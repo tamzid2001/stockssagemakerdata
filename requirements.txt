@@ -1,0 +1,5 @@
+yfinance>=0.2.27
+pandas>=1.5
+numpy
+python-dateutil
+pytz

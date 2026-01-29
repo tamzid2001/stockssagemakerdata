@@ -1,0 +1,16 @@
+{
+  "name": "Python MLOps Codespace",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "settings": {
+    "terminal.integrated.shell.linux": "/bin/bash"
+  },
+  "extensions": [
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "ms-toolsai.jupyter"
+  ],
+  "postCreateCommand": "python -m pip install --upgrade pip && pip install -r requirements.txt",
+  "remoteUser": "vscode"
+}
