@@ -1,4 +1,4 @@
-.PHONY: install fetch fetch-ticker sample git-push check-weekday setup-aws fetch-s3-bucket
+.PHONY: install fetch fetch-ticker sample git-push check-weekday setup-aws fetch-s3-bucket predict predict-sample
 
 install:
 	pip install -r requirements.txt
@@ -49,7 +49,18 @@ setup-aws:
 # Usage: make fetch-s3-bucket TICKERS="AAPL" START=2024-01-01 END=2024-01-08 INTERVAL=1d PREFIX=stock_data/
 fetch-s3-bucket:
 	python fetch_data_s3.py -t "$(TICKERS)" -s "$(START)" -e "$(END)" -i "$(INTERVAL)" -b stockscompute -p "$(PREFIX)" -r us-east-2
-# Usage: make git-push MSG="Update Makefile"
+
+# Generate price predictions and upload to S3
+# Usage: make predict TICKERS="AAPL,MSFT" START=2024-01-01 END=2024-01-31 DAYS=5 PREFIX=predictions/
+predict:
+	python predictions.py -t "$(TICKERS)" -s "$(START)" -e "$(END)" -b stockscompute -p "$(PREFIX)" -d "$(DAYS)" -r us-east-2
+
+# Generate predictions for AAPL (sample)
+# Usage: make predict-sample
+predict-sample:
+	$(MAKE) predict TICKERS="AAPL" START=2024-01-01 END=2024-01-31 DAYS=5 PREFIX=predictions/
+
+# Commit & push changes to origin/main
 git-push:
 	git add -A
 	git commit -m "$(MSG)" || true
