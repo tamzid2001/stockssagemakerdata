@@ -1,129 +1,50 @@
 #!/usr/bin/env python3
-"""Generate stock price predictions and upload to AWS S3.
+"""Upload a predictions CSV file to AWS S3.
 
-Uses simple moving average (SMA) and exponential moving average (EMA) based
-predictions to forecast next 5 trading days.
+Simple utility to upload a locally created predictions CSV file to the
+stockscompute bucket in the predictions folder.
 
-CSV format produced:
-- columns: Ticker, Date, Close_Price, SMA_20, EMA_12, Prediction, Confidence
+CSV format expected:
+- Any format is supported (user creates the CSV locally)
 
-This script downloads historical data, calculates technical indicators,
-generates predictions, and uploads results to S3.
+Example CSV columns:
+- Ticker, Date, Prediction, Confidence
 """
 from __future__ import annotations
 import argparse
 import os
-from io import StringIO
-from typing import List, Optional, Tuple
-from datetime import datetime, timedelta
+from typing import Optional
+from datetime import datetime
 
-import pandas as pd
-import numpy as np
-import yfinance as yf
 import boto3
 from botocore.exceptions import ClientError
 
 
-def calculate_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
-    """Calculate SMA and EMA technical indicators.
-    
-    Args:
-        df: DataFrame with 'Close' column
-        
-    Returns:
-        DataFrame with added SMA_20 and EMA_12 columns
-    """
-    df_copy = df.copy()
-    df_copy["SMA_20"] = df_copy["Close"].rolling(window=20).mean()
-    df_copy["EMA_12"] = df_copy["Close"].ewm(span=12, adjust=False).mean()
-    return df_copy
-
-
-def generate_predictions(df: pd.DataFrame, ticker: str, days_ahead: int = 5) -> pd.DataFrame:
-    """Generate price predictions based on technical indicators.
-    
-    Args:
-        df: DataFrame with OHLCV data and technical indicators
-        ticker: Stock ticker symbol
-        days_ahead: Number of days to predict ahead (default: 5)
-        
-    Returns:
-        DataFrame with predictions
-    """
-    if df.empty or len(df) < 20:
-        raise ValueError(f"Insufficient data for {ticker}. Need at least 20 days.")
-    
-    # Use latest data for prediction
-    latest_close = df["Close"].iloc[-1]
-    latest_sma = df["SMA_20"].iloc[-1]
-    latest_ema = df["EMA_12"].iloc[-1]
-    
-    # Simple prediction logic: average of recent trend indicators
-    avg_indicator = (latest_sma + latest_ema) / 2
-    trend = (latest_close - avg_indicator) / avg_indicator if avg_indicator != 0 else 0
-    
-    # Calculate daily change volatility
-    recent_returns = df["Close"].pct_change().tail(20)
-    volatility = recent_returns.std()
-    
-    predictions = []
-    current_date = df.index[-1]
-    
-    for i in range(1, days_ahead + 1):
-        # Move to next trading day
-        current_date = current_date + timedelta(days=1)
-        
-        # Skip weekends
-        while current_date.weekday() > 4:  # 5=Saturday, 6=Sunday
-            current_date = current_date + timedelta(days=1)
-        
-        # Generate prediction with trend and noise
-        prediction_change = trend + (volatility * 0.5 * (np.random.randn()))
-        predicted_price = latest_close * (1 + prediction_change * (i * 0.3))
-        
-        # Confidence decreases further into future
-        confidence = max(0.5, 1.0 - (i * 0.1))
-        
-        predictions.append({
-            "Ticker": ticker,
-            "Date": current_date.strftime("%Y-%m-%d"),
-            "Close_Price": round(latest_close, 2),
-            "SMA_20": round(latest_sma, 2),
-            "EMA_12": round(latest_ema, 2),
-            "Prediction": round(predicted_price, 2),
-            "Confidence": round(confidence, 2),
-        })
-    
-    return pd.DataFrame(predictions)
-
-
-def fetch_and_predict(
-    ticker: str,
-    start: str,
-    end: str,
+def upload_predictions_to_s3(
+    csv_file_path: str,
     bucket_name: str,
-    s3_prefix: str = "",
+    s3_prefix: str = "predictions/",
     aws_access_key_id: Optional[str] = None,
     aws_secret_access_key: Optional[str] = None,
     region_name: str = "us-east-2",
-    days_ahead: int = 5,
 ) -> str:
-    """Fetch stock data, generate predictions, and upload to S3.
+    """Upload a predictions CSV file to S3.
     
     Args:
-        ticker: Stock ticker symbol
-        start: Start date YYYY-MM-DD
-        end: End date YYYY-MM-DD
+        csv_file_path: Path to local CSV file
         bucket_name: S3 bucket name
-        s3_prefix: S3 key prefix (e.g., 'predictions/')
+        s3_prefix: S3 key prefix (default: predictions/)
         aws_access_key_id: AWS access key (uses AWS_ACCESS_KEY_ID env var if None)
         aws_secret_access_key: AWS secret key (uses AWS_SECRET_ACCESS_KEY env var if None)
         region_name: AWS region
-        days_ahead: Number of days to predict ahead
         
     Returns:
-        S3 object key where predictions were uploaded
+        S3 object key where file was uploaded
     """
+    # Validate local file exists
+    if not os.path.exists(csv_file_path):
+        raise FileNotFoundError(f"CSV file not found: {csv_file_path}")
+    
     # Use environment variables for AWS credentials if not provided
     if aws_access_key_id is None:
         aws_access_key_id = os.getenv("AWS_ACCESS_KEY_ID")
@@ -136,29 +57,6 @@ def fetch_and_predict(
             "AWS_SECRET_ACCESS_KEY environment variables or pass them as arguments."
         )
     
-    # Download historical data
-    print(f"Downloading {ticker} data from {start} to {end}...")
-    df = yf.download(ticker, start=start, end=end, progress=False)
-    
-    if df is None or df.empty:
-        raise RuntimeError(f"No data returned for {ticker}. Check ticker/dates.")
-    
-    print(f"✓ Downloaded {len(df)} days of data")
-    
-    # Calculate indicators
-    print("Calculating technical indicators...")
-    df_with_indicators = calculate_technical_indicators(df)
-    
-    # Generate predictions
-    print(f"Generating {days_ahead}-day predictions...")
-    predictions_df = generate_predictions(df_with_indicators, ticker, days_ahead)
-    
-    # Prepare CSV content
-    buf = StringIO()
-    predictions_df.to_csv(buf, index=False)
-    buf.seek(0)
-    csv_content = buf.getvalue()
-    
     # Initialize S3 client
     s3_client = boto3.client(
         "s3",
@@ -167,14 +65,22 @@ def fetch_and_predict(
         region_name=region_name,
     )
     
-    # Generate S3 key
+    # Read file
+    print(f"Reading CSV file: {csv_file_path}")
+    with open(csv_file_path, "r") as f:
+        csv_content = f.read()
+    
+    # Generate S3 key with timestamp
+    file_name = os.path.basename(csv_file_path)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    file_name = f"{ticker}_{start}_{end}_predictions_{timestamp}.csv"
-    s3_key = os.path.join(s3_prefix, file_name).replace("\\", "/")
+    # Insert timestamp before file extension
+    name, ext = os.path.splitext(file_name)
+    s3_file_name = f"{name}_{timestamp}{ext}"
+    s3_key = os.path.join(s3_prefix, s3_file_name).replace("\\", "/")
     
     # Upload to S3
     try:
-        print(f"Uploading predictions to S3...")
+        print(f"Uploading to S3...")
         s3_client.put_object(
             Bucket=bucket_name,
             Key=s3_key,
@@ -184,18 +90,16 @@ def fetch_and_predict(
         print(f"✓ Successfully uploaded s3://{bucket_name}/{s3_key}")
         return s3_key
     except ClientError as e:
-        raise RuntimeError(f"Failed to upload predictions to S3: {e}")
+        raise RuntimeError(f"Failed to upload to S3: {e}")
 
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        description="Generate stock price predictions and upload to S3"
+        description="Upload predictions CSV file to S3"
     )
     p.add_argument(
-        "--tickers", "-t", required=True, help="Comma-separated tickers, e.g. AAPL,MSFT"
+        "--file", "-f", required=True, help="Path to local CSV file (e.g., predictions.csv)"
     )
-    p.add_argument("--start", "-s", required=True, help="Start date YYYY-MM-DD")
-    p.add_argument("--end", "-e", required=True, help="End date YYYY-MM-DD")
     p.add_argument(
         "--bucket", "-b", required=True, help="S3 bucket name"
     )
@@ -206,9 +110,6 @@ def parse_args() -> argparse.Namespace:
         "--region", "-r", default="us-east-2", help="AWS region (default: us-east-2)"
     )
     p.add_argument(
-        "--days", "-d", type=int, default=5, help="Days ahead to predict (default: 5)"
-    )
-    p.add_argument(
         "--access-key", default=None, help="AWS access key ID (uses AWS_ACCESS_KEY_ID env var if not provided)"
     )
     p.add_argument(
@@ -217,36 +118,22 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
-def _normalize_tickers(t: str) -> List[str]:
-    return [x.strip() for x in t.split(",") if x.strip()]
-
-
 def main() -> None:
     args = parse_args()
-    tickers = _normalize_tickers(args.tickers)
     
-    print(f"Starting predictions for {len(tickers)} ticker(s)")
-    print(f"Prediction window: {args.days} days ahead\n")
-    
-    for ticker in tickers:
-        print(f"{'='*60}")
-        print(f"Processing: {ticker}")
-        print(f"{'='*60}")
-        try:
-            s3_key = fetch_and_predict(
-                ticker=ticker,
-                start=args.start,
-                end=args.end,
-                bucket_name=args.bucket,
-                s3_prefix=args.prefix,
-                aws_access_key_id=args.access_key,
-                aws_secret_access_key=args.secret_key,
-                region_name=args.region,
-                days_ahead=args.days,
-            )
-            print(f"✓ Success: {ticker}\n")
-        except Exception as e:
-            print(f"✗ Failed to generate predictions for {ticker}: {e}\n")
+    try:
+        s3_key = upload_predictions_to_s3(
+            csv_file_path=args.file,
+            bucket_name=args.bucket,
+            s3_prefix=args.prefix,
+            aws_access_key_id=args.access_key,
+            aws_secret_access_key=args.secret_key,
+            region_name=args.region,
+        )
+        print(f"✓ Upload complete!")
+    except Exception as e:
+        print(f"✗ Upload failed: {e}")
+        exit(1)
 
 
 if __name__ == "__main__":
