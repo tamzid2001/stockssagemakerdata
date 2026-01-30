@@ -53,13 +53,25 @@ def fetch_and_upload_to_s3(
         bucket_name: S3 bucket name
         s3_prefix: S3 key prefix (e.g., 'stock_data/')
         interval: Data interval ('1d' or '1h')
-        aws_access_key_id: AWS access key (uses env var if None)
-        aws_secret_access_key: AWS secret key (uses env var if None)
+        aws_access_key_id: AWS access key (uses AWS_ACCESS_KEY_ID env var if None)
+        aws_secret_access_key: AWS secret key (uses AWS_SECRET_ACCESS_KEY env var if None)
         region_name: AWS region
         
     Returns:
         S3 object key where the file was uploaded
     """
+    # Use environment variables for AWS credentials if not provided
+    if aws_access_key_id is None:
+        aws_access_key_id = os.getenv("AWS_ACCESS_KEY_ID")
+    if aws_secret_access_key is None:
+        aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+    
+    if not aws_access_key_id or not aws_secret_access_key:
+        raise RuntimeError(
+            "AWS credentials not provided. Set AWS_ACCESS_KEY_ID and "
+            "AWS_SECRET_ACCESS_KEY environment variables or pass them as arguments."
+        )
+    
     # Download data from yfinance
     df = yf.download(ticker, start=start, end=end, interval=interval, progress=False)
     if df is None or df.empty:
@@ -68,7 +80,10 @@ def fetch_and_upload_to_s3(
     # Prepare dataframe
     outdf = df[["Close"]].rename(columns={"Close": "Price"}).copy()
     outdf.reset_index(inplace=True)
-    if outdf.columns[0].lower() != "date":
+    first_col_name = outdf.columns[0]
+    if isinstance(first_col_name, tuple):
+        first_col_name = first_col_name[0]
+    if str(first_col_name).lower() != "date":
         outdf.rename(columns={outdf.columns[0]: "Date"}, inplace=True)
     outdf.insert(0, "Item_Id", ticker.lower())
     
@@ -112,9 +127,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--interval", "-i", choices=["1d", "1h"], default="1d", help="Data interval: 1d or 1h")
     p.add_argument("--bucket", "-b", required=True, help="S3 bucket name")
     p.add_argument("--prefix", "-p", default="", help="S3 key prefix (e.g., 'stock_data/')")
-    p.add_argument("--region", "-r", default="us-east-1", help="AWS region")
-    p.add_argument("--access-key", default=None, help="AWS access key ID (uses env var if not provided)")
-    p.add_argument("--secret-key", default=None, help="AWS secret access key (uses env var if not provided)")
+    p.add_argument("--region", "-r", default="us-east-2", help="AWS region (default: us-east-2)")
+    p.add_argument("--access-key", default=None, help="AWS access key ID (uses AWS_ACCESS_KEY_ID env var if not provided)")
+    p.add_argument("--secret-key", default=None, help="AWS secret access key (uses AWS_SECRET_ACCESS_KEY env var if not provided)")
+    return p.parse_args()
     return p.parse_args()
 
 

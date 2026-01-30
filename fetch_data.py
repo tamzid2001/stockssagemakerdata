@@ -38,7 +38,10 @@ def colab_download_price_csv(ticker: str, start: str, end: str, interval: str = 
     outdf = df[["Close"]].rename(columns={"Close": "Price"}).copy()
     outdf.reset_index(inplace=True)
     # Ensure the date column is named 'Date' for clarity
-    if outdf.columns[0].lower() != "date":
+    first_col_name = outdf.columns[0]
+    if isinstance(first_col_name, tuple):
+        first_col_name = first_col_name[0]
+    if str(first_col_name).lower() != "date":
         outdf.rename(columns={outdf.columns[0]: "Date"}, inplace=True)
     outdf.insert(0, "Item_Id", ticker.lower())
     buf = StringIO()
