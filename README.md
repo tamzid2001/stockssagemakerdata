@@ -6,6 +6,8 @@ Small helper to download stock close prices (daily or hourly) using `yfinance` a
 
 - Download historical stock data using `yfinance`
 - Upload data to AWS S3 (S3 bucket: `stockscompute` in `us-east-2`)
+- Generate price predictions using technical indicators (SMA, EMA)
+- Upload predictions to S3 in separate folder
 - Check if a given date or prediction window lands on a weekday
 - Support for both daily (1d) and hourly (1h) intervals
 
@@ -73,11 +75,39 @@ make check-weekday-today
 make check-weekday-yesterday
 ```
 
+### Generate Price Predictions
+
+Generate stock price predictions using technical indicators and upload to S3:
+
+```bash
+# Generate 5-day predictions for AAPL and MSFT
+python predictions.py -t AAPL,MSFT -s 2024-01-01 -e 2024-01-31 -b stockscompute -p predictions/ -d 5 -r us-east-2
+```
+
+Or using Make:
+```bash
+# Quick prediction example
+make predict-sample
+
+# Parameterized prediction
+make predict TICKERS="AAPL,MSFT" START=2024-01-01 END=2024-01-31 DAYS=5 PREFIX=predictions/
+```
+
+The predictions CSV includes:
+- **Ticker** — Stock symbol
+- **Date** — Prediction date
+- **Close_Price** — Latest closing price
+- **SMA_20** — 20-day Simple Moving Average
+- **EMA_12** — 12-day Exponential Moving Average
+- **Prediction** — Predicted price
+- **Confidence** — Confidence score (0.0-1.0)
+
 ## Files
 
 - [fetch_data.py](fetch_data.py) — CLI to download `Close` prices locally (CSV output).
 - [fetch_data_s3.py](fetch_data_s3.py) — CLI to download `Close` prices and upload to AWS S3.
 - [check_weekday.py](check_weekday.py) — Utility to check if a date is a weekday.
+- [predictions.py](predictions.py) — Generate stock price predictions and upload to S3.
 - [Makefile](Makefile) — Convenient targets for common tasks.
 - [requirements.txt](requirements.txt) — Python dependencies.
 - [setup_aws.sh](setup_aws.sh) — Script to configure AWS CLI from environment variables.
@@ -88,19 +118,21 @@ make check-weekday-yesterday
 ## Makefile Targets
 
 ```bash
-make install              # Install Python dependencies
-make fetch                # Quick fetch example (AAPL local)
-make fetch-ticker         # Parameterized local fetch
-make sample               # Sample fetch to local data/
-make fetch-s3             # Quick fetch to S3
-make fetch-s3-ticker      # Parameterized S3 fetch
-make sample-s3            # Sample fetch to S3
-make setup-aws            # Configure AWS credentials
-make fetch-s3-bucket      # Fetch to stockscompute bucket
-make check-weekday        # Check if prediction date is weekday
-make check-weekday-today  # Check if today is weekday
+make install                  # Install Python dependencies
+make fetch                    # Quick fetch example (AAPL local)
+make fetch-ticker             # Parameterized local fetch
+make sample                   # Sample fetch to local data/
+make fetch-s3                 # Quick fetch to S3
+make fetch-s3-ticker          # Parameterized S3 fetch
+make sample-s3                # Sample fetch to S3
+make setup-aws                # Configure AWS credentials
+make fetch-s3-bucket          # Fetch to stockscompute bucket
+make predict                  # Generate price predictions
+make predict-sample           # Sample predictions (AAPL)
+make check-weekday            # Check if prediction date is weekday
+make check-weekday-today      # Check if today is weekday
 make check-weekday-yesterday  # Check if yesterday is weekday
-make git-push             # Push changes to main branch
+make git-push                 # Push changes to main branch
 ```
 
 ## AWS Integration
