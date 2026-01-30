@@ -51,14 +51,21 @@ fetch-s3-bucket:
 	python fetch_data_s3.py -t "$(TICKERS)" -s "$(START)" -e "$(END)" -i "$(INTERVAL)" -b stockscompute -p "$(PREFIX)" -r us-east-2
 
 # Generate price predictions and upload to S3
-# Usage: make predict TICKERS="AAPL,MSFT" START=2024-01-01 END=2024-01-31 DAYS=5 PREFIX=predictions/
+# Usage: make predict FILE=predictions.csv PREFIX=predictions/
 predict:
-	python predictions.py -t "$(TICKERS)" -s "$(START)" -e "$(END)" -b stockscompute -p "$(PREFIX)" -d "$(DAYS)" -r us-east-2
+	python predictions.py -f "$(FILE)" -b stockscompute -p "$(PREFIX)" -r us-east-2
 
-# Generate predictions for AAPL (sample)
+# Generate predictions for sample file
 # Usage: make predict-sample
 predict-sample:
-	$(MAKE) predict TICKERS="AAPL" START=2024-01-01 END=2024-01-31 DAYS=5 PREFIX=predictions/
+	@echo "Creating sample predictions.csv..."
+	@echo "Ticker,Date,Prediction,Confidence" > predictions.csv
+	@echo "AAPL,2024-02-06,180.50,0.95" >> predictions.csv
+	@echo "AAPL,2024-02-07,181.25,0.92" >> predictions.csv
+	@echo "MSFT,2024-02-06,425.75,0.94" >> predictions.csv
+	@echo "MSFT,2024-02-07,427.00,0.91" >> predictions.csv
+	@echo "✓ Sample predictions.csv created"
+	$(MAKE) predict FILE=predictions.csv PREFIX=predictions/
 
 # Commit & push changes to origin/main
 git-push:

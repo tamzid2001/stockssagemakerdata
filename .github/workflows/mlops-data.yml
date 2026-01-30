@@ -65,13 +65,18 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
+          # Create sample predictions CSV
+          cat > predictions.csv <<EOF
+          Ticker,Date,Prediction,Confidence
+          AAPL,$(date -d '1 day' +%Y-%m-%d),180.50,0.95
+          MSFT,$(date -d '1 day' +%Y-%m-%d),425.75,0.94
+          GOOGL,$(date -d '1 day' +%Y-%m-%d),140.25,0.92
+          EOF
+          # Upload predictions to S3
           python predictions.py \
-            -t AAPL,MSFT,GOOGL \
-            -s ${{ steps.dates.outputs.start }} \
-            -e ${{ steps.dates.outputs.end }} \
+            -f predictions.csv \
             -b stockscompute \
-            -p predictions/$(date +%Y-%m-%d)/ \
-            -d 5 \
+            -p "predictions/$(date +%Y-%m-%d)/" \
             -r us-east-2
 
   # Additional job: Data validation
@@ -119,9 +124,9 @@ jobs:
           echo "- **Location**: S3 `stockscompute/stock_data/`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Predictions" >> $GITHUB_STEP_SUMMARY
-          echo "- **Format**: CSV with columns (Ticker, Date, Close_Price, SMA_20, EMA_12, Prediction, Confidence)" >> $GITHUB_STEP_SUMMARY
-          echo "- **Location**: S3 `stockscompute/predictions/`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Forecast Window**: 5 trading days ahead" >> $GITHUB_STEP_SUMMARY
+          echo "- **Format**: CSV with custom columns (user-created)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Location**: S3 \`stockscompute/predictions/\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Method**: Local CSV file upload" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Status**: ✓ Complete" >> $GITHUB_STEP_SUMMARY
 

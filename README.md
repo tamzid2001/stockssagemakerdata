@@ -77,30 +77,30 @@ make check-weekday-yesterday
 
 ### Generate Price Predictions
 
-Generate stock price predictions using technical indicators and upload to S3:
+Create a predictions CSV file locally and upload it to S3:
 
 ```bash
-# Generate 5-day predictions for AAPL and MSFT
-python predictions.py -t AAPL,MSFT -s 2024-01-01 -e 2024-01-31 -b stockscompute -p predictions/ -d 5 -r us-east-2
+# Create your own predictions.csv file, then upload it
+python predictions.py -f predictions.csv -b stockscompute -p predictions/ -r us-east-2
 ```
 
 Or using Make:
 ```bash
-# Quick prediction example
+# Create sample predictions and upload
 make predict-sample
 
-# Parameterized prediction
-make predict TICKERS="AAPL,MSFT" START=2024-01-01 END=2024-01-31 DAYS=5 PREFIX=predictions/
+# Upload your own CSV file
+make predict FILE=your_predictions.csv PREFIX=predictions/
 ```
 
-The predictions CSV includes:
-- **Ticker** — Stock symbol
-- **Date** — Prediction date
-- **Close_Price** — Latest closing price
-- **SMA_20** — 20-day Simple Moving Average
-- **EMA_12** — 12-day Exponential Moving Average
-- **Prediction** — Predicted price
-- **Confidence** — Confidence score (0.0-1.0)
+**Expected CSV Format** (example):
+```csv
+Ticker,Date,Prediction,Confidence
+AAPL,2024-02-06,180.50,0.95
+MSFT,2024-02-07,427.00,0.91
+```
+
+The predictions CSV is uploaded to `stockscompute/predictions/` with a timestamp appended to the filename.
 
 ## Files
 
@@ -127,8 +127,8 @@ make fetch-s3-ticker          # Parameterized S3 fetch
 make sample-s3                # Sample fetch to S3
 make setup-aws                # Configure AWS credentials
 make fetch-s3-bucket          # Fetch to stockscompute bucket
-make predict                  # Generate price predictions
-make predict-sample           # Sample predictions (AAPL)
+make predict                  # Upload predictions CSV to S3
+make predict-sample           # Create sample CSV and upload
 make check-weekday            # Check if prediction date is weekday
 make check-weekday-today      # Check if today is weekday
 make check-weekday-yesterday  # Check if yesterday is weekday
