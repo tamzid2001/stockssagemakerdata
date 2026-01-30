@@ -3,3 +3,4 @@ pandas>=1.5
 numpy
 python-dateutil
 pytz
+boto3>=1.26
