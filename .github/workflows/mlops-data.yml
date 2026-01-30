@@ -10,19 +10,93 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
+      
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-      - name: Fetch market data
+      
+      - name: Check if today is a weekday
         run: |
-          python fetch_data.py -t AAPL,MSFT -s 2024-01-01 -e 2024-01-08 -i 1d -o output
-      - name: Upload data artifact
+          python check_weekday.py today
+      
+      - name: Calculate date range (last 7 days)
+        id: dates
+        run: |
+          END_DATE=$(date +%Y-%m-%d)
+          START_DATE=$(date -d '7 days ago' +%Y-%m-%d)
+          echo "start=$START_DATE" >> $GITHUB_OUTPUT
+          echo "end=$END_DATE" >> $GITHUB_OUTPUT
+          echo "Date range: $START_DATE to $END_DATE"
+      
+      - name: Fetch market data locally
+        run: |
+          python fetch_data.py -t AAPL,MSFT,GOOGL -s ${{ steps.dates.outputs.start }} -e ${{ steps.dates.outputs.end }} -i 1d -o output
+      
+      - name: Upload data artifact (local)
         uses: actions/upload-artifact@v4
         with:
           name: market-data
           path: output
+      
+      - name: Fetch and upload to S3
+        if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          python fetch_data_s3.py \
+            -t AAPL,MSFT,GOOGL \
+            -s ${{ steps.dates.outputs.start }} \
+            -e ${{ steps.dates.outputs.end }} \
+            -i 1d \
+            -b stockscompute \
+            -p stock_data/$(date +%Y-%m-%d)/ \
+            -r us-east-2
+
+  # Additional job: Data validation
+  validate:
+    runs-on: ubuntu-latest
+    needs: fetch
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: market-data
+          path: output
+      
+      - name: Validate data files
+        run: |
+          if [ ! -d "output" ]; then
+            echo "❌ No output directory found"
+            exit 1
+          fi
+          
+          file_count=$(find output -type f -name "*.csv" | wc -l)
+          echo "✓ Found $file_count CSV files"
+          
+          for file in output/*.csv; do
+            line_count=$(wc -l < "$file")
+            echo "  - $(basename $file): $line_count lines"
+          done
+      
+      - name: Generate summary
+        run: |
+          echo "## Data Fetch Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Execution Time**: $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "**Tickers**: AAPL, MSFT, GOOGL" >> $GITHUB_STEP_SUMMARY
+          echo "**Format**: CSV with columns (Item_Id, Date, Price)" >> $GITHUB_STEP_SUMMARY
+          echo "**Status**: ✓ Complete" >> $GITHUB_STEP_SUMMARY
