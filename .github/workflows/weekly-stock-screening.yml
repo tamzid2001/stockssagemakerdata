@@ -41,17 +41,21 @@ jobs:
             echo "GOOGL" >> tickers.txt
             echo "TSLA" >> tickers.txt
             echo "AMZN" >> tickers.txt
+            echo "NVDA" >> tickers.txt
           fi
 
-      - name: Run Stock Screener (Agent-based)
+      - name: Run Combined Stock Screener
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL: ${{ secrets.SLACK_CHANNEL }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: us-east-2
         run: |
-          echo "Starting advanced agent-based stock screening..."
-          python agents_stock_screener.py
+          echo "Starting combined stock screening..."
+          python combined_stock_screener.py
           echo "Stock screening completed."
 
       - name: List Generated Results
@@ -62,6 +66,11 @@ jobs:
             echo "Agent screening results:"
             head -20 agent_screening_results.csv
             wc -l agent_screening_results.csv
+          fi
+          if [ -f "combined_screening_results.csv" ]; then
+            echo "Combined screening results:"
+            head -20 combined_screening_results.csv
+            wc -l combined_screening_results.csv
           fi
           if [ -f "value_candidates.csv" ]; then
             echo "Value candidates:"
@@ -76,6 +85,7 @@ jobs:
           name: stock-screening-results-${{ github.run_number }}
           path: |
             agent_screening_results.csv
+            combined_screening_results.csv
             value_candidates.csv
           retention-days: 30
           if-no-files-found: ignore
@@ -93,6 +103,13 @@ jobs:
             echo "Uploading agent screening results to S3..."
             aws s3 cp agent_screening_results.csv \
               s3://stockscompute/screening_results/agent_results_${DATE}.csv \
+              --region us-east-2 || echo "S3 upload skipped (bucket may not exist or permissions issue)"
+          fi
+
+          if [ -f "combined_screening_results.csv" ]; then
+            echo "Uploading combined screening results to S3..."
+            aws s3 cp combined_screening_results.csv \
+              s3://stockscompute/screening_results/combined_results_${DATE}.csv \
               --region us-east-2 || echo "S3 upload skipped (bucket may not exist or permissions issue)"
           fi
           
@@ -117,6 +134,17 @@ jobs:
             echo "Top 5 Results (by overall_score):" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
             head -6 agent_screening_results.csv >> $GITHUB_STEP_SUMMARY || true
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ -f "combined_screening_results.csv" ]; then
+            COUNT=$(tail -n +2 combined_screening_results.csv | wc -l)
+            echo "### Combined Screening (Headlines + Slack)" >> $GITHUB_STEP_SUMMARY
+            echo "**Stocks Analyzed:** $COUNT" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Top 5 Results (by upside_score):" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            head -6 combined_screening_results.csv >> $GITHUB_STEP_SUMMARY || true
             echo '```' >> $GITHUB_STEP_SUMMARY
           fi
           
