@@ -102,18 +102,34 @@ MSFT,2024-02-07,427.00,0.91
 
 The predictions CSV is uploaded to `stockscompute/predictions/` with a timestamp appended to the filename.
 
+### Combined Stock Screener + Slack Delivery
+
+Generate a formatted CSV with headlines and optional Slack delivery:
+
+```bash
+python combined_stock_screener.py
+```
+
+Optional environment variables:
+- `SLACK_WEBHOOK_URL` for posting a summary message.
+- `SLACK_BOT_TOKEN` + `SLACK_CHANNEL` for uploading the CSV file to Slack.
+- `SCREENING_OUTPUT_FILE` to override the CSV output filename.
+
 ## Files
 
 - [fetch_data.py](fetch_data.py) — CLI to download `Close` prices locally (CSV output).
 - [fetch_data_s3.py](fetch_data_s3.py) — CLI to download `Close` prices and upload to AWS S3.
 - [check_weekday.py](check_weekday.py) — Utility to check if a date is a weekday.
 - [predictions.py](predictions.py) — Generate stock price predictions and upload to S3.
+- [combined_stock_screener.py](combined_stock_screener.py) — Combined screener that outputs formatted CSV with headlines and can send results to Slack.
 - [Makefile](Makefile) — Convenient targets for common tasks.
 - [requirements.txt](requirements.txt) — Python dependencies.
 - [setup_aws.sh](setup_aws.sh) — Script to configure AWS CLI from environment variables.
 - [.env.example](.env.example) — Template for AWS configuration.
 - [.devcontainer/devcontainer.json](.devcontainer/devcontainer.json) and [.devcontainer/Dockerfile](.devcontainer/Dockerfile) — Codespace/devcontainer setup for development.
 - [.github/workflows/mlops-data.yml](.github/workflows/mlops-data.yml) — Scheduled/manual workflow to fetch data and store artifacts.
+- [.github/workflows/weekly-stock-screening.yml](.github/workflows/weekly-stock-screening.yml) — Weekly combined screening job with optional Slack delivery.
+- [.github/workflows/linear-sync.yml](.github/workflows/linear-sync.yml) — GitHub → Linear issue sync workflow.
 
 ## Makefile Targets
 

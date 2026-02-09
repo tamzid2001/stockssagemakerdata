@@ -1,0 +1,65 @@
+name: Linear Issue Sync
+
+on:
+  issues:
+    types: [opened, labeled]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  create-linear-issue:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'linear'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create Linear Issue
+        env:
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+          LINEAR_TEAM_ID: ${{ secrets.LINEAR_TEAM_ID }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+        run: |
+          if [ -z "$LINEAR_API_KEY" ] || [ -z "$LINEAR_TEAM_ID" ]; then
+            echo "Missing LINEAR_API_KEY or LINEAR_TEAM_ID secrets."
+            exit 1
+          fi
+
+          DESCRIPTION="GitHub Issue: $ISSUE_URL"
+          if [ -n "$ISSUE_BODY" ]; then
+            DESCRIPTION="$DESCRIPTION\n\n$ISSUE_BODY"
+          fi
+
+          GRAPHQL_QUERY=$(cat <<EOF
+          mutation IssueCreate(\$teamId: String!, \$title: String!, \$description: String!) {
+            issueCreate(input: {teamId: \$teamId, title: \$title, description: \$description}) {
+              success
+              issue {
+                id
+                identifier
+                url
+              }
+            }
+          }
+          EOF
+          )
+
+          curl -sS -X POST https://api.linear.app/graphql \
+            -H "Content-Type: application/json" \
+            -H "Authorization: $LINEAR_API_KEY" \
+            -d "$(jq -n --arg query "$GRAPHQL_QUERY" \
+              --arg teamId "$LINEAR_TEAM_ID" \
+              --arg title "$ISSUE_TITLE" \
+              --arg description "$DESCRIPTION" \
+              '{query: $query, variables: {teamId: $teamId, title: $title, description: $description}}')" \
+            | tee linear_response.json
+
+          if ! jq -e '.data.issueCreate.success == true' linear_response.json >/dev/null; then
+            echo "Linear issue creation failed:"
+            cat linear_response.json
+            exit 1
+          fi
+
+          echo "Linear issue created:"
+          jq '.data.issueCreate.issue' linear_response.json
