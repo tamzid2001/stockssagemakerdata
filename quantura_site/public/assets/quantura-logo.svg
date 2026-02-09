@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="240" viewBox="0 0 640 240" role="img" aria-label="Quantura logo">
+  <defs>
+    <linearGradient id="g" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#0ea5e9" />
+      <stop offset="60%" stop-color="#22c55e" />
+      <stop offset="100%" stop-color="#1e293b" />
+    </linearGradient>
+  </defs>
+  <rect width="640" height="240" fill="white" />
+  <circle cx="120" cy="120" r="80" fill="url(#g)" />
+  <path d="M70 150 L95 130 L120 110 L155 80" stroke="#ffffff" stroke-width="10" fill="none" stroke-linecap="round" />
+  <polygon points="155,80 185,70 175,100" fill="#ffffff" />
+  <text x="220" y="140" font-family="Manrope, Arial, sans-serif" font-size="72" font-weight="700" fill="#0f172a">Quantura</text>
+</svg>
