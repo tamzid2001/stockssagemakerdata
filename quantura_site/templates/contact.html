@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% set title = "Quantura | Contact" %}
+
+{% block content %}
+<section class="section">
+  <div class="container split">
+    <div>
+      <h1>Contact Quantura</h1>
+      <p>
+        Tell us what you need: a Deep Forecast report, a custom research request,
+        or enterprise collaboration. We respond within 2 business days.
+      </p>
+      <p class="small">Email: hello@quantura.finance</p>
+    </div>
+    <div class="card">
+      <form>
+        <input type="text" placeholder="Name" />
+        <input type="email" placeholder="Email" />
+        <textarea placeholder="How can we help?"></textarea>
+        <button class="cta" type="submit">Send message</button>
+      </form>
+    </div>
+  </div>
+</section>
+{% endblock %}
