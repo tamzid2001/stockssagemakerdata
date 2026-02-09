@@ -412,7 +412,7 @@ def alpaca_get_options(req: https_fn.CallableRequest) -> dict[str, Any]:
         if expiration:
             params["expiration_date"] = expiration
         response = requests.get(
-            f\"{ALPACA_DATA_BASE}/v1beta1/options/contracts\",
+            f"{ALPACA_DATA_BASE}/v1beta1/options/contracts",
             headers=headers,
             params=params,
             timeout=10,
