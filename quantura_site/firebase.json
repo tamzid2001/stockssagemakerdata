@@ -15,7 +15,9 @@
         ".git",
         "firebase-debug.log",
         "firebase-debug.*.log",
-        "*.local"
+        "*.local",
+        "serviceAccountKey.json",
+        ".env"
       ],
       "runtime": "python313"
     }
