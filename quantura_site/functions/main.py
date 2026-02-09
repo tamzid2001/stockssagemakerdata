@@ -311,7 +311,7 @@ def get_technicals(req: https_fn.CallableRequest) -> dict[str, Any]:
     lookback = int(data.get("lookback") or 120)
     indicators = data.get("indicators") or ["RSI", "MACD"]
 
-    history = yf.download(ticker, period=f\"{lookback}d\", interval=interval, progress=False)
+    history = yf.download(ticker, period=f"{lookback}d", interval=interval, progress=False)
     history = history.dropna()
     if history.empty:
         return {"latest": []}
