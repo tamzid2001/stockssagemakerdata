@@ -494,7 +494,7 @@ def alpaca_place_order(req: https_fn.CallableRequest) -> dict[str, Any]:
 
     headers = _alpaca_headers()
     response = requests.post(
-        f\"{ALPACA_API_BASE}/v2/orders\",
+        f"{ALPACA_API_BASE}/v2/orders",
         headers=headers,
         json=order_payload,
         timeout=10,
@@ -503,7 +503,7 @@ def alpaca_place_order(req: https_fn.CallableRequest) -> dict[str, Any]:
     if response.status_code >= 400:
         raise https_fn.HttpsError(
             https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
-            f\"Alpaca error: {response.text}\",
+            f"Alpaca error: {response.text}",
         )
 
     order_data = response.json()
