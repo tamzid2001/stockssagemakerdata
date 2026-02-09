@@ -31,8 +31,11 @@ TRENDING_URL = "https://query1.finance.yahoo.com/v1/finance/trending/US"
 DEFAULT_FORECAST_PRICE = 349
 
 if not firebase_admin._apps:
-    cred = credentials.Certificate(SERVICE_ACCOUNT_PATH)
-    firebase_admin.initialize_app(cred)
+    if os.path.exists(SERVICE_ACCOUNT_PATH):
+        cred = credentials.Certificate(SERVICE_ACCOUNT_PATH)
+        firebase_admin.initialize_app(cred)
+    else:
+        firebase_admin.initialize_app()
 
 db = firestore.client()
 
