@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Quantura Dashboard | Orders, Forecasts, Uploads</title>
+    <meta
+      name="description"
+      content="Quantura member dashboard for forecasts, orders, uploads, and admin fulfillment."
+    />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://quantura.ai/dashboard" />
+    <meta property="og:title" content="Quantura Dashboard" />
+    <meta property="og:description" content="Access your forecasts, orders, and uploads in one secure dashboard." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://quantura.ai/dashboard" />
+    <meta property="og:image" content="/assets/quantura-logo.svg" />
+    <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="stylesheet" href="/styles.css" />
+
+    <script defer src="/__/firebase/12.9.0/firebase-app-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-auth-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-firestore-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-functions-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-storage-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-analytics-compat.js"></script>
+    <script defer src="/__/firebase/init.js?useEmulator=false"></script>
+    <script defer src="/app.js"></script>
+  </head>
+  <body>
+    <header class="header">
+      <div class="container nav">
+        <a class="logo" href="/">QUANTURA</a>
+        <nav class="nav-links">
+          <a href="/forecasting">Forecasting</a>
+          <a href="/screener">Screener</a>
+          <a href="/dashboard">Dashboard</a>
+          <a href="/contact">Contact</a>
+        </nav>
+        <div class="nav-actions">
+          <button class="cta secondary" id="header-auth">Sign in</button>
+          <button class="cta secondary hidden" id="header-signout">Sign out</button>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="page-hero">
+        <div class="container content-grid">
+          <div>
+            <div class="eyebrow">Member dashboard</div>
+            <h1>Manage Deep Forecast orders, uploads, and trading requests.</h1>
+            <p>
+              Every forecast, upload, and order is stored securely in Firestore. Sign in to unlock your
+              dashboard and keep a complete audit trail for your research workflow.
+            </p>
+          </div>
+          <div class="card">
+            <h3>Account status</h3>
+            <div class="profile-item">
+              <span class="label">Signed in as</span>
+              <span id="user-email" class="value">Not signed in</span>
+            </div>
+            <div class="profile-item">
+              <span class="label">Provider</span>
+              <span id="user-provider" class="value">—</span>
+            </div>
+            <div class="profile-item">
+              <span class="label">Status</span>
+              <span id="user-status" class="pill">Guest</span>
+            </div>
+            <div class="notice" id="dashboard-cta">
+              Sign in to unlock order tracking and fulfillment updates.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section auth-section" id="auth">
+        <div class="container">
+          <div class="section-title">
+            <h2>Sign in to unlock your dashboard</h2>
+            <p class="small">Email/password and Google sign-in backed by Firebase Auth.</p>
+          </div>
+          <div class="auth-grid">
+            <div class="card">
+              <h3>Email access</h3>
+              <p class="small">Use your email to sign in or create your Quantura account.</p>
+              <form id="email-auth-form" class="auth-form">
+                <label class="label" for="auth-email">Email</label>
+                <input id="auth-email" type="email" placeholder="you@domain.com" required />
+                <label class="label" for="auth-password">Password</label>
+                <input id="auth-password" type="password" minlength="6" placeholder="Minimum 6 characters" required />
+                <div class="auth-actions">
+                  <button class="cta" id="email-signin" type="submit">Sign in</button>
+                  <button class="cta secondary" id="email-create" type="button">Create account</button>
+                </div>
+                <p class="small" id="auth-email-message"></p>
+              </form>
+            </div>
+            <div class="card">
+              <h3>Google sign-in</h3>
+              <p class="small">Fastest way to access your account and purchase history.</p>
+              <button class="cta google" id="google-signin" type="button">Continue with Google</button>
+              <div class="notice">
+                <strong>Secure by design.</strong> We only store what’s needed to deliver your report and
+                surface your order status in the dashboard.
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="purchase">
+        <div class="container">
+          <div class="section-title">
+            <h2>Request a Deep Forecast</h2>
+            <p class="small">Sign in before placing your order.</p>
+          </div>
+          <div class="offer">
+            <div>
+              <span class="badge">One-time report</span>
+              <h2>Deep Forecast</h2>
+              <div class="price">$349</div>
+              <p class="small">Delivery in 5 business days, PDF + summary deck.</p>
+            </div>
+            <ul>
+              <li>5 forecast horizons</li>
+              <li>Prophet + factor overlays</li>
+              <li>Interpretation call included</li>
+            </ul>
+            <div class="purchase-panel" data-product="Deep Forecast" data-price="349" data-currency="USD">
+              <button class="cta" data-action="purchase" data-label-guest="Sign in to purchase" data-label-auth="Request Deep Forecast" disabled>
+                Sign in to purchase
+              </button>
+              <p class="small purchase-note">You must sign in to purchase. We use Firebase Auth to secure checkout.</p>
+              <div class="notice purchase-success hidden"></div>
+              <button class="cta secondary hidden" data-action="stripe" type="button">Proceed to payment</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="dashboard">
+        <div class="container">
+          <div class="section-title">
+            <h2>Your orders</h2>
+            <p class="small">Track your Deep Forecast requests and fulfillment status.</p>
+          </div>
+          <div class="dashboard-grid">
+            <div class="card">
+              <h3>Order history</h3>
+              <div id="user-orders" class="order-list"></div>
+            </div>
+            <div class="card">
+              <h3>Forecast requests</h3>
+              <div id="user-forecasts" class="order-list"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="uploads">
+        <div class="container">
+          <div class="section-title">
+            <h2>Upload predictions CSV</h2>
+            <p class="small">Upload predictions.csv to trigger exploratory analysis by the Quantura agent.</p>
+          </div>
+          <div class="content-grid">
+            <form id="predictions-upload-form" class="card">
+              <div class="field">
+                <label class="label" for="predictions-file">predictions.csv</label>
+                <input id="predictions-file" class="file-input" type="file" accept=".csv" />
+              </div>
+              <div class="field">
+                <label class="label" for="predictions-notes">Notes</label>
+                <textarea id="predictions-notes" name="notes" placeholder="What should the analysis focus on?"></textarea>
+              </div>
+              <button class="cta" type="submit" data-analytics="predictions_upload">Upload predictions</button>
+              <p class="small" id="predictions-status"></p>
+            </form>
+            <div class="results-panel" id="predictions-result">
+              <h3>Recent uploads</h3>
+              <div id="predictions-output" class="small">Uploads will appear here once submitted.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="autopilot">
+        <div class="container">
+          <div class="section-title">
+            <h2>SageMaker Autopilot request</h2>
+            <p class="small">Queue a forecast run with custom quantiles and horizon length.</p>
+          </div>
+          <div class="content-grid">
+            <form id="autopilot-form" class="card">
+              <div class="form-grid">
+                <div class="field">
+                  <label class="label" for="autopilot-ticker">Ticker</label>
+                  <input id="autopilot-ticker" name="ticker" placeholder="AMD" required />
+                </div>
+                <div class="field">
+                  <label class="label" for="autopilot-horizon">Prediction length</label>
+                  <input id="autopilot-horizon" name="horizon" type="number" min="5" max="365" value="60" />
+                </div>
+                <div class="field">
+                  <label class="label" for="autopilot-quantiles">Quantiles (comma separated)</label>
+                  <input id="autopilot-quantiles" name="quantiles" placeholder="0.1,0.5,0.9" />
+                </div>
+                <div class="field">
+                  <label class="label" for="autopilot-interval">Timeframe</label>
+                  <select id="autopilot-interval" name="interval">
+                    <option value="1d">Daily</option>
+                    <option value="1h">Hourly</option>
+                  </select>
+                </div>
+              </div>
+              <div class="field">
+                <label class="label" for="autopilot-notes">Notes</label>
+                <textarea id="autopilot-notes" name="notes" placeholder="Special constraints or focus"></textarea>
+              </div>
+              <button class="cta" type="submit" data-analytics="autopilot_submit">Queue Autopilot run</button>
+              <p class="small" id="autopilot-status"></p>
+            </form>
+            <div class="results-panel" id="autopilot-result">
+              <h3>Autopilot runs</h3>
+              <div id="autopilot-output" class="small">Queued runs will appear here.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="alpaca">
+        <div class="container">
+          <div class="section-title">
+            <h2>Place Alpaca orders</h2>
+            <p class="small">Submit orders directly through Alpaca (paper or live depending on configuration).</p>
+          </div>
+          <div class="content-grid">
+            <form id="alpaca-order-form" class="card">
+              <div class="form-grid">
+                <div class="field">
+                  <label class="label" for="alpaca-symbol">Symbol</label>
+                  <input id="alpaca-symbol" name="symbol" placeholder="TSLA" required />
+                </div>
+                <div class="field">
+                  <label class="label" for="alpaca-qty">Quantity</label>
+                  <input id="alpaca-qty" name="qty" type="number" min="1" value="1" required />
+                </div>
+                <div class="field">
+                  <label class="label" for="alpaca-side">Side</label>
+                  <select id="alpaca-side" name="side">
+                    <option value="buy">Buy</option>
+                    <option value="sell">Sell</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label class="label" for="alpaca-type">Order type</label>
+                  <select id="alpaca-type" name="type">
+                    <option value="market">Market</option>
+                    <option value="limit">Limit</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label class="label" for="alpaca-limit">Limit price (optional)</label>
+                  <input id="alpaca-limit" name="limitPrice" type="number" step="0.01" />
+                </div>
+                <div class="field">
+                  <label class="label" for="alpaca-tif">Time in force</label>
+                  <select id="alpaca-tif" name="timeInForce">
+                    <option value="day">Day</option>
+                    <option value="gtc">GTC</option>
+                  </select>
+                </div>
+              </div>
+              <button class="cta" type="submit" data-analytics="alpaca_order">Place order</button>
+              <p class="small" id="alpaca-status"></p>
+            </form>
+            <div class="results-panel" id="alpaca-orders">
+              <h3>Recent Alpaca orders</h3>
+              <div id="alpaca-output" class="small">Orders will appear here after submission.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section admin-section hidden" id="admin">
+        <div class="container">
+          <div class="section-title">
+            <h2>Admin dashboard</h2>
+            <p class="small">Manage and fulfill Deep Forecast orders.</p>
+          </div>
+          <div class="card">
+            <div id="admin-orders" class="order-list"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="container footer-grid">
+        <div>
+          <div class="logo">QUANTURA</div>
+          <p class="small">Secure forecasting, stored orders, and fulfillment delivery.</p>
+          <span class="tag">Member dashboard</span>
+        </div>
+        <div class="small">
+          <strong>Explore</strong>
+          <div><a href="/">Home</a></div>
+          <div><a href="/forecasting">Forecasting</a></div>
+          <div><a href="/screener">Screener</a></div>
+          <div><a href="/contact">Contact</a></div>
+        </div>
+        <div class="small">
+          <strong>Product</strong>
+          <div>Deep Forecast</div>
+          <div>Autopilot Requests</div>
+          <div>Order Fulfillment</div>
+        </div>
+      </div>
+      <div class="container small" style="margin-top: 24px;">
+        © 2026 Quantura. All rights reserved.
+      </div>
+    </footer>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>

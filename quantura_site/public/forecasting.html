@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Quantura Forecasting | Prophet + Technical Indicators</title>
+    <meta
+      name="description"
+      content="Generate Prophet-based forecasts, toggle technical indicators, and track ticker momentum with Quantura's forecasting studio."
+    />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://quantura.ai/forecasting" />
+    <meta property="og:title" content="Quantura Forecasting Studio" />
+    <meta property="og:description" content="Prophet forecasting, technical indicators, and demand intelligence for serious investors." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://quantura.ai/forecasting" />
+    <meta property="og:image" content="/assets/quantura-logo.svg" />
+    <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="stylesheet" href="/styles.css" />
+
+    <script defer src="/__/firebase/12.9.0/firebase-app-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-auth-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-firestore-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-functions-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-storage-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-analytics-compat.js"></script>
+    <script defer src="/__/firebase/init.js?useEmulator=false"></script>
+    <script defer src="/app.js"></script>
+  </head>
+  <body>
+    <header class="header">
+      <div class="container nav">
+        <a class="logo" href="/">QUANTURA</a>
+        <nav class="nav-links">
+          <a href="/forecasting" data-analytics="nav_forecasting">Forecasting</a>
+          <a href="/screener" data-analytics="nav_screener">Screener</a>
+          <a href="/dashboard" data-analytics="nav_dashboard">Dashboard</a>
+          <a href="/contact" data-analytics="nav_contact">Contact</a>
+        </nav>
+        <div class="nav-actions">
+          <a class="cta secondary" href="/dashboard">Sign in</a>
+          <a class="cta" href="/dashboard">Request Deep Forecast</a>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="page-hero">
+        <div class="container content-grid">
+          <div>
+            <div class="eyebrow">Forecasting Studio</div>
+            <h1>Prophet-powered forecasts, technical indicators, and demand overlays in one workspace.</h1>
+            <p>
+              Build precision forecasts with adjustable horizons and quantile bands. Toggle technical
+              indicators from Finta, inspect ticker momentum, and surface relevant news — all backed by
+              Firebase functions and stored in your dashboard for later retrieval.
+            </p>
+            <div class="hero-actions">
+              <a class="cta" href="/dashboard" data-analytics="forecast_cta">Save forecast to dashboard</a>
+              <a class="cta secondary" href="#indicators" data-analytics="forecast_indicators">Explore indicators</a>
+            </div>
+          </div>
+          <div class="card">
+            <h3>Forecasting capabilities</h3>
+            <div class="feature-list">
+              <div class="feature"><span></span>Prophet with optimized changepoints</div>
+              <div class="feature"><span></span>P10–P90 and P25–P75 bands</div>
+              <div class="feature"><span></span>Daily or hourly horizons</div>
+              <div class="feature"><span></span>Store every run in Firestore</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="forecast">
+        <div class="container">
+          <div class="section-title">
+            <h2>Run a Prophet forecast</h2>
+            <p class="small">Choose your horizon, quantiles, and timeframe. Results are stored in your dashboard.</p>
+          </div>
+          <div class="content-grid">
+            <form id="forecast-form" class="card">
+              <div class="form-grid">
+                <div class="field">
+                  <label class="label" for="forecast-ticker">Ticker</label>
+                  <input id="forecast-ticker" name="ticker" placeholder="AAPL" required />
+                </div>
+                <div class="field">
+                  <label class="label" for="forecast-start">Start date</label>
+                  <input id="forecast-start" name="start" type="date" />
+                </div>
+                <div class="field">
+                  <label class="label" for="forecast-horizon">Forecast length (days)</label>
+                  <input id="forecast-horizon" name="horizon" type="number" min="5" max="365" value="90" />
+                </div>
+                <div class="field">
+                  <label class="label" for="forecast-interval">Timeframe</label>
+                  <select id="forecast-interval" name="interval">
+                    <option value="1d">Daily</option>
+                    <option value="1h">Hourly</option>
+                  </select>
+                </div>
+              </div>
+              <div class="field">
+                <label class="label">Quantile bands</label>
+                <div class="checkbox-grid">
+                  <label><input type="checkbox" name="quantiles" value="0.10" checked /> P10</label>
+                  <label><input type="checkbox" name="quantiles" value="0.25" checked /> P25</label>
+                  <label><input type="checkbox" name="quantiles" value="0.50" checked /> P50</label>
+                  <label><input type="checkbox" name="quantiles" value="0.75" checked /> P75</label>
+                  <label><input type="checkbox" name="quantiles" value="0.90" checked /> P90</label>
+                </div>
+              </div>
+              <button class="cta" type="submit" data-analytics="forecast_submit">Generate forecast</button>
+              <p class="small">Forecasts are optimized to minimize bias against the latest closing price.</p>
+            </form>
+            <div class="results-panel" id="forecast-result">
+              <h3>Forecast output</h3>
+              <p class="small">Run a forecast to see model summary, accuracy metrics, and quantile bands.</p>
+              <div id="forecast-output"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="indicators">
+        <div class="container">
+          <div class="section-title">
+            <h2>Technical indicator stack (Finta)</h2>
+            <p class="small">Toggle any combination of indicators and compare signals instantly.</p>
+          </div>
+          <div class="content-grid">
+            <form id="technicals-form" class="card">
+              <div class="form-grid">
+                <div class="field">
+                  <label class="label" for="technicals-ticker">Ticker</label>
+                  <input id="technicals-ticker" name="ticker" placeholder="MSFT" required />
+                </div>
+                <div class="field">
+                  <label class="label" for="technicals-interval">Interval</label>
+                  <select id="technicals-interval" name="interval">
+                    <option value="1d">Daily</option>
+                    <option value="1h">Hourly</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label class="label" for="technicals-lookback">Lookback (days)</label>
+                  <input id="technicals-lookback" name="lookback" type="number" min="30" max="365" value="120" />
+                </div>
+              </div>
+              <div class="field">
+                <label class="label">Indicators</label>
+                <div class="checkbox-grid">
+                  <label><input type="checkbox" name="indicators" value="RSI" checked /> RSI</label>
+                  <label><input type="checkbox" name="indicators" value="MACD" checked /> MACD</label>
+                  <label><input type="checkbox" name="indicators" value="SMA" /> SMA</label>
+                  <label><input type="checkbox" name="indicators" value="EMA" /> EMA</label>
+                  <label><input type="checkbox" name="indicators" value="BBANDS" /> Bollinger</label>
+                  <label><input type="checkbox" name="indicators" value="ATR" /> ATR</label>
+                </div>
+              </div>
+              <button class="cta" type="submit" data-analytics="technicals_submit">Run indicators</button>
+            </form>
+            <div class="results-panel" id="technicals-result">
+              <h3>Indicator output</h3>
+              <div id="technicals-output" class="small">Select indicators to see the latest values.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="ticker-intel">
+        <div class="container">
+          <div class="section-title">
+            <h2>Ticker intelligence</h2>
+            <p class="small">Download data, inspect trending tickers, and scan the latest news.</p>
+          </div>
+          <div class="content-grid">
+            <form id="download-form" class="card">
+              <h3>Download price history</h3>
+              <div class="form-grid">
+                <div class="field">
+                  <label class="label" for="download-ticker">Ticker</label>
+                  <input id="download-ticker" name="ticker" placeholder="NVDA" required />
+                </div>
+                <div class="field">
+                  <label class="label" for="download-interval">Interval</label>
+                  <select id="download-interval" name="interval">
+                    <option value="1d">Daily</option>
+                    <option value="1h">Hourly</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label class="label" for="download-start">Start date</label>
+                  <input id="download-start" name="start" type="date" />
+                </div>
+                <div class="field">
+                  <label class="label" for="download-end">End date</label>
+                  <input id="download-end" name="end" type="date" />
+                </div>
+              </div>
+              <button class="cta" type="submit" data-analytics="download_prices">Download CSV</button>
+              <p class="small" id="download-status"></p>
+            </form>
+            <div class="card">
+              <h3>Trending tickers</h3>
+              <p class="small">Tap the button to load the latest trending names.</p>
+              <button class="cta secondary" id="load-trending" type="button" data-analytics="load_trending">Load trending</button>
+              <div id="trending-list" class="ticker-grid" style="margin-top: 16px;"></div>
+            </div>
+          </div>
+          <div class="content-grid" style="margin-top: 24px;">
+            <form id="news-form" class="card">
+              <h3>Latest ticker news</h3>
+              <div class="field">
+                <label class="label" for="news-ticker">Ticker</label>
+                <input id="news-ticker" name="ticker" placeholder="TSLA" required />
+              </div>
+              <button class="cta" type="submit" data-analytics="news_submit">Fetch news</button>
+            </form>
+            <div class="results-panel" id="news-results">
+              <h3>News feed</h3>
+              <div id="news-output" class="small">Latest headlines will appear here.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="options">
+        <div class="container">
+          <div class="section-title">
+            <h2>Options chain + implied probability</h2>
+            <p class="small">Powered by Alpaca data. Estimate probability using delta as a proxy.</p>
+          </div>
+          <div class="content-grid">
+            <form id="options-form" class="card">
+              <div class="form-grid">
+                <div class="field">
+                  <label class="label" for="options-ticker">Underlying ticker</label>
+                  <input id="options-ticker" name="ticker" placeholder="AAPL" required />
+                </div>
+                <div class="field">
+                  <label class="label" for="options-expiration">Expiration (optional)</label>
+                  <input id="options-expiration" name="expiration" type="date" />
+                </div>
+              </div>
+              <button class="cta" type="submit" data-analytics="options_submit">Load options</button>
+              <p class="small">Implied probability is estimated from delta and is not a guarantee.</p>
+            </form>
+            <div class="results-panel" id="options-results">
+              <h3>Options snapshots</h3>
+              <div id="options-output" class="small">Calls and puts will appear here.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="container footer-grid">
+        <div>
+          <div class="logo">QUANTURA</div>
+          <p class="small">Demand forecasting and market intelligence for high-conviction investors.</p>
+          <span class="tag">Forecasting studio</span>
+        </div>
+        <div class="small">
+          <strong>Explore</strong>
+          <div><a href="/">Home</a></div>
+          <div><a href="/screener">Screener</a></div>
+          <div><a href="/dashboard">Dashboard</a></div>
+          <div><a href="/contact">Contact</a></div>
+        </div>
+        <div class="small">
+          <strong>Product</strong>
+          <div>Prophet Forecasting</div>
+          <div>Technical Indicators</div>
+          <div>Options Intelligence</div>
+        </div>
+      </div>
+      <div class="container small" style="margin-top: 24px;">
+        © 2026 Quantura. All rights reserved.
+      </div>
+    </footer>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>

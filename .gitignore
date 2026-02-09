@@ -1,0 +1,7 @@
+.env
+quantura_site/functions/serviceAccountKey.json
+quantura_site/functions/venv/
+quantura_site/.firebase/
+*.local
+.DS_Store
+__pycache__/
