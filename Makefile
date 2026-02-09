@@ -1,4 +1,4 @@
-.PHONY: install fetch fetch-ticker sample git-push check-weekday setup-aws fetch-s3-bucket predict predict-sample
+.PHONY: install fetch fetch-ticker sample git-push check-weekday setup-aws fetch-s3-bucket predict predict-sample screen screen-agent create-tickers
 
 install:
 	pip install -r requirements.txt
@@ -72,3 +72,30 @@ git-push:
 	git add -A
 	git commit -m "$(MSG)" || true
 	git push origin main
+
+# Stock Screening Targets
+# Run basic fundamental-based stock screener
+# Usage: make screen (requires tickers.txt)
+screen:
+	@echo "Running fundamental-based stock screener..."
+	python stock_screener.py
+	@echo "✓ Results saved to value_candidates.csv"
+
+# Run advanced agent-based stock screener
+# Usage: make screen-agent (requires tickers.txt and OPENAI_API_KEY)
+screen-agent:
+	@echo "Running advanced agent-based stock screener..."
+	python agents_stock_screener.py
+	@echo "✓ Results saved to agent_screening_results.csv"
+
+# Create sample tickers.txt file
+create-tickers:
+	@echo "Creating sample tickers.txt..."
+	@echo "AAPL" > tickers.txt
+	@echo "MSFT" >> tickers.txt
+	@echo "GOOGL" >> tickers.txt
+	@echo "TSLA" >> tickers.txt
+	@echo "AMZN" >> tickers.txt
+	@echo "NVDA" >> tickers.txt
+	@echo "META" >> tickers.txt
+	@echo "✓ Sample tickers.txt created with 7 stocks"

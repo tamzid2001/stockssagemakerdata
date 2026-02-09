@@ -4,3 +4,4 @@ numpy
 python-dateutil
 pytz
 boto3>=1.26
+openai>=1.0.0
