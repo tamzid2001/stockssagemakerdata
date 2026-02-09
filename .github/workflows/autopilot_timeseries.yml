@@ -1,0 +1,45 @@
+name: Autopilot Time Series Forecast
+
+on:
+  schedule:
+    - cron: "0 21 * * 2" # Tuesday 21:00 UTC == 4 PM EST
+  workflow_dispatch:
+
+jobs:
+  run-autopilot:
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: us-east-1
+      TICKERS: ${{ secrets.AUTOPILOT_TICKERS }}
+      AUTOPILOT_ROLE_ARN: ${{ secrets.AUTOPILOT_ROLE_ARN }}
+      AUTOPILOT_S3_BUCKET: ${{ secrets.AUTOPILOT_S3_BUCKET }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Autopilot time series job
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+        run: |
+          python scripts/run_autopilot_timeseries.py \
+            --tickers "${TICKERS}" \
+            --start "2020-01-01" \
+            --interval "1d" \
+            --s3-bucket "${AUTOPILOT_S3_BUCKET}" \
+            --s3-prefix "autopilot-stock-forecast" \
+            --role-arn "${AUTOPILOT_ROLE_ARN}" \
+            --frequency "1D" \
+            --forecast-horizon 7 \
+            --skip-if-monday-holiday
