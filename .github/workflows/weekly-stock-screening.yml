@@ -1,0 +1,139 @@
+name: Weekly Stock Screening
+
+on:
+  schedule:
+    # Run every Monday at 9 AM UTC
+    - cron: '0 9 * * 1'
+  
+  # Allow manual trigger for testing
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  stock-screening:
+    runs-on: ubuntu-latest
+    name: Run Weekly Stock Screener
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Create tickers.txt (if not exists)
+        run: |
+          if [ ! -f tickers.txt ]; then
+            echo "AAPL" > tickers.txt
+            echo "MSFT" >> tickers.txt
+            echo "GOOGL" >> tickers.txt
+            echo "TSLA" >> tickers.txt
+            echo "AMZN" >> tickers.txt
+          fi
+
+      - name: Run Stock Screener (Agent-based)
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: us-east-2
+        run: |
+          echo "Starting advanced agent-based stock screening..."
+          python agents_stock_screener.py
+          echo "Stock screening completed."
+
+      - name: List Generated Results
+        if: success()
+        run: |
+          echo "=== Screening Results ==="
+          if [ -f "agent_screening_results.csv" ]; then
+            echo "Agent screening results:"
+            head -20 agent_screening_results.csv
+            wc -l agent_screening_results.csv
+          fi
+          if [ -f "value_candidates.csv" ]; then
+            echo "Value candidates:"
+            head -20 value_candidates.csv
+            wc -l value_candidates.csv
+          fi
+
+      - name: Upload Results to Artifact
+        if: success()
+        uses: actions/upload-artifact@v3
+        with:
+          name: stock-screening-results-${{ github.run_number }}
+          path: |
+            agent_screening_results.csv
+            value_candidates.csv
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Upload Results to S3
+        if: success()
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: us-east-2
+        run: |
+          DATE=$(date +%Y-%m-%d)
+          
+          if [ -f "agent_screening_results.csv" ]; then
+            echo "Uploading agent screening results to S3..."
+            aws s3 cp agent_screening_results.csv \
+              s3://stockscompute/screening_results/agent_results_${DATE}.csv \
+              --region us-east-2 || echo "S3 upload skipped (bucket may not exist or permissions issue)"
+          fi
+          
+          if [ -f "value_candidates.csv" ]; then
+            echo "Uploading value candidates to S3..."
+            aws s3 cp value_candidates.csv \
+              s3://stockscompute/screening_results/value_candidates_${DATE}.csv \
+              --region us-east-2 || echo "S3 upload skipped (bucket may not exist or permissions issue)"
+          fi
+
+      - name: Generate Summary Report
+        if: success()
+        run: |
+          echo "## Stock Screening Report - $(date +'%Y-%m-%d')" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -f "agent_screening_results.csv" ]; then
+            COUNT=$(tail -n +2 agent_screening_results.csv | wc -l)
+            echo "### Agent-Based Screening" >> $GITHUB_STEP_SUMMARY
+            echo "**Stocks Analyzed:** $COUNT" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Top 5 Results (by overall_score):" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            head -6 agent_screening_results.csv >> $GITHUB_STEP_SUMMARY || true
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ -f "value_candidates.csv" ]; then
+            COUNT=$(tail -n +2 value_candidates.csv | wc -l)
+            echo "### Fundamental-Based Screening" >> $GITHUB_STEP_SUMMARY
+            echo "**Stocks Analyzed:** $COUNT" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Notify on Failure
+        if: failure()
+        run: |
+          echo "❌ Stock screening failed. Check logs for details."
+          exit 1
+
+      - name: Notify on Success
+        if: success()
+        run: |
+          echo "✅ Stock screening completed successfully!"
+          echo "Results available in artifacts and S3 bucket (if configured)"
