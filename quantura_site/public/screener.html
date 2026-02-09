@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Quantura Screener | Signal Discovery & Watchlists</title>
+    <meta
+      name="description"
+      content="Quantura's stock screener surfaces mispriced opportunities, ranks candidates, and syncs to Slack for weekly decision briefs."
+    />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://quantura.ai/screener" />
+    <meta property="og:title" content="Quantura Stock Screener" />
+    <meta property="og:description" content="Signal discovery, factor ranking, and real-time watchlists for investors." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://quantura.ai/screener" />
+    <meta property="og:image" content="/assets/quantura-logo.svg" />
+    <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="stylesheet" href="/styles.css" />
+
+    <script defer src="/__/firebase/12.9.0/firebase-app-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-auth-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-firestore-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-functions-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-storage-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-analytics-compat.js"></script>
+    <script defer src="/__/firebase/init.js?useEmulator=false"></script>
+    <script defer src="/app.js"></script>
+  </head>
+  <body>
+    <header class="header">
+      <div class="container nav">
+        <a class="logo" href="/">QUANTURA</a>
+        <nav class="nav-links">
+          <a href="/forecasting" data-analytics="nav_forecasting">Forecasting</a>
+          <a href="/screener" data-analytics="nav_screener">Screener</a>
+          <a href="/dashboard" data-analytics="nav_dashboard">Dashboard</a>
+          <a href="/contact" data-analytics="nav_contact">Contact</a>
+        </nav>
+        <div class="nav-actions">
+          <a class="cta secondary" href="/dashboard">Sign in</a>
+          <a class="cta" href="/dashboard">Launch screener</a>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="page-hero">
+        <div class="container content-grid">
+          <div>
+            <div class="eyebrow">Signal discovery</div>
+            <h1>Quantura Screener ranks the names you should study next.</h1>
+            <p>
+              Combine fundamentals, technicals, and demand signals into a single ranked watchlist.
+              Sync results to Slack, export CSVs, and keep the research pipeline moving every week.
+            </p>
+            <div class="hero-actions">
+              <a class="cta" href="#screener" data-analytics="screener_start">Run a screen</a>
+              <a class="cta secondary" href="#roadmap" data-analytics="screener_roadmap">View roadmap</a>
+            </div>
+          </div>
+          <div class="card">
+            <h3>What the screener delivers</h3>
+            <div class="feature-list">
+              <div class="feature"><span></span>Ranked watchlist with conviction scores</div>
+              <div class="feature"><span></span>Slack-ready weekly brief output</div>
+              <div class="feature"><span></span>CSV exports for BI workflows</div>
+              <div class="feature"><span></span>Sector-level summaries</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="screener">
+        <div class="container">
+          <div class="section-title">
+            <h2>Run the Quantura screener</h2>
+            <p class="small">Store each run in Firestore for comparison across weeks.</p>
+          </div>
+          <div class="content-grid">
+            <form id="screener-form" class="card">
+              <div class="form-grid">
+                <div class="field">
+                  <label class="label" for="screener-universe">Universe</label>
+                  <select id="screener-universe" name="universe">
+                    <option value="large-cap">Large Cap</option>
+                    <option value="mid-cap">Mid Cap</option>
+                    <option value="small-cap">Small Cap</option>
+                    <option value="custom">Custom list</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label class="label" for="screener-market">Market</label>
+                  <select id="screener-market" name="market">
+                    <option value="us">US</option>
+                    <option value="global">Global</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label class="label" for="screener-min">Minimum market cap ($B)</label>
+                  <input id="screener-min" name="minCap" type="number" value="5" />
+                </div>
+                <div class="field">
+                  <label class="label" for="screener-max">Max names</label>
+                  <input id="screener-max" name="maxNames" type="number" value="25" />
+                </div>
+              </div>
+              <div class="field">
+                <label class="label" for="screener-notes">Notes</label>
+                <textarea id="screener-notes" name="notes" placeholder="Optional focus or exclusions"></textarea>
+              </div>
+              <button class="cta" type="submit" data-analytics="screener_submit">Queue screener run</button>
+              <p class="small">Runs are queued and stored in your dashboard with a unique ID.</p>
+            </form>
+            <div class="results-panel" id="screener-result">
+              <h3>Screener output</h3>
+              <p class="small">Queued screener runs will appear in your dashboard.</p>
+              <div id="screener-output"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="roadmap">
+        <div class="container">
+          <div class="section-title">
+            <h2>Stock screener roadmap</h2>
+            <p class="small">Short-term priorities and upcoming enhancements.</p>
+          </div>
+          <div class="content-grid">
+            <div class="card">
+              <h3>Must-do (short term)</h3>
+              <ul>
+                <li>Verify Slack delivery for webhook + bot token paths</li>
+                <li>Confirm Linear workflow secrets and issue creation</li>
+                <li>Expand headlines collection with additional sources</li>
+                <li>Add unit tests for tickers, Slack payloads, schema validation</li>
+                <li>Add CSV schema validation for BI consumers</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>Should-do (mid term)</h3>
+              <ul>
+                <li>Add caching for fundamentals/headlines</li>
+                <li>Build a lightweight screening dashboard</li>
+                <li>Include market-cap weighting in rankings</li>
+                <li>Add optional S3 upload for combined output</li>
+                <li>Configurable minimum ticker count enforcement</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>Nice-to-have</h3>
+              <ul>
+                <li>Sector-level summaries in Slack message</li>
+                <li>Sector-specific models or prompt templates</li>
+                <li>Retry logic and circuit breakers for API calls</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="container footer-grid">
+        <div>
+          <div class="logo">QUANTURA</div>
+          <p class="small">Signal discovery and conviction ranking for active investors.</p>
+          <span class="tag">Stock screener</span>
+        </div>
+        <div class="small">
+          <strong>Explore</strong>
+          <div><a href="/">Home</a></div>
+          <div><a href="/forecasting">Forecasting</a></div>
+          <div><a href="/dashboard">Dashboard</a></div>
+          <div><a href="/contact">Contact</a></div>
+        </div>
+        <div class="small">
+          <strong>Product</strong>
+          <div>Ranked Watchlists</div>
+          <div>Slack Briefings</div>
+          <div>CSV Exports</div>
+        </div>
+      </div>
+      <div class="container small" style="margin-top: 24px;">
+        © 2026 Quantura. All rights reserved.
+      </div>
+    </footer>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>
