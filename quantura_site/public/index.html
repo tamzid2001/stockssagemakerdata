@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Quantura | Weekly Investing Intelligence</title>
+    <meta
+      name="description"
+      content="Quantura delivers weekly investing intelligence and deep demand forecasting reports for serious builders of wealth."
+    />
+    <link rel="stylesheet" href="/styles.css" />
+
+    <script defer src="/__/firebase/12.9.0/firebase-app-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-auth-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-firestore-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-functions-compat.js"></script>
+    <script defer src="/__/firebase/init.js?useEmulator=false"></script>
+    <script defer src="/app.js"></script>
+  </head>
+  <body>
+    <header class="header">
+      <div class="container nav">
+        <a class="logo" href="#">QUANTURA</a>
+        <nav class="nav-links">
+          <a href="#use-cases">Use Cases</a>
+          <a href="#forecast">Deep Forecast</a>
+          <a href="#auth">Sign In</a>
+          <a href="#dashboard" id="header-dashboard" class="hidden">Dashboard</a>
+        </nav>
+        <div class="nav-actions">
+          <button class="cta secondary" id="header-auth">Sign in</button>
+          <button class="cta secondary hidden" id="header-signout">Sign out</button>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="container hero-grid">
+          <div class="fade-in">
+            <span class="badge">Weekly investing newsletter</span>
+            <h1>Quantura delivers the mispriced ideas you want before the market agrees.</h1>
+            <p>
+              A weekly brief for serious investors. Each issue highlights 5–10 mispriced
+              growth or value stocks, one chart that matters, and crisp commentary.
+            </p>
+            <div class="hero-actions">
+              <a class="cta" href="#newsletter">Get the free weekly email</a>
+              <a class="cta secondary" href="#use-cases">See use cases</a>
+            </div>
+            <div class="small" style="margin-top: 24px;">
+              Trusted by private investors, family offices, and product-led founders.
+            </div>
+          </div>
+          <div class="hero-card fade-in delay-1">
+            <h3>This week in Quantura</h3>
+            <ul>
+              <li>Top 5–10 mispriced growth/value stocks</li>
+              <li>1–2 bullets of commentary per name</li>
+              <li>Key chart or metric per stock</li>
+              <li>Soft CTA: full model + ranking inside</li>
+            </ul>
+            <div style="margin-top: 22px;">
+              <span class="tag">Weekly cadence</span>
+              <span class="tag" style="background: #fde7db; color: #7b2b14;">Independent research</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="use-cases">
+        <div class="container">
+          <div class="section-title">
+            <h2>Core free product</h2>
+            <p class="small">Top of funnel designed to build trust and momentum.</p>
+          </div>
+          <div class="grid-3">
+            <div class="card fade-in">
+              <h3>Weekly report</h3>
+              <p>Curated mispricings with a clean narrative that respects your time.</p>
+              <div class="feature-list">
+                <div class="feature"><span></span>5–10 high conviction names</div>
+                <div class="feature"><span></span>Signals, catalysts, and ranking</div>
+                <div class="feature"><span></span>Clear stop/monitor notes</div>
+              </div>
+            </div>
+            <div class="card fade-in delay-1">
+              <h3>Macro overlay</h3>
+              <p>Context for rate regimes, sector rotations, and demand shifts.</p>
+              <div class="feature-list">
+                <div class="feature"><span></span>Sector heatmap snapshot</div>
+                <div class="feature"><span></span>Style factor commentary</div>
+                <div class="feature"><span></span>Forward risk scenario notes</div>
+              </div>
+            </div>
+            <div class="card fade-in delay-2">
+              <h3>Soft CTA</h3>
+              <p>Invite readers into the deep forecast report once they’re warmed.</p>
+              <div class="feature-list">
+                <div class="feature"><span></span>Full model + ranking</div>
+                <div class="feature"><span></span>On-demand forecasting</div>
+                <div class="feature"><span></span>Decision-ready report</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="forecast">
+        <div class="container split">
+          <div>
+            <h2>Demand Forecasting™ — Deep Forecast</h2>
+            <p>
+              High-conviction forecasting for a single asset with regime sensitivity notes,
+              accuracy diagnostics, and structured delivery. Built to feel professional,
+              defensible, and decision-ready.
+            </p>
+            <div class="card" style="margin-top: 24px;">
+              <strong>Includes</strong>
+              <ul>
+                <li>1 asset deep dive</li>
+                <li>Up to 5 prediction lengths</li>
+                <li>Enhanced feature set</li>
+                <li>Accuracy diagnostics + error bands</li>
+                <li>Regime sensitivity notes</li>
+                <li>Structured report delivery</li>
+              </ul>
+            </div>
+          </div>
+          <div class="offer">
+            <div>
+              <span class="badge">One-time report</span>
+              <h2>Deep Forecast</h2>
+              <div class="price">$349</div>
+              <p class="small">Markup: ~2.3×–2.8×, built to feel defensible.</p>
+            </div>
+            <ul>
+              <li>Delivered within 5 business days</li>
+              <li>PDF + summary deck format</li>
+              <li>1:1 interpretation call included</li>
+            </ul>
+            <div class="purchase-panel">
+              <button class="cta" id="purchase-btn" disabled>Sign in to purchase</button>
+              <p class="small" id="purchase-note">
+                You must sign in to purchase. We use Firebase Auth to secure checkout.
+              </p>
+              <div id="purchase-success" class="notice hidden"></div>
+              <button class="cta secondary hidden" id="stripe-link" type="button">Proceed to payment</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="newsletter">
+        <div class="container">
+          <div class="section-title">
+            <h2>Get the free weekly update</h2>
+            <p class="small">Join the list for the next issue and receive the latest mispricings.</p>
+          </div>
+          <div class="split">
+            <div>
+              <p>
+                Quantura Weekly gives you a ranked short list of mispriced equities,
+                a fast scan of sector shifts, and a preview of demand-led insights.
+              </p>
+            </div>
+            <div class="card">
+              <form>
+                <input type="text" placeholder="Name" />
+                <input type="email" placeholder="Email" />
+                <button class="cta" type="submit">Join Quantura Weekly</button>
+                <p class="small">We respect your inbox. Unsubscribe anytime.</p>
+              </form>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section auth-section" id="auth">
+        <div class="container">
+          <div class="section-title">
+            <h2>Sign in to unlock your dashboard</h2>
+            <p class="small">Email/password and Google sign-in backed by Firebase Auth.</p>
+          </div>
+          <div class="auth-grid">
+            <div class="card">
+              <h3>Email access</h3>
+              <p class="small">Use your email to sign in or create your Quantura account.</p>
+              <form id="email-auth-form" class="auth-form">
+                <label class="label" for="auth-email">Email</label>
+                <input id="auth-email" type="email" placeholder="you@domain.com" required />
+                <label class="label" for="auth-password">Password</label>
+                <input id="auth-password" type="password" minlength="6" placeholder="Minimum 6 characters" required />
+                <div class="auth-actions">
+                  <button class="cta" id="email-signin" type="submit">Sign in</button>
+                  <button class="cta secondary" id="email-create" type="button">Create account</button>
+                </div>
+                <p class="small" id="auth-email-message"></p>
+              </form>
+            </div>
+            <div class="card">
+              <h3>Google sign-in</h3>
+              <p class="small">Fastest way to access your account and purchase history.</p>
+              <button class="cta google" id="google-signin" type="button">Continue with Google</button>
+              <div class="notice">
+                <strong>Secure by design.</strong> We only store what’s needed to deliver your report and
+                surface your order status in the dashboard.
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="dashboard">
+        <div class="container">
+          <div class="section-title">
+            <h2>Your dashboard</h2>
+            <p class="small">Order status, fulfillment, and delivery timeline.</p>
+          </div>
+          <div class="dashboard-grid">
+            <div class="card" id="profile-card">
+              <h3>Account</h3>
+              <div class="profile-item">
+                <span class="label">Signed in as</span>
+                <span id="user-email" class="value">Not signed in</span>
+              </div>
+              <div class="profile-item">
+                <span class="label">Provider</span>
+                <span id="user-provider" class="value">—</span>
+              </div>
+              <div class="profile-item">
+                <span class="label">Status</span>
+                <span id="user-status" class="pill">Guest</span>
+              </div>
+              <div class="notice" id="dashboard-cta">
+                Sign in to unlock order tracking and fulfillment updates.
+              </div>
+            </div>
+            <div class="card">
+              <h3>Your orders</h3>
+              <div id="user-orders" class="order-list"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section admin-section hidden" id="admin">
+        <div class="container">
+          <div class="section-title">
+            <h2>Admin dashboard</h2>
+            <p class="small">Manage and fulfill Deep Forecast orders.</p>
+          </div>
+          <div class="card">
+            <div id="admin-orders" class="order-list"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="container footer-grid">
+        <div>
+          <div class="logo">QUANTURA</div>
+          <p class="small">
+            Weekly investing intelligence and on-demand forecasting reports. Built for
+            founders, operators, and private investors who move early.
+          </p>
+          <span class="tag">Weekly newsletter</span>
+        </div>
+        <div class="small">
+          <strong>Explore</strong>
+          <div><a href="#use-cases">Use Cases</a></div>
+          <div><a href="#auth">Sign in</a></div>
+          <div><a href="#dashboard">Dashboard</a></div>
+        </div>
+        <div class="small">
+          <strong>Product</strong>
+          <div>Demand Forecasting™</div>
+          <div>Deep Forecast Report</div>
+          <div>$349 one-time</div>
+          <div>Delivery in 5 business days</div>
+        </div>
+      </div>
+      <div class="container small" style="margin-top: 24px;">
+        © 2026 Quantura. All rights reserved.
+      </div>
+    </footer>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>
