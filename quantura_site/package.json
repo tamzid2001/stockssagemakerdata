@@ -1,0 +1,10 @@
+{
+  "name": "quantura-site",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Quantura Firebase Hosting (static).",
+  "scripts": {
+    "build": "node -e \"console.log('Quantura: static hosting, no build step required.')\""
+  }
+}
+
