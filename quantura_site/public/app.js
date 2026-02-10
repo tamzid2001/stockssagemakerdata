@@ -495,7 +495,7 @@
 	    }
 	  };
 
-    const resolveThemePreference = () => {
+	    const resolveThemePreference = () => {
       try {
         const stored = localStorage.getItem(THEME_KEY);
         if (stored === "dark" || stored === "light") return stored;
@@ -507,20 +507,35 @@
       } catch (error) {
         return "light";
       }
-    };
+	    };
 
-    const isDarkMode = () => document.documentElement.dataset.theme === "dark";
+	    const isDarkMode = () => document.documentElement.dataset.theme === "dark";
 
-    const applyTheme = (theme, { persist = true } = {}) => {
-      const next = theme === "dark" ? "dark" : "light";
-      document.documentElement.dataset.theme = next;
-      if (persist) safeLocalStorageSet(THEME_KEY, next);
-      const button = document.getElementById("theme-toggle");
-      if (button) {
-        button.textContent = next === "dark" ? "Light mode" : "Dark mode";
-        button.setAttribute("aria-label", next === "dark" ? "Switch to light mode" : "Switch to dark mode");
-      }
-    };
+	    const LOGO_LIGHT = "/assets/quantura-logo.svg";
+	    const LOGO_DARK = "/assets/quantura-logo-dark.svg";
+
+	    const syncBrandAssets = (theme) => {
+	      const desiredLogo = theme === "dark" ? LOGO_DARK : LOGO_LIGHT;
+	      document
+	        .querySelectorAll('img[src$="quantura-logo.svg"], img[src$="quantura-logo-dark.svg"]')
+	        .forEach((img) => {
+	          if (img.getAttribute("src") !== desiredLogo) {
+	            img.setAttribute("src", desiredLogo);
+	          }
+	        });
+	    };
+
+	    const applyTheme = (theme, { persist = true } = {}) => {
+	      const next = theme === "dark" ? "dark" : "light";
+	      document.documentElement.dataset.theme = next;
+	      syncBrandAssets(next);
+	      if (persist) safeLocalStorageSet(THEME_KEY, next);
+	      const button = document.getElementById("theme-toggle");
+	      if (button) {
+	        button.textContent = next === "dark" ? "Light mode" : "Dark mode";
+	        button.setAttribute("aria-label", next === "dark" ? "Switch to light mode" : "Switch to dark mode");
+	      }
+	    };
 
     const ensureThemeToggle = () => {
       if (document.getElementById("theme-toggle")) return;
@@ -2017,10 +2032,10 @@
       throw new Error("Notification permission was not granted.");
     }
 
-    const vapidKey = await loadVapidKey(functions);
-    if (!vapidKey) {
-      throw new Error("FCM Web Push key is missing. Configure FCM_WEB_VAPID_KEY in Functions.");
-    }
+	    const vapidKey = await loadVapidKey(functions);
+	    if (!vapidKey) {
+	      throw new Error("Web push key is missing. Configure the VAPID public key on the server.");
+	    }
 
     const serviceWorkerRegistration = await ensureMessagingServiceWorker();
     const token = await messaging.getToken({

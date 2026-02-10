@@ -1,5 +1,15 @@
 User-agent: *
 Allow: /
 Disallow: /dashboard
+Disallow: /account
+Disallow: /purchase
+Disallow: /watchlist
+Disallow: /productivity
+Disallow: /collaboration
+Disallow: /uploads
+Disallow: /autopilot
+Disallow: /trading
+Disallow: /notifications
 Disallow: /admin
-Sitemap: https://quantura.ai/sitemap.xml
+Disallow: /saved-forecasts
+Sitemap: https://quantura-e2e3d.web.app/sitemap.xml
