@@ -283,6 +283,42 @@
               <div id="alpaca-output" class="small">Orders will appear here after submission.</div>
             </div>
           </div>
+          <div class="content-grid" style="margin-top: 24px;">
+            <div class="card">
+              <h3>Alpaca account snapshot</h3>
+              <button class="cta secondary" id="alpaca-load-account" type="button">Load account</button>
+              <div id="alpaca-account-output" class="small" style="margin-top: 12px;">Account data will appear here.</div>
+            </div>
+            <div class="card">
+              <h3>Open positions</h3>
+              <button class="cta secondary" id="alpaca-load-positions" type="button">Load positions</button>
+              <div id="alpaca-positions-output" class="small" style="margin-top: 12px;">Positions will appear here.</div>
+            </div>
+          </div>
+          <div class="content-grid" style="margin-top: 24px;">
+            <div class="card">
+              <h3>List broker orders</h3>
+              <div class="field">
+                <label class="label" for="alpaca-order-status-filter">Status filter</label>
+                <select id="alpaca-order-status-filter">
+                  <option value="all">All</option>
+                  <option value="open">Open</option>
+                  <option value="closed">Closed</option>
+                </select>
+              </div>
+              <button class="cta secondary" id="alpaca-load-orders" type="button">Load broker orders</button>
+              <div id="alpaca-broker-orders-output" class="small" style="margin-top: 12px;">Broker orders will appear here.</div>
+            </div>
+            <form class="card" id="alpaca-cancel-order-form">
+              <h3>Cancel broker order</h3>
+              <div class="field">
+                <label class="label" for="alpaca-cancel-order-id">Alpaca order ID</label>
+                <input id="alpaca-cancel-order-id" placeholder="Paste Alpaca order id" required />
+              </div>
+              <button class="cta secondary" type="submit">Cancel order</button>
+              <p class="small" id="alpaca-cancel-status"></p>
+            </form>
+          </div>
         </div>
       </section>
 
