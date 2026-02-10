@@ -148,12 +148,16 @@
 	    remoteConfigLoaded: false,
 	    remoteFlags: {
 	      watchlistEnabled: true,
+	      forecastProphetEnabled: true,
+	      forecastTimeMixerEnabled: true,
 	      webPushVapidKey: "",
 	    },
+	    remoteConfigRefreshTimer: null,
+	    remoteConfigUnsubscribe: null,
 	    activeWorkspaceId: (() => {
 	      try {
 	        return localStorage.getItem(WORKSPACE_KEY) || "";
-      } catch (error) {
+	      } catch (error) {
         return "";
       }
     })(),
@@ -344,57 +348,188 @@
     }
   };
 
-  const getRemoteConfigClient = () => {
-    try {
-      if (typeof firebase === "undefined") return null;
-      if (!firebase.remoteConfig) return null;
-      const rc = firebase.remoteConfig();
-      if (rc.settings) {
-        rc.settings.minimumFetchIntervalMillis = 5 * 60 * 1000;
-      } else {
-        rc.settings = { minimumFetchIntervalMillis: 5 * 60 * 1000 };
-      }
-      rc.defaultConfig = {
-        watchlist_enabled: true,
-        forecast_prophet_enabled: true,
-        forecast_timemixer_enabled: true,
-        webpush_vapid_key: "",
-      };
-      return rc;
-    } catch (error) {
-      return null;
-    }
-  };
+	  const getRemoteConfigClient = () => {
+	    try {
+	      if (typeof firebase === "undefined") return null;
+	      if (!firebase.remoteConfig) return null;
+	      const rc = firebase.remoteConfig();
+	      const host = (typeof window !== "undefined" && window.location && window.location.hostname) ? window.location.hostname : "";
+	      const isDev = host === "localhost" || host === "127.0.0.1" || host.endsWith(".localhost");
+	      const minFetchIntervalMillis = isDev ? 5 * 60 * 1000 : 60 * 60 * 1000; // 5 min dev, 1 hr prod.
+	      if (rc.settings) {
+	        rc.settings.minimumFetchIntervalMillis = minFetchIntervalMillis;
+	      } else {
+	        rc.settings = { minimumFetchIntervalMillis };
+	      }
+	      rc.defaultConfig = {
+	        welcome_message: "Welcome to Quantura",
+	        watchlist_enabled: true,
+	        forecast_prophet_enabled: true,
+	        forecast_timemixer_enabled: true,
+	        webpush_vapid_key: "",
+	      };
+	      return rc;
+	    } catch (error) {
+	      return null;
+	    }
+	  };
 
-  const applyRemoteFlags = (flags) => {
-    document.querySelectorAll('[data-panel-target="watchlist"]').forEach((el) => {
-      el.classList.toggle("hidden", !flags.watchlistEnabled);
-    });
-    document.querySelectorAll('[data-panel="watchlist"]').forEach((el) => {
-      if (!flags.watchlistEnabled) el.classList.add("hidden");
-    });
-  };
+	  const readRemoteConfigFlags = (rc) => {
+	    const getBool = (key, fallback) => {
+	      try {
+	        if (typeof rc.getBoolean === "function") return Boolean(rc.getBoolean(key));
+	        const raw = typeof rc.getString === "function" ? rc.getString(key) : "";
+	        if (raw === "") return fallback;
+	        return String(raw).trim().toLowerCase() === "true";
+	      } catch (error) {
+	        return fallback;
+	      }
+	    };
+	    const getString = (key, fallback) => {
+	      try {
+	        if (typeof rc.getString === "function") return String(rc.getString(key) || fallback);
+	        return fallback;
+	      } catch (error) {
+	        return fallback;
+	      }
+	    };
+	    return {
+	      watchlistEnabled: getBool("watchlist_enabled", true),
+	      forecastProphetEnabled: getBool("forecast_prophet_enabled", true),
+	      forecastTimeMixerEnabled: getBool("forecast_timemixer_enabled", true),
+	      webPushVapidKey: getString("webpush_vapid_key", ""),
+	    };
+	  };
 
-  const loadRemoteConfig = async () => {
-    const rc = getRemoteConfigClient();
-    if (!rc) return state.remoteFlags;
-    try {
-      await rc.fetchAndActivate();
-    } catch (error) {
-      // Ignore fetch errors and fall back to defaults.
-    }
-    const watchlistEnabled = typeof rc.getBoolean === "function" ? rc.getBoolean("watchlist_enabled") : String(rc.getString("watchlist_enabled")).toLowerCase() === "true";
-    const webPushVapidKey = typeof rc.getString === "function" ? rc.getString("webpush_vapid_key") : "";
-    state.remoteFlags = {
-      ...state.remoteFlags,
-      watchlistEnabled: Boolean(watchlistEnabled),
-      webPushVapidKey: String(webPushVapidKey || ""),
-    };
-    state.remoteConfigLoaded = true;
-    applyRemoteFlags(state.remoteFlags);
-    logEvent("remote_config_loaded", { watchlist: state.remoteFlags.watchlistEnabled });
-    return state.remoteFlags;
-  };
+	  const applyRemoteFlags = (flags) => {
+	    document.querySelectorAll('[data-panel-target="watchlist"]').forEach((el) => {
+	      el.classList.toggle("hidden", !flags.watchlistEnabled);
+	    });
+	    document.querySelectorAll('[data-panel="watchlist"]').forEach((el) => {
+	      if (!flags.watchlistEnabled) el.classList.add("hidden");
+	    });
+
+	    if (ui.forecastService) {
+	      const setOptionEnabled = (value, enabled) => {
+	        const option = ui.forecastService.querySelector(`option[value="${value}"]`);
+	        if (!option) return;
+	        option.disabled = !enabled;
+	        option.hidden = !enabled;
+	      };
+	      setOptionEnabled("prophet", flags.forecastProphetEnabled);
+	      setOptionEnabled("ibm_timemixer", flags.forecastTimeMixerEnabled);
+
+	      const available = Array.from(ui.forecastService.options).filter((opt) => !opt.disabled && !opt.hidden);
+	      if (available.length === 0) {
+	        ui.forecastService.disabled = true;
+	      } else {
+	        ui.forecastService.disabled = false;
+	        const selected = ui.forecastService.selectedOptions?.[0];
+	        if (!selected || selected.disabled || selected.hidden) {
+	          ui.forecastService.value = available[0].value;
+	        }
+	      }
+	    }
+	  };
+
+	  const subscribeRemoteConfigUpdates = (rc) => {
+	    if (!rc) return;
+	    if (state.remoteConfigUnsubscribe) return;
+
+	    const handler = async (configUpdate) => {
+	      let updatedKeys = [];
+	      try {
+	        if (configUpdate?.getUpdatedKeys) {
+	          updatedKeys = Array.from(configUpdate.getUpdatedKeys());
+	        } else if (configUpdate?.updatedKeys) {
+	          updatedKeys = Array.from(configUpdate.updatedKeys);
+	        }
+	      } catch (error) {
+	        updatedKeys = [];
+	      }
+
+	      try {
+	        if (typeof rc.activate === "function") {
+	          await rc.activate();
+	        }
+	      } catch (error) {
+	        // Ignore activate errors.
+	      }
+
+	      const nextFlags = readRemoteConfigFlags(rc);
+	      state.remoteFlags = { ...state.remoteFlags, ...nextFlags };
+	      applyRemoteFlags(state.remoteFlags);
+	      logEvent("remote_config_updated", { updated_keys: updatedKeys.slice(0, 25).join(",") });
+	    };
+
+	    const onUpdate =
+	      typeof rc.onConfigUpdated === "function"
+	        ? rc.onConfigUpdated.bind(rc)
+	        : typeof rc.onConfigUpdate === "function"
+	          ? rc.onConfigUpdate.bind(rc)
+	          : null;
+
+	    if (!onUpdate) return;
+	    try {
+	      const unsub = onUpdate({
+	        next: handler,
+	        error: (err) => {
+	          logEvent("remote_config_update_error", { message: String(err?.message || err || "") });
+	        },
+	        complete: () => {
+	          // Ignore.
+	        },
+	      });
+	      if (typeof unsub === "function") state.remoteConfigUnsubscribe = unsub;
+	    } catch (error) {
+	      // Ignore.
+	    }
+	  };
+
+	  const startRemoteConfigRefreshLoop = (rc) => {
+	    if (!rc) return;
+	    if (state.remoteConfigRefreshTimer) return;
+	    const refresh = async () => {
+	      if (document.visibilityState && document.visibilityState !== "visible") return;
+	      try {
+	        await rc.fetchAndActivate();
+	        const nextFlags = readRemoteConfigFlags(rc);
+	        state.remoteFlags = { ...state.remoteFlags, ...nextFlags };
+	        applyRemoteFlags(state.remoteFlags);
+	      } catch (error) {
+	        // Ignore.
+	      }
+	    };
+	    state.remoteConfigRefreshTimer = window.setInterval(refresh, 15 * 60 * 1000);
+	    document.addEventListener("visibilitychange", () => {
+	      if (document.visibilityState === "visible") refresh();
+	    });
+	  };
+
+	  const loadRemoteConfig = async () => {
+	    const rc = getRemoteConfigClient();
+	    if (!rc) return state.remoteFlags;
+	    try {
+	      await rc.fetchAndActivate();
+	    } catch (error) {
+	      // Ignore fetch errors and fall back to defaults.
+	    }
+	    const nextFlags = readRemoteConfigFlags(rc);
+	    state.remoteFlags = {
+	      ...state.remoteFlags,
+	      ...nextFlags,
+	    };
+	    state.remoteConfigLoaded = true;
+	    applyRemoteFlags(state.remoteFlags);
+	    subscribeRemoteConfigUpdates(rc);
+	    startRemoteConfigRefreshLoop(rc);
+	    logEvent("remote_config_loaded", {
+	      watchlist: state.remoteFlags.watchlistEnabled,
+	      prophet: state.remoteFlags.forecastProphetEnabled,
+	      timemixer: state.remoteFlags.forecastTimeMixerEnabled,
+	    });
+	    return state.remoteFlags;
+	  };
 
   let ephemeralSessionId = "";
   const getSessionId = () => {
@@ -662,6 +797,7 @@
     if (value === "accepted") {
       ensureInitialPageView();
       setUserId(state.user?.uid || null);
+      loadRemoteConfig();
       showToast("Thanks. Analytics is enabled.");
     } else {
       showToast("Preferences saved.");
