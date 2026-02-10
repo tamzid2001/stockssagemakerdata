@@ -5,6 +5,7 @@
   const COOKIE_CONSENT_KEY = "quantura_cookie_consent";
   const FEEDBACK_PROMPT_KEY = "quantura_feedback_prompt_v1";
   const LAST_TICKER_KEY = "quantura_last_ticker";
+  const WORKSPACE_KEY = "quantura_active_workspace";
 
   const ui = {
     headerAuth: document.getElementById("header-auth"),
@@ -69,6 +70,13 @@
     alpacaCancelOrderId: document.getElementById("alpaca-cancel-order-id"),
     alpacaCancelStatus: document.getElementById("alpaca-cancel-status"),
     savedForecastsList: document.getElementById("saved-forecasts-list"),
+    workspaceSelect: document.getElementById("workspace-select"),
+    collabInviteForm: document.getElementById("collab-invite-form"),
+    collabInviteEmail: document.getElementById("collab-invite-email"),
+    collabInviteRole: document.getElementById("collab-invite-role"),
+    collabInviteStatus: document.getElementById("collab-invite-status"),
+    collabInvitesList: document.getElementById("collab-invites-list"),
+    collabCollaboratorsList: document.getElementById("collab-collaborators-list"),
     notificationsEnable: document.getElementById("notifications-enable"),
     notificationsRefresh: document.getElementById("notifications-refresh"),
     notificationsSendTest: document.getElementById("notifications-send-test"),
@@ -103,6 +111,15 @@
     unsubscribePredictions: null,
     unsubscribeAlpaca: null,
     messagingBound: false,
+    activeWorkspaceId: (() => {
+      try {
+        return localStorage.getItem(WORKSPACE_KEY) || "";
+      } catch (error) {
+        return "";
+      }
+    })(),
+    sharedWorkspaces: [],
+    unsubscribeSharedWorkspaces: null,
   };
 
   const showToast = (message, variant = "default") => {
@@ -227,8 +244,98 @@
     try {
       localStorage.setItem(key, value);
     } catch (error) {
-      // Ignore storage write failures.
+      // Ignore storage failures.
     }
+  };
+
+  const safeLocalStorageRemove = (key) => {
+    try {
+      localStorage.removeItem(key);
+    } catch (error) {
+      // Ignore storage failures.
+    }
+  };
+
+  const buildWorkspaceOptions = (user) => {
+    const opts = [];
+    if (!user) return opts;
+    opts.push({ id: user.uid, label: "My workspace" });
+    state.sharedWorkspaces.forEach((ws) => {
+      const id = ws.workspaceUserId || ws.id;
+      if (!id) return;
+      const label = ws.workspaceEmail ? `Shared: ${ws.workspaceEmail}` : `Shared workspace ${id.slice(0, 6)}`;
+      opts.push({ id, label });
+    });
+    return opts;
+  };
+
+  const resolveActiveWorkspaceId = (user) => {
+    if (!user) return "";
+    const allowed = new Set(buildWorkspaceOptions(user).map((o) => o.id));
+    const desired = state.activeWorkspaceId || "";
+    return allowed.has(desired) ? desired : user.uid;
+  };
+
+  const setActiveWorkspaceId = (workspaceId) => {
+    state.activeWorkspaceId = workspaceId || "";
+    if (workspaceId) {
+      safeLocalStorageSet(WORKSPACE_KEY, workspaceId);
+    } else {
+      safeLocalStorageRemove(WORKSPACE_KEY);
+    }
+  };
+
+  const renderWorkspaceSelect = (user) => {
+    if (!ui.workspaceSelect) return;
+    ui.workspaceSelect.innerHTML = "";
+    if (!user) {
+      const opt = document.createElement("option");
+      opt.value = "";
+      opt.textContent = "Sign in to manage workspaces";
+      ui.workspaceSelect.appendChild(opt);
+      ui.workspaceSelect.disabled = true;
+      return;
+    }
+
+    const options = buildWorkspaceOptions(user);
+    const active = resolveActiveWorkspaceId(user);
+    options.forEach((item) => {
+      const opt = document.createElement("option");
+      opt.value = item.id;
+      opt.textContent = item.label;
+      ui.workspaceSelect.appendChild(opt);
+    });
+    ui.workspaceSelect.value = active;
+    ui.workspaceSelect.disabled = options.length <= 1;
+  };
+
+  const subscribeSharedWorkspaces = (db, user) => {
+    if (state.unsubscribeSharedWorkspaces) state.unsubscribeSharedWorkspaces();
+    state.sharedWorkspaces = [];
+    if (!user) {
+      renderWorkspaceSelect(null);
+      return;
+    }
+
+    state.unsubscribeSharedWorkspaces = db
+      .collection("users")
+      .doc(user.uid)
+      .collection("shared_workspaces")
+      .onSnapshot(
+        (snapshot) => {
+          state.sharedWorkspaces = snapshot.docs.map((doc) => ({ id: doc.id, workspaceUserId: doc.id, ...doc.data() }));
+          renderWorkspaceSelect(user);
+          const resolved = resolveActiveWorkspaceId(user);
+          if (resolved !== state.activeWorkspaceId) {
+            setActiveWorkspaceId(resolved);
+            logEvent("workspace_resolved", { workspace_id: resolved });
+          }
+          if (resolved) startUserForecasts(db, resolved);
+        },
+        () => {
+          // Ignore workspace subscription errors.
+        }
+      );
   };
 
   const ensureInitialPageView = () => {
@@ -576,6 +683,89 @@
     });
   };
 
+  const renderCollabInvites = (invites) => {
+    if (!ui.collabInvitesList) return;
+    ui.collabInvitesList.innerHTML = "";
+    if (!Array.isArray(invites) || invites.length === 0) {
+      ui.collabInvitesList.textContent = "No invites right now.";
+      return;
+    }
+
+    invites.forEach((invite) => {
+      const card = document.createElement("div");
+      card.className = "order-card";
+      card.innerHTML = `
+        <div class="order-header">
+          <div>
+            <div class="order-title">Workspace invite</div>
+            <div class="small">From: ${escapeHtml(invite.fromEmail || "Unknown")}</div>
+          </div>
+          <span class="status pending">${escapeHtml(invite.role || "viewer")}</span>
+        </div>
+        <div class="order-meta">
+          <div><strong>Workspace</strong> ${escapeHtml(invite.workspaceEmail || invite.workspaceUserId || "")}</div>
+          <div><strong>Invite ID</strong> ${escapeHtml(invite.inviteId || "")}</div>
+        </div>
+        <div class="order-actions" style="grid-template-columns: 1fr;">
+          <button class="cta secondary small" type="button" data-action="accept-collab-invite" data-invite-id="${escapeHtml(invite.inviteId || "")}">
+            Accept invite
+          </button>
+        </div>
+      `;
+      ui.collabInvitesList.appendChild(card);
+    });
+  };
+
+  const renderCollaborators = (collaborators) => {
+    if (!ui.collabCollaboratorsList) return;
+    ui.collabCollaboratorsList.innerHTML = "";
+    if (!Array.isArray(collaborators) || collaborators.length === 0) {
+      ui.collabCollaboratorsList.textContent = "No collaborators yet.";
+      return;
+    }
+
+    collaborators.forEach((collab) => {
+      const card = document.createElement("div");
+      card.className = "order-card";
+      card.innerHTML = `
+        <div class="order-header">
+          <div>
+            <div class="order-title">${escapeHtml(collab.email || collab.userId || "Collaborator")}</div>
+            <div class="small">Role: ${escapeHtml(collab.role || "viewer")}</div>
+          </div>
+          <span class="status completed">active</span>
+        </div>
+        <div class="order-actions" style="grid-template-columns: 1fr;">
+          <button class="cta secondary small" type="button" data-action="remove-collaborator" data-collaborator-id="${escapeHtml(collab.userId || "")}">
+            Remove
+          </button>
+        </div>
+      `;
+      ui.collabCollaboratorsList.appendChild(card);
+    });
+  };
+
+  const refreshCollaboration = async (functions) => {
+    if (!state.user) return;
+    if (!ui.collabInvitesList && !ui.collabCollaboratorsList) return;
+    try {
+      const listInvites = functions.httpsCallable("list_collab_invites");
+      const listCollaborators = functions.httpsCallable("list_collaborators");
+      const [invitesRes, collabsRes] = await Promise.all([
+        ui.collabInvitesList ? listInvites({ meta: buildMeta() }) : Promise.resolve({ data: { invites: [] } }),
+        ui.collabCollaboratorsList ? listCollaborators({ meta: buildMeta() }) : Promise.resolve({ data: { collaborators: [] } }),
+      ]);
+      const invites = invitesRes.data?.invites || [];
+      const collaborators = collabsRes.data?.collaborators || [];
+      renderCollabInvites(invites);
+      renderCollaborators(collaborators);
+      logEvent("collaboration_loaded", { invites: invites.length, collaborators: collaborators.length });
+    } catch (error) {
+      if (ui.collabInvitesList) ui.collabInvitesList.textContent = "Unable to load invites.";
+      if (ui.collabCollaboratorsList) ui.collabCollaboratorsList.textContent = "Unable to load collaborators.";
+    }
+  };
+
   const startUserOrders = (db, user) => {
     if (state.unsubscribeOrders) state.unsubscribeOrders();
     if (!user) return;
@@ -590,14 +780,14 @@
       });
   };
 
-  const startUserForecasts = (db, user) => {
+  const startUserForecasts = (db, workspaceUserId) => {
     if (state.unsubscribeForecasts) state.unsubscribeForecasts();
     const containers = [ui.userForecasts, ui.savedForecastsList].filter(Boolean);
-    if (!user || containers.length === 0) return;
+    if (!workspaceUserId || containers.length === 0) return;
 
     state.unsubscribeForecasts = db
       .collection("forecast_requests")
-      .where("userId", "==", user.uid)
+      .where("userId", "==", workspaceUserId)
       .orderBy("createdAt", "desc")
       .onSnapshot((snapshot) => {
         const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
@@ -1155,58 +1345,163 @@
     }
     window.setTimeout(() => ensureFeedbackPrompt(), 1400);
 
-    document.addEventListener("click", (event) => {
-      const target = event.target.closest("[data-analytics]");
-      if (!target) return;
-      logEvent(target.dataset.analytics, {
-        label: target.dataset.label || target.textContent.trim(),
-        page_path: window.location.pathname,
-      });
-    });
+	    document.addEventListener("click", (event) => {
+	      const target = event.target.closest("[data-analytics]");
+	      if (!target) return;
+	      logEvent(target.dataset.analytics, {
+	        label: target.dataset.label || target.textContent.trim(),
+	        page_path: window.location.pathname,
+	      });
+	    });
 
-    document.addEventListener("click", async (event) => {
-      const plotButton = event.target.closest('[data-action="plot-forecast"]');
-      if (!plotButton) return;
-      const forecastId = plotButton.dataset.forecastId;
-      const ticker = plotButton.dataset.ticker || "";
-      if (!forecastId) return;
+	    document.addEventListener("click", (event) => {
+	      const social = event.target.closest(".social-link");
+	      if (!social) return;
+	      const href = social.getAttribute("href") || "";
+	      if (!href || href === "#") {
+	        event.preventDefault();
+	        showToast("Social links are coming soon.");
+	      }
+	    });
+
+	    document.addEventListener("click", async (event) => {
+	      const plotButton = event.target.closest('[data-action="plot-forecast"]');
+	      if (!plotButton) return;
+	      const forecastId = plotButton.dataset.forecastId;
+	      const ticker = plotButton.dataset.ticker || "";
+	      if (!forecastId) return;
 
       if (!state.user) {
         showToast("Sign in to view saved forecasts.", "warn");
         return;
       }
 
-      const onForecastingPage = window.location.pathname === "/forecasting";
-      if (!onForecastingPage) {
-        const params = new URLSearchParams();
-        params.set("forecastId", forecastId);
-        if (ticker) params.set("ticker", ticker);
-        window.location.href = `/forecasting?${params.toString()}`;
-        return;
-      }
+	      const onForecastingPage = window.location.pathname === "/forecasting";
+	      if (!onForecastingPage) {
+	        logEvent("forecast_plot_navigate", { forecast_id: forecastId, ticker });
+	        const params = new URLSearchParams();
+	        params.set("forecastId", forecastId);
+	        if (ticker) params.set("ticker", ticker);
+	        window.location.href = `/forecasting?${params.toString()}`;
+	        return;
+	      }
 
-      try {
-        setTerminalStatus("Loading saved forecast...");
-        await plotForecastById(db, functions, forecastId);
-        document.getElementById("terminal")?.scrollIntoView({ behavior: "smooth" });
-      } catch (error) {
-        setTerminalStatus(error.message || "Unable to plot forecast.");
-        showToast(error.message || "Unable to plot forecast.", "warn");
-      }
-    });
+	      try {
+	        setTerminalStatus("Loading saved forecast...");
+	        await plotForecastById(db, functions, forecastId);
+	        logEvent("forecast_plotted", { forecast_id: forecastId, ticker });
+	        document.getElementById("terminal")?.scrollIntoView({ behavior: "smooth" });
+	      } catch (error) {
+	        setTerminalStatus(error.message || "Unable to plot forecast.");
+	        showToast(error.message || "Unable to plot forecast.", "warn");
+	      }
+	    });
 
     const persistenceReady = auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(() => {
       showToast("Unable to set auth persistence.", "warn");
     });
 
-    ui.headerAuth?.addEventListener("click", () => {
-      const authSection = document.getElementById("auth");
-      if (authSection) {
-        authSection.scrollIntoView({ behavior: "smooth" });
-      } else {
-        window.location.href = "/dashboard#auth";
-      }
-    });
+	    ui.headerAuth?.addEventListener("click", () => {
+	      const authSection = document.getElementById("auth");
+	      if (authSection) {
+	        authSection.scrollIntoView({ behavior: "smooth" });
+	      } else {
+	        window.location.href = "/dashboard#auth";
+	      }
+	    });
+
+	    ui.workspaceSelect?.addEventListener("change", () => {
+	      if (!state.user) {
+	        showToast("Sign in first.", "warn");
+	        renderWorkspaceSelect(null);
+	        return;
+	      }
+	      const next = String(ui.workspaceSelect.value || "");
+	      const allowed = new Set(buildWorkspaceOptions(state.user).map((o) => o.id));
+	      if (!allowed.has(next)) {
+	        showToast("Workspace is not available.", "warn");
+	        renderWorkspaceSelect(state.user);
+	        return;
+	      }
+	      setActiveWorkspaceId(next);
+	      logEvent("workspace_switched", { workspace_id: next });
+	      startUserForecasts(db, next);
+	      showToast("Workspace updated.");
+	    });
+
+	    ui.collabInviteForm?.addEventListener("submit", async (event) => {
+	      event.preventDefault();
+	      if (!state.user) {
+	        showToast("Sign in to invite collaborators.", "warn");
+	        return;
+	      }
+	      const email = String(ui.collabInviteEmail?.value || "").trim();
+	      const role = String(ui.collabInviteRole?.value || "viewer");
+	      if (!email) {
+	        showToast("Enter an email address.", "warn");
+	        return;
+	      }
+	      if (ui.collabInviteStatus) ui.collabInviteStatus.textContent = "Sending invite...";
+	      try {
+	        const createInvite = functions.httpsCallable("create_collab_invite");
+	        const result = await createInvite({ email, role, meta: buildMeta() });
+	        const inviteId = result.data?.inviteId || "";
+	        if (ui.collabInviteStatus) ui.collabInviteStatus.textContent = inviteId ? `Invite sent (ID: ${inviteId}).` : "Invite sent.";
+	        showToast("Invite sent.");
+	        logEvent("collab_invite_sent", { role });
+	        if (ui.collabInviteEmail) ui.collabInviteEmail.value = "";
+	        await refreshCollaboration(functions);
+	      } catch (error) {
+	        if (ui.collabInviteStatus) ui.collabInviteStatus.textContent = error.message || "Unable to send invite.";
+	        showToast(error.message || "Unable to send invite.", "warn");
+	      }
+	    });
+
+	    document.addEventListener("click", async (event) => {
+	      const acceptButton = event.target.closest('[data-action="accept-collab-invite"]');
+	      if (acceptButton) {
+	        const inviteId = acceptButton.dataset.inviteId;
+	        if (!inviteId) return;
+	        if (!state.user) {
+	          showToast("Sign in to accept invites.", "warn");
+	          return;
+	        }
+	        acceptButton.disabled = true;
+	        try {
+	          const acceptInvite = functions.httpsCallable("accept_collab_invite");
+	          await acceptInvite({ inviteId, meta: buildMeta() });
+	          showToast("Invite accepted.");
+	          logEvent("collab_invite_accepted", { invite_id: inviteId });
+	          await refreshCollaboration(functions);
+	        } catch (error) {
+	          showToast(error.message || "Unable to accept invite.", "warn");
+	        } finally {
+	          acceptButton.disabled = false;
+	        }
+	        return;
+	      }
+
+	      const removeButton = event.target.closest('[data-action="remove-collaborator"]');
+	      if (!removeButton) return;
+	      const collaboratorUserId = removeButton.dataset.collaboratorId;
+	      if (!collaboratorUserId) return;
+	      if (!state.user) {
+	        showToast("Sign in to manage collaborators.", "warn");
+	        return;
+	      }
+	      removeButton.disabled = true;
+	      try {
+	        const remove = functions.httpsCallable("remove_collaborator");
+	        await remove({ collaboratorUserId, meta: buildMeta() });
+	        showToast("Collaborator removed.");
+	        logEvent("collaborator_removed", { collaborator_id: collaboratorUserId });
+	        await refreshCollaboration(functions);
+	      } catch (error) {
+	        showToast(error.message || "Unable to remove collaborator.", "warn");
+	      } finally {
+	        removeButton.disabled = false;
+	      }
+	    });
 
     ui.headerSignOut?.addEventListener("click", async () => {
       await unregisterCachedNotificationToken(functions);
@@ -1253,15 +1548,20 @@
       }
     });
 
-    ui.purchasePanels.forEach((panel) => {
-      const purchaseBtn = panel.querySelector('[data-action="purchase"]');
-      const stripeBtn = panel.querySelector('[data-action="stripe"]');
-      purchaseBtn?.addEventListener("click", () => handlePurchase(panel, functions));
-      stripeBtn?.addEventListener("click", () => {
-        logEvent("purchase_intent", { product: panel.dataset.product || "Deep Forecast" });
-        window.open(STRIPE_URL, "_blank", "noreferrer");
-      });
-    });
+	    ui.purchasePanels.forEach((panel) => {
+	      const purchaseBtn = panel.querySelector('[data-action="purchase"]');
+	      const stripeBtn = panel.querySelector('[data-action="stripe"]');
+	      purchaseBtn?.addEventListener("click", () => handlePurchase(panel, functions));
+	      stripeBtn?.addEventListener("click", () => {
+	        logEvent("purchase_intent", { product: panel.dataset.product || "Deep Forecast" });
+	        const url = panel.dataset.stripeUrl || STRIPE_URL;
+	        if (!url || url === "#") {
+	          showToast("Payment link is not configured yet.", "warn");
+	          return;
+	        }
+	        window.open(url, "_blank", "noreferrer");
+	      });
+	    });
 
     if (ui.terminalTicker) {
       const initialTicker =
@@ -2021,19 +2321,21 @@
       }
     });
 
-    auth.onAuthStateChanged(async (user) => {
-      state.user = user;
-      setAuthUi(user);
-      setUserId(user?.uid || null);
+	    auth.onAuthStateChanged(async (user) => {
+	      state.user = user;
+	      setAuthUi(user);
+	      setUserId(user?.uid || null);
 
-      if (!user) {
-        renderOrderList([], ui.userOrders);
-        renderRequestList([], ui.userForecasts, "No forecast requests yet.");
-        renderRequestList([], ui.autopilotOutput, "No autopilot requests yet.");
-        renderRequestList([], ui.predictionsOutput, "No uploads yet.");
-        renderRequestList([], ui.alpacaOutput, "No Alpaca orders yet.");
-        ui.adminSection?.classList.add("hidden");
-        ui.navAdmin?.classList.add("hidden");
+	      if (!user) {
+	        renderOrderList([], ui.userOrders);
+	        renderRequestList([], ui.userForecasts, "No forecast requests yet.");
+	        renderRequestList([], ui.autopilotOutput, "No autopilot requests yet.");
+	        renderRequestList([], ui.predictionsOutput, "No uploads yet.");
+	        renderRequestList([], ui.alpacaOutput, "No Alpaca orders yet.");
+	        if (ui.collabInvitesList) ui.collabInvitesList.textContent = "Sign in to view invites.";
+	        if (ui.collabCollaboratorsList) ui.collabCollaboratorsList.textContent = "Sign in to manage collaborators.";
+	        ui.adminSection?.classList.add("hidden");
+	        ui.navAdmin?.classList.add("hidden");
         if (ui.notificationsStatus) {
           if (!isPushSupported()) {
             setNotificationStatus("Push notifications are not supported in this browser.");
@@ -2044,21 +2346,30 @@
           }
           setNotificationControlsEnabled(false);
         }
-        if (state.unsubscribeOrders) state.unsubscribeOrders();
-        if (state.unsubscribeAdmin) state.unsubscribeAdmin();
-        if (state.unsubscribeForecasts) state.unsubscribeForecasts();
-        if (state.unsubscribeAutopilot) state.unsubscribeAutopilot();
-        if (state.unsubscribePredictions) state.unsubscribePredictions();
-        if (state.unsubscribeAlpaca) state.unsubscribeAlpaca();
-        return;
-      }
+	        if (state.unsubscribeOrders) state.unsubscribeOrders();
+	        if (state.unsubscribeAdmin) state.unsubscribeAdmin();
+	        if (state.unsubscribeForecasts) state.unsubscribeForecasts();
+	        if (state.unsubscribeAutopilot) state.unsubscribeAutopilot();
+	        if (state.unsubscribePredictions) state.unsubscribePredictions();
+	        if (state.unsubscribeAlpaca) state.unsubscribeAlpaca();
+	        if (state.unsubscribeSharedWorkspaces) state.unsubscribeSharedWorkspaces();
+	        state.sharedWorkspaces = [];
+	        setActiveWorkspaceId("");
+	        renderWorkspaceSelect(null);
+	        return;
+	      }
 
-      await ensureUserProfile(db, user);
-      startUserOrders(db, user);
-      startUserForecasts(db, user);
-      startAutopilotRequests(db, user);
-      startPredictionsUploads(db, user);
-      startAlpacaOrders(db, user);
+	      await ensureUserProfile(db, user);
+	      startUserOrders(db, user);
+	      subscribeSharedWorkspaces(db, user);
+	      const activeWorkspaceId = resolveActiveWorkspaceId(user);
+	      setActiveWorkspaceId(activeWorkspaceId);
+	      renderWorkspaceSelect(user);
+	      startUserForecasts(db, activeWorkspaceId);
+	      startAutopilotRequests(db, user);
+	      startPredictionsUploads(db, user);
+	      startAlpacaOrders(db, user);
+	      refreshCollaboration(functions);
 
       if (ui.notificationsStatus) {
         if (messaging && isPushSupported()) {

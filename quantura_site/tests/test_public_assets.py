@@ -6,7 +6,7 @@ PUBLIC = ROOT / "public"
 
 
 def test_public_pages_exist():
-    for name in ["index.html", "forecasting.html", "screener.html", "dashboard.html", "contact.html"]:
+    for name in ["index.html", "forecasting.html", "screener.html", "dashboard.html", "pricing.html", "contact.html"]:
         path = PUBLIC / name
         assert path.exists(), f"Missing {path}"
 
@@ -25,7 +25,7 @@ def test_manifest_and_robots():
 
 
 def test_pages_include_analytics():
-    for name in ["index.html", "forecasting.html", "screener.html", "dashboard.html", "contact.html"]:
+    for name in ["index.html", "forecasting.html", "screener.html", "dashboard.html", "pricing.html", "contact.html"]:
         html = (PUBLIC / name).read_text()
         assert "firebase-analytics-compat" in html
         assert "app.js" in html
