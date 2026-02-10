@@ -107,6 +107,38 @@
 	                  <div class="chart-shell studio-chart">
 	                    <div id="ticker-chart" class="chart"></div>
 	                  </div>
+
+                    <div class="studio-secondary" id="intel-strip">
+                      <div class="card">
+                        <div class="card-head">
+                          <h3>Ticker intelligence</h3>
+                        </div>
+                        <div class="small muted" style="margin-bottom: 12px;">Auto-updates for the ticker in your chart context.</div>
+                        <div id="intel-output" class="panel-output small">Load a ticker to see company overview, events, and analyst signals.</div>
+                        <details class="learn-more">
+                          <summary>Learn more</summary>
+                          <div class="small">
+                            <p>
+                              Use this panel to sanity-check what the market is reacting to. The company overview helps you verify sector and business model,
+                              the events section surfaces upcoming earnings and dividend dates, and the analyst snapshot helps you understand consensus and dispersion.
+                            </p>
+                          </div>
+                        </details>
+                      </div>
+
+                      <div class="card">
+                        <div class="card-head">
+                          <h3>Headlines</h3>
+                        </div>
+                        <div id="news-output" class="panel-output small">Latest headlines will appear here.</div>
+                        <details class="learn-more">
+                          <summary>Learn more</summary>
+                          <p class="small">
+                            Headlines refresh automatically when you load a new ticker. Use them to find catalysts, then confirm with indicator overlays and saved forecast bands.
+                          </p>
+                        </details>
+                      </div>
+                    </div>
 	                </div>
 
                 <div class="studio-panel">
@@ -292,7 +324,7 @@
                   <section class="panel hidden" data-panel="news">
                     <div class="panel-header">
                       <h2>News and data</h2>
-                      <p class="small">Company context and headlines update automatically when you load a ticker in the chart.</p>
+                      <p class="small">Company context and headlines update automatically and render below your chart.</p>
                     </div>
                     <div class="content-grid">
                       <form id="download-form" class="card">
@@ -333,29 +365,9 @@
                         </details>
                       </div>
                     </div>
-                    <div class="content-grid" style="margin-top: 16px;">
-                      <div class="card">
-                        <h3>Ticker intelligence</h3>
-                        <input id="intel-ticker" type="hidden" />
-                        <div class="small muted" style="margin-bottom: 12px;">Auto-updates for the ticker in your chart context.</div>
-                        <div id="intel-output" class="panel-output small">Load a ticker to see company overview, events, and analyst signals.</div>
-                        <details class="learn-more">
-                          <summary>Learn more</summary>
-                          <div class="small">
-                            <p>
-                              Use this panel to sanity-check what the market is reacting to. The company overview helps you verify sector and business model,
-                              the events section surfaces upcoming earnings and dividend dates, and the analyst snapshot helps you understand consensus and dispersion.
-                            </p>
-                            <p>
-                              For any headline cluster, overlay indicators on the price chart and compare forecast bands before you add the ticker to an alert or watchlist.
-                            </p>
-                          </div>
-                        </details>
-                      </div>
-                      <div class="results-panel">
-                        <h3>Headlines</h3>
-                        <div id="news-output" class="panel-output small">Latest headlines will appear here.</div>
-                      </div>
+                    <div class="notice" style="margin-top: 16px;">
+                      Ticker intelligence and headlines are shown below the chart for the active symbol.
+                      <a class="news-link" href="#intel-strip">Jump to the intelligence panel</a>.
                     </div>
                   </section>
 
@@ -393,7 +405,7 @@
                     </div>
                   </section>
 
-                  <section class="panel hidden" data-panel="screener">
+	                  <section class="panel hidden" data-panel="screener">
                     <div class="panel-header">
                       <h2>Screener</h2>
                       <p class="small">Run a quick screen against trending tickers and click any result to load it in the chart.</p>
@@ -442,6 +454,25 @@
 	                      <h3>Screener output</h3>
 	                      <div id="screener-output" class="panel-output small">Run the screener to see ranked candidates.</div>
 	                    </div>
+                      <div class="card">
+                        <h3>Load saved run</h3>
+                        <div class="form-grid">
+                          <div class="field">
+                            <label class="label" for="screener-load-select">Recent runs</label>
+                            <select id="screener-load-select">
+                              <option value="">Select a run</option>
+                            </select>
+                          </div>
+                          <div class="field">
+                            <label class="label" for="screener-load-id">Run ID</label>
+                            <input id="screener-load-id" placeholder="Paste a run ID" />
+                          </div>
+                        </div>
+                        <div class="hero-actions" style="margin-top: 12px;">
+                          <button class="cta secondary" id="screener-load-button" type="button" data-analytics="screener_load_saved">Load run</button>
+                        </div>
+                        <p class="small muted" id="screener-load-status"></p>
+                      </div>
 	                  </section>
 
 	                  <section class="panel hidden" data-panel="watchlist">
