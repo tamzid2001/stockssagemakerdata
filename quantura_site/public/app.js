@@ -337,13 +337,25 @@
     return state.remoteFlags;
   };
 
+  let ephemeralSessionId = "";
   const getSessionId = () => {
+    if (ephemeralSessionId) return ephemeralSessionId;
     const key = "quantura_session_id";
-    const existing = localStorage.getItem(key);
-    if (existing) return existing;
-    const sessionId = `qs_${Math.random().toString(36).slice(2, 11)}${Date.now().toString(36)}`;
-    localStorage.setItem(key, sessionId);
-    return sessionId;
+    try {
+      const existing = localStorage.getItem(key);
+      if (existing) {
+        ephemeralSessionId = existing;
+        return existing;
+      }
+      const sessionId = `qs_${Math.random().toString(36).slice(2, 11)}${Date.now().toString(36)}`;
+      localStorage.setItem(key, sessionId);
+      ephemeralSessionId = sessionId;
+      return sessionId;
+    } catch (error) {
+      // Some browsers/extensions block storage access. Keep a stable per-page session id anyway.
+      ephemeralSessionId = `qs_${Math.random().toString(36).slice(2, 11)}${Date.now().toString(36)}`;
+      return ephemeralSessionId;
+    }
   };
 
   const getUtm = () => {
@@ -2714,33 +2726,35 @@
 	        const runForecast = functions.httpsCallable("run_timeseries_forecast");
 	        const result = await runForecast(payload);
 	        const data = result.data || {};
-        const previewRows = Array.isArray(data.forecastPreview) ? data.forecastPreview.slice(0, 8) : [];
-        const previewTable = previewRows.length
-          ? `
-            <table class="data-table" style="margin-top:12px;">
-              <thead>
-                <tr>
-                  ${Object.keys(previewRows[0])
-                    .map((key) => `<th>${escapeHtml(key)}</th>`)
-                    .join("")}
-                </tr>
-              </thead>
-              <tbody>
-                ${previewRows
-                  .map(
-                    (row) => `
-                      <tr>
-                        ${Object.keys(previewRows[0])
-                          .map((key) => `<td>${escapeHtml(row[key])}</td>`)
-                          .join("")}
-                      </tr>
-                    `
-                  )
-                  .join("")}
-              </tbody>
-            </table>
-          `
-          : "";
+	        const previewRows = Array.isArray(data.forecastPreview) ? data.forecastPreview.slice(0, 8) : [];
+	        const previewTable = previewRows.length
+	          ? `
+              <div class="table-wrap" style="margin-top:12px;">
+	              <table class="data-table">
+	                <thead>
+	                  <tr>
+	                    ${Object.keys(previewRows[0])
+	                      .map((key) => `<th>${escapeHtml(key)}</th>`)
+	                      .join("")}
+	                  </tr>
+	                </thead>
+	                <tbody>
+	                  ${previewRows
+	                    .map(
+	                      (row) => `
+	                        <tr>
+	                          ${Object.keys(previewRows[0])
+	                            .map((key) => `<td>${escapeHtml(row[key])}</td>`)
+	                            .join("")}
+	                        </tr>
+	                      `
+	                    )
+	                    .join("")}
+	                </tbody>
+	              </table>
+              </div>
+	          `
+	          : "";
 	        if (ui.forecastOutput) {
 	          setOutputReady(ui.forecastOutput);
 	          ui.forecastOutput.innerHTML = `
@@ -2793,19 +2807,21 @@
 	        const rows = data.latest || [];
 	        if (ui.technicalsOutput) {
 	          setOutputReady(ui.technicalsOutput);
-	          if (!rows.length) {
-	            ui.technicalsOutput.textContent = "No indicator data returned.";
-	          } else {
-	            ui.technicalsOutput.innerHTML = `
-	              <table class="data-table">
-                <thead><tr><th>Indicator</th><th>Value</th></tr></thead>
-                <tbody>
-                  ${rows.map((row) => `<tr><td>${row.name}</td><td>${row.value}</td></tr>`).join("")}
-                </tbody>
-              </table>
-            `;
-          }
-        }
+		          if (!rows.length) {
+		            ui.technicalsOutput.textContent = "No indicator data returned.";
+		          } else {
+		            ui.technicalsOutput.innerHTML = `
+                  <div class="table-wrap">
+		                <table class="data-table">
+	                    <thead><tr><th>Indicator</th><th>Value</th></tr></thead>
+	                    <tbody>
+	                      ${rows.map((row) => `<tr><td>${row.name}</td><td>${row.value}</td></tr>`).join("")}
+	                    </tbody>
+	                  </table>
+                  </div>
+	            `;
+	          }
+	        }
 
         if (includeSeries && data.series) {
           await renderIndicatorChart(data.series);
@@ -3109,46 +3125,48 @@
 	              <div class="small muted">No results returned.</div>
 	              <div class="small" style="margin-top:10px;"><strong>Run ID:</strong> ${escapeHtml(result.data?.runId || "—")}</div>
 	            `;
-	          } else {
-	            ui.screenerOutput.innerHTML = `
-	              <div class="small"><strong>Run ID:</strong> ${result.data?.runId || "—"}</div>
-	              <table class="data-table" style="margin-top:12px;">
-	                <thead>
-	                  <tr>
-	                    <th>Symbol</th>
-	                    <th>Last close</th>
-	                    <th>Return 1M (%)</th>
-	                    <th>Return 3M (%)</th>
-	                    <th>RSI 14</th>
-	                    <th>Volatility</th>
-	                    <th>Score</th>
-	                  </tr>
-	                </thead>
-	                <tbody>
-	                  ${rows
-	                    .map(
-	                      (row) => `
-	                        <tr>
-	                          <td>
-	                            <button class="link-button" type="button" data-action="pick-ticker" data-ticker="${escapeHtml(row.symbol)}">
-	                              ${escapeHtml(row.symbol)}
-	                            </button>
-	                          </td>
-	                          <td>${row.lastClose ?? "—"}</td>
-	                          <td>${row.return1m ?? "—"}</td>
-	                          <td>${row.return3m ?? "—"}</td>
-	                          <td>${row.rsi14 ?? "—"}</td>
-	                          <td>${row.volatility ?? "—"}</td>
-	                          <td>${row.score ?? "—"}</td>
-	                        </tr>
-	                      `
-	                    )
-	                    .join("")}
-	                </tbody>
-	              </table>
-	            `;
-	          }
-	        }
+		          } else {
+		            ui.screenerOutput.innerHTML = `
+		              <div class="small"><strong>Run ID:</strong> ${result.data?.runId || "—"}</div>
+                  <div class="table-wrap" style="margin-top:12px;">
+		                <table class="data-table">
+		                  <thead>
+		                    <tr>
+		                      <th>Symbol</th>
+		                      <th>Last close</th>
+		                      <th>Return 1M (%)</th>
+		                      <th>Return 3M (%)</th>
+		                      <th>RSI 14</th>
+		                      <th>Volatility</th>
+		                      <th>Score</th>
+		                    </tr>
+		                  </thead>
+		                  <tbody>
+		                    ${rows
+		                      .map(
+		                        (row) => `
+		                          <tr>
+		                            <td>
+		                              <button class="link-button" type="button" data-action="pick-ticker" data-ticker="${escapeHtml(row.symbol)}">
+		                                ${escapeHtml(row.symbol)}
+		                              </button>
+		                            </td>
+		                            <td>${row.lastClose ?? "—"}</td>
+		                            <td>${row.return1m ?? "—"}</td>
+		                            <td>${row.return3m ?? "—"}</td>
+		                            <td>${row.rsi14 ?? "—"}</td>
+		                            <td>${row.volatility ?? "—"}</td>
+		                            <td>${row.score ?? "—"}</td>
+		                          </tr>
+		                        `
+		                      )
+		                      .join("")}
+		                  </tbody>
+		                </table>
+                  </div>
+		            `;
+		          }
+		        }
         showToast("Screener run completed.");
         logEvent("screener_request", { universe: payload.universe });
       } catch (error) {
