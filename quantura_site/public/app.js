@@ -29,6 +29,7 @@
     userForecasts: document.getElementById("user-forecasts"),
     adminSection: document.getElementById("admin"),
     adminOrders: document.getElementById("admin-orders"),
+    adminAutopilot: document.getElementById("admin-autopilot"),
     contactForm: document.getElementById("contact-form"),
     navAdmin: document.getElementById("nav-admin"),
     terminalForm: document.getElementById("terminal-form"),
@@ -130,8 +131,11 @@
       indicatorOverlays: [],
       forecastTablePage: 0,
     },
+    taskCalendarCursor: null,
+    taskCalendarTasks: [],
     unsubscribeOrders: null,
     unsubscribeAdmin: null,
+    unsubscribeAdminAutopilot: null,
 	    unsubscribeForecasts: null,
 	    unsubscribeAutopilot: null,
 	    unsubscribePredictions: null,
@@ -142,7 +146,6 @@
 	    messagingBound: false,
 	    remoteConfigLoaded: false,
 	    remoteFlags: {
-	      assistantEnabled: true,
 	      watchlistEnabled: true,
 	      webPushVapidKey: "",
 	    },
@@ -205,6 +208,7 @@
 		        panelToPath: {
 		          forecast: "/forecasting",
 		          indicators: "/indicators",
+              trending: "/trending",
 		          news: "/news",
 		          options: "/options",
 		          saved: "/saved-forecasts",
@@ -344,7 +348,6 @@
         rc.settings = { minimumFetchIntervalMillis: 5 * 60 * 1000 };
       }
       rc.defaultConfig = {
-        assistant_enabled: true,
         watchlist_enabled: true,
         forecast_prophet_enabled: true,
         forecast_timemixer_enabled: true,
@@ -357,9 +360,6 @@
   };
 
   const applyRemoteFlags = (flags) => {
-    const assistantRoot = document.getElementById("assistant-widget");
-    if (assistantRoot) assistantRoot.classList.toggle("hidden", !flags.assistantEnabled);
-
     document.querySelectorAll('[data-panel-target="watchlist"]').forEach((el) => {
       el.classList.toggle("hidden", !flags.watchlistEnabled);
     });
@@ -376,18 +376,16 @@
     } catch (error) {
       // Ignore fetch errors and fall back to defaults.
     }
-    const assistantEnabled = typeof rc.getBoolean === "function" ? rc.getBoolean("assistant_enabled") : String(rc.getString("assistant_enabled")).toLowerCase() === "true";
     const watchlistEnabled = typeof rc.getBoolean === "function" ? rc.getBoolean("watchlist_enabled") : String(rc.getString("watchlist_enabled")).toLowerCase() === "true";
     const webPushVapidKey = typeof rc.getString === "function" ? rc.getString("webpush_vapid_key") : "";
     state.remoteFlags = {
       ...state.remoteFlags,
-      assistantEnabled: Boolean(assistantEnabled),
       watchlistEnabled: Boolean(watchlistEnabled),
       webPushVapidKey: String(webPushVapidKey || ""),
     };
     state.remoteConfigLoaded = true;
     applyRemoteFlags(state.remoteFlags);
-    logEvent("remote_config_loaded", { assistant: state.remoteFlags.assistantEnabled, watchlist: state.remoteFlags.watchlistEnabled });
+    logEvent("remote_config_loaded", { watchlist: state.remoteFlags.watchlistEnabled });
     return state.remoteFlags;
   };
 
@@ -794,126 +792,6 @@
       return button;
 		  };
 
-	  const ensureAssistantWidget = (functions) => {
-	    if (document.getElementById("assistant-widget")) return;
-
-	    const root = document.createElement("div");
-	    root.id = "assistant-widget";
-
-		    const launcher = document.createElement("button");
-		    launcher.type = "button";
-		    launcher.className = "assistant-launcher";
-		    launcher.setAttribute("aria-label", "Open Quantura assistant");
-		    launcher.textContent = "Ask";
-
-	    const panel = document.createElement("div");
-	    panel.className = "assistant-panel hidden";
-	    panel.setAttribute("role", "dialog");
-	    panel.setAttribute("aria-modal", "false");
-
-	    const header = document.createElement("div");
-	    header.className = "assistant-header";
-	    const title = document.createElement("div");
-	    title.className = "assistant-title";
-	    title.textContent = "Quantura Assistant";
-	    const close = document.createElement("button");
-	    close.type = "button";
-	    close.className = "assistant-close";
-	    close.textContent = "Close";
-	    header.appendChild(title);
-	    header.appendChild(close);
-
-	    const messages = document.createElement("div");
-	    messages.className = "assistant-messages";
-
-	    const form = document.createElement("form");
-	    form.className = "assistant-form";
-	    const input = document.createElement("input");
-	    input.className = "assistant-input";
-	    input.type = "text";
-	    input.placeholder = "Ask about forecasts, indicators, or this ticker...";
-	    input.autocomplete = "off";
-	    const send = document.createElement("button");
-	    send.type = "submit";
-	    send.className = "assistant-send";
-	    send.textContent = "Send";
-	    form.appendChild(input);
-	    form.appendChild(send);
-
-	    const hint = document.createElement("div");
-	    hint.className = "assistant-hint";
-	    hint.textContent = "Tip: load a ticker first, then ask for a plan (forecast, indicators, news, options).";
-
-	    panel.appendChild(header);
-	    panel.appendChild(messages);
-	    panel.appendChild(hint);
-	    panel.appendChild(form);
-
-	    root.appendChild(launcher);
-	    root.appendChild(panel);
-	    document.body.appendChild(root);
-
-	    const appendMessage = (role, text, opts = {}) => {
-	      const bubble = document.createElement("div");
-	      bubble.className = `assistant-msg assistant-msg--${role}`;
-	      if (opts.loading) bubble.classList.add("assistant-msg--loading");
-	      bubble.textContent = text;
-	      messages.appendChild(bubble);
-	      messages.scrollTop = messages.scrollHeight;
-	      return bubble;
-	    };
-
-	    const openPanel = () => {
-	      panel.classList.remove("hidden");
-	      input.focus();
-	      logEvent("assistant_opened", { page_path: window.location.pathname });
-	      if (!messages.childElementCount) {
-	        appendMessage(
-	          "assistant",
-	          state.user
-	            ? "Ask me to interpret indicators, suggest a forecasting setup, or summarize what to check next for this ticker."
-	            : "Sign in to use the assistant. Messages are saved privately to your account."
-	        );
-	      }
-	    };
-
-	    const closePanel = () => panel.classList.add("hidden");
-
-	    launcher.addEventListener("click", () => {
-	      if (panel.classList.contains("hidden")) openPanel();
-	      else closePanel();
-	    });
-
-	    close.addEventListener("click", closePanel);
-
-	    form.addEventListener("submit", async (event) => {
-	      event.preventDefault();
-	      const text = String(input.value || "").trim();
-	      if (!text) return;
-	      input.value = "";
-	      appendMessage("user", text);
-	      if (!state.user) {
-	        appendMessage("assistant", "Sign in to use the assistant.");
-	        showToast("Sign in to use the assistant.", "warn");
-	        return;
-	      }
-
-	      const loading = appendMessage("assistant", "Thinking...", { loading: true });
-	      try {
-	        const ticker = state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "";
-	        const chat = functions.httpsCallable("assistant_chat");
-	        const result = await chat({ message: text, ticker, page: window.location.pathname, meta: buildMeta() });
-	        const reply = result.data?.text || "No response returned.";
-	        loading.textContent = reply;
-	        loading.classList.remove("assistant-msg--loading");
-	        logEvent("assistant_message", { page_path: window.location.pathname });
-	      } catch (error) {
-	        loading.textContent = error.message || "Assistant request failed.";
-	        loading.classList.remove("assistant-msg--loading");
-	      }
-	    });
-	  };
-
   const setPurchaseState = (user) => {
     ui.purchasePanels.forEach((panel) => {
       const button = panel.querySelector('[data-action="purchase"]');
@@ -1060,12 +938,23 @@
       const card = document.createElement("div");
       card.className = "order-card";
       const isForecast = Boolean(item.service && item.ticker);
+      const isAutopilot = Boolean(!isForecast && (item.horizon || item.quantiles || item.interval));
       const forecastMeta = isForecast
         ? `
           <div><strong>Ticker</strong> ${item.ticker}</div>
           <div><strong>Service</strong> ${item.service}</div>
           <div><strong>Engine</strong> ${item.engine || "—"}</div>
           ${item.serviceMessage ? `<div><strong>Message</strong> ${escapeHtml(item.serviceMessage)}</div>` : ""}
+        `
+        : "";
+      const autopilotMeta = isAutopilot
+        ? `
+          ${item.ticker ? `<div><strong>Ticker</strong> ${escapeHtml(item.ticker)}</div>` : ""}
+          ${item.interval ? `<div><strong>Interval</strong> ${escapeHtml(item.interval)}</div>` : ""}
+          ${item.horizon ? `<div><strong>Horizon</strong> ${escapeHtml(item.horizon)}</div>` : ""}
+          ${item.quantiles ? `<div><strong>Quantiles</strong> ${escapeHtml(item.quantiles)}</div>` : ""}
+          ${item.userEmail ? `<div><strong>User</strong> ${escapeHtml(item.userEmail)}</div>` : ""}
+          ${item.notes ? `<div><strong>Notes</strong> ${escapeHtml(item.notes)}</div>` : ""}
         `
         : "";
       const actions = isForecast
@@ -1089,6 +978,7 @@
           <div><strong>Requested</strong> ${formatTimestamp(item.createdAt)}</div>
           ${item.summary ? `<div><strong>Summary</strong> ${item.summary}</div>` : ""}
           ${forecastMeta}
+          ${autopilotMeta}
         </div>
         ${actions}
       `;
@@ -1277,30 +1167,99 @@
 
 	  const renderTaskCalendar = (tasks) => {
 	    if (!ui.tasksCalendar) return;
-	    const upcoming = (tasks || [])
-	      .filter((t) => t.dueDate)
-	      .slice()
-	      .sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)))
-	      .slice(0, 12);
-	    if (!upcoming.length) {
-	      ui.tasksCalendar.textContent = "Tasks with due dates will appear here.";
-	      ui.tasksCalendar.classList.add("muted");
-	      return;
+	    state.taskCalendarTasks = Array.isArray(tasks) ? tasks : [];
+
+	    const pad2 = (num) => String(num).padStart(2, "0");
+	    const toDateKey = (dt) => `${dt.getFullYear()}-${pad2(dt.getMonth() + 1)}-${pad2(dt.getDate())}`;
+	    const parseDateKey = (key) => {
+	      const parts = String(key || "").split("-").map((p) => Number(p));
+	      if (parts.length !== 3 || parts.some((n) => !Number.isFinite(n))) return null;
+	      const [y, m, d] = parts;
+	      if (y < 1970 || m < 1 || m > 12 || d < 1 || d > 31) return null;
+	      return new Date(y, m - 1, d);
+	    };
+
+	    const ensureCursor = () => {
+	      const cursor = state.taskCalendarCursor instanceof Date ? new Date(state.taskCalendarCursor) : null;
+	      if (cursor && Number.isFinite(cursor.getTime())) {
+	        return new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+	      }
+	      const now = new Date();
+	      const next = new Date(now.getFullYear(), now.getMonth(), 1);
+	      state.taskCalendarCursor = next;
+	      return next;
+	    };
+
+	    const cursor = ensureCursor();
+	    const year = cursor.getFullYear();
+	    const month = cursor.getMonth();
+
+	    const monthLabel = cursor.toLocaleString(undefined, { month: "long", year: "numeric" });
+	    const firstOfMonth = new Date(year, month, 1);
+	    const weekday = firstOfMonth.getDay(); // 0=Sun
+	    const weekStartMonday = true;
+	    const offset = weekStartMonday ? (weekday + 6) % 7 : weekday;
+	    const gridStart = new Date(year, month, 1 - offset);
+	    const todayKey = toDateKey(new Date());
+
+	    const tasksByDate = new Map();
+	    for (const t of state.taskCalendarTasks) {
+	      const dueKey = String(t?.dueDate || "").slice(0, 10);
+	      if (!/^\d{4}-\d{2}-\d{2}$/.test(dueKey)) continue;
+	      const list = tasksByDate.get(dueKey) || [];
+	      list.push(t);
+	      tasksByDate.set(dueKey, list);
 	    }
+
+	    const dow = weekStartMonday ? ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] : ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+	    const cells = [];
+	    for (let i = 0; i < 42; i += 1) {
+	      const dt = new Date(gridStart);
+	      dt.setDate(gridStart.getDate() + i);
+	      const key = toDateKey(dt);
+	      const inMonth = dt.getMonth() === month;
+	      const isToday = key === todayKey;
+	      const items = tasksByDate.get(key) || [];
+
+	      const summary = items.slice(0, 3).map((task) => {
+	        const title = escapeHtml(task?.title || "Untitled");
+	        const status = escapeHtml(String(task?.status || "backlog"));
+	        return `<div class="calendar-task" data-status="${status}">${title}</div>`;
+	      });
+	      const overflow = items.length > 3 ? `<div class="calendar-task calendar-task--more">+${items.length - 3} more</div>` : "";
+
+	      cells.push(`
+	        <div class="calendar-cell${inMonth ? "" : " calendar-cell--out"}${isToday ? " calendar-cell--today" : ""}">
+	          <div class="calendar-cell-head">
+	            <span class="calendar-day">${dt.getDate()}</span>
+	            ${items.length ? `<span class="pill small">${items.length}</span>` : ""}
+	          </div>
+	          <div class="calendar-tasks">
+	            ${summary.join("")}
+	            ${overflow}
+	          </div>
+	        </div>
+	      `);
+	    }
+
 	    ui.tasksCalendar.classList.remove("muted");
 	    ui.tasksCalendar.innerHTML = `
-	      <div class="task-upcoming">
-	        ${upcoming
-	          .map((t) => {
-	            const due = new Date(t.dueDate).toLocaleDateString();
-	            return `
-	              <div class="task-upcoming-row">
-	                <div class="small"><strong>${escapeHtml(t.title || "Untitled")}</strong></div>
-	                <div class="small muted">${escapeHtml(due)} · ${escapeHtml(String(t.status || "backlog"))}</div>
-	              </div>
-	            `;
-	          })
-	          .join("")}
+	      <div class="calendar-wrap">
+	        <div class="calendar-head">
+	          <div class="calendar-title"><strong>${escapeHtml(monthLabel)}</strong></div>
+	          <div class="calendar-nav">
+	            <button class="cta secondary small" type="button" data-action="calendar-prev" aria-label="Previous month">Prev</button>
+	            <button class="cta secondary small" type="button" data-action="calendar-today" aria-label="Jump to current month">Today</button>
+	            <button class="cta secondary small" type="button" data-action="calendar-next" aria-label="Next month">Next</button>
+	          </div>
+	        </div>
+	        <div class="calendar-grid" role="grid" aria-label="Task calendar">
+	          ${dow.map((d) => `<div class="calendar-dow" role="columnheader">${escapeHtml(d)}</div>`).join("")}
+	          ${cells.join("")}
+	        </div>
+	        <div class="small muted" style="margin-top:10px;">
+	          Tip: add a due date in the Create task form. Tasks are visible to workspace collaborators.
+	        </div>
 	      </div>
 	    `;
 	  };
@@ -1506,6 +1465,24 @@
         const orders = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
         renderOrderList(orders, ui.adminOrders, { admin: true });
       });
+  };
+
+  const startAdminAutopilotQueue = (db) => {
+    if (state.unsubscribeAdminAutopilot) state.unsubscribeAdminAutopilot();
+    if (!ui.adminAutopilot) return;
+    state.unsubscribeAdminAutopilot = db
+      .collection("autopilot_requests")
+      .orderBy("createdAt", "desc")
+      .limit(150)
+      .onSnapshot(
+        (snapshot) => {
+          const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+          renderRequestList(items, ui.adminAutopilot, "No autopilot requests yet.");
+        },
+        () => {
+          ui.adminAutopilot.textContent = "Unable to load autopilot requests.";
+        }
+      );
   };
 
   const ensureUserProfile = async (db, user) => {
@@ -2181,10 +2158,7 @@
 	    syncStickyOffsets();
 	    window.addEventListener("resize", () => window.requestAnimationFrame(syncStickyOffsets));
 	    window.setTimeout(syncStickyOffsets, 280);
-	    if (state.remoteFlags.assistantEnabled) ensureAssistantWidget(functions);
-	    loadRemoteConfig().then((flags) => {
-	      if (flags.assistantEnabled) ensureAssistantWidget(functions);
-	    });
+	    loadRemoteConfig();
 
 		    document.addEventListener("click", (event) => {
 		      const target = event.target.closest("[data-analytics]");
@@ -2229,6 +2203,32 @@
 		      event.preventDefault();
 		      await pickTicker(button.dataset.ticker || button.textContent);
 		    });
+
+        document.addEventListener("click", (event) => {
+          const action = event.target.closest("[data-action]")?.dataset?.action;
+          if (!action) return;
+          if (!ui.tasksCalendar) return;
+
+          const cursor = state.taskCalendarCursor instanceof Date ? new Date(state.taskCalendarCursor) : new Date();
+          const base = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+
+          if (action === "calendar-prev") {
+            event.preventDefault?.();
+            base.setMonth(base.getMonth() - 1);
+          } else if (action === "calendar-next") {
+            event.preventDefault?.();
+            base.setMonth(base.getMonth() + 1);
+          } else if (action === "calendar-today") {
+            event.preventDefault?.();
+            const now = new Date();
+            base.setFullYear(now.getFullYear(), now.getMonth(), 1);
+          } else {
+            return;
+          }
+
+          state.taskCalendarCursor = new Date(base.getFullYear(), base.getMonth(), 1);
+          renderTaskCalendar(state.taskCalendarTasks);
+        });
 
 		    document.addEventListener("click", async (event) => {
 		      const plotButton = event.target.closest('[data-action="plot-forecast"]');
@@ -3127,8 +3127,14 @@
     ui.downloadForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
       const formData = new FormData(ui.downloadForm);
+      const ticker =
+        normalizeTicker(formData.get("ticker")) || state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "";
+      if (!ticker) {
+        showToast("Load a ticker first.", "warn");
+        return;
+      }
       const payload = {
-        ticker: formData.get("ticker"),
+        ticker,
         start: formData.get("start"),
         end: formData.get("end"),
         interval: formData.get("interval"),
@@ -3146,9 +3152,9 @@
         }
         const headers = Object.keys(rows[0]);
         const csv = buildCsv(rows, headers);
-        triggerDownload(`${payload.ticker}_history.csv`, csv);
+        triggerDownload(`${ticker}_history.csv`, csv);
         ui.downloadStatus.textContent = "Download ready.";
-        logEvent("download_history", { ticker: payload.ticker, interval: payload.interval });
+        logEvent("download_history", { ticker, interval: payload.interval });
       } catch (error) {
         ui.downloadStatus.textContent = "Download failed.";
         showToast(error.message || "Unable to fetch history.", "warn");
@@ -3185,8 +3191,14 @@
 	    ui.newsForm?.addEventListener("submit", async (event) => {
 	      event.preventDefault();
 	      const formData = new FormData(ui.newsForm);
+        const ticker =
+          normalizeTicker(formData.get("ticker")) || state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "";
+        if (!ticker) {
+          showToast("Load a ticker first.", "warn");
+          return;
+        }
 	      const payload = {
-	        ticker: formData.get("ticker"),
+	        ticker,
 	      };
 
 	      try {
@@ -3198,7 +3210,7 @@
 	          setOutputReady(ui.newsOutput);
 	          if (!items.length) {
 	            ui.newsOutput.innerHTML = `
-	              <div class="small muted">No news returned for ${escapeHtml(payload.ticker || "")}.</div>
+	              <div class="small muted">No news returned for ${escapeHtml(ticker)}.</div>
 	              <div class="small" style="margin-top:10px;">Try a different symbol, or load a trending ticker and retry.</div>
 	            `;
 	          } else {
@@ -3209,20 +3221,24 @@
 	                const published = formatEpoch(item.publishedAt);
 	                const summary = escapeHtml(item.summary || "");
 	                const link = item.link ? escapeHtml(item.link) : "";
+                  const thumb = item.thumbnailUrl ? escapeHtml(item.thumbnailUrl) : "";
 	                const meta = [publisher, published].filter(Boolean).join(" · ");
 	                return `
-	                  <article class="news-card">
-	                    <div class="news-title">${title}</div>
-	                    <div class="news-meta small">${meta}</div>
-	                    ${summary ? `<div class="news-summary small">${summary}</div>` : ""}
-	                    ${link ? `<a class="news-link" href="${link}" target="_blank" rel="noreferrer">Read article</a>` : ""}
+	                  <article class="news-card${thumb ? " news-card--with-thumb" : ""}">
+                      ${thumb ? `<img class="news-thumb" src="${thumb}" alt="" loading="lazy" />` : ""}
+                      <div class="news-body">
+	                      <div class="news-title">${title}</div>
+	                      <div class="news-meta small">${meta}</div>
+	                      ${summary ? `<div class="news-summary small">${summary}</div>` : ""}
+	                      ${link ? `<a class="news-link" href="${link}" target="_blank" rel="noreferrer">Read article</a>` : ""}
+                      </div>
 	                  </article>
 	                `;
 	              })
 	              .join("");
 	          }
 	        }
-	        logEvent("news_loaded", { ticker: payload.ticker, count: items.length });
+	        logEvent("news_loaded", { ticker, count: items.length });
 	      } catch (error) {
 	        showToast(error.message || "Unable to fetch news.", "warn");
 	      }
@@ -3255,6 +3271,21 @@
 	        const expirations = data.expirations || [];
 	        const calls = data.calls || [];
 	        const puts = data.puts || [];
+          const sortByStrike = (rows) => {
+            if (!Array.isArray(rows)) return [];
+            return rows
+              .slice()
+              .sort((a, b) => {
+                const sa = typeof a?.strike === "number" ? a.strike : Number(a?.strike);
+                const sb = typeof b?.strike === "number" ? b.strike : Number(b?.strike);
+                if (!Number.isFinite(sa) && !Number.isFinite(sb)) return 0;
+                if (!Number.isFinite(sa)) return 1;
+                if (!Number.isFinite(sb)) return -1;
+                return sa - sb;
+              });
+          };
+          const callsSorted = sortByStrike(calls);
+          const putsSorted = sortByStrike(puts);
 
 	        if (cacheKey && selectedExpiration) {
 	          safeLocalStorageSet(cacheKey, selectedExpiration);
@@ -3346,11 +3377,11 @@
 	              </div>
 	              <details class="option-block" open>
 	                <summary>Calls</summary>
-	                ${table(calls, "Calls")}
+	                ${table(callsSorted, "Calls")}
 	              </details>
 	              <details class="option-block">
 	                <summary>Puts</summary>
-	                ${table(puts, "Puts")}
+	                ${table(putsSorted, "Puts")}
 	              </details>
 	              <div class="small muted" style="margin-top:10px;">
 	                Prob ITM and delta are Black-Scholes style approximations derived from implied volatility and time to expiry. They are not guarantees.
@@ -3830,10 +3861,12 @@
         ui.adminSection?.classList.remove("hidden");
         ui.navAdmin?.classList.remove("hidden");
         startAdminOrders(db);
+        startAdminAutopilotQueue(db);
       } else {
         ui.adminSection?.classList.add("hidden");
         ui.navAdmin?.classList.add("hidden");
         if (state.unsubscribeAdmin) state.unsubscribeAdmin();
+        if (state.unsubscribeAdminAutopilot) state.unsubscribeAdminAutopilot();
       }
     });
   });
