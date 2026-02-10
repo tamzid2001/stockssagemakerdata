@@ -147,6 +147,14 @@ const getServerTemplate = async () => {
       // eslint-disable-next-line no-console
       console.error("Remote Config SSR: unable to load server template, using defaults.", error?.message || error);
     }
+    // If the server template doesn't exist yet, seed an empty template so evaluate() can still run.
+    // This keeps initialFetchResponse working with the defaultConfig values.
+    try {
+      template.set({ etag: "qs_default", parameters: {}, conditions: [] });
+    } catch (seedError) {
+      // eslint-disable-next-line no-console
+      console.error("Remote Config SSR: failed to seed default template cache.", seedError?.message || seedError);
+    }
   }
   cachedTemplate = template;
   cachedTemplateLoadedAt = now;
