@@ -2136,7 +2136,8 @@ def submit_feedback(req: https_fn.CallableRequest) -> dict[str, Any]:
 
 @https_fn.on_call()
 def alpaca_get_options(req: https_fn.CallableRequest) -> dict[str, Any]:
-    _require_auth(req)
+    token = _require_auth(req)
+    _require_admin(token)
     data = req.data or {}
     ticker = str(data.get("ticker") or "").upper()
     expiration = data.get("expiration")
@@ -2213,6 +2214,7 @@ def alpaca_get_options(req: https_fn.CallableRequest) -> dict[str, Any]:
 @https_fn.on_call()
 def alpaca_place_order(req: https_fn.CallableRequest) -> dict[str, Any]:
     token = _require_auth(req)
+    _require_admin(token)
     data = req.data or {}
 
     symbol = str(data.get("symbol") or "").upper().strip()
@@ -2274,7 +2276,8 @@ def alpaca_place_order(req: https_fn.CallableRequest) -> dict[str, Any]:
 
 @https_fn.on_call()
 def alpaca_get_account(req: https_fn.CallableRequest) -> dict[str, Any]:
-    _require_auth(req)
+    token = _require_auth(req)
+    _require_admin(token)
     response = requests.get(f"{ALPACA_API_BASE}/v2/account", headers=_alpaca_headers(), timeout=12)
     if response.status_code >= 400:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.FAILED_PRECONDITION, response.text)
@@ -2295,7 +2298,8 @@ def alpaca_get_account(req: https_fn.CallableRequest) -> dict[str, Any]:
 
 @https_fn.on_call()
 def alpaca_get_positions(req: https_fn.CallableRequest) -> dict[str, Any]:
-    _require_auth(req)
+    token = _require_auth(req)
+    _require_admin(token)
     response = requests.get(f"{ALPACA_API_BASE}/v2/positions", headers=_alpaca_headers(), timeout=12)
     if response.status_code >= 400:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.FAILED_PRECONDITION, response.text)
@@ -2317,7 +2321,8 @@ def alpaca_get_positions(req: https_fn.CallableRequest) -> dict[str, Any]:
 
 @https_fn.on_call()
 def alpaca_list_orders(req: https_fn.CallableRequest) -> dict[str, Any]:
-    _require_auth(req)
+    token = _require_auth(req)
+    _require_admin(token)
     data = req.data or {}
     status = str(data.get("status") or "all")
     limit = int(data.get("limit") or 50)
@@ -2348,6 +2353,7 @@ def alpaca_list_orders(req: https_fn.CallableRequest) -> dict[str, Any]:
 @https_fn.on_call()
 def alpaca_cancel_order(req: https_fn.CallableRequest) -> dict[str, Any]:
     token = _require_auth(req)
+    _require_admin(token)
     data = req.data or {}
     order_id = str(data.get("orderId") or "").strip()
     if not order_id:
