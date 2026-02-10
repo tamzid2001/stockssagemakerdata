@@ -166,6 +166,8 @@
 	      forecastProphetEnabled: true,
 	      forecastTimeMixerEnabled: true,
 	      webPushVapidKey: "",
+        stripeCheckoutEnabled: true,
+        stripePublicKey: "",
 	    },
 	    remoteConfigRefreshTimer: null,
 	    remoteConfigUnsubscribe: null,
@@ -382,6 +384,8 @@
 	        forecast_prophet_enabled: true,
 	        forecast_timemixer_enabled: true,
 	        webpush_vapid_key: "",
+          stripe_checkout_enabled: true,
+          stripe_public_key: "",
 	      };
 	      return rc;
 	    } catch (error) {
@@ -461,6 +465,8 @@
             forecast_prophet_enabled: true,
             forecast_timemixer_enabled: true,
             webpush_vapid_key: "",
+            stripe_checkout_enabled: true,
+            stripe_public_key: "",
           };
 
           const wrap = {
@@ -508,6 +514,8 @@
 	      forecastProphetEnabled: getBool("forecast_prophet_enabled", true),
 	      forecastTimeMixerEnabled: getBool("forecast_timemixer_enabled", true),
 	      webPushVapidKey: getString("webpush_vapid_key", ""),
+        stripeCheckoutEnabled: getBool("stripe_checkout_enabled", true),
+        stripePublicKey: getString("stripe_public_key", ""),
 	    };
 	  };
 
@@ -1206,6 +1214,8 @@
 
       const status = order.status || "pending";
       const statusLabel = status.replace("_", " ");
+      const paymentStatus = String(order.paymentStatus || "unpaid");
+      const paymentLabel = paymentStatus.replace(/_/g, " ");
       const filesMarkup = renderFileList(order.fulfillmentFiles || []);
 
       const adminTools = opts.admin
@@ -1241,7 +1251,9 @@
         <div class="order-meta">
           <div><strong>Requested</strong> ${formatTimestamp(order.createdAt)}</div>
           <div><strong>Price</strong> $${order.price || 349} ${order.currency || "USD"}</div>
+          <div><strong>Payment</strong> ${escapeHtml(paymentLabel)}</div>
           ${opts.admin ? `<div><strong>Client</strong> ${order.userEmail || "—"}</div>` : ""}
+          ${opts.admin && order.stripeCheckoutSessionId ? `<div><strong>Stripe session</strong> ${escapeHtml(order.stripeCheckoutSessionId)}</div>` : ""}
           ${order.fulfillmentNotes ? `<div><strong>Notes</strong> ${order.fulfillmentNotes}</div>` : ""}
         </div>
         ${filesMarkup ? `<div><strong>Files</strong>${filesMarkup}</div>` : ""}
@@ -3285,6 +3297,9 @@
         meta,
       });
       const orderId = result.data?.orderId;
+      if (orderId) {
+        panel.dataset.orderId = String(orderId);
+      }
       if (success) {
         success.textContent = `Order ${orderId} created. Proceed to payment to finalize.`;
         success.classList.remove("hidden");
@@ -3298,6 +3313,140 @@
     } finally {
       button.disabled = false;
       button.textContent = button.dataset.labelAuth || "Request Deep Forecast";
+    }
+  };
+
+  const loadStripeJs = async () => {
+    if (typeof window === "undefined") return null;
+    if (window.Stripe) return window.Stripe;
+    await new Promise((resolve, reject) => {
+      const existing = document.querySelector('script[src="https://js.stripe.com/v3/"]');
+      if (existing) {
+        existing.addEventListener("load", resolve, { once: true });
+        existing.addEventListener("error", reject, { once: true });
+        return;
+      }
+      const script = document.createElement("script");
+      script.src = "https://js.stripe.com/v3/";
+      script.async = true;
+      script.onload = resolve;
+      script.onerror = reject;
+      document.head.appendChild(script);
+    });
+    return window.Stripe || null;
+  };
+
+  const handleStripeCheckout = async (panel, functions) => {
+    if (!state.user) {
+      showToast("Sign in to continue.", "warn");
+      return;
+    }
+    if (!state.remoteFlags.stripeCheckoutEnabled) {
+      showToast("Checkout is temporarily disabled.", "warn");
+      return;
+    }
+
+    const stripeBtn = panel.querySelector('[data-action="stripe"]');
+    const note = panel.querySelector(".purchase-note");
+    const orderId = String(panel.dataset.orderId || "").trim();
+    if (!orderId) {
+      showToast("Create an order first.", "warn");
+      return;
+    }
+
+    if (stripeBtn) {
+      stripeBtn.disabled = true;
+      stripeBtn.textContent = "Redirecting to payment...";
+    }
+    if (note) note.textContent = "Starting secure checkout...";
+
+    try {
+      logEvent("add_payment_info", { currency: panel.dataset.currency || "USD", value: Number(panel.dataset.price || 349) });
+      const createSession = functions.httpsCallable("create_stripe_checkout_session");
+      const result = await createSession({ orderId, meta: buildMeta() });
+      const sessionId = String(result.data?.sessionId || "");
+      const url = String(result.data?.url || "");
+
+      logEvent("checkout_redirect", { order_id: orderId, mode: result.data?.mode || "" });
+      if (url) {
+        window.location.assign(url);
+        return;
+      }
+
+      const stripeKey = String(state.remoteFlags.stripePublicKey || "").trim();
+      if (stripeKey && sessionId) {
+        const StripeCtor = await loadStripeJs();
+        if (StripeCtor) {
+          const stripe = StripeCtor(stripeKey);
+          await stripe.redirectToCheckout({ sessionId });
+          return;
+        }
+      }
+
+      throw new Error("Checkout URL is not available.");
+    } catch (error) {
+      showToast(error.message || "Unable to start checkout.", "warn");
+      if (note) note.textContent = "Unable to start checkout. Try again.";
+    } finally {
+      if (stripeBtn) {
+        stripeBtn.disabled = false;
+        stripeBtn.textContent = "Proceed to payment";
+      }
+    }
+  };
+
+  const handleCheckoutReturn = async (functions) => {
+    const checkout = String(getQueryParam("checkout") || "").trim().toLowerCase();
+    if (!checkout) return;
+
+    const orderId = String(getQueryParam("orderId") || "").trim();
+    const sessionId = String(getQueryParam("session_id") || "").trim();
+    if (!orderId) return;
+
+    if (checkout === "cancel") {
+      showToast("Checkout cancelled.", "warn");
+      try {
+        const params = new URLSearchParams(window.location.search);
+        params.delete("checkout");
+        params.delete("orderId");
+        params.delete("session_id");
+        history.replaceState({}, "", `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ""}`);
+      } catch (error) {
+        // Ignore.
+      }
+      return;
+    }
+
+    if (checkout !== "success" || !sessionId) return;
+    if (!state.user) {
+      showToast("Sign in to finalize checkout.", "warn");
+      return;
+    }
+
+    try {
+      const confirm = functions.httpsCallable("confirm_stripe_checkout");
+      const result = await confirm({ orderId, sessionId });
+      const paid = Boolean(result.data?.paid);
+      const currency = String(result.data?.currency || "USD");
+      const price = Number(result.data?.price || 0);
+      const product = String(result.data?.product || "");
+      showToast(paid ? "Payment confirmed." : "Payment pending review.");
+      logEvent("purchase", {
+        transaction_id: orderId,
+        currency,
+        value: Number.isFinite(price) ? price : 0,
+        items: product ? [{ item_name: product, item_id: product, price }] : undefined,
+      });
+      if (paid) {
+        try {
+          history.replaceState({}, "", "/dashboard");
+          window.location.assign("/dashboard");
+        } catch (error) {
+          // Ignore.
+        }
+      }
+    } catch (error) {
+      showToast(error.message || "Unable to confirm payment yet.", "warn");
     }
   };
 
@@ -3379,6 +3528,7 @@
 	    window.addEventListener("resize", () => window.requestAnimationFrame(syncStickyOffsets));
 	    window.setTimeout(syncStickyOffsets, 280);
 	    loadRemoteConfig();
+      handleCheckoutReturn(functions);
 
 		    document.addEventListener("click", (event) => {
 		      const target = event.target.closest("[data-analytics]");
@@ -4371,15 +4521,7 @@
 	      const purchaseBtn = panel.querySelector('[data-action="purchase"]');
 	      const stripeBtn = panel.querySelector('[data-action="stripe"]');
 	      purchaseBtn?.addEventListener("click", () => handlePurchase(panel, functions));
-	      stripeBtn?.addEventListener("click", () => {
-	        logEvent("purchase_intent", { product: panel.dataset.product || "Deep Forecast" });
-	        const url = panel.dataset.stripeUrl || STRIPE_URL;
-	        if (!url || url === "#") {
-	          showToast("Payment link is not configured yet.", "warn");
-	          return;
-	        }
-	        window.open(url, "_blank", "noreferrer");
-	      });
+	      stripeBtn?.addEventListener("click", () => handleStripeCheckout(panel, functions));
 	    });
 
     if (ui.terminalTicker) {
