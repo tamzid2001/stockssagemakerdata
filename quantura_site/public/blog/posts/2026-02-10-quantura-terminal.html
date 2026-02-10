@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Introducing the Quantura Ticker Terminal | Quantura Blog</title>
+    <meta
+      name="description"
+      content="Quantura's new terminal experience: interactive charting, forecast overlays, and technical indicator panels built on Firebase."
+    />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://quantura.ai/blog/posts/2026-02-10-quantura-terminal" />
+    <meta property="og:title" content="Introducing the Quantura Ticker Terminal" />
+    <meta property="og:description" content="Interactive charts + forecast overlays + technical indicators." />
+    <meta property="og:type" content="article" />
+    <meta property="og:url" content="https://quantura.ai/blog/posts/2026-02-10-quantura-terminal" />
+    <meta property="og:image" content="/assets/quantura-logo.svg" />
+    <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="stylesheet" href="/styles.css" />
+
+    <script defer src="/__/firebase/12.9.0/firebase-app-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-auth-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-firestore-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-functions-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-storage-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-analytics-compat.js"></script>
+    <script defer src="/__/firebase/init.js?useEmulator=false"></script>
+    <script defer src="/app.js"></script>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "BlogPosting",
+        "headline": "Introducing the Quantura Ticker Terminal",
+        "datePublished": "2026-02-10",
+        "dateModified": "2026-02-10",
+        "author": { "@type": "Organization", "name": "Quantura" },
+        "publisher": {
+          "@type": "Organization",
+          "name": "Quantura",
+          "logo": { "@type": "ImageObject", "url": "https://quantura.ai/assets/quantura-logo.svg" }
+        },
+        "mainEntityOfPage": "https://quantura.ai/blog/posts/2026-02-10-quantura-terminal"
+      }
+    </script>
+  </head>
+  <body>
+    <header class="header">
+      <div class="container nav">
+        <a class="logo" href="/">QUANTURA</a>
+        <nav class="nav-links">
+          <a href="/forecasting">Forecasting</a>
+          <a href="/screener">Screener</a>
+          <a href="/dashboard">Dashboard</a>
+          <a href="/blog">Blog</a>
+          <a href="/contact">Contact</a>
+        </nav>
+        <div class="nav-actions">
+          <span id="header-user-email" class="small" style="max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Guest</span>
+          <span id="header-user-status" class="pill">Guest</span>
+          <button class="cta secondary" id="header-auth" type="button">Sign in</button>
+          <button class="cta secondary hidden" id="header-signout" type="button">Sign out</button>
+          <a class="cta secondary hidden" id="header-dashboard" href="/dashboard">Dashboard</a>
+          <a class="cta" href="/forecasting">Open terminal</a>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="page-hero">
+        <div class="container content-grid">
+          <div>
+            <div class="eyebrow">Product update</div>
+            <h1>Introducing the Quantura Ticker Terminal</h1>
+            <p class="small">Published February 10, 2026</p>
+            <p style="margin-top: 14px;">
+              Quantura started as a forecasting workflow. The hard part wasn’t fitting a model, it was keeping
+              research organized: chart, forecast, indicators, news, options, and saved runs.
+            </p>
+            <div class="hero-actions">
+              <a class="cta" href="/forecasting">Open the terminal</a>
+              <a class="cta secondary" href="/dashboard#purchase">Request Deep Forecast</a>
+            </div>
+          </div>
+          <div class="card">
+            <img src="/assets/quantura-logo.svg" alt="Quantura logo" style="max-width: 220px;" />
+            <div style="margin-top: 16px;" class="feature-list">
+              <div class="feature"><span></span>Interactive charting (candles + overlays)</div>
+              <div class="feature"><span></span>Saved forecasts you can re-plot</div>
+              <div class="feature"><span></span>Indicator charts backed by Finta</div>
+              <div class="feature"><span></span>Firebase functions + Firestore storage</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container content-grid">
+          <div>
+            <h2>What changed</h2>
+            <p>
+              The terminal centers everything around one object: the ticker. Load it once, and every panel
+              downstream is ready to run: forecasting, technical indicators, news, and options.
+            </p>
+            <p>
+              Forecast runs are stored in Firestore with quantile rows. You can pull any prior run back,
+              overlay it on the chart, and compare Prophet vs IBM TinyTimeMixer results side-by-side.
+            </p>
+          </div>
+          <div class="card">
+            <h3>How to use it</h3>
+            <div class="feature-list">
+              <div class="feature"><span></span>Open `/forecasting` and load your ticker</div>
+              <div class="feature"><span></span>Run a forecast with bands and save it automatically</div>
+              <div class="feature"><span></span>Toggle indicators and graph them under the chart</div>
+              <div class="feature"><span></span>Use Saved forecasts to plot prior runs instantly</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container callout">
+          <span class="badge" style="background: rgba(255,255,255,0.1); color: #f8fafc;">Deep Forecast</span>
+          <h2>Want a bespoke report?</h2>
+          <p>
+            If you need scenario ranges, implied probability bands, and a clean briefing you can act on,
+            request a Deep Forecast in the dashboard.
+          </p>
+          <div class="hero-actions">
+            <a class="cta" href="/dashboard#purchase">Request Deep Forecast</a>
+            <a class="cta secondary" href="/forecasting">Try the terminal</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="container footer-grid">
+        <div>
+          <div class="logo">QUANTURA</div>
+          <p class="small">Forecasting and market intelligence for high-conviction decisions.</p>
+          <span class="tag">Blog</span>
+        </div>
+        <div class="small">
+          <strong>Explore</strong>
+          <div><a href="/blog">Blog</a></div>
+          <div><a href="/forecasting">Forecasting</a></div>
+          <div><a href="/screener">Screener</a></div>
+          <div><a href="/dashboard">Dashboard</a></div>
+        </div>
+        <div class="small">
+          <strong>Product</strong>
+          <div>Prophet</div>
+          <div>IBM TinyTimeMixer</div>
+          <div>Saved forecasts</div>
+        </div>
+      </div>
+      <div class="container small" style="margin-top: 24px;">
+        © 2026 Quantura. All rights reserved.
+      </div>
+    </footer>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>
+

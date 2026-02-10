@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import os
 from statistics import NormalDist
 from typing import Any
@@ -11,7 +12,7 @@ import yfinance as yf
 from finta import TA
 
 import firebase_admin
-from firebase_admin import credentials, firestore
+from firebase_admin import credentials, firestore, messaging as admin_messaging
 from firebase_functions import https_fn
 from firebase_functions.options import set_global_options
 
@@ -37,6 +38,7 @@ IBM_TIMEMIXER_API_KEY = os.environ.get("IBM_TIMEMIXER_API_KEY", "").strip()
 HUGGINGFACEHUB_API_TOKEN = os.environ.get("HUGGINGFACEHUB_API_TOKEN", "").strip()
 
 SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL", "").strip()
+FCM_WEB_VAPID_KEY = os.environ.get("FCM_WEB_VAPID_KEY", "").strip()
 TRENDING_URL = "https://query1.finance.yahoo.com/v1/finance/trending/US"
 DEFAULT_FORECAST_PRICE = 349
 
@@ -97,6 +99,105 @@ def _audit_event(uid: str, email: str | None, event_type: str, payload: dict[str
             "createdAt": firestore.SERVER_TIMESTAMP,
         }
     )
+
+
+def _token_doc_id(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _active_notification_tokens_for_user(user_id: str) -> list[str]:
+    docs = (
+        db.collection("notification_tokens")
+        .where("userId", "==", user_id)
+        .where("active", "==", True)
+        .limit(500)
+        .stream()
+    )
+    tokens: list[str] = []
+    for doc in docs:
+        token_value = (doc.to_dict() or {}).get("token")
+        if isinstance(token_value, str) and token_value:
+            tokens.append(token_value)
+    return list(dict.fromkeys(tokens))
+
+
+def _send_push_tokens(tokens: list[str], title: str, body: str, data: dict[str, Any] | None = None) -> dict[str, Any]:
+    tokens = [str(token).strip() for token in tokens if str(token).strip()]
+    if not tokens:
+        return {"successCount": 0, "failureCount": 0, "failed": [], "staleTokens": []}
+
+    payload_data = {str(key): str(value) for key, value in (data or {}).items() if value is not None}
+    message = admin_messaging.MulticastMessage(
+        tokens=tokens[:500],
+        notification=admin_messaging.Notification(title=title, body=body),
+        data=payload_data,
+        webpush=admin_messaging.WebpushConfig(
+            notification=admin_messaging.WebpushNotification(
+                title=title,
+                body=body,
+                icon="/assets/quantura-icon.svg",
+                badge="/assets/quantura-icon.svg",
+            ),
+            fcm_options=admin_messaging.WebpushFCMOptions(link="/dashboard"),
+            headers={"Urgency": "high"},
+        ),
+    )
+
+    response = admin_messaging.send_each_for_multicast(message)
+    failed: list[dict[str, str]] = []
+    stale_tokens: list[str] = []
+
+    for idx, resp in enumerate(response.responses):
+        if resp.success:
+            continue
+        token = tokens[idx]
+        error_text = str(resp.exception or "unknown_error")
+        failed.append({"token": token, "error": error_text})
+        normalized = error_text.lower()
+        if (
+            "unregistered" in normalized
+            or "registration-token-not-registered" in normalized
+            or "invalid registration token" in normalized
+            or "requested entity was not found" in normalized
+        ):
+            stale_tokens.append(token)
+
+    return {
+        "successCount": response.success_count,
+        "failureCount": response.failure_count,
+        "failed": failed,
+        "staleTokens": stale_tokens,
+    }
+
+
+def _notify_user(
+    user_id: str,
+    user_email: str | None,
+    title: str,
+    body: str,
+    data: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    tokens = _active_notification_tokens_for_user(user_id)
+    result = _send_push_tokens(tokens, title=title, body=body, data=data)
+    for stale in result.get("staleTokens", []):
+        db.collection("notification_tokens").document(_token_doc_id(stale)).set(
+            {
+                "active": False,
+                "updatedAt": firestore.SERVER_TIMESTAMP,
+            },
+            merge=True,
+        )
+    _audit_event(
+        user_id,
+        user_email,
+        "push_notification_attempted",
+        {
+            "title": title,
+            "successCount": result.get("successCount", 0),
+            "failureCount": result.get("failureCount", 0),
+        },
+    )
+    return result
 
 
 def _serialize_for_firestore(value: Any) -> Any:
@@ -396,6 +497,7 @@ def update_order_status(req: https_fn.CallableRequest) -> dict[str, Any]:
             https_fn.FunctionsErrorCode.NOT_FOUND,
             "Order not found.",
         )
+    order_data = snapshot.to_dict() or {}
 
     update_payload: dict[str, Any] = {
         "status": status,
@@ -408,6 +510,24 @@ def update_order_status(req: https_fn.CallableRequest) -> dict[str, Any]:
 
     order_ref.update(update_payload)
     _audit_event(req.auth.uid, token.get("email"), "order_status_updated", {"orderId": order_id, "status": status})
+
+    order_user_id = order_data.get("userId")
+    order_user_email = order_data.get("userEmail")
+    if isinstance(order_user_id, str) and order_user_id:
+        product = str(order_data.get("product") or "Deep Forecast")
+        human_status = status.replace("_", " ").title()
+        _notify_user(
+            order_user_id,
+            order_user_email if isinstance(order_user_email, str) else None,
+            title="Quantura order update",
+            body=f"{product} order {order_id} is now {human_status}.",
+            data={
+                "type": "order_status",
+                "orderId": order_id,
+                "status": status,
+                "url": "/dashboard",
+            },
+        )
 
     return {"orderId": order_id, "status": status}
 
@@ -439,6 +559,97 @@ def submit_contact(req: https_fn.CallableRequest) -> dict[str, Any]:
     doc_ref.set(payload)
 
     return {"contactId": doc_ref.id}
+
+
+@https_fn.on_call()
+def get_web_push_config(req: https_fn.CallableRequest) -> dict[str, Any]:
+    _require_auth(req)
+    if not FCM_WEB_VAPID_KEY:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "FCM_WEB_VAPID_KEY is not configured.",
+        )
+    return {"vapidKey": FCM_WEB_VAPID_KEY}
+
+
+@https_fn.on_call()
+def register_notification_token(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    data = req.data or {}
+    registration_token = str(data.get("token") or "").strip()
+    meta = data.get("meta") if isinstance(data.get("meta"), dict) else {}
+    if len(registration_token) < 20:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "Valid notification token is required.",
+        )
+
+    doc_id = _token_doc_id(registration_token)
+    doc_ref = db.collection("notification_tokens").document(doc_id)
+    doc_ref.set(
+        {
+            "token": registration_token,
+            "tokenHash": doc_id,
+            "active": True,
+            "userId": req.auth.uid,
+            "userEmail": token.get("email"),
+            "userAgent": str(meta.get("userAgent") or ""),
+            "meta": meta,
+            "forceRefresh": bool(data.get("forceRefresh")),
+            "updatedAt": firestore.SERVER_TIMESTAMP,
+            "lastSeenAt": firestore.SERVER_TIMESTAMP,
+            "createdAt": firestore.SERVER_TIMESTAMP,
+        },
+        merge=True,
+    )
+
+    _audit_event(req.auth.uid, token.get("email"), "notification_token_registered", {"tokenHash": doc_id})
+    return {"tokenHash": doc_id, "active": True}
+
+
+@https_fn.on_call()
+def unregister_notification_token(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    data = req.data or {}
+    registration_token = str(data.get("token") or "").strip()
+    if len(registration_token) < 20:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "Valid notification token is required.",
+        )
+
+    doc_id = _token_doc_id(registration_token)
+    db.collection("notification_tokens").document(doc_id).set(
+        {
+            "active": False,
+            "updatedAt": firestore.SERVER_TIMESTAMP,
+        },
+        merge=True,
+    )
+    _audit_event(req.auth.uid, token.get("email"), "notification_token_unregistered", {"tokenHash": doc_id})
+    return {"tokenHash": doc_id, "active": False}
+
+
+@https_fn.on_call()
+def send_test_notification(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    data = req.data or {}
+    title = str(data.get("title") or "Quantura notification test")
+    body = str(data.get("body") or "Your web push notifications are active.")
+    payload_data = data.get("data") if isinstance(data.get("data"), dict) else {}
+
+    result = _notify_user(
+        req.auth.uid,
+        token.get("email"),
+        title=title,
+        body=body,
+        data={
+            **payload_data,
+            "type": "test",
+            "url": "/dashboard",
+        },
+    )
+    return result
 
 
 def _handle_forecast_request(req: https_fn.CallableRequest, forced_service: str | None = None) -> dict[str, Any]:
@@ -605,13 +816,16 @@ def get_technicals(req: https_fn.CallableRequest) -> dict[str, Any]:
     interval = str(data.get("interval") or "1d")
     lookback = int(data.get("lookback") or 120)
     indicators = data.get("indicators") or ["RSI", "MACD"]
+    include_series = bool(data.get("includeSeries"))
+    max_points = int(data.get("maxPoints") or (240 if interval == "1h" else 260))
+    max_points = max(30, min(max_points, 900))
 
     history = yf.download(ticker, period=f"{lookback}d", interval=interval, progress=False)
     if isinstance(history.columns, pd.MultiIndex):
         history.columns = history.columns.get_level_values(0)
     history = history.dropna()
     if history.empty:
-        return {"latest": []}
+        return {"latest": [], "series": {"dates": [], "items": []} if include_series else None}
 
     history = history.rename(
         columns={
@@ -624,12 +838,15 @@ def get_technicals(req: https_fn.CallableRequest) -> dict[str, Any]:
     )
 
     latest_values = []
+    series_items: list[dict[str, Any]] = []
+    dates_index = history.index[-max_points:]
+    dates_out = [pd.Timestamp(ts).isoformat() for ts in dates_index]
     indicator_map = {
         "RSI": lambda frame: TA.RSI(frame),
         "MACD": lambda frame: TA.MACD(frame).get("MACD"),
         "SMA": lambda frame: TA.SMA(frame, 20),
         "EMA": lambda frame: TA.EMA(frame, 20),
-        "BBANDS": lambda frame: TA.BBANDS(frame).get("BB_UPPER"),
+        "BBANDS": lambda frame: TA.BBANDS(frame),
         "ATR": lambda frame: TA.ATR(frame, 14),
     }
 
@@ -641,12 +858,42 @@ def get_technicals(req: https_fn.CallableRequest) -> dict[str, Any]:
             series = func(history)
             if series is None or len(series) == 0:
                 continue
+            if indicator == "BBANDS" and isinstance(series, pd.DataFrame):
+                for key, label in [("BB_UPPER", "BBANDS_UPPER"), ("BB_MIDDLE", "BBANDS_MIDDLE"), ("BB_LOWER", "BBANDS_LOWER")]:
+                    band = series.get(key)
+                    if band is None or len(band) == 0:
+                        continue
+                    value = band.dropna().iloc[-1]
+                    latest_values.append({"name": label, "value": round(float(value), 4)})
+                    if include_series:
+                        aligned = band.reindex(dates_index)
+                        series_items.append(
+                            {
+                                "name": label,
+                                "values": [None if pd.isna(v) else round(float(v), 6) for v in aligned.tolist()],
+                            }
+                        )
+                continue
+
+            if isinstance(series, pd.DataFrame):
+                series = series.iloc[:, 0]
             value = series.dropna().iloc[-1]
             latest_values.append({"name": indicator, "value": round(float(value), 4)})
+            if include_series:
+                aligned = series.reindex(dates_index)
+                series_items.append(
+                    {
+                        "name": indicator,
+                        "values": [None if pd.isna(v) else round(float(v), 6) for v in aligned.tolist()],
+                    }
+                )
         except Exception:
             continue
 
-    return {"latest": latest_values}
+    out: dict[str, Any] = {"latest": latest_values}
+    if include_series:
+        out["series"] = {"dates": dates_out, "items": series_items}
+    return out
 
 
 @https_fn.on_call()
@@ -674,6 +921,138 @@ def queue_screener_run(req: https_fn.CallableRequest) -> dict[str, Any]:
 
 
 @https_fn.on_call()
+def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    data = req.data or {}
+
+    market = str(data.get("market") or "us").lower()
+    max_names = int(data.get("maxNames") or 25)
+    max_names = max(5, min(max_names, 50))
+
+    trending: list[str] = []
+    try:
+        response = requests.get(TRENDING_URL, timeout=10)
+        response.raise_for_status()
+        payload = response.json()
+        quotes = payload.get("finance", {}).get("result", [{}])[0].get("quotes", [])
+        trending = [str(item.get("symbol") or "").upper() for item in quotes if item.get("symbol")]
+    except Exception:
+        trending = []
+
+    tickers = [t for t in trending if t][: max(10, min(len(trending), max_names * 2))]
+    results: list[dict[str, Any]] = []
+
+    if tickers:
+        try:
+            history = yf.download(
+                " ".join(tickers),
+                period="6mo",
+                interval="1d",
+                group_by="ticker",
+                progress=False,
+                threads=True,
+                auto_adjust=False,
+            )
+        except Exception:
+            history = pd.DataFrame()
+
+        def _extract(history_frame: pd.DataFrame, symbol: str) -> pd.DataFrame:
+            if history_frame.empty:
+                return pd.DataFrame()
+            if not isinstance(history_frame.columns, pd.MultiIndex):
+                return history_frame.copy()
+            if symbol in history_frame.columns.get_level_values(0):
+                frame = history_frame[symbol].copy()
+                if isinstance(frame.columns, pd.MultiIndex):
+                    frame.columns = frame.columns.get_level_values(-1)
+                return frame
+            if symbol in history_frame.columns.get_level_values(1):
+                frame = history_frame.xs(symbol, level=1, axis=1).copy()
+                if isinstance(frame.columns, pd.MultiIndex):
+                    frame.columns = frame.columns.get_level_values(-1)
+                return frame
+            return pd.DataFrame()
+
+        for symbol in tickers:
+            frame = _extract(history, symbol)
+            if frame.empty or "Close" not in frame.columns:
+                continue
+            frame = frame.dropna()
+            if frame.empty:
+                continue
+
+            close = frame["Close"].astype(float).dropna()
+            if len(close) < 30:
+                continue
+
+            last_close = float(close.iloc[-1])
+            ret_1m = (last_close / float(close.iloc[-21]) - 1.0) if len(close) >= 22 else None
+            ret_3m = (last_close / float(close.iloc[-63]) - 1.0) if len(close) >= 64 else None
+
+            returns = close.pct_change().dropna()
+            vol_ann = float(returns.std() * np.sqrt(252)) if len(returns) else None
+
+            rsi_val = None
+            try:
+                ta_frame = frame.rename(
+                    columns={
+                        "Open": "open",
+                        "High": "high",
+                        "Low": "low",
+                        "Close": "close",
+                        "Volume": "volume",
+                    }
+                )
+                rsi_series = TA.RSI(ta_frame)
+                if rsi_series is not None and len(rsi_series.dropna()) > 0:
+                    rsi_val = float(rsi_series.dropna().iloc[-1])
+            except Exception:
+                rsi_val = None
+
+            score = 0.0
+            if isinstance(ret_3m, float):
+                score += 0.65 * ret_3m
+            if isinstance(ret_1m, float):
+                score += 0.35 * ret_1m
+            if isinstance(rsi_val, float):
+                score += 0.05 * ((rsi_val - 50.0) / 50.0)
+
+            results.append(
+                {
+                    "symbol": symbol,
+                    "lastClose": round(last_close, 4),
+                    "return1m": None if ret_1m is None else round(ret_1m * 100.0, 2),
+                    "return3m": None if ret_3m is None else round(ret_3m * 100.0, 2),
+                    "rsi14": None if rsi_val is None else round(rsi_val, 2),
+                    "volatility": None if vol_ann is None else round(vol_ann, 4),
+                    "score": round(score, 6),
+                }
+            )
+
+    results.sort(key=lambda item: float(item.get("score") or 0.0), reverse=True)
+    results = results[:max_names]
+
+    doc_ref = db.collection("screener_runs").document()
+    run_doc = {
+        "userId": req.auth.uid,
+        "userEmail": token.get("email"),
+        "market": market,
+        "universe": str(data.get("universe") or "trending"),
+        "maxNames": max_names,
+        "status": "completed",
+        "results": _serialize_for_firestore(results),
+        "notes": str(data.get("notes") or ""),
+        "createdAt": firestore.SERVER_TIMESTAMP,
+        "updatedAt": firestore.SERVER_TIMESTAMP,
+        "meta": data.get("meta") or {},
+    }
+    doc_ref.set(run_doc)
+    _audit_event(req.auth.uid, token.get("email"), "screener_completed", {"runId": doc_ref.id, "count": len(results)})
+
+    return {"runId": doc_ref.id, "status": "completed", "results": results}
+
+
+@https_fn.on_call()
 def queue_autopilot_run(req: https_fn.CallableRequest) -> dict[str, Any]:
     token = _require_auth(req)
     data = req.data or {}
@@ -695,6 +1074,43 @@ def queue_autopilot_run(req: https_fn.CallableRequest) -> dict[str, Any]:
     doc_ref.set(payload)
     _audit_event(req.auth.uid, token.get("email"), "autopilot_queued", {"requestId": doc_ref.id})
     return {"requestId": doc_ref.id}
+
+
+@https_fn.on_call()
+def submit_feedback(req: https_fn.CallableRequest) -> dict[str, Any]:
+    data = req.data or {}
+    message = str(data.get("message") or "").strip()
+    if not message:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Feedback message is required.")
+
+    rating = data.get("rating")
+    page_path = str(data.get("pagePath") or "").strip()
+    meta = data.get("meta") if isinstance(data.get("meta"), dict) else {}
+
+    user_id = req.auth.uid if req.auth else ""
+    user_email = ""
+    if req.auth and req.auth.token:
+        user_email = str(req.auth.token.get("email") or "")
+    if not user_email:
+        user_email = str(data.get("email") or "").strip()
+
+    doc_ref = db.collection("feedback").document()
+    doc_ref.set(
+        {
+            "userId": user_id,
+            "userEmail": user_email,
+            "rating": rating,
+            "message": message,
+            "pagePath": page_path or str(meta.get("pagePath") or ""),
+            "meta": meta,
+            "createdAt": firestore.SERVER_TIMESTAMP,
+        }
+    )
+
+    if user_id:
+        _audit_event(user_id, user_email, "feedback_submitted", {"feedbackId": doc_ref.id})
+
+    return {"feedbackId": doc_ref.id}
 
 
 @https_fn.on_call()

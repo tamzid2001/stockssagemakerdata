@@ -24,6 +24,7 @@
     <script defer src="/__/firebase/12.9.0/firebase-firestore-compat.js"></script>
     <script defer src="/__/firebase/12.9.0/firebase-functions-compat.js"></script>
     <script defer src="/__/firebase/12.9.0/firebase-storage-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-messaging-compat.js"></script>
     <script defer src="/__/firebase/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
     <script defer src="/app.js"></script>
@@ -36,16 +37,39 @@
           <a href="/forecasting">Forecasting</a>
           <a href="/screener">Screener</a>
           <a href="/dashboard">Dashboard</a>
+          <a href="/blog">Blog</a>
           <a href="/contact">Contact</a>
         </nav>
         <div class="nav-actions">
-          <button class="cta secondary" id="header-auth">Sign in</button>
-          <button class="cta secondary hidden" id="header-signout">Sign out</button>
+          <span id="header-user-email" class="small" style="max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Guest</span>
+          <span id="header-user-status" class="pill">Guest</span>
+          <button class="cta secondary" id="header-auth" type="button">Sign in</button>
+          <button class="cta secondary hidden" id="header-signout" type="button">Sign out</button>
         </div>
       </div>
     </header>
 
     <main>
+      <div class="app-layout">
+        <aside class="app-sidebar">
+          <div class="sidebar-card">
+            <div class="small"><strong>Shortcuts</strong></div>
+            <a class="cta secondary small" href="/forecasting">Open terminal</a>
+            <a class="cta secondary small" href="#purchase">Request Deep Forecast</a>
+            <a class="cta secondary small hidden" id="nav-admin" href="/admin">Admin dashboard</a>
+          </div>
+          <nav class="sidebar-nav">
+            <a href="#auth">Sign in</a>
+            <a href="#notifications">Notifications</a>
+            <a href="#purchase">Purchase</a>
+            <a href="#dashboard">Orders</a>
+            <a href="#uploads">Uploads</a>
+            <a href="#autopilot">Autopilot</a>
+            <a href="#alpaca">Alpaca</a>
+          </nav>
+        </aside>
+
+        <div class="app-main">
       <section class="page-hero">
         <div class="container content-grid">
           <div>
@@ -107,6 +131,39 @@
                 <strong>Secure by design.</strong> We only store what’s needed to deliver your report and
                 surface your order status in the dashboard.
               </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="notifications">
+        <div class="container">
+          <div class="section-title">
+            <h2>Browser notifications</h2>
+            <p class="small">Enable Firebase Cloud Messaging web push notifications for order updates and forecast events.</p>
+          </div>
+          <div class="content-grid">
+            <div class="card">
+              <h3>FCM setup</h3>
+              <div class="feature-list">
+                <div class="feature"><span></span>HTTPS + service worker required</div>
+                <div class="feature"><span></span>Permission must be granted by browser</div>
+                <div class="feature"><span></span>Token stored securely in Firestore</div>
+              </div>
+              <div class="hero-actions" style="margin-top: 16px;">
+                <button class="cta" id="notifications-enable" type="button">Enable notifications</button>
+                <button class="cta secondary" id="notifications-refresh" type="button">Refresh token</button>
+                <button class="cta secondary" id="notifications-send-test" type="button">Send test push</button>
+              </div>
+              <p class="small" id="notifications-status" style="margin-top: 12px;">Sign in and enable notifications.</p>
+              <p class="small" style="margin-top: 8px;"><strong>Token:</strong> <span id="notifications-token">No token registered yet.</span></p>
+            </div>
+            <div class="results-panel">
+              <h3>How delivery works</h3>
+              <p class="small">
+                Quantura registers your browser token to your account and sends push notifications through Firebase Cloud Messaging.
+                You can revoke permission any time from your browser site settings.
+              </p>
             </div>
           </div>
         </div>
@@ -322,17 +379,8 @@
         </div>
       </section>
 
-      <section class="section admin-section hidden" id="admin">
-        <div class="container">
-          <div class="section-title">
-            <h2>Admin dashboard</h2>
-            <p class="small">Manage and fulfill Deep Forecast orders.</p>
-          </div>
-          <div class="card">
-            <div id="admin-orders" class="order-list"></div>
-          </div>
         </div>
-      </section>
+      </div>
     </main>
 
     <footer class="footer">
@@ -347,6 +395,7 @@
           <div><a href="/">Home</a></div>
           <div><a href="/forecasting">Forecasting</a></div>
           <div><a href="/screener">Screener</a></div>
+          <div><a href="/blog">Blog</a></div>
           <div><a href="/contact">Contact</a></div>
         </div>
         <div class="small">

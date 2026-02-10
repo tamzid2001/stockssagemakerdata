@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Quantura Admin | Order Fulfillment</title>
+    <meta name="description" content="Admin dashboard for Quantura order fulfillment." />
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="stylesheet" href="/styles.css" />
+
+    <script defer src="/__/firebase/12.9.0/firebase-app-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-auth-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-firestore-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-functions-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-storage-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-analytics-compat.js"></script>
+    <script defer src="/__/firebase/init.js?useEmulator=false"></script>
+    <script defer src="/app.js"></script>
+  </head>
+  <body>
+    <header class="header">
+      <div class="container nav">
+        <a class="logo" href="/">QUANTURA</a>
+        <nav class="nav-links">
+          <a href="/forecasting">Forecasting</a>
+          <a href="/screener">Screener</a>
+          <a href="/dashboard">Dashboard</a>
+          <a href="/blog">Blog</a>
+          <a href="/contact">Contact</a>
+        </nav>
+        <div class="nav-actions">
+          <span id="header-user-email" class="small" style="max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Guest</span>
+          <span id="header-user-status" class="pill">Guest</span>
+          <button class="cta secondary" id="header-auth" type="button">Sign in</button>
+          <button class="cta secondary hidden" id="header-signout" type="button">Sign out</button>
+          <a class="cta secondary hidden" id="header-dashboard" href="/dashboard">Dashboard</a>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <div class="app-layout">
+        <aside class="app-sidebar">
+          <div class="sidebar-card">
+            <div class="small"><strong>Admin</strong></div>
+            <div class="small">Signed in as <span id="user-email">Not signed in</span></div>
+            <div class="small">Status <span id="user-status" class="pill">Guest</span></div>
+            <a class="cta secondary small" href="/dashboard">Back to dashboard</a>
+            <a class="cta secondary small" href="/forecasting">Open terminal</a>
+          </div>
+          <nav class="sidebar-nav">
+            <a href="#admin">Fulfill orders</a>
+            <a href="/dashboard#purchase">Purchase flow</a>
+            <a href="/forecasting#saved-forecasts">Saved forecasts</a>
+          </nav>
+        </aside>
+
+        <div class="app-main">
+          <section class="page-hero">
+            <div class="container content-grid">
+              <div>
+                <div class="eyebrow">Admin dashboard</div>
+                <h1>Fulfill Deep Forecast orders with status updates, notes, and file uploads.</h1>
+                <p>
+                  This page is restricted to the admin account. Use the order list below to update status,
+                  leave fulfillment notes, and upload deliverables directly to Firebase Storage.
+                </p>
+              </div>
+              <div class="card">
+                <h3>Fulfillment checklist</h3>
+                <div class="feature-list">
+                  <div class="feature"><span></span>Update order status + notes</div>
+                  <div class="feature"><span></span>Upload PDF, slides, or datasets</div>
+                  <div class="feature"><span></span>Push notifications fire on status changes</div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="section admin-section hidden" id="admin">
+            <div class="container">
+              <div class="section-title">
+                <h2>Orders</h2>
+                <p class="small">Only `tamzid257@gmail.com` can see this list.</p>
+              </div>
+              <div class="card">
+                <div id="admin-orders" class="order-list"></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="section" id="admin-locked">
+            <div class="container">
+              <div class="notice">
+                If you are not seeing the admin list, sign in with the admin account. This page hides admin data for all other users.
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="container footer-grid">
+        <div>
+          <div class="logo">QUANTURA</div>
+          <p class="small">Admin fulfillment portal.</p>
+          <span class="tag">Admin</span>
+        </div>
+        <div class="small">
+          <strong>Explore</strong>
+          <div><a href="/dashboard">Dashboard</a></div>
+          <div><a href="/forecasting">Forecasting</a></div>
+          <div><a href="/screener">Screener</a></div>
+          <div><a href="/blog">Blog</a></div>
+        </div>
+        <div class="small">
+          <strong>Ops</strong>
+          <div>Order status updates</div>
+          <div>File uploads</div>
+          <div>Audit logs</div>
+        </div>
+      </div>
+      <div class="container small" style="margin-top: 24px;">
+        © 2026 Quantura. All rights reserved.
+      </div>
+    </footer>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>
+

@@ -3,17 +3,17 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Contact Quantura | Forecasting & Research</title>
+    <title>Quantura Blog | Forecasting, Screener, Market Intelligence</title>
     <meta
       name="description"
-      content="Contact Quantura for Deep Forecast reports, portfolio retainers, or bespoke research engagements."
+      content="Product updates, forecasting notes, and market intelligence from Quantura."
     />
     <meta name="robots" content="index, follow" />
-    <link rel="canonical" href="https://quantura.ai/contact" />
-    <meta property="og:title" content="Contact Quantura" />
-    <meta property="og:description" content="Request forecasting, research, or partnership support." />
+    <link rel="canonical" href="https://quantura.ai/blog" />
+    <meta property="og:title" content="Quantura Blog" />
+    <meta property="og:description" content="Forecasting notes and market intelligence from Quantura." />
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://quantura.ai/contact" />
+    <meta property="og:url" content="https://quantura.ai/blog" />
     <meta property="og:image" content="/assets/quantura-logo.svg" />
     <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="/manifest.json" />
@@ -45,7 +45,7 @@
           <button class="cta secondary" id="header-auth" type="button">Sign in</button>
           <button class="cta secondary hidden" id="header-signout" type="button">Sign out</button>
           <a class="cta secondary hidden" id="header-dashboard" href="/dashboard">Dashboard</a>
-          <a class="cta" href="/dashboard#purchase">Request Deep Forecast</a>
+          <a class="cta" href="/forecasting">Open terminal</a>
         </div>
       </div>
     </header>
@@ -54,58 +54,41 @@
       <section class="page-hero">
         <div class="container content-grid">
           <div>
-            <div class="eyebrow">Contact Quantura</div>
-            <h1>Tell us what you need. We’ll reply within one business day.</h1>
+            <div class="eyebrow">Quantura Blog</div>
+            <h1>Forecasting notes, product updates, and market workflows.</h1>
             <p>
-              Whether you need a Deep Forecast, a portfolio retainer, or a custom research engagement,
-              Quantura is ready to help. Share your objectives and we’ll map the fastest route to clarity.
+              Short, operator-friendly posts on how we build forecasts, rank watchlists, and turn data into
+              decision-ready reports.
             </p>
           </div>
           <div class="card">
-            <h3>Preferred channels</h3>
-            <div class="feature-list">
-              <div class="feature"><span></span>Forecast requests and pricing</div>
-              <div class="feature"><span></span>Partnerships and enterprise retainers</div>
-              <div class="feature"><span></span>Custom data and reporting needs</div>
+            <h3>Popular topics</h3>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px;">
+              <span class="tag">Prophet</span>
+              <span class="tag">TimeMixer</span>
+              <span class="tag">Technical Indicators</span>
+              <span class="tag">Options</span>
+              <span class="tag">Screener</span>
             </div>
           </div>
         </div>
       </section>
 
       <section class="section">
-        <div class="container content-grid">
-          <form id="contact-form" class="card">
-            <div class="form-grid">
-              <div class="field">
-                <label class="label" for="contact-name">Name</label>
-                <input id="contact-name" name="name" required />
-              </div>
-              <div class="field">
-                <label class="label" for="contact-email">Email</label>
-                <input id="contact-email" name="email" type="email" required />
-              </div>
-              <div class="field">
-                <label class="label" for="contact-company">Company</label>
-                <input id="contact-company" name="company" />
-              </div>
-              <div class="field">
-                <label class="label" for="contact-role">Role</label>
-                <input id="contact-role" name="role" />
-              </div>
-            </div>
-            <div class="field">
-              <label class="label" for="contact-message">How can we help?</label>
-              <textarea id="contact-message" name="message" required></textarea>
-            </div>
-            <button class="cta" type="submit" data-analytics="contact_submit">Send message</button>
-          </form>
-          <div class="results-panel">
-            <h3>What happens next</h3>
-            <div class="feature-list">
-              <div class="feature"><span></span>We review your request within one business day.</div>
-              <div class="feature"><span></span>We share a clear scope, timeline, and pricing.</div>
-              <div class="feature"><span></span>We kickoff with a forecasting alignment call.</div>
-            </div>
+        <div class="container">
+          <div class="section-title">
+            <h2>Latest posts</h2>
+            <p class="small">New posts ship weekly.</p>
+          </div>
+          <div class="grid-3">
+            <a class="card" href="/blog/posts/2026-02-10-quantura-terminal">
+              <h3>Introducing the Quantura Ticker Terminal</h3>
+              <div class="small">February 10, 2026</div>
+              <p class="small" style="margin-top: 12px;">
+                Interactive charting, forecast overlays, and indicator panels that feel closer to a trading desk.
+              </p>
+              <div class="tag" style="margin-top: 14px;">Product update</div>
+            </a>
           </div>
         </div>
       </section>
@@ -115,8 +98,8 @@
       <div class="container footer-grid">
         <div>
           <div class="logo">QUANTURA</div>
-          <p class="small">Demand forecasting and market intelligence for high-conviction decisions.</p>
-          <span class="tag">Contact</span>
+          <p class="small">Forecasting and market intelligence for high-conviction decisions.</p>
+          <span class="tag">Blog</span>
         </div>
         <div class="small">
           <strong>Explore</strong>
@@ -124,13 +107,13 @@
           <div><a href="/forecasting">Forecasting</a></div>
           <div><a href="/screener">Screener</a></div>
           <div><a href="/dashboard">Dashboard</a></div>
-          <div><a href="/blog">Blog</a></div>
+          <div><a href="/contact">Contact</a></div>
         </div>
         <div class="small">
           <strong>Product</strong>
           <div>Deep Forecast</div>
-          <div>Weekly Briefs</div>
-          <div>Retainer Engagements</div>
+          <div>Ticker terminal</div>
+          <div>Saved forecasts</div>
         </div>
       </div>
       <div class="container small" style="margin-top: 24px;">
