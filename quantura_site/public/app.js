@@ -1,11 +1,17 @@
 (() => {
   const ADMIN_EMAIL = "tamzid257@gmail.com";
   const STRIPE_URL = "https://buy.stripe.com/8x24gze7a86K1zE9M20co08";
+  const FCM_TOKEN_CACHE_KEY = "quantura_fcm_token";
+  const COOKIE_CONSENT_KEY = "quantura_cookie_consent";
+  const FEEDBACK_PROMPT_KEY = "quantura_feedback_prompt_v1";
+  const LAST_TICKER_KEY = "quantura_last_ticker";
 
   const ui = {
     headerAuth: document.getElementById("header-auth"),
     headerSignOut: document.getElementById("header-signout"),
     headerDashboard: document.getElementById("header-dashboard"),
+    headerUserEmail: document.getElementById("header-user-email"),
+    headerUserStatus: document.getElementById("header-user-status"),
     emailForm: document.getElementById("email-auth-form"),
     emailInput: document.getElementById("auth-email"),
     passwordInput: document.getElementById("auth-password"),
@@ -21,6 +27,13 @@
     adminSection: document.getElementById("admin"),
     adminOrders: document.getElementById("admin-orders"),
     contactForm: document.getElementById("contact-form"),
+    navAdmin: document.getElementById("nav-admin"),
+    terminalForm: document.getElementById("terminal-form"),
+    terminalTicker: document.getElementById("terminal-ticker"),
+    terminalInterval: document.getElementById("terminal-interval"),
+    terminalStatus: document.getElementById("terminal-status"),
+    tickerChart: document.getElementById("ticker-chart"),
+    indicatorChart: document.getElementById("indicator-chart"),
     forecastForm: document.getElementById("forecast-form"),
     forecastOutput: document.getElementById("forecast-output"),
     forecastService: document.getElementById("forecast-service"),
@@ -55,18 +68,41 @@
     alpacaCancelOrderForm: document.getElementById("alpaca-cancel-order-form"),
     alpacaCancelOrderId: document.getElementById("alpaca-cancel-order-id"),
     alpacaCancelStatus: document.getElementById("alpaca-cancel-status"),
+    savedForecastsList: document.getElementById("saved-forecasts-list"),
+    notificationsEnable: document.getElementById("notifications-enable"),
+    notificationsRefresh: document.getElementById("notifications-refresh"),
+    notificationsSendTest: document.getElementById("notifications-send-test"),
+    notificationsStatus: document.getElementById("notifications-status"),
+    notificationsToken: document.getElementById("notifications-token"),
     toast: document.getElementById("toast"),
     purchasePanels: Array.from(document.querySelectorAll(".purchase-panel")),
   };
 
   const state = {
     user: null,
+    cookieConsent: (() => {
+      try {
+        return localStorage.getItem(COOKIE_CONSENT_KEY) || "";
+      } catch (error) {
+        return "";
+      }
+    })(),
+    initialPageViewSent: false,
+    tickerContext: {
+      ticker: "",
+      interval: "1d",
+      rows: [],
+      forecastId: "",
+      forecastDoc: null,
+      indicatorOverlays: [],
+    },
     unsubscribeOrders: null,
     unsubscribeAdmin: null,
     unsubscribeForecasts: null,
     unsubscribeAutopilot: null,
     unsubscribePredictions: null,
     unsubscribeAlpaca: null,
+    messagingBound: false,
   };
 
   const showToast = (message, variant = "default") => {
@@ -82,6 +118,7 @@
 
   const getAnalytics = () => {
     try {
+      if (state.cookieConsent !== "accepted") return null;
       if (typeof firebase === "undefined") return null;
       if (!firebase.analytics) return null;
       return firebase.analytics();
@@ -142,6 +179,221 @@
     platform: navigator.platform,
   });
 
+  const getMessagingClient = () => {
+    if (typeof firebase === "undefined" || !firebase.messaging) return null;
+    try {
+      return firebase.messaging();
+    } catch (error) {
+      return null;
+    }
+  };
+
+  const isPushSupported = () =>
+    typeof window !== "undefined" &&
+    "Notification" in window &&
+    "serviceWorker" in navigator &&
+    "PushManager" in window;
+
+  const setNotificationStatus = (text) => {
+    if (ui.notificationsStatus) {
+      ui.notificationsStatus.textContent = text;
+    }
+  };
+
+  const setNotificationTokenPreview = (token) => {
+    if (!ui.notificationsToken) return;
+    if (!token) {
+      ui.notificationsToken.textContent = "No token registered yet.";
+      return;
+    }
+    ui.notificationsToken.textContent = `${token.slice(0, 20)}...${token.slice(-12)}`;
+  };
+
+  const setNotificationControlsEnabled = (enabled) => {
+    if (ui.notificationsEnable) ui.notificationsEnable.disabled = !enabled;
+    if (ui.notificationsRefresh) ui.notificationsRefresh.disabled = !enabled;
+    if (ui.notificationsSendTest) ui.notificationsSendTest.disabled = !enabled;
+  };
+
+  const safeLocalStorageGet = (key) => {
+    try {
+      return localStorage.getItem(key);
+    } catch (error) {
+      return null;
+    }
+  };
+
+  const safeLocalStorageSet = (key, value) => {
+    try {
+      localStorage.setItem(key, value);
+    } catch (error) {
+      // Ignore storage write failures.
+    }
+  };
+
+  const ensureInitialPageView = () => {
+    if (state.initialPageViewSent) return;
+    logEvent("page_view", {
+      page_title: document.title,
+      page_path: window.location.pathname,
+      page_location: window.location.href,
+    });
+    state.initialPageViewSent = true;
+  };
+
+  const setCookieConsent = (value) => {
+    state.cookieConsent = value;
+    safeLocalStorageSet(COOKIE_CONSENT_KEY, value);
+    if (value === "accepted") {
+      ensureInitialPageView();
+      setUserId(state.user?.uid || null);
+      showToast("Thanks. Analytics is enabled.");
+    } else {
+      showToast("Preferences saved.");
+    }
+  };
+
+  const buildModalShell = (id) => {
+    const wrapper = document.createElement("div");
+    wrapper.id = id;
+    wrapper.className = "modal hidden";
+    wrapper.innerHTML = `
+      <div class="modal-backdrop" data-action="close"></div>
+      <div class="modal-card card" role="dialog" aria-modal="true"></div>
+    `;
+    document.body.appendChild(wrapper);
+    return wrapper;
+  };
+
+  const ensureCookieModal = () => {
+    let modal = document.getElementById("cookie-modal");
+    if (!modal) modal = buildModalShell("cookie-modal");
+    const card = modal.querySelector(".modal-card");
+    card.innerHTML = `
+      <h3>Cookies and analytics</h3>
+      <p class="small">
+        Quantura uses cookies for analytics and to improve reliability. You can opt out at any time.
+      </p>
+      <div class="modal-actions">
+        <button class="cta secondary" type="button" data-action="decline">No thanks</button>
+        <button class="cta" type="button" data-action="accept">Accept</button>
+      </div>
+    `;
+    modal.addEventListener("click", (event) => {
+      const action = event.target?.dataset?.action;
+      if (!action) return;
+      if (action === "accept") {
+        setCookieConsent("accepted");
+        modal.classList.add("hidden");
+      }
+      if (action === "decline") {
+        setCookieConsent("declined");
+        modal.classList.add("hidden");
+      }
+      if (action === "close") {
+        modal.classList.add("hidden");
+      }
+    });
+    return modal;
+  };
+
+  const ensureFeedbackModal = () => {
+    let modal = document.getElementById("feedback-modal");
+    if (!modal) modal = buildModalShell("feedback-modal");
+    const card = modal.querySelector(".modal-card");
+    card.innerHTML = `
+      <h3>Help us improve Quantura</h3>
+      <p class="small">
+        Share what you were trying to do and what could be better. This feedback is stored privately in Firestore.
+      </p>
+      <label class="label" for="feedback-rating">Rating</label>
+      <select id="feedback-rating" class="status-select">
+        <option value="">Select</option>
+        <option value="5">5 (Excellent)</option>
+        <option value="4">4</option>
+        <option value="3">3</option>
+        <option value="2">2</option>
+        <option value="1">1 (Poor)</option>
+      </select>
+      <label class="label" for="feedback-message">Feedback</label>
+      <textarea id="feedback-message" placeholder="What should we improve?"></textarea>
+      <div class="modal-actions">
+        <button class="cta secondary" type="button" data-action="close">Cancel</button>
+        <button class="cta" type="button" data-action="send">Send feedback</button>
+      </div>
+      <p class="small" id="feedback-status"></p>
+    `;
+    modal.addEventListener("click", async (event) => {
+      const action = event.target?.dataset?.action;
+      if (!action) return;
+      if (action === "close") {
+        modal.classList.add("hidden");
+        return;
+      }
+      if (action !== "send") return;
+
+      const rating = modal.querySelector("#feedback-rating")?.value || "";
+      const message = modal.querySelector("#feedback-message")?.value || "";
+      const status = modal.querySelector("#feedback-status");
+      if (status) status.textContent = "Sending...";
+
+      try {
+        if (typeof firebase === "undefined") throw new Error("Firebase not loaded.");
+        const functions = firebase.functions();
+        const submitFeedback = functions.httpsCallable("submit_feedback");
+        await submitFeedback({
+          rating,
+          message,
+          pagePath: window.location.pathname,
+          meta: buildMeta(),
+        });
+        if (status) status.textContent = "Sent. Thank you.";
+        logEvent("feedback_submitted", { rating: rating || "n/a" });
+        showToast("Feedback sent.");
+        safeLocalStorageSet(FEEDBACK_PROMPT_KEY, String(Date.now()));
+      } catch (error) {
+        if (status) status.textContent = error.message || "Unable to send feedback.";
+        showToast(error.message || "Unable to send feedback.", "warn");
+      }
+    });
+    return modal;
+  };
+
+  const ensureFeedbackPrompt = () => {
+    const lastShown = Number(safeLocalStorageGet(FEEDBACK_PROMPT_KEY) || "0");
+    const weekMs = 7 * 24 * 60 * 60 * 1000;
+    if (lastShown && Date.now() - lastShown < weekMs) return null;
+    if (document.getElementById("feedback-banner")) return null;
+
+    const banner = document.createElement("div");
+    banner.id = "feedback-banner";
+    banner.className = "feedback-banner";
+    banner.innerHTML = `
+      <div>
+        <strong>Help us improve Firebase Hosting.</strong>
+        <div class="small">By continuing, you agree Google may use feedback and basic system info to improve services.</div>
+      </div>
+      <div class="banner-actions">
+        <button class="cta secondary small" type="button" data-action="dismiss">No thanks</button>
+        <button class="cta small" type="button" data-action="open">Show question</button>
+      </div>
+    `;
+    document.body.appendChild(banner);
+
+    banner.addEventListener("click", (event) => {
+      const action = event.target?.dataset?.action;
+      if (!action) return;
+      if (action === "dismiss") {
+        safeLocalStorageSet(FEEDBACK_PROMPT_KEY, String(Date.now()));
+        banner.remove();
+      }
+      if (action === "open") {
+        ensureFeedbackModal().classList.remove("hidden");
+      }
+    });
+    return banner;
+  };
+
   const setPurchaseState = (user) => {
     ui.purchasePanels.forEach((panel) => {
       const button = panel.querySelector('[data-action="purchase"]');
@@ -169,6 +421,12 @@
     ui.headerAuth?.classList.toggle("hidden", isAuthed);
     ui.headerSignOut?.classList.toggle("hidden", !isAuthed);
     ui.headerDashboard?.classList.toggle("hidden", !isAuthed);
+
+    if (ui.headerUserEmail) ui.headerUserEmail.textContent = user?.email || "Guest";
+    if (ui.headerUserStatus) {
+      ui.headerUserStatus.textContent = isAuthed ? "Member" : "Guest";
+      ui.headerUserStatus.classList.toggle("pill", true);
+    }
 
     if (ui.userEmail) ui.userEmail.textContent = user?.email || "Not signed in";
     if (ui.userProvider) ui.userProvider.textContent = user?.providerData?.[0]?.providerId || "—";
@@ -281,6 +539,24 @@
     items.forEach((item) => {
       const card = document.createElement("div");
       card.className = "order-card";
+      const isForecast = Boolean(item.service && item.ticker);
+      const forecastMeta = isForecast
+        ? `
+          <div><strong>Ticker</strong> ${item.ticker}</div>
+          <div><strong>Service</strong> ${item.service}</div>
+          <div><strong>Engine</strong> ${item.engine || "—"}</div>
+          ${item.serviceMessage ? `<div><strong>Message</strong> ${escapeHtml(item.serviceMessage)}</div>` : ""}
+        `
+        : "";
+      const actions = isForecast
+        ? `
+          <div class="order-actions" style="grid-template-columns: 1fr;">
+            <button class="cta secondary small" type="button" data-action="plot-forecast" data-forecast-id="${item.id}" data-ticker="${item.ticker}">
+              Plot on chart
+            </button>
+          </div>
+        `
+        : "";
       card.innerHTML = `
         <div class="order-header">
           <div>
@@ -292,7 +568,9 @@
         <div class="order-meta">
           <div><strong>Requested</strong> ${formatTimestamp(item.createdAt)}</div>
           ${item.summary ? `<div><strong>Summary</strong> ${item.summary}</div>` : ""}
+          ${forecastMeta}
         </div>
+        ${actions}
       `;
       container.appendChild(card);
     });
@@ -314,7 +592,8 @@
 
   const startUserForecasts = (db, user) => {
     if (state.unsubscribeForecasts) state.unsubscribeForecasts();
-    if (!user || !ui.userForecasts) return;
+    const containers = [ui.userForecasts, ui.savedForecastsList].filter(Boolean);
+    if (!user || containers.length === 0) return;
 
     state.unsubscribeForecasts = db
       .collection("forecast_requests")
@@ -322,7 +601,7 @@
       .orderBy("createdAt", "desc")
       .onSnapshot((snapshot) => {
         const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-        renderRequestList(items, ui.userForecasts, "No forecast requests yet.");
+        containers.forEach((container) => renderRequestList(items, container, "No forecast requests yet."));
       });
   };
 
@@ -426,6 +705,375 @@
     URL.revokeObjectURL(url);
   };
 
+  const escapeHtml = (value) =>
+    String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+
+  const toPrettyJson = (value) => `<pre class="small">${escapeHtml(JSON.stringify(value, null, 2))}</pre>`;
+
+  const normalizeTicker = (value) =>
+    String(value || "")
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9.\\-]/g, "");
+
+  const setTerminalStatus = (text) => {
+    if (!ui.terminalStatus) return;
+    ui.terminalStatus.textContent = text || "";
+  };
+
+  const getQueryParam = (key) => {
+    try {
+      return new URLSearchParams(window.location.search).get(key);
+    } catch (error) {
+      return null;
+    }
+  };
+
+  const syncTickerInputs = (ticker) => {
+    const t = normalizeTicker(ticker);
+    if (!t) return;
+    const ids = [
+      "forecast-ticker",
+      "technicals-ticker",
+      "download-ticker",
+      "news-ticker",
+      "options-ticker",
+      "autopilot-ticker",
+      "alpaca-symbol",
+    ];
+    ids.forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if ("value" in el && !String(el.value || "").trim()) {
+        el.value = t;
+      } else if ("value" in el) {
+        el.value = t;
+      }
+    });
+  };
+
+  const computeHistoryStart = (interval) => {
+    const days = interval === "1h" ? 45 : 730;
+    const dt = new Date();
+    dt.setDate(dt.getDate() - days);
+    return dt.toISOString().slice(0, 10);
+  };
+
+  const getPlotly = () => (typeof window !== "undefined" ? window.Plotly : null);
+
+  const extractDateKey = (rows) => {
+    if (!rows?.length) return null;
+    const sample = rows[0] || {};
+    if ("Datetime" in sample) return "Datetime";
+    if ("Date" in sample) return "Date";
+    if ("ds" in sample) return "ds";
+    return null;
+  };
+
+  const renderTickerChart = async (rows, ticker, interval, overlays = []) => {
+    if (!ui.tickerChart) return;
+    const Plotly = getPlotly();
+    if (!Plotly) {
+      ui.tickerChart.textContent = "Chart library not loaded.";
+      return;
+    }
+
+    if (!rows?.length) {
+      ui.tickerChart.textContent = "No price data to plot.";
+      return;
+    }
+
+    const dateKey = extractDateKey(rows);
+    if (!dateKey) {
+      ui.tickerChart.textContent = "Unable to find timestamp column.";
+      return;
+    }
+
+    const x = rows.map((row) => row[dateKey]);
+    const hasOhlc = ["Open", "High", "Low", "Close"].every((key) => key in (rows[0] || {}));
+
+    const baseTraces = hasOhlc
+      ? [
+          {
+            type: "candlestick",
+            name: `${ticker} price`,
+            x,
+            open: rows.map((row) => row.Open),
+            high: rows.map((row) => row.High),
+            low: rows.map((row) => row.Low),
+            close: rows.map((row) => row.Close),
+            increasing: { line: { color: "#1c6a50" } },
+            decreasing: { line: { color: "#9b2b1a" } },
+          },
+        ]
+      : [
+          {
+            type: "scatter",
+            mode: "lines",
+            name: `${ticker} close`,
+            x,
+            y: rows.map((row) => row.Close ?? row.close ?? null),
+            line: { color: "#12182a", width: 2 },
+          },
+        ];
+
+    const layout = {
+      title: { text: `${ticker} (${interval})`, font: { family: "Manrope, sans-serif", size: 16 } },
+      paper_bgcolor: "rgba(255,255,255,0)",
+      plot_bgcolor: "#ffffff",
+      margin: { l: 50, r: 30, t: 40, b: 40 },
+      xaxis: {
+        rangeslider: { visible: true },
+        showspikes: true,
+        spikemode: "across",
+        spikesnap: "cursor",
+      },
+      yaxis: { showspikes: true, spikemode: "across", spikesnap: "cursor" },
+      legend: { orientation: "h" },
+    };
+
+    await Plotly.react(ui.tickerChart, [...baseTraces, ...overlays], layout, {
+      responsive: true,
+      displaylogo: false,
+    });
+  };
+
+  const renderIndicatorChart = async (series) => {
+    if (!ui.indicatorChart) return;
+    const Plotly = getPlotly();
+    if (!Plotly) {
+      ui.indicatorChart.textContent = "Chart library not loaded.";
+      return;
+    }
+
+    const dates = series?.dates || [];
+    const items = series?.items || [];
+    if (!dates.length || !items.length) {
+      ui.indicatorChart.textContent = "No indicator series to plot.";
+      return;
+    }
+
+    const traces = items.map((item) => ({
+      type: "scatter",
+      mode: "lines",
+      name: item.name,
+      x: dates,
+      y: item.values,
+      line: { width: 2 },
+    }));
+
+    const layout = {
+      title: { text: "Technical indicators", font: { family: "Manrope, sans-serif", size: 14 } },
+      paper_bgcolor: "rgba(255,255,255,0)",
+      plot_bgcolor: "#ffffff",
+      margin: { l: 50, r: 30, t: 40, b: 40 },
+      xaxis: { showspikes: true, spikemode: "across", spikesnap: "cursor" },
+      yaxis: { zeroline: false },
+      legend: { orientation: "h" },
+    };
+
+    await Plotly.react(ui.indicatorChart, traces, layout, {
+      responsive: true,
+      displaylogo: false,
+    });
+  };
+
+  const buildIndicatorOverlays = (series) => {
+    const dates = series?.dates || [];
+    const items = series?.items || [];
+    if (!dates.length || !items.length) return [];
+    const overlayNames = new Set(["SMA", "EMA", "BBANDS_UPPER", "BBANDS_MIDDLE", "BBANDS_LOWER"]);
+    return items
+      .filter((item) => overlayNames.has(item.name))
+      .map((item) => ({
+        type: "scatter",
+        mode: "lines",
+        name: item.name,
+        x: dates,
+        y: item.values,
+        line: { width: 1.8 },
+        opacity: 0.85,
+      }));
+  };
+
+  const buildForecastOverlays = (forecastRows) => {
+    if (!Array.isArray(forecastRows) || forecastRows.length === 0) return [];
+    const keys = Object.keys(forecastRows[0] || {});
+    const quantKeys = keys.filter((key) => /^q\\d\\d$/.test(key)).sort();
+    const pick = (q) => (quantKeys.includes(q) ? q : null);
+    const q10 = pick("q10");
+    const q25 = pick("q25");
+    const q50 = pick("q50") || pick("q50");
+    const q75 = pick("q75");
+    const q90 = pick("q90");
+
+    const x = forecastRows.map((row) => row.ds);
+    const overlays = [];
+
+    const addBand = (lowerKey, upperKey, label, color) => {
+      if (!lowerKey || !upperKey) return;
+      overlays.push({
+        type: "scatter",
+        mode: "lines",
+        name: `${label} lower`,
+        x,
+        y: forecastRows.map((row) => row[lowerKey]),
+        line: { width: 1, color: "rgba(0,0,0,0)" },
+        hoverinfo: "skip",
+        showlegend: false,
+      });
+      overlays.push({
+        type: "scatter",
+        mode: "lines",
+        name: label,
+        x,
+        y: forecastRows.map((row) => row[upperKey]),
+        line: { width: 1, color: "rgba(0,0,0,0)" },
+        fill: "tonexty",
+        fillcolor: color,
+      });
+    };
+
+    addBand(q10, q90, "P10-P90", "rgba(58, 181, 162, 0.16)");
+    addBand(q25, q75, "P25-P75", "rgba(240, 180, 41, 0.18)");
+
+    if (q50) {
+      overlays.push({
+        type: "scatter",
+        mode: "lines",
+        name: "Median forecast",
+        x,
+        y: forecastRows.map((row) => row[q50]),
+        line: { width: 2, color: "#12182a", dash: "dot" },
+      });
+    }
+    return overlays;
+  };
+
+  const loadTickerHistory = async (functions, ticker, interval) => {
+    const fetchHistory = functions.httpsCallable("get_ticker_history");
+    const start = computeHistoryStart(interval);
+    const result = await fetchHistory({ ticker, interval, start, end: "" });
+    const rows = result.data?.rows || [];
+    return Array.isArray(rows) ? rows : [];
+  };
+
+  const loadForecastDoc = async (db, forecastId) => {
+    const snap = await db.collection("forecast_requests").doc(forecastId).get();
+    if (!snap.exists) throw new Error("Forecast not found.");
+    return { id: snap.id, ...snap.data() };
+  };
+
+  const plotForecastById = async (db, functions, forecastId) => {
+    if (!forecastId) return;
+    const doc = await loadForecastDoc(db, forecastId);
+    const ticker = normalizeTicker(doc.ticker);
+    const interval = doc.interval || state.tickerContext.interval || "1d";
+    state.tickerContext.forecastId = forecastId;
+    state.tickerContext.forecastDoc = doc;
+    safeLocalStorageSet(LAST_TICKER_KEY, ticker);
+
+    if (!ticker) throw new Error("Forecast ticker is missing.");
+    if (!state.tickerContext.rows.length || state.tickerContext.ticker !== ticker || state.tickerContext.interval !== interval) {
+      setTerminalStatus("Loading price history...");
+      const rows = await loadTickerHistory(functions, ticker, interval);
+      state.tickerContext.rows = rows;
+      state.tickerContext.ticker = ticker;
+      state.tickerContext.interval = interval;
+      syncTickerInputs(ticker);
+    }
+
+    const forecastOverlays = buildForecastOverlays(doc.forecastRows || []);
+    const overlays = [...forecastOverlays, ...(state.tickerContext.indicatorOverlays || [])];
+    await renderTickerChart(state.tickerContext.rows, ticker, interval, overlays);
+    setTerminalStatus(`Plotted forecast ${forecastId}.`);
+  };
+
+  const ensureMessagingServiceWorker = async () => {
+    if (!("serviceWorker" in navigator)) {
+      throw new Error("Service workers are not available in this browser.");
+    }
+    return navigator.serviceWorker.register("/firebase-messaging-sw.js");
+  };
+
+  const loadVapidKey = async (functions) => {
+    if (window.QUANTURA_VAPID_KEY) return String(window.QUANTURA_VAPID_KEY);
+    const getWebPushConfig = functions.httpsCallable("get_web_push_config");
+    const response = await getWebPushConfig({ meta: buildMeta() });
+    return response.data?.vapidKey || "";
+  };
+
+  const registerNotificationToken = async (functions, messaging, opts = {}) => {
+    if (!state.user) throw new Error("Sign in before enabling notifications.");
+    if (!messaging) throw new Error("Messaging SDK is not available.");
+    if (!isPushSupported()) throw new Error("Push notifications are not supported in this browser.");
+
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") {
+      throw new Error("Notification permission was not granted.");
+    }
+
+    const vapidKey = await loadVapidKey(functions);
+    if (!vapidKey) {
+      throw new Error("FCM Web Push key is missing. Configure FCM_WEB_VAPID_KEY in Functions.");
+    }
+
+    const serviceWorkerRegistration = await ensureMessagingServiceWorker();
+    const token = await messaging.getToken({
+      vapidKey,
+      serviceWorkerRegistration,
+    });
+
+    if (!token) {
+      throw new Error("No registration token generated.");
+    }
+
+    const registerPushToken = functions.httpsCallable("register_notification_token");
+    await registerPushToken({
+      token,
+      forceRefresh: Boolean(opts.forceRefresh),
+      meta: buildMeta(),
+    });
+
+    localStorage.setItem(FCM_TOKEN_CACHE_KEY, token);
+    setNotificationTokenPreview(token);
+    return token;
+  };
+
+  const unregisterCachedNotificationToken = async (functions) => {
+    const token = localStorage.getItem(FCM_TOKEN_CACHE_KEY);
+    if (!token) return;
+    try {
+      const unregisterToken = functions.httpsCallable("unregister_notification_token");
+      await unregisterToken({ token, meta: buildMeta() });
+    } catch (error) {
+      // Ignore token cleanup errors.
+    }
+    localStorage.removeItem(FCM_TOKEN_CACHE_KEY);
+    setNotificationTokenPreview("");
+  };
+
+  const bindForegroundPushHandler = (messaging) => {
+    if (!messaging || state.messagingBound) return;
+    try {
+      messaging.onMessage((payload) => {
+        const title = payload?.notification?.title || "Quantura update";
+        const body = payload?.notification?.body || "You have a new dashboard update.";
+        showToast(`${title}: ${body}`);
+        setNotificationStatus(`Last message: ${title}`);
+        logEvent("push_received_foreground", { title });
+      });
+      state.messagingBound = true;
+    } catch (error) {
+      // Ignore foreground messaging bind errors.
+    }
+  };
+
   const handlePurchase = async (panel, functions) => {
     if (!state.user) {
       showToast("Sign in to continue.", "warn");
@@ -482,12 +1130,30 @@
     const db = firebase.firestore();
     const functions = firebase.functions();
     const storage = firebase.storage ? firebase.storage() : null;
+    const messaging = getMessagingClient();
 
-    logEvent("page_view", {
-      page_title: document.title,
-      page_path: window.location.pathname,
-      page_location: window.location.href,
-    });
+    if (ui.notificationsStatus) {
+      if (!isPushSupported()) {
+        setNotificationStatus("Push notifications are not supported in this browser.");
+        setNotificationControlsEnabled(false);
+      } else if (!messaging) {
+        setNotificationStatus("Messaging SDK is not loaded on this page.");
+        setNotificationControlsEnabled(false);
+      } else {
+        setNotificationStatus("Sign in and enable notifications.");
+        setNotificationControlsEnabled(true);
+      }
+      setNotificationTokenPreview(safeLocalStorageGet(FCM_TOKEN_CACHE_KEY) || "");
+    }
+
+    bindForegroundPushHandler(messaging);
+
+    if (state.cookieConsent === "accepted") {
+      ensureInitialPageView();
+    } else if (state.cookieConsent !== "declined") {
+      ensureCookieModal().classList.remove("hidden");
+    }
+    window.setTimeout(() => ensureFeedbackPrompt(), 1400);
 
     document.addEventListener("click", (event) => {
       const target = event.target.closest("[data-analytics]");
@@ -498,15 +1164,52 @@
       });
     });
 
-    auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(() => {
+    document.addEventListener("click", async (event) => {
+      const plotButton = event.target.closest('[data-action="plot-forecast"]');
+      if (!plotButton) return;
+      const forecastId = plotButton.dataset.forecastId;
+      const ticker = plotButton.dataset.ticker || "";
+      if (!forecastId) return;
+
+      if (!state.user) {
+        showToast("Sign in to view saved forecasts.", "warn");
+        return;
+      }
+
+      const onForecastingPage = window.location.pathname === "/forecasting";
+      if (!onForecastingPage) {
+        const params = new URLSearchParams();
+        params.set("forecastId", forecastId);
+        if (ticker) params.set("ticker", ticker);
+        window.location.href = `/forecasting?${params.toString()}`;
+        return;
+      }
+
+      try {
+        setTerminalStatus("Loading saved forecast...");
+        await plotForecastById(db, functions, forecastId);
+        document.getElementById("terminal")?.scrollIntoView({ behavior: "smooth" });
+      } catch (error) {
+        setTerminalStatus(error.message || "Unable to plot forecast.");
+        showToast(error.message || "Unable to plot forecast.", "warn");
+      }
+    });
+
+    const persistenceReady = auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(() => {
       showToast("Unable to set auth persistence.", "warn");
     });
 
     ui.headerAuth?.addEventListener("click", () => {
-      document.getElementById("auth")?.scrollIntoView({ behavior: "smooth" });
+      const authSection = document.getElementById("auth");
+      if (authSection) {
+        authSection.scrollIntoView({ behavior: "smooth" });
+      } else {
+        window.location.href = "/dashboard#auth";
+      }
     });
 
     ui.headerSignOut?.addEventListener("click", async () => {
+      await unregisterCachedNotificationToken(functions);
       await auth.signOut();
       showToast("Signed out.");
       logEvent("logout", { method: "firebase" });
@@ -516,6 +1219,7 @@
       event.preventDefault();
       if (ui.emailMessage) ui.emailMessage.textContent = "";
       try {
+        await persistenceReady;
         await auth.signInWithEmailAndPassword(ui.emailInput.value, ui.passwordInput.value);
         showToast("Signed in successfully.");
         logEvent("login", { method: "password" });
@@ -527,6 +1231,7 @@
     ui.emailCreate?.addEventListener("click", async () => {
       if (ui.emailMessage) ui.emailMessage.textContent = "";
       try {
+        await persistenceReady;
         await auth.createUserWithEmailAndPassword(ui.emailInput.value, ui.passwordInput.value);
         showToast("Account created.");
         logEvent("sign_up", { method: "password" });
@@ -538,6 +1243,7 @@
     ui.googleSignin?.addEventListener("click", async () => {
       if (ui.emailMessage) ui.emailMessage.textContent = "";
       try {
+        await persistenceReady;
         const provider = new firebase.auth.GoogleAuthProvider();
         await auth.signInWithPopup(provider);
         showToast("Signed in with Google.");
@@ -556,6 +1262,64 @@
         window.open(STRIPE_URL, "_blank", "noreferrer");
       });
     });
+
+    if (ui.terminalTicker) {
+      const initialTicker =
+        normalizeTicker(getQueryParam("ticker")) ||
+        normalizeTicker(getQueryParam("symbol")) ||
+        normalizeTicker(safeLocalStorageGet(LAST_TICKER_KEY)) ||
+        normalizeTicker(ui.terminalTicker.value) ||
+        "AAPL";
+      const initialInterval = getQueryParam("interval") || (ui.terminalInterval?.value || "1d");
+      ui.terminalTicker.value = initialTicker;
+      if (ui.terminalInterval) ui.terminalInterval.value = initialInterval;
+      state.tickerContext.ticker = initialTicker;
+      state.tickerContext.interval = initialInterval;
+      syncTickerInputs(initialTicker);
+
+      const forecastId = getQueryParam("forecastId");
+      if (forecastId) state.tickerContext.forecastId = forecastId;
+
+      ui.terminalForm?.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const ticker = normalizeTicker(ui.terminalTicker?.value);
+        const interval = ui.terminalInterval?.value || "1d";
+        if (!ticker) {
+          showToast("Enter a ticker.", "warn");
+          return;
+        }
+        safeLocalStorageSet(LAST_TICKER_KEY, ticker);
+        state.tickerContext.ticker = ticker;
+        state.tickerContext.interval = interval;
+        state.tickerContext.forecastDoc = null;
+        state.tickerContext.forecastId = "";
+        setTerminalStatus("Loading price history...");
+        try {
+          const rows = await loadTickerHistory(functions, ticker, interval);
+          state.tickerContext.rows = rows;
+          await renderTickerChart(rows, ticker, interval, state.tickerContext.indicatorOverlays || []);
+          setTerminalStatus("Loaded.");
+          logEvent("terminal_load", { ticker, interval });
+          syncTickerInputs(ticker);
+        } catch (error) {
+          setTerminalStatus(error.message || "Unable to load ticker data.");
+          showToast(error.message || "Unable to load ticker data.", "warn");
+        }
+      });
+
+      if (ui.tickerChart) {
+        setTerminalStatus("Loading price history...");
+        loadTickerHistory(functions, initialTicker, initialInterval)
+          .then(async (rows) => {
+            state.tickerContext.rows = rows;
+            await renderTickerChart(rows, initialTicker, initialInterval, state.tickerContext.indicatorOverlays || []);
+            setTerminalStatus("Loaded.");
+          })
+          .catch((error) => {
+            setTerminalStatus(error.message || "Unable to load ticker data.");
+          });
+      }
+    }
 
     ui.adminOrders?.addEventListener("click", async (event) => {
       const updateButton = event.target.closest(".update-status");
@@ -670,25 +1434,66 @@
         start: formData.get("start"),
         horizon: Number(formData.get("horizon")),
         interval: formData.get("interval"),
+        service: formData.get("service") || ui.forecastService?.value || "prophet",
         quantiles,
         meta: buildMeta(),
         utm: getUtm(),
       };
 
       try {
-        const runForecast = functions.httpsCallable("run_prophet_forecast");
+        const runForecast = functions.httpsCallable("run_timeseries_forecast");
         const result = await runForecast(payload);
         const data = result.data || {};
+        const previewRows = Array.isArray(data.forecastPreview) ? data.forecastPreview.slice(0, 8) : [];
+        const previewTable = previewRows.length
+          ? `
+            <table class="data-table" style="margin-top:12px;">
+              <thead>
+                <tr>
+                  ${Object.keys(previewRows[0])
+                    .map((key) => `<th>${escapeHtml(key)}</th>`)
+                    .join("")}
+                </tr>
+              </thead>
+              <tbody>
+                ${previewRows
+                  .map(
+                    (row) => `
+                      <tr>
+                        ${Object.keys(previewRows[0])
+                          .map((key) => `<td>${escapeHtml(row[key])}</td>`)
+                          .join("")}
+                      </tr>
+                    `
+                  )
+                  .join("")}
+              </tbody>
+            </table>
+          `
+          : "";
         if (ui.forecastOutput) {
           ui.forecastOutput.innerHTML = `
             <div class="small"><strong>Request ID:</strong> ${data.requestId || "—"}</div>
+            <div class="small"><strong>Service:</strong> ${data.service || payload.service}</div>
+            <div class="small"><strong>Engine:</strong> ${data.engine || "—"}</div>
+            <div class="small"><strong>Message:</strong> ${data.serviceMessage || "—"}</div>
             <div class="small"><strong>Last close:</strong> ${data.lastClose || "—"}</div>
             <div class="small"><strong>MAE (recent):</strong> ${data.mae || "—"}</div>
             <div class="small"><strong>Coverage P10–P90:</strong> ${data.coverage10_90 || "—"}</div>
+            ${previewTable}
           `;
         }
-        logEvent("forecast_request", { ticker: payload.ticker, interval: payload.interval });
+        logEvent("forecast_request", { ticker: payload.ticker, interval: payload.interval, service: payload.service });
         showToast("Forecast queued and stored in your dashboard.");
+        if (ui.tickerChart && data.requestId) {
+          try {
+            setTerminalStatus("Loading forecast for chart...");
+            await plotForecastById(db, functions, data.requestId);
+            document.getElementById("terminal")?.scrollIntoView({ behavior: "smooth" });
+          } catch (plotError) {
+            setTerminalStatus(plotError.message || "Unable to plot forecast.");
+          }
+        }
       } catch (error) {
         showToast(error.message || "Unable to run forecast.", "warn");
       }
@@ -698,11 +1503,14 @@
       event.preventDefault();
       const formData = new FormData(ui.technicalsForm);
       const indicators = formData.getAll("indicators");
+      const includeSeries = Boolean(ui.indicatorChart || ui.tickerChart);
       const payload = {
         ticker: formData.get("ticker"),
         interval: formData.get("interval"),
         lookback: Number(formData.get("lookback")),
         indicators,
+        includeSeries,
+        maxPoints: formData.get("interval") === "1h" ? 240 : 260,
         meta: buildMeta(),
       };
 
@@ -723,6 +1531,22 @@
                 </tbody>
               </table>
             `;
+          }
+        }
+
+        if (includeSeries && data.series) {
+          await renderIndicatorChart(data.series);
+          state.tickerContext.indicatorOverlays = buildIndicatorOverlays(data.series);
+          const ticker = normalizeTicker(payload.ticker);
+          if (ticker && ui.tickerChart && state.tickerContext.rows.length && state.tickerContext.ticker === ticker) {
+            const forecastOverlays =
+              state.tickerContext.forecastDoc && normalizeTicker(state.tickerContext.forecastDoc.ticker) === ticker
+                ? buildForecastOverlays(state.tickerContext.forecastDoc.forecastRows || [])
+                : [];
+            await renderTickerChart(state.tickerContext.rows, ticker, payload.interval, [
+              ...forecastOverlays,
+              ...(state.tickerContext.indicatorOverlays || []),
+            ]);
           }
         }
         logEvent("technicals_request", { ticker: payload.ticker });
@@ -868,6 +1692,10 @@
 
     ui.screenerForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
+      if (!state.user) {
+        showToast("Sign in to run the screener.", "warn");
+        return;
+      }
       const formData = new FormData(ui.screenerForm);
       const payload = {
         universe: formData.get("universe"),
@@ -879,12 +1707,50 @@
       };
 
       try {
-        const queueRun = functions.httpsCallable("queue_screener_run");
-        const result = await queueRun(payload);
+        if (ui.screenerOutput) ui.screenerOutput.textContent = "Running screener...";
+        const runScreener = functions.httpsCallable("run_quick_screener");
+        const result = await runScreener(payload);
+        const rows = result.data?.results || [];
         if (ui.screenerOutput) {
-          ui.screenerOutput.innerHTML = `Run queued. ID: ${result.data?.runId || "—"}`;
+          if (!rows.length) {
+            ui.screenerOutput.textContent = `No results returned. Run ID: ${result.data?.runId || "—"}`;
+          } else {
+            ui.screenerOutput.innerHTML = `
+              <div class="small"><strong>Run ID:</strong> ${result.data?.runId || "—"}</div>
+              <table class="data-table" style="margin-top:12px;">
+                <thead>
+                  <tr>
+                    <th>Symbol</th>
+                    <th>Last close</th>
+                    <th>Return 1M (%)</th>
+                    <th>Return 3M (%)</th>
+                    <th>RSI 14</th>
+                    <th>Volatility</th>
+                    <th>Score</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${rows
+                    .map(
+                      (row) => `
+                        <tr>
+                          <td>${escapeHtml(row.symbol)}</td>
+                          <td>${row.lastClose ?? "—"}</td>
+                          <td>${row.return1m ?? "—"}</td>
+                          <td>${row.return3m ?? "—"}</td>
+                          <td>${row.rsi14 ?? "—"}</td>
+                          <td>${row.volatility ?? "—"}</td>
+                          <td>${row.score ?? "—"}</td>
+                        </tr>
+                      `
+                    )
+                    .join("")}
+                </tbody>
+              </table>
+            `;
+          }
         }
-        showToast("Screener run queued.");
+        showToast("Screener run completed.");
         logEvent("screener_request", { universe: payload.universe });
       } catch (error) {
         showToast(error.message || "Unable to queue screener run.", "warn");
@@ -1000,6 +1866,161 @@
       }
     });
 
+    ui.alpacaLoadAccount?.addEventListener("click", async () => {
+      if (!state.user) {
+        showToast("Sign in to load account data.", "warn");
+        return;
+      }
+      try {
+        ui.alpacaAccountOutput.textContent = "Loading account...";
+        const getAccount = functions.httpsCallable("alpaca_get_account");
+        const result = await getAccount({ meta: buildMeta() });
+        const account = result.data?.account || {};
+        ui.alpacaAccountOutput.innerHTML = toPrettyJson(account);
+        logEvent("alpaca_account_loaded");
+      } catch (error) {
+        ui.alpacaAccountOutput.textContent = "Unable to load account.";
+        showToast(error.message || "Unable to load account.", "warn");
+      }
+    });
+
+    ui.alpacaLoadPositions?.addEventListener("click", async () => {
+      if (!state.user) {
+        showToast("Sign in to load positions.", "warn");
+        return;
+      }
+      try {
+        ui.alpacaPositionsOutput.textContent = "Loading positions...";
+        const getPositions = functions.httpsCallable("alpaca_get_positions");
+        const result = await getPositions({ meta: buildMeta() });
+        const positions = result.data?.positions || [];
+        ui.alpacaPositionsOutput.innerHTML = toPrettyJson(positions);
+        logEvent("alpaca_positions_loaded", { count: positions.length });
+      } catch (error) {
+        ui.alpacaPositionsOutput.textContent = "Unable to load positions.";
+        showToast(error.message || "Unable to load positions.", "warn");
+      }
+    });
+
+    ui.alpacaLoadOrders?.addEventListener("click", async () => {
+      if (!state.user) {
+        showToast("Sign in to load broker orders.", "warn");
+        return;
+      }
+      try {
+        ui.alpacaBrokerOrdersOutput.textContent = "Loading broker orders...";
+        const listOrders = functions.httpsCallable("alpaca_list_orders");
+        const result = await listOrders({
+          status: ui.alpacaOrderStatusFilter?.value || "all",
+          limit: 50,
+          meta: buildMeta(),
+        });
+        const orders = result.data?.orders || [];
+        ui.alpacaBrokerOrdersOutput.innerHTML = toPrettyJson(orders);
+        logEvent("alpaca_broker_orders_loaded", { count: orders.length });
+      } catch (error) {
+        ui.alpacaBrokerOrdersOutput.textContent = "Unable to load broker orders.";
+        showToast(error.message || "Unable to load broker orders.", "warn");
+      }
+    });
+
+    ui.alpacaCancelOrderForm?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!state.user) {
+        showToast("Sign in to cancel orders.", "warn");
+        return;
+      }
+      const orderId = ui.alpacaCancelOrderId?.value?.trim();
+      if (!orderId) {
+        showToast("Enter an order ID.", "warn");
+        return;
+      }
+      try {
+        ui.alpacaCancelStatus.textContent = "Cancelling order...";
+        const cancelOrder = functions.httpsCallable("alpaca_cancel_order");
+        const result = await cancelOrder({ orderId, meta: buildMeta() });
+        const cancelled = Boolean(result.data?.cancelled);
+        ui.alpacaCancelStatus.textContent = cancelled
+          ? `Order cancelled: ${result.data?.orderId || orderId}`
+          : "Cancel request submitted.";
+        logEvent("alpaca_order_cancelled", { order_id: orderId });
+        showToast("Order cancel request submitted.");
+      } catch (error) {
+        ui.alpacaCancelStatus.textContent = "Unable to cancel order.";
+        showToast(error.message || "Unable to cancel order.", "warn");
+      }
+    });
+
+    ui.notificationsEnable?.addEventListener("click", async () => {
+      if (!state.user) {
+        showToast("Sign in to enable notifications.", "warn");
+        return;
+      }
+      if (!messaging) {
+        showToast("Messaging SDK is unavailable on this page.", "warn");
+        return;
+      }
+      try {
+        setNotificationStatus("Registering notification token...");
+        const token = await registerNotificationToken(functions, messaging, { forceRefresh: false });
+        setNotificationStatus("Notifications are enabled for this browser.");
+        setNotificationTokenPreview(token);
+        logEvent("notifications_enabled", { channel: "webpush" });
+        showToast("Notifications enabled.");
+      } catch (error) {
+        setNotificationStatus(error.message || "Unable to enable notifications.");
+        showToast(error.message || "Unable to enable notifications.", "warn");
+      }
+    });
+
+    ui.notificationsRefresh?.addEventListener("click", async () => {
+      if (!state.user) {
+        showToast("Sign in first.", "warn");
+        return;
+      }
+      if (!messaging) {
+        showToast("Messaging SDK is unavailable on this page.", "warn");
+        return;
+      }
+      try {
+        setNotificationStatus("Refreshing notification token...");
+        const token = await registerNotificationToken(functions, messaging, { forceRefresh: true });
+        setNotificationStatus("Notification token refreshed.");
+        setNotificationTokenPreview(token);
+        logEvent("notifications_token_refreshed", { channel: "webpush" });
+      } catch (error) {
+        setNotificationStatus(error.message || "Unable to refresh notification token.");
+        showToast(error.message || "Unable to refresh notification token.", "warn");
+      }
+    });
+
+    ui.notificationsSendTest?.addEventListener("click", async () => {
+      if (!state.user) {
+        showToast("Sign in first.", "warn");
+        return;
+      }
+      try {
+        setNotificationStatus("Sending test notification...");
+        const sendTestNotification = functions.httpsCallable("send_test_notification");
+        const result = await sendTestNotification({
+          title: "Quantura test",
+          body: "Web push is active for your dashboard.",
+          data: {
+            source: "dashboard_test",
+            timestamp: new Date().toISOString(),
+          },
+          meta: buildMeta(),
+        });
+        const sent = result.data?.successCount ?? 0;
+        setNotificationStatus(`Test sent. Delivered to ${sent} token(s).`);
+        logEvent("notifications_test_sent", { delivered: sent });
+        showToast("Test notification sent.");
+      } catch (error) {
+        setNotificationStatus(error.message || "Unable to send test notification.");
+        showToast(error.message || "Unable to send test notification.", "warn");
+      }
+    });
+
     auth.onAuthStateChanged(async (user) => {
       state.user = user;
       setAuthUi(user);
@@ -1012,6 +2033,17 @@
         renderRequestList([], ui.predictionsOutput, "No uploads yet.");
         renderRequestList([], ui.alpacaOutput, "No Alpaca orders yet.");
         ui.adminSection?.classList.add("hidden");
+        ui.navAdmin?.classList.add("hidden");
+        if (ui.notificationsStatus) {
+          if (!isPushSupported()) {
+            setNotificationStatus("Push notifications are not supported in this browser.");
+          } else if (!messaging) {
+            setNotificationStatus("Messaging SDK is not loaded on this page.");
+          } else {
+            setNotificationStatus("Sign in and enable notifications.");
+          }
+          setNotificationControlsEnabled(false);
+        }
         if (state.unsubscribeOrders) state.unsubscribeOrders();
         if (state.unsubscribeAdmin) state.unsubscribeAdmin();
         if (state.unsubscribeForecasts) state.unsubscribeForecasts();
@@ -1028,11 +2060,46 @@
       startPredictionsUploads(db, user);
       startAlpacaOrders(db, user);
 
+      if (ui.notificationsStatus) {
+        if (messaging && isPushSupported()) {
+          setNotificationControlsEnabled(true);
+          const cachedToken = localStorage.getItem(FCM_TOKEN_CACHE_KEY) || "";
+          setNotificationTokenPreview(cachedToken);
+          setNotificationStatus(cachedToken ? "Notifications enabled for this browser." : "Click Enable notifications.");
+          if (Notification.permission === "granted") {
+            try {
+              await registerNotificationToken(functions, messaging, { forceRefresh: !cachedToken });
+              setNotificationStatus("Notifications enabled for this browser.");
+            } catch (error) {
+              setNotificationStatus(error.message || "Unable to initialize notifications.");
+            }
+          }
+        } else {
+          setNotificationControlsEnabled(false);
+        }
+      }
+
+      if (
+        window.location.pathname === "/forecasting" &&
+        ui.tickerChart &&
+        state.tickerContext.forecastId &&
+        !state.tickerContext.forecastDoc
+      ) {
+        try {
+          setTerminalStatus("Loading saved forecast...");
+          await plotForecastById(db, functions, state.tickerContext.forecastId);
+        } catch (error) {
+          setTerminalStatus(error.message || "Unable to load saved forecast.");
+        }
+      }
+
       if (user.email === ADMIN_EMAIL) {
         ui.adminSection?.classList.remove("hidden");
+        ui.navAdmin?.classList.remove("hidden");
         startAdminOrders(db);
       } else {
         ui.adminSection?.classList.add("hidden");
+        ui.navAdmin?.classList.add("hidden");
         if (state.unsubscribeAdmin) state.unsubscribeAdmin();
       }
     });

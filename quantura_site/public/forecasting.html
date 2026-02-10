@@ -18,6 +18,7 @@
     <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="stylesheet" href="/styles.css" />
+    <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 
     <script defer src="/__/firebase/12.9.0/firebase-app-compat.js"></script>
     <script defer src="/__/firebase/12.9.0/firebase-auth-compat.js"></script>
@@ -36,47 +37,106 @@
           <a href="/forecasting" data-analytics="nav_forecasting">Forecasting</a>
           <a href="/screener" data-analytics="nav_screener">Screener</a>
           <a href="/dashboard" data-analytics="nav_dashboard">Dashboard</a>
+          <a href="/blog" data-analytics="nav_blog">Blog</a>
           <a href="/contact" data-analytics="nav_contact">Contact</a>
         </nav>
         <div class="nav-actions">
-          <a class="cta secondary" href="/dashboard">Sign in</a>
-          <a class="cta" href="/dashboard">Request Deep Forecast</a>
+          <span id="header-user-email" class="small" style="max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Guest</span>
+          <span id="header-user-status" class="pill">Guest</span>
+          <button class="cta secondary" id="header-auth" type="button">Sign in</button>
+          <button class="cta secondary hidden" id="header-signout" type="button">Sign out</button>
+          <a class="cta secondary hidden" id="header-dashboard" href="/dashboard">Dashboard</a>
+          <a class="cta" href="/dashboard#purchase">Request Deep Forecast</a>
         </div>
       </div>
     </header>
 
     <main>
-      <section class="page-hero">
-        <div class="container content-grid">
-          <div>
-            <div class="eyebrow">Forecasting Studio</div>
-            <h1>Prophet-powered forecasts, technical indicators, and demand overlays in one workspace.</h1>
-            <p>
-              Build precision forecasts with adjustable horizons and quantile bands. Toggle technical
-              indicators from Finta, inspect ticker momentum, and surface relevant news — all backed by
-              Firebase functions and stored in your dashboard for later retrieval.
-            </p>
-            <div class="hero-actions">
-              <a class="cta" href="/dashboard" data-analytics="forecast_cta">Save forecast to dashboard</a>
-              <a class="cta secondary" href="#indicators" data-analytics="forecast_indicators">Explore indicators</a>
-            </div>
+      <div class="app-layout">
+        <aside class="app-sidebar">
+          <div class="sidebar-card">
+            <div class="small"><strong>Account</strong></div>
+            <div class="small">Signed in as <span id="user-email">Not signed in</span></div>
+            <div class="small">Status <span id="user-status" class="pill">Guest</span></div>
+            <a class="cta secondary small" href="/dashboard">Open dashboard</a>
+            <a class="cta secondary small hidden" id="nav-admin" href="/admin">Admin dashboard</a>
           </div>
-          <div class="card">
-            <h3>Forecasting capabilities</h3>
-            <div class="feature-list">
-              <div class="feature"><span></span>Prophet with optimized changepoints</div>
-              <div class="feature"><span></span>P10–P90 and P25–P75 bands</div>
-              <div class="feature"><span></span>Daily or hourly horizons</div>
-              <div class="feature"><span></span>Store every run in Firestore</div>
+          <nav class="sidebar-nav">
+            <a href="#terminal">Ticker terminal</a>
+            <a href="#forecast">Forecast</a>
+            <a href="#indicators">Indicators</a>
+            <a href="#ticker-intel">News and data</a>
+            <a href="#options">Options</a>
+            <a href="#saved-forecasts">Saved forecasts</a>
+          </nav>
+        </aside>
+
+        <div class="app-main">
+          <section class="page-hero">
+            <div class="container content-grid">
+              <div>
+                <div class="eyebrow">Ticker Terminal</div>
+                <h1>Research a ticker like a pro: interactive chart, forecasts, indicators, news, and options in one place.</h1>
+                <p>
+                  Quantura stores every forecast in Firestore so you can pull it back and plot quantile bands on demand.
+                  Run Prophet or IBM TinyTimeMixer forecasting, toggle Finta indicators, and keep your workflow tight.
+                </p>
+                <div class="hero-actions">
+                  <a class="cta" href="#terminal" data-analytics="terminal_jump">Open terminal</a>
+                  <a class="cta secondary" href="#saved-forecasts" data-analytics="saved_forecasts_jump">Saved forecasts</a>
+                </div>
+              </div>
+              <div class="card">
+                <h3>What’s inside</h3>
+                <div class="feature-list">
+                  <div class="feature"><span></span>Interactive Plotly candlestick chart</div>
+                  <div class="feature"><span></span>Prophet and IBM TinyTimeMixer forecasting</div>
+                  <div class="feature"><span></span>P10–P90 and P25–P75 bands</div>
+                  <div class="feature"><span></span>Indicator charts + price overlays</div>
+                  <div class="feature"><span></span>Saved runs you can re-plot anytime</div>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-      </section>
+          </section>
+
+          <section class="section" id="terminal">
+            <div class="container">
+              <div class="section-title">
+                <h2>Ticker terminal</h2>
+                <p class="small">Load a ticker to drive every panel below. Forecasts and indicators can be overlaid on the chart.</p>
+              </div>
+              <div class="terminal-grid">
+                <form id="terminal-form" class="card">
+                  <div class="field">
+                    <label class="label" for="terminal-ticker">Ticker</label>
+                    <input id="terminal-ticker" placeholder="AAPL" required />
+                  </div>
+                  <div class="field">
+                    <label class="label" for="terminal-interval">Timeframe</label>
+                    <select id="terminal-interval">
+                      <option value="1d">Daily</option>
+                      <option value="1h">Hourly</option>
+                    </select>
+                  </div>
+                  <button class="cta" type="submit" data-analytics="terminal_load">Load chart</button>
+                  <p class="small" id="terminal-status"></p>
+                  <div class="notice">
+                    Tip: run a forecast or indicators, then use “Plot on chart” in Saved forecasts.
+                  </div>
+                </form>
+
+                <div class="chart-shell">
+                  <div id="ticker-chart" class="chart"></div>
+                  <div id="indicator-chart" class="chart"></div>
+                </div>
+              </div>
+            </div>
+          </section>
 
       <section class="section" id="forecast">
         <div class="container">
           <div class="section-title">
-            <h2>Run a Prophet forecast</h2>
+            <h2>Run a forecast</h2>
             <p class="small">Choose your horizon, quantiles, and timeframe. Results are stored in your dashboard.</p>
           </div>
           <div class="content-grid">
@@ -262,6 +322,18 @@
           </div>
         </div>
       </section>
+
+      <section class="section" id="saved-forecasts">
+        <div class="container">
+          <div class="section-title">
+            <h2>Saved forecasts</h2>
+            <p class="small">Every run is stored in Firestore. Plot any saved forecast onto the terminal chart above.</p>
+          </div>
+          <div id="saved-forecasts-list" class="order-list"></div>
+        </div>
+      </section>
+    </div>
+  </div>
     </main>
 
     <footer class="footer">
@@ -276,6 +348,7 @@
           <div><a href="/">Home</a></div>
           <div><a href="/screener">Screener</a></div>
           <div><a href="/dashboard">Dashboard</a></div>
+          <div><a href="/blog">Blog</a></div>
           <div><a href="/contact">Contact</a></div>
         </div>
         <div class="small">
