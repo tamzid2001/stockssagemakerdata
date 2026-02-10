@@ -17,7 +17,7 @@ from firebase_functions.options import set_global_options
 
 try:
     from firebase_admin import remote_config as admin_remote_config  # type: ignore
-except Exception:
+except Exception:  # pragma: no cover - optional dependency until firebase-admin>=7.x
     admin_remote_config = None
 
 set_global_options(max_instances=10)
@@ -58,51 +58,108 @@ if not firebase_admin._apps:
 
 db = firestore.client()
 
-_REMOTE_CONFIG_CACHE: dict[str, Any] = {"template": None, "fetchedAt": 0.0}
+_REMOTE_CONFIG_CACHE: dict[str, Any] = {"template": None, "loadedAt": 0.0}
+
+DEFAULT_REMOTE_CONFIG: dict[str, str] = {
+    "welcome_message": "Welcome to Quantura",
+    "watchlist_enabled": "true",
+    "forecast_prophet_enabled": "true",
+    "forecast_timemixer_enabled": "true",
+    "webpush_vapid_key": "",
+}
 
 
 def _get_remote_config_template(max_age_seconds: int = 300) -> Any | None:
+    """Loads a Remote Config ServerTemplate and keeps it cached between invocations."""
     if admin_remote_config is None:
         return None
     now = time.time()
     cached = _REMOTE_CONFIG_CACHE.get("template")
-    fetched_at = float(_REMOTE_CONFIG_CACHE.get("fetchedAt") or 0.0)
-    if cached is not None and (now - fetched_at) < max_age_seconds:
+    loaded_at = float(_REMOTE_CONFIG_CACHE.get("loadedAt") or 0.0)
+
+    if cached is None:
+        try:
+            cached = admin_remote_config.init_server_template(default_config=DEFAULT_REMOTE_CONFIG)
+            _REMOTE_CONFIG_CACHE["template"] = cached
+        except Exception:
+            return None
+
+    if loaded_at and (now - loaded_at) < max_age_seconds:
         return cached
+
     try:
-        template = admin_remote_config.get_template()
-        _REMOTE_CONFIG_CACHE["template"] = template
-        _REMOTE_CONFIG_CACHE["fetchedAt"] = now
-        return template
+        cached.load()
+        _REMOTE_CONFIG_CACHE["loadedAt"] = now
     except Exception:
-        return cached
+        # Keep the old template cache (if any).
+        pass
+    return cached
 
 
-def _remote_config_param(key: str, default: str = "") -> str:
+def _remote_config_context(
+    req: https_fn.CallableRequest | None,
+    token: dict[str, Any] | None,
+    meta: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Builds a stable Remote Config evaluation context.
+
+    Note: Python ServerTemplate percent conditions expect `randomization_id`.
+    """
+    meta = meta or {}
+    token = token or {}
+    context: dict[str, Any] = {}
+
+    randomization_id = ""
+    if req and req.auth:
+        randomization_id = req.auth.uid
+    if not randomization_id and isinstance(meta.get("sessionId"), str) and meta.get("sessionId"):
+        # For unauthenticated calls, fall back to a stable per-device session id.
+        randomization_id = meta["sessionId"]
+    if randomization_id:
+        context["randomization_id"] = randomization_id
+
+    email = token.get("email")
+    if isinstance(email, str) and email:
+        context["email"] = email.lower()
+    if isinstance(meta.get("pagePath"), str) and meta.get("pagePath"):
+        context["page_path"] = meta["pagePath"]
+    if isinstance(meta.get("timezone"), str) and meta.get("timezone"):
+        context["timezone"] = meta["timezone"]
+    return context
+
+
+def _remote_config_param(key: str, default: str = "", context: dict[str, Any] | None = None) -> str:
     template = _get_remote_config_template()
     if template is None:
         return default
-    params = getattr(template, "parameters", {}) or {}
-    param = params.get(key)
-    if param is None:
+    try:
+        config = template.evaluate(context or {})
+        value = config.get_string(key)
+        if value is None:
+            return default
+        value_str = str(value)
+        return value_str if value_str != "" else default
+    except Exception:
         return default
-    default_value = getattr(param, "default_value", None) or getattr(param, "defaultValue", None)
-    value = getattr(default_value, "value", None) if default_value is not None else None
-    if value is None:
-        return default
-    return str(value)
 
 
-def _remote_config_bool(key: str, default: bool = False) -> bool:
-    raw = _remote_config_param(key, "")
-    if not raw:
+def _remote_config_bool(key: str, default: bool = False, context: dict[str, Any] | None = None) -> bool:
+    template = _get_remote_config_template()
+    if template is None:
         return default
-    normalized = raw.strip().lower()
-    if normalized in {"1", "true", "yes", "on"}:
-        return True
-    if normalized in {"0", "false", "no", "off"}:
-        return False
-    return default
+    try:
+        config = template.evaluate(context or {})
+        return bool(config.get_boolean(key))
+    except Exception:
+        raw = _remote_config_param(key, "", context=context)
+        if not raw:
+            return default
+        normalized = raw.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+        return default
 
 
 def _yahoo_headers() -> dict[str, str]:
@@ -1038,8 +1095,10 @@ def remove_collaborator(req: https_fn.CallableRequest) -> dict[str, Any]:
 
 @https_fn.on_call()
 def get_web_push_config(req: https_fn.CallableRequest) -> dict[str, Any]:
-    _require_auth(req)
-    vapid_key = FCM_WEB_VAPID_KEY or _remote_config_param("webpush_vapid_key", "")
+    token = _require_auth(req)
+    meta = req.data.get("meta") if isinstance(req.data, dict) else {}
+    context = _remote_config_context(req, token, meta if isinstance(meta, dict) else None)
+    vapid_key = FCM_WEB_VAPID_KEY or _remote_config_param("webpush_vapid_key", "", context=context)
     if not vapid_key:
         raise https_fn.HttpsError(
             https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
@@ -1050,12 +1109,14 @@ def get_web_push_config(req: https_fn.CallableRequest) -> dict[str, Any]:
 
 @https_fn.on_call()
 def get_feature_flags(req: https_fn.CallableRequest) -> dict[str, Any]:
-    _require_auth(req)
+    token = _require_auth(req)
+    meta = req.data.get("meta") if isinstance(req.data, dict) else {}
+    context = _remote_config_context(req, token, meta if isinstance(meta, dict) else None)
     return {
-        "forecastProphetEnabled": _remote_config_bool("forecast_prophet_enabled", True),
-        "forecastTimeMixerEnabled": _remote_config_bool("forecast_timemixer_enabled", True),
-        "watchlistEnabled": _remote_config_bool("watchlist_enabled", True),
-        "webPushVapidKey": _remote_config_param("webpush_vapid_key", ""),
+        "forecastProphetEnabled": _remote_config_bool("forecast_prophet_enabled", True, context=context),
+        "forecastTimeMixerEnabled": _remote_config_bool("forecast_timemixer_enabled", True, context=context),
+        "watchlistEnabled": _remote_config_bool("watchlist_enabled", True, context=context),
+        "webPushVapidKey": _remote_config_param("webpush_vapid_key", "", context=context),
     }
 
 
@@ -1294,12 +1355,13 @@ def _handle_forecast_request(req: https_fn.CallableRequest, forced_service: str 
             "Invalid forecast service.",
             {"allowed": sorted(FORECAST_SERVICES)},
         )
-    if service == "prophet" and not _remote_config_bool("forecast_prophet_enabled", True):
+    context = _remote_config_context(req, token, data.get("meta") if isinstance(data.get("meta"), dict) else None)
+    if service == "prophet" and not _remote_config_bool("forecast_prophet_enabled", True, context=context):
         raise https_fn.HttpsError(
             https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
             "Prophet forecasting is currently disabled.",
         )
-    if service == "ibm_timemixer" and not _remote_config_bool("forecast_timemixer_enabled", True):
+    if service == "ibm_timemixer" and not _remote_config_bool("forecast_timemixer_enabled", True, context=context):
         raise https_fn.HttpsError(
             https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
             "IBM TimeMixer forecasting is currently disabled.",
