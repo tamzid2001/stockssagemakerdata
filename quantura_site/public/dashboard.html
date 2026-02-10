@@ -8,7 +8,7 @@
       name="description"
       content="Quantura member dashboard for forecasts, orders, uploads, and admin fulfillment."
     />
-    <meta name="robots" content="index, follow" />
+    <meta name="robots" content="noindex, nofollow" />
     <link rel="canonical" href="https://quantura.ai/dashboard" />
     <meta property="og:title" content="Quantura Dashboard" />
     <meta property="og:description" content="Access your forecasts, orders, and uploads in one secure dashboard." />
@@ -56,36 +56,36 @@
     <main>
       <div class="app-layout">
         <aside class="app-sidebar">
-          <div class="sidebar-card">
-            <div class="small"><strong>Shortcuts</strong></div>
-            <a class="cta secondary small" href="/forecasting">Open terminal</a>
-            <a class="cta secondary small" href="#purchase">Request Deep Forecast</a>
-            <a class="cta secondary small hidden" id="nav-admin" href="/admin">Admin dashboard</a>
-          </div>
-          <nav class="sidebar-nav" aria-label="Dashboard navigation">
-            <button class="sidebar-link active" type="button" data-panel-target="orders">Orders</button>
-            <button class="sidebar-link" type="button" data-panel-target="watchlist">Watchlist</button>
-            <button class="sidebar-link" type="button" data-panel-target="productivity">Productivity</button>
-            <button class="sidebar-link" type="button" data-panel-target="collaboration">Collaboration</button>
-            <button class="sidebar-link" type="button" data-panel-target="uploads">Uploads</button>
-            <button class="sidebar-link" type="button" data-panel-target="autopilot">Autopilot</button>
-            <button class="sidebar-link" type="button" data-panel-target="alpaca">Alpaca</button>
-            <button class="sidebar-link" type="button" data-panel-target="notifications">Notifications</button>
-            <button class="sidebar-link" type="button" data-panel-target="purchase">Purchase</button>
-            <button class="sidebar-link" type="button" data-panel-target="auth">Sign in</button>
-          </nav>
-        </aside>
+	          <div class="sidebar-card">
+	            <div class="small"><strong>Shortcuts</strong></div>
+	            <a class="cta secondary small" href="/forecasting">Open terminal</a>
+	            <a class="cta secondary small" href="/purchase">Request Deep Forecast</a>
+	            <a class="cta secondary small hidden" id="nav-admin" href="/admin">Admin dashboard</a>
+	          </div>
+	          <nav class="sidebar-nav" aria-label="Dashboard navigation">
+	            <a class="sidebar-link active" href="/dashboard" data-panel-target="orders">Orders</a>
+	            <a class="sidebar-link" href="/watchlist" data-panel-target="watchlist">Watchlist</a>
+	            <a class="sidebar-link" href="/productivity" data-panel-target="productivity">Productivity</a>
+	            <a class="sidebar-link" href="/collaboration" data-panel-target="collaboration">Collaboration</a>
+	            <a class="sidebar-link" href="/uploads" data-panel-target="uploads">Uploads</a>
+	            <a class="sidebar-link" href="/autopilot" data-panel-target="autopilot">Autopilot</a>
+	            <a class="sidebar-link" href="/trading" data-panel-target="alpaca">Trading</a>
+	            <a class="sidebar-link" href="/notifications" data-panel-target="notifications">Notifications</a>
+	            <a class="sidebar-link" href="/purchase" data-panel-target="purchase">Purchase</a>
+	            <a class="sidebar-link" href="/account" data-panel-target="auth">Sign in</a>
+	          </nav>
+	        </aside>
 
-        <div class="app-main" data-panels>
+	        <div class="app-main" data-panels data-panel-router="dashboard">
       <section class="page-hero">
         <div class="container content-grid">
           <div>
             <div class="eyebrow">Member dashboard</div>
-            <h1>Manage Deep Forecast orders, uploads, and trading requests.</h1>
-            <p>
-              Every forecast, upload, and order is stored securely in Firestore. Sign in to unlock your
-              dashboard and keep a complete audit trail for your research workflow.
-            </p>
+	            <h1>Manage Deep Forecast orders, uploads, and trading requests.</h1>
+	            <p>
+	              Every forecast, upload, and order is stored in your secure workspace. Sign in to unlock your
+	              dashboard and keep a complete audit trail for your research workflow.
+	            </p>
           </div>
           <div class="card">
             <h3>Account status</h3>
@@ -110,10 +110,10 @@
 
       <section class="section auth-section panel hidden" data-panel="auth" id="auth">
         <div class="container">
-          <div class="section-title">
-            <h2>Sign in to unlock your dashboard</h2>
-            <p class="small">Email/password and Google sign-in backed by Firebase Auth.</p>
-          </div>
+	          <div class="section-title">
+	            <h2>Sign in to unlock your dashboard</h2>
+	            <p class="small">Email/password and Google sign-in, secured to your account.</p>
+	          </div>
           <div class="auth-grid">
             <div class="card">
               <h3>Email access</h3>
@@ -147,7 +147,7 @@
         <div class="container">
           <div class="section-title">
             <h2>Browser notifications</h2>
-            <p class="small">Enable Firebase Cloud Messaging web push notifications for order updates and forecast events.</p>
+            <p class="small">Enable web push notifications for order updates and forecast events.</p>
           </div>
           <div class="content-grid">
             <div class="card">
@@ -155,7 +155,7 @@
               <div class="feature-list">
                 <div class="feature"><span></span>HTTPS + service worker required</div>
                 <div class="feature"><span></span>Permission must be granted by browser</div>
-                <div class="feature"><span></span>Token stored securely in Firestore</div>
+                <div class="feature"><span></span>Token stored securely to your account</div>
               </div>
               <div class="hero-actions" style="margin-top: 16px;">
                 <button class="cta" id="notifications-enable" type="button">Enable notifications</button>
@@ -168,7 +168,7 @@
             <div class="results-panel">
               <h3>How delivery works</h3>
               <p class="small">
-                Quantura registers your browser token to your account and sends push notifications through Firebase Cloud Messaging.
+                Quantura registers your browser token to your account and sends push notifications through the messaging service.
                 You can revoke permission any time from your browser site settings.
               </p>
             </div>
@@ -198,7 +198,7 @@
               <button class="cta" data-action="purchase" data-label-guest="Sign in to purchase" data-label-auth="Request Deep Forecast" disabled>
                 Sign in to purchase
               </button>
-              <p class="small purchase-note">You must sign in to purchase. We use Firebase Auth to secure checkout.</p>
+              <p class="small purchase-note">You must sign in to purchase. Checkout is secured to your account.</p>
               <div class="notice purchase-success hidden"></div>
               <button class="cta secondary hidden" data-action="stripe" type="button">Proceed to payment</button>
             </div>
@@ -292,7 +292,7 @@
 	                <summary>Learn more</summary>
 	                <p class="small">
 	                  Alerts are evaluated against the latest market price. For push delivery, enable notifications in the Notifications panel.
-	                  Quantura logs trigger events in Firestore so you can review what happened later.
+	                  Quantura logs trigger events in your workspace so you can review what happened later.
 	                </p>
 	              </details>
 	            </form>
@@ -367,7 +367,7 @@
               <h3>Workspace audit</h3>
               <div class="small">
                 Keep research accountable: tie tasks to forecasts, saved runs, and Deep Forecast deliverables.
-                Everything is stored in Firestore for traceability.
+                Everything is stored in your workspace for traceability.
               </div>
             </div>
           </div>
@@ -612,9 +612,9 @@
             </a>
           </div>
           <div class="footer-badges" aria-label="Quantura technology stack">
-            <span class="badge-chip">Firebase</span>
-            <span class="badge-chip">Firestore</span>
-            <span class="badge-chip">Cloud Storage</span>
+            <span class="badge-chip">Secure auth</span>
+            <span class="badge-chip">Realtime sync</span>
+            <span class="badge-chip">Object storage</span>
             <span class="badge-chip">Notifications</span>
             <span class="badge-chip">Audit logs</span>
           </div>
