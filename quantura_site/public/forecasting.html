@@ -68,6 +68,7 @@
 	          <nav class="sidebar-nav" aria-label="Terminal navigation">
 	            <a class="sidebar-link active" href="/forecasting" data-panel-target="forecast">Forecast</a>
 	            <a class="sidebar-link" href="/indicators" data-panel-target="indicators">Indicators</a>
+              <a class="sidebar-link" href="/trending" data-panel-target="trending">Trending</a>
 	            <a class="sidebar-link" href="/news" data-panel-target="news">News and data</a>
 	            <a class="sidebar-link" href="/options" data-panel-target="options">Options</a>
 	            <a class="sidebar-link" href="/saved-forecasts" data-panel-target="saved">Saved forecasts</a>
@@ -241,19 +242,52 @@
 	                    </div>
 	                  </section>
 
+                  <section class="panel hidden" data-panel="trending">
+                    <div class="panel-header">
+                      <h2>Trending</h2>
+                      <p class="small">Load the market's most active tickers and click any name to drive the chart context.</p>
+                    </div>
+                    <div class="content-grid">
+                      <div class="card">
+                        <h3>Trending tickers</h3>
+                        <p class="small">Click a ticker to load it into the chart. Forecast, indicators, news, options, and screener panels will follow.</p>
+                        <button class="cta secondary" id="load-trending" type="button" data-analytics="load_trending">Load trending</button>
+                        <div id="trending-list" class="ticker-grid" style="margin-top: 16px;"></div>
+                        <details class="learn-more">
+                          <summary>Learn more</summary>
+                          <p class="small">
+                            Trending tickers are a fast way to discover names worth screening. After loading a symbol, switch to Indicators to build overlays or jump to News and data to validate catalysts.
+                          </p>
+                        </details>
+                      </div>
+                      <div class="card">
+                        <h3>Recommended next steps</h3>
+                        <div class="feature-list">
+                          <div class="feature"><span></span>Open Forecast to queue quantiles</div>
+                          <div class="feature"><span></span>Open Indicators to overlay momentum signals</div>
+                          <div class="feature"><span></span>Open Screener to rank the trend set</div>
+                        </div>
+                        <details class="learn-more">
+                          <summary>Learn more</summary>
+                          <p class="small">
+                            Quantura is designed to move from discovery to decision: trending leads to screening, screening leads to forecasts, and forecasts are stored in your workspace for review later.
+                          </p>
+                        </details>
+                      </div>
+                    </div>
+                  </section>
+
                   <section class="panel hidden" data-panel="news">
                     <div class="panel-header">
                       <h2>News and data</h2>
-                      <p class="small">Trending tickers are clickable. News uses Yahoo search fallback to avoid empty responses.</p>
+                      <p class="small">Headlines are pulled with multiple fallbacks to avoid empty feeds. Use Trending to discover symbols quickly.</p>
                     </div>
                     <div class="content-grid">
                       <form id="download-form" class="card">
                         <h3>Download price history</h3>
+                        <input id="download-ticker" name="ticker" type="hidden" />
+                        <div class="small muted" style="margin-bottom: 12px;">Uses the ticker from your chart context.</div>
                         <div class="form-grid">
-                          <div class="field">
-                            <label class="label" for="download-ticker">Ticker</label>
-                            <input id="download-ticker" name="ticker" placeholder="NVDA" required />
-                          </div>
                           <div class="field">
                             <label class="label" for="download-interval">Interval</label>
                             <select id="download-interval" name="interval">
@@ -274,19 +308,24 @@
                         <p class="small" id="download-status"></p>
                       </form>
                       <div class="card">
-                        <h3>Trending tickers</h3>
-                        <p class="small">Load and click a ticker to drive the chart and every panel.</p>
-                        <button class="cta secondary" id="load-trending" type="button" data-analytics="load_trending">Load trending</button>
-                        <div id="trending-list" class="ticker-grid" style="margin-top: 16px;"></div>
+                        <h3>Export guidance</h3>
+                        <p class="small">
+                          Use daily exports for longer-horizon backtests and hourly exports to inspect short-term regime shifts.
+                          Quantura keeps your terminal context consistent so you can pull data without re-entering symbols.
+                        </p>
+                        <details class="learn-more">
+                          <summary>Learn more</summary>
+                          <p class="small">
+                            If you're building your own dashboard, export the same interval you used to generate forecasts so the timestamps align cleanly in downstream tooling.
+                          </p>
+                        </details>
                       </div>
                     </div>
                     <div class="content-grid" style="margin-top: 16px;">
                       <form id="news-form" class="card">
                         <h3>Latest ticker news</h3>
-                        <div class="field">
-                          <label class="label" for="news-ticker">Ticker</label>
-                          <input id="news-ticker" name="ticker" placeholder="TSLA" required />
-                        </div>
+                        <input id="news-ticker" name="ticker" type="hidden" />
+                        <div class="small muted" style="margin-bottom: 12px;">Headlines are pulled for the ticker in your chart context.</div>
                         <button class="cta" type="submit" data-analytics="news_submit">Fetch news</button>
                         <details class="learn-more">
                           <summary>Learn more</summary>

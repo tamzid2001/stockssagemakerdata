@@ -44,8 +44,6 @@ HUGGINGFACEHUB_API_TOKEN = os.environ.get("HUGGINGFACEHUB_API_TOKEN", "").strip(
 
 SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL", "").strip()
 FCM_WEB_VAPID_KEY = os.environ.get("FCM_WEB_VAPID_KEY", "").strip()
-GOOGLE_GENAI_API_KEY = os.environ.get("GOOGLE_GENAI_API_KEY", "").strip()
-GOOGLE_GENAI_MODEL = os.environ.get("GOOGLE_GENAI_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash"
 RISK_FREE_RATE = float(os.environ.get("RISK_FREE_RATE", "0.045") or 0.045)
 TRENDING_URL = "https://query1.finance.yahoo.com/v1/finance/trending/US"
 YAHOO_SEARCH_URL = "https://query2.finance.yahoo.com/v1/finance/search"
@@ -985,7 +983,6 @@ def get_web_push_config(req: https_fn.CallableRequest) -> dict[str, Any]:
 def get_feature_flags(req: https_fn.CallableRequest) -> dict[str, Any]:
     _require_auth(req)
     return {
-        "assistantEnabled": _remote_config_bool("assistant_enabled", True),
         "forecastProphetEnabled": _remote_config_bool("forecast_prophet_enabled", True),
         "forecastTimeMixerEnabled": _remote_config_bool("forecast_timemixer_enabled", True),
         "watchlistEnabled": _remote_config_bool("watchlist_enabled", True),
@@ -1360,18 +1357,48 @@ def get_ticker_news(req: https_fn.CallableRequest) -> dict[str, Any]:
     if not ticker:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Ticker is required.")
 
+    seen: set[str] = set()
+
+    def _extract_thumbnail(item: dict[str, Any]) -> str:
+        thumb = item.get("thumbnail")
+        if isinstance(thumb, dict):
+            resolutions = thumb.get("resolutions")
+            if isinstance(resolutions, list) and resolutions:
+                # Prefer the largest image available.
+                best = None
+                for res in resolutions:
+                    if not isinstance(res, dict):
+                        continue
+                    url = res.get("url")
+                    width = res.get("width") or 0
+                    if not url:
+                        continue
+                    if best is None or int(width or 0) > int(best.get("width") or 0):
+                        best = {"url": str(url), "width": int(width or 0)}
+                if best and best.get("url"):
+                    return str(best["url"])
+        return ""
+
     def _append_item(item: dict[str, Any]) -> None:
         title = str(item.get("title") or "").strip()
         link = str(item.get("link") or item.get("url") or "").strip()
         if not title:
             return
+        key = (link or title).strip().lower()
+        if key in seen:
+            return
+        seen.add(key)
+        publisher = str(item.get("publisher") or item.get("source") or "").strip()
+        published = item.get("publishedAt") or item.get("providerPublishTime")
+        summary = str(item.get("summary") or item.get("description") or "").strip()
         news_items.append(
             {
                 "title": title,
-                "publisher": str(item.get("publisher") or item.get("source") or "").strip(),
+                "publisher": publisher,
                 "link": link,
-                "publishedAt": item.get("publishedAt") or item.get("providerPublishTime"),
-                "summary": str(item.get("summary") or "").strip(),
+                "publishedAt": published,
+                "summary": summary,
+                "thumbnailUrl": _extract_thumbnail(item),
             }
         )
 
@@ -1419,6 +1446,10 @@ def get_ticker_news(req: https_fn.CallableRequest) -> dict[str, Any]:
                     link = (item.findtext("link") or "").strip()
                     pub_date = (item.findtext("pubDate") or "").strip()
                     if title:
+                        key = (link or title).strip().lower()
+                        if key in seen:
+                            continue
+                        seen.add(key)
                         news_items.append(
                             {
                                 "title": title,
@@ -1426,6 +1457,7 @@ def get_ticker_news(req: https_fn.CallableRequest) -> dict[str, Any]:
                                 "link": link,
                                 "publishedAt": pub_date,
                                 "summary": "",
+                                "thumbnailUrl": "",
                             }
                         )
         except Exception:
@@ -1515,13 +1547,36 @@ def get_options_chain(req: https_fn.CallableRequest) -> dict[str, Any]:
         if df is None or df.empty:
             return []
         frame = df.copy()
+        if "strike" in frame.columns:
+            frame["strike"] = pd.to_numeric(frame["strike"], errors="coerce")
         for col in ["openInterest", "volume"]:
             if col in frame.columns:
                 frame[col] = pd.to_numeric(frame[col], errors="coerce").fillna(0)
-        sort_col = "openInterest" if "openInterest" in frame.columns else ("volume" if "volume" in frame.columns else None)
-        if sort_col:
-            frame = frame.sort_values(by=sort_col, ascending=False)
+        if "strike" in frame.columns:
+            frame = frame.dropna(subset=["strike"])
+
+        # Select a compact window around the underlying, then return results ordered by strike.
+        if underlying_price is not None and "strike" in frame.columns:
+            frame["distance"] = (frame["strike"] - float(underlying_price)).abs()
+            sort_cols: list[str] = ["distance"]
+            ascending: list[bool] = [True]
+            if "openInterest" in frame.columns:
+                sort_cols.append("openInterest")
+                ascending.append(False)
+            elif "volume" in frame.columns:
+                sort_cols.append("volume")
+                ascending.append(False)
+            frame = frame.sort_values(by=sort_cols, ascending=ascending)
+        elif "strike" in frame.columns:
+            frame = frame.sort_values(by="strike", ascending=True)
+        else:
+            sort_col = "openInterest" if "openInterest" in frame.columns else ("volume" if "volume" in frame.columns else None)
+            if sort_col:
+                frame = frame.sort_values(by=sort_col, ascending=False)
+
         frame = frame.head(limit)
+        if "strike" in frame.columns:
+            frame = frame.sort_values(by="strike", ascending=True)
 
         items: list[dict[str, Any]] = []
         for _, row in frame.iterrows():
@@ -1572,78 +1627,6 @@ def get_options_chain(req: https_fn.CallableRequest) -> dict[str, Any]:
         "calls": _serialize_for_firestore(calls),
         "puts": _serialize_for_firestore(puts),
     }
-
-
-@https_fn.on_call()
-def assistant_chat(req: https_fn.CallableRequest) -> dict[str, Any]:
-    token = _require_auth(req)
-    if not _remote_config_bool("assistant_enabled", True):
-        raise https_fn.HttpsError(
-            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
-            "Assistant is currently disabled.",
-        )
-    if not GOOGLE_GENAI_API_KEY:
-        raise https_fn.HttpsError(
-            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
-            "GOOGLE_GENAI_API_KEY is not configured.",
-        )
-
-    data = req.data or {}
-    message = str(data.get("message") or "").strip()
-    if not message:
-        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Message is required.")
-
-    ticker = str(data.get("ticker") or "").upper().strip()
-    page = str(data.get("page") or "").strip()
-    meta = data.get("meta") if isinstance(data.get("meta"), dict) else {}
-
-    # Keep responses useful and aligned with the product.
-    system = (
-        "You are Quantura Assistant, embedded in a finance and forecasting product. "
-        "Be concise and actionable. When discussing tickers, avoid hype and provide caveats. "
-        "You can suggest which Quantura panels to use next (Forecasting, Indicators, News, Options, Screener)."
-    )
-    prompt = f"{system}\n\nContext:\n- page: {page or 'unknown'}\n- ticker: {ticker or 'n/a'}\n\nUser:\n{message}"
-
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GOOGLE_GENAI_MODEL}:generateContent"
-    payload = {
-        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.35, "maxOutputTokens": 512},
-    }
-    try:
-        resp = requests.post(url, params={"key": GOOGLE_GENAI_API_KEY}, json=payload, timeout=30)
-        if resp.status_code >= 400:
-            raise RuntimeError(f"Gemini request failed ({resp.status_code}).")
-        body = resp.json() if resp.text else {}
-        text = ""
-        candidates = body.get("candidates") or []
-        if candidates and isinstance(candidates[0], dict):
-            parts = (candidates[0].get("content") or {}).get("parts") or []
-            if parts and isinstance(parts[0], dict):
-                text = str(parts[0].get("text") or "").strip()
-        if not text:
-            text = "I could not generate a response right now. Please try again."
-    except Exception as exc:
-        raise https_fn.HttpsError(
-            https_fn.FunctionsErrorCode.INTERNAL,
-            f"Assistant request failed: {exc}",
-        )
-
-    doc_ref = db.collection("assistant_chats").document(req.auth.uid).collection("messages").document()
-    doc_ref.set(
-        {
-            "userId": req.auth.uid,
-            "userEmail": token.get("email"),
-            "ticker": ticker,
-            "page": page,
-            "message": message,
-            "response": text,
-            "meta": meta,
-            "createdAt": firestore.SERVER_TIMESTAMP,
-        }
-    )
-    _audit_event(req.auth.uid, token.get("email"), "assistant_chat", {"messageId": doc_ref.id, "ticker": ticker, "page": page})
-    return {"messageId": doc_ref.id, "text": text}
 
 
 @https_fn.on_call()
