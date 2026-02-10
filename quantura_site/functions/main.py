@@ -49,6 +49,9 @@ HUGGINGFACEHUB_API_TOKEN = os.environ.get("HUGGINGFACEHUB_API_TOKEN", "").strip(
 
 SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL", "").strip()
 FCM_WEB_VAPID_KEY = os.environ.get("FCM_WEB_VAPID_KEY", "").strip()
+STRIPE_PUBLIC_KEY = os.environ.get("STRIPE_PUBLIC_KEY", "").strip()
+STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "").strip()
+STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip()
 RISK_FREE_RATE = float(os.environ.get("RISK_FREE_RATE", "0.045") or 0.045)
 TRENDING_URL = "https://query1.finance.yahoo.com/v1/finance/trending/US"
 YAHOO_SEARCH_URL = "https://query2.finance.yahoo.com/v1/finance/search"
@@ -76,6 +79,8 @@ DEFAULT_REMOTE_CONFIG: dict[str, str] = {
     "forecast_prophet_enabled": "true",
     "forecast_timemixer_enabled": "true",
     "webpush_vapid_key": "",
+    "stripe_checkout_enabled": "true",
+    "stripe_public_key": "",
 }
 
 
@@ -257,6 +262,24 @@ def _alpaca_headers() -> dict[str, str]:
         "APCA-API-SECRET-KEY": ALPACA_SECRET_KEY,
         "Content-Type": "application/json",
     }
+
+
+def _stripe_module():
+    try:
+        import stripe  # type: ignore
+    except Exception as exc:  # pragma: no cover
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "Stripe SDK is not available in this deployment.",
+        ) from exc
+
+    if not STRIPE_SECRET_KEY:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "Stripe is not configured (missing STRIPE_SECRET_KEY).",
+        )
+    stripe.api_key = STRIPE_SECRET_KEY
+    return stripe
 
 
 def _safe_float(value: Any) -> float | None:
@@ -839,6 +862,11 @@ def create_order(req: https_fn.CallableRequest) -> dict[str, Any]:
         "price": price,
         "currency": currency,
         "status": "pending",
+        "paymentProvider": "stripe",
+        "paymentStatus": "unpaid",
+        "stripeCheckoutSessionId": "",
+        "stripePaymentIntentId": "",
+        "stripeSubscriptionId": "",
         "fulfillmentNotes": "",
         "meta": meta,
         "createdAt": firestore.SERVER_TIMESTAMP,
@@ -850,6 +878,266 @@ def create_order(req: https_fn.CallableRequest) -> dict[str, Any]:
     _audit_event(req.auth.uid, token.get("email"), "order_created", {"orderId": doc_ref.id, "product": product})
 
     return {"orderId": doc_ref.id}
+
+
+@https_fn.on_call()
+def create_stripe_checkout_session(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    data = req.data or {}
+    order_id = str(data.get("orderId") or "").strip()
+    meta = data.get("meta") if isinstance(data.get("meta"), dict) else {}
+
+    if not order_id:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Order ID is required.")
+
+    context = _remote_config_context(req, token, meta)
+    if not _remote_config_bool("stripe_checkout_enabled", True, context=context):
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "Checkout is temporarily disabled.",
+        )
+
+    stripe = _stripe_module()
+    order_ref = db.collection("orders").document(order_id)
+    snapshot = order_ref.get()
+    if not snapshot.exists:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "Order not found.")
+
+    order = snapshot.to_dict() or {}
+    owner_id = str(order.get("userId") or "")
+    if token.get("email") != ADMIN_EMAIL and owner_id != req.auth.uid:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.PERMISSION_DENIED, "Order access denied.")
+
+    payment_status = str(order.get("paymentStatus") or "unpaid").strip().lower()
+    if payment_status in {"paid", "succeeded"}:
+        return {"orderId": order_id, "status": "paid"}
+
+    product = str(order.get("product") or "Deep Forecast").strip() or "Deep Forecast"
+    currency = str(order.get("currency") or "USD").strip().lower() or "usd"
+    price = _safe_float(order.get("price"))
+    if price is None:
+        price = float(DEFAULT_FORECAST_PRICE)
+    amount_cents = max(50, int(round(float(price) * 100)))
+
+    normalized_name = product.lower()
+    mode = "payment" if "forecast" in normalized_name else "subscription"
+    recurring = {"interval": "month"} if mode == "subscription" else None
+
+    price_data: dict[str, Any] = {
+        "currency": currency,
+        "unit_amount": amount_cents,
+        "product_data": {"name": product},
+    }
+    if recurring:
+        price_data["recurring"] = recurring
+
+    success_url = f"{PUBLIC_ORIGIN}/purchase?checkout=success&orderId={order_id}&session_id={{CHECKOUT_SESSION_ID}}"
+    cancel_url = f"{PUBLIC_ORIGIN}/purchase?checkout=cancel&orderId={order_id}"
+
+    session_kwargs: dict[str, Any] = {
+        "mode": mode,
+        "line_items": [{"price_data": price_data, "quantity": 1}],
+        "success_url": success_url,
+        "cancel_url": cancel_url,
+        "client_reference_id": order_id,
+        "metadata": {
+            "orderId": order_id,
+            "userId": owner_id,
+            "product": product,
+        },
+    }
+
+    email = token.get("email")
+    if isinstance(email, str) and email.strip():
+        session_kwargs["customer_email"] = email.strip()
+
+    try:
+        session = stripe.checkout.Session.create(**session_kwargs)
+    except Exception as exc:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INTERNAL,
+            "Unable to start checkout session.",
+            {"error": str(exc)},
+        )
+
+    order_ref.set(
+        {
+            "paymentProvider": "stripe",
+            "paymentStatus": "checkout_created",
+            "stripeCheckoutSessionId": str(getattr(session, "id", "") or ""),
+            "stripeMode": mode,
+            "updatedAt": firestore.SERVER_TIMESTAMP,
+        },
+        merge=True,
+    )
+    _audit_event(
+        req.auth.uid,
+        token.get("email"),
+        "stripe_checkout_session_created",
+        {"orderId": order_id, "mode": mode, "currency": currency, "amountCents": amount_cents},
+    )
+
+    return {
+        "orderId": order_id,
+        "status": "created",
+        "mode": mode,
+        "sessionId": str(getattr(session, "id", "") or ""),
+        "url": str(getattr(session, "url", "") or ""),
+    }
+
+
+@https_fn.on_call()
+def confirm_stripe_checkout(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    data = req.data or {}
+    session_id = str(data.get("sessionId") or data.get("session_id") or "").strip()
+    order_hint = str(data.get("orderId") or "").strip()
+
+    if not session_id:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Stripe session ID is required.")
+
+    stripe = _stripe_module()
+    try:
+        session = stripe.checkout.Session.retrieve(session_id, expand=["payment_intent", "subscription"])
+    except Exception as exc:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.NOT_FOUND,
+            "Stripe session could not be loaded.",
+            {"error": str(exc)},
+        )
+
+    session_dict: dict[str, Any] = session.to_dict() if hasattr(session, "to_dict") else dict(session)
+    order_id = (
+        str(session_dict.get("client_reference_id") or "").strip()
+        or str((session_dict.get("metadata") or {}).get("orderId") or "").strip()
+        or order_hint
+    )
+    if not order_id:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "Order ID missing from Stripe session.")
+
+    order_ref = db.collection("orders").document(order_id)
+    snapshot = order_ref.get()
+    if not snapshot.exists:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "Order not found.")
+
+    order = snapshot.to_dict() or {}
+    owner_id = str(order.get("userId") or "")
+    if token.get("email") != ADMIN_EMAIL and owner_id != req.auth.uid:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.PERMISSION_DENIED, "Order access denied.")
+
+    mode = str(session_dict.get("mode") or "")
+    payment_status = str(session_dict.get("payment_status") or "").lower()
+    session_status = str(session_dict.get("status") or "").lower()
+    subscription_id = session_dict.get("subscription")
+    payment_intent = session_dict.get("payment_intent")
+
+    is_paid = False
+    if mode == "payment":
+        is_paid = payment_status == "paid"
+    elif mode == "subscription":
+        is_paid = session_status == "complete" or bool(subscription_id)
+    else:
+        is_paid = payment_status == "paid"
+
+    payment_intent_id = ""
+    if isinstance(payment_intent, dict):
+        payment_intent_id = str(payment_intent.get("id") or "")
+    elif isinstance(payment_intent, str):
+        payment_intent_id = payment_intent
+
+    subscription_id_str = ""
+    if isinstance(subscription_id, dict):
+        subscription_id_str = str(subscription_id.get("id") or "")
+    elif isinstance(subscription_id, str):
+        subscription_id_str = subscription_id
+
+    update_payload: dict[str, Any] = {
+        "paymentProvider": "stripe",
+        "stripeCheckoutSessionId": session_id,
+        "stripePaymentIntentId": payment_intent_id,
+        "stripeSubscriptionId": subscription_id_str,
+        "stripeMode": mode,
+        "stripePaymentStatus": payment_status,
+        "stripeSessionStatus": session_status,
+        "updatedAt": firestore.SERVER_TIMESTAMP,
+    }
+
+    if is_paid:
+        update_payload["paymentStatus"] = "paid"
+        update_payload["paidAt"] = firestore.SERVER_TIMESTAMP
+    else:
+        update_payload["paymentStatus"] = "unpaid"
+
+    order_ref.set(update_payload, merge=True)
+    _audit_event(
+        req.auth.uid,
+        token.get("email"),
+        "stripe_checkout_confirmed",
+        {"orderId": order_id, "paid": bool(is_paid), "mode": mode, "sessionId": session_id},
+    )
+
+    return {
+        "orderId": order_id,
+        "paid": bool(is_paid),
+        "mode": mode,
+        "paymentStatus": update_payload["paymentStatus"],
+        "product": order.get("product") or "",
+        "currency": order.get("currency") or "USD",
+        "price": order.get("price") or 0,
+    }
+
+
+@https_fn.on_request()
+def stripe_webhook(req: https_fn.Request) -> tuple[str, int]:
+    if req.method != "POST":
+        return ("Method not allowed", 405)
+
+    if not STRIPE_WEBHOOK_SECRET:
+        return ("Stripe webhook secret is not configured.", 500)
+
+    stripe = _stripe_module()
+    payload = req.get_data(cache=False, as_text=False)
+    sig = req.headers.get("Stripe-Signature", "")
+
+    try:
+        event = stripe.Webhook.construct_event(payload=payload, sig_header=sig, secret=STRIPE_WEBHOOK_SECRET)
+    except Exception:
+        return ("Invalid signature", 400)
+
+    try:
+        event_type = str(event.get("type") or "")
+        if event_type == "checkout.session.completed":
+            session_obj = (event.get("data") or {}).get("object") or {}
+            order_id = str(session_obj.get("client_reference_id") or "").strip()
+            if not order_id:
+                order_id = str((session_obj.get("metadata") or {}).get("orderId") or "").strip()
+
+            if order_id:
+                payment_status = str(session_obj.get("payment_status") or "").lower()
+                session_status = str(session_obj.get("status") or "").lower()
+                mode = str(session_obj.get("mode") or "")
+
+                is_paid = payment_status == "paid" or session_status == "complete"
+                db.collection("orders").document(order_id).set(
+                    {
+                        "paymentProvider": "stripe",
+                        "paymentStatus": "paid" if is_paid else "unpaid",
+                        "stripeCheckoutSessionId": str(session_obj.get("id") or ""),
+                        "stripePaymentIntentId": str(session_obj.get("payment_intent") or ""),
+                        "stripeSubscriptionId": str(session_obj.get("subscription") or ""),
+                        "stripeMode": mode,
+                        "stripePaymentStatus": payment_status,
+                        "stripeSessionStatus": session_status,
+                        "paidAt": firestore.SERVER_TIMESTAMP if is_paid else firestore.DELETE_FIELD,
+                        "updatedAt": firestore.SERVER_TIMESTAMP,
+                    },
+                    merge=True,
+                )
+    except Exception:
+        # Webhook processing is best-effort; Stripe will retry on non-2xx, so keep this 200 unless signature fails.
+        pass
+
+    return ("ok", 200)
 
 
 @https_fn.on_call()
