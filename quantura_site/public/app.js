@@ -53,15 +53,19 @@
     trendingList: document.getElementById("trending-list"),
     intelOutput: document.getElementById("intel-output"),
     newsOutput: document.getElementById("news-output"),
-    optionsForm: document.getElementById("options-form"),
-    optionsExpiration: document.getElementById("options-expiration"),
-    optionsOutput: document.getElementById("options-output"),
-    screenerForm: document.getElementById("screener-form"),
-    screenerOutput: document.getElementById("screener-output"),
-    watchlistForm: document.getElementById("watchlist-form"),
-    watchlistTicker: document.getElementById("watchlist-ticker"),
-    watchlistNotes: document.getElementById("watchlist-notes"),
-    watchlistList: document.getElementById("watchlist-list"),
+	    optionsForm: document.getElementById("options-form"),
+	    optionsExpiration: document.getElementById("options-expiration"),
+	    optionsOutput: document.getElementById("options-output"),
+	    screenerForm: document.getElementById("screener-form"),
+	    screenerOutput: document.getElementById("screener-output"),
+	    screenerLoadSelect: document.getElementById("screener-load-select"),
+	    screenerLoadId: document.getElementById("screener-load-id"),
+	    screenerLoadButton: document.getElementById("screener-load-button"),
+	    screenerLoadStatus: document.getElementById("screener-load-status"),
+	    watchlistForm: document.getElementById("watchlist-form"),
+	    watchlistTicker: document.getElementById("watchlist-ticker"),
+	    watchlistNotes: document.getElementById("watchlist-notes"),
+	    watchlistList: document.getElementById("watchlist-list"),
     alertForm: document.getElementById("alert-form"),
     alertTicker: document.getElementById("alert-ticker"),
     alertCondition: document.getElementById("alert-condition"),
@@ -144,6 +148,8 @@
 	    unsubscribeTasks: null,
 	    unsubscribeWatchlist: null,
 	    unsubscribeAlerts: null,
+	    unsubscribeScreenerRuns: null,
+	    screenerUrlRunLoaded: false,
 	    messagingBound: false,
 	    remoteConfigLoaded: false,
 	    remoteFlags: {
@@ -770,6 +776,7 @@
 	          }
 	          if (resolved) {
 	            startUserForecasts(db, resolved);
+              startScreenerRuns(db, resolved);
 	            startWorkspaceTasks(db, resolved);
 	            startWatchlist(db, resolved);
 	            startPriceAlerts(db, resolved);
@@ -1244,6 +1251,34 @@
           renderForecastPicker(items);
 	      });
 	  };
+
+    const startScreenerRuns = (db, workspaceUserId) => {
+      if (state.unsubscribeScreenerRuns) state.unsubscribeScreenerRuns();
+      if (!ui.screenerLoadSelect && !ui.screenerLoadId && !ui.screenerOutput) return;
+      if (!workspaceUserId || !db) return;
+
+      state.unsubscribeScreenerRuns = db
+        .collection("screener_runs")
+        .where("userId", "==", workspaceUserId)
+        .orderBy("createdAt", "desc")
+        .limit(60)
+        .onSnapshot(
+          (snapshot) => {
+            const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+            renderScreenerRunPicker(items);
+
+            const params = new URLSearchParams(window.location.search);
+            const urlRunId = String(params.get("screenerRunId") || params.get("runId") || "").trim();
+            if (urlRunId && !state.screenerUrlRunLoaded) {
+              state.screenerUrlRunLoaded = true;
+              loadScreenerRunById(db, urlRunId).catch(() => {});
+            }
+          },
+          () => {
+            renderScreenerRunPicker([]);
+          }
+        );
+    };
 
 	  const resolveWorkspaceRole = (workspaceId) => {
 	    if (!state.user || !workspaceId) return "guest";
@@ -2030,12 +2065,12 @@
       .join("");
   };
 
-  const loadTrendingTickers = async (functions, { notify = false } = {}) => {
+  const loadTrendingTickers = async (functions, { notify = false, force = false } = {}) => {
     if (!functions || !ui.trendingList) return;
     try {
       setOutputLoading(ui.trendingList, "Loading trending tickers...");
       const getTrending = functions.httpsCallable("get_trending_tickers");
-      const result = await getTrending({ meta: buildMeta() });
+      const result = await getTrending({ force: Boolean(force), meta: buildMeta() });
       setOutputReady(ui.trendingList);
       renderTrendingTickers(result.data || {});
       const count = Array.isArray(result.data?.tickers) ? result.data.tickers.length : 0;
@@ -2313,6 +2348,105 @@
 
     ui.forecastLoadSelect.innerHTML = options.join("");
     if (previous) ui.forecastLoadSelect.value = previous;
+  };
+
+  const renderScreenerRunPicker = (items) => {
+    if (!ui.screenerLoadSelect) return;
+    const list = Array.isArray(items) ? items : [];
+    const previous = String(ui.screenerLoadSelect.value || "").trim();
+
+    const options = [
+      `<option value="">Select a run</option>`,
+      ...list.slice(0, 60).map((item) => {
+        const id = escapeHtml(item.id || "");
+        const universe = escapeHtml(String(item.universe || "trending"));
+        const market = escapeHtml(String(item.market || "us"));
+        const count = Array.isArray(item.results) ? item.results.length : Number(item.count || 0) || 0;
+        const when = escapeHtml(formatTimestamp(item.createdAt));
+        const label = `${universe} · ${market.toUpperCase()} · ${count} names · ${when}`;
+        return `<option value="${id}">${label}</option>`;
+      }),
+    ];
+
+    ui.screenerLoadSelect.innerHTML = options.join("");
+    if (previous) ui.screenerLoadSelect.value = previous;
+  };
+
+  const renderScreenerRunOutput = (runDoc) => {
+    if (!ui.screenerOutput) return;
+    const rows = Array.isArray(runDoc?.results) ? runDoc.results : [];
+    setOutputReady(ui.screenerOutput);
+
+    if (!rows.length) {
+      ui.screenerOutput.innerHTML = `
+        <div class="small muted">No screener rows stored for this run.</div>
+      `;
+      return;
+    }
+
+    const runId = escapeHtml(runDoc.id || "");
+    const createdAt = escapeHtml(formatTimestamp(runDoc.createdAt));
+    const notes = String(runDoc.notes || "").trim();
+
+    ui.screenerOutput.innerHTML = `
+      <div class="small"><strong>Run ID:</strong> ${runId || "—"}</div>
+      <div class="small"><strong>Created:</strong> ${createdAt}</div>
+      ${notes ? `<div class="small" style="margin-top:10px;"><strong>Notes:</strong> ${escapeHtml(notes)}</div>` : ""}
+      <div class="hero-actions" style="margin-top:12px;">
+        <button class="cta secondary small" type="button" data-action="download-screener" data-run-id="${runId}">Download CSV</button>
+      </div>
+      <div class="table-wrap" style="margin-top:12px;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Symbol</th>
+              <th>Last close</th>
+              <th>Return 1M (%)</th>
+              <th>Return 3M (%)</th>
+              <th>RSI 14</th>
+              <th>Volatility</th>
+              <th>Score</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows
+              .map(
+                (row) => `
+                  <tr>
+                    <td>
+                      <button class="link-button" type="button" data-action="pick-ticker" data-ticker="${escapeHtml(row.symbol)}">
+                        ${escapeHtml(row.symbol)}
+                      </button>
+                    </td>
+                    <td>${row.lastClose ?? "—"}</td>
+                    <td>${row.return1m ?? "—"}</td>
+                    <td>${row.return3m ?? "—"}</td>
+                    <td>${row.rsi14 ?? "—"}</td>
+                    <td>${row.volatility ?? "—"}</td>
+                    <td>${row.score ?? "—"}</td>
+                  </tr>
+                `
+              )
+              .join("")}
+          </tbody>
+        </table>
+      </div>
+    `;
+  };
+
+  const loadScreenerRunById = async (db, runId) => {
+    if (!db || !runId) throw new Error("Run ID is required.");
+    if (!state.user) throw new Error("Sign in to load saved runs.");
+
+    const cleanId = String(runId || "").trim();
+    if (!cleanId) throw new Error("Run ID is required.");
+
+    setOutputLoading(ui.screenerOutput, "Loading saved run...");
+    const doc = await db.collection("screener_runs").doc(cleanId).get();
+    if (!doc.exists) throw new Error("Run not found.");
+    const data = doc.data() || {};
+    renderScreenerRunOutput({ id: doc.id, ...data });
+    logEvent("screener_loaded_saved", { run_id: doc.id });
   };
 
   const renderForecastDetails = (forecastDoc) => {
@@ -2774,6 +2908,37 @@
           } finally {
             dlButton.disabled = false;
             setTerminalStatus("");
+          }
+        });
+
+        document.addEventListener("click", async (event) => {
+          const dlButton = event.target.closest('[data-action="download-screener"]');
+          if (!dlButton) return;
+          event.preventDefault();
+          if (!state.user) {
+            showToast("Sign in to download screener runs.", "warn");
+            return;
+          }
+          const runId = String(dlButton.dataset.runId || "").trim();
+          if (!runId) return;
+
+          try {
+            dlButton.disabled = true;
+            const doc = await db.collection("screener_runs").doc(runId).get();
+            if (!doc.exists) throw new Error("Screener run not found.");
+            const data = doc.data() || {};
+            const rows = Array.isArray(data.results) ? data.results : [];
+            if (!rows.length) throw new Error("No results stored for this run.");
+
+            const headers = ["symbol", "lastClose", "return1m", "return3m", "rsi14", "volatility", "score"];
+            const csv = buildCsv(rows, headers);
+            triggerDownload(`quantura_screener_${runId}.csv`, csv);
+            showToast("CSV downloaded.");
+            logEvent("screener_csv_downloaded", { run_id: runId });
+          } catch (error) {
+            showToast(error.message || "Unable to download screener run.", "warn");
+          } finally {
+            dlButton.disabled = false;
           }
         });
 
@@ -3708,7 +3873,7 @@
     });
 
 		    ui.trendingButton?.addEventListener("click", async () => {
-		      await loadTrendingTickers(functions, { notify: true });
+		      await loadTrendingTickers(functions, { notify: true, force: true });
 		    });
 
 	    ui.optionsForm?.addEventListener("submit", async (event) => {
@@ -3888,6 +4053,7 @@
         minCap: Number(formData.get("minCap")),
         maxNames: Number(formData.get("maxNames")),
         notes: formData.get("notes"),
+        workspaceId: state.activeWorkspaceId || state.user.uid,
         meta: buildMeta(),
       };
 
@@ -3949,6 +4115,33 @@
         logEvent("screener_request", { universe: payload.universe });
       } catch (error) {
         showToast(error.message || "Unable to queue screener run.", "warn");
+      }
+    });
+
+    ui.screenerLoadSelect?.addEventListener("change", () => {
+      if (!ui.screenerLoadId || !ui.screenerLoadSelect) return;
+      const value = String(ui.screenerLoadSelect.value || "").trim();
+      if (value) ui.screenerLoadId.value = value;
+    });
+
+    ui.screenerLoadButton?.addEventListener("click", async () => {
+      if (!state.user) {
+        showToast("Sign in to load saved screener runs.", "warn");
+        return;
+      }
+      const runId = String(ui.screenerLoadId?.value || "").trim() || String(ui.screenerLoadSelect?.value || "").trim();
+      if (!runId) {
+        showToast("Select a run or paste a run ID.", "warn");
+        return;
+      }
+      if (ui.screenerLoadStatus) ui.screenerLoadStatus.textContent = "Loading...";
+      try {
+        await loadScreenerRunById(db, runId);
+        if (ui.screenerLoadStatus) ui.screenerLoadStatus.textContent = "";
+        showToast("Screener run loaded.");
+      } catch (error) {
+        if (ui.screenerLoadStatus) ui.screenerLoadStatus.textContent = error.message || "Unable to load run.";
+        showToast(error.message || "Unable to load run.", "warn");
       }
     });
 
@@ -4130,20 +4323,25 @@
           }
           setNotificationControlsEnabled(false);
         }
-	        if (state.unsubscribeOrders) state.unsubscribeOrders();
-	        if (state.unsubscribeAdmin) state.unsubscribeAdmin();
-			        if (state.unsubscribeForecasts) state.unsubscribeForecasts();
-			        if (state.unsubscribeAutopilot) state.unsubscribeAutopilot();
-			        if (state.unsubscribePredictions) state.unsubscribePredictions();
-			        if (state.unsubscribeTasks) state.unsubscribeTasks();
-			        if (state.unsubscribeWatchlist) state.unsubscribeWatchlist();
-			        if (state.unsubscribeAlerts) state.unsubscribeAlerts();
+			        if (state.unsubscribeOrders) state.unsubscribeOrders();
+			        if (state.unsubscribeAdmin) state.unsubscribeAdmin();
+				        if (state.unsubscribeForecasts) state.unsubscribeForecasts();
+				        if (state.unsubscribeAutopilot) state.unsubscribeAutopilot();
+				        if (state.unsubscribePredictions) state.unsubscribePredictions();
+				        if (state.unsubscribeTasks) state.unsubscribeTasks();
+				        if (state.unsubscribeWatchlist) state.unsubscribeWatchlist();
+				        if (state.unsubscribeAlerts) state.unsubscribeAlerts();
+                if (state.unsubscribeScreenerRuns) state.unsubscribeScreenerRuns();
 		        if (state.unsubscribeSharedWorkspaces) state.unsubscribeSharedWorkspaces();
 		        state.sharedWorkspaces = [];
 		        setActiveWorkspaceId("");
 		        renderWorkspaceSelect(null);
 		        if (ui.productivityBoard) ui.productivityBoard.innerHTML = "";
 		        if (ui.tasksCalendar) ui.tasksCalendar.textContent = "Tasks with due dates will appear here.";
+            if (ui.screenerLoadSelect) ui.screenerLoadSelect.innerHTML = `<option value="">Select a run</option>`;
+            if (ui.screenerLoadId) ui.screenerLoadId.value = "";
+            if (ui.screenerLoadStatus) ui.screenerLoadStatus.textContent = "";
+            if (ui.screenerOutput && !ui.screenerOutput.dataset.loading) ui.screenerOutput.textContent = "Sign in to run the screener.";
 				        const gated = new Set([
 				          "/dashboard",
 				          "/watchlist",
@@ -4167,6 +4365,7 @@
 		      setActiveWorkspaceId(activeWorkspaceId);
 		      renderWorkspaceSelect(user);
 		      startUserForecasts(db, activeWorkspaceId);
+          startScreenerRuns(db, activeWorkspaceId);
 		      startWorkspaceTasks(db, activeWorkspaceId);
 			      startWatchlist(db, activeWorkspaceId);
 			      startPriceAlerts(db, activeWorkspaceId);
