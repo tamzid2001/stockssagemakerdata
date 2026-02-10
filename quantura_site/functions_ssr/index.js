@@ -48,7 +48,7 @@ const ensureRandomizationId = (req, res) => {
 const safeJsonForHtml = (value) =>
   JSON.stringify(value)
     // Guard against closing the script tag.
-    .replace(/<\\//g, "<\\/")
+    .replace(/<\//g, "<\\/")
     // Avoid HTML parser confusion.
     .replace(/</g, "\\u003c");
 
