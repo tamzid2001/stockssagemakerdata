@@ -46,6 +46,18 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin() || canEditWorkspace(userId);
     }
 
+    match /users/{userId}/watchlist/{tickerId} {
+      allow read: if isAdmin()
+        || (isSignedIn() && (request.auth.uid == userId || isWorkspaceCollaborator(userId)));
+      allow create, update, delete: if isAdmin() || canEditWorkspace(userId);
+    }
+
+    match /users/{userId}/price_alerts/{alertId} {
+      allow read: if isAdmin()
+        || (isSignedIn() && (request.auth.uid == userId || isWorkspaceCollaborator(userId)));
+      allow create, update, delete: if isAdmin() || canEditWorkspace(userId);
+    }
+
     match /collab_invites/{inviteId} {
       allow read, write: if false;
     }

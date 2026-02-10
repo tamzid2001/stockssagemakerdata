@@ -12,6 +12,9 @@
   --line: #d9d2c7;
   --shadow: rgba(11, 15, 26, 0.12);
   --maxw: 1180px;
+  --header-height: 88px;
+  --dock-top: 104px;
+  --studio-chart-top: 284px;
 }
 
 * {
@@ -1250,7 +1253,7 @@ textarea {
 
 .app-sidebar {
   position: sticky;
-  top: 88px;
+  top: var(--header-height);
   align-self: start;
   display: grid;
   gap: 16px;
@@ -1356,12 +1359,12 @@ textarea {
 
 .studio-chart {
   position: sticky;
-  top: 284px;
+  top: var(--studio-chart-top);
 }
 
 .ticker-dock {
   position: sticky;
-  top: 104px;
+  top: var(--dock-top);
   z-index: 3;
 }
 
