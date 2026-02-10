@@ -354,7 +354,7 @@
     }
   };
 
-	  const getRemoteConfigClient = () => {
+	  const getRemoteConfigClientCompat = () => {
 	    try {
 	      if (typeof firebase === "undefined") return null;
 	      if (!firebase.remoteConfig) return null;
@@ -379,6 +379,101 @@
 	      return null;
 	    }
 	  };
+
+    const getSsrInitialFetchResponse = () => {
+      try {
+        if (typeof window === "undefined") return null;
+        return window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ || null;
+      } catch (error) {
+        return null;
+      }
+    };
+
+    const getSsrTemplateId = () => {
+      try {
+        if (typeof window === "undefined") return "";
+        return String(window.__QUANTURA_RC_TEMPLATE_ID__ || "").trim();
+      } catch (error) {
+        return "";
+      }
+    };
+
+    let modularRemoteConfigPromise = null;
+    const getRemoteConfigClient = async () => {
+      const ssrFetchResponse = getSsrInitialFetchResponse();
+      const ssrTemplateId = getSsrTemplateId() || "firebase-server";
+      if (!ssrFetchResponse) return getRemoteConfigClientCompat();
+
+      if (!modularRemoteConfigPromise) {
+        modularRemoteConfigPromise = (async () => {
+          const version = "12.9.0";
+          const appUrl = `https://www.gstatic.com/firebasejs/${version}/firebase-app.js`;
+          const rcUrl = `https://www.gstatic.com/firebasejs/${version}/firebase-remote-config.js`;
+
+          const [{ initializeApp, getApps }, rcLib] = await Promise.all([import(appUrl), import(rcUrl)]);
+
+          const resolveFirebaseConfig = async () => {
+            try {
+              if (typeof firebase !== "undefined" && typeof firebase.app === "function") {
+                const options = firebase.app().options;
+                if (options && typeof options === "object") return options;
+              }
+            } catch (error) {
+              // Ignore.
+            }
+            try {
+              const resp = await fetch("/__/firebase/init.json");
+              if (resp.ok) return await resp.json();
+            } catch (error) {
+              // Ignore.
+            }
+            return null;
+          };
+
+          const firebaseConfig = await resolveFirebaseConfig();
+          if (!firebaseConfig) throw new Error("Unable to resolve Firebase config for Remote Config.");
+
+          const appName = "quantura-rc";
+          const existing = typeof getApps === "function" ? getApps().find((app) => app.name === appName) : null;
+          const app = existing || initializeApp(firebaseConfig, appName);
+
+          const rc = rcLib.getRemoteConfig(app, {
+            templateId: ssrTemplateId,
+            initialFetchResponse: ssrFetchResponse,
+          });
+
+          const host = (typeof window !== "undefined" && window.location && window.location.hostname) ? window.location.hostname : "";
+          const isDev = host === "localhost" || host === "127.0.0.1" || host.endsWith(".localhost");
+          const minFetchIntervalMillis = isDev ? 5 * 60 * 1000 : 60 * 60 * 1000;
+          rc.settings.minimumFetchIntervalMillis = minFetchIntervalMillis;
+          rc.defaultConfig = {
+            welcome_message: "Welcome to Quantura",
+            watchlist_enabled: true,
+            forecast_prophet_enabled: true,
+            forecast_timemixer_enabled: true,
+            webpush_vapid_key: "",
+          };
+
+          const wrap = {
+            __ssrHydrated: true,
+            fetchAndActivate: () => rcLib.fetchAndActivate(rc),
+            activate: () => rcLib.activate(rc),
+            getBoolean: (key) => rcLib.getBoolean(rc, key),
+            getString: (key) => rcLib.getString(rc, key),
+            onConfigUpdate: (handlers) =>
+              typeof rcLib.onConfigUpdate === "function" ? rcLib.onConfigUpdate(rc, handlers) : null,
+          };
+          return wrap;
+        })();
+      }
+
+      try {
+        return await modularRemoteConfigPromise;
+      } catch (error) {
+        // Fall back to compat Remote Config if the SSR hydration path fails.
+        return getRemoteConfigClientCompat();
+      }
+    };
 
 	  const readRemoteConfigFlags = (rc) => {
 	    const getBool = (key, fallback) => {
@@ -513,13 +608,21 @@
 	  };
 
 	  const loadRemoteConfig = async () => {
-	    const rc = getRemoteConfigClient();
+	    const rc = await getRemoteConfigClient();
 	    if (!rc) return state.remoteFlags;
-	    try {
-	      await rc.fetchAndActivate();
-	    } catch (error) {
-	      // Ignore fetch errors and fall back to defaults.
-	    }
+
+      if (!rc.__ssrHydrated) {
+	      try {
+	        await rc.fetchAndActivate();
+	      } catch (error) {
+	        // Ignore fetch errors and fall back to defaults.
+	      }
+      } else {
+        // Server-side Remote Config values are already present on first paint. Refresh later.
+        window.setTimeout(() => {
+          rc.fetchAndActivate?.().catch?.(() => {});
+        }, 5000);
+      }
 	    const nextFlags = readRemoteConfigFlags(rc);
 	    state.remoteFlags = {
 	      ...state.remoteFlags,
