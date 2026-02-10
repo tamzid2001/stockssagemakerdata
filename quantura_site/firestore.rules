@@ -15,6 +15,15 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/users/$(ownerId)/collaborators/$(request.auth.uid));
     }
 
+    function collaboratorRole(ownerId) {
+      return get(/databases/$(database)/documents/users/$(ownerId)/collaborators/$(request.auth.uid)).data.role;
+    }
+
+    function canEditWorkspace(ownerId) {
+      return isSignedIn()
+        && (request.auth.uid == ownerId || (isWorkspaceCollaborator(ownerId) && collaboratorRole(ownerId) == "editor"));
+    }
+
     match /users/{userId} {
       allow read: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
       allow create, update: if isSignedIn() && request.auth.uid == userId;
@@ -29,6 +38,12 @@ service cloud.firestore {
     match /users/{userId}/shared_workspaces/{workspaceId} {
       allow read: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
       allow write: if false;
+    }
+
+    match /users/{userId}/tasks/{taskId} {
+      allow read: if isAdmin()
+        || (isSignedIn() && (request.auth.uid == userId || isWorkspaceCollaborator(userId)));
+      allow create, update, delete: if isAdmin() || canEditWorkspace(userId);
     }
 
     match /collab_invites/{inviteId} {

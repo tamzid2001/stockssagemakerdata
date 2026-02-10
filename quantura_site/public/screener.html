@@ -31,7 +31,9 @@
   <body>
     <header class="header">
       <div class="container nav">
-        <a class="logo" href="/">QUANTURA</a>
+        <a class="logo" href="/" aria-label="Quantura home">
+          <img class="logo-img" src="/assets/quantura-logo.svg" alt="Quantura logo" />
+        </a>
         <nav class="nav-links">
           <a href="/forecasting" data-analytics="nav_forecasting">Forecasting</a>
           <a href="/screener" data-analytics="nav_screener">Screener</a>
@@ -142,7 +144,7 @@
             <div class="results-panel" id="screener-result">
               <h3>Screener output</h3>
               <p class="small">Top-ranked tickers will appear here. Use the terminal to deep-dive.</p>
-              <div id="screener-output"></div>
+              <div id="screener-output" class="panel-output"></div>
             </div>
           </div>
         </div>

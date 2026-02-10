@@ -32,7 +32,9 @@
   <body>
     <header class="header">
       <div class="container nav">
-        <a class="logo" href="/">QUANTURA</a>
+        <a class="logo" href="/" aria-label="Quantura home">
+          <img class="logo-img" src="/assets/quantura-logo.svg" alt="Quantura logo" />
+        </a>
         <nav class="nav-links">
           <a href="/forecasting" data-analytics="nav_forecasting">Forecasting</a>
           <a href="/screener" data-analytics="nav_screener">Screener</a>
@@ -59,19 +61,20 @@
             <a class="cta secondary small" href="#purchase">Request Deep Forecast</a>
             <a class="cta secondary small hidden" id="nav-admin" href="/admin">Admin dashboard</a>
           </div>
-          <nav class="sidebar-nav">
-            <a href="#auth">Sign in</a>
-            <a href="#notifications">Notifications</a>
-            <a href="#purchase">Purchase</a>
-            <a href="#dashboard">Orders</a>
-            <a href="#collaboration">Collaboration</a>
-            <a href="#uploads">Uploads</a>
-            <a href="#autopilot">Autopilot</a>
-            <a href="#alpaca">Alpaca</a>
+          <nav class="sidebar-nav" aria-label="Dashboard navigation">
+            <button class="sidebar-link active" type="button" data-panel-target="orders">Orders</button>
+            <button class="sidebar-link" type="button" data-panel-target="productivity">Productivity</button>
+            <button class="sidebar-link" type="button" data-panel-target="collaboration">Collaboration</button>
+            <button class="sidebar-link" type="button" data-panel-target="uploads">Uploads</button>
+            <button class="sidebar-link" type="button" data-panel-target="autopilot">Autopilot</button>
+            <button class="sidebar-link" type="button" data-panel-target="alpaca">Alpaca</button>
+            <button class="sidebar-link" type="button" data-panel-target="notifications">Notifications</button>
+            <button class="sidebar-link" type="button" data-panel-target="purchase">Purchase</button>
+            <button class="sidebar-link" type="button" data-panel-target="auth">Sign in</button>
           </nav>
         </aside>
 
-        <div class="app-main">
+        <div class="app-main" data-panels>
       <section class="page-hero">
         <div class="container content-grid">
           <div>
@@ -103,7 +106,7 @@
         </div>
       </section>
 
-      <section class="section auth-section" id="auth">
+      <section class="section auth-section panel hidden" data-panel="auth" id="auth">
         <div class="container">
           <div class="section-title">
             <h2>Sign in to unlock your dashboard</h2>
@@ -138,7 +141,7 @@
         </div>
       </section>
 
-      <section class="section" id="notifications">
+      <section class="section panel hidden" data-panel="notifications" id="notifications">
         <div class="container">
           <div class="section-title">
             <h2>Browser notifications</h2>
@@ -171,7 +174,7 @@
         </div>
       </section>
 
-      <section class="section" id="purchase">
+      <section class="section panel hidden" data-panel="purchase" id="purchase">
         <div class="container">
           <div class="section-title">
             <h2>Request a Deep Forecast</h2>
@@ -201,26 +204,95 @@
         </div>
       </section>
 
-      <section class="section" id="dashboard">
+      <section class="section panel" data-panel="orders" id="dashboard">
         <div class="container">
           <div class="section-title">
             <h2>Your orders</h2>
             <p class="small">Track your Deep Forecast requests and fulfillment status.</p>
           </div>
-          <div class="dashboard-grid">
+            <div class="dashboard-grid">
             <div class="card">
               <h3>Order history</h3>
-              <div id="user-orders" class="order-list"></div>
+              <div id="user-orders" class="order-list panel-output"></div>
             </div>
             <div class="card">
               <h3>Forecast requests</h3>
-              <div id="user-forecasts" class="order-list"></div>
+              <div id="user-forecasts" class="order-list panel-output"></div>
             </div>
           </div>
         </div>
       </section>
 
-      <section class="section" id="collaboration">
+      <section class="section panel hidden" data-panel="productivity" id="productivity">
+        <div class="container">
+          <div class="section-title">
+            <h2>Productivity boards</h2>
+            <p class="small">Todo + kanban + calendar views synced to your active workspace.</p>
+          </div>
+
+          <div class="content-grid">
+            <form id="task-form" class="card">
+              <h3>Create task</h3>
+              <div class="field">
+                <label class="label" for="task-title">Title</label>
+                <input id="task-title" placeholder="Review earnings transcript" required />
+              </div>
+              <div class="form-grid">
+                <div class="field">
+                  <label class="label" for="task-due">Due date</label>
+                  <input id="task-due" type="date" />
+                </div>
+                <div class="field">
+                  <label class="label" for="task-status">Status</label>
+                  <select id="task-status">
+                    <option value="backlog">Backlog</option>
+                    <option value="doing">Doing</option>
+                    <option value="done">Done</option>
+                  </select>
+                </div>
+              </div>
+              <div class="field">
+                <label class="label" for="task-assignee">Assignee email (optional)</label>
+                <input id="task-assignee" type="email" placeholder="collaborator@domain.com" />
+              </div>
+              <div class="field">
+                <label class="label" for="task-notes">Notes</label>
+                <textarea id="task-notes" placeholder="What should be captured in the write-up?"></textarea>
+              </div>
+              <button class="cta" type="submit" data-analytics="task_create">Create task</button>
+              <p class="small" id="task-status-text"></p>
+              <details class="learn-more">
+                <summary>Learn more</summary>
+                <p class="small">
+                  Tasks live inside your active workspace. Invite collaborators in the Collaboration panel to share the same board.
+                  Viewer collaborators can read tasks. Editor collaborators can create and move tasks.
+                </p>
+              </details>
+            </form>
+
+            <div class="results-panel">
+              <h3>Kanban board</h3>
+              <div id="productivity-board" class="kanban"></div>
+            </div>
+          </div>
+
+          <div class="content-grid" style="margin-top: 16px;">
+            <div class="card">
+              <h3>Upcoming</h3>
+              <div id="tasks-calendar" class="panel-output small muted">Tasks with due dates will appear here.</div>
+            </div>
+            <div class="card">
+              <h3>Workspace audit</h3>
+              <div class="small">
+                Keep research accountable: tie tasks to forecasts, saved runs, and Deep Forecast deliverables.
+                Everything is stored in Firestore for traceability.
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section panel hidden" data-panel="collaboration" id="collaboration">
         <div class="container">
           <div class="section-title">
             <h2>Workspace collaboration</h2>
@@ -272,7 +344,7 @@
         </div>
       </section>
 
-      <section class="section" id="uploads">
+      <section class="section panel hidden" data-panel="uploads" id="uploads">
         <div class="container">
           <div class="section-title">
             <h2>Upload predictions CSV</h2>
@@ -293,13 +365,13 @@
             </form>
             <div class="results-panel" id="predictions-result">
               <h3>Recent uploads</h3>
-              <div id="predictions-output" class="small">Uploads will appear here once submitted.</div>
+              <div id="predictions-output" class="panel-output small">Uploads will appear here once submitted.</div>
             </div>
           </div>
         </div>
       </section>
 
-      <section class="section" id="autopilot">
+      <section class="section panel hidden" data-panel="autopilot" id="autopilot">
         <div class="container">
           <div class="section-title">
             <h2>SageMaker Autopilot request</h2>
@@ -337,13 +409,13 @@
             </form>
             <div class="results-panel" id="autopilot-result">
               <h3>Autopilot runs</h3>
-              <div id="autopilot-output" class="small">Queued runs will appear here.</div>
+              <div id="autopilot-output" class="panel-output small">Queued runs will appear here.</div>
             </div>
           </div>
         </div>
       </section>
 
-      <section class="section" id="alpaca">
+      <section class="section panel hidden" data-panel="alpaca" id="alpaca">
         <div class="container">
           <div class="section-title">
             <h2>Place Alpaca orders</h2>
@@ -391,19 +463,19 @@
             </form>
             <div class="results-panel" id="alpaca-orders">
               <h3>Recent Alpaca orders</h3>
-              <div id="alpaca-output" class="small">Orders will appear here after submission.</div>
+              <div id="alpaca-output" class="panel-output small">Orders will appear here after submission.</div>
             </div>
           </div>
           <div class="content-grid" style="margin-top: 24px;">
             <div class="card">
               <h3>Alpaca account snapshot</h3>
               <button class="cta secondary" id="alpaca-load-account" type="button">Load account</button>
-              <div id="alpaca-account-output" class="small" style="margin-top: 12px;">Account data will appear here.</div>
+              <div id="alpaca-account-output" class="panel-output small" style="margin-top: 12px;">Account data will appear here.</div>
             </div>
             <div class="card">
               <h3>Open positions</h3>
               <button class="cta secondary" id="alpaca-load-positions" type="button">Load positions</button>
-              <div id="alpaca-positions-output" class="small" style="margin-top: 12px;">Positions will appear here.</div>
+              <div id="alpaca-positions-output" class="panel-output small" style="margin-top: 12px;">Positions will appear here.</div>
             </div>
           </div>
           <div class="content-grid" style="margin-top: 24px;">
@@ -418,7 +490,7 @@
                 </select>
               </div>
               <button class="cta secondary" id="alpaca-load-orders" type="button">Load broker orders</button>
-              <div id="alpaca-broker-orders-output" class="small" style="margin-top: 12px;">Broker orders will appear here.</div>
+              <div id="alpaca-broker-orders-output" class="panel-output small" style="margin-top: 12px;">Broker orders will appear here.</div>
             </div>
             <form class="card" id="alpaca-cancel-order-form">
               <h3>Cancel broker order</h3>
