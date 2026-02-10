@@ -76,11 +76,20 @@
     collabInviteRole: document.getElementById("collab-invite-role"),
     collabInviteStatus: document.getElementById("collab-invite-status"),
     collabInvitesList: document.getElementById("collab-invites-list"),
-    collabCollaboratorsList: document.getElementById("collab-collaborators-list"),
-    notificationsEnable: document.getElementById("notifications-enable"),
-    notificationsRefresh: document.getElementById("notifications-refresh"),
-    notificationsSendTest: document.getElementById("notifications-send-test"),
-    notificationsStatus: document.getElementById("notifications-status"),
+	    collabCollaboratorsList: document.getElementById("collab-collaborators-list"),
+	    taskForm: document.getElementById("task-form"),
+	    taskTitle: document.getElementById("task-title"),
+	    taskDue: document.getElementById("task-due"),
+	    taskStatus: document.getElementById("task-status"),
+	    taskAssignee: document.getElementById("task-assignee"),
+	    taskNotes: document.getElementById("task-notes"),
+	    taskStatusText: document.getElementById("task-status-text"),
+	    productivityBoard: document.getElementById("productivity-board"),
+	    tasksCalendar: document.getElementById("tasks-calendar"),
+	    notificationsEnable: document.getElementById("notifications-enable"),
+	    notificationsRefresh: document.getElementById("notifications-refresh"),
+	    notificationsSendTest: document.getElementById("notifications-send-test"),
+	    notificationsStatus: document.getElementById("notifications-status"),
     notificationsToken: document.getElementById("notifications-token"),
     toast: document.getElementById("toast"),
     purchasePanels: Array.from(document.querySelectorAll(".purchase-panel")),
@@ -95,25 +104,27 @@
         return "";
       }
     })(),
-    initialPageViewSent: false,
-    tickerContext: {
-      ticker: "",
-      interval: "1d",
-      rows: [],
+	    initialPageViewSent: false,
+	    authResolved: false,
+	    tickerContext: {
+	      ticker: "",
+	      interval: "1d",
+	      rows: [],
       forecastId: "",
       forecastDoc: null,
       indicatorOverlays: [],
     },
     unsubscribeOrders: null,
     unsubscribeAdmin: null,
-    unsubscribeForecasts: null,
-    unsubscribeAutopilot: null,
-    unsubscribePredictions: null,
-    unsubscribeAlpaca: null,
-    messagingBound: false,
-    activeWorkspaceId: (() => {
-      try {
-        return localStorage.getItem(WORKSPACE_KEY) || "";
+	    unsubscribeForecasts: null,
+	    unsubscribeAutopilot: null,
+	    unsubscribePredictions: null,
+	    unsubscribeAlpaca: null,
+	    unsubscribeTasks: null,
+	    messagingBound: false,
+	    activeWorkspaceId: (() => {
+	      try {
+	        return localStorage.getItem(WORKSPACE_KEY) || "";
       } catch (error) {
         return "";
       }
@@ -122,16 +133,81 @@
     unsubscribeSharedWorkspaces: null,
   };
 
-  const showToast = (message, variant = "default") => {
-    if (!ui.toast) return;
-    ui.toast.textContent = message;
-    ui.toast.dataset.variant = variant;
-    ui.toast.classList.add("show");
-    window.clearTimeout(ui.toast._timeout);
-    ui.toast._timeout = window.setTimeout(() => {
-      ui.toast.classList.remove("show");
-    }, 3200);
-  };
+	  const showToast = (message, variant = "default") => {
+	    if (!ui.toast) return;
+	    ui.toast.textContent = message;
+	    ui.toast.dataset.variant = variant;
+	    ui.toast.classList.add("show");
+	    window.clearTimeout(ui.toast._timeout);
+	    ui.toast._timeout = window.setTimeout(() => {
+	      ui.toast.classList.remove("show");
+	    }, 3200);
+	  };
+
+	  const skeletonHtml = (lines = 4) => {
+	    const widths = ["92%", "78%", "88%", "64%", "84%"];
+	    const blocks = Array.from({ length: Math.max(2, Math.min(lines, 8)) }).map((_, idx) => {
+	      const width = widths[idx % widths.length];
+	      return `<div class="skeleton-line" style="width:${width}"></div>`;
+	    });
+	    return `<div class="skeleton" aria-hidden="true">${blocks.join("")}</div>`;
+	  };
+
+	  const setOutputLoading = (el, label = "Loading...") => {
+	    if (!el) return;
+	    el.setAttribute("aria-busy", "true");
+	    el.innerHTML = `${skeletonHtml()}<div class="small muted" style="margin-top:10px;">${label}</div>`;
+	  };
+
+	  const setOutputReady = (el) => {
+	    if (!el) return;
+	    el.removeAttribute("aria-busy");
+	  };
+
+	  const bindPanelNavigation = () => {
+	    const panelsRoot = document.querySelector("[data-panels]");
+	    const buttons = Array.from(document.querySelectorAll("[data-panel-target]"));
+	    const panels = Array.from(document.querySelectorAll("[data-panel]"));
+	    if (!panelsRoot || buttons.length === 0 || panels.length === 0) return;
+
+	    const setActive = (target, { pushHash = true } = {}) => {
+	      const next = String(target || "").trim();
+	      if (!next) return;
+	      panels.forEach((panel) => panel.classList.toggle("hidden", panel.dataset.panel !== next));
+	      buttons.forEach((btn) => btn.classList.toggle("active", btn.dataset.panelTarget === next));
+	      if (pushHash) {
+	        try {
+	          history.replaceState(null, "", `${window.location.pathname}${window.location.search}#${encodeURIComponent(next)}`);
+	        } catch (error) {
+	          // Ignore URL update errors.
+	        }
+	      }
+	      logEvent("panel_view", { panel: next, page_path: window.location.pathname });
+	    };
+
+	    const initialFromUrl = () => {
+	      try {
+	        const params = new URLSearchParams(window.location.search);
+	        const panel = params.get("panel");
+	        if (panel) return panel;
+	      } catch (error) {
+	        // Ignore.
+	      }
+	      return (window.location.hash || "").replace(/^#/, "");
+	    };
+
+	    buttons.forEach((btn) => {
+	      btn.addEventListener("click", () => setActive(btn.dataset.panelTarget));
+	    });
+
+	    const initial = initialFromUrl() || buttons[0].dataset.panelTarget;
+	    setActive(initial, { pushHash: false });
+
+	    window.addEventListener("hashchange", () => {
+	      const next = (window.location.hash || "").replace(/^#/, "");
+	      if (next) setActive(next, { pushHash: false });
+	    });
+	  };
 
   const getAnalytics = () => {
     try {
@@ -326,17 +402,20 @@
           state.sharedWorkspaces = snapshot.docs.map((doc) => ({ id: doc.id, workspaceUserId: doc.id, ...doc.data() }));
           renderWorkspaceSelect(user);
           const resolved = resolveActiveWorkspaceId(user);
-          if (resolved !== state.activeWorkspaceId) {
-            setActiveWorkspaceId(resolved);
-            logEvent("workspace_resolved", { workspace_id: resolved });
-          }
-          if (resolved) startUserForecasts(db, resolved);
-        },
-        () => {
-          // Ignore workspace subscription errors.
-        }
-      );
-  };
+	          if (resolved !== state.activeWorkspaceId) {
+	            setActiveWorkspaceId(resolved);
+	            logEvent("workspace_resolved", { workspace_id: resolved });
+	          }
+	          if (resolved) {
+	            startUserForecasts(db, resolved);
+	            startWorkspaceTasks(db, resolved);
+	          }
+	        },
+	        () => {
+	          // Ignore workspace subscription errors.
+	        }
+	      );
+	  };
 
   const ensureInitialPageView = () => {
     if (state.initialPageViewSent) return;
@@ -466,23 +545,23 @@
     return modal;
   };
 
-  const ensureFeedbackPrompt = () => {
-    const lastShown = Number(safeLocalStorageGet(FEEDBACK_PROMPT_KEY) || "0");
-    const weekMs = 7 * 24 * 60 * 60 * 1000;
-    if (lastShown && Date.now() - lastShown < weekMs) return null;
-    if (document.getElementById("feedback-banner")) return null;
+	  const ensureFeedbackPrompt = () => {
+	    const lastShown = Number(safeLocalStorageGet(FEEDBACK_PROMPT_KEY) || "0");
+	    const weekMs = 7 * 24 * 60 * 60 * 1000;
+	    if (lastShown && Date.now() - lastShown < weekMs) return null;
+	    if (document.getElementById("feedback-banner")) return null;
 
     const banner = document.createElement("div");
     banner.id = "feedback-banner";
     banner.className = "feedback-banner";
-    banner.innerHTML = `
-      <div>
-        <strong>Help us improve Firebase Hosting.</strong>
-        <div class="small">By continuing, you agree Google may use feedback and basic system info to improve services.</div>
-      </div>
-      <div class="banner-actions">
-        <button class="cta secondary small" type="button" data-action="dismiss">No thanks</button>
-        <button class="cta small" type="button" data-action="open">Show question</button>
+	    banner.innerHTML = `
+	      <div>
+	        <strong>Help Quantura improve.</strong>
+	        <div class="small">By continuing, you agree feedback and basic system info may be used to improve the Quantura experience.</div>
+	      </div>
+	      <div class="banner-actions">
+	        <button class="cta secondary small" type="button" data-action="dismiss">No thanks</button>
+	        <button class="cta small" type="button" data-action="open">Show question</button>
       </div>
     `;
     document.body.appendChild(banner);
@@ -498,8 +577,128 @@
         ensureFeedbackModal().classList.remove("hidden");
       }
     });
-    return banner;
-  };
+	    return banner;
+	  };
+
+	  const ensureAssistantWidget = (functions) => {
+	    if (document.getElementById("assistant-widget")) return;
+
+	    const root = document.createElement("div");
+	    root.id = "assistant-widget";
+
+	    const launcher = document.createElement("button");
+	    launcher.type = "button";
+	    launcher.className = "assistant-launcher";
+	    launcher.setAttribute("aria-label", "Open Quantura assistant");
+	    launcher.textContent = "AI";
+
+	    const panel = document.createElement("div");
+	    panel.className = "assistant-panel hidden";
+	    panel.setAttribute("role", "dialog");
+	    panel.setAttribute("aria-modal", "false");
+
+	    const header = document.createElement("div");
+	    header.className = "assistant-header";
+	    const title = document.createElement("div");
+	    title.className = "assistant-title";
+	    title.textContent = "Quantura Assistant";
+	    const close = document.createElement("button");
+	    close.type = "button";
+	    close.className = "assistant-close";
+	    close.textContent = "Close";
+	    header.appendChild(title);
+	    header.appendChild(close);
+
+	    const messages = document.createElement("div");
+	    messages.className = "assistant-messages";
+
+	    const form = document.createElement("form");
+	    form.className = "assistant-form";
+	    const input = document.createElement("input");
+	    input.className = "assistant-input";
+	    input.type = "text";
+	    input.placeholder = "Ask about forecasts, indicators, or this ticker...";
+	    input.autocomplete = "off";
+	    const send = document.createElement("button");
+	    send.type = "submit";
+	    send.className = "assistant-send";
+	    send.textContent = "Send";
+	    form.appendChild(input);
+	    form.appendChild(send);
+
+	    const hint = document.createElement("div");
+	    hint.className = "assistant-hint";
+	    hint.textContent = "Tip: load a ticker first, then ask for a plan (forecast, indicators, news, options).";
+
+	    panel.appendChild(header);
+	    panel.appendChild(messages);
+	    panel.appendChild(hint);
+	    panel.appendChild(form);
+
+	    root.appendChild(launcher);
+	    root.appendChild(panel);
+	    document.body.appendChild(root);
+
+	    const appendMessage = (role, text, opts = {}) => {
+	      const bubble = document.createElement("div");
+	      bubble.className = `assistant-msg assistant-msg--${role}`;
+	      if (opts.loading) bubble.classList.add("assistant-msg--loading");
+	      bubble.textContent = text;
+	      messages.appendChild(bubble);
+	      messages.scrollTop = messages.scrollHeight;
+	      return bubble;
+	    };
+
+	    const openPanel = () => {
+	      panel.classList.remove("hidden");
+	      input.focus();
+	      logEvent("assistant_opened", { page_path: window.location.pathname });
+	      if (!messages.childElementCount) {
+	        appendMessage(
+	          "assistant",
+	          state.user
+	            ? "Ask me to interpret indicators, suggest a forecasting setup, or summarize what to check next for this ticker."
+	            : "Sign in to use the assistant. It keeps your messages private in Firestore."
+	        );
+	      }
+	    };
+
+	    const closePanel = () => panel.classList.add("hidden");
+
+	    launcher.addEventListener("click", () => {
+	      if (panel.classList.contains("hidden")) openPanel();
+	      else closePanel();
+	    });
+
+	    close.addEventListener("click", closePanel);
+
+	    form.addEventListener("submit", async (event) => {
+	      event.preventDefault();
+	      const text = String(input.value || "").trim();
+	      if (!text) return;
+	      input.value = "";
+	      appendMessage("user", text);
+	      if (!state.user) {
+	        appendMessage("assistant", "Sign in to use the assistant.");
+	        showToast("Sign in to use the assistant.", "warn");
+	        return;
+	      }
+
+	      const loading = appendMessage("assistant", "Thinking...", { loading: true });
+	      try {
+	        const ticker = state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "";
+	        const chat = functions.httpsCallable("assistant_chat");
+	        const result = await chat({ message: text, ticker, page: window.location.pathname, meta: buildMeta() });
+	        const reply = result.data?.text || "No response returned.";
+	        loading.textContent = reply;
+	        loading.classList.remove("assistant-msg--loading");
+	        logEvent("assistant_message", { page_path: window.location.pathname });
+	      } catch (error) {
+	        loading.textContent = error.message || "Assistant request failed.";
+	        loading.classList.remove("assistant-msg--loading");
+	      }
+	    });
+	  };
 
   const setPurchaseState = (user) => {
     ui.purchasePanels.forEach((panel) => {
@@ -780,20 +979,141 @@
       });
   };
 
-  const startUserForecasts = (db, workspaceUserId) => {
-    if (state.unsubscribeForecasts) state.unsubscribeForecasts();
-    const containers = [ui.userForecasts, ui.savedForecastsList].filter(Boolean);
-    if (!workspaceUserId || containers.length === 0) return;
+	  const startUserForecasts = (db, workspaceUserId) => {
+	    if (state.unsubscribeForecasts) state.unsubscribeForecasts();
+	    const containers = [ui.userForecasts, ui.savedForecastsList].filter(Boolean);
+	    if (!workspaceUserId || containers.length === 0) return;
 
-    state.unsubscribeForecasts = db
-      .collection("forecast_requests")
-      .where("userId", "==", workspaceUserId)
-      .orderBy("createdAt", "desc")
-      .onSnapshot((snapshot) => {
-        const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-        containers.forEach((container) => renderRequestList(items, container, "No forecast requests yet."));
-      });
-  };
+	    state.unsubscribeForecasts = db
+	      .collection("forecast_requests")
+	      .where("userId", "==", workspaceUserId)
+	      .orderBy("createdAt", "desc")
+	      .onSnapshot((snapshot) => {
+	        const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+	        containers.forEach((container) => renderRequestList(items, container, "No forecast requests yet."));
+	      });
+	  };
+
+	  const resolveWorkspaceRole = (workspaceId) => {
+	    if (!state.user || !workspaceId) return "guest";
+	    if (state.user.uid === workspaceId) return "owner";
+	    const shared = (state.sharedWorkspaces || []).find((ws) => ws.workspaceUserId === workspaceId || ws.id === workspaceId);
+	    return shared?.role || "viewer";
+	  };
+
+	  const canWriteWorkspace = (workspaceId) => {
+	    const role = resolveWorkspaceRole(workspaceId);
+	    return role === "owner" || role === "editor";
+	  };
+
+	  const renderTaskBoard = (tasks, workspaceId) => {
+	    if (!ui.productivityBoard) return;
+	    const editable = canWriteWorkspace(workspaceId);
+	    const buckets = { backlog: [], doing: [], done: [] };
+	    (tasks || []).forEach((task) => {
+	      const status = String(task.status || "backlog");
+	      if (status in buckets) buckets[status].push(task);
+	      else buckets.backlog.push(task);
+	    });
+
+	    const taskCard = (task) => {
+	      const title = escapeHtml(task.title || "Untitled");
+	      const due = task.dueDate ? new Date(task.dueDate).toLocaleDateString() : "";
+	      const assignee = escapeHtml(task.assigneeEmail || "");
+	      const meta = [due ? `Due ${due}` : "", assignee ? `Assignee: ${assignee}` : ""].filter(Boolean).join(" · ");
+	      const actions = editable
+	        ? `
+	          <div class="task-actions">
+	            <button class="task-chip" type="button" data-action="task-move" data-task-id="${escapeHtml(task.id)}" data-to="backlog">Backlog</button>
+	            <button class="task-chip" type="button" data-action="task-move" data-task-id="${escapeHtml(task.id)}" data-to="doing">Doing</button>
+	            <button class="task-chip" type="button" data-action="task-move" data-task-id="${escapeHtml(task.id)}" data-to="done">Done</button>
+	            <button class="task-chip danger" type="button" data-action="task-delete" data-task-id="${escapeHtml(task.id)}">Delete</button>
+	          </div>
+	        `
+	        : "";
+	      return `
+	        <div class="task-card" draggable="${editable ? "true" : "false"}" data-task-id="${escapeHtml(task.id)}">
+	          <div class="task-title">${title}</div>
+	          ${meta ? `<div class="small task-meta muted">${meta}</div>` : ""}
+	          ${actions}
+	        </div>
+	      `;
+	    };
+
+	    const col = (key, label, items) => `
+	      <div class="kanban-col" data-task-dropzone="${key}">
+	        <div class="kanban-col-header">
+	          <strong>${label}</strong>
+	          <span class="pill">${items.length}</span>
+	        </div>
+	        <div class="kanban-col-body">
+	          ${items.length ? items.map(taskCard).join("") : `<div class="small muted">No tasks</div>`}
+	        </div>
+	      </div>
+	    `;
+
+	    ui.productivityBoard.innerHTML = `
+	      <div class="kanban" data-workspace-id="${escapeHtml(workspaceId)}">
+	        ${col("backlog", "Backlog", buckets.backlog)}
+	        ${col("doing", "Doing", buckets.doing)}
+	        ${col("done", "Done", buckets.done)}
+	      </div>
+	    `;
+	  };
+
+	  const renderTaskCalendar = (tasks) => {
+	    if (!ui.tasksCalendar) return;
+	    const upcoming = (tasks || [])
+	      .filter((t) => t.dueDate)
+	      .slice()
+	      .sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)))
+	      .slice(0, 12);
+	    if (!upcoming.length) {
+	      ui.tasksCalendar.textContent = "Tasks with due dates will appear here.";
+	      ui.tasksCalendar.classList.add("muted");
+	      return;
+	    }
+	    ui.tasksCalendar.classList.remove("muted");
+	    ui.tasksCalendar.innerHTML = `
+	      <div class="task-upcoming">
+	        ${upcoming
+	          .map((t) => {
+	            const due = new Date(t.dueDate).toLocaleDateString();
+	            return `
+	              <div class="task-upcoming-row">
+	                <div class="small"><strong>${escapeHtml(t.title || "Untitled")}</strong></div>
+	                <div class="small muted">${escapeHtml(due)} · ${escapeHtml(String(t.status || "backlog"))}</div>
+	              </div>
+	            `;
+	          })
+	          .join("")}
+	      </div>
+	    `;
+	  };
+
+	  const startWorkspaceTasks = (db, workspaceId) => {
+	    if (state.unsubscribeTasks) state.unsubscribeTasks();
+	    const containers = [ui.productivityBoard, ui.tasksCalendar].filter(Boolean);
+	    if (!workspaceId || containers.length === 0) return;
+
+	    state.unsubscribeTasks = db
+	      .collection("users")
+	      .doc(workspaceId)
+	      .collection("tasks")
+	      .orderBy("createdAt", "desc")
+	      .limit(200)
+	      .onSnapshot(
+	        (snapshot) => {
+	          const tasks = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+	          renderTaskBoard(tasks, workspaceId);
+	          renderTaskCalendar(tasks);
+	        },
+	        () => {
+	          if (ui.productivityBoard) ui.productivityBoard.innerHTML = `<div class="small muted">Unable to load tasks.</div>`;
+	          if (ui.tasksCalendar) ui.tasksCalendar.textContent = "Unable to load tasks.";
+	        }
+	      );
+	  };
 
   const startAutopilotRequests = (db, user) => {
     if (state.unsubscribeAutopilot) state.unsubscribeAutopilot();
@@ -1316,11 +1636,16 @@
       return;
     }
 
-    const auth = firebase.auth();
-    const db = firebase.firestore();
-    const functions = firebase.functions();
-    const storage = firebase.storage ? firebase.storage() : null;
-    const messaging = getMessagingClient();
+	    const auth = firebase.auth();
+	    const db = firebase.firestore();
+	    const functions = firebase.functions();
+	    const storage = firebase.storage ? firebase.storage() : null;
+	    const messaging = getMessagingClient();
+
+	    if (!state.authResolved) {
+	      if (ui.headerUserEmail) ui.headerUserEmail.textContent = "Restoring session...";
+	      if (ui.headerUserStatus) ui.headerUserStatus.textContent = "Loading";
+	    }
 
     if (ui.notificationsStatus) {
       if (!isPushSupported()) {
@@ -1342,27 +1667,53 @@
       ensureInitialPageView();
     } else if (state.cookieConsent !== "declined") {
       ensureCookieModal().classList.remove("hidden");
-    }
-    window.setTimeout(() => ensureFeedbackPrompt(), 1400);
+	    }
+	    window.setTimeout(() => ensureFeedbackPrompt(), 1400);
+	    bindPanelNavigation();
+	    ensureAssistantWidget(functions);
 
-	    document.addEventListener("click", (event) => {
-	      const target = event.target.closest("[data-analytics]");
-	      if (!target) return;
-	      logEvent(target.dataset.analytics, {
+		    document.addEventListener("click", (event) => {
+		      const target = event.target.closest("[data-analytics]");
+		      if (!target) return;
+		      logEvent(target.dataset.analytics, {
 	        label: target.dataset.label || target.textContent.trim(),
 	        page_path: window.location.pathname,
 	      });
 	    });
 
-	    document.addEventListener("click", (event) => {
-	      const social = event.target.closest(".social-link");
-	      if (!social) return;
-	      const href = social.getAttribute("href") || "";
-	      if (!href || href === "#") {
-	        event.preventDefault();
-	        showToast("Social links are coming soon.");
-	      }
-	    });
+		    document.addEventListener("click", (event) => {
+		      const social = event.target.closest(".social-link");
+		      if (!social) return;
+		      const href = social.getAttribute("href") || "";
+		      if (!href || href === "#") {
+		        event.preventDefault();
+		        showToast("Social links are coming soon.");
+		      }
+		    });
+
+		    const pickTicker = async (rawTicker) => {
+		      const ticker = normalizeTicker(rawTicker);
+		      if (!ticker) return;
+		      safeLocalStorageSet(LAST_TICKER_KEY, ticker);
+		      syncTickerInputs(ticker);
+
+		      // If we're in the studio, load the chart immediately. Otherwise, jump to the studio.
+		      if (window.location.pathname === "/forecasting" && ui.terminalForm && ui.terminalTicker) {
+		        ui.terminalTicker.value = ticker;
+		        ui.terminalForm.requestSubmit?.();
+		      } else {
+		        const params = new URLSearchParams();
+		        params.set("ticker", ticker);
+		        window.location.href = `/forecasting?${params.toString()}`;
+		      }
+		    };
+
+		    document.addEventListener("click", async (event) => {
+		      const button = event.target.closest('[data-action="pick-ticker"]');
+		      if (!button) return;
+		      event.preventDefault();
+		      await pickTicker(button.dataset.ticker || button.textContent);
+		    });
 
 	    document.addEventListener("click", async (event) => {
 	      const plotButton = event.target.closest('[data-action="plot-forecast"]');
@@ -1404,6 +1755,13 @@
 	    ui.headerAuth?.addEventListener("click", () => {
 	      const authSection = document.getElementById("auth");
 	      if (authSection) {
+	        if (window.location.pathname === "/dashboard") {
+	          try {
+	            window.location.hash = "auth";
+	          } catch (error) {
+	            // Ignore.
+	          }
+	        }
 	        authSection.scrollIntoView({ behavior: "smooth" });
 	      } else {
 	        window.location.href = "/dashboard#auth";
@@ -1423,11 +1781,12 @@
 	        renderWorkspaceSelect(state.user);
 	        return;
 	      }
-	      setActiveWorkspaceId(next);
-	      logEvent("workspace_switched", { workspace_id: next });
-	      startUserForecasts(db, next);
-	      showToast("Workspace updated.");
-	    });
+		      setActiveWorkspaceId(next);
+		      logEvent("workspace_switched", { workspace_id: next });
+		      startUserForecasts(db, next);
+		      startWorkspaceTasks(db, next);
+		      showToast("Workspace updated.");
+		    });
 
 	    ui.collabInviteForm?.addEventListener("submit", async (event) => {
 	      event.preventDefault();
@@ -1457,11 +1816,11 @@
 	      }
 	    });
 
-	    document.addEventListener("click", async (event) => {
-	      const acceptButton = event.target.closest('[data-action="accept-collab-invite"]');
-	      if (acceptButton) {
-	        const inviteId = acceptButton.dataset.inviteId;
-	        if (!inviteId) return;
+		    document.addEventListener("click", async (event) => {
+		      const acceptButton = event.target.closest('[data-action="accept-collab-invite"]');
+		      if (acceptButton) {
+		        const inviteId = acceptButton.dataset.inviteId;
+		        if (!inviteId) return;
 	        if (!state.user) {
 	          showToast("Sign in to accept invites.", "warn");
 	          return;
@@ -1500,12 +1859,178 @@
 	        showToast(error.message || "Unable to remove collaborator.", "warn");
 	      } finally {
 	        removeButton.disabled = false;
+		      }
+		    });
+
+	    ui.taskForm?.addEventListener("submit", async (event) => {
+	      event.preventDefault();
+	      if (!state.user) {
+	        showToast("Sign in to manage tasks.", "warn");
+	        return;
+	      }
+	      const workspaceId = state.activeWorkspaceId || state.user.uid;
+	      if (!canWriteWorkspace(workspaceId)) {
+	        showToast("Editor access required to create tasks.", "warn");
+	        return;
+	      }
+	      const title = String(ui.taskTitle?.value || "").trim();
+	      if (!title) {
+	        showToast("Enter a task title.", "warn");
+	        return;
+	      }
+	      const dueDate = String(ui.taskDue?.value || "").trim();
+	      const status = String(ui.taskStatus?.value || "backlog");
+	      const assigneeEmail = String(ui.taskAssignee?.value || "").trim();
+	      const notes = String(ui.taskNotes?.value || "").trim();
+	      if (ui.taskStatusText) ui.taskStatusText.textContent = "Saving...";
+
+	      try {
+	        await db
+	          .collection("users")
+	          .doc(workspaceId)
+	          .collection("tasks")
+	          .add({
+	            title,
+	            notes,
+	            status,
+	            dueDate: dueDate || null,
+	            assigneeEmail: assigneeEmail || "",
+	            createdBy: { uid: state.user.uid, email: state.user.email || "" },
+	            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+	            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+	            meta: buildMeta(),
+	          });
+	        if (ui.taskStatusText) ui.taskStatusText.textContent = "Task created.";
+	        if (ui.taskTitle) ui.taskTitle.value = "";
+	        if (ui.taskNotes) ui.taskNotes.value = "";
+	        showToast("Task created.");
+	        logEvent("task_created", { workspace_id: workspaceId });
+	      } catch (error) {
+	        if (ui.taskStatusText) ui.taskStatusText.textContent = error.message || "Unable to create task.";
+	        showToast(error.message || "Unable to create task.", "warn");
 	      }
 	    });
 
-    ui.headerSignOut?.addEventListener("click", async () => {
-      await unregisterCachedNotificationToken(functions);
-      await auth.signOut();
+	    document.addEventListener("click", async (event) => {
+	      const move = event.target.closest('[data-action="task-move"]');
+	      if (move) {
+	        if (!state.user) return;
+	        const workspaceId = state.activeWorkspaceId || state.user.uid;
+	        if (!canWriteWorkspace(workspaceId)) {
+	          showToast("Editor access required to move tasks.", "warn");
+	          return;
+	        }
+	        const taskId = move.dataset.taskId;
+	        const to = move.dataset.to;
+	        if (!taskId || !to) return;
+	        try {
+	          await db
+	            .collection("users")
+	            .doc(workspaceId)
+	            .collection("tasks")
+	            .doc(taskId)
+	            .set(
+	              {
+	                status: to,
+	                updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+	                movedBy: { uid: state.user.uid, email: state.user.email || "" },
+	              },
+	              { merge: true }
+	            );
+	          logEvent("task_moved", { to, workspace_id: workspaceId });
+	        } catch (error) {
+	          showToast(error.message || "Unable to move task.", "warn");
+	        }
+	        return;
+	      }
+
+	      const del = event.target.closest('[data-action="task-delete"]');
+	      if (!del) return;
+	      if (!state.user) return;
+	      const workspaceId = state.activeWorkspaceId || state.user.uid;
+	      if (!canWriteWorkspace(workspaceId)) {
+	        showToast("Editor access required to delete tasks.", "warn");
+	        return;
+	      }
+	      const taskId = del.dataset.taskId;
+	      if (!taskId) return;
+	      del.disabled = true;
+	      try {
+	        await db.collection("users").doc(workspaceId).collection("tasks").doc(taskId).delete();
+	        showToast("Task deleted.");
+	        logEvent("task_deleted", { workspace_id: workspaceId });
+	      } catch (error) {
+	        showToast(error.message || "Unable to delete task.", "warn");
+	      } finally {
+	        del.disabled = false;
+	      }
+	    });
+
+	    document.addEventListener("dragstart", (event) => {
+	      const card = event.target.closest(".task-card");
+	      if (!card) return;
+	      if (card.getAttribute("draggable") !== "true") return;
+	      const taskId = card.dataset.taskId;
+	      if (!taskId) return;
+	      event.dataTransfer?.setData("text/plain", taskId);
+	      event.dataTransfer?.setData("application/x-quantura-task", taskId);
+	      event.dataTransfer && (event.dataTransfer.effectAllowed = "move");
+	      card.classList.add("dragging");
+	    });
+
+	    document.addEventListener("dragend", (event) => {
+	      const card = event.target.closest(".task-card");
+	      card?.classList.remove("dragging");
+	      document.querySelectorAll(".kanban-col.drag-over").forEach((el) => el.classList.remove("drag-over"));
+	    });
+
+	    document.addEventListener("dragover", (event) => {
+	      const col = event.target.closest("[data-task-dropzone]");
+	      if (!col) return;
+	      event.preventDefault();
+	      col.classList.add("drag-over");
+	    });
+
+	    document.addEventListener("dragleave", (event) => {
+	      const col = event.target.closest("[data-task-dropzone]");
+	      if (!col) return;
+	      col.classList.remove("drag-over");
+	    });
+
+	    document.addEventListener("drop", async (event) => {
+	      const col = event.target.closest("[data-task-dropzone]");
+	      if (!col) return;
+	      event.preventDefault();
+	      col.classList.remove("drag-over");
+	      if (!state.user) return;
+	      const workspaceId = state.activeWorkspaceId || state.user.uid;
+	      if (!canWriteWorkspace(workspaceId)) return;
+	      const to = col.dataset.taskDropzone;
+	      const taskId = event.dataTransfer?.getData("application/x-quantura-task") || event.dataTransfer?.getData("text/plain");
+	      if (!taskId || !to) return;
+	      try {
+	        await db
+	          .collection("users")
+	          .doc(workspaceId)
+	          .collection("tasks")
+	          .doc(taskId)
+	          .set(
+	            {
+	              status: to,
+	              updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+	              movedBy: { uid: state.user.uid, email: state.user.email || "" },
+	            },
+	            { merge: true }
+	          );
+	        logEvent("task_drag_moved", { to, workspace_id: workspaceId });
+	      } catch (error) {
+	        showToast(error.message || "Unable to move task.", "warn");
+	      }
+	    });
+
+	    ui.headerSignOut?.addEventListener("click", async () => {
+	      await unregisterCachedNotificationToken(functions);
+	      await auth.signOut();
       showToast("Signed out.");
       logEvent("logout", { method: "firebase" });
     });
@@ -1725,12 +2250,16 @@
       }
     });
 
-    ui.forecastForm?.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const formData = new FormData(ui.forecastForm);
-      const quantiles = formData.getAll("quantiles").map((value) => Number(value));
-      const payload = {
-        ticker: formData.get("ticker"),
+	    ui.forecastForm?.addEventListener("submit", async (event) => {
+	      event.preventDefault();
+	      if (!state.user) {
+	        showToast("Sign in to run a forecast.", "warn");
+	        return;
+	      }
+	      const formData = new FormData(ui.forecastForm);
+	      const quantiles = formData.getAll("quantiles").map((value) => Number(value));
+	      const payload = {
+	        ticker: formData.get("ticker"),
         start: formData.get("start"),
         horizon: Number(formData.get("horizon")),
         interval: formData.get("interval"),
@@ -1738,12 +2267,13 @@
         quantiles,
         meta: buildMeta(),
         utm: getUtm(),
-      };
+	      };
 
-      try {
-        const runForecast = functions.httpsCallable("run_timeseries_forecast");
-        const result = await runForecast(payload);
-        const data = result.data || {};
+	      try {
+	        setOutputLoading(ui.forecastOutput, "Generating forecast...");
+	        const runForecast = functions.httpsCallable("run_timeseries_forecast");
+	        const result = await runForecast(payload);
+	        const data = result.data || {};
         const previewRows = Array.isArray(data.forecastPreview) ? data.forecastPreview.slice(0, 8) : [];
         const previewTable = previewRows.length
           ? `
@@ -1771,12 +2301,13 @@
             </table>
           `
           : "";
-        if (ui.forecastOutput) {
-          ui.forecastOutput.innerHTML = `
-            <div class="small"><strong>Request ID:</strong> ${data.requestId || "—"}</div>
-            <div class="small"><strong>Service:</strong> ${data.service || payload.service}</div>
-            <div class="small"><strong>Engine:</strong> ${data.engine || "—"}</div>
-            <div class="small"><strong>Message:</strong> ${data.serviceMessage || "—"}</div>
+	        if (ui.forecastOutput) {
+	          setOutputReady(ui.forecastOutput);
+	          ui.forecastOutput.innerHTML = `
+	            <div class="small"><strong>Request ID:</strong> ${data.requestId || "—"}</div>
+	            <div class="small"><strong>Service:</strong> ${data.service || payload.service}</div>
+	            <div class="small"><strong>Engine:</strong> ${data.engine || "—"}</div>
+	            <div class="small"><strong>Message:</strong> ${data.serviceMessage || "—"}</div>
             <div class="small"><strong>Last close:</strong> ${data.lastClose || "—"}</div>
             <div class="small"><strong>MAE (recent):</strong> ${data.mae || "—"}</div>
             <div class="small"><strong>Coverage P10–P90:</strong> ${data.coverage10_90 || "—"}</div>
@@ -1799,11 +2330,11 @@
       }
     });
 
-    ui.technicalsForm?.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const formData = new FormData(ui.technicalsForm);
-      const indicators = formData.getAll("indicators");
-      const includeSeries = Boolean(ui.indicatorChart || ui.tickerChart);
+	    ui.technicalsForm?.addEventListener("submit", async (event) => {
+	      event.preventDefault();
+	      const formData = new FormData(ui.technicalsForm);
+	      const indicators = formData.getAll("indicators");
+	      const includeSeries = Boolean(ui.indicatorChart || ui.tickerChart);
       const payload = {
         ticker: formData.get("ticker"),
         interval: formData.get("interval"),
@@ -1812,19 +2343,21 @@
         includeSeries,
         maxPoints: formData.get("interval") === "1h" ? 240 : 260,
         meta: buildMeta(),
-      };
+	      };
 
-      try {
-        const runIndicators = functions.httpsCallable("get_technicals");
-        const result = await runIndicators(payload);
-        const data = result.data || {};
-        const rows = data.latest || [];
-        if (ui.technicalsOutput) {
-          if (!rows.length) {
-            ui.technicalsOutput.textContent = "No indicator data returned.";
-          } else {
-            ui.technicalsOutput.innerHTML = `
-              <table class="data-table">
+	      try {
+	        setOutputLoading(ui.technicalsOutput, "Computing indicators...");
+	        const runIndicators = functions.httpsCallable("get_technicals");
+	        const result = await runIndicators(payload);
+	        const data = result.data || {};
+	        const rows = data.latest || [];
+	        if (ui.technicalsOutput) {
+	          setOutputReady(ui.technicalsOutput);
+	          if (!rows.length) {
+	            ui.technicalsOutput.textContent = "No indicator data returned.";
+	          } else {
+	            ui.technicalsOutput.innerHTML = `
+	              <table class="data-table">
                 <thead><tr><th>Indicator</th><th>Value</th></tr></thead>
                 <tbody>
                   ${rows.map((row) => `<tr><td>${row.name}</td><td>${row.value}</td></tr>`).join("")}
@@ -1886,117 +2419,193 @@
       }
     });
 
-    ui.trendingButton?.addEventListener("click", async () => {
-      try {
-        const getTrending = functions.httpsCallable("get_trending_tickers");
-        const result = await getTrending({ meta: buildMeta() });
-        const tickers = result.data?.tickers || [];
-        if (ui.trendingList) {
-          ui.trendingList.innerHTML = tickers.map((ticker) => `<div class="ticker-pill">${ticker}</div>`).join("");
-        }
-        logEvent("trending_loaded", { count: tickers.length });
-      } catch (error) {
-        showToast(error.message || "Unable to load trending tickers.", "warn");
-      }
-    });
+	    ui.trendingButton?.addEventListener("click", async () => {
+	      try {
+	        setOutputLoading(ui.trendingList, "Loading trending tickers...");
+	        const getTrending = functions.httpsCallable("get_trending_tickers");
+	        const result = await getTrending({ meta: buildMeta() });
+	        const tickers = result.data?.tickers || [];
+	        if (ui.trendingList) {
+	          setOutputReady(ui.trendingList);
+	          if (!tickers.length) {
+	            ui.trendingList.innerHTML = `<div class="small muted">No trending tickers returned.</div>`;
+	          } else {
+	            ui.trendingList.innerHTML = tickers
+	              .map(
+	                (ticker) =>
+	                  `<button class="ticker-pill" type="button" data-action="pick-ticker" data-ticker="${escapeHtml(
+	                    ticker
+	                  )}">${escapeHtml(ticker)}</button>`
+	              )
+	              .join("");
+	          }
+	        }
+	        logEvent("trending_loaded", { count: tickers.length });
+	      } catch (error) {
+	        showToast(error.message || "Unable to load trending tickers.", "warn");
+	      }
+	    });
 
-    ui.newsForm?.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const formData = new FormData(ui.newsForm);
-      const payload = {
-        ticker: formData.get("ticker"),
-      };
+	    ui.newsForm?.addEventListener("submit", async (event) => {
+	      event.preventDefault();
+	      const formData = new FormData(ui.newsForm);
+	      const payload = {
+	        ticker: formData.get("ticker"),
+	      };
 
-      try {
-        const getNews = functions.httpsCallable("get_ticker_news");
-        const result = await getNews(payload);
-        const items = result.data?.news || [];
-        if (ui.newsOutput) {
-          if (!items.length) {
-            ui.newsOutput.textContent = "No news returned.";
-          } else {
-            ui.newsOutput.innerHTML = items
-              .map(
-                (item) => `
-                  <div class="card" style="margin-bottom:12px;">
-                    <strong>${item.title}</strong>
-                    <div class="small">${item.publisher || ""} · ${formatEpoch(item.publishedAt)}</div>
-                    <a href="${item.link}" target="_blank" rel="noreferrer">Read article</a>
-                  </div>
-                `
-              )
-              .join("");
-          }
-        }
-        logEvent("news_loaded", { ticker: payload.ticker, count: items.length });
-      } catch (error) {
-        showToast(error.message || "Unable to fetch news.", "warn");
-      }
-    });
+	      try {
+	        setOutputLoading(ui.newsOutput, "Fetching headlines...");
+	        const getNews = functions.httpsCallable("get_ticker_news");
+	        const result = await getNews(payload);
+	        const items = result.data?.news || [];
+	        if (ui.newsOutput) {
+	          setOutputReady(ui.newsOutput);
+	          if (!items.length) {
+	            ui.newsOutput.innerHTML = `
+	              <div class="small muted">No news returned for ${escapeHtml(payload.ticker || "")}.</div>
+	              <div class="small" style="margin-top:10px;">Try a different symbol, or load a trending ticker and retry.</div>
+	            `;
+	          } else {
+	            ui.newsOutput.innerHTML = items
+	              .map((item) => {
+	                const title = escapeHtml(item.title || "");
+	                const publisher = escapeHtml(item.publisher || "");
+	                const published = formatEpoch(item.publishedAt);
+	                const summary = escapeHtml(item.summary || "");
+	                const link = item.link ? escapeHtml(item.link) : "";
+	                const meta = [publisher, published].filter(Boolean).join(" · ");
+	                return `
+	                  <article class="news-card">
+	                    <div class="news-title">${title}</div>
+	                    <div class="news-meta small">${meta}</div>
+	                    ${summary ? `<div class="news-summary small">${summary}</div>` : ""}
+	                    ${link ? `<a class="news-link" href="${link}" target="_blank" rel="noreferrer">Read article</a>` : ""}
+	                  </article>
+	                `;
+	              })
+	              .join("");
+	          }
+	        }
+	        logEvent("news_loaded", { ticker: payload.ticker, count: items.length });
+	      } catch (error) {
+	        showToast(error.message || "Unable to fetch news.", "warn");
+	      }
+	    });
 
-    ui.optionsForm?.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const formData = new FormData(ui.optionsForm);
-      const payload = {
-        ticker: formData.get("ticker"),
-        expiration: formData.get("expiration"),
-      };
+	    ui.optionsForm?.addEventListener("submit", async (event) => {
+	      event.preventDefault();
+	      if (!state.user) {
+	        showToast("Sign in to load options.", "warn");
+	        return;
+	      }
+	      const formData = new FormData(ui.optionsForm);
+	      const payload = {
+	        ticker: formData.get("ticker"),
+	        expiration: formData.get("expiration"),
+	      };
 
-      try {
-        const getOptions = functions.httpsCallable("alpaca_get_options");
-        const result = await getOptions(payload);
-        const items = result.data?.options || [];
-        if (ui.optionsOutput) {
-          if (!items.length) {
-            ui.optionsOutput.textContent = "No options returned.";
-          } else {
-            ui.optionsOutput.innerHTML = `
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>Symbol</th>
-                    <th>Type</th>
-                    <th>Strike</th>
-                    <th>Expiry</th>
-                    <th>Price</th>
-                    <th>Delta</th>
-                    <th>Implied Prob.</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${items
-                    .map(
-                      (opt) => `
-                        <tr>
-                          <td>${opt.symbol}</td>
-                          <td>${opt.type}</td>
-                          <td>${opt.strike}</td>
-                          <td>${opt.expiration}</td>
-                          <td>${opt.lastPrice}</td>
-                          <td>${opt.delta ?? "—"}</td>
-                          <td>${opt.impliedProbability ?? "—"}</td>
-                        </tr>
-                      `
-                    )
-                    .join("")}
-                </tbody>
-              </table>
-            `;
-          }
-        }
-        logEvent("options_loaded", { ticker: payload.ticker });
-      } catch (error) {
-        showToast(error.message || "Unable to load options.", "warn");
-      }
-    });
+	      try {
+	        setOutputLoading(ui.optionsOutput, "Loading options chain...");
+	        const getOptions = functions.httpsCallable("get_options_chain");
+	        const result = await getOptions({ ...payload, limit: 36, meta: buildMeta() });
+	        const data = result.data || {};
+	        const underlyingPrice = data.underlyingPrice;
+	        const selectedExpiration = data.selectedExpiration || payload.expiration || "";
+	        const expirations = data.expirations || [];
+	        const calls = data.calls || [];
+	        const puts = data.puts || [];
+	        if (ui.optionsOutput) {
+	          setOutputReady(ui.optionsOutput);
+	          if (!expirations.length) {
+	            ui.optionsOutput.innerHTML = `<div class="small muted">No options expirations returned for ${escapeHtml(payload.ticker || "")}.</div>`;
+	          } else {
+	            const fmt = (value, digits = 2) => {
+	              const num = typeof value === "number" ? value : Number(value);
+	              if (!Number.isFinite(num)) return "—";
+	              return num.toFixed(digits);
+	            };
+	            const money = (value) => {
+	              const num = typeof value === "number" ? value : Number(value);
+	              if (!Number.isFinite(num)) return "—";
+	              return `$${num.toFixed(2)}`;
+	            };
+	            const table = (rows, label) => {
+	              if (!Array.isArray(rows) || rows.length === 0) {
+	                return `<div class="small muted">No ${label.toLowerCase()} returned.</div>`;
+	              }
+	              return `
+	                <div class="table-wrap">
+	                  <table class="data-table">
+	                    <thead>
+	                      <tr>
+	                        <th>Strike</th>
+	                        <th>Last</th>
+	                        <th>Bid</th>
+	                        <th>Ask</th>
+	                        <th>IV</th>
+	                        <th>OI</th>
+	                        <th>Vol</th>
+	                        <th>Prob ITM</th>
+	                      </tr>
+	                    </thead>
+	                    <tbody>
+	                      ${rows
+	                        .map((opt) => {
+	                          const iv = opt.impliedVolatility ? `${fmt(opt.impliedVolatility, 3)}` : "—";
+	                          const prob = typeof opt.probabilityITM === "number" ? `${fmt(opt.probabilityITM, 2)}%` : "—";
+	                          const rowClass = opt.inTheMoney ? "row-itm" : "";
+	                          return `
+	                            <tr class="${rowClass}">
+	                              <td>${fmt(opt.strike, 2)}</td>
+	                              <td>${money(opt.lastPrice)}</td>
+	                              <td>${money(opt.bid)}</td>
+	                              <td>${money(opt.ask)}</td>
+	                              <td>${iv}</td>
+	                              <td>${Number(opt.openInterest || 0).toLocaleString()}</td>
+	                              <td>${Number(opt.volume || 0).toLocaleString()}</td>
+	                              <td>${prob}</td>
+	                            </tr>
+	                          `;
+	                        })
+	                        .join("")}
+	                    </tbody>
+	                  </table>
+	                </div>
+	              `;
+	            };
 
-    ui.screenerForm?.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      if (!state.user) {
-        showToast("Sign in to run the screener.", "warn");
-        return;
-      }
-      const formData = new FormData(ui.screenerForm);
+	            ui.optionsOutput.innerHTML = `
+	              <div class="options-meta">
+	                <div class="small"><strong>Underlying:</strong> ${money(underlyingPrice)}</div>
+	                <div class="small"><strong>Expiration:</strong> ${escapeHtml(selectedExpiration)}</div>
+	              </div>
+	              <details class="option-block" open>
+	                <summary>Calls</summary>
+	                ${table(calls, "Calls")}
+	              </details>
+	              <details class="option-block">
+	                <summary>Puts</summary>
+	                ${table(puts, "Puts")}
+	              </details>
+	              <div class="small muted" style="margin-top:10px;">
+	                Prob ITM is a risk-neutral estimate derived from implied volatility and time to expiry. It is not a guarantee.
+	              </div>
+	            `;
+	          }
+	        }
+	        logEvent("options_loaded", { ticker: payload.ticker });
+	      } catch (error) {
+	        showToast(error.message || "Unable to load options.", "warn");
+	      }
+	    });
+
+	    ui.screenerForm?.addEventListener("submit", async (event) => {
+	      event.preventDefault();
+	      if (!state.user) {
+	        showToast("Sign in to run the screener.", "warn");
+	        return;
+	      }
+	      const formData = new FormData(ui.screenerForm);
       const payload = {
         universe: formData.get("universe"),
         market: formData.get("market"),
@@ -2006,50 +2615,58 @@
         meta: buildMeta(),
       };
 
-      try {
-        if (ui.screenerOutput) ui.screenerOutput.textContent = "Running screener...";
-        const runScreener = functions.httpsCallable("run_quick_screener");
-        const result = await runScreener(payload);
-        const rows = result.data?.results || [];
-        if (ui.screenerOutput) {
-          if (!rows.length) {
-            ui.screenerOutput.textContent = `No results returned. Run ID: ${result.data?.runId || "—"}`;
-          } else {
-            ui.screenerOutput.innerHTML = `
-              <div class="small"><strong>Run ID:</strong> ${result.data?.runId || "—"}</div>
-              <table class="data-table" style="margin-top:12px;">
-                <thead>
-                  <tr>
-                    <th>Symbol</th>
-                    <th>Last close</th>
-                    <th>Return 1M (%)</th>
-                    <th>Return 3M (%)</th>
-                    <th>RSI 14</th>
-                    <th>Volatility</th>
-                    <th>Score</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${rows
-                    .map(
-                      (row) => `
-                        <tr>
-                          <td>${escapeHtml(row.symbol)}</td>
-                          <td>${row.lastClose ?? "—"}</td>
-                          <td>${row.return1m ?? "—"}</td>
-                          <td>${row.return3m ?? "—"}</td>
-                          <td>${row.rsi14 ?? "—"}</td>
-                          <td>${row.volatility ?? "—"}</td>
-                          <td>${row.score ?? "—"}</td>
-                        </tr>
-                      `
-                    )
-                    .join("")}
-                </tbody>
-              </table>
-            `;
-          }
-        }
+	      try {
+	        setOutputLoading(ui.screenerOutput, "Running screener...");
+	        const runScreener = functions.httpsCallable("run_quick_screener");
+	        const result = await runScreener(payload);
+	        const rows = result.data?.results || [];
+	        if (ui.screenerOutput) {
+	          setOutputReady(ui.screenerOutput);
+	          if (!rows.length) {
+	            ui.screenerOutput.innerHTML = `
+	              <div class="small muted">No results returned.</div>
+	              <div class="small" style="margin-top:10px;"><strong>Run ID:</strong> ${escapeHtml(result.data?.runId || "—")}</div>
+	            `;
+	          } else {
+	            ui.screenerOutput.innerHTML = `
+	              <div class="small"><strong>Run ID:</strong> ${result.data?.runId || "—"}</div>
+	              <table class="data-table" style="margin-top:12px;">
+	                <thead>
+	                  <tr>
+	                    <th>Symbol</th>
+	                    <th>Last close</th>
+	                    <th>Return 1M (%)</th>
+	                    <th>Return 3M (%)</th>
+	                    <th>RSI 14</th>
+	                    <th>Volatility</th>
+	                    <th>Score</th>
+	                  </tr>
+	                </thead>
+	                <tbody>
+	                  ${rows
+	                    .map(
+	                      (row) => `
+	                        <tr>
+	                          <td>
+	                            <button class="link-button" type="button" data-action="pick-ticker" data-ticker="${escapeHtml(row.symbol)}">
+	                              ${escapeHtml(row.symbol)}
+	                            </button>
+	                          </td>
+	                          <td>${row.lastClose ?? "—"}</td>
+	                          <td>${row.return1m ?? "—"}</td>
+	                          <td>${row.return3m ?? "—"}</td>
+	                          <td>${row.rsi14 ?? "—"}</td>
+	                          <td>${row.volatility ?? "—"}</td>
+	                          <td>${row.score ?? "—"}</td>
+	                        </tr>
+	                      `
+	                    )
+	                    .join("")}
+	                </tbody>
+	              </table>
+	            `;
+	          }
+	        }
         showToast("Screener run completed.");
         logEvent("screener_request", { universe: payload.universe });
       } catch (error) {
@@ -2321,10 +2938,11 @@
       }
     });
 
-	    auth.onAuthStateChanged(async (user) => {
-	      state.user = user;
-	      setAuthUi(user);
-	      setUserId(user?.uid || null);
+		    auth.onAuthStateChanged(async (user) => {
+		      state.authResolved = true;
+		      state.user = user;
+		      setAuthUi(user);
+		      setUserId(user?.uid || null);
 
 	      if (!user) {
 	        renderOrderList([], ui.userOrders);
@@ -2348,32 +2966,55 @@
         }
 	        if (state.unsubscribeOrders) state.unsubscribeOrders();
 	        if (state.unsubscribeAdmin) state.unsubscribeAdmin();
-	        if (state.unsubscribeForecasts) state.unsubscribeForecasts();
-	        if (state.unsubscribeAutopilot) state.unsubscribeAutopilot();
-	        if (state.unsubscribePredictions) state.unsubscribePredictions();
-	        if (state.unsubscribeAlpaca) state.unsubscribeAlpaca();
-	        if (state.unsubscribeSharedWorkspaces) state.unsubscribeSharedWorkspaces();
-	        state.sharedWorkspaces = [];
-	        setActiveWorkspaceId("");
-	        renderWorkspaceSelect(null);
-	        return;
-	      }
+		        if (state.unsubscribeForecasts) state.unsubscribeForecasts();
+		        if (state.unsubscribeAutopilot) state.unsubscribeAutopilot();
+		        if (state.unsubscribePredictions) state.unsubscribePredictions();
+		        if (state.unsubscribeAlpaca) state.unsubscribeAlpaca();
+		        if (state.unsubscribeTasks) state.unsubscribeTasks();
+		        if (state.unsubscribeSharedWorkspaces) state.unsubscribeSharedWorkspaces();
+		        state.sharedWorkspaces = [];
+		        setActiveWorkspaceId("");
+		        renderWorkspaceSelect(null);
+		        if (ui.productivityBoard) ui.productivityBoard.innerHTML = "";
+		        if (ui.tasksCalendar) ui.tasksCalendar.textContent = "Tasks with due dates will appear here.";
+		        if (window.location.pathname === "/dashboard") {
+		          try {
+		            if ((window.location.hash || "") !== "#auth") {
+		              window.location.hash = "auth";
+		            }
+		          } catch (error) {
+		            // Ignore.
+		          }
+		        }
+		        return;
+		      }
 
 	      await ensureUserProfile(db, user);
 	      startUserOrders(db, user);
 	      subscribeSharedWorkspaces(db, user);
-	      const activeWorkspaceId = resolveActiveWorkspaceId(user);
-	      setActiveWorkspaceId(activeWorkspaceId);
-	      renderWorkspaceSelect(user);
-	      startUserForecasts(db, activeWorkspaceId);
-	      startAutopilotRequests(db, user);
-	      startPredictionsUploads(db, user);
-	      startAlpacaOrders(db, user);
-	      refreshCollaboration(functions);
+		      const activeWorkspaceId = resolveActiveWorkspaceId(user);
+		      setActiveWorkspaceId(activeWorkspaceId);
+		      renderWorkspaceSelect(user);
+		      startUserForecasts(db, activeWorkspaceId);
+		      startWorkspaceTasks(db, activeWorkspaceId);
+		      startAutopilotRequests(db, user);
+		      startPredictionsUploads(db, user);
+		      startAlpacaOrders(db, user);
+		      refreshCollaboration(functions);
+		      if (window.location.pathname === "/dashboard") {
+		        const current = (window.location.hash || "").replace(/^#/, "");
+		        if (!current || current === "auth") {
+		          try {
+		            window.location.hash = "orders";
+		          } catch (error) {
+		            // Ignore.
+		          }
+		        }
+		      }
 
-      if (ui.notificationsStatus) {
-        if (messaging && isPushSupported()) {
-          setNotificationControlsEnabled(true);
+	      if (ui.notificationsStatus) {
+	        if (messaging && isPushSupported()) {
+	          setNotificationControlsEnabled(true);
           const cachedToken = localStorage.getItem(FCM_TOKEN_CACHE_KEY) || "";
           setNotificationTokenPreview(cachedToken);
           setNotificationStatus(cachedToken ? "Notifications enabled for this browser." : "Click Enable notifications.");

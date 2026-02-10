@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import math
 import os
 from statistics import NormalDist
 from typing import Any
@@ -39,7 +40,11 @@ HUGGINGFACEHUB_API_TOKEN = os.environ.get("HUGGINGFACEHUB_API_TOKEN", "").strip(
 
 SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL", "").strip()
 FCM_WEB_VAPID_KEY = os.environ.get("FCM_WEB_VAPID_KEY", "").strip()
+GOOGLE_GENAI_API_KEY = os.environ.get("GOOGLE_GENAI_API_KEY", "").strip()
+GOOGLE_GENAI_MODEL = os.environ.get("GOOGLE_GENAI_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash"
+RISK_FREE_RATE = float(os.environ.get("RISK_FREE_RATE", "0.045") or 0.045)
 TRENDING_URL = "https://query1.finance.yahoo.com/v1/finance/trending/US"
+YAHOO_SEARCH_URL = "https://query2.finance.yahoo.com/v1/finance/search"
 DEFAULT_FORECAST_PRICE = 349
 
 if not firebase_admin._apps:
@@ -50,6 +55,15 @@ if not firebase_admin._apps:
         firebase_admin.initialize_app()
 
 db = firestore.client()
+
+def _yahoo_headers() -> dict[str, str]:
+    # Yahoo endpoints frequently rate-limit requests without a browser-like UA.
+    return {
+        "User-Agent": "Mozilla/5.0 (Quantura; +https://quantura.ai)",
+        "Accept": "application/json,text/plain,*/*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Connection": "keep-alive",
+    }
 
 
 def _require_auth(req: https_fn.CallableRequest) -> dict[str, Any]:
@@ -980,14 +994,15 @@ def get_ticker_history(req: https_fn.CallableRequest) -> dict[str, Any]:
 @https_fn.on_call()
 def get_trending_tickers(req: https_fn.CallableRequest) -> dict[str, Any]:
     try:
-        response = requests.get(TRENDING_URL, timeout=10)
+        response = requests.get(TRENDING_URL, headers=_yahoo_headers(), timeout=10)
         response.raise_for_status()
         data = response.json()
         quotes = data.get("finance", {}).get("result", [{}])[0].get("quotes", [])
         tickers = [item.get("symbol") for item in quotes if item.get("symbol")]
         return {"tickers": tickers}
     except Exception:
-        return {"tickers": []}
+        # Keep the UI functional even when Yahoo throttles.
+        return {"tickers": ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "TSLA", "META"]}
 
 
 @https_fn.on_call()
@@ -997,22 +1012,263 @@ def get_ticker_news(req: https_fn.CallableRequest) -> dict[str, Any]:
     if not ticker:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Ticker is required.")
 
-    news_items = []
+    def _append_item(item: dict[str, Any]) -> None:
+        title = str(item.get("title") or "").strip()
+        link = str(item.get("link") or item.get("url") or "").strip()
+        if not title:
+            return
+        news_items.append(
+            {
+                "title": title,
+                "publisher": str(item.get("publisher") or item.get("source") or "").strip(),
+                "link": link,
+                "publishedAt": item.get("publishedAt") or item.get("providerPublishTime"),
+                "summary": str(item.get("summary") or "").strip(),
+            }
+        )
+
+    news_items: list[dict[str, Any]] = []
+    # 1) Prefer Yahoo search news (more reliable than yfinance .news)
     try:
-        ticker_obj = yf.Ticker(ticker)
-        for item in ticker_obj.news[:10]:
-            news_items.append(
-                {
-                    "title": item.get("title"),
-                    "publisher": item.get("publisher"),
-                    "link": item.get("link"),
-                    "publishedAt": item.get("providerPublishTime"),
-                }
-            )
+        resp = requests.get(
+            YAHOO_SEARCH_URL,
+            headers=_yahoo_headers(),
+            params={"q": ticker, "newsCount": 12, "quotesCount": 0, "listsCount": 0},
+            timeout=10,
+        )
+        if resp.status_code < 400:
+            payload = resp.json() if resp.text else {}
+            for item in (payload.get("news") or [])[:12]:
+                if isinstance(item, dict):
+                    _append_item(item)
     except Exception:
         pass
 
+    # 2) Fallback: yfinance news
+    if not news_items:
+        try:
+            ticker_obj = yf.Ticker(ticker)
+            for item in (ticker_obj.news or [])[:10]:
+                if not isinstance(item, dict):
+                    continue
+                _append_item(item)
+        except Exception:
+            pass
+
+    # 3) Optional: RSS fallback (lightweight parse)
+    if not news_items:
+        try:
+            import xml.etree.ElementTree as ET
+
+            rss_url = f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={ticker}&region=US&lang=en-US"
+            rss = requests.get(rss_url, headers=_yahoo_headers(), timeout=10)
+            if rss.status_code < 400 and rss.text:
+                root = ET.fromstring(rss.text)
+                for item in root.findall(".//item")[:10]:
+                    title = (item.findtext("title") or "").strip()
+                    link = (item.findtext("link") or "").strip()
+                    pub_date = (item.findtext("pubDate") or "").strip()
+                    if title:
+                        news_items.append(
+                            {
+                                "title": title,
+                                "publisher": "Yahoo Finance",
+                                "link": link,
+                                "publishedAt": pub_date,
+                                "summary": "",
+                            }
+                        )
+        except Exception:
+            pass
+
     return {"news": news_items}
+
+
+@https_fn.on_call()
+def get_options_chain(req: https_fn.CallableRequest) -> dict[str, Any]:
+    _require_auth(req)
+    data = req.data or {}
+    ticker = str(data.get("ticker") or "").upper().strip()
+    expiration = str(data.get("expiration") or "").strip()
+    limit = int(data.get("limit") or 24)
+    limit = max(10, min(limit, 200))
+    if not ticker:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Ticker is required.")
+
+    ticker_obj = yf.Ticker(ticker)
+    expirations = []
+    try:
+        expirations = list(ticker_obj.options or [])
+    except Exception:
+        expirations = []
+
+    if not expirations:
+        return {"ticker": ticker, "underlyingPrice": None, "expirations": [], "selectedExpiration": "", "calls": [], "puts": []}
+
+    selected = expiration if expiration in expirations else expirations[0]
+
+    underlying_price = None
+    try:
+        fast_info = getattr(ticker_obj, "fast_info", None) or {}
+        underlying_price = _safe_float(fast_info.get("last_price") or fast_info.get("lastPrice"))
+    except Exception:
+        underlying_price = None
+    if underlying_price is None:
+        try:
+            hist = ticker_obj.history(period="5d", interval="1d")
+            if not hist.empty and "Close" in hist.columns:
+                underlying_price = float(hist["Close"].dropna().iloc[-1])
+        except Exception:
+            underlying_price = None
+
+    # Time to expiry in years (approx). If we cannot parse, probabilities will be null.
+    T = None
+    try:
+        from datetime import datetime, timezone
+
+        exp_dt = datetime.strptime(selected, "%Y-%m-%d").date()
+        today = datetime.now(tz=timezone.utc).date()
+        days = max((exp_dt - today).days, 0)
+        T = days / 365.0
+    except Exception:
+        T = None
+
+    normal = NormalDist()
+
+    def _prob_itm(strike: float | None, iv: float | None, is_call: bool) -> float | None:
+        if underlying_price is None or T is None or T <= 0:
+            return None
+        if strike is None or strike <= 0:
+            return None
+        if iv is None or iv <= 0:
+            return None
+        S = float(underlying_price)
+        K = float(strike)
+        sigma = float(iv)
+        denom = sigma * math.sqrt(T)
+        if denom <= 0:
+            return None
+        d2 = (math.log(S / K) + (RISK_FREE_RATE - 0.5 * sigma * sigma) * T) / denom
+        p_call = normal.cdf(d2)
+        return p_call if is_call else normal.cdf(-d2)
+
+    def _format_chain(df: pd.DataFrame, opt_type: str) -> list[dict[str, Any]]:
+        if df is None or df.empty:
+            return []
+        frame = df.copy()
+        for col in ["openInterest", "volume"]:
+            if col in frame.columns:
+                frame[col] = pd.to_numeric(frame[col], errors="coerce").fillna(0)
+        sort_col = "openInterest" if "openInterest" in frame.columns else ("volume" if "volume" in frame.columns else None)
+        if sort_col:
+            frame = frame.sort_values(by=sort_col, ascending=False)
+        frame = frame.head(limit)
+
+        items: list[dict[str, Any]] = []
+        for _, row in frame.iterrows():
+            strike = _safe_float(row.get("strike"))
+            iv = _safe_float(row.get("impliedVolatility"))
+            p_itm = _prob_itm(strike, iv, is_call=(opt_type == "call"))
+            items.append(
+                {
+                    "contractSymbol": row.get("contractSymbol"),
+                    "type": opt_type,
+                    "strike": strike,
+                    "lastPrice": _safe_float(row.get("lastPrice")),
+                    "bid": _safe_float(row.get("bid")),
+                    "ask": _safe_float(row.get("ask")),
+                    "impliedVolatility": None if iv is None else round(iv, 4),
+                    "volume": int(row.get("volume") or 0),
+                    "openInterest": int(row.get("openInterest") or 0),
+                    "inTheMoney": bool(row.get("inTheMoney")) if "inTheMoney" in row else None,
+                    "probabilityITM": None if p_itm is None else round(p_itm * 100.0, 2),
+                }
+            )
+        return items
+
+    try:
+        chain = ticker_obj.option_chain(selected)
+        calls = _format_chain(chain.calls, "call")
+        puts = _format_chain(chain.puts, "put")
+    except Exception:
+        calls = []
+        puts = []
+
+    return {
+        "ticker": ticker,
+        "underlyingPrice": underlying_price,
+        "expirations": expirations,
+        "selectedExpiration": selected,
+        "calls": _serialize_for_firestore(calls),
+        "puts": _serialize_for_firestore(puts),
+    }
+
+
+@https_fn.on_call()
+def assistant_chat(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    if not GOOGLE_GENAI_API_KEY:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "GOOGLE_GENAI_API_KEY is not configured.",
+        )
+
+    data = req.data or {}
+    message = str(data.get("message") or "").strip()
+    if not message:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Message is required.")
+
+    ticker = str(data.get("ticker") or "").upper().strip()
+    page = str(data.get("page") or "").strip()
+    meta = data.get("meta") if isinstance(data.get("meta"), dict) else {}
+
+    # Keep responses useful and aligned with the product.
+    system = (
+        "You are Quantura Assistant, embedded in a finance and forecasting product. "
+        "Be concise and actionable. When discussing tickers, avoid hype and provide caveats. "
+        "You can suggest which Quantura panels to use next (Forecasting, Indicators, News, Options, Screener)."
+    )
+    prompt = f"{system}\n\nContext:\n- page: {page or 'unknown'}\n- ticker: {ticker or 'n/a'}\n\nUser:\n{message}"
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GOOGLE_GENAI_MODEL}:generateContent"
+    payload = {
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.35, "maxOutputTokens": 512},
+    }
+    try:
+        resp = requests.post(url, params={"key": GOOGLE_GENAI_API_KEY}, json=payload, timeout=30)
+        if resp.status_code >= 400:
+            raise RuntimeError(f"Gemini request failed ({resp.status_code}).")
+        body = resp.json() if resp.text else {}
+        text = ""
+        candidates = body.get("candidates") or []
+        if candidates and isinstance(candidates[0], dict):
+            parts = (candidates[0].get("content") or {}).get("parts") or []
+            if parts and isinstance(parts[0], dict):
+                text = str(parts[0].get("text") or "").strip()
+        if not text:
+            text = "I could not generate a response right now. Please try again."
+    except Exception as exc:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INTERNAL,
+            f"Assistant request failed: {exc}",
+        )
+
+    doc_ref = db.collection("assistant_chats").document(req.auth.uid).collection("messages").document()
+    doc_ref.set(
+        {
+            "userId": req.auth.uid,
+            "userEmail": token.get("email"),
+            "ticker": ticker,
+            "page": page,
+            "message": message,
+            "response": text,
+            "meta": meta,
+            "createdAt": firestore.SERVER_TIMESTAMP,
+        }
+    )
+    _audit_event(req.auth.uid, token.get("email"), "assistant_chat", {"messageId": doc_ref.id, "ticker": ticker, "page": page})
+    return {"messageId": doc_ref.id, "text": text}
 
 
 @https_fn.on_call()
@@ -1153,13 +1409,13 @@ def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
 
     trending: list[str] = []
     try:
-        response = requests.get(TRENDING_URL, timeout=10)
+        response = requests.get(TRENDING_URL, headers=_yahoo_headers(), timeout=10)
         response.raise_for_status()
         payload = response.json()
         quotes = payload.get("finance", {}).get("result", [{}])[0].get("quotes", [])
         trending = [str(item.get("symbol") or "").upper() for item in quotes if item.get("symbol")]
     except Exception:
-        trending = []
+        trending = ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "TSLA", "META"]
 
     tickers = [t for t in trending if t][: max(10, min(len(trending), max_names * 2))]
     results: list[dict[str, Any]] = []

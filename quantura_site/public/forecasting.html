@@ -32,7 +32,9 @@
   <body>
     <header class="header">
       <div class="container nav">
-        <a class="logo" href="/">QUANTURA</a>
+        <a class="logo" href="/" aria-label="Quantura home">
+          <img class="logo-img" src="/assets/quantura-logo.svg" alt="Quantura logo" />
+        </a>
         <nav class="nav-links">
           <a href="/forecasting" data-analytics="nav_forecasting">Forecasting</a>
           <a href="/screener" data-analytics="nav_screener">Screener</a>
@@ -62,13 +64,14 @@
             <a class="cta secondary small" href="/dashboard">Open dashboard</a>
             <a class="cta secondary small hidden" id="nav-admin" href="/admin">Admin dashboard</a>
           </div>
-          <nav class="sidebar-nav">
-            <a href="#terminal">Ticker terminal</a>
-            <a href="#forecast">Forecast</a>
-            <a href="#indicators">Indicators</a>
-            <a href="#ticker-intel">News and data</a>
-            <a href="#options">Options</a>
-            <a href="#saved-forecasts">Saved forecasts</a>
+          <nav class="sidebar-nav" aria-label="Forecasting navigation">
+            <button class="sidebar-link active" type="button" data-panel-target="forecast">Forecast</button>
+            <button class="sidebar-link" type="button" data-panel-target="indicators">Indicators</button>
+            <button class="sidebar-link" type="button" data-panel-target="news">News and data</button>
+            <button class="sidebar-link" type="button" data-panel-target="options">Options</button>
+            <button class="sidebar-link" type="button" data-panel-target="screener">Screener</button>
+            <button class="sidebar-link" type="button" data-panel-target="saved">Saved forecasts</button>
+            <button class="sidebar-link" type="button" data-panel-target="learn">Learn more</button>
           </nav>
         </aside>
 
@@ -76,270 +79,351 @@
           <section class="page-hero">
             <div class="container content-grid">
               <div>
-                <div class="eyebrow">Ticker Terminal</div>
-                <h1>Research a ticker like a pro: interactive chart, forecasts, indicators, news, and options in one place.</h1>
+                <div class="eyebrow">Forecasting studio</div>
+                <h1>Everything on one screen: ticker dock, interactive chart, and a right-side intelligence panel.</h1>
                 <p>
-                  Quantura stores every forecast in Firestore so you can pull it back and plot quantile bands on demand.
-                  Run Prophet or IBM TinyTimeMixer forecasting, toggle technical indicators, and keep your workflow tight.
+                  Select a ticker once and Quantura drives forecasts, indicator overlays, news, options, and screener results from the same context.
+                  Saved runs live in Firestore so you can re-plot quantile bands instantly.
                 </p>
-                <div class="hero-actions">
-                  <a class="cta" href="#terminal" data-analytics="terminal_jump">Open terminal</a>
-                  <a class="cta secondary" href="#saved-forecasts" data-analytics="saved_forecasts_jump">Saved forecasts</a>
-                </div>
               </div>
               <div class="card">
-                <h3>What’s inside</h3>
+                <h3>Workflow</h3>
                 <div class="feature-list">
-                  <div class="feature"><span></span>Interactive Plotly candlestick chart</div>
-                  <div class="feature"><span></span>Prophet and IBM TinyTimeMixer forecasting</div>
-                  <div class="feature"><span></span>P10–P90 and P25–P75 bands</div>
-                  <div class="feature"><span></span>Indicator charts + price overlays</div>
-                  <div class="feature"><span></span>Saved runs you can re-plot anytime</div>
+                  <div class="feature"><span></span>Sticky ticker dock (no scrolling back to the top)</div>
+                  <div class="feature"><span></span>One chart reused across every panel</div>
+                  <div class="feature"><span></span>Saved forecasts and indicator stacks</div>
                 </div>
               </div>
             </div>
           </section>
 
-          <section class="section" id="terminal">
+          <section class="section studio-section" id="terminal">
             <div class="container">
-              <div class="section-title">
-                <h2>Ticker terminal</h2>
-                <p class="small">Load a ticker to drive every panel below. Forecasts and indicators can be overlaid on the chart.</p>
-              </div>
-              <div class="terminal-grid">
-                <form id="terminal-form" class="card">
-                  <div class="field">
-                    <label class="label" for="terminal-ticker">Ticker</label>
-                    <input id="terminal-ticker" placeholder="AAPL" required />
+              <div class="studio-layout" data-panels>
+                <div class="studio-primary">
+                  <div class="ticker-dock card">
+                    <form id="terminal-form" class="ticker-dock-form">
+                      <div class="field">
+                        <label class="label" for="terminal-ticker">Ticker</label>
+                        <input id="terminal-ticker" placeholder="AAPL" required />
+                      </div>
+                      <div class="field">
+                        <label class="label" for="terminal-interval">Timeframe</label>
+                        <select id="terminal-interval">
+                          <option value="1d">Daily</option>
+                          <option value="1h">Hourly</option>
+                        </select>
+                      </div>
+                      <button class="cta" type="submit" data-analytics="terminal_load">Load chart</button>
+                      <p class="small" id="terminal-status"></p>
+                    </form>
+                    <div class="small ticker-hint">
+                      Tip: pick a panel on the left, then click any ticker in results to update the chart immediately.
+                    </div>
                   </div>
-                  <div class="field">
-                    <label class="label" for="terminal-interval">Timeframe</label>
-                    <select id="terminal-interval">
-                      <option value="1d">Daily</option>
-                      <option value="1h">Hourly</option>
-                    </select>
-                  </div>
-                  <button class="cta" type="submit" data-analytics="terminal_load">Load chart</button>
-                  <p class="small" id="terminal-status"></p>
-                  <div class="notice">
-                    Tip: run a forecast or indicators, then use “Plot on chart” in Saved forecasts.
-                  </div>
-                </form>
 
-                <div class="chart-shell">
-                  <div id="ticker-chart" class="chart"></div>
-                  <div id="indicator-chart" class="chart"></div>
+                  <div class="chart-shell studio-chart">
+                    <div id="ticker-chart" class="chart"></div>
+                    <div id="indicator-chart" class="chart"></div>
+                  </div>
+                </div>
+
+                <div class="studio-panel">
+                  <section class="panel" data-panel="forecast">
+                    <div class="panel-header">
+                      <h2>Forecast</h2>
+                      <p class="small">Generate quantile bands and store the run in Firestore for later re-plotting.</p>
+                    </div>
+                    <form id="forecast-form" class="card">
+                      <div class="form-grid">
+                        <div class="field">
+                          <label class="label" for="forecast-ticker">Ticker</label>
+                          <input id="forecast-ticker" name="ticker" placeholder="AAPL" required />
+                        </div>
+                        <div class="field">
+                          <label class="label" for="forecast-start">Start date</label>
+                          <input id="forecast-start" name="start" type="date" />
+                        </div>
+                        <div class="field">
+                          <label class="label" for="forecast-horizon">Forecast length (days)</label>
+                          <input id="forecast-horizon" name="horizon" type="number" min="5" max="365" value="90" />
+                        </div>
+                        <div class="field">
+                          <label class="label" for="forecast-interval">Timeframe</label>
+                          <select id="forecast-interval" name="interval">
+                            <option value="1d">Daily</option>
+                            <option value="1h">Hourly</option>
+                          </select>
+                        </div>
+                        <div class="field">
+                          <label class="label" for="forecast-service">Forecast service</label>
+                          <select id="forecast-service" name="service">
+                            <option value="prophet">Prophet</option>
+                            <option value="ibm_timemixer">IBM TinyTimeMixer</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div class="field">
+                        <label class="label">Quantile bands</label>
+                        <div class="checkbox-grid">
+                          <label><input type="checkbox" name="quantiles" value="0.10" checked /> P10</label>
+                          <label><input type="checkbox" name="quantiles" value="0.25" checked /> P25</label>
+                          <label><input type="checkbox" name="quantiles" value="0.50" checked /> P50</label>
+                          <label><input type="checkbox" name="quantiles" value="0.75" checked /> P75</label>
+                          <label><input type="checkbox" name="quantiles" value="0.90" checked /> P90</label>
+                        </div>
+                      </div>
+                      <button class="cta" type="submit" data-analytics="forecast_submit">Generate forecast</button>
+                      <details class="learn-more">
+                        <summary>Learn more</summary>
+                        <p class="small">
+                          Quantura stores the full forecast rows (quantiles per timestamp) and lets you re-plot them onto the chart from Saved forecasts.
+                          Use “IBM TinyTimeMixer” when you want a fast foundation-model style forecast, then compare against Prophet.
+                        </p>
+                      </details>
+                    </form>
+                    <div class="results-panel">
+                      <h3>Forecast output</h3>
+                      <div id="forecast-output" class="panel-output small">Run a forecast to see model summary and preview rows.</div>
+                    </div>
+                  </section>
+
+                  <section class="panel hidden" data-panel="indicators">
+                    <div class="panel-header">
+                      <h2>Indicators</h2>
+                      <p class="small">Toggle indicator stacks. Overlays (SMA/EMA/Bollinger) render on the price chart; full series plot below.</p>
+                    </div>
+                    <form id="technicals-form" class="card">
+                      <div class="form-grid">
+                        <div class="field">
+                          <label class="label" for="technicals-ticker">Ticker</label>
+                          <input id="technicals-ticker" name="ticker" placeholder="MSFT" required />
+                        </div>
+                        <div class="field">
+                          <label class="label" for="technicals-interval">Interval</label>
+                          <select id="technicals-interval" name="interval">
+                            <option value="1d">Daily</option>
+                            <option value="1h">Hourly</option>
+                          </select>
+                        </div>
+                        <div class="field">
+                          <label class="label" for="technicals-lookback">Lookback (days)</label>
+                          <input id="technicals-lookback" name="lookback" type="number" min="30" max="365" value="120" />
+                        </div>
+                      </div>
+                      <div class="field">
+                        <label class="label">Indicators</label>
+                        <div class="checkbox-grid">
+                          <label><input type="checkbox" name="indicators" value="RSI" checked /> RSI</label>
+                          <label><input type="checkbox" name="indicators" value="MACD" checked /> MACD</label>
+                          <label><input type="checkbox" name="indicators" value="SMA" /> SMA</label>
+                          <label><input type="checkbox" name="indicators" value="EMA" /> EMA</label>
+                          <label><input type="checkbox" name="indicators" value="BBANDS" /> Bollinger</label>
+                          <label><input type="checkbox" name="indicators" value="ATR" /> ATR</label>
+                          <label><input type="checkbox" name="indicators" value="ADX" /> ADX</label>
+                          <label><input type="checkbox" name="indicators" value="CCI" /> CCI</label>
+                          <label><input type="checkbox" name="indicators" value="MFI" /> MFI</label>
+                          <label><input type="checkbox" name="indicators" value="OBV" /> OBV</label>
+                          <label><input type="checkbox" name="indicators" value="ROC" /> ROC</label>
+                          <label><input type="checkbox" name="indicators" value="STOCH" /> Stochastic</label>
+                          <label><input type="checkbox" name="indicators" value="WILLR" /> Williams %R</label>
+                        </div>
+                      </div>
+                      <button class="cta" type="submit" data-analytics="technicals_submit">Run indicators</button>
+                      <details class="learn-more">
+                        <summary>Learn more</summary>
+                        <p class="small">
+                          Start with RSI + MACD to spot momentum and regime shifts. Add SMA/EMA overlays for trend confirmation and Bollinger bands for volatility context.
+                        </p>
+                      </details>
+                    </form>
+                    <div class="results-panel">
+                      <h3>Indicator output</h3>
+                      <div id="technicals-output" class="panel-output small">Select indicators to see the latest values.</div>
+                    </div>
+                  </section>
+
+                  <section class="panel hidden" data-panel="news">
+                    <div class="panel-header">
+                      <h2>News and data</h2>
+                      <p class="small">Trending tickers are clickable. News uses Yahoo search fallback to avoid empty responses.</p>
+                    </div>
+                    <div class="content-grid">
+                      <form id="download-form" class="card">
+                        <h3>Download price history</h3>
+                        <div class="form-grid">
+                          <div class="field">
+                            <label class="label" for="download-ticker">Ticker</label>
+                            <input id="download-ticker" name="ticker" placeholder="NVDA" required />
+                          </div>
+                          <div class="field">
+                            <label class="label" for="download-interval">Interval</label>
+                            <select id="download-interval" name="interval">
+                              <option value="1d">Daily</option>
+                              <option value="1h">Hourly</option>
+                            </select>
+                          </div>
+                          <div class="field">
+                            <label class="label" for="download-start">Start date</label>
+                            <input id="download-start" name="start" type="date" />
+                          </div>
+                          <div class="field">
+                            <label class="label" for="download-end">End date</label>
+                            <input id="download-end" name="end" type="date" />
+                          </div>
+                        </div>
+                        <button class="cta" type="submit" data-analytics="download_prices">Download CSV</button>
+                        <p class="small" id="download-status"></p>
+                      </form>
+                      <div class="card">
+                        <h3>Trending tickers</h3>
+                        <p class="small">Load and click a ticker to drive the chart and every panel.</p>
+                        <button class="cta secondary" id="load-trending" type="button" data-analytics="load_trending">Load trending</button>
+                        <div id="trending-list" class="ticker-grid" style="margin-top: 16px;"></div>
+                      </div>
+                    </div>
+                    <div class="content-grid" style="margin-top: 16px;">
+                      <form id="news-form" class="card">
+                        <h3>Latest ticker news</h3>
+                        <div class="field">
+                          <label class="label" for="news-ticker">Ticker</label>
+                          <input id="news-ticker" name="ticker" placeholder="TSLA" required />
+                        </div>
+                        <button class="cta" type="submit" data-analytics="news_submit">Fetch news</button>
+                        <details class="learn-more">
+                          <summary>Learn more</summary>
+                          <p class="small">
+                            Use the News panel to validate that a move is driven by fundamentals rather than pure technical momentum.
+                            Pair with the Indicators panel to confirm whether sentiment and price agree.
+                          </p>
+                        </details>
+                      </form>
+                      <div class="results-panel">
+                        <h3>News feed</h3>
+                        <div id="news-output" class="panel-output small">Latest headlines will appear here.</div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="panel hidden" data-panel="options">
+                    <div class="panel-header">
+                      <h2>Options</h2>
+                      <p class="small">Pull an options chain and estimate probability of expiring in the money (risk-neutral approximation).</p>
+                    </div>
+                    <form id="options-form" class="card">
+                      <div class="form-grid">
+                        <div class="field">
+                          <label class="label" for="options-ticker">Underlying ticker</label>
+                          <input id="options-ticker" name="ticker" placeholder="AAPL" required />
+                        </div>
+                        <div class="field">
+                          <label class="label" for="options-expiration">Expiration (optional)</label>
+                          <input id="options-expiration" name="expiration" type="date" />
+                        </div>
+                      </div>
+                      <button class="cta" type="submit" data-analytics="options_submit">Load options</button>
+                      <details class="learn-more">
+                        <summary>Learn more</summary>
+                        <p class="small">
+                          Probability is estimated from implied volatility and is not a guarantee.
+                          Use this as a rough sizing input, not a promise of outcomes.
+                        </p>
+                      </details>
+                    </form>
+                    <div class="results-panel">
+                      <h3>Options chain</h3>
+                      <div id="options-output" class="panel-output small">Calls and puts will appear here.</div>
+                    </div>
+                  </section>
+
+                  <section class="panel hidden" data-panel="screener">
+                    <div class="panel-header">
+                      <h2>Screener</h2>
+                      <p class="small">Run a quick screen against trending tickers and click any result to load it in the chart.</p>
+                    </div>
+                    <form id="screener-form" class="card">
+                      <div class="form-grid">
+                        <div class="field">
+                          <label class="label" for="screener-universe">Universe</label>
+                          <select id="screener-universe" name="universe">
+                            <option value="trending">Trending</option>
+                            <option value="large-cap">Large Cap</option>
+                            <option value="mid-cap">Mid Cap</option>
+                            <option value="small-cap">Small Cap</option>
+                          </select>
+                        </div>
+                        <div class="field">
+                          <label class="label" for="screener-market">Market</label>
+                          <select id="screener-market" name="market">
+                            <option value="us">US</option>
+                            <option value="global">Global</option>
+                          </select>
+                        </div>
+                        <div class="field">
+                          <label class="label" for="screener-min">Minimum market cap ($B)</label>
+                          <input id="screener-min" name="minCap" type="number" value="5" />
+                        </div>
+                        <div class="field">
+                          <label class="label" for="screener-max">Max names</label>
+                          <input id="screener-max" name="maxNames" type="number" value="25" />
+                        </div>
+                      </div>
+                      <div class="field">
+                        <label class="label" for="screener-notes">Notes</label>
+                        <textarea id="screener-notes" name="notes" placeholder="Optional focus, exclusions, or themes"></textarea>
+                      </div>
+                      <button class="cta" type="submit" data-analytics="screener_submit">Run screener</button>
+                      <details class="learn-more">
+                        <summary>Learn more</summary>
+                        <p class="small">
+                          Use the Screener panel for discovery, then jump to Indicators and Forecast to build a thesis.
+                          Quantura stores runs in Firestore for week-over-week comparison.
+                        </p>
+                      </details>
+                    </form>
+                    <div class="results-panel">
+                      <h3>Screener output</h3>
+                      <div id="screener-output" class="panel-output small">Run the screener to see ranked candidates.</div>
+                    </div>
+                  </section>
+
+                  <section class="panel hidden" data-panel="saved">
+                    <div class="panel-header">
+                      <h2>Saved forecasts</h2>
+                      <p class="small">Plot any saved run onto the chart without leaving this page.</p>
+                    </div>
+                    <div id="saved-forecasts-list" class="order-list panel-output"></div>
+                    <details class="learn-more">
+                      <summary>Learn more</summary>
+                      <p class="small">
+                        Saved forecasts are linked to your active workspace. Use the Dashboard collaboration panel to invite teammates and share this workspace.
+                      </p>
+                    </details>
+                  </section>
+
+                  <section class="panel hidden" data-panel="learn">
+                    <div class="panel-header">
+                      <h2>Learn more</h2>
+                      <p class="small">Short docs for each feature, with recommended next steps.</p>
+                    </div>
+                    <div class="card">
+                      <h3>Recommended flow</h3>
+                      <ol class="small">
+                        <li>Load a ticker in the dock to populate the chart.</li>
+                        <li>Run Indicators to understand trend, momentum, and volatility.</li>
+                        <li>Run a Forecast and compare services, then re-plot saved runs.</li>
+                        <li>Use News to validate narrative and Options to inspect market positioning.</li>
+                        <li>Use Screener for discovery and build a watchlist of candidates.</li>
+                      </ol>
+                      <div class="notice" style="margin-top: 16px;">
+                        Want inspiration? Visit the <a href="/blog">Quantura blog</a> for weekly briefs and workflow patterns.
+                      </div>
+                    </div>
+                  </section>
                 </div>
               </div>
             </div>
           </section>
-
-      <section class="section" id="forecast">
-        <div class="container">
-          <div class="section-title">
-            <h2>Run a forecast</h2>
-            <p class="small">Choose your horizon, quantiles, and timeframe. Results are stored in your dashboard.</p>
-          </div>
-          <div class="content-grid">
-            <form id="forecast-form" class="card">
-              <div class="form-grid">
-                <div class="field">
-                  <label class="label" for="forecast-ticker">Ticker</label>
-                  <input id="forecast-ticker" name="ticker" placeholder="AAPL" required />
-                </div>
-                <div class="field">
-                  <label class="label" for="forecast-start">Start date</label>
-                  <input id="forecast-start" name="start" type="date" />
-                </div>
-                <div class="field">
-                  <label class="label" for="forecast-horizon">Forecast length (days)</label>
-                  <input id="forecast-horizon" name="horizon" type="number" min="5" max="365" value="90" />
-                </div>
-                <div class="field">
-                  <label class="label" for="forecast-interval">Timeframe</label>
-                  <select id="forecast-interval" name="interval">
-                    <option value="1d">Daily</option>
-                    <option value="1h">Hourly</option>
-                  </select>
-                </div>
-                <div class="field">
-                  <label class="label" for="forecast-service">Forecast service</label>
-                  <select id="forecast-service" name="service">
-                    <option value="prophet">Prophet</option>
-                    <option value="ibm_timemixer">IBM TinyTimeMixer</option>
-                  </select>
-                </div>
-              </div>
-              <div class="field">
-                <label class="label">Quantile bands</label>
-                <div class="checkbox-grid">
-                  <label><input type="checkbox" name="quantiles" value="0.10" checked /> P10</label>
-                  <label><input type="checkbox" name="quantiles" value="0.25" checked /> P25</label>
-                  <label><input type="checkbox" name="quantiles" value="0.50" checked /> P50</label>
-                  <label><input type="checkbox" name="quantiles" value="0.75" checked /> P75</label>
-                  <label><input type="checkbox" name="quantiles" value="0.90" checked /> P90</label>
-                </div>
-              </div>
-              <button class="cta" type="submit" data-analytics="forecast_submit">Generate forecast</button>
-              <p class="small">IBM service uses model family `ibm-granite/granite-timeseries-ttm-r2` with endpoint fallback.</p>
-            </form>
-            <div class="results-panel" id="forecast-result">
-              <h3>Forecast output</h3>
-              <p class="small">Run a forecast to see model summary, accuracy metrics, and quantile bands.</p>
-              <div id="forecast-output"></div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="section" id="indicators">
-        <div class="container">
-          <div class="section-title">
-            <h2>Technical indicator stack</h2>
-            <p class="small">Toggle any combination of indicators and compare signals instantly.</p>
-          </div>
-          <div class="content-grid">
-            <form id="technicals-form" class="card">
-              <div class="form-grid">
-                <div class="field">
-                  <label class="label" for="technicals-ticker">Ticker</label>
-                  <input id="technicals-ticker" name="ticker" placeholder="MSFT" required />
-                </div>
-                <div class="field">
-                  <label class="label" for="technicals-interval">Interval</label>
-                  <select id="technicals-interval" name="interval">
-                    <option value="1d">Daily</option>
-                    <option value="1h">Hourly</option>
-                  </select>
-                </div>
-                <div class="field">
-                  <label class="label" for="technicals-lookback">Lookback (days)</label>
-                  <input id="technicals-lookback" name="lookback" type="number" min="30" max="365" value="120" />
-                </div>
-              </div>
-              <div class="field">
-                <label class="label">Indicators</label>
-                <div class="checkbox-grid">
-                  <label><input type="checkbox" name="indicators" value="RSI" checked /> RSI</label>
-                  <label><input type="checkbox" name="indicators" value="MACD" checked /> MACD</label>
-                  <label><input type="checkbox" name="indicators" value="SMA" /> SMA</label>
-                  <label><input type="checkbox" name="indicators" value="EMA" /> EMA</label>
-                  <label><input type="checkbox" name="indicators" value="BBANDS" /> Bollinger</label>
-                  <label><input type="checkbox" name="indicators" value="ATR" /> ATR</label>
-                  <label><input type="checkbox" name="indicators" value="ADX" /> ADX</label>
-                  <label><input type="checkbox" name="indicators" value="CCI" /> CCI</label>
-                  <label><input type="checkbox" name="indicators" value="MFI" /> MFI</label>
-                  <label><input type="checkbox" name="indicators" value="OBV" /> OBV</label>
-                  <label><input type="checkbox" name="indicators" value="ROC" /> ROC</label>
-                  <label><input type="checkbox" name="indicators" value="STOCH" /> Stochastic</label>
-                  <label><input type="checkbox" name="indicators" value="WILLR" /> Williams %R</label>
-                </div>
-              </div>
-              <button class="cta" type="submit" data-analytics="technicals_submit">Run indicators</button>
-            </form>
-            <div class="results-panel" id="technicals-result">
-              <h3>Indicator output</h3>
-              <div id="technicals-output" class="small">Select indicators to see the latest values.</div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="section" id="ticker-intel">
-        <div class="container">
-          <div class="section-title">
-            <h2>Ticker intelligence</h2>
-            <p class="small">Download data, inspect trending tickers, and scan the latest news.</p>
-          </div>
-          <div class="content-grid">
-            <form id="download-form" class="card">
-              <h3>Download price history</h3>
-              <div class="form-grid">
-                <div class="field">
-                  <label class="label" for="download-ticker">Ticker</label>
-                  <input id="download-ticker" name="ticker" placeholder="NVDA" required />
-                </div>
-                <div class="field">
-                  <label class="label" for="download-interval">Interval</label>
-                  <select id="download-interval" name="interval">
-                    <option value="1d">Daily</option>
-                    <option value="1h">Hourly</option>
-                  </select>
-                </div>
-                <div class="field">
-                  <label class="label" for="download-start">Start date</label>
-                  <input id="download-start" name="start" type="date" />
-                </div>
-                <div class="field">
-                  <label class="label" for="download-end">End date</label>
-                  <input id="download-end" name="end" type="date" />
-                </div>
-              </div>
-              <button class="cta" type="submit" data-analytics="download_prices">Download CSV</button>
-              <p class="small" id="download-status"></p>
-            </form>
-            <div class="card">
-              <h3>Trending tickers</h3>
-              <p class="small">Tap the button to load the latest trending names.</p>
-              <button class="cta secondary" id="load-trending" type="button" data-analytics="load_trending">Load trending</button>
-              <div id="trending-list" class="ticker-grid" style="margin-top: 16px;"></div>
-            </div>
-          </div>
-          <div class="content-grid" style="margin-top: 24px;">
-            <form id="news-form" class="card">
-              <h3>Latest ticker news</h3>
-              <div class="field">
-                <label class="label" for="news-ticker">Ticker</label>
-                <input id="news-ticker" name="ticker" placeholder="TSLA" required />
-              </div>
-              <button class="cta" type="submit" data-analytics="news_submit">Fetch news</button>
-            </form>
-            <div class="results-panel" id="news-results">
-              <h3>News feed</h3>
-              <div id="news-output" class="small">Latest headlines will appear here.</div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="section" id="options">
-        <div class="container">
-          <div class="section-title">
-            <h2>Options chain + implied probability</h2>
-            <p class="small">Powered by Alpaca data. Estimate probability using delta as a proxy.</p>
-          </div>
-          <div class="content-grid">
-            <form id="options-form" class="card">
-              <div class="form-grid">
-                <div class="field">
-                  <label class="label" for="options-ticker">Underlying ticker</label>
-                  <input id="options-ticker" name="ticker" placeholder="AAPL" required />
-                </div>
-                <div class="field">
-                  <label class="label" for="options-expiration">Expiration (optional)</label>
-                  <input id="options-expiration" name="expiration" type="date" />
-                </div>
-              </div>
-              <button class="cta" type="submit" data-analytics="options_submit">Load options</button>
-              <p class="small">Implied probability is estimated from delta and is not a guarantee.</p>
-            </form>
-            <div class="results-panel" id="options-results">
-              <h3>Options snapshots</h3>
-              <div id="options-output" class="small">Calls and puts will appear here.</div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="section" id="saved-forecasts">
-        <div class="container">
-          <div class="section-title">
-            <h2>Saved forecasts</h2>
-            <p class="small">Every run is stored in Firestore. Plot any saved forecast onto the terminal chart above.</p>
-          </div>
-          <div id="saved-forecasts-list" class="order-list"></div>
-        </div>
-      </section>
     </div>
   </div>
     </main>

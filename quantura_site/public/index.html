@@ -47,7 +47,9 @@
   <body>
     <header class="header">
       <div class="container nav">
-        <a class="logo" href="/">QUANTURA</a>
+        <a class="logo" href="/" aria-label="Quantura home">
+          <img class="logo-img" src="/assets/quantura-logo.svg" alt="Quantura logo" />
+        </a>
         <nav class="nav-links">
           <a href="/forecasting" data-analytics="nav_forecasting">Forecasting</a>
           <a href="/screener" data-analytics="nav_screener">Screener</a>
@@ -104,6 +106,57 @@
             <div style="margin-top: 22px;">
               <span class="tag">Weekly cadence</span>
               <span class="tag" style="background: #fde7db; color: #7b2b14;">Independent research</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container content-grid">
+          <div class="card">
+            <div class="eyebrow">Terminal preview</div>
+            <h2>Quantura is built to feel like a desk terminal, not a spreadsheet.</h2>
+            <p>
+              Load a ticker once, keep the chart on screen, and drive forecasting, indicators, news, options, and screener discovery from the same context.
+              Your work is stored in Firestore so you can return to any run later.
+            </p>
+            <div class="feature-list" style="margin-top: 18px;">
+              <div class="feature"><span></span>Sticky ticker dock + reusable interactive chart</div>
+              <div class="feature"><span></span>Saved forecasts with quantile overlays</div>
+              <div class="feature"><span></span>Collaboration workspaces + audit trail</div>
+            </div>
+            <div class="hero-actions" style="margin-top: 22px;">
+              <a class="cta" href="/forecasting" data-analytics="home_terminal_open">Open forecasting studio</a>
+              <a class="cta secondary" href="/pricing" data-analytics="home_pricing_open">View plans</a>
+            </div>
+            <details class="learn-more">
+              <summary>Learn more</summary>
+              <p class="small">
+                Quantura is designed for weekly execution. Start with discovery in the Screener, validate with Indicators + News,
+                then store forecasts and deliverables in your Dashboard. Invite collaborators when you want a shared workspace.
+              </p>
+            </details>
+          </div>
+
+          <div class="card media-card">
+            <video
+              class="hero-video"
+              src="https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4"
+              muted
+              autoplay
+              loop
+              playsinline
+              controls
+            ></video>
+            <div class="small muted" style="margin-top: 10px;">
+              Video: CC0 sample loop. Replace with your Quantura brand reel any time.
+            </div>
+            <div style="margin-top: 14px;">
+              <div class="small"><strong>Affiliate partners (coming soon)</strong></div>
+              <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px;">
+                <span class="badge-chip">Robinhood</span>
+                <span class="badge-chip">FTMO</span>
+              </div>
             </div>
           </div>
         </div>
