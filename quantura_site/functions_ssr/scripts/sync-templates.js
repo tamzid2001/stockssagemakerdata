@@ -1,7 +1,7 @@
 const fs = require("fs/promises");
 const path = require("path");
 
-const sourceRoot = path.join(__dirname, "..", "..", "public");
+const sourceRoot = path.join(__dirname, "..", "..", "pages");
 const destRoot = path.join(__dirname, "..", "templates");
 
 const walk = async (dir) => {
@@ -42,4 +42,3 @@ main().catch((err) => {
   console.error(err);
   process.exitCode = 1;
 });
-
