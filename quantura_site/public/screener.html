@@ -9,11 +9,11 @@
       content="Quantura's stock screener surfaces mispriced opportunities, ranks candidates, and syncs to Slack for weekly decision briefs."
     />
     <meta name="robots" content="index, follow" />
-    <link rel="canonical" href="https://quantura.ai/screener" />
+    <link rel="canonical" href="https://quantura-e2e3d.web.app/screener" />
     <meta property="og:title" content="Quantura Stock Screener" />
     <meta property="og:description" content="Signal discovery, factor ranking, and real-time watchlists for investors." />
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://quantura.ai/screener" />
+    <meta property="og:url" content="https://quantura-e2e3d.web.app/screener" />
     <meta property="og:image" content="/assets/quantura-logo.svg" />
     <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="/manifest.json" />
@@ -81,7 +81,7 @@
                 <div class="eyebrow">Signal discovery</div>
                 <h1>Quantura Screener ranks the names you should study next.</h1>
                 <p>
-                  Run a fast screen against trending tickers, measure momentum, and store every run in Firestore.
+                  Run a fast screen against trending tickers, measure momentum, and store every run in your workspace.
                   Export results, turn them into watchlists, and keep your weekly brief pipeline moving.
                 </p>
                 <div class="hero-actions">
@@ -94,7 +94,7 @@
                 <div class="feature-list">
                   <div class="feature"><span></span>Ranked watchlist with conviction scores</div>
                   <div class="feature"><span></span>RSI, momentum, and volatility snapshots</div>
-                  <div class="feature"><span></span>Saved runs in Firestore</div>
+                  <div class="feature"><span></span>Saved runs in your workspace</div>
                   <div class="feature"><span></span>Slack-ready workflow hooks</div>
                 </div>
               </div>
@@ -105,7 +105,7 @@
         <div class="container">
           <div class="section-title">
             <h2>Run the Quantura screener</h2>
-            <p class="small">Store each run in Firestore for comparison across weeks.</p>
+            <p class="small">Store each run in your workspace for comparison across weeks.</p>
           </div>
           <div class="content-grid">
             <form id="screener-form" class="card">
@@ -140,7 +140,7 @@
                 <textarea id="screener-notes" name="notes" placeholder="Optional focus or exclusions"></textarea>
               </div>
               <button class="cta" type="submit" data-analytics="screener_submit">Run screener</button>
-              <p class="small">Results are computed immediately and stored in Firestore with a unique run ID.</p>
+              <p class="small">Results are computed immediately and stored in your workspace with a unique run ID.</p>
             </form>
             <div class="results-panel" id="screener-result">
               <h3>Screener output</h3>
@@ -214,7 +214,7 @@
             </a>
           </div>
           <div class="footer-badges" aria-label="Quantura technology stack">
-            <span class="badge-chip">Firebase</span>
+            <span class="badge-chip">Secure auth</span>
             <span class="badge-chip">Yahoo Finance</span>
             <span class="badge-chip">Python</span>
             <span class="badge-chip">Indicators</span>

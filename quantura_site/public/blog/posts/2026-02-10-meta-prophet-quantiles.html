@@ -3,46 +3,46 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Introducing the Quantura Ticker Terminal | Quantura Blog</title>
+    <title>Meta Prophet Quantiles: Reading Forecast Bands | Quantura Blog</title>
     <meta
       name="description"
-      content="Quantura's new terminal experience: interactive charting, forecast overlays, and technical indicator panels built on Firebase."
+      content="How to read quantile forecast bands, choose quantiles, and compare Meta Prophet vs IBM TimeMixer inside the Quantura terminal."
     />
     <meta name="robots" content="index, follow" />
-    <link rel="canonical" href="https://quantura.ai/blog/posts/2026-02-10-quantura-terminal" />
-    <meta property="og:title" content="Introducing the Quantura Ticker Terminal" />
-    <meta property="og:description" content="Interactive charts + forecast overlays + technical indicators." />
+    <link rel="canonical" href="https://quantura-e2e3d.web.app/blog/posts/2026-02-10-meta-prophet-quantiles" />
+    <meta property="og:title" content="Meta Prophet Quantiles: Reading Forecast Bands" />
+    <meta property="og:description" content="Choose quantiles, read uncertainty bands, and compare models without overfitting." />
     <meta property="og:type" content="article" />
-    <meta property="og:url" content="https://quantura.ai/blog/posts/2026-02-10-quantura-terminal" />
+    <meta property="og:url" content="https://quantura-e2e3d.web.app/blog/posts/2026-02-10-meta-prophet-quantiles" />
     <meta property="og:image" content="/assets/quantura-logo.svg" />
+    <link rel="alternate" type="application/rss+xml" title="Quantura Blog RSS" href="/blog/rss.xml" />
     <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="stylesheet" href="/styles.css" />
 
     <script defer src="/__/firebase/12.9.0/firebase-app-compat.js"></script>
     <script defer src="/__/firebase/12.9.0/firebase-auth-compat.js"></script>
-	    <script defer src="/__/firebase/12.9.0/firebase-firestore-compat.js"></script>
-	    <script defer src="/__/firebase/12.9.0/firebase-functions-compat.js"></script>
-	    <script defer src="/__/firebase/12.9.0/firebase-storage-compat.js"></script>
-	    <script defer src="/__/firebase/12.9.0/firebase-remote-config-compat.js"></script>
-	    <script defer src="/__/firebase/12.9.0/firebase-analytics-compat.js"></script>
-	    <script defer src="/__/firebase/init.js?useEmulator=false"></script>
-	    <script defer src="/app.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-firestore-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-functions-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-storage-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-analytics-compat.js"></script>
+    <script defer src="/__/firebase/init.js?useEmulator=false"></script>
+    <script defer src="/app.js"></script>
 
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
         "@type": "BlogPosting",
-        "headline": "Introducing the Quantura Ticker Terminal",
+        "headline": "Meta Prophet Quantiles: Reading Forecast Bands",
         "datePublished": "2026-02-10",
         "dateModified": "2026-02-10",
         "author": { "@type": "Organization", "name": "Quantura" },
         "publisher": {
           "@type": "Organization",
           "name": "Quantura",
-          "logo": { "@type": "ImageObject", "url": "https://quantura.ai/assets/quantura-logo.svg" }
+          "logo": { "@type": "ImageObject", "url": "https://quantura-e2e3d.web.app/assets/quantura-logo.svg" }
         },
-        "mainEntityOfPage": "https://quantura.ai/blog/posts/2026-02-10-quantura-terminal"
+        "mainEntityOfPage": "https://quantura-e2e3d.web.app/blog/posts/2026-02-10-meta-prophet-quantiles"
       }
     </script>
   </head>
@@ -61,7 +61,12 @@
           <a href="/contact" data-analytics="nav_contact">Contact</a>
         </nav>
         <div class="nav-actions">
-          <span id="header-user-email" class="small" style="max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Guest</span>
+          <span
+            id="header-user-email"
+            class="small"
+            style="max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
+            >Guest</span
+          >
           <span id="header-user-status" class="pill">Guest</span>
           <button class="cta secondary" id="header-auth" type="button">Sign in</button>
           <button class="cta secondary hidden" id="header-signout" type="button">Sign out</button>
@@ -75,25 +80,24 @@
       <section class="page-hero">
         <div class="container content-grid">
           <div>
-            <div class="eyebrow">Product update</div>
-            <h1>Introducing the Quantura Ticker Terminal</h1>
+            <div class="eyebrow">Forecasting notes</div>
+            <h1>Meta Prophet Quantiles: how to read forecast bands</h1>
             <p class="small">Published February 10, 2026</p>
             <p style="margin-top: 14px;">
-              Quantura started as a forecasting workflow. The hard part wasn’t fitting a model, it was keeping
-              research organized: chart, forecast, indicators, news, options, and saved runs.
+              Quantile bands are a discipline tool. They force you to look at uncertainty, not just a single predicted line.
+              This note explains how to pick quantiles, how to interpret bands, and how to compare Meta Prophet against IBM TimeMixer inside the terminal.
             </p>
             <div class="hero-actions">
-              <a class="cta" href="/forecasting">Open the terminal</a>
-              <a class="cta secondary" href="/dashboard#purchase">Request Deep Forecast</a>
+              <a class="cta" href="/forecasting" data-analytics="blog_open_terminal">Open the terminal</a>
+              <a class="cta secondary" href="/saved-forecasts" data-analytics="blog_open_saved">View saved forecasts</a>
             </div>
           </div>
           <div class="card">
-            <img src="/assets/quantura-logo.svg" alt="Quantura logo" style="max-width: 220px;" />
-              <div style="margin-top: 16px;" class="feature-list">
-              <div class="feature"><span></span>Interactive charting (candles + overlays)</div>
-              <div class="feature"><span></span>Saved forecasts you can re-plot</div>
-              <div class="feature"><span></span>Indicator charts with real-time overlays</div>
-              <div class="feature"><span></span>Firebase functions + Firestore storage</div>
+            <h3>Quick defaults</h3>
+            <div class="feature-list">
+              <div class="feature"><span></span>Start with `0.1,0.5,0.9`</div>
+              <div class="feature"><span></span>Add `0.25,0.75` for an inner band</div>
+              <div class="feature"><span></span>Compare engines, not vibes</div>
             </div>
           </div>
         </div>
@@ -102,39 +106,55 @@
       <section class="section">
         <div class="container content-grid">
           <div>
-            <h2>What changed</h2>
+            <h2>What the bands mean</h2>
             <p>
-              The terminal centers everything around one object: the ticker. Load it once, and every panel
-              downstream is ready to run: forecasting, technical indicators, news, and options.
+              A quantile forecast answers: “at each timestamp, what price would we expect to be below X% of the time?”
+              It is not a promise. It is a calibrated range you can compare against your process.
             </p>
             <p>
-              Forecast runs are stored in Firestore with quantile rows. You can pull any prior run back,
-              overlay it on the chart, and compare Prophet vs IBM TinyTimeMixer results side-by-side.
+              When the outer band widens, uncertainty is expanding. When it tightens, the model is more confident given recent dynamics.
+              The job is to combine that information with context: trend signals, catalysts, liquidity, and risk constraints.
             </p>
           </div>
           <div class="card">
-            <h3>How to use it</h3>
+            <h3>How to choose quantiles</h3>
             <div class="feature-list">
-              <div class="feature"><span></span>Open `/forecasting` and load your ticker</div>
-              <div class="feature"><span></span>Run a forecast with bands and save it automatically</div>
-              <div class="feature"><span></span>Toggle indicators and graph them under the chart</div>
-              <div class="feature"><span></span>Use Saved forecasts to plot prior runs instantly</div>
+              <div class="feature"><span></span>`0.1,0.5,0.9` for a wide risk envelope</div>
+              <div class="feature"><span></span>`0.25,0.5,0.75` for tighter planning</div>
+              <div class="feature"><span></span>Use fewer quantiles when you want clarity</div>
             </div>
           </div>
         </div>
       </section>
 
       <section class="section">
-        <div class="container callout">
-          <span class="badge" style="background: rgba(255,255,255,0.1); color: #f8fafc;">Deep Forecast</span>
-          <h2>Want a bespoke report?</h2>
-          <p>
-            If you need scenario ranges, implied probability bands, and a clean briefing you can act on,
-            request a Deep Forecast in the dashboard.
-          </p>
-          <div class="hero-actions">
-            <a class="cta" href="/dashboard#purchase">Request Deep Forecast</a>
-            <a class="cta secondary" href="/forecasting">Try the terminal</a>
+        <div class="container content-grid">
+          <div class="card">
+            <h3>Model comparison</h3>
+            <p class="small" style="margin-top: 10px;">
+              Quantura supports two engines:
+            </p>
+            <ul style="margin: 12px 0 0 18px; color: var(--graphite); line-height: 1.75;">
+              <li><strong>Meta Prophet</strong>: best when trend and seasonality are meaningful signals.</li>
+              <li><strong>IBM TimeMixer</strong>: useful for fast, foundation-model style baselines to compare against.</li>
+            </ul>
+          </div>
+          <div>
+            <h2>Next steps in the terminal</h2>
+            <p>
+              After you generate a run, overlay indicators and pull headlines before you make a call:
+            </p>
+            <div class="feature-list" style="margin-top: 14px;">
+              <div class="feature"><span></span>Indicators: overlay SMA/EMA and confirm momentum</div>
+              <div class="feature"><span></span>News: sanity-check recent catalysts</div>
+              <div class="feature"><span></span>Options: map strikes to your bands for risk planning</div>
+            </div>
+            <details class="learn-more">
+              <summary>Learn more</summary>
+              <p class="small">
+                The terminal is designed to reduce context switching. Pick a ticker once, then iterate: forecast, overlay, verify, record.
+              </p>
+            </details>
           </div>
         </div>
       </section>
@@ -158,10 +178,9 @@
             </a>
           </div>
           <div class="footer-badges" aria-label="Quantura technology stack">
-            <span class="badge-chip">Terminal</span>
-            <span class="badge-chip">Forecast bands</span>
-            <span class="badge-chip">Indicators</span>
-            <span class="badge-chip">Firestore</span>
+            <span class="badge-chip">Quantile bands</span>
+            <span class="badge-chip">Model comparison</span>
+            <span class="badge-chip">Terminal workflow</span>
           </div>
         </div>
         <div class="small">
@@ -169,14 +188,12 @@
           <div><a href="/blog">Blog</a></div>
           <div><a href="/forecasting">Forecasting</a></div>
           <div><a href="/screener">Screener</a></div>
-          <div><a href="/dashboard">Dashboard</a></div>
           <div><a href="/pricing">Pricing</a></div>
+          <div><a href="/contact">Contact</a></div>
         </div>
         <div class="small">
-          <strong>Product</strong>
-          <div>Prophet</div>
-          <div>IBM TinyTimeMixer</div>
-          <div>Saved forecasts</div>
+          <strong>RSS</strong>
+          <div><a href="/blog/rss.xml">Subscribe</a></div>
         </div>
       </div>
       <div class="container small" style="margin-top: 24px;">

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Quantura Blog</title>
+    <link>https://quantura-e2e3d.web.app/blog</link>
+    <description>Forecasting notes and market workflows from Quantura.</description>
+    <language>en-us</language>
+    <lastBuildDate>Tue, 10 Feb 2026 00:00:00 GMT</lastBuildDate>
+
+    <item>
+      <title>Options Chain Primer: Implied Probability in Practice</title>
+      <link>https://quantura-e2e3d.web.app/blog/posts/2026-02-10-options-probability-primer</link>
+      <guid>https://quantura-e2e3d.web.app/blog/posts/2026-02-10-options-probability-primer</guid>
+      <pubDate>Tue, 10 Feb 2026 00:00:00 GMT</pubDate>
+      <description><![CDATA[A practical guide to reading options data alongside forecast bands and trend overlays.]]></description>
+    </item>
+
+    <item>
+      <title>The Weekly Research Loop: Screener to Terminal to Dashboard</title>
+      <link>https://quantura-e2e3d.web.app/blog/posts/2026-02-10-weekly-research-loop</link>
+      <guid>https://quantura-e2e3d.web.app/blog/posts/2026-02-10-weekly-research-loop</guid>
+      <pubDate>Tue, 10 Feb 2026 00:00:00 GMT</pubDate>
+      <description><![CDATA[A practical weekly workflow: discover candidates in the screener, validate in the terminal, and record decisions in the dashboard.]]></description>
+    </item>
+
+    <item>
+      <title>Meta Prophet Quantiles: Reading Forecast Bands</title>
+      <link>https://quantura-e2e3d.web.app/blog/posts/2026-02-10-meta-prophet-quantiles</link>
+      <guid>https://quantura-e2e3d.web.app/blog/posts/2026-02-10-meta-prophet-quantiles</guid>
+      <pubDate>Tue, 10 Feb 2026 00:00:00 GMT</pubDate>
+      <description><![CDATA[How to choose quantiles, read uncertainty bands, and compare Meta Prophet vs IBM TimeMixer inside the terminal.]]></description>
+    </item>
+
+    <item>
+      <title>Weekly Market Brief (2026-02-09)</title>
+      <link>https://quantura-e2e3d.web.app/blog/posts/2026-02-09-weekly-market-brief</link>
+      <guid>https://quantura-e2e3d.web.app/blog/posts/2026-02-09-weekly-market-brief</guid>
+      <pubDate>Mon, 09 Feb 2026 00:00:00 GMT</pubDate>
+      <description><![CDATA[Trending tickers, momentum snapshot, and a workflow to validate setups in the terminal.]]></description>
+    </item>
+  </channel>
+</rss>
