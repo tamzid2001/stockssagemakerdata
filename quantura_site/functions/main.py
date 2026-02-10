@@ -11,7 +11,7 @@ from typing import Any
 import requests
 
 import firebase_admin
-from firebase_admin import credentials, firestore, messaging as admin_messaging
+from firebase_admin import credentials, firestore, messaging as admin_messaging, storage as admin_storage
 from firebase_functions import https_fn
 from firebase_functions.options import set_global_options
 
@@ -25,6 +25,11 @@ set_global_options(max_instances=10)
 SERVICE_ACCOUNT_PATH = os.environ.get(
     "SERVICE_ACCOUNT_PATH",
     os.path.join(os.path.dirname(__file__), "serviceAccountKey.json"),
+)
+STORAGE_BUCKET = (
+    os.environ.get("STORAGE_BUCKET")
+    or os.environ.get("FIREBASE_STORAGE_BUCKET")
+    or "quantura-e2e3d.firebasestorage.app"
 )
 PUBLIC_ORIGIN = (os.environ.get("PUBLIC_ORIGIN") or "https://quantura-e2e3d.web.app").rstrip("/")
 ADMIN_EMAIL = "tamzid257@gmail.com"
@@ -50,11 +55,14 @@ YAHOO_SEARCH_URL = "https://query2.finance.yahoo.com/v1/finance/search"
 DEFAULT_FORECAST_PRICE = 349
 
 if not firebase_admin._apps:
+    options: dict[str, Any] = {}
+    if STORAGE_BUCKET:
+        options["storageBucket"] = STORAGE_BUCKET
     if os.path.exists(SERVICE_ACCOUNT_PATH):
         cred = credentials.Certificate(SERVICE_ACCOUNT_PATH)
-        firebase_admin.initialize_app(cred)
+        firebase_admin.initialize_app(cred, options or None)
     else:
-        firebase_admin.initialize_app()
+        firebase_admin.initialize_app(options or None)
 
 db = firestore.client()
 
@@ -186,6 +194,53 @@ def _require_admin(token: dict[str, Any]) -> None:
         raise https_fn.HttpsError(
             https_fn.FunctionsErrorCode.PERMISSION_DENIED,
             "Admin access required.",
+        )
+
+
+def _collaborator_snapshot(workspace_id: str, uid: str):
+    return (
+        db.collection("users")
+        .document(workspace_id)
+        .collection("collaborators")
+        .document(uid)
+        .get()
+    )
+
+
+def _can_read_workspace(workspace_id: str, uid: str, token: dict[str, Any]) -> bool:
+    if token.get("email") == ADMIN_EMAIL:
+        return True
+    if workspace_id == uid:
+        return True
+    shared = _collaborator_snapshot(workspace_id, uid)
+    return bool(shared.exists)
+
+
+def _can_edit_workspace(workspace_id: str, uid: str, token: dict[str, Any]) -> bool:
+    if token.get("email") == ADMIN_EMAIL:
+        return True
+    if workspace_id == uid:
+        return True
+    shared = _collaborator_snapshot(workspace_id, uid)
+    if not shared.exists:
+        return False
+    role = str((shared.to_dict() or {}).get("role") or "viewer").strip().lower()
+    return role == "editor"
+
+
+def _require_workspace_access(workspace_id: str, uid: str, token: dict[str, Any]) -> None:
+    if not _can_read_workspace(workspace_id, uid, token):
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.PERMISSION_DENIED,
+            "Workspace access required.",
+        )
+
+
+def _require_workspace_editor(workspace_id: str, uid: str, token: dict[str, Any]) -> None:
+    if not _can_edit_workspace(workspace_id, uid, token):
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.PERMISSION_DENIED,
+            "Editor access required for this workspace.",
         )
 
 
@@ -1344,6 +1399,12 @@ def _handle_forecast_request(req: https_fn.CallableRequest, forced_service: str 
     if forced_service:
         data["service"] = forced_service
 
+    workspace_id = str(data.get("workspaceId") or req.auth.uid or "").strip()
+    if not workspace_id:
+        workspace_id = req.auth.uid
+    if workspace_id != req.auth.uid:
+        _require_workspace_editor(workspace_id, req.auth.uid, token)
+
     ticker = str(data.get("ticker") or "").upper().strip()
     if not ticker:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Ticker is required.")
@@ -1385,8 +1446,10 @@ def _handle_forecast_request(req: https_fn.CallableRequest, forced_service: str 
         result["serviceMessage"] = "Forecast service failed; fallback model executed."
 
     request_doc = {
-        "userId": req.auth.uid,
+        "userId": workspace_id,
         "userEmail": token.get("email"),
+        "createdByUid": req.auth.uid,
+        "createdByEmail": token.get("email"),
         "ticker": ticker,
         "interval": interval,
         "horizon": horizon,
@@ -1417,6 +1480,7 @@ def _handle_forecast_request(req: https_fn.CallableRequest, forced_service: str 
             "ticker": ticker,
             "service": service,
             "engine": result.get("engine"),
+            "workspaceId": workspace_id,
         },
     )
 
@@ -1442,6 +1506,282 @@ def run_timeseries_forecast(req: https_fn.CallableRequest) -> dict[str, Any]:
 @https_fn.on_call()
 def run_prophet_forecast(req: https_fn.CallableRequest) -> dict[str, Any]:
     return _handle_forecast_request(req, forced_service="prophet")
+
+
+@https_fn.on_call()
+def delete_forecast_request(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    data = req.data or {}
+    forecast_id = str(data.get("forecastId") or data.get("id") or "").strip()
+    if not forecast_id:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Forecast ID is required.")
+
+    ref = db.collection("forecast_requests").document(forecast_id)
+    snap = ref.get()
+    if not snap.exists:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "Forecast not found.")
+
+    doc = snap.to_dict() or {}
+    workspace_id = str(doc.get("userId") or "").strip()
+    if not workspace_id:
+        if token.get("email") != ADMIN_EMAIL:
+            raise https_fn.HttpsError(https_fn.FunctionsErrorCode.PERMISSION_DENIED, "Access denied.")
+    else:
+        _require_workspace_editor(workspace_id, req.auth.uid, token)
+
+    ref.delete()
+    _audit_event(req.auth.uid, token.get("email"), "forecast_deleted", {"forecastId": forecast_id, "workspaceId": workspace_id})
+    return {"deleted": True, "forecastId": forecast_id}
+
+
+@https_fn.on_call()
+def delete_screener_run(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    data = req.data or {}
+    run_id = str(data.get("runId") or data.get("id") or "").strip()
+    if not run_id:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Run ID is required.")
+
+    ref = db.collection("screener_runs").document(run_id)
+    snap = ref.get()
+    if not snap.exists:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "Screener run not found.")
+
+    doc = snap.to_dict() or {}
+    workspace_id = str(doc.get("userId") or "").strip()
+    if not workspace_id:
+        if token.get("email") != ADMIN_EMAIL:
+            raise https_fn.HttpsError(https_fn.FunctionsErrorCode.PERMISSION_DENIED, "Access denied.")
+    else:
+        _require_workspace_editor(workspace_id, req.auth.uid, token)
+
+    ref.delete()
+    _audit_event(req.auth.uid, token.get("email"), "screener_deleted", {"runId": run_id, "workspaceId": workspace_id})
+    return {"deleted": True, "runId": run_id}
+
+
+@https_fn.on_call()
+def rename_prediction_upload(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    data = req.data or {}
+    upload_id = str(data.get("uploadId") or data.get("id") or "").strip()
+    title = str(data.get("title") or "").strip()
+    if not upload_id:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Upload ID is required.")
+    if not title:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Title is required.")
+    if len(title) > 180:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Title is too long.")
+
+    ref = db.collection("prediction_uploads").document(upload_id)
+    snap = ref.get()
+    if not snap.exists:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "Upload not found.")
+
+    doc = snap.to_dict() or {}
+    owner_id = str(doc.get("userId") or "").strip()
+    if token.get("email") != ADMIN_EMAIL and owner_id != req.auth.uid:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.PERMISSION_DENIED, "Access denied.")
+
+    ref.set({"title": title, "updatedAt": firestore.SERVER_TIMESTAMP}, merge=True)
+    _audit_event(req.auth.uid, token.get("email"), "predictions_renamed", {"uploadId": upload_id})
+    return {"updated": True, "uploadId": upload_id, "title": title}
+
+
+@https_fn.on_call()
+def delete_prediction_upload(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    data = req.data or {}
+    upload_id = str(data.get("uploadId") or data.get("id") or "").strip()
+    if not upload_id:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Upload ID is required.")
+
+    ref = db.collection("prediction_uploads").document(upload_id)
+    snap = ref.get()
+    if not snap.exists:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "Upload not found.")
+
+    doc = snap.to_dict() or {}
+    owner_id = str(doc.get("userId") or "").strip()
+    if token.get("email") != ADMIN_EMAIL and owner_id != req.auth.uid:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.PERMISSION_DENIED, "Access denied.")
+
+    file_path = str(doc.get("filePath") or "").strip()
+    if file_path:
+        try:
+            bucket = admin_storage.bucket(STORAGE_BUCKET)
+            bucket.blob(file_path).delete()
+        except Exception:
+            # Best-effort cleanup; still delete Firestore metadata.
+            pass
+
+    ref.delete()
+    _audit_event(req.auth.uid, token.get("email"), "predictions_deleted", {"uploadId": upload_id})
+    return {"deleted": True, "uploadId": upload_id}
+
+
+@https_fn.on_call()
+def create_share_link(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    data = req.data or {}
+    kind = str(data.get("kind") or "").strip().lower()
+    source_id = str(data.get("id") or "").strip()
+    if kind not in {"forecast", "screener", "upload"}:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Invalid share kind.")
+    if not source_id:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Source ID is required.")
+
+    collection = "forecast_requests" if kind == "forecast" else "screener_runs" if kind == "screener" else "prediction_uploads"
+    snap = db.collection(collection).document(source_id).get()
+    if not snap.exists:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "Source document not found.")
+
+    doc = snap.to_dict() or {}
+    owner_id = str(doc.get("userId") or "").strip()
+    if kind in {"forecast", "screener"}:
+        if not owner_id:
+            _require_admin(token)
+        else:
+            _require_workspace_access(owner_id, req.auth.uid, token)
+    else:
+        if token.get("email") != ADMIN_EMAIL and owner_id != req.auth.uid:
+            raise https_fn.HttpsError(https_fn.FunctionsErrorCode.PERMISSION_DENIED, "Access denied.")
+
+    share_ref = db.collection("shares").document()
+    share_doc = {
+        "kind": kind,
+        "sourceCollection": collection,
+        "sourceId": source_id,
+        "sourceUserId": owner_id,
+        "createdByUid": req.auth.uid,
+        "createdByEmail": token.get("email"),
+        "title": doc.get("title") or doc.get("ticker") or "",
+        "ticker": doc.get("ticker") or "",
+        "createdAt": firestore.SERVER_TIMESTAMP,
+    }
+    share_ref.set(share_doc)
+
+    path = "/forecasting" if kind == "forecast" else "/screener" if kind == "screener" else "/uploads"
+    share_url = f"{PUBLIC_ORIGIN}{path}?share={share_ref.id}"
+    _audit_event(req.auth.uid, token.get("email"), "share_created", {"shareId": share_ref.id, "kind": kind})
+    return {"shareId": share_ref.id, "shareUrl": share_url, "kind": kind}
+
+
+@https_fn.on_call()
+def import_shared_item(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    data = req.data or {}
+    share_id = str(data.get("shareId") or "").strip()
+    if not share_id:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Share ID is required.")
+
+    share_snap = db.collection("shares").document(share_id).get()
+    if not share_snap.exists:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "Share link not found.")
+
+    share_doc = share_snap.to_dict() or {}
+    kind = str(share_doc.get("kind") or "").strip().lower()
+    source_collection = str(share_doc.get("sourceCollection") or "").strip()
+    source_id = str(share_doc.get("sourceId") or "").strip()
+    if kind not in {"forecast", "screener", "upload"} or not source_collection or not source_id:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.FAILED_PRECONDITION, "Share link is invalid.")
+
+    destination_workspace_id = str(data.get("workspaceId") or req.auth.uid or "").strip() or req.auth.uid
+    if destination_workspace_id != req.auth.uid:
+        _require_workspace_editor(destination_workspace_id, req.auth.uid, token)
+
+    import_key = f"{destination_workspace_id}_{share_id}"
+    import_ref = db.collection("share_imports").document(import_key)
+    existing = import_ref.get()
+    if existing.exists:
+        payload = existing.to_dict() or {}
+        imported_id = str(payload.get("importedId") or "").strip()
+        if imported_id:
+            return {"kind": kind, "importedId": imported_id, "shareId": share_id}
+
+    source_snap = db.collection(source_collection).document(source_id).get()
+    if not source_snap.exists:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "Source document no longer exists.")
+
+    source = source_snap.to_dict() or {}
+    imported_ref = db.collection(source_collection).document()
+    imported_doc: dict[str, Any] = {
+        "userId": destination_workspace_id,
+        "userEmail": token.get("email"),
+        "createdByUid": req.auth.uid,
+        "createdByEmail": token.get("email"),
+        "status": source.get("status") or "completed",
+        "createdAt": firestore.SERVER_TIMESTAMP,
+        "updatedAt": firestore.SERVER_TIMESTAMP,
+        "sourceShareId": share_id,
+        "sourceId": source_id,
+        "sourceUserId": str(source.get("userId") or ""),
+        "meta": source.get("meta") or {},
+    }
+
+    if kind == "forecast":
+        for key in [
+            "ticker",
+            "interval",
+            "horizon",
+            "start",
+            "quantiles",
+            "service",
+            "engine",
+            "serviceMessage",
+            "metrics",
+            "forecastPreview",
+            "forecastRows",
+        ]:
+            if key in source:
+                imported_doc[key] = source.get(key)
+        imported_doc["title"] = source.get("title") or f"{source.get('ticker') or ''} forecast".strip()
+    elif kind == "screener":
+        for key in ["market", "universe", "maxNames", "results", "notes"]:
+            if key in source:
+                imported_doc[key] = source.get(key)
+        imported_doc["title"] = source.get("title") or "Screener run"
+    else:
+        title = str(source.get("title") or "predictions.csv")
+        notes = str(source.get("notes") or "")
+        file_path = str(source.get("filePath") or "").strip()
+        new_path = ""
+        if file_path:
+            try:
+                bucket = admin_storage.bucket(STORAGE_BUCKET)
+                src_blob = bucket.blob(file_path)
+                if src_blob.exists():
+                    base = os.path.basename(file_path)
+                    new_path = f"predictions/{destination_workspace_id}/{int(time.time()*1000)}_{base}"
+                    bucket.copy_blob(src_blob, bucket, new_path)
+            except Exception:
+                new_path = ""
+
+        imported_doc.update(
+            {
+                "title": title,
+                "notes": notes,
+                "status": "uploaded",
+                "filePath": new_path or file_path,
+                "fileUrl": "",
+            }
+        )
+
+    imported_ref.set(imported_doc)
+    import_ref.set(
+        {
+            "shareId": share_id,
+            "kind": kind,
+            "importedCollection": source_collection,
+            "importedId": imported_ref.id,
+            "workspaceId": destination_workspace_id,
+            "createdByUid": req.auth.uid,
+            "createdAt": firestore.SERVER_TIMESTAMP,
+        }
+    )
+
+    _audit_event(req.auth.uid, token.get("email"), "share_imported", {"shareId": share_id, "kind": kind})
+    return {"kind": kind, "importedId": imported_ref.id, "shareId": share_id}
 
 
 @https_fn.on_call()

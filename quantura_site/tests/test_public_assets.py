@@ -3,11 +3,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC = ROOT / "public"
+PAGES = ROOT / "pages"
 
 
-def test_public_pages_exist():
+def test_pages_exist():
     for name in ["index.html", "forecasting.html", "screener.html", "dashboard.html", "pricing.html", "contact.html"]:
-        path = PUBLIC / name
+        path = PAGES / name
         assert path.exists(), f"Missing {path}"
 
 
@@ -26,9 +27,9 @@ def test_manifest_and_robots():
 
 def test_pages_include_analytics():
     for name in ["index.html", "forecasting.html", "screener.html", "dashboard.html", "pricing.html", "contact.html"]:
-        html = (PUBLIC / name).read_text()
+        html = (PAGES / name).read_text()
         assert "firebase-analytics-compat" in html
         assert "app.js" in html
         assert "manifest.json" in html
-    dashboard_html = (PUBLIC / "dashboard.html").read_text()
+    dashboard_html = (PAGES / "dashboard.html").read_text()
     assert "firebase-messaging-compat" in dashboard_html
