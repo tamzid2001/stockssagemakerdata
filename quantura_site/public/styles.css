@@ -929,6 +929,10 @@ textarea {
   align-items: center;
 }
 
+.order-actions .cta.update-status {
+  color: #fff;
+}
+
 .status-select {
   border-radius: 10px;
   border: 1px solid var(--line);
@@ -1931,6 +1935,10 @@ textarea {
   background: linear-gradient(135deg, rgba(240, 180, 41, 0.95) 0%, rgba(226, 90, 44, 0.88) 100%);
   color: #0b0f1a;
   box-shadow: 0 12px 26px rgba(0, 0, 0, 0.45);
+}
+
+[data-theme="dark"] .order-actions .cta.update-status {
+  color: #fff;
 }
 
 [data-theme="dark"] .cta.google {
