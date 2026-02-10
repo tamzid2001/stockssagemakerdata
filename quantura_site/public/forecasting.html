@@ -3,15 +3,15 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Quantura Forecasting | Prophet + Technical Indicators</title>
+    <title>Quantura Terminal | Meta Prophet + Indicators</title>
     <meta
       name="description"
-      content="Generate Prophet-based forecasts, toggle technical indicators, and track ticker momentum with Quantura's forecasting studio."
+      content="Generate quantile forecasts, toggle technical indicators, and track ticker momentum with Quantura's terminal."
     />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://quantura.ai/forecasting" />
     <meta property="og:title" content="Quantura Forecasting Studio" />
-    <meta property="og:description" content="Prophet forecasting, technical indicators, and demand intelligence for serious investors." />
+    <meta property="og:description" content="Quantile forecasting, technical indicators, and demand intelligence for serious investors." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://quantura.ai/forecasting" />
     <meta property="og:image" content="/assets/quantura-logo.svg" />
@@ -50,7 +50,7 @@
           <button class="cta secondary" id="header-auth" type="button">Sign in</button>
           <button class="cta secondary hidden" id="header-signout" type="button">Sign out</button>
           <a class="cta secondary hidden" id="header-dashboard" href="/dashboard">Dashboard</a>
-          <a class="cta" href="/dashboard#purchase">Request Deep Forecast</a>
+          <a class="cta" href="/purchase">Request Deep Forecast</a>
         </div>
       </div>
     </header>
@@ -65,15 +65,15 @@
             <a class="cta secondary small" href="/dashboard">Open dashboard</a>
             <a class="cta secondary small hidden" id="nav-admin" href="/admin">Admin dashboard</a>
           </div>
-	          <nav class="sidebar-nav" aria-label="Forecasting navigation">
-	            <button class="sidebar-link active" type="button" data-panel-target="forecast">Forecast</button>
-	            <button class="sidebar-link" type="button" data-panel-target="indicators">Indicators</button>
-	            <button class="sidebar-link" type="button" data-panel-target="news">News and data</button>
-	            <button class="sidebar-link" type="button" data-panel-target="options">Options</button>
-	            <button class="sidebar-link" type="button" data-panel-target="screener">Screener</button>
-	            <button class="sidebar-link" type="button" data-panel-target="watchlist">Watchlist and alerts</button>
-	            <button class="sidebar-link" type="button" data-panel-target="saved">Saved forecasts</button>
-	            <button class="sidebar-link" type="button" data-panel-target="learn">Learn more</button>
+	          <nav class="sidebar-nav" aria-label="Terminal navigation">
+	            <a class="sidebar-link active" href="/forecasting" data-panel-target="forecast">Forecast</a>
+	            <a class="sidebar-link" href="/indicators" data-panel-target="indicators">Indicators</a>
+	            <a class="sidebar-link" href="/news" data-panel-target="news">News and data</a>
+	            <a class="sidebar-link" href="/options" data-panel-target="options">Options</a>
+	            <a class="sidebar-link" href="/saved-forecasts" data-panel-target="saved">Saved forecasts</a>
+	            <a class="sidebar-link" href="/studio" data-panel-target="learn">Learn more</a>
+	            <a class="sidebar-link" href="/screener">Screener</a>
+	            <a class="sidebar-link" href="/watchlist">Watchlist and alerts</a>
 	          </nav>
 	        </aside>
 
@@ -81,27 +81,27 @@
           <section class="page-hero">
             <div class="container content-grid">
               <div>
-                <div class="eyebrow">Forecasting studio</div>
-                <h1>Everything on one screen: ticker dock, interactive chart, and a right-side intelligence panel.</h1>
+                <div class="eyebrow">Quantura terminal</div>
+                <h1>Everything on one screen: ticker controls, an interactive chart, and a right-side intelligence panel.</h1>
                 <p>
                   Select a ticker once and Quantura drives forecasts, indicator overlays, news, options, and screener results from the same context.
-                  Saved runs live in Firestore so you can re-plot quantile bands instantly.
+                  Saved runs live in your workspace so you can re-plot quantile bands instantly.
                 </p>
               </div>
-              <div class="card">
-                <h3>Workflow</h3>
-                <div class="feature-list">
-                  <div class="feature"><span></span>Sticky ticker dock (no scrolling back to the top)</div>
-                  <div class="feature"><span></span>One chart reused across every panel</div>
-                  <div class="feature"><span></span>Saved forecasts and indicator stacks</div>
-                </div>
-              </div>
+	              <div class="card">
+	                <h3>Workflow</h3>
+	                <div class="feature-list">
+	                  <div class="feature"><span></span>Ticker context stays synced across the terminal</div>
+	                  <div class="feature"><span></span>One chart reused across every panel</div>
+	                  <div class="feature"><span></span>Saved forecasts and indicator stacks</div>
+	                </div>
+	              </div>
             </div>
           </section>
 
           <section class="section studio-section" id="terminal">
             <div class="container">
-              <div class="studio-layout" data-panels>
+	              <div class="studio-layout" data-panels data-panel-router="terminal">
                 <div class="studio-primary">
                   <div class="ticker-dock card">
                     <form id="terminal-form" class="ticker-dock-form">
@@ -130,13 +130,13 @@
 	                </div>
 
                 <div class="studio-panel">
-                  <section class="panel" data-panel="forecast">
-                    <div class="panel-header">
-                      <h2>Forecast</h2>
-                      <p class="small">Generate quantile bands and store the run in Firestore for later re-plotting.</p>
-                    </div>
-                    <form id="forecast-form" class="card">
-                      <div class="form-grid">
+	                  <section class="panel" data-panel="forecast">
+	                    <div class="panel-header">
+	                      <h2>Forecast</h2>
+	                      <p class="small">Generate quantile bands and save the run so you can re-plot it later.</p>
+	                    </div>
+	                    <form id="forecast-form" class="card">
+	                      <div class="form-grid">
                         <div class="field">
                           <label class="label" for="forecast-ticker">Ticker</label>
                           <input id="forecast-ticker" name="ticker" placeholder="AAPL" required />
@@ -145,10 +145,11 @@
                           <label class="label" for="forecast-start">Start date</label>
                           <input id="forecast-start" name="start" type="date" />
                         </div>
-                        <div class="field">
-                          <label class="label" for="forecast-horizon">Forecast length (days)</label>
-                          <input id="forecast-horizon" name="horizon" type="number" min="5" max="365" value="90" />
-                        </div>
+	                        <div class="field">
+	                          <label class="label" for="forecast-horizon">Forecast length</label>
+	                          <input id="forecast-horizon" name="horizon" type="number" min="5" max="365" value="90" />
+	                          <div class="small muted">Daily = trading days. Hourly = hours.</div>
+	                        </div>
                         <div class="field">
                           <label class="label" for="forecast-interval">Timeframe</label>
                           <select id="forecast-interval" name="interval">
@@ -156,33 +157,28 @@
                             <option value="1h">Hourly</option>
                           </select>
                         </div>
-                        <div class="field">
-                          <label class="label" for="forecast-service">Forecast service</label>
-                          <select id="forecast-service" name="service">
-                            <option value="prophet">Prophet</option>
-                            <option value="ibm_timemixer">IBM TinyTimeMixer</option>
-                          </select>
-                        </div>
-                      </div>
-                      <div class="field">
-                        <label class="label">Quantile bands</label>
-                        <div class="checkbox-grid">
-                          <label><input type="checkbox" name="quantiles" value="0.10" checked /> P10</label>
-                          <label><input type="checkbox" name="quantiles" value="0.25" checked /> P25</label>
-                          <label><input type="checkbox" name="quantiles" value="0.50" checked /> P50</label>
-                          <label><input type="checkbox" name="quantiles" value="0.75" checked /> P75</label>
-                          <label><input type="checkbox" name="quantiles" value="0.90" checked /> P90</label>
-                        </div>
-                      </div>
-                      <button class="cta" type="submit" data-analytics="forecast_submit">Generate forecast</button>
-                      <details class="learn-more">
-                        <summary>Learn more</summary>
-                        <p class="small">
-                          Quantura stores the full forecast rows (quantiles per timestamp) and lets you re-plot them onto the chart from Saved forecasts.
-                          Use “IBM TinyTimeMixer” when you want a fast foundation-model style forecast, then compare against Prophet.
-                        </p>
-                      </details>
-                    </form>
+	                        <div class="field">
+	                          <label class="label" for="forecast-service">Forecast service</label>
+	                          <select id="forecast-service" name="service">
+	                            <option value="prophet">Meta Prophet</option>
+	                            <option value="ibm_timemixer">IBM TimeMixer</option>
+	                          </select>
+	                        </div>
+	                      </div>
+	                      <div class="field">
+	                        <label class="label" for="forecast-quantiles">Quantiles (comma-delimited)</label>
+	                        <input id="forecast-quantiles" name="quantiles" value="0.1,0.5,0.9" placeholder="0.1,0.5,0.9" required />
+	                        <div class="small muted">Values must be between 0 and 1 (exclusive). Example: 0.1,0.5,0.9</div>
+	                      </div>
+	                      <button class="cta" type="submit" data-analytics="forecast_submit">Generate forecast</button>
+	                      <details class="learn-more">
+	                        <summary>Learn more</summary>
+	                        <p class="small">
+	                          Quantura stores the full forecast rows (quantiles per timestamp) and lets you re-plot them onto the chart from Saved forecasts.
+	                          Use IBM TimeMixer when you want a fast foundation-model style forecast, then compare against Meta Prophet.
+	                        </p>
+	                      </details>
+	                    </form>
                     <div class="results-panel">
                       <h3>Forecast output</h3>
                       <div id="forecast-output" class="panel-output small">Run a forecast to see model summary and preview rows.</div>
@@ -382,7 +378,7 @@
                         <summary>Learn more</summary>
                         <p class="small">
                           Use the Screener panel for discovery, then jump to Indicators and Forecast to build a thesis.
-                          Quantura stores runs in Firestore for week-over-week comparison.
+                          Quantura stores runs in your workspace for week-over-week comparison.
                         </p>
                       </details>
                     </form>
@@ -458,7 +454,7 @@
 	                          <summary>Learn more</summary>
 	                          <p class="small">
 	                            Alerts are evaluated against the latest market price. For push delivery, enable notifications in the Dashboard.
-	                            Quantura stores alerts in Firestore, along with trigger events, so you can audit what happened.
+	                            Quantura stores alerts in your workspace, along with trigger events, so you can audit what happened.
 	                          </p>
 	                        </details>
 	                      </form>
@@ -532,10 +528,10 @@
             </a>
           </div>
           <div class="footer-badges" aria-label="Quantura technology stack">
-            <span class="badge-chip">Firebase</span>
-            <span class="badge-chip">Firestore</span>
-            <span class="badge-chip">Functions</span>
-            <span class="badge-chip">Cloud Storage</span>
+            <span class="badge-chip">Secure auth</span>
+            <span class="badge-chip">Realtime sync</span>
+            <span class="badge-chip">Serverless APIs</span>
+            <span class="badge-chip">Object storage</span>
             <span class="badge-chip">Analytics</span>
             <span class="badge-chip">Python</span>
             <span class="badge-chip">Plotly</span>

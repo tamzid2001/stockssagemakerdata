@@ -26,6 +26,23 @@
     "public": "public",
     "cleanUrls": true,
     "trailingSlash": false,
+    "rewrites": [
+      { "source": "/account", "destination": "/dashboard.html" },
+      { "source": "/watchlist", "destination": "/dashboard.html" },
+      { "source": "/productivity", "destination": "/dashboard.html" },
+      { "source": "/collaboration", "destination": "/dashboard.html" },
+      { "source": "/uploads", "destination": "/dashboard.html" },
+      { "source": "/autopilot", "destination": "/dashboard.html" },
+      { "source": "/trading", "destination": "/dashboard.html" },
+      { "source": "/notifications", "destination": "/dashboard.html" },
+      { "source": "/purchase", "destination": "/dashboard.html" },
+
+      { "source": "/indicators", "destination": "/forecasting.html" },
+      { "source": "/news", "destination": "/forecasting.html" },
+      { "source": "/options", "destination": "/forecasting.html" },
+      { "source": "/saved-forecasts", "destination": "/forecasting.html" },
+      { "source": "/studio", "destination": "/forecasting.html" }
+    ],
     "ignore": [
       "firebase.json",
       "**/.*",

@@ -183,59 +183,107 @@
 	    el.innerHTML = `${skeletonHtml()}<div class="small muted" style="margin-top:10px;">${label}</div>`;
 	  };
 
-	  const setOutputReady = (el) => {
-	    if (!el) return;
-	    el.removeAttribute("aria-busy");
-	  };
+		  const setOutputReady = (el) => {
+		    if (!el) return;
+		    el.removeAttribute("aria-busy");
+		  };
 
-	  const bindPanelNavigation = () => {
-	    const panelsRoot = document.querySelector("[data-panels]");
-	    if (!panelsRoot) return;
-	    const panels = Array.from(panelsRoot.querySelectorAll("[data-panel]"));
-	    const panelNames = new Set(panels.map((panel) => String(panel.dataset.panel || "").trim()).filter(Boolean));
-	    const buttons = Array.from(document.querySelectorAll("[data-panel-target]")).filter((btn) =>
-	      panelNames.has(String(btn.dataset.panelTarget || "").trim())
-	    );
-	    if (buttons.length === 0 || panels.length === 0) return;
+		  const bindPanelNavigation = () => {
+		    const panelsRoot = document.querySelector("[data-panels]");
+		    if (!panelsRoot) return;
+		    const panels = Array.from(panelsRoot.querySelectorAll("[data-panel]"));
+		    const panelNames = new Set(panels.map((panel) => String(panel.dataset.panel || "").trim()).filter(Boolean));
+		    const buttons = Array.from(document.querySelectorAll("[data-panel-target]")).filter((btn) =>
+		      panelNames.has(String(btn.dataset.panelTarget || "").trim())
+		    );
+		    if (buttons.length === 0 || panels.length === 0) return;
 
-	    const setActive = (target, { pushHash = true } = {}) => {
-	      const next = String(target || "").trim();
-	      if (!next) return;
-	      panels.forEach((panel) => panel.classList.toggle("hidden", panel.dataset.panel !== next));
-	      buttons.forEach((btn) => btn.classList.toggle("active", btn.dataset.panelTarget === next));
-	      if (pushHash) {
-	        try {
-	          history.replaceState(null, "", `${window.location.pathname}${window.location.search}#${encodeURIComponent(next)}`);
-	        } catch (error) {
-	          // Ignore URL update errors.
-	        }
-	      }
-	      logEvent("panel_view", { panel: next, page_path: window.location.pathname });
-	    };
+		    const routerKey = String(panelsRoot.dataset.panelRouter || "").trim();
+		    const routers = {
+		      terminal: {
+		        defaultPanel: "forecast",
+		        panelToPath: {
+		          forecast: "/forecasting",
+		          indicators: "/indicators",
+		          news: "/news",
+		          options: "/options",
+		          saved: "/saved-forecasts",
+		          learn: "/studio",
+		        },
+		      },
+		      dashboard: {
+		        defaultPanel: "orders",
+		        panelToPath: {
+		          orders: "/dashboard",
+		          watchlist: "/watchlist",
+		          productivity: "/productivity",
+		          collaboration: "/collaboration",
+		          uploads: "/uploads",
+		          autopilot: "/autopilot",
+		          alpaca: "/trading",
+		          notifications: "/notifications",
+		          purchase: "/purchase",
+		          auth: "/account",
+		        },
+		      },
+		    };
+		    const router = routers[routerKey] || null;
+		    const pathToPanel = (() => {
+		      if (!router) return {};
+		      const mapping = {};
+		      Object.entries(router.panelToPath || {}).forEach(([panel, path]) => {
+		        mapping[String(path)] = String(panel);
+		      });
+		      return mapping;
+		    })();
 
-	    const initialFromUrl = () => {
-	      try {
-	        const params = new URLSearchParams(window.location.search);
-	        const panel = params.get("panel");
-	        if (panel) return panel;
-	      } catch (error) {
-	        // Ignore.
-	      }
-	      return (window.location.hash || "").replace(/^#/, "");
-	    };
+		    const setActive = (target, { pushPath = true } = {}) => {
+		      const next = String(target || "").trim();
+		      if (!next) return;
+		      panels.forEach((panel) => panel.classList.toggle("hidden", panel.dataset.panel !== next));
+		      buttons.forEach((btn) => btn.classList.toggle("active", btn.dataset.panelTarget === next));
+		      if (pushPath && router?.panelToPath?.[next]) {
+		        const desired = router.panelToPath[next];
+		        if (desired && window.location.pathname !== desired) {
+		          try {
+		            history.pushState({ panel: next }, "", `${desired}${window.location.search}`);
+		          } catch (error) {
+		            // Ignore.
+		          }
+		        }
+		      }
+		      logEvent("panel_view", { panel: next, page_path: window.location.pathname });
+		    };
 
-	    buttons.forEach((btn) => {
-	      btn.addEventListener("click", () => setActive(btn.dataset.panelTarget));
-	    });
+		    const initialFromUrl = () => {
+		      try {
+		        const params = new URLSearchParams(window.location.search);
+		        const panel = params.get("panel");
+		        if (panel) return panel;
+		      } catch (error) {
+		        // Ignore.
+		      }
+		      if (router && pathToPanel[window.location.pathname]) {
+		        return pathToPanel[window.location.pathname];
+		      }
+		      return (window.location.hash || "").replace(/^#/, "");
+		    };
 
-	    const initial = initialFromUrl() || buttons[0].dataset.panelTarget;
-	    setActive(initial, { pushHash: false });
+		    buttons.forEach((btn) => {
+		      btn.addEventListener("click", (event) => {
+		        event.preventDefault?.();
+		        setActive(btn.dataset.panelTarget);
+		      });
+		    });
 
-	    window.addEventListener("hashchange", () => {
-	      const next = (window.location.hash || "").replace(/^#/, "");
-	      if (next) setActive(next, { pushHash: false });
-	    });
-	  };
+		    const initial = initialFromUrl() || router?.defaultPanel || buttons[0].dataset.panelTarget;
+		    setActive(initial, { pushPath: false });
+
+		    window.addEventListener("popstate", () => {
+		      const next = initialFromUrl();
+		      if (next) setActive(next, { pushPath: false });
+		    });
+		  };
 
   const syncStickyOffsets = () => {
     const header = document.querySelector(".header");
@@ -651,7 +699,7 @@
     card.innerHTML = `
       <h3>Help us improve Quantura</h3>
       <p class="small">
-        Share what you were trying to do and what could be better. This feedback is stored privately in Firestore.
+        Share what you were trying to do and what could be better. This feedback is stored privately to your account.
       </p>
       <label class="label" for="feedback-rating">Rating</label>
       <select id="feedback-rating" class="status-select">
@@ -685,7 +733,7 @@
       if (status) status.textContent = "Sending...";
 
       try {
-        if (typeof firebase === "undefined") throw new Error("Firebase not loaded.");
+        if (typeof firebase === "undefined") throw new Error("App services are not loaded.");
         const functions = firebase.functions();
         const submitFeedback = functions.httpsCallable("submit_feedback");
         await submitFeedback({
@@ -809,7 +857,7 @@
 	          "assistant",
 	          state.user
 	            ? "Ask me to interpret indicators, suggest a forecasting setup, or summarize what to check next for this ticker."
-	            : "Sign in to use the assistant. It keeps your messages private in Firestore."
+	            : "Sign in to use the assistant. Messages are saved privately to your account."
 	        );
 	      }
 	    };
@@ -866,7 +914,7 @@
       } else {
         button.disabled = true;
         button.textContent = button.dataset.labelGuest || "Sign in to purchase";
-        note.textContent = "You must sign in to purchase. We use Firebase Auth to secure checkout.";
+        note.textContent = "You must sign in to purchase. Checkout is secured to your account.";
         stripe?.classList.add("hidden");
         success?.classList.add("hidden");
       }
@@ -1507,6 +1555,34 @@
       .toUpperCase()
       .replace(/[^A-Z0-9.\\-]/g, "");
 
+  const parseQuantilesInput = (raw) => {
+    const parts = Array.isArray(raw) ? raw : String(raw || "").split(",");
+    const values = [];
+    const seen = new Set();
+    for (const part of parts) {
+      const trimmed = String(part).trim();
+      if (!trimmed) continue;
+      const q = Number(trimmed);
+      if (!Number.isFinite(q)) {
+        throw new Error(`Invalid quantile value: ${trimmed}`);
+      }
+      if (!(q > 0 && q < 1)) {
+        throw new Error("Quantiles must be between 0 and 1 (exclusive).");
+      }
+      const key = Math.round(q * 10000);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      values.push(q);
+    }
+    if (!values.length) {
+      throw new Error("Enter at least one quantile (example: 0.1,0.5,0.9).");
+    }
+    if (values.length > 12) {
+      throw new Error("Too many quantiles (max 12).");
+    }
+    return values;
+  };
+
   const setTerminalStatus = (text) => {
     if (!ui.terminalStatus) return;
     ui.terminalStatus.textContent = text || "";
@@ -1709,14 +1785,16 @@
 
   const buildForecastOverlays = (forecastRows) => {
     if (!Array.isArray(forecastRows) || forecastRows.length === 0) return [];
-    const keys = Object.keys(forecastRows[0] || {});
-    const quantKeys = keys.filter((key) => /^q\\d\\d$/.test(key)).sort();
-    const pick = (q) => (quantKeys.includes(q) ? q : null);
-    const q10 = pick("q10");
-    const q25 = pick("q25");
-    const q50 = pick("q50") || pick("q50");
-    const q75 = pick("q75");
-    const q90 = pick("q90");
+    const sample = forecastRows[0] || {};
+    const quantKeys = Object.keys(sample)
+      .filter((key) => /^q\\d\\d$/.test(key))
+      .sort();
+    if (!quantKeys.length) return [];
+
+    const entries = quantKeys
+      .map((key) => ({ key, q: Number(key.slice(1)) / 100 }))
+      .filter((item) => Number.isFinite(item.q))
+      .sort((a, b) => a.q - b.q);
 
     const x = forecastRows.map((row) => row.ds);
     const overlays = [];
@@ -1745,20 +1823,131 @@
       });
     };
 
-    addBand(q10, q90, "P10-P90", "rgba(58, 181, 162, 0.16)");
-    addBand(q25, q75, "P25-P75", "rgba(240, 180, 41, 0.18)");
-
-    if (q50) {
-      overlays.push({
-        type: "scatter",
-        mode: "lines",
-        name: "Median forecast",
-        x,
-        y: forecastRows.map((row) => row[q50]),
-        line: { width: 2, color: "#12182a", dash: "dot" },
-      });
+    if (entries.length >= 2) {
+      const low = entries[0];
+      const high = entries[entries.length - 1];
+      addBand(low.key, high.key, `P${Math.round(low.q * 100)}-P${Math.round(high.q * 100)}`, "rgba(58, 181, 162, 0.16)");
     }
+    if (entries.length >= 4) {
+      const low = entries[1];
+      const high = entries[entries.length - 2];
+      addBand(low.key, high.key, `P${Math.round(low.q * 100)}-P${Math.round(high.q * 100)}`, "rgba(240, 180, 41, 0.18)");
+    }
+
+    const median =
+      entries.find((item) => item.key === "q50") ||
+      entries.reduce((best, item) => (Math.abs(item.q - 0.5) < Math.abs(best.q - 0.5) ? item : best), entries[0]);
+    const medianColor = isDarkMode() ? "#e9edf7" : "#12182a";
+    overlays.push({
+      type: "scatter",
+      mode: "lines",
+      name: median.key === "q50" ? "Median forecast" : `Quantile P${Math.round(median.q * 100)}`,
+      x,
+      y: forecastRows.map((row) => row[median.key]),
+      line: { width: 2, color: medianColor, dash: "dot" },
+    });
+
     return overlays;
+  };
+
+  const formatForecastCell = (value) => {
+    if (value === null || value === undefined) return "—";
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value.toFixed(2);
+    }
+    const asNum = Number(value);
+    if (Number.isFinite(asNum)) return asNum.toFixed(2);
+    return String(value);
+  };
+
+  const labelForecastService = (raw) => {
+    const key = String(raw || "").trim().toLowerCase();
+    if (key === "prophet") return "Meta Prophet";
+    if (key === "ibm_timemixer") return "IBM TimeMixer";
+    return raw ? String(raw) : "Forecast";
+  };
+
+  const renderForecastDetails = (forecastDoc) => {
+    if (!ui.forecastOutput || !forecastDoc) return;
+    const rows = Array.isArray(forecastDoc.forecastRows) ? forecastDoc.forecastRows : [];
+    if (!rows.length) {
+      setOutputReady(ui.forecastOutput);
+      ui.forecastOutput.innerHTML = `<div class="small muted">No forecast rows were stored for this run.</div>`;
+      return;
+    }
+
+    const quantKeys = Object.keys(rows[0] || {})
+      .filter((key) => /^q\\d\\d$/.test(key))
+      .sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
+    const headers = ["ds", ...quantKeys];
+
+    const pageSize = 25;
+    const total = rows.length;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const page = Math.max(0, Math.min(totalPages - 1, Number(state.tickerContext.forecastTablePage || 0)));
+    state.tickerContext.forecastTablePage = page;
+
+    const start = page * pageSize;
+    const end = Math.min(total, start + pageSize);
+    const slice = rows.slice(start, end);
+
+    const quantileLabel = Array.isArray(forecastDoc.quantiles)
+      ? forecastDoc.quantiles.map((q) => `P${Math.round(Number(q) * 100)}`).filter(Boolean).join(", ")
+      : "";
+    const metrics = forecastDoc.metrics || {};
+    const summary = [
+      `<div class="small"><strong>Forecast ID:</strong> ${escapeHtml(forecastDoc.id || "")}</div>`,
+      `<div class="small"><strong>Service:</strong> ${escapeHtml(labelForecastService(forecastDoc.service))}</div>`,
+      forecastDoc.engine ? `<div class="small"><strong>Engine:</strong> ${escapeHtml(forecastDoc.engine)}</div>` : "",
+      quantileLabel ? `<div class="small"><strong>Quantiles:</strong> ${escapeHtml(quantileLabel)}</div>` : "",
+      metrics.lastClose ? `<div class="small"><strong>Last close:</strong> ${escapeHtml(metrics.lastClose)}</div>` : "",
+      metrics.mae ? `<div class="small"><strong>MAE (recent):</strong> ${escapeHtml(metrics.mae)}</div>` : "",
+    ]
+      .filter(Boolean)
+      .join("");
+
+    setOutputReady(ui.forecastOutput);
+    ui.forecastOutput.innerHTML = `
+      <div class="output-stack">
+        ${summary}
+        <div class="table-controls">
+          <button class="cta secondary small" type="button" data-action="forecast-page" data-delta="-1" ${
+            page === 0 ? "disabled" : ""
+          }>Prev</button>
+          <div class="small muted">Rows ${start + 1}-${end} of ${total} · Page ${page + 1}/${totalPages}</div>
+          <button class="cta secondary small" type="button" data-action="forecast-page" data-delta="1" ${
+            page >= totalPages - 1 ? "disabled" : ""
+          }>Next</button>
+          <button class="cta secondary small" type="button" data-action="forecast-csv">Download CSV</button>
+        </div>
+        <div class="table-wrap" style="margin-top:10px;">
+          <table class="data-table">
+            <thead>
+              <tr>${headers.map((key) => `<th>${escapeHtml(key)}</th>`).join("")}</tr>
+            </thead>
+            <tbody>
+              ${slice
+                .map(
+                  (row) => `
+                    <tr>
+                      ${headers
+                        .map((key) => `<td>${escapeHtml(key === "ds" ? row[key] : formatForecastCell(row[key]))}</td>`)
+                        .join("")}
+                    </tr>
+                  `
+                )
+                .join("")}
+            </tbody>
+          </table>
+        </div>
+        <details class="learn-more">
+          <summary>Learn more</summary>
+          <p class="small">
+            Forecasts are saved to your account so you can re-plot them later. Use Indicators to overlay trend signals, then switch to News and Options for context.
+          </p>
+        </details>
+      </div>
+    `;
   };
 
   const loadTickerHistory = async (functions, ticker, interval) => {
@@ -1782,6 +1971,7 @@
     const interval = doc.interval || state.tickerContext.interval || "1d";
     state.tickerContext.forecastId = forecastId;
     state.tickerContext.forecastDoc = doc;
+    state.tickerContext.forecastTablePage = 0;
     safeLocalStorageSet(LAST_TICKER_KEY, ticker);
 
     if (!ticker) throw new Error("Forecast ticker is missing.");
@@ -1798,6 +1988,8 @@
     const overlays = [...forecastOverlays, ...(state.tickerContext.indicatorOverlays || [])];
     await renderTickerChart(state.tickerContext.rows, ticker, interval, overlays);
     setTerminalStatus(`Plotted forecast ${forecastId}.`);
+    renderForecastDetails(doc);
+    return doc;
   };
 
   const ensureMessagingServiceWorker = async () => {
@@ -2005,11 +2197,11 @@
 		      syncTickerInputs(ticker);
 		      logEvent("ticker_selected", { ticker, page_path: window.location.pathname });
 
-		      // If we're in the studio, load the chart immediately. Otherwise, jump to the studio.
-		      if (window.location.pathname === "/forecasting" && ui.terminalForm && ui.terminalTicker) {
-		        ui.terminalTicker.value = ticker;
-		        ui.terminalForm.requestSubmit?.();
-		      } else {
+			      // If we're in the terminal, load the chart immediately. Otherwise, jump to the terminal.
+			      if (ui.terminalForm && ui.terminalTicker && ui.tickerChart) {
+			        ui.terminalTicker.value = ticker;
+			        ui.terminalForm.requestSubmit?.();
+			      } else {
 		        const params = new URLSearchParams();
 		        params.set("ticker", ticker);
 		        window.location.href = `/forecasting?${params.toString()}`;
@@ -2023,27 +2215,27 @@
 		      await pickTicker(button.dataset.ticker || button.textContent);
 		    });
 
-	    document.addEventListener("click", async (event) => {
-	      const plotButton = event.target.closest('[data-action="plot-forecast"]');
-	      if (!plotButton) return;
-	      const forecastId = plotButton.dataset.forecastId;
-	      const ticker = plotButton.dataset.ticker || "";
-	      if (!forecastId) return;
+		    document.addEventListener("click", async (event) => {
+		      const plotButton = event.target.closest('[data-action="plot-forecast"]');
+		      if (!plotButton) return;
+		      const forecastId = plotButton.dataset.forecastId;
+		      const ticker = plotButton.dataset.ticker || "";
+		      if (!forecastId) return;
 
       if (!state.user) {
         showToast("Sign in to view saved forecasts.", "warn");
         return;
       }
 
-	      const onForecastingPage = window.location.pathname === "/forecasting";
-	      if (!onForecastingPage) {
-	        logEvent("forecast_plot_navigate", { forecast_id: forecastId, ticker });
-	        const params = new URLSearchParams();
-	        params.set("forecastId", forecastId);
-	        if (ticker) params.set("ticker", ticker);
-	        window.location.href = `/forecasting?${params.toString()}`;
-	        return;
-	      }
+		      const onTerminalPage = Boolean(ui.terminalForm && ui.tickerChart);
+		      if (!onTerminalPage) {
+		        logEvent("forecast_plot_navigate", { forecast_id: forecastId, ticker });
+		        const params = new URLSearchParams();
+		        params.set("forecastId", forecastId);
+		        if (ticker) params.set("ticker", ticker);
+		        window.location.href = `/forecasting?${params.toString()}`;
+		        return;
+		      }
 
 	      try {
 	        setTerminalStatus("Loading saved forecast...");
@@ -2053,12 +2245,47 @@
 	      } catch (error) {
 	        setTerminalStatus(error.message || "Unable to plot forecast.");
 	        showToast(error.message || "Unable to plot forecast.", "warn");
-	      }
-	    });
+		      }
+		    });
 
-    const persistenceReady = auth
-      .setPersistence(firebase.auth.Auth.Persistence.LOCAL)
-      .catch(async () => {
+		    document.addEventListener("click", (event) => {
+		      const pageBtn = event.target.closest('[data-action="forecast-page"]');
+		      if (pageBtn) {
+		        event.preventDefault();
+		        const delta = Number(pageBtn.dataset.delta || "0");
+		        const doc = state.tickerContext.forecastDoc;
+		        if (!doc || !Array.isArray(doc.forecastRows) || !doc.forecastRows.length) return;
+		        const pageSize = 25;
+		        const totalPages = Math.max(1, Math.ceil(doc.forecastRows.length / pageSize));
+		        const next = Math.max(0, Math.min(totalPages - 1, Number(state.tickerContext.forecastTablePage || 0) + delta));
+		        state.tickerContext.forecastTablePage = next;
+		        renderForecastDetails(doc);
+		        return;
+		      }
+
+		      const csvBtn = event.target.closest('[data-action="forecast-csv"]');
+		      if (!csvBtn) return;
+		      event.preventDefault();
+		      const doc = state.tickerContext.forecastDoc;
+		      if (!doc || !Array.isArray(doc.forecastRows) || !doc.forecastRows.length) {
+		        showToast("No forecast rows available to export.", "warn");
+		        return;
+		      }
+		      const rows = doc.forecastRows;
+		      const quantKeys = Object.keys(rows[0] || {})
+		        .filter((key) => /^q\\d\\d$/.test(key))
+		        .sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
+		      const headers = ["ds", ...quantKeys];
+		      const csv = buildCsv(rows, headers);
+		      const ticker = normalizeTicker(doc.ticker || "ticker") || "ticker";
+		      const service = String(doc.service || "forecast").replace(/[^a-z0-9_\\-]+/gi, "_");
+		      triggerDownload(`${ticker}_${service}_${doc.id || "run"}.csv`, csv);
+		      showToast("CSV downloaded.");
+		    });
+
+	    const persistenceReady = auth
+	      .setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+	      .catch(async () => {
         // Some browsers block persistent storage (e.g., private browsing). Fall back to session persistence.
         try {
           await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION);
@@ -2068,21 +2295,9 @@
         showToast("Using session-only sign-in in this browser.", "warn");
       });
 
-		    ui.headerAuth?.addEventListener("click", () => {
-		      const authSection = document.getElementById("auth");
-		      if (authSection) {
-		        if (window.location.pathname === "/dashboard") {
-		          try {
-		            window.location.hash = "auth";
-		          } catch (error) {
-		            // Ignore.
-		          }
-		        }
-		        authSection.scrollIntoView({ behavior: "smooth" });
-		      } else {
-		        window.location.href = "/account";
-		      }
-		    });
+			    ui.headerAuth?.addEventListener("click", () => {
+			      window.location.href = "/account";
+			    });
 
 	    ui.workspaceSelect?.addEventListener("change", () => {
 	      if (!state.user) {
@@ -2764,87 +2979,75 @@
       }
     });
 
-	    ui.forecastForm?.addEventListener("submit", async (event) => {
-	      event.preventDefault();
-	      if (!state.user) {
-	        showToast("Sign in to run a forecast.", "warn");
-	        return;
-	      }
-	      const formData = new FormData(ui.forecastForm);
-	      const quantiles = formData.getAll("quantiles").map((value) => Number(value));
-	      const payload = {
-	        ticker: formData.get("ticker"),
-        start: formData.get("start"),
-        horizon: Number(formData.get("horizon")),
-        interval: formData.get("interval"),
-        service: formData.get("service") || ui.forecastService?.value || "prophet",
-        quantiles,
-        meta: buildMeta(),
-        utm: getUtm(),
-	      };
+		    ui.forecastForm?.addEventListener("submit", async (event) => {
+		      event.preventDefault();
+		      if (!state.user) {
+		        showToast("Sign in to run a forecast.", "warn");
+		        return;
+		      }
+		      const formData = new FormData(ui.forecastForm);
+		      let quantiles = [];
+		      try {
+		        const raw = formData.getAll("quantiles");
+		        if (raw.length === 1 && String(raw[0]).includes(",")) {
+		          quantiles = parseQuantilesInput(String(raw[0]));
+		        } else {
+		          quantiles = parseQuantilesInput(raw);
+		        }
+		      } catch (error) {
+		        showToast(error.message || "Invalid quantiles.", "warn");
+		        return;
+		      }
+		      const payload = {
+		        ticker: formData.get("ticker"),
+	        start: formData.get("start"),
+	        horizon: Number(formData.get("horizon")),
+	        interval: formData.get("interval"),
+	        service: formData.get("service") || ui.forecastService?.value || "prophet",
+	        quantiles,
+	        meta: buildMeta(),
+	        utm: getUtm(),
+		      };
 
-	      try {
-	        setOutputLoading(ui.forecastOutput, "Generating forecast...");
-	        const runForecast = functions.httpsCallable("run_timeseries_forecast");
-	        const result = await runForecast(payload);
-	        const data = result.data || {};
-	        const previewRows = Array.isArray(data.forecastPreview) ? data.forecastPreview.slice(0, 8) : [];
-	        const previewTable = previewRows.length
-	          ? `
-              <div class="table-wrap" style="margin-top:12px;">
-	              <table class="data-table">
-	                <thead>
-	                  <tr>
-	                    ${Object.keys(previewRows[0])
-	                      .map((key) => `<th>${escapeHtml(key)}</th>`)
-	                      .join("")}
-	                  </tr>
-	                </thead>
-	                <tbody>
-	                  ${previewRows
-	                    .map(
-	                      (row) => `
-	                        <tr>
-	                          ${Object.keys(previewRows[0])
-	                            .map((key) => `<td>${escapeHtml(row[key])}</td>`)
-	                            .join("")}
-	                        </tr>
-	                      `
-	                    )
-	                    .join("")}
-	                </tbody>
-	              </table>
-              </div>
-	          `
-	          : "";
-	        if (ui.forecastOutput) {
-	          setOutputReady(ui.forecastOutput);
-	          ui.forecastOutput.innerHTML = `
-	            <div class="small"><strong>Request ID:</strong> ${data.requestId || "—"}</div>
-	            <div class="small"><strong>Service:</strong> ${data.service || payload.service}</div>
-	            <div class="small"><strong>Engine:</strong> ${data.engine || "—"}</div>
-	            <div class="small"><strong>Message:</strong> ${data.serviceMessage || "—"}</div>
-            <div class="small"><strong>Last close:</strong> ${data.lastClose || "—"}</div>
-            <div class="small"><strong>MAE (recent):</strong> ${data.mae || "—"}</div>
-            <div class="small"><strong>Coverage P10–P90:</strong> ${data.coverage10_90 || "—"}</div>
-            ${previewTable}
-          `;
-        }
-        logEvent("forecast_request", { ticker: payload.ticker, interval: payload.interval, service: payload.service });
-        showToast("Forecast queued and stored in your dashboard.");
-        if (ui.tickerChart && data.requestId) {
-          try {
-            setTerminalStatus("Loading forecast for chart...");
-            await plotForecastById(db, functions, data.requestId);
-            document.getElementById("terminal")?.scrollIntoView({ behavior: "smooth" });
-          } catch (plotError) {
-            setTerminalStatus(plotError.message || "Unable to plot forecast.");
-          }
-        }
-      } catch (error) {
-        showToast(error.message || "Unable to run forecast.", "warn");
-      }
-    });
+		      try {
+		        setOutputLoading(ui.forecastOutput, "Generating forecast...");
+		        const runForecast = functions.httpsCallable("run_timeseries_forecast");
+		        const result = await runForecast(payload);
+		        const data = result.data || {};
+		        const requestId = String(data.requestId || "").trim();
+		        if (!requestId) {
+		          throw new Error("Forecast run did not return a request ID.");
+		        }
+
+		        logEvent("forecast_request", { ticker: payload.ticker, interval: payload.interval, service: payload.service });
+		        showToast("Forecast saved.");
+
+		        try {
+		          if (ui.tickerChart) {
+		            setTerminalStatus("Loading forecast for chart...");
+		            await plotForecastById(db, functions, requestId);
+		            document.getElementById("terminal")?.scrollIntoView({ behavior: "smooth" });
+		          } else {
+		            const doc = await loadForecastDoc(db, requestId);
+		            state.tickerContext.forecastDoc = doc;
+		            state.tickerContext.forecastId = requestId;
+		            state.tickerContext.forecastTablePage = 0;
+		            renderForecastDetails(doc);
+		          }
+		        } catch (plotError) {
+		          setOutputReady(ui.forecastOutput);
+		          if (ui.forecastOutput) {
+		            ui.forecastOutput.innerHTML = `
+		              <div class="small"><strong>Forecast ID:</strong> ${escapeHtml(requestId)}</div>
+		              <div class="small"><strong>Service:</strong> ${escapeHtml(labelForecastService(payload.service))}</div>
+		              <div class="small muted" style="margin-top:10px;">${escapeHtml(plotError.message || "Forecast saved, but could not be loaded yet.")}</div>
+		            `;
+		          }
+		        }
+	      } catch (error) {
+	        showToast(error.message || "Unable to run forecast.", "warn");
+	      }
+	    });
 
 	    ui.technicalsForm?.addEventListener("submit", async (event) => {
 	      event.preventDefault();
@@ -3545,17 +3748,22 @@
 		        renderWorkspaceSelect(null);
 		        if (ui.productivityBoard) ui.productivityBoard.innerHTML = "";
 		        if (ui.tasksCalendar) ui.tasksCalendar.textContent = "Tasks with due dates will appear here.";
-		        if (window.location.pathname === "/dashboard") {
-		          try {
-		            if ((window.location.hash || "") !== "#auth") {
-		              window.location.hash = "auth";
-		            }
-		          } catch (error) {
-		            // Ignore.
-		          }
-		        }
-		        return;
-		      }
+			        const gated = new Set([
+			          "/dashboard",
+			          "/watchlist",
+			          "/productivity",
+			          "/collaboration",
+			          "/uploads",
+			          "/autopilot",
+			          "/trading",
+			          "/notifications",
+			          "/purchase",
+			        ]);
+			        if (gated.has(window.location.pathname) && window.location.pathname !== "/account") {
+			          window.location.href = "/account";
+			        }
+			        return;
+			      }
 
 	      await ensureUserProfile(db, user);
 	      startUserOrders(db, user);
@@ -3571,16 +3779,9 @@
 		      startPredictionsUploads(db, user);
 		      startAlpacaOrders(db, user);
 		      refreshCollaboration(functions);
-		      if (window.location.pathname === "/dashboard") {
-		        const current = (window.location.hash || "").replace(/^#/, "");
-		        if (!current || current === "auth") {
-		          try {
-		            window.location.hash = "orders";
-		          } catch (error) {
-		            // Ignore.
-		          }
-		        }
-		      }
+			      if (window.location.pathname === "/account") {
+			        window.location.href = "/dashboard";
+			      }
 
 	      if (ui.notificationsStatus) {
 	        if (messaging && isPushSupported()) {
@@ -3601,19 +3802,14 @@
         }
       }
 
-      if (
-        window.location.pathname === "/forecasting" &&
-        ui.tickerChart &&
-        state.tickerContext.forecastId &&
-        !state.tickerContext.forecastDoc
-      ) {
-        try {
-          setTerminalStatus("Loading saved forecast...");
-          await plotForecastById(db, functions, state.tickerContext.forecastId);
-        } catch (error) {
-          setTerminalStatus(error.message || "Unable to load saved forecast.");
-        }
-      }
+	      if (ui.terminalForm && ui.tickerChart && state.tickerContext.forecastId && !state.tickerContext.forecastDoc) {
+	        try {
+	          setTerminalStatus("Loading saved forecast...");
+	          await plotForecastById(db, functions, state.tickerContext.forecastId);
+	        } catch (error) {
+	          setTerminalStatus(error.message || "Unable to load saved forecast.");
+	        }
+	      }
 
       if (user.email === ADMIN_EMAIL) {
         ui.adminSection?.classList.remove("hidden");
