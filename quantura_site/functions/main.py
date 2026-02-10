@@ -445,10 +445,9 @@ def _generate_quantile_forecast(
     import numpy as np  # type: ignore
     import pandas as pd  # type: ignore
 
-    quantiles = sorted({float(q) for q in quantiles if 0 < float(q) < 1})
-    if 0.5 not in quantiles:
-        quantiles.append(0.5)
-        quantiles.sort()
+    quantiles = sorted({float(q) for q in (quantiles or []) if 0 < float(q) < 1})
+    if not quantiles:
+        quantiles = [0.5]
 
     horizon = max(1, min(horizon, 365 if interval == "1d" else 240))
 
@@ -479,7 +478,8 @@ def _generate_quantile_forecast(
             row[f"q{int(round(quantile * 100)):02d}"] = round(float(np.quantile(sim_prices[:, idx], quantile)), 4)
         forecast_rows.append(row)
 
-    median_key = "q50"
+    ref_q = min(quantiles, key=lambda q: abs(q - 0.5)) if quantiles else 0.5
+    median_key = f"q{int(round(ref_q * 100)):02d}"
     median_path = np.array([row.get(median_key, values[-1]) for row in forecast_rows], dtype=float)
     last_actual = float(values[-1])
     mae_recent = float(np.mean(np.abs(np.diff(values[-min(len(values), 90) :])))) if len(values) > 2 else 0.0
@@ -1244,8 +1244,7 @@ def _handle_forecast_request(req: https_fn.CallableRequest, forced_service: str 
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Interval must be 1d or 1h.")
 
     horizon = int(data.get("horizon") or 90)
-    quantiles_raw = data.get("quantiles") or [0.1, 0.25, 0.5, 0.75, 0.9]
-    quantiles = [float(q) for q in quantiles_raw]
+    quantiles = _parse_quantiles(data.get("quantiles"))
     start = data.get("start")
 
     history = _load_history(ticker=ticker, start=start, interval=interval)
