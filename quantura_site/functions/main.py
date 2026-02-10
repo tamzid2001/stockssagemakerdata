@@ -4,7 +4,7 @@ import hashlib
 import math
 import os
 import time
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from statistics import NormalDist
 from typing import Any
 
@@ -299,11 +299,77 @@ def _serialize_for_firestore(value: Any) -> Any:
     except Exception:
         pass
 
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+
     if isinstance(value, list):
         return [_serialize_for_firestore(item) for item in value]
     if isinstance(value, dict):
         return {key: _serialize_for_firestore(item) for key, item in value.items()}
     return value
+
+
+def _trending_snapshots(tickers: list[str], max_rows: int = 18) -> dict[str, dict[str, Any]]:
+    import pandas as pd  # type: ignore
+    import yfinance as yf  # type: ignore
+
+    tickers = [str(t).upper().strip() for t in (tickers or []) if str(t).strip()]
+    tickers = list(dict.fromkeys([t for t in tickers if t]))[: max(1, int(max_rows or 18))]
+    if not tickers:
+        return {}
+
+    symbols = " ".join(tickers)
+    try:
+        frame = yf.download(
+            symbols,
+            period="14d",
+            interval="1d",
+            group_by="ticker",
+            progress=False,
+            threads=True,
+            auto_adjust=False,
+        )
+    except Exception:
+        frame = pd.DataFrame()
+
+    if frame.empty:
+        return {}
+
+    snapshots: dict[str, dict[str, Any]] = {}
+
+    def _snap_from_close(series: pd.Series) -> dict[str, Any] | None:
+        close = pd.to_numeric(series, errors="coerce").dropna()
+        if close.empty:
+            return None
+        last = float(close.iloc[-1])
+        prev = float(close.iloc[-2]) if len(close) >= 2 else None
+        change = round(last - prev, 4) if prev else None
+        change_pct = round((last - prev) / prev * 100.0, 4) if prev else None
+        return {"lastClose": round(last, 4), "prevClose": round(prev, 4) if prev else None, "change": change, "changePct": change_pct}
+
+    if isinstance(frame.columns, pd.MultiIndex):
+        # shape: (field, ticker) or (ticker, field)
+        level0 = list(frame.columns.get_level_values(0))
+        is_ticker_level0 = any(t in set(level0) for t in tickers)
+        for ticker in tickers:
+            try:
+                sub = frame[ticker] if is_ticker_level0 else frame.xs(ticker, axis=1, level=1)
+            except Exception:
+                continue
+            if isinstance(sub.columns, pd.MultiIndex):
+                sub.columns = sub.columns.get_level_values(-1)
+            if "Close" not in sub.columns:
+                continue
+            snap = _snap_from_close(sub["Close"])
+            if snap:
+                snapshots[ticker] = snap
+        return snapshots
+
+    if "Close" in frame.columns and len(tickers) == 1:
+        snap = _snap_from_close(frame["Close"])
+        if snap:
+            snapshots[tickers[0]] = snap
+    return snapshots
 
 
 def _parse_quantiles(raw: Any) -> list[float]:
@@ -1345,16 +1411,119 @@ def get_ticker_history(req: https_fn.CallableRequest) -> dict[str, Any]:
 
 @https_fn.on_call()
 def get_trending_tickers(req: https_fn.CallableRequest) -> dict[str, Any]:
+    tickers: list[str] = []
     try:
         response = requests.get(TRENDING_URL, headers=_yahoo_headers(), timeout=10)
         response.raise_for_status()
         data = response.json()
         quotes = data.get("finance", {}).get("result", [{}])[0].get("quotes", [])
         tickers = [item.get("symbol") for item in quotes if item.get("symbol")]
-        return {"tickers": tickers}
     except Exception:
         # Keep the UI functional even when Yahoo throttles.
-        return {"tickers": ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "TSLA", "META"]}
+        tickers = ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "TSLA", "META"]
+
+    tickers = [str(t).upper().strip() for t in (tickers or []) if str(t).strip()]
+    tickers = list(dict.fromkeys(tickers))
+
+    snapshots = _trending_snapshots(tickers, max_rows=18)
+    items: list[dict[str, Any]] = []
+    for symbol in tickers[:18]:
+        snap = snapshots.get(symbol) or {}
+        items.append({"symbol": symbol, **snap})
+
+    return {"tickers": tickers, "items": _serialize_for_firestore(items)}
+
+
+@https_fn.on_call()
+def get_ticker_intel(req: https_fn.CallableRequest) -> dict[str, Any]:
+    import yfinance as yf  # type: ignore
+
+    data = req.data or {}
+    ticker = str(data.get("ticker") or "").upper().strip()
+    if not ticker:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Ticker is required.")
+
+    ticker_obj = yf.Ticker(ticker)
+
+    info: dict[str, Any] = {}
+    try:
+        info = ticker_obj.info or {}
+        if not isinstance(info, dict):
+            info = {}
+    except Exception:
+        info = {}
+
+    summary = str(info.get("longBusinessSummary") or "").strip()
+    if len(summary) > 900:
+        summary = summary[:897].rstrip() + "..."
+
+    profile = {
+        "name": info.get("longName") or info.get("shortName") or "",
+        "sector": info.get("sector") or "",
+        "industry": info.get("industry") or "",
+        "website": info.get("website") or "",
+        "country": info.get("country") or "",
+        "exchange": info.get("fullExchangeName") or info.get("exchange") or "",
+        "currency": info.get("currency") or "",
+        "summary": summary,
+        "marketCap": info.get("marketCap"),
+        "beta": info.get("beta"),
+        "trailingPE": info.get("trailingPE"),
+        "forwardPE": info.get("forwardPE"),
+        "dividendYield": info.get("dividendYield"),
+        "fiftyTwoWeekLow": info.get("fiftyTwoWeekLow"),
+        "fiftyTwoWeekHigh": info.get("fiftyTwoWeekHigh"),
+    }
+
+    calendar_raw: dict[str, Any] = {}
+    try:
+        cal = ticker_obj.calendar or {}
+        if isinstance(cal, dict):
+            calendar_raw = cal
+    except Exception:
+        calendar_raw = {}
+
+    events: list[dict[str, Any]] = []
+    for key, value in (calendar_raw or {}).items():
+        if value is None:
+            continue
+        events.append({"label": str(key), "value": _serialize_for_firestore(value)})
+
+    analyst = {
+        "recommendationKey": info.get("recommendationKey"),
+        "recommendationMean": info.get("recommendationMean"),
+        "analystOpinions": info.get("numberOfAnalystOpinions"),
+        "targetLowPrice": info.get("targetLowPrice"),
+        "targetMeanPrice": info.get("targetMeanPrice"),
+        "targetHighPrice": info.get("targetHighPrice"),
+    }
+
+    recommendation_trend: list[dict[str, Any]] = []
+    try:
+        rec = ticker_obj.recommendations
+        if rec is not None and getattr(rec, "empty", True) is False:
+            rec_rows = rec.reset_index(drop=True).head(6)
+            for _, row in rec_rows.iterrows():
+                recommendation_trend.append(
+                    {
+                        "period": str(row.get("period") or ""),
+                        "strongBuy": int(row.get("strongBuy") or 0),
+                        "buy": int(row.get("buy") or 0),
+                        "hold": int(row.get("hold") or 0),
+                        "sell": int(row.get("sell") or 0),
+                        "strongSell": int(row.get("strongSell") or 0),
+                    }
+                )
+    except Exception:
+        recommendation_trend = []
+
+    return {
+        "ticker": ticker,
+        "profile": _serialize_for_firestore(profile),
+        "events": _serialize_for_firestore(events),
+        "analyst": _serialize_for_firestore(analyst),
+        "recommendationTrend": _serialize_for_firestore(recommendation_trend),
+    }
 
 
 @https_fn.on_call()
