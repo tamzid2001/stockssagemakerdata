@@ -256,32 +256,33 @@
                   <section class="panel hidden" data-panel="trending">
                     <div class="panel-header">
                       <h2>Trending</h2>
-                      <p class="small">Load the market's most active tickers and click any name to drive the chart context.</p>
+                      <p class="small">Load the market's most active tickers and click any symbol to drive the chart context.</p>
                     </div>
                     <div class="content-grid">
                       <div class="card">
-                        <h3>Trending tickers</h3>
-                        <p class="small">Click a ticker to load it into the chart. Forecast, indicators, news, options, and screener panels will follow.</p>
-                        <button class="cta secondary" id="load-trending" type="button" data-analytics="load_trending">Load trending</button>
-                        <div id="trending-list" class="ticker-grid" style="margin-top: 16px;"></div>
+                        <div class="card-head">
+                          <h3>Trending tickers</h3>
+                          <button class="cta secondary small" id="load-trending" type="button" data-analytics="load_trending">Refresh</button>
+                        </div>
+                        <div id="trending-list" class="trending-grid" style="margin-top: 16px;"></div>
                         <details class="learn-more">
                           <summary>Learn more</summary>
                           <p class="small">
-                            Trending tickers are a fast way to discover names worth screening. After loading a symbol, switch to Indicators to build overlays or jump to News and data to validate catalysts.
+                            Trending is a discovery surface. Use it to seed a watchlist, then validate moves with indicators, news, and forecast bands.
                           </p>
                         </details>
                       </div>
                       <div class="card">
-                        <h3>Recommended next steps</h3>
+                        <h3>Quick workflow</h3>
                         <div class="feature-list">
-                          <div class="feature"><span></span>Open Forecast to queue quantiles</div>
-                          <div class="feature"><span></span>Open Indicators to overlay momentum signals</div>
-                          <div class="feature"><span></span>Open Screener to rank the trend set</div>
+                          <div class="feature"><span></span>Load a symbol and choose a timeframe</div>
+                          <div class="feature"><span></span>Overlay indicators to confirm momentum</div>
+                          <div class="feature"><span></span>Store a forecast band and compare later</div>
                         </div>
                         <details class="learn-more">
                           <summary>Learn more</summary>
                           <p class="small">
-                            Quantura is designed to move from discovery to decision: trending leads to screening, screening leads to forecasts, and forecasts are stored in your workspace for review later.
+                            Quantura stores runs inside your workspace so you can revisit the same ticker later and share context with collaborators.
                           </p>
                         </details>
                       </div>
@@ -291,7 +292,7 @@
                   <section class="panel hidden" data-panel="news">
                     <div class="panel-header">
                       <h2>News and data</h2>
-                      <p class="small">Headlines are pulled with multiple fallbacks to avoid empty feeds. Use Trending to discover symbols quickly.</p>
+                      <p class="small">Company context and headlines update automatically when you load a ticker in the chart.</p>
                     </div>
                     <div class="content-grid">
                       <form id="download-form" class="card">
@@ -333,21 +334,26 @@
                       </div>
                     </div>
                     <div class="content-grid" style="margin-top: 16px;">
-                      <form id="news-form" class="card">
-                        <h3>Latest ticker news</h3>
-                        <input id="news-ticker" name="ticker" type="hidden" />
-                        <div class="small muted" style="margin-bottom: 12px;">Headlines are pulled for the ticker in your chart context.</div>
-                        <button class="cta" type="submit" data-analytics="news_submit">Fetch news</button>
+                      <div class="card">
+                        <h3>Ticker intelligence</h3>
+                        <input id="intel-ticker" type="hidden" />
+                        <div class="small muted" style="margin-bottom: 12px;">Auto-updates for the ticker in your chart context.</div>
+                        <div id="intel-output" class="panel-output small">Load a ticker to see company overview, events, and analyst signals.</div>
                         <details class="learn-more">
                           <summary>Learn more</summary>
-                          <p class="small">
-                            Use the News panel to validate that a move is driven by fundamentals rather than pure technical momentum.
-                            Pair with the Indicators panel to confirm whether sentiment and price agree.
-                          </p>
+                          <div class="small">
+                            <p>
+                              Use this panel to sanity-check what the market is reacting to. The company overview helps you verify sector and business model,
+                              the events section surfaces upcoming earnings and dividend dates, and the analyst snapshot helps you understand consensus and dispersion.
+                            </p>
+                            <p>
+                              For any headline cluster, overlay indicators on the price chart and compare forecast bands before you add the ticker to an alert or watchlist.
+                            </p>
+                          </div>
                         </details>
-                      </form>
+                      </div>
                       <div class="results-panel">
-                        <h3>News feed</h3>
+                        <h3>Headlines</h3>
                         <div id="news-output" class="panel-output small">Latest headlines will appear here.</div>
                       </div>
                     </div>

@@ -51,7 +51,7 @@
     downloadStatus: document.getElementById("download-status"),
     trendingButton: document.getElementById("load-trending"),
     trendingList: document.getElementById("trending-list"),
-    newsForm: document.getElementById("news-form"),
+    intelOutput: document.getElementById("intel-output"),
     newsOutput: document.getElementById("news-output"),
     optionsForm: document.getElementById("options-form"),
     optionsExpiration: document.getElementById("options-expiration"),
@@ -134,7 +134,18 @@
       forecastDoc: null,
       indicatorOverlays: [],
       forecastTablePage: 0,
+      newsTicker: "",
+      intelTicker: "",
     },
+    clients: {
+      auth: null,
+      db: null,
+      functions: null,
+      storage: null,
+      messaging: null,
+    },
+    panelAutoloaded: {},
+    sideDataRefreshTimer: null,
     taskCalendarCursor: null,
     taskCalendarTasks: [],
     unsubscribeOrders: null,
@@ -261,6 +272,13 @@
 		        }
 		      }
 		      logEvent("panel_view", { panel: next, page_path: window.location.pathname });
+		      try {
+		        if (typeof window !== "undefined" && typeof window.__quanturaPanelActivated === "function") {
+		          window.__quanturaPanelActivated(next);
+		        }
+		      } catch (error) {
+		        // Ignore.
+		      }
 		    };
 
 		    const initialFromUrl = () => {
@@ -1604,6 +1622,7 @@
       "technicals-ticker",
       "download-ticker",
       "news-ticker",
+      "intel-ticker",
       "options-ticker",
       "watchlist-ticker",
       "alert-ticker",
@@ -1619,6 +1638,307 @@
         el.value = t;
       }
     });
+  };
+
+  const formatUsd = (value, digits = 2) => {
+    const num = typeof value === "number" ? value : Number(value);
+    if (!Number.isFinite(num)) return "—";
+    return `$${num.toFixed(digits)}`;
+  };
+
+  const formatCompactNumber = (value) => {
+    const num = typeof value === "number" ? value : Number(value);
+    if (!Number.isFinite(num)) return "—";
+    try {
+      return new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 }).format(num);
+    } catch (error) {
+      return num.toLocaleString();
+    }
+  };
+
+  const formatPercent = (value, { signed = false, digits = 2 } = {}) => {
+    const num = typeof value === "number" ? value : Number(value);
+    if (!Number.isFinite(num)) return "—";
+    const prefix = signed && num > 0 ? "+" : "";
+    return `${prefix}${num.toFixed(digits)}%`;
+  };
+
+  const formatIntelValue = (value) => {
+    if (value === null || value === undefined || value === "") return "—";
+    if (Array.isArray(value)) return value.map((item) => String(item)).join(", ");
+    if (typeof value === "number" && Number.isFinite(value)) return value.toLocaleString();
+    return String(value);
+  };
+
+  const renderTickerIntel = (payload) => {
+    if (!ui.intelOutput) return;
+    const data = payload || {};
+    const ticker = normalizeTicker(data.ticker || state.tickerContext.ticker || "") || "";
+    const profile = data.profile || {};
+    const events = Array.isArray(data.events) ? data.events : [];
+    const analyst = data.analyst || {};
+    const trend = Array.isArray(data.recommendationTrend) ? data.recommendationTrend : [];
+
+    const name = escapeHtml(profile.name || ticker || "Ticker");
+    const sector = escapeHtml(profile.sector || "");
+    const industry = escapeHtml(profile.industry || "");
+    const exchange = escapeHtml(profile.exchange || "");
+    const currency = escapeHtml(profile.currency || "");
+    const website = String(profile.website || "").trim();
+    const websiteLink = website ? escapeHtml(website) : "";
+    const summary = escapeHtml(profile.summary || "");
+
+    const stats = [
+      { label: "Market cap", value: profile.marketCap ? formatCompactNumber(profile.marketCap) : "—" },
+      { label: "52-week range", value: profile.fiftyTwoWeekLow && profile.fiftyTwoWeekHigh ? `${formatUsd(profile.fiftyTwoWeekLow)} - ${formatUsd(profile.fiftyTwoWeekHigh)}` : "—" },
+      { label: "Trailing P/E", value: profile.trailingPE ? Number(profile.trailingPE).toFixed(2) : "—" },
+      { label: "Forward P/E", value: profile.forwardPE ? Number(profile.forwardPE).toFixed(2) : "—" },
+      { label: "Beta", value: profile.beta ? Number(profile.beta).toFixed(2) : "—" },
+      { label: "Dividend yield", value: profile.dividendYield ? formatPercent(Number(profile.dividendYield) * 100.0, { signed: false, digits: 2 }) : "—" },
+    ];
+
+    const recommendationKey = analyst.recommendationKey ? String(analyst.recommendationKey).replace(/_/g, " ") : "";
+    const recommendationMean = analyst.recommendationMean ? Number(analyst.recommendationMean).toFixed(2) : "";
+    const analystOpinions = analyst.analystOpinions ? Number(analyst.analystOpinions).toLocaleString() : "";
+    const targetLine =
+      analyst.targetMeanPrice || analyst.targetLowPrice || analyst.targetHighPrice
+        ? `${formatUsd(analyst.targetLowPrice)} / ${formatUsd(analyst.targetMeanPrice)} / ${formatUsd(analyst.targetHighPrice)}`
+        : "";
+
+    const eventMarkup = events.length
+      ? `
+        <div class="intel-list">
+          ${events
+            .slice(0, 8)
+            .map((item) => `<div class="intel-row"><span class="intel-k">${escapeHtml(item.label || "")}</span><span class="intel-v">${escapeHtml(formatIntelValue(item.value))}</span></div>`)
+            .join("")}
+        </div>
+      `
+      : `<div class="small muted">No events returned.</div>`;
+
+    const trendMarkup = trend.length
+      ? `
+        <div class="table-wrap" style="margin-top:10px;">
+          <table class="data-table">
+            <thead><tr><th>Period</th><th>SB</th><th>B</th><th>H</th><th>S</th><th>SS</th></tr></thead>
+            <tbody>
+              ${trend
+                .slice(0, 5)
+                .map(
+                  (row) => `
+                <tr>
+                  <td>${escapeHtml(row.period || "")}</td>
+                  <td>${Number(row.strongBuy || 0)}</td>
+                  <td>${Number(row.buy || 0)}</td>
+                  <td>${Number(row.hold || 0)}</td>
+                  <td>${Number(row.sell || 0)}</td>
+                  <td>${Number(row.strongSell || 0)}</td>
+                </tr>
+              `
+                )
+                .join("")}
+            </tbody>
+          </table>
+        </div>
+      `
+      : "";
+
+    ui.intelOutput.innerHTML = `
+      <div class="intel-head">
+        <div class="intel-name">${name}</div>
+        <div class="small muted">${[ticker, sector, industry, exchange, currency].filter(Boolean).join(" · ")}</div>
+        ${websiteLink ? `<a class="news-link" href="${websiteLink}" target="_blank" rel="noreferrer">Company site</a>` : ""}
+      </div>
+
+      <div class="intel-stats">
+        ${stats.map((item) => `<div class="intel-stat"><div class="small muted">${escapeHtml(item.label)}</div><div class="intel-stat-v">${escapeHtml(item.value)}</div></div>`).join("")}
+      </div>
+
+      ${summary ? `<div class="intel-summary small">${summary}</div>` : ""}
+
+      <div class="intel-split">
+        <div>
+          <div class="small"><strong>Upcoming events</strong></div>
+          ${eventMarkup}
+        </div>
+        <div>
+          <div class="small"><strong>Analyst snapshot</strong></div>
+          <div class="intel-analyst small">
+            ${recommendationKey ? `<div><strong>Consensus</strong> ${escapeHtml(recommendationKey)}${recommendationMean ? ` (mean ${escapeHtml(recommendationMean)})` : ""}</div>` : "<div class=\"muted\">No consensus available.</div>"}
+            ${analystOpinions ? `<div><strong>Analyst opinions</strong> ${escapeHtml(analystOpinions)}</div>` : ""}
+            ${targetLine ? `<div><strong>Target (low / mean / high)</strong> ${escapeHtml(targetLine)}</div>` : ""}
+          </div>
+          ${trendMarkup}
+        </div>
+      </div>
+    `;
+  };
+
+  const loadTickerIntel = async (functions, ticker, { notify = false, force = false } = {}) => {
+    if (!functions || !ui.intelOutput) return;
+    const symbol = normalizeTicker(ticker);
+    if (!symbol) {
+      ui.intelOutput.innerHTML = `<div class="small muted">Load a ticker to see company context.</div>`;
+      return;
+    }
+    if (!force && state.tickerContext.intelTicker === symbol) return;
+    state.tickerContext.intelTicker = symbol;
+
+    try {
+      setOutputLoading(ui.intelOutput, "Loading company context...");
+      const getIntel = functions.httpsCallable("get_ticker_intel");
+      const result = await getIntel({ ticker: symbol, meta: buildMeta() });
+      setOutputReady(ui.intelOutput);
+      renderTickerIntel(result.data || {});
+      logEvent("ticker_intel_loaded", { ticker: symbol });
+    } catch (error) {
+      setOutputReady(ui.intelOutput);
+      ui.intelOutput.innerHTML = `<div class="small muted">Unable to load ticker intelligence right now.</div>`;
+      if (notify) showToast(error.message || "Unable to load ticker intelligence.", "warn");
+    }
+  };
+
+  const renderTickerNews = (items, ticker) => {
+    if (!ui.newsOutput) return;
+    const list = Array.isArray(items) ? items : [];
+    const symbol = normalizeTicker(ticker) || "";
+
+    if (!list.length) {
+      ui.newsOutput.innerHTML = `
+        <div class="small muted">No headlines returned for ${escapeHtml(symbol || "this ticker")}.</div>
+        <div class="small" style="margin-top:10px;">Try a different symbol, or load a trending ticker and retry.</div>
+      `;
+      return;
+    }
+
+    ui.newsOutput.innerHTML = list
+      .map((item) => {
+        const title = escapeHtml(item.title || "");
+        const publisher = escapeHtml(item.publisher || "");
+        const published = formatEpoch(item.publishedAt);
+        const summary = escapeHtml(item.summary || "");
+        const link = item.link ? escapeHtml(item.link) : "";
+        const thumb = item.thumbnailUrl ? escapeHtml(item.thumbnailUrl) : "";
+        const meta = [publisher, published].filter(Boolean).join(" · ");
+        return `
+          <article class="news-card${thumb ? " news-card--with-thumb" : ""}">
+            ${thumb ? `<img class="news-thumb" src="${thumb}" alt="" loading="lazy" />` : ""}
+            <div class="news-body">
+              <div class="news-title">${title}</div>
+              <div class="news-meta small">${meta}</div>
+              ${summary ? `<div class="news-summary small">${summary}</div>` : ""}
+              ${link ? `<a class="news-link" href="${link}" target="_blank" rel="noreferrer">Read article</a>` : ""}
+            </div>
+          </article>
+        `;
+      })
+      .join("");
+  };
+
+  const loadTickerNews = async (functions, ticker, { notify = false, force = false } = {}) => {
+    if (!functions || !ui.newsOutput) return;
+    const symbol = normalizeTicker(ticker);
+    if (!symbol) {
+      ui.newsOutput.innerHTML = `<div class="small muted">Load a ticker to see headlines.</div>`;
+      return;
+    }
+    if (!force && state.tickerContext.newsTicker === symbol) return;
+    state.tickerContext.newsTicker = symbol;
+
+    try {
+      setOutputLoading(ui.newsOutput, "Loading headlines...");
+      const getNews = functions.httpsCallable("get_ticker_news");
+      const result = await getNews({ ticker: symbol, meta: buildMeta() });
+      const items = result.data?.news || [];
+      setOutputReady(ui.newsOutput);
+      renderTickerNews(items, symbol);
+      logEvent("news_loaded", { ticker: symbol, count: Array.isArray(items) ? items.length : 0 });
+    } catch (error) {
+      setOutputReady(ui.newsOutput);
+      ui.newsOutput.innerHTML = `<div class="small muted">Unable to load headlines right now.</div>`;
+      if (notify) showToast(error.message || "Unable to load news.", "warn");
+    }
+  };
+
+  const scheduleSideDataRefresh = (ticker, { force = false } = {}) => {
+    const symbol = normalizeTicker(ticker) || "";
+    const functions = state.clients?.functions;
+    if (!functions || (!ui.newsOutput && !ui.intelOutput)) return;
+    if (!symbol) return;
+    if (state.sideDataRefreshTimer) window.clearTimeout(state.sideDataRefreshTimer);
+    state.sideDataRefreshTimer = window.setTimeout(() => {
+      loadTickerNews(functions, symbol, { force, notify: false });
+      loadTickerIntel(functions, symbol, { force, notify: false });
+    }, 220);
+  };
+
+  const renderTrendingTickers = (payload) => {
+    if (!ui.trendingList) return;
+    const items = Array.isArray(payload?.items) ? payload.items : [];
+    const tickers = Array.isArray(payload?.tickers) ? payload.tickers : [];
+
+    const rows = items.length
+      ? items
+      : tickers.map((symbol) => ({
+          symbol,
+          lastClose: null,
+          changePct: null,
+        }));
+
+    if (!rows.length) {
+      ui.trendingList.innerHTML = `<div class="small muted">No trending tickers returned.</div>`;
+      return;
+    }
+
+    ui.trendingList.innerHTML = rows
+      .slice(0, 18)
+      .map((row) => {
+        const symbol = normalizeTicker(row.symbol || row.ticker || "") || "";
+        const lastClose = row.lastClose;
+        const changePct = row.changePct;
+        const change = row.change;
+
+        const changeNum = typeof changePct === "number" ? changePct : Number(changePct);
+        const changeOk = Number.isFinite(changeNum);
+        const direction = !changeOk ? "flat" : changeNum < 0 ? "down" : "up";
+        const changeLabel = changeOk ? formatPercent(changeNum, { signed: true, digits: 2 }) : "Quote unavailable";
+        const absChange = typeof change === "number" ? change : Number(change);
+        const absChangeLabel = Number.isFinite(absChange) ? `${absChange > 0 ? "+" : ""}${absChange.toFixed(2)}` : "";
+
+        const priceLabel = lastClose !== null && lastClose !== undefined ? formatUsd(lastClose) : "—";
+        const subLabel = absChangeLabel && changeOk ? `${absChangeLabel} · ${changeLabel}` : changeLabel;
+
+        return `
+          <button class="trending-card" type="button" data-action="pick-ticker" data-ticker="${escapeHtml(symbol)}">
+            <div class="trending-top">
+              <div class="trending-symbol">${escapeHtml(symbol)}</div>
+              <div class="trending-price">${escapeHtml(priceLabel)}</div>
+            </div>
+            <div class="trending-bottom">
+              <span class="trending-chip trending-chip--${direction}">${escapeHtml(subLabel)}</span>
+              <span class="small muted">Tap to load</span>
+            </div>
+          </button>
+        `;
+      })
+      .join("");
+  };
+
+  const loadTrendingTickers = async (functions, { notify = false } = {}) => {
+    if (!functions || !ui.trendingList) return;
+    try {
+      setOutputLoading(ui.trendingList, "Loading trending tickers...");
+      const getTrending = functions.httpsCallable("get_trending_tickers");
+      const result = await getTrending({ meta: buildMeta() });
+      setOutputReady(ui.trendingList);
+      renderTrendingTickers(result.data || {});
+      const count = Array.isArray(result.data?.tickers) ? result.data.tickers.length : 0;
+      logEvent("trending_loaded", { count });
+    } catch (error) {
+      setOutputReady(ui.trendingList);
+      ui.trendingList.innerHTML = `<div class="small muted">Unable to load trending tickers right now.</div>`;
+      if (notify) showToast(error.message || "Unable to load trending tickers.", "warn");
+    }
   };
 
   const computeHistoryStart = (interval) => {
@@ -2154,6 +2474,27 @@
 		    const functions = firebase.functions();
 		    const storage = firebase.storage ? firebase.storage() : null;
 		    const messaging = getMessagingClient();
+
+      state.clients = { auth, db, functions, storage, messaging };
+
+      window.__quanturaPanelActivated = (panel) => {
+        const next = String(panel || "").trim();
+        if (!next) return;
+
+        if (next === "trending") {
+          if (!state.panelAutoloaded.trending) {
+            state.panelAutoloaded.trending = true;
+            loadTrendingTickers(functions, { notify: false });
+          }
+        }
+
+        if (next === "news") {
+          const ticker = normalizeTicker(state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "");
+          if (!ticker) return;
+          scheduleSideDataRefresh(ticker, { force: !state.panelAutoloaded.news });
+          state.panelAutoloaded.news = true;
+        }
+      };
 
       ensureThemeToggle();
 
@@ -2933,27 +3274,29 @@
         try {
           const rows = await loadTickerHistory(functions, ticker, interval);
           state.tickerContext.rows = rows;
-          await renderTickerChart(rows, ticker, interval, state.tickerContext.indicatorOverlays || []);
-          setTerminalStatus("Loaded.");
-          logEvent("terminal_load", { ticker, interval });
-          syncTickerInputs(ticker);
-        } catch (error) {
-          setTerminalStatus(error.message || "Unable to load ticker data.");
-          showToast(error.message || "Unable to load ticker data.", "warn");
-        }
+	          await renderTickerChart(rows, ticker, interval, state.tickerContext.indicatorOverlays || []);
+	          setTerminalStatus("Loaded.");
+	          logEvent("terminal_load", { ticker, interval });
+	          syncTickerInputs(ticker);
+	          scheduleSideDataRefresh(ticker, { force: true });
+	        } catch (error) {
+	          setTerminalStatus(error.message || "Unable to load ticker data.");
+	          showToast(error.message || "Unable to load ticker data.", "warn");
+	        }
       });
 
       if (ui.tickerChart) {
         setTerminalStatus("Loading price history...");
-        loadTickerHistory(functions, initialTicker, initialInterval)
-          .then(async (rows) => {
-            state.tickerContext.rows = rows;
-            await renderTickerChart(rows, initialTicker, initialInterval, state.tickerContext.indicatorOverlays || []);
-            setTerminalStatus("Loaded.");
-          })
-          .catch((error) => {
-            setTerminalStatus(error.message || "Unable to load ticker data.");
-          });
+	        loadTickerHistory(functions, initialTicker, initialInterval)
+	          .then(async (rows) => {
+	            state.tickerContext.rows = rows;
+	            await renderTickerChart(rows, initialTicker, initialInterval, state.tickerContext.indicatorOverlays || []);
+	            setTerminalStatus("Loaded.");
+	            scheduleSideDataRefresh(initialTicker, { force: true });
+	          })
+	          .catch((error) => {
+	            setTerminalStatus(error.message || "Unable to load ticker data.");
+	          });
       }
     }
 
@@ -3258,88 +3601,9 @@
       }
     });
 
-	    ui.trendingButton?.addEventListener("click", async () => {
-	      try {
-	        setOutputLoading(ui.trendingList, "Loading trending tickers...");
-	        const getTrending = functions.httpsCallable("get_trending_tickers");
-	        const result = await getTrending({ meta: buildMeta() });
-	        const tickers = result.data?.tickers || [];
-	        if (ui.trendingList) {
-	          setOutputReady(ui.trendingList);
-	          if (!tickers.length) {
-	            ui.trendingList.innerHTML = `<div class="small muted">No trending tickers returned.</div>`;
-	          } else {
-	            ui.trendingList.innerHTML = tickers
-	              .map(
-	                (ticker) =>
-	                  `<button class="ticker-pill" type="button" data-action="pick-ticker" data-ticker="${escapeHtml(
-	                    ticker
-	                  )}">${escapeHtml(ticker)}</button>`
-	              )
-	              .join("");
-	          }
-	        }
-	        logEvent("trending_loaded", { count: tickers.length });
-	      } catch (error) {
-	        showToast(error.message || "Unable to load trending tickers.", "warn");
-	      }
-	    });
-
-	    ui.newsForm?.addEventListener("submit", async (event) => {
-	      event.preventDefault();
-	      const formData = new FormData(ui.newsForm);
-        const ticker =
-          normalizeTicker(formData.get("ticker")) || state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "";
-        if (!ticker) {
-          showToast("Load a ticker first.", "warn");
-          return;
-        }
-	      const payload = {
-	        ticker,
-	      };
-
-	      try {
-	        setOutputLoading(ui.newsOutput, "Fetching headlines...");
-	        const getNews = functions.httpsCallable("get_ticker_news");
-	        const result = await getNews(payload);
-	        const items = result.data?.news || [];
-	        if (ui.newsOutput) {
-	          setOutputReady(ui.newsOutput);
-	          if (!items.length) {
-	            ui.newsOutput.innerHTML = `
-	              <div class="small muted">No news returned for ${escapeHtml(ticker)}.</div>
-	              <div class="small" style="margin-top:10px;">Try a different symbol, or load a trending ticker and retry.</div>
-	            `;
-	          } else {
-	            ui.newsOutput.innerHTML = items
-	              .map((item) => {
-	                const title = escapeHtml(item.title || "");
-	                const publisher = escapeHtml(item.publisher || "");
-	                const published = formatEpoch(item.publishedAt);
-	                const summary = escapeHtml(item.summary || "");
-	                const link = item.link ? escapeHtml(item.link) : "";
-                  const thumb = item.thumbnailUrl ? escapeHtml(item.thumbnailUrl) : "";
-	                const meta = [publisher, published].filter(Boolean).join(" · ");
-	                return `
-	                  <article class="news-card${thumb ? " news-card--with-thumb" : ""}">
-                      ${thumb ? `<img class="news-thumb" src="${thumb}" alt="" loading="lazy" />` : ""}
-                      <div class="news-body">
-	                      <div class="news-title">${title}</div>
-	                      <div class="news-meta small">${meta}</div>
-	                      ${summary ? `<div class="news-summary small">${summary}</div>` : ""}
-	                      ${link ? `<a class="news-link" href="${link}" target="_blank" rel="noreferrer">Read article</a>` : ""}
-                      </div>
-	                  </article>
-	                `;
-	              })
-	              .join("");
-	          }
-	        }
-	        logEvent("news_loaded", { ticker, count: items.length });
-	      } catch (error) {
-	        showToast(error.message || "Unable to fetch news.", "warn");
-	      }
-	    });
+		    ui.trendingButton?.addEventListener("click", async () => {
+		      await loadTrendingTickers(functions, { notify: true });
+		    });
 
 	    ui.optionsForm?.addEventListener("submit", async (event) => {
 	      event.preventDefault();
