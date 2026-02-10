@@ -8,11 +8,7 @@ from datetime import datetime, timezone
 from statistics import NormalDist
 from typing import Any
 
-import numpy as np
-import pandas as pd
 import requests
-import yfinance as yf
-from finta import TA
 
 import firebase_admin
 from firebase_admin import credentials, firestore, messaging as admin_messaging
@@ -273,12 +269,24 @@ def _notify_user(
 
 
 def _serialize_for_firestore(value: Any) -> Any:
-    if isinstance(value, (np.floating, np.integer)):
-        return value.item()
-    if isinstance(value, pd.Timestamp):
-        return value.isoformat()
-    if isinstance(value, np.ndarray):
-        return [_serialize_for_firestore(item) for item in value.tolist()]
+    try:
+        import numpy as np  # type: ignore
+
+        if isinstance(value, (np.floating, np.integer)):
+            return value.item()
+        if isinstance(value, np.ndarray):
+            return [_serialize_for_firestore(item) for item in value.tolist()]
+    except Exception:
+        pass
+
+    try:
+        import pandas as pd  # type: ignore
+
+        if isinstance(value, pd.Timestamp):
+            return value.isoformat()
+    except Exception:
+        pass
+
     if isinstance(value, list):
         return [_serialize_for_firestore(item) for item in value]
     if isinstance(value, dict):
@@ -287,6 +295,9 @@ def _serialize_for_firestore(value: Any) -> Any:
 
 
 def _load_history(ticker: str, start: str | None, interval: str) -> pd.DataFrame:
+    import pandas as pd  # type: ignore
+    import yfinance as yf  # type: ignore
+
     period = "730d" if interval == "1h" else "10y"
     frame = yf.download(
         ticker,
@@ -313,6 +324,9 @@ def _load_history(ticker: str, start: str | None, interval: str) -> pd.DataFrame
 
 
 def _latest_close_prices(tickers: list[str]) -> dict[str, float]:
+    import pandas as pd  # type: ignore
+    import yfinance as yf  # type: ignore
+
     tickers = [str(t).upper().strip() for t in (tickers or []) if str(t).strip()]
     tickers = list(dict.fromkeys([t for t in tickers if t]))
     if not tickers:
@@ -369,6 +383,9 @@ def _generate_quantile_forecast(
     quantiles: list[float],
     interval: str,
 ) -> dict[str, Any]:
+    import numpy as np  # type: ignore
+    import pandas as pd  # type: ignore
+
     quantiles = sorted({float(q) for q in quantiles if 0 < float(q) < 1})
     if 0.5 not in quantiles:
         quantiles.append(0.5)
@@ -427,6 +444,8 @@ def _run_prophet_engine(close_series: pd.Series, horizon: int, quantiles: list[f
         from prophet import Prophet  # type: ignore
     except Exception:
         return _generate_quantile_forecast(close_series, horizon, quantiles, interval)
+
+    import pandas as pd  # type: ignore
 
     forecast_core = _generate_quantile_forecast(close_series, horizon, quantiles, interval)
 
@@ -1235,6 +1254,9 @@ def run_prophet_forecast(req: https_fn.CallableRequest) -> dict[str, Any]:
 
 @https_fn.on_call()
 def get_ticker_history(req: https_fn.CallableRequest) -> dict[str, Any]:
+    import pandas as pd  # type: ignore
+    import yfinance as yf  # type: ignore
+
     data = req.data or {}
     ticker = str(data.get("ticker") or "").upper()
     if not ticker:
@@ -1313,6 +1335,8 @@ def get_ticker_news(req: https_fn.CallableRequest) -> dict[str, Any]:
     # 2) Fallback: yfinance news
     if not news_items:
         try:
+            import yfinance as yf  # type: ignore
+
             ticker_obj = yf.Ticker(ticker)
             for item in (ticker_obj.news or [])[:10]:
                 if not isinstance(item, dict):
@@ -1352,6 +1376,9 @@ def get_ticker_news(req: https_fn.CallableRequest) -> dict[str, Any]:
 
 @https_fn.on_call()
 def get_options_chain(req: https_fn.CallableRequest) -> dict[str, Any]:
+    import pandas as pd  # type: ignore
+    import yfinance as yf  # type: ignore
+
     _require_auth(req)
     data = req.data or {}
     ticker = str(data.get("ticker") or "").upper().strip()
@@ -1561,6 +1588,10 @@ def assistant_chat(req: https_fn.CallableRequest) -> dict[str, Any]:
 
 @https_fn.on_call()
 def get_technicals(req: https_fn.CallableRequest) -> dict[str, Any]:
+    import pandas as pd  # type: ignore
+    import yfinance as yf  # type: ignore
+    from finta import TA  # type: ignore
+
     data = req.data or {}
     ticker = str(data.get("ticker") or "").upper()
     if not ticker:
@@ -1688,6 +1719,11 @@ def queue_screener_run(req: https_fn.CallableRequest) -> dict[str, Any]:
 
 @https_fn.on_call()
 def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
+    import numpy as np  # type: ignore
+    import pandas as pd  # type: ignore
+    import yfinance as yf  # type: ignore
+    from finta import TA  # type: ignore
+
     token = _require_auth(req)
     data = req.data or {}
 
