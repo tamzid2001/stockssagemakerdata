@@ -1473,6 +1473,32 @@ def get_ticker_history(req: https_fn.CallableRequest) -> dict[str, Any]:
 
 @https_fn.on_call()
 def get_trending_tickers(req: https_fn.CallableRequest) -> dict[str, Any]:
+    data = req.data or {}
+    force = bool(data.get("force"))
+    now = time.time()
+
+    cache_ref = db.collection("cache").document("trending_us")
+    ttl_seconds = 24 * 60 * 60
+
+    if not force:
+        try:
+            cached_snap = cache_ref.get()
+            if cached_snap.exists:
+                cached = cached_snap.to_dict() or {}
+                updated_epoch = float(cached.get("updatedAtEpoch") or 0.0)
+                tickers_cached = cached.get("tickers") or []
+                items_cached = cached.get("items") or []
+                if updated_epoch and (now - updated_epoch) < ttl_seconds and (tickers_cached or items_cached):
+                    return {
+                        "tickers": tickers_cached,
+                        "items": items_cached,
+                        "cached": True,
+                        "updatedAtEpoch": updated_epoch,
+                    }
+        except Exception:
+            # Cache is best-effort; fall back to live fetch.
+            pass
+
     tickers: list[str] = []
     try:
         response = requests.get(TRENDING_URL, headers=_yahoo_headers(), timeout=10)
@@ -1493,7 +1519,27 @@ def get_trending_tickers(req: https_fn.CallableRequest) -> dict[str, Any]:
         snap = snapshots.get(symbol) or {}
         items.append({"symbol": symbol, **snap})
 
-    return {"tickers": tickers, "items": _serialize_for_firestore(items)}
+    payload = {
+        "tickers": tickers,
+        "items": _serialize_for_firestore(items),
+        "cached": False,
+        "updatedAtEpoch": int(now),
+    }
+
+    try:
+        cache_ref.set(
+            {
+                "tickers": tickers,
+                "items": payload["items"],
+                "updatedAtEpoch": payload["updatedAtEpoch"],
+                "updatedAt": firestore.SERVER_TIMESTAMP,
+            },
+            merge=True,
+        )
+    except Exception:
+        pass
+
+    return payload
 
 
 @https_fn.on_call()
@@ -2008,6 +2054,31 @@ def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
     token = _require_auth(req)
     data = req.data or {}
 
+    workspace_id = str(data.get("workspaceId") or req.auth.uid or "").strip()
+    if not workspace_id:
+        workspace_id = req.auth.uid
+
+    # Allow writing into your own workspace, or an editor-level shared workspace.
+    if workspace_id != req.auth.uid and token.get("email") != ADMIN_EMAIL:
+        shared = (
+            db.collection("users")
+            .document(workspace_id)
+            .collection("collaborators")
+            .document(req.auth.uid)
+            .get()
+        )
+        if not shared.exists:
+            raise https_fn.HttpsError(
+                https_fn.FunctionsErrorCode.PERMISSION_DENIED,
+                "Workspace access required to run a screener for this workspace.",
+            )
+        role = str((shared.to_dict() or {}).get("role") or "viewer").strip().lower()
+        if role != "editor":
+            raise https_fn.HttpsError(
+                https_fn.FunctionsErrorCode.PERMISSION_DENIED,
+                "Editor access is required to run a screener for this workspace.",
+            )
+
     market = str(data.get("market") or "us").lower()
     max_names = int(data.get("maxNames") or 25)
     max_names = max(5, min(max_names, 50))
@@ -2117,8 +2188,10 @@ def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
 
     doc_ref = db.collection("screener_runs").document()
     run_doc = {
-        "userId": req.auth.uid,
+        "userId": workspace_id,
         "userEmail": token.get("email"),
+        "createdByUid": req.auth.uid,
+        "createdByEmail": token.get("email"),
         "market": market,
         "universe": str(data.get("universe") or "trending"),
         "maxNames": max_names,
@@ -2132,7 +2205,7 @@ def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
     doc_ref.set(run_doc)
     _audit_event(req.auth.uid, token.get("email"), "screener_completed", {"runId": doc_ref.id, "count": len(results)})
 
-    return {"runId": doc_ref.id, "status": "completed", "results": results}
+    return {"runId": doc_ref.id, "status": "completed", "results": results, "workspaceId": workspace_id}
 
 
 @https_fn.on_call()
