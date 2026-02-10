@@ -25,6 +25,7 @@
     <script defer src="/__/firebase/12.9.0/firebase-firestore-compat.js"></script>
     <script defer src="/__/firebase/12.9.0/firebase-functions-compat.js"></script>
     <script defer src="/__/firebase/12.9.0/firebase-storage-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-remote-config-compat.js"></script>
     <script defer src="/__/firebase/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
     <script defer src="/app.js"></script>
@@ -64,16 +65,17 @@
             <a class="cta secondary small" href="/dashboard">Open dashboard</a>
             <a class="cta secondary small hidden" id="nav-admin" href="/admin">Admin dashboard</a>
           </div>
-          <nav class="sidebar-nav" aria-label="Forecasting navigation">
-            <button class="sidebar-link active" type="button" data-panel-target="forecast">Forecast</button>
-            <button class="sidebar-link" type="button" data-panel-target="indicators">Indicators</button>
-            <button class="sidebar-link" type="button" data-panel-target="news">News and data</button>
-            <button class="sidebar-link" type="button" data-panel-target="options">Options</button>
-            <button class="sidebar-link" type="button" data-panel-target="screener">Screener</button>
-            <button class="sidebar-link" type="button" data-panel-target="saved">Saved forecasts</button>
-            <button class="sidebar-link" type="button" data-panel-target="learn">Learn more</button>
-          </nav>
-        </aside>
+	          <nav class="sidebar-nav" aria-label="Forecasting navigation">
+	            <button class="sidebar-link active" type="button" data-panel-target="forecast">Forecast</button>
+	            <button class="sidebar-link" type="button" data-panel-target="indicators">Indicators</button>
+	            <button class="sidebar-link" type="button" data-panel-target="news">News and data</button>
+	            <button class="sidebar-link" type="button" data-panel-target="options">Options</button>
+	            <button class="sidebar-link" type="button" data-panel-target="screener">Screener</button>
+	            <button class="sidebar-link" type="button" data-panel-target="watchlist">Watchlist and alerts</button>
+	            <button class="sidebar-link" type="button" data-panel-target="saved">Saved forecasts</button>
+	            <button class="sidebar-link" type="button" data-panel-target="learn">Learn more</button>
+	          </nav>
+	        </aside>
 
         <div class="app-main">
           <section class="page-hero">
@@ -122,11 +124,10 @@
                     </div>
                   </div>
 
-                  <div class="chart-shell studio-chart">
-                    <div id="ticker-chart" class="chart"></div>
-                    <div id="indicator-chart" class="chart"></div>
-                  </div>
-                </div>
+	                  <div class="chart-shell studio-chart">
+	                    <div id="ticker-chart" class="chart"></div>
+	                  </div>
+	                </div>
 
                 <div class="studio-panel">
                   <section class="panel" data-panel="forecast">
@@ -237,11 +238,12 @@
                         </p>
                       </details>
                     </form>
-                    <div class="results-panel">
-                      <h3>Indicator output</h3>
-                      <div id="technicals-output" class="panel-output small">Select indicators to see the latest values.</div>
-                    </div>
-                  </section>
+	                    <div class="results-panel">
+	                      <h3>Indicator output</h3>
+	                      <div id="technicals-output" class="panel-output small">Select indicators to see the latest values.</div>
+	                      <div id="indicator-chart" class="chart" style="margin-top: 16px;"></div>
+	                    </div>
+	                  </section>
 
                   <section class="panel hidden" data-panel="news">
                     <div class="panel-header">
@@ -317,8 +319,11 @@
                           <input id="options-ticker" name="ticker" placeholder="AAPL" required />
                         </div>
                         <div class="field">
-                          <label class="label" for="options-expiration">Expiration (optional)</label>
-                          <input id="options-expiration" name="expiration" type="date" />
+                          <label class="label" for="options-expiration">Expiration</label>
+                          <select id="options-expiration" name="expiration">
+                            <option value="">Auto (nearest)</option>
+                          </select>
+                          <div class="small muted" style="margin-top:8px;">Quantura loads available expirations from the market and remembers your last choice.</div>
                         </div>
                       </div>
                       <button class="cta" type="submit" data-analytics="options_submit">Load options</button>
@@ -381,16 +386,94 @@
                         </p>
                       </details>
                     </form>
-                    <div class="results-panel">
-                      <h3>Screener output</h3>
-                      <div id="screener-output" class="panel-output small">Run the screener to see ranked candidates.</div>
-                    </div>
-                  </section>
+	                    <div class="results-panel">
+	                      <h3>Screener output</h3>
+	                      <div id="screener-output" class="panel-output small">Run the screener to see ranked candidates.</div>
+	                    </div>
+	                  </section>
 
-                  <section class="panel hidden" data-panel="saved">
-                    <div class="panel-header">
-                      <h2>Saved forecasts</h2>
-                      <p class="small">Plot any saved run onto the chart without leaving this page.</p>
+	                  <section class="panel hidden" data-panel="watchlist">
+	                    <div class="panel-header">
+	                      <h2>Watchlist and alerts</h2>
+	                      <p class="small">Save symbols to your workspace and set price alerts that can trigger notifications.</p>
+	                    </div>
+
+	                    <div class="content-grid">
+	                      <form id="watchlist-form" class="card">
+	                        <h3>Add to watchlist</h3>
+	                        <div class="field">
+	                          <label class="label" for="watchlist-ticker">Ticker</label>
+	                          <input id="watchlist-ticker" name="ticker" placeholder="AAPL" required />
+	                        </div>
+	                        <div class="field">
+	                          <label class="label" for="watchlist-notes">Notes (optional)</label>
+	                          <textarea id="watchlist-notes" name="notes" placeholder="Thesis, catalysts, or why this name matters"></textarea>
+	                        </div>
+	                        <button class="cta" type="submit" data-analytics="watchlist_add">Add</button>
+	                        <details class="learn-more">
+	                          <summary>Learn more</summary>
+	                          <p class="small">
+	                            Watchlists live in your active workspace. Invite collaborators from the Dashboard to share this list.
+	                            Click any symbol to update the chart instantly.
+	                          </p>
+	                        </details>
+	                      </form>
+
+	                      <div class="results-panel">
+	                        <h3>Watchlist</h3>
+	                        <div id="watchlist-list" class="panel-output small">Sign in to start saving tickers.</div>
+	                      </div>
+	                    </div>
+
+	                    <div class="content-grid" style="margin-top: 16px;">
+	                      <form id="alert-form" class="card">
+	                        <h3>Create price alert</h3>
+	                        <div class="form-grid">
+	                          <div class="field">
+	                            <label class="label" for="alert-ticker">Ticker</label>
+	                            <input id="alert-ticker" name="ticker" placeholder="NVDA" required />
+	                          </div>
+	                          <div class="field">
+	                            <label class="label" for="alert-condition">Condition</label>
+	                            <select id="alert-condition" name="condition">
+	                              <option value="above">Crosses above</option>
+	                              <option value="below">Crosses below</option>
+	                            </select>
+	                          </div>
+	                          <div class="field">
+	                            <label class="label" for="alert-price">Target price (USD)</label>
+	                            <input id="alert-price" name="target" type="number" step="0.01" placeholder="150.00" required />
+	                          </div>
+	                        </div>
+	                        <div class="field">
+	                          <label class="label" for="alert-notes">Notes (optional)</label>
+	                          <textarea id="alert-notes" name="notes" placeholder="What should you do when this triggers?"></textarea>
+	                        </div>
+	                        <div class="hero-actions" style="margin-top: 12px;">
+	                          <button class="cta" type="submit" data-analytics="alert_create">Create alert</button>
+	                          <button class="cta secondary" id="alerts-check" type="button" data-analytics="alert_check">Check alerts now</button>
+	                        </div>
+	                        <p class="small" id="alerts-status"></p>
+	                        <details class="learn-more">
+	                          <summary>Learn more</summary>
+	                          <p class="small">
+	                            Alerts are evaluated against the latest market price. For push delivery, enable notifications in the Dashboard.
+	                            Quantura stores alerts in Firestore, along with trigger events, so you can audit what happened.
+	                          </p>
+	                        </details>
+	                      </form>
+
+	                      <div class="results-panel">
+	                        <h3>Active alerts</h3>
+	                        <div id="alerts-list" class="panel-output small">Create an alert to see it here.</div>
+	                      </div>
+	                    </div>
+	                  </section>
+
+	                  <section class="panel hidden" data-panel="saved">
+	                    <div class="panel-header">
+	                      <h2>Saved forecasts</h2>
+	                      <p class="small">Plot any saved run onto the chart without leaving this page.</p>
                     </div>
                     <div id="saved-forecasts-list" class="order-list panel-output"></div>
                     <details class="learn-more">
