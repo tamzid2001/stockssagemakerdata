@@ -128,7 +128,26 @@ const getServerTemplate = async () => {
   const now = Date.now();
   if (cachedTemplate && now - cachedTemplateLoadedAt < TEMPLATE_TTL_MS) return cachedTemplate;
   const rc = getRemoteConfig(adminApp);
-  const template = await rc.getServerTemplate();
+  const template = rc.initServerTemplate({
+    // Keep UI stable even if the server template has not been published yet.
+    defaultConfig: {
+      welcome_message: "Welcome to Quantura",
+      watchlist_enabled: "true",
+      forecast_prophet_enabled: "true",
+      forecast_timemixer_enabled: "true",
+      webpush_vapid_key: "",
+    },
+  });
+  try {
+    await template.load();
+  } catch (error) {
+    const nowMs = Date.now();
+    if (nowMs - lastRemoteConfigErrorLogAt > 60 * 1000) {
+      lastRemoteConfigErrorLogAt = nowMs;
+      // eslint-disable-next-line no-console
+      console.error("Remote Config SSR: unable to load server template, using defaults.", error?.message || error);
+    }
+  }
   cachedTemplate = template;
   cachedTemplateLoadedAt = now;
   return template;
