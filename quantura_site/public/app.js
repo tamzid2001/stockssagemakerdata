@@ -8,6 +8,7 @@
   const WORKSPACE_KEY = "quantura_active_workspace";
   const OPTIONS_EXPIRATION_PREFIX = "quantura_options_expiration_";
   const THEME_KEY = "quantura_theme";
+  const PENDING_SHARE_KEY = "quantura_pending_share_v1";
 
   const ui = {
     headerAuth: document.getElementById("header-auth"),
@@ -82,6 +83,7 @@
     autopilotStatus: document.getElementById("autopilot-status"),
     savedForecastsList: document.getElementById("saved-forecasts-list"),
     workspaceSelect: document.getElementById("workspace-select"),
+    dashboardAuthLink: document.getElementById("dashboard-auth-link"),
     collabInviteForm: document.getElementById("collab-invite-form"),
     collabInviteEmail: document.getElementById("collab-invite-email"),
     collabInviteRole: document.getElementById("collab-invite-role"),
@@ -100,8 +102,11 @@
 	    notificationsEnable: document.getElementById("notifications-enable"),
 	    notificationsRefresh: document.getElementById("notifications-refresh"),
 	    notificationsSendTest: document.getElementById("notifications-send-test"),
-	    notificationsStatus: document.getElementById("notifications-status"),
+    notificationsStatus: document.getElementById("notifications-status"),
     notificationsToken: document.getElementById("notifications-token"),
+    predictionsChart: document.getElementById("predictions-chart"),
+    predictionsPreview: document.getElementById("predictions-preview"),
+    predictionsPlotMeta: document.getElementById("predictions-plot-meta"),
     toast: document.getElementById("toast"),
     purchasePanels: Array.from(document.querySelectorAll(".purchase-panel")),
   };
@@ -127,6 +132,7 @@
       forecastTablePage: 0,
       newsTicker: "",
       intelTicker: "",
+      optionsTicker: "",
     },
     clients: {
       auth: null,
@@ -137,6 +143,8 @@
     },
     panelAutoloaded: {},
     sideDataRefreshTimer: null,
+    pendingShareId: "",
+    pendingShareProcessed: false,
     taskCalendarCursor: null,
     taskCalendarTasks: [],
     unsubscribeOrders: null,
@@ -150,6 +158,7 @@
 	    unsubscribeAlerts: null,
 	    unsubscribeScreenerRuns: null,
 	    screenerUrlRunLoaded: false,
+      uploadUrlLoaded: false,
 	    messagingBound: false,
 	    remoteConfigLoaded: false,
 	    remoteFlags: {
@@ -744,6 +753,76 @@
 	    }
 	  };
 
+    const readCookie = (name) => {
+      try {
+        const raw = document.cookie || "";
+        const parts = raw.split(";").map((p) => p.trim());
+        for (const part of parts) {
+          if (!part) continue;
+          const idx = part.indexOf("=");
+          if (idx < 0) continue;
+          const key = part.slice(0, idx).trim();
+          if (key !== name) continue;
+          return decodeURIComponent(part.slice(idx + 1));
+        }
+      } catch (error) {
+        // Ignore.
+      }
+      return "";
+    };
+
+    const writeCookie = (name, value, { days = 14 } = {}) => {
+      try {
+        const maxAge = Math.max(1, Number(days) || 14) * 24 * 60 * 60;
+        document.cookie = `${name}=${encodeURIComponent(String(value || ""))}; Path=/; Max-Age=${maxAge}; SameSite=Lax; Secure`;
+      } catch (error) {
+        // Ignore.
+      }
+    };
+
+    const deleteCookie = (name) => {
+      try {
+        document.cookie = `${name}=; Path=/; Max-Age=0; SameSite=Lax; Secure`;
+      } catch (error) {
+        // Ignore.
+      }
+    };
+
+    const setPendingShareId = (shareId) => {
+      const id = String(shareId || "").trim();
+      state.pendingShareId = id;
+      if (id) {
+        safeLocalStorageSet(PENDING_SHARE_KEY, id);
+        writeCookie(PENDING_SHARE_KEY, id, { days: 14 });
+      } else {
+        safeLocalStorageRemove(PENDING_SHARE_KEY);
+        deleteCookie(PENDING_SHARE_KEY);
+      }
+    };
+
+    const getPendingShareId = () => {
+      if (state.pendingShareId) return state.pendingShareId;
+      const fromStorage = String(safeLocalStorageGet(PENDING_SHARE_KEY) || "").trim();
+      if (fromStorage) return fromStorage;
+      const fromCookie = String(readCookie(PENDING_SHARE_KEY) || "").trim();
+      return fromCookie;
+    };
+
+    const captureShareFromUrl = () => {
+      let share = "";
+      try {
+        const url = new URL(window.location.href);
+        share = String(url.searchParams.get("share") || "").trim();
+        if (!share) return "";
+        url.searchParams.delete("share");
+        history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+      } catch (error) {
+        return "";
+      }
+      if (share) setPendingShareId(share);
+      return share;
+    };
+
 	    const resolveThemePreference = () => {
       try {
         const stored = localStorage.getItem(THEME_KEY);
@@ -1070,7 +1149,8 @@
   const setAuthUi = (user) => {
     const isAuthed = Boolean(user);
     ui.headerAuth?.classList.toggle("hidden", isAuthed);
-    ui.headerSignOut?.classList.toggle("hidden", !isAuthed);
+    // Sign-out is handled inside the dashboard navigation (not the global header).
+    ui.headerSignOut?.classList.add("hidden");
     ui.headerDashboard?.classList.toggle("hidden", !isAuthed);
 
     if (ui.headerUserEmail) ui.headerUserEmail.textContent = user?.email || "Guest";
@@ -1086,6 +1166,12 @@
       ui.userStatus.classList.toggle("pill", true);
     }
     ui.dashboardCta?.classList.toggle("hidden", isAuthed);
+
+    if (ui.dashboardAuthLink) {
+      ui.dashboardAuthLink.textContent = isAuthed ? "Sign out" : "Sign in";
+      ui.dashboardAuthLink.setAttribute("href", isAuthed ? "#" : "/account");
+      ui.dashboardAuthLink.setAttribute("aria-label", isAuthed ? "Sign out" : "Sign in");
+    }
 
     setPurchaseState(user);
   };
@@ -1192,6 +1278,7 @@
       card.className = "order-card";
       const isForecast = Boolean(item.service && item.ticker);
       const isAutopilot = Boolean(!isForecast && (item.horizon || item.quantiles || item.interval));
+      const isUpload = Boolean(!isForecast && !isAutopilot && (item.filePath || item.fileUrl));
       const forecastMeta = isForecast
         ? `
           <div><strong>Ticker</strong> ${item.ticker}</div>
@@ -1210,22 +1297,50 @@
           ${item.notes ? `<div><strong>Notes</strong> ${escapeHtml(item.notes)}</div>` : ""}
         `
         : "";
+      const uploadMeta = isUpload
+        ? `
+          ${item.notes ? `<div><strong>Notes</strong> ${escapeHtml(item.notes)}</div>` : ""}
+          ${item.filePath ? `<div><strong>Path</strong> ${escapeHtml(item.filePath)}</div>` : ""}
+        `
+        : "";
+
+      const titleText = escapeHtml(item.title || item.ticker || "Request");
+      const titleMarkup = isUpload
+        ? `<button class="link-button" type="button" data-action="plot-upload" data-upload-id="${escapeHtml(item.id)}">${titleText}</button>`
+        : titleText;
+
       const actions = isForecast
         ? `
           <div class="order-actions" style="display:flex; gap:10px; flex-wrap:wrap;">
-            <button class="cta secondary small" type="button" data-action="plot-forecast" data-forecast-id="${item.id}" data-ticker="${item.ticker}">
+            <button class="cta secondary small" type="button" data-action="plot-forecast" data-forecast-id="${escapeHtml(item.id)}" data-ticker="${escapeHtml(item.ticker)}">
               Plot on chart
             </button>
-            <button class="cta secondary small" type="button" data-action="download-forecast" data-forecast-id="${item.id}">
+            <button class="cta secondary small" type="button" data-action="download-forecast" data-forecast-id="${escapeHtml(item.id)}">
               Download CSV
+            </button>
+            <button class="cta secondary small" type="button" data-action="share-forecast" data-forecast-id="${escapeHtml(item.id)}">
+              Share link
+            </button>
+            <button class="cta secondary small danger" type="button" data-action="delete-forecast" data-forecast-id="${escapeHtml(item.id)}">
+              Delete
             </button>
           </div>
         `
-        : "";
+        : isUpload
+          ? `
+          <div class="order-actions" style="display:flex; gap:10px; flex-wrap:wrap;">
+            <button class="cta secondary small" type="button" data-action="plot-upload" data-upload-id="${escapeHtml(item.id)}">Plot</button>
+            <button class="cta secondary small" type="button" data-action="download-upload" data-upload-id="${escapeHtml(item.id)}">Download</button>
+            <button class="cta secondary small" type="button" data-action="rename-upload" data-upload-id="${escapeHtml(item.id)}">Rename</button>
+            <button class="cta secondary small" type="button" data-action="share-upload" data-upload-id="${escapeHtml(item.id)}">Share link</button>
+            <button class="cta secondary small danger" type="button" data-action="delete-upload" data-upload-id="${escapeHtml(item.id)}">Delete</button>
+          </div>
+        `
+          : "";
       card.innerHTML = `
         <div class="order-header">
           <div>
-            <div class="order-title">${item.title || item.ticker || "Request"}</div>
+            <div class="order-title">${titleMarkup}</div>
             <div class="small">ID: ${item.id}</div>
           </div>
           <span class="status ${item.status || "pending"}">${item.status || "pending"}</span>
@@ -1235,6 +1350,7 @@
           ${item.summary ? `<div><strong>Summary</strong> ${item.summary}</div>` : ""}
           ${forecastMeta}
           ${autopilotMeta}
+          ${uploadMeta}
         </div>
         ${actions}
       `;
@@ -1723,6 +1839,13 @@
       .onSnapshot((snapshot) => {
         const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
         renderRequestList(items, ui.predictionsOutput, "No uploads yet.");
+
+        const params = new URLSearchParams(window.location.search);
+        const urlUploadId = String(params.get("uploadId") || "").trim();
+        if (urlUploadId && !state.uploadUrlLoaded) {
+          state.uploadUrlLoaded = true;
+          plotPredictionUploadById(db, state.clients?.storage, urlUploadId).catch(() => {});
+        }
       });
   };
 
@@ -1802,6 +1925,33 @@
     URL.revokeObjectURL(url);
   };
 
+  const copyToClipboard = async (text) => {
+    const value = String(text || "");
+    if (!value) return false;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value);
+        return true;
+      }
+    } catch (error) {
+      // Fall back.
+    }
+    try {
+      const textarea = document.createElement("textarea");
+      textarea.value = value;
+      textarea.setAttribute("readonly", "true");
+      textarea.style.position = "absolute";
+      textarea.style.left = "-9999px";
+      document.body.appendChild(textarea);
+      textarea.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(textarea);
+      return Boolean(ok);
+    } catch (error) {
+      return false;
+    }
+  };
+
   const escapeHtml = (value) =>
     String(value ?? "")
       .replace(/&/g, "&amp;")
@@ -1855,6 +2005,54 @@
     try {
       return new URLSearchParams(window.location.search).get(key);
     } catch (error) {
+      return null;
+    }
+  };
+
+  const buildShareUrl = (kind, shareId) => {
+    const id = encodeURIComponent(String(shareId || "").trim());
+    if (!id) return "";
+    const type = String(kind || "").trim().toLowerCase();
+    const path = type === "forecast" ? "/forecasting" : type === "screener" ? "/screener" : "/uploads";
+    return `${window.location.origin}${path}?share=${id}`;
+  };
+
+  const processPendingShareImport = async (functions) => {
+    if (!functions || !state.user) return null;
+    const shareId = String(getPendingShareId() || "").trim();
+    if (!shareId) return null;
+    if (state.pendingShareProcessed) return null;
+    state.pendingShareProcessed = true;
+
+    try {
+      setPendingShareId(shareId);
+      const importShare = functions.httpsCallable("import_shared_item");
+      const result = await importShare({ shareId, meta: buildMeta() });
+      const kind = String(result.data?.kind || "").trim().toLowerCase();
+      const importedId = String(result.data?.importedId || "").trim();
+      if (!kind || !importedId) throw new Error("Shared item import did not return an ID.");
+
+      setPendingShareId("");
+      showToast("Shared item saved to your dashboard.");
+      logEvent("shared_item_imported", { kind });
+
+      if (kind === "forecast") {
+        window.location.href = `/forecasting?forecastId=${encodeURIComponent(importedId)}`;
+        return { kind, importedId };
+      }
+      if (kind === "screener") {
+        window.location.href = `/screener?runId=${encodeURIComponent(importedId)}`;
+        return { kind, importedId };
+      }
+      if (kind === "upload") {
+        window.location.href = `/uploads?uploadId=${encodeURIComponent(importedId)}`;
+        return { kind, importedId };
+      }
+
+      return { kind, importedId };
+    } catch (error) {
+      state.pendingShareProcessed = false;
+      showToast(error.message || "Unable to import shared item.", "warn");
       return null;
     }
   };
@@ -2104,15 +2302,49 @@
     }
   };
 
+  const isPanelVisible = (panelName) => {
+    const panel = document.querySelector(`[data-panel="${String(panelName || "").trim()}"]`);
+    return Boolean(panel && !panel.classList.contains("hidden"));
+  };
+
+  const autoloadOptionsChain = async (functions, { force = false } = {}) => {
+    if (!functions || !ui.optionsForm || !ui.optionsOutput) return;
+    const symbol = normalizeTicker(state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "");
+    if (!symbol) return;
+
+    const tickerInput = document.getElementById("options-ticker");
+    if (tickerInput && "value" in tickerInput) tickerInput.value = symbol;
+
+    if (!state.user) {
+      if (isPanelVisible("options")) {
+        setOutputReady(ui.optionsOutput);
+        ui.optionsOutput.innerHTML = `<div class="small muted">Sign in to load the options chain.</div>`;
+      }
+      return;
+    }
+
+    if (!force && state.tickerContext.optionsTicker === symbol) return;
+    state.tickerContext.optionsTicker = symbol;
+
+    try {
+      ui.optionsForm.requestSubmit?.();
+    } catch (error) {
+      // Ignore.
+    }
+  };
+
   const scheduleSideDataRefresh = (ticker, { force = false } = {}) => {
     const symbol = normalizeTicker(ticker) || "";
     const functions = state.clients?.functions;
-    if (!functions || (!ui.newsOutput && !ui.intelOutput)) return;
+    if (!functions || (!ui.newsOutput && !ui.intelOutput && !ui.optionsOutput)) return;
     if (!symbol) return;
     if (state.sideDataRefreshTimer) window.clearTimeout(state.sideDataRefreshTimer);
     state.sideDataRefreshTimer = window.setTimeout(() => {
       loadTickerNews(functions, symbol, { force, notify: false });
       loadTickerIntel(functions, symbol, { force, notify: false });
+      if (state.panelAutoloaded.options || isPanelVisible("options")) {
+        autoloadOptionsChain(functions, { force });
+      }
     }, 220);
   };
 
@@ -2284,7 +2516,7 @@
     });
   };
 
-	  const renderIndicatorChart = async (series) => {
+  const renderIndicatorChart = async (series) => {
 	    if (!ui.indicatorChart) return;
 	    const Plotly = getPlotly();
 	    if (!Plotly) {
@@ -2327,6 +2559,269 @@
       responsive: true,
       displaylogo: false,
     });
+  };
+
+  const parseCsvTable = (csvText, { maxRows = 5000 } = {}) => {
+    const text = String(csvText || "");
+    if (!text.trim()) throw new Error("CSV file is empty.");
+
+    const delimiter = ",";
+    const rows = [];
+    let row = [];
+    let field = "";
+    let inQuotes = false;
+
+    const pushField = () => {
+      row.push(field);
+      field = "";
+    };
+    const pushRow = () => {
+      // Drop trailing completely-empty rows.
+      if (row.length === 1 && !String(row[0] || "").trim()) {
+        row = [];
+        return;
+      }
+      rows.push(row);
+      row = [];
+    };
+
+    for (let i = 0; i < text.length; i += 1) {
+      const ch = text[i];
+      const next = text[i + 1];
+      if (inQuotes) {
+        if (ch === "\"" && next === "\"") {
+          field += "\"";
+          i += 1;
+          continue;
+        }
+        if (ch === "\"") {
+          inQuotes = false;
+          continue;
+        }
+        field += ch;
+        continue;
+      }
+
+      if (ch === "\"") {
+        inQuotes = true;
+        continue;
+      }
+      if (ch === delimiter) {
+        pushField();
+        continue;
+      }
+      if (ch === "\n") {
+        pushField();
+        pushRow();
+        if (rows.length >= maxRows + 1) break;
+        continue;
+      }
+      if (ch === "\r") continue;
+      field += ch;
+    }
+
+    if (inQuotes) {
+      // Best-effort recovery for malformed CSV.
+      inQuotes = false;
+    }
+    if (field.length || row.length) {
+      pushField();
+      pushRow();
+    }
+
+    if (rows.length < 2) throw new Error("CSV must include a header row and at least one data row.");
+    const headers = rows[0].map((h) => String(h || "").trim());
+    const data = rows.slice(1).filter((r) => Array.isArray(r) && r.some((v) => String(v || "").trim()));
+
+    return { headers, rows: data };
+  };
+
+  const renderCsvPreview = (table, { maxRows = 12, maxCols = 6 } = {}) => {
+    if (!ui.predictionsPreview) return;
+    const headers = table?.headers || [];
+    const rows = table?.rows || [];
+    if (!headers.length || !rows.length) {
+      ui.predictionsPreview.textContent = "No preview available.";
+      return;
+    }
+
+    const cols = headers.slice(0, Math.max(1, Math.min(headers.length, maxCols)));
+    const bodyRows = rows.slice(0, Math.max(1, Math.min(rows.length, maxRows)));
+
+    ui.predictionsPreview.innerHTML = `
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>${cols.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}</tr>
+          </thead>
+          <tbody>
+            ${bodyRows
+              .map((r) => `<tr>${cols.map((_, idx) => `<td>${escapeHtml(r[idx] ?? "")}</td>`).join("")}</tr>`)
+              .join("")}
+          </tbody>
+        </table>
+      </div>
+      <div class="small muted" style="margin-top:10px;">
+        Showing ${Math.min(bodyRows.length, rows.length)} of ${rows.length} row(s) and ${cols.length} of ${headers.length} column(s).
+      </div>
+    `;
+  };
+
+  const inferCsvAxes = (table) => {
+    const headers = table?.headers || [];
+    const rows = table?.rows || [];
+    const norm = (h) => String(h || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+    const candidates = new Set(["date", "ds", "datetime", "timestamp", "time"]);
+    let xIndex = headers.findIndex((h) => candidates.has(norm(h)));
+    if (xIndex < 0) {
+      xIndex = 0;
+    }
+
+    const sampleN = Math.min(50, rows.length);
+    const numericScore = (idx) => {
+      let ok = 0;
+      let total = 0;
+      for (let i = 0; i < sampleN; i += 1) {
+        const raw = rows[i]?.[idx];
+        const val = String(raw ?? "").trim();
+        if (!val) continue;
+        total += 1;
+        const num = Number(val);
+        if (Number.isFinite(num)) ok += 1;
+      }
+      return total ? ok / total : 0;
+    };
+
+    const numericCols = headers
+      .map((h, idx) => ({ h, idx, score: numericScore(idx) }))
+      .filter((c) => c.idx !== xIndex && c.score >= 0.6);
+
+    const quantMatches = (h) => {
+      const m = norm(h).match(/^(q|p)(\d\d)$/);
+      if (!m) return null;
+      return { key: m[1], q: Number(m[2]) };
+    };
+
+    const quantCols = numericCols
+      .map((c) => ({ ...c, qm: quantMatches(c.h) }))
+      .filter((c) => c.qm && Number.isFinite(c.qm.q))
+      .sort((a, b) => a.qm.q - b.qm.q);
+
+    let yCols = [];
+    if (quantCols.length >= 2) {
+      yCols = quantCols.slice(0, Math.min(6, quantCols.length));
+    } else {
+      const preferredNames = ["yhat", "prediction", "forecast", "price", "close", "value"];
+      const preferred = [];
+      for (const name of preferredNames) {
+        const hit = numericCols.find((c) => norm(c.h) === name);
+        if (hit) preferred.push(hit);
+      }
+      yCols = preferred.length ? preferred.slice(0, 4) : numericCols.slice(0, 4);
+    }
+
+    if (!yCols.length) throw new Error("No numeric columns detected to plot.");
+    return { xIndex, yCols };
+  };
+
+  const renderPredictionsChart = async (table, { title = "CSV plot" } = {}) => {
+    if (!ui.predictionsChart) return;
+    const Plotly = getPlotly();
+    if (!Plotly) {
+      ui.predictionsChart.textContent = "Chart library not loaded.";
+      return;
+    }
+    const headers = table?.headers || [];
+    const rows = table?.rows || [];
+    if (!headers.length || !rows.length) {
+      ui.predictionsChart.textContent = "No CSV data to plot.";
+      return;
+    }
+
+    const { xIndex, yCols } = inferCsvAxes(table);
+    const xLabel = headers[xIndex] || "x";
+    const x = rows.map((r, idx) => {
+      const raw = r?.[xIndex];
+      const val = raw === undefined || raw === null || raw === "" ? null : raw;
+      if (val === null) return idx;
+      const parsed = Date.parse(String(val));
+      return Number.isFinite(parsed) ? new Date(parsed) : val;
+    });
+
+    const traces = yCols.map((col) => ({
+      type: "scatter",
+      mode: "lines",
+      name: col.h,
+      x,
+      y: rows.map((r) => {
+        const raw = r?.[col.idx];
+        const num = Number(String(raw ?? "").trim());
+        return Number.isFinite(num) ? num : null;
+      }),
+      line: { width: 2 },
+    }));
+
+    const dark = isDarkMode();
+    const plotBg = dark ? "#0b0f1a" : "#ffffff";
+    const textColor = dark ? "rgba(246, 244, 238, 0.92)" : "#12182a";
+    const gridColor = dark ? "rgba(246, 244, 238, 0.14)" : "rgba(18, 24, 42, 0.12)";
+    const layout = {
+      title: { text: title, font: { family: "Manrope, sans-serif", size: 14, color: textColor } },
+      font: { family: "Manrope, sans-serif", color: textColor },
+      paper_bgcolor: "rgba(0,0,0,0)",
+      plot_bgcolor: plotBg,
+      margin: { l: 50, r: 30, t: 44, b: 44 },
+      xaxis: { title: { text: xLabel }, showspikes: true, spikemode: "across", spikesnap: "cursor", gridcolor: gridColor, zerolinecolor: gridColor },
+      yaxis: { gridcolor: gridColor, zerolinecolor: gridColor },
+      legend: { orientation: "h" },
+      hovermode: "x unified",
+    };
+
+    await Plotly.react(ui.predictionsChart, traces, layout, { responsive: true, displaylogo: false });
+  };
+
+  const resolveUploadCsvUrl = async (storage, uploadDoc) => {
+    if (storage && uploadDoc?.filePath) {
+      try {
+        return await storage.ref().child(String(uploadDoc.filePath)).getDownloadURL();
+      } catch (error) {
+        // Fall back.
+      }
+    }
+    return String(uploadDoc?.fileUrl || "").trim();
+  };
+
+  const plotPredictionUploadById = async (db, storage, uploadId) => {
+    if (!db || !uploadId) throw new Error("Upload ID is required.");
+    if (!ui.predictionsChart || !ui.predictionsPreview || !ui.predictionsPlotMeta) return;
+    const cleanId = String(uploadId || "").trim();
+    if (!cleanId) throw new Error("Upload ID is required.");
+
+    ui.predictionsPlotMeta.textContent = "Loading CSV...";
+    if (ui.predictionsChart) setOutputLoading(ui.predictionsChart, "Loading CSV plot...");
+    if (ui.predictionsPreview) setOutputLoading(ui.predictionsPreview, "Loading preview...");
+
+    const snap = await db.collection("prediction_uploads").doc(cleanId).get();
+    if (!snap.exists) throw new Error("Upload not found.");
+    const doc = { id: snap.id, ...(snap.data() || {}) };
+
+    const url = await resolveUploadCsvUrl(storage, doc);
+    if (!url) throw new Error("Upload is missing a downloadable URL.");
+
+    const resp = await fetch(url, { cache: "no-store" });
+    if (!resp.ok) throw new Error("Unable to download CSV.");
+    const text = await resp.text();
+
+    const table = parseCsvTable(text, { maxRows: 5000 });
+    const title = doc.title ? `Upload: ${doc.title}` : "CSV plot";
+    ui.predictionsPlotMeta.textContent = `${doc.title || "predictions.csv"} · ${table.rows.length.toLocaleString()} rows · ${table.headers.length} cols`;
+
+    await renderPredictionsChart(table, { title });
+    setOutputReady(ui.predictionsChart);
+    renderCsvPreview(table);
+    setOutputReady(ui.predictionsPreview);
+    logEvent("predictions_plotted", { upload_id: cleanId });
   };
 
   const buildIndicatorOverlays = (series) => {
@@ -2497,6 +2992,8 @@
       ${notes ? `<div class="small" style="margin-top:10px;"><strong>Notes:</strong> ${escapeHtml(notes)}</div>` : ""}
       <div class="hero-actions" style="margin-top:12px;">
         <button class="cta secondary small" type="button" data-action="download-screener" data-run-id="${runId}">Download CSV</button>
+        <button class="cta secondary small" type="button" data-action="share-screener" data-run-id="${runId}">Share link</button>
+        <button class="cta secondary small danger" type="button" data-action="delete-screener" data-run-id="${runId}">Delete</button>
       </div>
       <div class="table-wrap" style="margin-top:12px;">
         <table class="data-table">
@@ -2837,9 +3334,18 @@
           scheduleSideDataRefresh(ticker, { force: !state.panelAutoloaded.news });
           state.panelAutoloaded.news = true;
         }
+
+        if (next === "options") {
+          const ticker = normalizeTicker(state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "");
+          if (!ticker) return;
+          const first = !state.panelAutoloaded.options;
+          state.panelAutoloaded.options = true;
+          autoloadOptionsChain(functions, { force: first });
+        }
       };
 
       ensureThemeToggle();
+      captureShareFromUrl();
 
 	    if (!state.authResolved) {
 	      if (ui.headerUserEmail) ui.headerUserEmail.textContent = "Restoring session...";
@@ -3042,6 +3548,253 @@
             showToast(error.message || "Unable to download screener run.", "warn");
           } finally {
             dlButton.disabled = false;
+          }
+        });
+
+        document.addEventListener("click", async (event) => {
+          const shareForecast = event.target.closest('[data-action="share-forecast"]');
+          if (shareForecast) {
+            event.preventDefault();
+            if (!state.user) {
+              showToast("Sign in to share forecasts.", "warn");
+              return;
+            }
+            const forecastId = String(shareForecast.dataset.forecastId || "").trim();
+            if (!forecastId) return;
+
+            shareForecast.disabled = true;
+            try {
+              const createShare = functions.httpsCallable("create_share_link");
+              const result = await createShare({ kind: "forecast", id: forecastId, meta: buildMeta() });
+              const shareId = String(result.data?.shareId || "").trim();
+              const url = String(result.data?.shareUrl || "") || buildShareUrl("forecast", shareId);
+              if (!shareId || !url) throw new Error("Unable to create share link.");
+              await copyToClipboard(url);
+              showToast("Share link copied.");
+              logEvent("forecast_shared", { forecast_id: forecastId });
+            } catch (error) {
+              showToast(error.message || "Unable to share forecast.", "warn");
+            } finally {
+              shareForecast.disabled = false;
+            }
+            return;
+          }
+
+          const deleteForecast = event.target.closest('[data-action="delete-forecast"]');
+          if (deleteForecast) {
+            event.preventDefault();
+            if (!state.user) {
+              showToast("Sign in to delete forecasts.", "warn");
+              return;
+            }
+            const forecastId = String(deleteForecast.dataset.forecastId || "").trim();
+            if (!forecastId) return;
+            const ok = window.confirm("Delete this saved forecast? This cannot be undone.");
+            if (!ok) return;
+
+            deleteForecast.disabled = true;
+            try {
+              const del = functions.httpsCallable("delete_forecast_request");
+              await del({ forecastId, meta: buildMeta() });
+              showToast("Forecast deleted.");
+              logEvent("forecast_deleted", { forecast_id: forecastId });
+              if (state.tickerContext.forecastId === forecastId) {
+                state.tickerContext.forecastId = "";
+                state.tickerContext.forecastDoc = null;
+                if (ui.forecastOutput) ui.forecastOutput.innerHTML = `<div class="small muted">Forecast deleted.</div>`;
+              }
+            } catch (error) {
+              showToast(error.message || "Unable to delete forecast.", "warn");
+            } finally {
+              deleteForecast.disabled = false;
+            }
+            return;
+          }
+
+          const shareScreener = event.target.closest('[data-action="share-screener"]');
+          if (shareScreener) {
+            event.preventDefault();
+            if (!state.user) {
+              showToast("Sign in to share screener runs.", "warn");
+              return;
+            }
+            const runId = String(shareScreener.dataset.runId || "").trim();
+            if (!runId) return;
+
+            shareScreener.disabled = true;
+            try {
+              const createShare = functions.httpsCallable("create_share_link");
+              const result = await createShare({ kind: "screener", id: runId, meta: buildMeta() });
+              const shareId = String(result.data?.shareId || "").trim();
+              const url = String(result.data?.shareUrl || "") || buildShareUrl("screener", shareId);
+              if (!shareId || !url) throw new Error("Unable to create share link.");
+              await copyToClipboard(url);
+              showToast("Share link copied.");
+              logEvent("screener_shared", { run_id: runId });
+            } catch (error) {
+              showToast(error.message || "Unable to share screener run.", "warn");
+            } finally {
+              shareScreener.disabled = false;
+            }
+            return;
+          }
+
+          const deleteScreener = event.target.closest('[data-action="delete-screener"]');
+          if (deleteScreener) {
+            event.preventDefault();
+            if (!state.user) {
+              showToast("Sign in to delete screener runs.", "warn");
+              return;
+            }
+            const runId = String(deleteScreener.dataset.runId || "").trim();
+            if (!runId) return;
+            const ok = window.confirm("Delete this screener run? This cannot be undone.");
+            if (!ok) return;
+
+            deleteScreener.disabled = true;
+            try {
+              const del = functions.httpsCallable("delete_screener_run");
+              await del({ runId, meta: buildMeta() });
+              showToast("Screener run deleted.");
+              logEvent("screener_deleted", { run_id: runId });
+              if (ui.screenerOutput) ui.screenerOutput.innerHTML = `<div class="small muted">Screener run deleted.</div>`;
+            } catch (error) {
+              showToast(error.message || "Unable to delete screener run.", "warn");
+            } finally {
+              deleteScreener.disabled = false;
+            }
+            return;
+          }
+
+          const plotUpload = event.target.closest('[data-action="plot-upload"]');
+          if (plotUpload) {
+            event.preventDefault();
+            if (!state.user) {
+              showToast("Sign in to view uploads.", "warn");
+              return;
+            }
+            const uploadId = String(plotUpload.dataset.uploadId || "").trim();
+            if (!uploadId) return;
+            try {
+              await plotPredictionUploadById(db, storage, uploadId);
+              showToast("Upload loaded.");
+            } catch (error) {
+              showToast(error.message || "Unable to plot upload.", "warn");
+            }
+            return;
+          }
+
+          const downloadUpload = event.target.closest('[data-action="download-upload"]');
+          if (downloadUpload) {
+            event.preventDefault();
+            if (!state.user) {
+              showToast("Sign in to download uploads.", "warn");
+              return;
+            }
+            const uploadId = String(downloadUpload.dataset.uploadId || "").trim();
+            if (!uploadId) return;
+
+            downloadUpload.disabled = true;
+            try {
+              const snap = await db.collection("prediction_uploads").doc(uploadId).get();
+              if (!snap.exists) throw new Error("Upload not found.");
+              const doc = { id: snap.id, ...(snap.data() || {}) };
+              const url = await resolveUploadCsvUrl(storage, doc);
+              if (!url) throw new Error("Upload is missing a downloadable URL.");
+              const resp = await fetch(url, { cache: "no-store" });
+              if (!resp.ok) throw new Error("Unable to download CSV.");
+              const text = await resp.text();
+              triggerDownload(String(doc.title || "predictions.csv"), text);
+              showToast("CSV downloaded.");
+              logEvent("predictions_downloaded", { upload_id: uploadId });
+            } catch (error) {
+              showToast(error.message || "Unable to download upload.", "warn");
+            } finally {
+              downloadUpload.disabled = false;
+            }
+            return;
+          }
+
+          const renameUpload = event.target.closest('[data-action="rename-upload"]');
+          if (renameUpload) {
+            event.preventDefault();
+            if (!state.user) {
+              showToast("Sign in to rename uploads.", "warn");
+              return;
+            }
+            const uploadId = String(renameUpload.dataset.uploadId || "").trim();
+            if (!uploadId) return;
+            const nextTitle = String(window.prompt("Rename this upload:", "") || "").trim();
+            if (!nextTitle) return;
+
+            renameUpload.disabled = true;
+            try {
+              const rename = functions.httpsCallable("rename_prediction_upload");
+              await rename({ uploadId, title: nextTitle, meta: buildMeta() });
+              showToast("Upload renamed.");
+              logEvent("predictions_renamed", { upload_id: uploadId });
+            } catch (error) {
+              showToast(error.message || "Unable to rename upload.", "warn");
+            } finally {
+              renameUpload.disabled = false;
+            }
+            return;
+          }
+
+          const shareUpload = event.target.closest('[data-action="share-upload"]');
+          if (shareUpload) {
+            event.preventDefault();
+            if (!state.user) {
+              showToast("Sign in to share uploads.", "warn");
+              return;
+            }
+            const uploadId = String(shareUpload.dataset.uploadId || "").trim();
+            if (!uploadId) return;
+
+            shareUpload.disabled = true;
+            try {
+              const createShare = functions.httpsCallable("create_share_link");
+              const result = await createShare({ kind: "upload", id: uploadId, meta: buildMeta() });
+              const shareId = String(result.data?.shareId || "").trim();
+              const url = String(result.data?.shareUrl || "") || buildShareUrl("upload", shareId);
+              if (!shareId || !url) throw new Error("Unable to create share link.");
+              await copyToClipboard(url);
+              showToast("Share link copied.");
+              logEvent("upload_shared", { upload_id: uploadId });
+            } catch (error) {
+              showToast(error.message || "Unable to share upload.", "warn");
+            } finally {
+              shareUpload.disabled = false;
+            }
+            return;
+          }
+
+          const deleteUpload = event.target.closest('[data-action="delete-upload"]');
+          if (deleteUpload) {
+            event.preventDefault();
+            if (!state.user) {
+              showToast("Sign in to delete uploads.", "warn");
+              return;
+            }
+            const uploadId = String(deleteUpload.dataset.uploadId || "").trim();
+            if (!uploadId) return;
+            const ok = window.confirm("Delete this upload? This will remove the file from storage.");
+            if (!ok) return;
+
+            deleteUpload.disabled = true;
+            try {
+              const del = functions.httpsCallable("delete_prediction_upload");
+              await del({ uploadId, meta: buildMeta() });
+              showToast("Upload deleted.");
+              logEvent("predictions_deleted", { upload_id: uploadId });
+              if (ui.predictionsPlotMeta) ui.predictionsPlotMeta.textContent = "Select an upload to preview and plot it.";
+              if (ui.predictionsChart) ui.predictionsChart.innerHTML = "";
+              if (ui.predictionsPreview) ui.predictionsPreview.innerHTML = "Preview will appear here.";
+            } catch (error) {
+              showToast(error.message || "Unable to delete upload.", "warn");
+            } finally {
+              deleteUpload.disabled = false;
+            }
           }
         });
 
@@ -3554,12 +4307,27 @@
 	      }
 	    });
 
-	    ui.headerSignOut?.addEventListener("click", async () => {
-	      await unregisterCachedNotificationToken(functions);
-	      await auth.signOut();
-      showToast("Signed out.");
-      logEvent("logout", { method: "firebase" });
-    });
+      const performSignOut = async () => {
+        try {
+          await unregisterCachedNotificationToken(functions);
+        } catch (error) {
+          // Ignore token cleanup failures.
+        }
+        await auth.signOut();
+        showToast("Signed out.");
+        logEvent("logout", { method: "firebase" });
+      };
+
+      ui.headerSignOut?.addEventListener("click", async (event) => {
+        event.preventDefault?.();
+        await performSignOut();
+      });
+
+      ui.dashboardAuthLink?.addEventListener("click", async (event) => {
+        if (!state.user) return;
+        event.preventDefault?.();
+        await performSignOut();
+      });
 
     ui.emailForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -3808,6 +4576,7 @@
 	        interval: formData.get("interval"),
 	        service: formData.get("service") || ui.forecastService?.value || "prophet",
 	        quantiles,
+          workspaceId: state.activeWorkspaceId || state.user.uid,
 	        meta: buildMeta(),
 	        utm: getUtm(),
 		      };
@@ -4190,55 +4959,13 @@
 	        const runScreener = functions.httpsCallable("run_quick_screener");
 	        const result = await runScreener(payload);
 	        const rows = result.data?.results || [];
-	        if (ui.screenerOutput) {
-	          setOutputReady(ui.screenerOutput);
-	          if (!rows.length) {
-	            ui.screenerOutput.innerHTML = `
-	              <div class="small muted">No results returned.</div>
-	              <div class="small" style="margin-top:10px;"><strong>Run ID:</strong> ${escapeHtml(result.data?.runId || "—")}</div>
-	            `;
-		          } else {
-		            ui.screenerOutput.innerHTML = `
-		              <div class="small"><strong>Run ID:</strong> ${result.data?.runId || "—"}</div>
-                  <div class="table-wrap" style="margin-top:12px;">
-		                <table class="data-table">
-		                  <thead>
-		                    <tr>
-		                      <th>Symbol</th>
-		                      <th>Last close</th>
-		                      <th>Return 1M (%)</th>
-		                      <th>Return 3M (%)</th>
-		                      <th>RSI 14</th>
-		                      <th>Volatility</th>
-		                      <th>Score</th>
-		                    </tr>
-		                  </thead>
-		                  <tbody>
-		                    ${rows
-		                      .map(
-		                        (row) => `
-		                          <tr>
-		                            <td>
-		                              <button class="link-button" type="button" data-action="pick-ticker" data-ticker="${escapeHtml(row.symbol)}">
-		                                ${escapeHtml(row.symbol)}
-		                              </button>
-		                            </td>
-		                            <td>${row.lastClose ?? "—"}</td>
-		                            <td>${row.return1m ?? "—"}</td>
-		                            <td>${row.return3m ?? "—"}</td>
-		                            <td>${row.rsi14 ?? "—"}</td>
-		                            <td>${row.volatility ?? "—"}</td>
-		                            <td>${row.score ?? "—"}</td>
-		                          </tr>
-		                        `
-		                      )
-		                      .join("")}
-		                  </tbody>
-		                </table>
-                  </div>
-		            `;
-		          }
-		        }
+          const runId = String(result.data?.runId || "").trim();
+          renderScreenerRunOutput({
+            id: runId || "—",
+            results: rows,
+            notes: payload.notes,
+            createdAt: new Date().toISOString(),
+          });
         showToast("Screener run completed.");
         logEvent("screener_request", { universe: payload.universe });
       } catch (error) {
@@ -4470,6 +5197,13 @@
             if (ui.screenerLoadId) ui.screenerLoadId.value = "";
             if (ui.screenerLoadStatus) ui.screenerLoadStatus.textContent = "";
             if (ui.screenerOutput && !ui.screenerOutput.dataset.loading) ui.screenerOutput.textContent = "Sign in to run the screener.";
+
+            const pendingShare = String(getPendingShareId() || "").trim();
+            if (pendingShare && window.location.pathname !== "/account") {
+              window.location.href = "/account";
+              return;
+            }
+
 				        const gated = new Set([
 				          "/dashboard",
 				          "/watchlist",
@@ -4497,12 +5231,15 @@
 		      startWorkspaceTasks(db, activeWorkspaceId);
 			      startWatchlist(db, activeWorkspaceId);
 			      startPriceAlerts(db, activeWorkspaceId);
-			      startAutopilotRequests(db, user);
-			      startPredictionsUploads(db, user);
-			      refreshCollaboration(functions);
-				      if (window.location.pathname === "/account") {
-				        window.location.href = "/dashboard";
-				      }
+	      startAutopilotRequests(db, user);
+	      startPredictionsUploads(db, user);
+	      refreshCollaboration(functions);
+
+        await processPendingShareImport(functions);
+
+        if (window.location.pathname === "/account" && !String(getPendingShareId() || "").trim()) {
+          window.location.href = "/dashboard";
+        }
 
 	      if (ui.notificationsStatus) {
 	        if (messaging && isPushSupported()) {
