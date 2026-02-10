@@ -62,31 +62,30 @@
 	            <a class="cta secondary small" href="/purchase">Request Deep Forecast</a>
 	            <a class="cta secondary small hidden" id="nav-admin" href="/admin">Admin dashboard</a>
 	          </div>
-	          <nav class="sidebar-nav" aria-label="Dashboard navigation">
-	            <a class="sidebar-link active" href="/dashboard" data-panel-target="orders">Orders</a>
-	            <a class="sidebar-link" href="/watchlist" data-panel-target="watchlist">Watchlist</a>
-	            <a class="sidebar-link" href="/productivity" data-panel-target="productivity">Productivity</a>
-	            <a class="sidebar-link" href="/collaboration" data-panel-target="collaboration">Collaboration</a>
-	            <a class="sidebar-link" href="/uploads" data-panel-target="uploads">Uploads</a>
-	            <a class="sidebar-link" href="/autopilot" data-panel-target="autopilot">Autopilot</a>
-	            <a class="sidebar-link" href="/trading" data-panel-target="alpaca">Trading</a>
-	            <a class="sidebar-link" href="/notifications" data-panel-target="notifications">Notifications</a>
-	            <a class="sidebar-link" href="/purchase" data-panel-target="purchase">Purchase</a>
-	            <a class="sidebar-link" href="/account" data-panel-target="auth">Sign in</a>
-	          </nav>
+		          <nav class="sidebar-nav" aria-label="Dashboard navigation">
+		            <a class="sidebar-link active" href="/dashboard" data-panel-target="orders">Orders</a>
+		            <a class="sidebar-link" href="/watchlist" data-panel-target="watchlist">Watchlist</a>
+		            <a class="sidebar-link" href="/productivity" data-panel-target="productivity">Productivity</a>
+		            <a class="sidebar-link" href="/collaboration" data-panel-target="collaboration">Collaboration</a>
+		            <a class="sidebar-link" href="/uploads" data-panel-target="uploads">Uploads</a>
+		            <a class="sidebar-link" href="/autopilot" data-panel-target="autopilot">Autopilot</a>
+		            <a class="sidebar-link" href="/notifications" data-panel-target="notifications">Notifications</a>
+		            <a class="sidebar-link" href="/purchase" data-panel-target="purchase">Purchase</a>
+		            <a class="sidebar-link" href="/account" data-panel-target="auth">Sign in</a>
+		          </nav>
 	        </aside>
 
 	        <div class="app-main" data-panels data-panel-router="dashboard">
       <section class="page-hero">
         <div class="container content-grid">
-          <div>
-            <div class="eyebrow">Member dashboard</div>
-	            <h1>Manage Deep Forecast orders, uploads, and trading requests.</h1>
-	            <p>
-	              Every forecast, upload, and order is stored in your secure workspace. Sign in to unlock your
-	              dashboard and keep a complete audit trail for your research workflow.
-	            </p>
-          </div>
+	          <div>
+	            <div class="eyebrow">Member dashboard</div>
+		            <h1>Manage Deep Forecast orders, uploads, and workspace activity.</h1>
+		            <p>
+		              Every forecast, upload, and order is stored in your secure workspace. Sign in to unlock your
+		              dashboard and keep a complete audit trail for your research workflow.
+		            </p>
+	          </div>
           <div class="card">
             <h3>Account status</h3>
             <div class="profile-item">
@@ -453,10 +452,10 @@
         </div>
       </section>
 
-      <section class="section panel hidden" data-panel="autopilot" id="autopilot">
-        <div class="container">
-          <div class="section-title">
-            <h2>SageMaker Autopilot request</h2>
+	      <section class="section panel hidden" data-panel="autopilot" id="autopilot">
+	        <div class="container">
+	          <div class="section-title">
+	            <h2>SageMaker Autopilot request</h2>
             <p class="small">Queue a forecast run with custom quantiles and horizon length.</p>
           </div>
           <div class="content-grid">
@@ -494,102 +493,12 @@
               <div id="autopilot-output" class="panel-output small">Queued runs will appear here.</div>
             </div>
           </div>
-        </div>
-      </section>
+	        </div>
+	      </section>
 
-      <section class="section panel hidden" data-panel="alpaca" id="alpaca">
-        <div class="container">
-          <div class="section-title">
-            <h2>Place Alpaca orders</h2>
-            <p class="small">Submit orders directly through Alpaca (paper or live depending on configuration).</p>
-          </div>
-          <div class="content-grid">
-            <form id="alpaca-order-form" class="card">
-              <div class="form-grid">
-                <div class="field">
-                  <label class="label" for="alpaca-symbol">Symbol</label>
-                  <input id="alpaca-symbol" name="symbol" placeholder="TSLA" required />
-                </div>
-                <div class="field">
-                  <label class="label" for="alpaca-qty">Quantity</label>
-                  <input id="alpaca-qty" name="qty" type="number" min="1" value="1" required />
-                </div>
-                <div class="field">
-                  <label class="label" for="alpaca-side">Side</label>
-                  <select id="alpaca-side" name="side">
-                    <option value="buy">Buy</option>
-                    <option value="sell">Sell</option>
-                  </select>
-                </div>
-                <div class="field">
-                  <label class="label" for="alpaca-type">Order type</label>
-                  <select id="alpaca-type" name="type">
-                    <option value="market">Market</option>
-                    <option value="limit">Limit</option>
-                  </select>
-                </div>
-                <div class="field">
-                  <label class="label" for="alpaca-limit">Limit price (optional)</label>
-                  <input id="alpaca-limit" name="limitPrice" type="number" step="0.01" />
-                </div>
-                <div class="field">
-                  <label class="label" for="alpaca-tif">Time in force</label>
-                  <select id="alpaca-tif" name="timeInForce">
-                    <option value="day">Day</option>
-                    <option value="gtc">GTC</option>
-                  </select>
-                </div>
-              </div>
-              <button class="cta" type="submit" data-analytics="alpaca_order">Place order</button>
-              <p class="small" id="alpaca-status"></p>
-            </form>
-            <div class="results-panel" id="alpaca-orders">
-              <h3>Recent Alpaca orders</h3>
-              <div id="alpaca-output" class="panel-output small">Orders will appear here after submission.</div>
-            </div>
-          </div>
-          <div class="content-grid" style="margin-top: 24px;">
-            <div class="card">
-              <h3>Alpaca account snapshot</h3>
-              <button class="cta secondary" id="alpaca-load-account" type="button">Load account</button>
-              <div id="alpaca-account-output" class="panel-output small" style="margin-top: 12px;">Account data will appear here.</div>
-            </div>
-            <div class="card">
-              <h3>Open positions</h3>
-              <button class="cta secondary" id="alpaca-load-positions" type="button">Load positions</button>
-              <div id="alpaca-positions-output" class="panel-output small" style="margin-top: 12px;">Positions will appear here.</div>
-            </div>
-          </div>
-          <div class="content-grid" style="margin-top: 24px;">
-            <div class="card">
-              <h3>List broker orders</h3>
-              <div class="field">
-                <label class="label" for="alpaca-order-status-filter">Status filter</label>
-                <select id="alpaca-order-status-filter">
-                  <option value="all">All</option>
-                  <option value="open">Open</option>
-                  <option value="closed">Closed</option>
-                </select>
-              </div>
-              <button class="cta secondary" id="alpaca-load-orders" type="button">Load broker orders</button>
-              <div id="alpaca-broker-orders-output" class="panel-output small" style="margin-top: 12px;">Broker orders will appear here.</div>
-            </div>
-            <form class="card" id="alpaca-cancel-order-form">
-              <h3>Cancel broker order</h3>
-              <div class="field">
-                <label class="label" for="alpaca-cancel-order-id">Alpaca order ID</label>
-                <input id="alpaca-cancel-order-id" placeholder="Paste Alpaca order id" required />
-              </div>
-              <button class="cta secondary" type="submit">Cancel order</button>
-              <p class="small" id="alpaca-cancel-status"></p>
-            </form>
-          </div>
-        </div>
-      </section>
-
-        </div>
-      </div>
-    </main>
+	        </div>
+	      </div>
+	    </main>
 
     <footer class="footer">
       <div class="container footer-grid">

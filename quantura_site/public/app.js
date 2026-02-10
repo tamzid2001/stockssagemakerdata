@@ -76,19 +76,6 @@
     autopilotForm: document.getElementById("autopilot-form"),
     autopilotOutput: document.getElementById("autopilot-output"),
     autopilotStatus: document.getElementById("autopilot-status"),
-    alpacaForm: document.getElementById("alpaca-order-form"),
-    alpacaOutput: document.getElementById("alpaca-output"),
-    alpacaStatus: document.getElementById("alpaca-status"),
-    alpacaLoadAccount: document.getElementById("alpaca-load-account"),
-    alpacaAccountOutput: document.getElementById("alpaca-account-output"),
-    alpacaLoadPositions: document.getElementById("alpaca-load-positions"),
-    alpacaPositionsOutput: document.getElementById("alpaca-positions-output"),
-    alpacaLoadOrders: document.getElementById("alpaca-load-orders"),
-    alpacaOrderStatusFilter: document.getElementById("alpaca-order-status-filter"),
-    alpacaBrokerOrdersOutput: document.getElementById("alpaca-broker-orders-output"),
-    alpacaCancelOrderForm: document.getElementById("alpaca-cancel-order-form"),
-    alpacaCancelOrderId: document.getElementById("alpaca-cancel-order-id"),
-    alpacaCancelStatus: document.getElementById("alpaca-cancel-status"),
     savedForecastsList: document.getElementById("saved-forecasts-list"),
     workspaceSelect: document.getElementById("workspace-select"),
     collabInviteForm: document.getElementById("collab-invite-form"),
@@ -154,7 +141,6 @@
 	    unsubscribeForecasts: null,
 	    unsubscribeAutopilot: null,
 	    unsubscribePredictions: null,
-	    unsubscribeAlpaca: null,
 	    unsubscribeTasks: null,
 	    unsubscribeWatchlist: null,
 	    unsubscribeAlerts: null,
@@ -230,21 +216,20 @@
 		          learn: "/studio",
 		        },
 		      },
-		      dashboard: {
-		        defaultPanel: "orders",
-		        panelToPath: {
-		          orders: "/dashboard",
-		          watchlist: "/watchlist",
-		          productivity: "/productivity",
-		          collaboration: "/collaboration",
-		          uploads: "/uploads",
-		          autopilot: "/autopilot",
-		          alpaca: "/trading",
-		          notifications: "/notifications",
-		          purchase: "/purchase",
-		          auth: "/account",
-		        },
-		      },
+			      dashboard: {
+			        defaultPanel: "orders",
+			        panelToPath: {
+			          orders: "/dashboard",
+			          watchlist: "/watchlist",
+			          productivity: "/productivity",
+			          collaboration: "/collaboration",
+			          uploads: "/uploads",
+			          autopilot: "/autopilot",
+			          notifications: "/notifications",
+			          purchase: "/purchase",
+			          auth: "/account",
+			        },
+			      },
 		    };
 		    const router = routers[routerKey] || null;
 		    const pathToPanel = (() => {
@@ -1467,20 +1452,6 @@
       });
   };
 
-  const startAlpacaOrders = (db, user) => {
-    if (state.unsubscribeAlpaca) state.unsubscribeAlpaca();
-    if (!user || !ui.alpacaOutput) return;
-
-    state.unsubscribeAlpaca = db
-      .collection("alpaca_orders")
-      .where("userId", "==", user.uid)
-      .orderBy("createdAt", "desc")
-      .onSnapshot((snapshot) => {
-        const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-        renderRequestList(items, ui.alpacaOutput, "No Alpaca orders yet.");
-      });
-  };
-
   const startAdminOrders = (db) => {
     if (state.unsubscribeAdmin) state.unsubscribeAdmin();
     state.unsubscribeAdmin = db
@@ -1627,7 +1598,6 @@
       "watchlist-ticker",
       "alert-ticker",
       "autopilot-ticker",
-      "alpaca-symbol",
     ];
     ids.forEach((id) => {
       const el = document.getElementById(id);
@@ -3925,121 +3895,6 @@
       }
     });
 
-    ui.alpacaForm?.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      if (!state.user) {
-        showToast("Sign in to place orders.", "warn");
-        return;
-      }
-      const formData = new FormData(ui.alpacaForm);
-      const payload = {
-        symbol: formData.get("symbol"),
-        qty: Number(formData.get("qty")),
-        side: formData.get("side"),
-        type: formData.get("type"),
-        limitPrice: formData.get("limitPrice"),
-        timeInForce: formData.get("timeInForce"),
-        meta: buildMeta(),
-      };
-
-      try {
-        ui.alpacaStatus.textContent = "Submitting order...";
-        const placeOrder = functions.httpsCallable("alpaca_place_order");
-        const result = await placeOrder(payload);
-        ui.alpacaStatus.textContent = `Order placed: ${result.data?.orderId || "—"}`;
-        logEvent("alpaca_order", { symbol: payload.symbol, side: payload.side });
-        showToast("Order submitted.");
-      } catch (error) {
-        ui.alpacaStatus.textContent = "Unable to place order.";
-        showToast(error.message || "Unable to place order.", "warn");
-      }
-    });
-
-    ui.alpacaLoadAccount?.addEventListener("click", async () => {
-      if (!state.user) {
-        showToast("Sign in to load account data.", "warn");
-        return;
-      }
-      try {
-        ui.alpacaAccountOutput.textContent = "Loading account...";
-        const getAccount = functions.httpsCallable("alpaca_get_account");
-        const result = await getAccount({ meta: buildMeta() });
-        const account = result.data?.account || {};
-        ui.alpacaAccountOutput.innerHTML = toPrettyJson(account);
-        logEvent("alpaca_account_loaded");
-      } catch (error) {
-        ui.alpacaAccountOutput.textContent = "Unable to load account.";
-        showToast(error.message || "Unable to load account.", "warn");
-      }
-    });
-
-    ui.alpacaLoadPositions?.addEventListener("click", async () => {
-      if (!state.user) {
-        showToast("Sign in to load positions.", "warn");
-        return;
-      }
-      try {
-        ui.alpacaPositionsOutput.textContent = "Loading positions...";
-        const getPositions = functions.httpsCallable("alpaca_get_positions");
-        const result = await getPositions({ meta: buildMeta() });
-        const positions = result.data?.positions || [];
-        ui.alpacaPositionsOutput.innerHTML = toPrettyJson(positions);
-        logEvent("alpaca_positions_loaded", { count: positions.length });
-      } catch (error) {
-        ui.alpacaPositionsOutput.textContent = "Unable to load positions.";
-        showToast(error.message || "Unable to load positions.", "warn");
-      }
-    });
-
-    ui.alpacaLoadOrders?.addEventListener("click", async () => {
-      if (!state.user) {
-        showToast("Sign in to load broker orders.", "warn");
-        return;
-      }
-      try {
-        ui.alpacaBrokerOrdersOutput.textContent = "Loading broker orders...";
-        const listOrders = functions.httpsCallable("alpaca_list_orders");
-        const result = await listOrders({
-          status: ui.alpacaOrderStatusFilter?.value || "all",
-          limit: 50,
-          meta: buildMeta(),
-        });
-        const orders = result.data?.orders || [];
-        ui.alpacaBrokerOrdersOutput.innerHTML = toPrettyJson(orders);
-        logEvent("alpaca_broker_orders_loaded", { count: orders.length });
-      } catch (error) {
-        ui.alpacaBrokerOrdersOutput.textContent = "Unable to load broker orders.";
-        showToast(error.message || "Unable to load broker orders.", "warn");
-      }
-    });
-
-    ui.alpacaCancelOrderForm?.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      if (!state.user) {
-        showToast("Sign in to cancel orders.", "warn");
-        return;
-      }
-      const orderId = ui.alpacaCancelOrderId?.value?.trim();
-      if (!orderId) {
-        showToast("Enter an order ID.", "warn");
-        return;
-      }
-      try {
-        ui.alpacaCancelStatus.textContent = "Cancelling order...";
-        const cancelOrder = functions.httpsCallable("alpaca_cancel_order");
-        const result = await cancelOrder({ orderId, meta: buildMeta() });
-        const cancelled = Boolean(result.data?.cancelled);
-        ui.alpacaCancelStatus.textContent = cancelled
-          ? `Order cancelled: ${result.data?.orderId || orderId}`
-          : "Cancel request submitted.";
-        logEvent("alpaca_order_cancelled", { order_id: orderId });
-        showToast("Order cancel request submitted.");
-      } catch (error) {
-        ui.alpacaCancelStatus.textContent = "Unable to cancel order.";
-        showToast(error.message || "Unable to cancel order.", "warn");
-      }
-    });
-
     ui.notificationsEnable?.addEventListener("click", async () => {
       if (!state.user) {
         showToast("Sign in to enable notifications.", "warn");
@@ -4117,14 +3972,13 @@
 		      setAuthUi(user);
 		      setUserId(user?.uid || null);
 
-	      if (!user) {
-	        renderOrderList([], ui.userOrders);
-	        renderRequestList([], ui.userForecasts, "No forecast requests yet.");
-	        renderRequestList([], ui.autopilotOutput, "No autopilot requests yet.");
-	        renderRequestList([], ui.predictionsOutput, "No uploads yet.");
-	        renderRequestList([], ui.alpacaOutput, "No Alpaca orders yet.");
-	        if (ui.watchlistList) ui.watchlistList.textContent = "Sign in to manage your watchlist.";
-	        if (ui.alertsList) ui.alertsList.textContent = "Sign in to manage your alerts.";
+		      if (!user) {
+		        renderOrderList([], ui.userOrders);
+		        renderRequestList([], ui.userForecasts, "No forecast requests yet.");
+		        renderRequestList([], ui.autopilotOutput, "No autopilot requests yet.");
+		        renderRequestList([], ui.predictionsOutput, "No uploads yet.");
+		        if (ui.watchlistList) ui.watchlistList.textContent = "Sign in to manage your watchlist.";
+		        if (ui.alertsList) ui.alertsList.textContent = "Sign in to manage your alerts.";
 	        if (ui.alertsStatus) ui.alertsStatus.textContent = "";
 	        if (ui.collabInvitesList) ui.collabInvitesList.textContent = "Sign in to view invites.";
 	        if (ui.collabCollaboratorsList) ui.collabCollaboratorsList.textContent = "Sign in to manage collaborators.";
@@ -4142,30 +3996,28 @@
         }
 	        if (state.unsubscribeOrders) state.unsubscribeOrders();
 	        if (state.unsubscribeAdmin) state.unsubscribeAdmin();
-		        if (state.unsubscribeForecasts) state.unsubscribeForecasts();
-		        if (state.unsubscribeAutopilot) state.unsubscribeAutopilot();
-		        if (state.unsubscribePredictions) state.unsubscribePredictions();
-		        if (state.unsubscribeAlpaca) state.unsubscribeAlpaca();
-		        if (state.unsubscribeTasks) state.unsubscribeTasks();
-		        if (state.unsubscribeWatchlist) state.unsubscribeWatchlist();
-		        if (state.unsubscribeAlerts) state.unsubscribeAlerts();
+			        if (state.unsubscribeForecasts) state.unsubscribeForecasts();
+			        if (state.unsubscribeAutopilot) state.unsubscribeAutopilot();
+			        if (state.unsubscribePredictions) state.unsubscribePredictions();
+			        if (state.unsubscribeTasks) state.unsubscribeTasks();
+			        if (state.unsubscribeWatchlist) state.unsubscribeWatchlist();
+			        if (state.unsubscribeAlerts) state.unsubscribeAlerts();
 		        if (state.unsubscribeSharedWorkspaces) state.unsubscribeSharedWorkspaces();
 		        state.sharedWorkspaces = [];
 		        setActiveWorkspaceId("");
 		        renderWorkspaceSelect(null);
 		        if (ui.productivityBoard) ui.productivityBoard.innerHTML = "";
 		        if (ui.tasksCalendar) ui.tasksCalendar.textContent = "Tasks with due dates will appear here.";
-			        const gated = new Set([
-			          "/dashboard",
-			          "/watchlist",
-			          "/productivity",
-			          "/collaboration",
-			          "/uploads",
-			          "/autopilot",
-			          "/trading",
-			          "/notifications",
-			          "/purchase",
-			        ]);
+				        const gated = new Set([
+				          "/dashboard",
+				          "/watchlist",
+				          "/productivity",
+				          "/collaboration",
+				          "/uploads",
+				          "/autopilot",
+				          "/notifications",
+				          "/purchase",
+				        ]);
 			        if (gated.has(window.location.pathname) && window.location.pathname !== "/account") {
 			          window.location.href = "/account";
 			        }
@@ -4180,15 +4032,14 @@
 		      renderWorkspaceSelect(user);
 		      startUserForecasts(db, activeWorkspaceId);
 		      startWorkspaceTasks(db, activeWorkspaceId);
-		      startWatchlist(db, activeWorkspaceId);
-		      startPriceAlerts(db, activeWorkspaceId);
-		      startAutopilotRequests(db, user);
-		      startPredictionsUploads(db, user);
-		      startAlpacaOrders(db, user);
-		      refreshCollaboration(functions);
-			      if (window.location.pathname === "/account") {
-			        window.location.href = "/dashboard";
-			      }
+			      startWatchlist(db, activeWorkspaceId);
+			      startPriceAlerts(db, activeWorkspaceId);
+			      startAutopilotRequests(db, user);
+			      startPredictionsUploads(db, user);
+			      refreshCollaboration(functions);
+				      if (window.location.pathname === "/account") {
+				        window.location.href = "/dashboard";
+				      }
 
 	      if (ui.notificationsStatus) {
 	        if (messaging && isPushSupported()) {
