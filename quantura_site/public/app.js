@@ -7,6 +7,7 @@
   const LAST_TICKER_KEY = "quantura_last_ticker";
   const WORKSPACE_KEY = "quantura_active_workspace";
   const OPTIONS_EXPIRATION_PREFIX = "quantura_options_expiration_";
+  const THEME_KEY = "quantura_theme";
 
   const ui = {
     headerAuth: document.getElementById("header-auth"),
@@ -127,6 +128,7 @@
       forecastId: "",
       forecastDoc: null,
       indicatorOverlays: [],
+      forecastTablePage: 0,
     },
     unsubscribeOrders: null,
     unsubscribeAdmin: null,
@@ -188,9 +190,13 @@
 
 	  const bindPanelNavigation = () => {
 	    const panelsRoot = document.querySelector("[data-panels]");
-	    const buttons = Array.from(document.querySelectorAll("[data-panel-target]"));
-	    const panels = Array.from(document.querySelectorAll("[data-panel]"));
-	    if (!panelsRoot || buttons.length === 0 || panels.length === 0) return;
+	    if (!panelsRoot) return;
+	    const panels = Array.from(panelsRoot.querySelectorAll("[data-panel]"));
+	    const panelNames = new Set(panels.map((panel) => String(panel.dataset.panel || "").trim()).filter(Boolean));
+	    const buttons = Array.from(document.querySelectorAll("[data-panel-target]")).filter((btn) =>
+	      panelNames.has(String(btn.dataset.panelTarget || "").trim())
+	    );
+	    if (buttons.length === 0 || panels.length === 0) return;
 
 	    const setActive = (target, { pushHash = true } = {}) => {
 	      const next = String(target || "").trim();
@@ -433,18 +439,62 @@
     }
   };
 
-  const safeLocalStorageRemove = (key) => {
-    try {
-      localStorage.removeItem(key);
-    } catch (error) {
-      // Ignore storage failures.
-    }
-  };
+	  const safeLocalStorageRemove = (key) => {
+	    try {
+	      localStorage.removeItem(key);
+	    } catch (error) {
+	      // Ignore storage failures.
+	    }
+	  };
 
-  const buildWorkspaceOptions = (user) => {
-    const opts = [];
-    if (!user) return opts;
-    opts.push({ id: user.uid, label: "My workspace" });
+    const resolveThemePreference = () => {
+      try {
+        const stored = localStorage.getItem(THEME_KEY);
+        if (stored === "dark" || stored === "light") return stored;
+      } catch (error) {
+        // Ignore storage errors.
+      }
+      try {
+        return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      } catch (error) {
+        return "light";
+      }
+    };
+
+    const isDarkMode = () => document.documentElement.dataset.theme === "dark";
+
+    const applyTheme = (theme, { persist = true } = {}) => {
+      const next = theme === "dark" ? "dark" : "light";
+      document.documentElement.dataset.theme = next;
+      if (persist) safeLocalStorageSet(THEME_KEY, next);
+      const button = document.getElementById("theme-toggle");
+      if (button) {
+        button.textContent = next === "dark" ? "Light mode" : "Dark mode";
+        button.setAttribute("aria-label", next === "dark" ? "Switch to light mode" : "Switch to dark mode");
+      }
+    };
+
+    const ensureThemeToggle = () => {
+      if (document.getElementById("theme-toggle")) return;
+      const host = document.querySelector(".nav-actions");
+      if (!host) return;
+      const button = document.createElement("button");
+      button.id = "theme-toggle";
+      button.type = "button";
+      button.className = "cta secondary small theme-toggle";
+      button.textContent = isDarkMode() ? "Light mode" : "Dark mode";
+      button.addEventListener("click", () => {
+        const next = isDarkMode() ? "light" : "dark";
+        applyTheme(next, { persist: true });
+        logEvent("theme_toggled", { theme: next, page_path: window.location.pathname });
+      });
+      host.insertBefore(button, host.firstChild);
+    };
+
+	  const buildWorkspaceOptions = (user) => {
+	    const opts = [];
+	    if (!user) return opts;
+	    opts.push({ id: user.uid, label: "My workspace" });
     state.sharedWorkspaces.forEach((ws) => {
       const id = ws.workspaceUserId || ws.id;
       if (!id) return;
@@ -656,40 +706,30 @@
     return modal;
   };
 
-	  const ensureFeedbackPrompt = () => {
-	    const lastShown = Number(safeLocalStorageGet(FEEDBACK_PROMPT_KEY) || "0");
-	    const weekMs = 7 * 24 * 60 * 60 * 1000;
-	    if (lastShown && Date.now() - lastShown < weekMs) return null;
-	    if (document.getElementById("feedback-banner")) return null;
+		  const ensureFeedbackPrompt = () => {
+		    if (document.getElementById("feedback-fab")) return null;
 
-    const banner = document.createElement("div");
-    banner.id = "feedback-banner";
-    banner.className = "feedback-banner";
-	    banner.innerHTML = `
-	      <div>
-	        <strong>Help Quantura improve.</strong>
-	        <div class="small">By continuing, you agree feedback and basic system info may be used to improve the Quantura experience.</div>
-	      </div>
-	      <div class="banner-actions">
-	        <button class="cta secondary small" type="button" data-action="dismiss">No thanks</button>
-	        <button class="cta small" type="button" data-action="open">Show question</button>
-      </div>
-    `;
-    document.body.appendChild(banner);
+      const lastShown = Number(safeLocalStorageGet(FEEDBACK_PROMPT_KEY) || "0");
+      const weekMs = 7 * 24 * 60 * 60 * 1000;
+      const shouldPulse = !lastShown || Date.now() - lastShown > weekMs;
 
-    banner.addEventListener("click", (event) => {
-      const action = event.target?.dataset?.action;
-      if (!action) return;
-      if (action === "dismiss") {
-        safeLocalStorageSet(FEEDBACK_PROMPT_KEY, String(Date.now()));
-        banner.remove();
-      }
-      if (action === "open") {
+      const button = document.createElement("button");
+      button.id = "feedback-fab";
+      button.type = "button";
+      button.className = `feedback-fab${shouldPulse ? " pulse" : ""}`;
+      button.textContent = "Feedback";
+      button.setAttribute("aria-label", "Send feedback to Quantura");
+      document.body.appendChild(button);
+
+      button.addEventListener("click", () => {
         ensureFeedbackModal().classList.remove("hidden");
-      }
-    });
-	    return banner;
-	  };
+        button.classList.remove("pulse");
+        safeLocalStorageSet(FEEDBACK_PROMPT_KEY, String(Date.now()));
+        logEvent("feedback_opened", { page_path: window.location.pathname });
+      });
+
+      return button;
+		  };
 
 	  const ensureAssistantWidget = (functions) => {
 	    if (document.getElementById("assistant-widget")) return;
@@ -697,11 +737,11 @@
 	    const root = document.createElement("div");
 	    root.id = "assistant-widget";
 
-	    const launcher = document.createElement("button");
-	    launcher.type = "button";
-	    launcher.className = "assistant-launcher";
-	    launcher.setAttribute("aria-label", "Open Quantura assistant");
-	    launcher.textContent = "AI";
+		    const launcher = document.createElement("button");
+		    launcher.type = "button";
+		    launcher.className = "assistant-launcher";
+		    launcher.setAttribute("aria-label", "Open Quantura assistant");
+		    launcher.textContent = "Ask";
 
 	    const panel = document.createElement("div");
 	    panel.className = "assistant-panel hidden";
@@ -1523,13 +1563,13 @@
     return null;
   };
 
-  const renderTickerChart = async (rows, ticker, interval, overlays = []) => {
-    if (!ui.tickerChart) return;
-    const Plotly = getPlotly();
-    if (!Plotly) {
-      ui.tickerChart.textContent = "Chart library not loaded.";
-      return;
-    }
+	  const renderTickerChart = async (rows, ticker, interval, overlays = []) => {
+	    if (!ui.tickerChart) return;
+	    const Plotly = getPlotly();
+	    if (!Plotly) {
+	      ui.tickerChart.textContent = "Chart library not loaded.";
+	      return;
+	    }
 
     if (!rows?.length) {
       ui.tickerChart.textContent = "No price data to plot.";
@@ -1570,20 +1610,33 @@
           },
         ];
 
-    const layout = {
-      title: { text: `${ticker} (${interval})`, font: { family: "Manrope, sans-serif", size: 16 } },
-      paper_bgcolor: "rgba(255,255,255,0)",
-      plot_bgcolor: "#ffffff",
-      margin: { l: 50, r: 30, t: 40, b: 40 },
-      xaxis: {
-        rangeslider: { visible: true },
-        showspikes: true,
-        spikemode: "across",
-        spikesnap: "cursor",
-      },
-      yaxis: { showspikes: true, spikemode: "across", spikesnap: "cursor" },
-      legend: { orientation: "h" },
-    };
+      const dark = isDarkMode();
+      const plotBg = dark ? "#0b0f1a" : "#ffffff";
+      const textColor = dark ? "rgba(246, 244, 238, 0.92)" : "#12182a";
+      const gridColor = dark ? "rgba(246, 244, 238, 0.14)" : "rgba(18, 24, 42, 0.12)";
+	    const layout = {
+	      title: { text: `${ticker} (${interval})`, font: { family: "Manrope, sans-serif", size: 16, color: textColor } },
+	      font: { family: "Manrope, sans-serif", color: textColor },
+	      paper_bgcolor: "rgba(0,0,0,0)",
+	      plot_bgcolor: plotBg,
+	      margin: { l: 50, r: 30, t: 40, b: 40 },
+	      xaxis: {
+	        rangeslider: { visible: true },
+	        showspikes: true,
+	        spikemode: "across",
+	        spikesnap: "cursor",
+          gridcolor: gridColor,
+          zerolinecolor: gridColor,
+	      },
+	      yaxis: {
+          showspikes: true,
+          spikemode: "across",
+          spikesnap: "cursor",
+          gridcolor: gridColor,
+          zerolinecolor: gridColor,
+        },
+	      legend: { orientation: "h" },
+	    };
 
     await Plotly.react(ui.tickerChart, [...baseTraces, ...overlays], layout, {
       responsive: true,
@@ -1591,13 +1644,13 @@
     });
   };
 
-  const renderIndicatorChart = async (series) => {
-    if (!ui.indicatorChart) return;
-    const Plotly = getPlotly();
-    if (!Plotly) {
-      ui.indicatorChart.textContent = "Chart library not loaded.";
-      return;
-    }
+	  const renderIndicatorChart = async (series) => {
+	    if (!ui.indicatorChart) return;
+	    const Plotly = getPlotly();
+	    if (!Plotly) {
+	      ui.indicatorChart.textContent = "Chart library not loaded.";
+	      return;
+	    }
 
     const dates = series?.dates || [];
     const items = series?.items || [];
@@ -1615,15 +1668,20 @@
       line: { width: 2 },
     }));
 
-    const layout = {
-      title: { text: "Technical indicators", font: { family: "Manrope, sans-serif", size: 14 } },
-      paper_bgcolor: "rgba(255,255,255,0)",
-      plot_bgcolor: "#ffffff",
-      margin: { l: 50, r: 30, t: 40, b: 40 },
-      xaxis: { showspikes: true, spikemode: "across", spikesnap: "cursor" },
-      yaxis: { zeroline: false },
-      legend: { orientation: "h" },
-    };
+      const dark = isDarkMode();
+      const plotBg = dark ? "#0b0f1a" : "#ffffff";
+      const textColor = dark ? "rgba(246, 244, 238, 0.92)" : "#12182a";
+      const gridColor = dark ? "rgba(246, 244, 238, 0.14)" : "rgba(18, 24, 42, 0.12)";
+	    const layout = {
+	      title: { text: "Technical indicators", font: { family: "Manrope, sans-serif", size: 14, color: textColor } },
+	      font: { family: "Manrope, sans-serif", color: textColor },
+	      paper_bgcolor: "rgba(0,0,0,0)",
+	      plot_bgcolor: plotBg,
+	      margin: { l: 50, r: 30, t: 40, b: 40 },
+	      xaxis: { showspikes: true, spikemode: "across", spikesnap: "cursor", gridcolor: gridColor, zerolinecolor: gridColor },
+	      yaxis: { zeroline: false, gridcolor: gridColor },
+	      legend: { orientation: "h" },
+	    };
 
     await Plotly.react(ui.indicatorChart, traces, layout, {
       responsive: true,
@@ -1869,17 +1927,21 @@
     }
   };
 
-  const init = () => {
-    if (typeof firebase === "undefined") {
-      console.error("Firebase SDK not loaded.");
-      return;
-    }
+	  const init = () => {
+	    if (typeof firebase === "undefined") {
+	      console.error("App SDK not loaded.");
+	      return;
+	    }
 
-	    const auth = firebase.auth();
-	    const db = firebase.firestore();
-	    const functions = firebase.functions();
-	    const storage = firebase.storage ? firebase.storage() : null;
-	    const messaging = getMessagingClient();
+      applyTheme(resolveThemePreference(), { persist: false });
+
+		    const auth = firebase.auth();
+		    const db = firebase.firestore();
+		    const functions = firebase.functions();
+		    const storage = firebase.storage ? firebase.storage() : null;
+		    const messaging = getMessagingClient();
+
+      ensureThemeToggle();
 
 	    if (!state.authResolved) {
 	      if (ui.headerUserEmail) ui.headerUserEmail.textContent = "Restoring session...";
@@ -2006,21 +2068,21 @@
         showToast("Using session-only sign-in in this browser.", "warn");
       });
 
-	    ui.headerAuth?.addEventListener("click", () => {
-	      const authSection = document.getElementById("auth");
-	      if (authSection) {
-	        if (window.location.pathname === "/dashboard") {
-	          try {
-	            window.location.hash = "auth";
-	          } catch (error) {
-	            // Ignore.
-	          }
-	        }
-	        authSection.scrollIntoView({ behavior: "smooth" });
-	      } else {
-	        window.location.href = "/dashboard#auth";
-	      }
-	    });
+		    ui.headerAuth?.addEventListener("click", () => {
+		      const authSection = document.getElementById("auth");
+		      if (authSection) {
+		        if (window.location.pathname === "/dashboard") {
+		          try {
+		            window.location.hash = "auth";
+		          } catch (error) {
+		            // Ignore.
+		          }
+		        }
+		        authSection.scrollIntoView({ behavior: "smooth" });
+		      } else {
+		        window.location.href = "/account";
+		      }
+		    });
 
 	    ui.workspaceSelect?.addEventListener("change", () => {
 	      if (!state.user) {

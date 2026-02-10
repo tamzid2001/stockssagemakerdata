@@ -26,6 +26,7 @@ SERVICE_ACCOUNT_PATH = os.environ.get(
     "SERVICE_ACCOUNT_PATH",
     os.path.join(os.path.dirname(__file__), "serviceAccountKey.json"),
 )
+PUBLIC_ORIGIN = (os.environ.get("PUBLIC_ORIGIN") or "https://quantura-e2e3d.web.app").rstrip("/")
 ADMIN_EMAIL = "tamzid257@gmail.com"
 ALLOWED_STATUSES = {"pending", "in_progress", "fulfilled", "cancelled"}
 CONTACT_REQUIRED_FIELDS = {"name", "email", "message"}
@@ -192,9 +193,12 @@ def _active_notification_tokens_for_user(user_id: str) -> list[str]:
 def _send_push_tokens(tokens: list[str], title: str, body: str, data: dict[str, Any] | None = None) -> dict[str, Any]:
     tokens = [str(token).strip() for token in tokens if str(token).strip()]
     if not tokens:
-        return {"successCount": 0, "failureCount": 0, "failed": [], "staleTokens": []}
+        return {"successCount": 0, "failureCount": 0, "failed": [], "staleTokenHashes": []}
 
     payload_data = {str(key): str(value) for key, value in (data or {}).items() if value is not None}
+    target = payload_data.get("url") or "/dashboard"
+    link = target if target.startswith("http") else f"{PUBLIC_ORIGIN}{target}"
+    icon = f"{PUBLIC_ORIGIN}/assets/quantura-icon.svg"
     message = admin_messaging.MulticastMessage(
         tokens=tokens[:500],
         notification=admin_messaging.Notification(title=title, body=body),
@@ -203,24 +207,34 @@ def _send_push_tokens(tokens: list[str], title: str, body: str, data: dict[str, 
             notification=admin_messaging.WebpushNotification(
                 title=title,
                 body=body,
-                icon="/assets/quantura-icon.svg",
-                badge="/assets/quantura-icon.svg",
+                icon=icon,
+                badge=icon,
             ),
-            fcm_options=admin_messaging.WebpushFCMOptions(link="/dashboard"),
+            fcm_options=admin_messaging.WebpushFCMOptions(link=link),
             headers={"Urgency": "high"},
         ),
     )
 
-    response = admin_messaging.send_each_for_multicast(message)
+    try:
+        response = admin_messaging.send_each_for_multicast(message)
+    except Exception as exc:
+        # Avoid surfacing an opaque "internal error" to the caller. We still audit via _notify_user().
+        return {
+            "successCount": 0,
+            "failureCount": len(tokens[:500]),
+            "failed": [{"tokenHash": _token_doc_id(t), "error": str(exc)} for t in tokens[:5]],
+            "staleTokenHashes": [],
+            "error": str(exc),
+        }
     failed: list[dict[str, str]] = []
-    stale_tokens: list[str] = []
+    stale_token_hashes: list[str] = []
 
     for idx, resp in enumerate(response.responses):
         if resp.success:
             continue
         token = tokens[idx]
         error_text = str(resp.exception or "unknown_error")
-        failed.append({"token": token, "error": error_text})
+        failed.append({"tokenHash": _token_doc_id(token), "error": error_text})
         normalized = error_text.lower()
         if (
             "unregistered" in normalized
@@ -228,13 +242,13 @@ def _send_push_tokens(tokens: list[str], title: str, body: str, data: dict[str, 
             or "invalid registration token" in normalized
             or "requested entity was not found" in normalized
         ):
-            stale_tokens.append(token)
+            stale_token_hashes.append(_token_doc_id(token))
 
     return {
         "successCount": response.success_count,
         "failureCount": response.failure_count,
         "failed": failed,
-        "staleTokens": stale_tokens,
+        "staleTokenHashes": stale_token_hashes,
     }
 
 
@@ -247,8 +261,8 @@ def _notify_user(
 ) -> dict[str, Any]:
     tokens = _active_notification_tokens_for_user(user_id)
     result = _send_push_tokens(tokens, title=title, body=body, data=data)
-    for stale in result.get("staleTokens", []):
-        db.collection("notification_tokens").document(_token_doc_id(stale)).set(
+    for stale_hash in result.get("staleTokenHashes", []):
+        db.collection("notification_tokens").document(str(stale_hash)).set(
             {
                 "active": False,
                 "updatedAt": firestore.SERVER_TIMESTAMP,
@@ -292,6 +306,51 @@ def _serialize_for_firestore(value: Any) -> Any:
     if isinstance(value, dict):
         return {key: _serialize_for_firestore(item) for key, item in value.items()}
     return value
+
+
+def _parse_quantiles(raw: Any) -> list[float]:
+    if raw is None:
+        return [0.1, 0.5, 0.9]
+
+    values: list[float] = []
+    if isinstance(raw, str):
+        parts = [p.strip() for p in raw.split(",") if p.strip()]
+        if not parts:
+            raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Quantiles must be comma-delimited values between 0 and 1.")
+        for part in parts:
+            try:
+                values.append(float(part))
+            except Exception:
+                raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, f"Invalid quantile value: {part}")
+    elif isinstance(raw, (list, tuple)):
+        if not raw:
+            raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "At least one quantile is required.")
+        for item in raw:
+            try:
+                values.append(float(item))
+            except Exception:
+                raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, f"Invalid quantile value: {item}")
+    else:
+        try:
+            values = [float(raw)]
+        except Exception:
+            raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Invalid quantile value.")
+
+    cleaned: list[float] = []
+    seen: set[int] = set()
+    for q in values:
+        if not (0.0 < float(q) < 1.0):
+            raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Quantiles must be between 0 and 1 (exclusive).")
+        key = int(round(float(q) * 10000))
+        if key in seen:
+            continue
+        seen.add(key)
+        cleaned.append(float(q))
+
+    if len(cleaned) > 12:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Too many quantiles requested (max 12).")
+
+    return cleaned
 
 
 def _load_history(ticker: str, start: str | None, interval: str) -> pd.DataFrame:
@@ -476,9 +535,9 @@ def _run_prophet_engine(close_series: pd.Series, horizon: int, quantiles: list[f
         z_80 = 1.28155
 
     rows: list[dict[str, Any]] = []
-    quantiles = sorted({float(q) for q in quantiles if 0 < float(q) < 1})
-    if 0.5 not in quantiles:
-        quantiles.append(0.5)
+    quantiles = sorted({float(q) for q in (quantiles or []) if 0 < float(q) < 1})
+    if not quantiles:
+        quantiles = [0.5]
 
     for _, row in forecast.iterrows():
         yhat = float(row["yhat"])
@@ -494,7 +553,9 @@ def _run_prophet_engine(close_series: pd.Series, horizon: int, quantiles: list[f
     forecast_core["engine"] = "prophet"
     forecast_core["serviceMessage"] = "Forecast generated with Prophet, quantiles derived from model uncertainty."
     forecast_core["forecastRows"] = rows
-    forecast_core["metrics"]["medianEnd"] = rows[-1].get("q50") if rows else forecast_core["metrics"].get("medianEnd")
+    ref_q = min(quantiles, key=lambda q: abs(q - 0.5)) if quantiles else 0.5
+    ref_key = f"q{int(round(ref_q * 100)):02d}"
+    forecast_core["metrics"]["medianEnd"] = rows[-1].get(ref_key) if rows else forecast_core["metrics"].get("medianEnd")
 
     return forecast_core
 
