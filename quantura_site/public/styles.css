@@ -1067,6 +1067,42 @@ textarea {
   background: #f0fbf7;
 }
 
+.watchlist-item {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.92);
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: start;
+  margin-bottom: 12px;
+}
+
+.alert-item {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.92);
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.alert-item[data-status="triggered"] {
+  border-color: rgba(226, 90, 44, 0.55);
+  box-shadow: 0 14px 26px rgba(226, 90, 44, 0.12);
+  background: rgba(255, 247, 230, 0.96);
+}
+
+.alert-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .kanban {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1253,7 +1289,7 @@ textarea {
 
 .app-sidebar {
   position: sticky;
-  top: var(--header-height);
+  top: var(--dock-top, 96px);
   align-self: start;
   display: grid;
   gap: 16px;
@@ -1359,12 +1395,12 @@ textarea {
 
 .studio-chart {
   position: sticky;
-  top: var(--studio-chart-top);
+  top: var(--studio-chart-top, 284px);
 }
 
 .ticker-dock {
   position: sticky;
-  top: var(--dock-top);
+  top: var(--dock-top, 104px);
   z-index: 3;
 }
 
