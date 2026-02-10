@@ -3,15 +3,12 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Quantura Screener | Signal Discovery & Watchlists</title>
-    <meta
-      name="description"
-      content="Quantura's stock screener surfaces mispriced opportunities, ranks candidates, and syncs to Slack for weekly decision briefs."
-    />
+    <title>Quantura Screener | Ranked Watchlists</title>
+    <meta name="description" content="Run a fast stock screen, rank candidates, and save every run to your workspace." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://quantura-e2e3d.web.app/screener" />
     <meta property="og:title" content="Quantura Stock Screener" />
-    <meta property="og:description" content="Signal discovery, factor ranking, and real-time watchlists for investors." />
+    <meta property="og:description" content="Rank candidates, export results, and store every screener run in your workspace." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://quantura-e2e3d.web.app/screener" />
     <meta property="og:image" content="/assets/quantura-logo.svg" />
@@ -67,7 +64,6 @@
           </div>
           <nav class="sidebar-nav">
             <a href="#screener">Run screener</a>
-            <a href="#roadmap">Roadmap</a>
             <a href="/forecasting">Terminal</a>
             <a href="/dashboard">Dashboard</a>
             <a href="/blog">Blog</a>
@@ -75,37 +71,11 @@
         </aside>
 
         <div class="app-main">
-          <section class="page-hero">
-            <div class="container content-grid">
-              <div>
-                <div class="eyebrow">Signal discovery</div>
-                <h1>Quantura Screener ranks the names you should study next.</h1>
-                <p>
-                  Run a fast screen against trending tickers, measure momentum, and store every run in your workspace.
-                  Export results, turn them into watchlists, and keep your weekly brief pipeline moving.
-                </p>
-                <div class="hero-actions">
-                  <a class="cta" href="#screener" data-analytics="screener_start">Run a screen</a>
-                  <a class="cta secondary" href="/forecasting" data-analytics="screener_terminal">Plot a ticker</a>
-                </div>
-              </div>
-              <div class="card">
-                <h3>What the screener delivers</h3>
-                <div class="feature-list">
-                  <div class="feature"><span></span>Ranked watchlist with conviction scores</div>
-                  <div class="feature"><span></span>RSI, momentum, and volatility snapshots</div>
-                  <div class="feature"><span></span>Saved runs in your workspace</div>
-                  <div class="feature"><span></span>Slack-ready workflow hooks</div>
-                </div>
-              </div>
-            </div>
-          </section>
-
       <section class="section" id="screener">
         <div class="container">
           <div class="section-title">
             <h2>Run the Quantura screener</h2>
-            <p class="small">Store each run in your workspace for comparison across weeks.</p>
+            <p class="small">Run a screen and click any symbol to open it in the terminal.</p>
           </div>
           <div class="content-grid">
             <form id="screener-form" class="card">
@@ -140,51 +110,11 @@
                 <textarea id="screener-notes" name="notes" placeholder="Optional focus or exclusions"></textarea>
               </div>
               <button class="cta" type="submit" data-analytics="screener_submit">Run screener</button>
-              <p class="small">Results are computed immediately and stored in your workspace with a unique run ID.</p>
             </form>
             <div class="results-panel" id="screener-result">
               <h3>Screener output</h3>
-              <p class="small">Top-ranked tickers will appear here. Use the terminal to deep-dive.</p>
+              <p class="small">Top-ranked tickers appear here.</p>
               <div id="screener-output" class="panel-output"></div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="section" id="roadmap">
-        <div class="container">
-          <div class="section-title">
-            <h2>Stock screener roadmap</h2>
-            <p class="small">Short-term priorities and upcoming enhancements.</p>
-          </div>
-          <div class="content-grid">
-            <div class="card">
-              <h3>Must-do (short term)</h3>
-              <ul>
-                <li>Verify Slack delivery for webhook + bot token paths</li>
-                <li>Confirm Linear workflow secrets and issue creation</li>
-                <li>Expand headlines collection with additional sources</li>
-                <li>Add unit tests for tickers, Slack payloads, schema validation</li>
-                <li>Add CSV schema validation for BI consumers</li>
-              </ul>
-            </div>
-            <div class="card">
-              <h3>Should-do (mid term)</h3>
-              <ul>
-                <li>Add caching for fundamentals/headlines</li>
-                <li>Build a lightweight screening dashboard</li>
-                <li>Include market-cap weighting in rankings</li>
-                <li>Add optional S3 upload for combined output</li>
-                <li>Configurable minimum ticker count enforcement</li>
-              </ul>
-            </div>
-            <div class="card">
-              <h3>Nice-to-have</h3>
-              <ul>
-                <li>Sector-level summaries in Slack message</li>
-                <li>Sector-specific models or prompt templates</li>
-                <li>Retry logic and circuit breakers for API calls</li>
-              </ul>
             </div>
           </div>
         </div>
@@ -197,7 +127,7 @@
       <div class="container footer-grid">
         <div>
           <div class="logo">QUANTURA</div>
-          <p class="small">Signal discovery and conviction ranking for active investors.</p>
+          <p class="small">Ranked watchlists and screening runs for active investors.</p>
           <span class="tag">Stock screener</span>
           <div class="footer-social" aria-label="Quantura social links">
             <a class="social-link" href="#" data-analytics="social_x" aria-label="X (coming soon)">

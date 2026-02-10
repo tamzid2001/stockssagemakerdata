@@ -31,12 +31,5 @@
       <description><![CDATA[How to choose quantiles, read uncertainty bands, and compare Meta Prophet vs IBM TimeMixer inside the terminal.]]></description>
     </item>
 
-    <item>
-      <title>Weekly Market Brief (2026-02-09)</title>
-      <link>https://quantura-e2e3d.web.app/blog/posts/2026-02-09-weekly-market-brief</link>
-      <guid>https://quantura-e2e3d.web.app/blog/posts/2026-02-09-weekly-market-brief</guid>
-      <pubDate>Mon, 09 Feb 2026 00:00:00 GMT</pubDate>
-      <description><![CDATA[Trending tickers, momentum snapshot, and a workflow to validate setups in the terminal.]]></description>
-    </item>
   </channel>
 </rss>

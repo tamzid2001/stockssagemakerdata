@@ -505,57 +505,60 @@ def _run_prophet_engine(close_series: pd.Series, horizon: int, quantiles: list[f
     import pandas as pd  # type: ignore
 
     forecast_core = _generate_quantile_forecast(close_series, horizon, quantiles, interval)
+    try:
+        df = pd.DataFrame({"ds": close_series.index.tz_localize(None), "y": close_series.values.astype(float)})
+        is_hourly = interval == "1h"
+        model = Prophet(
+            daily_seasonality=is_hourly,
+            weekly_seasonality=True,
+            yearly_seasonality=not is_hourly,
+            changepoint_prior_scale=0.08,
+            seasonality_prior_scale=12.0,
+            interval_width=0.8,
+        )
+        model.add_country_holidays(country_name="US")
+        if not is_hourly:
+            model.add_seasonality(name="monthly", period=30.5, fourier_order=5)
 
-    df = pd.DataFrame({"ds": close_series.index.tz_localize(None), "y": close_series.values.astype(float)})
-    is_hourly = interval == "1h"
-    model = Prophet(
-        daily_seasonality=is_hourly,
-        weekly_seasonality=True,
-        yearly_seasonality=not is_hourly,
-        changepoint_prior_scale=0.08,
-        seasonality_prior_scale=12.0,
-        interval_width=0.8,
-    )
-    model.add_country_holidays(country_name="US")
-    if not is_hourly:
-        model.add_seasonality(name="monthly", period=30.5, fourier_order=5)
+        model.fit(df)
 
-    model.fit(df)
+        freq = "H" if is_hourly else "B"
+        periods = max(1, min(horizon, 365 if not is_hourly else 240))
+        future = model.make_future_dataframe(periods=periods, freq=freq, include_history=False)
+        forecast = model.predict(future)
 
-    freq = "H" if is_hourly else "B"
-    periods = max(1, min(horizon, 365 if not is_hourly else 240))
-    future = model.make_future_dataframe(periods=periods, freq=freq, include_history=False)
-    forecast = model.predict(future)
+        normal = NormalDist()
+        z_80 = normal.inv_cdf(0.9)
+        if z_80 == 0:
+            z_80 = 1.28155
 
-    normal = NormalDist()
-    z_80 = normal.inv_cdf(0.9)
-    if z_80 == 0:
-        z_80 = 1.28155
+        rows: list[dict[str, Any]] = []
+        quantiles = sorted({float(q) for q in (quantiles or []) if 0 < float(q) < 1})
+        if not quantiles:
+            quantiles = [0.5]
 
-    rows: list[dict[str, Any]] = []
-    quantiles = sorted({float(q) for q in (quantiles or []) if 0 < float(q) < 1})
-    if not quantiles:
-        quantiles = [0.5]
+        for _, row in forecast.iterrows():
+            yhat = float(row["yhat"])
+            lower = float(row["yhat_lower"])
+            upper = float(row["yhat_upper"])
+            sigma = max((upper - lower) / (2 * z_80), 1e-6)
+            out_row: dict[str, Any] = {"ds": row["ds"].isoformat()}
+            for q in quantiles:
+                z = normal.inv_cdf(q)
+                out_row[f"q{int(round(q * 100)):02d}"] = round(yhat + sigma * z, 4)
+            rows.append(out_row)
 
-    for _, row in forecast.iterrows():
-        yhat = float(row["yhat"])
-        lower = float(row["yhat_lower"])
-        upper = float(row["yhat_upper"])
-        sigma = max((upper - lower) / (2 * z_80), 1e-6)
-        out_row: dict[str, Any] = {"ds": row["ds"].isoformat()}
-        for q in quantiles:
-            z = normal.inv_cdf(q)
-            out_row[f"q{int(round(q * 100)):02d}"] = round(yhat + sigma * z, 4)
-        rows.append(out_row)
+        forecast_core["engine"] = "prophet"
+        forecast_core["serviceMessage"] = "Forecast generated with Meta Prophet, quantiles derived from model uncertainty."
+        forecast_core["forecastRows"] = rows
+        ref_q = min(quantiles, key=lambda q: abs(q - 0.5)) if quantiles else 0.5
+        ref_key = f"q{int(round(ref_q * 100)):02d}"
+        forecast_core["metrics"]["medianEnd"] = rows[-1].get(ref_key) if rows else forecast_core["metrics"].get("medianEnd")
 
-    forecast_core["engine"] = "prophet"
-    forecast_core["serviceMessage"] = "Forecast generated with Prophet, quantiles derived from model uncertainty."
-    forecast_core["forecastRows"] = rows
-    ref_q = min(quantiles, key=lambda q: abs(q - 0.5)) if quantiles else 0.5
-    ref_key = f"q{int(round(ref_q * 100)):02d}"
-    forecast_core["metrics"]["medianEnd"] = rows[-1].get(ref_key) if rows else forecast_core["metrics"].get("medianEnd")
-
-    return forecast_core
+        return forecast_core
+    except Exception:
+        # Prophet is best-effort: keep the product usable by returning the fallback model output.
+        return forecast_core
 
 
 def _run_timemixer_engine(close_series: pd.Series, horizon: int, quantiles: list[float], interval: str) -> dict[str, Any]:
@@ -1247,7 +1250,11 @@ def _handle_forecast_request(req: https_fn.CallableRequest, forced_service: str 
     history = _load_history(ticker=ticker, start=start, interval=interval)
     close_series = history["Close"].copy()
 
-    result = _run_forecast_service(service, close_series, horizon, quantiles, interval)
+    try:
+        result = _run_forecast_service(service, close_series, horizon, quantiles, interval)
+    except Exception:
+        result = _generate_quantile_forecast(close_series, horizon, quantiles, interval)
+        result["serviceMessage"] = "Forecast service failed; fallback model executed."
 
     request_doc = {
         "userId": req.auth.uid,
