@@ -101,6 +101,13 @@
                     <option value="1h">Hourly</option>
                   </select>
                 </div>
+                <div class="field">
+                  <label class="label" for="forecast-service">Forecast service</label>
+                  <select id="forecast-service" name="service">
+                    <option value="prophet">Prophet</option>
+                    <option value="ibm_timemixer">IBM TinyTimeMixer</option>
+                  </select>
+                </div>
               </div>
               <div class="field">
                 <label class="label">Quantile bands</label>
@@ -113,7 +120,7 @@
                 </div>
               </div>
               <button class="cta" type="submit" data-analytics="forecast_submit">Generate forecast</button>
-              <p class="small">Forecasts are optimized to minimize bias against the latest closing price.</p>
+              <p class="small">IBM service uses model family `ibm-granite/granite-timeseries-ttm-r2` with endpoint fallback.</p>
             </form>
             <div class="results-panel" id="forecast-result">
               <h3>Forecast output</h3>
