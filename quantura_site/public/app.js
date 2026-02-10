@@ -2107,7 +2107,7 @@
     if (!Array.isArray(forecastRows) || forecastRows.length === 0) return [];
     const sample = forecastRows[0] || {};
     const quantKeys = Object.keys(sample)
-      .filter((key) => /^q\\d\\d$/.test(key))
+      .filter((key) => /^q\d\d$/.test(key))
       .sort();
     if (!quantKeys.length) return [];
 
@@ -2219,7 +2219,7 @@
     }
 
     const quantKeys = Object.keys(rows[0] || {})
-      .filter((key) => /^q\\d\\d$/.test(key))
+      .filter((key) => /^q\d\d$/.test(key))
       .sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
     const headers = ["ds", ...quantKeys];
 
@@ -2654,7 +2654,7 @@
             if (!rows.length) throw new Error("No forecast rows stored for this run.");
 
             const quantKeys = Object.keys(rows[0] || {})
-              .filter((key) => /^q\\d\\d$/.test(key))
+              .filter((key) => /^q\d\d$/.test(key))
               .sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
             const headers = ["ds", ...quantKeys];
             const csv = buildCsv(rows, headers);
@@ -2694,10 +2694,10 @@
 		        showToast("No forecast rows available to export.", "warn");
 		        return;
 		      }
-		      const rows = doc.forecastRows;
-		      const quantKeys = Object.keys(rows[0] || {})
-		        .filter((key) => /^q\\d\\d$/.test(key))
-		        .sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
+      const rows = doc.forecastRows;
+      const quantKeys = Object.keys(rows[0] || {})
+        .filter((key) => /^q\d\d$/.test(key))
+        .sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
 		      const headers = ["ds", ...quantKeys];
 		      const csv = buildCsv(rows, headers);
 		      const ticker = normalizeTicker(doc.ticker || "ticker") || "ticker";
