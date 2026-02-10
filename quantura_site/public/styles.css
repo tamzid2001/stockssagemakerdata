@@ -9,25 +9,50 @@
   --mint: #3ab5a2;
   --paper: #f7f4ee;
   --paper-2: #efe9df;
+  --surface-solid: #ffffff;
+  --surface: rgba(255, 255, 255, 0.96);
   --line: #d9d2c7;
   --shadow: rgba(11, 15, 26, 0.12);
+  --header-bg: rgba(247, 244, 238, 0.9);
+  --bg: radial-gradient(circle at 15% 10%, #fff7e6 0%, transparent 45%),
+    radial-gradient(circle at 80% 20%, #eef7f6 0%, transparent 50%),
+    var(--paper);
   --maxw: 1180px;
   --header-height: 88px;
   --dock-top: 104px;
   --studio-chart-top: 284px;
 }
 
+[data-theme="dark"] {
+  --ink: #e9edf7;
+  --ink-2: #d5def2;
+  --graphite: rgba(233, 237, 247, 0.74);
+  --paper: #0b0f1a;
+  --paper-2: #12182a;
+  --surface-solid: rgba(18, 24, 42, 0.92);
+  --surface: rgba(18, 24, 42, 0.96);
+  --line: rgba(233, 237, 247, 0.14);
+  --shadow: rgba(0, 0, 0, 0.45);
+  --header-bg: rgba(11, 15, 26, 0.86);
+  --bg: radial-gradient(circle at 15% 10%, rgba(226, 90, 44, 0.18) 0%, transparent 42%),
+    radial-gradient(circle at 75% 15%, rgba(58, 181, 162, 0.12) 0%, transparent 48%),
+    var(--paper);
+}
+
 * {
   box-sizing: border-box;
+}
+
+html,
+body {
+  overflow-x: hidden;
 }
 
 body {
   margin: 0;
   font-family: "Manrope", "Avenir Next", "Gill Sans", "Segoe UI", sans-serif;
   color: var(--ink);
-  background: radial-gradient(circle at 15% 10%, #fff7e6 0%, transparent 45%),
-    radial-gradient(circle at 80% 20%, #eef7f6 0%, transparent 50%),
-    var(--paper);
+  background: var(--bg);
 }
 
 h1, h2, h3, h4 {
@@ -44,7 +69,7 @@ p {
 }
 
 .muted {
-  color: rgba(42, 51, 80, 0.72);
+  color: var(--graphite);
 }
 
 a {
@@ -62,7 +87,7 @@ a {
 .header {
   position: sticky;
   top: 0;
-  background: rgba(247, 244, 238, 0.9);
+  background: var(--header-bg);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--line);
   z-index: 10;
@@ -135,6 +160,17 @@ a {
 .cta.secondary:hover {
   background: #fff;
   border-color: rgba(226, 90, 44, 0.45);
+}
+
+[data-theme="dark"] .cta.secondary {
+  background: rgba(18, 24, 42, 0.78);
+  color: var(--ink);
+  border-color: rgba(233, 237, 247, 0.18);
+}
+
+[data-theme="dark"] .cta.secondary:hover {
+  background: rgba(18, 24, 42, 0.92);
+  border-color: rgba(240, 180, 41, 0.35);
 }
 
 .cta.google {
@@ -232,7 +268,7 @@ a {
 }
 
 .card {
-  background: #fff;
+  background: var(--surface-solid);
   border-radius: 20px;
   border: 1px solid var(--line);
   padding: 26px;
@@ -567,7 +603,8 @@ input, textarea {
   border-radius: 12px;
   border: 1px solid var(--line);
   font: inherit;
-  background: #fff;
+  background: var(--surface-solid);
+  color: var(--ink);
 }
 
 textarea {
@@ -968,7 +1005,7 @@ textarea {
 }
 
 .results-panel {
-  background: #fff;
+  background: var(--surface-solid);
   border: 1px solid var(--line);
   border-radius: 20px;
   padding: 20px;
@@ -982,6 +1019,18 @@ textarea {
   overflow: auto;
   padding-right: 8px;
   overflow-wrap: anywhere;
+}
+
+.output-stack {
+  display: grid;
+  gap: 8px;
+}
+
+.table-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .table-wrap {
@@ -1012,7 +1061,7 @@ textarea {
   border: 1px solid var(--line);
   border-radius: 18px;
   padding: 14px 16px;
-  background: #fff;
+  background: var(--surface-solid);
   display: grid;
   gap: 8px;
   margin-bottom: 12px;
@@ -1029,11 +1078,11 @@ textarea {
 }
 
 .news-meta {
-  color: rgba(42, 51, 80, 0.82);
+  color: var(--graphite);
 }
 
 .news-summary {
-  color: rgba(42, 51, 80, 0.92);
+  color: var(--ink-2);
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
@@ -1055,14 +1104,14 @@ textarea {
   padding: 12px 14px;
   border: 1px solid var(--line);
   border-radius: 16px;
-  background: #f8f4ed;
+  background: var(--paper-2);
 }
 
 .option-block {
   border: 1px solid var(--line);
   border-radius: 16px;
   padding: 10px 12px;
-  background: #fff;
+  background: var(--surface-solid);
   margin-top: 12px;
 }
 
@@ -1073,14 +1122,14 @@ textarea {
 }
 
 .row-itm td {
-  background: #f0fbf7;
+  background: rgba(58, 181, 162, 0.12);
 }
 
 .watchlist-item {
   border: 1px solid var(--line);
   border-radius: 18px;
   padding: 12px 14px;
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--surface-solid);
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 12px;
@@ -1092,7 +1141,7 @@ textarea {
   border: 1px solid var(--line);
   border-radius: 18px;
   padding: 12px 14px;
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--surface-solid);
   display: grid;
   gap: 8px;
   margin-bottom: 12px;
@@ -1122,7 +1171,7 @@ textarea {
   border: 1px solid var(--line);
   border-radius: 18px;
   padding: 12px;
-  background: rgba(255, 255, 255, 0.84);
+  background: var(--surface-solid);
   min-height: 220px;
 }
 
@@ -1147,7 +1196,7 @@ textarea {
   border: 1px solid rgba(18, 24, 42, 0.14);
   border-radius: 16px;
   padding: 12px;
-  background: #fff;
+  background: var(--surface-solid);
   box-shadow: 0 10px 18px rgba(26, 33, 56, 0.06);
 }
 
@@ -1200,7 +1249,7 @@ textarea {
   border: 1px solid var(--line);
   border-radius: 16px;
   padding: 12px;
-  background: #fff;
+  background: var(--surface-solid);
   display: grid;
   gap: 6px;
 }
@@ -1245,7 +1294,7 @@ textarea {
 .ticker-pill {
   padding: 10px 12px;
   border-radius: 14px;
-  background: #f8f4ed;
+  background: var(--paper-2);
   border: 1px solid var(--line);
   font-weight: 600;
   text-align: center;
@@ -1366,7 +1415,7 @@ textarea {
 .chart-shell {
   border: 1px solid var(--line);
   border-radius: 18px;
-  background: #ffffff;
+  background: var(--surface-solid);
   box-shadow: 0 12px 24px rgba(26, 33, 56, 0.06);
   padding: 14px;
   display: grid;
@@ -1403,15 +1452,15 @@ textarea {
 }
 
 .studio-chart {
-  position: sticky;
-  top: var(--studio-chart-top, 284px);
+  position: relative;
+  top: 0;
   z-index: 1;
 }
 
 .ticker-dock {
-  position: sticky;
-  top: var(--dock-top, 104px);
-  z-index: 3;
+  position: relative;
+  top: 0;
+  z-index: 2;
 }
 
 .ticker-dock-form {
@@ -1469,47 +1518,57 @@ textarea {
   margin-top: 12px;
 }
 
-.feedback-banner {
+.feedback-fab {
   position: fixed;
-  bottom: 18px;
   left: 18px;
-  right: 18px;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  padding: 14px 16px;
-  box-shadow: 0 20px 50px rgba(11, 15, 26, 0.18);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  z-index: 70;
+  bottom: 18px;
+  z-index: 78;
+  border-radius: 999px;
+  border: 1px solid rgba(18, 24, 42, 0.22);
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 800;
+  padding: 10px 14px;
+  cursor: pointer;
+  box-shadow: 0 18px 40px rgba(11, 15, 26, 0.18);
+  backdrop-filter: blur(10px);
 }
 
-.banner-actions {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
+.feedback-fab:hover {
+  transform: translateY(-1px);
+}
+
+.feedback-fab.pulse {
+  animation: quanturaPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes quanturaPulse {
+  0% { box-shadow: 0 18px 40px rgba(11, 15, 26, 0.18); }
+  50% { box-shadow: 0 18px 40px rgba(240, 180, 41, 0.32); }
+  100% { box-shadow: 0 18px 40px rgba(11, 15, 26, 0.18); }
 }
 
 #assistant-widget {
   position: fixed;
-  left: 18px;
-  bottom: 96px;
+  right: 18px;
+  bottom: 18px;
+  left: auto;
   z-index: 76;
-  display: grid;
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: flex-end;
   gap: 12px;
 }
 
 .assistant-launcher {
-  width: 52px;
-  height: 52px;
-  border-radius: 16px;
+  height: 48px;
+  padding: 0 18px;
+  border-radius: 999px;
   border: 1px solid rgba(18, 24, 42, 0.22);
-  background: rgba(18, 24, 42, 0.92);
+  background: linear-gradient(135deg, rgba(18, 24, 42, 0.96) 0%, rgba(31, 39, 64, 0.96) 100%);
   color: #fff;
   font-weight: 900;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
   cursor: pointer;
   box-shadow: 0 18px 40px rgba(11, 15, 26, 0.22);
 }
@@ -1523,7 +1582,7 @@ textarea {
   max-height: min(560px, calc(100vh - 180px));
   border-radius: 20px;
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.96);
+  background: var(--surface);
   backdrop-filter: blur(10px);
   box-shadow: 0 24px 70px rgba(11, 15, 26, 0.22);
   display: grid;
@@ -1593,7 +1652,7 @@ textarea {
 .assistant-hint {
   padding: 0 14px 10px;
   font-size: 0.82rem;
-  color: rgba(42, 51, 80, 0.78);
+  color: var(--graphite);
 }
 
 .assistant-form {

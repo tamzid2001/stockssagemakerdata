@@ -110,7 +110,7 @@ def _remote_config_bool(key: str, default: bool = False) -> bool:
 def _yahoo_headers() -> dict[str, str]:
     # Yahoo endpoints frequently rate-limit requests without a browser-like UA.
     return {
-        "User-Agent": "Mozilla/5.0 (Quantura; +https://quantura.ai)",
+        "User-Agent": "Mozilla/5.0 (Quantura; +https://quantura-e2e3d.web.app)",
         "Accept": "application/json,text/plain,*/*",
         "Accept-Language": "en-US,en;q=0.9",
         "Connection": "keep-alive",
