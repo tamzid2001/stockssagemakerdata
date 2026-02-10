@@ -284,8 +284,11 @@
       if (typeof firebase === "undefined") return null;
       if (!firebase.remoteConfig) return null;
       const rc = firebase.remoteConfig();
-      rc.settings = rc.settings || {};
-      rc.settings.minimumFetchIntervalMillis = 5 * 60 * 1000;
+      if (rc.settings) {
+        rc.settings.minimumFetchIntervalMillis = 5 * 60 * 1000;
+      } else {
+        rc.settings = { minimumFetchIntervalMillis: 5 * 60 * 1000 };
+      }
       rc.defaultConfig = {
         assistant_enabled: true,
         watchlist_enabled: true,
@@ -307,7 +310,7 @@
       el.classList.toggle("hidden", !flags.watchlistEnabled);
     });
     document.querySelectorAll('[data-panel="watchlist"]').forEach((el) => {
-      el.classList.toggle("hidden", !flags.watchlistEnabled);
+      if (!flags.watchlistEnabled) el.classList.add("hidden");
     });
   };
 
@@ -503,6 +506,8 @@
 	          if (resolved) {
 	            startUserForecasts(db, resolved);
 	            startWorkspaceTasks(db, resolved);
+	            startWatchlist(db, resolved);
+	            startPriceAlerts(db, resolved);
 	          }
 	        },
 	        () => {
@@ -1895,7 +1900,10 @@
 	    syncStickyOffsets();
 	    window.addEventListener("resize", () => window.requestAnimationFrame(syncStickyOffsets));
 	    window.setTimeout(syncStickyOffsets, 280);
-	    ensureAssistantWidget(functions);
+	    if (state.remoteFlags.assistantEnabled) ensureAssistantWidget(functions);
+	    loadRemoteConfig().then((flags) => {
+	      if (flags.assistantEnabled) ensureAssistantWidget(functions);
+	    });
 
 		    document.addEventListener("click", (event) => {
 		      const target = event.target.closest("[data-analytics]");
@@ -2019,6 +2027,8 @@
 		      logEvent("workspace_switched", { workspace_id: next });
 		      startUserForecasts(db, next);
 		      startWorkspaceTasks(db, next);
+		      startWatchlist(db, next);
+		      startPriceAlerts(db, next);
 		      showToast("Workspace updated.");
 		    });
 
@@ -3423,6 +3433,9 @@
 	        renderRequestList([], ui.autopilotOutput, "No autopilot requests yet.");
 	        renderRequestList([], ui.predictionsOutput, "No uploads yet.");
 	        renderRequestList([], ui.alpacaOutput, "No Alpaca orders yet.");
+	        if (ui.watchlistList) ui.watchlistList.textContent = "Sign in to manage your watchlist.";
+	        if (ui.alertsList) ui.alertsList.textContent = "Sign in to manage your alerts.";
+	        if (ui.alertsStatus) ui.alertsStatus.textContent = "";
 	        if (ui.collabInvitesList) ui.collabInvitesList.textContent = "Sign in to view invites.";
 	        if (ui.collabCollaboratorsList) ui.collabCollaboratorsList.textContent = "Sign in to manage collaborators.";
 	        ui.adminSection?.classList.add("hidden");
@@ -3444,6 +3457,8 @@
 		        if (state.unsubscribePredictions) state.unsubscribePredictions();
 		        if (state.unsubscribeAlpaca) state.unsubscribeAlpaca();
 		        if (state.unsubscribeTasks) state.unsubscribeTasks();
+		        if (state.unsubscribeWatchlist) state.unsubscribeWatchlist();
+		        if (state.unsubscribeAlerts) state.unsubscribeAlerts();
 		        if (state.unsubscribeSharedWorkspaces) state.unsubscribeSharedWorkspaces();
 		        state.sharedWorkspaces = [];
 		        setActiveWorkspaceId("");
@@ -3470,6 +3485,8 @@
 		      renderWorkspaceSelect(user);
 		      startUserForecasts(db, activeWorkspaceId);
 		      startWorkspaceTasks(db, activeWorkspaceId);
+		      startWatchlist(db, activeWorkspaceId);
+		      startPriceAlerts(db, activeWorkspaceId);
 		      startAutopilotRequests(db, user);
 		      startPredictionsUploads(db, user);
 		      startAlpacaOrders(db, user);
