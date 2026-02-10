@@ -36,41 +36,66 @@
           <a href="/forecasting" data-analytics="nav_forecasting">Forecasting</a>
           <a href="/screener" data-analytics="nav_screener">Screener</a>
           <a href="/dashboard" data-analytics="nav_dashboard">Dashboard</a>
+          <a href="/blog" data-analytics="nav_blog">Blog</a>
           <a href="/contact" data-analytics="nav_contact">Contact</a>
         </nav>
         <div class="nav-actions">
-          <a class="cta secondary" href="/dashboard">Sign in</a>
-          <a class="cta" href="/dashboard">Launch screener</a>
+          <span id="header-user-email" class="small" style="max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Guest</span>
+          <span id="header-user-status" class="pill">Guest</span>
+          <button class="cta secondary" id="header-auth" type="button">Sign in</button>
+          <button class="cta secondary hidden" id="header-signout" type="button">Sign out</button>
+          <a class="cta secondary hidden" id="header-dashboard" href="/dashboard">Dashboard</a>
+          <a class="cta" href="#screener">Run screener</a>
         </div>
       </div>
     </header>
 
     <main>
-      <section class="page-hero">
-        <div class="container content-grid">
-          <div>
-            <div class="eyebrow">Signal discovery</div>
-            <h1>Quantura Screener ranks the names you should study next.</h1>
-            <p>
-              Combine fundamentals, technicals, and demand signals into a single ranked watchlist.
-              Sync results to Slack, export CSVs, and keep the research pipeline moving every week.
-            </p>
-            <div class="hero-actions">
-              <a class="cta" href="#screener" data-analytics="screener_start">Run a screen</a>
-              <a class="cta secondary" href="#roadmap" data-analytics="screener_roadmap">View roadmap</a>
-            </div>
+      <div class="app-layout">
+        <aside class="app-sidebar">
+          <div class="sidebar-card">
+            <div class="small"><strong>Account</strong></div>
+            <div class="small">Signed in as <span id="user-email">Not signed in</span></div>
+            <div class="small">Status <span id="user-status" class="pill">Guest</span></div>
+            <a class="cta secondary small" href="/forecasting">Open terminal</a>
+            <a class="cta secondary small" href="/dashboard">Open dashboard</a>
+            <a class="cta secondary small hidden" id="nav-admin" href="/admin">Admin dashboard</a>
           </div>
-          <div class="card">
-            <h3>What the screener delivers</h3>
-            <div class="feature-list">
-              <div class="feature"><span></span>Ranked watchlist with conviction scores</div>
-              <div class="feature"><span></span>Slack-ready weekly brief output</div>
-              <div class="feature"><span></span>CSV exports for BI workflows</div>
-              <div class="feature"><span></span>Sector-level summaries</div>
+          <nav class="sidebar-nav">
+            <a href="#screener">Run screener</a>
+            <a href="#roadmap">Roadmap</a>
+            <a href="/forecasting">Terminal</a>
+            <a href="/dashboard">Dashboard</a>
+            <a href="/blog">Blog</a>
+          </nav>
+        </aside>
+
+        <div class="app-main">
+          <section class="page-hero">
+            <div class="container content-grid">
+              <div>
+                <div class="eyebrow">Signal discovery</div>
+                <h1>Quantura Screener ranks the names you should study next.</h1>
+                <p>
+                  Run a fast screen against trending tickers, measure momentum, and store every run in Firestore.
+                  Export results, turn them into watchlists, and keep your weekly brief pipeline moving.
+                </p>
+                <div class="hero-actions">
+                  <a class="cta" href="#screener" data-analytics="screener_start">Run a screen</a>
+                  <a class="cta secondary" href="/forecasting" data-analytics="screener_terminal">Plot a ticker</a>
+                </div>
+              </div>
+              <div class="card">
+                <h3>What the screener delivers</h3>
+                <div class="feature-list">
+                  <div class="feature"><span></span>Ranked watchlist with conviction scores</div>
+                  <div class="feature"><span></span>RSI, momentum, and volatility snapshots</div>
+                  <div class="feature"><span></span>Saved runs in Firestore</div>
+                  <div class="feature"><span></span>Slack-ready workflow hooks</div>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-      </section>
+          </section>
 
       <section class="section" id="screener">
         <div class="container">
@@ -110,12 +135,12 @@
                 <label class="label" for="screener-notes">Notes</label>
                 <textarea id="screener-notes" name="notes" placeholder="Optional focus or exclusions"></textarea>
               </div>
-              <button class="cta" type="submit" data-analytics="screener_submit">Queue screener run</button>
-              <p class="small">Runs are queued and stored in your dashboard with a unique ID.</p>
+              <button class="cta" type="submit" data-analytics="screener_submit">Run screener</button>
+              <p class="small">Results are computed immediately and stored in Firestore with a unique run ID.</p>
             </form>
             <div class="results-panel" id="screener-result">
               <h3>Screener output</h3>
-              <p class="small">Queued screener runs will appear in your dashboard.</p>
+              <p class="small">Top-ranked tickers will appear here. Use the terminal to deep-dive.</p>
               <div id="screener-output"></div>
             </div>
           </div>
@@ -160,6 +185,8 @@
           </div>
         </div>
       </section>
+    </div>
+  </div>
     </main>
 
     <footer class="footer">
@@ -174,6 +201,7 @@
           <div><a href="/">Home</a></div>
           <div><a href="/forecasting">Forecasting</a></div>
           <div><a href="/dashboard">Dashboard</a></div>
+          <div><a href="/blog">Blog</a></div>
           <div><a href="/contact">Contact</a></div>
         </div>
         <div class="small">

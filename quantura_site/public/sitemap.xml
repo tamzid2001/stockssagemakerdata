@@ -2,22 +2,30 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://quantura.ai/</loc>
-    <lastmod>2026-02-09</lastmod>
+    <lastmod>2026-02-10</lastmod>
   </url>
   <url>
     <loc>https://quantura.ai/forecasting</loc>
-    <lastmod>2026-02-09</lastmod>
+    <lastmod>2026-02-10</lastmod>
   </url>
   <url>
     <loc>https://quantura.ai/screener</loc>
-    <lastmod>2026-02-09</lastmod>
+    <lastmod>2026-02-10</lastmod>
   </url>
   <url>
     <loc>https://quantura.ai/dashboard</loc>
-    <lastmod>2026-02-09</lastmod>
+    <lastmod>2026-02-10</lastmod>
+  </url>
+  <url>
+    <loc>https://quantura.ai/blog</loc>
+    <lastmod>2026-02-10</lastmod>
+  </url>
+  <url>
+    <loc>https://quantura.ai/blog/posts/2026-02-10-quantura-terminal</loc>
+    <lastmod>2026-02-10</lastmod>
   </url>
   <url>
     <loc>https://quantura.ai/contact</loc>
-    <lastmod>2026-02-09</lastmod>
+    <lastmod>2026-02-10</lastmod>
   </url>
 </urlset>
