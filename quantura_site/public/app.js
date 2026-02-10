@@ -3797,9 +3797,13 @@
 		        showToast(error.message || "Invalid quantiles.", "warn");
 		        return;
 		      }
+          const ticker = normalizeTicker(state.tickerContext.ticker || ui.terminalTicker?.value || "");
+          if (!ticker) {
+            showToast("Load a ticker in the chart before forecasting.", "warn");
+            return;
+          }
 		      const payload = {
-		        ticker: formData.get("ticker"),
-	        start: formData.get("start"),
+		        ticker,
 	        horizon: Number(formData.get("horizon")),
 	        interval: formData.get("interval"),
 	        service: formData.get("service") || ui.forecastService?.value || "prophet",
@@ -3807,6 +3811,27 @@
 	        meta: buildMeta(),
 	        utm: getUtm(),
 		      };
+          payload.start = (() => {
+            const desiredInterval = String(payload.interval || state.tickerContext.interval || "1d");
+            if (
+              Array.isArray(state.tickerContext.rows) &&
+              state.tickerContext.rows.length &&
+              state.tickerContext.ticker === ticker &&
+              state.tickerContext.interval === desiredInterval
+            ) {
+              const dateKey = extractDateKey(state.tickerContext.rows);
+              const first = dateKey ? state.tickerContext.rows[0]?.[dateKey] : null;
+              if (typeof first === "string") {
+                const match = first.match(/^(\\d{4}-\\d{2}-\\d{2})/);
+                if (match) return match[1];
+              }
+              if (first) {
+                const dt = new Date(first);
+                if (!Number.isNaN(dt.getTime())) return dt.toISOString().slice(0, 10);
+              }
+            }
+            return computeHistoryStart(desiredInterval);
+          })();
 
 		      try {
 		        setOutputLoading(ui.forecastOutput, "Generating forecast...");

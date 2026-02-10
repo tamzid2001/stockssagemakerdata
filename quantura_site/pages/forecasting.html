@@ -145,18 +145,10 @@
 	                  <section class="panel" data-panel="forecast">
 	                    <div class="panel-header">
 	                      <h2>Forecast</h2>
-	                      <p class="small">Generate quantile bands and save the run so you can re-plot it later.</p>
+	                      <p class="small">Generate quantile bands for the ticker in your chart and save the run so you can re-plot it later.</p>
 	                    </div>
 	                    <form id="forecast-form" class="card">
 	                      <div class="form-grid">
-                        <div class="field">
-                          <label class="label" for="forecast-ticker">Ticker</label>
-                          <input id="forecast-ticker" name="ticker" placeholder="AAPL" required />
-                        </div>
-                        <div class="field">
-                          <label class="label" for="forecast-start">Start date</label>
-                          <input id="forecast-start" name="start" type="date" />
-                        </div>
 	                        <div class="field">
 	                          <label class="label" for="forecast-horizon">Forecast length</label>
 	                          <input id="forecast-horizon" name="horizon" type="number" min="5" max="365" value="90" />
