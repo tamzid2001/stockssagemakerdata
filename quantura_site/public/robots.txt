@@ -8,7 +8,6 @@ Disallow: /productivity
 Disallow: /collaboration
 Disallow: /uploads
 Disallow: /autopilot
-Disallow: /trading
 Disallow: /notifications
 Disallow: /admin
 Disallow: /saved-forecasts
