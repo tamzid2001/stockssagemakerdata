@@ -41,6 +41,10 @@
     forecastForm: document.getElementById("forecast-form"),
     forecastOutput: document.getElementById("forecast-output"),
     forecastService: document.getElementById("forecast-service"),
+    forecastLoadSelect: document.getElementById("forecast-load-select"),
+    forecastLoadId: document.getElementById("forecast-load-id"),
+    forecastLoadButton: document.getElementById("forecast-load-button"),
+    forecastLoadStatus: document.getElementById("forecast-load-status"),
     technicalsForm: document.getElementById("technicals-form"),
     technicalsOutput: document.getElementById("technicals-output"),
     downloadForm: document.getElementById("download-form"),
@@ -959,9 +963,12 @@
         : "";
       const actions = isForecast
         ? `
-          <div class="order-actions" style="grid-template-columns: 1fr;">
+          <div class="order-actions" style="display:flex; gap:10px; flex-wrap:wrap;">
             <button class="cta secondary small" type="button" data-action="plot-forecast" data-forecast-id="${item.id}" data-ticker="${item.ticker}">
               Plot on chart
+            </button>
+            <button class="cta secondary small" type="button" data-action="download-forecast" data-forecast-id="${item.id}">
+              Download CSV
             </button>
           </div>
         `
@@ -1095,6 +1102,7 @@
 	      .onSnapshot((snapshot) => {
 	        const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
 	        containers.forEach((container) => renderRequestList(items, container, "No forecast requests yet."));
+          renderForecastPicker(items);
 	      });
 	  };
 
@@ -1859,6 +1867,28 @@
     return raw ? String(raw) : "Forecast";
   };
 
+  const renderForecastPicker = (items) => {
+    if (!ui.forecastLoadSelect) return;
+    const list = Array.isArray(items) ? items : [];
+    const previous = String(ui.forecastLoadSelect.value || "").trim();
+
+    const options = [
+      `<option value="">Select a forecast</option>`,
+      ...list.slice(0, 60).map((item) => {
+        const id = escapeHtml(item.id || "");
+        const ticker = escapeHtml(normalizeTicker(item.ticker || "") || "Ticker");
+        const service = escapeHtml(labelForecastService(item.service || ""));
+        const interval = escapeHtml(String(item.interval || "") || "1d");
+        const when = escapeHtml(formatTimestamp(item.createdAt));
+        const label = `${ticker} · ${service} · ${interval} · ${when}`;
+        return `<option value="${id}">${label}</option>`;
+      }),
+    ];
+
+    ui.forecastLoadSelect.innerHTML = options.join("");
+    if (previous) ui.forecastLoadSelect.value = previous;
+  };
+
   const renderForecastDetails = (forecastDoc) => {
     if (!ui.forecastOutput || !forecastDoc) return;
     const rows = Array.isArray(forecastDoc.forecastRows) ? forecastDoc.forecastRows : [];
@@ -2256,12 +2286,49 @@
 	        setTerminalStatus("Loading saved forecast...");
 	        await plotForecastById(db, functions, forecastId);
 	        logEvent("forecast_plotted", { forecast_id: forecastId, ticker });
+          document.querySelector('[data-panel-target="forecast"]')?.click?.();
 	        document.getElementById("terminal")?.scrollIntoView({ behavior: "smooth" });
 	      } catch (error) {
 	        setTerminalStatus(error.message || "Unable to plot forecast.");
 	        showToast(error.message || "Unable to plot forecast.", "warn");
 		      }
 		    });
+
+        document.addEventListener("click", async (event) => {
+          const dlButton = event.target.closest('[data-action="download-forecast"]');
+          if (!dlButton) return;
+          event.preventDefault();
+          if (!state.user) {
+            showToast("Sign in to download forecasts.", "warn");
+            return;
+          }
+          const forecastId = String(dlButton.dataset.forecastId || "").trim();
+          if (!forecastId) return;
+
+          try {
+            dlButton.disabled = true;
+            setTerminalStatus("Preparing download...");
+            const doc = await loadForecastDoc(db, forecastId);
+            const rows = Array.isArray(doc.forecastRows) ? doc.forecastRows : [];
+            if (!rows.length) throw new Error("No forecast rows stored for this run.");
+
+            const quantKeys = Object.keys(rows[0] || {})
+              .filter((key) => /^q\\d\\d$/.test(key))
+              .sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
+            const headers = ["ds", ...quantKeys];
+            const csv = buildCsv(rows, headers);
+            const ticker = normalizeTicker(doc.ticker || "ticker") || "ticker";
+            const service = String(doc.service || "forecast").replace(/[^a-z0-9_\\-]+/gi, "_");
+            triggerDownload(`${ticker}_${service}_${doc.id || forecastId}.csv`, csv);
+            showToast("CSV downloaded.");
+            logEvent("forecast_csv_downloaded", { forecast_id: forecastId, ticker, service });
+          } catch (error) {
+            showToast(error.message || "Unable to download forecast.", "warn");
+          } finally {
+            dlButton.disabled = false;
+            setTerminalStatus("");
+          }
+        });
 
 		    document.addEventListener("click", (event) => {
 		      const pageBtn = event.target.closest('[data-action="forecast-page"]');
@@ -3063,6 +3130,36 @@
 	        showToast(error.message || "Unable to run forecast.", "warn");
 	      }
 	    });
+
+        ui.forecastLoadSelect?.addEventListener("change", () => {
+          if (!ui.forecastLoadId || !ui.forecastLoadSelect) return;
+          const value = String(ui.forecastLoadSelect.value || "").trim();
+          if (value) ui.forecastLoadId.value = value;
+        });
+
+        ui.forecastLoadButton?.addEventListener("click", async () => {
+          if (!state.user) {
+            showToast("Sign in to load saved forecasts.", "warn");
+            return;
+          }
+          const forecastId = String(ui.forecastLoadId?.value || "").trim() || String(ui.forecastLoadSelect?.value || "").trim();
+          if (!forecastId) {
+            showToast("Select a forecast or paste an ID.", "warn");
+            return;
+          }
+          if (ui.forecastLoadStatus) ui.forecastLoadStatus.textContent = "Loading...";
+          try {
+            setTerminalStatus("Loading saved forecast...");
+            await plotForecastById(db, functions, forecastId);
+            if (ui.forecastLoadStatus) ui.forecastLoadStatus.textContent = "";
+            showToast("Forecast loaded.");
+            logEvent("forecast_loaded_saved", { forecast_id: forecastId });
+            document.getElementById("terminal")?.scrollIntoView({ behavior: "smooth" });
+          } catch (error) {
+            if (ui.forecastLoadStatus) ui.forecastLoadStatus.textContent = error.message || "Unable to load forecast.";
+            showToast(error.message || "Unable to load forecast.", "warn");
+          }
+        });
 
 	    ui.technicalsForm?.addEventListener("submit", async (event) => {
 	      event.preventDefault();

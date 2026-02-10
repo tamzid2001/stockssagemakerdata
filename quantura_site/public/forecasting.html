@@ -76,30 +76,9 @@
 	            <a class="sidebar-link" href="/screener">Screener</a>
 	            <a class="sidebar-link" href="/watchlist">Watchlist and alerts</a>
 	          </nav>
-	        </aside>
+        </aside>
 
         <div class="app-main">
-          <section class="page-hero">
-            <div class="container content-grid">
-              <div>
-                <div class="eyebrow">Quantura terminal</div>
-                <h1>Everything on one screen: ticker controls, an interactive chart, and a right-side intelligence panel.</h1>
-                <p>
-                  Select a ticker once and Quantura drives forecasts, indicator overlays, news, options, and screener results from the same context.
-                  Saved runs live in your workspace so you can re-plot quantile bands instantly.
-                </p>
-              </div>
-	              <div class="card">
-	                <h3>Workflow</h3>
-	                <div class="feature-list">
-	                  <div class="feature"><span></span>Ticker context stays synced across the terminal</div>
-	                  <div class="feature"><span></span>One chart reused across every panel</div>
-	                  <div class="feature"><span></span>Saved forecasts and indicator stacks</div>
-	                </div>
-	              </div>
-            </div>
-          </section>
-
           <section class="section studio-section" id="terminal">
             <div class="container">
 	              <div class="studio-layout" data-panels data-panel-router="terminal">
@@ -174,12 +153,44 @@
 	                      <button class="cta" type="submit" data-analytics="forecast_submit">Generate forecast</button>
 	                      <details class="learn-more">
 	                        <summary>Learn more</summary>
-	                        <p class="small">
-	                          Quantura stores the full forecast rows (quantiles per timestamp) and lets you re-plot them onto the chart from Saved forecasts.
-	                          Use IBM TimeMixer when you want a fast foundation-model style forecast, then compare against Meta Prophet.
-	                        </p>
+	                        <div class="small">
+                            <p>
+                              Forecasts are stored to your workspace as quantile bands. Quantiles are probabilities (not targets): for example, <strong>0.1</strong> is a lower band,
+                              <strong>0.5</strong> is the median path, and <strong>0.9</strong> is an upper band. Use them to reason about uncertainty, not to force a single outcome.
+                            </p>
+                            <p>
+                              <strong>Forecast length</strong> controls how many future timestamps are generated for the selected timeframe. Daily forecasts use trading days (business days).
+                              Hourly forecasts are capped to keep the terminal responsive.
+                            </p>
+                            <p>
+                              <strong>Meta Prophet</strong> is best when you want a transparent, classical model and stable uncertainty bands. <strong>IBM TimeMixer</strong> is best when you want a fast,
+                              foundation-model style forecast. Quantura saves both so you can compare them on the same chart.
+                            </p>
+                            <p>
+                              After you generate a run, use <strong>Load saved forecast</strong> (or the <strong>Saved forecasts</strong> panel) to re-plot it later and export CSV for backtests.
+                            </p>
+                          </div>
 	                      </details>
 	                    </form>
+                      <div class="card">
+                        <h3>Load saved forecast</h3>
+                        <div class="form-grid">
+                          <div class="field">
+                            <label class="label" for="forecast-load-select">Recent forecasts</label>
+                            <select id="forecast-load-select">
+                              <option value="">Select a forecast</option>
+                            </select>
+                          </div>
+                          <div class="field">
+                            <label class="label" for="forecast-load-id">Forecast ID</label>
+                            <input id="forecast-load-id" placeholder="Paste a forecast ID" />
+                          </div>
+                        </div>
+                        <div class="hero-actions" style="margin-top: 12px;">
+                          <button class="cta secondary" id="forecast-load-button" type="button" data-analytics="forecast_load_saved">Load forecast</button>
+                        </div>
+                        <p class="small muted" id="forecast-load-status"></p>
+                      </div>
                     <div class="results-panel">
                       <h3>Forecast output</h3>
                       <div id="forecast-output" class="panel-output small">Run a forecast to see model summary and preview rows.</div>
@@ -513,28 +524,72 @@
                     <div id="saved-forecasts-list" class="order-list panel-output"></div>
                     <details class="learn-more">
                       <summary>Learn more</summary>
-                      <p class="small">
-                        Saved forecasts are linked to your active workspace. Use the Dashboard collaboration panel to invite teammates and share this workspace.
-                      </p>
+                      <div class="small">
+                        <p>
+                          Saved forecasts are linked to your active workspace. Use <strong>Plot on chart</strong> to overlay quantile bands, or <strong>Download CSV</strong> to export the full run.
+                        </p>
+                        <p>
+                          If you are working with collaborators, pick the correct workspace in the Dashboard so you are viewing the same saved runs and history.
+                        </p>
+                      </div>
                     </details>
                   </section>
 
                   <section class="panel hidden" data-panel="learn">
                     <div class="panel-header">
                       <h2>Learn more</h2>
-                      <p class="small">Short docs for each feature, with recommended next steps.</p>
+                      <p class="small">Documentation for each panel with recommended next steps.</p>
                     </div>
-                    <div class="card">
-                      <h3>Recommended flow</h3>
-                      <ol class="small">
-                        <li>Load a ticker in the dock to populate the chart.</li>
-                        <li>Run Indicators to understand trend, momentum, and volatility.</li>
-                        <li>Run a Forecast and compare services, then re-plot saved runs.</li>
-                        <li>Use News to validate narrative and Options to inspect market positioning.</li>
-                        <li>Use Screener for discovery and build a watchlist of candidates.</li>
-                      </ol>
-                      <div class="notice" style="margin-top: 16px;">
-                        Want inspiration? Visit the <a href="/blog">Quantura blog</a> for weekly briefs and workflow patterns.
+                    <div class="content-grid">
+                      <div class="card">
+                        <h3>Terminal basics</h3>
+                        <div class="small">
+                          <p><strong>1.</strong> Load a ticker in the dock to render the chart.</p>
+                          <p><strong>2.</strong> Switch panels on the left. Your ticker context is reused so you can move fast.</p>
+                          <p><strong>3.</strong> Click any ticker pill (Trending, Screener, Watchlist) to update the chart immediately.</p>
+                        </div>
+                      </div>
+                      <div class="card">
+                        <h3>Forecasting</h3>
+                        <div class="small">
+                          <p>
+                            Use comma-delimited quantiles like <strong>0.1,0.5,0.9</strong>. Quantura stores each run so you can re-plot it later.
+                            For analysis, export CSV and compare model bands against subsequent realized prices.
+                          </p>
+                          <p>
+                            When you load a saved run, Quantura overlays the widest band (low-to-high quantile) plus an inner band (if available),
+                            then plots the median quantile as a dotted line.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="content-grid" style="margin-top: 16px;">
+                      <div class="card">
+                        <h3>Indicators</h3>
+                        <div class="small">
+                          <p>
+                            Indicators return two outputs: a table of latest values, plus a chart of full series. Trend overlays (SMA/EMA/Bollinger)
+                            are plotted on the main price chart so you can keep context.
+                          </p>
+                          <p>
+                            Start with RSI and MACD. Add volatility context (ATR, Bollinger) before you interpret breakouts.
+                          </p>
+                        </div>
+                      </div>
+                      <div class="card">
+                        <h3>News, Options, and Discovery</h3>
+                        <div class="small">
+                          <p>
+                            Use News to validate catalysts and Options to inspect implied positioning. Use Trending and Screener to find candidates,
+                            then move back to Forecasting for uncertainty bands.
+                          </p>
+                          <p>
+                            If you are building a research loop, store runs to your workspace and share it with collaborators from the Dashboard.
+                          </p>
+                        </div>
+                        <div class="notice" style="margin-top: 16px;">
+                          For workflow patterns, visit the <a href="/blog">Quantura blog</a>.
+                        </div>
                       </div>
                     </div>
                   </section>
