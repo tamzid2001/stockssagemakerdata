@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import os
 import re
 from pathlib import Path
 
@@ -13,13 +14,21 @@ ROOT = Path(__file__).resolve().parents[1]
 PUBLIC = ROOT / "quantura_site" / "public"
 BLOG_INDEX = PUBLIC / "blog" / "index.html"
 POSTS_DIR = PUBLIC / "blog" / "posts"
+RSS_PATH = PUBLIC / "blog" / "rss.xml"
 SITEMAP = PUBLIC / "sitemap.xml"
 
 TRENDING_URL = "https://query1.finance.yahoo.com/v1/finance/trending/US"
+SITE_ORIGIN = (os.environ.get("SITE_ORIGIN") or "https://quantura-e2e3d.web.app").rstrip("/")
 
 
 def _fmt_month_day_year(date_obj: dt.date) -> str:
     return date_obj.strftime("%B %d, %Y")
+
+
+def _fmt_rfc2822(date_obj: dt.date) -> str:
+    # RSS uses RFC 2822 timestamps (we keep it simple and publish at midnight UTC).
+    dt_obj = dt.datetime(date_obj.year, date_obj.month, date_obj.day, tzinfo=dt.timezone.utc)
+    return dt_obj.strftime("%a, %d %b %Y %H:%M:%S GMT")
 
 
 def fetch_trending_tickers(max_names: int = 10) -> list[str]:
@@ -98,11 +107,11 @@ def build_post_html(slug: str, published_date: dt.date, snapshot: pd.DataFrame) 
     <title>Weekly Market Brief ({date_iso}) | Quantura Blog</title>
     <meta name="description" content="Weekly market brief: trending tickers, momentum snapshot, and a clean workflow for follow-up research in Quantura." />
     <meta name="robots" content="index, follow" />
-    <link rel="canonical" href="https://quantura.ai/blog/posts/{slug}" />
+    <link rel="canonical" href="{SITE_ORIGIN}/blog/posts/{slug}" />
     <meta property="og:title" content="Weekly Market Brief ({date_iso})" />
     <meta property="og:description" content="Trending tickers, momentum snapshot, and a clean workflow for follow-up research." />
     <meta property="og:type" content="article" />
-    <meta property="og:url" content="https://quantura.ai/blog/posts/{slug}" />
+    <meta property="og:url" content="{SITE_ORIGIN}/blog/posts/{slug}" />
     <meta property="og:image" content="/assets/quantura-logo.svg" />
     <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="/manifest.json" />
@@ -128,9 +137,9 @@ def build_post_html(slug: str, published_date: dt.date, snapshot: pd.DataFrame) 
         "publisher": {{
           "@type": "Organization",
           "name": "Quantura",
-          "logo": {{ "@type": "ImageObject", "url": "https://quantura.ai/assets/quantura-logo.svg" }}
+          "logo": {{ "@type": "ImageObject", "url": "{SITE_ORIGIN}/assets/quantura-logo.svg" }}
         }},
-        "mainEntityOfPage": "https://quantura.ai/blog/posts/{slug}"
+        "mainEntityOfPage": "{SITE_ORIGIN}/blog/posts/{slug}"
       }}
     </script>
   </head>
@@ -286,7 +295,7 @@ def insert_into_sitemap(slug: str, lastmod: str) -> None:
     if not SITEMAP.exists():
         return
     xml = SITEMAP.read_text(encoding="utf-8")
-    loc = f"https://quantura.ai/blog/posts/{slug}"
+    loc = f"{SITE_ORIGIN}/blog/posts/{slug}"
     if loc in xml:
         return
     entry = f"""  <url>
@@ -296,6 +305,74 @@ def insert_into_sitemap(slug: str, lastmod: str) -> None:
 """
     xml = xml.replace("</urlset>", entry + "</urlset>")
     SITEMAP.write_text(xml, encoding="utf-8")
+
+
+def rebuild_rss(max_items: int = 12) -> None:
+    POSTS_DIR.mkdir(parents=True, exist_ok=True)
+    items: list[dict[str, str]] = []
+
+    for path in sorted(POSTS_DIR.glob("*.html"), key=lambda p: p.name, reverse=True):
+        slug = path.stem
+        if len(slug) < 10:
+            continue
+        try:
+            published = dt.date.fromisoformat(slug[:10])
+        except Exception:
+            continue
+        html = path.read_text(encoding="utf-8", errors="ignore")
+        title_match = re.search(r"<title>(.*?)</title>", html, flags=re.IGNORECASE | re.DOTALL)
+        title = title_match.group(1).strip() if title_match else slug
+        title = re.sub(r"\\s*\\|\\s*Quantura\\s*Blog\\s*$", "", title).strip()
+
+        desc_match = re.search(
+            r'<meta\\s+name=\"description\"\\s+content=\"([^\"]+)\"\\s*/?>',
+            html,
+            flags=re.IGNORECASE,
+        )
+        description = desc_match.group(1).strip() if desc_match else "Quantura market workflow notes."
+
+        items.append(
+            {
+                "title": title,
+                "link": f"{SITE_ORIGIN}/blog/posts/{slug}",
+                "guid": f"{SITE_ORIGIN}/blog/posts/{slug}",
+                "pubDate": _fmt_rfc2822(published),
+                "description": description,
+            }
+        )
+        if len(items) >= max_items:
+            break
+
+    last_build = _fmt_rfc2822(dt.date.today())
+    rss = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<rss version="2.0">',
+        "  <channel>",
+        "    <title>Quantura Blog</title>",
+        f"    <link>{SITE_ORIGIN}/blog</link>",
+        "    <description>Forecasting notes and market workflows from Quantura.</description>",
+        "    <language>en-us</language>",
+        f"    <lastBuildDate>{last_build}</lastBuildDate>",
+        "",
+    ]
+
+    for item in items:
+        rss.extend(
+            [
+                "    <item>",
+                f"      <title>{item['title']}</title>",
+                f"      <link>{item['link']}</link>",
+                f"      <guid>{item['guid']}</guid>",
+                f"      <pubDate>{item['pubDate']}</pubDate>",
+                f"      <description><![CDATA[{item['description']}]]></description>",
+                "    </item>",
+                "",
+            ]
+        )
+
+    rss.extend(["  </channel>", "</rss>", ""])
+    RSS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    RSS_PATH.write_text("\n".join(rss), encoding="utf-8")
 
 
 def main() -> int:
@@ -316,6 +393,7 @@ def main() -> int:
 
     insert_into_blog_index(slug, date_iso)
     insert_into_sitemap(slug, date_iso)
+    rebuild_rss()
     print(f"Wrote blog post: {post_path}")
     return 0
 
