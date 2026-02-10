@@ -6,6 +6,7 @@
   const FEEDBACK_PROMPT_KEY = "quantura_feedback_prompt_v1";
   const LAST_TICKER_KEY = "quantura_last_ticker";
   const WORKSPACE_KEY = "quantura_active_workspace";
+  const OPTIONS_EXPIRATION_PREFIX = "quantura_options_expiration_";
 
   const ui = {
     headerAuth: document.getElementById("header-auth"),
@@ -47,9 +48,22 @@
     newsForm: document.getElementById("news-form"),
     newsOutput: document.getElementById("news-output"),
     optionsForm: document.getElementById("options-form"),
+    optionsExpiration: document.getElementById("options-expiration"),
     optionsOutput: document.getElementById("options-output"),
     screenerForm: document.getElementById("screener-form"),
     screenerOutput: document.getElementById("screener-output"),
+    watchlistForm: document.getElementById("watchlist-form"),
+    watchlistTicker: document.getElementById("watchlist-ticker"),
+    watchlistNotes: document.getElementById("watchlist-notes"),
+    watchlistList: document.getElementById("watchlist-list"),
+    alertForm: document.getElementById("alert-form"),
+    alertTicker: document.getElementById("alert-ticker"),
+    alertCondition: document.getElementById("alert-condition"),
+    alertPrice: document.getElementById("alert-price"),
+    alertNotes: document.getElementById("alert-notes"),
+    alertsList: document.getElementById("alerts-list"),
+    alertsStatus: document.getElementById("alerts-status"),
+    alertsCheck: document.getElementById("alerts-check"),
     predictionsForm: document.getElementById("predictions-upload-form"),
     predictionsOutput: document.getElementById("predictions-output"),
     predictionsStatus: document.getElementById("predictions-status"),
@@ -121,7 +135,15 @@
 	    unsubscribePredictions: null,
 	    unsubscribeAlpaca: null,
 	    unsubscribeTasks: null,
+	    unsubscribeWatchlist: null,
+	    unsubscribeAlerts: null,
 	    messagingBound: false,
+	    remoteConfigLoaded: false,
+	    remoteFlags: {
+	      assistantEnabled: true,
+	      watchlistEnabled: true,
+	      webPushVapidKey: "",
+	    },
 	    activeWorkspaceId: (() => {
 	      try {
 	        return localStorage.getItem(WORKSPACE_KEY) || "";
@@ -209,6 +231,23 @@
 	    });
 	  };
 
+  const syncStickyOffsets = () => {
+    const header = document.querySelector(".header");
+    const headerHeight = header ? header.getBoundingClientRect().height : 88;
+    document.documentElement.style.setProperty("--header-height", `${Math.round(headerHeight)}px`);
+
+    const gutter = 16;
+    const dockTop = Math.round(headerHeight + gutter);
+    document.documentElement.style.setProperty("--dock-top", `${dockTop}px`);
+
+    const dock = document.querySelector(".ticker-dock");
+    const dockHeight = dock ? dock.getBoundingClientRect().height : 0;
+    if (dockHeight) {
+      const chartTop = Math.round(dockTop + dockHeight + gutter);
+      document.documentElement.style.setProperty("--studio-chart-top", `${chartTop}px`);
+    }
+  };
+
   const getAnalytics = () => {
     try {
       if (state.cookieConsent !== "accepted") return null;
@@ -238,6 +277,61 @@
     } catch (error) {
       // Ignore analytics errors.
     }
+  };
+
+  const getRemoteConfigClient = () => {
+    try {
+      if (typeof firebase === "undefined") return null;
+      if (!firebase.remoteConfig) return null;
+      const rc = firebase.remoteConfig();
+      rc.settings = rc.settings || {};
+      rc.settings.minimumFetchIntervalMillis = 5 * 60 * 1000;
+      rc.defaultConfig = {
+        assistant_enabled: true,
+        watchlist_enabled: true,
+        forecast_prophet_enabled: true,
+        forecast_timemixer_enabled: true,
+        webpush_vapid_key: "",
+      };
+      return rc;
+    } catch (error) {
+      return null;
+    }
+  };
+
+  const applyRemoteFlags = (flags) => {
+    const assistantRoot = document.getElementById("assistant-widget");
+    if (assistantRoot) assistantRoot.classList.toggle("hidden", !flags.assistantEnabled);
+
+    document.querySelectorAll('[data-panel-target="watchlist"]').forEach((el) => {
+      el.classList.toggle("hidden", !flags.watchlistEnabled);
+    });
+    document.querySelectorAll('[data-panel="watchlist"]').forEach((el) => {
+      el.classList.toggle("hidden", !flags.watchlistEnabled);
+    });
+  };
+
+  const loadRemoteConfig = async () => {
+    const rc = getRemoteConfigClient();
+    if (!rc) return state.remoteFlags;
+    try {
+      await rc.fetchAndActivate();
+    } catch (error) {
+      // Ignore fetch errors and fall back to defaults.
+    }
+    const assistantEnabled = typeof rc.getBoolean === "function" ? rc.getBoolean("assistant_enabled") : String(rc.getString("assistant_enabled")).toLowerCase() === "true";
+    const watchlistEnabled = typeof rc.getBoolean === "function" ? rc.getBoolean("watchlist_enabled") : String(rc.getString("watchlist_enabled")).toLowerCase() === "true";
+    const webPushVapidKey = typeof rc.getString === "function" ? rc.getString("webpush_vapid_key") : "";
+    state.remoteFlags = {
+      ...state.remoteFlags,
+      assistantEnabled: Boolean(assistantEnabled),
+      watchlistEnabled: Boolean(watchlistEnabled),
+      webPushVapidKey: String(webPushVapidKey || ""),
+    };
+    state.remoteConfigLoaded = true;
+    applyRemoteFlags(state.remoteFlags);
+    logEvent("remote_config_loaded", { assistant: state.remoteFlags.assistantEnabled, watchlist: state.remoteFlags.watchlistEnabled });
+    return state.remoteFlags;
   };
 
   const getSessionId = () => {
@@ -1115,6 +1209,131 @@
 	      );
 	  };
 
+	  const renderWatchlist = (items, workspaceId) => {
+	    if (!ui.watchlistList) return;
+	    const editable = canWriteWorkspace(workspaceId);
+	    const list = Array.isArray(items) ? items : [];
+	    if (!list.length) {
+	      ui.watchlistList.innerHTML = `<div class="small muted">No watchlist items yet.</div>`;
+	      return;
+	    }
+
+	    ui.watchlistList.innerHTML = list
+	      .map((item) => {
+	        const ticker = normalizeTicker(item.ticker || item.id || "");
+	        if (!ticker) return "";
+	        const notes = escapeHtml(item.notes || "");
+	        const addedBy = escapeHtml(item.addedBy?.email || item.addedByEmail || "");
+	        const metaParts = [addedBy ? `Added by ${addedBy}` : "", item.updatedAt ? `Updated ${formatTimestamp(item.updatedAt)}` : ""].filter(Boolean);
+	        const meta = metaParts.length ? `<div class="small muted">${metaParts.join(" · ")}</div>` : "";
+	        const actions = editable
+	          ? `
+	            <div class="task-actions">
+	              <button class="task-chip danger" type="button" data-action="watchlist-remove" data-ticker="${escapeHtml(ticker)}">Remove</button>
+	            </div>
+	          `
+	          : "";
+	        return `
+	          <div class="watchlist-item">
+	            <div>
+	              <button class="ticker-pill" type="button" data-action="pick-ticker" data-ticker="${escapeHtml(ticker)}">${escapeHtml(ticker)}</button>
+	              ${meta}
+	              ${notes ? `<div class="small">${notes}</div>` : ""}
+	            </div>
+	            ${actions}
+	          </div>
+	        `;
+	      })
+	      .join("");
+	  };
+
+	  const startWatchlist = (db, workspaceId) => {
+	    if (state.unsubscribeWatchlist) state.unsubscribeWatchlist();
+	    if (!workspaceId || !ui.watchlistList || !state.remoteFlags.watchlistEnabled) return;
+	    ui.watchlistList.innerHTML = `<div class="small muted">Loading watchlist...</div>`;
+	    state.unsubscribeWatchlist = db
+	      .collection("users")
+	      .doc(workspaceId)
+	      .collection("watchlist")
+	      .orderBy("createdAt", "desc")
+	      .limit(250)
+	      .onSnapshot(
+	        (snapshot) => {
+	          const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+	          renderWatchlist(items, workspaceId);
+	        },
+	        () => {
+	          if (ui.watchlistList) ui.watchlistList.innerHTML = `<div class="small muted">Unable to load watchlist.</div>`;
+	        }
+	      );
+	  };
+
+	  const renderAlerts = (items, workspaceId) => {
+	    if (!ui.alertsList) return;
+	    const editable = canWriteWorkspace(workspaceId);
+	    const list = Array.isArray(items) ? items : [];
+	    if (!list.length) {
+	      ui.alertsList.innerHTML = `<div class="small muted">No alerts yet.</div>`;
+	      return;
+	    }
+
+	    ui.alertsList.innerHTML = list
+	      .map((item) => {
+	        const ticker = normalizeTicker(item.ticker || "");
+	        const condition = String(item.condition || "above");
+	        const target = Number(item.targetPrice ?? item.target ?? item.price);
+	        const active = Boolean(item.active);
+	        const status = String(item.status || (active ? "active" : "disabled"));
+	        const createdBy = escapeHtml(item.createdByEmail || item.createdBy?.email || "");
+	        const lastPrice = typeof item.lastPrice === "number" ? `$${item.lastPrice.toFixed(2)}` : "";
+	        const lastChecked = item.lastCheckedAt ? `Checked ${formatTimestamp(item.lastCheckedAt)}` : "";
+	        const triggeredAt = item.triggeredAt ? `Triggered ${formatTimestamp(item.triggeredAt)}` : "";
+	        const metaParts = [createdBy ? `By ${createdBy}` : "", lastChecked, lastPrice, triggeredAt].filter(Boolean);
+	        const meta = metaParts.length ? `<div class="small muted">${metaParts.join(" · ")}</div>` : "";
+	        const title = `${escapeHtml(ticker)} ${condition === "below" ? "below" : "above"} ${Number.isFinite(target) ? `$${target.toFixed(2)}` : "—"}`;
+	        const actions = editable
+	          ? `
+	            <div class="task-actions">
+	              <button class="task-chip" type="button" data-action="alert-toggle" data-alert-id="${escapeHtml(item.id)}" data-active="${active ? "1" : "0"}">
+	                ${active ? "Disable" : "Enable"}
+	              </button>
+	              <button class="task-chip danger" type="button" data-action="alert-delete" data-alert-id="${escapeHtml(item.id)}">Delete</button>
+	            </div>
+	          `
+	          : "";
+	        return `
+	          <div class="alert-item" data-status="${escapeHtml(status)}">
+	            <div class="alert-title"><strong>${title}</strong> <span class="pill">${escapeHtml(status)}</span></div>
+	            ${meta}
+	            ${item.notes ? `<div class="small">${escapeHtml(item.notes)}</div>` : ""}
+	            ${actions}
+	          </div>
+	        `;
+	      })
+	      .join("");
+	  };
+
+	  const startPriceAlerts = (db, workspaceId) => {
+	    if (state.unsubscribeAlerts) state.unsubscribeAlerts();
+	    if (!workspaceId || !ui.alertsList || !state.remoteFlags.watchlistEnabled) return;
+	    ui.alertsList.innerHTML = `<div class="small muted">Loading alerts...</div>`;
+	    state.unsubscribeAlerts = db
+	      .collection("users")
+	      .doc(workspaceId)
+	      .collection("price_alerts")
+	      .orderBy("createdAt", "desc")
+	      .limit(250)
+	      .onSnapshot(
+	        (snapshot) => {
+	          const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+	          renderAlerts(items, workspaceId);
+	        },
+	        () => {
+	          if (ui.alertsList) ui.alertsList.innerHTML = `<div class="small muted">Unable to load alerts.</div>`;
+	        }
+	      );
+	  };
+
   const startAutopilotRequests = (db, user) => {
     if (state.unsubscribeAutopilot) state.unsubscribeAutopilot();
     if (!user || !ui.autopilotOutput) return;
@@ -1253,6 +1472,8 @@
       "download-ticker",
       "news-ticker",
       "options-ticker",
+      "watchlist-ticker",
+      "alert-ticker",
       "autopilot-ticker",
       "alpaca-symbol",
     ];
@@ -1512,6 +1733,7 @@
   };
 
   const loadVapidKey = async (functions) => {
+    if (state.remoteFlags?.webPushVapidKey) return String(state.remoteFlags.webPushVapidKey);
     if (window.QUANTURA_VAPID_KEY) return String(window.QUANTURA_VAPID_KEY);
     const getWebPushConfig = functions.httpsCallable("get_web_push_config");
     const response = await getWebPushConfig({ meta: buildMeta() });
@@ -1670,6 +1892,9 @@
 	    }
 	    window.setTimeout(() => ensureFeedbackPrompt(), 1400);
 	    bindPanelNavigation();
+	    syncStickyOffsets();
+	    window.addEventListener("resize", () => window.requestAnimationFrame(syncStickyOffsets));
+	    window.setTimeout(syncStickyOffsets, 280);
 	    ensureAssistantWidget(functions);
 
 		    document.addEventListener("click", (event) => {
@@ -1696,6 +1921,7 @@
 		      if (!ticker) return;
 		      safeLocalStorageSet(LAST_TICKER_KEY, ticker);
 		      syncTickerInputs(ticker);
+		      logEvent("ticker_selected", { ticker, page_path: window.location.pathname });
 
 		      // If we're in the studio, load the chart immediately. Otherwise, jump to the studio.
 		      if (window.location.pathname === "/forecasting" && ui.terminalForm && ui.terminalTicker) {
@@ -1748,9 +1974,17 @@
 	      }
 	    });
 
-    const persistenceReady = auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(() => {
-      showToast("Unable to set auth persistence.", "warn");
-    });
+    const persistenceReady = auth
+      .setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+      .catch(async () => {
+        // Some browsers block persistent storage (e.g., private browsing). Fall back to session persistence.
+        try {
+          await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION);
+        } catch (error) {
+          // Ignore persistence failures.
+        }
+        showToast("Using session-only sign-in in this browser.", "warn");
+      });
 
 	    ui.headerAuth?.addEventListener("click", () => {
 	      const authSection = document.getElementById("auth");
@@ -1911,6 +2145,121 @@
 	      }
 	    });
 
+	    ui.watchlistForm?.addEventListener("submit", async (event) => {
+	      event.preventDefault();
+	      if (!state.user) {
+	        showToast("Sign in to manage your watchlist.", "warn");
+	        return;
+	      }
+	      const workspaceId = state.activeWorkspaceId || state.user.uid;
+	      if (!canWriteWorkspace(workspaceId)) {
+	        showToast("Editor access required to update this workspace watchlist.", "warn");
+	        return;
+	      }
+	      const formData = new FormData(ui.watchlistForm);
+	      const ticker = normalizeTicker(formData.get("ticker"));
+	      const notes = String(formData.get("notes") || "").trim().slice(0, 2400);
+	      if (!ticker) {
+	        showToast("Enter a ticker.", "warn");
+	        return;
+	      }
+	      try {
+	        await db
+	          .collection("users")
+	          .doc(workspaceId)
+	          .collection("watchlist")
+	          .doc(ticker)
+	          .set(
+	            {
+	              ticker,
+	              notes,
+	              addedBy: { uid: state.user.uid, email: state.user.email || "" },
+	              createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+	              updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+	              meta: buildMeta(),
+	            },
+	            { merge: true }
+	          );
+	        if (ui.watchlistNotes) ui.watchlistNotes.value = "";
+	        showToast(`${ticker} added to watchlist.`);
+	        logEvent("watchlist_added", { ticker, workspace_id: workspaceId });
+	      } catch (error) {
+	        showToast(error.message || "Unable to update watchlist.", "warn");
+	      }
+	    });
+
+	    ui.alertForm?.addEventListener("submit", async (event) => {
+	      event.preventDefault();
+	      if (!state.user) {
+	        showToast("Sign in to create alerts.", "warn");
+	        return;
+	      }
+	      const workspaceId = state.activeWorkspaceId || state.user.uid;
+	      if (!canWriteWorkspace(workspaceId)) {
+	        showToast("Editor access required to create alerts in this workspace.", "warn");
+	        return;
+	      }
+	      const formData = new FormData(ui.alertForm);
+	      const ticker = normalizeTicker(formData.get("ticker"));
+	      const condition = String(formData.get("condition") || "above").trim().toLowerCase();
+	      const targetPrice = Number(formData.get("target"));
+	      const notes = String(formData.get("notes") || "").trim().slice(0, 2000);
+	      if (!ticker) {
+	        showToast("Enter a ticker.", "warn");
+	        return;
+	      }
+	      if (!Number.isFinite(targetPrice) || targetPrice <= 0) {
+	        showToast("Enter a valid target price.", "warn");
+	        return;
+	      }
+	      try {
+	        await db
+	          .collection("users")
+	          .doc(workspaceId)
+	          .collection("price_alerts")
+	          .add({
+	            ticker,
+	            condition: condition === "below" ? "below" : "above",
+	            targetPrice,
+	            notes,
+	            active: true,
+	            status: "active",
+	            createdByUid: state.user.uid,
+	            createdByEmail: state.user.email || "",
+	            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+	            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+	            meta: buildMeta(),
+	          });
+	        if (ui.alertNotes) ui.alertNotes.value = "";
+	        showToast("Alert created.");
+	        logEvent("alert_created", { ticker, condition, workspace_id: workspaceId });
+	      } catch (error) {
+	        showToast(error.message || "Unable to create alert.", "warn");
+	      }
+	    });
+
+	    ui.alertsCheck?.addEventListener("click", async () => {
+	      if (!state.user) {
+	        showToast("Sign in first.", "warn");
+	        return;
+	      }
+	      if (ui.alertsStatus) ui.alertsStatus.textContent = "Checking alerts...";
+	      try {
+	        const workspaceId = state.activeWorkspaceId || state.user.uid;
+	        const check = functions.httpsCallable("check_price_alerts");
+	        const result = await check({ workspaceId, meta: buildMeta() });
+	        const data = result.data || {};
+	        const triggered = Number(data.triggered || 0);
+	        const checked = Number(data.checked || 0);
+	        if (ui.alertsStatus) ui.alertsStatus.textContent = triggered ? `${triggered} alert(s) triggered (checked ${checked}).` : `No alerts triggered (checked ${checked}).`;
+	        showToast(triggered ? `${triggered} alert(s) triggered.` : "No alerts triggered.");
+	        logEvent("alert_scan", { checked, triggered, workspace_id: workspaceId });
+	      } catch (error) {
+	        if (ui.alertsStatus) ui.alertsStatus.textContent = error.message || "Unable to check alerts.";
+	        showToast(error.message || "Unable to check alerts.", "warn");
+	      }
+	    });
+
 	    document.addEventListener("click", async (event) => {
 	      const move = event.target.closest('[data-action="task-move"]');
 	      if (move) {
@@ -1963,6 +2312,87 @@
 	        showToast(error.message || "Unable to delete task.", "warn");
 	      } finally {
 	        del.disabled = false;
+	      }
+	    });
+
+	    document.addEventListener("click", async (event) => {
+	      const remove = event.target.closest('[data-action="watchlist-remove"]');
+	      if (remove) {
+	        if (!state.user) return;
+	        const workspaceId = state.activeWorkspaceId || state.user.uid;
+	        if (!canWriteWorkspace(workspaceId)) {
+	          showToast("Editor access required to update this workspace.", "warn");
+	          return;
+	        }
+	        const ticker = normalizeTicker(remove.dataset.ticker || "");
+	        if (!ticker) return;
+	        remove.disabled = true;
+	        try {
+	          await db.collection("users").doc(workspaceId).collection("watchlist").doc(ticker).delete();
+	          showToast(`${ticker} removed.`);
+	          logEvent("watchlist_removed", { ticker, workspace_id: workspaceId });
+	        } catch (error) {
+	          showToast(error.message || "Unable to remove ticker.", "warn");
+	        } finally {
+	          remove.disabled = false;
+	        }
+	        return;
+	      }
+
+	      const toggle = event.target.closest('[data-action="alert-toggle"]');
+	      if (toggle) {
+	        if (!state.user) return;
+	        const workspaceId = state.activeWorkspaceId || state.user.uid;
+	        if (!canWriteWorkspace(workspaceId)) {
+	          showToast("Editor access required to update alerts.", "warn");
+	          return;
+	        }
+	        const alertId = toggle.dataset.alertId || "";
+	        if (!alertId) return;
+	        const active = toggle.dataset.active === "1";
+	        toggle.disabled = true;
+	        try {
+	          await db
+	            .collection("users")
+	            .doc(workspaceId)
+	            .collection("price_alerts")
+	            .doc(alertId)
+	            .set(
+	              {
+	                active: !active,
+	                status: !active ? "active" : "disabled",
+	                updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+	              },
+	              { merge: true }
+	            );
+	          logEvent("alert_toggled", { active: !active, workspace_id: workspaceId });
+	        } catch (error) {
+	          showToast(error.message || "Unable to update alert.", "warn");
+	        } finally {
+	          toggle.disabled = false;
+	        }
+	        return;
+	      }
+
+	      const delAlert = event.target.closest('[data-action="alert-delete"]');
+	      if (!delAlert) return;
+	      if (!state.user) return;
+	      const workspaceId = state.activeWorkspaceId || state.user.uid;
+	      if (!canWriteWorkspace(workspaceId)) {
+	        showToast("Editor access required to delete alerts.", "warn");
+	        return;
+	      }
+	      const alertId = delAlert.dataset.alertId || "";
+	      if (!alertId) return;
+	      delAlert.disabled = true;
+	      try {
+	        await db.collection("users").doc(workspaceId).collection("price_alerts").doc(alertId).delete();
+	        showToast("Alert deleted.");
+	        logEvent("alert_deleted", { workspace_id: workspaceId });
+	      } catch (error) {
+	        showToast(error.message || "Unable to delete alert.", "warn");
+	      } finally {
+	        delAlert.disabled = false;
 	      }
 	    });
 
@@ -2499,10 +2929,13 @@
 	        return;
 	      }
 	      const formData = new FormData(ui.optionsForm);
-	      const payload = {
-	        ticker: formData.get("ticker"),
-	        expiration: formData.get("expiration"),
-	      };
+	      const ticker = normalizeTicker(formData.get("ticker"));
+	      const cacheKey = ticker ? `${OPTIONS_EXPIRATION_PREFIX}${ticker}` : "";
+	      let expiration = String(formData.get("expiration") || "").trim();
+	      if (!expiration && cacheKey) {
+	        expiration = String(safeLocalStorageGet(cacheKey) || "").trim();
+	      }
+	      const payload = { ticker, expiration };
 
 	      try {
 	        setOutputLoading(ui.optionsOutput, "Loading options chain...");
@@ -2510,10 +2943,28 @@
 	        const result = await getOptions({ ...payload, limit: 36, meta: buildMeta() });
 	        const data = result.data || {};
 	        const underlyingPrice = data.underlyingPrice;
+	        const riskFreeRate = data.riskFreeRate;
+	        const timeToExpiryYears = data.timeToExpiryYears;
 	        const selectedExpiration = data.selectedExpiration || payload.expiration || "";
 	        const expirations = data.expirations || [];
 	        const calls = data.calls || [];
 	        const puts = data.puts || [];
+
+	        if (cacheKey && selectedExpiration) {
+	          safeLocalStorageSet(cacheKey, selectedExpiration);
+	        }
+
+	        const expirationEl = document.getElementById("options-expiration");
+	        if (expirationEl && expirationEl.tagName === "SELECT" && Array.isArray(expirations) && expirations.length) {
+	          expirationEl.innerHTML = [
+	            `<option value="">Auto (nearest)</option>`,
+	            ...expirations.map((exp) => `<option value="${escapeHtml(exp)}">${escapeHtml(exp)}</option>`),
+	          ].join("");
+	          if (expirations.includes(selectedExpiration)) {
+	            expirationEl.value = selectedExpiration;
+	          }
+	        }
+
 	        if (ui.optionsOutput) {
 	          setOutputReady(ui.optionsOutput);
 	          if (!expirations.length) {
@@ -2542,7 +2993,9 @@
 	                        <th>Last</th>
 	                        <th>Bid</th>
 	                        <th>Ask</th>
+	                        <th>Mid</th>
 	                        <th>IV</th>
+	                        <th>Delta</th>
 	                        <th>OI</th>
 	                        <th>Vol</th>
 	                        <th>Prob ITM</th>
@@ -2551,7 +3004,8 @@
 	                    <tbody>
 	                      ${rows
 	                        .map((opt) => {
-	                          const iv = opt.impliedVolatility ? `${fmt(opt.impliedVolatility, 3)}` : "—";
+	                          const iv = typeof opt.impliedVolatility === "number" ? `${fmt(opt.impliedVolatility * 100, 1)}%` : "—";
+	                          const delta = typeof opt.delta === "number" ? fmt(opt.delta, 3) : "—";
 	                          const prob = typeof opt.probabilityITM === "number" ? `${fmt(opt.probabilityITM, 2)}%` : "—";
 	                          const rowClass = opt.inTheMoney ? "row-itm" : "";
 	                          return `
@@ -2560,7 +3014,9 @@
 	                              <td>${money(opt.lastPrice)}</td>
 	                              <td>${money(opt.bid)}</td>
 	                              <td>${money(opt.ask)}</td>
+	                              <td>${money(opt.mid)}</td>
 	                              <td>${iv}</td>
+	                              <td>${delta}</td>
 	                              <td>${Number(opt.openInterest || 0).toLocaleString()}</td>
 	                              <td>${Number(opt.volume || 0).toLocaleString()}</td>
 	                              <td>${prob}</td>
@@ -2578,6 +3034,9 @@
 	              <div class="options-meta">
 	                <div class="small"><strong>Underlying:</strong> ${money(underlyingPrice)}</div>
 	                <div class="small"><strong>Expiration:</strong> ${escapeHtml(selectedExpiration)}</div>
+	                <div class="small"><strong>RFR:</strong> ${typeof riskFreeRate === "number" ? fmt(riskFreeRate, 3) : "—"} · <strong>T:</strong> ${
+	                  typeof timeToExpiryYears === "number" ? fmt(timeToExpiryYears, 3) : "—"
+	                }y</div>
 	              </div>
 	              <details class="option-block" open>
 	                <summary>Calls</summary>
@@ -2588,7 +3047,7 @@
 	                ${table(puts, "Puts")}
 	              </details>
 	              <div class="small muted" style="margin-top:10px;">
-	                Prob ITM is a risk-neutral estimate derived from implied volatility and time to expiry. It is not a guarantee.
+	                Prob ITM and delta are Black-Scholes style approximations derived from implied volatility and time to expiry. They are not guarantees.
 	              </div>
 	            `;
 	          }
@@ -2596,6 +3055,19 @@
 	        logEvent("options_loaded", { ticker: payload.ticker });
 	      } catch (error) {
 	        showToast(error.message || "Unable to load options.", "warn");
+	      }
+	    });
+
+	    ui.optionsExpiration?.addEventListener("change", () => {
+	      if (!ui.optionsForm) return;
+	      if (!state.user) {
+	        showToast("Sign in to load options.", "warn");
+	        return;
+	      }
+	      try {
+	        ui.optionsForm.requestSubmit?.();
+	      } catch (error) {
+	        // Ignore.
 	      }
 	    });
 
@@ -2938,7 +3410,8 @@
       }
     });
 
-		    auth.onAuthStateChanged(async (user) => {
+		    persistenceReady.finally(() => {
+		      auth.onAuthStateChanged(async (user) => {
 		      state.authResolved = true;
 		      state.user = user;
 		      setAuthUi(user);
@@ -3055,6 +3528,7 @@
         if (state.unsubscribeAdmin) state.unsubscribeAdmin();
       }
     });
+  });
   };
 
   window.addEventListener("load", init);

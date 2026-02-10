@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 import math
 import os
+import time
+from datetime import datetime, timezone
 from statistics import NormalDist
 from typing import Any
 
@@ -16,6 +18,11 @@ import firebase_admin
 from firebase_admin import credentials, firestore, messaging as admin_messaging
 from firebase_functions import https_fn
 from firebase_functions.options import set_global_options
+
+try:
+    from firebase_admin import remote_config as admin_remote_config  # type: ignore
+except Exception:
+    admin_remote_config = None
 
 set_global_options(max_instances=10)
 
@@ -55,6 +62,53 @@ if not firebase_admin._apps:
         firebase_admin.initialize_app()
 
 db = firestore.client()
+
+_REMOTE_CONFIG_CACHE: dict[str, Any] = {"template": None, "fetchedAt": 0.0}
+
+
+def _get_remote_config_template(max_age_seconds: int = 300) -> Any | None:
+    if admin_remote_config is None:
+        return None
+    now = time.time()
+    cached = _REMOTE_CONFIG_CACHE.get("template")
+    fetched_at = float(_REMOTE_CONFIG_CACHE.get("fetchedAt") or 0.0)
+    if cached is not None and (now - fetched_at) < max_age_seconds:
+        return cached
+    try:
+        template = admin_remote_config.get_template()
+        _REMOTE_CONFIG_CACHE["template"] = template
+        _REMOTE_CONFIG_CACHE["fetchedAt"] = now
+        return template
+    except Exception:
+        return cached
+
+
+def _remote_config_param(key: str, default: str = "") -> str:
+    template = _get_remote_config_template()
+    if template is None:
+        return default
+    params = getattr(template, "parameters", {}) or {}
+    param = params.get(key)
+    if param is None:
+        return default
+    default_value = getattr(param, "default_value", None) or getattr(param, "defaultValue", None)
+    value = getattr(default_value, "value", None) if default_value is not None else None
+    if value is None:
+        return default
+    return str(value)
+
+
+def _remote_config_bool(key: str, default: bool = False) -> bool:
+    raw = _remote_config_param(key, "")
+    if not raw:
+        return default
+    normalized = raw.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    return default
+
 
 def _yahoo_headers() -> dict[str, str]:
     # Yahoo endpoints frequently rate-limit requests without a browser-like UA.
@@ -256,6 +310,57 @@ def _load_history(ticker: str, start: str | None, interval: str) -> pd.DataFrame
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "No valid close values for ticker.")
 
     return frame
+
+
+def _latest_close_prices(tickers: list[str]) -> dict[str, float]:
+    tickers = [str(t).upper().strip() for t in (tickers or []) if str(t).strip()]
+    tickers = list(dict.fromkeys([t for t in tickers if t]))
+    if not tickers:
+        return {}
+
+    symbols = " ".join(tickers)
+    try:
+        frame = yf.download(
+            symbols,
+            period="7d",
+            interval="1d",
+            group_by="ticker",
+            progress=False,
+            threads=True,
+            auto_adjust=False,
+        )
+    except Exception:
+        frame = pd.DataFrame()
+
+    prices: dict[str, float] = {}
+    if frame.empty:
+        return prices
+
+    if isinstance(frame.columns, pd.MultiIndex):
+        # shape: (field, ticker) or (ticker, field) depending on yfinance version
+        level0 = list(frame.columns.get_level_values(0))
+        level1 = list(frame.columns.get_level_values(1))
+        is_ticker_level0 = any(t in set(level0) for t in tickers)
+        for ticker in tickers:
+            try:
+                sub = frame[ticker] if is_ticker_level0 else frame.xs(ticker, axis=1, level=1)
+            except Exception:
+                continue
+            if isinstance(sub.columns, pd.MultiIndex):
+                sub.columns = sub.columns.get_level_values(-1)
+            if "Close" not in sub.columns:
+                continue
+            close = pd.to_numeric(sub["Close"], errors="coerce").dropna()
+            if close.empty:
+                continue
+            prices[ticker] = float(close.iloc[-1])
+        return prices
+
+    if "Close" in frame.columns and len(tickers) == 1:
+        close = pd.to_numeric(frame["Close"], errors="coerce").dropna()
+        if not close.empty:
+            prices[tickers[0]] = float(close.iloc[-1])
+    return prices
 
 
 def _generate_quantile_forecast(
@@ -787,12 +892,25 @@ def remove_collaborator(req: https_fn.CallableRequest) -> dict[str, Any]:
 @https_fn.on_call()
 def get_web_push_config(req: https_fn.CallableRequest) -> dict[str, Any]:
     _require_auth(req)
-    if not FCM_WEB_VAPID_KEY:
+    vapid_key = FCM_WEB_VAPID_KEY or _remote_config_param("webpush_vapid_key", "")
+    if not vapid_key:
         raise https_fn.HttpsError(
             https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
             "FCM_WEB_VAPID_KEY is not configured.",
         )
-    return {"vapidKey": FCM_WEB_VAPID_KEY}
+    return {"vapidKey": vapid_key}
+
+
+@https_fn.on_call()
+def get_feature_flags(req: https_fn.CallableRequest) -> dict[str, Any]:
+    _require_auth(req)
+    return {
+        "assistantEnabled": _remote_config_bool("assistant_enabled", True),
+        "forecastProphetEnabled": _remote_config_bool("forecast_prophet_enabled", True),
+        "forecastTimeMixerEnabled": _remote_config_bool("forecast_timemixer_enabled", True),
+        "watchlistEnabled": _remote_config_bool("watchlist_enabled", True),
+        "webPushVapidKey": _remote_config_param("webpush_vapid_key", ""),
+    }
 
 
 @https_fn.on_call()
@@ -875,6 +993,144 @@ def send_test_notification(req: https_fn.CallableRequest) -> dict[str, Any]:
     return result
 
 
+@https_fn.on_call()
+def check_price_alerts(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    data = req.data or {}
+    workspace_id = str(data.get("workspaceId") or req.auth.uid or "").strip()
+    if not workspace_id:
+        workspace_id = req.auth.uid
+
+    # Allow scanning your own workspace, or a shared workspace you have access to.
+    if workspace_id != req.auth.uid and token.get("email") != ADMIN_EMAIL:
+        shared = (
+            db.collection("users")
+            .document(workspace_id)
+            .collection("collaborators")
+            .document(req.auth.uid)
+            .get()
+        )
+        if not shared.exists:
+            raise https_fn.HttpsError(
+                https_fn.FunctionsErrorCode.PERMISSION_DENIED,
+                "Workspace access required to scan alerts.",
+            )
+
+    alerts_ref = db.collection("users").document(workspace_id).collection("price_alerts")
+    docs = (
+        alerts_ref.where("createdByUid", "==", req.auth.uid)
+        .where("active", "==", True)
+        .limit(200)
+        .stream()
+    )
+    alert_docs = [(doc, doc.to_dict() or {}) for doc in docs]
+    if not alert_docs:
+        return {"workspaceId": workspace_id, "checked": 0, "triggered": 0, "triggeredAlerts": []}
+
+    alerts: list[dict[str, Any]] = []
+    tickers: list[str] = []
+    for doc, payload in alert_docs:
+        ticker = str(payload.get("ticker") or "").upper().strip()
+        if ticker:
+            tickers.append(ticker)
+        alerts.append({"ref": doc.reference, "id": doc.id, "data": payload, "ticker": ticker})
+
+    price_map = _latest_close_prices(tickers)
+    batch = db.batch()
+    triggered: list[dict[str, Any]] = []
+
+    for alert in alerts:
+        ref = alert["ref"]
+        payload = alert["data"] or {}
+        ticker = alert["ticker"]
+        condition = str(payload.get("condition") or "above").strip().lower()
+        target = _safe_float(payload.get("targetPrice") or payload.get("target") or payload.get("price"))
+        current = price_map.get(ticker)
+
+        update_payload: dict[str, Any] = {
+            "lastCheckedAt": firestore.SERVER_TIMESTAMP,
+            "lastPrice": current,
+            "updatedAt": firestore.SERVER_TIMESTAMP,
+        }
+
+        fired = False
+        if current is not None and target is not None:
+            if condition == "below" and current <= target:
+                fired = True
+            if condition != "below" and current >= target:
+                fired = True
+
+        if fired:
+            update_payload.update(
+                {
+                    "active": False,
+                    "status": "triggered",
+                    "triggeredAt": firestore.SERVER_TIMESTAMP,
+                    "triggeredPrice": current,
+                }
+            )
+            triggered.append(
+                {
+                    "alertId": alert["id"],
+                    "workspaceId": workspace_id,
+                    "ticker": ticker,
+                    "condition": condition,
+                    "targetPrice": target,
+                    "currentPrice": current,
+                }
+            )
+            event_ref = db.collection("price_alert_events").document()
+            batch.set(
+                event_ref,
+                {
+                    "alertId": alert["id"],
+                    "workspaceId": workspace_id,
+                    "userId": req.auth.uid,
+                    "userEmail": token.get("email"),
+                    "ticker": ticker,
+                    "condition": condition,
+                    "targetPrice": target,
+                    "currentPrice": current,
+                    "createdAt": firestore.SERVER_TIMESTAMP,
+                    "meta": data.get("meta") or {},
+                },
+            )
+
+        batch.set(ref, update_payload, merge=True)
+
+    batch.commit()
+
+    if triggered:
+        lines = []
+        for item in triggered[:6]:
+            t = item.get("ticker") or "?"
+            cond = ">= " if item.get("condition") != "below" else "<= "
+            lines.append(f"{t} {cond}{item.get('targetPrice')} (now {item.get('currentPrice')})")
+        body = "Triggered: " + "; ".join(lines)
+        _notify_user(
+            req.auth.uid,
+            token.get("email"),
+            title="Quantura price alert",
+            body=body,
+            data={"type": "price_alert", "count": len(triggered), "url": "/dashboard#watchlist"},
+        )
+
+    _audit_event(
+        req.auth.uid,
+        token.get("email"),
+        "price_alerts_checked",
+        {"workspaceId": workspace_id, "checked": len(alerts), "triggered": len(triggered)},
+    )
+
+    return {
+        "workspaceId": workspace_id,
+        "checked": len(alerts),
+        "triggered": len(triggered),
+        "triggeredAlerts": _serialize_for_firestore(triggered),
+        "prices": _serialize_for_firestore(price_map),
+    }
+
+
 def _handle_forecast_request(req: https_fn.CallableRequest, forced_service: str | None = None) -> dict[str, Any]:
     token = _require_auth(req)
     data = dict(req.data or {})
@@ -891,6 +1147,16 @@ def _handle_forecast_request(req: https_fn.CallableRequest, forced_service: str 
             https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
             "Invalid forecast service.",
             {"allowed": sorted(FORECAST_SERVICES)},
+        )
+    if service == "prophet" and not _remote_config_bool("forecast_prophet_enabled", True):
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "Prophet forecasting is currently disabled.",
+        )
+    if service == "ibm_timemixer" and not _remote_config_bool("forecast_timemixer_enabled", True):
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "IBM TimeMixer forecasting is currently disabled.",
         )
 
     interval = str(data.get("interval") or "1d")
@@ -1124,8 +1390,6 @@ def get_options_chain(req: https_fn.CallableRequest) -> dict[str, Any]:
     # Time to expiry in years (approx). If we cannot parse, probabilities will be null.
     T = None
     try:
-        from datetime import datetime, timezone
-
         exp_dt = datetime.strptime(selected, "%Y-%m-%d").date()
         today = datetime.now(tz=timezone.utc).date()
         days = max((exp_dt - today).days, 0)
@@ -1135,7 +1399,9 @@ def get_options_chain(req: https_fn.CallableRequest) -> dict[str, Any]:
 
     normal = NormalDist()
 
-    def _prob_itm(strike: float | None, iv: float | None, is_call: bool) -> float | None:
+    def _option_metrics(
+        strike: float | None, iv: float | None, is_call: bool
+    ) -> tuple[float, float, float, float] | None:
         if underlying_price is None or T is None or T <= 0:
             return None
         if strike is None or strike <= 0:
@@ -1145,12 +1411,18 @@ def get_options_chain(req: https_fn.CallableRequest) -> dict[str, Any]:
         S = float(underlying_price)
         K = float(strike)
         sigma = float(iv)
+        # Protect the probability math from extreme / bad IV values.
+        if sigma > 5:
+            return None
         denom = sigma * math.sqrt(T)
         if denom <= 0:
             return None
-        d2 = (math.log(S / K) + (RISK_FREE_RATE - 0.5 * sigma * sigma) * T) / denom
+        d1 = (math.log(S / K) + (RISK_FREE_RATE + 0.5 * sigma * sigma) * T) / denom
+        d2 = d1 - sigma * math.sqrt(T)
         p_call = normal.cdf(d2)
-        return p_call if is_call else normal.cdf(-d2)
+        prob_itm = p_call if is_call else normal.cdf(-d2)
+        delta = normal.cdf(d1) if is_call else normal.cdf(d1) - 1.0
+        return (prob_itm, delta, d1, d2)
 
     def _format_chain(df: pd.DataFrame, opt_type: str) -> list[dict[str, Any]]:
         if df is None or df.empty:
@@ -1168,16 +1440,25 @@ def get_options_chain(req: https_fn.CallableRequest) -> dict[str, Any]:
         for _, row in frame.iterrows():
             strike = _safe_float(row.get("strike"))
             iv = _safe_float(row.get("impliedVolatility"))
-            p_itm = _prob_itm(strike, iv, is_call=(opt_type == "call"))
+            metrics = _option_metrics(strike, iv, is_call=(opt_type == "call"))
+            p_itm = metrics[0] if metrics else None
+            delta = metrics[1] if metrics else None
+            bid = _safe_float(row.get("bid"))
+            ask = _safe_float(row.get("ask"))
+            mid = None
+            if bid is not None and ask is not None and bid >= 0 and ask >= 0:
+                mid = (bid + ask) / 2.0
             items.append(
                 {
                     "contractSymbol": row.get("contractSymbol"),
                     "type": opt_type,
                     "strike": strike,
                     "lastPrice": _safe_float(row.get("lastPrice")),
-                    "bid": _safe_float(row.get("bid")),
-                    "ask": _safe_float(row.get("ask")),
+                    "bid": bid,
+                    "ask": ask,
+                    "mid": None if mid is None else round(mid, 4),
                     "impliedVolatility": None if iv is None else round(iv, 4),
+                    "delta": None if delta is None else round(delta, 4),
                     "volume": int(row.get("volume") or 0),
                     "openInterest": int(row.get("openInterest") or 0),
                     "inTheMoney": bool(row.get("inTheMoney")) if "inTheMoney" in row else None,
@@ -1197,6 +1478,8 @@ def get_options_chain(req: https_fn.CallableRequest) -> dict[str, Any]:
     return {
         "ticker": ticker,
         "underlyingPrice": underlying_price,
+        "timeToExpiryYears": None if T is None else round(float(T), 6),
+        "riskFreeRate": RISK_FREE_RATE,
         "expirations": expirations,
         "selectedExpiration": selected,
         "calls": _serialize_for_firestore(calls),
@@ -1207,6 +1490,11 @@ def get_options_chain(req: https_fn.CallableRequest) -> dict[str, Any]:
 @https_fn.on_call()
 def assistant_chat(req: https_fn.CallableRequest) -> dict[str, Any]:
     token = _require_auth(req)
+    if not _remote_config_bool("assistant_enabled", True):
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "Assistant is currently disabled.",
+        )
     if not GOOGLE_GENAI_API_KEY:
         raise https_fn.HttpsError(
             https_fn.FunctionsErrorCode.FAILED_PRECONDITION,

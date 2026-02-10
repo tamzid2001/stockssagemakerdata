@@ -1,108 +1,16 @@
-#!/usr/bin/env python3
-from __future__ import annotations
-
-import datetime as dt
-import re
-from pathlib import Path
-
-import pandas as pd
-import requests
-import yfinance as yf
-
-ROOT = Path(__file__).resolve().parents[1]
-PUBLIC = ROOT / "quantura_site" / "public"
-BLOG_INDEX = PUBLIC / "blog" / "index.html"
-POSTS_DIR = PUBLIC / "blog" / "posts"
-SITEMAP = PUBLIC / "sitemap.xml"
-
-TRENDING_URL = "https://query1.finance.yahoo.com/v1/finance/trending/US"
-
-
-def _fmt_month_day_year(date_obj: dt.date) -> str:
-    return date_obj.strftime("%B %d, %Y")
-
-
-def fetch_trending_tickers(max_names: int = 10) -> list[str]:
-    try:
-        resp = requests.get(TRENDING_URL, timeout=15)
-        resp.raise_for_status()
-        data = resp.json()
-        quotes = data.get("finance", {}).get("result", [{}])[0].get("quotes", [])
-        out = []
-        for item in quotes:
-            symbol = item.get("symbol")
-            if isinstance(symbol, str) and symbol:
-                out.append(symbol.upper())
-        return out[:max_names]
-    except Exception:
-        return []
-
-
-def download_snapshot(tickers: list[str]) -> pd.DataFrame:
-    if not tickers:
-        return pd.DataFrame()
-    df = yf.download(" ".join(tickers), period="45d", interval="1d", group_by="ticker", progress=False)
-    if df is None or len(df) == 0:
-        return pd.DataFrame()
-    if isinstance(df.columns, pd.MultiIndex):
-        # Flatten: (field, ticker) -> ticker.field
-        df.columns = [".".join([str(a), str(b)]) for a, b in df.columns.to_list()]
-
-    rows: list[dict] = []
-    for t in tickers:
-        close_col = f"Close.{t}"
-        if close_col not in df.columns:
-            continue
-        close = df[close_col].dropna()
-        if close.empty or len(close) < 6:
-            continue
-        last = float(close.iloc[-1])
-        prev = float(close.iloc[-2])
-        w1 = float(close.iloc[-6])  # ~5 trading days ago
-        chg_1d = (last - prev) / prev * 100 if prev else None
-        chg_1w = (last - w1) / w1 * 100 if w1 else None
-        rows.append(
-            {
-                "ticker": t,
-                "last_close": last,
-                "chg_1d_pct": chg_1d,
-                "chg_1w_pct": chg_1w,
-            }
-        )
-    out = pd.DataFrame(rows)
-    if out.empty:
-        return out
-    return out.sort_values("chg_1w_pct", ascending=False).reset_index(drop=True)
-
-
-def build_post_html(slug: str, published_date: dt.date, snapshot: pd.DataFrame) -> str:
-    date_iso = published_date.isoformat()
-    date_human = _fmt_month_day_year(published_date)
-
-    movers = snapshot.head(6).to_dict(orient="records") if not snapshot.empty else []
-    mover_lines = []
-    for row in movers:
-        chg_1w = row.get("chg_1w_pct")
-        chg_1d = row.get("chg_1d_pct")
-        mover_lines.append(
-            f"<li><strong>{row.get('ticker')}</strong> "
-            f"<span class=\"small\">(1W {chg_1w:+.2f}% • 1D {chg_1d:+.2f}% • last {row.get('last_close'):.2f})</span></li>"
-        )
-    movers_html = "\n".join(mover_lines) if mover_lines else "<li class=\"small\">Unable to load trending tickers right now.</li>"
-
-    return f"""<!doctype html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Weekly Market Brief ({date_iso}) | Quantura Blog</title>
+    <title>Weekly Market Brief (2026-02-09) | Quantura Blog</title>
     <meta name="description" content="Weekly market brief: trending tickers, momentum snapshot, and a clean workflow for follow-up research in Quantura." />
     <meta name="robots" content="index, follow" />
-    <link rel="canonical" href="https://quantura.ai/blog/posts/{slug}" />
-    <meta property="og:title" content="Weekly Market Brief ({date_iso})" />
+    <link rel="canonical" href="https://quantura.ai/blog/posts/2026-02-09-weekly-market-brief" />
+    <meta property="og:title" content="Weekly Market Brief (2026-02-09)" />
     <meta property="og:description" content="Trending tickers, momentum snapshot, and a clean workflow for follow-up research." />
     <meta property="og:type" content="article" />
-    <meta property="og:url" content="https://quantura.ai/blog/posts/{slug}" />
+    <meta property="og:url" content="https://quantura.ai/blog/posts/2026-02-09-weekly-market-brief" />
     <meta property="og:image" content="/assets/quantura-logo.svg" />
     <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="/manifest.json" />
@@ -118,20 +26,20 @@ def build_post_html(slug: str, published_date: dt.date, snapshot: pd.DataFrame) 
     <script defer src="/app.js"></script>
 
     <script type="application/ld+json">
-      {{
+      {
         "@context": "https://schema.org",
         "@type": "BlogPosting",
-        "headline": "Weekly Market Brief ({date_iso})",
-        "datePublished": "{date_iso}",
-        "dateModified": "{date_iso}",
-        "author": {{ "@type": "Organization", "name": "Quantura" }},
-        "publisher": {{
+        "headline": "Weekly Market Brief (2026-02-09)",
+        "datePublished": "2026-02-09",
+        "dateModified": "2026-02-09",
+        "author": { "@type": "Organization", "name": "Quantura" },
+        "publisher": {
           "@type": "Organization",
           "name": "Quantura",
-          "logo": {{ "@type": "ImageObject", "url": "https://quantura.ai/assets/quantura-logo.svg" }}
-        }},
-        "mainEntityOfPage": "https://quantura.ai/blog/posts/{slug}"
-      }}
+          "logo": { "@type": "ImageObject", "url": "https://quantura.ai/assets/quantura-logo.svg" }
+        },
+        "mainEntityOfPage": "https://quantura.ai/blog/posts/2026-02-09-weekly-market-brief"
+      }
     </script>
   </head>
   <body>
@@ -165,7 +73,7 @@ def build_post_html(slug: str, published_date: dt.date, snapshot: pd.DataFrame) 
           <div>
             <div class="eyebrow">Weekly brief</div>
             <h1>Weekly Market Brief</h1>
-            <p class="small">Published {date_human}</p>
+            <p class="small">Published February 09, 2026</p>
             <p style="margin-top: 14px;">
               This is a lightweight workflow post. The goal is not to predict the market, it is to surface where attention
               and momentum are concentrated, then use the Quantura terminal to validate the next moves.
@@ -179,7 +87,7 @@ def build_post_html(slug: str, published_date: dt.date, snapshot: pd.DataFrame) 
             <h3>Trending tickers snapshot</h3>
             <p class="small">Based on public trending signals and last-close momentum.</p>
             <ul style="margin: 14px 0 0 18px; color: var(--graphite); line-height: 1.7;">
-              {movers_html}
+              <li class="small">Unable to load trending tickers right now.</li>
             </ul>
           </div>
         </div>
@@ -257,68 +165,3 @@ def build_post_html(slug: str, published_date: dt.date, snapshot: pd.DataFrame) 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
   </body>
 </html>
-"""
-
-
-def insert_into_blog_index(slug: str, date_iso: str) -> None:
-    if not BLOG_INDEX.exists():
-        return
-    html = BLOG_INDEX.read_text(encoding="utf-8")
-    if f"/blog/posts/{slug}" in html:
-        return
-
-    date_human = _fmt_month_day_year(dt.date.fromisoformat(date_iso))
-    card = f"""
-            <a class="card" href="/blog/posts/{slug}">
-              <h3>Weekly Market Brief ({date_iso})</h3>
-              <div class="small">{date_human}</div>
-              <p class="small" style="margin-top: 12px;">
-                Trending tickers, momentum snapshot, and a clean workflow to validate setups in the terminal.
-              </p>
-              <div class="tag" style="margin-top: 14px;">Weekly brief</div>
-            </a>"""
-
-    html = re.sub(r'(<div class="grid-3">)', r"\1" + card, html, count=1)
-    BLOG_INDEX.write_text(html, encoding="utf-8")
-
-
-def insert_into_sitemap(slug: str, lastmod: str) -> None:
-    if not SITEMAP.exists():
-        return
-    xml = SITEMAP.read_text(encoding="utf-8")
-    loc = f"https://quantura.ai/blog/posts/{slug}"
-    if loc in xml:
-        return
-    entry = f"""  <url>
-    <loc>{loc}</loc>
-    <lastmod>{lastmod}</lastmod>
-  </url>
-"""
-    xml = xml.replace("</urlset>", entry + "</urlset>")
-    SITEMAP.write_text(xml, encoding="utf-8")
-
-
-def main() -> int:
-    POSTS_DIR.mkdir(parents=True, exist_ok=True)
-
-    today = dt.date.today()
-    date_iso = today.isoformat()
-    slug = f"{date_iso}-weekly-market-brief"
-    post_path = POSTS_DIR / f"{slug}.html"
-    if post_path.exists():
-        print(f"Post already exists: {post_path}")
-        return 0
-
-    tickers = fetch_trending_tickers(max_names=10)
-    snapshot = download_snapshot(tickers)
-    post_html = build_post_html(slug, today, snapshot)
-    post_path.write_text(post_html, encoding="utf-8")
-
-    insert_into_blog_index(slug, date_iso)
-    insert_into_sitemap(slug, date_iso)
-    print(f"Wrote blog post: {post_path}")
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

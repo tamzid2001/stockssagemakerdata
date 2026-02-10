@@ -25,6 +25,7 @@
     <script defer src="/__/firebase/12.9.0/firebase-functions-compat.js"></script>
     <script defer src="/__/firebase/12.9.0/firebase-storage-compat.js"></script>
     <script defer src="/__/firebase/12.9.0/firebase-messaging-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-remote-config-compat.js"></script>
     <script defer src="/__/firebase/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
     <script defer src="/app.js"></script>
@@ -63,6 +64,7 @@
           </div>
           <nav class="sidebar-nav" aria-label="Dashboard navigation">
             <button class="sidebar-link active" type="button" data-panel-target="orders">Orders</button>
+            <button class="sidebar-link" type="button" data-panel-target="watchlist">Watchlist</button>
             <button class="sidebar-link" type="button" data-panel-target="productivity">Productivity</button>
             <button class="sidebar-link" type="button" data-panel-target="collaboration">Collaboration</button>
             <button class="sidebar-link" type="button" data-panel-target="uploads">Uploads</button>
@@ -204,31 +206,111 @@
         </div>
       </section>
 
-      <section class="section panel" data-panel="orders" id="dashboard">
-        <div class="container">
-          <div class="section-title">
-            <h2>Your orders</h2>
-            <p class="small">Track your Deep Forecast requests and fulfillment status.</p>
-          </div>
-            <div class="dashboard-grid">
-            <div class="card">
-              <h3>Order history</h3>
-              <div id="user-orders" class="order-list panel-output"></div>
-            </div>
-            <div class="card">
-              <h3>Forecast requests</h3>
-              <div id="user-forecasts" class="order-list panel-output"></div>
-            </div>
-          </div>
-        </div>
-      </section>
+	      <section class="section panel" data-panel="orders" id="dashboard">
+	        <div class="container">
+	          <div class="section-title">
+	            <h2>Your orders</h2>
+	            <p class="small">Track your Deep Forecast requests and fulfillment status.</p>
+	          </div>
+	            <div class="dashboard-grid">
+	            <div class="card">
+	              <h3>Order history</h3>
+	              <div id="user-orders" class="order-list panel-output"></div>
+	            </div>
+	            <div class="card">
+	              <h3>Forecast requests</h3>
+	              <div id="user-forecasts" class="order-list panel-output"></div>
+	            </div>
+	          </div>
+	        </div>
+	      </section>
 
-      <section class="section panel hidden" data-panel="productivity" id="productivity">
-        <div class="container">
-          <div class="section-title">
-            <h2>Productivity boards</h2>
-            <p class="small">Todo + kanban + calendar views synced to your active workspace.</p>
-          </div>
+	      <section class="section panel hidden" data-panel="watchlist" id="watchlist">
+	        <div class="container">
+	          <div class="section-title">
+	            <h2>Watchlist and price alerts</h2>
+	            <p class="small">Save tickers to your active workspace and track actionable levels.</p>
+	          </div>
+
+	          <div class="content-grid">
+	            <form id="watchlist-form" class="card">
+	              <h3>Add to watchlist</h3>
+	              <div class="field">
+	                <label class="label" for="watchlist-ticker">Ticker</label>
+	                <input id="watchlist-ticker" name="ticker" placeholder="AAPL" required />
+	              </div>
+	              <div class="field">
+	                <label class="label" for="watchlist-notes">Notes (optional)</label>
+	                <textarea id="watchlist-notes" name="notes" placeholder="Thesis, catalysts, or why this name matters"></textarea>
+	              </div>
+	              <button class="cta" type="submit" data-analytics="watchlist_add">Add</button>
+	              <details class="learn-more">
+	                <summary>Learn more</summary>
+	                <p class="small">
+	                  Watchlists are workspace-scoped. If you’re collaborating, switching workspaces changes the watchlist you see.
+	                  Click a ticker to open it in the Forecasting studio.
+	                </p>
+	              </details>
+	            </form>
+
+	            <div class="results-panel">
+	              <h3>Watchlist</h3>
+	              <div id="watchlist-list" class="panel-output small">Sign in to start saving tickers.</div>
+	            </div>
+	          </div>
+
+	          <div class="content-grid" style="margin-top: 16px;">
+	            <form id="alert-form" class="card">
+	              <h3>Create price alert</h3>
+	              <div class="form-grid">
+	                <div class="field">
+	                  <label class="label" for="alert-ticker">Ticker</label>
+	                  <input id="alert-ticker" name="ticker" placeholder="NVDA" required />
+	                </div>
+	                <div class="field">
+	                  <label class="label" for="alert-condition">Condition</label>
+	                  <select id="alert-condition" name="condition">
+	                    <option value="above">Crosses above</option>
+	                    <option value="below">Crosses below</option>
+	                  </select>
+	                </div>
+	                <div class="field">
+	                  <label class="label" for="alert-price">Target price (USD)</label>
+	                  <input id="alert-price" name="target" type="number" step="0.01" placeholder="150.00" required />
+	                </div>
+	              </div>
+	              <div class="field">
+	                <label class="label" for="alert-notes">Notes (optional)</label>
+	                <textarea id="alert-notes" name="notes" placeholder="What should you do when this triggers?"></textarea>
+	              </div>
+	              <div class="hero-actions" style="margin-top: 12px;">
+	                <button class="cta" type="submit" data-analytics="alert_create">Create alert</button>
+	                <button class="cta secondary" id="alerts-check" type="button" data-analytics="alert_check">Check alerts now</button>
+	              </div>
+	              <p class="small" id="alerts-status"></p>
+	              <details class="learn-more">
+	                <summary>Learn more</summary>
+	                <p class="small">
+	                  Alerts are evaluated against the latest market price. For push delivery, enable notifications in the Notifications panel.
+	                  Quantura logs trigger events in Firestore so you can review what happened later.
+	                </p>
+	              </details>
+	            </form>
+
+	            <div class="results-panel">
+	              <h3>Active alerts</h3>
+	              <div id="alerts-list" class="panel-output small">Create an alert to see it here.</div>
+	            </div>
+	          </div>
+	        </div>
+	      </section>
+
+	      <section class="section panel hidden" data-panel="productivity" id="productivity">
+	        <div class="container">
+	          <div class="section-title">
+	            <h2>Productivity boards</h2>
+	            <p class="small">Todo + kanban + calendar views synced to your active workspace.</p>
+	          </div>
 
           <div class="content-grid">
             <form id="task-form" class="card">
