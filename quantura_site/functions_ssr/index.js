@@ -15,6 +15,7 @@ const adminApp = initializeApp();
 const TEMPLATE_TTL_MS = 5 * 60 * 1000;
 let cachedTemplate = null;
 let cachedTemplateLoadedAt = 0;
+let lastRemoteConfigErrorLogAt = 0;
 
 const templatesRoot = path.join(__dirname, "templates");
 
@@ -164,6 +165,12 @@ exports.ssr = onRequest(async (req, res) => {
     const fetchResponse = new RemoteConfigFetchResponse(adminApp, config);
     initialFetchResponse = typeof fetchResponse.toJSON === "function" ? fetchResponse.toJSON() : fetchResponse;
   } catch (error) {
+    const now = Date.now();
+    if (now - lastRemoteConfigErrorLogAt > 60 * 1000) {
+      lastRemoteConfigErrorLogAt = now;
+      // eslint-disable-next-line no-console
+      console.error("Remote Config SSR hydration failed:", error?.message || error);
+    }
     initialFetchResponse = null;
   }
 
@@ -173,4 +180,3 @@ exports.ssr = onRequest(async (req, res) => {
   res.setHeader("Cache-Control", "private, no-cache, max-age=0, must-revalidate");
   res.status(200).send(req.method === "HEAD" ? "" : rendered);
 });
-
