@@ -89,6 +89,10 @@ def _safe_float(value: Any) -> float | None:
         return None
 
 
+def _normalize_email(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
 def _audit_event(uid: str, email: str | None, event_type: str, payload: dict[str, Any]) -> None:
     db.collection("user_events").add(
         {
@@ -562,6 +566,211 @@ def submit_contact(req: https_fn.CallableRequest) -> dict[str, Any]:
 
 
 @https_fn.on_call()
+def create_collab_invite(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    data = req.data or {}
+    to_email_raw = str(data.get("email") or "").strip()
+    to_email_norm = _normalize_email(to_email_raw)
+    if not to_email_norm or "@" not in to_email_norm:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Valid email is required.")
+
+    role = str(data.get("role") or "viewer").strip().lower()
+    if role not in {"viewer", "editor"}:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Role must be viewer or editor.")
+
+    from_email = _normalize_email(token.get("email"))
+    invite_doc = {
+        "fromUserId": req.auth.uid,
+        "fromEmail": from_email,
+        "workspaceUserId": req.auth.uid,
+        "workspaceEmail": from_email,
+        "toEmail": to_email_raw,
+        "toEmailNorm": to_email_norm,
+        "toUserId": "",
+        "role": role,
+        "status": "pending",
+        "createdAt": firestore.SERVER_TIMESTAMP,
+        "updatedAt": firestore.SERVER_TIMESTAMP,
+    }
+
+    doc_ref = db.collection("collab_invites").document()
+    doc_ref.set(invite_doc)
+    _audit_event(
+        req.auth.uid,
+        token.get("email"),
+        "collab_invite_created",
+        {"inviteId": doc_ref.id, "toEmail": to_email_norm, "role": role},
+    )
+    return {"inviteId": doc_ref.id, "status": "pending"}
+
+
+@https_fn.on_call()
+def list_collab_invites(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    email_norm = _normalize_email(token.get("email"))
+    if not email_norm:
+        return {"invites": []}
+
+    docs = (
+        db.collection("collab_invites")
+        .where("toEmailNorm", "==", email_norm)
+        .limit(100)
+        .stream()
+    )
+
+    invites: list[dict[str, Any]] = []
+    for doc in docs:
+        data = doc.to_dict() or {}
+        if data.get("status") != "pending":
+            continue
+        invites.append(
+            {
+                "inviteId": doc.id,
+                "fromEmail": data.get("fromEmail"),
+                "workspaceUserId": data.get("workspaceUserId"),
+                "workspaceEmail": data.get("workspaceEmail"),
+                "role": data.get("role", "viewer"),
+                "status": data.get("status", "pending"),
+                "createdAt": data.get("createdAt"),
+            }
+        )
+
+    return {"invites": _serialize_for_firestore(invites)}
+
+
+@https_fn.on_call()
+def accept_collab_invite(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    data = req.data or {}
+    invite_id = str(data.get("inviteId") or "").strip()
+    if not invite_id:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Invite ID is required.")
+
+    email_norm = _normalize_email(token.get("email"))
+    invite_ref = db.collection("collab_invites").document(invite_id)
+    snapshot = invite_ref.get()
+    if not snapshot.exists:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "Invite not found.")
+
+    invite = snapshot.to_dict() or {}
+    if invite.get("status") != "pending":
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.FAILED_PRECONDITION, "Invite is not pending.")
+    if _normalize_email(invite.get("toEmailNorm")) != email_norm:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.PERMISSION_DENIED, "Invite is not addressed to you.")
+
+    workspace_user_id = str(invite.get("workspaceUserId") or invite.get("fromUserId") or "").strip()
+    workspace_email = _normalize_email(invite.get("workspaceEmail") or invite.get("fromEmail"))
+    if not workspace_user_id:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INTERNAL, "Invite is missing workspace info.")
+
+    role = str(invite.get("role") or "viewer").strip().lower()
+    if role not in {"viewer", "editor"}:
+        role = "viewer"
+
+    collab_uid = req.auth.uid
+    collab_email = _normalize_email(token.get("email"))
+
+    batch = db.batch()
+    batch.set(
+        db.collection("users").document(workspace_user_id).collection("collaborators").document(collab_uid),
+        {
+            "userId": collab_uid,
+            "email": collab_email,
+            "role": role,
+            "addedAt": firestore.SERVER_TIMESTAMP,
+            "addedBy": workspace_user_id,
+        },
+        merge=True,
+    )
+    batch.set(
+        db.collection("users").document(collab_uid).collection("shared_workspaces").document(workspace_user_id),
+        {
+            "workspaceUserId": workspace_user_id,
+            "workspaceEmail": workspace_email,
+            "role": role,
+            "addedAt": firestore.SERVER_TIMESTAMP,
+        },
+        merge=True,
+    )
+    batch.update(
+        invite_ref,
+        {
+            "status": "accepted",
+            "toUserId": collab_uid,
+            "acceptedAt": firestore.SERVER_TIMESTAMP,
+            "updatedAt": firestore.SERVER_TIMESTAMP,
+        },
+    )
+    batch.commit()
+
+    _audit_event(
+        collab_uid,
+        token.get("email"),
+        "collab_invite_accepted",
+        {"inviteId": invite_id, "workspaceUserId": workspace_user_id, "role": role},
+    )
+    return {"status": "accepted", "workspaceUserId": workspace_user_id, "workspaceEmail": workspace_email, "role": role}
+
+
+@https_fn.on_call()
+def revoke_collab_invite(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    data = req.data or {}
+    invite_id = str(data.get("inviteId") or "").strip()
+    if not invite_id:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Invite ID is required.")
+
+    invite_ref = db.collection("collab_invites").document(invite_id)
+    snapshot = invite_ref.get()
+    if not snapshot.exists:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "Invite not found.")
+    invite = snapshot.to_dict() or {}
+    if invite.get("fromUserId") != req.auth.uid:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.PERMISSION_DENIED, "Only the inviter can revoke.")
+    if invite.get("status") != "pending":
+        return {"inviteId": invite_id, "status": invite.get("status")}
+
+    invite_ref.update({"status": "revoked", "updatedAt": firestore.SERVER_TIMESTAMP})
+    _audit_event(req.auth.uid, token.get("email"), "collab_invite_revoked", {"inviteId": invite_id})
+    return {"inviteId": invite_id, "status": "revoked"}
+
+
+@https_fn.on_call()
+def list_collaborators(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    docs = db.collection("users").document(req.auth.uid).collection("collaborators").limit(200).stream()
+    collaborators: list[dict[str, Any]] = []
+    for doc in docs:
+        data = doc.to_dict() or {}
+        collaborators.append(
+            {
+                "userId": doc.id,
+                "email": data.get("email"),
+                "role": data.get("role", "viewer"),
+                "addedAt": data.get("addedAt"),
+            }
+        )
+    return {"collaborators": _serialize_for_firestore(collaborators)}
+
+
+@https_fn.on_call()
+def remove_collaborator(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    data = req.data or {}
+    collaborator_user_id = str(data.get("collaboratorUserId") or "").strip()
+    if not collaborator_user_id:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Collaborator user ID is required.")
+
+    owner_id = req.auth.uid
+    batch = db.batch()
+    batch.delete(db.collection("users").document(owner_id).collection("collaborators").document(collaborator_user_id))
+    batch.delete(db.collection("users").document(collaborator_user_id).collection("shared_workspaces").document(owner_id))
+    batch.commit()
+    _audit_event(owner_id, token.get("email"), "collaborator_removed", {"collaboratorUserId": collaborator_user_id})
+    return {"status": "removed", "collaboratorUserId": collaborator_user_id}
+
+
+@https_fn.on_call()
 def get_web_push_config(req: https_fn.CallableRequest) -> dict[str, Any]:
     _require_auth(req)
     if not FCM_WEB_VAPID_KEY:
@@ -837,17 +1046,30 @@ def get_technicals(req: https_fn.CallableRequest) -> dict[str, Any]:
         }
     )
 
+    def _ta(name: str, frame: pd.DataFrame):
+        func = getattr(TA, name, None)
+        if not callable(func):
+            return None
+        return func(frame)
+
     latest_values = []
     series_items: list[dict[str, Any]] = []
     dates_index = history.index[-max_points:]
     dates_out = [pd.Timestamp(ts).isoformat() for ts in dates_index]
     indicator_map = {
-        "RSI": lambda frame: TA.RSI(frame),
+        "RSI": lambda frame: _ta("RSI", frame),
         "MACD": lambda frame: TA.MACD(frame).get("MACD"),
         "SMA": lambda frame: TA.SMA(frame, 20),
         "EMA": lambda frame: TA.EMA(frame, 20),
-        "BBANDS": lambda frame: TA.BBANDS(frame),
+        "BBANDS": lambda frame: _ta("BBANDS", frame),
         "ATR": lambda frame: TA.ATR(frame, 14),
+        "ADX": lambda frame: _ta("ADX", frame),
+        "CCI": lambda frame: _ta("CCI", frame),
+        "MFI": lambda frame: _ta("MFI", frame),
+        "OBV": lambda frame: _ta("OBV", frame),
+        "ROC": lambda frame: _ta("ROC", frame),
+        "STOCH": lambda frame: _ta("STOCH", frame),
+        "WILLR": lambda frame: _ta("WILLIAMS", frame),
     }
 
     for indicator in indicators:
