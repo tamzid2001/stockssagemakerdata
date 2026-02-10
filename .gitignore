@@ -1,4 +1,10 @@
 .env
+.venv/
+tickers.txt
+watchlist.csv
+combined_screening_results.csv
+agent_screening_results.csv
+value_candidates.csv
 quantura_site/functions/serviceAccountKey.json
 quantura_site/functions/venv/
 quantura_site/.firebase/

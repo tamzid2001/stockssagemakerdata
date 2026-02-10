@@ -10,10 +10,29 @@ service cloud.firestore {
       return isSignedIn() && request.auth.token.email == "tamzid257@gmail.com";
     }
 
+    function isWorkspaceCollaborator(ownerId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(ownerId)/collaborators/$(request.auth.uid));
+    }
+
     match /users/{userId} {
       allow read: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
       allow create, update: if isSignedIn() && request.auth.uid == userId;
       allow delete: if isAdmin();
+    }
+
+    match /users/{userId}/collaborators/{collabId} {
+      allow read: if isAdmin() || (isSignedIn() && (request.auth.uid == userId || request.auth.uid == collabId));
+      allow write: if false;
+    }
+
+    match /users/{userId}/shared_workspaces/{workspaceId} {
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
+      allow write: if false;
+    }
+
+    match /collab_invites/{inviteId} {
+      allow read, write: if false;
     }
 
     match /orders/{orderId} {
@@ -30,13 +49,15 @@ service cloud.firestore {
 
     match /forecast_requests/{requestId} {
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.userId);
+      allow read: if isAdmin()
+        || (isSignedIn() && (request.auth.uid == resource.data.userId || isWorkspaceCollaborator(resource.data.userId)));
       allow update, delete: if isAdmin();
     }
 
     match /screener_runs/{runId} {
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.userId);
+      allow read: if isAdmin()
+        || (isSignedIn() && (request.auth.uid == resource.data.userId || isWorkspaceCollaborator(resource.data.userId)));
       allow update, delete: if isAdmin();
     }
 
@@ -48,7 +69,8 @@ service cloud.firestore {
 
     match /prediction_uploads/{uploadId} {
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.userId);
+      allow read: if isAdmin()
+        || (isSignedIn() && (request.auth.uid == resource.data.userId || isWorkspaceCollaborator(resource.data.userId)));
       allow update, delete: if isAdmin();
     }
 
