@@ -38,6 +38,7 @@
       { "source": "/purchase", "destination": "/dashboard.html" },
 
       { "source": "/indicators", "destination": "/forecasting.html" },
+      { "source": "/trending", "destination": "/forecasting.html" },
       { "source": "/news", "destination": "/forecasting.html" },
       { "source": "/options", "destination": "/forecasting.html" },
       { "source": "/saved-forecasts", "destination": "/forecasting.html" },
