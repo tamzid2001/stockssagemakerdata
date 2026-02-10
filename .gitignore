@@ -1,5 +1,6 @@
 .env
 .venv/
+node_modules/
 tickers.txt
 watchlist.csv
 combined_screening_results.csv
@@ -7,6 +8,7 @@ agent_screening_results.csv
 value_candidates.csv
 quantura_site/functions/serviceAccountKey.json
 quantura_site/functions/venv/
+quantura_site/functions_ssr/templates/
 quantura_site/.firebase/
 *.local
 .DS_Store

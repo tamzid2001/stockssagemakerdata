@@ -20,31 +20,58 @@
         ".env"
       ],
       "runtime": "python313"
+    },
+    {
+      "source": "functions_ssr",
+      "codebase": "ssr",
+      "disallowLegacyRuntimeConfig": true,
+      "predeploy": [
+        "node \"$RESOURCE_DIR/scripts/sync-templates.js\""
+      ],
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ],
+      "runtime": "nodejs20"
     }
   ],
   "hosting": {
     "public": "public",
-    "cleanUrls": true,
+    "cleanUrls": false,
     "trailingSlash": false,
     "redirects": [
       { "source": "/trading", "destination": "/dashboard", "type": 301 }
     ],
     "rewrites": [
-      { "source": "/account", "destination": "/dashboard.html" },
-      { "source": "/watchlist", "destination": "/dashboard.html" },
-      { "source": "/productivity", "destination": "/dashboard.html" },
-      { "source": "/collaboration", "destination": "/dashboard.html" },
-      { "source": "/uploads", "destination": "/dashboard.html" },
-      { "source": "/autopilot", "destination": "/dashboard.html" },
-      { "source": "/notifications", "destination": "/dashboard.html" },
-      { "source": "/purchase", "destination": "/dashboard.html" },
+      { "source": "/", "function": "ssr" },
+      { "source": "/forecasting", "function": "ssr" },
+      { "source": "/indicators", "function": "ssr" },
+      { "source": "/trending", "function": "ssr" },
+      { "source": "/news", "function": "ssr" },
+      { "source": "/options", "function": "ssr" },
+      { "source": "/saved-forecasts", "function": "ssr" },
+      { "source": "/studio", "function": "ssr" },
 
-      { "source": "/indicators", "destination": "/forecasting.html" },
-      { "source": "/trending", "destination": "/forecasting.html" },
-      { "source": "/news", "destination": "/forecasting.html" },
-      { "source": "/options", "destination": "/forecasting.html" },
-      { "source": "/saved-forecasts", "destination": "/forecasting.html" },
-      { "source": "/studio", "destination": "/forecasting.html" }
+      { "source": "/screener", "function": "ssr" },
+      { "source": "/pricing", "function": "ssr" },
+      { "source": "/contact", "function": "ssr" },
+      { "source": "/admin", "function": "ssr" },
+
+      { "source": "/blog", "function": "ssr" },
+      { "source": "/blog/posts/**", "function": "ssr" },
+
+      { "source": "/dashboard", "function": "ssr" },
+      { "source": "/account", "function": "ssr" },
+      { "source": "/watchlist", "function": "ssr" },
+      { "source": "/productivity", "function": "ssr" },
+      { "source": "/collaboration", "function": "ssr" },
+      { "source": "/uploads", "function": "ssr" },
+      { "source": "/autopilot", "function": "ssr" },
+      { "source": "/notifications", "function": "ssr" },
+      { "source": "/purchase", "function": "ssr" }
     ],
     "ignore": [
       "firebase.json",
