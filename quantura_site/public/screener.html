@@ -77,8 +77,8 @@
             <h2>Run the Quantura screener</h2>
             <p class="small">Run a screen and click any symbol to open it in the terminal.</p>
           </div>
-          <div class="content-grid">
-            <form id="screener-form" class="card">
+	          <div class="content-grid">
+	            <form id="screener-form" class="card">
               <div class="form-grid">
                 <div class="field">
                   <label class="label" for="screener-universe">Universe</label>
@@ -109,14 +109,39 @@
                 <label class="label" for="screener-notes">Notes</label>
                 <textarea id="screener-notes" name="notes" placeholder="Optional focus or exclusions"></textarea>
               </div>
-              <button class="cta" type="submit" data-analytics="screener_submit">Run screener</button>
-            </form>
-            <div class="results-panel" id="screener-result">
-              <h3>Screener output</h3>
-              <p class="small">Top-ranked tickers appear here.</p>
-              <div id="screener-output" class="panel-output"></div>
-            </div>
-          </div>
+	              <button class="cta" type="submit" data-analytics="screener_submit">Run screener</button>
+	            </form>
+              <div class="card">
+                <h3>Load saved run</h3>
+                <div class="form-grid">
+                  <div class="field">
+                    <label class="label" for="screener-load-select">Recent runs</label>
+                    <select id="screener-load-select">
+                      <option value="">Select a run</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label class="label" for="screener-load-id">Run ID</label>
+                    <input id="screener-load-id" placeholder="Paste a run ID" />
+                  </div>
+                </div>
+                <div class="hero-actions" style="margin-top: 12px;">
+                  <button class="cta secondary" id="screener-load-button" type="button" data-analytics="screener_load_saved">Load run</button>
+                </div>
+                <p class="small muted" id="screener-load-status"></p>
+                <details class="learn-more">
+                  <summary>Learn more</summary>
+                  <p class="small">
+                    Every screener run is saved so you can revisit the ranked list later. Use the run ID to share an exact output with a collaborator.
+                  </p>
+                </details>
+              </div>
+	            <div class="results-panel" id="screener-result">
+	              <h3>Screener output</h3>
+	              <p class="small">Top-ranked tickers appear here.</p>
+	              <div id="screener-output" class="panel-output"></div>
+	            </div>
+	          </div>
         </div>
       </section>
     </div>

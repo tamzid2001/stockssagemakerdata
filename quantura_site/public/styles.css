@@ -1470,6 +1470,7 @@ textarea {
   cursor: pointer;
   text-align: left;
   width: 100%;
+  min-height: 110px;
   font: inherit;
   transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
 }
@@ -1492,11 +1493,16 @@ textarea {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .trending-price {
   font-weight: 900;
   color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .trending-bottom {
@@ -1515,6 +1521,7 @@ textarea {
   border: 1px solid var(--line);
   font-size: 0.82rem;
   font-weight: 800;
+  font-variant-numeric: tabular-nums;
 }
 
 .trending-chip--up {
@@ -1751,6 +1758,10 @@ textarea {
   align-content: start;
 }
 
+.studio-panel .content-grid {
+  grid-template-columns: 1fr;
+}
+
 .studio-chart {
   position: relative;
   top: 0;
@@ -1772,6 +1783,17 @@ textarea {
 
 .ticker-hint {
   margin-top: 12px;
+}
+
+.studio-secondary {
+  display: grid;
+  gap: 16px;
+}
+
+.studio-secondary .panel-output {
+  max-height: none;
+  overflow: visible;
+  padding-right: 0;
 }
 
 .panel-header {
