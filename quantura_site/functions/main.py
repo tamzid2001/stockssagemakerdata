@@ -62,7 +62,9 @@ if not firebase_admin._apps:
         cred = credentials.Certificate(SERVICE_ACCOUNT_PATH)
         firebase_admin.initialize_app(cred, options or None)
     else:
-        firebase_admin.initialize_app(options or None)
+        # IMPORTANT: initialize_app() expects (credential, options). When running in Cloud
+        # Functions, we rely on Application Default Credentials and only pass options.
+        firebase_admin.initialize_app(options=options or None)
 
 db = firestore.client()
 
