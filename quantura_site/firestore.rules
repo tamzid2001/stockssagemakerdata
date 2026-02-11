@@ -101,6 +101,12 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
+    match /backtests/{backtestId} {
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.userId);
+      allow update, delete: if isAdmin();
+    }
+
     match /alpaca_orders/{orderId} {
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow read: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.userId);

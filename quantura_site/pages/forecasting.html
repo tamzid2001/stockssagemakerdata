@@ -72,6 +72,7 @@
 	            <a class="sidebar-link" href="/news" data-panel-target="news">News and data</a>
 	            <a class="sidebar-link" href="/options" data-panel-target="options">Options</a>
 	            <a class="sidebar-link" href="/saved-forecasts" data-panel-target="saved">Saved forecasts</a>
+              <a class="sidebar-link" href="/backtesting" data-panel-target="backtesting">Backtesting</a>
 	            <a class="sidebar-link" href="/studio" data-panel-target="learn">Learn more</a>
 	            <a class="sidebar-link" href="/screener">Screener</a>
 	            <a class="sidebar-link" href="/watchlist">Watchlist and alerts</a>
@@ -545,7 +546,7 @@
 	                    </div>
 	                  </section>
 
-	                  <section class="panel hidden" data-panel="saved">
+                  <section class="panel hidden" data-panel="saved">
 	                    <div class="panel-header">
 	                      <h2>Saved forecasts</h2>
 	                      <p class="small">Plot any saved run onto the chart without leaving this page.</p>
@@ -562,6 +563,103 @@
                         </p>
                       </div>
                     </details>
+                  </section>
+
+                  <section class="panel hidden" data-panel="backtesting">
+                    <div class="panel-header">
+                      <h2>Backtesting</h2>
+                      <p class="small">Backtest strategies on the ticker in your chart. Each run is saved so you can reload it later.</p>
+                    </div>
+
+                    <form id="backtest-form" class="card">
+                      <div class="form-grid">
+                        <div class="field">
+                          <label class="label" for="backtest-strategy">Strategy</label>
+                          <select id="backtest-strategy" name="strategy">
+                            <option value="sma_cross">Moving average crossover</option>
+                            <option value="rsi_reversion">RSI mean reversion</option>
+                          </select>
+                          <div class="small muted">Use the chart for context; the backtest runs against the same ticker/timeframe.</div>
+                        </div>
+                        <div class="field">
+                          <label class="label" for="backtest-lookback">Lookback (days)</label>
+                          <input id="backtest-lookback" name="lookback" type="number" min="30" max="5000" value="730" />
+                          <div class="small muted">Controls how much history is used for the run.</div>
+                        </div>
+                        <div class="field">
+                          <label class="label" for="backtest-cash">Starting cash (USD)</label>
+                          <input id="backtest-cash" name="cash" type="number" min="1000" max="10000000" value="10000" />
+                        </div>
+                        <div class="field">
+                          <label class="label" for="backtest-commission">Commission (decimal)</label>
+                          <input id="backtest-commission" name="commission" type="number" min="0" max="0.05" step="0.0001" value="0.0005" />
+                          <div class="small muted">Example: 0.001 = 0.1% per trade.</div>
+                        </div>
+                      </div>
+
+                      <div class="form-grid" style="margin-top: 10px;">
+                        <div class="field" data-backtest-strategy="sma_cross">
+                          <label class="label" for="backtest-fast">Fast SMA window</label>
+                          <input id="backtest-fast" name="fast" type="number" min="2" max="200" value="20" />
+                        </div>
+                        <div class="field" data-backtest-strategy="sma_cross">
+                          <label class="label" for="backtest-slow">Slow SMA window</label>
+                          <input id="backtest-slow" name="slow" type="number" min="5" max="400" value="50" />
+                        </div>
+                        <div class="field hidden" data-backtest-strategy="rsi_reversion">
+                          <label class="label" for="backtest-rsi-period">RSI period</label>
+                          <input id="backtest-rsi-period" name="rsiPeriod" type="number" min="2" max="60" value="14" />
+                        </div>
+                        <div class="field hidden" data-backtest-strategy="rsi_reversion">
+                          <label class="label" for="backtest-rsi-oversold">Oversold threshold</label>
+                          <input id="backtest-rsi-oversold" name="oversold" type="number" min="1" max="49" value="30" />
+                        </div>
+                        <div class="field hidden" data-backtest-strategy="rsi_reversion">
+                          <label class="label" for="backtest-rsi-exit">Exit above</label>
+                          <input id="backtest-rsi-exit" name="exitAbove" type="number" min="50" max="95" value="55" />
+                        </div>
+                      </div>
+
+                      <button class="cta" type="submit" data-analytics="backtest_submit">Run backtest</button>
+                      <details class="learn-more">
+                        <summary>Learn more</summary>
+                        <div class="small">
+                          <p>
+                            Backtests are a fast way to validate whether a rule has any edge on the selected ticker. Use them for exploration, not certainty.
+                            Quantura saves every run with parameters and an equity curve image, and also generates runnable Python source code.
+                          </p>
+                          <p>
+                            Usage is tiered by plan. If you hit a daily limit, visit Pricing to upgrade and unlock higher throughput.
+                          </p>
+                        </div>
+                      </details>
+                    </form>
+
+                    <div class="results-panel">
+                      <h3>Backtest output</h3>
+                      <div id="backtest-output" class="panel-output small">Run a backtest to see metrics and the equity curve.</div>
+                    </div>
+
+                    <div class="card">
+                      <h3>Saved backtests</h3>
+                      <div class="form-grid">
+                        <div class="field">
+                          <label class="label" for="backtest-load-select">Recent backtests</label>
+                          <select id="backtest-load-select">
+                            <option value="">Select a backtest</option>
+                          </select>
+                        </div>
+                        <div class="field">
+                          <label class="label" for="backtest-load-id">Backtest ID</label>
+                          <input id="backtest-load-id" placeholder="Paste a backtest ID" />
+                        </div>
+                      </div>
+                      <div class="hero-actions" style="margin-top: 12px;">
+                        <button class="cta secondary" id="backtest-load-button" type="button" data-analytics="backtest_load_saved">Load backtest</button>
+                      </div>
+                      <p class="small muted" id="backtest-load-status"></p>
+                      <div id="saved-backtests-list" class="order-list panel-output"></div>
+                    </div>
                   </section>
 
                   <section class="panel hidden" data-panel="learn">

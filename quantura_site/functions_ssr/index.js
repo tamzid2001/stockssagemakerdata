@@ -84,6 +84,7 @@ const resolveTemplate = (pathname) => {
     "/news",
     "/options",
     "/saved-forecasts",
+    "/backtesting",
     "/studio",
   ]);
   if (forecastingAliases.has(route)) return "forecasting.html";
@@ -139,6 +140,10 @@ const getServerTemplate = async () => {
       webpush_vapid_key: "",
       stripe_checkout_enabled: "true",
       stripe_public_key: "",
+      holiday_promo: "false",
+      backtesting_enabled: "true",
+      backtesting_free_daily_limit: "1",
+      backtesting_pro_daily_limit: "25",
     },
   });
   try {
