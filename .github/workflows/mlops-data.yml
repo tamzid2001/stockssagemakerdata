@@ -5,11 +5,18 @@ on:
   schedule:
     - cron: '0 6 * * *' # run daily at 06:00 UTC
 
+permissions:
+  contents: read
+
 jobs:
   fetch:
     runs-on: ubuntu-latest
+    env:
+      HAS_AWS_CREDS: ${{ secrets.AWS_ACCESS_KEY_ID != '' && secrets.AWS_SECRET_ACCESS_KEY != '' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -45,7 +52,7 @@ jobs:
           path: output
       
       - name: Fetch and upload to S3
-        if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+        if: (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') && env.HAS_AWS_CREDS == 'true'
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -60,7 +67,7 @@ jobs:
             -r us-east-2
       
       - name: Generate price predictions
-        if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+        if: (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') && env.HAS_AWS_CREDS == 'true'
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -78,6 +85,13 @@ jobs:
             -b stockscompute \
             -p "predictions/$(date +%Y-%m-%d)/" \
             -r us-east-2
+
+      - name: AWS step status
+        if: env.HAS_AWS_CREDS != 'true'
+        run: |
+          echo "AWS credentials are not configured. S3 upload and prediction upload steps were skipped."
+          echo "### AWS steps skipped" >> $GITHUB_STEP_SUMMARY
+          echo "- Configure repository secrets AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY to enable S3 uploads." >> $GITHUB_STEP_SUMMARY
 
   # Additional job: Data validation
   validate:
@@ -129,4 +143,3 @@ jobs:
           echo "- **Method**: Local CSV file upload" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Status**: ✓ Complete" >> $GITHUB_STEP_SUMMARY
-

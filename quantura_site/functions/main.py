@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import math
 import os
+import re
 import time
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
+from io import StringIO
 from statistics import NormalDist
 from typing import Any
 
@@ -12,7 +15,7 @@ import requests
 
 import firebase_admin
 from firebase_admin import credentials, firestore, messaging as admin_messaging, storage as admin_storage
-from firebase_functions import https_fn
+from firebase_functions import https_fn, scheduler_fn
 from firebase_functions.options import set_global_options
 
 try:
@@ -56,6 +59,39 @@ RISK_FREE_RATE = float(os.environ.get("RISK_FREE_RATE", "0.045") or 0.045)
 TRENDING_URL = "https://query1.finance.yahoo.com/v1/finance/trending/US"
 YAHOO_SEARCH_URL = "https://query2.finance.yahoo.com/v1/finance/search"
 DEFAULT_FORECAST_PRICE = 349
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "").strip()
+SOCIAL_CONTENT_MODEL = (os.environ.get("SOCIAL_CONTENT_MODEL") or "gpt-4o-mini").strip()
+SOCIAL_AUTOMATION_ENABLED = str(os.environ.get("SOCIAL_AUTOMATION_ENABLED") or "true").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+SOCIAL_AUTOMATION_TIMEZONE = str(os.environ.get("SOCIAL_AUTOMATION_TIMEZONE") or "America/New_York").strip()
+SOCIAL_DISPATCH_BATCH_SIZE = max(1, min(int(os.environ.get("SOCIAL_DISPATCH_BATCH_SIZE", "30") or 30), 100))
+SOCIAL_DEFAULT_CTA_URL = str(os.environ.get("SOCIAL_DEFAULT_CTA_URL") or PUBLIC_ORIGIN).strip()
+SOCIAL_POPULAR_CHANNELS = [
+    "x",
+    "linkedin",
+    "facebook",
+    "instagram",
+    "threads",
+    "reddit",
+    "tiktok",
+    "youtube",
+    "pinterest",
+]
+SOCIAL_CHANNEL_WEBHOOK_ENV = {
+    "x": "SOCIAL_WEBHOOK_X",
+    "linkedin": "SOCIAL_WEBHOOK_LINKEDIN",
+    "facebook": "SOCIAL_WEBHOOK_FACEBOOK",
+    "instagram": "SOCIAL_WEBHOOK_INSTAGRAM",
+    "threads": "SOCIAL_WEBHOOK_THREADS",
+    "reddit": "SOCIAL_WEBHOOK_REDDIT",
+    "tiktok": "SOCIAL_WEBHOOK_TIKTOK",
+    "youtube": "SOCIAL_WEBHOOK_YOUTUBE",
+    "pinterest": "SOCIAL_WEBHOOK_PINTEREST",
+}
 
 if not firebase_admin._apps:
     options: dict[str, Any] = {}
@@ -199,6 +235,441 @@ def _yahoo_headers() -> dict[str, str]:
         "Accept": "application/json,text/plain,*/*",
         "Accept-Language": "en-US,en;q=0.9",
         "Connection": "keep-alive",
+    }
+
+
+def _force_remove_second_line(csv_text: str) -> str:
+    lines = csv_text.splitlines(True)
+    if len(lines) > 1:
+        del lines[1]
+    return "".join(lines)
+
+
+def _social_channel_webhooks() -> dict[str, str]:
+    out: dict[str, str] = {}
+    for channel, env_key in SOCIAL_CHANNEL_WEBHOOK_ENV.items():
+        out[channel] = str(os.environ.get(env_key) or "").strip()
+    return out
+
+
+def _normalize_social_channels(raw: Any) -> list[str]:
+    if raw is None:
+        return list(SOCIAL_POPULAR_CHANNELS)
+    if isinstance(raw, str):
+        parts = [part.strip().lower() for part in raw.split(",")]
+    elif isinstance(raw, list):
+        parts = [str(part).strip().lower() for part in raw]
+    else:
+        parts = []
+    channels = [channel for channel in parts if channel in SOCIAL_POPULAR_CHANNELS]
+    if not channels:
+        return list(SOCIAL_POPULAR_CHANNELS)
+    return list(dict.fromkeys(channels))
+
+
+def _as_utc_datetime(raw: Any) -> datetime | None:
+    if raw is None:
+        return None
+    if isinstance(raw, datetime):
+        return raw.astimezone(timezone.utc) if raw.tzinfo else raw.replace(tzinfo=timezone.utc)
+    if hasattr(raw, "to_datetime"):
+        try:
+            dt = raw.to_datetime()  # Firestore Timestamp
+            if isinstance(dt, datetime):
+                return dt.astimezone(timezone.utc) if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+        except Exception:
+            return None
+    try:
+        text = str(raw).strip()
+        if not text:
+            return None
+        normalized = text.replace("Z", "+00:00")
+        dt = datetime.fromisoformat(normalized)
+        return dt.astimezone(timezone.utc) if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    except Exception:
+        return None
+
+
+def _extract_json_object(raw_text: str) -> dict[str, Any]:
+    text = str(raw_text or "").strip()
+    if not text:
+        return {}
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, dict):
+            return parsed
+    except Exception:
+        pass
+
+    fenced = re.search(r"```(?:json)?\\s*(\\{.*\\})\\s*```", text, flags=re.DOTALL)
+    if fenced:
+        try:
+            parsed = json.loads(fenced.group(1))
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            pass
+
+    start = text.find("{")
+    end = text.rfind("}")
+    if start >= 0 and end > start:
+        try:
+            parsed = json.loads(text[start : end + 1])
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            return {}
+    return {}
+
+
+def _default_social_copy(
+    topic: str,
+    objective: str,
+    audience: str,
+    tone: str,
+    channels: list[str],
+    posts_per_channel: int,
+    cta_url: str,
+) -> dict[str, list[dict[str, Any]]]:
+    base_objective = objective.strip() or "Drive qualified leads to Quantura"
+    base_audience = audience.strip() or "active investors and data-driven operators"
+    base_tone = tone.strip() or "confident, concise, practical"
+    today = datetime.now(timezone.utc).date().isoformat()
+    out: dict[str, list[dict[str, Any]]] = {}
+
+    for channel in channels:
+        channel_posts: list[dict[str, Any]] = []
+        for idx in range(posts_per_channel):
+            headline = f"{topic} insight #{idx + 1}"
+            body = (
+                f"{topic}: clear signal, clear execution. "
+                f"We built this for {base_audience}. "
+                f"Objective: {base_objective}. "
+                f"Tone: {base_tone}."
+            )
+            channel_posts.append(
+                {
+                    "headline": headline,
+                    "body": body,
+                    "hashtags": ["#Quantura", "#Stocks", "#DataScience", f"#{channel.capitalize()}"],
+                    "cta": "Explore the platform",
+                    "ctaUrl": cta_url,
+                    "suggestedPostTime": f"{today}T14:{10 + idx:02d}:00Z",
+                }
+            )
+        out[channel] = channel_posts
+    return out
+
+
+def _generate_social_copy_with_openai(
+    *,
+    topic: str,
+    objective: str,
+    audience: str,
+    tone: str,
+    channels: list[str],
+    posts_per_channel: int,
+    cta_url: str,
+) -> tuple[dict[str, list[dict[str, Any]]], str]:
+    if not OPENAI_API_KEY:
+        drafts = _default_social_copy(topic, objective, audience, tone, channels, posts_per_channel, cta_url)
+        return drafts, "template_fallback"
+
+    system_prompt = (
+        "You are a social media strategist for a financial analytics company. "
+        "Write concise, compliant, high-conversion posts. "
+        "Avoid guaranteed-return language. Keep content useful and brand-safe. "
+        "Return strict JSON only."
+    )
+    user_prompt = (
+        "Generate social drafts with this exact JSON shape: "
+        '{"channels":{"x":[{"headline":"","body":"","hashtags":[],"cta":"","ctaUrl":"","suggestedPostTime":""}]}}. '
+        f"Topic: {topic}. Objective: {objective}. Audience: {audience}. Tone: {tone}. "
+        f"Channels: {', '.join(channels)}. Posts per channel: {posts_per_channel}. "
+        f"Use CTA URL: {cta_url}. Keep each body optimized for the channel and under typical limits."
+    )
+
+    payload = {
+        "model": SOCIAL_CONTENT_MODEL,
+        "temperature": 0.7,
+        "max_tokens": 1200,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "response_format": {"type": "json_object"},
+    }
+
+    try:
+        response = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {OPENAI_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=35,
+        )
+        response.raise_for_status()
+        body = response.json()
+        content = (
+            body.get("choices", [{}])[0]
+            .get("message", {})
+            .get("content", "{}")
+        )
+        parsed = _extract_json_object(content)
+        channels_obj = parsed.get("channels") if isinstance(parsed, dict) else None
+        if not isinstance(channels_obj, dict):
+            raise ValueError("Model response missing channels object.")
+
+        normalized: dict[str, list[dict[str, Any]]] = {}
+        for channel in channels:
+            rows = channels_obj.get(channel) if isinstance(channels_obj, dict) else None
+            if not isinstance(rows, list):
+                rows = []
+            mapped: list[dict[str, Any]] = []
+            for row in rows[:posts_per_channel]:
+                if not isinstance(row, dict):
+                    continue
+                hashtags_raw = row.get("hashtags")
+                if isinstance(hashtags_raw, list):
+                    hashtags = [str(tag).strip() for tag in hashtags_raw if str(tag).strip()]
+                elif isinstance(hashtags_raw, str):
+                    hashtags = [tag.strip() for tag in hashtags_raw.split(",") if tag.strip()]
+                else:
+                    hashtags = []
+                mapped.append(
+                    {
+                        "headline": str(row.get("headline") or "").strip(),
+                        "body": str(row.get("body") or "").strip(),
+                        "hashtags": hashtags,
+                        "cta": str(row.get("cta") or "Learn more").strip(),
+                        "ctaUrl": str(row.get("ctaUrl") or cta_url).strip() or cta_url,
+                        "suggestedPostTime": str(row.get("suggestedPostTime") or "").strip(),
+                    }
+                )
+            if mapped:
+                normalized[channel] = mapped
+
+        if not normalized:
+            raise ValueError("No valid posts returned from model.")
+
+        for channel in channels:
+            if channel not in normalized:
+                normalized[channel] = _default_social_copy(
+                    topic,
+                    objective,
+                    audience,
+                    tone,
+                    [channel],
+                    posts_per_channel,
+                    cta_url,
+                ).get(channel, [])
+        return normalized, SOCIAL_CONTENT_MODEL
+    except Exception:
+        drafts = _default_social_copy(topic, objective, audience, tone, channels, posts_per_channel, cta_url)
+        return drafts, "template_fallback"
+
+
+def _enqueue_social_posts(
+    *,
+    campaign_id: str,
+    user_id: str,
+    user_email: str,
+    channels: list[str],
+    drafts: dict[str, list[dict[str, Any]]],
+    scheduled_for: datetime,
+    meta: dict[str, Any],
+) -> dict[str, Any]:
+    created_ids: list[str] = []
+    total = 0
+    scheduled_utc = scheduled_for.astimezone(timezone.utc)
+    for channel in channels:
+        posts = drafts.get(channel) if isinstance(drafts, dict) else None
+        if not isinstance(posts, list):
+            continue
+        for rank, post in enumerate(posts):
+            if not isinstance(post, dict):
+                continue
+            body = str(post.get("body") or "").strip()
+            headline = str(post.get("headline") or "").strip()
+            if not body and not headline:
+                continue
+            doc = {
+                "campaignId": campaign_id,
+                "userId": user_id,
+                "userEmail": user_email,
+                "platform": channel,
+                "headline": headline,
+                "body": body,
+                "hashtags": post.get("hashtags") if isinstance(post.get("hashtags"), list) else [],
+                "cta": str(post.get("cta") or "").strip(),
+                "ctaUrl": str(post.get("ctaUrl") or SOCIAL_DEFAULT_CTA_URL).strip(),
+                "scheduledFor": scheduled_utc,
+                "status": "queued",
+                "attempts": 0,
+                "orderIndex": rank,
+                "createdAt": firestore.SERVER_TIMESTAMP,
+                "updatedAt": firestore.SERVER_TIMESTAMP,
+                "meta": meta or {},
+            }
+            ref = db.collection("social_queue").document()
+            ref.set(doc)
+            created_ids.append(ref.id)
+            total += 1
+    return {"count": total, "queueIds": created_ids}
+
+
+def _post_to_social_channel(
+    *,
+    platform: str,
+    body: str,
+    headline: str,
+    hashtags: list[str],
+    cta: str,
+    cta_url: str,
+    campaign_id: str,
+    queue_id: str,
+) -> dict[str, Any]:
+    webhooks = _social_channel_webhooks()
+    webhook = str(webhooks.get(platform) or "").strip()
+    if not webhook:
+        return {"ok": False, "pendingCredentials": True, "error": f"Missing webhook for channel '{platform}'."}
+
+    tags = [str(tag).strip() for tag in hashtags if str(tag).strip()]
+    rendered_text = body.strip()
+    if headline.strip():
+        rendered_text = f"{headline.strip()}\n\n{rendered_text}".strip()
+    if tags:
+        rendered_text = f"{rendered_text}\n\n{' '.join(tags)}".strip()
+    if cta.strip() and cta_url.strip():
+        rendered_text = f"{rendered_text}\n\n{cta.strip()}: {cta_url.strip()}".strip()
+
+    payload = {
+        "platform": platform,
+        "text": rendered_text,
+        "headline": headline.strip(),
+        "body": body.strip(),
+        "hashtags": tags,
+        "cta": cta.strip(),
+        "ctaUrl": cta_url.strip(),
+        "campaignId": campaign_id,
+        "queueId": queue_id,
+    }
+    response = requests.post(webhook, json=payload, timeout=20)
+    if response.status_code >= 400:
+        return {"ok": False, "pendingCredentials": False, "error": f"{response.status_code} {response.text}"}
+    external_id = ""
+    try:
+        response_body = response.json()
+        external_id = str(response_body.get("id") or response_body.get("postId") or "").strip()
+    except Exception:
+        external_id = ""
+    return {"ok": True, "externalId": external_id, "statusCode": response.status_code}
+
+
+def _dispatch_due_social_posts(*, max_posts: int, trigger: str, actor_uid: str = "") -> dict[str, Any]:
+    now_utc = datetime.now(timezone.utc)
+    snapshot = (
+        db.collection("social_queue")
+        .where("status", "in", ["queued", "retry"])
+        .limit(max(1, min(max_posts * 4, 200)))
+        .stream()
+    )
+
+    due_docs: list[tuple[str, dict[str, Any]]] = []
+    for doc in snapshot:
+        data = doc.to_dict() or {}
+        scheduled_for = _as_utc_datetime(data.get("scheduledFor"))
+        if scheduled_for is None or scheduled_for <= now_utc:
+            due_docs.append((doc.id, data))
+        if len(due_docs) >= max_posts:
+            break
+
+    posted = 0
+    waiting_credentials = 0
+    failed = 0
+    retried = 0
+    processed_ids: list[str] = []
+
+    for queue_id, item in due_docs:
+        platform = str(item.get("platform") or "").strip().lower()
+        attempts = int(item.get("attempts") or 0)
+        result = _post_to_social_channel(
+            platform=platform,
+            body=str(item.get("body") or ""),
+            headline=str(item.get("headline") or ""),
+            hashtags=item.get("hashtags") if isinstance(item.get("hashtags"), list) else [],
+            cta=str(item.get("cta") or ""),
+            cta_url=str(item.get("ctaUrl") or SOCIAL_DEFAULT_CTA_URL),
+            campaign_id=str(item.get("campaignId") or ""),
+            queue_id=queue_id,
+        )
+
+        ref = db.collection("social_queue").document(queue_id)
+        if result.get("ok"):
+            ref.set(
+                {
+                    "status": "posted",
+                    "attempts": attempts + 1,
+                    "postedAt": firestore.SERVER_TIMESTAMP,
+                    "updatedAt": firestore.SERVER_TIMESTAMP,
+                    "externalId": result.get("externalId") or "",
+                    "lastError": "",
+                },
+                merge=True,
+            )
+            posted += 1
+        elif result.get("pendingCredentials"):
+            ref.set(
+                {
+                    "status": "waiting_credentials",
+                    "attempts": attempts + 1,
+                    "updatedAt": firestore.SERVER_TIMESTAMP,
+                    "lastError": str(result.get("error") or "Missing credentials"),
+                },
+                merge=True,
+            )
+            waiting_credentials += 1
+        else:
+            next_attempts = attempts + 1
+            exhausted = next_attempts >= 3
+            ref.set(
+                {
+                    "status": "failed" if exhausted else "retry",
+                    "attempts": next_attempts,
+                    "updatedAt": firestore.SERVER_TIMESTAMP,
+                    "lastError": str(result.get("error") or "Publish failed"),
+                },
+                merge=True,
+            )
+            if exhausted:
+                failed += 1
+            else:
+                retried += 1
+        processed_ids.append(queue_id)
+
+    db.collection("social_dispatch_logs").add(
+        {
+            "trigger": trigger,
+            "actorUid": actor_uid,
+            "scheduledAt": firestore.SERVER_TIMESTAMP,
+            "processedCount": len(processed_ids),
+            "postedCount": posted,
+            "waitingCredentialsCount": waiting_credentials,
+            "retryCount": retried,
+            "failedCount": failed,
+            "queueIds": processed_ids,
+        }
+    )
+
+    return {
+        "processed": len(processed_ids),
+        "posted": posted,
+        "waitingCredentials": waiting_credentials,
+        "retry": retried,
+        "failed": failed,
+        "trigger": trigger,
     }
 
 
@@ -1905,6 +2376,37 @@ def delete_screener_run(req: https_fn.CallableRequest) -> dict[str, Any]:
 
 
 @https_fn.on_call()
+def rename_screener_run(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    data = req.data or {}
+    run_id = str(data.get("runId") or data.get("id") or "").strip()
+    title = str(data.get("title") or "").strip()
+    if not run_id:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Run ID is required.")
+    if not title:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Title is required.")
+    if len(title) > 180:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Title is too long.")
+
+    ref = db.collection("screener_runs").document(run_id)
+    snap = ref.get()
+    if not snap.exists:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "Screener run not found.")
+
+    doc = snap.to_dict() or {}
+    workspace_id = str(doc.get("userId") or "").strip()
+    if not workspace_id:
+        if token.get("email") != ADMIN_EMAIL:
+            raise https_fn.HttpsError(https_fn.FunctionsErrorCode.PERMISSION_DENIED, "Access denied.")
+    else:
+        _require_workspace_editor(workspace_id, req.auth.uid, token)
+
+    ref.set({"title": title, "updatedAt": firestore.SERVER_TIMESTAMP}, merge=True)
+    _audit_event(req.auth.uid, token.get("email"), "screener_renamed", {"runId": run_id, "workspaceId": workspace_id})
+    return {"updated": True, "runId": run_id, "title": title}
+
+
+@https_fn.on_call()
 def rename_prediction_upload(req: https_fn.CallableRequest) -> dict[str, Any]:
     token = _require_auth(req)
     data = req.data or {}
@@ -2620,6 +3122,7 @@ def import_shared_item(req: https_fn.CallableRequest) -> dict[str, Any]:
             {
                 "title": title,
                 "notes": notes,
+                "ticker": str(source.get("ticker") or "").upper(),
                 "status": "uploaded",
                 "filePath": new_path or file_path,
                 "fileUrl": "",
@@ -2660,7 +3163,7 @@ def get_ticker_history(req: https_fn.CallableRequest) -> dict[str, Any]:
     history = yf.download(ticker, start=start, end=end, interval=interval, progress=False)
     if isinstance(history.columns, pd.MultiIndex):
         history.columns = history.columns.get_level_values(0)
-    history = history.dropna().tail(500).reset_index()
+    history = history.dropna().reset_index()
 
     date_col = "Datetime" if "Datetime" in history.columns else "Date"
     if date_col in history.columns:
@@ -2668,6 +3171,83 @@ def get_ticker_history(req: https_fn.CallableRequest) -> dict[str, Any]:
 
     rows = history.to_dict(orient="records")
     return {"rows": _serialize_for_firestore(rows)}
+
+
+@https_fn.on_call()
+def download_price_csv(req: https_fn.CallableRequest) -> dict[str, Any]:
+    import pandas as pd  # type: ignore
+    import yfinance as yf  # type: ignore
+
+    _require_auth(req)
+    data = req.data or {}
+    ticker = str(data.get("ticker") or "").upper().strip()
+    interval = str(data.get("interval") or "1d").strip().lower()
+    if not ticker:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Ticker is required.")
+    if interval not in {"1d", "1h"}:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Interval must be 1d or 1h.")
+
+    end_raw = str(data.get("end") or "").strip()
+    start_raw = str(data.get("start") or "").strip()
+
+    def _parse_iso_date(raw: str, fallback: date) -> date:
+        raw = (raw or "").strip()
+        if not raw:
+            return fallback
+        try:
+            return datetime.fromisoformat(raw[:10]).date()
+        except Exception:
+            return fallback
+
+    end_date = _parse_iso_date(end_raw, date.today())
+    if interval == "1h":
+        min_start = end_date - timedelta(days=729)
+        start_date = _parse_iso_date(start_raw, min_start)
+        if start_date < min_start:
+            start_date = min_start
+    else:
+        start_date = _parse_iso_date(start_raw, date(1900, 1, 1))
+
+    # yfinance treats end as exclusive; bump one day so user-selected end is included.
+    end_exclusive = end_date + timedelta(days=1)
+
+    history = yf.download(
+        ticker,
+        start=start_date.isoformat(),
+        end=end_exclusive.isoformat(),
+        interval=interval,
+        progress=False,
+    )
+    if isinstance(history.columns, pd.MultiIndex):
+        history.columns = history.columns.get_level_values(0)
+    history = history.dropna()
+    if history.empty or "Close" not in history.columns:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "No data returned for the requested range.")
+
+    out_df = history[["Close"]].rename(columns={"Close": "Price"}).copy()
+    out_df.reset_index(inplace=True)
+    date_col = "Datetime" if "Datetime" in out_df.columns else "Date"
+    if date_col != "Date" and date_col in out_df.columns:
+        out_df.rename(columns={date_col: "Date"}, inplace=True)
+    if "Date" in out_df.columns:
+        out_df["Date"] = out_df["Date"].astype(str)
+    out_df.insert(0, "Item_Id", ticker.lower())
+
+    buffer = StringIO()
+    out_df.to_csv(buffer, index=False)
+    buffer.seek(0)
+    csv_text = _force_remove_second_line(buffer.getvalue())
+
+    filename = f"{ticker}_{start_date.isoformat()}_{end_date.isoformat()}_{interval}.csv"
+    return {
+        "ticker": ticker,
+        "interval": interval,
+        "start": start_date.isoformat(),
+        "end": end_date.isoformat(),
+        "rowCount": int(len(out_df)),
+        "filename": filename,
+        "csv": csv_text,
+    }
 
 
 @https_fn.on_call()
@@ -3384,6 +3964,9 @@ def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
 
     results.sort(key=lambda item: float(item.get("score") or 0.0), reverse=True)
     results = results[:max_names]
+    run_title = str(data.get("title") or "").strip()
+    if not run_title:
+        run_title = f"{str(data.get('universe') or 'Trending').title()} screener"
 
     doc_ref = db.collection("screener_runs").document()
     run_doc = {
@@ -3395,6 +3978,7 @@ def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
         "universe": str(data.get("universe") or "trending"),
         "maxNames": max_names,
         "status": "completed",
+        "title": run_title,
         "results": _serialize_for_firestore(results),
         "notes": str(data.get("notes") or ""),
         "createdAt": firestore.SERVER_TIMESTAMP,
@@ -3404,7 +3988,7 @@ def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
     doc_ref.set(run_doc)
     _audit_event(req.auth.uid, token.get("email"), "screener_completed", {"runId": doc_ref.id, "count": len(results)})
 
-    return {"runId": doc_ref.id, "status": "completed", "results": results, "workspaceId": workspace_id}
+    return {"runId": doc_ref.id, "status": "completed", "title": run_title, "results": results, "workspaceId": workspace_id}
 
 
 @https_fn.on_call()
@@ -3489,6 +4073,204 @@ def submit_feedback(req: https_fn.CallableRequest) -> dict[str, Any]:
         _audit_event(user_id, user_email, "feedback_submitted", {"feedbackId": doc_ref.id})
 
     return {"feedbackId": doc_ref.id}
+
+
+@https_fn.on_call()
+def generate_social_campaign_drafts(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    data = req.data or {}
+
+    topic = str(data.get("topic") or "").strip() or "Weekly market positioning update"
+    objective = str(data.get("objective") or "").strip() or "Drive qualified leads to Quantura"
+    audience = str(data.get("audience") or "").strip() or "active investors and growth-focused teams"
+    tone = str(data.get("tone") or "").strip() or "confident, concise, practical"
+    channels = _normalize_social_channels(data.get("channels"))
+    posts_per_channel = max(1, min(int(data.get("postsPerChannel") or 2), 5))
+    cta_url = str(data.get("ctaUrl") or SOCIAL_DEFAULT_CTA_URL).strip() or SOCIAL_DEFAULT_CTA_URL
+    title = str(data.get("title") or f"{topic} campaign").strip()
+    save_draft = bool(data.get("saveDraft", True))
+
+    drafts, model_used = _generate_social_copy_with_openai(
+        topic=topic,
+        objective=objective,
+        audience=audience,
+        tone=tone,
+        channels=channels,
+        posts_per_channel=posts_per_channel,
+        cta_url=cta_url,
+    )
+
+    campaign_id = ""
+    if save_draft:
+        campaign_ref = db.collection("social_campaigns").document()
+        campaign_ref.set(
+            {
+                "userId": req.auth.uid,
+                "userEmail": token.get("email"),
+                "title": title,
+                "topic": topic,
+                "objective": objective,
+                "audience": audience,
+                "tone": tone,
+                "channels": channels,
+                "postsPerChannel": posts_per_channel,
+                "ctaUrl": cta_url,
+                "drafts": _serialize_for_firestore(drafts),
+                "model": model_used,
+                "status": "draft",
+                "createdAt": firestore.SERVER_TIMESTAMP,
+                "updatedAt": firestore.SERVER_TIMESTAMP,
+                "meta": data.get("meta") or {},
+            }
+        )
+        campaign_id = campaign_ref.id
+
+    _audit_event(
+        req.auth.uid,
+        token.get("email"),
+        "social_drafts_generated",
+        {"campaignId": campaign_id, "channels": channels, "postsPerChannel": posts_per_channel, "model": model_used},
+    )
+
+    return {
+        "campaignId": campaign_id,
+        "title": title,
+        "topic": topic,
+        "channels": channels,
+        "postsPerChannel": posts_per_channel,
+        "model": model_used,
+        "drafts": drafts,
+    }
+
+
+@https_fn.on_call()
+def queue_social_campaign_posts(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    data = req.data or {}
+    campaign_id = str(data.get("campaignId") or "").strip()
+    if not campaign_id:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "campaignId is required.")
+
+    campaign_ref = db.collection("social_campaigns").document(campaign_id)
+    campaign_snap = campaign_ref.get()
+    if not campaign_snap.exists:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "Campaign not found.")
+
+    campaign = campaign_snap.to_dict() or {}
+    owner_id = str(campaign.get("userId") or "").strip()
+    if token.get("email") != ADMIN_EMAIL and owner_id != req.auth.uid:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.PERMISSION_DENIED, "Access denied.")
+
+    drafts = campaign.get("drafts") if isinstance(campaign.get("drafts"), dict) else {}
+    if not drafts:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.FAILED_PRECONDITION, "Campaign has no drafts to queue.")
+
+    requested_channels = _normalize_social_channels(data.get("channels"))
+    channels = [channel for channel in requested_channels if channel in drafts] or list(drafts.keys())
+    if not channels:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.FAILED_PRECONDITION, "No channels available to queue.")
+
+    scheduled_for = _as_utc_datetime(data.get("scheduledFor")) or datetime.now(timezone.utc)
+    if scheduled_for < datetime.now(timezone.utc) - timedelta(minutes=2):
+        scheduled_for = datetime.now(timezone.utc)
+
+    enqueue = _enqueue_social_posts(
+        campaign_id=campaign_id,
+        user_id=owner_id or req.auth.uid,
+        user_email=str(campaign.get("userEmail") or token.get("email") or ""),
+        channels=channels,
+        drafts=drafts,
+        scheduled_for=scheduled_for,
+        meta=data.get("meta") if isinstance(data.get("meta"), dict) else {},
+    )
+
+    campaign_ref.set(
+        {
+            "status": "queued",
+            "queuedAt": firestore.SERVER_TIMESTAMP,
+            "queuedCount": enqueue["count"],
+            "queuedChannels": channels,
+            "scheduledFor": scheduled_for,
+            "updatedAt": firestore.SERVER_TIMESTAMP,
+        },
+        merge=True,
+    )
+
+    _audit_event(
+        req.auth.uid,
+        token.get("email"),
+        "social_posts_queued",
+        {"campaignId": campaign_id, "queuedCount": enqueue["count"], "channels": channels},
+    )
+    return {
+        "campaignId": campaign_id,
+        "queuedCount": enqueue["count"],
+        "queueIds": enqueue["queueIds"],
+        "scheduledFor": scheduled_for.isoformat(),
+        "channels": channels,
+    }
+
+
+@https_fn.on_call()
+def list_social_campaigns(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    limit = max(1, min(int((req.data or {}).get("limit") or 40), 100))
+    query = db.collection("social_campaigns")
+    if token.get("email") != ADMIN_EMAIL:
+        query = query.where("userId", "==", req.auth.uid)
+
+    docs = query.order_by("createdAt", direction=firestore.Query.DESCENDING).limit(limit).stream()
+    items = []
+    for doc in docs:
+        row = doc.to_dict() or {}
+        row["id"] = doc.id
+        items.append(row)
+    return {"campaigns": _serialize_for_firestore(items)}
+
+
+@https_fn.on_call()
+def list_social_queue(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    data = req.data or {}
+    limit = max(1, min(int(data.get("limit") or 80), 200))
+    status_filter = str(data.get("status") or "").strip().lower()
+    query = db.collection("social_queue")
+    if token.get("email") != ADMIN_EMAIL:
+        query = query.where("userId", "==", req.auth.uid)
+    if status_filter:
+        query = query.where("status", "==", status_filter)
+
+    docs = query.order_by("createdAt", direction=firestore.Query.DESCENDING).limit(limit).stream()
+    items = []
+    for doc in docs:
+        row = doc.to_dict() or {}
+        row["id"] = doc.id
+        items.append(row)
+    return {"queue": _serialize_for_firestore(items)}
+
+
+@https_fn.on_call()
+def publish_social_queue_now(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    _require_admin(token)
+    if not SOCIAL_AUTOMATION_ENABLED:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.FAILED_PRECONDITION, "Social automation is disabled.")
+    data = req.data or {}
+    max_posts = max(1, min(int(data.get("maxPosts") or SOCIAL_DISPATCH_BATCH_SIZE), 100))
+    summary = _dispatch_due_social_posts(max_posts=max_posts, trigger="manual", actor_uid=req.auth.uid)
+    _audit_event(req.auth.uid, token.get("email"), "social_dispatch_manual", summary)
+    return summary
+
+
+@scheduler_fn.on_schedule(
+    schedule="0 * * * *",
+    timezone=scheduler_fn.Timezone(SOCIAL_AUTOMATION_TIMEZONE),
+)
+def social_dispatch_scheduler(event: scheduler_fn.ScheduledEvent) -> None:
+    del event
+    if not SOCIAL_AUTOMATION_ENABLED:
+        return
+    _dispatch_due_social_posts(max_posts=SOCIAL_DISPATCH_BATCH_SIZE, trigger="scheduler")
 
 
 @https_fn.on_call()

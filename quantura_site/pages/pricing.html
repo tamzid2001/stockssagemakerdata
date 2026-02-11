@@ -33,23 +33,17 @@
   <body>
     <header class="header">
       <div class="container nav">
-        <a class="logo" href="/" aria-label="Quantura home">
-          <img class="logo-img" src="/assets/quantura-logo.svg" alt="Quantura logo" />
-        </a>
+        <a class="logo" href="/" aria-label="Quantura home"><span>QUANTURA</span></a>
         <nav class="nav-links">
-          <a href="/forecasting" data-analytics="nav_forecasting"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Forecasting</span></a>
+          <a href="/forecasting" data-analytics="nav_forecasting"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Terminal</span></a>
           <a href="/screener" data-analytics="nav_screener"><i class="iconoir-search" aria-hidden="true"></i><span>Screener</span></a>
-          <a href="/dashboard" data-analytics="nav_dashboard"><i class="iconoir-dashboard" aria-hidden="true"></i><span>Dashboard</span></a>
           <a href="/pricing" data-analytics="nav_pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>Pricing</span></a>
-          <a href="/blog" data-analytics="nav_blog"><i class="iconoir-journal" aria-hidden="true"></i><span>Blog</span></a>
           <a href="/contact" data-analytics="nav_contact"><i class="iconoir-mail" aria-hidden="true"></i><span>Contact</span></a>
         </nav>
         <div class="nav-actions">
           <span id="header-user-email" class="small" style="max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Guest</span>
           <span id="header-user-status" class="pill">Guest</span>
           <button class="cta secondary" id="header-auth" type="button" data-analytics="nav_signin"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></button>
-          <button class="cta secondary hidden" id="header-signout" type="button"><i class="iconoir-log-out" aria-hidden="true"></i><span>Sign out</span></button>
-          <a class="cta secondary hidden" id="header-dashboard" href="/dashboard"><i class="iconoir-dashboard" aria-hidden="true"></i><span>Dashboard</span></a>
           <a class="cta" href="/forecasting" data-analytics="nav_cta"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Open terminal</span></a>
         </div>
       </div>
@@ -66,17 +60,17 @@
               Choose a plan based on how much compute and automation you want to run each week.
             </p>
             <div class="hero-actions">
-              <a class="cta" href="/account" data-analytics="pricing_signin"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></a>
+              <a class="cta" id="pricing-auth-cta" href="/account" data-analytics="pricing_signin"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></a>
               <a class="cta secondary" href="/forecasting" data-analytics="pricing_terminal"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Try the terminal</span></a>
             </div>
           </div>
           <div class="card">
             <h3>What’s included in every plan</h3>
             <div class="feature-list">
-              <div class="feature"><span></span>Secure sign-in and session persistence</div>
-              <div class="feature"><span></span>Saved forecasts and chart overlays</div>
-              <div class="feature"><span></span>Research workspace collaboration</div>
-              <div class="feature"><span></span>Push notifications for key events</div>
+              <div class="feature"><span></span><i class="iconoir-shield-check" aria-hidden="true"></i>Secure sign-in with persistent sessions</div>
+              <div class="feature"><span></span><i class="iconoir-bookmark" aria-hidden="true"></i>Saved forecasts, screeners, and uploads</div>
+              <div class="feature"><span></span><i class="iconoir-group" aria-hidden="true"></i>Workspace collaboration and invite controls</div>
+              <div class="feature"><span></span><i class="iconoir-bell-notification" aria-hidden="true"></i>Push alerts and operational notifications</div>
             </div>
           </div>
         </div>
@@ -86,7 +80,7 @@
         <div class="container">
           <div class="section-title">
             <h2>Choose your plan</h2>
-            <p class="small">Payment links can be wired per plan. For now, Pro and Desk collect an order intent.</p>
+            <p class="small">Monthly subscriptions include forecasting compute, screener storage, automation quotas, and collaboration controls.</p>
           </div>
 
           <div class="grid-3">
@@ -96,12 +90,12 @@
               <div class="price">$0</div>
               <p class="small">For trying the terminal, saving forecasts, and exploring the screener.</p>
               <div class="feature-list" style="margin-top: 16px;">
-                <div class="feature"><span></span>Forecasting terminal + saved runs</div>
-                <div class="feature"><span></span>Indicator overlays and news</div>
-                <div class="feature"><span></span>Basic screener runs</div>
+                <div class="feature"><span></span><i class="iconoir-candlestick-chart" aria-hidden="true"></i>Forecasting terminal + saved runs</div>
+                <div class="feature"><span></span><i class="iconoir-graph-up" aria-hidden="true"></i>Indicator overlays and market context</div>
+                <div class="feature"><span></span><i class="iconoir-search" aria-hidden="true"></i>Basic screener runs with history</div>
               </div>
               <div class="hero-actions" style="margin-top: 18px;">
-                <a class="cta secondary" href="/account" data-analytics="plan_starter_cta"><i class="iconoir-user-plus" aria-hidden="true"></i><span>Start free</span></a>
+                <a class="cta secondary" id="pricing-starter-cta" href="/account" data-analytics="plan_starter_cta"><i class="iconoir-user-plus" aria-hidden="true"></i><span>Start free</span></a>
               </div>
             </div>
 
@@ -111,9 +105,9 @@
               <div class="price">$39</div>
               <p class="small">For investors running weekly screens, forecasts, and export workflows.</p>
               <div class="feature-list" style="margin-top: 16px;">
-                <div class="feature"><span></span>Higher forecast and indicator limits</div>
-                <div class="feature"><span></span>Workspace collaboration (viewer/editor roles)</div>
-                <div class="feature"><span></span>Priority Slack briefing automation</div>
+                <div class="feature"><span></span><i class="iconoir-graph-up" aria-hidden="true"></i>Higher forecast and indicator limits</div>
+                <div class="feature"><span></span><i class="iconoir-group" aria-hidden="true"></i>Workspace collaboration (viewer/editor roles)</div>
+                <div class="feature"><span></span><i class="iconoir-message-text" aria-hidden="true"></i>Priority briefing automation and alerts</div>
               </div>
               <div class="purchase-panel" data-product="Quantura Pro" data-price="39" data-currency="USD" data-stripe-url="#">
                 <button class="cta" data-action="purchase" data-label-guest="Sign in to continue" data-label-auth="Request Pro access" disabled>
@@ -131,9 +125,9 @@
               <div class="price">$199</div>
               <p class="small">For teams that need more compute, automation, and internal collaboration.</p>
               <div class="feature-list" style="margin-top: 16px;">
-                <div class="feature"><span></span>Highest forecast and screener throughput</div>
-                <div class="feature"><span></span>Collaborator seats + audit trail</div>
-                <div class="feature"><span></span>Priority support and custom workflows</div>
+                <div class="feature"><span></span><i class="iconoir-rocket" aria-hidden="true"></i>Highest forecast and screener throughput</div>
+                <div class="feature"><span></span><i class="iconoir-journal-page" aria-hidden="true"></i>Collaborator seats + audit trail</div>
+                <div class="feature"><span></span><i class="iconoir-info-circle" aria-hidden="true"></i>Priority support and custom workflows</div>
               </div>
               <div class="purchase-panel" data-product="Quantura Desk" data-price="199" data-currency="USD" data-stripe-url="#">
                 <button class="cta" data-action="purchase" data-label-guest="Sign in to continue" data-label-auth="Request Desk access" disabled>
@@ -157,8 +151,20 @@
             the Deep Forecast report is the fastest way to get clarity. Every engagement includes an AWS SageMaker Canvas
             predictive analysis baseline so you can compare model-driven ranges against the market narrative.
           </p>
+          <div class="feature-list" style="margin: 12px 0 4px;">
+            <div class="feature"><span></span><i class="iconoir-page" aria-hidden="true"></i>5 forecast horizons with quantile bands</div>
+            <div class="feature"><span></span><i class="iconoir-journal-page" aria-hidden="true"></i>Model-ready outputs saved to your dashboard</div>
+            <div class="feature"><span></span><i class="iconoir-clock" aria-hidden="true"></i>Delivery target: 5 business days</div>
+          </div>
           <div class="hero-actions">
-            <a class="cta" href="/purchase" data-analytics="pricing_deep_forecast"><i class="iconoir-page" aria-hidden="true"></i><span>Request Deep Forecast</span></a>
+            <div class="purchase-panel" data-product="Deep Forecast" data-price="349" data-currency="USD">
+              <button class="cta" data-action="purchase" data-label-guest="Sign in to request report" data-label-auth="Request Deep Forecast" disabled>
+                Sign in to request report
+              </button>
+              <p class="small purchase-note">Sign in to continue.</p>
+              <div class="notice purchase-success hidden"></div>
+              <button class="cta secondary hidden" data-action="stripe" type="button">Proceed to payment</button>
+            </div>
             <a class="cta secondary" href="/forecasting" data-analytics="pricing_try_terminal"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Try the terminal</span></a>
           </div>
         </div>
@@ -169,8 +175,7 @@
       <div class="container footer-grid">
         <div>
           <div class="logo">QUANTURA</div>
-          <p class="small">Forecasting and market intelligence plans built for weekly execution.</p>
-          <span class="tag">Pricing</span>
+          <p class="small">Decision intelligence for market research, forecasting, and execution.</p>
           <div class="footer-social" aria-label="Quantura social links">
             <a class="social-link" href="#" data-analytics="social_x" aria-label="X (coming soon)">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.9 2H22l-6.8 7.8L23 22h-6.9l-5.4-6.9L4.7 22H1.6l7.3-8.4L1 2h7.1l4.9 6.3L18.9 2zm-1.2 18h1.7L7.2 3.9H5.4L17.7 20z"/></svg>
@@ -178,16 +183,12 @@
             <a class="social-link" href="#" data-analytics="social_linkedin" aria-label="LinkedIn (coming soon)">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.98 3.5C4.98 4.88 3.87 6 2.5 6S0 4.88 0 3.5 1.12 1 2.5 1 4.98 2.12 4.98 3.5zM0.5 8.5H4.5V23H0.5V8.5zM8.5 8.5H12.3V10.4h.1c.5-1 1.9-2.1 3.9-2.1 4.2 0 5 2.8 5 6.5V23h-4v-6.7c0-1.6 0-3.7-2.2-3.7-2.3 0-2.6 1.8-2.6 3.6V23h-4V8.5z"/></svg>
             </a>
+            <a class="social-link" href="#" data-analytics="social_reddit" aria-label="Reddit (coming soon)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21.9 10.7c.1-.4.1-.8 0-1.2-.3-1-1.4-1.6-2.5-1.3-.6.2-1 .6-1.2 1.1-1.5-1-3.4-1.7-5.5-1.8l1-4.6 3.2.7c.1.8.8 1.4 1.7 1.4.9 0 1.7-.8 1.7-1.7S19.5 2 18.6 2c-.6 0-1.2.4-1.5.9l-3.7-.8c-.3-.1-.6.1-.7.4l-1.2 5.2c-2.2.1-4.2.8-5.7 1.8-.2-.5-.6-.9-1.2-1.1-1-.3-2.1.3-2.5 1.3-.1.4-.1.8 0 1.2.1.6.4 1 .9 1.3-.1.4-.1.9-.1 1.3 0 3.6 4.1 6.5 9.1 6.5s9.1-2.9 9.1-6.5c0-.4 0-.9-.1-1.3.5-.3.8-.8.9-1.3zM7.9 12.8c0-.8.7-1.5 1.5-1.5s1.5.7 1.5 1.5-.7 1.5-1.5 1.5-1.5-.6-1.5-1.5zm8.5 4c-.9.9-2.6 1.3-4.4 1.3s-3.5-.4-4.4-1.3c-.2-.2-.2-.5 0-.7.2-.2.5-.2.7 0 .6.6 2 1 3.7 1 1.7 0 3.1-.4 3.7-1 .2-.2.5-.2.7 0 .2.2.2.5 0 .7zm-1.8-2.5c-.8 0-1.5-.7-1.5-1.5s.7-1.5 1.5-1.5 1.5.7 1.5 1.5-.7 1.5-1.5 1.5z"/></svg>
+            </a>
             <a class="social-link" href="#" data-analytics="social_github" aria-label="GitHub (coming soon)">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .5C5.73.5.75 5.63.75 12c0 5.1 3.29 9.41 7.86 10.94.58.11.79-.26.79-.57v-2.1c-3.2.71-3.88-1.57-3.88-1.57-.53-1.37-1.29-1.74-1.29-1.74-1.05-.74.08-.73.08-.73 1.16.08 1.77 1.23 1.77 1.23 1.03 1.8 2.7 1.28 3.36.98.1-.77.4-1.28.72-1.58-2.55-.3-5.23-1.31-5.23-5.84 0-1.29.45-2.35 1.19-3.18-.12-.3-.52-1.53.11-3.2 0 0 .97-.32 3.18 1.21.92-.26 1.9-.39 2.88-.39.98 0 1.96.13 2.88.39 2.2-1.53 3.17-1.21 3.17-1.21.63 1.67.23 2.9.11 3.2.74.83 1.19 1.89 1.19 3.18 0 4.54-2.69 5.54-5.25 5.83.41.37.77 1.1.77 2.22v3.29c0 .31.21.68.8.57A11.3 11.3 0 0 0 23.25 12C23.25 5.63 18.27.5 12 .5z"/></svg>
             </a>
-          </div>
-          <div class="footer-badges" aria-label="Quantura technology stack">
-            <span class="badge-chip">Secure auth</span>
-            <span class="badge-chip">Realtime sync</span>
-            <span class="badge-chip">Functions</span>
-            <span class="badge-chip">Analytics</span>
-            <span class="badge-chip">Forecasting</span>
           </div>
         </div>
         <div class="small">
@@ -196,14 +197,19 @@
           <div><a href="/forecasting">Forecasting</a></div>
           <div><a href="/screener">Screener</a></div>
           <div><a href="/dashboard">Dashboard</a></div>
-          <div><a href="/blog">Blog</a></div>
+          <div><a href="/pricing">Pricing</a></div>
           <div><a href="/contact">Contact</a></div>
         </div>
         <div class="small">
-          <strong>Product</strong>
-          <div>Terminal workflows</div>
-          <div>Forecast storage</div>
-          <div>Slack briefings</div>
+          <strong>Legal</strong>
+          <div><a href="/terms">Terms and Conditions</a></div>
+          <div><a href="/privacy">Privacy Policy</a></div>
+          <p class="small legal-copy" style="margin-top:10px;">
+            Quantura provides software and data tooling only. You are responsible for all account activity and for complying with applicable laws, exchange rules, and broker requirements.
+          </p>
+          <p class="small legal-copy">
+            Financial disclaimer: nothing on Quantura is investment, tax, accounting, or legal advice. Market data and model outputs can be delayed, incomplete, or incorrect. Past performance does not guarantee future results.
+          </p>
         </div>
       </div>
       <div class="container small" style="margin-top: 24px;">

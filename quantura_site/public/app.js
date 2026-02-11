@@ -17,6 +17,8 @@
     headerDashboard: document.getElementById("header-dashboard"),
     headerUserEmail: document.getElementById("header-user-email"),
     headerUserStatus: document.getElementById("header-user-status"),
+    pricingAuthCta: document.getElementById("pricing-auth-cta"),
+    pricingStarterCta: document.getElementById("pricing-starter-cta"),
     emailForm: document.getElementById("email-auth-form"),
     emailInput: document.getElementById("auth-email"),
     passwordInput: document.getElementById("auth-password"),
@@ -44,7 +46,6 @@
     forecastOutput: document.getElementById("forecast-output"),
     forecastService: document.getElementById("forecast-service"),
     forecastLoadSelect: document.getElementById("forecast-load-select"),
-    forecastLoadId: document.getElementById("forecast-load-id"),
     forecastLoadButton: document.getElementById("forecast-load-button"),
     forecastLoadStatus: document.getElementById("forecast-load-status"),
     technicalsForm: document.getElementById("technicals-form"),
@@ -61,7 +62,6 @@
 	    screenerForm: document.getElementById("screener-form"),
 	    screenerOutput: document.getElementById("screener-output"),
 	    screenerLoadSelect: document.getElementById("screener-load-select"),
-	    screenerLoadId: document.getElementById("screener-load-id"),
 	    screenerLoadButton: document.getElementById("screener-load-button"),
 	    screenerLoadStatus: document.getElementById("screener-load-status"),
 	    watchlistForm: document.getElementById("watchlist-form"),
@@ -77,6 +77,7 @@
     alertsStatus: document.getElementById("alerts-status"),
     alertsCheck: document.getElementById("alerts-check"),
     predictionsForm: document.getElementById("predictions-upload-form"),
+    predictionsTicker: document.getElementById("predictions-ticker"),
     predictionsOutput: document.getElementById("predictions-output"),
     predictionsStatus: document.getElementById("predictions-status"),
     autopilotForm: document.getElementById("autopilot-form"),
@@ -108,6 +109,8 @@
     predictionsChart: document.getElementById("predictions-chart"),
     predictionsPreview: document.getElementById("predictions-preview"),
     predictionsPlotMeta: document.getElementById("predictions-plot-meta"),
+    predictionsAgentButton: document.getElementById("predictions-agent-button"),
+    predictionsAgentOutput: document.getElementById("predictions-agent-output"),
     backtestForm: document.getElementById("backtest-form"),
     backtestStrategy: document.getElementById("backtest-strategy"),
     backtestOutput: document.getElementById("backtest-output"),
@@ -142,6 +145,13 @@
       newsTicker: "",
       intelTicker: "",
       optionsTicker: "",
+    },
+    predictionsContext: {
+      uploadId: "",
+      uploadDoc: null,
+      table: null,
+      previewPage: 0,
+      previewPageSize: 25,
     },
     clients: {
       auth: null,
@@ -221,12 +231,14 @@
 	  const setOutputLoading = (el, label = "Loading...") => {
 	    if (!el) return;
 	    el.setAttribute("aria-busy", "true");
-	    el.innerHTML = `${skeletonHtml()}<div class="small muted" style="margin-top:10px;">${label}</div>`;
+	    el.innerHTML = `<div data-skeleton>${skeletonHtml()}<div class="small muted" style="margin-top:10px;">${label}</div></div>`;
 	  };
 
 		  const setOutputReady = (el) => {
 		    if (!el) return;
 		    el.removeAttribute("aria-busy");
+        const skeleton = el.querySelector?.("[data-skeleton]");
+        if (skeleton) skeleton.remove();
 		  };
 
 		  const bindPanelNavigation = () => {
@@ -264,7 +276,6 @@
 			          uploads: "/uploads",
 			          autopilot: "/autopilot",
 			          notifications: "/notifications",
-			          purchase: "/purchase",
 			          auth: "/account",
 			        },
 			      },
@@ -941,6 +952,7 @@
 
 	    const LOGO_LIGHT = "/assets/quantura-logo.svg";
 	    const LOGO_DARK = "/assets/quantura-logo-dark.svg";
+    const themeToggleIconHtml = (theme) => (theme === "dark" ? icon("sun-light") : icon("half-moon"));
 
 	    const syncBrandAssets = (theme) => {
 	      const desiredLogo = theme === "dark" ? LOGO_DARK : LOGO_LIGHT;
@@ -960,8 +972,9 @@
 	      if (persist) safeLocalStorageSet(THEME_KEY, next);
 	      const button = document.getElementById("theme-toggle");
 	      if (button) {
-	        button.textContent = next === "dark" ? "Light mode" : "Dark mode";
+	        button.innerHTML = themeToggleIconHtml(next);
 	        button.setAttribute("aria-label", next === "dark" ? "Switch to light mode" : "Switch to dark mode");
+        button.setAttribute("title", next === "dark" ? "Light mode" : "Dark mode");
 	      }
 	    };
 
@@ -973,7 +986,10 @@
       button.id = "theme-toggle";
       button.type = "button";
       button.className = "cta secondary small theme-toggle";
-      button.textContent = isDarkMode() ? "Light mode" : "Dark mode";
+      const initialTheme = isDarkMode() ? "dark" : "light";
+      button.innerHTML = themeToggleIconHtml(initialTheme);
+      button.setAttribute("aria-label", initialTheme === "dark" ? "Switch to light mode" : "Switch to dark mode");
+      button.setAttribute("title", initialTheme === "dark" ? "Light mode" : "Dark mode");
       button.addEventListener("click", () => {
         const next = isDarkMode() ? "light" : "dark";
         applyTheme(next, { persist: true });
@@ -1437,10 +1453,12 @@
 
   const setAuthUi = (user) => {
     const isAuthed = Boolean(user);
-    ui.headerAuth?.classList.toggle("hidden", isAuthed);
-    // Sign-out is handled inside the dashboard navigation (not the global header).
-    ui.headerSignOut?.classList.add("hidden");
-    ui.headerDashboard?.classList.toggle("hidden", !isAuthed);
+    if (ui.headerAuth) {
+      ui.headerAuth.innerHTML = isAuthed
+        ? `${icon("dashboard")}<span>Dashboard</span>`
+        : `${icon("log-in")}<span>Sign in</span>`;
+      ui.headerAuth.setAttribute("aria-label", isAuthed ? "Open dashboard" : "Sign in");
+    }
 
     if (ui.headerUserEmail) ui.headerUserEmail.textContent = user?.email || "Guest";
     if (ui.headerUserStatus) {
@@ -1455,6 +1473,20 @@
       ui.userStatus.classList.toggle("pill", true);
     }
     ui.dashboardCta?.classList.toggle("hidden", isAuthed);
+
+    if (ui.pricingAuthCta) {
+      ui.pricingAuthCta.innerHTML = isAuthed
+        ? `${icon("dashboard")}<span>Open dashboard</span>`
+        : `${icon("log-in")}<span>Sign in</span>`;
+      ui.pricingAuthCta.setAttribute("href", isAuthed ? "/dashboard" : "/account");
+    }
+
+    if (ui.pricingStarterCta) {
+      ui.pricingStarterCta.innerHTML = isAuthed
+        ? `${icon("dashboard")}<span>Go to dashboard</span>`
+        : `${icon("user-plus")}<span>Start free</span>`;
+      ui.pricingStarterCta.setAttribute("href", isAuthed ? "/dashboard" : "/account");
+    }
 
     if (ui.dashboardAuthLink) {
       ui.dashboardAuthLink.innerHTML = isAuthed
@@ -1599,6 +1631,7 @@
         : "";
       const uploadMeta = isUpload
         ? `
+          ${item.ticker ? `<div><strong>Ticker</strong> ${escapeHtml(item.ticker)}</div>` : ""}
           ${item.notes ? `<div><strong>Notes</strong> ${escapeHtml(item.notes)}</div>` : ""}
           ${item.filePath ? `<div><strong>Path</strong> ${escapeHtml(item.filePath)}</div>` : ""}
         `
@@ -1781,7 +1814,7 @@
 
     const startScreenerRuns = (db, workspaceUserId) => {
       if (state.unsubscribeScreenerRuns) state.unsubscribeScreenerRuns();
-      if (!ui.screenerLoadSelect && !ui.screenerLoadId && !ui.screenerOutput) return;
+      if (!ui.screenerLoadSelect && !ui.screenerOutput) return;
       if (!workspaceUserId || !db) return;
 
       state.unsubscribeScreenerRuns = db
@@ -2977,6 +3010,8 @@
 	      paper_bgcolor: "rgba(0,0,0,0)",
 	      plot_bgcolor: plotBg,
 	      margin: { l: 50, r: 30, t: 40, b: 40 },
+        hovermode: "x unified",
+        dragmode: "pan",
 	      xaxis: {
 	        rangeslider: { visible: true },
 	        showspikes: true,
@@ -3121,7 +3156,7 @@
     return { headers, rows: data };
   };
 
-  const renderCsvPreview = (table, { maxRows = 12, maxCols = 6 } = {}) => {
+  const renderCsvPreview = (table, { maxCols = 8 } = {}) => {
     if (!ui.predictionsPreview) return;
     const headers = table?.headers || [];
     const rows = table?.rows || [];
@@ -3131,7 +3166,17 @@
     }
 
     const cols = headers.slice(0, Math.max(1, Math.min(headers.length, maxCols)));
-    const bodyRows = rows.slice(0, Math.max(1, Math.min(rows.length, maxRows)));
+    const pageSizeRaw = Number(state.predictionsContext?.previewPageSize || 25);
+    const pageSize = [25, 50, 100, 250, 500].includes(pageSizeRaw) ? pageSizeRaw : 25;
+    const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+    const currentPageRaw = Number(state.predictionsContext?.previewPage || 0);
+    const currentPage = Math.max(0, Math.min(totalPages - 1, Number.isFinite(currentPageRaw) ? currentPageRaw : 0));
+    state.predictionsContext.previewPage = currentPage;
+    state.predictionsContext.previewPageSize = pageSize;
+
+    const start = currentPage * pageSize;
+    const end = Math.min(rows.length, start + pageSize);
+    const bodyRows = rows.slice(start, end);
 
     ui.predictionsPreview.innerHTML = `
       <div class="table-wrap">
@@ -3146,10 +3191,264 @@
           </tbody>
         </table>
       </div>
+      <div class="csv-controls" aria-label="CSV preview pagination">
+        <div class="csv-group">
+          <span class="small muted">Show</span>
+          ${[25, 50, 100, 250, 500]
+            .map(
+              (size) =>
+                `<button class="task-chip" type="button" data-action="csv-page-size" data-size="${size}" aria-pressed="${
+                  size === pageSize ? "true" : "false"
+                }">${size}</button>`
+            )
+            .join("")}
+          <span class="small muted">rows</span>
+        </div>
+        <div class="csv-group">
+          <button class="task-chip" type="button" data-action="csv-page" data-dir="-1" ${currentPage === 0 ? "disabled" : ""}>Prev</button>
+          <span class="small muted">Page ${currentPage + 1} / ${totalPages}</span>
+          <button class="task-chip" type="button" data-action="csv-page" data-dir="1" ${
+            currentPage >= totalPages - 1 ? "disabled" : ""
+          }>Next</button>
+        </div>
+      </div>
       <div class="small muted" style="margin-top:10px;">
-        Showing ${Math.min(bodyRows.length, rows.length)} of ${rows.length} row(s) and ${cols.length} of ${headers.length} column(s).
+        Showing rows ${start + 1}-${end} of ${rows.length} row(s) and ${cols.length} of ${headers.length} column(s).
       </div>
     `;
+  };
+
+  const pad2 = (value) => String(value).padStart(2, "0");
+
+  const parseDateCell = (raw) => {
+    const text = String(raw ?? "").trim();
+    if (!text) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+      const parsed = new Date(`${text}T12:00:00`);
+      return Number.isFinite(parsed.getTime()) ? parsed : null;
+    }
+    const parsed = new Date(text);
+    return Number.isFinite(parsed.getTime()) ? parsed : null;
+  };
+
+  const dateToYmd = (dt) => `${dt.getFullYear()}-${pad2(dt.getMonth() + 1)}-${pad2(dt.getDate())}`;
+
+  const isWeekday = (dt) => {
+    const day = dt.getDay();
+    return day >= 1 && day <= 5;
+  };
+
+  const nearestWeekdayIndex = (rowsWithDate, fromIndex) => {
+    if (!Array.isArray(rowsWithDate) || !rowsWithDate.length) return -1;
+    const safeIndex = Math.max(0, Math.min(rowsWithDate.length - 1, fromIndex));
+    if (rowsWithDate[safeIndex]?.isWeekday) return safeIndex;
+    for (let distance = 1; distance < rowsWithDate.length; distance += 1) {
+      const future = safeIndex + distance;
+      if (future < rowsWithDate.length && rowsWithDate[future]?.isWeekday) return future;
+      const past = safeIndex - distance;
+      if (past >= 0 && rowsWithDate[past]?.isWeekday) return past;
+    }
+    return -1;
+  };
+
+  const extractQuantileColumns = (headers) => {
+    if (!Array.isArray(headers)) return [];
+    const cols = [];
+    headers.forEach((header, idx) => {
+      const raw = String(header || "").trim();
+      const normalized = raw.toLowerCase().replace(/[^a-z0-9.]/g, "");
+      let q = null;
+
+      let match = normalized.match(/^(?:p|q)(\d{1,2})$/);
+      if (match) q = Number(match[1]) / 100;
+      if (q === null) {
+        match = normalized.match(/^(?:p|q)(0?\.\d+)$/);
+        if (match) q = Number(match[1]);
+      }
+      if (q === null) {
+        match = normalized.match(/^(?:quantile)?(0?\.\d+)$/);
+        if (match) q = Number(match[1]);
+      }
+      if (!Number.isFinite(q) || q <= 0 || q >= 1) return;
+
+      cols.push({
+        idx,
+        header: raw,
+        q,
+        label: `p${Math.round(q * 100)}`,
+      });
+    });
+
+    return cols.sort((a, b) => a.q - b.q);
+  };
+
+  const numericCell = (row, idx) => {
+    const raw = row?.[idx];
+    const num = Number(String(raw ?? "").trim());
+    return Number.isFinite(num) ? num : null;
+  };
+
+  const shiftYmd = (ymd, deltaDays) => {
+    const base = parseDateCell(ymd);
+    if (!base) return ymd;
+    base.setDate(base.getDate() + Number(deltaDays || 0));
+    return dateToYmd(base);
+  };
+
+  const fetchTickerHighNearDate = async (functions, ticker, ymd) => {
+    const getHistory = functions.httpsCallable("get_ticker_history");
+    const targetDate = parseDateCell(ymd);
+    if (!targetDate) throw new Error("Unable to parse target date for price lookup.");
+    const start = shiftYmd(ymd, -5);
+    const end = shiftYmd(ymd, 6);
+    const result = await getHistory({ ticker, interval: "1d", start, end, meta: buildMeta() });
+    const rows = Array.isArray(result.data?.rows) ? result.data.rows : [];
+    if (!rows.length) throw new Error("No price rows found near the selected weekday.");
+
+    const targetYmd = dateToYmd(targetDate);
+    const candidates = rows
+      .map((row) => {
+        const rawDate = row.Date ?? row.Datetime ?? row.ds;
+        const dt = parseDateCell(rawDate);
+        const high = Number(row.High ?? row.high);
+        if (!dt || !Number.isFinite(high)) return null;
+        return {
+          ymd: dateToYmd(dt),
+          high,
+          ts: dt.getTime(),
+        };
+      })
+      .filter(Boolean);
+
+    if (!candidates.length) throw new Error("No valid highs were returned for the selected window.");
+
+    const exact = candidates.find((item) => item.ymd === targetYmd);
+    if (exact) return { ...exact, exact: true, requestedYmd: targetYmd };
+
+    const targetTs = targetDate.getTime();
+    candidates.sort((a, b) => {
+      const da = Math.abs(a.ts - targetTs);
+      const db = Math.abs(b.ts - targetTs);
+      if (da !== db) return da - db;
+      return b.ts - a.ts;
+    });
+    return { ...candidates[0], exact: false, requestedYmd: targetYmd };
+  };
+
+  const runPredictionsQuantileMapping = async (functions) => {
+    if (!state.user) {
+      showToast("Sign in to run quantile mapping.", "warn");
+      return;
+    }
+    const table = state.predictionsContext.table;
+    const uploadDoc = state.predictionsContext.uploadDoc;
+    const uploadId = state.predictionsContext.uploadId;
+    if (!table || !Array.isArray(table.rows) || table.rows.length < 2) {
+      showToast("Load an uploaded CSV first.", "warn");
+      return;
+    }
+    if (!uploadDoc) {
+      showToast("Upload metadata is not loaded yet.", "warn");
+      return;
+    }
+
+    const ticker = normalizeTicker(uploadDoc.ticker || uploadDoc.metaTicker || "");
+    if (!ticker) {
+      showToast("This upload is missing a ticker. Re-upload with a ticker.", "warn");
+      return;
+    }
+
+    const headers = table.headers || [];
+    const rows = table.rows || [];
+    const norm = (h) => String(h || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const dateCandidates = new Set(["date", "ds", "datetime", "timestamp", "time"]);
+    const dateIndex = headers.findIndex((h) => dateCandidates.has(norm(h)));
+    if (dateIndex < 0) throw new Error("Could not find a date column in this CSV.");
+
+    const quantileCols = extractQuantileColumns(headers);
+    if (!quantileCols.length) throw new Error("No quantile columns were detected (expected names like p10/q50/p90).");
+
+    const rowsWithDate = rows.map((row, idx) => {
+      const dt = parseDateCell(row?.[dateIndex]);
+      return {
+        idx,
+        row,
+        date: dt,
+        ymd: dt ? dateToYmd(dt) : "",
+        isWeekday: dt ? isWeekday(dt) : false,
+      };
+    });
+    if (!rowsWithDate[0]?.date || !rowsWithDate[rowsWithDate.length - 1]?.date) {
+      throw new Error("First/last prediction rows are missing valid dates.");
+    }
+
+    const firstRaw = rowsWithDate[0];
+    const lastRaw = rowsWithDate[rowsWithDate.length - 1];
+    const firstUseIdx = nearestWeekdayIndex(rowsWithDate, 0);
+    const lastUseIdx = nearestWeekdayIndex(rowsWithDate, rowsWithDate.length - 1);
+    if (firstUseIdx < 0 || lastUseIdx < 0) throw new Error("No weekday rows found in this CSV.");
+    const firstUse = rowsWithDate[firstUseIdx];
+    const lastUse = rowsWithDate[lastUseIdx];
+
+    const highLookup = await fetchTickerHighNearDate(functions, ticker, firstUse.ymd);
+    const highValue = Number(highLookup.high);
+    if (!Number.isFinite(highValue)) throw new Error("Unable to compute a valid High value near the first weekday row.");
+
+    const startQuantiles = quantileCols
+      .map((col) => ({ ...col, value: numericCell(firstUse.row, col.idx) }))
+      .filter((item) => Number.isFinite(item.value));
+    if (!startQuantiles.length) throw new Error("Could not find numeric quantile values on the first weekday row.");
+
+    let selected = startQuantiles[0];
+    for (const candidate of startQuantiles) {
+      if (highValue >= candidate.value) selected = candidate;
+    }
+
+    const pointForecastValue = numericCell(lastUse.row, selected.idx);
+    if (!Number.isFinite(pointForecastValue)) {
+      throw new Error(`Last weekday row is missing a numeric ${selected.header} value.`);
+    }
+
+    const firstRowText = firstRaw.row.map((value) => String(value ?? "")).join(" | ");
+    const lastRowText = lastRaw.row.map((value) => String(value ?? "")).join(" | ");
+    const warningBits = [];
+    if (!firstRaw.isWeekday) warningBits.push(`First row (${firstRaw.ymd}) is not a weekday; using ${firstUse.ymd}.`);
+    if (!lastRaw.isWeekday) warningBits.push(`Last row (${lastRaw.ymd}) is not a weekday; using ${lastUse.ymd}.`);
+
+    const relation =
+      highValue > selected.value
+        ? `High ${highValue.toFixed(2)} is above ${selected.label.toUpperCase()} start value ${selected.value.toFixed(2)}.`
+        : highValue < selected.value
+          ? `High ${highValue.toFixed(2)} is below ${selected.label.toUpperCase()} start value ${selected.value.toFixed(2)}.`
+          : `High ${highValue.toFixed(2)} is equal to ${selected.label.toUpperCase()} start value ${selected.value.toFixed(2)}.`;
+
+    if (ui.predictionsAgentOutput) {
+      ui.predictionsAgentOutput.innerHTML = `
+        <div class="small"><strong>Ticker:</strong> ${escapeHtml(ticker)}</div>
+        <div class="small"><strong>Upload:</strong> ${escapeHtml(uploadDoc.title || uploadId || "predictions.csv")}</div>
+        <div class="small"><strong>First row date:</strong> ${escapeHtml(firstRaw.ymd)} (${firstRaw.isWeekday ? "weekday" : "weekend"})</div>
+        <div class="small"><strong>Last row date:</strong> ${escapeHtml(lastRaw.ymd)} (${lastRaw.isWeekday ? "weekday" : "weekend"})</div>
+        ${warningBits.length ? `<div class="small" style="margin-top:8px;"><strong>Warning:</strong> ${escapeHtml(warningBits.join(" "))}</div>` : ""}
+        <div class="small" style="margin-top:8px;"><strong>Reference high:</strong> ${highLookup.high.toFixed(2)} on ${escapeHtml(highLookup.ymd)}${
+          highLookup.exact ? "" : " (nearest trading day)"
+        }</div>
+        <div class="small" style="margin-top:8px;"><strong>Selected quantile:</strong> ${escapeHtml(selected.label.toUpperCase())}</div>
+        <div class="small">${escapeHtml(relation)}</div>
+        <div class="small" style="margin-top:8px;"><strong>Point forecast (last weekday, same quantile):</strong> ${pointForecastValue.toFixed(4)}</div>
+        <div class="small" style="margin-top:12px;"><strong>First prediction row (no header):</strong></div>
+        <pre class="small" style="margin:6px 0 0; white-space:pre-wrap;">${escapeHtml(firstRowText)}</pre>
+        <div class="small" style="margin-top:10px;"><strong>Last prediction row (no header):</strong></div>
+        <pre class="small" style="margin:6px 0 0; white-space:pre-wrap;">${escapeHtml(lastRowText)}</pre>
+      `;
+    }
+
+    logEvent("predictions_quantile_mapping", {
+      upload_id: uploadId || "",
+      ticker,
+      quantile: selected.label,
+      first_weekday: firstUse.ymd,
+      last_weekday: lastUse.ymd,
+    });
   };
 
   const inferCsvAxes = (table) => {
@@ -3315,13 +3614,22 @@
 
     const url = await resolveUploadCsvUrl(storage, doc);
     if (!url) throw new Error("Upload is missing a downloadable URL.");
-    const { text, truncated, source } = await fetchUploadCsvText({ uploadId: cleanId, url, maxBytes: 2_000_000 });
+    const { text, truncated, source } = await fetchUploadCsvText({ uploadId: cleanId, url, maxBytes: 5_000_000 });
 
-    const table = parseCsvTable(text, { maxRows: 5000 });
+    const table = parseCsvTable(text, { maxRows: 20000 });
     const title = doc.title ? `Upload: ${doc.title}` : "CSV plot";
+    state.predictionsContext.uploadId = cleanId;
+    state.predictionsContext.uploadDoc = doc;
+    state.predictionsContext.table = table;
+    state.predictionsContext.previewPage = 0;
+    if (ui.predictionsTicker && doc.ticker) ui.predictionsTicker.value = normalizeTicker(doc.ticker) || String(doc.ticker);
     ui.predictionsPlotMeta.textContent = `${doc.title || "predictions.csv"} · ${table.rows.length.toLocaleString()} rows · ${table.headers.length} cols${
       truncated ? " · truncated" : ""
     }`;
+    if (ui.predictionsAgentOutput) {
+      ui.predictionsAgentOutput.innerHTML =
+        "Run the mapping to compare the first forecast date to real highs and select a point forecast quantile.";
+    }
 
     await renderPredictionsChart(table, { title });
     setOutputReady(ui.predictionsChart);
@@ -3460,11 +3768,12 @@
       `<option value="">Select a run</option>`,
       ...list.slice(0, 60).map((item) => {
         const id = escapeHtml(item.id || "");
+        const title = escapeHtml(String(item.title || "").trim());
         const universe = escapeHtml(String(item.universe || "trending"));
         const market = escapeHtml(String(item.market || "us"));
         const count = Array.isArray(item.results) ? item.results.length : Number(item.count || 0) || 0;
         const when = escapeHtml(formatTimestamp(item.createdAt));
-        const label = `${universe} · ${market.toUpperCase()} · ${count} names · ${when}`;
+        const label = `${title || universe} · ${market.toUpperCase()} · ${count} names · ${when}`;
         return `<option value="${id}">${label}</option>`;
       }),
     ];
@@ -3488,13 +3797,16 @@
     const runId = escapeHtml(runDoc.id || "");
     const createdAt = escapeHtml(formatTimestamp(runDoc.createdAt));
     const notes = String(runDoc.notes || "").trim();
+    const title = String(runDoc.title || "").trim();
 
     ui.screenerOutput.innerHTML = `
+      ${title ? `<div class="small"><strong>Title:</strong> ${escapeHtml(title)}</div>` : ""}
       <div class="small"><strong>Run ID:</strong> ${runId || "—"}</div>
       <div class="small"><strong>Created:</strong> ${createdAt}</div>
       ${notes ? `<div class="small" style="margin-top:10px;"><strong>Notes:</strong> ${escapeHtml(notes)}</div>` : ""}
       <div class="hero-actions" style="margin-top:12px;">
         <button class="cta secondary small" type="button" data-action="download-screener" data-run-id="${runId}">Download CSV</button>
+        <button class="cta secondary small" type="button" data-action="rename-screener" data-run-id="${runId}">Rename</button>
         <button class="cta secondary small" type="button" data-action="share-screener" data-run-id="${runId}">Share link</button>
         <button class="cta secondary small danger" type="button" data-action="delete-screener" data-run-id="${runId}">Delete</button>
       </div>
@@ -4357,6 +4669,50 @@
             return;
           }
 
+          const renameScreener = event.target.closest('[data-action="rename-screener"]');
+          if (renameScreener) {
+            event.preventDefault();
+            if (!state.user) {
+              showToast("Sign in to rename screener runs.", "warn");
+              return;
+            }
+            const runId = String(renameScreener.dataset.runId || "").trim();
+            if (!runId) return;
+
+            let currentTitle = "";
+            try {
+              const snap = await db.collection("screener_runs").doc(runId).get();
+              if (snap.exists) currentTitle = String(snap.data()?.title || "");
+            } catch (error) {
+              currentTitle = "";
+            }
+
+            const nextTitle = await openPromptModal({
+              title: "Rename screener run",
+              message: "Update the title shown for this saved screener run.",
+              label: "Title",
+              placeholder: "Screener run",
+              initialValue: currentTitle,
+              confirmLabel: "Rename",
+            });
+            if (!nextTitle) return;
+
+            renameScreener.disabled = true;
+            try {
+              const rename = functions.httpsCallable("rename_screener_run");
+              await rename({ runId, title: nextTitle, meta: buildMeta() });
+              showToast("Screener run renamed.");
+              logEvent("screener_renamed", { run_id: runId });
+              const fresh = await db.collection("screener_runs").doc(runId).get();
+              if (fresh.exists) renderScreenerRunOutput({ id: fresh.id, ...(fresh.data() || {}) });
+            } catch (error) {
+              showToast(error.message || "Unable to rename screener run.", "warn");
+            } finally {
+              renameScreener.disabled = false;
+            }
+            return;
+          }
+
           const shareScreener = event.target.closest('[data-action="share-screener"]');
           if (shareScreener) {
             event.preventDefault();
@@ -4586,9 +4942,19 @@
               await del({ uploadId, meta: buildMeta() });
               showToast("Upload deleted.");
               logEvent("predictions_deleted", { upload_id: uploadId });
+              if (state.predictionsContext.uploadId === uploadId) {
+                state.predictionsContext.uploadId = "";
+                state.predictionsContext.uploadDoc = null;
+                state.predictionsContext.table = null;
+                state.predictionsContext.previewPage = 0;
+              }
               if (ui.predictionsPlotMeta) ui.predictionsPlotMeta.textContent = "Select an upload to preview and plot it.";
               if (ui.predictionsChart) ui.predictionsChart.innerHTML = "";
               if (ui.predictionsPreview) ui.predictionsPreview.innerHTML = "Preview will appear here.";
+              if (ui.predictionsAgentOutput) {
+                ui.predictionsAgentOutput.innerHTML =
+                  "Run the mapping to compare the first forecast date to real highs and select a point forecast quantile.";
+              }
             } catch (error) {
               showToast(error.message || "Unable to delete upload.", "warn");
             } finally {
@@ -4729,21 +5095,48 @@
 		      }
 
 		      const csvBtn = event.target.closest('[data-action="forecast-csv"]');
-		      if (!csvBtn) return;
-		      event.preventDefault();
-		      const doc = state.tickerContext.forecastDoc;
-		      if (!doc || !Array.isArray(doc.forecastRows) || !doc.forecastRows.length) {
-		        showToast("No forecast rows available to export.", "warn");
+		      if (csvBtn) {
+		        event.preventDefault();
+		        const doc = state.tickerContext.forecastDoc;
+		        if (!doc || !Array.isArray(doc.forecastRows) || !doc.forecastRows.length) {
+		          showToast("No forecast rows available to export.", "warn");
+		          return;
+		        }
+		        const rows = doc.forecastRows;
+		        const quantKeys = extractQuantileKeys(rows);
+		        const headers = ["ds", ...quantKeys];
+		        const csv = buildCsv(rows, headers);
+		        const ticker = normalizeTicker(doc.ticker || "ticker") || "ticker";
+		        const service = String(doc.service || "forecast").replace(/[^a-z0-9_\\-]+/gi, "_");
+		        triggerDownload(`${ticker}_${service}_${doc.id || "run"}.csv`, csv);
+		        showToast("CSV downloaded.");
 		        return;
 		      }
-	      const rows = doc.forecastRows;
-	      const quantKeys = extractQuantileKeys(rows);
-			      const headers = ["ds", ...quantKeys];
-			      const csv = buildCsv(rows, headers);
-			      const ticker = normalizeTicker(doc.ticker || "ticker") || "ticker";
-			      const service = String(doc.service || "forecast").replace(/[^a-z0-9_\\-]+/gi, "_");
-			      triggerDownload(`${ticker}_${service}_${doc.id || "run"}.csv`, csv);
-		      showToast("CSV downloaded.");
+
+      const pageSizeBtn = event.target.closest('[data-action="csv-page-size"]');
+      if (pageSizeBtn) {
+        event.preventDefault();
+        const nextSize = Number(pageSizeBtn.dataset.size || "25");
+        if (!Number.isFinite(nextSize) || nextSize <= 0) return;
+        state.predictionsContext.previewPageSize = nextSize;
+        state.predictionsContext.previewPage = 0;
+        if (state.predictionsContext.table) renderCsvPreview(state.predictionsContext.table);
+        return;
+      }
+
+      const csvPageBtn = event.target.closest('[data-action="csv-page"]');
+      if (csvPageBtn) {
+        event.preventDefault();
+        const dir = Number(csvPageBtn.dataset.dir || "0");
+        if (!Number.isFinite(dir) || !dir) return;
+        const table = state.predictionsContext.table;
+        if (!table || !Array.isArray(table.rows) || table.rows.length === 0) return;
+        const pageSize = Number(state.predictionsContext.previewPageSize || 25) || 25;
+        const totalPages = Math.max(1, Math.ceil(table.rows.length / pageSize));
+        const next = Math.max(0, Math.min(totalPages - 1, Number(state.predictionsContext.previewPage || 0) + dir));
+        state.predictionsContext.previewPage = next;
+        renderCsvPreview(table);
+      }
 		    });
 
 	    const persistenceReady = auth
@@ -4759,7 +5152,7 @@
       });
 
 			    ui.headerAuth?.addEventListener("click", () => {
-			      window.location.href = "/account";
+			      window.location.href = state.user ? "/dashboard" : "/account";
 			    });
 
 	    ui.workspaceSelect?.addEventListener("change", () => {
@@ -5547,20 +5940,14 @@
 	      }
 	    });
 
-        ui.forecastLoadSelect?.addEventListener("change", () => {
-          if (!ui.forecastLoadId || !ui.forecastLoadSelect) return;
-          const value = String(ui.forecastLoadSelect.value || "").trim();
-          if (value) ui.forecastLoadId.value = value;
-        });
-
         ui.forecastLoadButton?.addEventListener("click", async () => {
           if (!state.user) {
             showToast("Sign in to load saved forecasts.", "warn");
             return;
           }
-          const forecastId = String(ui.forecastLoadId?.value || "").trim() || String(ui.forecastLoadSelect?.value || "").trim();
+          const forecastId = String(ui.forecastLoadSelect?.value || "").trim();
           if (!forecastId) {
-            showToast("Select a forecast or paste an ID.", "warn");
+            showToast("Select a saved forecast.", "warn");
             return;
           }
           if (ui.forecastLoadStatus) ui.forecastLoadStatus.textContent = "Loading...";
@@ -5639,6 +6026,10 @@
 
     ui.downloadForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
+      if (!state.user) {
+        showToast("Sign in to download price history.", "warn");
+        return;
+      }
       const formData = new FormData(ui.downloadForm);
       const ticker =
         normalizeTicker(formData.get("ticker")) || state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "";
@@ -5646,28 +6037,40 @@
         showToast("Load a ticker first.", "warn");
         return;
       }
+      const interval = String(formData.get("interval") || "1d");
+      const today = new Date();
+      const end = String(formData.get("end") || "").trim() || today.toISOString().slice(0, 10);
+      const start =
+        interval === "1h"
+          ? (() => {
+              const dt = new Date();
+              dt.setDate(dt.getDate() - 729);
+              return dt.toISOString().slice(0, 10);
+            })()
+          : "1900-01-01";
       const payload = {
         ticker,
-        start: formData.get("start"),
-        end: formData.get("end"),
-        interval: formData.get("interval"),
+        start,
+        end,
+        interval,
+        meta: buildMeta(),
       };
 
       try {
         ui.downloadStatus.textContent = "Fetching data...";
-        const fetchHistory = functions.httpsCallable("get_ticker_history");
-        const result = await fetchHistory(payload);
+        const getDownload = functions.httpsCallable("download_price_csv");
+        const result = await getDownload(payload);
         const data = result.data || {};
-        const rows = data.rows || [];
-        if (!rows.length) {
+        const csvText = String(data.csv || "");
+        if (!csvText.trim()) {
           ui.downloadStatus.textContent = "No data returned.";
           return;
         }
-        const headers = Object.keys(rows[0]);
-        const csv = buildCsv(rows, headers);
-        triggerDownload(`${ticker}_history.csv`, csv);
-        ui.downloadStatus.textContent = "Download ready.";
-        logEvent("download_history", { ticker, interval: payload.interval });
+        const filename = String(data.filename || `${ticker}_${start}_${end}.csv`);
+        triggerDownload(filename, csvText);
+        const rowCount = Number(data.rowCount || 0);
+        ui.downloadStatus.textContent = rowCount ? `Download ready (${rowCount} rows).` : "Download ready.";
+        logEvent("download_history", { ticker, interval });
       } catch (error) {
         ui.downloadStatus.textContent = "Download failed.";
         showToast(error.message || "Unable to fetch history.", "warn");
@@ -5865,8 +6268,10 @@
 	        const result = await runScreener(payload);
 	        const rows = result.data?.results || [];
           const runId = String(result.data?.runId || "").trim();
+          const runTitle = String(result.data?.title || "").trim();
           renderScreenerRunOutput({
             id: runId || "—",
+            title: runTitle || `${payload.universe || "Screener"} run`,
             results: rows,
             notes: payload.notes,
             createdAt: new Date().toISOString(),
@@ -5878,20 +6283,14 @@
       }
     });
 
-    ui.screenerLoadSelect?.addEventListener("change", () => {
-      if (!ui.screenerLoadId || !ui.screenerLoadSelect) return;
-      const value = String(ui.screenerLoadSelect.value || "").trim();
-      if (value) ui.screenerLoadId.value = value;
-    });
-
     ui.screenerLoadButton?.addEventListener("click", async () => {
       if (!state.user) {
         showToast("Sign in to load saved screener runs.", "warn");
         return;
       }
-      const runId = String(ui.screenerLoadId?.value || "").trim() || String(ui.screenerLoadSelect?.value || "").trim();
+      const runId = String(ui.screenerLoadSelect?.value || "").trim();
       if (!runId) {
-        showToast("Select a run or paste a run ID.", "warn");
+        showToast("Select a saved run.", "warn");
         return;
       }
       if (ui.screenerLoadStatus) ui.screenerLoadStatus.textContent = "Loading...";
@@ -5918,8 +6317,15 @@
 
       const fileInput = document.getElementById("predictions-file");
       const notesInput = document.getElementById("predictions-notes");
+      const tickerInput = ui.predictionsTicker;
       if (!fileInput?.files?.length) {
         showToast("Select a predictions.csv file.", "warn");
+        return;
+      }
+      const metaTicker = normalizeTicker(tickerInput?.value || "");
+      if (!metaTicker) {
+        showToast("Enter the ticker for this predictions CSV.", "warn");
+        tickerInput?.focus?.();
         return;
       }
 
@@ -5938,6 +6344,7 @@
           title: file.name,
           status: "uploaded",
           notes: notesInput?.value || "",
+          ticker: metaTicker,
           fileUrl: url,
           filePath: path,
           createdAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -5947,11 +6354,35 @@
         ui.predictionsStatus.textContent = "Upload complete.";
         fileInput.value = "";
         if (notesInput) notesInput.value = "";
+        if (tickerInput) tickerInput.value = metaTicker;
         logEvent("predictions_upload", { file: file.name });
         showToast("Predictions uploaded.");
       } catch (error) {
         ui.predictionsStatus.textContent = "Upload failed.";
         showToast(error.message || "Upload failed.", "warn");
+      }
+    });
+
+    ui.predictionsAgentButton?.addEventListener("click", async () => {
+      if (!state.user) {
+        showToast("Sign in to run quantile mapping.", "warn");
+        return;
+      }
+      if (!functions) {
+        showToast("Functions client is not ready.", "warn");
+        return;
+      }
+      try {
+        setOutputLoading(ui.predictionsAgentOutput, "Analyzing uploaded CSV...");
+        await runPredictionsQuantileMapping(functions);
+        setOutputReady(ui.predictionsAgentOutput);
+        showToast("Quantile mapping completed.");
+      } catch (error) {
+        setOutputReady(ui.predictionsAgentOutput);
+        if (ui.predictionsAgentOutput) {
+          ui.predictionsAgentOutput.innerHTML = `<div class="small muted">${escapeHtml(error.message || "Quantile mapping failed.")}</div>`;
+        }
+        showToast(error.message || "Quantile mapping failed.", "warn");
       }
     });
 
@@ -6206,9 +6637,16 @@
 		        if (ui.productivityBoard) ui.productivityBoard.innerHTML = "";
 		        if (ui.tasksCalendar) ui.tasksCalendar.textContent = "Tasks with due dates will appear here.";
             if (ui.screenerLoadSelect) ui.screenerLoadSelect.innerHTML = `<option value="">Select a run</option>`;
-            if (ui.screenerLoadId) ui.screenerLoadId.value = "";
             if (ui.screenerLoadStatus) ui.screenerLoadStatus.textContent = "";
             if (ui.screenerOutput && !ui.screenerOutput.dataset.loading) ui.screenerOutput.textContent = "Sign in to run the screener.";
+            state.predictionsContext.uploadId = "";
+            state.predictionsContext.uploadDoc = null;
+            state.predictionsContext.table = null;
+            state.predictionsContext.previewPage = 0;
+            if (ui.predictionsAgentOutput) {
+              ui.predictionsAgentOutput.textContent =
+                "Run the mapping to compare the first forecast date to real highs and select a point forecast quantile.";
+            }
 
             const pendingShare = String(getPendingShareId() || "").trim();
             if (pendingShare && window.location.pathname !== "/account") {
@@ -6224,7 +6662,6 @@
 				          "/uploads",
 				          "/autopilot",
 				          "/notifications",
-				          "/purchase",
 				        ]);
 			        if (gated.has(window.location.pathname) && window.location.pathname !== "/account") {
 			          window.location.href = "/account";

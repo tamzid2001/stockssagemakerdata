@@ -98,14 +98,16 @@ const resolveTemplate = (pathname) => {
     "/uploads",
     "/autopilot",
     "/notifications",
-    "/purchase",
   ]);
   if (dashboardAliases.has(route)) return "dashboard.html";
 
   if (route === "/screener") return "screener.html";
   if (route === "/pricing") return "pricing.html";
+  if (route === "/purchase") return "pricing.html";
   if (route === "/contact") return "contact.html";
   if (route === "/admin") return "admin.html";
+  if (route === "/terms") return "terms.html";
+  if (route === "/privacy") return "privacy.html";
 
   if (route === "/blog") return path.join("blog", "index.html");
   if (route.startsWith("/blog/posts/")) {
