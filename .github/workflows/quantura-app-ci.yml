@@ -1,0 +1,85 @@
+name: Quantura App CI
+
+on:
+  pull_request:
+    paths:
+      - "quantura_site/**"
+      - ".github/workflows/quantura-app-ci.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "quantura_site/**"
+      - ".github/workflows/quantura-app-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    name: Validate Quantura app and SSR templates
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python test deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest
+
+      - name: Run Quantura tests
+        run: |
+          pytest -q quantura_site/tests
+
+      - name: Syntax check frontend and SSR entrypoints
+        run: |
+          node --check quantura_site/public/app.js
+          node --check quantura_site/functions_ssr/index.js
+
+      - name: Verify SSR templates are synced
+        run: |
+          node quantura_site/functions_ssr/scripts/sync-templates.js
+          git diff --exit-code -- quantura_site/functions_ssr/templates
+
+      - name: Verify legal links and disclaimer route
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+
+          repo = Path(".")
+          pages = [
+              repo / "quantura_site/pages/index.html",
+              repo / "quantura_site/pages/forecasting.html",
+              repo / "quantura_site/pages/screener.html",
+              repo / "quantura_site/pages/dashboard.html",
+              repo / "quantura_site/pages/pricing.html",
+              repo / "quantura_site/pages/contact.html",
+              repo / "quantura_site/pages/terms.html",
+              repo / "quantura_site/pages/privacy.html",
+              repo / "quantura_site/pages/disclaimer.html",
+          ]
+          required_links = ["/terms", "/privacy", "/disclaimer"]
+
+          for page in pages:
+              html = page.read_text(encoding="utf-8")
+              for link in required_links:
+                  assert f'href="{link}"' in html, f"{page} missing link: {link}"
+
+          firebase_json = json.loads((repo / "quantura_site/firebase.json").read_text(encoding="utf-8"))
+          rewrites = firebase_json.get("hosting", {}).get("rewrites", [])
+          assert any(item.get("source") == "/disclaimer" for item in rewrites), "firebase.json missing /disclaimer rewrite"
+          print("Legal link and route checks passed.")
+          PY
