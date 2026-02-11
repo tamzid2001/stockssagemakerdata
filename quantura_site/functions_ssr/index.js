@@ -108,6 +108,7 @@ const resolveTemplate = (pathname) => {
   if (route === "/admin") return "admin.html";
   if (route === "/terms") return "terms.html";
   if (route === "/privacy") return "privacy.html";
+  if (route === "/disclaimer") return "disclaimer.html";
 
   if (route === "/blog") return path.join("blog", "index.html");
   if (route.startsWith("/blog/posts/")) {

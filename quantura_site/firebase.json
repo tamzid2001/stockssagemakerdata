@@ -62,6 +62,7 @@
       { "source": "/contact", "function": "ssr" },
       { "source": "/terms", "function": "ssr" },
       { "source": "/privacy", "function": "ssr" },
+      { "source": "/disclaimer", "function": "ssr" },
       { "source": "/admin", "function": "ssr" },
 
       { "source": "/blog", "function": "ssr" },
