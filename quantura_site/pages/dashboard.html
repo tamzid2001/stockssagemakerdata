@@ -270,20 +270,26 @@
 	      </section>
 
 	      <section class="section panel hidden" data-panel="productivity" id="productivity">
-	        <div class="container">
+	        <div class="container productivity-shell">
 	          <div class="section-title">
-	            <h2>Productivity boards</h2>
-	            <p class="small">Todo + kanban + calendar views synced to your active workspace.</p>
+	            <h2>Workspace productivity</h2>
+	            <p class="small">Create tasks quickly and track due dates in one place.</p>
 	          </div>
 
-          <div class="content-grid">
-            <form id="task-form" class="card">
+          <div class="productivity-grid">
+            <form id="task-form" class="card productivity-form">
               <h3>Create task</h3>
-              <div class="field">
-                <label class="label" for="task-title">Title</label>
-                <input id="task-title" placeholder="Review earnings transcript" required />
+              <div class="form-grid form-grid-compact">
+                <div class="field">
+                  <label class="label" for="task-title">Title</label>
+                  <input id="task-title" placeholder="Review earnings transcript" required />
+                </div>
+                <div class="field">
+                  <label class="label" for="task-assignee">Assignee (optional)</label>
+                  <input id="task-assignee" type="email" placeholder="collaborator@domain.com" />
+                </div>
               </div>
-              <div class="form-grid">
+              <div class="form-grid form-grid-compact">
                 <div class="field">
                   <label class="label" for="task-due">Due date</label>
                   <input id="task-due" type="date" />
@@ -298,43 +304,30 @@
                 </div>
               </div>
               <div class="field">
-                <label class="label" for="task-assignee">Assignee email (optional)</label>
-                <input id="task-assignee" type="email" placeholder="collaborator@domain.com" />
+                <label class="label" for="task-notes">Notes (optional)</label>
+                <textarea id="task-notes" rows="3" placeholder="Context, handoff, or checklist..."></textarea>
               </div>
-              <div class="field">
-                <label class="label" for="task-notes">Notes</label>
-                <textarea id="task-notes" placeholder="What should be captured in the write-up?"></textarea>
-              </div>
-              <button class="cta" type="submit" data-analytics="task_create">Create task</button>
+              <button class="cta" type="submit" data-analytics="task_create">Add task</button>
               <p class="small" id="task-status-text"></p>
-              <details class="learn-more">
-                <summary>Learn more</summary>
-                <p class="small">
-                  Tasks live inside your active workspace. Invite collaborators in the Collaboration panel to share the same board.
-                  Viewer collaborators can read tasks. Editor collaborators can create and move tasks.
-                </p>
-              </details>
             </form>
 
-            <div class="results-panel">
-              <h3>Kanban board</h3>
-              <div id="productivity-board" class="kanban"></div>
+            <div class="results-panel productivity-board-wrap">
+              <div class="productivity-head">
+                <h3>Kanban board</h3>
+                <p class="small">Drag tasks between Backlog, Doing, and Done.</p>
+              </div>
+              <div id="productivity-board" class="kanban-host"></div>
             </div>
           </div>
 
-          <div class="content-grid" style="margin-top: 16px;">
-            <div class="card">
+          <div class="card productivity-calendar-wrap">
+            <div class="productivity-head">
               <h3>Calendar</h3>
-              <div id="tasks-calendar" class="tasks-calendar small muted">Tasks with due dates will appear here.</div>
+              <p class="small">Due-date view for this workspace.</p>
             </div>
-            <div class="card">
-              <h3>Workspace audit</h3>
-              <div class="small">
-                Keep research accountable: tie tasks to forecasts, saved runs, and Deep Forecast deliverables.
-                Everything is stored in your workspace for traceability.
-              </div>
-            </div>
+            <div id="tasks-calendar" class="tasks-calendar small muted">Tasks with due dates will appear here.</div>
           </div>
+
         </div>
       </section>
 
@@ -425,9 +418,9 @@
             </div>
             <div id="predictions-plot-meta" class="small muted">Select an upload to preview and plot it.</div>
             <div class="hero-actions" style="margin-top: 12px; justify-content: flex-start;">
-              <button class="cta secondary" id="predictions-agent-button" type="button" data-analytics="predictions_agent_run"><i class="iconoir-flask" aria-hidden="true"></i><span>Run quantile mapping</span></button>
+              <button class="cta secondary" id="predictions-agent-button" type="button" data-analytics="predictions_agent_run"><i class="iconoir-sparks" aria-hidden="true"></i><span>Run OpenAI CSV Agent</span></button>
             </div>
-            <div id="predictions-agent-output" class="panel-output small" style="margin-top: 14px;">Run the mapping to compare the first forecast date to real highs and select a point forecast quantile.</div>
+            <div id="predictions-agent-output" class="panel-output small" style="margin-top: 14px;">Run the OpenAI CSV Agent to compute weekday-aware quantile mapping and return an analyst summary.</div>
             <div id="predictions-chart" class="chart" style="margin-top: 14px; min-height: 420px;"></div>
             <div id="predictions-preview" class="panel-output small" style="margin-top: 14px;">Preview will appear here.</div>
           </div>
@@ -515,11 +508,20 @@
           <strong>Legal</strong>
           <div><a href="/terms">Terms and Conditions</a></div>
           <div><a href="/privacy">Privacy Policy</a></div>
-          <p class="small legal-copy" style="margin-top:10px;">
-            Quantura provides software and data tooling only. You are responsible for all account activity and for complying with applicable laws, exchange rules, and broker requirements.
-          </p>
+          <div><a href="/disclaimer">Disclaimer Policy</a></div>
+          <details class="footer-terms" style="margin-top:10px;">
+            <summary>Terms summary (important)</summary>
+            <ul class="footer-terms-list">
+              <li>By using Quantura, you confirm you are at least 18 years old and authorized to act for your account or business.</li>
+              <li>Paid plans renew automatically until canceled before the next billing date. Refund and cancellation rules are listed in the full Terms.</li>
+              <li>Quantura provides software and data tooling, not brokerage, investment advisory, legal, or tax services.</li>
+              <li>Market data, forecast outputs, and AI-generated content may be delayed, incomplete, or inaccurate and must be independently verified.</li>
+              <li>Services are provided "as is" to the maximum extent permitted by law, with liability limitations and dispute resolution terms in the full Terms.</li>
+              <li>Where enforceable, disputes may be resolved through individual arbitration and class action waiver terms.</li>
+            </ul>
+          </details>
           <p class="small legal-copy">
-            Financial disclaimer: nothing on Quantura is investment, tax, accounting, or legal advice. Market data and model outputs can be delayed, incomplete, or incorrect. Past performance does not guarantee future results.
+            Financial disclaimer: nothing on Quantura is investment, tax, accounting, or legal advice. Trading and options involve substantial risk, including possible loss of principal.
           </p>
         </div>
       </div>

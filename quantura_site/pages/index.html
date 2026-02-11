@@ -45,6 +45,79 @@
         "sameAs": []
       }
     </script>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "What is Quantura?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Quantura is a market intelligence platform that combines forecasting, technical context, news, options data, and workflow tools so teams can make faster, better-documented decisions."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Who is Quantura built for?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Quantura is built for active investors, research teams, founders, and operators who need structured, repeatable decision workflows rather than one-off chart snapshots."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "What is the difference between Weekly Brief and Deep Forecast?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Weekly Brief provides curated watchlist intelligence. Deep Forecast is a paid, asset-specific deliverable with probability bands, scenario ranges, model notes, and decision triggers."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Which forecasting methods are included?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Quantura supports Meta Prophet workflows, TimeMixer options, and an AWS SageMaker Canvas baseline so users can compare approaches and store runs."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Can I save and reload forecasts and screener runs?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. Saved forecasts, uploaded prediction files, and screener runs are stored in your workspace and can be reloaded, shared, and managed later."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Can I upload my own prediction CSV files?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. You can upload prediction CSVs, preview rows, run plotting, and keep files tied to your workspace for future analysis."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Does Quantura place trades for me?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No. Quantura provides analytics and decision support only and is not a broker or investment adviser."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How is account data protected?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Quantura uses authenticated access, role-based controls, encrypted transport, and workspace-level permissions to protect user data."
+            }
+          }
+        ]
+      }
+    </script>
   </head>
   <body>
     <header class="header">
@@ -231,6 +304,101 @@
       </section>
 
       <section class="section">
+        <div class="container">
+          <div class="section-title">
+            <h2>Frequently asked questions</h2>
+            <p class="small">Everything you need before running production research workflows.</p>
+          </div>
+          <div class="faq-grid">
+            <details class="faq-item" open>
+              <summary><i class="iconoir-info-circle" aria-hidden="true"></i><span>What is Quantura?</span></summary>
+              <p class="small faq-answer">
+                Quantura is a market intelligence platform that combines forecasting, technical context, news, options analysis,
+                and workspace workflows so teams can move from idea to decision with less friction.
+              </p>
+            </details>
+            <details class="faq-item">
+              <summary><i class="iconoir-users-group-two-rounded" aria-hidden="true"></i><span>Who should use Quantura?</span></summary>
+              <p class="small faq-answer">
+                Quantura is designed for active investors, research teams, founders, and operators who need structured,
+                repeatable analysis rather than ad hoc chart checks.
+              </p>
+            </details>
+            <details class="faq-item">
+              <summary><i class="iconoir-wallet" aria-hidden="true"></i><span>What is included in Weekly Brief vs Deep Forecast?</span></summary>
+              <p class="small faq-answer">
+                Weekly Brief is your recurring market intelligence layer. Deep Forecast is a paid, asset-specific deliverable with
+                forecast bands, scenario planning, risk triggers, and action-oriented commentary.
+              </p>
+            </details>
+            <details class="faq-item">
+              <summary><i class="iconoir-graph-up" aria-hidden="true"></i><span>Which forecasting methods are supported?</span></summary>
+              <p class="small faq-answer">
+                You can run Meta Prophet workflows, TimeMixer alternatives, and an AWS SageMaker Canvas baseline for comparison.
+                Forecast runs are saved so you can revisit assumptions and outcomes over time.
+              </p>
+            </details>
+            <details class="faq-item">
+              <summary><i class="iconoir-media-image-list" aria-hidden="true"></i><span>Can I upload my own prediction CSV?</span></summary>
+              <p class="small faq-answer">
+                Yes. Uploads are tied to your workspace and can be previewed, plotted, renamed, shared, or deleted with full CRUD controls.
+                This supports handoffs between external model pipelines and Quantura workflows.
+              </p>
+            </details>
+            <details class="faq-item">
+              <summary><i class="iconoir-bookmark-book" aria-hidden="true"></i><span>Can I save, reload, and share past runs?</span></summary>
+              <p class="small faq-answer">
+                Yes. Forecast runs and screener outputs are persisted in your workspace so you can reload them later, compare versions,
+                and share with collaborators for review.
+              </p>
+            </details>
+            <details class="faq-item">
+              <summary><i class="iconoir-bell-notification" aria-hidden="true"></i><span>Do alerts and notifications run in real time?</span></summary>
+              <p class="small faq-answer">
+                Watchlists and price alerts are tracked continuously from connected data feeds. Notification delivery depends on client
+                permissions and service availability, and all alert events are logged to your workspace history.
+              </p>
+            </details>
+            <details class="faq-item">
+              <summary><i class="iconoir-shield-check" aria-hidden="true"></i><span>How does Quantura handle security and privacy?</span></summary>
+              <p class="small faq-answer">
+                Quantura uses authenticated access, encrypted transport, role-based permissions, and workspace-level access controls.
+                See the Privacy Policy for full data handling details.
+              </p>
+            </details>
+            <details class="faq-item">
+              <summary><i class="iconoir-cancel" aria-hidden="true"></i><span>Can I cancel a paid plan?</span></summary>
+              <p class="small faq-answer">
+                Yes. Paid plans can be canceled according to the billing terms listed in Pricing and Terms.
+                Cancellation changes future billing and does not retroactively reverse already rendered services.
+              </p>
+            </details>
+            <details class="faq-item">
+              <summary><i class="iconoir-cursor-pointer" aria-hidden="true"></i><span>Does Quantura execute trades automatically?</span></summary>
+              <p class="small faq-answer">
+                No. Quantura is an analytics and decision-support platform. It does not operate as a broker-dealer or investment adviser,
+                and all final trade decisions remain with the user.
+              </p>
+            </details>
+            <details class="faq-item">
+              <summary><i class="iconoir-download-circle" aria-hidden="true"></i><span>Can I export my research artifacts?</span></summary>
+              <p class="small faq-answer">
+                Yes. Forecasts, screen outputs, and upload-related artifacts can be downloaded and reused in external BI, model validation,
+                and reporting workflows.
+              </p>
+            </details>
+            <details class="faq-item">
+              <summary><i class="iconoir-headset-help" aria-hidden="true"></i><span>Where do I request support or enterprise help?</span></summary>
+              <p class="small faq-answer">
+                Use the Contact page for implementation support, enterprise onboarding, and custom forecasting engagements.
+                Quantura support typically replies within one business day.
+              </p>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
         <div class="container callout">
           <span class="badge" style="background: rgba(255,255,255,0.1); color: #f8fafc;">Deep Forecast</span>
           <h2>Need a high-conviction forecast this week?</h2>
@@ -321,11 +489,20 @@
           <strong>Legal</strong>
           <div><a href="/terms">Terms and Conditions</a></div>
           <div><a href="/privacy">Privacy Policy</a></div>
-          <p class="small legal-copy" style="margin-top:10px;">
-            Quantura provides software and data tooling only. You are responsible for all account activity and for complying with applicable laws, exchange rules, and broker requirements.
-          </p>
+          <div><a href="/disclaimer">Disclaimer Policy</a></div>
+          <details class="footer-terms" style="margin-top:10px;">
+            <summary>Terms summary (important)</summary>
+            <ul class="footer-terms-list">
+              <li>By using Quantura, you confirm you are at least 18 years old and authorized to act for your account or business.</li>
+              <li>Paid plans renew automatically until canceled before the next billing date. Refund and cancellation rules are listed in the full Terms.</li>
+              <li>Quantura provides software and data tooling, not brokerage, investment advisory, legal, or tax services.</li>
+              <li>Market data, forecast outputs, and AI-generated content may be delayed, incomplete, or inaccurate and must be independently verified.</li>
+              <li>Services are provided "as is" to the maximum extent permitted by law, with liability limitations and dispute resolution terms in the full Terms.</li>
+              <li>Where enforceable, disputes may be resolved through individual arbitration and class action waiver terms.</li>
+            </ul>
+          </details>
           <p class="small legal-copy">
-            Financial disclaimer: nothing on Quantura is investment, tax, accounting, or legal advice. Market data and model outputs can be delayed, incomplete, or incorrect. Past performance does not guarantee future results.
+            Financial disclaimer: nothing on Quantura is investment, tax, accounting, or legal advice. Trading and options involve substantial risk, including possible loss of principal.
           </p>
         </div>
       </div>

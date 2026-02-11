@@ -2541,6 +2541,128 @@ def get_prediction_upload_csv(req: https_fn.CallableRequest) -> dict[str, Any]:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INTERNAL, "Unable to fetch CSV.")
 
 
+def _prediction_agent_fallback(summary: dict[str, Any], ticker: str) -> str:
+    quantile = str(summary.get("selectedQuantileLabel") or summary.get("selectedQuantile") or "N/A")
+    point = summary.get("pointForecastValue")
+    first_date = str(summary.get("firstRowDate") or "")
+    last_date = str(summary.get("lastRowDate") or "")
+    relation = str(summary.get("relation") or "").strip()
+    warning = str(summary.get("warningText") or "").strip()
+    pieces = [
+        f"Ticker: {ticker or 'N/A'}.",
+        f"Selected quantile: {quantile}.",
+        f"Point forecast on last weekday row: {point}.",
+    ]
+    if first_date and last_date:
+        pieces.append(f"Prediction window: {first_date} -> {last_date}.")
+    if relation:
+        pieces.append(relation)
+    if warning:
+        pieces.append(f"Weekday warning: {warning}")
+    pieces.append("OpenAI commentary is unavailable; this is the deterministic fallback summary.")
+    return " ".join(pieces)
+
+
+@https_fn.on_call()
+def run_prediction_upload_agent(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    data = req.data or {}
+    upload_id = str(data.get("uploadId") or data.get("id") or "").strip()
+    if not upload_id:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Upload ID is required.")
+
+    ref = db.collection("prediction_uploads").document(upload_id)
+    snap = ref.get()
+    if not snap.exists:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "Upload not found.")
+
+    doc = snap.to_dict() or {}
+    owner_id = str(doc.get("userId") or "").strip()
+    if token.get("email") != ADMIN_EMAIL and owner_id != req.auth.uid:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.PERMISSION_DENIED, "Access denied.")
+
+    mapping_summary = data.get("mappingSummary") if isinstance(data.get("mappingSummary"), dict) else {}
+    ticker = str(data.get("ticker") or mapping_summary.get("ticker") or doc.get("ticker") or "").upper().strip()
+    if not ticker:
+        ticker = "UNKNOWN"
+
+    # Trim very long cells before sending to model.
+    compact_summary = dict(mapping_summary or {})
+    for key in ("firstRowText", "lastRowText", "relation", "warningText"):
+        if key in compact_summary and compact_summary[key] is not None:
+            compact_summary[key] = str(compact_summary[key])[:1200]
+
+    fallback_text = _prediction_agent_fallback(compact_summary, ticker)
+    analysis = fallback_text
+    model_used = "template_fallback"
+    provider = "fallback"
+
+    if OPENAI_API_KEY:
+        model_used = str(os.environ.get("PREDICTION_AGENT_MODEL") or "gpt-4o-mini").strip() or "gpt-4o-mini"
+        system_prompt = (
+            "You are a market data QA assistant for Quantura. "
+            "Given CSV-derived quantile mapping metadata, write a concise analyst note. "
+            "Do not provide financial advice, guarantees, or return promises. "
+            "Output plain text only."
+        )
+        user_prompt = (
+            "Write a compact report with these headings:\n"
+            "1) Mapping result\n"
+            "2) Weekday checks\n"
+            "3) Risk notes\n"
+            "4) Next validation step\n\n"
+            f"Ticker: {ticker}\n"
+            f"Upload title: {doc.get('title') or 'predictions.csv'}\n"
+            f"Summary JSON: {json.dumps(compact_summary, ensure_ascii=True)}"
+        )
+        payload = {
+            "model": model_used,
+            "temperature": 0.2,
+            "max_tokens": 450,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        }
+        try:
+            response = requests.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {OPENAI_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=30,
+            )
+            response.raise_for_status()
+            body = response.json()
+            message = body.get("choices", [{}])[0].get("message", {})
+            content = str(message.get("content") or "").strip()
+            if content:
+                analysis = content
+                provider = "openai"
+            else:
+                analysis = fallback_text
+                provider = "fallback"
+        except Exception:
+            analysis = fallback_text
+            provider = "fallback"
+
+    _audit_event(
+        req.auth.uid,
+        token.get("email"),
+        "predictions_agent_run",
+        {"uploadId": upload_id, "provider": provider, "model": model_used, "ticker": ticker},
+    )
+    return {
+        "uploadId": upload_id,
+        "ticker": ticker,
+        "analysis": analysis,
+        "provider": provider,
+        "model": model_used,
+    }
+
+
 def _is_paid_user(uid: str) -> bool:
     try:
         docs = db.collection("orders").where("userId", "==", uid).limit(25).stream()
