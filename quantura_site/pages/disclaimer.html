@@ -3,19 +3,15 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Options Chain Primer: Implied Probability in Practice | Quantura Blog</title>
-    <meta
-      name="description"
-      content="A practical options-chain primer: implied volatility, deltas, and how to think about implied probability alongside forecast bands."
-    />
+    <title>Quantura Disclaimer Policy</title>
+    <meta name="description" content="Disclaimer policy for Quantura analytics, forecasts, and market research outputs." />
     <meta name="robots" content="index, follow" />
-    <link rel="canonical" href="https://quantura-e2e3d.web.app/blog/posts/2026-02-10-options-probability-primer" />
-    <meta property="og:title" content="Options Chain Primer: Implied Probability in Practice" />
-    <meta property="og:description" content="How to read options data without getting lost in noise." />
-    <meta property="og:type" content="article" />
-    <meta property="og:url" content="https://quantura-e2e3d.web.app/blog/posts/2026-02-10-options-probability-primer" />
+    <link rel="canonical" href="https://quantura-e2e3d.web.app/disclaimer" />
+    <meta property="og:title" content="Quantura Disclaimer Policy" />
+    <meta property="og:description" content="Important risk and liability disclaimers for using Quantura." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://quantura-e2e3d.web.app/disclaimer" />
     <meta property="og:image" content="/assets/quantura-logo.svg" />
-    <link rel="alternate" type="application/rss+xml" title="Quantura Blog RSS" href="/blog/rss.xml" />
     <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="stylesheet" href="/styles.css" />
@@ -26,26 +22,10 @@
     <script defer src="/__/firebase/12.9.0/firebase-firestore-compat.js"></script>
     <script defer src="/__/firebase/12.9.0/firebase-functions-compat.js"></script>
     <script defer src="/__/firebase/12.9.0/firebase-storage-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-remote-config-compat.js"></script>
     <script defer src="/__/firebase/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
     <script defer src="/app.js"></script>
-
-    <script type="application/ld+json">
-      {
-        "@context": "https://schema.org",
-        "@type": "BlogPosting",
-        "headline": "Options Chain Primer: Implied Probability in Practice",
-        "datePublished": "2026-02-10",
-        "dateModified": "2026-02-10",
-        "author": { "@type": "Organization", "name": "Quantura" },
-        "publisher": {
-          "@type": "Organization",
-          "name": "Quantura",
-          "logo": { "@type": "ImageObject", "url": "https://quantura-e2e3d.web.app/assets/quantura-logo.svg" }
-        },
-        "mainEntityOfPage": "https://quantura-e2e3d.web.app/blog/posts/2026-02-10-options-probability-primer"
-      }
-    </script>
   </head>
   <body>
     <header class="header">
@@ -58,15 +38,10 @@
           <a href="/contact" data-analytics="nav_contact"><i class="iconoir-mail" aria-hidden="true"></i><span>Contact</span></a>
         </nav>
         <div class="nav-actions">
-          <span
-            id="header-user-email"
-            class="small"
-            style="max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
-            >Guest</span
-          >
+          <span id="header-user-email" class="small" style="max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Guest</span>
           <span id="header-user-status" class="pill">Guest</span>
           <button class="cta secondary" id="header-auth" type="button"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></button>
-          <a class="cta" href="/options"><i class="iconoir-numbered-list-left" aria-hidden="true"></i><span>Open options</span></a>
+          <a class="cta" href="/pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>View plans</span></a>
         </div>
       </div>
     </header>
@@ -75,76 +50,73 @@
       <section class="page-hero">
         <div class="container content-grid">
           <div>
-            <div class="eyebrow">Options notes</div>
-            <h1>Options chain primer: implied probability in practice</h1>
-            <p class="small">Published February 10, 2026</p>
-            <p style="margin-top: 14px;">
-              Options data can be useful, but only if you anchor it to a plan. The terminal lets you pull a chain,
-              estimate implied probability, and compare strikes to forecast bands and trend overlays.
+            <div class="eyebrow">Legal</div>
+            <h1>Disclaimer Policy</h1>
+            <p>
+              Effective date: February 11, 2026. This page explains the risk disclosures and liability boundaries
+              for using Quantura analytics, forecasts, and market content.
             </p>
-            <div class="hero-actions">
-              <a class="cta" href="/options" data-analytics="blog_open_options"><i class="iconoir-numbered-list-left" aria-hidden="true"></i><span>Open options panel</span></a>
-              <a class="cta secondary" href="/forecasting" data-analytics="blog_open_terminal"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Open terminal</span></a>
-            </div>
           </div>
           <div class="card">
-            <h3>What to focus on</h3>
+            <h3>Key points</h3>
             <div class="feature-list">
-              <div class="feature"><span></span>Liquidity first (volume, OI, spreads)</div>
-              <div class="feature"><span></span>Compare strikes to your band, not headlines</div>
-              <div class="feature"><span></span>Document your plan and revisit</div>
+              <div class="feature"><span></span>Quantura content is educational and informational only.</div>
+              <div class="feature"><span></span>No content is investment, legal, accounting, or tax advice.</div>
+              <div class="feature"><span></span>Trading and investing can result in substantial losses.</div>
+              <div class="feature"><span></span>You remain solely responsible for all decisions and outcomes.</div>
             </div>
           </div>
         </div>
       </section>
 
       <section class="section">
-        <div class="container content-grid">
-          <div>
-            <h2>Implied probability is not certainty</h2>
-            <p>
-              “Implied probability” is a translation of an options surface into a rough chance of finishing in-the-money.
-              It depends on assumptions. It changes with volatility. It is a lens, not a verdict.
-            </p>
-            <p>
-              Treat it as a way to sanity-check whether the market is pricing a move that is consistent with your forecast band.
-              If your band says wide uncertainty but IV is compressed, that mismatch is information.
-            </p>
-          </div>
+        <div class="container" style="display:grid; gap:16px;">
           <div class="card">
-            <h3>Practical checklist</h3>
-            <div class="feature-list">
-              <div class="feature"><span></span>Start with nearest expiration</div>
-              <div class="feature"><span></span>Filter to strikes near spot</div>
-              <div class="feature"><span></span>Look for skew and jumps in IV</div>
-            </div>
-          </div>
-        </div>
-      </section>
+            <h3>Educational purpose only</h3>
+            <p class="small">
+              Quantura and all related site materials are provided for general education and informational use only.
+              Nothing on this platform should be interpreted as personalized financial advice, investment advice,
+              or a recommendation to buy, sell, hold, or allocate capital to any security or strategy.
+            </p>
 
-      <section class="section">
-        <div class="container content-grid">
-          <div class="card">
-            <h3>How to use it in Quantura</h3>
-            <ul style="margin: 12px 0 0 18px; color: var(--graphite); line-height: 1.75;">
-              <li>Load a ticker, then run Meta Prophet with `0.1,0.5,0.9`.</li>
-              <li>Open Options and select an expiration.</li>
-              <li>Compare ITM probability across strikes to your band width.</li>
-              <li>Save the run so you can revisit after earnings or macro events.</li>
-            </ul>
-          </div>
-          <div>
-            <h2>Pair it with context</h2>
-            <p>
-              Options are context-sensitive. Use News for catalysts, Indicators for trend, and Alerts for execution levels.
-              A chain without a workflow becomes noise quickly.
+            <h3>No liability for trading or investment losses</h3>
+            <p class="small">
+              By using Quantura, you agree that no individual or entity affiliated with Quantura is responsible for
+              losses, damages, or costs resulting from your use of platform content, forecasts, alerts, model output,
+              newsletters, or any related information.
             </p>
-            <details class="learn-more">
-              <summary>Learn more</summary>
-              <p class="small">
-                If you want to build muscle, keep a short journal in Watchlist notes: what strike, what assumption, what happened next.
-              </p>
-            </details>
+
+            <h3>Risk disclosure</h3>
+            <p class="small">
+              Trading and investing involve substantial risk, including possible loss of principal.
+              You should only commit capital you can afford to lose and should evaluate your risk tolerance,
+              liquidity needs, and objectives before making decisions.
+            </p>
+
+            <h3>Accuracy and completeness</h3>
+            <p class="small">
+              Quantura uses third-party data providers and model-based methods. Data and outputs may be delayed,
+              incomplete, inaccurate, or unavailable. We do not warrant the completeness, timeliness, reliability,
+              or accuracy of any information provided.
+            </p>
+
+            <h3>Affiliates and partners</h3>
+            <p class="small">
+              Partner, affiliate, and third-party brands referenced on the site are independent entities unless
+              explicitly stated otherwise. Their products, services, or claims are not warranties by Quantura.
+            </p>
+
+            <h3>Independent advisor recommendation</h3>
+            <p class="small">
+              Before buying or selling securities, options, or other financial products, you should consult an
+              independent, qualified financial advisor and any other professional advisors relevant to your situation.
+            </p>
+
+            <h3>Errors and omissions</h3>
+            <p class="small">
+              Quantura cannot accept responsibility for errors, omissions, or interruptions in site content,
+              analytics output, or operational services.
+            </p>
           </div>
         </div>
       </section>

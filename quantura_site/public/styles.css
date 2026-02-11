@@ -443,6 +443,32 @@ i[class*=" iconoir-"]::before {
   line-height: 1.6;
 }
 
+.footer-terms {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.footer-terms summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.footer-terms-list {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+  color: var(--ink-2);
+  line-height: 1.45;
+}
+
+.footer-terms-list li {
+  margin: 0;
+}
+
 .footer-social {
   display: flex;
   gap: 10px;
@@ -877,6 +903,12 @@ textarea {
   padding: 32px;
   display: grid;
   gap: 12px;
+}
+
+.callout p,
+.callout li,
+.callout .small {
+  color: #f8fafc;
 }
 
 .callout .cta.secondary {
@@ -1328,19 +1360,83 @@ textarea {
   flex-wrap: wrap;
 }
 
+.productivity-shell {
+  display: grid;
+  gap: 24px;
+}
+
+.productivity-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 360px) minmax(0, 1fr);
+  gap: 22px;
+  align-items: start;
+}
+
+.productivity-form {
+  position: sticky;
+  top: calc(var(--dock-top) + 8px);
+  padding: 16px;
+  display: grid;
+  gap: 10px;
+}
+
+#productivity .productivity-form h3 {
+  margin: 0 0 2px;
+  font-size: 1.02rem;
+}
+
+#productivity .productivity-form .field {
+  gap: 4px;
+}
+
+#productivity .form-grid-compact {
+  gap: 10px;
+}
+
+#productivity .productivity-form textarea {
+  min-height: 82px;
+}
+
+#productivity .productivity-form .cta {
+  padding: 10px 14px;
+}
+
+#productivity #task-status-text {
+  min-height: 1.1rem;
+  margin: 0;
+}
+
+.productivity-board-wrap,
+.productivity-calendar-wrap {
+  display: grid;
+  gap: 14px;
+}
+
+.productivity-head {
+  display: grid;
+  gap: 4px;
+}
+
+.kanban-host {
+  min-height: 280px;
+}
+
 .kanban {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(3, minmax(240px, 1fr));
+  gap: 16px;
   align-items: start;
 }
 
 .kanban-col {
   border: 1px solid var(--line);
   border-radius: 18px;
-  padding: 12px;
+  padding: 16px;
   background: var(--surface-solid);
-  min-height: 220px;
+  min-height: 300px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
 }
 
 .kanban-col.drag-over {
@@ -1352,12 +1448,15 @@ textarea {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
+  margin-bottom: 2px;
 }
 
 .kanban-col-body {
   display: grid;
-  gap: 10px;
+  gap: 12px;
+  max-height: 620px;
+  overflow: auto;
+  padding-right: 4px;
 }
 
 .task-card {
@@ -1366,6 +1465,8 @@ textarea {
   padding: 12px;
   background: var(--surface-solid);
   box-shadow: 0 10px 18px rgba(26, 33, 56, 0.06);
+  display: grid;
+  gap: 10px;
 }
 
 .task-card[draggable="true"] {
@@ -1380,13 +1481,43 @@ textarea {
   font-weight: 900;
   color: var(--ink);
   line-height: 1.3;
+  font-size: 0.94rem;
+}
+
+.task-meta {
+  line-height: 1.35;
+}
+
+.task-notes {
+  line-height: 1.45;
+  max-height: 4.2em;
+  overflow: hidden;
 }
 
 .task-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-top: 10px;
+  display: grid;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.task-move-group {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(74px, 1fr));
+  gap: 7px;
+}
+
+#productivity .task-actions .task-chip {
+  text-align: center;
+  width: 100%;
+  min-height: 32px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#productivity .task-actions .task-chip.danger {
+  width: auto;
+  justify-self: start;
 }
 
 .task-chip {
@@ -1429,6 +1560,24 @@ textarea {
   align-items: center;
 }
 
+.csv-footnote {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+
+#predictions-preview .muted {
+  color: var(--ink-2);
+}
+
+#predictions-preview .task-chip[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+#predictions-preview .task-chip:not([disabled]) {
+  border-color: rgba(18, 24, 42, 0.28);
+}
+
 .task-upcoming {
   display: grid;
   gap: 12px;
@@ -1445,11 +1594,12 @@ textarea {
 
 .tasks-calendar {
   overflow: auto;
+  padding-bottom: 8px;
 }
 
 .calendar-wrap {
   display: grid;
-  gap: 12px;
+  gap: 14px;
 }
 
 .calendar-head {
@@ -1469,7 +1619,8 @@ textarea {
 .calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 10px;
+  gap: 12px;
+  min-width: 900px;
 }
 
 .calendar-dow {
@@ -1484,11 +1635,11 @@ textarea {
 .calendar-cell {
   border: 1px solid var(--line);
   border-radius: 16px;
-  padding: 10px;
-  min-height: 96px;
+  padding: 12px;
+  min-height: 156px;
   background: var(--surface-solid);
   display: grid;
-  gap: 8px;
+  gap: 10px;
   align-content: start;
 }
 
@@ -1516,20 +1667,23 @@ textarea {
 
 .calendar-tasks {
   display: grid;
-  gap: 6px;
+  gap: 5px;
 }
 
 .calendar-task {
-  font-size: 0.78rem;
-  line-height: 1.25;
-  padding: 5px 7px;
-  border-radius: 12px;
+  font-size: 0.76rem;
+  line-height: 1.28;
+  padding: 6px 8px;
+  border-radius: 10px;
   border: 1px solid rgba(18, 24, 42, 0.14);
   background: rgba(18, 24, 42, 0.06);
   color: var(--ink);
+  min-height: 38px;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 .calendar-task[data-status="doing"] {
@@ -1545,6 +1699,24 @@ textarea {
 .calendar-task--more {
   background: rgba(18, 24, 42, 0.04);
   color: var(--ink-2);
+  min-height: auto;
+  white-space: nowrap;
+  display: block;
+}
+
+.calendar-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  border: 1px solid var(--line);
+  color: var(--ink-2);
+  background: rgba(18, 24, 42, 0.06);
 }
 
 .skeleton {
@@ -1766,6 +1938,7 @@ textarea {
   .metrics,
   .content-grid,
   .insight-grid,
+  .faq-grid,
   .pricing-grid,
   .auth-grid,
   .dashboard-grid,
@@ -1970,6 +2143,51 @@ textarea {
   font-weight: 800;
 }
 
+.faq-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.faq-item {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface-solid);
+  padding: 14px 16px;
+}
+
+.faq-item summary {
+  list-style: none;
+  cursor: pointer;
+  font-weight: 800;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  line-height: 1.35;
+}
+
+.faq-item summary::-webkit-details-marker {
+  display: none;
+}
+
+.faq-item summary i {
+  color: var(--accent);
+  font-size: 1.05rem;
+  flex: 0 0 auto;
+}
+
+.faq-item[open] {
+  border-color: rgba(240, 180, 41, 0.45);
+  box-shadow: 0 10px 18px rgba(240, 180, 41, 0.12);
+}
+
+.faq-answer {
+  margin: 12px 0 0;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+
 .modal {
   position: fixed;
   inset: 0;
@@ -2054,6 +2272,21 @@ textarea {
   background: var(--paper-2);
 }
 
+[data-theme="dark"] .footer-terms {
+  background: rgba(18, 24, 42, 0.68);
+  border-color: rgba(233, 237, 247, 0.2);
+}
+
+[data-theme="dark"] .faq-item {
+  background: rgba(18, 24, 42, 0.72);
+  border-color: rgba(233, 237, 247, 0.16);
+}
+
+[data-theme="dark"] .faq-item[open] {
+  border-color: rgba(240, 180, 41, 0.42);
+  box-shadow: 0 10px 20px rgba(240, 180, 41, 0.16);
+}
+
 [data-theme="dark"] .media-card,
 [data-theme="dark"] .sidebar-card,
 [data-theme="dark"] .sidebar-nav {
@@ -2096,6 +2329,12 @@ textarea {
 [data-theme="dark"] .calendar-task[data-status="done"] {
   background: rgba(58, 181, 162, 0.18);
   border-color: rgba(58, 181, 162, 0.32);
+}
+
+[data-theme="dark"] .calendar-count {
+  background: rgba(233, 237, 247, 0.08);
+  border-color: rgba(233, 237, 247, 0.2);
+  color: var(--ink);
 }
 
 [data-theme="dark"] .notice {
@@ -2183,6 +2422,14 @@ textarea {
   border-color: rgba(233, 237, 247, 0.18);
 }
 
+[data-theme="dark"] #predictions-preview .muted {
+  color: rgba(233, 237, 247, 0.92);
+}
+
+[data-theme="dark"] .csv-footnote {
+  color: rgba(233, 237, 247, 0.92);
+}
+
 [data-theme="dark"] .logo span {
   background: linear-gradient(95deg, #8bb8ff 0%, #6dd3f5 44%, #6fe7cf 100%);
   -webkit-background-clip: text;
@@ -2214,6 +2461,19 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .productivity-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .productivity-form {
+    position: relative;
+    top: 0;
+  }
+
+  .calendar-grid {
+    min-width: 700px;
+  }
+
   .studio-layout {
     grid-template-columns: 1fr;
   }
@@ -2226,6 +2486,16 @@ textarea {
 
   .ticker-dock-form {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .calendar-grid {
+    min-width: 640px;
+  }
+
+  .calendar-cell {
+    min-height: 138px;
   }
 }
 

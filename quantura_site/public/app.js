@@ -1866,13 +1866,16 @@
 	      const title = escapeHtml(task.title || "Untitled");
 	      const due = task.dueDate ? new Date(task.dueDate).toLocaleDateString() : "";
 	      const assignee = escapeHtml(task.assigneeEmail || "");
+	      const notes = escapeHtml(String(task.notes || "").trim());
 	      const meta = [due ? `Due ${due}` : "", assignee ? `Assignee: ${assignee}` : ""].filter(Boolean).join(" · ");
 	      const actions = editable
 	        ? `
 	          <div class="task-actions">
-	            <button class="task-chip" type="button" data-action="task-move" data-task-id="${escapeHtml(task.id)}" data-to="backlog">Backlog</button>
-	            <button class="task-chip" type="button" data-action="task-move" data-task-id="${escapeHtml(task.id)}" data-to="doing">Doing</button>
-	            <button class="task-chip" type="button" data-action="task-move" data-task-id="${escapeHtml(task.id)}" data-to="done">Done</button>
+              <div class="task-move-group">
+	              <button class="task-chip" type="button" data-action="task-move" data-task-id="${escapeHtml(task.id)}" data-to="backlog">Backlog</button>
+	              <button class="task-chip" type="button" data-action="task-move" data-task-id="${escapeHtml(task.id)}" data-to="doing">Doing</button>
+	              <button class="task-chip" type="button" data-action="task-move" data-task-id="${escapeHtml(task.id)}" data-to="done">Done</button>
+              </div>
 	            <button class="task-chip danger" type="button" data-action="task-delete" data-task-id="${escapeHtml(task.id)}">Delete</button>
 	          </div>
 	        `
@@ -1881,6 +1884,7 @@
 	        <div class="task-card" draggable="${editable ? "true" : "false"}" data-task-id="${escapeHtml(task.id)}">
 	          <div class="task-title">${title}</div>
 	          ${meta ? `<div class="small task-meta muted">${meta}</div>` : ""}
+            ${notes ? `<div class="small task-notes muted">${notes}</div>` : ""}
 	          ${actions}
 	        </div>
 	      `;
@@ -1963,18 +1967,18 @@
 	      const isToday = key === todayKey;
 	      const items = tasksByDate.get(key) || [];
 
-	      const summary = items.slice(0, 3).map((task) => {
+	      const summary = items.slice(0, 2).map((task) => {
 	        const title = escapeHtml(task?.title || "Untitled");
 	        const status = escapeHtml(String(task?.status || "backlog"));
 	        return `<div class="calendar-task" data-status="${status}">${title}</div>`;
 	      });
-	      const overflow = items.length > 3 ? `<div class="calendar-task calendar-task--more">+${items.length - 3} more</div>` : "";
+	      const overflow = items.length > 2 ? `<div class="calendar-task calendar-task--more">+${items.length - 2} more</div>` : "";
 
 	      cells.push(`
 	        <div class="calendar-cell${inMonth ? "" : " calendar-cell--out"}${isToday ? " calendar-cell--today" : ""}">
 	          <div class="calendar-cell-head">
 	            <span class="calendar-day">${dt.getDate()}</span>
-	            ${items.length ? `<span class="pill small">${items.length}</span>` : ""}
+	            ${items.length ? `<span class="calendar-count">${items.length}</span>` : ""}
 	          </div>
 	          <div class="calendar-tasks">
 	            ${summary.join("")}
@@ -3193,7 +3197,7 @@
       </div>
       <div class="csv-controls" aria-label="CSV preview pagination">
         <div class="csv-group">
-          <span class="small muted">Show</span>
+          <span class="small csv-footnote">Show</span>
           ${[25, 50, 100, 250, 500]
             .map(
               (size) =>
@@ -3202,17 +3206,17 @@
                 }">${size}</button>`
             )
             .join("")}
-          <span class="small muted">rows</span>
+          <span class="small csv-footnote">rows</span>
         </div>
         <div class="csv-group">
           <button class="task-chip" type="button" data-action="csv-page" data-dir="-1" ${currentPage === 0 ? "disabled" : ""}>Prev</button>
-          <span class="small muted">Page ${currentPage + 1} / ${totalPages}</span>
+          <span class="small csv-footnote">Page ${currentPage + 1} / ${totalPages}</span>
           <button class="task-chip" type="button" data-action="csv-page" data-dir="1" ${
             currentPage >= totalPages - 1 ? "disabled" : ""
           }>Next</button>
         </div>
       </div>
-      <div class="small muted" style="margin-top:10px;">
+      <div class="small csv-footnote" style="margin-top:10px;">
         Showing rows ${start + 1}-${end} of ${rows.length} row(s) and ${cols.length} of ${headers.length} column(s).
       </div>
     `;
@@ -3337,7 +3341,7 @@
 
   const runPredictionsQuantileMapping = async (functions) => {
     if (!state.user) {
-      showToast("Sign in to run quantile mapping.", "warn");
+      showToast("Sign in to run the OpenAI CSV Agent.", "warn");
       return;
     }
     const table = state.predictionsContext.table;
@@ -3422,6 +3426,28 @@
           ? `High ${highValue.toFixed(2)} is below ${selected.label.toUpperCase()} start value ${selected.value.toFixed(2)}.`
           : `High ${highValue.toFixed(2)} is equal to ${selected.label.toUpperCase()} start value ${selected.value.toFixed(2)}.`;
 
+    const mappingResult = {
+      uploadId: uploadId || "",
+      uploadTitle: String(uploadDoc.title || "predictions.csv"),
+      ticker,
+      firstRowDate: firstRaw.ymd,
+      firstRowIsWeekday: firstRaw.isWeekday,
+      firstWeekdayDate: firstUse.ymd,
+      lastRowDate: lastRaw.ymd,
+      lastRowIsWeekday: lastRaw.isWeekday,
+      lastWeekdayDate: lastUse.ymd,
+      warningText: warningBits.join(" "),
+      referenceHigh: Number(highValue.toFixed(4)),
+      referenceHighDate: highLookup.ymd,
+      selectedQuantile: selected.label,
+      selectedQuantileLabel: selected.label.toUpperCase(),
+      selectedQuantileStartValue: Number(selected.value.toFixed(4)),
+      pointForecastValue: Number(pointForecastValue.toFixed(4)),
+      relation,
+      firstRowText,
+      lastRowText,
+    };
+
     if (ui.predictionsAgentOutput) {
       ui.predictionsAgentOutput.innerHTML = `
         <div class="small"><strong>Ticker:</strong> ${escapeHtml(ticker)}</div>
@@ -3449,6 +3475,7 @@
       first_weekday: firstUse.ymd,
       last_weekday: lastUse.ymd,
     });
+    return mappingResult;
   };
 
   const inferCsvAxes = (table) => {
@@ -3628,7 +3655,7 @@
     }`;
     if (ui.predictionsAgentOutput) {
       ui.predictionsAgentOutput.innerHTML =
-        "Run the mapping to compare the first forecast date to real highs and select a point forecast quantile.";
+        "Run the OpenAI CSV Agent to compute weekday-aware quantile mapping and return an analyst summary.";
     }
 
     await renderPredictionsChart(table, { title });
@@ -4953,7 +4980,7 @@
               if (ui.predictionsPreview) ui.predictionsPreview.innerHTML = "Preview will appear here.";
               if (ui.predictionsAgentOutput) {
                 ui.predictionsAgentOutput.innerHTML =
-                  "Run the mapping to compare the first forecast date to real highs and select a point forecast quantile.";
+                  "Run the OpenAI CSV Agent to compute weekday-aware quantile mapping and return an analyst summary.";
               }
             } catch (error) {
               showToast(error.message || "Unable to delete upload.", "warn");
@@ -6365,7 +6392,7 @@
 
     ui.predictionsAgentButton?.addEventListener("click", async () => {
       if (!state.user) {
-        showToast("Sign in to run quantile mapping.", "warn");
+        showToast("Sign in to run the OpenAI CSV Agent.", "warn");
         return;
       }
       if (!functions) {
@@ -6374,15 +6401,45 @@
       }
       try {
         setOutputLoading(ui.predictionsAgentOutput, "Analyzing uploaded CSV...");
-        await runPredictionsQuantileMapping(functions);
+        const mappingResult = await runPredictionsQuantileMapping(functions);
+        if (mappingResult?.uploadId) {
+          try {
+            const runAgent = functions.httpsCallable("run_prediction_upload_agent");
+            const agentRes = await runAgent({
+              uploadId: mappingResult.uploadId,
+              ticker: mappingResult.ticker,
+              mappingSummary: mappingResult,
+              meta: buildMeta(),
+            });
+            const agent = agentRes?.data || {};
+            const agentText = String(agent.analysis || "").trim();
+            const modelUsed = String(agent.model || "gpt-4o-mini");
+            if (agentText && ui.predictionsAgentOutput) {
+              ui.predictionsAgentOutput.innerHTML += `
+                <div class="agent-summary" style="margin-top:14px;">
+                  <div class="small"><strong>OpenAI Agent (${escapeHtml(modelUsed)}):</strong></div>
+                  <div class="small" style="margin-top:6px; white-space:pre-wrap;">${escapeHtml(agentText)}</div>
+                </div>
+              `;
+            }
+          } catch (agentError) {
+            if (ui.predictionsAgentOutput) {
+              ui.predictionsAgentOutput.innerHTML += `
+                <div class="small muted" style="margin-top:12px;">
+                  OpenAI agent unavailable: ${escapeHtml(agentError.message || "Unable to generate AI commentary.")}
+                </div>
+              `;
+            }
+          }
+        }
         setOutputReady(ui.predictionsAgentOutput);
-        showToast("Quantile mapping completed.");
+        showToast("OpenAI CSV Agent completed.");
       } catch (error) {
         setOutputReady(ui.predictionsAgentOutput);
         if (ui.predictionsAgentOutput) {
-          ui.predictionsAgentOutput.innerHTML = `<div class="small muted">${escapeHtml(error.message || "Quantile mapping failed.")}</div>`;
+          ui.predictionsAgentOutput.innerHTML = `<div class="small muted">${escapeHtml(error.message || "OpenAI CSV Agent failed.")}</div>`;
         }
-        showToast(error.message || "Quantile mapping failed.", "warn");
+        showToast(error.message || "OpenAI CSV Agent failed.", "warn");
       }
     });
 
@@ -6645,7 +6702,7 @@
             state.predictionsContext.previewPage = 0;
             if (ui.predictionsAgentOutput) {
               ui.predictionsAgentOutput.textContent =
-                "Run the mapping to compare the first forecast date to real highs and select a point forecast quantile.";
+                "Run the OpenAI CSV Agent to compute weekday-aware quantile mapping and return an analyst summary.";
             }
 
             const pendingShare = String(getPendingShareId() || "").trim();
