@@ -3059,13 +3059,10 @@
       }));
   };
 
-  const buildForecastOverlays = (forecastRows) => {
-    if (!Array.isArray(forecastRows) || forecastRows.length === 0) return [];
-    const sample = forecastRows[0] || {};
-    const quantKeys = Object.keys(sample)
-      .filter((key) => /^q\d\d$/.test(key))
-      .sort();
-    if (!quantKeys.length) return [];
+	  const buildForecastOverlays = (forecastRows) => {
+	    if (!Array.isArray(forecastRows) || forecastRows.length === 0) return [];
+	    const quantKeys = extractQuantileKeys(forecastRows);
+	    if (!quantKeys.length) return [];
 
     const entries = quantKeys
       .map((key) => ({ key, q: Number(key.slice(1)) / 100 }))
@@ -3266,6 +3263,18 @@
     logEvent("screener_loaded_saved", { run_id: doc.id });
   };
 
+  const extractQuantileKeys = (rows) => {
+    const list = Array.isArray(rows) ? rows : [];
+    const set = new Set();
+    for (let i = 0; i < Math.min(list.length, 500); i += 1) {
+      const row = list[i] || {};
+      Object.keys(row).forEach((key) => {
+        if (/^q\\d\\d$/.test(key)) set.add(key);
+      });
+    }
+    return Array.from(set).sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
+  };
+
   const renderForecastDetails = (forecastDoc) => {
     if (!ui.forecastOutput || !forecastDoc) return;
     const rows = Array.isArray(forecastDoc.forecastRows) ? forecastDoc.forecastRows : [];
@@ -3275,9 +3284,7 @@
       return;
     }
 
-    const quantKeys = Object.keys(rows[0] || {})
-      .filter((key) => /^q\d\d$/.test(key))
-      .sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
+    const quantKeys = extractQuantileKeys(rows);
     const headers = ["ds", ...quantKeys];
 
     const pageSize = 25;
@@ -4236,15 +4243,13 @@
 		        showToast("No forecast rows available to export.", "warn");
 		        return;
 		      }
-      const rows = doc.forecastRows;
-      const quantKeys = Object.keys(rows[0] || {})
-        .filter((key) => /^q\d\d$/.test(key))
-        .sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
-		      const headers = ["ds", ...quantKeys];
-		      const csv = buildCsv(rows, headers);
-		      const ticker = normalizeTicker(doc.ticker || "ticker") || "ticker";
-		      const service = String(doc.service || "forecast").replace(/[^a-z0-9_\\-]+/gi, "_");
-		      triggerDownload(`${ticker}_${service}_${doc.id || "run"}.csv`, csv);
+	      const rows = doc.forecastRows;
+	      const quantKeys = extractQuantileKeys(rows);
+			      const headers = ["ds", ...quantKeys];
+			      const csv = buildCsv(rows, headers);
+			      const ticker = normalizeTicker(doc.ticker || "ticker") || "ticker";
+			      const service = String(doc.service || "forecast").replace(/[^a-z0-9_\\-]+/gi, "_");
+			      triggerDownload(`${ticker}_${service}_${doc.id || "run"}.csv`, csv);
 		      showToast("CSV downloaded.");
 		    });
 
