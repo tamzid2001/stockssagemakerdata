@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -11,6 +12,10 @@ import boto3
 import pandas as pd
 import pytz
 from pandas.tseries.holiday import USFederalHolidayCalendar
+
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
 
 from fetch_data import colab_download_price_csv, ensure_dir
 
@@ -96,7 +101,7 @@ def main() -> None:
     training_path = os.path.join(args.workdir, "autopilot_ts_train.csv")
     training_df.to_csv(training_path, index=False)
 
-    s3_train_key = f"{args.s3-prefix}/data/train/autopilot_ts_train.csv"
+    s3_train_key = f"{args.s3_prefix}/data/train/autopilot_ts_train.csv"
     s3_output_prefix = f"s3://{args.s3_bucket}/{args.s3_prefix}/output"
     upload_to_s3(training_path, args.s3_bucket, s3_train_key, args.region)
 
