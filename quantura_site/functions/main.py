@@ -710,6 +710,11 @@ def _generate_quantile_forecast(
             "mae": round(mae_recent, 4),
             "horizon": horizon,
             "medianEnd": round(float(median_path[-1]), 4),
+            "drift": round(drift, 6),
+            "volatility": round(vol, 6),
+            "historyPoints": int(len(values)),
+            "historyStart": str(close_series.index[0].isoformat()) if len(close_series.index) else "",
+            "historyEnd": str(close_series.index[-1].isoformat()) if len(close_series.index) else "",
         },
     }
 
@@ -720,6 +725,7 @@ def _run_prophet_engine(close_series: pd.Series, horizon: int, quantiles: list[f
     except Exception:
         return _generate_quantile_forecast(close_series, horizon, quantiles, interval)
 
+    import numpy as np  # type: ignore
     import pandas as pd  # type: ignore
 
     forecast_core = _generate_quantile_forecast(close_series, horizon, quantiles, interval)
@@ -739,6 +745,38 @@ def _run_prophet_engine(close_series: pd.Series, horizon: int, quantiles: list[f
             model.add_seasonality(name="monthly", period=30.5, fourier_order=5)
 
         model.fit(df)
+
+        # In-sample diagnostics (tail window) so users can compare engines on fit quality.
+        try:
+            in_sample = model.predict(df[["ds"]])
+            tail = min(len(df), 90 if interval != "1h" else 240)
+            if tail >= 5:
+                actual = df["y"].to_numpy(dtype=float)
+                yhat = in_sample["yhat"].to_numpy(dtype=float)
+                abs_err = np.abs(actual - yhat)
+                mae = float(np.mean(abs_err[-tail:]))
+                rmse = float(np.sqrt(np.mean((actual[-tail:] - yhat[-tail:]) ** 2)))
+                denom = np.maximum(np.abs(actual[-tail:]), 1e-9)
+                mape = float(np.mean(np.abs((actual[-tail:] - yhat[-tail:]) / denom)))
+
+                lower = in_sample["yhat_lower"].to_numpy(dtype=float)
+                upper = in_sample["yhat_upper"].to_numpy(dtype=float)
+                coverage = float(np.mean((actual[-tail:] >= lower[-tail:]) & (actual[-tail:] <= upper[-tail:])))
+
+                forecast_core["metrics"].update(
+                    {
+                        "mae": round(mae, 4),
+                        "rmse": round(rmse, 4),
+                        "mape": round(mape, 6),
+                        "coverage10_90": round(coverage, 4),
+                        "historyPoints": int(len(df)),
+                        "historyStart": str(df["ds"].iloc[0].isoformat()) if len(df) else "",
+                        "historyEnd": str(df["ds"].iloc[-1].isoformat()) if len(df) else "",
+                        "diagnosticWindow": int(tail),
+                    }
+                )
+        except Exception:
+            pass
 
         freq = "H" if is_hourly else "B"
         periods = max(1, min(horizon, 365 if not is_hourly else 240))

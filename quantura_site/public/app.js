@@ -1399,7 +1399,7 @@
       button.id = "feedback-fab";
       button.type = "button";
       button.className = `feedback-fab${shouldPulse ? " pulse" : ""}`;
-      button.textContent = "Feedback";
+      button.innerHTML = `${icon("message-text")}<span>Feedback</span>`;
       button.setAttribute("aria-label", "Send feedback to Quantura");
       document.body.appendChild(button);
 
@@ -1457,7 +1457,9 @@
     ui.dashboardCta?.classList.toggle("hidden", isAuthed);
 
     if (ui.dashboardAuthLink) {
-      ui.dashboardAuthLink.textContent = isAuthed ? "Sign out" : "Sign in";
+      ui.dashboardAuthLink.innerHTML = isAuthed
+        ? `${icon("log-out")}<span>Sign out</span>`
+        : `${icon("log-in")}<span>Sign in</span>`;
       ui.dashboardAuthLink.setAttribute("href", isAuthed ? "#" : "/account");
       ui.dashboardAuthLink.setAttribute("aria-label", isAuthed ? "Sign out" : "Sign in");
     }
@@ -1512,11 +1514,11 @@
                 .join("")}
             </select>
             <textarea class="input notes-input" rows="2" placeholder="Fulfillment notes">${order.fulfillmentNotes || ""}</textarea>
-            <button class="cta small update-status" type="button">Update status</button>
+            <button class="cta small update-status" type="button">${icon("check-circle")}<span>Update status</span></button>
           </div>
           <div class="upload-row">
             <input class="file-input" type="file" />
-            <button class="cta secondary small upload-file" type="button">Upload file</button>
+            <button class="cta secondary small upload-file" type="button">${icon("upload")}<span>Upload file</span></button>
           </div>
         `
         : "";
@@ -1572,11 +1574,16 @@
       const isForecast = Boolean(item.service && item.ticker);
       const isAutopilot = Boolean(!isForecast && (item.horizon || item.quantiles || item.interval));
       const isUpload = Boolean(!isForecast && !isAutopilot && (item.filePath || item.fileUrl));
+      const metrics = item.metrics && typeof item.metrics === "object" ? item.metrics : {};
       const forecastMeta = isForecast
         ? `
           <div><strong>Ticker</strong> ${item.ticker}</div>
           <div><strong>Service</strong> ${item.service}</div>
           <div><strong>Engine</strong> ${item.engine || "—"}</div>
+          ${metrics.lastClose ? `<div><strong>Last close</strong> ${escapeHtml(metrics.lastClose)}</div>` : ""}
+          ${metrics.medianEnd ? `<div><strong>Median end</strong> ${escapeHtml(metrics.medianEnd)}</div>` : ""}
+          ${metrics.mae ? `<div><strong>MAE</strong> ${escapeHtml(metrics.mae)}</div>` : ""}
+          ${metrics.coverage10_90 ? `<div><strong>Coverage</strong> ${escapeHtml(metrics.coverage10_90)}</div>` : ""}
           ${item.serviceMessage ? `<div><strong>Message</strong> ${escapeHtml(item.serviceMessage)}</div>` : ""}
         `
         : "";
@@ -1606,16 +1613,16 @@
         ? `
           <div class="order-actions" style="display:flex; gap:10px; flex-wrap:wrap;">
             <button class="cta secondary small" type="button" data-action="plot-forecast" data-forecast-id="${escapeHtml(item.id)}" data-ticker="${escapeHtml(item.ticker)}">
-              Plot on chart
+              ${icon("candlestick-chart")}<span>Plot on chart</span>
             </button>
             <button class="cta secondary small" type="button" data-action="download-forecast" data-forecast-id="${escapeHtml(item.id)}">
-              Download CSV
+              ${icon("download")}<span>Download CSV</span>
             </button>
             <button class="cta secondary small" type="button" data-action="share-forecast" data-forecast-id="${escapeHtml(item.id)}">
-              Share link
+              ${icon("share-ios")}<span>Share link</span>
             </button>
             <button class="cta secondary small danger" type="button" data-action="delete-forecast" data-forecast-id="${escapeHtml(item.id)}">
-              Delete
+              ${icon("trash")}<span>Delete</span>
             </button>
           </div>
         `
@@ -1623,18 +1630,18 @@
           ? `
           <div class="order-actions" style="display:flex; gap:10px; flex-wrap:wrap;">
             <button class="cta secondary small danger" type="button" data-action="delete-autopilot" data-request-id="${escapeHtml(item.id)}">
-              Delete
+              ${icon("trash")}<span>Delete</span>
             </button>
           </div>
         `
         : isUpload
           ? `
           <div class="order-actions" style="display:flex; gap:10px; flex-wrap:wrap;">
-            <button class="cta secondary small" type="button" data-action="plot-upload" data-upload-id="${escapeHtml(item.id)}">Plot</button>
-            <button class="cta secondary small" type="button" data-action="download-upload" data-upload-id="${escapeHtml(item.id)}">Download</button>
-            <button class="cta secondary small" type="button" data-action="rename-upload" data-upload-id="${escapeHtml(item.id)}">Rename</button>
-            <button class="cta secondary small" type="button" data-action="share-upload" data-upload-id="${escapeHtml(item.id)}">Share link</button>
-            <button class="cta secondary small danger" type="button" data-action="delete-upload" data-upload-id="${escapeHtml(item.id)}">Delete</button>
+            <button class="cta secondary small" type="button" data-action="plot-upload" data-upload-id="${escapeHtml(item.id)}">${icon("graph-up")}<span>Plot</span></button>
+            <button class="cta secondary small" type="button" data-action="download-upload" data-upload-id="${escapeHtml(item.id)}">${icon("download")}<span>Download</span></button>
+            <button class="cta secondary small" type="button" data-action="rename-upload" data-upload-id="${escapeHtml(item.id)}">${icon("edit-pencil")}<span>Rename</span></button>
+            <button class="cta secondary small" type="button" data-action="share-upload" data-upload-id="${escapeHtml(item.id)}">${icon("share-ios")}<span>Share link</span></button>
+            <button class="cta secondary small danger" type="button" data-action="delete-upload" data-upload-id="${escapeHtml(item.id)}">${icon("trash")}<span>Delete</span></button>
           </div>
         `
           : "";
@@ -2435,6 +2442,8 @@
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#039;");
+
+  const icon = (name) => `<i class="iconoir-${name}" aria-hidden="true"></i>`;
 
   const toPrettyJson = (value) => `<pre class="small">${escapeHtml(JSON.stringify(value, null, 2))}</pre>`;
 
@@ -3580,14 +3589,102 @@
     const quantileLabel = Array.isArray(forecastDoc.quantiles)
       ? forecastDoc.quantiles.map((q) => `P${Math.round(Number(q) * 100)}`).filter(Boolean).join(", ")
       : "";
-    const metrics = forecastDoc.metrics || {};
+    const metrics = forecastDoc.metrics && typeof forecastDoc.metrics === "object" ? forecastDoc.metrics : {};
+    const interval = String(forecastDoc.interval || state.tickerContext.interval || "1d");
+
+    const formatFractionPercent = (value, digits = 1) => {
+      const num = typeof value === "number" ? value : Number(value);
+      if (!Number.isFinite(num)) return String(value ?? "—");
+      const pct = num <= 1 ? num * 100 : num;
+      return formatPercent(pct, { digits });
+    };
+
+    const metricChip = (label, value, iconName) => `
+      <div class="metric-chip">
+        ${icon(iconName)}
+        <span class="metric-label">${escapeHtml(label)}</span>
+        <span class="metric-value">${escapeHtml(value)}</span>
+      </div>
+    `;
+
+    const chips = [];
+    const displayedKeys = new Set();
+
+    const horizonValue = metrics.horizon ?? forecastDoc.horizon;
+    if (horizonValue) {
+      displayedKeys.add("horizon");
+      const unit = interval === "1h" ? "hours" : "days";
+      chips.push(metricChip("Horizon", `${horizonValue} ${unit}`, "clock"));
+    }
+    if (metrics.lastClose !== null && metrics.lastClose !== undefined) {
+      displayedKeys.add("lastClose");
+      chips.push(metricChip("Last close", formatUsd(metrics.lastClose), "candlestick-chart"));
+    }
+    if (metrics.medianEnd !== null && metrics.medianEnd !== undefined) {
+      displayedKeys.add("medianEnd");
+      chips.push(metricChip("Median end", formatUsd(metrics.medianEnd), "graph-up"));
+    }
+    if (metrics.mae !== null && metrics.mae !== undefined) {
+      displayedKeys.add("mae");
+      chips.push(metricChip("MAE", formatUsd(metrics.mae), "ruler"));
+    }
+    if (metrics.rmse !== null && metrics.rmse !== undefined) {
+      displayedKeys.add("rmse");
+      chips.push(metricChip("RMSE", formatUsd(metrics.rmse), "ruler-arrows"));
+    }
+    if (metrics.mape !== null && metrics.mape !== undefined) {
+      displayedKeys.add("mape");
+      chips.push(metricChip("MAPE", formatFractionPercent(metrics.mape), "percentage"));
+    }
+    if (metrics.coverage10_90 !== null && metrics.coverage10_90 !== undefined && metrics.coverage10_90 !== "n/a") {
+      displayedKeys.add("coverage10_90");
+      chips.push(metricChip("Coverage (10–90)", formatFractionPercent(metrics.coverage10_90), "check-circle"));
+    }
+    if (metrics.historyPoints !== null && metrics.historyPoints !== undefined) {
+      displayedKeys.add("historyPoints");
+      chips.push(metricChip("History", formatCompactNumber(metrics.historyPoints), "database-check"));
+    }
+    if (metrics.drift !== null && metrics.drift !== undefined) {
+      displayedKeys.add("drift");
+      const num = typeof metrics.drift === "number" ? metrics.drift : Number(metrics.drift);
+      const value = Number.isFinite(num) ? formatPercent(num * 100, { signed: true, digits: 2 }) : String(metrics.drift);
+      chips.push(metricChip("Drift", value, "graph-up"));
+    }
+    if (metrics.volatility !== null && metrics.volatility !== undefined) {
+      displayedKeys.add("volatility");
+      const num = typeof metrics.volatility === "number" ? metrics.volatility : Number(metrics.volatility);
+      const value = Number.isFinite(num) ? formatPercent(num * 100, { digits: 2 }) : String(metrics.volatility);
+      chips.push(metricChip("Volatility", value, "sine-wave"));
+    }
+
+    const metricsStrip = chips.length ? `<div class="metric-strip">${chips.join("")}</div>` : "";
+
+    const metricEntries = Object.entries(metrics || {}).filter(([, value]) => value !== null && value !== undefined && value !== "");
+    const extraMetrics = metricEntries.filter(([key]) => !displayedKeys.has(key));
+    const metricsTable = metricEntries.length
+      ? `
+        <details class="learn-more">
+          <summary>All model metrics</summary>
+          <div class="table-wrap" style="margin-top:10px;">
+            <table class="data-table">
+              <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+              <tbody>
+                ${metricEntries
+                  .map(([key, value]) => `<tr><td>${escapeHtml(key)}</td><td>${escapeHtml(value)}</td></tr>`)
+                  .join("")}
+              </tbody>
+            </table>
+          </div>
+          ${extraMetrics.length ? `<div class="small muted" style="margin-top: 8px;">Tip: saved runs may include additional engine-specific diagnostics.</div>` : ""}
+        </details>
+      `
+      : "";
+
     const summary = [
-      `<div class="small"><strong>Forecast ID:</strong> ${escapeHtml(forecastDoc.id || "")}</div>`,
-      `<div class="small"><strong>Service:</strong> ${escapeHtml(labelForecastService(forecastDoc.service))}</div>`,
-      forecastDoc.engine ? `<div class="small"><strong>Engine:</strong> ${escapeHtml(forecastDoc.engine)}</div>` : "",
-      quantileLabel ? `<div class="small"><strong>Quantiles:</strong> ${escapeHtml(quantileLabel)}</div>` : "",
-      metrics.lastClose ? `<div class="small"><strong>Last close:</strong> ${escapeHtml(metrics.lastClose)}</div>` : "",
-      metrics.mae ? `<div class="small"><strong>MAE (recent):</strong> ${escapeHtml(metrics.mae)}</div>` : "",
+      `<div class="small meta-line">${icon("hashtag")}<strong>Forecast ID:</strong> ${escapeHtml(forecastDoc.id || "")}</div>`,
+      `<div class="small meta-line">${icon("magic-wand")}<strong>Service:</strong> ${escapeHtml(labelForecastService(forecastDoc.service))}</div>`,
+      forecastDoc.engine ? `<div class="small meta-line">${icon("electronics-chip")}<strong>Engine:</strong> ${escapeHtml(forecastDoc.engine)}</div>` : "",
+      quantileLabel ? `<div class="small meta-line">${icon("percentage")}<strong>Quantiles:</strong> ${escapeHtml(quantileLabel)}</div>` : "",
     ]
       .filter(Boolean)
       .join("");
@@ -3596,15 +3693,17 @@
     ui.forecastOutput.innerHTML = `
       <div class="output-stack">
         ${summary}
+        ${metricsStrip}
+        ${metricsTable}
         <div class="table-controls">
           <button class="cta secondary small" type="button" data-action="forecast-page" data-delta="-1" ${
             page === 0 ? "disabled" : ""
-          }>Prev</button>
+          }>${icon("arrow-left")}<span>Prev</span></button>
           <div class="small muted">Rows ${start + 1}-${end} of ${total} · Page ${page + 1}/${totalPages}</div>
           <button class="cta secondary small" type="button" data-action="forecast-page" data-delta="1" ${
             page >= totalPages - 1 ? "disabled" : ""
-          }>Next</button>
-          <button class="cta secondary small" type="button" data-action="forecast-csv">Download CSV</button>
+          }>${icon("arrow-right")}<span>Next</span></button>
+          <button class="cta secondary small" type="button" data-action="forecast-csv">${icon("download")}<span>Download CSV</span></button>
         </div>
         <div class="table-wrap" style="margin-top:10px;">
           <table class="data-table">

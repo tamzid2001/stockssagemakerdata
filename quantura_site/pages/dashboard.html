@@ -18,6 +18,7 @@
     <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
     <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 
     <script defer src="/__/firebase/12.9.0/firebase-app-compat.js"></script>
@@ -38,18 +39,18 @@
           <img class="logo-img" src="/assets/quantura-logo.svg" alt="Quantura logo" />
         </a>
         <nav class="nav-links">
-          <a href="/forecasting" data-analytics="nav_forecasting">Forecasting</a>
-          <a href="/screener" data-analytics="nav_screener">Screener</a>
-          <a href="/dashboard" data-analytics="nav_dashboard">Dashboard</a>
-          <a href="/pricing" data-analytics="nav_pricing">Pricing</a>
-          <a href="/blog" data-analytics="nav_blog">Blog</a>
-          <a href="/contact" data-analytics="nav_contact">Contact</a>
+          <a href="/forecasting" data-analytics="nav_forecasting"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Forecasting</span></a>
+          <a href="/screener" data-analytics="nav_screener"><i class="iconoir-search" aria-hidden="true"></i><span>Screener</span></a>
+          <a href="/dashboard" data-analytics="nav_dashboard"><i class="iconoir-dashboard" aria-hidden="true"></i><span>Dashboard</span></a>
+          <a href="/pricing" data-analytics="nav_pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>Pricing</span></a>
+          <a href="/blog" data-analytics="nav_blog"><i class="iconoir-journal" aria-hidden="true"></i><span>Blog</span></a>
+          <a href="/contact" data-analytics="nav_contact"><i class="iconoir-mail" aria-hidden="true"></i><span>Contact</span></a>
         </nav>
         <div class="nav-actions">
           <span id="header-user-email" class="small" style="max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Guest</span>
           <span id="header-user-status" class="pill">Guest</span>
-          <button class="cta secondary" id="header-auth" type="button">Sign in</button>
-          <button class="cta secondary hidden" id="header-signout" type="button">Sign out</button>
+          <button class="cta secondary" id="header-auth" type="button"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></button>
+          <button class="cta secondary hidden" id="header-signout" type="button"><i class="iconoir-log-out" aria-hidden="true"></i><span>Sign out</span></button>
         </div>
       </div>
     </header>
@@ -59,20 +60,20 @@
         <aside class="app-sidebar">
 	          <div class="sidebar-card">
 	            <div class="small"><strong>Shortcuts</strong></div>
-	            <a class="cta secondary small" href="/forecasting">Open terminal</a>
-	            <a class="cta secondary small" href="/purchase">Request Deep Forecast</a>
-	            <a class="cta secondary small hidden" id="nav-admin" href="/admin">Admin dashboard</a>
+	            <a class="cta secondary small" href="/forecasting"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Open terminal</span></a>
+	            <a class="cta secondary small" href="/purchase"><i class="iconoir-page" aria-hidden="true"></i><span>Request Deep Forecast</span></a>
+	            <a class="cta secondary small hidden" id="nav-admin" href="/admin"><i class="iconoir-shield-check" aria-hidden="true"></i><span>Admin dashboard</span></a>
 	          </div>
 		          <nav class="sidebar-nav" aria-label="Dashboard navigation">
-		            <a class="sidebar-link active" href="/dashboard" data-panel-target="orders">Orders</a>
-		            <a class="sidebar-link" href="/watchlist" data-panel-target="watchlist">Watchlist</a>
-		            <a class="sidebar-link" href="/productivity" data-panel-target="productivity">Productivity</a>
-		            <a class="sidebar-link" href="/collaboration" data-panel-target="collaboration">Collaboration</a>
-		            <a class="sidebar-link" href="/uploads" data-panel-target="uploads">Uploads</a>
-		            <a class="sidebar-link" href="/autopilot" data-panel-target="autopilot">Autopilot</a>
-		            <a class="sidebar-link" href="/notifications" data-panel-target="notifications">Notifications</a>
-		            <a class="sidebar-link" href="/purchase" data-panel-target="purchase">Purchase</a>
-		            <a class="sidebar-link" href="/account" data-panel-target="auth" id="dashboard-auth-link">Sign in</a>
+		            <a class="sidebar-link active" href="/dashboard" data-panel-target="orders"><i class="iconoir-shopping-bag-check" aria-hidden="true"></i><span>Orders</span></a>
+		            <a class="sidebar-link" href="/watchlist" data-panel-target="watchlist"><i class="iconoir-bell-notification" aria-hidden="true"></i><span>Watchlist</span></a>
+		            <a class="sidebar-link" href="/productivity" data-panel-target="productivity"><i class="iconoir-kanban-board" aria-hidden="true"></i><span>Productivity</span></a>
+		            <a class="sidebar-link" href="/collaboration" data-panel-target="collaboration"><i class="iconoir-group" aria-hidden="true"></i><span>Collaboration</span></a>
+		            <a class="sidebar-link" href="/uploads" data-panel-target="uploads"><i class="iconoir-upload" aria-hidden="true"></i><span>Uploads</span></a>
+		            <a class="sidebar-link" href="/autopilot" data-panel-target="autopilot"><i class="iconoir-rocket" aria-hidden="true"></i><span>Autopilot</span></a>
+		            <a class="sidebar-link" href="/notifications" data-panel-target="notifications"><i class="iconoir-bell-notification" aria-hidden="true"></i><span>Notifications</span></a>
+		            <a class="sidebar-link" href="/purchase" data-panel-target="purchase"><i class="iconoir-wallet" aria-hidden="true"></i><span>Purchase</span></a>
+		            <a class="sidebar-link" href="/account" data-panel-target="auth" id="dashboard-auth-link"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></a>
 		          </nav>
 	        </aside>
 
