@@ -53,6 +53,7 @@
       { "source": "/news", "function": "ssr" },
       { "source": "/options", "function": "ssr" },
       { "source": "/saved-forecasts", "function": "ssr" },
+      { "source": "/backtesting", "function": "ssr" },
       { "source": "/studio", "function": "ssr" },
 
       { "source": "/screener", "function": "ssr" },

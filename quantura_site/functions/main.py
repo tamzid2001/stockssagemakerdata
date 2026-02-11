@@ -82,6 +82,10 @@ DEFAULT_REMOTE_CONFIG: dict[str, str] = {
     "webpush_vapid_key": "",
     "stripe_checkout_enabled": "true",
     "stripe_public_key": "",
+    "holiday_promo": "false",
+    "backtesting_enabled": "true",
+    "backtesting_free_daily_limit": "1",
+    "backtesting_pro_daily_limit": "25",
 }
 
 
@@ -175,6 +179,16 @@ def _remote_config_bool(key: str, default: bool = False, context: dict[str, Any]
             return True
         if normalized in {"0", "false", "no", "off"}:
             return False
+        return default
+
+
+def _remote_config_int(key: str, default: int = 0, context: dict[str, Any] | None = None) -> int:
+    raw = _remote_config_param(key, str(default), context=context)
+    if raw == "":
+        return default
+    try:
+        return int(float(str(raw).strip()))
+    except Exception:
         return default
 
 
@@ -1910,6 +1924,521 @@ def delete_prediction_upload(req: https_fn.CallableRequest) -> dict[str, Any]:
     ref.delete()
     _audit_event(req.auth.uid, token.get("email"), "predictions_deleted", {"uploadId": upload_id})
     return {"deleted": True, "uploadId": upload_id}
+
+
+@https_fn.on_call()
+def get_prediction_upload_csv(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    data = req.data or {}
+    upload_id = str(data.get("uploadId") or data.get("id") or "").strip()
+    if not upload_id:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Upload ID is required.")
+
+    max_bytes_raw = data.get("maxBytes")
+    max_bytes = 2_000_000
+    if max_bytes_raw is not None:
+        try:
+            max_bytes = int(max_bytes_raw)
+        except Exception:
+            max_bytes = 2_000_000
+    max_bytes = max(25_000, min(max_bytes, 5_000_000))
+
+    ref = db.collection("prediction_uploads").document(upload_id)
+    snap = ref.get()
+    if not snap.exists:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "Upload not found.")
+
+    doc = snap.to_dict() or {}
+    owner_id = str(doc.get("userId") or "").strip()
+    if token.get("email") != ADMIN_EMAIL and owner_id != req.auth.uid:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.PERMISSION_DENIED, "Access denied.")
+
+    file_path = str(doc.get("filePath") or "").strip()
+    if not file_path:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.FAILED_PRECONDITION, "Upload is missing a storage path.")
+
+    try:
+        bucket = admin_storage.bucket(STORAGE_BUCKET)
+        blob = bucket.blob(file_path)
+        if not blob.exists():
+            raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "CSV file not found in storage.")
+
+        truncated = False
+        size = 0
+        try:
+            blob.reload()
+            size = int(blob.size or 0)
+        except Exception:
+            size = 0
+
+        data_bytes = b""
+        if size and size > max_bytes:
+            truncated = True
+            try:
+                with blob.open("rb") as handle:
+                    data_bytes = handle.read(max_bytes)
+            except Exception:
+                data_bytes = blob.download_as_bytes()[:max_bytes]
+        else:
+            data_bytes = blob.download_as_bytes()
+            if len(data_bytes) > max_bytes:
+                truncated = True
+                data_bytes = data_bytes[:max_bytes]
+
+        text = data_bytes.decode("utf-8", errors="replace")
+        _audit_event(req.auth.uid, token.get("email"), "predictions_csv_fetched", {"uploadId": upload_id, "truncated": truncated})
+        return {
+            "uploadId": upload_id,
+            "title": doc.get("title") or "",
+            "filePath": file_path,
+            "bytes": len(data_bytes),
+            "truncated": truncated,
+            "csv": text,
+        }
+    except https_fn.HttpsError:
+        raise
+    except Exception:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INTERNAL, "Unable to fetch CSV.")
+
+
+def _is_paid_user(uid: str) -> bool:
+    try:
+        docs = db.collection("orders").where("userId", "==", uid).limit(25).stream()
+        for doc in docs:
+            data = doc.to_dict() or {}
+            status = str(data.get("paymentStatus") or "").strip().lower()
+            if status in {"paid", "succeeded"}:
+                return True
+    except Exception:
+        return False
+    return False
+
+
+def _enforce_daily_usage(uid: str, feature_key: str, limit: int) -> None:
+    if limit <= 0:
+        return
+    day_key = datetime.now(timezone.utc).date().isoformat()
+    ref = db.collection("usage_daily").document(f"{uid}_{day_key}")
+    transaction = db.transaction()
+    snap = ref.get(transaction=transaction)
+    existing = snap.to_dict() if snap.exists else {}
+    count = int(existing.get(feature_key) or 0)
+    if count >= limit:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.RESOURCE_EXHAUSTED,
+            "Daily usage limit reached. Upgrade your plan to run more backtests.",
+        )
+    transaction.set(
+        ref,
+        {
+            "userId": uid,
+            "date": day_key,
+            feature_key: count + 1,
+            "updatedAt": firestore.SERVER_TIMESTAMP,
+        },
+        merge=True,
+    )
+    transaction.commit()
+
+
+def _generate_backtest_code(payload: dict[str, Any]) -> str:
+    ticker = str(payload.get("ticker") or "").upper().strip()
+    interval = str(payload.get("interval") or "1d").strip()
+    lookback_days = int(payload.get("lookbackDays") or 730)
+    strategy = str(payload.get("strategy") or "sma_cross").strip().lower()
+    params = payload.get("params") or {}
+    cash = float(payload.get("cash") or 10_000)
+    commission = float(payload.get("commission") or 0.0)
+
+    # Keep the emitted code self-contained so users can run it locally.
+    fast = int(params.get("fast") or 20)
+    slow = int(params.get("slow") or 50)
+    rsi_period = int(params.get("rsiPeriod") or 14)
+    oversold = float(params.get("oversold") or 30)
+    exit_above = float(params.get("exitAbove") or 55)
+    strategy_class = "RsiReversion" if strategy == "rsi_reversion" else "SmaCross"
+
+    if strategy == "rsi_reversion":
+        strategy_code = f"""
+class RsiReversion(Strategy):
+    rsi_period = {rsi_period}
+    oversold = {oversold}
+    exit_above = {exit_above}
+
+    def init(self):
+        self.rsi = self.I(calc_rsi, self.data.Close, self.rsi_period)
+
+    def next(self):
+        if not self.position and self.rsi[-1] < self.oversold:
+            self.buy()
+        elif self.position and self.rsi[-1] > self.exit_above:
+            self.position.close()
+"""
+    else:
+        strategy_code = f"""
+class SmaCross(Strategy):
+    fast = {fast}
+    slow = {slow}
+
+    def init(self):
+        price = self.data.Close
+        self.sma_fast = self.I(SMA, price, self.fast)
+        self.sma_slow = self.I(SMA, price, self.slow)
+
+    def next(self):
+        if crossover(self.sma_fast, self.sma_slow):
+            self.position.close()
+            self.buy()
+        elif crossover(self.sma_slow, self.sma_fast):
+            self.position.close()
+"""
+
+    return (
+        f"""# Quantura backtest export (generated)
+# pip install yfinance backtesting pandas matplotlib
+
+from datetime import datetime, timedelta, timezone
+
+import pandas as pd
+import yfinance as yf
+from backtesting import Backtest, Strategy
+from backtesting.lib import crossover
+from backtesting.test import SMA
+
+
+def calc_rsi(series, period=14):
+    s = pd.Series(series)
+    delta = s.diff()
+    up = delta.clip(lower=0).rolling(period).mean()
+    down = (-delta.clip(upper=0)).rolling(period).mean()
+    rs = up / down
+    return 100 - (100 / (1 + rs))
+
+
+{strategy_code.strip()}
+
+
+def main():
+    ticker = {ticker!r}
+    interval = {interval!r}
+    lookback_days = {lookback_days}
+    end = datetime.now(timezone.utc)
+    start = end - timedelta(days=lookback_days)
+
+    df = yf.download(
+        ticker,
+        start=start.strftime("%Y-%m-%d"),
+        end=end.strftime("%Y-%m-%d"),
+        interval=interval,
+        progress=False,
+        auto_adjust=False,
+        threads=False,
+    )
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+    df = df.dropna()
+    df.index = pd.to_datetime(df.index, errors="coerce")
+    if getattr(df.index, "tz", None) is not None:
+        df.index = df.index.tz_localize(None)
+
+    df = df.rename(columns={{"Open": "Open", "High": "High", "Low": "Low", "Close": "Close", "Volume": "Volume"}})
+
+    bt = Backtest(df, {strategy_class}, cash={cash}, commission={commission})
+    stats = bt.run()
+    print(stats)
+    bt.plot()
+
+
+if __name__ == "__main__":
+    main()
+"""
+    ).strip()
+
+
+@https_fn.on_call()
+def run_backtest(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    data = req.data or {}
+    meta = data.get("meta") if isinstance(data.get("meta"), dict) else {}
+    context = _remote_config_context(req, token, meta)
+
+    if not _remote_config_bool("backtesting_enabled", True, context=context):
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.FAILED_PRECONDITION, "Backtesting is temporarily disabled.")
+
+    ticker = str(data.get("ticker") or "").upper().strip()
+    if not ticker or len(ticker) > 12 or not all(ch.isalnum() or ch in {".", "-"} for ch in ticker):
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Ticker is required.")
+
+    interval = str(data.get("interval") or "1d").strip()
+    if interval not in {"1d", "1h"}:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Invalid interval.")
+
+    strategy = str(data.get("strategy") or "sma_cross").strip().lower()
+    if strategy not in {"sma_cross", "rsi_reversion"}:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Invalid strategy.")
+
+    lookback_days = int(data.get("lookbackDays") or data.get("lookback") or 730)
+    if lookback_days < 30 or lookback_days > 5000:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Lookback must be between 30 and 5000 days.")
+
+    cash = float(data.get("cash") or 10_000)
+    commission = float(data.get("commission") or 0.0)
+    if cash <= 0 or cash > 10_000_000:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Invalid cash amount.")
+    if commission < 0 or commission > 0.05:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Invalid commission.")
+
+    params_raw = data.get("params") if isinstance(data.get("params"), dict) else {}
+    params: dict[str, Any] = {}
+    if strategy == "sma_cross":
+        fast = int(params_raw.get("fast") or 20)
+        slow = int(params_raw.get("slow") or 50)
+        if fast < 2 or slow < 5 or fast >= slow or slow > 400:
+            raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Invalid SMA parameters.")
+        params = {"fast": fast, "slow": slow}
+    else:
+        rsi_period = int(params_raw.get("rsiPeriod") or params_raw.get("period") or 14)
+        oversold = float(params_raw.get("oversold") or 30)
+        exit_above = float(params_raw.get("exitAbove") or 55)
+        if rsi_period < 2 or rsi_period > 60:
+            raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Invalid RSI period.")
+        if oversold <= 0 or oversold >= 50:
+            raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Invalid RSI oversold threshold.")
+        if exit_above <= 50 or exit_above >= 95:
+            raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Invalid RSI exit threshold.")
+        params = {"rsiPeriod": rsi_period, "oversold": oversold, "exitAbove": exit_above}
+
+    is_pro = token.get("email") == ADMIN_EMAIL or _is_paid_user(req.auth.uid)
+    free_limit = _remote_config_int("backtesting_free_daily_limit", 1, context=context)
+    pro_limit = _remote_config_int("backtesting_pro_daily_limit", 25, context=context)
+    _enforce_daily_usage(req.auth.uid, "backtestRuns", pro_limit if is_pro else free_limit)
+
+    from datetime import timedelta  # local import to reduce cold start
+    import io
+
+    import pandas as pd  # type: ignore
+    import yfinance as yf  # type: ignore
+
+    from backtesting import Backtest, Strategy  # type: ignore
+    from backtesting.lib import crossover  # type: ignore
+    from backtesting.test import SMA  # type: ignore
+
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt  # type: ignore
+
+    def calc_rsi(series, period: int = 14):
+        s = pd.Series(series)
+        delta = s.diff()
+        up = delta.clip(lower=0).rolling(period).mean()
+        down = (-delta.clip(upper=0)).rolling(period).mean()
+        rs = up / down
+        return 100 - (100 / (1 + rs))
+
+    if strategy == "rsi_reversion":
+
+        class RsiReversion(Strategy):  # type: ignore
+            rsi_period = int(params["rsiPeriod"])
+            oversold = float(params["oversold"])
+            exit_above = float(params["exitAbove"])
+
+            def init(self):
+                self.rsi = self.I(calc_rsi, self.data.Close, self.rsi_period)
+
+            def next(self):
+                if not self.position and self.rsi[-1] < self.oversold:
+                    self.buy()
+                elif self.position and self.rsi[-1] > self.exit_above:
+                    self.position.close()
+
+        strategy_cls = RsiReversion
+        strategy_name = "RSI reversion"
+    else:
+
+        class SmaCross(Strategy):  # type: ignore
+            fast = int(params["fast"])
+            slow = int(params["slow"])
+
+            def init(self):
+                price = self.data.Close
+                self.sma_fast = self.I(SMA, price, self.fast)
+                self.sma_slow = self.I(SMA, price, self.slow)
+
+            def next(self):
+                if crossover(self.sma_fast, self.sma_slow):
+                    self.position.close()
+                    self.buy()
+                elif crossover(self.sma_slow, self.sma_fast):
+                    self.position.close()
+
+        strategy_cls = SmaCross
+        strategy_name = "SMA crossover"
+
+    end = datetime.now(timezone.utc)
+    start = end - timedelta(days=lookback_days)
+    df = yf.download(
+        ticker,
+        start=start.strftime("%Y-%m-%d"),
+        end=end.strftime("%Y-%m-%d"),
+        interval=interval,
+        progress=False,
+        auto_adjust=False,
+        threads=False,
+    )
+    if df is None or getattr(df, "empty", True):
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.FAILED_PRECONDITION, "No price history returned.")
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+    df = df.dropna()
+    df.index = pd.to_datetime(df.index, errors="coerce")
+    if getattr(df.index, "tz", None) is not None:
+        df.index = df.index.tz_localize(None)
+
+    for col in ["Open", "High", "Low", "Close"]:
+        if col not in df.columns:
+            raise https_fn.HttpsError(https_fn.FunctionsErrorCode.FAILED_PRECONDITION, f"Missing column: {col}")
+
+    bt = Backtest(df, strategy_cls, cash=cash, commission=commission)
+    stats = bt.run()
+    equity = None
+    try:
+        equity = stats.get("_equity_curve") if hasattr(stats, "get") else None
+    except Exception:
+        equity = None
+
+    fig = plt.figure(figsize=(10.5, 4.4), dpi=160)
+    ax = fig.add_subplot(111)
+    ax.set_title(f"{ticker} backtest: {strategy_name}")
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Equity (USD)")
+    ax.grid(True, alpha=0.22)
+    if equity is not None and hasattr(equity, "__getitem__") and "Equity" in equity:
+        ax.plot(equity.index, equity["Equity"], linewidth=1.8)
+    else:
+        # Fall back to close price if equity curve is unavailable.
+        ax.plot(df.index, df["Close"], linewidth=1.6)
+        ax.set_ylabel("Close (USD)")
+    fig.tight_layout()
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", bbox_inches="tight")
+    plt.close(fig)
+    png_bytes = buf.getvalue()
+
+    code = _generate_backtest_code(
+        {
+            "ticker": ticker,
+            "interval": interval,
+            "lookbackDays": lookback_days,
+            "strategy": strategy,
+            "params": params,
+            "cash": cash,
+            "commission": commission,
+        }
+    )
+
+    doc_ref = db.collection("backtests").document()
+    backtest_id = doc_ref.id
+    image_path = f"backtests/{req.auth.uid}/{backtest_id}.png"
+
+    try:
+        bucket = admin_storage.bucket(STORAGE_BUCKET)
+        bucket.blob(image_path).upload_from_string(png_bytes, content_type="image/png")
+    except Exception:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INTERNAL, "Unable to store backtest chart.")
+
+    metrics = {
+        "ReturnPct": float(stats.get("Return [%]", 0.0)) if hasattr(stats, "get") else 0.0,
+        "Sharpe": float(stats.get("Sharpe Ratio", 0.0)) if hasattr(stats, "get") else 0.0,
+        "MaxDrawdownPct": float(stats.get("Max. Drawdown [%]", 0.0)) if hasattr(stats, "get") else 0.0,
+        "Trades": int(stats.get("# Trades", 0)) if hasattr(stats, "get") else 0,
+        "WinRatePct": float(stats.get("Win Rate [%]", 0.0)) if hasattr(stats, "get") else 0.0,
+    }
+
+    title = str(data.get("title") or f"{ticker} · {strategy_name}").strip()
+    if len(title) > 180:
+        title = title[:180]
+
+    doc_ref.set(
+        {
+            "userId": req.auth.uid,
+            "title": title,
+            "ticker": ticker,
+            "interval": interval,
+            "lookbackDays": lookback_days,
+            "strategy": strategy,
+            "params": params,
+            "cash": cash,
+            "commission": commission,
+            "status": "completed",
+            "metrics": metrics,
+            "imagePath": image_path,
+            "code": code,
+            "createdAt": firestore.SERVER_TIMESTAMP,
+            "updatedAt": firestore.SERVER_TIMESTAMP,
+            "meta": meta,
+        }
+    )
+
+    _audit_event(req.auth.uid, token.get("email"), "backtest_completed", {"backtestId": backtest_id, "ticker": ticker, "strategy": strategy})
+    return {"backtestId": backtest_id, "metrics": metrics, "imagePath": image_path, "title": title}
+
+
+@https_fn.on_call()
+def rename_backtest(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    data = req.data or {}
+    backtest_id = str(data.get("backtestId") or data.get("id") or "").strip()
+    title = str(data.get("title") or "").strip()
+    if not backtest_id:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Backtest ID is required.")
+    if not title:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Title is required.")
+    if len(title) > 180:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Title is too long.")
+
+    ref = db.collection("backtests").document(backtest_id)
+    snap = ref.get()
+    if not snap.exists:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "Backtest not found.")
+    doc = snap.to_dict() or {}
+    owner_id = str(doc.get("userId") or "").strip()
+    if token.get("email") != ADMIN_EMAIL and owner_id != req.auth.uid:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.PERMISSION_DENIED, "Access denied.")
+
+    ref.set({"title": title, "updatedAt": firestore.SERVER_TIMESTAMP}, merge=True)
+    _audit_event(req.auth.uid, token.get("email"), "backtest_renamed", {"backtestId": backtest_id})
+    return {"updated": True, "backtestId": backtest_id, "title": title}
+
+
+@https_fn.on_call()
+def delete_backtest(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    data = req.data or {}
+    backtest_id = str(data.get("backtestId") or data.get("id") or "").strip()
+    if not backtest_id:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Backtest ID is required.")
+
+    ref = db.collection("backtests").document(backtest_id)
+    snap = ref.get()
+    if not snap.exists:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "Backtest not found.")
+    doc = snap.to_dict() or {}
+    owner_id = str(doc.get("userId") or "").strip()
+    if token.get("email") != ADMIN_EMAIL and owner_id != req.auth.uid:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.PERMISSION_DENIED, "Access denied.")
+
+    image_path = str(doc.get("imagePath") or "").strip()
+    if image_path:
+        try:
+            bucket = admin_storage.bucket(STORAGE_BUCKET)
+            bucket.blob(image_path).delete()
+        except Exception:
+            pass
+
+    ref.delete()
+    _audit_event(req.auth.uid, token.get("email"), "backtest_deleted", {"backtestId": backtest_id})
+    return {"deleted": True, "backtestId": backtest_id}
 
 
 @https_fn.on_call()
