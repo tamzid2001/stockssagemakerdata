@@ -43,7 +43,8 @@
     "cleanUrls": false,
     "trailingSlash": false,
     "redirects": [
-      { "source": "/trading", "destination": "/dashboard", "type": 301 }
+      { "source": "/trading", "destination": "/dashboard", "type": 301 },
+      { "source": "/purchase", "destination": "/pricing", "type": 301 }
     ],
     "rewrites": [
       { "source": "/", "function": "ssr" },
@@ -59,6 +60,8 @@
       { "source": "/screener", "function": "ssr" },
       { "source": "/pricing", "function": "ssr" },
       { "source": "/contact", "function": "ssr" },
+      { "source": "/terms", "function": "ssr" },
+      { "source": "/privacy", "function": "ssr" },
       { "source": "/admin", "function": "ssr" },
 
       { "source": "/blog", "function": "ssr" },
@@ -71,8 +74,7 @@
       { "source": "/collaboration", "function": "ssr" },
       { "source": "/uploads", "function": "ssr" },
       { "source": "/autopilot", "function": "ssr" },
-      { "source": "/notifications", "function": "ssr" },
-      { "source": "/purchase", "function": "ssr" }
+      { "source": "/notifications", "function": "ssr" }
     ],
     "ignore": [
       "firebase.json",

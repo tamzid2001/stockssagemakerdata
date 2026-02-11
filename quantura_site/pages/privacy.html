@@ -3,14 +3,14 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Quantura Screener | Ranked Watchlists</title>
-    <meta name="description" content="Run a fast stock screen, rank candidates, and save every run to your workspace." />
+    <title>Quantura Privacy Policy</title>
+    <meta name="description" content="Privacy policy for Quantura services and website." />
     <meta name="robots" content="index, follow" />
-    <link rel="canonical" href="https://quantura-e2e3d.web.app/screener" />
-    <meta property="og:title" content="Quantura Stock Screener" />
-    <meta property="og:description" content="Rank candidates, export results, and store every screener run in your workspace." />
+    <link rel="canonical" href="https://quantura-e2e3d.web.app/privacy" />
+    <meta property="og:title" content="Quantura Privacy Policy" />
+    <meta property="og:description" content="How Quantura collects, uses, and protects your data." />
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://quantura-e2e3d.web.app/screener" />
+    <meta property="og:url" content="https://quantura-e2e3d.web.app/privacy" />
     <meta property="og:image" content="/assets/quantura-logo.svg" />
     <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="/manifest.json" />
@@ -41,101 +41,54 @@
           <span id="header-user-email" class="small" style="max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Guest</span>
           <span id="header-user-status" class="pill">Guest</span>
           <button class="cta secondary" id="header-auth" type="button"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></button>
-          <a class="cta" href="#screener"><i class="iconoir-search" aria-hidden="true"></i><span>Run screener</span></a>
+          <a class="cta" href="/pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>View plans</span></a>
         </div>
       </div>
     </header>
 
     <main>
-      <div class="app-layout">
-        <aside class="app-sidebar">
-          <div class="sidebar-card">
-            <div class="small"><strong>Account</strong></div>
-            <div class="small">Signed in as <span id="user-email">Not signed in</span></div>
-            <div class="small">Status <span id="user-status" class="pill">Guest</span></div>
-            <a class="cta secondary small" href="/forecasting"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Open terminal</span></a>
-            <a class="cta secondary small" href="/dashboard"><i class="iconoir-dashboard" aria-hidden="true"></i><span>Open dashboard</span></a>
-            <a class="cta secondary small hidden" id="nav-admin" href="/admin"><i class="iconoir-shield-check" aria-hidden="true"></i><span>Admin dashboard</span></a>
+      <section class="page-hero">
+        <div class="container content-grid">
+          <div>
+            <div class="eyebrow">Legal</div>
+            <h1>Privacy Policy</h1>
+            <p>
+              Effective date: February 11, 2026. This policy explains what data Quantura collects,
+              why we collect it, and how you can manage or delete your information.
+            </p>
           </div>
-          <nav class="sidebar-nav">
-            <a href="#screener"><i class="iconoir-search" aria-hidden="true"></i><span>Run screener</span></a>
-            <a href="#screener-result"><i class="iconoir-bookmark" aria-hidden="true"></i><span>Saved runs</span></a>
-            <a href="#screener-output"><i class="iconoir-graph-up" aria-hidden="true"></i><span>Output</span></a>
-          </nav>
-        </aside>
-
-        <div class="app-main">
-      <section class="section" id="screener">
-        <div class="container">
-          <div class="section-title">
-            <h2>Run the Quantura screener</h2>
-            <p class="small">Run a screen and click any symbol to open it in the terminal.</p>
+          <div class="card">
+            <h3>Privacy highlights</h3>
+            <div class="feature-list">
+              <div class="feature"><span></span>Account data is required for sign-in and workspace sync.</div>
+              <div class="feature"><span></span>Analytics events improve reliability and product experience.</div>
+              <div class="feature"><span></span>Forecasts, uploads, and orders are stored in your workspace.</div>
+              <div class="feature"><span></span>You can request deletion of your account data.</div>
+            </div>
           </div>
-	          <div class="content-grid">
-	            <form id="screener-form" class="card">
-              <div class="form-grid">
-                <div class="field">
-                  <label class="label" for="screener-universe">Universe</label>
-                  <select id="screener-universe" name="universe">
-                    <option value="large-cap">Large Cap</option>
-                    <option value="mid-cap">Mid Cap</option>
-                    <option value="small-cap">Small Cap</option>
-                    <option value="custom">Custom list</option>
-                  </select>
-                </div>
-                <div class="field">
-                  <label class="label" for="screener-market">Market</label>
-                  <select id="screener-market" name="market">
-                    <option value="us">US</option>
-                    <option value="global">Global</option>
-                  </select>
-                </div>
-                <div class="field">
-                  <label class="label" for="screener-min">Minimum market cap ($B)</label>
-                  <input id="screener-min" name="minCap" type="number" value="5" />
-                </div>
-                <div class="field">
-                  <label class="label" for="screener-max">Max names</label>
-                  <input id="screener-max" name="maxNames" type="number" value="25" />
-                </div>
-              </div>
-              <div class="field">
-                <label class="label" for="screener-notes">Notes</label>
-                <textarea id="screener-notes" name="notes" placeholder="Optional focus or exclusions"></textarea>
-              </div>
-	              <button class="cta" type="submit" data-analytics="screener_submit"><i class="iconoir-search" aria-hidden="true"></i><span>Run screener</span></button>
-	            </form>
-              <div class="card">
-                <h3>Load saved run</h3>
-                <div class="form-grid">
-                  <div class="field">
-                    <label class="label" for="screener-load-select">Recent runs</label>
-                    <select id="screener-load-select">
-                      <option value="">Select a run</option>
-                    </select>
-                  </div>
-                </div>
-                <div class="hero-actions" style="margin-top: 12px;">
-                  <button class="cta secondary" id="screener-load-button" type="button" data-analytics="screener_load_saved"><i class="iconoir-bookmark" aria-hidden="true"></i><span>Load run</span></button>
-                </div>
-                <p class="small muted" id="screener-load-status"></p>
-                <details class="learn-more">
-                  <summary>Learn more</summary>
-                  <p class="small">
-                    Every screener run is saved so you can revisit the ranked list later. Use the run ID to share an exact output with a collaborator.
-                  </p>
-                </details>
-              </div>
-	            <div class="results-panel" id="screener-result">
-	              <h3>Screener output</h3>
-	              <p class="small">Top-ranked tickers appear here.</p>
-	              <div id="screener-output" class="panel-output"></div>
-	            </div>
-	          </div>
         </div>
       </section>
-    </div>
-  </div>
+
+      <section class="section">
+        <div class="container" style="display:grid; gap:16px;">
+          <div class="card">
+            <h3>1. Information we collect</h3>
+            <p class="small">We collect account identifiers (email, auth provider), usage telemetry, billing/order records, and files you upload for forecasting and analysis.</p>
+            <h3>2. How we use data</h3>
+            <p class="small">Data is used to deliver features, secure your account, process transactions, generate analytics, and improve service quality.</p>
+            <h3>3. Data sharing</h3>
+            <p class="small">We do not sell personal data. We share data only with service providers needed for hosting, storage, notifications, payments, and support.</p>
+            <h3>4. Security</h3>
+            <p class="small">We use access controls, encrypted transport, and role-based authorization. No system is fully risk free; protect your credentials and use strong passwords.</p>
+            <h3>5. Retention</h3>
+            <p class="small">Data is retained while your account is active and for limited periods for compliance, fraud prevention, and incident investigation.</p>
+            <h3>6. Your rights</h3>
+            <p class="small">You can request access, correction, or deletion by contacting us. We may require identity verification before fulfilling requests.</p>
+            <h3>7. Cookies and local storage</h3>
+            <p class="small">Quantura uses cookies/local storage for sign-in state, feature controls, preferences, and product analytics. You can manage consent in the app.</p>
+          </div>
+        </div>
+      </section>
     </main>
 
     <footer class="footer">

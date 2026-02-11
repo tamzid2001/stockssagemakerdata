@@ -112,5 +112,21 @@ service cloud.firestore {
       allow read: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.userId);
       allow update, delete: if isAdmin();
     }
+
+    match /social_campaigns/{campaignId} {
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.userId);
+      allow update, delete: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.userId);
+    }
+
+    match /social_queue/{queueId} {
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.userId);
+      allow write: if false;
+    }
+
+    match /social_dispatch_logs/{logId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
   }
 }
