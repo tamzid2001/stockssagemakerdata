@@ -165,6 +165,7 @@
 	      watchlistEnabled: true,
 	      forecastProphetEnabled: true,
 	      forecastTimeMixerEnabled: true,
+	      pushEnabled: true,
 	      webPushVapidKey: "",
         stripeCheckoutEnabled: true,
         stripePublicKey: "",
@@ -378,15 +379,16 @@
 	      } else {
 	        rc.settings = { minimumFetchIntervalMillis };
 	      }
-	      rc.defaultConfig = {
-	        welcome_message: "Welcome to Quantura",
-	        watchlist_enabled: true,
-	        forecast_prophet_enabled: true,
-	        forecast_timemixer_enabled: true,
-	        webpush_vapid_key: "",
-          stripe_checkout_enabled: true,
-          stripe_public_key: "",
-	      };
+	          rc.defaultConfig = {
+	            welcome_message: "Welcome to Quantura",
+	            watchlist_enabled: true,
+	            forecast_prophet_enabled: true,
+	            forecast_timemixer_enabled: true,
+	            push_notifications_enabled: true,
+	            webpush_vapid_key: "",
+	            stripe_checkout_enabled: true,
+	            stripe_public_key: "",
+	          };
 	      return rc;
 	    } catch (error) {
 	      return null;
@@ -509,15 +511,16 @@
 	        return fallback;
 	      }
 	    };
-	    return {
-	      watchlistEnabled: getBool("watchlist_enabled", true),
-	      forecastProphetEnabled: getBool("forecast_prophet_enabled", true),
-	      forecastTimeMixerEnabled: getBool("forecast_timemixer_enabled", true),
-	      webPushVapidKey: getString("webpush_vapid_key", ""),
-        stripeCheckoutEnabled: getBool("stripe_checkout_enabled", true),
-        stripePublicKey: getString("stripe_public_key", ""),
-	    };
-	  };
+		    return {
+		      watchlistEnabled: getBool("watchlist_enabled", true),
+		      forecastProphetEnabled: getBool("forecast_prophet_enabled", true),
+		      forecastTimeMixerEnabled: getBool("forecast_timemixer_enabled", true),
+		      pushEnabled: getBool("push_notifications_enabled", true),
+		      webPushVapidKey: getString("webpush_vapid_key", ""),
+	        stripeCheckoutEnabled: getBool("stripe_checkout_enabled", true),
+	        stripePublicKey: getString("stripe_public_key", ""),
+		    };
+		  };
 
 	  const applyRemoteFlags = (flags) => {
 	    document.querySelectorAll('[data-panel-target="watchlist"]').forEach((el) => {
@@ -526,6 +529,11 @@
 	    document.querySelectorAll('[data-panel="watchlist"]').forEach((el) => {
 	      if (!flags.watchlistEnabled) el.classList.add("hidden");
 	    });
+
+	    if (!flags.pushEnabled) {
+	      setNotificationStatus("Notifications are temporarily disabled.");
+	      setNotificationControlsEnabled(false);
+	    }
 
 	    if (ui.forecastService) {
 	      const setOptionEnabled = (value, enabled) => {
@@ -1013,6 +1021,195 @@
     return wrapper;
   };
 
+  const ensureActionModal = () => {
+    let modal = document.getElementById("action-modal");
+    if (!modal) modal = buildModalShell("action-modal");
+    return modal;
+  };
+
+  const openConfirmModal = ({ title, message, confirmLabel = "Confirm", cancelLabel = "Cancel", danger = false } = {}) =>
+    new Promise((resolve) => {
+      const modal = ensureActionModal();
+      const card = modal.querySelector(".modal-card");
+      if (!card) {
+        resolve(false);
+        return;
+      }
+
+      card.innerHTML = "";
+      const h = document.createElement("h3");
+      h.textContent = title || "Confirm";
+      const p = document.createElement("p");
+      p.className = "small";
+      p.textContent = message || "";
+      const actions = document.createElement("div");
+      actions.className = "modal-actions";
+
+      const cancelBtn = document.createElement("button");
+      cancelBtn.type = "button";
+      cancelBtn.className = "cta secondary";
+      cancelBtn.dataset.action = "cancel";
+      cancelBtn.textContent = cancelLabel;
+
+      const confirmBtn = document.createElement("button");
+      confirmBtn.type = "button";
+      confirmBtn.className = danger ? "cta secondary danger" : "cta";
+      confirmBtn.dataset.action = "confirm";
+      confirmBtn.textContent = confirmLabel;
+
+      actions.appendChild(cancelBtn);
+      actions.appendChild(confirmBtn);
+
+      card.appendChild(h);
+      card.appendChild(p);
+      card.appendChild(actions);
+
+      modal.classList.remove("hidden");
+      logEvent("modal_opened", { modal: "confirm", title: String(title || "").slice(0, 60) });
+
+      const cleanup = (value) => {
+        modal.classList.add("hidden");
+        modal.removeEventListener("click", onClick);
+        window.removeEventListener("keydown", onKeyDown, true);
+        resolve(Boolean(value));
+      };
+
+      const onClick = (event) => {
+        const action = event.target?.dataset?.action;
+        if (!action) return;
+        if (action === "close" || action === "cancel") {
+          cleanup(false);
+          return;
+        }
+        if (action === "confirm") {
+          logEvent("modal_confirmed", { modal: "confirm", title: String(title || "").slice(0, 60) });
+          cleanup(true);
+        }
+      };
+
+      const onKeyDown = (event) => {
+        if (event.key === "Escape") cleanup(false);
+      };
+
+      modal.addEventListener("click", onClick);
+      window.addEventListener("keydown", onKeyDown, true);
+      window.setTimeout(() => confirmBtn.focus(), 0);
+    });
+
+  const openPromptModal = ({
+    title,
+    message,
+    label,
+    placeholder = "",
+    initialValue = "",
+    confirmLabel = "Save",
+    cancelLabel = "Cancel",
+    maxLen = 180,
+  } = {}) =>
+    new Promise((resolve) => {
+      const modal = ensureActionModal();
+      const card = modal.querySelector(".modal-card");
+      if (!card) {
+        resolve(null);
+        return;
+      }
+
+      card.innerHTML = "";
+      const h = document.createElement("h3");
+      h.textContent = title || "Update";
+      const p = document.createElement("p");
+      p.className = "small";
+      p.textContent = message || "";
+
+      const labelEl = document.createElement("label");
+      labelEl.className = "label";
+      labelEl.textContent = label || "Value";
+
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "modal-input";
+      input.placeholder = placeholder;
+      input.maxLength = Math.max(1, Number(maxLen) || 180);
+      input.value = String(initialValue || "");
+
+      const status = document.createElement("p");
+      status.className = "small muted";
+      status.style.marginTop = "10px";
+      status.textContent = "";
+
+      const actions = document.createElement("div");
+      actions.className = "modal-actions";
+
+      const cancelBtn = document.createElement("button");
+      cancelBtn.type = "button";
+      cancelBtn.className = "cta secondary";
+      cancelBtn.dataset.action = "cancel";
+      cancelBtn.textContent = cancelLabel;
+
+      const confirmBtn = document.createElement("button");
+      confirmBtn.type = "button";
+      confirmBtn.className = "cta";
+      confirmBtn.dataset.action = "confirm";
+      confirmBtn.textContent = confirmLabel;
+
+      actions.appendChild(cancelBtn);
+      actions.appendChild(confirmBtn);
+
+      card.appendChild(h);
+      if (message) card.appendChild(p);
+      card.appendChild(labelEl);
+      card.appendChild(input);
+      card.appendChild(actions);
+      card.appendChild(status);
+
+      modal.classList.remove("hidden");
+      logEvent("modal_opened", { modal: "prompt", title: String(title || "").slice(0, 60) });
+
+      const cleanup = (value) => {
+        modal.classList.add("hidden");
+        modal.removeEventListener("click", onClick);
+        window.removeEventListener("keydown", onKeyDown, true);
+        resolve(value);
+      };
+
+      const onConfirm = () => {
+        const next = String(input.value || "").trim();
+        if (!next) {
+          status.textContent = "Enter a value.";
+          return;
+        }
+        cleanup(next);
+      };
+
+      const onClick = (event) => {
+        const action = event.target?.dataset?.action;
+        if (!action) return;
+        if (action === "close" || action === "cancel") {
+          cleanup(null);
+          return;
+        }
+        if (action === "confirm") {
+          logEvent("modal_confirmed", { modal: "prompt", title: String(title || "").slice(0, 60) });
+          onConfirm();
+        }
+      };
+
+      const onKeyDown = (event) => {
+        if (event.key === "Escape") cleanup(null);
+        if (event.key === "Enter") {
+          event.preventDefault();
+          onConfirm();
+        }
+      };
+
+      modal.addEventListener("click", onClick);
+      window.addEventListener("keydown", onKeyDown, true);
+      window.setTimeout(() => {
+        input.focus();
+        input.select?.();
+      }, 0);
+    });
+
   const ensureCookieModal = () => {
     let modal = document.getElementById("cookie-modal");
     if (!modal) modal = buildModalShell("cookie-modal");
@@ -1334,6 +1531,14 @@
               Share link
             </button>
             <button class="cta secondary small danger" type="button" data-action="delete-forecast" data-forecast-id="${escapeHtml(item.id)}">
+              Delete
+            </button>
+          </div>
+        `
+        : isAutopilot
+          ? `
+          <div class="order-actions" style="display:flex; gap:10px; flex-wrap:wrap;">
+            <button class="cta secondary small danger" type="button" data-action="delete-autopilot" data-request-id="${escapeHtml(item.id)}">
               Delete
             </button>
           </div>
@@ -3227,16 +3432,15 @@
     }
 
     const registerPushToken = functions.httpsCallable("register_notification_token");
-    await registerPushToken({
-      token,
-      forceRefresh: Boolean(opts.forceRefresh),
-      meta: buildMeta(),
-    });
+	    await registerPushToken({
+	      token,
+	      forceRefresh: Boolean(opts.forceRefresh),
+	      meta: buildMeta(),
+	    });
 
-    localStorage.setItem(FCM_TOKEN_CACHE_KEY, token);
-    setNotificationTokenPreview(token);
-    return token;
-  };
+	    localStorage.setItem(FCM_TOKEN_CACHE_KEY, token);
+	    return token;
+	  };
 
   const unregisterCachedNotificationToken = async (functions) => {
     const token = localStorage.getItem(FCM_TOKEN_CACHE_KEY);
@@ -3244,12 +3448,11 @@
     try {
       const unregisterToken = functions.httpsCallable("unregister_notification_token");
       await unregisterToken({ token, meta: buildMeta() });
-    } catch (error) {
-      // Ignore token cleanup errors.
-    }
-    localStorage.removeItem(FCM_TOKEN_CACHE_KEY);
-    setNotificationTokenPreview("");
-  };
+	    } catch (error) {
+	      // Ignore token cleanup errors.
+	    }
+	    localStorage.removeItem(FCM_TOKEN_CACHE_KEY);
+	  };
 
   const bindForegroundPushHandler = (messaging) => {
     if (!messaging || state.messagingBound) return;
@@ -3501,19 +3704,21 @@
 	      if (ui.headerUserStatus) ui.headerUserStatus.textContent = "Loading";
 	    }
 
-    if (ui.notificationsStatus) {
-      if (!isPushSupported()) {
-        setNotificationStatus("Push notifications are not supported in this browser.");
-        setNotificationControlsEnabled(false);
-      } else if (!messaging) {
-        setNotificationStatus("Messaging SDK is not loaded on this page.");
-        setNotificationControlsEnabled(false);
-      } else {
-        setNotificationStatus("Sign in and enable notifications.");
-        setNotificationControlsEnabled(true);
-      }
-      setNotificationTokenPreview(safeLocalStorageGet(FCM_TOKEN_CACHE_KEY) || "");
-    }
+	    if (ui.notificationsStatus) {
+	      if (!state.remoteFlags.pushEnabled) {
+	        setNotificationStatus("Notifications are temporarily disabled.");
+	        setNotificationControlsEnabled(false);
+	      } else if (!isPushSupported()) {
+	        setNotificationStatus("Push notifications are not supported in this browser.");
+	        setNotificationControlsEnabled(false);
+	      } else if (!messaging) {
+	        setNotificationStatus("Messaging SDK is not loaded on this page.");
+	        setNotificationControlsEnabled(false);
+	      } else {
+	        setNotificationStatus("Sign in and enable notifications.");
+	        setNotificationControlsEnabled(true);
+	      }
+	    }
 
     bindForegroundPushHandler(messaging);
 
@@ -3730,17 +3935,22 @@
             return;
           }
 
-          const deleteForecast = event.target.closest('[data-action="delete-forecast"]');
-          if (deleteForecast) {
-            event.preventDefault();
-            if (!state.user) {
-              showToast("Sign in to delete forecasts.", "warn");
-              return;
-            }
-            const forecastId = String(deleteForecast.dataset.forecastId || "").trim();
-            if (!forecastId) return;
-            const ok = window.confirm("Delete this saved forecast? This cannot be undone.");
-            if (!ok) return;
+	          const deleteForecast = event.target.closest('[data-action="delete-forecast"]');
+	          if (deleteForecast) {
+	            event.preventDefault();
+	            if (!state.user) {
+	              showToast("Sign in to delete forecasts.", "warn");
+	              return;
+	            }
+	            const forecastId = String(deleteForecast.dataset.forecastId || "").trim();
+	            if (!forecastId) return;
+	            const ok = await openConfirmModal({
+	              title: "Delete saved forecast?",
+	              message: "This removes the saved forecast from your workspace. This cannot be undone.",
+	              confirmLabel: "Delete",
+	              danger: true,
+	            });
+	            if (!ok) return;
 
             deleteForecast.disabled = true;
             try {
@@ -3789,17 +3999,22 @@
             return;
           }
 
-          const deleteScreener = event.target.closest('[data-action="delete-screener"]');
-          if (deleteScreener) {
-            event.preventDefault();
-            if (!state.user) {
-              showToast("Sign in to delete screener runs.", "warn");
-              return;
-            }
-            const runId = String(deleteScreener.dataset.runId || "").trim();
-            if (!runId) return;
-            const ok = window.confirm("Delete this screener run? This cannot be undone.");
-            if (!ok) return;
+	          const deleteScreener = event.target.closest('[data-action="delete-screener"]');
+	          if (deleteScreener) {
+	            event.preventDefault();
+	            if (!state.user) {
+	              showToast("Sign in to delete screener runs.", "warn");
+	              return;
+	            }
+	            const runId = String(deleteScreener.dataset.runId || "").trim();
+	            if (!runId) return;
+	            const ok = await openConfirmModal({
+	              title: "Delete screener run?",
+	              message: "This removes the saved screener run from your workspace. This cannot be undone.",
+	              confirmLabel: "Delete",
+	              danger: true,
+	            });
+	            if (!ok) return;
 
             deleteScreener.disabled = true;
             try {
@@ -3816,11 +4031,42 @@
             return;
           }
 
-          const plotUpload = event.target.closest('[data-action="plot-upload"]');
-          if (plotUpload) {
-            event.preventDefault();
-            if (!state.user) {
-              showToast("Sign in to view uploads.", "warn");
+	          const deleteAutopilot = event.target.closest('[data-action="delete-autopilot"]');
+	          if (deleteAutopilot) {
+	            event.preventDefault();
+	            if (!state.user) {
+	              showToast("Sign in to delete autopilot requests.", "warn");
+	              return;
+	            }
+	            const requestId = String(deleteAutopilot.dataset.requestId || "").trim();
+	            if (!requestId) return;
+	            const ok = await openConfirmModal({
+	              title: "Delete autopilot request?",
+	              message: "This removes the queued autopilot request. This cannot be undone.",
+	              confirmLabel: "Delete",
+	              danger: true,
+	            });
+	            if (!ok) return;
+
+	            deleteAutopilot.disabled = true;
+	            try {
+	              const del = functions.httpsCallable("delete_autopilot_request");
+	              await del({ requestId, meta: buildMeta() });
+	              showToast("Autopilot request deleted.");
+	              logEvent("autopilot_deleted", { request_id: requestId });
+	            } catch (error) {
+	              showToast(error.message || "Unable to delete autopilot request.", "warn");
+	            } finally {
+	              deleteAutopilot.disabled = false;
+	            }
+	            return;
+	          }
+
+	          const plotUpload = event.target.closest('[data-action="plot-upload"]');
+	          if (plotUpload) {
+	            event.preventDefault();
+	            if (!state.user) {
+	              showToast("Sign in to view uploads.", "warn");
               return;
             }
             const uploadId = String(plotUpload.dataset.uploadId || "").trim();
@@ -3865,17 +4111,31 @@
             return;
           }
 
-          const renameUpload = event.target.closest('[data-action="rename-upload"]');
-          if (renameUpload) {
-            event.preventDefault();
-            if (!state.user) {
-              showToast("Sign in to rename uploads.", "warn");
-              return;
-            }
-            const uploadId = String(renameUpload.dataset.uploadId || "").trim();
-            if (!uploadId) return;
-            const nextTitle = String(window.prompt("Rename this upload:", "") || "").trim();
-            if (!nextTitle) return;
+	          const renameUpload = event.target.closest('[data-action="rename-upload"]');
+	          if (renameUpload) {
+	            event.preventDefault();
+	            if (!state.user) {
+	              showToast("Sign in to rename uploads.", "warn");
+	              return;
+	            }
+	            const uploadId = String(renameUpload.dataset.uploadId || "").trim();
+	            if (!uploadId) return;
+	            let currentTitle = "";
+	            try {
+	              const snap = await db.collection("prediction_uploads").doc(uploadId).get();
+	              if (snap.exists) currentTitle = String(snap.data()?.title || "");
+	            } catch (error) {
+	              currentTitle = "";
+	            }
+	            const nextTitle = await openPromptModal({
+	              title: "Rename upload",
+	              message: "Update the filename shown in your uploads list.",
+	              label: "Title",
+	              placeholder: "predictions.csv",
+	              initialValue: currentTitle,
+	              confirmLabel: "Rename",
+	            });
+	            if (!nextTitle) return;
 
             renameUpload.disabled = true;
             try {
@@ -3919,17 +4179,22 @@
             return;
           }
 
-          const deleteUpload = event.target.closest('[data-action="delete-upload"]');
-          if (deleteUpload) {
-            event.preventDefault();
-            if (!state.user) {
-              showToast("Sign in to delete uploads.", "warn");
-              return;
-            }
-            const uploadId = String(deleteUpload.dataset.uploadId || "").trim();
-            if (!uploadId) return;
-            const ok = window.confirm("Delete this upload? This will remove the file from storage.");
-            if (!ok) return;
+	          const deleteUpload = event.target.closest('[data-action="delete-upload"]');
+	          if (deleteUpload) {
+	            event.preventDefault();
+	            if (!state.user) {
+	              showToast("Sign in to delete uploads.", "warn");
+	              return;
+	            }
+	            const uploadId = String(deleteUpload.dataset.uploadId || "").trim();
+	            if (!uploadId) return;
+	            const ok = await openConfirmModal({
+	              title: "Delete upload?",
+	              message: "This deletes the CSV metadata and removes the file from storage.",
+	              confirmLabel: "Delete",
+	              danger: true,
+	            });
+	            if (!ok) return;
 
             deleteUpload.disabled = true;
             try {
@@ -5221,59 +5486,69 @@
       }
     });
 
-    ui.notificationsEnable?.addEventListener("click", async () => {
-      if (!state.user) {
-        showToast("Sign in to enable notifications.", "warn");
-        return;
-      }
-      if (!messaging) {
-        showToast("Messaging SDK is unavailable on this page.", "warn");
-        return;
-      }
-      try {
-        setNotificationStatus("Registering notification token...");
-        const token = await registerNotificationToken(functions, messaging, { forceRefresh: false });
-        setNotificationStatus("Notifications are enabled for this browser.");
-        setNotificationTokenPreview(token);
-        logEvent("notifications_enabled", { channel: "webpush" });
-        showToast("Notifications enabled.");
-      } catch (error) {
-        setNotificationStatus(error.message || "Unable to enable notifications.");
-        showToast(error.message || "Unable to enable notifications.", "warn");
-      }
-    });
-
-    ui.notificationsRefresh?.addEventListener("click", async () => {
-      if (!state.user) {
-        showToast("Sign in first.", "warn");
-        return;
-      }
-      if (!messaging) {
-        showToast("Messaging SDK is unavailable on this page.", "warn");
-        return;
-      }
-      try {
-        setNotificationStatus("Refreshing notification token...");
-        const token = await registerNotificationToken(functions, messaging, { forceRefresh: true });
-        setNotificationStatus("Notification token refreshed.");
-        setNotificationTokenPreview(token);
-        logEvent("notifications_token_refreshed", { channel: "webpush" });
-      } catch (error) {
-        setNotificationStatus(error.message || "Unable to refresh notification token.");
-        showToast(error.message || "Unable to refresh notification token.", "warn");
+	    ui.notificationsEnable?.addEventListener("click", async () => {
+	      if (!state.user) {
+	        showToast("Sign in to enable notifications.", "warn");
+	        return;
+	      }
+	      if (!state.remoteFlags.pushEnabled) {
+	        showToast("Notifications are temporarily disabled.", "warn");
+	        return;
+	      }
+	      if (!messaging) {
+	        showToast("Messaging SDK is unavailable on this page.", "warn");
+	        return;
+	      }
+	      try {
+	        setNotificationStatus("Registering notification token...");
+	        const token = await registerNotificationToken(functions, messaging, { forceRefresh: false });
+	        setNotificationStatus("Notifications are enabled for this browser.");
+	        logEvent("notifications_enabled", { channel: "webpush" });
+	        showToast("Notifications enabled.");
+	      } catch (error) {
+	        setNotificationStatus(error.message || "Unable to enable notifications.");
+	        showToast(error.message || "Unable to enable notifications.", "warn");
       }
     });
 
-    ui.notificationsSendTest?.addEventListener("click", async () => {
-      if (!state.user) {
-        showToast("Sign in first.", "warn");
-        return;
+	    ui.notificationsRefresh?.addEventListener("click", async () => {
+	      if (!state.user) {
+	        showToast("Sign in first.", "warn");
+	        return;
+	      }
+	      if (!state.remoteFlags.pushEnabled) {
+	        showToast("Notifications are temporarily disabled.", "warn");
+	        return;
+	      }
+	      if (!messaging) {
+	        showToast("Messaging SDK is unavailable on this page.", "warn");
+	        return;
+	      }
+	      try {
+	        setNotificationStatus("Refreshing notification token...");
+	        const token = await registerNotificationToken(functions, messaging, { forceRefresh: true });
+	        setNotificationStatus("Notification token refreshed.");
+	        logEvent("notifications_token_refreshed", { channel: "webpush" });
+	      } catch (error) {
+	        setNotificationStatus(error.message || "Unable to refresh notification token.");
+	        showToast(error.message || "Unable to refresh notification token.", "warn");
       }
-      try {
-        setNotificationStatus("Sending test notification...");
-        const sendTestNotification = functions.httpsCallable("send_test_notification");
-        const result = await sendTestNotification({
-          title: "Quantura test",
+    });
+
+	    ui.notificationsSendTest?.addEventListener("click", async () => {
+	      if (!state.user) {
+	        showToast("Sign in first.", "warn");
+	        return;
+	      }
+	      if (!state.remoteFlags.pushEnabled) {
+	        showToast("Notifications are temporarily disabled.", "warn");
+	        return;
+	      }
+	      try {
+	        setNotificationStatus("Sending test notification...");
+	        const sendTestNotification = functions.httpsCallable("send_test_notification");
+	        const result = await sendTestNotification({
+	          title: "Quantura test",
           body: "Web push is active for your dashboard.",
           data: {
             source: "dashboard_test",
@@ -5384,23 +5659,25 @@
         }
 
 	      if (ui.notificationsStatus) {
-	        if (messaging && isPushSupported()) {
+	        if (!state.remoteFlags.pushEnabled) {
+	          setNotificationControlsEnabled(false);
+	          setNotificationStatus("Notifications are temporarily disabled.");
+	        } else if (messaging && isPushSupported()) {
 	          setNotificationControlsEnabled(true);
-          const cachedToken = localStorage.getItem(FCM_TOKEN_CACHE_KEY) || "";
-          setNotificationTokenPreview(cachedToken);
-          setNotificationStatus(cachedToken ? "Notifications enabled for this browser." : "Click Enable notifications.");
-          if (Notification.permission === "granted") {
-            try {
-              await registerNotificationToken(functions, messaging, { forceRefresh: !cachedToken });
-              setNotificationStatus("Notifications enabled for this browser.");
-            } catch (error) {
-              setNotificationStatus(error.message || "Unable to initialize notifications.");
-            }
-          }
-        } else {
-          setNotificationControlsEnabled(false);
-        }
-      }
+	          const cachedToken = localStorage.getItem(FCM_TOKEN_CACHE_KEY) || "";
+	          setNotificationStatus(cachedToken ? "Notifications enabled for this browser." : "Click Enable notifications.");
+	          if (Notification.permission === "granted") {
+	            try {
+	              await registerNotificationToken(functions, messaging, { forceRefresh: !cachedToken });
+	              setNotificationStatus("Notifications enabled for this browser.");
+	            } catch (error) {
+	              setNotificationStatus(error.message || "Unable to initialize notifications.");
+	            }
+	          }
+	        } else {
+	          setNotificationControlsEnabled(false);
+	        }
+	      }
 
 	      if (ui.terminalForm && ui.tickerChart && state.tickerContext.forecastId && !state.tickerContext.forecastDoc) {
 	        try {
