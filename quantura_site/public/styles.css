@@ -77,6 +77,21 @@ a {
   text-decoration: none;
 }
 
+/* Iconoir (CDN) */
+i[class^="iconoir-"],
+i[class*=" iconoir-"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+i[class^="iconoir-"]::before,
+i[class*=" iconoir-"]::before {
+  width: 1.1em;
+  height: 1.1em;
+}
+
 .container {
   width: 100%;
   max-width: var(--maxw);
@@ -122,6 +137,9 @@ a {
 }
 
 .nav-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   padding-bottom: 4px;
   border-bottom: 2px solid transparent;
 }
@@ -432,6 +450,38 @@ a {
   font-size: 0.76rem;
   color: var(--ink-2);
   font-weight: 600;
+}
+
+.metric-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--ink-2);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.metric-chip .metric-label {
+  opacity: 0.78;
+  font-weight: 700;
+}
+
+.metric-chip .metric-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.metric-strip {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 6px;
 }
 
 .small {
@@ -1066,6 +1116,12 @@ textarea {
 .output-stack {
   display: grid;
   gap: 8px;
+}
+
+.meta-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .table-controls {
@@ -1708,6 +1764,9 @@ textarea {
   border-radius: 12px;
   font-weight: 600;
   color: var(--ink-2);
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .sidebar-link {
@@ -1720,6 +1779,9 @@ textarea {
   cursor: pointer;
   text-align: left;
   width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .sidebar-nav a:hover {
@@ -1884,6 +1946,9 @@ textarea {
   left: 18px;
   bottom: 18px;
   z-index: 78;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   border-radius: 999px;
   border: 1px solid rgba(18, 24, 42, 0.22);
   background: var(--surface);

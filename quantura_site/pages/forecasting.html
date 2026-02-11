@@ -18,6 +18,7 @@
     <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
     <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 
     <script defer src="/__/firebase/12.9.0/firebase-app-compat.js"></script>
@@ -37,20 +38,20 @@
           <img class="logo-img" src="/assets/quantura-logo.svg" alt="Quantura logo" />
         </a>
         <nav class="nav-links">
-          <a href="/forecasting" data-analytics="nav_forecasting">Forecasting</a>
-          <a href="/screener" data-analytics="nav_screener">Screener</a>
-          <a href="/dashboard" data-analytics="nav_dashboard">Dashboard</a>
-          <a href="/pricing" data-analytics="nav_pricing">Pricing</a>
-          <a href="/blog" data-analytics="nav_blog">Blog</a>
-          <a href="/contact" data-analytics="nav_contact">Contact</a>
+          <a href="/forecasting" data-analytics="nav_forecasting"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Forecasting</span></a>
+          <a href="/screener" data-analytics="nav_screener"><i class="iconoir-search" aria-hidden="true"></i><span>Screener</span></a>
+          <a href="/dashboard" data-analytics="nav_dashboard"><i class="iconoir-dashboard" aria-hidden="true"></i><span>Dashboard</span></a>
+          <a href="/pricing" data-analytics="nav_pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>Pricing</span></a>
+          <a href="/blog" data-analytics="nav_blog"><i class="iconoir-journal" aria-hidden="true"></i><span>Blog</span></a>
+          <a href="/contact" data-analytics="nav_contact"><i class="iconoir-mail" aria-hidden="true"></i><span>Contact</span></a>
         </nav>
         <div class="nav-actions">
           <span id="header-user-email" class="small" style="max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Guest</span>
           <span id="header-user-status" class="pill">Guest</span>
-          <button class="cta secondary" id="header-auth" type="button">Sign in</button>
-          <button class="cta secondary hidden" id="header-signout" type="button">Sign out</button>
-          <a class="cta secondary hidden" id="header-dashboard" href="/dashboard">Dashboard</a>
-          <a class="cta" href="/purchase">Request Deep Forecast</a>
+          <button class="cta secondary" id="header-auth" type="button"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></button>
+          <button class="cta secondary hidden" id="header-signout" type="button"><i class="iconoir-log-out" aria-hidden="true"></i><span>Sign out</span></button>
+          <a class="cta secondary hidden" id="header-dashboard" href="/dashboard"><i class="iconoir-dashboard" aria-hidden="true"></i><span>Dashboard</span></a>
+          <a class="cta" href="/purchase"><i class="iconoir-page" aria-hidden="true"></i><span>Request Deep Forecast</span></a>
         </div>
       </div>
     </header>
@@ -62,20 +63,20 @@
             <div class="small"><strong>Account</strong></div>
             <div class="small">Signed in as <span id="user-email">Not signed in</span></div>
             <div class="small">Status <span id="user-status" class="pill">Guest</span></div>
-            <a class="cta secondary small" href="/dashboard">Open dashboard</a>
-            <a class="cta secondary small hidden" id="nav-admin" href="/admin">Admin dashboard</a>
+            <a class="cta secondary small" href="/dashboard"><i class="iconoir-dashboard" aria-hidden="true"></i><span>Open dashboard</span></a>
+            <a class="cta secondary small hidden" id="nav-admin" href="/admin"><i class="iconoir-shield-check" aria-hidden="true"></i><span>Admin dashboard</span></a>
           </div>
 	          <nav class="sidebar-nav" aria-label="Terminal navigation">
-	            <a class="sidebar-link active" href="/forecasting" data-panel-target="forecast">Forecast</a>
-	            <a class="sidebar-link" href="/indicators" data-panel-target="indicators">Indicators</a>
-              <a class="sidebar-link" href="/trending" data-panel-target="trending">Trending</a>
-	            <a class="sidebar-link" href="/news" data-panel-target="news">News and data</a>
-	            <a class="sidebar-link" href="/options" data-panel-target="options">Options</a>
-	            <a class="sidebar-link" href="/saved-forecasts" data-panel-target="saved">Saved forecasts</a>
-              <a class="sidebar-link" href="/backtesting" data-panel-target="backtesting">Backtesting</a>
-	            <a class="sidebar-link" href="/studio" data-panel-target="learn">Learn more</a>
-	            <a class="sidebar-link" href="/screener">Screener</a>
-	            <a class="sidebar-link" href="/watchlist">Watchlist and alerts</a>
+	            <a class="sidebar-link active" href="/forecasting" data-panel-target="forecast"><i class="iconoir-magic-wand" aria-hidden="true"></i><span>Forecast</span></a>
+	            <a class="sidebar-link" href="/indicators" data-panel-target="indicators"><i class="iconoir-sigma-function" aria-hidden="true"></i><span>Indicators</span></a>
+              <a class="sidebar-link" href="/trending" data-panel-target="trending"><i class="iconoir-fire-flame" aria-hidden="true"></i><span>Trending</span></a>
+	            <a class="sidebar-link" href="/news" data-panel-target="news"><i class="iconoir-journal-page" aria-hidden="true"></i><span>News and data</span></a>
+	            <a class="sidebar-link" href="/options" data-panel-target="options"><i class="iconoir-numbered-list-left" aria-hidden="true"></i><span>Options</span></a>
+	            <a class="sidebar-link" href="/saved-forecasts" data-panel-target="saved"><i class="iconoir-bookmark" aria-hidden="true"></i><span>Saved forecasts</span></a>
+              <a class="sidebar-link" href="/backtesting" data-panel-target="backtesting"><i class="iconoir-flask" aria-hidden="true"></i><span>Backtesting</span></a>
+	            <a class="sidebar-link" href="/studio" data-panel-target="learn"><i class="iconoir-info-circle" aria-hidden="true"></i><span>Learn more</span></a>
+	            <a class="sidebar-link" href="/screener"><i class="iconoir-search" aria-hidden="true"></i><span>Screener</span></a>
+	            <a class="sidebar-link" href="/watchlist"><i class="iconoir-bell-notification" aria-hidden="true"></i><span>Watchlist and alerts</span></a>
 	          </nav>
         </aside>
 
@@ -97,7 +98,7 @@
                           <option value="1h">Hourly</option>
                         </select>
                       </div>
-                      <button class="cta" type="submit" data-analytics="terminal_load">Load chart</button>
+                      <button class="cta" type="submit" data-analytics="terminal_load"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Load chart</span></button>
                       <p class="small" id="terminal-status"></p>
                     </form>
                     <div class="small ticker-hint">
@@ -175,7 +176,7 @@
 	                        <input id="forecast-quantiles" name="quantiles" value="0.1,0.5,0.9" placeholder="0.1,0.5,0.9" required />
 	                        <div class="small muted">Values must be between 0 and 1 (exclusive). Example: 0.1,0.5,0.9</div>
 	                      </div>
-	                      <button class="cta" type="submit" data-analytics="forecast_submit">Generate forecast</button>
+	                      <button class="cta" type="submit" data-analytics="forecast_submit"><i class="iconoir-magic-wand" aria-hidden="true"></i><span>Generate forecast</span></button>
 	                      <details class="learn-more">
 	                        <summary>Learn more</summary>
 	                        <div class="small">
@@ -212,7 +213,7 @@
                           </div>
                         </div>
                         <div class="hero-actions" style="margin-top: 12px;">
-                          <button class="cta secondary" id="forecast-load-button" type="button" data-analytics="forecast_load_saved">Load forecast</button>
+                          <button class="cta secondary" id="forecast-load-button" type="button" data-analytics="forecast_load_saved"><i class="iconoir-bookmark" aria-hidden="true"></i><span>Load forecast</span></button>
                         </div>
                         <p class="small muted" id="forecast-load-status"></p>
                       </div>

@@ -19,6 +19,7 @@
     <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
 
     <script defer src="/__/firebase/12.9.0/firebase-app-compat.js"></script>
     <script defer src="/__/firebase/12.9.0/firebase-auth-compat.js"></script>
@@ -53,12 +54,12 @@
           <img class="logo-img" src="/assets/quantura-logo.svg" alt="Quantura logo" />
         </a>
         <nav class="nav-links">
-          <a href="/forecasting" data-analytics="nav_forecasting">Forecasting</a>
-          <a href="/screener" data-analytics="nav_screener">Screener</a>
-          <a href="/dashboard" data-analytics="nav_dashboard">Dashboard</a>
-          <a href="/pricing" data-analytics="nav_pricing">Pricing</a>
-          <a href="/blog" data-analytics="nav_blog">Blog</a>
-          <a href="/contact" data-analytics="nav_contact">Contact</a>
+          <a href="/forecasting" data-analytics="nav_forecasting"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Forecasting</span></a>
+          <a href="/screener" data-analytics="nav_screener"><i class="iconoir-search" aria-hidden="true"></i><span>Screener</span></a>
+          <a href="/dashboard" data-analytics="nav_dashboard"><i class="iconoir-dashboard" aria-hidden="true"></i><span>Dashboard</span></a>
+          <a href="/pricing" data-analytics="nav_pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>Pricing</span></a>
+          <a href="/blog" data-analytics="nav_blog"><i class="iconoir-journal" aria-hidden="true"></i><span>Blog</span></a>
+          <a href="/contact" data-analytics="nav_contact"><i class="iconoir-mail" aria-hidden="true"></i><span>Contact</span></a>
         </nav>
         <div class="nav-actions">
           <span
@@ -68,10 +69,10 @@
             >Guest</span
           >
           <span id="header-user-status" class="pill">Guest</span>
-          <button class="cta secondary" id="header-auth" type="button">Sign in</button>
-          <button class="cta secondary hidden" id="header-signout" type="button">Sign out</button>
-          <a class="cta secondary hidden" id="header-dashboard" href="/dashboard">Dashboard</a>
-          <a class="cta" href="/forecasting">Open terminal</a>
+          <button class="cta secondary" id="header-auth" type="button"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></button>
+          <button class="cta secondary hidden" id="header-signout" type="button"><i class="iconoir-log-out" aria-hidden="true"></i><span>Sign out</span></button>
+          <a class="cta secondary hidden" id="header-dashboard" href="/dashboard"><i class="iconoir-dashboard" aria-hidden="true"></i><span>Dashboard</span></a>
+          <a class="cta" href="/forecasting"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Open terminal</span></a>
         </div>
       </div>
     </header>
@@ -88,8 +89,8 @@
               This note explains how to pick quantiles, how to interpret bands, and how to compare Meta Prophet against IBM TimeMixer inside the terminal.
             </p>
             <div class="hero-actions">
-              <a class="cta" href="/forecasting" data-analytics="blog_open_terminal">Open the terminal</a>
-              <a class="cta secondary" href="/saved-forecasts" data-analytics="blog_open_saved">View saved forecasts</a>
+              <a class="cta" href="/forecasting" data-analytics="blog_open_terminal"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Open the terminal</span></a>
+              <a class="cta secondary" href="/saved-forecasts" data-analytics="blog_open_saved"><i class="iconoir-bookmark" aria-hidden="true"></i><span>View saved forecasts</span></a>
             </div>
           </div>
           <div class="card">
