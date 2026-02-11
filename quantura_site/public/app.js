@@ -9,6 +9,7 @@
   const OPTIONS_EXPIRATION_PREFIX = "quantura_options_expiration_";
   const THEME_KEY = "quantura_theme";
   const PENDING_SHARE_KEY = "quantura_pending_share_v1";
+  const HOLIDAY_PROMO_SEEN_KEY = "quantura_holiday_promo_seen_v1";
 
   const ui = {
     headerAuth: document.getElementById("header-auth"),
@@ -107,6 +108,14 @@
     predictionsChart: document.getElementById("predictions-chart"),
     predictionsPreview: document.getElementById("predictions-preview"),
     predictionsPlotMeta: document.getElementById("predictions-plot-meta"),
+    backtestForm: document.getElementById("backtest-form"),
+    backtestStrategy: document.getElementById("backtest-strategy"),
+    backtestOutput: document.getElementById("backtest-output"),
+    backtestLoadSelect: document.getElementById("backtest-load-select"),
+    backtestLoadId: document.getElementById("backtest-load-id"),
+    backtestLoadButton: document.getElementById("backtest-load-button"),
+    backtestLoadStatus: document.getElementById("backtest-load-status"),
+    savedBacktestsList: document.getElementById("saved-backtests-list"),
     toast: document.getElementById("toast"),
     purchasePanels: Array.from(document.querySelectorAll(".purchase-panel")),
   };
@@ -147,18 +156,20 @@
     pendingShareProcessed: false,
     taskCalendarCursor: null,
     taskCalendarTasks: [],
-    unsubscribeOrders: null,
-    unsubscribeAdmin: null,
-    unsubscribeAdminAutopilot: null,
+	    unsubscribeOrders: null,
+	    unsubscribeAdmin: null,
+	    unsubscribeAdminAutopilot: null,
 	    unsubscribeForecasts: null,
 	    unsubscribeAutopilot: null,
 	    unsubscribePredictions: null,
+      unsubscribeBacktests: null,
 	    unsubscribeTasks: null,
 	    unsubscribeWatchlist: null,
 	    unsubscribeAlerts: null,
 	    unsubscribeScreenerRuns: null,
 	    screenerUrlRunLoaded: false,
       uploadUrlLoaded: false,
+      backtestUrlLoaded: false,
 	    messagingBound: false,
 	    remoteConfigLoaded: false,
 	    remoteFlags: {
@@ -169,6 +180,10 @@
 	      webPushVapidKey: "",
         stripeCheckoutEnabled: true,
         stripePublicKey: "",
+        holidayPromo: false,
+        backtestingEnabled: true,
+        backtestingFreeDailyLimit: 1,
+        backtestingProDailyLimit: 25,
 	    },
 	    remoteConfigRefreshTimer: null,
 	    remoteConfigUnsubscribe: null,
@@ -235,6 +250,7 @@
 		          news: "/news",
 		          options: "/options",
 		          saved: "/saved-forecasts",
+              backtesting: "/backtesting",
 		          learn: "/studio",
 		        },
 		      },
@@ -388,6 +404,10 @@
 	            webpush_vapid_key: "",
 	            stripe_checkout_enabled: true,
 	            stripe_public_key: "",
+              holiday_promo: false,
+              backtesting_enabled: true,
+              backtesting_free_daily_limit: "1",
+              backtesting_pro_daily_limit: "25",
 	          };
 	      return rc;
 	    } catch (error) {
@@ -469,6 +489,10 @@
             webpush_vapid_key: "",
             stripe_checkout_enabled: true,
             stripe_public_key: "",
+            holiday_promo: false,
+            backtesting_enabled: true,
+            backtesting_free_daily_limit: "1",
+            backtesting_pro_daily_limit: "25",
           };
 
           const wrap = {
@@ -511,6 +535,12 @@
 	        return fallback;
 	      }
 	    };
+      const getInt = (key, fallback) => {
+        const raw = String(getString(key, "") || "").trim();
+        if (!raw) return fallback;
+        const parsed = Number.parseInt(raw, 10);
+        return Number.isFinite(parsed) ? parsed : fallback;
+      };
 		    return {
 		      watchlistEnabled: getBool("watchlist_enabled", true),
 		      forecastProphetEnabled: getBool("forecast_prophet_enabled", true),
@@ -519,6 +549,10 @@
 		      webPushVapidKey: getString("webpush_vapid_key", ""),
 	        stripeCheckoutEnabled: getBool("stripe_checkout_enabled", true),
 	        stripePublicKey: getString("stripe_public_key", ""),
+          holidayPromo: getBool("holiday_promo", false),
+          backtestingEnabled: getBool("backtesting_enabled", true),
+          backtestingFreeDailyLimit: getInt("backtesting_free_daily_limit", 1),
+          backtestingProDailyLimit: getInt("backtesting_pro_daily_limit", 25),
 		    };
 		  };
 
@@ -529,6 +563,13 @@
 	    document.querySelectorAll('[data-panel="watchlist"]').forEach((el) => {
 	      if (!flags.watchlistEnabled) el.classList.add("hidden");
 	    });
+
+      document.querySelectorAll('[data-panel-target="backtesting"]').forEach((el) => {
+        el.classList.toggle("hidden", !flags.backtestingEnabled);
+      });
+      document.querySelectorAll('[data-panel="backtesting"]').forEach((el) => {
+        if (!flags.backtestingEnabled) el.classList.add("hidden");
+      });
 
 	    if (!flags.pushEnabled) {
 	      setNotificationStatus("Notifications are temporarily disabled.");
@@ -557,6 +598,48 @@
 	      }
 	    }
 	  };
+
+    const maybeShowHolidayPromo = () => {
+      if (!state.remoteFlags.holidayPromo) return;
+      if (typeof window === "undefined") return;
+      if (window.location.pathname !== "/") return;
+      if (String(safeLocalStorageGet(HOLIDAY_PROMO_SEEN_KEY) || "") === "1") return;
+      if (document.getElementById("holiday-promo")) return;
+
+      const banner = document.createElement("section");
+      banner.id = "holiday-promo";
+      banner.className = "promo-banner";
+      banner.innerHTML = `
+        <div class="promo-inner">
+          <div>
+            <div class="promo-badge">Holiday promo</div>
+            <div class="promo-title">Limited-time discount for new Quantura members.</div>
+            <div class="small muted">Explore plans, unlock higher throughput, and ship your weekly research loop faster.</div>
+          </div>
+          <div class="promo-actions">
+            <a class="cta small" href="/pricing" data-action="promo-cta">View plans</a>
+            <button class="cta secondary small" type="button" data-action="promo-dismiss">No thanks</button>
+          </div>
+        </div>
+      `;
+      const header = document.querySelector("header.header");
+      if (header && typeof header.insertAdjacentElement === "function") header.insertAdjacentElement("afterend", banner);
+      else document.body.prepend(banner);
+
+      const dismiss = banner.querySelector('[data-action="promo-dismiss"]');
+      const cta = banner.querySelector('[data-action="promo-cta"]');
+      dismiss?.addEventListener("click", () => {
+        safeLocalStorageSet(HOLIDAY_PROMO_SEEN_KEY, "1");
+        banner.remove();
+        logEvent("holiday_promo_dismissed", {});
+      });
+      cta?.addEventListener("click", () => {
+        safeLocalStorageSet(HOLIDAY_PROMO_SEEN_KEY, "1");
+        logEvent("holiday_promo_clicked", {});
+      });
+
+      logEvent("holiday_promo_shown", {});
+    };
 
 	  const subscribeRemoteConfigUpdates = (rc) => {
 	    if (!rc) return;
@@ -655,6 +738,7 @@
 	    };
 	    state.remoteConfigLoaded = true;
 	    applyRemoteFlags(state.remoteFlags);
+      maybeShowHolidayPromo();
 	    subscribeRemoteConfigUpdates(rc);
 	    startRemoteConfigRefreshLoop(rc);
 	    logEvent("remote_config_loaded", {
@@ -2066,6 +2150,181 @@
       });
   };
 
+  const syncBacktestStrategyFields = () => {
+    if (!ui.backtestStrategy) return;
+    const selected = String(ui.backtestStrategy.value || "").trim();
+    document.querySelectorAll("[data-backtest-strategy]").forEach((el) => {
+      const key = String(el.dataset.backtestStrategy || "").trim();
+      el.classList.toggle("hidden", key && key !== selected);
+    });
+  };
+
+  const renderBacktestPicker = (items) => {
+    if (!ui.backtestLoadSelect) return;
+    const list = Array.isArray(items) ? items : [];
+    ui.backtestLoadSelect.innerHTML = `<option value="">Select a backtest</option>`;
+    list.slice(0, 60).forEach((item) => {
+      const opt = document.createElement("option");
+      opt.value = item.id;
+      const createdLabel = item.createdAt ? formatTimestamp(item.createdAt) : "";
+      opt.textContent = `${item.title || item.ticker || "Backtest"}${createdLabel ? ` · ${createdLabel}` : ""}`;
+      ui.backtestLoadSelect.appendChild(opt);
+    });
+  };
+
+  const renderBacktestList = (items) => {
+    if (!ui.savedBacktestsList) return;
+    const list = Array.isArray(items) ? items : [];
+    ui.savedBacktestsList.innerHTML = "";
+    if (!list.length) {
+      ui.savedBacktestsList.innerHTML = `<div class="small muted">No backtests yet.</div>`;
+      return;
+    }
+
+    list.slice(0, 30).forEach((item) => {
+      const card = document.createElement("div");
+      card.className = "order-card";
+      const title = escapeHtml(item.title || item.ticker || "Backtest");
+      const strategy = escapeHtml(item.strategy || "");
+      const interval = escapeHtml(item.interval || "");
+      const created = item.createdAt ? formatTimestamp(item.createdAt) : "";
+      const metrics = item.metrics || {};
+      const returnPct = typeof metrics.ReturnPct === "number" ? `${metrics.ReturnPct.toFixed(2)}%` : "—";
+      const sharpe = typeof metrics.Sharpe === "number" ? metrics.Sharpe.toFixed(2) : "—";
+      const maxDd = typeof metrics.MaxDrawdownPct === "number" ? `${metrics.MaxDrawdownPct.toFixed(2)}%` : "—";
+      const trades = typeof metrics.Trades === "number" ? String(metrics.Trades) : "—";
+
+      card.innerHTML = `
+        <div class="order-header">
+          <div>
+            <div class="order-title">${title}</div>
+            <div class="small">ID: ${escapeHtml(item.id)}</div>
+          </div>
+          <span class="status completed">saved</span>
+        </div>
+        <div class="order-meta">
+          ${created ? `<div><strong>Created</strong> ${escapeHtml(created)}</div>` : ""}
+          ${item.ticker ? `<div><strong>Ticker</strong> ${escapeHtml(item.ticker)}</div>` : ""}
+          ${interval ? `<div><strong>Interval</strong> ${interval}</div>` : ""}
+          ${strategy ? `<div><strong>Strategy</strong> ${strategy}</div>` : ""}
+          <div><strong>Return</strong> ${escapeHtml(returnPct)} · <strong>Sharpe</strong> ${escapeHtml(sharpe)} · <strong>Max DD</strong> ${escapeHtml(
+            maxDd
+          )} · <strong>Trades</strong> ${escapeHtml(trades)}</div>
+        </div>
+        <div class="order-actions" style="display:flex; gap:10px; flex-wrap:wrap;">
+          <button class="cta secondary small" type="button" data-action="plot-backtest" data-backtest-id="${escapeHtml(item.id)}">Load</button>
+          <button class="cta secondary small" type="button" data-action="download-backtest-code" data-backtest-id="${escapeHtml(item.id)}">Download code</button>
+          <button class="cta secondary small" type="button" data-action="rename-backtest" data-backtest-id="${escapeHtml(item.id)}">Rename</button>
+          <button class="cta secondary small danger" type="button" data-action="delete-backtest" data-backtest-id="${escapeHtml(item.id)}">Delete</button>
+        </div>
+      `;
+      ui.savedBacktestsList.appendChild(card);
+    });
+  };
+
+  const renderBacktestDetails = async (doc, { imageUrl }) => {
+    if (!ui.backtestOutput) return;
+    const metrics = doc.metrics || {};
+    const ret = typeof metrics.ReturnPct === "number" ? `${metrics.ReturnPct.toFixed(2)}%` : "—";
+    const sharpe = typeof metrics.Sharpe === "number" ? metrics.Sharpe.toFixed(2) : "—";
+    const maxDd = typeof metrics.MaxDrawdownPct === "number" ? `${metrics.MaxDrawdownPct.toFixed(2)}%` : "—";
+    const trades = typeof metrics.Trades === "number" ? String(metrics.Trades) : "—";
+    const winRate = typeof metrics.WinRatePct === "number" ? `${metrics.WinRatePct.toFixed(1)}%` : "—";
+
+    const title = escapeHtml(doc.title || doc.ticker || "Backtest");
+    const code = String(doc.code || "").trim();
+    const codeMarkup = code
+      ? `
+        <details class="learn-more">
+          <summary>Source code (generated)</summary>
+          <pre class="code-block">${escapeHtml(code)}</pre>
+        </details>
+      `
+      : "";
+
+    ui.backtestOutput.innerHTML = `
+      <div class="card">
+        <div class="card-head">
+          <h3>${title}</h3>
+        </div>
+        <div class="small muted" style="margin-bottom: 12px;">
+          ${escapeHtml(doc.ticker || "")}${doc.interval ? ` · ${escapeHtml(doc.interval)}` : ""}${doc.strategy ? ` · ${escapeHtml(doc.strategy)}` : ""}
+        </div>
+        <div class="metrics metrics-tight">
+          <div class="stat-card"><strong>${escapeHtml(ret)}</strong><span class="small">Return</span></div>
+          <div class="stat-card"><strong>${escapeHtml(sharpe)}</strong><span class="small">Sharpe</span></div>
+          <div class="stat-card"><strong>${escapeHtml(maxDd)}</strong><span class="small">Max drawdown</span></div>
+          <div class="stat-card"><strong>${escapeHtml(trades)}</strong><span class="small">Trades</span></div>
+          <div class="stat-card"><strong>${escapeHtml(winRate)}</strong><span class="small">Win rate</span></div>
+        </div>
+        ${
+          imageUrl
+            ? `<div style="margin-top: 14px;"><img class="backtest-image" src="${escapeHtml(imageUrl)}" alt="Backtest equity curve" loading="lazy" /></div>`
+            : `<div class="small muted" style="margin-top: 14px;">Chart unavailable.</div>`
+        }
+        <div class="hero-actions" style="margin-top: 14px;">
+          <button class="cta secondary small" type="button" data-action="download-backtest-code" data-backtest-id="${escapeHtml(
+            doc.id
+          )}">Download code</button>
+        </div>
+        ${codeMarkup}
+      </div>
+    `;
+  };
+
+  const loadBacktestById = async (db, storage, backtestId) => {
+    if (!db || !backtestId) throw new Error("Backtest ID is required.");
+    if (!ui.backtestOutput) return;
+    const cleanId = String(backtestId || "").trim();
+    if (!cleanId) throw new Error("Backtest ID is required.");
+    setOutputLoading(ui.backtestOutput, "Loading backtest...");
+
+    const snap = await db.collection("backtests").doc(cleanId).get();
+    if (!snap.exists) throw new Error("Backtest not found.");
+    const doc = { id: snap.id, ...(snap.data() || {}) };
+
+    let imageUrl = "";
+    if (storage && doc.imagePath) {
+      try {
+        imageUrl = await storage.ref().child(String(doc.imagePath)).getDownloadURL();
+      } catch (error) {
+        imageUrl = "";
+      }
+    }
+
+    await renderBacktestDetails(doc, { imageUrl });
+    setOutputReady(ui.backtestOutput);
+    logEvent("backtest_loaded", { backtest_id: cleanId });
+  };
+
+  const startBacktests = (db, user) => {
+    if (state.unsubscribeBacktests) state.unsubscribeBacktests();
+    if (!user || !ui.savedBacktestsList || !ui.backtestLoadSelect) return;
+    state.unsubscribeBacktests = db
+      .collection("backtests")
+      .where("userId", "==", user.uid)
+      .orderBy("createdAt", "desc")
+      .limit(60)
+      .onSnapshot(
+        (snapshot) => {
+          const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+          renderBacktestList(items);
+          renderBacktestPicker(items);
+
+          const params = new URLSearchParams(window.location.search);
+          const urlBacktestId = String(params.get("backtestId") || params.get("id") || "").trim();
+          if (urlBacktestId && !state.backtestUrlLoaded) {
+            state.backtestUrlLoaded = true;
+            loadBacktestById(db, state.clients?.storage, urlBacktestId).catch(() => {});
+          }
+        },
+        () => {
+          renderBacktestList([]);
+          renderBacktestPicker([]);
+        }
+      );
+  };
+
   const startAdminOrders = (db) => {
     if (state.unsubscribeAdmin) state.unsubscribeAdmin();
     state.unsubscribeAdmin = db
@@ -3009,6 +3268,28 @@
     return String(uploadDoc?.fileUrl || "").trim();
   };
 
+  const fetchUploadCsvText = async ({ uploadId, url, maxBytes = 2_000_000 }) => {
+    if (!url) throw new Error("Upload is missing a downloadable URL.");
+    try {
+      const resp = await fetch(url, { cache: "no-store" });
+      if (!resp.ok) throw new Error("Unable to download CSV.");
+      const text = await resp.text();
+      return { text, truncated: false, source: "direct" };
+    } catch (error) {
+      const functions = state.clients?.functions;
+      if (!functions) throw error;
+      const callable = functions.httpsCallable("get_prediction_upload_csv");
+      const result = await callable({ uploadId, maxBytes, meta: buildMeta() });
+      const text = String(result.data?.csv || "");
+      if (!text) throw new Error("Unable to download CSV.");
+      return {
+        text,
+        truncated: Boolean(result.data?.truncated),
+        source: "function",
+      };
+    }
+  };
+
   const plotPredictionUploadById = async (db, storage, uploadId) => {
     if (!db || !uploadId) throw new Error("Upload ID is required.");
     if (!ui.predictionsChart || !ui.predictionsPreview || !ui.predictionsPlotMeta) return;
@@ -3025,20 +3306,19 @@
 
     const url = await resolveUploadCsvUrl(storage, doc);
     if (!url) throw new Error("Upload is missing a downloadable URL.");
-
-    const resp = await fetch(url, { cache: "no-store" });
-    if (!resp.ok) throw new Error("Unable to download CSV.");
-    const text = await resp.text();
+    const { text, truncated, source } = await fetchUploadCsvText({ uploadId: cleanId, url, maxBytes: 2_000_000 });
 
     const table = parseCsvTable(text, { maxRows: 5000 });
     const title = doc.title ? `Upload: ${doc.title}` : "CSV plot";
-    ui.predictionsPlotMeta.textContent = `${doc.title || "predictions.csv"} · ${table.rows.length.toLocaleString()} rows · ${table.headers.length} cols`;
+    ui.predictionsPlotMeta.textContent = `${doc.title || "predictions.csv"} · ${table.rows.length.toLocaleString()} rows · ${table.headers.length} cols${
+      truncated ? " · truncated" : ""
+    }`;
 
     await renderPredictionsChart(table, { title });
     setOutputReady(ui.predictionsChart);
     renderCsvPreview(table);
     setOutputReady(ui.predictionsPreview);
-    logEvent("predictions_plotted", { upload_id: cleanId });
+    logEvent("predictions_plotted", { upload_id: cleanId, source });
   };
 
   const buildIndicatorOverlays = (series) => {
@@ -4104,12 +4384,10 @@
               const doc = { id: snap.id, ...(snap.data() || {}) };
               const url = await resolveUploadCsvUrl(storage, doc);
               if (!url) throw new Error("Upload is missing a downloadable URL.");
-              const resp = await fetch(url, { cache: "no-store" });
-              if (!resp.ok) throw new Error("Unable to download CSV.");
-              const text = await resp.text();
+              const { text, source } = await fetchUploadCsvText({ uploadId, url, maxBytes: 5_000_000 });
               triggerDownload(String(doc.title || "predictions.csv"), text);
               showToast("CSV downloaded.");
-              logEvent("predictions_downloaded", { upload_id: uploadId });
+              logEvent("predictions_downloaded", { upload_id: uploadId, source });
             } catch (error) {
               showToast(error.message || "Unable to download upload.", "warn");
             } finally {
@@ -4186,11 +4464,11 @@
             return;
           }
 
-	          const deleteUpload = event.target.closest('[data-action="delete-upload"]');
-	          if (deleteUpload) {
-	            event.preventDefault();
-	            if (!state.user) {
-	              showToast("Sign in to delete uploads.", "warn");
+          const deleteUpload = event.target.closest('[data-action="delete-upload"]');
+          if (deleteUpload) {
+            event.preventDefault();
+            if (!state.user) {
+              showToast("Sign in to delete uploads.", "warn");
 	              return;
 	            }
 	            const uploadId = String(deleteUpload.dataset.uploadId || "").trim();
@@ -4217,6 +4495,122 @@
             } finally {
               deleteUpload.disabled = false;
             }
+          }
+
+          const plotBacktest = event.target.closest('[data-action="plot-backtest"]');
+          if (plotBacktest) {
+            event.preventDefault();
+            if (!state.user) {
+              showToast("Sign in to load backtests.", "warn");
+              return;
+            }
+            const backtestId = String(plotBacktest.dataset.backtestId || "").trim();
+            if (!backtestId) return;
+            try {
+              await loadBacktestById(db, storage, backtestId);
+              showToast("Backtest loaded.");
+            } catch (error) {
+              showToast(error.message || "Unable to load backtest.", "warn");
+            }
+            return;
+          }
+
+          const downloadBacktestCode = event.target.closest('[data-action="download-backtest-code"]');
+          if (downloadBacktestCode) {
+            event.preventDefault();
+            if (!state.user) {
+              showToast("Sign in to download backtest code.", "warn");
+              return;
+            }
+            const backtestId = String(downloadBacktestCode.dataset.backtestId || "").trim();
+            if (!backtestId) return;
+            downloadBacktestCode.disabled = true;
+            try {
+              const snap = await db.collection("backtests").doc(backtestId).get();
+              if (!snap.exists) throw new Error("Backtest not found.");
+              const doc = { id: snap.id, ...(snap.data() || {}) };
+              const code = String(doc.code || "").trim();
+              if (!code) throw new Error("No source code saved for this backtest.");
+              const safeTicker = normalizeTicker(doc.ticker || "backtest") || "backtest";
+              triggerDownload(`${safeTicker}_${backtestId}.py`, code);
+              showToast("Source downloaded.");
+              logEvent("backtest_code_downloaded", { backtest_id: backtestId });
+            } catch (error) {
+              showToast(error.message || "Unable to download code.", "warn");
+            } finally {
+              downloadBacktestCode.disabled = false;
+            }
+            return;
+          }
+
+          const renameBacktest = event.target.closest('[data-action="rename-backtest"]');
+          if (renameBacktest) {
+            event.preventDefault();
+            if (!state.user) {
+              showToast("Sign in to rename backtests.", "warn");
+              return;
+            }
+            const backtestId = String(renameBacktest.dataset.backtestId || "").trim();
+            if (!backtestId) return;
+            let currentTitle = "";
+            try {
+              const snap = await db.collection("backtests").doc(backtestId).get();
+              if (snap.exists) currentTitle = String(snap.data()?.title || "");
+            } catch (error) {
+              currentTitle = "";
+            }
+            const nextTitle = await openPromptModal({
+              title: "Rename backtest",
+              message: "Update the label shown in your saved list.",
+              label: "Title",
+              placeholder: "Backtest",
+              initialValue: currentTitle,
+              confirmLabel: "Rename",
+            });
+            if (!nextTitle) return;
+            renameBacktest.disabled = true;
+            try {
+              const rename = functions.httpsCallable("rename_backtest");
+              await rename({ backtestId, title: nextTitle, meta: buildMeta() });
+              showToast("Backtest renamed.");
+              logEvent("backtest_renamed", { backtest_id: backtestId });
+            } catch (error) {
+              showToast(error.message || "Unable to rename backtest.", "warn");
+            } finally {
+              renameBacktest.disabled = false;
+            }
+            return;
+          }
+
+          const deleteBacktest = event.target.closest('[data-action="delete-backtest"]');
+          if (deleteBacktest) {
+            event.preventDefault();
+            if (!state.user) {
+              showToast("Sign in to delete backtests.", "warn");
+              return;
+            }
+            const backtestId = String(deleteBacktest.dataset.backtestId || "").trim();
+            if (!backtestId) return;
+            const ok = await openConfirmModal({
+              title: "Delete backtest?",
+              message: "This deletes the saved backtest and removes its chart from storage. This cannot be undone.",
+              confirmLabel: "Delete",
+              danger: true,
+            });
+            if (!ok) return;
+            deleteBacktest.disabled = true;
+            try {
+              const del = functions.httpsCallable("delete_backtest");
+              await del({ backtestId, meta: buildMeta() });
+              showToast("Backtest deleted.");
+              logEvent("backtest_deleted", { backtest_id: backtestId });
+              if (ui.backtestOutput) ui.backtestOutput.innerHTML = `<div class="small muted">Backtest deleted.</div>`;
+            } catch (error) {
+              showToast(error.message || "Unable to delete backtest.", "warn");
+            } finally {
+              deleteBacktest.disabled = false;
+            }
+            return;
           }
         });
 
@@ -5462,6 +5856,97 @@
       }
     });
 
+    ui.backtestStrategy?.addEventListener("change", () => {
+      syncBacktestStrategyFields();
+      logEvent("backtest_strategy_changed", { strategy: String(ui.backtestStrategy?.value || "") });
+    });
+    syncBacktestStrategyFields();
+
+    ui.backtestLoadSelect?.addEventListener("change", () => {
+      if (!ui.backtestLoadId || !ui.backtestLoadSelect) return;
+      const value = String(ui.backtestLoadSelect.value || "").trim();
+      if (value) ui.backtestLoadId.value = value;
+    });
+
+    ui.backtestLoadButton?.addEventListener("click", async () => {
+      if (!state.user) {
+        showToast("Sign in to load saved backtests.", "warn");
+        return;
+      }
+      const backtestId = String(ui.backtestLoadId?.value || "").trim() || String(ui.backtestLoadSelect?.value || "").trim();
+      if (!backtestId) {
+        showToast("Select a backtest or paste an ID.", "warn");
+        return;
+      }
+      if (ui.backtestLoadStatus) ui.backtestLoadStatus.textContent = "Loading...";
+      try {
+        await loadBacktestById(db, storage, backtestId);
+        if (ui.backtestLoadStatus) ui.backtestLoadStatus.textContent = "";
+        showToast("Backtest loaded.");
+      } catch (error) {
+        if (ui.backtestLoadStatus) ui.backtestLoadStatus.textContent = error.message || "Unable to load backtest.";
+        showToast(error.message || "Unable to load backtest.", "warn");
+      }
+    });
+
+    ui.backtestForm?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!state.user) {
+        showToast("Sign in to run backtests.", "warn");
+        return;
+      }
+      if (!state.remoteFlags.backtestingEnabled) {
+        showToast("Backtesting is temporarily disabled.", "warn");
+        return;
+      }
+      const ticker = normalizeTicker(state.tickerContext.ticker || ui.terminalTicker?.value || "");
+      if (!ticker) {
+        showToast("Load a ticker in the chart before backtesting.", "warn");
+        return;
+      }
+      const interval = String(ui.terminalInterval?.value || state.tickerContext.interval || "1d");
+      const formData = new FormData(ui.backtestForm);
+      const strategy = String(formData.get("strategy") || "sma_cross").trim();
+      const lookbackDays = Number(formData.get("lookback") || 730);
+      const cash = Number(formData.get("cash") || 10000);
+      const commission = Number(formData.get("commission") || 0.0);
+
+      const params = {};
+      if (strategy === "sma_cross") {
+        params.fast = Number(formData.get("fast") || 20);
+        params.slow = Number(formData.get("slow") || 50);
+      } else {
+        params.rsiPeriod = Number(formData.get("rsiPeriod") || 14);
+        params.oversold = Number(formData.get("oversold") || 30);
+        params.exitAbove = Number(formData.get("exitAbove") || 55);
+      }
+
+      const payload = {
+        ticker,
+        interval,
+        strategy,
+        lookbackDays,
+        cash,
+        commission,
+        params,
+        meta: buildMeta(),
+      };
+
+      try {
+        setOutputLoading(ui.backtestOutput, "Running backtest...");
+        const run = functions.httpsCallable("run_backtest");
+        const result = await run(payload);
+        const backtestId = String(result.data?.backtestId || "").trim();
+        showToast("Backtest saved.");
+        logEvent("backtest_run", { ticker, interval, strategy });
+        if (backtestId) {
+          await loadBacktestById(db, storage, backtestId);
+        }
+      } catch (error) {
+        showToast(error.message || "Unable to run backtest.", "warn");
+      }
+    });
+
     ui.autopilotForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
       if (!state.user) {
@@ -5580,9 +6065,14 @@
 
 		      if (!user) {
 		        renderOrderList([], ui.userOrders);
-		        renderRequestList([], ui.userForecasts, "No forecast requests yet.");
-		        renderRequestList([], ui.autopilotOutput, "No autopilot requests yet.");
-		        renderRequestList([], ui.predictionsOutput, "No uploads yet.");
+            renderRequestList([], ui.userForecasts, "No forecast requests yet.");
+            renderRequestList([], ui.autopilotOutput, "No autopilot requests yet.");
+            renderRequestList([], ui.predictionsOutput, "No uploads yet.");
+            if (ui.backtestOutput) ui.backtestOutput.textContent = "Sign in to run backtests.";
+            if (ui.savedBacktestsList) ui.savedBacktestsList.textContent = "Sign in to view backtests.";
+            if (ui.backtestLoadSelect) ui.backtestLoadSelect.innerHTML = `<option value="">Select a backtest</option>`;
+            if (ui.backtestLoadId) ui.backtestLoadId.value = "";
+            if (ui.backtestLoadStatus) ui.backtestLoadStatus.textContent = "";
 		        if (ui.watchlistList) ui.watchlistList.textContent = "Sign in to manage your watchlist.";
 		        if (ui.alertsList) ui.alertsList.textContent = "Sign in to manage your alerts.";
 	        if (ui.alertsStatus) ui.alertsStatus.textContent = "";
@@ -5605,6 +6095,7 @@
 				        if (state.unsubscribeForecasts) state.unsubscribeForecasts();
 				        if (state.unsubscribeAutopilot) state.unsubscribeAutopilot();
 				        if (state.unsubscribePredictions) state.unsubscribePredictions();
+                if (state.unsubscribeBacktests) state.unsubscribeBacktests();
 				        if (state.unsubscribeTasks) state.unsubscribeTasks();
 				        if (state.unsubscribeWatchlist) state.unsubscribeWatchlist();
 				        if (state.unsubscribeAlerts) state.unsubscribeAlerts();
@@ -5655,6 +6146,7 @@
 			      startPriceAlerts(db, activeWorkspaceId);
 	      startAutopilotRequests(db, user);
 	      startPredictionsUploads(db, user);
+        startBacktests(db, user);
 	      refreshCollaboration(functions);
 
         await processPendingShareImport(functions);
