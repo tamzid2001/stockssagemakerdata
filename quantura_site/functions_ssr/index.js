@@ -135,6 +135,7 @@ const getServerTemplate = async () => {
       watchlist_enabled: "true",
       forecast_prophet_enabled: "true",
       forecast_timemixer_enabled: "true",
+      push_notifications_enabled: "true",
       webpush_vapid_key: "",
       stripe_checkout_enabled: "true",
       stripe_public_key: "",

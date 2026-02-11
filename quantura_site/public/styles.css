@@ -1450,6 +1450,9 @@ textarea {
   border-bottom: 1px solid var(--line);
   padding: 10px;
   text-align: left;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
 }
 
 .ticker-grid {
@@ -1858,6 +1861,22 @@ textarea {
   justify-content: flex-end;
   flex-wrap: wrap;
   margin-top: 12px;
+}
+
+.modal-input {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  padding: 12px 14px;
+  font: inherit;
+  background: var(--surface-solid);
+  color: var(--ink);
+  margin-top: 6px;
+}
+
+.modal-input:focus {
+  outline: 2px solid rgba(240, 180, 41, 0.42);
+  outline-offset: 2px;
 }
 
 .feedback-fab {

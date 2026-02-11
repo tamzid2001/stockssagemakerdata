@@ -78,6 +78,7 @@ DEFAULT_REMOTE_CONFIG: dict[str, str] = {
     "watchlist_enabled": "true",
     "forecast_prophet_enabled": "true",
     "forecast_timemixer_enabled": "true",
+    "push_notifications_enabled": "true",
     "webpush_vapid_key": "",
     "stripe_checkout_enabled": "true",
     "stripe_public_key": "",
@@ -1461,6 +1462,7 @@ def get_feature_flags(req: https_fn.CallableRequest) -> dict[str, Any]:
         "forecastProphetEnabled": _remote_config_bool("forecast_prophet_enabled", True, context=context),
         "forecastTimeMixerEnabled": _remote_config_bool("forecast_timemixer_enabled", True, context=context),
         "watchlistEnabled": _remote_config_bool("watchlist_enabled", True, context=context),
+        "pushEnabled": _remote_config_bool("push_notifications_enabled", True, context=context),
         "webPushVapidKey": _remote_config_param("webpush_vapid_key", "", context=context),
     }
 
@@ -2860,6 +2862,29 @@ def queue_autopilot_run(req: https_fn.CallableRequest) -> dict[str, Any]:
     doc_ref.set(payload)
     _audit_event(req.auth.uid, token.get("email"), "autopilot_queued", {"requestId": doc_ref.id})
     return {"requestId": doc_ref.id}
+
+
+@https_fn.on_call()
+def delete_autopilot_request(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    data = req.data or {}
+    request_id = str(data.get("requestId") or data.get("id") or "").strip()
+    if not request_id:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Request ID is required.")
+
+    ref = db.collection("autopilot_requests").document(request_id)
+    snap = ref.get()
+    if not snap.exists:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "Autopilot request not found.")
+
+    doc = snap.to_dict() or {}
+    owner_id = str(doc.get("userId") or "").strip()
+    if token.get("email") != ADMIN_EMAIL and owner_id != req.auth.uid:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.PERMISSION_DENIED, "Access denied.")
+
+    ref.delete()
+    _audit_event(req.auth.uid, token.get("email"), "autopilot_deleted", {"requestId": request_id})
+    return {"deleted": True, "requestId": request_id}
 
 
 @https_fn.on_call()
