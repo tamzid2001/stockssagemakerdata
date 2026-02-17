@@ -5,6 +5,7 @@ node_modules/
 *.p12
 *.jks
 *.keystore
+*firebase-adminsdk*.json
 tickers.txt
 watchlist.csv
 combined_screening_results.csv
