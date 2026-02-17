@@ -370,9 +370,9 @@ i[class*=" iconoir-"]::before {
 .brand-track {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   width: max-content;
-  padding: 12px 14px;
+  padding: 14px 16px;
   animation: brandRailShift 40s linear infinite;
 }
 
@@ -383,20 +383,20 @@ i[class*=" iconoir-"]::before {
 .brand-pill {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   border-radius: 999px;
   border: 1px solid rgba(18, 24, 42, 0.18);
   background: rgba(255, 255, 255, 0.94);
-  padding: 8px 12px;
-  font-size: 0.86rem;
+  padding: 10px 15px;
+  font-size: 0.97rem;
   font-weight: 700;
   line-height: 1;
   white-space: nowrap;
 }
 
 .brand-pill img {
-  width: 16px;
-  height: 16px;
+  width: 22px;
+  height: 22px;
   object-fit: contain;
   display: block;
 }
@@ -489,6 +489,14 @@ i[class*=" iconoir-"]::before {
 .feature i {
   margin-top: 2px;
   opacity: 0.82;
+}
+
+.pricing-page .feature span {
+  display: none;
+}
+
+.pricing-page .feature {
+  gap: 10px;
 }
 
 .offer {
@@ -977,8 +985,13 @@ textarea {
   }
 
   .brand-pill {
-    font-size: 0.82rem;
-    padding: 8px 10px;
+    font-size: 0.9rem;
+    padding: 8px 12px;
+  }
+
+  .brand-pill img {
+    width: 18px;
+    height: 18px;
   }
 }
 
@@ -2590,7 +2603,6 @@ textarea {
 
 .chart-range-group,
 .chart-view-group,
-.chart-engine-group,
 .chart-theme-group {
   display: inline-flex;
   align-items: center;
@@ -2635,36 +2647,19 @@ textarea {
 
 .tradingview-terminal {
   display: grid;
-  gap: 14px;
-}
-
-.tradingview-grid-top,
-.tradingview-grid-bottom {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.tv-widget-card {
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--surface-solid);
-  padding: 12px;
-  display: grid;
   gap: 10px;
-  min-width: 0;
 }
 
-.tv-widget-head {
+.tradingview-grid-top {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.tv-widget-status-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.tv-widget-head h3 {
-  margin: 0;
-  font-size: 0.95rem;
+  justify-content: flex-end;
 }
 
 .tv-widget-slot {
@@ -2684,34 +2679,15 @@ textarea {
 }
 
 .tv-slot-info {
-  min-height: 255px;
-}
-
-.tv-slot-profile,
-.tv-slot-technical {
-  min-height: 420px;
+  min-height: 220px;
 }
 
 .tv-slot-advanced {
   min-height: 560px;
 }
 
-.tv-slot-financials {
-  min-height: 760px;
-}
-
-.tv-slot-timeline {
-  min-height: 600px;
-}
-
-.tv-advanced-card {
-  position: relative;
-}
-
 .tv-widget-fallback {
-  margin-top: 6px;
-  display: grid;
-  gap: 10px;
+  margin-top: 0;
 }
 
 .tv-widget-credit {
@@ -3786,26 +3762,12 @@ form[data-provider-accent="google"] #screener-generate-button {
 
   .chart-range-group,
   .chart-view-group,
-  .chart-engine-group,
   .chart-theme-group {
     width: 100%;
   }
 
-  .tradingview-grid-top,
-  .tradingview-grid-bottom {
-    grid-template-columns: 1fr;
-  }
-
   .tv-slot-advanced {
     min-height: 440px;
-  }
-
-  .tv-slot-financials {
-    min-height: 620px;
-  }
-
-  .tv-slot-timeline {
-    min-height: 500px;
   }
 
   .intel-heatmap {
