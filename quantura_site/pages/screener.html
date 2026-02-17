@@ -39,6 +39,7 @@
         <a class="logo" href="/" aria-label="Quantura home"><span>QUANTURA</span></a>
         <nav class="nav-links">
           <a href="/screener" data-analytics="nav_screener"><i class="iconoir-search" aria-hidden="true"></i><span>Screener</span></a>
+          <a href="/research" data-analytics="nav_research"><i class="iconoir-bookmark-book" aria-hidden="true"></i><span>Research</span></a>
           <a href="/pricing" data-analytics="nav_pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>Pricing</span></a>
           <a href="/contact" data-analytics="nav_contact"><i class="iconoir-mail" aria-hidden="true"></i><span>Contact</span></a>
         </nav>
@@ -95,8 +96,16 @@
                   </select>
                 </div>
                 <div class="field">
-                  <label class="label" for="screener-min">Minimum market cap ($B)</label>
-                  <input id="screener-min" name="minCap" type="number" value="5" />
+                  <label class="label" for="screener-min">Market cap bracket</label>
+                  <select id="screener-min" name="minCapBucket">
+                    <option value="any">Any</option>
+                    <option value="50000000">&gt; $50M (Nano-Cap)</option>
+                    <option value="300000000">&gt; $300M (Micro-Cap)</option>
+                    <option value="2000000000">&gt; $2B (Small-Cap)</option>
+                    <option value="10000000000">&gt; $10B (Mid-Cap)</option>
+                    <option value="100000000000">&gt; $100B (Large-Cap)</option>
+                    <option value="200000000000">&gt; $200B (Mega-Cap)</option>
+                  </select>
                 </div>
                 <div class="field">
                   <label class="label" for="screener-max">Candidate pool (5-25)</label>
@@ -106,12 +115,25 @@
                   <label class="label" for="screener-agent-name">Agent name (optional)</label>
                   <input id="screener-agent-name" name="agentName" placeholder="Quantura Horizon" />
                 </div>
+                <div class="field">
+                  <label class="label" for="screener-model">Model settings</label>
+                  <select id="screener-model" name="model"></select>
+                  <div id="screener-model-meta" class="small muted">Model availability is controlled by your usage tier.</div>
+                </div>
               </div>
+              <div class="ai-credits-shell">
+                <div class="ai-credits-head">
+                  <span>Daily Credits</span>
+                  <span id="screener-credits-text">0 / 0</span>
+                </div>
+                <div class="ai-credits-bar"><span id="screener-credits-fill"></span></div>
+              </div>
+              <div class="small muted" id="screener-results-count">Results Found: —</div>
               <div class="field">
                 <label class="label" for="screener-notes">Criteria</label>
                 <textarea id="screener-notes" name="notes" placeholder='Example: "Tech, P/E &lt; 20, high free cash flow"' ></textarea>
               </div>
-	              <button class="cta" type="submit" data-analytics="screener_submit"><i class="iconoir-search" aria-hidden="true"></i><span>Generate AI Portfolio</span></button>
+	              <button class="cta" id="screener-generate-button" type="submit" data-analytics="screener_submit"><i class="iconoir-search" aria-hidden="true"></i><span>Generate AI Portfolio</span></button>
 	            </form>
               <div class="card">
                 <h3>Load saved portfolio run</h3>
