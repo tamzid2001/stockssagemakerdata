@@ -214,10 +214,8 @@
         if (img) {
           img.src = photo.url;
           img.alt = photo.alt || "Market imagery from Unsplash";
-        }
-        const credit = card.querySelector("[data-unsplash-credit]");
-        if (credit && photo.link) {
-          credit.href = `${photo.link}?utm_source=quantura&utm_medium=referral`;
+          img.loading = "lazy";
+          img.decoding = "async";
         }
       });
     };
@@ -265,9 +263,8 @@
       const list = Array.isArray(payload) ? payload : [payload];
       const photos = list
         .map((item) => ({
-          url: item?.urls?.regular || item?.urls?.full || "",
+          url: item?.urls?.regular || item?.urls?.full || item?.urls?.small || "",
           alt: item?.alt_description || item?.description || "Market imagery from Unsplash",
-          link: item?.links?.html || "https://unsplash.com",
         }))
         .filter((item) => item.url);
 
