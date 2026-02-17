@@ -49,6 +49,7 @@
     "rewrites": [
       { "source": "/", "function": "ssr" },
       { "source": "/forecasting", "function": "ssr" },
+      { "source": "/ticker-intelligence", "function": "ssr" },
       { "source": "/indicators", "function": "ssr" },
       { "source": "/trending", "function": "ssr" },
       { "source": "/news", "function": "ssr" },
@@ -58,6 +59,7 @@
       { "source": "/studio", "function": "ssr" },
 
       { "source": "/screener", "function": "ssr" },
+      { "source": "/research", "function": "ssr" },
       { "source": "/pricing", "function": "ssr" },
       { "source": "/contact", "function": "ssr" },
       { "source": "/terms", "function": "ssr" },
