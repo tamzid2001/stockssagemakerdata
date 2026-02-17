@@ -10,6 +10,14 @@
   const THEME_KEY = "quantura_theme";
   const PENDING_SHARE_KEY = "quantura_pending_share_v1";
   const HOLIDAY_PROMO_SEEN_KEY = "quantura_holiday_promo_seen_v1";
+  const FCM_LOG_CACHE_KEY = "quantura_fcm_log_v1";
+  const CHART_RANGE_CACHE_KEY = "quantura_chart_range_v1";
+  const CHART_VIEW_CACHE_KEY = "quantura_chart_view_v1";
+  const CHART_ENGINE_CACHE_KEY = "quantura_chart_engine_v1";
+  const TRADINGVIEW_THEME_CACHE_KEY = "quantura_tv_theme_v1";
+  const LANGUAGE_PREFERENCE_KEY = "quantura_language_v1";
+  const COUNTRY_PREFERENCE_KEY = "quantura_country_v1";
+  const TRADINGVIEW_LOAD_TIMEOUT_MS = 9000;
   const AI_LEADERBOARD_DEFAULT_HORIZON = "1y";
   const DEFAULT_VOLATILITY_THRESHOLD = 0.05;
   const META_PIXEL_ID = "1643823927053003";
@@ -35,31 +43,124 @@
     "COST", "WMT", "NKE", "PLTR",
   ];
   const AI_MODEL_CATALOG = [
-    { id: "gpt-4o-mini", provider: "openai", tier: "Standard", label: "GPT-4o mini" },
-    { id: "gemini-1.5-flash", provider: "google", tier: "Standard", label: "Gemini 1.5 Flash" },
-    { id: "gpt-4o", provider: "openai", tier: "Professional", label: "GPT-4o" },
-    { id: "claude-3-5-sonnet", provider: "anthropic", tier: "Professional", label: "Claude 3.5 Sonnet" },
-    { id: "gemini-1.5-pro", provider: "google", tier: "Professional", label: "Gemini 1.5 Pro" },
-    { id: "o1-preview", provider: "openai", tier: "Research", label: "OpenAI o1-preview" },
-    { id: "claude-3-opus", provider: "anthropic", tier: "Research", label: "Claude 3 Opus" },
+    {
+      id: "gpt-5-mini",
+      provider: "openai",
+      tier: "Core",
+      label: "Balanced Analyst",
+      personality: "balanced",
+      helper: "Fast all-round screening for most workflows.",
+    },
+    {
+      id: "gpt-5",
+      provider: "openai",
+      tier: "Pro",
+      label: "Deep Research",
+      personality: "deep_research",
+      helper: "Higher-depth thesis and macro cross-checking.",
+    },
+    {
+      id: "gpt-5-thinking",
+      provider: "openai",
+      tier: "Pro",
+      label: "Contrarian Strategist",
+      personality: "contrarian",
+      helper: "Looks for crowded trades and asymmetric reversals.",
+    },
   ];
   const AI_USAGE_TIER_DEFAULTS = {
     free: {
-      allowed_models: ["gpt-4o-mini", "gemini-1.5-flash"],
-      daily_limit: 5,
+      allowed_models: ["gpt-5-mini"],
+      weekly_limit: 3,
+      daily_limit: 3,
       volatility_alerts: false,
     },
     premium: {
-      allowed_models: ["gpt-4o", "claude-3-5-sonnet", "gemini-1.5-pro", "o1-preview"],
-      daily_limit: 50,
+      allowed_models: ["gpt-5-mini", "gpt-5", "gpt-5-thinking"],
+      weekly_limit: 15,
+      daily_limit: 15,
       volatility_alerts: true,
     },
   };
   const MODEL_PROVIDER_LABEL = {
     openai: "OpenAI",
-    anthropic: "Anthropic",
-    google: "Google",
   };
+  const SUPPORTED_LANGUAGES = new Set(["en", "es", "fr", "de", "ar", "bn"]);
+  const COUNTRY_DEFAULT_LANGUAGE = Object.freeze({
+    US: "en",
+    CA: "en",
+    GB: "en",
+    DE: "de",
+    FR: "fr",
+    ES: "es",
+    BD: "bn",
+    SA: "ar",
+    AE: "ar",
+    EG: "ar",
+    IN: "en",
+    JP: "en",
+    CN: "en",
+    BR: "en",
+    AU: "en",
+  });
+  const PROFILE_AVATAR_OPTIONS = Object.freeze({
+    bull: { emoji: "\u{1F402}", label: "Bull Trader" },
+    bear: { emoji: "\u{1F43B}", label: "Bear Analyst" },
+    owl: { emoji: "\u{1F989}", label: "Night Researcher" },
+    fox: { emoji: "\u{1F98A}", label: "Momentum Scout" },
+    hawk: { emoji: "\u{1F985}", label: "Macro Hawk" },
+    orca: { emoji: "\u{1F40B}", label: "Quant Orca" },
+  });
+  const DEFAULT_PROFILE_SOCIAL_LINKS = Object.freeze({
+    website: "",
+    x: "",
+    linkedin: "",
+    github: "",
+    youtube: "",
+    tiktok: "",
+    facebook: "",
+    instagram: "",
+    reddit: "",
+  });
+  const PROFILE_SOCIAL_URL_RULES = Object.freeze({
+    website: {
+      hosts: [],
+      allowAnyHost: true,
+      requirePath: false,
+    },
+    x: {
+      hosts: ["x.com", "www.x.com", "twitter.com", "www.twitter.com", "mobile.twitter.com"],
+      requirePath: true,
+    },
+    linkedin: {
+      hosts: ["linkedin.com", "www.linkedin.com"],
+      requirePath: true,
+    },
+    github: {
+      hosts: ["github.com", "www.github.com"],
+      requirePath: true,
+    },
+    youtube: {
+      hosts: ["youtube.com", "www.youtube.com", "youtu.be"],
+      requirePath: true,
+    },
+    tiktok: {
+      hosts: ["tiktok.com", "www.tiktok.com", "vm.tiktok.com"],
+      requirePath: true,
+    },
+    facebook: {
+      hosts: ["facebook.com", "www.facebook.com", "m.facebook.com"],
+      requirePath: true,
+    },
+    instagram: {
+      hosts: ["instagram.com", "www.instagram.com"],
+      requirePath: true,
+    },
+    reddit: {
+      hosts: ["reddit.com", "www.reddit.com", "old.reddit.com"],
+      requirePath: true,
+    },
+  });
   const UNSPLASH_ACCESS_KEY = "tKqmTYXWxWdvGHHlbO8OtfdtJMYaz0KXKWKyCaG61u4";
   const UNSPLASH_CACHE_KEY = "quantura_unsplash_gallery_v1";
   const UNSPLASH_CACHE_TTL_MS = 1000 * 60 * 60 * 6;
@@ -68,21 +169,29 @@
       url: "https://images.unsplash.com/photo-1535320903710-d993d3d77d29?auto=format&fit=crop&w=1280&q=80",
       alt: "Finance workspace with market charts",
       link: "https://unsplash.com/photos/laptop-computer-on-glass-top-table-near-window-nA0UDNDbxys",
+      photographer: "Adeolu Eletu",
+      photographerLink: "https://unsplash.com/@adeolueletu",
     },
     {
       url: "https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?auto=format&fit=crop&w=1280&q=80",
       alt: "Stock market dashboard on laptop",
       link: "https://unsplash.com/photos/macbook-air-near-white-paper-BStWzy4M7vA",
+      photographer: "Austin Distel",
+      photographerLink: "https://unsplash.com/@austindistel",
     },
     {
       url: "https://images.unsplash.com/photo-1642790106117-e829e14a795f?auto=format&fit=crop&w=1280&q=80",
       alt: "Tablet with candlestick chart",
       link: "https://unsplash.com/photos/black-and-white-smartphone-on-brown-wooden-table-8wVYO8rK1j0",
+      photographer: "Tech Daily",
+      photographerLink: "https://unsplash.com/@techdailyca",
     },
     {
       url: "https://images.unsplash.com/photo-1559526324-4b87b5e36e44?auto=format&fit=crop&w=1280&q=80",
       alt: "Financial team reviewing growth metrics",
       link: "https://unsplash.com/photos/people-sitting-in-front-of-computer-MYbhN8KaaEc",
+      photographer: "Campaign Creators",
+      photographerLink: "https://unsplash.com/@campaign_creators",
     },
   ];
   const DEFAULT_AI_AGENTS = [
@@ -95,9 +204,9 @@
       returns: { "1m": 0.019, "3m": 0.057, "6m": 0.11, "1y": 0.183, "5y": 0.745, max: 0.745 },
       rationale:
         "This basket emphasizes high free cash flow consistency, durable balance sheets, and resilient earnings cadence. It is designed for steadier compounding across market regimes.",
-      modelId: "gpt-4o-mini",
+      modelId: "gpt-5-mini",
       modelProvider: "openai",
-      modelTier: "Standard",
+      modelTier: "Core",
     },
     {
       id: "quantura-velocity",
@@ -108,9 +217,9 @@
       returns: { "1m": 0.034, "3m": 0.102, "6m": 0.186, "1y": 0.322, "5y": 1.18, max: 1.18 },
       rationale:
         "Names are selected for strong relative strength, liquidity, and acceleration in trend metrics. The agent favors upside capture over downside smoothness.",
-      modelId: "gpt-4o",
+      modelId: "gpt-5",
       modelProvider: "openai",
-      modelTier: "Professional",
+      modelTier: "Pro",
     },
     {
       id: "quantura-dividend-king",
@@ -121,9 +230,9 @@
       returns: { "1m": 0.012, "3m": 0.033, "6m": 0.064, "1y": 0.121, "5y": 0.392, max: 0.392 },
       rationale:
         "The portfolio tilts toward durable payout profiles and lower drawdown sensitivity. It is tuned for investors prioritizing consistency and downside control.",
-      modelId: "gemini-1.5-flash",
-      modelProvider: "google",
-      modelTier: "Standard",
+      modelId: "gpt-5-mini",
+      modelProvider: "openai",
+      modelTier: "Core",
     },
     {
       id: "quantura-horizon",
@@ -134,9 +243,9 @@
       returns: { "1m": 0.026, "3m": 0.078, "6m": 0.142, "1y": 0.251, "5y": 0.984, max: 0.984 },
       rationale:
         "Quantura Horizon trend structure favors names with stable long-horizon slope and persistent seasonality. The set is filtered to avoid negative lower-bound outcomes.",
-      modelId: "gemini-1.5-pro",
-      modelProvider: "google",
-      modelTier: "Professional",
+      modelId: "gpt-5",
+      modelProvider: "openai",
+      modelTier: "Pro",
     },
     {
       id: "quantura-contrarian",
@@ -147,9 +256,9 @@
       returns: { "1m": 0.016, "3m": 0.049, "6m": 0.091, "1y": 0.164, "5y": 0.46, max: 0.46 },
       rationale:
         "This set targets deep pullbacks with improving momentum breadth and valuation support. It is tuned for mean-reversion windows with defined upside asymmetry.",
-      modelId: "claude-3-5-sonnet",
-      modelProvider: "anthropic",
-      modelTier: "Professional",
+      modelId: "gpt-5-thinking",
+      modelProvider: "openai",
+      modelTier: "Pro",
     },
     {
       id: "quantura-alphagen",
@@ -160,9 +269,9 @@
       returns: { "1m": 0.021, "3m": 0.061, "6m": 0.116, "1y": 0.198, "5y": 0.71, max: 0.71 },
       rationale:
         "AlphaGen blends quality, momentum, valuation, and macro sensitivity into one portfolio. The goal is balanced risk-adjusted return through factor diversification.",
-      modelId: "gpt-4o-mini",
+      modelId: "gpt-5-mini",
       modelProvider: "openai",
-      modelTier: "Standard",
+      modelTier: "Core",
     },
     {
       id: "quantura-deepvalue",
@@ -173,9 +282,9 @@
       returns: { "1m": 0.014, "3m": 0.041, "6m": 0.083, "1y": 0.146, "5y": 0.402, max: 0.402 },
       rationale:
         "DeepValue looks for discounted multiples with stabilization signals in earnings and cash flow. The portfolio is built for re-rating potential rather than headline momentum.",
-      modelId: "claude-3-opus",
-      modelProvider: "anthropic",
-      modelTier: "Research",
+      modelId: "gpt-5",
+      modelProvider: "openai",
+      modelTier: "Pro",
     },
     {
       id: "quantura-momenta",
@@ -186,9 +295,171 @@
       returns: { "1m": 0.031, "3m": 0.094, "6m": 0.171, "1y": 0.302, "5y": 1.05, max: 1.05 },
       rationale:
         "Momenta emphasizes high-conviction trend continuation where breadth and liquidity remain supportive. It is optimized for sustained breakout environments.",
-      modelId: "o1-preview",
+      modelId: "gpt-5-thinking",
       modelProvider: "openai",
-      modelTier: "Research",
+      modelTier: "Pro",
+    },
+    {
+      id: "preset-pelosi-radar",
+      name: "Pelosi Radar",
+      description: "Crossover from widely tracked Pelosi-style holdings.",
+      strategy: "celebrity_portfolio",
+      holdings: ["NVDA", "AAPL", "MSFT", "AMZN", "GOOGL", "PANW"],
+      returns: { "1m": 0.028, "3m": 0.085, "6m": 0.151, "1y": 0.264, "5y": 0.99, max: 0.99 },
+      rationale:
+        "Preset built from high-liquidity names commonly discussed in public-trade trackers tied to Nancy Pelosi themed searches.",
+      modelId: "gpt-5-thinking",
+      modelProvider: "openai",
+      modelTier: "Pro",
+    },
+    {
+      id: "preset-bezos-growth",
+      name: "Bezos Growth",
+      description: "Mega-cap growth stack from Bezos-themed screens.",
+      strategy: "celebrity_portfolio",
+      holdings: ["AMZN", "MSFT", "GOOGL", "NVDA", "META", "SHOP"],
+      returns: { "1m": 0.024, "3m": 0.074, "6m": 0.137, "1y": 0.232, "5y": 0.88, max: 0.88 },
+      rationale:
+        "Focuses on cloud, commerce, and AI infrastructure names frequently associated with Jeff Bezos portfolio-interest queries.",
+      modelId: "gpt-5",
+      modelProvider: "openai",
+      modelTier: "Pro",
+    },
+    {
+      id: "preset-cnbc-desk",
+      name: "CNBC Desk",
+      description: "High-velocity names that dominate financial media flow.",
+      strategy: "media_signal",
+      holdings: ["NVDA", "TSLA", "AAPL", "AMD", "PLTR", "META"],
+      returns: { "1m": 0.03, "3m": 0.09, "6m": 0.16, "1y": 0.289, "5y": 1.04, max: 1.04 },
+      rationale:
+        "Uses media-intensity themes from CNBC-style market coverage where momentum and liquidity concentration are highest.",
+      modelId: "gpt-5-mini",
+      modelProvider: "openai",
+      modelTier: "Core",
+    },
+    {
+      id: "preset-bloomberg-macro",
+      name: "Bloomberg Macro",
+      description: "Cross-sector macro leaders from Bloomberg-style themes.",
+      strategy: "media_signal",
+      holdings: ["AAPL", "MSFT", "NVDA", "JPM", "XOM", "UNH"],
+      returns: { "1m": 0.018, "3m": 0.058, "6m": 0.108, "1y": 0.191, "5y": 0.67, max: 0.67 },
+      rationale:
+        "Blends tech leadership with macro-sensitive financials and energy, mirroring recurring Bloomberg market narratives.",
+      modelId: "gpt-5-mini",
+      modelProvider: "openai",
+      modelTier: "Core",
+    },
+    {
+      id: "preset-blackrock-core",
+      name: "BlackRock Core",
+      description: "Institutional core equity basket.",
+      strategy: "institutional_portfolio",
+      holdings: ["AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL"],
+      returns: { "1m": 0.02, "3m": 0.064, "6m": 0.121, "1y": 0.212, "5y": 0.79, max: 0.79 },
+      rationale:
+        "Tracks liquid institutional leaders aligned with broad asset-management allocation patterns in BlackRock-themed screens.",
+      modelId: "gpt-5",
+      modelProvider: "openai",
+      modelTier: "Pro",
+    },
+    {
+      id: "preset-vanguard-factor",
+      name: "Vanguard Factor",
+      description: "Low-friction quality and profitability blend.",
+      strategy: "institutional_portfolio",
+      holdings: ["AAPL", "MSFT", "BRK.B", "JPM", "LLY", "COST"],
+      returns: { "1m": 0.016, "3m": 0.049, "6m": 0.097, "1y": 0.176, "5y": 0.62, max: 0.62 },
+      rationale:
+        "Designed for consistency-first investors inspired by index-heavy Vanguard-style core factor exposure.",
+      modelId: "gpt-5-mini",
+      modelProvider: "openai",
+      modelTier: "Core",
+    },
+    {
+      id: "preset-ark-disruptors",
+      name: "ARK Disruptors",
+      description: "High-beta innovation and disruption stack.",
+      strategy: "institutional_portfolio",
+      holdings: ["TSLA", "COIN", "ROKU", "SQ", "PATH", "CRSP"],
+      returns: { "1m": 0.033, "3m": 0.103, "6m": 0.186, "1y": 0.318, "5y": 1.22, max: 1.22 },
+      rationale:
+        "Captures disruptive-growth themes frequently associated with ARK Invest screens and innovation-centric flows.",
+      modelId: "gpt-5-thinking",
+      modelProvider: "openai",
+      modelTier: "Pro",
+    },
+    {
+      id: "preset-hedgefund-consensus",
+      name: "Hedge Fund Consensus",
+      description: "Concentrated consensus megacap picks.",
+      strategy: "institutional_portfolio",
+      holdings: ["AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL"],
+      returns: { "1m": 0.021, "3m": 0.067, "6m": 0.129, "1y": 0.224, "5y": 0.82, max: 0.82 },
+      rationale:
+        "Consensus-weighted megacap exposure based on recurring overlap across hedge fund and prime-broker commentary themes.",
+      modelId: "gpt-5",
+      modelProvider: "openai",
+      modelTier: "Pro",
+    },
+  ];
+  const ADMIN_SCREENER_PRESET_RUNS = [
+    {
+      id: "pelosi-tracker",
+      title: "Nancy Pelosi Portfolio Tracker",
+      notes: "Nancy Pelosi stock portfolio",
+      modelUsed: "gpt-5-thinking",
+      symbols: ["NVDA", "AAPL", "MSFT", "AMZN", "GOOGL", "PANW"],
+    },
+    {
+      id: "bezos-favorites",
+      title: "Jeff Bezos Favorite Stocks",
+      notes: "Jeff Bezos favorite stocks",
+      modelUsed: "gpt-5",
+      symbols: ["AMZN", "MSFT", "GOOGL", "NVDA", "META", "SHOP"],
+    },
+    {
+      id: "cnbc-theme",
+      title: "CNBC Market Leaders",
+      notes: "Top CNBC discussed growth stocks",
+      modelUsed: "gpt-5-mini",
+      symbols: ["NVDA", "TSLA", "AAPL", "AMD", "PLTR", "META"],
+    },
+    {
+      id: "bloomberg-theme",
+      title: "Bloomberg Macro Focus",
+      notes: "Bloomberg market favorites and macro leaders",
+      modelUsed: "gpt-5-mini",
+      symbols: ["AAPL", "MSFT", "NVDA", "JPM", "XOM", "UNH"],
+    },
+    {
+      id: "blackrock-core",
+      title: "BlackRock Core Exposure",
+      notes: "BlackRock top holdings style portfolio",
+      modelUsed: "gpt-5",
+      symbols: ["AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL"],
+    },
+    {
+      id: "vanguard-factor",
+      title: "Vanguard Quality Factor",
+      notes: "Vanguard core holdings and quality factor ideas",
+      modelUsed: "gpt-5-mini",
+      symbols: ["AAPL", "MSFT", "BRK.B", "JPM", "LLY", "COST"],
+    },
+    {
+      id: "ark-disruptors",
+      title: "ARK Innovation Disruptors",
+      notes: "ARK Invest disruptive innovation stocks",
+      modelUsed: "gpt-5-thinking",
+      symbols: ["TSLA", "COIN", "ROKU", "SQ", "PATH", "CRSP"],
+    },
+    {
+      id: "hedge-fund-consensus",
+      title: "Hedge Fund Consensus Mega Caps",
+      notes: "Most common hedge fund long positions this quarter",
+      modelUsed: "gpt-5",
+      symbols: ["AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL"],
     },
   ];
   const BACKTEST_SOURCE_OPTIONS = [
@@ -216,6 +487,16 @@
           img.alt = photo.alt || "Market imagery from Unsplash";
           img.loading = "lazy";
           img.decoding = "async";
+        }
+        const creditLink = card.querySelector("[data-unsplash-credit]");
+        if (creditLink) {
+          const creditText = photo.photographer
+            ? `Photo by ${photo.photographer} on Unsplash`
+            : "Photo on Unsplash";
+          creditLink.textContent = creditText;
+          creditLink.href = photo.photographerLink || photo.link || "https://unsplash.com/?utm_source=quantura&utm_medium=referral";
+          creditLink.setAttribute("target", "_blank");
+          creditLink.setAttribute("rel", "noopener noreferrer");
         }
       });
     };
@@ -265,6 +546,13 @@
         .map((item) => ({
           url: item?.urls?.regular || item?.urls?.full || item?.urls?.small || "",
           alt: item?.alt_description || item?.description || "Market imagery from Unsplash",
+          link: item?.links?.html
+            ? `${item.links.html}${String(item.links.html).includes("?") ? "&" : "?"}utm_source=quantura&utm_medium=referral`
+            : "",
+          photographer: item?.user?.name || "",
+          photographerLink: item?.user?.links?.html
+            ? `${item.user.links.html}${String(item.user.links.html).includes("?") ? "&" : "?"}utm_source=quantura&utm_medium=referral`
+            : "",
         }))
         .filter((item) => item.url);
 
@@ -292,6 +580,7 @@
     headerDashboard: document.getElementById("header-dashboard"),
     headerUserEmail: document.getElementById("header-user-email"),
     headerUserStatus: document.getElementById("header-user-status"),
+    headerNotifications: document.getElementById("header-notifications"),
     pricingAuthCta: document.getElementById("pricing-auth-cta"),
     pricingStarterCta: document.getElementById("pricing-starter-cta"),
     emailForm: document.getElementById("email-auth-form"),
@@ -302,9 +591,27 @@
     googleSignin: document.getElementById("google-signin"),
     githubSignin: document.getElementById("github-signin"),
     twitterSignin: document.getElementById("twitter-signin"),
+    languageSelect: document.getElementById("language-select"),
     userEmail: document.getElementById("user-email"),
     userProvider: document.getElementById("user-provider"),
     userStatus: document.getElementById("user-status"),
+    profileForm: document.getElementById("profile-form"),
+    profileUsername: document.getElementById("profile-username"),
+    profileAvatar: document.getElementById("profile-avatar"),
+    profileBio: document.getElementById("profile-bio"),
+    profilePublicEnabled: document.getElementById("profile-public-enabled"),
+    profilePublicScreener: document.getElementById("profile-public-screener"),
+    profileWebsite: document.getElementById("profile-social-website"),
+    profileX: document.getElementById("profile-social-x"),
+    profileLinkedin: document.getElementById("profile-social-linkedin"),
+    profileGithub: document.getElementById("profile-social-github"),
+    profileYoutube: document.getElementById("profile-social-youtube"),
+    profileTiktok: document.getElementById("profile-social-tiktok"),
+    profileFacebook: document.getElementById("profile-social-facebook"),
+    profileInstagram: document.getElementById("profile-social-instagram"),
+    profileReddit: document.getElementById("profile-social-reddit"),
+    profileConnectStripe: document.getElementById("profile-connect-stripe"),
+    profileStatus: document.getElementById("profile-status"),
     dashboardCta: document.getElementById("dashboard-cta"),
     userOrders: document.getElementById("user-orders"),
     userForecasts: document.getElementById("user-forecasts"),
@@ -334,6 +641,27 @@
     trendingList: document.getElementById("trending-list"),
     intelOutput: document.getElementById("intel-output"),
     newsOutput: document.getElementById("news-output"),
+    xTrendingOutput: document.getElementById("x-trending-output"),
+    eventsCalendarForm: document.getElementById("events-calendar-form"),
+    eventsCalendarTickers: document.getElementById("events-calendar-tickers"),
+    eventsCalendarCountry: document.getElementById("events-calendar-country"),
+    eventsCalendarStart: document.getElementById("events-calendar-start"),
+    eventsCalendarEnd: document.getElementById("events-calendar-end"),
+    eventsCalendarLimit: document.getElementById("events-calendar-limit"),
+    eventsCalendarStatus: document.getElementById("events-calendar-status"),
+    eventsCalendarOutput: document.getElementById("events-calendar-output"),
+    marketHeadlinesForm: document.getElementById("market-headlines-form"),
+    marketHeadlinesCountry: document.getElementById("market-headlines-country"),
+    marketHeadlinesLimit: document.getElementById("market-headlines-limit"),
+    marketHeadlinesStatus: document.getElementById("market-headlines-status"),
+    marketHeadlinesOutput: document.getElementById("market-headlines-output"),
+    marketSocialOutput: document.getElementById("market-social-output"),
+    tickerQueryForm: document.getElementById("ticker-query-form"),
+    tickerQueryTicker: document.getElementById("ticker-query-ticker"),
+    tickerQueryQuestion: document.getElementById("ticker-query-question"),
+    tickerQueryLanguage: document.getElementById("ticker-query-language"),
+    tickerQueryStatus: document.getElementById("ticker-query-status"),
+    tickerQueryOutput: document.getElementById("ticker-query-output"),
 	    optionsForm: document.getElementById("options-form"),
 	    optionsExpiration: document.getElementById("options-expiration"),
 	    optionsOutput: document.getElementById("options-output"),
@@ -386,10 +714,27 @@
 	    productivityBoard: document.getElementById("productivity-board"),
 	    tasksCalendar: document.getElementById("tasks-calendar"),
 	    notificationsEnable: document.getElementById("notifications-enable"),
-	    notificationsRefresh: document.getElementById("notifications-refresh"),
-	    notificationsSendTest: document.getElementById("notifications-send-test"),
+    notificationsRefresh: document.getElementById("notifications-refresh"),
+    notificationsSendTest: document.getElementById("notifications-send-test"),
     notificationsStatus: document.getElementById("notifications-status"),
     notificationsToken: document.getElementById("notifications-token"),
+    notificationsLog: document.getElementById("notifications-log"),
+    notificationsClear: document.getElementById("notifications-clear"),
+    billingPortalLink: document.getElementById("billing-portal-link"),
+    chartRangeButtons: Array.from(document.querySelectorAll("[data-chart-range]")),
+    chartViewButtons: Array.from(document.querySelectorAll("[data-chart-view]")),
+    chartEngineButtons: Array.from(document.querySelectorAll("[data-chart-engine]")),
+    chartThemeButtons: Array.from(document.querySelectorAll("[data-tv-theme]")),
+    tradingViewRoot: document.getElementById("tradingview-terminal-root"),
+    tradingViewStatus: document.getElementById("tv-widget-status"),
+    tradingViewSymbolInfo: document.getElementById("tv-symbol-info"),
+    tradingViewAdvanced: document.getElementById("tv-advanced-chart"),
+    tradingViewProfile: document.getElementById("tv-symbol-profile"),
+    tradingViewTechnical: document.getElementById("tv-technical-analysis"),
+    tradingViewTimeline: document.getElementById("tv-timeline"),
+    tradingViewFinancials: document.getElementById("tv-financials"),
+    tradingViewFallback: document.getElementById("tv-widget-fallback"),
+    tradingViewUseLegacy: document.getElementById("tv-use-legacy"),
     predictionsChart: document.getElementById("predictions-chart"),
     predictionsPreview: document.getElementById("predictions-preview"),
     predictionsPlotMeta: document.getElementById("predictions-plot-meta"),
@@ -410,6 +755,17 @@
   const state = {
     user: null,
     userHasPaidPlan: false,
+    userProfile: {
+      username: "",
+      socialLinks: { ...DEFAULT_PROFILE_SOCIAL_LINKS },
+      avatar: "bull",
+      bio: "",
+      publicProfile: false,
+      publicScreenerSharing: false,
+      stripeConnectAccountId: "",
+    },
+    preferredLanguage: "en",
+    preferredCountry: "US",
     cookieConsent: (() => {
       try {
         return localStorage.getItem(COOKIE_CONSENT_KEY) || "";
@@ -419,7 +775,7 @@
     })(),
 	    initialPageViewSent: false,
 	    authResolved: false,
-	    tickerContext: {
+    tickerContext: {
 	      ticker: "",
 	      interval: "1d",
 	      rows: [],
@@ -428,6 +784,7 @@
       indicatorOverlays: [],
       forecastTablePage: 0,
       newsTicker: "",
+      xTicker: "",
       intelTicker: "",
       optionsTicker: "",
     },
@@ -446,7 +803,7 @@
     aiUsageToday: 0,
     aiUsageDateKey: "",
     aiUsageTierKey: "free",
-    selectedScreenerModel: "gpt-4o-mini",
+    selectedScreenerModel: "gpt-5-mini",
     aiDefaultsSeededWorkspaceId: "",
     recentWatchlistItems: [],
     volatilityMonitorTimer: null,
@@ -503,11 +860,69 @@
 	    },
 	    remoteConfigRefreshTimer: null,
 	    remoteConfigUnsubscribe: null,
-	    activeWorkspaceId: (() => {
+    activeWorkspaceId: (() => {
 	      try {
 	        return localStorage.getItem(WORKSPACE_KEY) || "";
 	      } catch (error) {
         return "";
+      }
+    })(),
+    chartRangePreset: (() => {
+      const allowed = new Set(["1d", "5d", "1m", "3m", "ytd", "1y", "5y", "max"]);
+      let raw = "max";
+      try {
+        raw = String(localStorage.getItem(CHART_RANGE_CACHE_KEY) || "max").trim().toLowerCase();
+      } catch (error) {
+        raw = "max";
+      }
+      return allowed.has(raw) ? raw : "max";
+    })(),
+    chartViewMode: (() => {
+      let raw = "candlestick";
+      try {
+        raw = String(localStorage.getItem(CHART_VIEW_CACHE_KEY) || "candlestick").trim().toLowerCase();
+      } catch (error) {
+        raw = "candlestick";
+      }
+      return raw === "line" ? "line" : "candlestick";
+    })(),
+    chartEngine: (() => {
+      let raw = "tradingview";
+      try {
+        raw = String(localStorage.getItem(CHART_ENGINE_CACHE_KEY) || "tradingview").trim().toLowerCase();
+      } catch (error) {
+        raw = "tradingview";
+      }
+      return raw === "legacy" ? "legacy" : "tradingview";
+    })(),
+    tradingViewTheme: (() => {
+      let raw = "auto";
+      try {
+        raw = String(localStorage.getItem(TRADINGVIEW_THEME_CACHE_KEY) || "auto").trim().toLowerCase();
+      } catch (error) {
+        raw = "auto";
+      }
+      return raw === "dark" || raw === "light" ? raw : "auto";
+    })(),
+    tradingViewRenderNonce: 0,
+    tradingViewLoadTimer: null,
+    tradingViewLoadFailed: false,
+    notificationLog: (() => {
+      try {
+        const raw = localStorage.getItem(FCM_LOG_CACHE_KEY);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [];
+        return parsed
+          .slice(0, 30)
+          .map((entry) => ({
+            title: String(entry?.title || "Quantura update"),
+            body: String(entry?.body || ""),
+            source: String(entry?.source || "unknown"),
+            at: String(entry?.at || new Date().toISOString()),
+          }));
+      } catch (error) {
+        return [];
       }
     })(),
     sharedWorkspaces: [],
@@ -591,6 +1006,9 @@
 		          indicators: "/indicators",
               trending: "/trending",
 		          news: "/news",
+              "events-calendar": "/events-calendar",
+              "market-headlines": "/market-headlines",
+              "ticker-query": "/ticker-query",
 		          options: "/options",
 		          saved: "/saved-forecasts",
               backtesting: "/backtesting",
@@ -709,7 +1127,7 @@
       toggle.className = "mobile-nav-toggle";
       toggle.setAttribute("aria-label", "Toggle navigation menu");
       toggle.setAttribute("aria-expanded", "false");
-      toggle.innerHTML = `${icon("menu")}`;
+      toggle.innerHTML = `<span aria-hidden="true">☰</span>`;
       nav.appendChild(toggle);
     }
     if (!backdrop) {
@@ -725,12 +1143,22 @@
       toggle?.setAttribute("aria-expanded", "false");
       backdrop?.classList.add("hidden");
       document.body.classList.remove("mobile-nav-lock");
+      links.style.removeProperty("top");
+      actions.style.removeProperty("top");
+    };
+    const syncOverlayPositions = () => {
+      if (window.innerWidth > 980) return;
+      const baseTop = Math.round(header.getBoundingClientRect().height + 8);
+      links.style.top = `${baseTop}px`;
+      const linksHeight = Math.round(links.getBoundingClientRect().height || 0);
+      actions.style.top = `${baseTop + linksHeight + 10}px`;
     };
     const open = () => {
       header.classList.add("nav-open");
       toggle?.setAttribute("aria-expanded", "true");
       backdrop?.classList.remove("hidden");
       document.body.classList.add("mobile-nav-lock");
+      syncOverlayPositions();
     };
 
     toggle.addEventListener("click", () => {
@@ -748,6 +1176,7 @@
     });
     window.addEventListener("resize", () => {
       if (window.innerWidth > 980) close();
+      else if (header.classList.contains("nav-open")) syncOverlayPositions();
     });
   };
 
@@ -1198,6 +1627,8 @@
       updateDynamicPromoBanner(String(flags.promoBannerText || "").trim());
       refreshScreenerModelUi();
       refreshScreenerCreditsUi();
+      hydrateFundamentalFilterFields();
+      bindScreenerFilterTabs();
       bindAIAgentLeaderboardControls();
       // Ensure existing alerts inherit the configured default threshold when no explicit value is set.
       if (Number.isFinite(Number(flags.volatilityThreshold))) {
@@ -1447,13 +1878,44 @@
     };
   };
 
+  const normalizeLanguageCode = (raw) => {
+    const text = String(raw || "").trim().toLowerCase();
+    if (!text || text === "auto") return "auto";
+    const base = text.split(/[-_]/)[0];
+    return SUPPORTED_LANGUAGES.has(base) ? base : "en";
+  };
+
+  const normalizeCountryCode = (raw) => {
+    const text = String(raw || "").trim().toUpperCase();
+    return /^[A-Z]{2}$/.test(text) ? text : "US";
+  };
+
+  const resolveLanguageFromNavigator = () => {
+    const options = [
+      ...(Array.isArray(navigator.languages) ? navigator.languages : []),
+      navigator.language,
+      navigator.userLanguage,
+    ];
+    for (const candidate of options) {
+      const normalized = normalizeLanguageCode(candidate);
+      if (normalized !== "auto") return normalized;
+    }
+    return "en";
+  };
+
+  const resolveLanguageFromCountry = (country) => {
+    const key = normalizeCountryCode(country);
+    return normalizeLanguageCode(COUNTRY_DEFAULT_LANGUAGE[key] || "en");
+  };
+
   const buildMeta = () => ({
     sessionId: getSessionId(),
     pagePath: window.location.pathname,
     pageTitle: document.title,
     referrer: document.referrer || "",
     userAgent: navigator.userAgent,
-    language: navigator.language,
+    language: state.preferredLanguage || normalizeLanguageCode(navigator.language),
+    country: state.preferredCountry || "",
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     screen: `${window.screen.width}x${window.screen.height}`,
     platform: navigator.platform,
@@ -1518,6 +1980,99 @@
 	      // Ignore storage failures.
 	    }
 	  };
+
+  const setCountryControls = (countryCode) => {
+    const code = normalizeCountryCode(countryCode);
+    state.preferredCountry = code;
+    if (ui.eventsCalendarCountry && ui.eventsCalendarCountry.value !== code) ui.eventsCalendarCountry.value = code;
+    if (ui.marketHeadlinesCountry && ui.marketHeadlinesCountry.value !== code) ui.marketHeadlinesCountry.value = code;
+  };
+
+  const applyLanguagePreference = (languageCode, { persist = true } = {}) => {
+    const normalized = normalizeLanguageCode(languageCode);
+    const resolved = normalized === "auto" ? resolveLanguageFromNavigator() : normalized;
+    state.preferredLanguage = resolved;
+    document.documentElement.lang = resolved || "en";
+    document.documentElement.dir = resolved === "ar" ? "rtl" : "ltr";
+    if (ui.languageSelect) ui.languageSelect.value = normalized;
+    if (ui.tickerQueryLanguage && ui.tickerQueryLanguage.value === "auto") {
+      ui.tickerQueryLanguage.value = resolved;
+    }
+    if (persist) safeLocalStorageSet(LANGUAGE_PREFERENCE_KEY, normalized);
+  };
+
+  const applyCountryPreference = (countryCode, { persist = true } = {}) => {
+    const normalized = normalizeCountryCode(countryCode);
+    setCountryControls(normalized);
+    if (persist) safeLocalStorageSet(COUNTRY_PREFERENCE_KEY, normalized);
+  };
+
+  const detectCountryFromIp = async () => {
+    try {
+      const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+      const timeout = window.setTimeout(() => controller?.abort(), 2600);
+      const response = await fetch("https://ipapi.co/json/", {
+        method: "GET",
+        mode: "cors",
+        signal: controller?.signal,
+      });
+      window.clearTimeout(timeout);
+      if (!response.ok) return "";
+      const payload = await response.json();
+      const raw = String(payload?.country_code || payload?.country || "").trim();
+      return normalizeCountryCode(raw);
+    } catch (error) {
+      return "";
+    }
+  };
+
+  const initializeLanguageControls = async () => {
+    const storedLanguage = normalizeLanguageCode(safeLocalStorageGet(LANGUAGE_PREFERENCE_KEY) || "");
+    const urlLanguage = (() => {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        return normalizeLanguageCode(params.get("lang") || "");
+      } catch (error) {
+        return "auto";
+      }
+    })();
+    const nextLanguage = urlLanguage !== "auto" ? urlLanguage : storedLanguage !== "auto" ? storedLanguage : "auto";
+    applyLanguagePreference(nextLanguage, { persist: true });
+
+    if (ui.languageSelect && ui.languageSelect.dataset.bound !== "1") {
+      ui.languageSelect.value = nextLanguage;
+      ui.languageSelect.addEventListener("change", () => {
+        const selected = normalizeLanguageCode(ui.languageSelect.value || "auto");
+        applyLanguagePreference(selected, { persist: true });
+      });
+      ui.languageSelect.dataset.bound = "1";
+    }
+
+    const storedCountry = normalizeCountryCode(safeLocalStorageGet(COUNTRY_PREFERENCE_KEY) || "");
+    const urlCountry = (() => {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const raw = String(params.get("country") || "").trim();
+        return raw ? normalizeCountryCode(raw) : "";
+      } catch (error) {
+        return "";
+      }
+    })();
+    let country = urlCountry || (storedCountry !== "US" ? storedCountry : "");
+    if (!country) {
+      country = await detectCountryFromIp();
+    }
+    if (!country) {
+      const locale = String(navigator.language || "").split("-")[1] || "";
+      country = locale ? normalizeCountryCode(locale) : "US";
+    }
+    applyCountryPreference(country || "US", { persist: true });
+    if (storedLanguage === "auto" || !storedLanguage) {
+      const best = resolveLanguageFromCountry(country || "US");
+      applyLanguagePreference(best, { persist: false });
+      if (ui.languageSelect) ui.languageSelect.value = "auto";
+    }
+  };
 
     const readCookie = (name) => {
       try {
@@ -1620,18 +2175,25 @@
 	        });
 	    };
 
-	    const applyTheme = (theme, { persist = true } = {}) => {
-	      const next = theme === "dark" ? "dark" : "light";
-	      document.documentElement.dataset.theme = next;
-	      syncBrandAssets(next);
-	      if (persist) safeLocalStorageSet(THEME_KEY, next);
+    const applyTheme = (theme, { persist = true } = {}) => {
+      const next = theme === "dark" ? "dark" : "light";
+      document.documentElement.dataset.theme = next;
+      syncBrandAssets(next);
+      if (persist) safeLocalStorageSet(THEME_KEY, next);
 	      const button = document.getElementById("theme-toggle");
 	      if (button) {
 	        button.innerHTML = themeToggleIconHtml(next);
-	        button.setAttribute("aria-label", next === "dark" ? "Switch to light mode" : "Switch to dark mode");
+        button.setAttribute("aria-label", next === "dark" ? "Switch to light mode" : "Switch to dark mode");
         button.setAttribute("title", next === "dark" ? "Light mode" : "Dark mode");
-	      }
-	    };
+      }
+      if (state.tradingViewTheme === "auto" && state.chartEngine === "tradingview" && state.tickerContext.ticker) {
+        renderTradingViewTerminal({
+          ticker: state.tickerContext.ticker,
+          interval: state.tickerContext.interval || "1d",
+        });
+      }
+      applyChartControlState();
+    };
 
     const ensureThemeToggle = () => {
       if (document.getElementById("theme-toggle")) return;
@@ -2109,11 +2671,17 @@
   const setAuthUi = (user) => {
     const isAuthed = Boolean(user);
     const authLabel = isAuthed ? "Logged In" : "Logged Out";
+    ensureHeaderNotificationsCta();
     if (ui.headerAuth) {
       ui.headerAuth.innerHTML = isAuthed
         ? `${icon("dashboard")}<span>Dashboard</span>`
         : `${icon("log-in")}<span>Sign in</span>`;
       ui.headerAuth.setAttribute("aria-label", isAuthed ? "Open dashboard" : "Sign in");
+      if (ui.headerAuth.tagName.toLowerCase() === "button") {
+        ui.headerAuth.dataset.route = isAuthed ? "/dashboard" : "/account";
+      } else {
+        ui.headerAuth.setAttribute("href", isAuthed ? "/dashboard" : "/account");
+      }
     }
 
     if (ui.headerUserEmail) {
@@ -2132,7 +2700,21 @@
       ui.userStatus.textContent = authLabel;
       ui.userStatus.classList.toggle("pill", true);
     }
+    if (ui.billingPortalLink) {
+      ui.billingPortalLink.textContent = isAuthed ? "Open Stripe billing portal" : "Sign in to manage billing";
+      ui.billingPortalLink.setAttribute("href", isAuthed ? STRIPE_URL : "/account");
+      ui.billingPortalLink.setAttribute("target", isAuthed ? "_blank" : "_self");
+      if (isAuthed) {
+        ui.billingPortalLink.setAttribute("rel", "noopener noreferrer");
+      } else {
+        ui.billingPortalLink.removeAttribute("rel");
+      }
+    }
     ui.dashboardCta?.classList.toggle("hidden", isAuthed);
+    setProfileFormEnabled(isAuthed);
+    if (!isAuthed) {
+      setProfileStatus("Sign in to set your public leaderboard profile.");
+    }
 
     if (ui.pricingAuthCta) {
       ui.pricingAuthCta.innerHTML = isAuthed
@@ -3263,12 +3845,198 @@
       );
   };
 
+  const cloneDefaultProfileSocialLinks = () => ({ ...DEFAULT_PROFILE_SOCIAL_LINKS });
+
+  const normalizeProfileAvatar = (raw) => {
+    const value = String(raw || "").trim().toLowerCase();
+    if (value && PROFILE_AVATAR_OPTIONS[value]) return value;
+    return "bull";
+  };
+
+  const normalizeProfileBio = (raw) => String(raw || "").trim().slice(0, 300);
+
+  const getProfileAvatarMeta = (avatar) => {
+    const key = normalizeProfileAvatar(avatar);
+    return PROFILE_AVATAR_OPTIONS[key] || PROFILE_AVATAR_OPTIONS.bull;
+  };
+
+  const getDefaultProfileUsername = (user) => {
+    const display = String(user?.displayName || "").trim();
+    const emailLocal = String(user?.email || "")
+      .trim()
+      .split("@")[0];
+    const source = display || emailLocal || "quantura_user";
+    const compact = source
+      .toLowerCase()
+      .replace(/\s+/g, "_")
+      .replace(/[^a-z0-9_.-]/g, "")
+      .slice(0, 32);
+    return compact || "quantura_user";
+  };
+
+  const sanitizeProfileUsername = (raw, user = null) => {
+    const value = String(raw || "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "_")
+      .replace(/[^a-z0-9_.-]/g, "")
+      .slice(0, 32);
+    if (value) return value;
+    return user ? getDefaultProfileUsername(user) : "";
+  };
+
+  const normalizeProfileUrlInput = (raw) => {
+    const text = String(raw || "").trim();
+    if (!text) return "";
+    if (/^https?:\/\//i.test(text)) return text;
+    if (/^[a-z]+:\/\//i.test(text)) return text;
+    return `https://${text}`;
+  };
+
+  const validateProfileSocialUrl = (key, raw) => {
+    const value = String(raw || "").trim();
+    if (!value) return { ok: true, url: "" };
+
+    const normalized = normalizeProfileUrlInput(value);
+    let parsed;
+    try {
+      parsed = new URL(normalized);
+    } catch (error) {
+      return { ok: false, error: `Invalid URL for ${key}.` };
+    }
+    if (parsed.protocol !== "https:") {
+      return { ok: false, error: `${key} URL must use HTTPS.` };
+    }
+
+    const rule = PROFILE_SOCIAL_URL_RULES[key] || PROFILE_SOCIAL_URL_RULES.website;
+    const host = String(parsed.hostname || "").toLowerCase();
+    if (rule.allowAnyHost) {
+      if (!host || !host.includes(".")) {
+        return { ok: false, error: `${key} URL must include a valid host.` };
+      }
+    } else if (!Array.isArray(rule.hosts) || !rule.hosts.includes(host)) {
+      return { ok: false, error: `${key} URL must be on ${key}.` };
+    }
+
+    const path = String(parsed.pathname || "").trim();
+    if (rule.requirePath && (path === "/" || path === "")) {
+      return { ok: false, error: `${key} URL must include your profile path.` };
+    }
+
+    parsed.hash = "";
+    return { ok: true, url: parsed.toString() };
+  };
+
+  const normalizeProfileSocialLinks = (raw, { strict = false } = {}) => {
+    const source = raw && typeof raw === "object" ? raw : {};
+    const next = cloneDefaultProfileSocialLinks();
+    const invalid = [];
+    Object.keys(DEFAULT_PROFILE_SOCIAL_LINKS).forEach((key) => {
+      const check = validateProfileSocialUrl(key, source[key]);
+      if (check.ok) {
+        next[key] = check.url;
+      } else if (strict && String(source[key] || "").trim()) {
+        invalid.push(check.error || `Invalid ${key} URL.`);
+      }
+    });
+    if (invalid.length && strict) {
+      throw new Error(invalid.join(" "));
+    }
+    return next;
+  };
+
+  const setProfileStatus = (message, variant = "muted") => {
+    if (!ui.profileStatus) return;
+    ui.profileStatus.textContent = String(message || "");
+    ui.profileStatus.dataset.variant = String(variant || "muted");
+  };
+
+  const setProfileFormEnabled = (enabled) => {
+    if (!ui.profileForm) return;
+    const isEnabled = Boolean(enabled);
+    const controls = Array.from(ui.profileForm.querySelectorAll("input, button, select, textarea"));
+    controls.forEach((node) => {
+      node.disabled = !isEnabled;
+    });
+  };
+
+  const renderProfileForm = (profile = null, user = null) => {
+    const safeProfile = profile && typeof profile === "object" ? profile : {};
+    const username = sanitizeProfileUsername(safeProfile.username || "", user);
+    const socialLinks = normalizeProfileSocialLinks(safeProfile.socialLinks || {});
+    const avatar = normalizeProfileAvatar(safeProfile.avatar);
+    const bio = normalizeProfileBio(safeProfile.bio);
+    const publicProfile = Boolean(safeProfile.publicProfile);
+    const publicScreenerSharing = Boolean(safeProfile.publicScreenerSharing);
+    const stripeConnectAccountId = String(safeProfile.stripeConnectAccountId || "").trim();
+    state.userProfile = { username, socialLinks, avatar, bio, publicProfile, publicScreenerSharing, stripeConnectAccountId };
+
+    if (ui.profileUsername) ui.profileUsername.value = username;
+    if (ui.profileAvatar) ui.profileAvatar.value = avatar;
+    if (ui.profileBio) ui.profileBio.value = bio;
+    if (ui.profilePublicEnabled) ui.profilePublicEnabled.checked = publicProfile;
+    if (ui.profilePublicScreener) ui.profilePublicScreener.checked = publicScreenerSharing;
+    if (ui.profileWebsite) ui.profileWebsite.value = socialLinks.website || "";
+    if (ui.profileX) ui.profileX.value = socialLinks.x || "";
+    if (ui.profileLinkedin) ui.profileLinkedin.value = socialLinks.linkedin || "";
+    if (ui.profileGithub) ui.profileGithub.value = socialLinks.github || "";
+    if (ui.profileYoutube) ui.profileYoutube.value = socialLinks.youtube || "";
+    if (ui.profileTiktok) ui.profileTiktok.value = socialLinks.tiktok || "";
+    if (ui.profileFacebook) ui.profileFacebook.value = socialLinks.facebook || "";
+    if (ui.profileInstagram) ui.profileInstagram.value = socialLinks.instagram || "";
+    if (ui.profileReddit) ui.profileReddit.value = socialLinks.reddit || "";
+    if (ui.profileConnectStripe) {
+      ui.profileConnectStripe.classList.toggle("secondary", !stripeConnectAccountId);
+      ui.profileConnectStripe.classList.toggle("success", Boolean(stripeConnectAccountId));
+      ui.profileConnectStripe.innerHTML = stripeConnectAccountId
+        ? `${icon("check-circle")}<span>Stripe connected</span>`
+        : `${icon("wallet")}<span>Connect Stripe</span>`;
+    }
+  };
+
+  const loadUserProfile = async (db, user) => {
+    if (!db || !user) {
+      state.userProfile = {
+        username: "",
+        socialLinks: cloneDefaultProfileSocialLinks(),
+        avatar: "bull",
+        bio: "",
+        publicProfile: false,
+        publicScreenerSharing: false,
+        stripeConnectAccountId: "",
+      };
+      renderProfileForm(state.userProfile, null);
+      return;
+    }
+    try {
+      const snap = await db.collection("users").doc(user.uid).get();
+      const doc = snap.exists ? snap.data() || {} : {};
+      const rawProfile = doc.profile && typeof doc.profile === "object" ? doc.profile : {};
+      if (!rawProfile.stripeConnectAccountId && doc?.stripeConnectAccountId) {
+        rawProfile.stripeConnectAccountId = doc.stripeConnectAccountId;
+      }
+      renderProfileForm(rawProfile, user);
+    } catch (error) {
+      renderProfileForm({ username: getDefaultProfileUsername(user) }, user);
+    }
+  };
+
   const ensureUserProfile = async (db, user) => {
     if (!user) return;
     const userRef = db.collection("users").doc(user.uid);
     const snapshot = await userRef.get();
     const existing = snapshot.exists ? snapshot.data() : {};
     const createdAt = existing?.createdAt || firebase.firestore.FieldValue.serverTimestamp();
+    const existingProfile = existing?.profile && typeof existing.profile === "object" ? existing.profile : {};
+    const profileUsername = sanitizeProfileUsername(existingProfile.username || existing?.name || "", user);
+    const profileSocialLinks = normalizeProfileSocialLinks(existingProfile.socialLinks || {});
+    const profileAvatar = normalizeProfileAvatar(existingProfile.avatar);
+    const profileBio = normalizeProfileBio(existingProfile.bio);
+    const publicProfile = Boolean(existingProfile.publicProfile);
+    const publicScreenerSharing = Boolean(existingProfile.publicScreenerSharing);
+    const stripeConnectAccountId = String(
+      existingProfile.stripeConnectAccountId || existing?.stripeConnectAccountId || ""
+    ).trim();
 
     await userRef.set(
       {
@@ -3278,6 +4046,15 @@
         photoURL: user.photoURL || "",
         lastLoginAt: firebase.firestore.FieldValue.serverTimestamp(),
         createdAt,
+        profile: {
+          username: profileUsername,
+          socialLinks: profileSocialLinks,
+          avatar: profileAvatar,
+          bio: profileBio,
+          publicProfile,
+          publicScreenerSharing,
+          stripeConnectAccountId,
+        },
         metadata: buildMeta(),
       },
       { merge: true }
@@ -3377,6 +4154,444 @@
   const icon = (name) => `<i class="iconoir-${name}" aria-hidden="true"></i>`;
 
   const toPrettyJson = (value) => `<pre class="small">${escapeHtml(JSON.stringify(value, null, 2))}</pre>`;
+
+  const normalizeTopNavigation = () => {
+    const navs = Array.from(document.querySelectorAll(".header .nav-links"));
+    if (!navs.length) return;
+    navs.forEach((nav) => {
+      nav.innerHTML = `
+        <a href="/forecasting" data-analytics="nav_terminal">${icon("candlestick-chart")}<span>Terminal</span></a>
+        <a href="/research" data-analytics="nav_research">${icon("bookmark-book")}<span>Research</span></a>
+        <a href="/blog" data-analytics="nav_blog">${icon("page")}<span>Blog</span></a>
+        <a href="/pricing" data-analytics="nav_pricing">${icon("wallet")}<span>Pricing</span></a>
+        <a href="/contact" data-analytics="nav_contact">${icon("mail")}<span>Contact</span></a>
+      `;
+    });
+  };
+
+  const ensureHeaderNotificationsCta = () => {
+    const actions = document.querySelector(".header .nav-actions");
+    if (!actions) return;
+    let link = document.getElementById("header-notifications");
+    if (!link) {
+      link = document.createElement("a");
+      link.id = "header-notifications";
+      link.className = "cta secondary";
+      link.setAttribute("data-analytics", "nav_notifications");
+      const authButton = actions.querySelector("#header-auth");
+      if (authButton?.parentElement === actions) {
+        actions.insertBefore(link, authButton);
+      } else {
+        actions.appendChild(link);
+      }
+      ui.headerNotifications = link;
+    }
+    const authed = Boolean(state.user);
+    link.href = authed ? "/notifications" : "/account";
+    link.innerHTML = `${icon("bell-notification")}<span>Notifications</span>`;
+    link.setAttribute("aria-label", authed ? "Open notifications" : "Sign in to manage notifications");
+  };
+
+  const renderNotificationLog = () => {
+    if (!ui.notificationsLog) return;
+    const entries = Array.isArray(state.notificationLog) ? state.notificationLog : [];
+    if (!entries.length) {
+      ui.notificationsLog.innerHTML = `<div class="small muted">No live notifications yet.</div>`;
+      return;
+    }
+    ui.notificationsLog.innerHTML = entries
+      .map((entry) => {
+        const title = escapeHtml(String(entry.title || "Quantura update"));
+        const body = escapeHtml(String(entry.body || ""));
+        const source = escapeHtml(String(entry.source || "foreground"));
+        const at = escapeHtml(new Date(entry.at || Date.now()).toLocaleString());
+        return `
+          <article class="notification-log-item">
+            <div class="notification-log-head">
+              <strong>${title}</strong>
+              <span class="small muted">${at}</span>
+            </div>
+            <p class="small">${body || "No message body provided."}</p>
+            <div class="small muted">Source: ${source}</div>
+          </article>
+        `;
+      })
+      .join("");
+  };
+
+  const persistNotificationLog = () => {
+    try {
+      localStorage.setItem(FCM_LOG_CACHE_KEY, JSON.stringify((state.notificationLog || []).slice(0, 30)));
+    } catch (error) {
+      // Ignore storage failures.
+    }
+  };
+
+  const appendNotificationLog = ({ title, body, source = "foreground", at = new Date().toISOString() }) => {
+    const next = [
+      {
+        title: String(title || "Quantura update"),
+        body: String(body || ""),
+        source: String(source || "foreground"),
+        at: String(at || new Date().toISOString()),
+      },
+      ...(Array.isArray(state.notificationLog) ? state.notificationLog : []),
+    ].slice(0, 30);
+    state.notificationLog = next;
+    persistNotificationLog();
+    renderNotificationLog();
+  };
+
+  const resolveTradingViewTheme = () => {
+    if (state.tradingViewTheme === "dark" || state.tradingViewTheme === "light") {
+      return state.tradingViewTheme;
+    }
+    return isDarkMode() ? "dark" : "light";
+  };
+
+  const normalizeTradingViewSymbol = (ticker) => {
+    const clean = normalizeTicker(ticker);
+    if (!clean) return "NASDAQ:AAPL";
+    if (clean.includes(":")) return clean;
+    return `NASDAQ:${clean}`;
+  };
+
+  const resolveTradingViewInterval = (interval, rangePreset) => {
+    const base = String(interval || "").toLowerCase() === "1h" ? "60" : "D";
+    if (base === "60") return "60";
+    const range = String(rangePreset || "max").toLowerCase();
+    if (range === "1d") return "5";
+    if (range === "5d") return "30";
+    if (range === "1m") return "60";
+    if (range === "3m") return "240";
+    if (range === "5y") return "W";
+    return "D";
+  };
+
+  const resolveTradingViewStyle = () => (state.chartViewMode === "line" ? "3" : "1");
+
+  const setTradingViewStatus = (text) => {
+    if (!ui.tradingViewStatus) return;
+    ui.tradingViewStatus.textContent = String(text || "");
+  };
+
+  const setTerminalChartEngineVisibility = (engine) => {
+    const shell = ui.tickerChart?.closest(".chart-shell");
+    if (shell) {
+      shell.classList.toggle("chart-engine-tradingview", engine === "tradingview");
+      shell.classList.toggle("chart-engine-legacy", engine === "legacy");
+    }
+    if (ui.tradingViewRoot) {
+      ui.tradingViewRoot.classList.toggle("hidden", engine !== "tradingview");
+    }
+    if (ui.tickerChart) {
+      ui.tickerChart.classList.toggle("hidden", engine === "tradingview");
+    }
+  };
+
+  const buildCurrentChartOverlays = () => {
+    const ticker = normalizeTicker(state.tickerContext.ticker || "");
+    const forecastOverlays =
+      state.tickerContext.forecastDoc && normalizeTicker(state.tickerContext.forecastDoc.ticker || "") === ticker
+        ? buildForecastOverlays(state.tickerContext.forecastDoc.forecastRows || [])
+        : [];
+    return [...forecastOverlays, ...(state.tickerContext.indicatorOverlays || [])];
+  };
+
+  const setChartEngine = (engine, { persist = true, rerender = true } = {}) => {
+    const next = engine === "legacy" ? "legacy" : "tradingview";
+    state.chartEngine = next;
+    if (persist) safeLocalStorageSet(CHART_ENGINE_CACHE_KEY, next);
+    setTerminalChartEngineVisibility(next);
+    applyChartControlState();
+    if (
+      rerender &&
+      state.tickerContext.rows?.length &&
+      state.tickerContext.ticker &&
+      ui.tickerChart
+    ) {
+      renderTickerChart(
+        state.tickerContext.rows,
+        state.tickerContext.ticker,
+        state.tickerContext.interval,
+        buildCurrentChartOverlays()
+      ).catch(() => {});
+    }
+  };
+
+  const buildTradingViewWidgetSrc = (baseUrl, config) => {
+    const payload = encodeURIComponent(JSON.stringify(config || {}));
+    return `${baseUrl}#${payload}`;
+  };
+
+  const mountTradingViewIframe = ({ container, src, title, onload, onerror }) => {
+    if (!container) return null;
+    const frame = document.createElement("iframe");
+    frame.setAttribute("scrolling", "no");
+    frame.setAttribute("allowtransparency", "true");
+    frame.setAttribute("frameborder", "0");
+    frame.setAttribute("loading", "lazy");
+    frame.setAttribute("title", title || "TradingView widget");
+    frame.setAttribute("lang", "en");
+    frame.src = src;
+    if (typeof onload === "function") frame.addEventListener("load", onload, { once: true });
+    if (typeof onerror === "function") frame.addEventListener("error", onerror, { once: true });
+    container.innerHTML = "";
+    container.appendChild(frame);
+    return frame;
+  };
+
+  const renderTradingViewTerminal = ({ ticker, interval }) => {
+    if (!ui.tradingViewRoot || !ui.tradingViewAdvanced) return false;
+    const symbol = normalizeTradingViewSymbol(ticker);
+    const theme = resolveTradingViewTheme();
+    const tvInterval = resolveTradingViewInterval(interval, state.chartRangePreset);
+    const style = resolveTradingViewStyle();
+    const nonce = Date.now();
+    state.tradingViewRenderNonce = nonce;
+    state.tradingViewLoadFailed = false;
+    if (state.tradingViewLoadTimer) {
+      window.clearTimeout(state.tradingViewLoadTimer);
+      state.tradingViewLoadTimer = null;
+    }
+    ui.tradingViewFallback?.classList.add("hidden");
+    setTradingViewStatus(`TradingView · ${symbol}`);
+
+    const shared = {
+      symbol,
+      colorTheme: theme,
+      isTransparent: true,
+      locale: "en",
+    };
+
+    mountTradingViewIframe({
+      container: ui.tradingViewSymbolInfo,
+      src: buildTradingViewWidgetSrc("https://www.tradingview-widget.com/embed-widget/symbol-info/?locale=en", {
+        ...shared,
+        width: "100%",
+        height: 255,
+      }),
+      title: `Symbol info ${symbol}`,
+    });
+
+    mountTradingViewIframe({
+      container: ui.tradingViewProfile,
+      src: buildTradingViewWidgetSrc("https://www.tradingview-widget.com/embed-widget/symbol-profile/?locale=en", {
+        ...shared,
+        width: "100%",
+        height: "100%",
+      }),
+      title: `Company profile ${symbol}`,
+    });
+
+    mountTradingViewIframe({
+      container: ui.tradingViewTechnical,
+      src: buildTradingViewWidgetSrc("https://www.tradingview-widget.com/embed-widget/technical-analysis/?locale=en", {
+        ...shared,
+        interval: interval === "1h" ? "60m" : "1D",
+        width: "100%",
+        height: "100%",
+        showIntervalTabs: true,
+        displayMode: "single",
+      }),
+      title: `Technical analysis ${symbol}`,
+    });
+
+    mountTradingViewIframe({
+      container: ui.tradingViewTimeline,
+      src: buildTradingViewWidgetSrc("https://www.tradingview-widget.com/embed-widget/timeline/?locale=en", {
+        ...shared,
+        width: "100%",
+        height: 600,
+        displayMode: "regular",
+      }),
+      title: `Timeline ${symbol}`,
+    });
+
+    mountTradingViewIframe({
+      container: ui.tradingViewFinancials,
+      src: buildTradingViewWidgetSrc("https://www.tradingview-widget.com/embed-widget/financials/?locale=en", {
+        ...shared,
+        width: "100%",
+        height: 775,
+        displayMode: "regular",
+      }),
+      title: `Financials ${symbol}`,
+    });
+
+    mountTradingViewIframe({
+      container: ui.tradingViewAdvanced,
+      src: buildTradingViewWidgetSrc("https://www.tradingview.com/widgetembed/?hideideas=1&locale=en", {
+        symbol,
+        interval: tvInterval,
+        allow_symbol_change: "1",
+        hide_side_toolbar: "0",
+        save_image: "1",
+        style,
+        theme,
+        timezone: "Etc/UTC",
+        studies: ["STD;MACD"],
+      }),
+      title: `Advanced chart ${symbol}`,
+      onload: () => {
+        if (state.tradingViewRenderNonce !== nonce) return;
+        state.tradingViewLoadFailed = false;
+        if (state.tradingViewLoadTimer) {
+          window.clearTimeout(state.tradingViewLoadTimer);
+          state.tradingViewLoadTimer = null;
+        }
+        ui.tradingViewFallback?.classList.add("hidden");
+        setTradingViewStatus(`TradingView loaded · ${symbol}`);
+      },
+      onerror: () => {
+        if (state.tradingViewRenderNonce !== nonce) return;
+        state.tradingViewLoadFailed = true;
+        setTradingViewStatus("TradingView unavailable");
+        ui.tradingViewFallback?.classList.remove("hidden");
+      },
+    });
+
+    state.tradingViewLoadTimer = window.setTimeout(() => {
+      if (state.tradingViewRenderNonce !== nonce) return;
+      state.tradingViewLoadFailed = true;
+      setTradingViewStatus("TradingView timeout · fallback available");
+      ui.tradingViewFallback?.classList.remove("hidden");
+    }, TRADINGVIEW_LOAD_TIMEOUT_MS);
+
+    return true;
+  };
+
+  const applyChartControlState = () => {
+    ui.chartRangeButtons.forEach((button) => {
+      const preset = String(button.dataset.chartRange || "").toLowerCase();
+      button.classList.toggle("active", preset === state.chartRangePreset);
+      button.setAttribute("aria-pressed", preset === state.chartRangePreset ? "true" : "false");
+    });
+    ui.chartViewButtons.forEach((button) => {
+      const mode = String(button.dataset.chartView || "").toLowerCase();
+      button.classList.toggle("active", mode === state.chartViewMode);
+      button.setAttribute("aria-pressed", mode === state.chartViewMode ? "true" : "false");
+    });
+    ui.chartEngineButtons.forEach((button) => {
+      const engine = String(button.dataset.chartEngine || "").toLowerCase();
+      button.classList.toggle("active", engine === state.chartEngine);
+      button.setAttribute("aria-pressed", engine === state.chartEngine ? "true" : "false");
+    });
+    ui.chartThemeButtons.forEach((button) => {
+      const theme = String(button.dataset.tvTheme || "").toLowerCase();
+      button.classList.toggle("active", theme === state.tradingViewTheme);
+      button.setAttribute("aria-pressed", theme === state.tradingViewTheme ? "true" : "false");
+    });
+  };
+
+  const computeChartRange = (xValues, preset) => {
+    const normalized = String(preset || "max").toLowerCase();
+    if (normalized === "max") return null;
+    const points = Array.isArray(xValues)
+      ? xValues
+          .map((value) => {
+            const dt = new Date(value);
+            return Number.isFinite(dt.getTime()) ? dt : null;
+          })
+          .filter(Boolean)
+      : [];
+    if (!points.length) return null;
+    const first = points[0];
+    const last = points[points.length - 1];
+    const start = new Date(last.getTime());
+    const dayMs = 24 * 60 * 60 * 1000;
+    if (normalized === "1d") start.setTime(last.getTime() - dayMs);
+    if (normalized === "5d") start.setTime(last.getTime() - 5 * dayMs);
+    if (normalized === "1m") start.setTime(last.getTime() - 30 * dayMs);
+    if (normalized === "3m") start.setTime(last.getTime() - 90 * dayMs);
+    if (normalized === "1y") start.setTime(last.getTime() - 365 * dayMs);
+    if (normalized === "5y") start.setTime(last.getTime() - 365 * 5 * dayMs);
+    if (normalized === "ytd") {
+      start.setMonth(0, 1);
+      start.setHours(0, 0, 0, 0);
+    }
+    const clampedStart = start < first ? first : start;
+    return [clampedStart.toISOString(), last.toISOString()];
+  };
+
+  const bindChartControls = () => {
+    if (ui.chartRangeButtons.length) {
+      ui.chartRangeButtons.forEach((button) => {
+        button.addEventListener("click", async () => {
+          const preset = String(button.dataset.chartRange || "").toLowerCase();
+          if (!preset || preset === state.chartRangePreset) return;
+          state.chartRangePreset = preset;
+          safeLocalStorageSet(CHART_RANGE_CACHE_KEY, preset);
+          applyChartControlState();
+          if (ui.tickerChart && state.tickerContext.rows?.length) {
+            await renderTickerChart(
+              state.tickerContext.rows,
+              state.tickerContext.ticker,
+              state.tickerContext.interval,
+              buildCurrentChartOverlays()
+            );
+          }
+        });
+      });
+    }
+    if (ui.chartViewButtons.length) {
+      ui.chartViewButtons.forEach((button) => {
+        button.addEventListener("click", async () => {
+          const mode = String(button.dataset.chartView || "").toLowerCase();
+          if (!mode || mode === state.chartViewMode) return;
+          state.chartViewMode = mode === "line" ? "line" : "candlestick";
+          safeLocalStorageSet(CHART_VIEW_CACHE_KEY, state.chartViewMode);
+          applyChartControlState();
+          if (ui.tickerChart && state.tickerContext.rows?.length) {
+            await renderTickerChart(
+              state.tickerContext.rows,
+              state.tickerContext.ticker,
+              state.tickerContext.interval,
+              buildCurrentChartOverlays()
+            );
+          }
+        });
+      });
+    }
+
+    if (ui.chartEngineButtons.length) {
+      ui.chartEngineButtons.forEach((button) => {
+        button.addEventListener("click", () => {
+          const next = String(button.dataset.chartEngine || "").toLowerCase();
+          if (!next || next === state.chartEngine) return;
+          setChartEngine(next, { persist: true, rerender: true });
+        });
+      });
+    }
+
+    if (ui.chartThemeButtons.length) {
+      ui.chartThemeButtons.forEach((button) => {
+        button.addEventListener("click", () => {
+          const next = String(button.dataset.tvTheme || "").toLowerCase();
+          if (!next || next === state.tradingViewTheme) return;
+          state.tradingViewTheme = next === "dark" || next === "light" ? next : "auto";
+          safeLocalStorageSet(TRADINGVIEW_THEME_CACHE_KEY, state.tradingViewTheme);
+          applyChartControlState();
+          if (state.chartEngine === "tradingview" && state.tickerContext.ticker) {
+            renderTradingViewTerminal({
+              ticker: state.tickerContext.ticker,
+              interval: state.tickerContext.interval || "1d",
+            });
+          }
+        });
+      });
+    }
+
+    if (ui.tradingViewUseLegacy) {
+      ui.tradingViewUseLegacy.addEventListener("click", () => {
+        setChartEngine("legacy", { persist: true, rerender: true });
+        showToast("Switched to legacy chart.");
+      });
+    }
+
+    setTerminalChartEngineVisibility(state.chartEngine);
+    applyChartControlState();
+  };
 
   const normalizeTicker = (value) =>
     String(value || "")
@@ -3483,6 +4698,8 @@
       "news-ticker",
       "intel-ticker",
       "options-ticker",
+      "events-calendar-tickers",
+      "ticker-query-ticker",
       "watchlist-ticker",
       "alert-ticker",
       "autopilot-ticker",
@@ -3857,6 +5074,378 @@
     }
   };
 
+  const renderTickerXTrends = (posts, ticker, warning = "") => {
+    if (!ui.xTrendingOutput) return;
+    const list = Array.isArray(posts) ? posts : [];
+    const symbol = normalizeTicker(ticker) || "";
+    const warningText = String(warning || "").trim();
+
+    if (!list.length) {
+      ui.xTrendingOutput.innerHTML = `
+        <div class="small muted">No X posts returned for ${escapeHtml(symbol || "this ticker")}.</div>
+        ${warningText ? `<div class="small muted" style="margin-top:8px;">${escapeHtml(warningText)}</div>` : ""}
+      `;
+      return;
+    }
+
+    ui.xTrendingOutput.innerHTML = list
+      .slice(0, 8)
+      .map((post) => {
+        const authorName = escapeHtml(post.authorName || post.authorUsername || "Unknown");
+        const authorHandle = escapeHtml(post.authorUsername ? `@${post.authorUsername}` : "");
+        const text = escapeHtml(post.text || "");
+        const created = formatEpoch(post.createdAt);
+        const metrics = post.metrics && typeof post.metrics === "object" ? post.metrics : {};
+        const likes = Number(metrics.like_count || 0);
+        const reposts = Number(metrics.retweet_count || 0);
+        const replies = Number(metrics.reply_count || 0);
+        const permalink = post.permalink ? escapeHtml(post.permalink) : "";
+        return `
+          <article class="x-post-card">
+            <div class="x-post-top">
+              <div class="x-post-author">${authorName}</div>
+              <div class="x-post-handle small muted">${authorHandle}</div>
+            </div>
+            <div class="x-post-text small">${text}</div>
+            <div class="x-post-meta small">
+              <span>${escapeHtml(created || "Now")}</span>
+              <span>Likes ${Number.isFinite(likes) ? likes.toLocaleString() : "0"}</span>
+              <span>Reposts ${Number.isFinite(reposts) ? reposts.toLocaleString() : "0"}</span>
+              <span>Replies ${Number.isFinite(replies) ? replies.toLocaleString() : "0"}</span>
+            </div>
+            ${permalink ? `<a class="x-post-link" href="${permalink}" target="_blank" rel="noreferrer">View on X</a>` : ""}
+          </article>
+        `;
+      })
+      .join("");
+  };
+
+  const loadTickerXTrends = async (functions, ticker, { notify = false, force = false } = {}) => {
+    if (!functions || !ui.xTrendingOutput) return;
+    const symbol = normalizeTicker(ticker);
+    if (!symbol) {
+      ui.xTrendingOutput.innerHTML = `<div class="small muted">Load a ticker to see live X discussion.</div>`;
+      return;
+    }
+    if (!force && state.tickerContext.xTicker === symbol) return;
+    state.tickerContext.xTicker = symbol;
+
+    try {
+      setOutputLoading(ui.xTrendingOutput, "Loading X trends...");
+      const getXTrends = functions.httpsCallable("get_ticker_x_trends");
+      const result = await getXTrends({ ticker: symbol, meta: buildMeta() });
+      const payload = result.data || {};
+      const posts = Array.isArray(payload.posts) ? payload.posts : [];
+      const warning = String(payload.warning || "").trim();
+      setOutputReady(ui.xTrendingOutput);
+      renderTickerXTrends(posts, symbol, warning);
+      logEvent("x_trends_loaded", { ticker: symbol, count: posts.length });
+    } catch (error) {
+      setOutputReady(ui.xTrendingOutput);
+      ui.xTrendingOutput.innerHTML = `<div class="small muted">Unable to load X trends right now.</div>`;
+      if (notify) showToast(error.message || "Unable to load X trends.", "warn");
+    }
+  };
+
+  const normalizeTickerListInput = (raw) =>
+    String(raw || "")
+      .split(/[,\s]+/)
+      .map((item) => normalizeTicker(item))
+      .filter(Boolean)
+      .slice(0, 30);
+
+  const renderCorporateEventsCalendar = (payload) => {
+    if (!ui.eventsCalendarOutput) return;
+    const events = Array.isArray(payload?.events) ? payload.events : [];
+    const source = String(payload?.source || "unknown").trim();
+    const warnings = Array.isArray(payload?.warnings) ? payload.warnings.filter(Boolean) : [];
+    if (!events.length) {
+      ui.eventsCalendarOutput.innerHTML = `
+        <div class="small muted">No events returned for this window.</div>
+        ${warnings.length ? `<div class="small muted" style="margin-top:8px;">${escapeHtml(warnings.join(" "))}</div>` : ""}
+      `;
+      return;
+    }
+    ui.eventsCalendarOutput.innerHTML = `
+      <div class="small muted" style="margin-bottom:10px;">Source: ${escapeHtml(source)} · Events: ${events.length}</div>
+      ${
+        warnings.length
+          ? `<div class="small muted" style="margin-bottom:10px;">${escapeHtml(warnings.join(" "))}</div>`
+          : ""
+      }
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Ticker</th>
+              <th>Event</th>
+              <th>Type</th>
+              <th>Status</th>
+              <th>Source</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${events
+              .map((row) => {
+                const rowDate = escapeHtml(String(row?.date || "—"));
+                const rowTicker = escapeHtml(normalizeTicker(row?.ticker || "") || "—");
+                const rowName = escapeHtml(String(row?.name || row?.companyName || "Corporate event"));
+                const rowType = escapeHtml(String(row?.type || "—"));
+                const rowStatus = escapeHtml(String(row?.status || "scheduled"));
+                const rowSource = escapeHtml(String(row?.source || source || "—"));
+                return `
+                  <tr>
+                    <td>${rowDate}</td>
+                    <td>${rowTicker}</td>
+                    <td>${rowName}</td>
+                    <td>${rowType}</td>
+                    <td>${rowStatus}</td>
+                    <td>${rowSource}</td>
+                  </tr>
+                `;
+              })
+              .join("")}
+          </tbody>
+        </table>
+      </div>
+    `;
+  };
+
+  const loadCorporateEventsCalendar = async (functions, { force = false, notify = false } = {}) => {
+    if (!functions || !ui.eventsCalendarOutput) return;
+
+    const tickerSeed = normalizeTicker(state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "");
+    const inputTickers = normalizeTickerListInput(ui.eventsCalendarTickers?.value || "");
+    const tickers = inputTickers.length ? inputTickers : tickerSeed ? [tickerSeed] : [];
+    const country = normalizeCountryCode(ui.eventsCalendarCountry?.value || state.preferredCountry || "US");
+    const startDate = String(ui.eventsCalendarStart?.value || "").trim();
+    const endDate = String(ui.eventsCalendarEnd?.value || "").trim();
+    const limitRaw = Number(ui.eventsCalendarLimit?.value || 120);
+    const limit = Number.isFinite(limitRaw) ? Math.max(10, Math.min(500, limitRaw)) : 120;
+    const requestKey = JSON.stringify({ tickers, country, startDate, endDate, limit });
+    if (!force && ui.eventsCalendarOutput.dataset.requestKey === requestKey) return;
+    ui.eventsCalendarOutput.dataset.requestKey = requestKey;
+
+    try {
+      if (ui.eventsCalendarStatus) ui.eventsCalendarStatus.textContent = "Loading calendar...";
+      setOutputLoading(ui.eventsCalendarOutput, "Loading corporate events...");
+      const getEvents = functions.httpsCallable("get_corporate_events_calendar");
+      const result = await getEvents({
+        tickers,
+        ticker: tickers[0] || "",
+        country,
+        startDate,
+        endDate,
+        limit,
+        meta: buildMeta(),
+      });
+      setOutputReady(ui.eventsCalendarOutput);
+      renderCorporateEventsCalendar(result.data || {});
+      if (ui.eventsCalendarStatus) {
+        const source = String(result.data?.source || "unknown");
+        const fallback = Boolean(result.data?.fallbackUsed);
+        ui.eventsCalendarStatus.textContent = fallback
+          ? `Loaded from ${source} (fallback mode).`
+          : `Loaded from ${source}.`;
+      }
+      logEvent("corporate_events_loaded", {
+        country,
+        tickers_count: tickers.length,
+        source: String(result.data?.source || ""),
+      });
+    } catch (error) {
+      setOutputReady(ui.eventsCalendarOutput);
+      ui.eventsCalendarOutput.innerHTML = `<div class="small muted">Unable to load corporate events right now.</div>`;
+      if (ui.eventsCalendarStatus) ui.eventsCalendarStatus.textContent = "Unable to load corporate events.";
+      if (notify) showToast(error.message || "Unable to load corporate events.", "warn");
+    }
+  };
+
+  const renderMarketHeadlinesFeed = (payload) => {
+    if (!ui.marketHeadlinesOutput || !ui.marketSocialOutput) return;
+    const headlines = Array.isArray(payload?.headlines) ? payload.headlines : [];
+    const social = payload?.social && typeof payload.social === "object" ? payload.social : {};
+    const warnings = Array.isArray(payload?.warnings) ? payload.warnings.filter(Boolean) : [];
+    const query = String(payload?.query || "").trim();
+
+    if (!headlines.length) {
+      ui.marketHeadlinesOutput.innerHTML = `<div class="small muted">No headlines returned.</div>`;
+    } else {
+      ui.marketHeadlinesOutput.innerHTML = `
+        ${query ? `<div class="small muted" style="margin-bottom:10px;">Query: ${escapeHtml(query)}</div>` : ""}
+        ${headlines
+          .map((item) => {
+            const title = escapeHtml(String(item?.title || "Headline"));
+            const summary = escapeHtml(String(item?.summary || "").trim());
+            const publisher = escapeHtml(String(item?.publisher || "Unknown"));
+            const when = escapeHtml(formatEpoch(item?.publishedAt) || "");
+            const link = escapeHtml(String(item?.link || "").trim());
+            const thumb = escapeHtml(String(item?.thumbnailUrl || "").trim());
+            return `
+              <article class="news-card${thumb ? " news-card--with-thumb" : ""}">
+                ${thumb ? `<img class="news-thumb" src="${thumb}" alt="" loading="lazy" />` : ""}
+                <div class="news-body">
+                  <div class="news-title">${title}</div>
+                  <div class="news-meta small">${publisher}${when ? ` · ${when}` : ""}</div>
+                  ${summary ? `<div class="news-summary small">${summary}</div>` : ""}
+                  ${link ? `<a class="news-link" href="${link}" target="_blank" rel="noopener noreferrer">Open source</a>` : ""}
+                </div>
+              </article>
+            `;
+          })
+          .join("")}
+      `;
+    }
+
+    const networks = [
+      ["x", "X posts"],
+      ["reddit", "Reddit"],
+      ["facebook", "Facebook"],
+      ["instagram", "Instagram"],
+    ];
+    ui.marketSocialOutput.innerHTML = networks
+      .map(([key, label]) => {
+        const rows = Array.isArray(social[key]) ? social[key] : [];
+        const content = rows.length
+          ? rows
+              .slice(0, 8)
+              .map((row) => {
+                const text = escapeHtml(String(row?.text || row?.title || "").trim() || "No text");
+                const link = escapeHtml(String(row?.permalink || "").trim());
+                const author = escapeHtml(
+                  String(row?.authorUsername || row?.author || row?.authorName || row?.subreddit || "").trim()
+                );
+                const metrics =
+                  key === "x"
+                    ? `Likes ${Number((row?.metrics || {}).like_count || 0).toLocaleString()}`
+                    : key === "reddit"
+                    ? `Score ${Number(row?.score || 0).toLocaleString()}`
+                    : "";
+                return `
+                  <article class="x-post-card">
+                    <div class="x-post-top">
+                      <div class="x-post-author">${author || escapeHtml(label)}</div>
+                    </div>
+                    <div class="x-post-text small">${text}</div>
+                    ${metrics ? `<div class="x-post-meta small"><span>${escapeHtml(metrics)}</span></div>` : ""}
+                    ${link ? `<a class="x-post-link" href="${link}" target="_blank" rel="noopener noreferrer">Open post</a>` : ""}
+                  </article>
+                `;
+              })
+              .join("")
+          : `<div class="small muted">No ${escapeHtml(label)} returned.</div>`;
+        return `
+          <section style="margin-bottom:14px;">
+            <div class="small" style="margin-bottom:8px;"><strong>${escapeHtml(label)}</strong></div>
+            ${content}
+          </section>
+        `;
+      })
+      .join("");
+
+    if (warnings.length) {
+      ui.marketSocialOutput.innerHTML += `<div class="small muted">${escapeHtml(warnings.join(" "))}</div>`;
+    }
+  };
+
+  const loadMarketHeadlinesFeed = async (functions, { force = false, notify = false } = {}) => {
+    if (!functions || !ui.marketHeadlinesOutput) return;
+    const country = normalizeCountryCode(ui.marketHeadlinesCountry?.value || state.preferredCountry || "US");
+    const limitRaw = Number(ui.marketHeadlinesLimit?.value || 18);
+    const limit = Number.isFinite(limitRaw) ? Math.max(5, Math.min(40, limitRaw)) : 18;
+    const requestKey = `${country}_${limit}`;
+    if (!force && ui.marketHeadlinesOutput.dataset.requestKey === requestKey) return;
+    ui.marketHeadlinesOutput.dataset.requestKey = requestKey;
+    try {
+      if (ui.marketHeadlinesStatus) ui.marketHeadlinesStatus.textContent = "Loading market feed...";
+      setOutputLoading(ui.marketHeadlinesOutput, "Loading market headlines...");
+      setOutputLoading(ui.marketSocialOutput, "Loading social posts...");
+      const getFeed = functions.httpsCallable("get_market_headlines_feed");
+      const result = await getFeed({ country, limit, meta: buildMeta() });
+      setOutputReady(ui.marketHeadlinesOutput);
+      setOutputReady(ui.marketSocialOutput);
+      renderMarketHeadlinesFeed(result.data || {});
+      if (ui.marketHeadlinesStatus) ui.marketHeadlinesStatus.textContent = `Loaded ${country} market feed.`;
+      logEvent("market_headlines_loaded", { country, limit });
+    } catch (error) {
+      setOutputReady(ui.marketHeadlinesOutput);
+      setOutputReady(ui.marketSocialOutput);
+      ui.marketHeadlinesOutput.innerHTML = `<div class="small muted">Unable to load market headlines right now.</div>`;
+      ui.marketSocialOutput.innerHTML = `<div class="small muted">Unable to load social feed right now.</div>`;
+      if (ui.marketHeadlinesStatus) ui.marketHeadlinesStatus.textContent = "Unable to load market feed.";
+      if (notify) showToast(error.message || "Unable to load market feed.", "warn");
+    }
+  };
+
+  const renderTickerQueryResult = (payload) => {
+    if (!ui.tickerQueryOutput) return;
+    const answer = escapeHtml(String(payload?.answer || "").trim() || "No answer returned.");
+    const model = escapeHtml(String(payload?.model || "gpt-5"));
+    const provider = escapeHtml(String(payload?.provider || "openai"));
+    const context = payload?.context && typeof payload.context === "object" ? payload.context : {};
+    const sector = escapeHtml(String(context.sector || "").trim());
+    const industry = escapeHtml(String(context.industry || "").trim());
+    const exchange = escapeHtml(String(context.exchange || "").trim());
+    const headlines = Array.isArray(context.headlines) ? context.headlines : [];
+
+    ui.tickerQueryOutput.innerHTML = `
+      <div class="small muted">Provider: ${provider} · Model: ${model}</div>
+      <div class="small" style="margin-top:10px; white-space:pre-wrap;">${answer}</div>
+      <div class="small muted" style="margin-top:10px;">
+        ${sector ? `Sector: ${sector}` : ""}${industry ? ` · Industry: ${industry}` : ""}${exchange ? ` · Exchange: ${exchange}` : ""}
+      </div>
+      ${
+        headlines.length
+          ? `<div style="margin-top:12px;">
+              <div class="small"><strong>Context headlines</strong></div>
+              <ul class="small" style="margin:6px 0 0 16px;">
+                ${headlines
+                  .slice(0, 5)
+                  .map((item) => {
+                    const title = escapeHtml(String(item?.title || "").trim());
+                    const link = escapeHtml(String(item?.link || "").trim());
+                    return `<li>${link ? `<a class="news-link" href="${link}" target="_blank" rel="noopener noreferrer">${title}</a>` : title}</li>`;
+                  })
+                  .join("")}
+              </ul>
+            </div>`
+          : ""
+      }
+    `;
+  };
+
+  const loadTickerQueryInsight = async (functions, { ticker, question, notify = false } = {}) => {
+    if (!functions || !ui.tickerQueryOutput) return;
+    const symbol = normalizeTicker(ticker || ui.tickerQueryTicker?.value || state.tickerContext.ticker || "");
+    const prompt = String(question || ui.tickerQueryQuestion?.value || "").trim();
+    const languageRaw = normalizeLanguageCode(ui.tickerQueryLanguage?.value || state.preferredLanguage || "en");
+    const language = languageRaw === "auto" ? state.preferredLanguage || "en" : languageRaw;
+    if (!symbol) {
+      showToast("Ticker is required for GPT-5 query.", "warn");
+      return;
+    }
+    if (!prompt) {
+      showToast("Enter a question for GPT-5.", "warn");
+      return;
+    }
+    try {
+      if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Querying GPT-5...";
+      setOutputLoading(ui.tickerQueryOutput, "Running GPT-5 ticker query...");
+      const queryInsight = functions.httpsCallable("query_ticker_insight");
+      const result = await queryInsight({ ticker: symbol, question: prompt, language, meta: buildMeta() });
+      setOutputReady(ui.tickerQueryOutput);
+      renderTickerQueryResult(result.data || {});
+      if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Completed.";
+      logEvent("ticker_query_completed", { ticker: symbol, language });
+    } catch (error) {
+      setOutputReady(ui.tickerQueryOutput);
+      ui.tickerQueryOutput.innerHTML = `<div class="small muted">Unable to complete ticker query right now.</div>`;
+      if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Unable to complete query.";
+      if (notify) showToast(error.message || "Unable to run ticker query.", "warn");
+    }
+  };
+
   const isPanelVisible = (panelName) => {
     const panel = document.querySelector(`[data-panel="${String(panelName || "").trim()}"]`);
     return Boolean(panel && !panel.classList.contains("hidden"));
@@ -3891,11 +5480,12 @@
   const scheduleSideDataRefresh = (ticker, { force = false } = {}) => {
     const symbol = normalizeTicker(ticker) || "";
     const functions = state.clients?.functions;
-    if (!functions || (!ui.newsOutput && !ui.intelOutput && !ui.optionsOutput)) return;
+    if (!functions || (!ui.newsOutput && !ui.xTrendingOutput && !ui.intelOutput && !ui.optionsOutput)) return;
     if (!symbol) return;
     if (state.sideDataRefreshTimer) window.clearTimeout(state.sideDataRefreshTimer);
     state.sideDataRefreshTimer = window.setTimeout(() => {
       loadTickerNews(functions, symbol, { force, notify: false });
+      loadTickerXTrends(functions, symbol, { force, notify: false });
       loadTickerIntel(functions, symbol, { force, notify: false });
       if (state.panelAutoloaded.options || isPanelVisible("options")) {
         autoloadOptionsChain(functions, { force });
@@ -3992,31 +5582,57 @@
 
 	  const renderTickerChart = async (rows, ticker, interval, overlays = []) => {
 	    if (!ui.tickerChart) return;
+      const cleanTicker = normalizeTicker(ticker || state.tickerContext.ticker || "") || "AAPL";
+      const hasOverlays = Array.isArray(overlays) && overlays.length > 0;
+
+      if (!rows?.length) {
+        ui.tickerChart.textContent = "No price data to plot.";
+        return;
+      }
+
+      if (state.chartEngine === "tradingview" && !hasOverlays) {
+        const rendered = renderTradingViewTerminal({ ticker: cleanTicker, interval });
+        if (rendered) {
+          setTerminalChartEngineVisibility("tradingview");
+          return;
+        }
+      }
+
+      if (state.chartEngine === "tradingview" && hasOverlays) {
+        setChartEngine("legacy", { persist: false, rerender: false });
+        setTerminalStatus("Showing legacy chart for Quantura overlays. Switch back to TradingView anytime.");
+      } else {
+        setTerminalChartEngineVisibility("legacy");
+      }
+
 	    const Plotly = getPlotly();
 	    if (!Plotly) {
 	      ui.tickerChart.textContent = "Chart library not loaded.";
 	      return;
 	    }
 
-    if (!rows?.length) {
-      ui.tickerChart.textContent = "No price data to plot.";
-      return;
-    }
-
-    const dateKey = extractDateKey(rows);
-    if (!dateKey) {
-      ui.tickerChart.textContent = "Unable to find timestamp column.";
-      return;
-    }
+      const dateKey = extractDateKey(rows);
+      if (!dateKey) {
+        ui.tickerChart.textContent = "Unable to find timestamp column.";
+        return;
+      }
 
     const x = rows.map((row) => row[dateKey]);
+    const xTimestamps = x
+      .map((value) => {
+        const ts = new Date(value).getTime();
+        return Number.isFinite(ts) ? ts : null;
+      })
+      .filter((value) => value !== null)
+      .sort((a, b) => a - b);
     const hasOhlc = ["Open", "High", "Low", "Close"].every((key) => key in (rows[0] || {}));
+    const drawCandles = hasOhlc && state.chartViewMode !== "line";
 
-    const baseTraces = hasOhlc
+    const baseTraces = drawCandles
       ? [
           {
             type: "candlestick",
-            name: `${ticker} price`,
+            name: `${cleanTicker} price`,
             x,
             open: rows.map((row) => row.Open),
             high: rows.map((row) => row.High),
@@ -4030,9 +5646,9 @@
           {
             type: "scatter",
             mode: "lines",
-            name: `${ticker} close`,
+            name: `${cleanTicker} close`,
             x,
-            y: rows.map((row) => row.Close ?? row.close ?? null),
+            y: rows.map((row) => row.Close ?? row.close ?? row.AdjClose ?? null),
             line: { color: "#12182a", width: 2 },
           },
         ];
@@ -4042,7 +5658,7 @@
       const textColor = dark ? "rgba(246, 244, 238, 0.92)" : "#12182a";
       const gridColor = dark ? "rgba(246, 244, 238, 0.14)" : "rgba(18, 24, 42, 0.12)";
 	    const layout = {
-	      title: { text: `${ticker} (${interval})`, font: { family: "Manrope, sans-serif", size: 16, color: textColor } },
+		      title: { text: `${cleanTicker} (${interval})`, font: { family: "Manrope, sans-serif", size: 16, color: textColor } },
 	      font: { family: "Manrope, sans-serif", color: textColor },
 	      paper_bgcolor: "rgba(0,0,0,0)",
 	      plot_bgcolor: "rgba(0,0,0,0)",
@@ -4050,14 +5666,14 @@
         hovermode: "x unified",
         dragmode: "pan",
         hoverlabel: { namelength: 32 },
-	      xaxis: {
-	        rangeslider: { visible: false },
-	        showspikes: true,
-	        spikemode: "across",
-	        spikesnap: "cursor",
+      xaxis: {
+        rangeslider: { visible: false, thickness: 0 },
+        showspikes: true,
+        spikemode: "across",
+        spikesnap: "cursor",
           gridcolor: gridColor,
           zerolinecolor: gridColor,
-	      },
+      },
 	      yaxis: {
           showspikes: true,
           spikemode: "across",
@@ -4072,13 +5688,96 @@
           x: 0,
           xanchor: "left",
         },
-	    };
+    };
+    const manualRange = computeChartRange(x, state.chartRangePreset);
+    if (manualRange && manualRange.length === 2) {
+      layout.xaxis.range = manualRange;
+      layout.xaxis.autorange = false;
+    } else {
+      layout.xaxis.autorange = true;
+    }
 
     await Plotly.react(ui.tickerChart, [...baseTraces, ...overlays], layout, {
       responsive: true,
       displaylogo: false,
+      displayModeBar: false,
       scrollZoom: true,
     });
+
+    if (xTimestamps.length >= 2) {
+      const minMs = xTimestamps[0];
+      const maxMs = xTimestamps[xTimestamps.length - 1];
+      const totalSpanMs = Math.max(1, maxMs - minMs);
+      const minSpanMs = interval === "1h" ? 6 * 60 * 60 * 1000 : 3 * 24 * 60 * 60 * 1000;
+      const previousHandler = ui.tickerChart.__quanturaRelayoutHandler;
+      if (previousHandler && typeof ui.tickerChart.removeListener === "function") {
+        try {
+          ui.tickerChart.removeListener("plotly_relayout", previousHandler);
+        } catch (error) {
+          // Ignore listener removal errors.
+        }
+      }
+
+      let relayoutLock = false;
+      const guardRange = (startMs, endMs) => {
+        let nextStart = Math.min(startMs, endMs);
+        let nextEnd = Math.max(startMs, endMs);
+
+        if (nextStart < minMs) nextStart = minMs;
+        if (nextEnd > maxMs) nextEnd = maxMs;
+
+        let span = nextEnd - nextStart;
+        if (span > totalSpanMs) {
+          nextStart = minMs;
+          nextEnd = maxMs;
+          span = nextEnd - nextStart;
+        }
+        if (span < minSpanMs) {
+          const center = (nextStart + nextEnd) / 2;
+          nextStart = center - minSpanMs / 2;
+          nextEnd = center + minSpanMs / 2;
+          if (nextStart < minMs) {
+            nextStart = minMs;
+            nextEnd = Math.min(maxMs, minMs + minSpanMs);
+          }
+          if (nextEnd > maxMs) {
+            nextEnd = maxMs;
+            nextStart = Math.max(minMs, maxMs - minSpanMs);
+          }
+        }
+        return [nextStart, nextEnd];
+      };
+
+      const relayoutHandler = (eventData) => {
+        if (relayoutLock || !eventData || eventData["xaxis.autorange"]) return;
+        let startRaw = eventData["xaxis.range[0]"];
+        let endRaw = eventData["xaxis.range[1]"];
+        if (Array.isArray(eventData["xaxis.range"]) && eventData["xaxis.range"].length >= 2) {
+          startRaw = eventData["xaxis.range"][0];
+          endRaw = eventData["xaxis.range"][1];
+        }
+        const startMs = new Date(startRaw).getTime();
+        const endMs = new Date(endRaw).getTime();
+        if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return;
+
+        const [nextStart, nextEnd] = guardRange(startMs, endMs);
+        if (Math.abs(nextStart - startMs) < 1 && Math.abs(nextEnd - endMs) < 1) return;
+
+        relayoutLock = true;
+        Plotly.relayout(ui.tickerChart, {
+          "xaxis.range": [new Date(nextStart).toISOString(), new Date(nextEnd).toISOString()],
+          "xaxis.autorange": false,
+        })
+          .catch(() => {})
+          .finally(() => {
+            relayoutLock = false;
+          });
+      };
+      ui.tickerChart.__quanturaRelayoutHandler = relayoutHandler;
+      if (typeof ui.tickerChart.on === "function") {
+        ui.tickerChart.on("plotly_relayout", relayoutHandler);
+      }
+    }
   };
 
   const renderIndicatorChart = async (series) => {
@@ -4929,13 +6628,34 @@
     if (previous) ui.screenerLoadSelect.value = previous;
   };
 
-  const getModelMeta = (modelId) => {
+  const normalizeAiModelId = (modelId) => {
     const id = String(modelId || "").trim();
+    if (!id) return "";
+    const lower = id.toLowerCase();
+    if (lower.startsWith("gpt-") && lower.charAt(4) === "4") {
+      return "gpt-5-mini";
+    }
+    if (lower.startsWith("o1")) {
+      return "gpt-5-thinking";
+    }
+    return id;
+  };
+
+  const getModelMeta = (modelId) => {
+    const id = normalizeAiModelId(modelId);
     if (!id) return null;
     return AI_MODEL_CATALOG.find((item) => item.id === id) || null;
   };
 
-  const getTodayUsageKey = () => new Date().toISOString().slice(0, 10);
+  const getWeeklyUsageKey = () => {
+    const now = new Date();
+    const utcDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const day = utcDate.getUTCDay() || 7;
+    utcDate.setUTCDate(utcDate.getUTCDate() + 4 - day);
+    const yearStart = new Date(Date.UTC(utcDate.getUTCFullYear(), 0, 1));
+    const weekNumber = Math.ceil((((utcDate - yearStart) / 86400000) + 1) / 7);
+    return `${utcDate.getUTCFullYear()}-W${String(weekNumber).padStart(2, "0")}`;
+  };
 
   const getCurrentAiTierKey = () => {
     if (!state.user) return "free";
@@ -4950,32 +6670,462 @@
       ? state.remoteFlags.aiUsageTiers
       : AI_USAGE_TIER_DEFAULTS;
     const config = tiers[key] && typeof tiers[key] === "object" ? tiers[key] : AI_USAGE_TIER_DEFAULTS[key] || AI_USAGE_TIER_DEFAULTS.free;
+    const rawAllowed = Array.isArray(config.allowed_models) ? config.allowed_models : [];
+    const allowedModels = rawAllowed
+      .map((x) => normalizeAiModelId(String(x).trim()))
+      .filter((modelId) => modelId && modelId.toLowerCase().startsWith("gpt-5"));
+    const fallbackAllowed = (AI_USAGE_TIER_DEFAULTS[key]?.allowed_models || AI_USAGE_TIER_DEFAULTS.free.allowed_models)
+      .map((x) => normalizeAiModelId(String(x).trim()))
+      .filter(Boolean);
+    const weeklyLimitRaw = Number(config.weekly_limit ?? config.daily_limit ?? AI_USAGE_TIER_DEFAULTS[key]?.weekly_limit ?? 3);
+    const weeklyLimit = Number.isFinite(weeklyLimitRaw) ? Math.max(1, weeklyLimitRaw) : 3;
     return {
       key,
-      allowedModels: Array.isArray(config.allowed_models) ? config.allowed_models.map((x) => String(x).trim()).filter(Boolean) : [],
-      dailyLimit: Math.max(1, Number(config.daily_limit || 5)),
+      allowedModels: allowedModels.length ? allowedModels : fallbackAllowed,
+      weeklyLimit,
+      dailyLimit: weeklyLimit, // Legacy alias for older UI helpers.
       volatilityAlerts: Boolean(config.volatility_alerts),
     };
   };
 
   const syncScreenerProviderAccent = () => {
     if (!ui.screenerForm || !ui.screenerModel) return;
-    const modelId = String(ui.screenerModel.value || "").trim();
+    const modelId = normalizeAiModelId(ui.screenerModel.value || "");
     const meta = getModelMeta(modelId);
     const provider = meta?.provider || "openai";
-    state.selectedScreenerModel = modelId || "gpt-4o-mini";
+    state.selectedScreenerModel = modelId || "gpt-5-mini";
     ui.screenerForm.dataset.providerAccent = provider;
+    ui.screenerForm.dataset.personality = (meta?.personality || "balanced").toLowerCase();
+  };
+
+  const bindScreenerFilterTabs = () => {
+    const tabs = Array.from(document.querySelectorAll("[data-screener-filter-tab]"));
+    const groups = Array.from(document.querySelectorAll("[data-screener-filter-group]"));
+    if (!tabs.length || !groups.length) return;
+
+    const activate = (groupKey) => {
+      const target = String(groupKey || "descriptive").trim().toLowerCase();
+      const showAll = target === "all";
+      tabs.forEach((tab) => {
+        const key = String(tab.dataset.screenerFilterTab || "").trim().toLowerCase();
+        const active = key === target;
+        tab.classList.toggle("is-active", active);
+        tab.setAttribute("aria-selected", active ? "true" : "false");
+      });
+      groups.forEach((group) => {
+        const key = String(group.dataset.screenerFilterGroup || "").trim().toLowerCase();
+        const visible = showAll || key === target;
+        group.classList.toggle("is-active", visible);
+        group.hidden = !visible;
+      });
+    };
+
+    tabs.forEach((tab) => {
+      tab.setAttribute("role", "tab");
+      tab.addEventListener("click", () => {
+        activate(tab.dataset.screenerFilterTab || "descriptive");
+      });
+    });
+    groups.forEach((group) => {
+      group.setAttribute("role", "tabpanel");
+    });
+
+    const defaultTab = tabs.find((tab) => tab.classList.contains("is-active")) || tabs[0];
+    activate(defaultTab?.dataset.screenerFilterTab || "descriptive");
+  };
+
+  const EXTRA_FUNDAMENTAL_FILTER_FIELDS = [
+    {
+      name: "filterPriceCash",
+      label: "Price/Cash",
+      options: [
+        { value: "", label: "Any" },
+        { value: "low", label: "Low (<3)" },
+        { value: "u5", label: "Under 5" },
+        { value: "u10", label: "Under 10" },
+        { value: "o20", label: "Over 20" },
+        { value: "o50", label: "Over 50" },
+      ],
+    },
+    {
+      name: "filterPriceFcf",
+      label: "Price/Free Cash Flow",
+      options: [
+        { value: "", label: "Any" },
+        { value: "low", label: "Low (<15)" },
+        { value: "u20", label: "Under 20" },
+        { value: "u50", label: "Under 50" },
+        { value: "o50", label: "Over 50" },
+        { value: "o100", label: "Over 100" },
+      ],
+    },
+    {
+      name: "filterEvEbitda",
+      label: "EV/EBITDA",
+      options: [
+        { value: "", label: "Any" },
+        { value: "negative", label: "Negative (<0)" },
+        { value: "low", label: "Low (<15)" },
+        { value: "profitable", label: "Profitable (>0)" },
+        { value: "high", label: "High (>50)" },
+        { value: "u20", label: "Under 20" },
+        { value: "o20", label: "Over 20" },
+      ],
+    },
+    {
+      name: "filterEvSales",
+      label: "EV/Sales",
+      options: [
+        { value: "", label: "Any" },
+        { value: "negative", label: "Negative (<0)" },
+        { value: "low", label: "Low (<1)" },
+        { value: "positive", label: "Positive (>0)" },
+        { value: "high", label: "High (>10)" },
+        { value: "u2", label: "Under 2" },
+        { value: "o5", label: "Over 5" },
+      ],
+    },
+    {
+      name: "filterDividendGrowth",
+      label: "Dividend Growth",
+      options: [
+        { value: "", label: "Any" },
+        { value: "1ypos", label: "1 Year Positive" },
+        { value: "1yo5", label: "1 Year Over 5%" },
+        { value: "3ypos", label: "3 Years Positive" },
+        { value: "3yo10", label: "3 Years Over 10%" },
+        { value: "5ypos", label: "5 Years Positive" },
+        { value: "cy5", label: "Growing 5+ Years" },
+      ],
+    },
+    {
+      name: "filterEpsGrowthThisYear",
+      label: "EPS Growth This Year",
+      options: [
+        { value: "", label: "Any" },
+        { value: "neg", label: "Negative (<0%)" },
+        { value: "pos", label: "Positive (>0%)" },
+        { value: "poslow", label: "Positive Low (0-10%)" },
+        { value: "high", label: "High (>25%)" },
+        { value: "o10", label: "Over 10%" },
+      ],
+    },
+    {
+      name: "filterEpsGrowthNextYear",
+      label: "EPS Growth Next Year",
+      options: [
+        { value: "", label: "Any" },
+        { value: "neg", label: "Negative (<0%)" },
+        { value: "pos", label: "Positive (>0%)" },
+        { value: "poslow", label: "Positive Low (0-10%)" },
+        { value: "high", label: "High (>25%)" },
+        { value: "o10", label: "Over 10%" },
+      ],
+    },
+    {
+      name: "filterEpsGrowthQoq",
+      label: "EPS Growth Qtr/Qtr",
+      options: [
+        { value: "", label: "Any" },
+        { value: "neg", label: "Negative (<0%)" },
+        { value: "pos", label: "Positive (>0%)" },
+        { value: "poslow", label: "Positive Low (0-10%)" },
+        { value: "high", label: "High (>25%)" },
+        { value: "o10", label: "Over 10%" },
+      ],
+    },
+    {
+      name: "filterEpsGrowthTtm",
+      label: "EPS Growth TTM",
+      options: [
+        { value: "", label: "Any" },
+        { value: "neg", label: "Negative (<0%)" },
+        { value: "pos", label: "Positive (>0%)" },
+        { value: "high", label: "High (>25%)" },
+        { value: "o10", label: "Over 10%" },
+      ],
+    },
+    {
+      name: "filterEpsGrowth3Years",
+      label: "EPS Growth 3Y",
+      options: [
+        { value: "", label: "Any" },
+        { value: "neg", label: "Negative (<0%)" },
+        { value: "pos", label: "Positive (>0%)" },
+        { value: "high", label: "High (>25%)" },
+        { value: "o10", label: "Over 10%" },
+      ],
+    },
+    {
+      name: "filterEpsGrowth5Years",
+      label: "EPS Growth 5Y",
+      options: [
+        { value: "", label: "Any" },
+        { value: "neg", label: "Negative (<0%)" },
+        { value: "pos", label: "Positive (>0%)" },
+        { value: "high", label: "High (>25%)" },
+        { value: "o10", label: "Over 10%" },
+      ],
+    },
+    {
+      name: "filterEpsGrowthNext5Years",
+      label: "EPS Growth Next 5Y",
+      options: [
+        { value: "", label: "Any" },
+        { value: "neg", label: "Negative (<0%)" },
+        { value: "pos", label: "Positive (>0%)" },
+        { value: "poslow", label: "Positive Low (<10%)" },
+        { value: "high", label: "High (>25%)" },
+      ],
+    },
+    {
+      name: "filterSalesGrowthQoq",
+      label: "Sales Growth Qtr/Qtr",
+      options: [
+        { value: "", label: "Any" },
+        { value: "neg", label: "Negative (<0%)" },
+        { value: "pos", label: "Positive (>0%)" },
+        { value: "poslow", label: "Positive Low (0-10%)" },
+        { value: "high", label: "High (>25%)" },
+        { value: "o10", label: "Over 10%" },
+      ],
+    },
+    {
+      name: "filterSalesGrowthTtm",
+      label: "Sales Growth TTM",
+      options: [
+        { value: "", label: "Any" },
+        { value: "neg", label: "Negative (<0%)" },
+        { value: "pos", label: "Positive (>0%)" },
+        { value: "poslow", label: "Positive Low (0-10%)" },
+        { value: "high", label: "High (>25%)" },
+        { value: "o10", label: "Over 10%" },
+      ],
+    },
+    {
+      name: "filterSalesGrowth3Years",
+      label: "Sales Growth 3Y",
+      options: [
+        { value: "", label: "Any" },
+        { value: "neg", label: "Negative (<0%)" },
+        { value: "pos", label: "Positive (>0%)" },
+        { value: "high", label: "High (>25%)" },
+        { value: "o10", label: "Over 10%" },
+      ],
+    },
+    {
+      name: "filterSalesGrowth5Years",
+      label: "Sales Growth 5Y",
+      options: [
+        { value: "", label: "Any" },
+        { value: "neg", label: "Negative (<0%)" },
+        { value: "pos", label: "Positive (>0%)" },
+        { value: "high", label: "High (>25%)" },
+        { value: "o10", label: "Over 10%" },
+      ],
+    },
+    {
+      name: "filterEarningsRevenueSurprise",
+      label: "Earnings & Revenue Surprise",
+      options: [
+        { value: "", label: "Any" },
+        { value: "bp", label: "Both positive (>0%)" },
+        { value: "bm", label: "Both met (0%)" },
+        { value: "bn", label: "Both negative (<0%)" },
+        { value: "ep", label: "EPS Positive" },
+        { value: "en", label: "EPS Negative" },
+        { value: "rp", label: "Revenue Positive" },
+        { value: "rn", label: "Revenue Negative" },
+      ],
+    },
+    {
+      name: "filterRoi",
+      label: "Return on Invested Capital",
+      options: [
+        { value: "", label: "Any" },
+        { value: "pos", label: "Positive (>0%)" },
+        { value: "neg", label: "Negative (<0%)" },
+        { value: "verypos", label: "Very Positive (>25%)" },
+        { value: "o10", label: "Over +10%" },
+        { value: "o25", label: "Over +25%" },
+      ],
+    },
+    {
+      name: "filterCurrentRatio",
+      label: "Current Ratio",
+      options: [
+        { value: "", label: "Any" },
+        { value: "high", label: "High (>3)" },
+        { value: "low", label: "Low (<1)" },
+        { value: "u1", label: "Under 1" },
+        { value: "o2", label: "Over 2" },
+      ],
+    },
+    {
+      name: "filterQuickRatio",
+      label: "Quick Ratio",
+      options: [
+        { value: "", label: "Any" },
+        { value: "high", label: "High (>3)" },
+        { value: "low", label: "Low (<0.5)" },
+        { value: "u1", label: "Under 1" },
+        { value: "o2", label: "Over 2" },
+      ],
+    },
+    {
+      name: "filterLtDebtEquity",
+      label: "LT Debt/Equity",
+      options: [
+        { value: "", label: "Any" },
+        { value: "high", label: "High (>0.5)" },
+        { value: "low", label: "Low (<0.1)" },
+        { value: "u0.5", label: "Under 0.5" },
+        { value: "o1", label: "Over 1" },
+      ],
+    },
+    {
+      name: "filterGrossMargin",
+      label: "Gross Margin",
+      options: [
+        { value: "", label: "Any" },
+        { value: "pos", label: "Positive (>0%)" },
+        { value: "neg", label: "Negative (<0%)" },
+        { value: "high", label: "High (>50%)" },
+        { value: "o30", label: "Over 30%" },
+        { value: "o50", label: "Over 50%" },
+      ],
+    },
+    {
+      name: "filterOperatingMargin",
+      label: "Operating Margin",
+      options: [
+        { value: "", label: "Any" },
+        { value: "pos", label: "Positive (>0%)" },
+        { value: "neg", label: "Negative (<0%)" },
+        { value: "veryneg", label: "Very Negative (<-20%)" },
+        { value: "high", label: "High (>25%)" },
+        { value: "o20", label: "Over 20%" },
+      ],
+    },
+    {
+      name: "filterPayoutRatio",
+      label: "Payout Ratio",
+      options: [
+        { value: "", label: "Any" },
+        { value: "none", label: "None (0%)" },
+        { value: "pos", label: "Positive (>0%)" },
+        { value: "low", label: "Low (<20%)" },
+        { value: "high", label: "High (>50%)" },
+      ],
+    },
+    {
+      name: "filterInsiderOwnership",
+      label: "Insider Ownership",
+      options: [
+        { value: "", label: "Any" },
+        { value: "low", label: "Low (<5%)" },
+        { value: "high", label: "High (>30%)" },
+        { value: "veryhigh", label: "Very High (>50%)" },
+      ],
+    },
+    {
+      name: "filterInsiderTransactions",
+      label: "Insider Transactions",
+      options: [
+        { value: "", label: "Any" },
+        { value: "veryneg", label: "Very Negative (<-20%)" },
+        { value: "neg", label: "Negative (<0%)" },
+        { value: "pos", label: "Positive (>0%)" },
+        { value: "verypos", label: "Very Positive (>20%)" },
+      ],
+    },
+    {
+      name: "filterInstitutionalOwnership",
+      label: "Institutional Ownership",
+      options: [
+        { value: "", label: "Any" },
+        { value: "low", label: "Low (<5%)" },
+        { value: "high", label: "High (>90%)" },
+        { value: "o50", label: "Over 50%" },
+      ],
+    },
+    {
+      name: "filterInstitutionalTransactions",
+      label: "Institutional Transactions",
+      options: [
+        { value: "", label: "Any" },
+        { value: "veryneg", label: "Very Negative (<-20%)" },
+        { value: "neg", label: "Negative (<0%)" },
+        { value: "pos", label: "Positive (>0%)" },
+        { value: "verypos", label: "Very Positive (>20%)" },
+      ],
+    },
+  ];
+
+  const hydrateFundamentalFilterFields = () => {
+    const groups = Array.from(document.querySelectorAll('[data-screener-filter-group="fundamental"] .screener-filter-grid'));
+    if (!groups.length) return;
+
+    const makeId = (name, idx) =>
+      `screener-extra-${String(name || "")
+        .replace(/[^a-zA-Z0-9]+/g, "-")
+        .replace(/(^-|-$)/g, "")
+        .toLowerCase()}-${idx}`;
+
+    groups.forEach((grid, groupIdx) => {
+      EXTRA_FUNDAMENTAL_FILTER_FIELDS.forEach((field) => {
+        if (!field?.name || !Array.isArray(field.options)) return;
+        if (grid.querySelector(`[name="${field.name}"]`)) return;
+
+        const wrapper = document.createElement("div");
+        wrapper.className = "field";
+
+        const label = document.createElement("label");
+        label.className = "label";
+        const id = makeId(field.name, groupIdx);
+        label.setAttribute("for", id);
+        label.textContent = String(field.label || field.name);
+
+        const select = document.createElement("select");
+        select.id = id;
+        select.name = field.name;
+        select.innerHTML = field.options
+          .map((opt) => {
+            const value = escapeHtml(String(opt.value ?? ""));
+            const text = escapeHtml(String(opt.label ?? ""));
+            return `<option value="${value}">${text}</option>`;
+          })
+          .join("");
+
+        wrapper.appendChild(label);
+        wrapper.appendChild(select);
+        grid.appendChild(wrapper);
+      });
+    });
+  };
+
+  const collectScreenerFilters = (formData) => {
+    const filters = {};
+    if (!(formData instanceof FormData)) return filters;
+    for (const [key, value] of formData.entries()) {
+      const name = String(key || "").trim();
+      if (!name.startsWith("filter")) continue;
+      const text = String(value || "").trim();
+      if (!text) continue;
+      filters[name] = text;
+    }
+    return filters;
   };
 
   const refreshScreenerModelUi = () => {
     if (!ui.screenerModel) return;
-    const currentValue = String(ui.screenerModel.value || state.selectedScreenerModel || "").trim();
+    const currentValue = normalizeAiModelId(ui.screenerModel.value || state.selectedScreenerModel || "");
     const tier = getCurrentAiTierConfig();
     state.aiUsageTierKey = tier.key;
     const allowedSet = new Set(tier.allowedModels);
 
     const grouped = AI_MODEL_CATALOG.reduce((acc, item) => {
-      const key = item.tier || "Standard";
+      const key = item.tier || "Core";
       if (!acc[key]) acc[key] = [];
       acc[key].push(item);
       return acc;
@@ -4986,9 +7136,9 @@
         const options = grouped[groupKey]
           .map((item) => {
             const locked = allowedSet.size > 0 && !allowedSet.has(item.id);
-            const provider = MODEL_PROVIDER_LABEL[item.provider] || item.provider;
-            const label = `${provider} · ${item.label}${locked ? " 🔒" : ""}`;
-            return `<option value="${escapeHtml(item.id)}" ${locked ? "disabled" : ""} data-provider="${escapeHtml(item.provider)}">${escapeHtml(label)}</option>`;
+            const helper = String(item.helper || "").trim();
+            const label = `${item.label}${helper ? ` - ${helper}` : ""}${locked ? " (Pro)" : ""}`;
+            return `<option value="${escapeHtml(item.id)}" ${locked ? "disabled" : ""} data-provider="${escapeHtml(item.provider)}" data-personality="${escapeHtml(item.personality || "balanced")}">${escapeHtml(label)}</option>`;
           })
           .join("");
         return `<optgroup label="${escapeHtml(groupKey)}">${options}</optgroup>`;
@@ -4998,29 +7148,29 @@
     ui.screenerModel.innerHTML = html;
     let nextValue = currentValue;
     if (!nextValue || !AI_MODEL_CATALOG.some((item) => item.id === nextValue)) {
-      nextValue = tier.allowedModels[0] || AI_MODEL_CATALOG[0].id;
+      nextValue = normalizeAiModelId(tier.allowedModels[0] || AI_MODEL_CATALOG[0].id);
     }
     if (allowedSet.size > 0 && !allowedSet.has(nextValue)) {
-      nextValue = tier.allowedModels[0] || AI_MODEL_CATALOG[0].id;
+      nextValue = normalizeAiModelId(tier.allowedModels[0] || AI_MODEL_CATALOG[0].id);
     }
     ui.screenerModel.value = nextValue;
     state.selectedScreenerModel = nextValue;
     syncScreenerProviderAccent();
 
     if (ui.screenerModelMeta) {
-      ui.screenerModelMeta.textContent = `${tier.key === "premium" ? "Premium" : "Free"} tier · ${tier.dailyLimit} daily credits`;
+      ui.screenerModelMeta.textContent = `${tier.key === "premium" ? "Pro" : "Free"} tier · ${tier.weeklyLimit} weekly credits · GPT-5 personalities`;
     }
   };
 
   const refreshScreenerCreditsUi = () => {
     const tier = getCurrentAiTierConfig();
-    const todayKey = getTodayUsageKey();
-    if (state.aiUsageDateKey !== todayKey) {
-      state.aiUsageDateKey = todayKey;
+    const weekKey = getWeeklyUsageKey();
+    if (state.aiUsageDateKey !== weekKey) {
+      state.aiUsageDateKey = weekKey;
       state.aiUsageToday = 0;
     }
     const used = Math.max(0, Number(state.aiUsageToday || 0));
-    const limit = Math.max(1, Number(tier.dailyLimit || 5));
+    const limit = Math.max(1, Number(tier.weeklyLimit || 3));
     const pct = Math.max(0, Math.min(100, (used / limit) * 100));
     if (ui.screenerCreditsText) {
       ui.screenerCreditsText.textContent = `${used} / ${limit}`;
@@ -5032,16 +7182,16 @@
 
   const loadScreenerUsageToday = async (db) => {
     if (!db || !state.user) return;
-    const dayKey = getTodayUsageKey();
-    const docId = `${state.user.uid}_${dayKey}`;
+    const weekKey = getWeeklyUsageKey();
+    const docId = `${state.user.uid}_${weekKey}`;
     try {
-      const snap = await db.collection("usage_daily").doc(docId).get();
+      const snap = await db.collection("usage_weekly").doc(docId).get();
       const raw = snap.exists ? Number(snap.data()?.aiScreenerRuns || 0) : 0;
       state.aiUsageToday = Number.isFinite(raw) ? Math.max(0, raw) : 0;
-      state.aiUsageDateKey = dayKey;
+      state.aiUsageDateKey = weekKey;
     } catch (error) {
       state.aiUsageToday = 0;
-      state.aiUsageDateKey = dayKey;
+      state.aiUsageDateKey = weekKey;
     }
     refreshScreenerCreditsUi();
   };
@@ -5051,8 +7201,8 @@
       title: "Limit Reached",
       message:
         String(message || "").trim() ||
-        "You have reached your daily AI screener credit limit. Upgrade to Premium to unlock higher throughput.",
-      confirmLabel: "Upgrade to Premium",
+        "You have reached your weekly AI screener credit limit. Upgrade to Pro to unlock higher throughput.",
+      confirmLabel: "Upgrade to Pro",
       cancelLabel: "Close",
     });
     if (upgrade) {
@@ -5103,7 +7253,7 @@
   };
 
   const getAgentModelMeta = (agent) => {
-    const modelId = String(agent?.modelId || "").trim();
+    const modelId = normalizeAiModelId(agent?.modelId || "");
     const fromCatalog = getModelMeta(modelId);
     if (fromCatalog) return fromCatalog;
     const provider = String(agent?.modelProvider || "openai").trim().toLowerCase();
@@ -5117,14 +7267,58 @@
 
   const renderModelBadge = (agent) => {
     const meta = getAgentModelMeta(agent);
-    const provider = meta.provider || "openai";
-    const providerLabel = MODEL_PROVIDER_LABEL[provider] || provider;
+    const label = meta.label || meta.id || "GPT-5 personality";
+    const modelTag = meta.id ? ` · ${meta.id}` : "";
     return `
-      <span class="model-badge model-badge-${escapeHtml(provider)}">
+      <span class="model-badge model-badge-openai">
         <span class="model-badge-dot" aria-hidden="true"></span>
-        ${escapeHtml(providerLabel)} · ${escapeHtml(meta.label)}
+        ${escapeHtml(`${label}${modelTag}`)}
       </span>
     `;
+  };
+
+  const getAgentOwnerUsername = (agent) => {
+    const raw = String(agent?.ownerUsername || "").trim();
+    if (raw) return raw;
+    const email = String(agent?.ownerEmail || "").trim();
+    if (email.includes("@")) return sanitizeProfileUsername(email.split("@")[0], null);
+    return "quantura_member";
+  };
+
+  const renderAgentOwnerIdentity = (agent) => {
+    const avatarMeta = getProfileAvatarMeta(agent?.ownerAvatar || "bull");
+    const bio = normalizeProfileBio(agent?.ownerBio || "");
+    return `
+      <div class="small muted ai-owner-identity">
+        <span aria-hidden="true">${escapeHtml(avatarMeta.emoji || "")}</span>
+        <span>${escapeHtml(avatarMeta.label || "Member")}</span>
+      </div>
+      ${bio ? `<div class="small muted">${escapeHtml(bio)}</div>` : ""}
+    `;
+  };
+
+  const renderAgentOwnerLinks = (agent) => {
+    const links = normalizeProfileSocialLinks(agent?.ownerSocialLinks || {});
+    const chips = [
+      ["website", "Site"],
+      ["x", "X"],
+      ["linkedin", "LinkedIn"],
+      ["github", "GitHub"],
+      ["youtube", "YouTube"],
+      ["tiktok", "TikTok"],
+      ["facebook", "Facebook"],
+      ["instagram", "Instagram"],
+      ["reddit", "Reddit"],
+    ]
+      .map(([key, label]) => {
+        const href = String(links[key] || "").trim();
+        if (!href) return "";
+        return `<a class="task-chip" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`;
+      })
+      .filter(Boolean)
+      .join("");
+    if (!chips) return "";
+    return `<div class="task-actions ai-owner-links">${chips}</div>`;
   };
 
   const renderAiPortfolioSummary = (runDoc) => {
@@ -5181,20 +7375,19 @@
     if (!container) return;
     const selected = normalizeRoiHorizonKey(document.getElementById("ai-leaderboard-horizon")?.value || state.aiLeaderboardHorizon);
     const modelFilterNode = document.getElementById("ai-leaderboard-model-filter");
-    let selectedModelFilter = String(modelFilterNode?.value || state.aiModelFilter || "all").trim() || "all";
+    let selectedModelFilter = normalizeAiModelId(modelFilterNode?.value || state.aiModelFilter || "all") || "all";
     state.aiLeaderboardHorizon = selected;
     const list = Array.isArray(agents) ? agents.slice() : [];
     if (modelFilterNode) {
-      const modelSet = new Set(list.map((agent) => String(agent?.modelId || "").trim()).filter(Boolean));
+      const modelSet = new Set(list.map((agent) => normalizeAiModelId(agent?.modelId || "")).filter(Boolean));
       if (!modelSet.size) AI_MODEL_CATALOG.forEach((model) => modelSet.add(model.id));
       const options = [
-        `<option value="all">All models</option>`,
+        `<option value="all">All personalities</option>`,
         ...Array.from(modelSet)
           .sort((a, b) => a.localeCompare(b))
           .map((modelId) => {
             const meta = getModelMeta(modelId);
-            const provider = MODEL_PROVIDER_LABEL[meta?.provider || "openai"] || "Model";
-            return `<option value="${escapeHtml(modelId)}">${escapeHtml(`${provider} · ${meta?.label || modelId}`)}</option>`;
+            return `<option value="${escapeHtml(modelId)}">${escapeHtml(meta?.label || modelId)}</option>`;
           }),
       ];
       modelFilterNode.innerHTML = options.join("");
@@ -5204,7 +7397,9 @@
       modelFilterNode.value = selectedModelFilter;
     }
     state.aiModelFilter = selectedModelFilter;
-    const filtered = list.filter((agent) => selectedModelFilter === "all" || String(agent?.modelId || "").trim() === selectedModelFilter);
+    const filtered = list.filter(
+      (agent) => selectedModelFilter === "all" || normalizeAiModelId(agent?.modelId || "") === selectedModelFilter
+    );
     const ranked = filtered
       .map((agent) => ({
         ...agent,
@@ -5239,10 +7434,18 @@
                 .map((item) => escapeHtml(typeof item === "string" ? item : item?.symbol || ""))
                 .filter(Boolean)
                 .join(", ");
+              const ownerUsername = escapeHtml(getAgentOwnerUsername(agent));
+              const ownerLinks = renderAgentOwnerLinks(agent);
+              const ownerIdentity = renderAgentOwnerIdentity(agent);
               const likes = Number(agent.likesCount || 0);
               const follows = Number(agent.followersCount || 0);
               const liked = state.aiLikeSet.has(String(agent.id || ""));
               const followed = state.aiFollowSet.has(String(agent.id || ""));
+              const creatorWorkspaceId = String(agent.ownerId || agent.workspaceId || "").trim();
+              const canSupport =
+                Boolean(creatorWorkspaceId) &&
+                String(state.user?.uid || "").trim() !== creatorWorkspaceId &&
+                creatorWorkspaceId !== "quantura";
               return `
                 <article class="ai-agent-card">
                   <div class="ai-agent-head">
@@ -5250,8 +7453,11 @@
                     <div class="small muted">${selected.toUpperCase()} ROI</div>
                   </div>
                   <div class="ai-agent-name">${name}</div>
+                  <div class="small muted">by @${ownerUsername}</div>
+                  ${ownerIdentity}
                   <div class="ai-agent-roi">${roi}</div>
                   <div class="small">${renderModelBadge(agent)}</div>
+                  ${ownerLinks}
                   ${buildAIAgentSparkline(agent)}
                   <div class="small muted">${symbols || "No holdings listed."}</div>
                   <div class="ai-agent-actions">
@@ -5262,6 +7468,16 @@
                       ${liked ? "Liked" : "Like"} (${likes})
                     </button>
                     <button class="task-chip" type="button" data-action="ai-agent-share" data-agent-id="${agentId}">Share</button>
+                    ${
+                      canSupport
+                        ? `<button class="task-chip" type="button" data-action="ai-agent-thanks" data-creator-workspace-id="${escapeHtml(
+                            creatorWorkspaceId
+                          )}" data-target-id="${agentId}">Send thanks</button>
+                           <button class="task-chip" type="button" data-action="ai-agent-subscribe" data-creator-workspace-id="${escapeHtml(
+                             creatorWorkspaceId
+                           )}" data-target-id="${agentId}">Subscribe</button>`
+                        : ""
+                    }
                   </div>
                 </article>
               `;
@@ -5296,17 +7512,28 @@
                   .map((item) => escapeHtml(typeof item === "string" ? item : item?.symbol || ""))
                   .filter(Boolean)
                   .join(", ");
+                const ownerUsername = escapeHtml(getAgentOwnerUsername(agent));
+                const ownerLinks = renderAgentOwnerLinks(agent);
+                const ownerIdentity = renderAgentOwnerIdentity(agent);
                 const likes = Number(agent.likesCount || 0);
                 const follows = Number(agent.followersCount || 0);
                 const liked = state.aiLikeSet.has(String(agent.id || ""));
                 const followed = state.aiFollowSet.has(String(agent.id || ""));
+                const creatorWorkspaceId = String(agent.ownerId || agent.workspaceId || "").trim();
+                const canSupport =
+                  Boolean(creatorWorkspaceId) &&
+                  String(state.user?.uid || "").trim() !== creatorWorkspaceId &&
+                  creatorWorkspaceId !== "quantura";
                 return `
                   <tr>
                     <td>${idx + 1}</td>
                     <td>
                       <div><strong>${name}</strong></div>
                       <div class="small">${renderModelBadge(agent)}</div>
+                      <div class="small muted">by @${ownerUsername}</div>
+                      ${ownerIdentity}
                       <div class="small muted">${escapeHtml(String(agent.description || "").trim() || "AI-generated portfolio agent")}</div>
+                      ${ownerLinks}
                     </td>
                     <td><strong>${roi}</strong></td>
                     <td>${symbols || "—"}</td>
@@ -5319,6 +7546,16 @@
                           ${liked ? "Liked" : "Like"} (${likes})
                         </button>
                         <button class="task-chip" type="button" data-action="ai-agent-share" data-agent-id="${agentId}">Share</button>
+                        ${
+                          canSupport
+                            ? `<button class="task-chip" type="button" data-action="ai-agent-thanks" data-creator-workspace-id="${escapeHtml(
+                                creatorWorkspaceId
+                              )}" data-target-id="${agentId}">Send thanks</button>
+                               <button class="task-chip" type="button" data-action="ai-agent-subscribe" data-creator-workspace-id="${escapeHtml(
+                                 creatorWorkspaceId
+                               )}" data-target-id="${agentId}">Subscribe</button>`
+                            : ""
+                        }
                       </div>
                     </td>
                   </tr>
@@ -5374,16 +7611,43 @@
     const title = String(runDoc.title || "").trim();
     const portfolioSummary = renderAiPortfolioSummary(runDoc);
     const agentId = escapeHtml(String(runDoc?.aiPortfolio?.agentId || "").trim());
+    const isPublic = Boolean(runDoc?.isPublic);
+    const ownerWorkspaceId = String(runDoc?.userId || "").trim();
+    const canSupportOwner = Boolean(ownerWorkspaceId) && String(state.user?.uid || "").trim() !== ownerWorkspaceId;
+    const ownerUsername = escapeHtml(String(runDoc?.ownerUsername || "").trim());
+    const ownerBio = escapeHtml(String(runDoc?.ownerBio || "").trim());
+    const ownerAvatarMeta = getProfileAvatarMeta(String(runDoc?.ownerAvatar || "bull").trim());
 
     ui.screenerOutput.innerHTML = `
       ${title ? `<div class="small"><strong>Title:</strong> ${escapeHtml(title)}</div>` : ""}
       <div class="small"><strong>Run ID:</strong> ${runId || "—"}</div>
       <div class="small"><strong>Created:</strong> ${createdAt}</div>
+      <div class="small"><strong>Visibility:</strong> ${isPublic ? "Public" : "Private"}</div>
+      ${
+        ownerUsername || ownerBio
+          ? `<div class="small muted"><strong>Owner:</strong> ${escapeHtml(ownerAvatarMeta.emoji || "")} ${
+              ownerUsername ? `@${ownerUsername}` : "workspace member"
+            }${ownerBio ? ` · ${ownerBio}` : ""}</div>`
+          : ""
+      }
       ${notes ? `<div class="small" style="margin-top:10px;"><strong>Notes:</strong> ${escapeHtml(notes)}</div>` : ""}
       <div class="hero-actions" style="margin-top:12px;">
         <button class="cta secondary small" type="button" data-action="download-screener" data-run-id="${runId}">Download CSV</button>
         <button class="cta secondary small" type="button" data-action="rename-screener" data-run-id="${runId}">Rename</button>
         <button class="cta secondary small" type="button" data-action="share-screener" data-run-id="${runId}">Share link</button>
+        <button class="cta secondary small" type="button" data-action="toggle-screener-public" data-run-id="${runId}" data-is-public="${
+          isPublic ? "1" : "0"
+        }">${isPublic ? "Make private" : "Publish public"}</button>
+        ${
+          canSupportOwner
+            ? `<button class="cta secondary small" type="button" data-action="screener-owner-thanks" data-creator-workspace-id="${escapeHtml(
+                ownerWorkspaceId
+              )}" data-target-id="${runId}">Send thanks</button>
+               <button class="cta secondary small" type="button" data-action="screener-owner-subscribe" data-creator-workspace-id="${escapeHtml(
+                 ownerWorkspaceId
+               )}" data-target-id="${runId}">Subscribe</button>`
+            : ""
+        }
         <button class="cta secondary small danger" type="button" data-action="delete-screener" data-run-id="${runId}">Delete</button>
       </div>
       <div class="card" style="margin-top:14px;">
@@ -5610,6 +7874,40 @@
     }
   };
 
+  const startCreatorSupportCheckout = async ({
+    functions,
+    creatorWorkspaceId,
+    mode,
+    targetId = "",
+    targetType = "profile",
+  }) => {
+    if (!state.user) {
+      showToast("Sign in to support creators.", "warn");
+      return;
+    }
+    const creatorId = String(creatorWorkspaceId || "").trim();
+    if (!creatorId) {
+      showToast("Creator account is unavailable.", "warn");
+      return;
+    }
+    if (creatorId === String(state.user.uid || "").trim()) {
+      showToast("You cannot subscribe to your own profile.", "warn");
+      return;
+    }
+    const createCheckout = functions.httpsCallable("create_creator_support_checkout");
+    const payload = {
+      creatorWorkspaceId: creatorId,
+      mode: mode === "subscribe" ? "subscription" : "tip",
+      targetType: String(targetType || "profile").trim().toLowerCase(),
+      targetId: String(targetId || "").trim(),
+      meta: buildMeta(),
+    };
+    const result = await createCheckout(payload);
+    const url = String(result.data?.url || "").trim();
+    if (!url) throw new Error("Stripe checkout URL is missing.");
+    window.location.assign(url);
+  };
+
   const toggleAIAgentSocial = async ({ kind, agentId, db, functions }) => {
     if (!state.user) {
       showToast("Sign in to interact with AI Agents.", "warn");
@@ -5682,6 +7980,11 @@
     const collection = db.collection("users").doc(workspaceId).collection("ai_agents");
     const existingId = String(runDoc?.aiPortfolio?.agentId || "").trim();
     const nextId = existingId || `agent_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const ownerUsername = sanitizeProfileUsername(state.userProfile?.username || "", state.user);
+    const ownerSocialLinks = normalizeProfileSocialLinks(state.userProfile?.socialLinks || {});
+    const ownerAvatar = normalizeProfileAvatar(state.userProfile?.avatar || "bull");
+    const ownerBio = normalizeProfileBio(state.userProfile?.bio || "");
+    const ownerPublicProfile = Boolean(state.userProfile?.publicProfile);
     const payload = {
       name: portfolio.name,
       description: portfolio.description,
@@ -5694,6 +7997,11 @@
       followersCount: Number(runDoc?.followersCount || 0),
       ownerId: state.user?.uid || "",
       ownerEmail: state.user?.email || "",
+      ownerUsername,
+      ownerSocialLinks,
+      ownerAvatar,
+      ownerBio,
+      ownerPublicProfile,
       workspaceId,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -5712,7 +8020,7 @@
     const runSnap = await db.collection("screener_runs").doc(runId).get();
     if (!runSnap.exists) throw new Error("Screener run not found.");
     const runDoc = { id: runSnap.id, ...(runSnap.data() || {}) };
-    const modelId = String(selectedModel || runDoc.modelUsed || state.selectedScreenerModel || "gpt-4o-mini").trim();
+    const modelId = normalizeAiModelId(selectedModel || runDoc.modelUsed || state.selectedScreenerModel || "gpt-5-mini");
     const modelMeta = getModelMeta(modelId) || {
       id: modelId,
       provider: "openai",
@@ -5765,6 +8073,11 @@
     const chosenName = baseName || `Quantura Horizon ${new Date().toISOString().slice(0, 10)}`;
     const returns = buildPortfolioReturns({ holdings, screenerRows: rows });
     const rationale = buildPortfolioRationale(holdings);
+    const ownerUsername = sanitizeProfileUsername(state.userProfile?.username || "", state.user);
+    const ownerSocialLinks = normalizeProfileSocialLinks(state.userProfile?.socialLinks || {});
+    const ownerAvatar = normalizeProfileAvatar(state.userProfile?.avatar || "bull");
+    const ownerBio = normalizeProfileBio(state.userProfile?.bio || "");
+    const ownerPublicProfile = Boolean(state.userProfile?.publicProfile);
     const roiBySymbol = new Map(holdings.map((item) => [item.symbol, item.projectedRoi]));
     const enrichedResults = rows.map((row) => {
       const symbol = normalizeTicker(row?.symbol || "");
@@ -5785,6 +8098,11 @@
       modelProvider: modelMeta.provider,
       modelTier: modelMeta.tier,
       modelLabel: modelMeta.label,
+      ownerUsername,
+      ownerSocialLinks,
+      ownerAvatar,
+      ownerBio,
+      ownerPublicProfile,
     };
     const agentId = await upsertAIAgentFromPortfolio({
       db,
@@ -5859,7 +8177,22 @@
           isDefault: true,
           workspaceId,
           ownerId: "quantura",
+          ownerUsername: "quantura",
           ownerEmail: "system@quantura.ai",
+          ownerSocialLinks: {
+            website: "https://quantura-e2e3d.web.app/",
+            x: "",
+            linkedin: "",
+            github: "",
+            youtube: "",
+            tiktok: "",
+            facebook: "",
+            instagram: "",
+            reddit: "",
+          },
+          ownerAvatar: "bull",
+          ownerBio: "Quantura system strategy templates.",
+          ownerPublicProfile: true,
           updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
           createdAt: firebase.firestore.FieldValue.serverTimestamp(),
         },
@@ -5868,6 +8201,84 @@
     );
     await Promise.all(writes);
     state.aiDefaultsSeededWorkspaceId = workspaceId;
+  };
+
+  const buildPresetScreenerRows = (symbols = []) =>
+    symbols.slice(0, 12).map((symbol, idx) => {
+      const base = Math.max(0.2, 1 - idx * 0.08);
+      return {
+        symbol,
+        lastClose: null,
+        return1m: Number((base * 3.2).toFixed(2)),
+        return3m: Number((base * 8.1).toFixed(2)),
+        rsi14: Number((52 + idx * 1.8).toFixed(2)),
+        volatility: Number((0.22 + idx * 0.008).toFixed(4)),
+        score: Number(base.toFixed(6)),
+        marketCap: null,
+        marketCapLabel: "—",
+      };
+    });
+
+  const seedAdminPresetScreenerRuns = async (db, workspaceId) => {
+    if (!state.user || !db || !workspaceId) return;
+    const email = String(state.user.email || "").trim().toLowerCase();
+    if (email !== String(ADMIN_EMAIL).trim().toLowerCase()) return;
+
+    const markerRef = db.collection("users").doc(workspaceId).collection("settings").doc("admin_screener_seed");
+    const marker = await markerRef.get();
+    const seedVersion = "2026-02-17-social-presets-v1";
+    if (marker.exists && String(marker.data()?.version || "") === seedVersion) return;
+
+    const batch = db.batch();
+    const now = firebase.firestore.FieldValue.serverTimestamp();
+    ADMIN_SCREENER_PRESET_RUNS.forEach((preset, idx) => {
+      const runRef = db.collection("screener_runs").doc(`admin_${preset.id}`);
+      batch.set(
+        runRef,
+        {
+          userId: workspaceId,
+          userEmail: state.user.email || "",
+          createdByUid: state.user.uid,
+          createdByEmail: state.user.email || "",
+          market: "us",
+          universe: "trending",
+          maxNames: 12,
+          status: "completed",
+          title: preset.title,
+          notes: preset.notes,
+          results: buildPresetScreenerRows(preset.symbols || []),
+          modelUsed: preset.modelUsed,
+          modelTier: "premium",
+          weeklyLimit: 15,
+          dailyLimit: 15,
+          allowedModels: ["gpt-5-mini", "gpt-5", "gpt-5-thinking"],
+          filters: {},
+          noteSignals: {
+            tickers: preset.symbols || [],
+            queries: [preset.notes],
+            matchedHints: ["admin_seed"],
+            usedWebSearch: true,
+          },
+          fallbackUsed: false,
+          createdAt: now,
+          updatedAt: now,
+          meta: {
+            source: "admin_seed",
+            presetIndex: idx,
+          },
+        },
+        { merge: true }
+      );
+    });
+    batch.set(
+      markerRef,
+      {
+        version: seedVersion,
+        updatedAt: now,
+      },
+      { merge: true }
+    );
+    await batch.commit();
   };
 
   const startAIAgents = (db, workspaceId) => {
@@ -6266,8 +8677,29 @@
         const body = payload?.notification?.body || "You have a new dashboard update.";
         showToast(`${title}: ${body}`);
         setNotificationStatus(`Last message: ${title}`);
+        appendNotificationLog({
+          title,
+          body,
+          source: "foreground",
+          at: new Date().toISOString(),
+        });
         logEvent("push_received_foreground", { title });
       });
+      if (typeof navigator !== "undefined" && navigator.serviceWorker) {
+        navigator.serviceWorker.addEventListener("message", (event) => {
+          const data = event?.data || {};
+          if (String(data?.type || "").trim() !== "quantura_push_background") return;
+          const title = String(data?.title || "Quantura update");
+          const body = String(data?.body || "");
+          appendNotificationLog({
+            title,
+            body,
+            source: "background",
+            at: new Date().toISOString(),
+          });
+          setNotificationStatus(`Last message: ${title}`);
+        });
+      }
       state.messagingBound = true;
     } catch (error) {
       // Ignore foreground messaging bind errors.
@@ -6492,6 +8924,28 @@
           state.panelAutoloaded.news = true;
         }
 
+        if (next === "events-calendar") {
+          const first = !state.panelAutoloaded.eventsCalendar;
+          state.panelAutoloaded.eventsCalendar = true;
+          loadCorporateEventsCalendar(functions, { force: first, notify: false });
+        }
+
+        if (next === "market-headlines") {
+          const first = !state.panelAutoloaded.marketHeadlines;
+          state.panelAutoloaded.marketHeadlines = true;
+          loadMarketHeadlinesFeed(functions, { force: first, notify: false });
+        }
+
+        if (next === "ticker-query") {
+          const ticker = normalizeTicker(state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "");
+          if (ticker && ui.tickerQueryTicker && !String(ui.tickerQueryTicker.value || "").trim()) {
+            ui.tickerQueryTicker.value = ticker;
+          }
+          if (ui.tickerQueryLanguage && ui.tickerQueryLanguage.value === "auto") {
+            ui.tickerQueryLanguage.value = state.preferredLanguage || "en";
+          }
+        }
+
         if (next === "options") {
           const ticker = normalizeTicker(state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "");
           if (!ticker) return;
@@ -6502,17 +8956,25 @@
       };
 
       ensureThemeToggle();
+      normalizeTopNavigation();
+      ensureHeaderNotificationsCta();
+      bindMobileNav();
+      initializeLanguageControls().catch(() => {});
       captureShareFromUrl();
+      renderNotificationLog();
+      bindChartControls();
 
 	    if (!state.authResolved) {
 	      if (ui.headerUserEmail) ui.headerUserEmail.textContent = "Restoring session...";
 	      if (ui.headerUserStatus) ui.headerUserStatus.textContent = "Loading";
 	    }
 
-	    if (ui.notificationsStatus) {
-	      if (!state.remoteFlags.pushEnabled) {
-	        setNotificationStatus("Notifications are temporarily disabled.");
-	        setNotificationControlsEnabled(false);
+    if (ui.notificationsStatus) {
+      const cachedToken = safeLocalStorageGet(FCM_TOKEN_CACHE_KEY) || "";
+      setNotificationTokenPreview(cachedToken);
+      if (!state.remoteFlags.pushEnabled) {
+        setNotificationStatus("Notifications are temporarily disabled.");
+        setNotificationControlsEnabled(false);
 	      } else if (!isPushSupported()) {
 	        setNotificationStatus("Push notifications are not supported in this browser.");
 	        setNotificationControlsEnabled(false);
@@ -6889,7 +9351,7 @@
             generatePortfolio.disabled = true;
             try {
               const preferredName = String(document.getElementById("screener-agent-name")?.value || "").trim();
-              const selectedModel = String(ui.screenerModel?.value || state.selectedScreenerModel || "").trim();
+              const selectedModel = normalizeAiModelId(ui.screenerModel?.value || state.selectedScreenerModel || "");
               await generateAIPortfolioForRun({ db, functions, runId, preferredName, selectedModel });
               logEvent("ai_portfolio_generated", { run_id: runId });
             } catch (error) {
@@ -6989,6 +9451,120 @@
               logEvent("ai_agent_shared", { agent_id: agentId });
             } catch (error) {
               showToast(error.message || "Unable to copy share link.", "warn");
+            }
+            return;
+          }
+
+          const agentThanks = event.target.closest('[data-action="ai-agent-thanks"]');
+          if (agentThanks) {
+            event.preventDefault();
+            const creatorWorkspaceId = String(agentThanks.dataset.creatorWorkspaceId || "").trim();
+            const targetId = String(agentThanks.dataset.targetId || "").trim();
+            agentThanks.disabled = true;
+            try {
+              await startCreatorSupportCheckout({
+                functions,
+                creatorWorkspaceId,
+                mode: "tip",
+                targetId,
+                targetType: "screener",
+              });
+            } catch (error) {
+              showToast(error.message || "Unable to open support checkout.", "warn");
+            } finally {
+              agentThanks.disabled = false;
+            }
+            return;
+          }
+
+          const agentSubscribe = event.target.closest('[data-action="ai-agent-subscribe"]');
+          if (agentSubscribe) {
+            event.preventDefault();
+            const creatorWorkspaceId = String(agentSubscribe.dataset.creatorWorkspaceId || "").trim();
+            const targetId = String(agentSubscribe.dataset.targetId || "").trim();
+            agentSubscribe.disabled = true;
+            try {
+              await startCreatorSupportCheckout({
+                functions,
+                creatorWorkspaceId,
+                mode: "subscribe",
+                targetId,
+                targetType: "screener",
+              });
+            } catch (error) {
+              showToast(error.message || "Unable to open subscription checkout.", "warn");
+            } finally {
+              agentSubscribe.disabled = false;
+            }
+            return;
+          }
+
+          const toggleScreenerPublic = event.target.closest('[data-action="toggle-screener-public"]');
+          if (toggleScreenerPublic) {
+            event.preventDefault();
+            if (!state.user) {
+              showToast("Sign in to update screener visibility.", "warn");
+              return;
+            }
+            const runId = String(toggleScreenerPublic.dataset.runId || "").trim();
+            if (!runId) return;
+            const currentlyPublic = String(toggleScreenerPublic.dataset.isPublic || "0").trim() === "1";
+            const nextValue = !currentlyPublic;
+            toggleScreenerPublic.disabled = true;
+            try {
+              const updateVisibility = functions.httpsCallable("set_screener_public_visibility");
+              await updateVisibility({ runId, isPublic: nextValue, meta: buildMeta() });
+              const fresh = await db.collection("screener_runs").doc(runId).get();
+              if (fresh.exists) {
+                renderScreenerRunOutput({ id: fresh.id, ...(fresh.data() || {}) });
+              }
+              showToast(nextValue ? "Screener is now public." : "Screener is now private.");
+            } catch (error) {
+              showToast(error.message || "Unable to update screener visibility.", "warn");
+            } finally {
+              toggleScreenerPublic.disabled = false;
+            }
+            return;
+          }
+
+          const screenerOwnerThanks = event.target.closest('[data-action="screener-owner-thanks"]');
+          if (screenerOwnerThanks) {
+            event.preventDefault();
+            const creatorWorkspaceId = String(screenerOwnerThanks.dataset.creatorWorkspaceId || "").trim();
+            const targetId = String(screenerOwnerThanks.dataset.targetId || "").trim();
+            screenerOwnerThanks.disabled = true;
+            try {
+              await startCreatorSupportCheckout({
+                functions,
+                creatorWorkspaceId,
+                mode: "tip",
+                targetId,
+              });
+            } catch (error) {
+              showToast(error.message || "Unable to open support checkout.", "warn");
+            } finally {
+              screenerOwnerThanks.disabled = false;
+            }
+            return;
+          }
+
+          const screenerOwnerSubscribe = event.target.closest('[data-action="screener-owner-subscribe"]');
+          if (screenerOwnerSubscribe) {
+            event.preventDefault();
+            const creatorWorkspaceId = String(screenerOwnerSubscribe.dataset.creatorWorkspaceId || "").trim();
+            const targetId = String(screenerOwnerSubscribe.dataset.targetId || "").trim();
+            screenerOwnerSubscribe.disabled = true;
+            try {
+              await startCreatorSupportCheckout({
+                functions,
+                creatorWorkspaceId,
+                mode: "subscribe",
+                targetId,
+              });
+            } catch (error) {
+              showToast(error.message || "Unable to open subscription checkout.", "warn");
+            } finally {
+              screenerOwnerSubscribe.disabled = false;
             }
             return;
           }
@@ -8178,6 +10754,7 @@
         email: formData.get("email"),
         company: formData.get("company"),
         role: formData.get("role"),
+        category: formData.get("category"),
         message: formData.get("message"),
         sourcePage: window.location.pathname,
         utm: getUtm(),
@@ -8446,6 +11023,41 @@
 		      await loadTrendingTickers(functions, { notify: true, force: true });
 		    });
 
+    if (ui.eventsCalendarStart && ui.eventsCalendarEnd) {
+      const today = new Date();
+      const end = new Date(today);
+      end.setDate(end.getDate() + 90);
+      if (!ui.eventsCalendarStart.value) ui.eventsCalendarStart.value = today.toISOString().slice(0, 10);
+      if (!ui.eventsCalendarEnd.value) ui.eventsCalendarEnd.value = end.toISOString().slice(0, 10);
+    }
+    if (ui.eventsCalendarCountry && !ui.eventsCalendarCountry.value) {
+      ui.eventsCalendarCountry.value = state.preferredCountry || "US";
+    }
+    ui.eventsCalendarForm?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      await loadCorporateEventsCalendar(functions, { force: true, notify: true });
+    });
+
+    if (ui.marketHeadlinesCountry && !ui.marketHeadlinesCountry.value) {
+      ui.marketHeadlinesCountry.value = state.preferredCountry || "US";
+    }
+    ui.marketHeadlinesForm?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      await loadMarketHeadlinesFeed(functions, { force: true, notify: true });
+    });
+
+    if (ui.tickerQueryLanguage && !ui.tickerQueryLanguage.value) {
+      ui.tickerQueryLanguage.value = state.preferredLanguage || "en";
+    }
+    ui.tickerQueryForm?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      await loadTickerQueryInsight(functions, {
+        ticker: ui.tickerQueryTicker?.value || state.tickerContext.ticker || "",
+        question: ui.tickerQueryQuestion?.value || "",
+        notify: true,
+      });
+    });
+
 	    ui.optionsForm?.addEventListener("submit", async (event) => {
 	      event.preventDefault();
 	      if (!state.user) {
@@ -8616,6 +11228,8 @@
       });
       refreshScreenerModelUi();
       refreshScreenerCreditsUi();
+      hydrateFundamentalFilterFields();
+      bindScreenerFilterTabs();
       bindAIAgentLeaderboardControls();
 
 	    ui.screenerForm?.addEventListener("submit", async (event) => {
@@ -8629,14 +11243,15 @@
       const boundedNames = Number.isFinite(requestedNames) ? Math.max(5, Math.min(25, requestedNames)) : 10;
       const minCapBucket = String(formData.get("minCapBucket") || "any").trim().toLowerCase();
       const minCapAbs = minCapBucket === "any" ? null : Number(minCapBucket);
-      const selectedModel = String(formData.get("model") || state.selectedScreenerModel || "gpt-4o-mini").trim();
+      const selectedModel = normalizeAiModelId(formData.get("model") || state.selectedScreenerModel || "gpt-5-mini");
+      const selectedMeta = getModelMeta(selectedModel) || { personality: "balanced" };
       const tier = getCurrentAiTierConfig();
       if (tier.allowedModels.length && !tier.allowedModels.includes(selectedModel)) {
-        await showLimitReachedModal("Selected model is locked for your current tier.");
+        await showLimitReachedModal("Selected personality is only available for Pro.");
         return;
       }
-      if (Number(state.aiUsageToday || 0) >= Number(tier.dailyLimit || 5)) {
-        await showLimitReachedModal("You have reached your daily AI screener credit limit.");
+      if (Number(state.aiUsageToday || 0) >= Number(tier.weeklyLimit || 3)) {
+        await showLimitReachedModal("You have reached your weekly AI screener credit limit.");
         return;
       }
       const payload = {
@@ -8650,7 +11265,9 @@
         maxNames: boundedNames,
         notes: formData.get("notes"),
         agentName: String(formData.get("agentName") || "").trim(),
+        filters: collectScreenerFilters(formData),
         model: selectedModel,
+        personality: String(selectedMeta.personality || "balanced"),
         workspaceId: state.activeWorkspaceId || state.user.uid,
         meta: buildMeta(),
       };
@@ -8806,7 +11423,7 @@
             });
             const agent = agentRes?.data || {};
             const agentText = String(agent.analysis || "").trim();
-            const modelUsed = String(agent.model || "gpt-4o-mini");
+            const modelUsed = normalizeAiModelId(agent.model || "gpt-5-mini") || "gpt-5-mini";
             if (agentText && ui.predictionsAgentOutput) {
               ui.predictionsAgentOutput.innerHTML += `
                 <div class="agent-summary" style="margin-top:14px;">
@@ -8979,7 +11596,7 @@
       }
     });
 
-	    ui.notificationsEnable?.addEventListener("click", async () => {
+    ui.notificationsEnable?.addEventListener("click", async () => {
 	      if (!state.user) {
 	        showToast("Sign in to enable notifications.", "warn");
 	        return;
@@ -8992,19 +11609,26 @@
 	        showToast("Messaging SDK is unavailable on this page.", "warn");
 	        return;
 	      }
-	      try {
-	        setNotificationStatus("Registering notification token...");
-	        const token = await registerNotificationToken(functions, messaging, { forceRefresh: false });
-	        setNotificationStatus("Notifications are enabled for this browser.");
-	        logEvent("notifications_enabled", { channel: "webpush" });
-	        showToast("Notifications enabled.");
-	      } catch (error) {
+      try {
+        setNotificationStatus("Registering notification token...");
+        const token = await registerNotificationToken(functions, messaging, { forceRefresh: false });
+        setNotificationTokenPreview(token);
+        setNotificationStatus("Notifications are enabled for this browser.");
+        appendNotificationLog({
+          title: "Notifications enabled",
+          body: "Browser token registered successfully.",
+          source: "system",
+          at: new Date().toISOString(),
+        });
+        logEvent("notifications_enabled", { channel: "webpush" });
+        showToast("Notifications enabled.");
+      } catch (error) {
 	        setNotificationStatus(error.message || "Unable to enable notifications.");
 	        showToast(error.message || "Unable to enable notifications.", "warn");
       }
     });
 
-	    ui.notificationsRefresh?.addEventListener("click", async () => {
+    ui.notificationsRefresh?.addEventListener("click", async () => {
 	      if (!state.user) {
 	        showToast("Sign in first.", "warn");
 	        return;
@@ -9017,18 +11641,25 @@
 	        showToast("Messaging SDK is unavailable on this page.", "warn");
 	        return;
 	      }
-	      try {
-	        setNotificationStatus("Refreshing notification token...");
-	        const token = await registerNotificationToken(functions, messaging, { forceRefresh: true });
-	        setNotificationStatus("Notification token refreshed.");
-	        logEvent("notifications_token_refreshed", { channel: "webpush" });
-	      } catch (error) {
+      try {
+        setNotificationStatus("Refreshing notification token...");
+        const token = await registerNotificationToken(functions, messaging, { forceRefresh: true });
+        setNotificationTokenPreview(token);
+        setNotificationStatus("Notification token refreshed.");
+        appendNotificationLog({
+          title: "Notification token refreshed",
+          body: "FCM token rotated and synced.",
+          source: "system",
+          at: new Date().toISOString(),
+        });
+        logEvent("notifications_token_refreshed", { channel: "webpush" });
+      } catch (error) {
 	        setNotificationStatus(error.message || "Unable to refresh notification token.");
 	        showToast(error.message || "Unable to refresh notification token.", "warn");
       }
     });
 
-	    ui.notificationsSendTest?.addEventListener("click", async () => {
+    ui.notificationsSendTest?.addEventListener("click", async () => {
 	      if (!state.user) {
 	        showToast("Sign in first.", "warn");
 	        return;
@@ -9051,6 +11682,12 @@
         });
         const sent = result.data?.successCount ?? 0;
         setNotificationStatus(`Test sent. Delivered to ${sent} token(s).`);
+        appendNotificationLog({
+          title: "Test notification sent",
+          body: `Delivered to ${sent} registered token(s).`,
+          source: "system",
+          at: new Date().toISOString(),
+        });
         logEvent("notifications_test_sent", { delivered: sent });
         showToast("Test notification sent.");
       } catch (error) {
@@ -9058,6 +11695,99 @@
         showToast(error.message || "Unable to send test notification.", "warn");
       }
     });
+
+    ui.notificationsClear?.addEventListener("click", () => {
+      state.notificationLog = [];
+      persistNotificationLog();
+      renderNotificationLog();
+      setNotificationStatus("Notification log cleared.");
+      showToast("Notification log cleared.");
+    });
+
+    if (ui.profileForm && ui.profileForm.dataset.bound !== "1") {
+      ui.profileForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        if (!state.user) {
+          setProfileStatus("Sign in to save your profile.", "warn");
+          showToast("Sign in to save your profile.", "warn");
+          return;
+        }
+        try {
+          const nextProfile = {
+            username: sanitizeProfileUsername(ui.profileUsername?.value || "", state.user),
+            avatar: normalizeProfileAvatar(ui.profileAvatar?.value || state.userProfile?.avatar || "bull"),
+            bio: normalizeProfileBio(ui.profileBio?.value || ""),
+            publicProfile: Boolean(ui.profilePublicEnabled?.checked),
+            publicScreenerSharing: Boolean(ui.profilePublicScreener?.checked),
+            stripeConnectAccountId: String(state.userProfile?.stripeConnectAccountId || "").trim(),
+            socialLinks: normalizeProfileSocialLinks(
+              {
+                website: ui.profileWebsite?.value || "",
+                x: ui.profileX?.value || "",
+                linkedin: ui.profileLinkedin?.value || "",
+                github: ui.profileGithub?.value || "",
+                youtube: ui.profileYoutube?.value || "",
+                tiktok: ui.profileTiktok?.value || "",
+                facebook: ui.profileFacebook?.value || "",
+                instagram: ui.profileInstagram?.value || "",
+                reddit: ui.profileReddit?.value || "",
+              },
+              { strict: true }
+            ),
+          };
+          await db.collection("users").doc(state.user.uid).set(
+            {
+              profile: nextProfile,
+              profileUpdatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+              metadata: buildMeta(),
+            },
+            { merge: true }
+          );
+          renderProfileForm(nextProfile, state.user);
+          setProfileStatus("Profile saved. New AI Agents will include this attribution.", "success");
+          showToast("Profile saved.");
+        } catch (error) {
+          const message = extractErrorMessage(error, "Unable to save profile.");
+          setProfileStatus(message, "warn");
+          showToast(message, "warn");
+        }
+      });
+      ui.profileForm.dataset.bound = "1";
+    }
+    if (ui.profileConnectStripe && ui.profileConnectStripe.dataset.bound !== "1") {
+      ui.profileConnectStripe.addEventListener("click", async () => {
+        if (!state.user) {
+          setProfileStatus("Sign in to connect Stripe.", "warn");
+          showToast("Sign in to connect Stripe.", "warn");
+          return;
+        }
+        const workspaceId = state.activeWorkspaceId || state.user.uid;
+        ui.profileConnectStripe.disabled = true;
+        try {
+          const onboard = functions.httpsCallable("create_stripe_connect_onboarding_link");
+          const result = await onboard({ workspaceId, meta: buildMeta() });
+          const accountId = String(result.data?.accountId || "").trim();
+          const url = String(result.data?.url || "").trim();
+          if (!url) throw new Error("Stripe onboarding URL is missing.");
+          state.userProfile = {
+            ...state.userProfile,
+            stripeConnectAccountId: accountId,
+          };
+          renderProfileForm(state.userProfile, state.user);
+          setProfileStatus("Redirecting to Stripe onboarding...", "success");
+          window.location.assign(url);
+        } catch (error) {
+          const message = extractErrorMessage(error, "Unable to start Stripe onboarding.");
+          setProfileStatus(message, "warn");
+          showToast(message, "warn");
+        } finally {
+          ui.profileConnectStripe.disabled = false;
+        }
+      });
+      ui.profileConnectStripe.dataset.bound = "1";
+    }
+    setProfileFormEnabled(false);
+    renderProfileForm({ username: "", socialLinks: cloneDefaultProfileSocialLinks() }, null);
 
 		    persistenceReady.finally(() => {
 		      auth.onAuthStateChanged(async (user) => {
@@ -9094,6 +11824,7 @@
           } else {
             setNotificationStatus("Sign in and enable notifications.");
           }
+          setNotificationTokenPreview("");
           setNotificationControlsEnabled(false);
         }
 			        if (state.unsubscribeOrders) state.unsubscribeOrders();
@@ -9120,6 +11851,16 @@
             state.aiDefaultsSeededWorkspaceId = "";
 		        state.sharedWorkspaces = [];
 		        setActiveWorkspaceId("");
+            state.userProfile = {
+              username: "",
+              socialLinks: cloneDefaultProfileSocialLinks(),
+              avatar: "bull",
+              bio: "",
+              publicProfile: false,
+              publicScreenerSharing: false,
+              stripeConnectAccountId: "",
+            };
+            renderProfileForm(state.userProfile, null);
 		        renderWorkspaceSelect(null);
 		        if (ui.productivityBoard) ui.productivityBoard.innerHTML = "";
 		        if (ui.tasksCalendar) ui.tasksCalendar.textContent = "Tasks with due dates will appear here.";
@@ -9159,6 +11900,8 @@
 			      }
 
 	      await ensureUserProfile(db, user);
+        await loadUserProfile(db, user);
+        setProfileStatus("Profile is used when publishing AI Agents to the leaderboard.");
 	      startUserOrders(db, user);
 	      subscribeSharedWorkspaces(db, user);
 		      const activeWorkspaceId = resolveActiveWorkspaceId(user);
@@ -9167,10 +11910,11 @@
 		      startUserForecasts(db, activeWorkspaceId);
           startScreenerRuns(db, activeWorkspaceId);
           loadScreenerUsageToday(db);
-		      startWorkspaceTasks(db, activeWorkspaceId);
+          startWorkspaceTasks(db, activeWorkspaceId);
 			      startWatchlist(db, activeWorkspaceId);
 			      startPriceAlerts(db, activeWorkspaceId);
           await seedDefaultAIAgents(db, activeWorkspaceId).catch(() => {});
+          await seedAdminPresetScreenerRuns(db, activeWorkspaceId).catch(() => {});
           startAIAgents(db, activeWorkspaceId);
           startVolatilityMonitor(db, functions, activeWorkspaceId);
 	      startAutopilotRequests(db, user);
@@ -9188,18 +11932,20 @@
 	        if (!state.remoteFlags.pushEnabled) {
 	          setNotificationControlsEnabled(false);
 	          setNotificationStatus("Notifications are temporarily disabled.");
-	        } else if (messaging && isPushSupported()) {
-	          setNotificationControlsEnabled(true);
-	          const cachedToken = localStorage.getItem(FCM_TOKEN_CACHE_KEY) || "";
-	          setNotificationStatus(cachedToken ? "Notifications enabled for this browser." : "Click Enable notifications.");
-	          if (Notification.permission === "granted") {
-	            try {
-	              await registerNotificationToken(functions, messaging, { forceRefresh: !cachedToken });
-	              setNotificationStatus("Notifications enabled for this browser.");
-	            } catch (error) {
-	              setNotificationStatus(error.message || "Unable to initialize notifications.");
-	            }
-	          }
+        } else if (messaging && isPushSupported()) {
+          setNotificationControlsEnabled(true);
+          const cachedToken = localStorage.getItem(FCM_TOKEN_CACHE_KEY) || "";
+          setNotificationTokenPreview(cachedToken);
+          setNotificationStatus(cachedToken ? "Notifications enabled for this browser." : "Click Enable notifications.");
+          if (Notification.permission === "granted") {
+            try {
+              const token = await registerNotificationToken(functions, messaging, { forceRefresh: !cachedToken });
+              setNotificationTokenPreview(token);
+              setNotificationStatus("Notifications enabled for this browser.");
+            } catch (error) {
+              setNotificationStatus(error.message || "Unable to initialize notifications.");
+            }
+          }
 	        } else {
 	          setNotificationControlsEnabled(false);
 	        }
