@@ -10,6 +10,96 @@
   const THEME_KEY = "quantura_theme";
   const PENDING_SHARE_KEY = "quantura_pending_share_v1";
   const HOLIDAY_PROMO_SEEN_KEY = "quantura_holiday_promo_seen_v1";
+  const AI_LEADERBOARD_DEFAULT_HORIZON = "1y";
+  const DEFAULT_VOLATILITY_THRESHOLD = 0.05;
+  const DEFAULT_BRIEF_TICKERS = [
+    "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "NFLX",
+    "AMD", "AVGO", "CRM", "ORCL", "JPM", "BAC", "GS", "V", "MA",
+    "UNH", "LLY", "JNJ", "XOM", "CVX", "CAT", "DE", "KO", "PEP",
+    "COST", "WMT", "NKE", "PLTR",
+  ];
+  const DEFAULT_AI_AGENTS = [
+    {
+      id: "quantura-oracle",
+      name: "Quantura Oracle",
+      description: "High-probability blue chips.",
+      strategy: "quality_blue_chip",
+      holdings: ["AAPL", "MSFT", "GOOGL", "V", "LLY", "COST"],
+      returns: { "1m": 0.019, "3m": 0.057, "6m": 0.11, "1y": 0.183, "5y": 0.745, max: 0.745 },
+      rationale:
+        "This basket emphasizes high free cash flow consistency, durable balance sheets, and resilient earnings cadence. It is designed for steadier compounding across market regimes.",
+    },
+    {
+      id: "quantura-velocity",
+      name: "Quantura Velocity",
+      description: "Momentum and volatility leaders.",
+      strategy: "momentum_volatility",
+      holdings: ["NVDA", "TSLA", "AMD", "PLTR", "META", "AVGO"],
+      returns: { "1m": 0.034, "3m": 0.102, "6m": 0.186, "1y": 0.322, "5y": 1.18, max: 1.18 },
+      rationale:
+        "Names are selected for strong relative strength, liquidity, and acceleration in trend metrics. The agent favors upside capture over downside smoothness.",
+    },
+    {
+      id: "quantura-dividend-king",
+      name: "Quantura Dividend King",
+      description: "Yield and stability.",
+      strategy: "dividend_stability",
+      holdings: ["JNJ", "KO", "PEP", "XOM", "CVX", "UNH"],
+      returns: { "1m": 0.012, "3m": 0.033, "6m": 0.064, "1y": 0.121, "5y": 0.392, max: 0.392 },
+      rationale:
+        "The portfolio tilts toward durable payout profiles and lower drawdown sensitivity. It is tuned for investors prioritizing consistency and downside control.",
+    },
+    {
+      id: "quantura-horizon",
+      name: "Quantura Horizon",
+      description: "Long-term growth from Prophet scoring.",
+      strategy: "prophet_growth",
+      holdings: ["AAPL", "MSFT", "NVDA", "AMZN", "META", "LLY"],
+      returns: { "1m": 0.026, "3m": 0.078, "6m": 0.142, "1y": 0.251, "5y": 0.984, max: 0.984 },
+      rationale:
+        "Prophet trend structure favors names with stable long-horizon slope and persistent seasonality. The set is filtered to avoid negative lower-bound outcomes.",
+    },
+    {
+      id: "quantura-contrarian",
+      name: "Quantura Contrarian",
+      description: "Oversold rebound opportunities.",
+      strategy: "contrarian_rebound",
+      holdings: ["NKE", "DIS", "PYPL", "SBUX", "BA", "INTC"],
+      returns: { "1m": 0.016, "3m": 0.049, "6m": 0.091, "1y": 0.164, "5y": 0.46, max: 0.46 },
+      rationale:
+        "This set targets deep pullbacks with improving momentum breadth and valuation support. It is tuned for mean-reversion windows with defined upside asymmetry.",
+    },
+    {
+      id: "quantura-alphagen",
+      name: "Quantura AlphaGen",
+      description: "Balanced multi-factor alpha basket.",
+      strategy: "multi_factor",
+      holdings: ["AAPL", "NVDA", "JPM", "XOM", "COST", "CAT"],
+      returns: { "1m": 0.021, "3m": 0.061, "6m": 0.116, "1y": 0.198, "5y": 0.71, max: 0.71 },
+      rationale:
+        "AlphaGen blends quality, momentum, valuation, and macro sensitivity into one portfolio. The goal is balanced risk-adjusted return through factor diversification.",
+    },
+    {
+      id: "quantura-deepvalue",
+      name: "Quantura DeepValue",
+      description: "Valuation compression reversals.",
+      strategy: "deep_value",
+      holdings: ["BAC", "CVX", "INTC", "BA", "C", "F"],
+      returns: { "1m": 0.014, "3m": 0.041, "6m": 0.083, "1y": 0.146, "5y": 0.402, max: 0.402 },
+      rationale:
+        "DeepValue looks for discounted multiples with stabilization signals in earnings and cash flow. The portfolio is built for re-rating potential rather than headline momentum.",
+    },
+    {
+      id: "quantura-momenta",
+      name: "Quantura Momenta",
+      description: "Trend persistence and breakout continuation.",
+      strategy: "trend_following",
+      holdings: ["NVDA", "AVGO", "META", "AMD", "CRM", "MSFT"],
+      returns: { "1m": 0.031, "3m": 0.094, "6m": 0.171, "1y": 0.302, "5y": 1.05, max: 1.05 },
+      rationale:
+        "Momenta emphasizes high-conviction trend continuation where breadth and liquidity remain supportive. It is optimized for sustained breakout environments.",
+    },
+  ];
 
   const ui = {
     headerAuth: document.getElementById("header-auth"),
@@ -153,6 +243,13 @@
       previewPage: 0,
       previewPageSize: 25,
     },
+    aiLeaderboardHorizon: AI_LEADERBOARD_DEFAULT_HORIZON,
+    aiAgents: [],
+    aiFollowSet: new Set(),
+    aiLikeSet: new Set(),
+    aiDefaultsSeededWorkspaceId: "",
+    recentWatchlistItems: [],
+    volatilityMonitorTimer: null,
     clients: {
       auth: null,
       db: null,
@@ -177,6 +274,9 @@
 	    unsubscribeWatchlist: null,
 	    unsubscribeAlerts: null,
 	    unsubscribeScreenerRuns: null,
+      unsubscribeAIAgents: null,
+      unsubscribeAIFollows: null,
+      unsubscribeAILikes: null,
 	    screenerUrlRunLoaded: false,
       uploadUrlLoaded: false,
       backtestUrlLoaded: false,
@@ -344,6 +444,24 @@
 		      if (next) setActive(next, { pushPath: false });
 		    });
 		  };
+
+  const bindFaqAccordion = () => {
+    const grids = Array.from(document.querySelectorAll(".faq-grid"));
+    grids.forEach((grid) => {
+      const items = Array.from(grid.querySelectorAll(".faq-item"));
+      if (!items.length) return;
+      items.forEach((item) => {
+        item.addEventListener("toggle", () => {
+          if (!item.open) return;
+          items.forEach((other) => {
+            if (other !== item && other.open) {
+              other.open = false;
+            }
+          });
+        });
+      });
+    });
+  };
 
   const syncStickyOffsets = () => {
     const header = document.querySelector(".header");
@@ -1453,6 +1571,7 @@
 
   const setAuthUi = (user) => {
     const isAuthed = Boolean(user);
+    const authLabel = isAuthed ? "Logged In" : "Logged Out";
     if (ui.headerAuth) {
       ui.headerAuth.innerHTML = isAuthed
         ? `${icon("dashboard")}<span>Dashboard</span>`
@@ -1460,16 +1579,20 @@
       ui.headerAuth.setAttribute("aria-label", isAuthed ? "Open dashboard" : "Sign in");
     }
 
-    if (ui.headerUserEmail) ui.headerUserEmail.textContent = user?.email || "Guest";
+    if (ui.headerUserEmail) {
+      ui.headerUserEmail.textContent = "";
+      ui.headerUserEmail.classList.add("hidden");
+      ui.headerUserEmail.setAttribute("aria-hidden", "true");
+    }
     if (ui.headerUserStatus) {
-      ui.headerUserStatus.textContent = isAuthed ? "Member" : "Guest";
+      ui.headerUserStatus.textContent = authLabel;
       ui.headerUserStatus.classList.toggle("pill", true);
     }
 
     if (ui.userEmail) ui.userEmail.textContent = user?.email || "Not signed in";
     if (ui.userProvider) ui.userProvider.textContent = user?.providerData?.[0]?.providerId || "—";
     if (ui.userStatus) {
-      ui.userStatus.textContent = isAuthed ? "Member" : "Guest";
+      ui.userStatus.textContent = authLabel;
       ui.userStatus.classList.toggle("pill", true);
     }
     ui.dashboardCta?.classList.toggle("hidden", isAuthed);
@@ -1514,6 +1637,26 @@
     return new Date(ts).toLocaleString();
   };
 
+  const renderOrderStatusBadge = (rawStatus) => {
+    const status = String(rawStatus || "pending").trim().toLowerCase();
+    const statusLabel = status.replace(/_/g, " ");
+    if (status === "cancelled") {
+      return `
+        <span class="status ${escapeHtml(status)} status-icon-only" aria-label="Cancelled">
+          <span class="status-icon status-icon-cancelled" aria-hidden="true">${icon("cancel")}</span>
+        </span>
+      `;
+    }
+    if (status === "completed" || status === "fulfilled") {
+      return `
+        <span class="status ${escapeHtml(status)} status-icon-only" aria-label="Completed">
+          <span class="status-icon status-icon-completed" aria-hidden="true">${icon("check-circle")}</span>
+        </span>
+      `;
+    }
+    return `<span class="status ${escapeHtml(status)}">${escapeHtml(statusLabel)}</span>`;
+  };
+
   const renderOrderList = (orders, container, opts = {}) => {
     if (!container) return;
     container.innerHTML = "";
@@ -1528,7 +1671,6 @@
       card.dataset.orderId = order.id;
 
       const status = order.status || "pending";
-      const statusLabel = status.replace("_", " ");
       const paymentStatus = String(order.paymentStatus || "unpaid");
       const paymentLabel = paymentStatus.replace(/_/g, " ");
       const filesMarkup = renderFileList(order.fulfillmentFiles || []);
@@ -1561,7 +1703,7 @@
             <div class="order-title">${order.product || "Deep Forecast"}</div>
             <div class="small">Order ID: ${order.id}</div>
           </div>
-          <span class="status ${status}">${statusLabel}</span>
+          ${renderOrderStatusBadge(status)}
         </div>
         <div class="order-meta">
           <div><strong>Requested</strong> ${formatTimestamp(order.createdAt)}</div>
@@ -2072,28 +2214,158 @@
 	      .join("");
 	  };
 
-	  const startWatchlist = (db, workspaceId) => {
-	    if (state.unsubscribeWatchlist) state.unsubscribeWatchlist();
-	    if (!workspaceId || !ui.watchlistList || !state.remoteFlags.watchlistEnabled) return;
-	    ui.watchlistList.innerHTML = `<div class="small muted">Loading watchlist...</div>`;
+  const startWatchlist = (db, workspaceId) => {
+    if (state.unsubscribeWatchlist) state.unsubscribeWatchlist();
+    if (!workspaceId || !ui.watchlistList || !state.remoteFlags.watchlistEnabled) return;
+    ui.watchlistList.innerHTML = `<div class="small muted">Loading watchlist...</div>`;
 	    state.unsubscribeWatchlist = db
 	      .collection("users")
 	      .doc(workspaceId)
 	      .collection("watchlist")
 	      .orderBy("createdAt", "desc")
 	      .limit(250)
-	      .onSnapshot(
-	        (snapshot) => {
-	          const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-	          renderWatchlist(items, workspaceId);
-	        },
-	        () => {
-	          if (ui.watchlistList) ui.watchlistList.innerHTML = `<div class="small muted">Unable to load watchlist.</div>`;
-	        }
-	      );
-	  };
+      .onSnapshot(
+        (snapshot) => {
+          const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+          state.recentWatchlistItems = items;
+          renderWatchlist(items, workspaceId);
+          ensureVolatilityAlertsForWatchlist({ db, workspaceId, items }).catch(() => {});
+        },
+        () => {
+          if (ui.watchlistList) ui.watchlistList.innerHTML = `<div class="small muted">Unable to load watchlist.</div>`;
+        }
+      );
+  };
 
-	  const renderAlerts = (items, workspaceId) => {
+  const ensureVolatilityAlertsForWatchlist = async ({ db, workspaceId, items }) => {
+    if (!workspaceId || !state.user) return;
+    const list = Array.isArray(items) ? items : [];
+    for (const item of list) {
+      const ticker = normalizeTicker(item?.ticker || item?.id || "");
+      if (!ticker) continue;
+      const alertId = `volatility_${ticker}`;
+      const ref = db.collection("users").doc(workspaceId).collection("price_alerts").doc(alertId);
+      const snap = await ref.get();
+      if (snap.exists) continue;
+      await ref.set(
+        {
+          ticker,
+          condition: "volatility",
+          thresholdPercent: DEFAULT_VOLATILITY_THRESHOLD,
+          baselinePrice: null,
+          active: true,
+          status: "active",
+          isDefault: true,
+          createdByUid: state.user.uid,
+          createdByEmail: state.user.email || "",
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+          notes: "Default volatility alert (±5%) for followed assets.",
+          meta: buildMeta(),
+        },
+        { merge: true }
+      );
+    }
+  };
+
+  const runVolatilityAlertsCheck = async ({ db, functions, workspaceId, sendPush = true }) => {
+    if (!workspaceId || !state.user) return { checked: 0, triggered: 0 };
+    const querySnap = await db
+      .collection("users")
+      .doc(workspaceId)
+      .collection("price_alerts")
+      .where("condition", "==", "volatility")
+      .where("active", "==", true)
+      .get();
+    if (querySnap.empty) return { checked: 0, triggered: 0 };
+
+    const getHistory = functions.httpsCallable("get_ticker_history");
+    const sendTestNotification = functions.httpsCallable("send_test_notification");
+    let checked = 0;
+    let triggered = 0;
+
+    const today = new Date();
+    const start = new Date(today);
+    start.setDate(start.getDate() - 14);
+    const startKey = start.toISOString().slice(0, 10);
+    const endKey = today.toISOString().slice(0, 10);
+
+    for (const doc of querySnap.docs) {
+      const alertId = doc.id;
+      const data = doc.data() || {};
+      const ticker = normalizeTicker(data.ticker || "");
+      if (!ticker) continue;
+      checked += 1;
+
+      try {
+        const historyResult = await getHistory({ ticker, interval: "1d", start: startKey, end: endKey, meta: buildMeta() });
+        const rows = Array.isArray(historyResult.data?.rows) ? historyResult.data.rows : [];
+        const current = rows.length ? extractCloseFromHistoryRow(rows[rows.length - 1]) : null;
+        if (current === null || current <= 0) continue;
+
+        const threshold = toFiniteOrNull(data.thresholdPercent) ?? DEFAULT_VOLATILITY_THRESHOLD;
+        const baseline = toFiniteOrNull(data.baselinePrice);
+        if (baseline === null || baseline <= 0) {
+          await doc.ref.set(
+            {
+              baselinePrice: current,
+              lastPrice: current,
+              lastCheckedAt: firebase.firestore.FieldValue.serverTimestamp(),
+              updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            },
+            { merge: true }
+          );
+          continue;
+        }
+
+        const change = (current - baseline) / baseline;
+        const hit = Math.abs(change) >= threshold;
+        await doc.ref.set(
+          {
+            lastPrice: current,
+            percentChange: change,
+            lastCheckedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            status: hit ? "triggered" : "active",
+            triggeredAt: hit ? firebase.firestore.FieldValue.serverTimestamp() : null,
+            baselinePrice: hit ? current : baseline,
+          },
+          { merge: true }
+        );
+        if (!hit) continue;
+
+        triggered += 1;
+        if (sendPush) {
+          try {
+            const direction = change >= 0 ? "up" : "down";
+            await sendTestNotification({
+              title: `Volatility alert: ${ticker}`,
+              body: `${ticker} moved ${formatPercent(change * 100, { signed: true, digits: 2 })} (${direction}) from baseline.`,
+              meta: buildMeta(),
+            });
+          } catch (error) {
+            // Ignore push failures.
+          }
+        }
+      } catch (error) {
+        // Ignore per-ticker failures so one feed issue does not block the loop.
+      }
+    }
+    return { checked, triggered };
+  };
+
+  const startVolatilityMonitor = (db, functions, workspaceId) => {
+    if (state.volatilityMonitorTimer) {
+      window.clearInterval(state.volatilityMonitorTimer);
+      state.volatilityMonitorTimer = null;
+    }
+    if (!workspaceId || !state.user) return;
+    state.volatilityMonitorTimer = window.setInterval(() => {
+      runVolatilityAlertsCheck({ db, functions, workspaceId, sendPush: true }).catch(() => {});
+    }, 15 * 60 * 1000);
+  };
+
+  const renderAlerts = (items, workspaceId) => {
 	    if (!ui.alertsList) return;
 	    const editable = canWriteWorkspace(workspaceId);
 	    const list = Array.isArray(items) ? items : [];
@@ -2105,17 +2377,19 @@
 	    ui.alertsList.innerHTML = list
 	      .map((item) => {
 	        const ticker = normalizeTicker(item.ticker || "");
-	        const condition = String(item.condition || "above");
-	        const target = Number(item.targetPrice ?? item.target ?? item.price);
-	        const active = Boolean(item.active);
-	        const status = String(item.status || (active ? "active" : "disabled"));
+        const condition = String(item.condition || "above");
+        const target = Number(item.targetPrice ?? item.target ?? item.price);
+        const active = Boolean(item.active);
+        const status = String(item.status || (active ? "active" : "disabled"));
 	        const createdBy = escapeHtml(item.createdByEmail || item.createdBy?.email || "");
 	        const lastPrice = typeof item.lastPrice === "number" ? `$${item.lastPrice.toFixed(2)}` : "";
 	        const lastChecked = item.lastCheckedAt ? `Checked ${formatTimestamp(item.lastCheckedAt)}` : "";
 	        const triggeredAt = item.triggeredAt ? `Triggered ${formatTimestamp(item.triggeredAt)}` : "";
 	        const metaParts = [createdBy ? `By ${createdBy}` : "", lastChecked, lastPrice, triggeredAt].filter(Boolean);
 	        const meta = metaParts.length ? `<div class="small muted">${metaParts.join(" · ")}</div>` : "";
-	        const title = `${escapeHtml(ticker)} ${condition === "below" ? "below" : "above"} ${Number.isFinite(target) ? `$${target.toFixed(2)}` : "—"}`;
+        const title = condition === "volatility"
+          ? `${escapeHtml(ticker)} volatility ±${Math.round((toFiniteOrNull(item.thresholdPercent) ?? DEFAULT_VOLATILITY_THRESHOLD) * 100)}%`
+          : `${escapeHtml(ticker)} ${condition === "below" ? "below" : "above"} ${Number.isFinite(target) ? `$${target.toFixed(2)}` : "—"}`;
 	        const actions = editable
 	          ? `
 	            <div class="task-actions">
@@ -3182,7 +3456,31 @@
     const end = Math.min(rows.length, start + pageSize);
     const bodyRows = rows.slice(start, end);
 
+    const controlsMarkup = (position = "top") => `
+      <div class="csv-controls csv-toolbar${position === "bottom" ? " is-bottom" : ""}" aria-label="CSV preview pagination">
+        <div class="csv-group">
+          <span class="small csv-footnote">Rows per page</span>
+          ${[25, 50, 100, 250, 500]
+            .map(
+              (size) =>
+                `<button class="task-chip" type="button" data-action="csv-page-size" data-size="${size}" aria-pressed="${
+                  size === pageSize ? "true" : "false"
+                }">${size}</button>`
+            )
+            .join("")}
+        </div>
+        <div class="csv-group">
+          <button class="task-chip" type="button" data-action="csv-page" data-dir="-1" ${currentPage === 0 ? "disabled" : ""}>Prev</button>
+          <span class="small csv-footnote">Page ${currentPage + 1} of ${totalPages}</span>
+          <button class="task-chip" type="button" data-action="csv-page" data-dir="1" ${
+            currentPage >= totalPages - 1 ? "disabled" : ""
+          }>Next</button>
+        </div>
+      </div>
+    `;
+
     ui.predictionsPreview.innerHTML = `
+      ${controlsMarkup("top")}
       <div class="table-wrap">
         <table class="data-table">
           <thead>
@@ -3195,27 +3493,7 @@
           </tbody>
         </table>
       </div>
-      <div class="csv-controls" aria-label="CSV preview pagination">
-        <div class="csv-group">
-          <span class="small csv-footnote">Show</span>
-          ${[25, 50, 100, 250, 500]
-            .map(
-              (size) =>
-                `<button class="task-chip" type="button" data-action="csv-page-size" data-size="${size}" aria-pressed="${
-                  size === pageSize ? "true" : "false"
-                }">${size}</button>`
-            )
-            .join("")}
-          <span class="small csv-footnote">rows</span>
-        </div>
-        <div class="csv-group">
-          <button class="task-chip" type="button" data-action="csv-page" data-dir="-1" ${currentPage === 0 ? "disabled" : ""}>Prev</button>
-          <span class="small csv-footnote">Page ${currentPage + 1} / ${totalPages}</span>
-          <button class="task-chip" type="button" data-action="csv-page" data-dir="1" ${
-            currentPage >= totalPages - 1 ? "disabled" : ""
-          }>Next</button>
-        </div>
-      </div>
+      ${controlsMarkup("bottom")}
       <div class="small csv-footnote" style="margin-top:10px;">
         Showing rows ${start + 1}-${end} of ${rows.length} row(s) and ${cols.length} of ${headers.length} column(s).
       </div>
@@ -3340,26 +3618,49 @@
   };
 
   const runPredictionsQuantileMapping = async (functions) => {
-    if (!state.user) {
-      showToast("Sign in to run the OpenAI CSV Agent.", "warn");
-      return;
-    }
+    if (!state.user) throw new Error("Sign in to run the OpenAI CSV Agent.");
     const table = state.predictionsContext.table;
     const uploadDoc = state.predictionsContext.uploadDoc;
     const uploadId = state.predictionsContext.uploadId;
     if (!table || !Array.isArray(table.rows) || table.rows.length < 2) {
-      showToast("Load an uploaded CSV first.", "warn");
-      return;
+      throw new Error("Load an uploaded CSV first.");
     }
     if (!uploadDoc) {
-      showToast("Upload metadata is not loaded yet.", "warn");
-      return;
+      throw new Error("Upload metadata is not loaded yet.");
     }
 
-    const ticker = normalizeTicker(uploadDoc.ticker || uploadDoc.metaTicker || "");
+    let ticker = normalizeTicker(
+      uploadDoc.ticker || uploadDoc.metaTicker || ui.predictionsTicker?.value || state.tickerContext?.ticker || ""
+    );
     if (!ticker) {
-      showToast("This upload is missing a ticker. Re-upload with a ticker.", "warn");
-      return;
+      const prompted = await openPromptModal({
+        title: "Ticker required",
+        message: "Enter the ticker symbol for this uploaded predictions CSV.",
+        label: "Ticker",
+        placeholder: "AAPL",
+        initialValue: "",
+        confirmLabel: "Save ticker",
+      });
+      ticker = normalizeTicker(prompted || "");
+      if (!ticker) {
+        throw new Error("Ticker is required to run the OpenAI CSV Agent.");
+      }
+      if (ui.predictionsTicker) ui.predictionsTicker.value = ticker;
+      if (uploadId && state.clients?.db) {
+        try {
+          await state.clients.db.collection("prediction_uploads").doc(uploadId).set(
+            {
+              ticker,
+              metaTicker: ticker,
+              updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+              meta: buildMeta(),
+            },
+            { merge: true }
+          );
+        } catch (error) {
+          // Keep running even if persistence fails.
+        }
+      }
     }
 
     const headers = table.headers || [];
@@ -3371,6 +3672,11 @@
 
     const quantileCols = extractQuantileColumns(headers);
     if (!quantileCols.length) throw new Error("No quantile columns were detected (expected names like p10/q50/p90).");
+
+    const quantilesForRow = (row) =>
+      quantileCols
+        .map((col) => ({ ...col, value: numericCell(row, col.idx) }))
+        .filter((item) => Number.isFinite(item.value));
 
     const rowsWithDate = rows.map((row, idx) => {
       const dt = parseDateCell(row?.[dateIndex]);
@@ -3388,29 +3694,52 @@
 
     const firstRaw = rowsWithDate[0];
     const lastRaw = rowsWithDate[rowsWithDate.length - 1];
-    const firstUseIdx = nearestWeekdayIndex(rowsWithDate, 0);
-    const lastUseIdx = nearestWeekdayIndex(rowsWithDate, rowsWithDate.length - 1);
-    if (firstUseIdx < 0 || lastUseIdx < 0) throw new Error("No weekday rows found in this CSV.");
-    const firstUse = rowsWithDate[firstUseIdx];
-    const lastUse = rowsWithDate[lastUseIdx];
+    const weekdayRows = rowsWithDate.filter((item) => item.isWeekday);
+    const firstUse =
+      weekdayRows.find((item) => quantilesForRow(item.row).length > 0) ||
+      rowsWithDate.find((item) => quantilesForRow(item.row).length > 0) ||
+      rowsWithDate[0];
+    const lastUse =
+      [...weekdayRows].reverse().find((item) => quantilesForRow(item.row).length > 0) ||
+      [...rowsWithDate].reverse().find((item) => quantilesForRow(item.row).length > 0) ||
+      rowsWithDate[rowsWithDate.length - 1];
 
-    const highLookup = await fetchTickerHighNearDate(functions, ticker, firstUse.ymd);
-    const highValue = Number(highLookup.high);
-    if (!Number.isFinite(highValue)) throw new Error("Unable to compute a valid High value near the first weekday row.");
-
-    const startQuantiles = quantileCols
-      .map((col) => ({ ...col, value: numericCell(firstUse.row, col.idx) }))
-      .filter((item) => Number.isFinite(item.value));
+    const startQuantiles = quantilesForRow(firstUse.row);
     if (!startQuantiles.length) throw new Error("Could not find numeric quantile values on the first weekday row.");
 
-    let selected = startQuantiles[0];
-    for (const candidate of startQuantiles) {
-      if (highValue >= candidate.value) selected = candidate;
+    let highLookup = null;
+    let highLookupError = "";
+    let highValue = NaN;
+    try {
+      highLookup = await fetchTickerHighNearDate(functions, ticker, firstUse.ymd);
+      highValue = Number(highLookup.high);
+    } catch (error) {
+      highLookupError = String(error?.message || "Unable to fetch the reference High value.");
+    }
+
+    let selected = startQuantiles.reduce((best, item) =>
+      Math.abs(item.q - 0.5) < Math.abs(best.q - 0.5) ? item : best
+    , startQuantiles[0]);
+    if (Number.isFinite(highValue)) {
+      selected = startQuantiles[0];
+      for (const candidate of startQuantiles) {
+        if (highValue >= candidate.value) selected = candidate;
+      }
     }
 
     const pointForecastValue = numericCell(lastUse.row, selected.idx);
-    if (!Number.isFinite(pointForecastValue)) {
-      throw new Error(`Last weekday row is missing a numeric ${selected.header} value.`);
+    let resolvedPointForecast = pointForecastValue;
+    if (!Number.isFinite(resolvedPointForecast)) {
+      const lastQuantiles = quantilesForRow(lastUse.row);
+      if (lastQuantiles.length) {
+        const nearest = lastQuantiles.reduce((best, item) =>
+          Math.abs(item.q - selected.q) < Math.abs(best.q - selected.q) ? item : best
+        , lastQuantiles[0]);
+        resolvedPointForecast = nearest.value;
+      }
+    }
+    if (!Number.isFinite(resolvedPointForecast)) {
+      throw new Error(`Last usable row is missing numeric quantile values.`);
     }
 
     const firstRowText = firstRaw.row.map((value) => String(value ?? "")).join(" | ");
@@ -3419,12 +3748,14 @@
     if (!firstRaw.isWeekday) warningBits.push(`First row (${firstRaw.ymd}) is not a weekday; using ${firstUse.ymd}.`);
     if (!lastRaw.isWeekday) warningBits.push(`Last row (${lastRaw.ymd}) is not a weekday; using ${lastUse.ymd}.`);
 
-    const relation =
-      highValue > selected.value
-        ? `High ${highValue.toFixed(2)} is above ${selected.label.toUpperCase()} start value ${selected.value.toFixed(2)}.`
-        : highValue < selected.value
-          ? `High ${highValue.toFixed(2)} is below ${selected.label.toUpperCase()} start value ${selected.value.toFixed(2)}.`
-          : `High ${highValue.toFixed(2)} is equal to ${selected.label.toUpperCase()} start value ${selected.value.toFixed(2)}.`;
+    if (highLookupError) warningBits.push(highLookupError);
+    const relation = Number.isFinite(highValue)
+      ? (highValue > selected.value
+          ? `High ${highValue.toFixed(2)} is above ${selected.label.toUpperCase()} start value ${selected.value.toFixed(2)}.`
+          : highValue < selected.value
+            ? `High ${highValue.toFixed(2)} is below ${selected.label.toUpperCase()} start value ${selected.value.toFixed(2)}.`
+            : `High ${highValue.toFixed(2)} is equal to ${selected.label.toUpperCase()} start value ${selected.value.toFixed(2)}.`)
+      : `Reference high was unavailable, so ${selected.label.toUpperCase()} was selected from the first usable row.`;
 
     const mappingResult = {
       uploadId: uploadId || "",
@@ -3437,12 +3768,12 @@
       lastRowIsWeekday: lastRaw.isWeekday,
       lastWeekdayDate: lastUse.ymd,
       warningText: warningBits.join(" "),
-      referenceHigh: Number(highValue.toFixed(4)),
-      referenceHighDate: highLookup.ymd,
+      referenceHigh: Number.isFinite(highValue) ? Number(highValue.toFixed(4)) : null,
+      referenceHighDate: highLookup?.ymd || "",
       selectedQuantile: selected.label,
       selectedQuantileLabel: selected.label.toUpperCase(),
       selectedQuantileStartValue: Number(selected.value.toFixed(4)),
-      pointForecastValue: Number(pointForecastValue.toFixed(4)),
+      pointForecastValue: Number(resolvedPointForecast.toFixed(4)),
       relation,
       firstRowText,
       lastRowText,
@@ -3455,12 +3786,16 @@
         <div class="small"><strong>First row date:</strong> ${escapeHtml(firstRaw.ymd)} (${firstRaw.isWeekday ? "weekday" : "weekend"})</div>
         <div class="small"><strong>Last row date:</strong> ${escapeHtml(lastRaw.ymd)} (${lastRaw.isWeekday ? "weekday" : "weekend"})</div>
         ${warningBits.length ? `<div class="small" style="margin-top:8px;"><strong>Warning:</strong> ${escapeHtml(warningBits.join(" "))}</div>` : ""}
-        <div class="small" style="margin-top:8px;"><strong>Reference high:</strong> ${highLookup.high.toFixed(2)} on ${escapeHtml(highLookup.ymd)}${
-          highLookup.exact ? "" : " (nearest trading day)"
-        }</div>
+        ${
+          Number.isFinite(highValue) && highLookup
+            ? `<div class="small" style="margin-top:8px;"><strong>Reference high:</strong> ${highLookup.high.toFixed(2)} on ${escapeHtml(highLookup.ymd)}${
+                highLookup.exact ? "" : " (nearest trading day)"
+              }</div>`
+            : `<div class="small" style="margin-top:8px;"><strong>Reference high:</strong> unavailable</div>`
+        }
         <div class="small" style="margin-top:8px;"><strong>Selected quantile:</strong> ${escapeHtml(selected.label.toUpperCase())}</div>
         <div class="small">${escapeHtml(relation)}</div>
-        <div class="small" style="margin-top:8px;"><strong>Point forecast (last weekday, same quantile):</strong> ${pointForecastValue.toFixed(4)}</div>
+        <div class="small" style="margin-top:8px;"><strong>Point forecast (last weekday, same quantile):</strong> ${resolvedPointForecast.toFixed(4)}</div>
         <div class="small" style="margin-top:12px;"><strong>First prediction row (no header):</strong></div>
         <pre class="small" style="margin:6px 0 0; white-space:pre-wrap;">${escapeHtml(firstRowText)}</pre>
         <div class="small" style="margin-top:10px;"><strong>Last prediction row (no header):</strong></div>
@@ -3658,10 +3993,21 @@
         "Run the OpenAI CSV Agent to compute weekday-aware quantile mapping and return an analyst summary.";
     }
 
-    await renderPredictionsChart(table, { title });
-    setOutputReady(ui.predictionsChart);
     renderCsvPreview(table);
     setOutputReady(ui.predictionsPreview);
+    try {
+      await renderPredictionsChart(table, { title });
+      setOutputReady(ui.predictionsChart);
+    } catch (chartError) {
+      setOutputReady(ui.predictionsChart);
+      if (ui.predictionsChart) {
+        ui.predictionsChart.innerHTML = `
+          <div class="small muted">
+            CSV preview is available, but chart rendering failed: ${escapeHtml(chartError?.message || "Unknown error")}
+          </div>
+        `;
+      }
+    }
     logEvent("predictions_plotted", { upload_id: cleanId, source });
   };
 
@@ -3809,6 +4155,159 @@
     if (previous) ui.screenerLoadSelect.value = previous;
   };
 
+  const normalizeRoiHorizonKey = (raw) => {
+    const key = String(raw || "").trim().toLowerCase();
+    if (key === "1m" || key === "3m" || key === "6m" || key === "1y" || key === "5y" || key === "max") return key;
+    return AI_LEADERBOARD_DEFAULT_HORIZON;
+  };
+
+  const toFiniteOrNull = (value) => {
+    const num = typeof value === "number" ? value : Number(value);
+    return Number.isFinite(num) ? num : null;
+  };
+
+  const formatRoiPercent = (value) => {
+    const num = toFiniteOrNull(value);
+    if (num === null) return "—";
+    return formatPercent(num * 100, { signed: true, digits: 2 });
+  };
+
+  const ensureReturnsShape = (returnsRaw = {}) => {
+    const base = returnsRaw && typeof returnsRaw === "object" ? returnsRaw : {};
+    const oneY = toFiniteOrNull(base["1y"]);
+    const normalized = {
+      "1m": toFiniteOrNull(base["1m"]),
+      "3m": toFiniteOrNull(base["3m"]),
+      "6m": toFiniteOrNull(base["6m"]),
+      "1y": oneY,
+      "5y": toFiniteOrNull(base["5y"]),
+      max: toFiniteOrNull(base.max),
+    };
+    if (normalized["1m"] === null && oneY !== null) normalized["1m"] = oneY * 0.09;
+    if (normalized["3m"] === null && oneY !== null) normalized["3m"] = oneY * 0.28;
+    if (normalized["6m"] === null && oneY !== null) normalized["6m"] = oneY * 0.55;
+    if (normalized["5y"] === null && oneY !== null) normalized["5y"] = oneY * 4.2;
+    if (normalized.max === null) normalized.max = Math.max(normalized["5y"] || -Infinity, normalized["1y"] || -Infinity);
+    return normalized;
+  };
+
+  const getAgentReturn = (agent, horizonKey) => {
+    const key = normalizeRoiHorizonKey(horizonKey);
+    const returns = ensureReturnsShape(agent?.returns || {});
+    return toFiniteOrNull(returns[key]);
+  };
+
+  const renderAiPortfolioSummary = (runDoc) => {
+    const portfolio = runDoc?.aiPortfolio && typeof runDoc.aiPortfolio === "object" ? runDoc.aiPortfolio : null;
+    if (!portfolio) {
+      return `<div class="small muted">Generate an AI Portfolio to score long-term growth with Meta Prophet and publish a leaderboard-ready AI Agent.</div>`;
+    }
+    const holdings = Array.isArray(portfolio.holdings) ? portfolio.holdings : [];
+    const chips = holdings
+      .slice(0, 10)
+      .map((item) => {
+        const symbol = escapeHtml(String(item?.symbol || "").trim() || "—");
+        const roi = formatRoiPercent(item?.projectedRoi);
+        return `<span class="trending-chip">${symbol} · ${roi}</span>`;
+      })
+      .join("");
+    const rationale = escapeHtml(String(portfolio.rationale || "").trim());
+    const strategy = escapeHtml(String(portfolio.strategy || "Meta Prophet long-term growth").trim());
+    const updatedAt = portfolio.updatedAt ? escapeHtml(formatTimestamp(portfolio.updatedAt)) : "";
+    const footer = [updatedAt ? `Updated ${updatedAt}` : "", portfolio.agentId ? `Agent ID: ${escapeHtml(portfolio.agentId)}` : ""]
+      .filter(Boolean)
+      .join(" · ");
+    return `
+      <div class="small"><strong>Strategy:</strong> ${strategy}</div>
+      ${chips ? `<div class="trending-list" style="margin-top:10px;">${chips}</div>` : ""}
+      ${rationale ? `<div class="small" style="margin-top:10px;"><strong>Trade rationale:</strong> ${rationale}</div>` : ""}
+      ${footer ? `<div class="small muted" style="margin-top:8px;">${footer}</div>` : ""}
+    `;
+  };
+
+  const renderAIAgentLeaderboard = (agents = []) => {
+    const container = document.getElementById("ai-agent-leaderboard");
+    if (!container) return;
+    const selected = normalizeRoiHorizonKey(document.getElementById("ai-leaderboard-horizon")?.value || state.aiLeaderboardHorizon);
+    state.aiLeaderboardHorizon = selected;
+    const list = Array.isArray(agents) ? agents.slice() : [];
+    const ranked = list
+      .map((agent) => ({
+        ...agent,
+        __roi: getAgentReturn(agent, selected),
+      }))
+      .sort((a, b) => {
+        const ax = toFiniteOrNull(a.__roi);
+        const bx = toFiniteOrNull(b.__roi);
+        if (ax === null && bx === null) return 0;
+        if (ax === null) return 1;
+        if (bx === null) return -1;
+        return bx - ax;
+      });
+
+    if (!ranked.length) {
+      container.innerHTML = `<div class="small muted">No AI Agents yet. Generate one from the latest screen to publish into the leaderboard.</div>`;
+      return;
+    }
+
+    container.innerHTML = `
+      <div class="table-wrap">
+        <table class="data-table ai-leaderboard-table">
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Agent</th>
+              <th>${selected.toUpperCase()} ROI</th>
+              <th>Holdings</th>
+              <th>Social</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${ranked
+              .map((agent, idx) => {
+                const agentId = escapeHtml(String(agent.id || "").trim());
+                const name = escapeHtml(String(agent.name || "Unnamed Agent").trim());
+                const roi = formatRoiPercent(agent.__roi);
+                const holdings = Array.isArray(agent.holdings) ? agent.holdings : [];
+                const symbols = holdings
+                  .slice(0, 6)
+                  .map((item) => escapeHtml(typeof item === "string" ? item : item?.symbol || ""))
+                  .filter(Boolean)
+                  .join(", ");
+                const likes = Number(agent.likesCount || 0);
+                const follows = Number(agent.followersCount || 0);
+                const liked = state.aiLikeSet.has(String(agent.id || ""));
+                const followed = state.aiFollowSet.has(String(agent.id || ""));
+                return `
+                  <tr>
+                    <td>${idx + 1}</td>
+                    <td>
+                      <div><strong>${name}</strong></div>
+                      <div class="small muted">${escapeHtml(String(agent.description || "").trim() || "AI-generated portfolio agent")}</div>
+                    </td>
+                    <td><strong>${roi}</strong></td>
+                    <td>${symbols || "—"}</td>
+                    <td>
+                      <div class="task-actions">
+                        <button class="task-chip${followed ? " active" : ""}" type="button" data-action="ai-agent-follow" data-agent-id="${agentId}">
+                          ${followed ? "Following" : "Follow"} (${follows})
+                        </button>
+                        <button class="task-chip${liked ? " active" : ""}" type="button" data-action="ai-agent-like" data-agent-id="${agentId}">
+                          ${liked ? "Liked" : "Like"} (${likes})
+                        </button>
+                        <button class="task-chip" type="button" data-action="ai-agent-share" data-agent-id="${agentId}">Share</button>
+                      </div>
+                    </td>
+                  </tr>
+                `;
+              })
+              .join("")}
+          </tbody>
+        </table>
+      </div>
+    `;
+  };
+
   const renderScreenerRunOutput = (runDoc) => {
     if (!ui.screenerOutput) return;
     const rows = Array.isArray(runDoc?.results) ? runDoc.results : [];
@@ -3825,6 +4324,8 @@
     const createdAt = escapeHtml(formatTimestamp(runDoc.createdAt));
     const notes = String(runDoc.notes || "").trim();
     const title = String(runDoc.title || "").trim();
+    const portfolioSummary = renderAiPortfolioSummary(runDoc);
+    const agentId = escapeHtml(String(runDoc?.aiPortfolio?.agentId || "").trim());
 
     ui.screenerOutput.innerHTML = `
       ${title ? `<div class="small"><strong>Title:</strong> ${escapeHtml(title)}</div>` : ""}
@@ -3837,6 +4338,33 @@
         <button class="cta secondary small" type="button" data-action="share-screener" data-run-id="${runId}">Share link</button>
         <button class="cta secondary small danger" type="button" data-action="delete-screener" data-run-id="${runId}">Delete</button>
       </div>
+      <div class="card" style="margin-top:14px;">
+        <div class="card-head">
+          <h3>AI Portfolio</h3>
+          <div class="hero-actions" style="margin-top:0;">
+            <button class="cta secondary small" type="button" data-action="generate-ai-portfolio" data-run-id="${runId}">${icon("magic-wand")}<span>Generate with Meta Prophet</span></button>
+            <button class="cta secondary small" type="button" data-action="rename-ai-agent" data-agent-id="${agentId}" ${agentId ? "" : "disabled"}>${icon("edit-pencil")}<span>Rename Agent</span></button>
+          </div>
+        </div>
+        <div id="ai-portfolio-summary" class="small">${portfolioSummary}</div>
+      </div>
+      <div class="card" style="margin-top:14px;">
+        <div class="card-head">
+          <h3>AI Portfolio Leaderboard</h3>
+          <div class="field" style="margin:0; min-width: 170px;">
+            <label class="label" for="ai-leaderboard-horizon">Sort by ROI</label>
+            <select id="ai-leaderboard-horizon">
+              <option value="1m">1M</option>
+              <option value="3m">3M</option>
+              <option value="6m">6M</option>
+              <option value="1y" selected>1Y</option>
+              <option value="5y">5Y</option>
+              <option value="max">Max</option>
+            </select>
+          </div>
+        </div>
+        <div id="ai-agent-leaderboard" class="panel-output small" style="max-height: none;"></div>
+      </div>
       <div class="table-wrap" style="margin-top:12px;">
         <table class="data-table">
           <thead>
@@ -3848,6 +4376,7 @@
               <th>RSI 14</th>
               <th>Volatility</th>
               <th>Score</th>
+              <th>Projected 1Y ROI</th>
             </tr>
           </thead>
           <tbody>
@@ -3866,6 +4395,7 @@
                     <td>${row.rsi14 ?? "—"}</td>
                     <td>${row.volatility ?? "—"}</td>
                     <td>${row.score ?? "—"}</td>
+                    <td>${formatRoiPercent(toFiniteOrNull(row.projectedRoi))}</td>
                   </tr>
                 `
               )
@@ -3874,6 +4404,456 @@
         </table>
       </div>
     `;
+
+    const horizonSelect = document.getElementById("ai-leaderboard-horizon");
+    if (horizonSelect) {
+      horizonSelect.value = state.aiLeaderboardHorizon;
+      horizonSelect.addEventListener("change", () => {
+        state.aiLeaderboardHorizon = normalizeRoiHorizonKey(horizonSelect.value);
+        renderAIAgentLeaderboard(state.aiAgents);
+      });
+    }
+    renderAIAgentLeaderboard(state.aiAgents);
+  };
+
+  const extractCloseFromHistoryRow = (row) => {
+    const keys = ["close", "Close", "adjClose", "Adj Close", "c", "last", "price"];
+    for (const key of keys) {
+      const value = toFiniteOrNull(row?.[key]);
+      if (value !== null) return value;
+    }
+    return null;
+  };
+
+  const extractDateFromHistoryRow = (row) => {
+    const keys = ["date", "datetime", "timestamp", "ds", "Date", "time"];
+    for (const key of keys) {
+      const raw = row?.[key];
+      if (!raw) continue;
+      const text = String(raw).trim();
+      if (!text) continue;
+      const parsed = new Date(text);
+      if (!Number.isNaN(parsed.getTime())) return parsed;
+      const match = text.match(/^(\d{4}-\d{2}-\d{2})/);
+      if (match) {
+        const dt = new Date(match[1]);
+        if (!Number.isNaN(dt.getTime())) return dt;
+      }
+    }
+    return null;
+  };
+
+  const summarizeTickerRationale = ({ projectedRoi, q4Seasonality }) => {
+    if (projectedRoi > 0 && q4Seasonality) {
+      return "Prophet detects strong upward trend with recurring Q4 seasonal strength.";
+    }
+    if (projectedRoi > 0) {
+      return "Prophet projects a positive long-term slope with supportive confidence structure.";
+    }
+    return "Trend is mixed and confidence is weaker versus peers.";
+  };
+
+  const averageNumber = (values = []) => {
+    const nums = values.map((value) => toFiniteOrNull(value)).filter((value) => value !== null);
+    if (!nums.length) return null;
+    const total = nums.reduce((acc, value) => acc + value, 0);
+    return total / nums.length;
+  };
+
+  const buildProphetTickerScore = async ({ functions, db, ticker, workspaceId }) => {
+    const cleanTicker = normalizeTicker(ticker);
+    if (!cleanTicker) return null;
+
+    const endDate = new Date();
+    const startDate = new Date(endDate);
+    startDate.setFullYear(startDate.getFullYear() - 2);
+    const start = startDate.toISOString().slice(0, 10);
+    const end = endDate.toISOString().slice(0, 10);
+
+    const getHistory = functions.httpsCallable("get_ticker_history");
+    const historyResult = await getHistory({ ticker: cleanTicker, interval: "1d", start, end, meta: buildMeta() });
+    const historyRows = Array.isArray(historyResult.data?.rows) ? historyResult.data.rows : [];
+    if (!historyRows.length) return null;
+
+    const closeSeries = historyRows.map((row) => extractCloseFromHistoryRow(row)).filter((value) => value !== null);
+    if (!closeSeries.length) return null;
+    const currentPrice = closeSeries[closeSeries.length - 1];
+    if (currentPrice === null || currentPrice <= 0) return null;
+
+    const runForecast = functions.httpsCallable("run_timeseries_forecast");
+    const forecastResult = await runForecast({
+      ticker: cleanTicker,
+      horizon: 365,
+      interval: "1d",
+      service: "prophet",
+      dailySeasonality: true,
+      quantiles: [0.1, 0.5, 0.9],
+      workspaceId,
+      start,
+      meta: buildMeta(),
+    });
+    const requestId = String(forecastResult.data?.requestId || "").trim();
+    if (!requestId) return null;
+
+    const forecastSnap = await db.collection("forecast_requests").doc(requestId).get();
+    if (!forecastSnap.exists) return null;
+    const forecastDoc = forecastSnap.data() || {};
+    const forecastRows = Array.isArray(forecastDoc.forecastRows) ? forecastDoc.forecastRows : [];
+    if (!forecastRows.length) return null;
+
+    const lastRow = forecastRows[forecastRows.length - 1] || {};
+    const yhat = toFiniteOrNull(lastRow.q50 ?? lastRow.yhat ?? lastRow.median);
+    const yhatLower = toFiniteOrNull(lastRow.q10 ?? lastRow.yhat_lower ?? lastRow.lower);
+    if (yhat === null) return null;
+    if (yhatLower !== null && yhatLower < 0) return null;
+
+    const projectedRoi = (yhat - currentPrice) / currentPrice;
+
+    const forecastWithDate = forecastRows
+      .map((row) => {
+        const ds = row?.ds ? new Date(String(row.ds)) : null;
+        const value = toFiniteOrNull(row?.q50 ?? row?.yhat ?? row?.median);
+        return {
+          ds: ds && !Number.isNaN(ds.getTime()) ? ds : null,
+          value,
+        };
+      })
+      .filter((row) => row.ds && row.value !== null);
+
+    const q4Values = forecastWithDate.filter((row) => row.ds.getUTCMonth() >= 9).map((row) => row.value);
+    const q4Avg = averageNumber(q4Values);
+    const fullAvg = averageNumber(forecastWithDate.map((row) => row.value));
+    const q4Seasonality = q4Avg !== null && fullAvg !== null && q4Avg > fullAvg * 1.02;
+
+    return {
+      symbol: cleanTicker,
+      currentPrice,
+      projectedRoi,
+      yhat,
+      yhatLower,
+      q4Seasonality,
+      rationale: summarizeTickerRationale({ projectedRoi, q4Seasonality }),
+    };
+  };
+
+  const buildPortfolioReturns = ({ holdings, screenerRows }) => {
+    const bySymbol = new Map(
+      (Array.isArray(screenerRows) ? screenerRows : []).map((row) => [normalizeTicker(row?.symbol || ""), row || {}])
+    );
+    const oneY = averageNumber((holdings || []).map((item) => item.projectedRoi));
+    const oneMFromScreen = averageNumber(
+      (holdings || []).map((item) => {
+        const row = bySymbol.get(item.symbol);
+        const val = toFiniteOrNull(row?.return1m);
+        return val === null ? null : val / 100;
+      })
+    );
+    const threeMFromScreen = averageNumber(
+      (holdings || []).map((item) => {
+        const row = bySymbol.get(item.symbol);
+        const val = toFiniteOrNull(row?.return3m);
+        return val === null ? null : val / 100;
+      })
+    );
+    return ensureReturnsShape({
+      "1m": oneMFromScreen !== null ? oneMFromScreen : oneY !== null ? oneY * 0.09 : null,
+      "3m": threeMFromScreen !== null ? threeMFromScreen : oneY !== null ? oneY * 0.28 : null,
+      "6m": oneY !== null ? oneY * 0.55 : null,
+      "1y": oneY,
+      "5y": oneY !== null ? oneY * 4.2 : null,
+      max: null,
+    });
+  };
+
+  const buildPortfolioRationale = (holdings = []) => {
+    const strong = holdings.filter((item) => item.q4Seasonality).length;
+    const avgRoi = averageNumber(holdings.map((item) => item.projectedRoi));
+    if (strong > 0) {
+      return "Prophet detects strong upward trend with recurring Q4 seasonal strength. The portfolio is further filtered for positive confidence structure and ranked by projected 1-year ROI.";
+    }
+    if (avgRoi !== null && avgRoi > 0) {
+      return "This portfolio emphasizes names with positive Prophet slope and favorable 1-year risk-adjusted upside. Selections were constrained to avoid negative lower confidence outcomes.";
+    }
+    return "Selected for relative long-term strength versus peers while preserving diversification across sectors and factor regimes.";
+  };
+
+  const persistAIAgentSocialAction = async ({ functions, payload }) => {
+    try {
+      const action = functions.httpsCallable("upsert_ai_agent_social_action");
+      await action(payload);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  };
+
+  const toggleAIAgentSocial = async ({ kind, agentId, db, functions }) => {
+    if (!state.user) {
+      showToast("Sign in to interact with AI Agents.", "warn");
+      return;
+    }
+    const workspaceId = state.activeWorkspaceId || state.user.uid;
+    if (!workspaceId || !agentId) return;
+
+    const actionKey = kind === "follow" ? "follow" : "like";
+    const socialCollection = actionKey === "follow" ? "ai_agent_followers" : "ai_agent_likes";
+    const userDocId = `${agentId}__${state.user.uid}`;
+    const socialRef = db.collection("users").doc(workspaceId).collection(socialCollection).doc(userDocId);
+    const agentRef = db.collection("users").doc(workspaceId).collection("ai_agents").doc(agentId);
+    const countField = actionKey === "follow" ? "followersCount" : "likesCount";
+
+    const snap = await socialRef.get();
+    const active = snap.exists;
+
+    const persistedToServer = await persistAIAgentSocialAction({
+      functions,
+      payload: { workspaceId, agentId, action: actionKey, active: !active, meta: buildMeta() },
+    });
+
+    if (!persistedToServer) {
+      await db.runTransaction(async (txn) => {
+        const agentSnap = await txn.get(agentRef);
+        const agentData = agentSnap.exists ? agentSnap.data() || {} : {};
+        const previous = Number(agentData[countField] || 0);
+        if (active) {
+          txn.delete(socialRef);
+          txn.set(
+            agentRef,
+            {
+              [countField]: Math.max(0, previous - 1),
+              updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            },
+            { merge: true }
+          );
+        } else {
+          txn.set(socialRef, {
+            agentId,
+            workspaceId,
+            userId: state.user.uid,
+            userEmail: state.user.email || "",
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            meta: buildMeta(),
+          });
+          txn.set(
+            agentRef,
+            {
+              [countField]: previous + 1,
+              updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            },
+            { merge: true }
+          );
+        }
+      });
+    }
+
+    showToast(actionKey === "follow" ? (!active ? "Following agent." : "Unfollowed agent.") : !active ? "Agent liked." : "Like removed.");
+  };
+
+  const buildAIAgentShareUrl = (agentId) => {
+    const url = new URL(window.location.origin + "/screener");
+    url.searchParams.set("agentId", String(agentId || "").trim());
+    return url.toString();
+  };
+
+  const upsertAIAgentFromPortfolio = async ({ db, workspaceId, runId, runDoc, portfolio }) => {
+    const collection = db.collection("users").doc(workspaceId).collection("ai_agents");
+    const existingId = String(runDoc?.aiPortfolio?.agentId || "").trim();
+    const nextId = existingId || `agent_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const payload = {
+      name: portfolio.name,
+      description: portfolio.description,
+      strategy: portfolio.strategy,
+      holdings: portfolio.holdings,
+      returns: portfolio.returns,
+      rationale: portfolio.rationale,
+      sourceRunId: runId,
+      likesCount: Number(runDoc?.likesCount || 0),
+      followersCount: Number(runDoc?.followersCount || 0),
+      ownerId: state.user?.uid || "",
+      ownerEmail: state.user?.email || "",
+      workspaceId,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      meta: buildMeta(),
+    };
+    await collection.doc(nextId).set(payload, { merge: true });
+    return nextId;
+  };
+
+  const generateAIPortfolioForRun = async ({ db, functions, runId, preferredName = "" }) => {
+    if (!state.user) {
+      showToast("Sign in to generate AI Portfolios.", "warn");
+      return;
+    }
+    const workspaceId = state.activeWorkspaceId || state.user.uid;
+    const runSnap = await db.collection("screener_runs").doc(runId).get();
+    if (!runSnap.exists) throw new Error("Screener run not found.");
+    const runDoc = { id: runSnap.id, ...(runSnap.data() || {}) };
+    const rows = Array.isArray(runDoc.results) ? runDoc.results : [];
+    const tickers = Array.from(
+      new Set(
+        rows
+          .map((row) => normalizeTicker(row?.symbol || ""))
+          .filter(Boolean)
+          .slice(0, 20)
+      )
+    );
+    if (!tickers.length) throw new Error("No tickers found in this run.");
+
+    const summary = document.getElementById("ai-portfolio-summary");
+    if (summary) summary.innerHTML = `<div class="small muted">Running Meta Prophet across ${tickers.length} tickers (2-year history each)...</div>`;
+
+    const scored = [];
+    for (let idx = 0; idx < tickers.length; idx += 1) {
+      const ticker = tickers[idx];
+      if (summary) summary.innerHTML = `<div class="small muted">Scoring ${ticker} (${idx + 1}/${tickers.length})...</div>`;
+      try {
+        const score = await buildProphetTickerScore({ functions, db, ticker, workspaceId });
+        if (score && score.projectedRoi > 0) scored.push(score);
+      } catch (error) {
+        // Skip individual symbol failures.
+      }
+    }
+
+    const ranked = scored
+      .filter((item) => item.yhatLower === null || item.yhatLower >= 0)
+      .sort((a, b) => b.projectedRoi - a.projectedRoi);
+    if (!ranked.length) throw new Error("No eligible Prophet candidates. Try broader screener criteria.");
+
+    const topCount = Math.max(5, Math.min(10, ranked.length));
+    const holdings = ranked.slice(0, topCount).map((row) => ({
+      symbol: row.symbol,
+      projectedRoi: row.projectedRoi,
+      currentPrice: row.currentPrice,
+      forecastPrice: row.yhat,
+      yhatLower: row.yhatLower,
+      q4Seasonality: row.q4Seasonality,
+      rationale: row.rationale,
+    }));
+
+    const baseName = String(preferredName || runDoc.aiPortfolio?.name || "").trim();
+    const chosenName = baseName || `Quantura Horizon ${new Date().toISOString().slice(0, 10)}`;
+    const returns = buildPortfolioReturns({ holdings, screenerRows: rows });
+    const rationale = buildPortfolioRationale(holdings);
+    const roiBySymbol = new Map(holdings.map((item) => [item.symbol, item.projectedRoi]));
+    const enrichedResults = rows.map((row) => {
+      const symbol = normalizeTicker(row?.symbol || "");
+      const roi = symbol ? roiBySymbol.get(symbol) : null;
+      return {
+        ...row,
+        projectedRoi: roi !== undefined ? roi : row?.projectedRoi ?? null,
+      };
+    });
+    const agentPayload = {
+      name: chosenName,
+      description: "AI Portfolio generated from screener criteria using Meta Prophet long-term growth scoring.",
+      strategy: "meta_prophet_long_term_growth",
+      holdings,
+      returns,
+      rationale,
+    };
+    const agentId = await upsertAIAgentFromPortfolio({
+      db,
+      workspaceId,
+      runId,
+      runDoc,
+      portfolio: agentPayload,
+    });
+
+    await db
+      .collection("screener_runs")
+      .doc(runId)
+      .set(
+        {
+          results: enrichedResults,
+          aiPortfolio: {
+            ...agentPayload,
+            agentId,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+          },
+        },
+        { merge: true }
+      );
+
+    const refreshed = await db.collection("screener_runs").doc(runId).get();
+    if (refreshed.exists) {
+      renderScreenerRunOutput({ id: refreshed.id, ...(refreshed.data() || {}) });
+    }
+    showToast("AI Portfolio generated and published to leaderboard.");
+  };
+
+  const startAIAgentSocial = (db, workspaceId) => {
+    if (state.unsubscribeAIFollows) state.unsubscribeAIFollows();
+    if (state.unsubscribeAILikes) state.unsubscribeAILikes();
+    state.aiFollowSet = new Set();
+    state.aiLikeSet = new Set();
+    if (!workspaceId || !state.user) return;
+
+    const userId = state.user.uid;
+    state.unsubscribeAIFollows = db
+      .collection("users")
+      .doc(workspaceId)
+      .collection("ai_agent_followers")
+      .where("userId", "==", userId)
+      .onSnapshot((snapshot) => {
+        state.aiFollowSet = new Set(snapshot.docs.map((doc) => String(doc.data()?.agentId || "").trim()).filter(Boolean));
+        renderAIAgentLeaderboard(state.aiAgents);
+      });
+
+    state.unsubscribeAILikes = db
+      .collection("users")
+      .doc(workspaceId)
+      .collection("ai_agent_likes")
+      .where("userId", "==", userId)
+      .onSnapshot((snapshot) => {
+        state.aiLikeSet = new Set(snapshot.docs.map((doc) => String(doc.data()?.agentId || "").trim()).filter(Boolean));
+        renderAIAgentLeaderboard(state.aiAgents);
+      });
+  };
+
+  const seedDefaultAIAgents = async (db, workspaceId) => {
+    if (!state.user || !workspaceId) return;
+    if (state.aiDefaultsSeededWorkspaceId === workspaceId) return;
+    const collection = db.collection("users").doc(workspaceId).collection("ai_agents");
+    const writes = DEFAULT_AI_AGENTS.map((agent) =>
+      collection.doc(`default_${agent.id}`).set(
+        {
+          ...agent,
+          isDefault: true,
+          workspaceId,
+          ownerId: "quantura",
+          ownerEmail: "system@quantura.ai",
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      )
+    );
+    await Promise.all(writes);
+    state.aiDefaultsSeededWorkspaceId = workspaceId;
+  };
+
+  const startAIAgents = (db, workspaceId) => {
+    if (state.unsubscribeAIAgents) state.unsubscribeAIAgents();
+    state.aiAgents = [];
+    if (!workspaceId) return;
+    state.unsubscribeAIAgents = db
+      .collection("users")
+      .doc(workspaceId)
+      .collection("ai_agents")
+      .orderBy("updatedAt", "desc")
+      .limit(120)
+      .onSnapshot(
+        (snapshot) => {
+          state.aiAgents = snapshot.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) }));
+          renderAIAgentLeaderboard(state.aiAgents);
+        },
+        () => {
+          state.aiAgents = [];
+          renderAIAgentLeaderboard(state.aiAgents);
+        }
+      );
+    startAIAgentSocial(db, workspaceId);
   };
 
   const loadScreenerRunById = async (db, runId) => {
@@ -4454,6 +5434,7 @@
 	    }
 	    window.setTimeout(() => ensureFeedbackPrompt(), 1400);
 	    bindPanelNavigation();
+      bindFaqAccordion();
 	    syncStickyOffsets();
 	    window.addEventListener("resize", () => window.requestAnimationFrame(syncStickyOffsets));
 	    window.setTimeout(syncStickyOffsets, 280);
@@ -4764,6 +5745,121 @@
               showToast(error.message || "Unable to share screener run.", "warn");
             } finally {
               shareScreener.disabled = false;
+            }
+            return;
+          }
+
+          const generatePortfolio = event.target.closest('[data-action="generate-ai-portfolio"]');
+          if (generatePortfolio) {
+            event.preventDefault();
+            if (!state.user) {
+              showToast("Sign in to generate AI Portfolios.", "warn");
+              return;
+            }
+            const runId = String(generatePortfolio.dataset.runId || "").trim();
+            if (!runId) return;
+            generatePortfolio.disabled = true;
+            try {
+              const preferredName = String(document.getElementById("screener-agent-name")?.value || "").trim();
+              await generateAIPortfolioForRun({ db, functions, runId, preferredName });
+              logEvent("ai_portfolio_generated", { run_id: runId });
+            } catch (error) {
+              showToast(error.message || "Unable to generate AI Portfolio.", "warn");
+            } finally {
+              generatePortfolio.disabled = false;
+            }
+            return;
+          }
+
+          const renameAgent = event.target.closest('[data-action="rename-ai-agent"]');
+          if (renameAgent) {
+            event.preventDefault();
+            if (!state.user) {
+              showToast("Sign in to rename AI Agents.", "warn");
+              return;
+            }
+            const agentId = String(renameAgent.dataset.agentId || "").trim();
+            if (!agentId) return;
+            const workspaceId = state.activeWorkspaceId || state.user.uid;
+            const current = state.aiAgents.find((agent) => String(agent.id || "") === agentId);
+            const nextName = await openPromptModal({
+              title: "Rename AI Agent",
+              message: "Update the custom name shown in the leaderboard.",
+              label: "Agent name",
+              placeholder: "Quantura Horizon",
+              initialValue: String(current?.name || "").trim(),
+              confirmLabel: "Rename",
+            });
+            if (!nextName) return;
+
+            renameAgent.disabled = true;
+            try {
+              await db
+                .collection("users")
+                .doc(workspaceId)
+                .collection("ai_agents")
+                .doc(agentId)
+                .set(
+                  {
+                    name: nextName.trim(),
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                  },
+                  { merge: true }
+                );
+              showToast("AI Agent renamed.");
+              logEvent("ai_agent_renamed", { agent_id: agentId });
+            } catch (error) {
+              showToast(error.message || "Unable to rename AI Agent.", "warn");
+            } finally {
+              renameAgent.disabled = false;
+            }
+            return;
+          }
+
+          const followAgent = event.target.closest('[data-action="ai-agent-follow"]');
+          if (followAgent) {
+            event.preventDefault();
+            const agentId = String(followAgent.dataset.agentId || "").trim();
+            if (!agentId) return;
+            followAgent.disabled = true;
+            try {
+              await toggleAIAgentSocial({ kind: "follow", agentId, db, functions });
+            } catch (error) {
+              showToast(error.message || "Unable to update follow state.", "warn");
+            } finally {
+              followAgent.disabled = false;
+            }
+            return;
+          }
+
+          const likeAgent = event.target.closest('[data-action="ai-agent-like"]');
+          if (likeAgent) {
+            event.preventDefault();
+            const agentId = String(likeAgent.dataset.agentId || "").trim();
+            if (!agentId) return;
+            likeAgent.disabled = true;
+            try {
+              await toggleAIAgentSocial({ kind: "like", agentId, db, functions });
+            } catch (error) {
+              showToast(error.message || "Unable to update like state.", "warn");
+            } finally {
+              likeAgent.disabled = false;
+            }
+            return;
+          }
+
+          const shareAgent = event.target.closest('[data-action="ai-agent-share"]');
+          if (shareAgent) {
+            event.preventDefault();
+            const agentId = String(shareAgent.dataset.agentId || "").trim();
+            if (!agentId) return;
+            const url = buildAIAgentShareUrl(agentId);
+            try {
+              await copyToClipboard(url);
+              showToast("Agent link copied.");
+              logEvent("ai_agent_shared", { agent_id: agentId });
+            } catch (error) {
+              showToast(error.message || "Unable to copy share link.", "warn");
             }
             return;
           }
@@ -5201,6 +6297,9 @@
 		      startWorkspaceTasks(db, next);
 		      startWatchlist(db, next);
 		      startPriceAlerts(db, next);
+          startAIAgents(db, next);
+          startVolatilityMonitor(db, functions, next);
+          seedDefaultAIAgents(db, next).catch(() => {});
 		      showToast("Workspace updated.");
 		    });
 
@@ -5362,8 +6461,9 @@
 	            },
 	            { merge: true }
 	          );
+          await ensureVolatilityAlertsForWatchlist({ db, workspaceId, items: [{ ticker }] });
 	        if (ui.watchlistNotes) ui.watchlistNotes.value = "";
-	        showToast(`${ticker} added to watchlist.`);
+	        showToast(`${ticker} added to watchlist. Default ±5% volatility alert enabled.`);
 	        logEvent("watchlist_added", { ticker, workspace_id: workspaceId });
 	      } catch (error) {
 	        showToast(error.message || "Unable to update watchlist.", "warn");
@@ -5428,11 +6528,12 @@
 	      if (ui.alertsStatus) ui.alertsStatus.textContent = "Checking alerts...";
 	      try {
 	        const workspaceId = state.activeWorkspaceId || state.user.uid;
+          const vol = await runVolatilityAlertsCheck({ db, functions, workspaceId, sendPush: true });
 	        const check = functions.httpsCallable("check_price_alerts");
 	        const result = await check({ workspaceId, meta: buildMeta() });
 	        const data = result.data || {};
-	        const triggered = Number(data.triggered || 0);
-	        const checked = Number(data.checked || 0);
+	        const triggered = Number(data.triggered || 0) + Number(vol.triggered || 0);
+	        const checked = Number(data.checked || 0) + Number(vol.checked || 0);
 	        if (ui.alertsStatus) ui.alertsStatus.textContent = triggered ? `${triggered} alert(s) triggered (checked ${checked}).` : `No alerts triggered (checked ${checked}).`;
 	        showToast(triggered ? `${triggered} alert(s) triggered.` : "No alerts triggered.");
 	        logEvent("alert_scan", { checked, triggered, workspace_id: workspaceId });
@@ -5511,6 +6612,7 @@
 	        remove.disabled = true;
 	        try {
 	          await db.collection("users").doc(workspaceId).collection("watchlist").doc(ticker).delete();
+            await db.collection("users").doc(workspaceId).collection("price_alerts").doc(`volatility_${ticker}`).delete().catch(() => {});
 	          showToast(`${ticker} removed.`);
 	          logEvent("watchlist_removed", { ticker, workspace_id: workspaceId });
 	        } catch (error) {
@@ -6275,22 +7377,25 @@
 	    ui.screenerForm?.addEventListener("submit", async (event) => {
 	      event.preventDefault();
 	      if (!state.user) {
-	        showToast("Sign in to run the screener.", "warn");
+	        showToast("Sign in to generate an AI Portfolio.", "warn");
 	        return;
 	      }
 	      const formData = new FormData(ui.screenerForm);
+      const requestedNames = Number(formData.get("maxNames"));
+      const boundedNames = Number.isFinite(requestedNames) ? Math.max(5, Math.min(25, requestedNames)) : 10;
       const payload = {
         universe: formData.get("universe"),
         market: formData.get("market"),
         minCap: Number(formData.get("minCap")),
-        maxNames: Number(formData.get("maxNames")),
+        maxNames: boundedNames,
         notes: formData.get("notes"),
+        agentName: String(formData.get("agentName") || "").trim(),
         workspaceId: state.activeWorkspaceId || state.user.uid,
         meta: buildMeta(),
       };
 
 	      try {
-	        setOutputLoading(ui.screenerOutput, "Running screener...");
+	        setOutputLoading(ui.screenerOutput, "Running screener and preparing AI Portfolio...");
 	        const runScreener = functions.httpsCallable("run_quick_screener");
 	        const result = await runScreener(payload);
 	        const rows = result.data?.results || [];
@@ -6298,15 +7403,22 @@
           const runTitle = String(result.data?.title || "").trim();
           renderScreenerRunOutput({
             id: runId || "—",
-            title: runTitle || `${payload.universe || "Screener"} run`,
+            title: runTitle || `${payload.universe || "AI Portfolio"} run`,
             results: rows,
             notes: payload.notes,
             createdAt: new Date().toISOString(),
           });
-        showToast("Screener run completed.");
+          if (runId) {
+            try {
+              await generateAIPortfolioForRun({ db, functions, runId, preferredName: payload.agentName });
+            } catch (portfolioError) {
+              showToast(portfolioError.message || "Portfolio generated from screener, but AI ranking needs retry.", "warn");
+            }
+          }
+        showToast("AI Portfolio generation started.");
         logEvent("screener_request", { universe: payload.universe });
       } catch (error) {
-        showToast(error.message || "Unable to queue screener run.", "warn");
+        showToast(error.message || "Unable to generate AI Portfolio.", "warn");
       }
     });
 
@@ -6541,22 +7653,43 @@
         return;
       }
       const formData = new FormData(ui.autopilotForm);
-      const payload = {
-        ticker: formData.get("ticker"),
+      const rawTickerInput = String(formData.get("ticker") || "").trim();
+      let tickers = rawTickerInput
+        .split(/[,\s]+/)
+        .map((item) => normalizeTicker(item))
+        .filter(Boolean);
+      if (!tickers.length || /^brief$/i.test(rawTickerInput)) {
+        tickers = DEFAULT_BRIEF_TICKERS.slice(0, 25);
+      }
+      tickers = Array.from(new Set(tickers)).slice(0, 30);
+
+      const basePayload = {
         horizon: Number(formData.get("horizon")),
         quantiles: formData.get("quantiles"),
         interval: formData.get("interval"),
         notes: formData.get("notes"),
+        briefTickers: tickers,
+        briefMode: tickers.length >= 20 ? "daily_weekly_brief" : "single",
         meta: buildMeta(),
       };
 
       try {
-        ui.autopilotStatus.textContent = "Queuing...";
+        ui.autopilotStatus.textContent = `Queuing ${tickers.length} ticker${tickers.length === 1 ? "" : "s"}...`;
         const queueRun = functions.httpsCallable("queue_autopilot_run");
-        const result = await queueRun(payload);
-        ui.autopilotStatus.textContent = `Queued: ${result.data?.requestId || "—"}`;
-        logEvent("autopilot_request", { ticker: payload.ticker });
-        showToast("Autopilot run queued.");
+        const requestIds = [];
+        for (const ticker of tickers) {
+          const result = await queueRun({
+            ...basePayload,
+            ticker,
+          });
+          const requestId = String(result.data?.requestId || "").trim();
+          if (requestId) requestIds.push(requestId);
+        }
+        ui.autopilotStatus.textContent = requestIds.length
+          ? `Queued ${requestIds.length} run(s).`
+          : `Queued ${tickers.length} run(s).`;
+        logEvent("autopilot_request", { count: tickers.length, mode: basePayload.briefMode });
+        showToast(`Autopilot queued for ${tickers.length} diversified stocks.`);
       } catch (error) {
         ui.autopilotStatus.textContent = "Unable to queue run.";
         showToast(error.message || "Unable to queue run.", "warn");
@@ -6687,7 +7820,18 @@
 				        if (state.unsubscribeWatchlist) state.unsubscribeWatchlist();
 				        if (state.unsubscribeAlerts) state.unsubscribeAlerts();
                 if (state.unsubscribeScreenerRuns) state.unsubscribeScreenerRuns();
+                if (state.unsubscribeAIAgents) state.unsubscribeAIAgents();
+                if (state.unsubscribeAIFollows) state.unsubscribeAIFollows();
+                if (state.unsubscribeAILikes) state.unsubscribeAILikes();
 		        if (state.unsubscribeSharedWorkspaces) state.unsubscribeSharedWorkspaces();
+            if (state.volatilityMonitorTimer) {
+              window.clearInterval(state.volatilityMonitorTimer);
+              state.volatilityMonitorTimer = null;
+            }
+            state.aiAgents = [];
+            state.aiFollowSet = new Set();
+            state.aiLikeSet = new Set();
+            state.aiDefaultsSeededWorkspaceId = "";
 		        state.sharedWorkspaces = [];
 		        setActiveWorkspaceId("");
 		        renderWorkspaceSelect(null);
@@ -6695,7 +7839,7 @@
 		        if (ui.tasksCalendar) ui.tasksCalendar.textContent = "Tasks with due dates will appear here.";
             if (ui.screenerLoadSelect) ui.screenerLoadSelect.innerHTML = `<option value="">Select a run</option>`;
             if (ui.screenerLoadStatus) ui.screenerLoadStatus.textContent = "";
-            if (ui.screenerOutput && !ui.screenerOutput.dataset.loading) ui.screenerOutput.textContent = "Sign in to run the screener.";
+            if (ui.screenerOutput && !ui.screenerOutput.dataset.loading) ui.screenerOutput.textContent = "Sign in to generate an AI Portfolio.";
             state.predictionsContext.uploadId = "";
             state.predictionsContext.uploadDoc = null;
             state.predictionsContext.table = null;
@@ -6737,6 +7881,9 @@
 		      startWorkspaceTasks(db, activeWorkspaceId);
 			      startWatchlist(db, activeWorkspaceId);
 			      startPriceAlerts(db, activeWorkspaceId);
+          await seedDefaultAIAgents(db, activeWorkspaceId).catch(() => {});
+          startAIAgents(db, activeWorkspaceId);
+          startVolatilityMonitor(db, functions, activeWorkspaceId);
 	      startAutopilotRequests(db, user);
 	      startPredictionsUploads(db, user);
         startBacktests(db, user);
