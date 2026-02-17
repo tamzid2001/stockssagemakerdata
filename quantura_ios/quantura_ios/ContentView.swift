@@ -1,3 +1,4 @@
+import FirebaseCore
 import FirebaseRemoteConfig
 import SwiftUI
 import WebKit
@@ -18,7 +19,7 @@ final class AppContainer {
 }
 
 final class RemoteConfigManager {
-    private let remoteConfig = RemoteConfig.remoteConfig()
+    private let remoteConfig: RemoteConfig?
 
     struct AdUnitIDs {
         let interstitial: String
@@ -26,10 +27,15 @@ final class RemoteConfigManager {
     }
 
     init() {
+        guard FirebaseApp.app() != nil else {
+            remoteConfig = nil
+            return
+        }
+        let rc = RemoteConfig.remoteConfig()
         let settings = RemoteConfigSettings()
         settings.minimumFetchInterval = _isDebugAssertConfiguration() ? 0 : 3600
-        remoteConfig.configSettings = settings
-        remoteConfig.setDefaults([
+        rc.configSettings = settings
+        rc.setDefaults([
             "ad_unit_ids": """
             {"interstitial":"ca-app-pub-3940256099942544/4411468910","rewarded":"ca-app-pub-3940256099942544/1712485313"}
             """ as NSObject,
@@ -37,15 +43,26 @@ final class RemoteConfigManager {
             {"native_bridge_enabled":true,"ads_enabled":true}
             """ as NSObject,
         ])
+        remoteConfig = rc
     }
 
     func fetchAndActivate(completion: ((Bool) -> Void)? = nil) {
+        guard let remoteConfig else {
+            completion?(false)
+            return
+        }
         remoteConfig.fetchAndActivate { status, _ in
             completion?(status == .successFetchedFromRemote || status == .successUsingPreFetchedData)
         }
     }
 
     func adUnitIDs() -> AdUnitIDs {
+        guard let remoteConfig else {
+            return AdUnitIDs(
+                interstitial: "ca-app-pub-3940256099942544/4411468910",
+                rewarded: "ca-app-pub-3940256099942544/1712485313"
+            )
+        }
         guard
             let data = remoteConfig["ad_unit_ids"].stringValue.data(using: .utf8),
             let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: String]
@@ -63,6 +80,9 @@ final class RemoteConfigManager {
     }
 
     func featureFlag(_ key: String, default defaultValue: Bool = false) -> Bool {
+        guard let remoteConfig else {
+            return defaultValue
+        }
         guard
             let data = remoteConfig["feature_flags"].stringValue.data(using: .utf8),
             let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
