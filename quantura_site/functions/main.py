@@ -24,13 +24,17 @@ import firebase_admin
 from firebase_admin import credentials, firestore, messaging as admin_messaging, storage as admin_storage
 from firebase_functions import https_fn, scheduler_fn
 from firebase_functions.options import MemoryOption, set_global_options
+from firebase_functions.params import SecretParam
 
 try:
     from firebase_admin import remote_config as admin_remote_config  # type: ignore
 except Exception:  # pragma: no cover - optional dependency until firebase-admin>=7.x
     admin_remote_config = None
 
-set_global_options(max_instances=10)
+# Bind high-sensitivity API keys via Secret Manager instead of committing them.
+OPENAI_API_KEY_SECRET = SecretParam("OPENAI_API_KEY")
+
+set_global_options(max_instances=10, secrets=[OPENAI_API_KEY_SECRET])
 
 SERVICE_ACCOUNT_PATH = os.environ.get(
     "SERVICE_ACCOUNT_PATH",
@@ -39,7 +43,8 @@ SERVICE_ACCOUNT_PATH = os.environ.get(
 STORAGE_BUCKET = (
     os.environ.get("STORAGE_BUCKET")
     or os.environ.get("FIREBASE_STORAGE_BUCKET")
-    or "quantura-e2e3d.firebasestorage.app"
+    # Default bucket names use the GCS bucket, not the public "firebasestorage.app" domain.
+    or "quantura-e2e3d.appspot.com"
 )
 PUBLIC_ORIGIN = (os.environ.get("PUBLIC_ORIGIN") or "https://quantura-e2e3d.web.app").rstrip("/")
 ADMIN_EMAIL = "tamzid257@gmail.com"
@@ -80,7 +85,7 @@ RISK_FREE_RATE = float(os.environ.get("RISK_FREE_RATE", "0.045") or 0.045)
 TRENDING_URL = "https://query1.finance.yahoo.com/v1/finance/trending/US"
 YAHOO_SEARCH_URL = "https://query2.finance.yahoo.com/v1/finance/search"
 DEFAULT_FORECAST_PRICE = 349
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "").strip()
+OPENAI_API_KEY = OPENAI_API_KEY_SECRET.value.strip() or os.environ.get("OPENAI_API_KEY", "").strip()
 AMAZON_NOVA_API_KEY = os.environ.get("AMAZON_NOVA_API_KEY", "").strip()
 AMAZON_NOVA_API_ENDPOINT = str(os.environ.get("AMAZON_NOVA_API_ENDPOINT") or "").strip()
 AMAZON_NOVA_DEFAULT_MODEL = str(os.environ.get("AMAZON_NOVA_DEFAULT_MODEL") or "amazon.nova-lite-v1:0").strip()
@@ -7407,7 +7412,7 @@ def import_shared_item(req: https_fn.CallableRequest) -> dict[str, Any]:
     return {"kind": kind, "importedId": imported_ref.id, "shareId": share_id}
 
 
-@https_fn.on_call()
+@https_fn.on_call(memory=MemoryOption.MB_512, timeout_sec=120)
 def get_ticker_history(req: https_fn.CallableRequest) -> dict[str, Any]:
     import pandas as pd  # type: ignore
     import yfinance as yf  # type: ignore
@@ -7417,12 +7422,22 @@ def get_ticker_history(req: https_fn.CallableRequest) -> dict[str, Any]:
     if not ticker:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Ticker is required.")
 
-    interval = str(data.get("interval") or "1d")
+    interval = str(data.get("interval") or "1d").strip().lower()
+    if interval not in {"1d", "1h"}:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Interval must be 1d or 1h.")
     start = data.get("start")
     end = data.get("end")
 
     try:
-        history = yf.download(ticker, start=start, end=end, interval=interval, progress=False)
+        history = yf.download(
+            ticker,
+            start=start,
+            end=end,
+            interval=interval,
+            progress=False,
+            auto_adjust=False,
+            threads=False,
+        )
     except Exception as exc:
         _raise_structured_error(
             https_fn.FunctionsErrorCode.NOT_FOUND,
@@ -7432,6 +7447,10 @@ def get_ticker_history(req: https_fn.CallableRequest) -> dict[str, Any]:
         )
     if isinstance(history.columns, pd.MultiIndex):
         history.columns = history.columns.get_level_values(0)
+    # Keep only the columns the client chart needs to reduce payload/memory.
+    keep_cols = [col for col in ["Open", "High", "Low", "Close", "Adj Close", "Volume"] if col in history.columns]
+    if keep_cols:
+        history = history[keep_cols]
     history = history.dropna().reset_index()
     if history.empty:
         _raise_structured_error(
@@ -7449,7 +7468,7 @@ def get_ticker_history(req: https_fn.CallableRequest) -> dict[str, Any]:
     return {"rows": _serialize_for_firestore(rows)}
 
 
-@https_fn.on_call()
+@https_fn.on_call(memory=MemoryOption.MB_512, timeout_sec=180)
 def download_price_csv(req: https_fn.CallableRequest) -> dict[str, Any]:
     import pandas as pd  # type: ignore
     import yfinance as yf  # type: ignore
@@ -7612,7 +7631,7 @@ def get_trending_tickers(req: https_fn.CallableRequest) -> dict[str, Any]:
     return payload
 
 
-@https_fn.on_call()
+@https_fn.on_call(memory=MemoryOption.GB_1, timeout_sec=180)
 def get_ticker_intel(req: https_fn.CallableRequest) -> dict[str, Any]:
     import numpy as np  # type: ignore
     import pandas as pd  # type: ignore

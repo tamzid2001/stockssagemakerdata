@@ -13,6 +13,7 @@
   const CHART_RANGE_CACHE_KEY = "quantura_chart_range_v1";
   const CHART_VIEW_CACHE_KEY = "quantura_chart_view_v1";
   const TRADINGVIEW_THEME_CACHE_KEY = "quantura_tv_theme_v1";
+  const SIDEBAR_COLLAPSED_KEY = "quantura_sidebar_collapsed_v1";
   const LANGUAGE_PREFERENCE_KEY = "quantura_language_v1";
   const COUNTRY_PREFERENCE_KEY = "quantura_country_v1";
   const TRADINGVIEW_LOAD_TIMEOUT_MS = 9000;
@@ -1965,6 +1966,7 @@
             volatility_threshold: "0.05",
             llm_allowed_models: DEFAULT_LLM_ALLOWED_MODELS.join(","),
             ai_usage_tiers: JSON.stringify(AI_USAGE_TIER_DEFAULTS),
+            push_notifications_enabled: true,
             webpush_vapid_key: "",
             stripe_checkout_enabled: true,
             stripe_public_key: "",
@@ -2052,6 +2054,7 @@
         return normalized.length ? normalized : fallback;
       };
 		    return {
+          welcomeMessage: getString("welcome_message", "Welcome to Quantura"),
 		      watchlistEnabled: getBool("watchlist_enabled", true),
 		      forecastProphetEnabled: getBool("forecast_prophet_enabled", true),
 		      forecastTimeMixerEnabled: getBool("forecast_timemixer_enabled", true),
@@ -2074,6 +2077,7 @@
 		  };
 
 	  const applyRemoteFlags = (flags) => {
+      updateWelcomeMessageBanner(String(flags.welcomeMessage || "").trim());
 	    document.querySelectorAll('[data-panel-target="watchlist"]').forEach((el) => {
 	      el.classList.toggle("hidden", !flags.watchlistEnabled);
 	    });
@@ -2088,6 +2092,13 @@
         if (!flags.backtestingEnabled) el.classList.add("hidden");
       });
 
+      document.querySelectorAll('[data-panel-target="notifications"]').forEach((el) => {
+        el.classList.toggle("hidden", !flags.pushEnabled);
+      });
+      document.querySelectorAll('[data-panel="notifications"]').forEach((el) => {
+        if (!flags.pushEnabled) el.classList.add("hidden");
+      });
+
 	    if (!flags.pushEnabled) {
 	      setNotificationStatus("Notifications are temporarily disabled.");
 	      setNotificationControlsEnabled(false);
@@ -2098,6 +2109,9 @@
 
       updateMaintenanceModeUi(Boolean(flags.maintenanceMode));
       updateDynamicPromoBanner(String(flags.promoBannerText || "").trim());
+      ensureHeaderNotificationsCta();
+      const headerNotificationsLink = document.getElementById("header-notifications");
+      if (headerNotificationsLink) headerNotificationsLink.classList.toggle("hidden", !flags.pushEnabled);
       refreshScreenerModelUi();
       refreshScreenerCreditsUi();
       hydrateFundamentalFilterFields();
@@ -2110,6 +2124,32 @@
 
       remoteConfigStore.publish(flags);
 	  };
+
+    const updateWelcomeMessageBanner = (text) => {
+      const message = String(text || "").trim();
+      const existing = document.getElementById("welcome-message-banner");
+      if (!message) {
+        existing?.remove();
+        return;
+      }
+      if (existing) {
+        const node = existing.querySelector("[data-welcome-message]");
+        if (node) node.textContent = message;
+        return;
+      }
+      const banner = document.createElement("section");
+      banner.id = "welcome-message-banner";
+      banner.className = "welcome-banner";
+      banner.innerHTML = `
+        <div class="welcome-inner">
+          <span class="welcome-badge">Welcome</span>
+          <span class="welcome-text" data-welcome-message>${escapeHtml(message)}</span>
+        </div>
+      `;
+      const header = document.querySelector("header.header");
+      if (header && typeof header.insertAdjacentElement === "function") header.insertAdjacentElement("afterend", banner);
+      else document.body.prepend(banner);
+    };
 
     const maybeShowHolidayPromo = () => {
       if (!state.remoteFlags.holidayPromo) return;
@@ -4980,10 +5020,10 @@
 
   const toPrettyJson = (value) => `<pre class="small">${escapeHtml(JSON.stringify(value, null, 2))}</pre>`;
 
-  const normalizeTopNavigation = () => {
-    const navs = Array.from(document.querySelectorAll(".header .nav-links"));
-    if (!navs.length) return;
-    navs.forEach((nav) => {
+	  const normalizeTopNavigation = () => {
+	    const navs = Array.from(document.querySelectorAll(".header .nav-links"));
+	    if (!navs.length) return;
+	    navs.forEach((nav) => {
       nav.innerHTML = `
         <a href="/forecasting" data-analytics="nav_terminal">${icon("candlestick-chart")}<span>Terminal</span></a>
         <a href="/research" data-analytics="nav_research">${icon("bookmark-book")}<span>Research</span></a>
@@ -4991,13 +5031,91 @@
         <a href="/pricing" data-analytics="nav_pricing">${icon("wallet")}<span>Pricing</span></a>
         <a href="/contact" data-analytics="nav_contact">${icon("mail")}<span>Contact</span></a>
       `;
-    });
-  };
+	    });
+	  };
 
-  const ensureHeaderNotificationsCta = () => {
-    const actions = document.querySelector(".header .nav-actions");
-    if (!actions) return;
-    let link = document.getElementById("header-notifications");
+    const ensureSidebarCollapseToggle = () => {
+      const layout = document.querySelector(".app-layout");
+      const sidebarNav = document.querySelector(".app-sidebar .sidebar-nav");
+      if (!layout || !sidebarNav) return;
+
+      const collapsedClass = "is-sidebar-collapsed";
+      const shouldApplyCollapse = () => {
+        try {
+          return window.matchMedia && window.matchMedia("(min-width: 981px)").matches;
+        } catch (error) {
+          return false;
+        }
+      };
+
+      const setCollapsed = (collapsed, { persist = true } = {}) => {
+        if (!shouldApplyCollapse()) {
+          layout.classList.remove(collapsedClass);
+          return;
+        }
+        layout.classList.toggle(collapsedClass, Boolean(collapsed));
+        if (persist) {
+          safeLocalStorageSet(SIDEBAR_COLLAPSED_KEY, collapsed ? "1" : "0");
+        }
+
+        const links = Array.from(sidebarNav.querySelectorAll("a.sidebar-link"));
+        links.forEach((link) => {
+          if (!(link instanceof HTMLElement)) return;
+          const label = String(link.textContent || "").trim();
+          if (!label) return;
+          if (layout.classList.contains(collapsedClass)) {
+            link.setAttribute("title", label);
+          } else {
+            link.removeAttribute("title");
+          }
+        });
+
+        syncStickyOffsets();
+      };
+
+      let toggle = sidebarNav.querySelector('[data-action="sidebar-toggle"]');
+      if (!toggle) {
+        toggle = document.createElement("button");
+        toggle.type = "button";
+        toggle.className = "sidebar-link sidebar-toggle";
+        toggle.dataset.action = "sidebar-toggle";
+        sidebarNav.prepend(toggle);
+      }
+
+      const updateToggleUi = () => {
+        const collapsed = layout.classList.contains(collapsedClass) && shouldApplyCollapse();
+        toggle.innerHTML = `${icon("side-menu")}<span>${collapsed ? "Expand" : "Collapse"}</span>`;
+        toggle.setAttribute("aria-pressed", collapsed ? "true" : "false");
+        toggle.setAttribute("aria-label", collapsed ? "Expand sidebar" : "Collapse sidebar");
+        toggle.setAttribute("title", collapsed ? "Expand sidebar" : "Collapse sidebar");
+      };
+
+      if (!toggle.__quanturaSidebarBound) {
+        toggle.__quanturaSidebarBound = true;
+        toggle.addEventListener("click", () => {
+          const next = !layout.classList.contains(collapsedClass);
+          setCollapsed(next, { persist: true });
+          updateToggleUi();
+          logEvent("sidebar_toggled", { collapsed: next, page_path: window.location.pathname });
+        });
+      }
+
+      const initialPref = String(safeLocalStorageGet(SIDEBAR_COLLAPSED_KEY) || "") === "1";
+      setCollapsed(initialPref, { persist: false });
+      updateToggleUi();
+
+      window.addEventListener("resize", () => {
+        // Ensure the layout resets on mobile, but preserve preference for desktop.
+        const collapsed = String(safeLocalStorageGet(SIDEBAR_COLLAPSED_KEY) || "") === "1";
+        setCollapsed(collapsed, { persist: false });
+        updateToggleUi();
+      });
+    };
+
+	  const ensureHeaderNotificationsCta = () => {
+	    const actions = document.querySelector(".header .nav-actions");
+	    if (!actions) return;
+	    let link = document.getElementById("header-notifications");
     if (!link) {
       link = document.createElement("a");
       link.id = "header-notifications";
@@ -5009,13 +5127,13 @@
       } else {
         actions.appendChild(link);
       }
-      ui.headerNotifications = link;
-    }
-    const authed = hasFullAccount();
-    link.href = authed ? "/notifications" : "/account";
-    link.innerHTML = `${icon("bell-notification")}<span>Notifications</span>`;
-    link.setAttribute("aria-label", authed ? "Open notifications" : "Sign in to manage notifications");
-  };
+	      ui.headerNotifications = link;
+	    }
+	    const authed = hasFullAccount();
+	    link.href = authed ? "/notifications" : "/account";
+	    link.innerHTML = `${icon("bell-notification")}<span>Notifications</span>`;
+	    link.setAttribute("aria-label", authed ? "Open notifications" : "Sign in to manage notifications");
+	  };
 
   const renderNotificationLog = () => {
     if (!ui.notificationsLog) return;
@@ -9955,7 +10073,8 @@
         const next = String(panel || "").trim();
         if (!next) return;
         if (ui.intelStrip) {
-          ui.intelStrip.classList.toggle("hidden", next === "ticker-intelligence");
+          // Keep the intel side-strip scoped to the ticker intelligence view.
+          ui.intelStrip.classList.toggle("hidden", next !== "ticker-intelligence");
         }
         if (next === "ticker-intelligence") {
           const activeTicker = normalizeTicker(state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "");
@@ -9964,11 +10083,23 @@
               state.tickerContext.rows,
               activeTicker,
               state.tickerContext.interval || "1d",
-              buildCurrentChartOverlays()
+              // TradingView does not support Quantura overlays; keep the TI view clean.
+              []
             ).catch(() => {});
           }
         } else {
-          setTerminalChartEngineVisibility("legacy");
+          const activeTicker = normalizeTicker(state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "");
+          if (activeTicker && Array.isArray(state.tickerContext.rows) && state.tickerContext.rows.length) {
+            renderTickerChart(
+              state.tickerContext.rows,
+              activeTicker,
+              state.tickerContext.interval || "1d",
+              buildCurrentChartOverlays(),
+              { skipTradingView: true }
+            ).catch(() => {});
+          } else {
+            setTerminalChartEngineVisibility("legacy");
+          }
         }
 
         if (next === "trending") {
@@ -10019,6 +10150,7 @@
       ensureThemeToggle();
       normalizeTopNavigation();
       ensureHeaderNotificationsCta();
+      ensureSidebarCollapseToggle();
       bindMobileNav();
       initializeLanguageControls().catch(() => {});
       captureShareFromUrl();
