@@ -13,6 +13,10 @@ from statistics import NormalDist
 from typing import Any
 
 import requests
+try:
+    from zoneinfo import ZoneInfo
+except Exception:  # pragma: no cover - Python < 3.9 fallback
+    ZoneInfo = None  # type: ignore
 
 import firebase_admin
 from firebase_admin import credentials, firestore, messaging as admin_messaging, storage as admin_storage
@@ -58,12 +62,17 @@ FCM_WEB_VAPID_KEY = os.environ.get("FCM_WEB_VAPID_KEY", "").strip()
 STRIPE_PUBLIC_KEY = os.environ.get("STRIPE_PUBLIC_KEY", "").strip()
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "").strip()
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip()
+MASSIVE_API_KEY = os.environ.get("MASSIVE_API_KEY", "").strip()
+MASSIVE_BASE_URL = (os.environ.get("MASSIVE_BASE_URL") or "https://api.massive.com").rstrip("/")
+STRIPE_CONNECT_PLATFORM_FEE_PERCENT = float(os.environ.get("STRIPE_CONNECT_PLATFORM_FEE_PERCENT", "12") or 12)
+CREATOR_DEFAULT_SUBSCRIBE_USD = float(os.environ.get("CREATOR_DEFAULT_SUBSCRIBE_USD", "9") or 9)
+CREATOR_DEFAULT_THANKS_USD = float(os.environ.get("CREATOR_DEFAULT_THANKS_USD", "5") or 5)
 RISK_FREE_RATE = float(os.environ.get("RISK_FREE_RATE", "0.045") or 0.045)
 TRENDING_URL = "https://query1.finance.yahoo.com/v1/finance/trending/US"
 YAHOO_SEARCH_URL = "https://query2.finance.yahoo.com/v1/finance/search"
 DEFAULT_FORECAST_PRICE = 349
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "").strip()
-SOCIAL_CONTENT_MODEL = (os.environ.get("SOCIAL_CONTENT_MODEL") or "gpt-4o-mini").strip()
+SOCIAL_CONTENT_MODEL = (os.environ.get("SOCIAL_CONTENT_MODEL") or "gpt-5-mini").strip()
 SOCIAL_AUTOMATION_ENABLED = str(os.environ.get("SOCIAL_AUTOMATION_ENABLED") or "true").strip().lower() in {
     "1",
     "true",
@@ -71,8 +80,55 @@ SOCIAL_AUTOMATION_ENABLED = str(os.environ.get("SOCIAL_AUTOMATION_ENABLED") or "
     "on",
 }
 SOCIAL_AUTOMATION_TIMEZONE = str(os.environ.get("SOCIAL_AUTOMATION_TIMEZONE") or "America/New_York").strip()
+SOCIAL_POSTING_TIMEZONE = str(os.environ.get("SOCIAL_POSTING_TIMEZONE") or SOCIAL_AUTOMATION_TIMEZONE).strip()
 SOCIAL_DISPATCH_BATCH_SIZE = max(1, min(int(os.environ.get("SOCIAL_DISPATCH_BATCH_SIZE", "30") or 30), 100))
 SOCIAL_DEFAULT_CTA_URL = str(os.environ.get("SOCIAL_DEFAULT_CTA_URL") or PUBLIC_ORIGIN).strip()
+SOCIAL_AUTOPILOT_ENABLED = str(os.environ.get("SOCIAL_AUTOPILOT_ENABLED") or "true").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+SOCIAL_AUTOPILOT_USER_ID = str(os.environ.get("SOCIAL_AUTOPILOT_USER_ID") or "quantura_system").strip()
+SOCIAL_AUTOPILOT_USER_EMAIL = str(os.environ.get("SOCIAL_AUTOPILOT_USER_EMAIL") or "system@quantura.ai").strip()
+SOCIAL_AUTOPILOT_POSTS_PER_CHANNEL = max(
+    1,
+    min(int(os.environ.get("SOCIAL_AUTOPILOT_POSTS_PER_CHANNEL", "3") or 3), 8),
+)
+SOCIAL_AUTOPILOT_TOPIC = str(
+    os.environ.get("SOCIAL_AUTOPILOT_TOPIC")
+    or "Daily Quantura market pulse: top catalysts, risk posture, and setup watchlist"
+).strip()
+SOCIAL_AUTOPILOT_OBJECTIVE = str(
+    os.environ.get("SOCIAL_AUTOPILOT_OBJECTIVE")
+    or "Drive qualified users to Quantura forecasting workflows"
+).strip()
+SOCIAL_AUTOPILOT_AUDIENCE = str(
+    os.environ.get("SOCIAL_AUTOPILOT_AUDIENCE")
+    or "active investors, analysts, and portfolio operators"
+).strip()
+SOCIAL_AUTOPILOT_TONE = str(os.environ.get("SOCIAL_AUTOPILOT_TONE") or "institutional, concise, actionable").strip()
+SOCIAL_AUTOPILOT_CHANNELS = [
+    channel.strip().lower()
+    for channel in str(os.environ.get("SOCIAL_AUTOPILOT_CHANNELS") or "x,linkedin,facebook,instagram,tiktok").split(",")
+    if channel.strip()
+]
+
+TWITTER_BEARER_TOKEN = str(os.environ.get("TWITTER_BEARER_TOKEN") or "").strip()
+TWITTER_ACCESS_TOKEN = str(os.environ.get("TWITTER_ACCESS_TOKEN") or "").strip()
+TWITTER_ACCESS_TOKEN_SECRET = str(os.environ.get("TWITTER_ACCESS_TOKEN_SECRET") or "").strip()
+LINKEDIN_ACCESS_TOKEN = str(os.environ.get("LINKEDIN_ACCESS_TOKEN") or "").strip()
+LINKEDIN_AUTHOR_URN = str(os.environ.get("LINKEDIN_AUTHOR_URN") or "").strip()
+FACEBOOK_PAGE_ID = str(os.environ.get("FACEBOOK_PAGE_ID") or "").strip()
+FACEBOOK_PAGE_ACCESS_TOKEN = str(os.environ.get("FACEBOOK_PAGE_ACCESS_TOKEN") or "").strip()
+INSTAGRAM_BUSINESS_ACCOUNT_ID = str(os.environ.get("INSTAGRAM_BUSINESS_ACCOUNT_ID") or "").strip()
+INSTAGRAM_ACCESS_TOKEN = str(os.environ.get("INSTAGRAM_ACCESS_TOKEN") or FACEBOOK_PAGE_ACCESS_TOKEN).strip()
+INSTAGRAM_DEFAULT_IMAGE_URL = str(
+    os.environ.get("INSTAGRAM_DEFAULT_IMAGE_URL")
+    or "https://images.unsplash.com/photo-1535320903710-d993d3d77d29?auto=format&fit=crop&w=1280&q=80"
+).strip()
+TIKTOK_ACCESS_TOKEN = str(os.environ.get("TIKTOK_ACCESS_TOKEN") or "").strip()
+TIKTOK_OPEN_ID = str(os.environ.get("TIKTOK_OPEN_ID") or "").strip()
 SOCIAL_POPULAR_CHANNELS = [
     "x",
     "linkedin",
@@ -95,6 +151,31 @@ SOCIAL_CHANNEL_WEBHOOK_ENV = {
     "youtube": "SOCIAL_WEBHOOK_YOUTUBE",
     "pinterest": "SOCIAL_WEBHOOK_PINTEREST",
 }
+SCREENER_NOTES_TICKER_HINTS: dict[str, list[str]] = {
+    "nancy pelosi": ["NVDA", "AAPL", "MSFT", "GOOGL", "AMZN", "PANW", "TSLA"],
+    "pelosi": ["NVDA", "AAPL", "MSFT", "GOOGL", "AMZN"],
+    "jeff bezos": ["AMZN", "MSFT", "GOOGL", "NVDA", "SHOP"],
+    "bezos": ["AMZN", "MSFT", "GOOGL", "NVDA"],
+    "warren buffett": ["AAPL", "BAC", "KO", "OXY", "CVX", "AXP"],
+    "bill gates": ["MSFT", "BRK.B", "CAT", "WM"],
+    "elon musk": ["TSLA", "NVDA", "GOOGL", "MSFT"],
+    "cathie wood": ["TSLA", "COIN", "ROKU", "SQ", "PATH", "CRSP"],
+    "ark invest": ["TSLA", "COIN", "ROKU", "SQ", "CRSP", "PATH"],
+    "blackrock": ["AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL"],
+    "vanguard": ["AAPL", "MSFT", "NVDA", "AMZN", "META", "BRK.B"],
+    "fidelity": ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META"],
+    "bridgewater": ["SPY", "GLD", "TLT", "IEMG", "EEM", "XLF"],
+    "renaissance": ["MSFT", "NVDA", "AAPL", "AMZN", "META"],
+    "citadel": ["AAPL", "MSFT", "NVDA", "AMZN", "META", "JPM"],
+    "cnbc": ["NVDA", "AAPL", "TSLA", "MSFT", "AMZN", "META"],
+    "bloomberg": ["AAPL", "MSFT", "NVDA", "AMZN", "TSLA", "JPM"],
+    "reuters": ["XOM", "CVX", "AAPL", "MSFT", "AMZN", "JPM"],
+    "wall street journal": ["AAPL", "MSFT", "JPM", "XOM", "UNH", "NVDA"],
+    "marketwatch": ["TSLA", "NVDA", "AAPL", "AMD", "PLTR", "META"],
+    "motley fool": ["AMZN", "MSFT", "NVDA", "CRWD", "MELI", "SHOP"],
+    "seeking alpha": ["AAPL", "MSFT", "NVDA", "O", "SCHD", "VICI"],
+    "hedge fund": ["AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL"],
+}
 META_PIXEL_ID = str(os.environ.get("META_PIXEL_ID") or "1643823927053003").strip()
 META_CAPI_ACCESS_TOKEN = str(os.environ.get("META_CAPI_ACCESS_TOKEN") or "").strip()
 META_GRAPH_API_VERSION = str(os.environ.get("META_GRAPH_API_VERSION") or "v21.0").strip() or "v21.0"
@@ -113,8 +194,13 @@ if not firebase_admin._apps:
     if STORAGE_BUCKET:
         options["storageBucket"] = STORAGE_BUCKET
     if os.path.exists(SERVICE_ACCOUNT_PATH):
-        cred = credentials.Certificate(SERVICE_ACCOUNT_PATH)
-        firebase_admin.initialize_app(cred, options or None)
+        try:
+            cred = credentials.Certificate(SERVICE_ACCOUNT_PATH)
+            firebase_admin.initialize_app(cred, options or None)
+        except Exception as exc:
+            # Allow checked-in placeholder files (no private key) without breaking runtime.
+            print(f"Warning: ignoring invalid service account file at {SERVICE_ACCOUNT_PATH}: {exc}")
+            firebase_admin.initialize_app(options=options or None)
     else:
         # IMPORTANT: initialize_app() expects (credential, options). When running in Cloud
         # Functions, we rely on Application Default Credentials and only pass options.
@@ -137,13 +223,15 @@ DEFAULT_REMOTE_CONFIG: dict[str, str] = {
     "ai_usage_tiers": json.dumps(
         {
             "free": {
-                "allowed_models": ["gpt-4o-mini", "gemini-1.5-flash"],
-                "daily_limit": 5,
+                "allowed_models": ["gpt-5-mini"],
+                "weekly_limit": 3,
+                "daily_limit": 3,
                 "volatility_alerts": False,
             },
             "premium": {
-                "allowed_models": ["gpt-4o", "claude-3-5-sonnet", "gemini-1.5-pro", "o1-preview"],
-                "daily_limit": 50,
+                "allowed_models": ["gpt-5-mini", "gpt-5", "gpt-5-thinking"],
+                "weekly_limit": 15,
+                "daily_limit": 15,
                 "volatility_alerts": True,
             },
         }
@@ -295,22 +383,77 @@ def _raise_structured_error(
     raise https_fn.HttpsError(code, detail, payload)
 
 
+def _normalize_ai_model_id(raw: Any) -> str:
+    value = str(raw or "").strip()
+    if not value:
+        return ""
+    lowered = value.lower()
+    if lowered.startswith("gpt-") and len(lowered) > 4 and lowered[4] == "4":
+        return "gpt-5-mini"
+    if lowered.startswith("o1"):
+        return "gpt-5-thinking"
+    return value
+
+
 def _get_ai_usage_tiers(context: dict[str, Any] | None = None) -> dict[str, Any]:
     fallback = {
         "free": {
-            "allowed_models": ["gpt-4o-mini", "gemini-1.5-flash"],
-            "daily_limit": 5,
+            "allowed_models": ["gpt-5-mini"],
+            "weekly_limit": 3,
+            "daily_limit": 3,
             "volatility_alerts": False,
         },
         "premium": {
-            "allowed_models": ["gpt-4o", "claude-3-5-sonnet", "gemini-1.5-pro", "o1-preview"],
-            "daily_limit": 50,
+            "allowed_models": ["gpt-5-mini", "gpt-5", "gpt-5-thinking"],
+            "weekly_limit": 15,
+            "daily_limit": 15,
             "volatility_alerts": True,
         },
     }
     parsed = _remote_config_json_param("ai_usage_tiers", fallback, context=context)
     if not isinstance(parsed, dict):
         return fallback
+    default_limits = {"free": 3, "premium": 15}
+    for tier_name, tier_data in parsed.items():
+        if not isinstance(tier_data, dict):
+            continue
+        raw_models = tier_data.get("allowed_models")
+        normalized: list[str] = []
+        if isinstance(raw_models, list):
+            for raw in raw_models:
+                model_id = _normalize_ai_model_id(raw)
+                if not model_id:
+                    continue
+                if not model_id.lower().startswith("gpt-5"):
+                    continue
+                if model_id not in normalized:
+                    normalized.append(model_id)
+        if not normalized:
+            defaults = fallback.get(str(tier_name).lower(), fallback["free"]).get("allowed_models") or []
+            for model_id in defaults:
+                if model_id and model_id not in normalized:
+                    normalized.append(model_id)
+
+        tier_key = str(tier_name).strip().lower()
+        default_limit = default_limits.get(tier_key, 3)
+        raw_weekly = tier_data.get("weekly_limit")
+        if raw_weekly in (None, ""):
+            raw_weekly = tier_data.get("daily_limit")
+        try:
+            weekly_limit = int(float(raw_weekly))
+        except Exception:
+            weekly_limit = default_limit
+        if weekly_limit <= 0:
+            weekly_limit = default_limit
+        if tier_key == "free":
+            weekly_limit = max(1, min(weekly_limit, 5))
+        elif tier_key == "premium":
+            weekly_limit = max(6, min(weekly_limit, 25))
+
+        tier_data["weekly_limit"] = weekly_limit
+        tier_data["daily_limit"] = weekly_limit  # Backward-compatible alias for older clients.
+        tier_data["volatility_alerts"] = bool(tier_data.get("volatility_alerts"))
+        tier_data["allowed_models"] = normalized
     return parsed
 
 
@@ -324,7 +467,13 @@ def _resolve_ai_tier(
     tier_key = "premium" if is_premium else "free"
     tier = tiers.get(tier_key) if isinstance(tiers.get(tier_key), dict) else {}
     if not tier:
-        tier = {"allowed_models": [], "daily_limit": 5, "volatility_alerts": bool(is_premium)}
+        fallback_limit = 15 if is_premium else 3
+        tier = {
+            "allowed_models": ["gpt-5-mini", "gpt-5", "gpt-5-thinking"] if is_premium else ["gpt-5-mini"],
+            "weekly_limit": fallback_limit,
+            "daily_limit": fallback_limit,
+            "volatility_alerts": bool(is_premium),
+        }
     return tier_key, tier
 
 
@@ -365,6 +514,247 @@ def _normalize_social_channels(raw: Any) -> list[str]:
     if not channels:
         return list(SOCIAL_POPULAR_CHANNELS)
     return list(dict.fromkeys(channels))
+
+
+def _posting_tzinfo():
+    if ZoneInfo is not None:
+        try:
+            return ZoneInfo(SOCIAL_POSTING_TIMEZONE)
+        except Exception:
+            pass
+    return timezone.utc
+
+
+def _strategic_slot_minutes(channel: str) -> list[int]:
+    # Local-time slots chosen for US market participation windows.
+    slots = {
+        "x": [9 * 60 + 5, 12 * 60 + 20, 16 * 60 + 40],
+        "linkedin": [8 * 60 + 45, 12 * 60 + 10, 17 * 60 + 20],
+        "facebook": [10 * 60 + 15, 14 * 60 + 35, 19 * 60 + 15],
+        "instagram": [11 * 60 + 30, 18 * 60 + 0, 21 * 60 + 10],
+        "threads": [12 * 60 + 0, 18 * 60 + 30],
+        "reddit": [13 * 60 + 15, 20 * 60 + 0],
+        "tiktok": [13 * 60 + 0, 19 * 60 + 30, 22 * 60 + 5],
+        "youtube": [17 * 60 + 0],
+        "pinterest": [13 * 60 + 45, 20 * 60 + 30],
+    }
+    key = str(channel or "").strip().lower()
+    return slots.get(key) or [14 * 60 + 10]
+
+
+def _strategic_suggested_post_time(channel: str, index: int, now_utc: datetime | None = None) -> str:
+    now_utc = now_utc or datetime.now(timezone.utc)
+    local_tz = _posting_tzinfo()
+    now_local = now_utc.astimezone(local_tz)
+    slots = _strategic_slot_minutes(channel)
+    if not slots:
+        slots = [14 * 60 + 10]
+    slot_idx = max(0, int(index or 0)) % len(slots)
+    day_offset = max(0, int(index or 0)) // len(slots)
+    base_date = now_local.date() + timedelta(days=day_offset)
+    minute_of_day = slots[slot_idx]
+    hour = minute_of_day // 60
+    minute = minute_of_day % 60
+    local_candidate = datetime(
+        base_date.year,
+        base_date.month,
+        base_date.day,
+        hour,
+        minute,
+        tzinfo=local_tz,
+    )
+    if day_offset == 0 and local_candidate <= now_local + timedelta(minutes=8):
+        local_candidate += timedelta(days=1)
+    return local_candidate.astimezone(timezone.utc).replace(second=0, microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _render_social_text(
+    *,
+    body: str,
+    headline: str,
+    hashtags: list[str],
+    cta: str,
+    cta_url: str,
+) -> tuple[str, list[str]]:
+    tags = [str(tag).strip() for tag in hashtags if str(tag).strip()]
+    rendered_text = body.strip()
+    if headline.strip():
+        rendered_text = f"{headline.strip()}\n\n{rendered_text}".strip()
+    if tags:
+        rendered_text = f"{rendered_text}\n\n{' '.join(tags)}".strip()
+    if cta.strip() and cta_url.strip():
+        rendered_text = f"{rendered_text}\n\n{cta.strip()}: {cta_url.strip()}".strip()
+    return rendered_text, tags
+
+
+def _post_x_direct(text: str) -> dict[str, Any]:
+    if not TWITTER_BEARER_TOKEN:
+        return {"ok": False, "pendingCredentials": True, "error": "Missing TWITTER_BEARER_TOKEN for X posting."}
+    try:
+        response = requests.post(
+            "https://api.twitter.com/2/tweets",
+            headers={
+                "Authorization": f"Bearer {TWITTER_BEARER_TOKEN}",
+                "Content-Type": "application/json",
+            },
+            json={"text": text},
+            timeout=20,
+        )
+        if response.status_code >= 400:
+            err_text = str(response.text or "")[:300]
+            err_lower = err_text.lower()
+            pending = response.status_code in {401, 403} and (
+                "unsupported authentication" in err_lower
+                or "application-only is forbidden" in err_lower
+                or "oauth 2.0 application-only" in err_lower
+            )
+            return {
+                "ok": False,
+                "pendingCredentials": pending,
+                "error": (
+                    "X posting requires OAuth user-context write tokens (TWITTER_ACCESS_TOKEN / "
+                    "TWITTER_ACCESS_TOKEN_SECRET) or a posting webhook."
+                    if pending
+                    else f"X API {response.status_code}: {err_text}"
+                ),
+            }
+        body = response.json() if response.content else {}
+        post_id = str((body.get("data") or {}).get("id") or "").strip()
+        return {"ok": True, "externalId": post_id, "statusCode": response.status_code, "provider": "x_api"}
+    except Exception as exc:
+        return {"ok": False, "pendingCredentials": False, "error": f"X API exception: {str(exc)[:300]}"}
+
+
+def _post_linkedin_direct(text: str) -> dict[str, Any]:
+    if not LINKEDIN_ACCESS_TOKEN or not LINKEDIN_AUTHOR_URN:
+        return {
+            "ok": False,
+            "pendingCredentials": True,
+            "error": "Missing LINKEDIN_ACCESS_TOKEN or LINKEDIN_AUTHOR_URN for LinkedIn posting.",
+        }
+    payload = {
+        "author": LINKEDIN_AUTHOR_URN,
+        "lifecycleState": "PUBLISHED",
+        "specificContent": {
+            "com.linkedin.ugc.ShareContent": {
+                "shareCommentary": {"text": text},
+                "shareMediaCategory": "NONE",
+            }
+        },
+        "visibility": {"com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"},
+    }
+    try:
+        response = requests.post(
+            "https://api.linkedin.com/v2/ugcPosts",
+            headers={
+                "Authorization": f"Bearer {LINKEDIN_ACCESS_TOKEN}",
+                "Content-Type": "application/json",
+                "X-Restli-Protocol-Version": "2.0.0",
+            },
+            json=payload,
+            timeout=20,
+        )
+        if response.status_code >= 400:
+            return {
+                "ok": False,
+                "pendingCredentials": False,
+                "error": f"LinkedIn API {response.status_code}: {response.text[:300]}",
+            }
+        external_id = str(response.headers.get("x-restli-id") or "").strip()
+        return {"ok": True, "externalId": external_id, "statusCode": response.status_code, "provider": "linkedin_api"}
+    except Exception as exc:
+        return {"ok": False, "pendingCredentials": False, "error": f"LinkedIn API exception: {str(exc)[:300]}"}
+
+
+def _post_facebook_direct(text: str) -> dict[str, Any]:
+    if not FACEBOOK_PAGE_ID or not FACEBOOK_PAGE_ACCESS_TOKEN:
+        return {
+            "ok": False,
+            "pendingCredentials": True,
+            "error": "Missing FACEBOOK_PAGE_ID or FACEBOOK_PAGE_ACCESS_TOKEN for Facebook posting.",
+        }
+    try:
+        response = requests.post(
+            f"https://graph.facebook.com/{META_GRAPH_API_VERSION}/{FACEBOOK_PAGE_ID}/feed",
+            data={"message": text, "access_token": FACEBOOK_PAGE_ACCESS_TOKEN},
+            timeout=20,
+        )
+        if response.status_code >= 400:
+            return {
+                "ok": False,
+                "pendingCredentials": False,
+                "error": f"Facebook API {response.status_code}: {response.text[:300]}",
+            }
+        body = response.json() if response.content else {}
+        external_id = str(body.get("id") or "").strip()
+        return {"ok": True, "externalId": external_id, "statusCode": response.status_code, "provider": "facebook_api"}
+    except Exception as exc:
+        return {"ok": False, "pendingCredentials": False, "error": f"Facebook API exception: {str(exc)[:300]}"}
+
+
+def _post_instagram_direct(text: str) -> dict[str, Any]:
+    if not INSTAGRAM_BUSINESS_ACCOUNT_ID or not INSTAGRAM_ACCESS_TOKEN:
+        return {
+            "ok": False,
+            "pendingCredentials": True,
+            "error": "Missing INSTAGRAM_BUSINESS_ACCOUNT_ID or INSTAGRAM_ACCESS_TOKEN for Instagram posting.",
+        }
+    if not INSTAGRAM_DEFAULT_IMAGE_URL:
+        return {"ok": False, "pendingCredentials": True, "error": "Missing INSTAGRAM_DEFAULT_IMAGE_URL for Instagram posts."}
+    try:
+        create_resp = requests.post(
+            f"https://graph.facebook.com/{META_GRAPH_API_VERSION}/{INSTAGRAM_BUSINESS_ACCOUNT_ID}/media",
+            data={
+                "image_url": INSTAGRAM_DEFAULT_IMAGE_URL,
+                "caption": text,
+                "access_token": INSTAGRAM_ACCESS_TOKEN,
+            },
+            timeout=25,
+        )
+        if create_resp.status_code >= 400:
+            return {
+                "ok": False,
+                "pendingCredentials": False,
+                "error": f"Instagram media create {create_resp.status_code}: {create_resp.text[:300]}",
+            }
+        creation_id = str((create_resp.json() or {}).get("id") or "").strip()
+        if not creation_id:
+            return {"ok": False, "pendingCredentials": False, "error": "Instagram media create did not return an id."}
+
+        publish_resp = requests.post(
+            f"https://graph.facebook.com/{META_GRAPH_API_VERSION}/{INSTAGRAM_BUSINESS_ACCOUNT_ID}/media_publish",
+            data={
+                "creation_id": creation_id,
+                "access_token": INSTAGRAM_ACCESS_TOKEN,
+            },
+            timeout=25,
+        )
+        if publish_resp.status_code >= 400:
+            return {
+                "ok": False,
+                "pendingCredentials": False,
+                "error": f"Instagram publish {publish_resp.status_code}: {publish_resp.text[:300]}",
+            }
+        body = publish_resp.json() if publish_resp.content else {}
+        external_id = str(body.get("id") or "").strip()
+        return {"ok": True, "externalId": external_id, "statusCode": publish_resp.status_code, "provider": "instagram_api"}
+    except Exception as exc:
+        return {"ok": False, "pendingCredentials": False, "error": f"Instagram API exception: {str(exc)[:300]}"}
+
+
+def _post_tiktok_direct(text: str) -> dict[str, Any]:
+    # TikTok's content publishing flow requires pre-uploaded media and user-granted scopes.
+    if not TIKTOK_ACCESS_TOKEN or not TIKTOK_OPEN_ID:
+        return {
+            "ok": False,
+            "pendingCredentials": True,
+            "error": "Missing TIKTOK_ACCESS_TOKEN or TIKTOK_OPEN_ID for TikTok posting.",
+        }
+    return {
+        "ok": False,
+        "pendingCredentials": False,
+        "error": "TikTok direct text posting is not supported by this endpoint. Use SOCIAL_WEBHOOK_TIKTOK or media-publish integration.",
+    }
 
 
 def _as_utc_datetime(raw: Any) -> datetime | None:
@@ -422,6 +812,716 @@ def _extract_json_object(raw_text: str) -> dict[str, Any]:
     return {}
 
 
+def _extract_responses_output_text(payload: dict[str, Any]) -> str:
+    output = payload.get("output")
+    if not isinstance(output, list):
+        return ""
+    chunks: list[str] = []
+    for item in output:
+        if not isinstance(item, dict):
+            continue
+        if item.get("type") != "message":
+            continue
+        content = item.get("content")
+        if not isinstance(content, list):
+            continue
+        for part in content:
+            if not isinstance(part, dict):
+                continue
+            part_type = str(part.get("type") or "").strip().lower()
+            if part_type in {"output_text", "text"}:
+                text = str(part.get("text") or "").strip()
+                if text:
+                    chunks.append(text)
+    return "\n".join(chunks).strip()
+
+
+def _normalize_symbol_token(raw: Any) -> str:
+    text = str(raw or "").strip().upper()
+    if text.startswith("$"):
+        text = text[1:]
+    text = re.sub(r"[^A-Z0-9\.\-]", "", text)
+    if not text:
+        return ""
+    if len(text) > 10:
+        return ""
+    if not re.fullmatch(r"[A-Z][A-Z0-9\.\-]{0,9}", text):
+        return ""
+    return text
+
+
+def _extract_symbols_from_text(raw_text: str) -> list[str]:
+    text = str(raw_text or "")
+    if not text:
+        return []
+    candidates = re.findall(r"\$?[A-Za-z][A-Za-z0-9\.\-]{0,9}", text)
+    symbols: list[str] = []
+    blocked = {
+        "THE",
+        "THIS",
+        "THAT",
+        "WITH",
+        "FROM",
+        "WHAT",
+        "ABOUT",
+        "PORTFOLIO",
+        "FAVORITE",
+        "STOCK",
+        "STOCKS",
+    }
+    for token in candidates:
+        symbol = _normalize_symbol_token(token)
+        if not symbol or symbol in blocked:
+            continue
+        if symbol not in symbols:
+            symbols.append(symbol)
+    return symbols
+
+
+def _yahoo_search_symbols(query: str, *, max_results: int = 8) -> list[str]:
+    q = str(query or "").strip()
+    if not q:
+        return []
+    try:
+        response = requests.get(
+            YAHOO_SEARCH_URL,
+            headers=_yahoo_headers(),
+            params={"q": q, "quotesCount": max(1, min(max_results, 20)), "newsCount": 0},
+            timeout=12,
+        )
+        response.raise_for_status()
+        payload = response.json()
+    except Exception:
+        return []
+
+    out: list[str] = []
+    for quote in payload.get("quotes", []) or []:
+        if not isinstance(quote, dict):
+            continue
+        symbol = _normalize_symbol_token(quote.get("symbol"))
+        if not symbol:
+            continue
+        quote_type = str(quote.get("quoteType") or "").strip().upper()
+        if quote_type and quote_type not in {"EQUITY", "ETF", "MUTUALFUND"}:
+            continue
+        if symbol not in out:
+            out.append(symbol)
+        if len(out) >= max_results:
+            break
+    return out
+
+
+def _normalize_country_code(raw: Any) -> str:
+    text = str(raw or "").strip().upper()
+    if not text:
+        return "US"
+    alias = {
+        "USA": "US",
+        "UNITED STATES": "US",
+        "UNITED STATES OF AMERICA": "US",
+        "U.S.": "US",
+        "U.S.A.": "US",
+        "CANADA": "CA",
+        "UNITED KINGDOM": "GB",
+        "UK": "GB",
+        "GREAT BRITAIN": "GB",
+        "GERMANY": "DE",
+        "FRANCE": "FR",
+        "JAPAN": "JP",
+        "CHINA": "CN",
+        "HONG KONG": "HK",
+        "INDIA": "IN",
+        "AUSTRALIA": "AU",
+        "BRAZIL": "BR",
+        "MEXICO": "MX",
+        "SOUTH KOREA": "KR",
+        "TAIWAN": "TW",
+        "SINGAPORE": "SG",
+    }
+    if text in alias:
+        return alias[text]
+    if len(text) == 2 and text.isalpha():
+        return text
+    return "US"
+
+
+def _is_us_equity_symbol(symbol: str) -> bool:
+    try:
+        import yfinance as yf  # type: ignore
+
+        info = yf.Ticker(str(symbol or "").strip().upper()).info or {}
+        if not isinstance(info, dict):
+            return False
+        country = str(info.get("country") or "").strip().lower()
+        if country in {"united states", "usa", "us"}:
+            return True
+        exchange = str(info.get("exchange") or info.get("fullExchangeName") or "").strip().lower()
+        if any(tag in exchange for tag in ["nasdaq", "nyse", "amex", "cboe", "arca"]):
+            return True
+    except Exception:
+        return False
+    return False
+
+
+def _coerce_event_iso_dates(value: Any) -> list[str]:
+    values: list[Any]
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple)):
+        values = list(value)
+    else:
+        values = [value]
+
+    out: list[str] = []
+    for item in values:
+        if item is None:
+            continue
+        try:
+            if isinstance(item, datetime):
+                out.append(item.date().isoformat())
+                continue
+            if isinstance(item, date):
+                out.append(item.isoformat())
+                continue
+            text = str(item).strip()
+            if not text:
+                continue
+            if "T" in text:
+                parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+                out.append(parsed.date().isoformat())
+                continue
+            parsed_date = datetime.fromisoformat(text[:10]).date()
+            out.append(parsed_date.isoformat())
+        except Exception:
+            continue
+    return list(dict.fromkeys(out))
+
+
+def _fetch_yahoo_corporate_events_for_ticker(
+    ticker: str,
+    *,
+    start_date: date,
+    end_date: date,
+) -> list[dict[str, Any]]:
+    import yfinance as yf  # type: ignore
+
+    symbol = _normalize_symbol_token(ticker)
+    if not symbol:
+        return []
+
+    out: list[dict[str, Any]] = []
+    tk = yf.Ticker(symbol)
+    info: dict[str, Any] = {}
+    try:
+        raw_info = tk.info or {}
+        info = raw_info if isinstance(raw_info, dict) else {}
+    except Exception:
+        info = {}
+
+    company_name = str(info.get("longName") or info.get("shortName") or symbol).strip()
+    country = str(info.get("country") or "").strip()
+    exchange = str(info.get("fullExchangeName") or info.get("exchange") or "").strip()
+
+    seen: set[str] = set()
+    try:
+        calendar_raw = tk.calendar or {}
+        if isinstance(calendar_raw, dict):
+            for key, raw_value in calendar_raw.items():
+                label = str(key or "").strip() or "Corporate Event"
+                for dt_iso in _coerce_event_iso_dates(raw_value):
+                    try:
+                        dt_obj = datetime.fromisoformat(dt_iso).date()
+                    except Exception:
+                        continue
+                    if dt_obj < start_date or dt_obj > end_date:
+                        continue
+                    event_id = f"{symbol}_{dt_iso}_{label}".lower().replace(" ", "_")
+                    if event_id in seen:
+                        continue
+                    seen.add(event_id)
+                    out.append(
+                        {
+                            "id": event_id,
+                            "ticker": symbol,
+                            "companyName": company_name,
+                            "date": dt_iso,
+                            "type": str(label).lower().replace(" ", "_"),
+                            "status": "scheduled",
+                            "name": label,
+                            "country": country,
+                            "exchange": exchange,
+                            "source": "yahoo_finance",
+                        }
+                    )
+    except Exception:
+        pass
+
+    try:
+        earnings = tk.get_earnings_dates(limit=8)
+        if earnings is not None and getattr(earnings, "empty", True) is False:
+            for idx, row in earnings.reset_index().iterrows():
+                raw_dt = row.get("Earnings Date") or row.get("Date") or row.get("date")
+                for dt_iso in _coerce_event_iso_dates(raw_dt):
+                    try:
+                        dt_obj = datetime.fromisoformat(dt_iso).date()
+                    except Exception:
+                        continue
+                    if dt_obj < start_date or dt_obj > end_date:
+                        continue
+                    event_id = f"{symbol}_{dt_iso}_earnings_announcement_date_{idx}".lower()
+                    if event_id in seen:
+                        continue
+                    seen.add(event_id)
+                    out.append(
+                        {
+                            "id": event_id,
+                            "ticker": symbol,
+                            "companyName": company_name,
+                            "date": dt_iso,
+                            "type": "earnings_announcement_date",
+                            "status": "scheduled",
+                            "name": "Earnings Announcement Date",
+                            "country": country,
+                            "exchange": exchange,
+                            "source": "yahoo_finance",
+                        }
+                    )
+    except Exception:
+        pass
+
+    out.sort(key=lambda row: (str(row.get("date") or ""), str(row.get("ticker") or "")))
+    return out
+
+
+def _fetch_massive_corporate_events(
+    *,
+    tickers: list[str],
+    start_date: date,
+    end_date: date,
+    limit: int = 200,
+    event_types: list[str] | None = None,
+    statuses: list[str] | None = None,
+) -> tuple[list[dict[str, Any]], str]:
+    if not MASSIVE_API_KEY:
+        return [], "Massive TMX API key is not configured."
+
+    normalized = [_normalize_symbol_token(t) for t in (tickers or [])]
+    normalized = [t for t in normalized if t]
+    if not normalized:
+        return [], "No valid tickers were provided."
+
+    params: dict[str, Any] = {
+        "date.gte": start_date.isoformat(),
+        "date.lte": end_date.isoformat(),
+        "sort": "date.asc",
+        "limit": max(1, min(int(limit or 200), 1000)),
+        "apiKey": MASSIVE_API_KEY,
+    }
+    if len(normalized) == 1:
+        params["ticker"] = normalized[0]
+    else:
+        params["ticker.any_of"] = ",".join(normalized[:100])
+
+    if event_types:
+        clean_types = [str(item).strip() for item in event_types if str(item).strip()]
+        if clean_types:
+            params["type.any_of"] = ",".join(clean_types[:30])
+    if statuses:
+        clean_statuses = [str(item).strip() for item in statuses if str(item).strip()]
+        if clean_statuses:
+            params["status.any_of"] = ",".join(clean_statuses[:20])
+
+    url = f"{MASSIVE_BASE_URL}/tmx/v1/corporate-events"
+    try:
+        response = requests.get(url, params=params, timeout=18)
+        response.raise_for_status()
+        payload = response.json() if response.text else {}
+        rows = payload.get("results") or []
+    except Exception as exc:
+        return [], f"Massive TMX request failed: {str(exc)[:180]}"
+
+    out: list[dict[str, Any]] = []
+    for idx, row in enumerate(rows):
+        if not isinstance(row, dict):
+            continue
+        ticker = _normalize_symbol_token(row.get("ticker"))
+        if not ticker:
+            continue
+        dt = str(row.get("date") or "").strip()
+        if not dt:
+            continue
+        event_id = str(row.get("tmx_record_id") or "").strip() or f"{ticker}_{dt}_{idx}"
+        out.append(
+            {
+                "id": event_id,
+                "ticker": ticker,
+                "companyName": str(row.get("company_name") or row.get("name") or ticker).strip(),
+                "date": dt[:10],
+                "type": str(row.get("type") or "").strip(),
+                "status": str(row.get("status") or "").strip() or "scheduled",
+                "name": str(row.get("name") or row.get("type") or "Corporate Event").strip(),
+                "country": "United States",
+                "exchange": str(row.get("exchange") or "").strip(),
+                "source": "massive_tmx",
+            }
+        )
+    out.sort(key=lambda item: (str(item.get("date") or ""), str(item.get("ticker") or "")))
+    return out[: max(1, min(int(limit or 200), 400))], ""
+
+
+def _fetch_yahoo_news_query(query: str, *, limit: int = 12) -> list[dict[str, Any]]:
+    q = str(query or "").strip()
+    if not q:
+        return []
+
+    def _thumbnail(item: dict[str, Any]) -> str:
+        thumb = item.get("thumbnail")
+        if isinstance(thumb, dict):
+            resolutions = thumb.get("resolutions")
+            if isinstance(resolutions, list):
+                best_url = ""
+                best_width = -1
+                for res in resolutions:
+                    if not isinstance(res, dict):
+                        continue
+                    url = str(res.get("url") or "").strip()
+                    width = int(res.get("width") or 0)
+                    if url and width >= best_width:
+                        best_width = width
+                        best_url = url
+                return best_url
+        return ""
+
+    seen: set[str] = set()
+    out: list[dict[str, Any]] = []
+    try:
+        response = requests.get(
+            YAHOO_SEARCH_URL,
+            headers=_yahoo_headers(),
+            params={"q": q, "newsCount": max(1, min(int(limit or 12), 50)), "quotesCount": 0, "listsCount": 0},
+            timeout=12,
+        )
+        if response.status_code >= 400:
+            return []
+        payload = response.json() if response.text else {}
+        for item in payload.get("news") or []:
+            if not isinstance(item, dict):
+                continue
+            title = str(item.get("title") or "").strip()
+            link = str(item.get("link") or item.get("url") or "").strip()
+            if not title:
+                continue
+            key = (link or title).lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(
+                {
+                    "title": title,
+                    "publisher": str(item.get("publisher") or item.get("source") or "").strip(),
+                    "link": link,
+                    "publishedAt": item.get("providerPublishTime") or item.get("publishedAt"),
+                    "summary": str(item.get("summary") or item.get("description") or "").strip(),
+                    "thumbnailUrl": _thumbnail(item),
+                    "source": "yahoo_finance",
+                }
+            )
+            if len(out) >= limit:
+                break
+    except Exception:
+        return []
+
+    return out
+
+
+def _fetch_reddit_social_posts(query: str, *, limit: int = 8) -> list[dict[str, Any]]:
+    q = str(query or "").strip()
+    if not q:
+        return []
+    try:
+        response = requests.get(
+            "https://www.reddit.com/search.json",
+            params={"q": q, "sort": "hot", "limit": max(1, min(int(limit or 8), 25)), "restrict_sr": "false"},
+            headers={"User-Agent": "quantura/1.0"},
+            timeout=12,
+        )
+        if response.status_code >= 400:
+            return []
+        payload = response.json() if response.text else {}
+    except Exception:
+        return []
+
+    out: list[dict[str, Any]] = []
+    for child in (payload.get("data") or {}).get("children") or []:
+        post = child.get("data") if isinstance(child, dict) else None
+        if not isinstance(post, dict):
+            continue
+        permalink = str(post.get("permalink") or "").strip()
+        out.append(
+            {
+                "id": str(post.get("id") or "").strip(),
+                "title": str(post.get("title") or "").strip(),
+                "text": str(post.get("selftext") or "").strip()[:420],
+                "author": str(post.get("author") or "").strip(),
+                "subreddit": str(post.get("subreddit") or "").strip(),
+                "score": int(post.get("score") or 0),
+                "numComments": int(post.get("num_comments") or 0),
+                "createdAt": int(post.get("created_utc") or 0),
+                "permalink": f"https://www.reddit.com{permalink}" if permalink else "",
+                "source": "reddit",
+            }
+        )
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _fetch_x_social_posts(query: str, *, limit: int = 8) -> tuple[list[dict[str, Any]], str]:
+    if not TWITTER_BEARER_TOKEN:
+        return [], "TWITTER_BEARER_TOKEN is not configured."
+    q = str(query or "").strip()
+    if not q:
+        return [], "Query is required."
+
+    endpoint = "https://api.twitter.com/2/tweets/search/recent"
+    params = {
+        "query": f"({q}) lang:en -is:retweet -is:reply",
+        "max_results": max(10, min(int(limit or 8) * 2, 40)),
+        "tweet.fields": "created_at,public_metrics,author_id,lang",
+        "expansions": "author_id",
+        "user.fields": "username,name,verified",
+    }
+    try:
+        response = requests.get(
+            endpoint,
+            headers={"Authorization": f"Bearer {TWITTER_BEARER_TOKEN}"},
+            params=params,
+            timeout=15,
+        )
+        if response.status_code >= 400:
+            return [], f"X API returned HTTP {response.status_code}."
+        payload = response.json() if response.text else {}
+    except Exception as exc:
+        return [], f"X API error: {str(exc)[:160]}"
+
+    users = {
+        str(item.get("id") or "").strip(): item
+        for item in (payload.get("includes") or {}).get("users") or []
+        if isinstance(item, dict)
+    }
+    ranked: list[tuple[float, dict[str, Any]]] = []
+    for row in payload.get("data") or []:
+        if not isinstance(row, dict):
+            continue
+        post_id = str(row.get("id") or "").strip()
+        if not post_id:
+            continue
+        author = users.get(str(row.get("author_id") or "").strip()) or {}
+        metrics = row.get("public_metrics") if isinstance(row.get("public_metrics"), dict) else {}
+        likes = int(metrics.get("like_count") or 0)
+        reposts = int(metrics.get("retweet_count") or 0)
+        replies = int(metrics.get("reply_count") or 0)
+        score = likes + reposts * 2 + replies * 1.5
+        username = str(author.get("username") or "").strip()
+        ranked.append(
+            (
+                score,
+                {
+                    "id": post_id,
+                    "text": str(row.get("text") or "").strip(),
+                    "authorName": str(author.get("name") or "").strip(),
+                    "authorUsername": username,
+                    "createdAt": row.get("created_at"),
+                    "metrics": {
+                        "like_count": likes,
+                        "retweet_count": reposts,
+                        "reply_count": replies,
+                    },
+                    "permalink": f"https://x.com/{username}/status/{post_id}" if username else f"https://x.com/i/web/status/{post_id}",
+                    "source": "x",
+                },
+            )
+        )
+    ranked.sort(key=lambda item: item[0], reverse=True)
+    return [item[1] for item in ranked[: max(1, min(int(limit or 8), 15))]], ""
+
+
+def _fetch_meta_social_posts(query: str, *, platform: str, limit: int = 6) -> tuple[list[dict[str, Any]], str]:
+    q = str(query or "").strip().lower()
+    if platform == "facebook":
+        if not FACEBOOK_PAGE_ID or not FACEBOOK_PAGE_ACCESS_TOKEN:
+            return [], "Facebook page credentials are not configured."
+        try:
+            response = requests.get(
+                f"https://graph.facebook.com/{META_GRAPH_API_VERSION}/{FACEBOOK_PAGE_ID}/posts",
+                params={
+                    "access_token": FACEBOOK_PAGE_ACCESS_TOKEN,
+                    "fields": "id,message,permalink_url,created_time,reactions.summary(true),comments.summary(true)",
+                    "limit": 20,
+                },
+                timeout=14,
+            )
+            if response.status_code >= 400:
+                return [], f"Facebook API returned HTTP {response.status_code}."
+            payload = response.json() if response.text else {}
+        except Exception as exc:
+            return [], f"Facebook API error: {str(exc)[:160]}"
+
+        out: list[dict[str, Any]] = []
+        for row in payload.get("data") or []:
+            if not isinstance(row, dict):
+                continue
+            message = str(row.get("message") or "").strip()
+            if q and q not in message.lower():
+                continue
+            out.append(
+                {
+                    "id": str(row.get("id") or "").strip(),
+                    "text": message,
+                    "createdAt": row.get("created_time"),
+                    "permalink": str(row.get("permalink_url") or "").strip(),
+                    "reactions": int(((row.get("reactions") or {}).get("summary") or {}).get("total_count") or 0),
+                    "comments": int(((row.get("comments") or {}).get("summary") or {}).get("total_count") or 0),
+                    "source": "facebook",
+                }
+            )
+            if len(out) >= limit:
+                break
+        return out, ""
+
+    if platform == "instagram":
+        if not INSTAGRAM_BUSINESS_ACCOUNT_ID or not INSTAGRAM_ACCESS_TOKEN:
+            return [], "Instagram business credentials are not configured."
+        try:
+            response = requests.get(
+                f"https://graph.facebook.com/{META_GRAPH_API_VERSION}/{INSTAGRAM_BUSINESS_ACCOUNT_ID}/media",
+                params={
+                    "access_token": INSTAGRAM_ACCESS_TOKEN,
+                    "fields": "id,caption,permalink,timestamp,media_type",
+                    "limit": 25,
+                },
+                timeout=14,
+            )
+            if response.status_code >= 400:
+                return [], f"Instagram API returned HTTP {response.status_code}."
+            payload = response.json() if response.text else {}
+        except Exception as exc:
+            return [], f"Instagram API error: {str(exc)[:160]}"
+
+        out: list[dict[str, Any]] = []
+        for row in payload.get("data") or []:
+            if not isinstance(row, dict):
+                continue
+            caption = str(row.get("caption") or "").strip()
+            if q and q not in caption.lower():
+                continue
+            out.append(
+                {
+                    "id": str(row.get("id") or "").strip(),
+                    "text": caption[:600],
+                    "createdAt": row.get("timestamp"),
+                    "permalink": str(row.get("permalink") or "").strip(),
+                    "mediaType": str(row.get("media_type") or "").strip(),
+                    "source": "instagram",
+                }
+            )
+            if len(out) >= limit:
+                break
+        return out, ""
+
+    return [], "Unsupported platform."
+
+
+def _resolve_screener_note_signals(notes: str, preferred_model: str = "gpt-5-mini") -> dict[str, Any]:
+    notes_text = str(notes or "").strip()
+    if not notes_text:
+        return {
+            "tickers": [],
+            "queries": [],
+            "matchedHints": [],
+            "usedWebSearch": False,
+        }
+
+    merged_tickers: list[str] = _extract_symbols_from_text(notes_text)
+    queries: list[str] = [notes_text]
+    matched_hints: list[str] = []
+    lowered = notes_text.lower()
+    for hint, symbols in SCREENER_NOTES_TICKER_HINTS.items():
+        if hint in lowered:
+            matched_hints.append(hint)
+            for symbol in symbols:
+                clean = _normalize_symbol_token(symbol)
+                if clean and clean not in merged_tickers:
+                    merged_tickers.append(clean)
+
+    used_web_search = False
+    model_id = _normalize_ai_model_id(preferred_model or "gpt-5-mini")
+    if not model_id.lower().startswith("gpt-5"):
+        model_id = "gpt-5-mini"
+
+    if OPENAI_API_KEY:
+        system_prompt = (
+            "You help convert natural-language investing requests into a stock watchlist. "
+            "Use web search when useful and return strict JSON only with this shape: "
+            '{"tickers":["AAPL"],"queries":["tech mega caps"],"reasoning":"short text"}. '
+            "Use US-listed symbols whenever possible and keep tickers to 20 max."
+        )
+        user_prompt = (
+            "Parse this request and infer likely stock symbols and search phrases for a screener:\\n"
+            f"{notes_text}"
+        )
+        responses_payload = {
+            "model": model_id,
+            "input": [
+                {"role": "system", "content": [{"type": "input_text", "text": system_prompt}]},
+                {"role": "user", "content": [{"type": "input_text", "text": user_prompt}]},
+            ],
+            "text": {"format": {"type": "json_object"}},
+            "tools": [{"type": "web_search_preview"}],
+            "max_output_tokens": 600,
+        }
+        parsed: dict[str, Any] = {}
+        try:
+            response = requests.post(
+                "https://api.openai.com/v1/responses",
+                headers={
+                    "Authorization": f"Bearer {OPENAI_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json=responses_payload,
+                timeout=28,
+            )
+            response.raise_for_status()
+            used_web_search = True
+            content = _extract_responses_output_text(response.json())
+            parsed = _extract_json_object(content)
+        except Exception:
+            # Keep note parsing resilient if web search or model call is unavailable.
+            parsed = {}
+
+        for raw_symbol in parsed.get("tickers", []) if isinstance(parsed.get("tickers"), list) else []:
+            symbol = _normalize_symbol_token(raw_symbol)
+            if symbol and symbol not in merged_tickers:
+                merged_tickers.append(symbol)
+        for raw_query in parsed.get("queries", []) if isinstance(parsed.get("queries"), list) else []:
+            query = str(raw_query or "").strip()
+            if query and query not in queries:
+                queries.append(query)
+
+    # Resolve natural-language queries through Yahoo symbol search as an extra safety net.
+    for query in queries[:8]:
+        for symbol in _yahoo_search_symbols(query, max_results=8):
+            if symbol not in merged_tickers:
+                merged_tickers.append(symbol)
+
+    return {
+        "tickers": merged_tickers[:60],
+        "queries": queries[:12],
+        "matchedHints": matched_hints[:24],
+        "usedWebSearch": used_web_search,
+    }
+
+
 def _default_social_copy(
     topic: str,
     objective: str,
@@ -434,7 +1534,7 @@ def _default_social_copy(
     base_objective = objective.strip() or "Drive qualified leads to Quantura"
     base_audience = audience.strip() or "active investors and data-driven operators"
     base_tone = tone.strip() or "confident, concise, practical"
-    today = datetime.now(timezone.utc).date().isoformat()
+    now_utc = datetime.now(timezone.utc)
     out: dict[str, list[dict[str, Any]]] = {}
 
     for channel in channels:
@@ -454,7 +1554,7 @@ def _default_social_copy(
                     "hashtags": ["#Quantura", "#Stocks", "#DataScience", f"#{channel.capitalize()}"],
                     "cta": "Explore the platform",
                     "ctaUrl": cta_url,
-                    "suggestedPostTime": f"{today}T14:{10 + idx:02d}:00Z",
+                    "suggestedPostTime": _strategic_suggested_post_time(channel, idx, now_utc=now_utc),
                 }
             )
         out[channel] = channel_posts
@@ -481,52 +1581,86 @@ def _generate_social_copy_with_openai(
         "Avoid guaranteed-return language. Keep content useful and brand-safe. "
         "Return strict JSON only."
     )
-    user_prompt = (
-        "Generate social drafts with this exact JSON shape: "
-        '{"channels":{"x":[{"headline":"","body":"","hashtags":[],"cta":"","ctaUrl":"","suggestedPostTime":""}]}}. '
-        f"Topic: {topic}. Objective: {objective}. Audience: {audience}. Tone: {tone}. "
-        f"Channels: {', '.join(channels)}. Posts per channel: {posts_per_channel}. "
-        f"Use CTA URL: {cta_url}. Keep each body optimized for the channel and under typical limits."
-    )
-
-    payload = {
-        "model": SOCIAL_CONTENT_MODEL,
-        "temperature": 0.7,
-        "max_tokens": 1200,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        "response_format": {"type": "json_object"},
-    }
-
-    try:
+    def _request_json_from_openai(user_prompt: str, max_output_tokens: int = 2200) -> dict[str, Any]:
+        responses_payload = {
+            "model": SOCIAL_CONTENT_MODEL,
+            "input": [
+                {"role": "system", "content": [{"type": "input_text", "text": system_prompt}]},
+                {"role": "user", "content": [{"type": "input_text", "text": user_prompt}]},
+            ],
+            "text": {"format": {"type": "json_object"}},
+            "max_output_tokens": max_output_tokens,
+        }
         response = requests.post(
+            "https://api.openai.com/v1/responses",
+            headers={
+                "Authorization": f"Bearer {OPENAI_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json=responses_payload,
+            timeout=35,
+        )
+        response.raise_for_status()
+        content = _extract_responses_output_text(response.json())
+        if content:
+            parsed = _extract_json_object(content)
+            if parsed:
+                return parsed
+
+        # Fallback path for compatibility across model/endpoint variants.
+        chat_payload = {
+            "model": SOCIAL_CONTENT_MODEL,
+            "temperature": 0.7,
+            "max_completion_tokens": 2200,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "response_format": {"type": "json_object"},
+        }
+        chat_response = requests.post(
             "https://api.openai.com/v1/chat/completions",
             headers={
                 "Authorization": f"Bearer {OPENAI_API_KEY}",
                 "Content-Type": "application/json",
             },
-            json=payload,
+            json=chat_payload,
             timeout=35,
         )
-        response.raise_for_status()
-        body = response.json()
-        content = (
-            body.get("choices", [{}])[0]
+        chat_response.raise_for_status()
+        chat_body = chat_response.json()
+        chat_content = (
+            chat_body.get("choices", [{}])[0]
             .get("message", {})
             .get("content", "{}")
         )
-        parsed = _extract_json_object(content)
-        channels_obj = parsed.get("channels") if isinstance(parsed, dict) else None
-        if not isinstance(channels_obj, dict):
-            raise ValueError("Model response missing channels object.")
+        parsed = _extract_json_object(chat_content)
+        if not parsed:
+            raise ValueError("OpenAI response did not return parseable JSON.")
+        return parsed
 
-        normalized: dict[str, list[dict[str, Any]]] = {}
-        for channel in channels:
-            rows = channels_obj.get(channel) if isinstance(channels_obj, dict) else None
-            if not isinstance(rows, list):
-                rows = []
+    normalized: dict[str, list[dict[str, Any]]] = {}
+    used_model = False
+
+    for channel in channels:
+        per_channel_prompt = (
+            "Generate social drafts with this exact JSON shape: "
+            '{"channels":{"x":[{"headline":"","body":"","hashtags":[],"cta":"","ctaUrl":"","suggestedPostTime":""}]}}. '
+            f"Topic: {topic}. Objective: {objective}. Audience: {audience}. Tone: {tone}. "
+            f"Generate only channel: {channel}. Posts per channel: {posts_per_channel}. "
+            f"Use CTA URL: {cta_url}. Keep each body optimized for the channel and under typical limits."
+        )
+        rows: list[Any] = []
+        try:
+            parsed = _request_json_from_openai(per_channel_prompt)
+            if isinstance(parsed, dict):
+                channels_obj = parsed.get("channels")
+                if isinstance(channels_obj, dict):
+                    candidate = channels_obj.get(channel)
+                    if isinstance(candidate, list):
+                        rows = candidate
+                elif isinstance(parsed.get(channel), list):
+                    rows = parsed.get(channel)  # type: ignore[assignment]
             mapped: list[dict[str, Any]] = []
             for row in rows[:posts_per_channel]:
                 if not isinstance(row, dict):
@@ -550,25 +1684,22 @@ def _generate_social_copy_with_openai(
                 )
             if mapped:
                 normalized[channel] = mapped
+                used_model = True
+                continue
+        except Exception:
+            pass
 
-        if not normalized:
-            raise ValueError("No valid posts returned from model.")
+        normalized[channel] = _default_social_copy(
+            topic,
+            objective,
+            audience,
+            tone,
+            [channel],
+            posts_per_channel,
+            cta_url,
+        ).get(channel, [])
 
-        for channel in channels:
-            if channel not in normalized:
-                normalized[channel] = _default_social_copy(
-                    topic,
-                    objective,
-                    audience,
-                    tone,
-                    [channel],
-                    posts_per_channel,
-                    cta_url,
-                ).get(channel, [])
-        return normalized, SOCIAL_CONTENT_MODEL
-    except Exception:
-        drafts = _default_social_copy(topic, objective, audience, tone, channels, posts_per_channel, cta_url)
-        return drafts, "template_fallback"
+    return normalized, (SOCIAL_CONTENT_MODEL if used_model else "template_fallback")
 
 
 def _enqueue_social_posts(
@@ -583,6 +1714,7 @@ def _enqueue_social_posts(
 ) -> dict[str, Any]:
     created_ids: list[str] = []
     total = 0
+    now_utc = datetime.now(timezone.utc)
     scheduled_utc = scheduled_for.astimezone(timezone.utc)
     for channel in channels:
         posts = drafts.get(channel) if isinstance(drafts, dict) else None
@@ -595,6 +1727,11 @@ def _enqueue_social_posts(
             headline = str(post.get("headline") or "").strip()
             if not body and not headline:
                 continue
+            suggested = _as_utc_datetime(post.get("suggestedPostTime"))
+            publish_time = suggested or scheduled_utc
+            if publish_time < now_utc - timedelta(minutes=2):
+                while publish_time < now_utc + timedelta(minutes=2):
+                    publish_time += timedelta(days=1)
             doc = {
                 "campaignId": campaign_id,
                 "userId": user_id,
@@ -605,7 +1742,7 @@ def _enqueue_social_posts(
                 "hashtags": post.get("hashtags") if isinstance(post.get("hashtags"), list) else [],
                 "cta": str(post.get("cta") or "").strip(),
                 "ctaUrl": str(post.get("ctaUrl") or SOCIAL_DEFAULT_CTA_URL).strip(),
-                "scheduledFor": scheduled_utc,
+                "scheduledFor": publish_time,
                 "status": "queued",
                 "attempts": 0,
                 "orderIndex": rank,
@@ -631,19 +1768,45 @@ def _post_to_social_channel(
     campaign_id: str,
     queue_id: str,
 ) -> dict[str, Any]:
+    rendered_text, tags = _render_social_text(
+        body=body,
+        headline=headline,
+        hashtags=hashtags,
+        cta=cta,
+        cta_url=cta_url,
+    )
+
+    direct_dispatchers = {
+        "x": _post_x_direct,
+        "linkedin": _post_linkedin_direct,
+        "facebook": _post_facebook_direct,
+        "instagram": _post_instagram_direct,
+        "tiktok": _post_tiktok_direct,
+    }
+    direct_result: dict[str, Any] | None = None
+    dispatcher = direct_dispatchers.get(platform)
+    if dispatcher is not None:
+        direct_result = dispatcher(rendered_text)
+        if direct_result.get("ok"):
+            return direct_result
+        # If direct credentials are missing or unsupported, fallback to webhook relay.
+        if not direct_result.get("pendingCredentials"):
+            webhook_candidate = str(_social_channel_webhooks().get(platform) or "").strip()
+            if not webhook_candidate:
+                return direct_result
+
     webhooks = _social_channel_webhooks()
     webhook = str(webhooks.get(platform) or "").strip()
     if not webhook:
+        if direct_result:
+            return direct_result
+        if dispatcher is not None:
+            return {
+                "ok": False,
+                "pendingCredentials": True,
+                "error": f"Missing direct credentials and webhook for channel '{platform}'.",
+            }
         return {"ok": False, "pendingCredentials": True, "error": f"Missing webhook for channel '{platform}'."}
-
-    tags = [str(tag).strip() for tag in hashtags if str(tag).strip()]
-    rendered_text = body.strip()
-    if headline.strip():
-        rendered_text = f"{headline.strip()}\n\n{rendered_text}".strip()
-    if tags:
-        rendered_text = f"{rendered_text}\n\n{' '.join(tags)}".strip()
-    if cta.strip() and cta_url.strip():
-        rendered_text = f"{rendered_text}\n\n{cta.strip()}: {cta_url.strip()}".strip()
 
     payload = {
         "platform": platform,
@@ -665,7 +1828,7 @@ def _post_to_social_channel(
         external_id = str(response_body.get("id") or response_body.get("postId") or "").strip()
     except Exception:
         external_id = ""
-    return {"ok": True, "externalId": external_id, "statusCode": response.status_code}
+    return {"ok": True, "externalId": external_id, "statusCode": response.status_code, "provider": "webhook"}
 
 
 def _dispatch_due_social_posts(*, max_posts: int, trigger: str, actor_uid: str = "") -> dict[str, Any]:
@@ -2206,6 +3369,248 @@ def confirm_stripe_checkout(req: https_fn.CallableRequest) -> dict[str, Any]:
     }
 
 
+@https_fn.on_call()
+def create_stripe_connect_onboarding_link(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    data = req.data or {}
+    workspace_id = str(data.get("workspaceId") or req.auth.uid or "").strip() or req.auth.uid
+    _require_workspace_editor(workspace_id, req.auth.uid, token)
+
+    stripe = _stripe_module()
+    user_ref = db.collection("users").document(workspace_id)
+    user_snap = user_ref.get()
+    user_doc = user_snap.to_dict() if user_snap.exists else {}
+    profile = user_doc.get("profile") if isinstance(user_doc.get("profile"), dict) else {}
+
+    account_id = str(
+        user_doc.get("stripeConnectAccountId")
+        or profile.get("stripeConnectAccountId")
+        or ""
+    ).strip()
+
+    if not account_id:
+        account_kwargs: dict[str, Any] = {
+            "type": "express",
+            "metadata": {"workspaceId": workspace_id, "ownerUid": req.auth.uid},
+        }
+        email = str(token.get("email") or "").strip()
+        if email:
+            account_kwargs["email"] = email
+        try:
+            account = stripe.Account.create(**account_kwargs)
+            account_id = str(
+                getattr(account, "id", "")
+                or (account.get("id") if isinstance(account, dict) else "")
+                or ""
+            ).strip()
+        except Exception as exc:
+            raise https_fn.HttpsError(
+                https_fn.FunctionsErrorCode.INTERNAL,
+                "Unable to create Stripe Connect account.",
+                {"error": str(exc)},
+            )
+        if not account_id:
+            raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INTERNAL, "Stripe Connect account ID is missing.")
+
+        user_ref.set(
+            {
+                "stripeConnectAccountId": account_id,
+                "profile": {
+                    **(profile if isinstance(profile, dict) else {}),
+                    "stripeConnectAccountId": account_id,
+                },
+                "updatedAt": firestore.SERVER_TIMESTAMP,
+            },
+            merge=True,
+        )
+
+    try:
+        link = stripe.AccountLink.create(
+            account=account_id,
+            refresh_url=f"{PUBLIC_ORIGIN}/forecasting?connect=retry",
+            return_url=f"{PUBLIC_ORIGIN}/forecasting?connect=done",
+            type="account_onboarding",
+        )
+    except Exception as exc:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INTERNAL,
+            "Unable to start Stripe Connect onboarding.",
+            {"error": str(exc)},
+        )
+
+    _audit_event(
+        req.auth.uid,
+        token.get("email"),
+        "stripe_connect_onboarding_link_created",
+        {"workspaceId": workspace_id, "accountId": account_id},
+    )
+
+    return {
+        "workspaceId": workspace_id,
+        "accountId": account_id,
+        "url": str(getattr(link, "url", "") or (link.get("url") if isinstance(link, dict) else "") or ""),
+        "platformFeePercent": STRIPE_CONNECT_PLATFORM_FEE_PERCENT,
+    }
+
+
+@https_fn.on_call()
+def create_creator_support_checkout(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    data = req.data or {}
+
+    creator_workspace_id = str(data.get("creatorWorkspaceId") or "").strip()
+    if not creator_workspace_id:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "creatorWorkspaceId is required.")
+
+    mode_raw = str(data.get("mode") or "tip").strip().lower()
+    mode = "subscription" if mode_raw in {"subscription", "subscribe", "sub"} else "payment"
+    currency = str(data.get("currency") or "usd").strip().lower() or "usd"
+    amount_default = CREATOR_DEFAULT_SUBSCRIBE_USD if mode == "subscription" else CREATOR_DEFAULT_THANKS_USD
+    amount = _safe_float(data.get("amountUsd"))
+    if amount is None or amount <= 0:
+        amount = float(amount_default)
+    amount_cents = max(100, int(round(float(amount) * 100)))
+
+    target_type = str(data.get("targetType") or "profile").strip().lower() or "profile"
+    target_id = str(data.get("targetId") or "").strip()
+
+    creator_ref = db.collection("users").document(creator_workspace_id)
+    creator_snap = creator_ref.get()
+    if not creator_snap.exists:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "Creator profile not found.")
+    creator_doc = creator_snap.to_dict() or {}
+    creator_profile = creator_doc.get("profile") if isinstance(creator_doc.get("profile"), dict) else {}
+    creator_name = str(
+        creator_profile.get("username")
+        or creator_doc.get("name")
+        or creator_doc.get("email")
+        or creator_workspace_id
+    ).strip()
+
+    connect_account_id = str(
+        creator_doc.get("stripeConnectAccountId")
+        or creator_profile.get("stripeConnectAccountId")
+        or ""
+    ).strip()
+
+    stripe = _stripe_module()
+    platform_fee_percent = max(1.0, min(float(STRIPE_CONNECT_PLATFORM_FEE_PERCENT), 40.0))
+    line_item_name = (
+        f"Subscribe to @{creator_name}"
+        if mode == "subscription"
+        else f"Send thanks to @{creator_name}"
+    )
+    if target_type == "screener" and target_id:
+        line_item_name = (
+            f"Subscribe to @{creator_name}'s screener"
+            if mode == "subscription"
+            else f"Send thanks for screener {target_id}"
+        )
+
+    success_url = f"{PUBLIC_ORIGIN}/forecasting?creator_checkout=success&session_id={{CHECKOUT_SESSION_ID}}"
+    cancel_url = f"{PUBLIC_ORIGIN}/forecasting?creator_checkout=cancel"
+    session_kwargs: dict[str, Any] = {
+        "mode": mode,
+        "line_items": [
+            {
+                "price_data": {
+                    "currency": currency,
+                    "unit_amount": amount_cents,
+                    "product_data": {"name": line_item_name},
+                    **({"recurring": {"interval": "month"}} if mode == "subscription" else {}),
+                },
+                "quantity": 1,
+            }
+        ],
+        "success_url": success_url,
+        "cancel_url": cancel_url,
+        "metadata": {
+            "supporterUid": req.auth.uid,
+            "supporterEmail": str(token.get("email") or ""),
+            "creatorWorkspaceId": creator_workspace_id,
+            "creatorName": creator_name,
+            "mode": mode,
+            "targetType": target_type,
+            "targetId": target_id,
+            "platformFeePercent": str(platform_fee_percent),
+            "connectLinked": "1" if connect_account_id else "0",
+        },
+    }
+
+    email = str(token.get("email") or "").strip()
+    if email:
+        session_kwargs["customer_email"] = email
+
+    if connect_account_id:
+        if mode == "payment":
+            fee_amount = max(1, int(round(amount_cents * (platform_fee_percent / 100.0))))
+            session_kwargs["payment_intent_data"] = {
+                "application_fee_amount": fee_amount,
+                "transfer_data": {"destination": connect_account_id},
+            }
+        else:
+            session_kwargs["subscription_data"] = {
+                "application_fee_percent": platform_fee_percent,
+                "transfer_data": {"destination": connect_account_id},
+            }
+
+    try:
+        session = stripe.checkout.Session.create(**session_kwargs)
+    except Exception as exc:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INTERNAL,
+            "Unable to create creator checkout session.",
+            {"error": str(exc)},
+        )
+
+    doc_ref = db.collection("creator_support_sessions").document()
+    doc_ref.set(
+        {
+            "supporterUid": req.auth.uid,
+            "supporterEmail": token.get("email"),
+            "creatorWorkspaceId": creator_workspace_id,
+            "creatorName": creator_name,
+            "targetType": target_type,
+            "targetId": target_id,
+            "mode": mode,
+            "currency": currency,
+            "amountUsd": round(float(amount), 2),
+            "amountCents": amount_cents,
+            "platformFeePercent": platform_fee_percent,
+            "connectAccountId": connect_account_id,
+            "stripeCheckoutSessionId": str(getattr(session, "id", "") or ""),
+            "status": "created",
+            "createdAt": firestore.SERVER_TIMESTAMP,
+            "updatedAt": firestore.SERVER_TIMESTAMP,
+            "meta": data.get("meta") if isinstance(data.get("meta"), dict) else {},
+        }
+    )
+
+    _audit_event(
+        req.auth.uid,
+        token.get("email"),
+        "creator_support_checkout_created",
+        {
+            "creatorWorkspaceId": creator_workspace_id,
+            "mode": mode,
+            "targetType": target_type,
+            "targetId": target_id,
+            "amountCents": amount_cents,
+            "connectLinked": bool(connect_account_id),
+        },
+    )
+
+    return {
+        "sessionId": str(getattr(session, "id", "") or ""),
+        "url": str(getattr(session, "url", "") or ""),
+        "mode": mode,
+        "creatorWorkspaceId": creator_workspace_id,
+        "creatorName": creator_name,
+        "platformFeePercent": platform_fee_percent,
+        "connectLinked": bool(connect_account_id),
+    }
+
+
 @https_fn.on_request()
 def stripe_webhook(req: https_fn.Request) -> tuple[str, int]:
     if req.method != "POST":
@@ -2331,6 +3736,7 @@ def submit_contact(req: https_fn.CallableRequest) -> dict[str, Any]:
         "email": str(data.get("email") or "").strip(),
         "company": str(data.get("company") or "").strip(),
         "role": str(data.get("role") or "").strip(),
+        "category": str(data.get("category") or "").strip(),
         "message": str(data.get("message") or "").strip(),
         "sourcePage": str(data.get("sourcePage") or "").strip(),
         "utm": data.get("utm") or {},
@@ -3270,6 +4676,47 @@ def rename_screener_run(req: https_fn.CallableRequest) -> dict[str, Any]:
 
 
 @https_fn.on_call()
+def set_screener_public_visibility(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    data = req.data or {}
+    run_id = str(data.get("runId") or data.get("id") or "").strip()
+    is_public = bool(data.get("isPublic"))
+    if not run_id:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Run ID is required.")
+
+    ref = db.collection("screener_runs").document(run_id)
+    snap = ref.get()
+    if not snap.exists:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "Screener run not found.")
+
+    doc = snap.to_dict() or {}
+    workspace_id = str(doc.get("userId") or "").strip()
+    if not workspace_id:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.PERMISSION_DENIED, "Workspace owner is missing.")
+    _require_workspace_editor(workspace_id, req.auth.uid, token)
+
+    payload: dict[str, Any] = {
+        "isPublic": is_public,
+        "updatedAt": firestore.SERVER_TIMESTAMP,
+    }
+    if is_public:
+        payload["publishedAt"] = firestore.SERVER_TIMESTAMP
+        payload["publishedByUid"] = req.auth.uid
+    else:
+        payload["publishedAt"] = firestore.DELETE_FIELD
+        payload["publishedByUid"] = firestore.DELETE_FIELD
+
+    ref.set(payload, merge=True)
+    _audit_event(
+        req.auth.uid,
+        token.get("email"),
+        "screener_public_visibility_updated",
+        {"runId": run_id, "workspaceId": workspace_id, "isPublic": is_public},
+    )
+    return {"runId": run_id, "isPublic": is_public, "workspaceId": workspace_id, "updated": True}
+
+
+@https_fn.on_call()
 def upsert_ai_agent_social_action(req: https_fn.CallableRequest) -> dict[str, Any]:
     token = _require_auth(req)
     data = req.data or {}
@@ -3582,7 +5029,7 @@ def run_prediction_upload_agent(req: https_fn.CallableRequest) -> dict[str, Any]
     provider = "fallback"
 
     if OPENAI_API_KEY:
-        model_used = str(os.environ.get("PREDICTION_AGENT_MODEL") or "gpt-4o-mini").strip() or "gpt-4o-mini"
+        model_used = str(os.environ.get("PREDICTION_AGENT_MODEL") or "gpt-5-mini").strip() or "gpt-5-mini"
         system_prompt = (
             "You are a market data QA assistant for Quantura. "
             "Given CSV-derived quantile mapping metadata, write a concise analyst note. "
@@ -3679,6 +5126,39 @@ def _enforce_daily_usage(uid: str, feature_key: str, limit: int, limit_message: 
         {
             "userId": uid,
             "date": day_key,
+            feature_key: count + 1,
+            "updatedAt": firestore.SERVER_TIMESTAMP,
+        },
+        merge=True,
+    )
+    transaction.commit()
+
+
+def _iso_week_key(now_utc: datetime | None = None) -> str:
+    dt = now_utc or datetime.now(timezone.utc)
+    iso = dt.isocalendar()
+    return f"{iso.year}-W{iso.week:02d}"
+
+
+def _enforce_weekly_usage(uid: str, feature_key: str, limit: int, limit_message: str | None = None) -> None:
+    if limit <= 0:
+        return
+    week_key = _iso_week_key()
+    ref = db.collection("usage_weekly").document(f"{uid}_{week_key}")
+    transaction = db.transaction()
+    snap = ref.get(transaction=transaction)
+    existing = snap.to_dict() if snap.exists else {}
+    count = int(existing.get(feature_key) or 0)
+    if count >= limit:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.RESOURCE_EXHAUSTED,
+            limit_message or "Weekly usage limit reached.",
+        )
+    transaction.set(
+        ref,
+        {
+            "userId": uid,
+            "week": week_key,
             feature_key: count + 1,
             "updatedAt": firestore.SERVER_TIMESTAMP,
         },
@@ -5266,6 +6746,393 @@ def get_ticker_news(req: https_fn.CallableRequest) -> dict[str, Any]:
 
 
 @https_fn.on_call()
+def get_ticker_x_trends(req: https_fn.CallableRequest) -> dict[str, Any]:
+    data = req.data or {}
+    ticker = str(data.get("ticker") or "").upper().strip()
+    if not ticker:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Ticker is required.")
+
+    if not TWITTER_BEARER_TOKEN:
+        return {
+            "ticker": ticker,
+            "posts": [],
+            "warning": "X trend feed is not configured (missing TWITTER_BEARER_TOKEN).",
+        }
+
+    endpoint = "https://api.twitter.com/2/tweets/search/recent"
+    query = f"(${ticker} OR {ticker}) lang:en -is:retweet -is:reply"
+    params = {
+        "query": query,
+        "max_results": 30,
+        "tweet.fields": "created_at,public_metrics,author_id,lang",
+        "expansions": "author_id",
+        "user.fields": "username,name,verified",
+    }
+    headers = {"Authorization": f"Bearer {TWITTER_BEARER_TOKEN}"}
+
+    try:
+        response = requests.get(endpoint, headers=headers, params=params, timeout=15)
+        if response.status_code >= 400:
+            return {
+                "ticker": ticker,
+                "posts": [],
+                "warning": f"X trend feed unavailable (HTTP {response.status_code}).",
+            }
+
+        payload = response.json() if response.text else {}
+        tweets = payload.get("data") or []
+        includes = payload.get("includes") or {}
+        users = includes.get("users") or []
+
+        user_map: dict[str, dict[str, Any]] = {}
+        for user in users:
+            if not isinstance(user, dict):
+                continue
+            user_id = str(user.get("id") or "").strip()
+            if user_id:
+                user_map[user_id] = user
+
+        ranked_posts: list[tuple[float, dict[str, Any]]] = []
+        for item in tweets:
+            if not isinstance(item, dict):
+                continue
+            post_id = str(item.get("id") or "").strip()
+            if not post_id:
+                continue
+            author_id = str(item.get("author_id") or "").strip()
+            author = user_map.get(author_id) or {}
+            metrics = item.get("public_metrics") if isinstance(item.get("public_metrics"), dict) else {}
+            likes = int(metrics.get("like_count") or 0)
+            reposts = int(metrics.get("retweet_count") or 0)
+            replies = int(metrics.get("reply_count") or 0)
+            quotes = int(metrics.get("quote_count") or 0)
+            score = (likes * 1.0) + (reposts * 2.0) + (replies * 1.5) + (quotes * 1.25)
+
+            username = str(author.get("username") or "").strip()
+            permalink = f"https://x.com/{username}/status/{post_id}" if username else f"https://x.com/i/web/status/{post_id}"
+            ranked_posts.append(
+                (
+                    score,
+                    {
+                        "id": post_id,
+                        "text": str(item.get("text") or "").strip(),
+                        "createdAt": item.get("created_at"),
+                        "authorUsername": username,
+                        "authorName": str(author.get("name") or "").strip(),
+                        "metrics": {
+                            "like_count": likes,
+                            "retweet_count": reposts,
+                            "reply_count": replies,
+                            "quote_count": quotes,
+                        },
+                        "permalink": permalink,
+                    },
+                )
+            )
+
+        ranked_posts.sort(key=lambda row: row[0], reverse=True)
+        posts = [row[1] for row in ranked_posts[:8]]
+        return {"ticker": ticker, "posts": posts}
+    except Exception as exc:
+        return {
+            "ticker": ticker,
+            "posts": [],
+            "warning": f"X trend feed error: {str(exc)[:180]}",
+        }
+
+
+@https_fn.on_call()
+def get_corporate_events_calendar(req: https_fn.CallableRequest) -> dict[str, Any]:
+    data = req.data or {}
+    ticker = _normalize_symbol_token(data.get("ticker"))
+    tickers_raw = data.get("tickers") if isinstance(data.get("tickers"), list) else []
+    tickers = [_normalize_symbol_token(item) for item in tickers_raw]
+    tickers = [item for item in tickers if item]
+    if ticker:
+        tickers = [ticker] + tickers
+    tickers = list(dict.fromkeys(tickers))
+
+    if not tickers:
+        tickers = ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL"]
+
+    today = date.today()
+    try:
+        start_date = datetime.fromisoformat(str(data.get("startDate") or data.get("start") or today.isoformat())[:10]).date()
+    except Exception:
+        start_date = today
+    try:
+        default_end = today + timedelta(days=90)
+        end_date = datetime.fromisoformat(str(data.get("endDate") or data.get("end") or default_end.isoformat())[:10]).date()
+    except Exception:
+        end_date = today + timedelta(days=90)
+
+    if end_date < start_date:
+        end_date = start_date + timedelta(days=30)
+    if (end_date - start_date).days > 370:
+        end_date = start_date + timedelta(days=370)
+
+    country_code = _normalize_country_code(data.get("country"))
+    use_massive = country_code == "US"
+    if use_massive and tickers:
+        # If all provided tickers look non-US, force Yahoo fallback.
+        us_check = [_is_us_equity_symbol(item) for item in tickers[:10]]
+        if us_check and not any(us_check):
+            use_massive = False
+
+    warnings: list[str] = []
+    events: list[dict[str, Any]] = []
+    source = "yahoo_finance"
+
+    if use_massive:
+        massive_events, massive_warning = _fetch_massive_corporate_events(
+            tickers=tickers,
+            start_date=start_date,
+            end_date=end_date,
+            limit=int(data.get("limit") or 250),
+            event_types=data.get("eventTypes") if isinstance(data.get("eventTypes"), list) else None,
+            statuses=data.get("statuses") if isinstance(data.get("statuses"), list) else None,
+        )
+        if massive_events:
+            events = massive_events
+            source = "massive_tmx"
+        elif massive_warning:
+            warnings.append(massive_warning)
+
+    if not events:
+        source = "yahoo_finance"
+        for symbol in tickers[:30]:
+            try:
+                events.extend(
+                    _fetch_yahoo_corporate_events_for_ticker(
+                        symbol,
+                        start_date=start_date,
+                        end_date=end_date,
+                    )
+                )
+            except Exception:
+                continue
+
+    dedup: dict[str, dict[str, Any]] = {}
+    for row in events:
+        if not isinstance(row, dict):
+            continue
+        event_id = str(row.get("id") or "").strip()
+        if not event_id:
+            event_id = f"{row.get('ticker')}_{row.get('date')}_{row.get('type')}".lower()
+            row["id"] = event_id
+        dedup[event_id] = row
+
+    sorted_events = sorted(
+        list(dedup.values()),
+        key=lambda item: (str(item.get("date") or ""), str(item.get("ticker") or ""), str(item.get("name") or "")),
+    )
+
+    return {
+        "tickers": tickers,
+        "country": country_code,
+        "startDate": start_date.isoformat(),
+        "endDate": end_date.isoformat(),
+        "source": source,
+        "fallbackUsed": source != "massive_tmx",
+        "warnings": warnings,
+        "events": _serialize_for_firestore(sorted_events[: max(1, min(int(data.get("limit") or 250), 500))]),
+    }
+
+
+@https_fn.on_call()
+def query_ticker_insight(req: https_fn.CallableRequest) -> dict[str, Any]:
+    import yfinance as yf  # type: ignore
+
+    data = req.data or {}
+    ticker = _normalize_symbol_token(data.get("ticker"))
+    question = str(data.get("question") or data.get("query") or "").strip()
+    language = str(data.get("language") or "en").strip().lower()[:8]
+    if language in {"", "auto"}:
+        language = "en"
+    if not re.match(r"^[a-z]{2}(?:-[a-z]{2})?$", language):
+        language = "en"
+    language_label = {
+        "en": "English",
+        "es": "Spanish",
+        "fr": "French",
+        "de": "German",
+        "ar": "Arabic",
+        "bn": "Bengali",
+    }.get(language, "English")
+    if not ticker:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Ticker is required.")
+    if not question:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Question is required.")
+
+    tk = yf.Ticker(ticker)
+    info: dict[str, Any] = {}
+    try:
+        raw_info = tk.info or {}
+        info = raw_info if isinstance(raw_info, dict) else {}
+    except Exception:
+        info = {}
+
+    history_summary: dict[str, Any] = {}
+    try:
+        hist = tk.history(period="6mo", interval="1d")
+        if hist is not None and getattr(hist, "empty", True) is False and "Close" in hist.columns:
+            close = hist["Close"].astype(float).dropna()
+            if len(close) >= 2:
+                last = float(close.iloc[-1])
+                start = float(close.iloc[0])
+                one_month = float(close.iloc[-22]) if len(close) >= 22 else None
+                history_summary = {
+                    "lastClose": round(last, 4),
+                    "periodStartClose": round(start, 4),
+                    "change6mPct": round(((last / start) - 1.0) * 100.0, 3) if start else None,
+                    "change1mPct": round(((last / one_month) - 1.0) * 100.0, 3) if one_month else None,
+                }
+    except Exception:
+        history_summary = {}
+
+    headlines = _fetch_yahoo_news_query(ticker, limit=6)
+    headline_compact = [
+        {
+            "title": str(item.get("title") or "").strip(),
+            "publisher": str(item.get("publisher") or "").strip(),
+            "publishedAt": item.get("publishedAt"),
+            "link": str(item.get("link") or "").strip(),
+        }
+        for item in headlines[:6]
+    ]
+
+    context_payload = {
+        "ticker": ticker,
+        "country": str(info.get("country") or "").strip(),
+        "exchange": str(info.get("fullExchangeName") or info.get("exchange") or "").strip(),
+        "sector": str(info.get("sector") or "").strip(),
+        "industry": str(info.get("industry") or "").strip(),
+        "marketCap": info.get("marketCap"),
+        "trailingPE": info.get("trailingPE"),
+        "forwardPE": info.get("forwardPE"),
+        "dividendYield": info.get("dividendYield"),
+        "beta": info.get("beta"),
+        "historySummary": history_summary,
+        "headlines": headline_compact,
+    }
+
+    answer = ""
+    model_used = "heuristic"
+    provider = "local"
+
+    if OPENAI_API_KEY:
+        model_used = "gpt-5"
+        provider = "openai"
+        system_prompt = (
+            "You are Quantura's market assistant. Answer using the supplied ticker context only. "
+            "Be explicit when data is missing. Keep the answer concise, practical, and professional. "
+            f"Write the final response in {language_label}."
+        )
+        user_prompt = (
+            f"Ticker: {ticker}\n"
+            f"Question: {question}\n"
+            f"Preferred language: {language_label}\n"
+            f"Context JSON:\n{json.dumps(context_payload, ensure_ascii=False)}\n\n"
+            "Respond in plain text with: (1) direct answer, (2) key evidence bullets, (3) one risk caveat."
+        )
+        payload = {
+            "model": model_used,
+            "input": [
+                {"role": "system", "content": [{"type": "input_text", "text": system_prompt}]},
+                {"role": "user", "content": [{"type": "input_text", "text": user_prompt}]},
+            ],
+            "max_output_tokens": 900,
+            "tools": [{"type": "web_search_preview"}],
+        }
+        try:
+            response = requests.post(
+                "https://api.openai.com/v1/responses",
+                headers={"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"},
+                json=payload,
+                timeout=35,
+            )
+            response.raise_for_status()
+            answer = _extract_responses_output_text(response.json())
+        except Exception as exc:
+            provider = "fallback"
+            model_used = "heuristic"
+            answer = f"Unable to complete GPT-5 query right now. Fallback summary: {str(exc)[:160]}"
+
+    if not answer:
+        last_close = history_summary.get("lastClose")
+        change_1m = history_summary.get("change1mPct")
+        sector = str(context_payload.get("sector") or "Unknown sector")
+        pe = context_payload.get("trailingPE")
+        answer = (
+            f"{ticker} currently screens in {sector}. "
+            f"Last close: {last_close if last_close is not None else 'n/a'}, "
+            f"1M move: {change_1m if change_1m is not None else 'n/a'}%. "
+            f"Trailing P/E: {pe if pe is not None else 'n/a'}. "
+            "Recent headlines were attached for context."
+        )
+
+    return {
+        "ticker": ticker,
+        "question": question,
+        "answer": answer.strip(),
+        "provider": provider,
+        "model": model_used,
+        "context": _serialize_for_firestore(context_payload),
+        "language": language,
+        "usedYahooFallback": str(context_payload.get("country") or "").strip().lower() not in {"united states", "usa", "us"},
+    }
+
+
+@https_fn.on_call()
+def get_market_headlines_feed(req: https_fn.CallableRequest) -> dict[str, Any]:
+    data = req.data or {}
+    country_code = _normalize_country_code(data.get("country"))
+    limit = max(5, min(int(data.get("limit") or 14), 40))
+
+    country_query = {
+        "US": "US stock market top headlines today",
+        "CA": "Canada stock market top headlines today",
+        "GB": "UK stock market top headlines today",
+        "DE": "Germany stock market top headlines today",
+        "FR": "France stock market top headlines today",
+        "JP": "Japan stock market top headlines today",
+        "CN": "China stock market top headlines today",
+        "IN": "India stock market top headlines today",
+        "AU": "Australia stock market top headlines today",
+        "BR": "Brazil stock market top headlines today",
+    }.get(country_code, f"{country_code} stock market top headlines today")
+
+    headlines = _fetch_yahoo_news_query(country_query, limit=limit)
+    if not headlines:
+        headlines = _fetch_yahoo_news_query("stock market top headlines today", limit=limit)
+
+    warnings: list[str] = []
+    x_posts, x_warning = _fetch_x_social_posts(country_query, limit=8)
+    if x_warning:
+        warnings.append(x_warning)
+    reddit_posts = _fetch_reddit_social_posts(country_query, limit=8)
+    facebook_posts, facebook_warning = _fetch_meta_social_posts(country_query, platform="facebook", limit=6)
+    if facebook_warning:
+        warnings.append(facebook_warning)
+    instagram_posts, instagram_warning = _fetch_meta_social_posts(country_query, platform="instagram", limit=6)
+    if instagram_warning:
+        warnings.append(instagram_warning)
+
+    return {
+        "country": country_code,
+        "query": country_query,
+        "headlines": _serialize_for_firestore(headlines[:limit]),
+        "social": {
+            "x": _serialize_for_firestore(x_posts),
+            "reddit": _serialize_for_firestore(reddit_posts),
+            "facebook": _serialize_for_firestore(facebook_posts),
+            "instagram": _serialize_for_firestore(instagram_posts),
+        },
+        "warnings": warnings,
+    }
+
+
+@https_fn.on_call()
 def get_options_chain(req: https_fn.CallableRequest) -> dict[str, Any]:
     import pandas as pd  # type: ignore
     import yfinance as yf  # type: ignore
@@ -5604,23 +7471,36 @@ def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
     context = _remote_config_context(req, token, data.get("meta") if isinstance(data.get("meta"), dict) else None)
     tier_key, tier = _resolve_ai_tier(req.auth.uid, token, context=context)
     allowed_models_raw = tier.get("allowed_models") if isinstance(tier, dict) else []
-    allowed_models = [str(item).strip() for item in (allowed_models_raw or []) if str(item).strip()]
-    daily_limit = int(tier.get("daily_limit") or (50 if tier_key == "premium" else 5))
+    allowed_models = [_normalize_ai_model_id(item) for item in (allowed_models_raw or []) if str(item).strip()]
+    allowed_models = list(dict.fromkeys([item for item in allowed_models if item]))
+    weekly_limit = int(tier.get("weekly_limit") or tier.get("daily_limit") or (15 if tier_key == "premium" else 3))
+    weekly_limit = max(1, weekly_limit)
 
-    selected_model = str(data.get("model") or data.get("selectedModel") or "gpt-4o-mini").strip()
+    personality = str(data.get("personality") or "").strip().lower()
+    personality_model_map = {
+        "balanced": "gpt-5-mini",
+        "deep_research": "gpt-5",
+        "deep-research": "gpt-5",
+        "momentum": "gpt-5-mini",
+        "contrarian": "gpt-5-thinking",
+    }
+
+    selected_model = _normalize_ai_model_id(
+        data.get("model")
+        or data.get("selectedModel")
+        or personality_model_map.get(personality)
+        or "gpt-5-mini"
+    )
+    if not selected_model:
+        selected_model = allowed_models[0] if allowed_models else "gpt-5-mini"
     if allowed_models and selected_model not in allowed_models:
-        _raise_structured_error(
-            https_fn.FunctionsErrorCode.PERMISSION_DENIED,
-            "model_locked",
-            "Selected model is not available for your current tier.",
-            {"selectedModel": selected_model, "allowedModels": allowed_models, "tier": tier_key},
-        )
+        selected_model = allowed_models[0]
 
-    _enforce_daily_usage(
+    _enforce_weekly_usage(
         req.auth.uid,
         "aiScreenerRuns",
-        max(1, daily_limit),
-        "Daily AI screener limit reached. Upgrade to Premium for higher throughput.",
+        max(1, weekly_limit),
+        "Weekly AI screener limit reached. Upgrade to Pro for higher throughput.",
     )
 
     market = str(data.get("market") or "us").lower()
@@ -5651,6 +7531,19 @@ def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
 
     if filter_mode not in {"greater_than", "less_than", "any"}:
         filter_mode = "greater_than"
+
+    raw_filters = data.get("filters") if isinstance(data.get("filters"), dict) else {}
+    screener_filters: dict[str, str] = {}
+    for key, value in (raw_filters or {}).items():
+        name = str(key or "").strip()
+        if not name.startswith("filter"):
+            continue
+        filter_token = str(value or "").strip()
+        if filter_token:
+            screener_filters[name] = filter_token
+
+    notes_text = str(data.get("notes") or "")
+    note_signals = _resolve_screener_note_signals(notes_text, selected_model)
 
     universe_key = str(data.get("universe") or "trending").strip().lower()
     universe_map: dict[str, list[str]] = {
@@ -5687,11 +7580,287 @@ def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
     if not base_tickers:
         base_tickers = trending or fallback_diverse
 
-    candidate_pool = max(20, min(max_names * 3, 90))
-    tickers = list(dict.fromkeys([str(t).upper().strip() for t in base_tickers if str(t).strip()]))[:candidate_pool]
+    note_tickers = [
+        _normalize_symbol_token(item)
+        for item in (note_signals.get("tickers") if isinstance(note_signals, dict) else [])
+        if str(item or "").strip()
+    ]
+    note_tickers = [item for item in note_tickers if item]
+
+    candidate_pool = max(30, min(max_names * 4, 120))
+    seed_tickers = note_tickers + list(base_tickers or []) + list(trending or []) + list(fallback_diverse)
+    tickers = list(dict.fromkeys([str(t).upper().strip() for t in seed_tickers if str(t).strip()]))[:candidate_pool]
 
     results: list[dict[str, Any]] = []
     market_cap_cache: dict[str, float | None] = {}
+    info_cache: dict[str, dict[str, Any]] = {}
+    dividend_growth_cache: dict[str, dict[str, Any]] = {}
+
+    index_members: dict[str, set[str]] = {
+        "sp500": set(universe_map["large-cap"]),
+        "nasdaq100": {
+            "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "AVGO", "TSLA", "AMD", "NFLX",
+            "ADBE", "ORCL", "CSCO", "INTC", "QCOM", "TXN", "AMAT", "MU", "LRCX", "KLAC",
+        },
+        "djia": {
+            "AAPL", "AMGN", "AXP", "BA", "CAT", "CRM", "CSCO", "CVX", "DIS", "GS",
+            "HD", "HON", "IBM", "JNJ", "JPM", "KO", "MCD", "MMM", "MRK", "MSFT",
+            "NKE", "PG", "TRV", "UNH", "V", "VZ", "WBA", "WMT", "XOM",
+        },
+        "russell2000": set(universe_map["small-cap"]),
+    }
+    theme_keywords: dict[str, list[str]] = {
+        "artificialintelligence": ["artificial intelligence", "machine learning", "ai", "gpu", "accelerator"],
+        "cloudcomputing": ["cloud", "saas", "data center", "infrastructure"],
+        "cybersecurity": ["cybersecurity", "security", "identity", "threat"],
+        "fintech": ["fintech", "payments", "digital banking", "credit"],
+        "semiconductors": ["semiconductor", "chip", "foundry", "fab"],
+        "robotics": ["robot", "automation", "autonomous"],
+        "energyrenewable": ["renewable", "solar", "wind", "battery", "clean energy"],
+        "defenseaerospace": ["defense", "aerospace", "drone", "missile"],
+    }
+    subtheme_keywords: dict[str, list[str]] = {
+        "aicompute": ["gpu", "accelerator", "ai compute", "inference"],
+        "aienterprise": ["enterprise software", "productivity", "workflow"],
+        "cloudsecurity": ["cloud security", "zero trust", "identity"],
+        "fintechpayments": ["payments", "merchant", "card network", "wallet"],
+        "semiscompute": ["cpu", "gpu", "logic", "compute"],
+        "roboticsautomation": ["industrial automation", "robotics", "factory"],
+        "energycleansolar": ["solar", "photovoltaic", "inverter"],
+        "defensedrones": ["drone", "uav", "autonomous defense"],
+    }
+
+    def _info_for_symbol(symbol: str) -> dict[str, Any]:
+        cached = info_cache.get(symbol)
+        if cached is not None:
+            return cached
+        info: dict[str, Any] = {}
+        try:
+            tk = yf.Ticker(symbol)
+            raw = tk.info or {}
+            if isinstance(raw, dict):
+                info = dict(raw)
+
+            fast_info = getattr(tk, "fast_info", None)
+            if fast_info is not None:
+                fast_market_cap = None
+                fast_last_price = None
+                try:
+                    fast_market_cap = fast_info.get("market_cap")
+                    fast_last_price = fast_info.get("last_price")
+                except Exception:
+                    fast_market_cap = getattr(fast_info, "market_cap", None)
+                    fast_last_price = getattr(fast_info, "last_price", None)
+
+                if fast_market_cap not in (None, "") and info.get("marketCap") in (None, ""):
+                    info["marketCap"] = fast_market_cap
+                if fast_market_cap not in (None, "") and info.get("market_cap") in (None, ""):
+                    info["market_cap"] = fast_market_cap
+                if fast_last_price not in (None, "") and info.get("currentPrice") in (None, ""):
+                    info["currentPrice"] = fast_last_price
+        except Exception:
+            info = {}
+        info_cache[symbol] = info
+        return info
+
+    def _to_float(value: Any) -> float | None:
+        try:
+            num = float(value)
+            if math.isfinite(num):
+                return num
+        except Exception:
+            return None
+        return None
+
+    def _to_percent(value: Any) -> float | None:
+        num = _to_float(value)
+        if num is None:
+            return None
+        if abs(num) <= 1:
+            return num * 100.0
+        return num
+
+    def _parse_threshold(token: str) -> tuple[str, float] | None:
+        text = str(token or "").strip().lower()
+        if len(text) < 2 or text[0] not in {"u", "o"}:
+            return None
+        try:
+            return ("under" if text[0] == "u" else "over", float(text[1:]))
+        except Exception:
+            return None
+
+    def _match_threshold(value: float | None, token: str) -> bool:
+        if value is None:
+            return False
+        text = str(token or "").strip().lower()
+        if not text:
+            return True
+        if "to" in text and not text.startswith(("u", "o")):
+            try:
+                low_text, high_text = text.split("to", 1)
+                low = float(low_text)
+                high = float(high_text)
+                return low <= value <= high
+            except Exception:
+                return False
+        parsed = _parse_threshold(text)
+        if not parsed:
+            return False
+        mode, threshold = parsed
+        if mode == "under":
+            return value < threshold
+        return value > threshold
+
+    def _match_numeric_filter_token(
+        value: float | None,
+        token: str,
+        *,
+        low: float | None = None,
+        high: float | None = None,
+        positive_label: str = "profitable",
+        negative_label: str = "negative",
+    ) -> bool:
+        if value is None:
+            return False
+        key = str(token or "").strip().lower()
+        if not key:
+            return True
+        if key == "low" and low is not None:
+            return value < low
+        if key == "high" and high is not None:
+            return value > high
+        if key in {positive_label, "positive"}:
+            return value > 0
+        if key == negative_label:
+            return value < 0
+        return _match_threshold(value, key)
+
+    def _match_percent_filter_token(
+        value: float | None,
+        token: str,
+        *,
+        low: float | None = None,
+        high: float | None = None,
+        very_high: float | None = None,
+        very_neg: float | None = None,
+    ) -> bool:
+        if value is None:
+            return False
+        key = str(token or "").strip().lower()
+        if not key:
+            return True
+        if key in {"pos", "positive"}:
+            return value > 0
+        if key in {"neg", "negative"}:
+            return value < 0
+        if key == "none":
+            return abs(value) <= 1e-9
+        if key == "poslow":
+            return 0 < value < 10
+        if key == "low" and low is not None:
+            return value < low
+        if key == "high" and high is not None:
+            return value > high
+        if key == "veryhigh":
+            threshold = very_high if very_high is not None else high
+            return threshold is not None and value > threshold
+        if key == "verypos":
+            threshold = very_high if very_high is not None else high
+            return threshold is not None and value > threshold
+        if key == "veryneg":
+            threshold = very_neg if very_neg is not None else -20.0
+            return value < threshold
+        return _match_threshold(value, key)
+
+    def _match_market_cap_profile(cap: float | None, token: str) -> bool:
+        if cap is None:
+            return False
+        key = str(token or "").strip().lower()
+        if not key:
+            return True
+        ranges: dict[str, tuple[float, float]] = {
+            "mega": (200_000_000_000, float("inf")),
+            "large": (10_000_000_000, 200_000_000_000),
+            "mid": (2_000_000_000, 10_000_000_000),
+            "small": (300_000_000, 2_000_000_000),
+            "micro": (50_000_000, 300_000_000),
+            "nano": (0, 50_000_000),
+        }
+        if key in ranges:
+            low, high = ranges[key]
+            return low <= cap < high
+        if key == "largeover":
+            return cap >= 10_000_000_000
+        if key == "midover":
+            return cap >= 2_000_000_000
+        if key == "smallover":
+            return cap >= 300_000_000
+        if key == "microover":
+            return cap >= 50_000_000
+        if key == "largeunder":
+            return cap < 200_000_000_000
+        if key == "midunder":
+            return cap < 10_000_000_000
+        if key == "smallunder":
+            return cap < 2_000_000_000
+        if key == "microunder":
+            return cap < 300_000_000
+        return True
+
+    def _match_theme_token(text_blob: str, token: str, keyword_map: dict[str, list[str]]) -> bool:
+        key = str(token or "").strip().lower()
+        if not key:
+            return True
+        keywords = keyword_map.get(key) or []
+        if not keywords:
+            return True
+        return any(kw in text_blob for kw in keywords)
+
+    def _dividend_growth_stats(symbol: str) -> dict[str, Any]:
+        cached = dividend_growth_cache.get(symbol)
+        if cached is not None:
+            return cached
+
+        stats = {
+            "growth1y": None,
+            "growth3y": None,
+            "growth5y": None,
+            "streak": 0,
+        }
+        try:
+            dividends = yf.Ticker(symbol).dividends
+            if dividends is not None and getattr(dividends, "empty", True) is False:
+                annual = dividends.resample("Y").sum().dropna()
+                annual = annual[annual > 0]
+                if len(annual) >= 2:
+                    last = float(annual.iloc[-1])
+                    prev1 = float(annual.iloc[-2])
+                    if prev1 > 0:
+                        stats["growth1y"] = ((last / prev1) - 1.0) * 100.0
+                if len(annual) >= 4:
+                    prev3 = float(annual.iloc[-4])
+                    last = float(annual.iloc[-1])
+                    if prev3 > 0:
+                        stats["growth3y"] = (((last / prev3) ** (1.0 / 3.0)) - 1.0) * 100.0
+                if len(annual) >= 6:
+                    prev5 = float(annual.iloc[-6])
+                    last = float(annual.iloc[-1])
+                    if prev5 > 0:
+                        stats["growth5y"] = (((last / prev5) ** (1.0 / 5.0)) - 1.0) * 100.0
+
+                streak = 0
+                values = [float(x) for x in annual.tail(12).tolist()]
+                for idx in range(len(values) - 1, 0, -1):
+                    if values[idx] > values[idx - 1]:
+                        streak += 1
+                    else:
+                        break
+                stats["streak"] = streak
+        except Exception:
+            pass
+
+        dividend_growth_cache[symbol] = stats
+        return stats
 
     def _fmt_market_cap(value: float | None) -> str:
         if value is None:
@@ -5710,25 +7879,18 @@ def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
             return market_cap_cache[symbol]
         cap: float | None = None
         try:
-            tk = yf.Ticker(symbol)
-            fast_info = getattr(tk, "fast_info", None)
-            if fast_info is not None:
-                cap_raw = None
-                try:
-                    cap_raw = fast_info.get("market_cap")
-                except Exception:
-                    cap_raw = getattr(fast_info, "market_cap", None)
-                if cap_raw is not None:
-                    cap_num = float(cap_raw)
-                    if math.isfinite(cap_num) and cap_num > 0:
-                        cap = cap_num
+            info = _info_for_symbol(symbol)
+            cap_raw = info.get("marketCap")
+            if cap_raw is not None:
+                cap_num = float(cap_raw)
+                if math.isfinite(cap_num) and cap_num > 0:
+                    cap = cap_num
             if cap is None:
-                info = tk.info or {}
-                cap_raw = info.get("marketCap")
-                if cap_raw is not None:
-                    cap_num = float(cap_raw)
-                    if math.isfinite(cap_num) and cap_num > 0:
-                        cap = cap_num
+                fast_cap = info.get("market_cap")
+                if fast_cap is not None:
+                    fast_cap_num = float(fast_cap)
+                    if math.isfinite(fast_cap_num) and fast_cap_num > 0:
+                        cap = fast_cap_num
         except Exception:
             cap = None
         market_cap_cache[symbol] = cap
@@ -5752,6 +7914,511 @@ def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
             return float(clean.iloc[-1])
         except Exception:
             return None
+
+    def _safe_pct_change(current: float, base: float) -> float | None:
+        try:
+            curr = float(current)
+            prev = float(base)
+            if not math.isfinite(curr) or not math.isfinite(prev) or abs(prev) < 1e-12:
+                return None
+            value = (curr / prev) - 1.0
+            return value if math.isfinite(value) else None
+        except Exception:
+            return None
+
+    def _passes_screener_filters(symbol: str, frame: Any, last_close: float, market_cap: float | None) -> bool:
+        if not screener_filters:
+            return True
+
+        info = _info_for_symbol(symbol)
+        sector = str(info.get("sector") or "").strip()
+        industry = str(info.get("industry") or "").strip()
+        country = str(info.get("country") or "").strip()
+        exchange_raw = str(info.get("exchange") or info.get("fullExchangeName") or "").strip().lower()
+        summary_blob = " ".join(
+            [
+                str(info.get("longBusinessSummary") or ""),
+                str(info.get("shortName") or ""),
+                sector,
+                industry,
+            ]
+        ).strip().lower()
+        cap_value = market_cap if market_cap is not None else _market_cap_for_symbol(symbol)
+
+        def _match_exchange(token: str) -> bool:
+            key = str(token or "").strip().lower()
+            if not key:
+                return True
+            aliases = {
+                "nasdaq": ["nasdaq", "nms", "ngm", "ncm", "nas"],
+                "nyse": ["nyse", "nyq"],
+                "amex": ["amex", "ase", "american"],
+                "cboe": ["cboe", "bats", "cbo"],
+            }
+            keys = aliases.get(key) or [key]
+            return any(alias in exchange_raw for alias in keys)
+
+        def _match_volume_k(value: float | None, token: str) -> bool:
+            if value is None:
+                return False
+            parsed = _parse_threshold(token)
+            if not parsed:
+                return False
+            mode, amount_k = parsed
+            threshold = amount_k * 1_000.0
+            return value < threshold if mode == "under" else value > threshold
+
+        def _match_shares_millions(value: float | None, token: str) -> bool:
+            if value is None:
+                return False
+            parsed = _parse_threshold(token)
+            if not parsed:
+                return False
+            mode, amount_m = parsed
+            threshold = amount_m * 1_000_000.0
+            return value < threshold if mode == "under" else value > threshold
+
+        exchange_filter = screener_filters.get("filterExchange")
+        if exchange_filter and not _match_exchange(exchange_filter):
+            return False
+
+        index_filter = screener_filters.get("filterIndex")
+        if index_filter:
+            index_key = str(index_filter).strip().lower()
+            members = index_members.get(index_key)
+            if members is not None and symbol not in members:
+                return False
+
+        sector_filter = screener_filters.get("filterSector")
+        if sector_filter and str(sector_filter).strip().lower() != sector.lower():
+            return False
+
+        industry_filter = screener_filters.get("filterIndustry")
+        if industry_filter and str(industry_filter).strip().lower() not in industry.lower():
+            return False
+
+        country_filter = screener_filters.get("filterCountry")
+        if country_filter:
+            country_key = str(country_filter).strip().lower()
+            country_text = country.lower()
+            if country_key == "united states":
+                if country_text not in {"united states", "usa", "us"}:
+                    return False
+            elif country_key != country_text:
+                return False
+
+        cap_profile_filter = screener_filters.get("filterCapProfile")
+        if cap_profile_filter and not _match_market_cap_profile(cap_value, cap_profile_filter):
+            return False
+
+        theme_filter = screener_filters.get("filterTheme")
+        if theme_filter and not _match_theme_token(summary_blob, theme_filter, theme_keywords):
+            return False
+
+        subtheme_filter = screener_filters.get("filterSubtheme")
+        if subtheme_filter and not _match_theme_token(summary_blob, subtheme_filter, subtheme_keywords):
+            return False
+
+        trailing_pe = _to_float(info.get("trailingPE"))
+        forward_pe = _to_float(info.get("forwardPE"))
+        peg = _to_float(info.get("pegRatio"))
+        price_to_sales = _to_float(info.get("priceToSalesTrailing12Months"))
+        price_to_book = _to_float(info.get("priceToBook"))
+        total_cash_per_share = _to_float(info.get("totalCashPerShare"))
+        free_cash_flow = _to_float(info.get("freeCashflow"))
+        enterprise_to_ebitda = _to_float(info.get("enterpriseToEbitda"))
+        enterprise_to_sales = _to_float(info.get("enterpriseToRevenue"))
+        dividend_yield_pct = _to_percent(info.get("dividendYield"))
+        roe_pct = _to_percent(info.get("returnOnEquity"))
+        roa_pct = _to_percent(info.get("returnOnAssets"))
+        roi_pct = _to_percent(info.get("returnOnCapital")) or roa_pct
+        debt_to_equity = _to_float(info.get("debtToEquity"))
+        if debt_to_equity is not None and debt_to_equity > 10:
+            debt_to_equity = debt_to_equity / 100.0
+        lt_debt_to_equity = debt_to_equity
+        net_margin_pct = _to_percent(info.get("profitMargins"))
+        gross_margin_pct = _to_percent(info.get("grossMargins"))
+        operating_margin_pct = _to_percent(info.get("operatingMargins"))
+        payout_ratio_pct = _to_percent(info.get("payoutRatio"))
+        current_ratio = _to_float(info.get("currentRatio"))
+        quick_ratio = _to_float(info.get("quickRatio"))
+        insider_ownership_pct = _to_percent(info.get("heldPercentInsiders"))
+        institutional_ownership_pct = _to_percent(info.get("heldPercentInstitutions"))
+        insider_transactions_pct = _to_percent(info.get("netInsiderBuying"))
+        institutional_transactions_pct = _to_percent(info.get("netPercentInstitutionalShares"))
+        analyst_recommendation = _to_float(info.get("recommendationMean"))
+        earnings_growth_pct = _to_percent(info.get("earningsGrowth"))
+        earnings_qoq_pct = _to_percent(info.get("earningsQuarterlyGrowth"))
+        sales_growth_pct = _to_percent(info.get("revenueGrowth"))
+
+        price_to_cash = (last_close / total_cash_per_share) if total_cash_per_share and total_cash_per_share > 0 else None
+        price_to_fcf = (cap_value / free_cash_flow) if cap_value and free_cash_flow and free_cash_flow > 0 else None
+
+        pe_filter = screener_filters.get("filterPe")
+        if pe_filter and not _match_numeric_filter_token(trailing_pe, pe_filter, low=15, high=50):
+            return False
+        forward_pe_filter = screener_filters.get("filterForwardPe")
+        if forward_pe_filter and not _match_numeric_filter_token(forward_pe, forward_pe_filter, low=15, high=50):
+            return False
+        peg_filter = screener_filters.get("filterPeg")
+        if peg_filter and not _match_numeric_filter_token(peg, peg_filter, low=1, high=2):
+            return False
+        ps_filter = screener_filters.get("filterPs")
+        if ps_filter and not _match_numeric_filter_token(price_to_sales, ps_filter, low=1, high=10):
+            return False
+        pb_filter = screener_filters.get("filterPb")
+        if pb_filter and not _match_numeric_filter_token(price_to_book, pb_filter, low=1, high=5):
+            return False
+
+        div_filter = screener_filters.get("filterDividendYield")
+        if div_filter and not _match_percent_filter_token(dividend_yield_pct, div_filter, high=5, very_high=10):
+            return False
+
+        roe_filter = screener_filters.get("filterRoe")
+        if roe_filter and not _match_percent_filter_token(roe_pct, roe_filter, high=20, very_high=30, very_neg=-15):
+            return False
+
+        roa_filter = screener_filters.get("filterRoa")
+        if roa_filter and not _match_percent_filter_token(roa_pct, roa_filter, high=15, very_high=15, very_neg=-15):
+            return False
+
+        debt_filter = screener_filters.get("filterDebtEq")
+        if debt_filter and not _match_numeric_filter_token(debt_to_equity, debt_filter, low=0.1, high=0.5):
+            return False
+
+        net_margin_filter = screener_filters.get("filterNetMargin")
+        if net_margin_filter and not _match_percent_filter_token(net_margin_pct, net_margin_filter, high=20, very_neg=-20):
+            return False
+
+        analyst_filter = screener_filters.get("filterAnalystRecom")
+        if analyst_filter:
+            if analyst_recommendation is None:
+                return False
+            key = str(analyst_filter).strip().lower()
+            if key == "strongbuy" and not (analyst_recommendation <= 1.5):
+                return False
+            if key == "buybetter" and not (analyst_recommendation <= 2.0):
+                return False
+            if key == "buy" and not (analyst_recommendation <= 2.5):
+                return False
+            if key == "holdbetter" and not (analyst_recommendation <= 3.0):
+                return False
+            if key == "holdworse" and not (analyst_recommendation >= 3.0):
+                return False
+            if key == "strongsell" and not (analyst_recommendation >= 4.5):
+                return False
+
+        price_cash_filter = screener_filters.get("filterPriceCash")
+        if price_cash_filter and not _match_numeric_filter_token(price_to_cash, price_cash_filter, low=3, high=50):
+            return False
+
+        price_fcf_filter = screener_filters.get("filterPriceFcf")
+        if price_fcf_filter and not _match_numeric_filter_token(price_to_fcf, price_fcf_filter, low=15, high=50):
+            return False
+
+        ev_ebitda_filter = screener_filters.get("filterEvEbitda")
+        if ev_ebitda_filter and not _match_numeric_filter_token(
+            enterprise_to_ebitda,
+            ev_ebitda_filter,
+            low=15,
+            high=50,
+            positive_label="profitable",
+            negative_label="negative",
+        ):
+            return False
+
+        ev_sales_filter = screener_filters.get("filterEvSales")
+        if ev_sales_filter and not _match_numeric_filter_token(
+            enterprise_to_sales,
+            ev_sales_filter,
+            low=1,
+            high=10,
+            positive_label="positive",
+            negative_label="negative",
+        ):
+            return False
+
+        dividend_growth_filter = screener_filters.get("filterDividendGrowth")
+        if dividend_growth_filter:
+            div_stats = _dividend_growth_stats(symbol)
+            key = str(dividend_growth_filter).strip().lower()
+            growth1 = _to_float(div_stats.get("growth1y"))
+            growth3 = _to_float(div_stats.get("growth3y"))
+            growth5 = _to_float(div_stats.get("growth5y"))
+            streak = int(div_stats.get("streak") or 0)
+            if key == "1ypos" and not (growth1 is not None and growth1 > 0):
+                return False
+            if key.startswith("1yo"):
+                threshold = _to_float(key[3:])
+                if threshold is None or growth1 is None or growth1 <= threshold:
+                    return False
+            if key == "3ypos" and not (growth3 is not None and growth3 > 0):
+                return False
+            if key.startswith("3yo"):
+                threshold = _to_float(key[3:])
+                if threshold is None or growth3 is None or growth3 <= threshold:
+                    return False
+            if key == "5ypos" and not (growth5 is not None and growth5 > 0):
+                return False
+            if key.startswith("5yo"):
+                threshold = _to_float(key[3:])
+                if threshold is None or growth5 is None or growth5 <= threshold:
+                    return False
+            if key.startswith("cy"):
+                years = int(_to_float(key[2:]) or 0)
+                if years <= 0 or streak < years:
+                    return False
+
+        def _match_growth_filter(value: float | None, token: str) -> bool:
+            return _match_percent_filter_token(value, token, high=25)
+
+        eps_this_filter = screener_filters.get("filterEpsGrowthThisYear")
+        if eps_this_filter and not _match_growth_filter(earnings_growth_pct, eps_this_filter):
+            return False
+        eps_next_filter = screener_filters.get("filterEpsGrowthNextYear")
+        if eps_next_filter and not _match_growth_filter(earnings_growth_pct, eps_next_filter):
+            return False
+        eps_qoq_filter = screener_filters.get("filterEpsGrowthQoq")
+        if eps_qoq_filter and not _match_growth_filter(earnings_qoq_pct, eps_qoq_filter):
+            return False
+        eps_ttm_filter = screener_filters.get("filterEpsGrowthTtm")
+        if eps_ttm_filter and not _match_growth_filter(earnings_qoq_pct, eps_ttm_filter):
+            return False
+        eps_3y_filter = screener_filters.get("filterEpsGrowth3Years")
+        if eps_3y_filter and not _match_growth_filter(earnings_growth_pct, eps_3y_filter):
+            return False
+        eps_5y_filter = screener_filters.get("filterEpsGrowth5Years")
+        if eps_5y_filter and not _match_growth_filter(earnings_growth_pct, eps_5y_filter):
+            return False
+        eps_n5y_filter = screener_filters.get("filterEpsGrowthNext5Years")
+        if eps_n5y_filter and not _match_growth_filter(earnings_growth_pct, eps_n5y_filter):
+            return False
+
+        sales_qoq_filter = screener_filters.get("filterSalesGrowthQoq")
+        if sales_qoq_filter and not _match_growth_filter(sales_growth_pct, sales_qoq_filter):
+            return False
+        sales_ttm_filter = screener_filters.get("filterSalesGrowthTtm")
+        if sales_ttm_filter and not _match_growth_filter(sales_growth_pct, sales_ttm_filter):
+            return False
+        sales_3y_filter = screener_filters.get("filterSalesGrowth3Years")
+        if sales_3y_filter and not _match_growth_filter(sales_growth_pct, sales_3y_filter):
+            return False
+        sales_5y_filter = screener_filters.get("filterSalesGrowth5Years")
+        if sales_5y_filter and not _match_growth_filter(sales_growth_pct, sales_5y_filter):
+            return False
+
+        eps_rev_surprise_filter = screener_filters.get("filterEarningsRevenueSurprise")
+        if eps_rev_surprise_filter:
+            eps_proxy = earnings_qoq_pct
+            rev_proxy = sales_growth_pct
+            key = str(eps_rev_surprise_filter).strip().lower()
+            if key == "bp" and not (eps_proxy is not None and rev_proxy is not None and eps_proxy > 0 and rev_proxy > 0):
+                return False
+            if key == "bm" and not (eps_proxy is not None and rev_proxy is not None and abs(eps_proxy) < 0.5 and abs(rev_proxy) < 0.5):
+                return False
+            if key == "bn" and not (eps_proxy is not None and rev_proxy is not None and eps_proxy < 0 and rev_proxy < 0):
+                return False
+            if key == "ep" and not (eps_proxy is not None and eps_proxy > 0):
+                return False
+            if key == "em" and not (eps_proxy is not None and abs(eps_proxy) < 0.5):
+                return False
+            if key == "en" and not (eps_proxy is not None and eps_proxy < 0):
+                return False
+            if key == "rp" and not (rev_proxy is not None and rev_proxy > 0):
+                return False
+            if key == "rm" and not (rev_proxy is not None and abs(rev_proxy) < 0.5):
+                return False
+            if key == "rn" and not (rev_proxy is not None and rev_proxy < 0):
+                return False
+
+        roi_filter = screener_filters.get("filterRoi")
+        if roi_filter and not _match_percent_filter_token(roi_pct, roi_filter, high=25, very_high=25, very_neg=-10):
+            return False
+
+        current_ratio_filter = screener_filters.get("filterCurrentRatio")
+        if current_ratio_filter and not _match_numeric_filter_token(current_ratio, current_ratio_filter, low=1, high=3):
+            return False
+
+        quick_ratio_filter = screener_filters.get("filterQuickRatio")
+        if quick_ratio_filter and not _match_numeric_filter_token(quick_ratio, quick_ratio_filter, low=0.5, high=3):
+            return False
+
+        lt_debt_filter = screener_filters.get("filterLtDebtEquity")
+        if lt_debt_filter and not _match_numeric_filter_token(lt_debt_to_equity, lt_debt_filter, low=0.1, high=0.5):
+            return False
+
+        gross_margin_filter = screener_filters.get("filterGrossMargin")
+        if gross_margin_filter and not _match_percent_filter_token(gross_margin_pct, gross_margin_filter, high=50):
+            return False
+
+        operating_margin_filter = screener_filters.get("filterOperatingMargin")
+        if operating_margin_filter and not _match_percent_filter_token(
+            operating_margin_pct,
+            operating_margin_filter,
+            high=25,
+            very_neg=-20,
+        ):
+            return False
+
+        payout_ratio_filter = screener_filters.get("filterPayoutRatio")
+        if payout_ratio_filter and not _match_percent_filter_token(payout_ratio_pct, payout_ratio_filter, low=20, high=50):
+            return False
+
+        insider_own_filter = screener_filters.get("filterInsiderOwnership")
+        if insider_own_filter and not _match_percent_filter_token(
+            insider_ownership_pct,
+            insider_own_filter,
+            low=5,
+            high=30,
+            very_high=50,
+        ):
+            return False
+
+        insider_tx_filter = screener_filters.get("filterInsiderTransactions")
+        if insider_tx_filter and not _match_percent_filter_token(
+            insider_transactions_pct,
+            insider_tx_filter,
+            very_high=20,
+            very_neg=-20,
+        ):
+            return False
+
+        inst_own_filter = screener_filters.get("filterInstitutionalOwnership")
+        if inst_own_filter and not _match_percent_filter_token(institutional_ownership_pct, inst_own_filter, low=5, high=90):
+            return False
+
+        inst_tx_filter = screener_filters.get("filterInstitutionalTransactions")
+        if inst_tx_filter and not _match_percent_filter_token(
+            institutional_transactions_pct,
+            inst_tx_filter,
+            very_high=20,
+            very_neg=-20,
+        ):
+            return False
+
+        current_volume = _to_float(frame["Volume"].iloc[-1]) if "Volume" in frame.columns and len(frame) else None
+        avg_volume = _to_float(info.get("averageVolume")) or _to_float(info.get("averageVolume10days"))
+        relative_volume = (current_volume / avg_volume) if current_volume and avg_volume and avg_volume > 0 else None
+        short_float_pct = _to_percent(info.get("shortPercentOfFloat"))
+        shares_outstanding = _to_float(info.get("sharesOutstanding"))
+        float_shares = _to_float(info.get("floatShares"))
+        float_pct = (float_shares / shares_outstanding * 100.0) if float_shares and shares_outstanding and shares_outstanding > 0 else None
+
+        price_filter = screener_filters.get("filterPrice")
+        if price_filter and not _match_threshold(last_close, price_filter):
+            return False
+
+        short_float_filter = screener_filters.get("filterShortFloat")
+        if short_float_filter and not _match_threshold(short_float_pct, short_float_filter):
+            return False
+
+        avg_vol_filter = screener_filters.get("filterAverageVolume")
+        if avg_vol_filter and not _match_volume_k(avg_volume, avg_vol_filter):
+            return False
+
+        rel_vol_filter = screener_filters.get("filterRelativeVolume")
+        if rel_vol_filter and not _match_threshold(relative_volume, rel_vol_filter):
+            return False
+
+        cur_vol_filter = screener_filters.get("filterCurrentVolume")
+        if cur_vol_filter and not _match_volume_k(current_volume, cur_vol_filter):
+            return False
+
+        option_short_filter = screener_filters.get("filterOptionShort")
+        if option_short_filter:
+            quote_type = str(info.get("quoteType") or "").strip().upper()
+            optionable = quote_type == "EQUITY" and (
+                _match_exchange("nasdaq") or _match_exchange("nyse") or _match_exchange("amex")
+            )
+            shortable = bool(optionable and (avg_volume or 0) >= 250_000 and (cap_value or 0) >= 300_000_000 and last_close >= 2.0)
+            key = str(option_short_filter).strip().lower()
+            if key == "option" and not optionable:
+                return False
+            if key == "short" and not shortable:
+                return False
+            if key == "optionshort" and not (optionable and shortable):
+                return False
+
+        earnings_filter = screener_filters.get("filterEarningsDate")
+        if earnings_filter:
+            raw_earnings = info.get("earningsTimestamp") or info.get("earningsDate")
+            earnings_date: date | None = None
+            if isinstance(raw_earnings, (list, tuple)) and raw_earnings:
+                raw_earnings = raw_earnings[0]
+            try:
+                if isinstance(raw_earnings, datetime):
+                    earnings_date = raw_earnings.date()
+                elif isinstance(raw_earnings, (int, float)):
+                    earnings_date = datetime.fromtimestamp(float(raw_earnings), tz=timezone.utc).date()
+                elif raw_earnings:
+                    earnings_date = datetime.fromisoformat(str(raw_earnings).replace("Z", "+00:00")).date()
+            except Exception:
+                earnings_date = None
+            if earnings_date is None:
+                return False
+            today = datetime.now(tz=timezone.utc).date()
+            key = str(earnings_filter).strip().lower()
+            if key == "today" and earnings_date != today:
+                return False
+            if key == "tomorrow" and earnings_date != (today + timedelta(days=1)):
+                return False
+            if key == "nextdays5" and not (today <= earnings_date <= today + timedelta(days=5)):
+                return False
+            if key == "thisweek":
+                now_week = today.isocalendar()[:2]
+                target_week = earnings_date.isocalendar()[:2]
+                if target_week != now_week:
+                    return False
+
+        target_filter = screener_filters.get("filterTargetPrice")
+        if target_filter:
+            target_price = _to_float(info.get("targetMeanPrice"))
+            if target_price is None or last_close <= 0:
+                return False
+            key = str(target_filter).strip().lower()
+            if key == "above" and not (target_price > last_close):
+                return False
+            if key == "below" and not (target_price < last_close):
+                return False
+            if key.startswith("a"):
+                pct = _to_float(key[1:])
+                if pct is None or not (target_price >= last_close * (1 + (pct / 100.0))):
+                    return False
+            if key.startswith("b"):
+                pct = _to_float(key[1:])
+                if pct is None or not (target_price <= last_close * (1 - (pct / 100.0))):
+                    return False
+
+        ipo_filter = screener_filters.get("filterIpoDate")
+        if ipo_filter:
+            ipo_epoch = _to_float(info.get("firstTradeDateEpochUtc"))
+            if ipo_epoch is None:
+                return False
+            ipo_date = datetime.fromtimestamp(ipo_epoch, tz=timezone.utc).date()
+            age_days = (datetime.now(tz=timezone.utc).date() - ipo_date).days
+            key = str(ipo_filter).strip().lower()
+            if key == "prevyear" and not (0 <= age_days <= 365):
+                return False
+            if key == "prev5yrs" and not (0 <= age_days <= 365 * 5):
+                return False
+            if key == "more5" and not (age_days > 365 * 5):
+                return False
+
+        shares_filter = screener_filters.get("filterSharesOutstanding")
+        if shares_filter and not _match_shares_millions(shares_outstanding, shares_filter):
+            return False
+
+        float_filter = screener_filters.get("filterFloat")
+        if float_filter:
+            key = str(float_filter).strip().lower()
+            if key.endswith("p"):
+                percent_token = key[:-1]
+                if not _match_threshold(float_pct, percent_token):
+                    return False
+            elif not _match_shares_millions(float_shares, key):
+                return False
+
+        return True
 
     if tickers:
         try:
@@ -5801,8 +8468,9 @@ def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
             return frame
 
         for symbol in tickers:
-            market_cap = _market_cap_for_symbol(symbol)
+            market_cap: float | None = None
             if market_cap_target_abs is not None and filter_mode != "any":
+                market_cap = _market_cap_for_symbol(symbol)
                 if market_cap is None:
                     continue
                 if filter_mode == "greater_than" and not (market_cap >= market_cap_target_abs):
@@ -5822,11 +8490,14 @@ def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
                 continue
 
             last_close = float(close.iloc[-1])
-            ret_1m = (last_close / float(close.iloc[-21]) - 1.0) if len(close) >= 22 else None
-            ret_3m = (last_close / float(close.iloc[-63]) - 1.0) if len(close) >= 64 else None
+            if screener_filters and not _passes_screener_filters(symbol, frame, last_close, market_cap):
+                continue
+            ret_1m = _safe_pct_change(last_close, float(close.iloc[-21])) if len(close) >= 22 else None
+            ret_3m = _safe_pct_change(last_close, float(close.iloc[-63])) if len(close) >= 64 else None
 
             returns = close.pct_change().dropna()
-            vol_ann = float(returns.std() * np.sqrt(252)) if len(returns) else None
+            vol_raw = float(returns.std() * np.sqrt(252)) if len(returns) else None
+            vol_ann = vol_raw if vol_raw is not None and math.isfinite(vol_raw) else None
             rsi_val = _compute_rsi(close, period=14)
 
             score = 0.0
@@ -5853,9 +8524,69 @@ def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
 
     results.sort(key=lambda item: float(item.get("score") or 0.0), reverse=True)
     results = results[:max_names]
+
+    # Safety fallback: always return a portfolio list even if data providers are partially unavailable.
+    fallback_used = False
+    if not results:
+        fallback_used = True
+        backup_universe = tickers[:max_names] or ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL"][:max_names]
+        for idx, symbol in enumerate(backup_universe):
+            info = _info_for_symbol(symbol)
+            last_close = _to_float(info.get("currentPrice")) or _to_float(info.get("regularMarketPrice"))
+            if last_close is None:
+                try:
+                    frame = yf.download(symbol, period="1mo", interval="1d", progress=False, auto_adjust=False, threads=False)
+                    if frame is not None and not frame.empty and "Close" in frame.columns:
+                        close_series = frame["Close"].astype(float).dropna()
+                        if not close_series.empty:
+                            last_close = float(close_series.iloc[-1])
+                except Exception:
+                    last_close = None
+            cap = _market_cap_for_symbol(symbol)
+            backup_score = max(0.0, 1.0 - (idx * 0.015))
+            results.append(
+                {
+                    "symbol": symbol,
+                    "lastClose": None if last_close is None else round(last_close, 4),
+                    "return1m": None,
+                    "return3m": None,
+                    "rsi14": None,
+                    "volatility": None,
+                    "score": round(backup_score, 6),
+                    "marketCap": None if cap is None else int(round(cap)),
+                    "marketCapLabel": _fmt_market_cap(cap),
+                }
+            )
+
+    if market_cap_target_abs is None or filter_mode == "any":
+        for item in results:
+            symbol = str(item.get("symbol") or "").strip().upper()
+            cap = _market_cap_for_symbol(symbol) if symbol else None
+            item["marketCap"] = None if cap is None else int(round(cap))
+            item["marketCapLabel"] = _fmt_market_cap(cap)
+
     run_title = str(data.get("title") or "").strip()
     if not run_title:
         run_title = f"{str(data.get('universe') or 'Trending').title()} screener"
+
+    workspace_profile: dict[str, Any] = {}
+    try:
+        workspace_snap = db.collection("users").document(workspace_id).get()
+        if workspace_snap.exists:
+            workspace_doc = workspace_snap.to_dict() or {}
+            profile_doc = workspace_doc.get("profile")
+            if isinstance(profile_doc, dict):
+                workspace_profile = profile_doc
+    except Exception:
+        workspace_profile = {}
+
+    owner_username = str(workspace_profile.get("username") or "").strip()
+    owner_bio = str(workspace_profile.get("bio") or "").strip()
+    owner_avatar = str(workspace_profile.get("avatar") or "").strip()
+    owner_public_profile = bool(workspace_profile.get("publicProfile"))
+    owner_public_screener_pref = bool(workspace_profile.get("publicScreenerSharing"))
+    requested_public = bool(data.get("isPublicScreener") or data.get("isPublic"))
+    is_public = bool(requested_public or owner_public_screener_pref)
 
     doc_ref = db.collection("screener_runs").document()
     run_doc = {
@@ -5870,19 +8601,38 @@ def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
         "title": run_title,
         "results": _serialize_for_firestore(results),
         "notes": str(data.get("notes") or ""),
+        "noteSignals": _serialize_for_firestore(note_signals),
+        "fallbackUsed": fallback_used,
+        "personality": personality or "",
         "modelUsed": selected_model,
         "modelTier": tier_key,
         "allowedModels": allowed_models,
-        "dailyLimit": daily_limit,
+        "weeklyLimit": weekly_limit,
+        "dailyLimit": weekly_limit,
+        "isPublic": is_public,
+        "ownerUsername": owner_username,
+        "ownerBio": owner_bio,
+        "ownerAvatar": owner_avatar,
+        "ownerPublicProfile": owner_public_profile,
+        "publishedAt": firestore.SERVER_TIMESTAMP if is_public else None,
         "marketCapFilter": {
             "type": filter_mode,
             "value": market_cap_target_abs,
         },
+        "filters": screener_filters,
         "createdAt": firestore.SERVER_TIMESTAMP,
         "updatedAt": firestore.SERVER_TIMESTAMP,
         "meta": data.get("meta") or {},
     }
-    doc_ref.set(run_doc)
+    try:
+        doc_ref.set(run_doc)
+    except Exception as exc:
+        _raise_structured_error(
+            https_fn.FunctionsErrorCode.INTERNAL,
+            "screener_persist_error",
+            "Screener completed, but saving the run failed.",
+            {"raw": str(exc)[:400]},
+        )
     _audit_event(req.auth.uid, token.get("email"), "screener_completed", {"runId": doc_ref.id, "count": len(results)})
 
     return {
@@ -5893,10 +8643,16 @@ def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
         "workspaceId": workspace_id,
         "modelUsed": selected_model,
         "modelTier": tier_key,
-        "dailyLimit": daily_limit,
+        "personality": personality or "",
+        "weeklyLimit": weekly_limit,
+        "dailyLimit": weekly_limit,
+        "isPublic": is_public,
         "allowedModels": allowed_models,
         "resultsFound": len(results),
+        "noteSignals": note_signals,
+        "fallbackUsed": fallback_used,
         "marketCapFilter": {"type": filter_mode, "value": market_cap_target_abs},
+        "filters": screener_filters,
     }
 
 
@@ -6180,6 +8936,101 @@ def social_dispatch_scheduler(event: scheduler_fn.ScheduledEvent) -> None:
     if not SOCIAL_AUTOMATION_ENABLED:
         return
     _dispatch_due_social_posts(max_posts=SOCIAL_DISPATCH_BATCH_SIZE, trigger="scheduler")
+
+
+def _autopilot_social_channels() -> list[str]:
+    channels = [channel for channel in SOCIAL_AUTOPILOT_CHANNELS if channel in SOCIAL_POPULAR_CHANNELS]
+    if not channels:
+        channels = ["x", "linkedin", "facebook", "instagram", "tiktok"]
+    return list(dict.fromkeys(channels))
+
+
+def _run_social_autopilot_plan(trigger: str, actor_uid: str = "") -> dict[str, Any]:
+    if not SOCIAL_AUTOPILOT_ENABLED:
+        return {"ok": False, "skipped": True, "reason": "autopilot_disabled"}
+
+    channels = _autopilot_social_channels()
+    if not channels:
+        return {"ok": False, "skipped": True, "reason": "no_channels"}
+
+    local_now = datetime.now(_posting_tzinfo())
+    date_key = local_now.date().isoformat()
+    campaign_id = f"autopilot_{date_key}"
+    campaign_ref = db.collection("social_campaigns").document(campaign_id)
+    snap = campaign_ref.get()
+    if snap.exists:
+        return {"ok": True, "skipped": True, "reason": "already_scheduled", "campaignId": campaign_id}
+
+    drafts, model_used = _generate_social_copy_with_openai(
+        topic=SOCIAL_AUTOPILOT_TOPIC,
+        objective=SOCIAL_AUTOPILOT_OBJECTIVE,
+        audience=SOCIAL_AUTOPILOT_AUDIENCE,
+        tone=SOCIAL_AUTOPILOT_TONE,
+        channels=channels,
+        posts_per_channel=SOCIAL_AUTOPILOT_POSTS_PER_CHANNEL,
+        cta_url=SOCIAL_DEFAULT_CTA_URL,
+    )
+    scheduled_at = datetime.now(timezone.utc)
+    enqueue = _enqueue_social_posts(
+        campaign_id=campaign_id,
+        user_id=SOCIAL_AUTOPILOT_USER_ID,
+        user_email=SOCIAL_AUTOPILOT_USER_EMAIL,
+        channels=channels,
+        drafts=drafts,
+        scheduled_for=scheduled_at,
+        meta={"trigger": trigger, "dateKey": date_key},
+    )
+
+    campaign_ref.set(
+        {
+            "id": campaign_id,
+            "userId": SOCIAL_AUTOPILOT_USER_ID,
+            "userEmail": SOCIAL_AUTOPILOT_USER_EMAIL,
+            "topic": SOCIAL_AUTOPILOT_TOPIC,
+            "objective": SOCIAL_AUTOPILOT_OBJECTIVE,
+            "audience": SOCIAL_AUTOPILOT_AUDIENCE,
+            "tone": SOCIAL_AUTOPILOT_TONE,
+            "channels": channels,
+            "postsPerChannel": SOCIAL_AUTOPILOT_POSTS_PER_CHANNEL,
+            "drafts": _serialize_for_firestore(drafts),
+            "modelUsed": model_used,
+            "status": "queued",
+            "queuedCount": enqueue["count"],
+            "queuedChannels": channels,
+            "scheduledFor": scheduled_at,
+            "createdAt": firestore.SERVER_TIMESTAMP,
+            "updatedAt": firestore.SERVER_TIMESTAMP,
+            "meta": {"trigger": trigger, "actorUid": actor_uid, "dateKey": date_key},
+        },
+        merge=True,
+    )
+    return {
+        "ok": True,
+        "campaignId": campaign_id,
+        "queuedCount": enqueue["count"],
+        "queueIds": enqueue["queueIds"],
+        "channels": channels,
+        "modelUsed": model_used,
+        "dateKey": date_key,
+    }
+
+
+@https_fn.on_call()
+def schedule_social_autopilot_now(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    _require_admin(token)
+    summary = _run_social_autopilot_plan(trigger="manual", actor_uid=req.auth.uid)
+    _audit_event(req.auth.uid, token.get("email"), "social_autopilot_scheduled", summary)
+    return summary
+
+
+@scheduler_fn.on_schedule(
+    schedule="15 7 * * *",
+    timezone=scheduler_fn.Timezone(SOCIAL_AUTOMATION_TIMEZONE),
+)
+def social_daily_planner_scheduler(event: scheduler_fn.ScheduledEvent) -> None:
+    del event
+    _run_social_autopilot_plan(trigger="scheduler")
 
 
 @https_fn.on_call()
