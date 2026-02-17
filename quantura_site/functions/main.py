@@ -68,6 +68,11 @@ STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "").strip()
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip()
 MASSIVE_API_KEY = os.environ.get("MASSIVE_API_KEY", "").strip()
 MASSIVE_BASE_URL = (os.environ.get("MASSIVE_BASE_URL") or "https://api.massive.com").rstrip("/")
+UNSPLASH_ACCESS_KEY = str(
+    os.environ.get("UNSPLASH_ACCESS_KEY")
+    or os.environ.get("UNSPLASH_APPLICATION_ID")
+    or ""
+).strip()
 STRIPE_CONNECT_PLATFORM_FEE_PERCENT = float(os.environ.get("STRIPE_CONNECT_PLATFORM_FEE_PERCENT", "12") or 12)
 CREATOR_DEFAULT_SUBSCRIBE_USD = float(os.environ.get("CREATOR_DEFAULT_SUBSCRIBE_USD", "9") or 9)
 CREATOR_DEFAULT_THANKS_USD = float(os.environ.get("CREATOR_DEFAULT_THANKS_USD", "5") or 5)
@@ -1588,6 +1593,92 @@ def _fetch_yahoo_news_query(query: str, *, limit: int = 12) -> list[dict[str, An
         return []
 
     return out
+
+
+def _fetch_unsplash_random_photos(
+    query: str,
+    *,
+    count: int = 1,
+) -> tuple[list[dict[str, Any]], str]:
+    q = str(query or "").strip()
+    if not q:
+        return [], "Query is required."
+    if not UNSPLASH_ACCESS_KEY:
+        return [], "Unsplash access key is not configured."
+
+    try:
+        response = requests.get(
+            "https://api.unsplash.com/photos/random",
+            headers={
+                "Accept-Version": "v1",
+                "Authorization": f"Client-ID {UNSPLASH_ACCESS_KEY}",
+            },
+            params={
+                "query": q,
+                "orientation": "landscape",
+                "content_filter": "high",
+                "count": max(1, min(int(count or 1), 8)),
+            },
+            timeout=12,
+        )
+        if response.status_code >= 400:
+            return [], f"Unsplash API returned HTTP {response.status_code}."
+        payload = response.json() if response.text else {}
+    except Exception as exc:
+        return [], f"Unsplash request failed: {str(exc)[:160]}"
+
+    items = payload if isinstance(payload, list) else [payload]
+    photos: list[dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        url = (
+            str(((item.get("urls") or {}) if isinstance(item.get("urls"), dict) else {}).get("regular") or "")
+            .strip()
+        )
+        if not url:
+            url = (
+                str(((item.get("urls") or {}) if isinstance(item.get("urls"), dict) else {}).get("full") or "")
+                .strip()
+            )
+        if not url:
+            url = (
+                str(((item.get("urls") or {}) if isinstance(item.get("urls"), dict) else {}).get("small") or "")
+                .strip()
+            )
+        if not url:
+            continue
+
+        link = ""
+        links_obj = item.get("links") if isinstance(item.get("links"), dict) else {}
+        if isinstance(links_obj, dict):
+            link = str(links_obj.get("html") or "").strip()
+        if link:
+            link = f"{link}{'&' if '?' in link else '?'}utm_source=quantura&utm_medium=referral"
+
+        user_obj = item.get("user") if isinstance(item.get("user"), dict) else {}
+        photographer = str(user_obj.get("name") or "").strip() if isinstance(user_obj, dict) else ""
+        photographer_link = ""
+        if isinstance(user_obj, dict):
+            ulinks = user_obj.get("links") if isinstance(user_obj.get("links"), dict) else {}
+            if isinstance(ulinks, dict):
+                photographer_link = str(ulinks.get("html") or "").strip()
+        if photographer_link:
+            photographer_link = f"{photographer_link}{'&' if '?' in photographer_link else '?'}utm_source=quantura&utm_medium=referral"
+
+        photos.append(
+            {
+                "url": url,
+                "alt": str(item.get("alt_description") or item.get("description") or "Market imagery from Unsplash").strip(),
+                "link": link,
+                "photographer": photographer,
+                "photographerLink": photographer_link,
+            }
+        )
+
+    if photos:
+        return photos, ""
+    return [], "Unsplash returned no usable photos."
 
 
 _SOCIAL_QUERY_STOPWORDS = {
@@ -7432,6 +7523,21 @@ def download_price_csv(req: https_fn.CallableRequest) -> dict[str, Any]:
         "rowCount": int(len(out_df)),
         "filename": filename,
         "csv": csv_text,
+    }
+
+
+@https_fn.on_call()
+def get_unsplash_gallery(req: https_fn.CallableRequest) -> dict[str, Any]:
+    data = req.data or {}
+    query = str(data.get("query") or data.get("q") or "stock market, trading desk").strip()
+    count = max(1, min(int(data.get("count") or data.get("limit") or 1), 8))
+
+    photos, warning = _fetch_unsplash_random_photos(query, count=count)
+    return {
+        "query": query,
+        "count": count,
+        "photos": _serialize_for_firestore(photos),
+        "warning": str(warning or "").strip(),
     }
 
 
