@@ -5561,10 +5561,17 @@ def queue_screener_run(req: https_fn.CallableRequest) -> dict[str, Any]:
 
 @https_fn.on_call()
 def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
-    import numpy as np  # type: ignore
-    import pandas as pd  # type: ignore
-    import yfinance as yf  # type: ignore
-    from finta import TA  # type: ignore
+    try:
+        import numpy as np  # type: ignore
+        import pandas as pd  # type: ignore
+        import yfinance as yf  # type: ignore
+    except Exception as exc:
+        _raise_structured_error(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "screener_dependency_error",
+            "Screener dependencies are unavailable.",
+            {"raw": str(exc)[:400]},
+        )
 
     token = _require_auth(req)
     data = req.data or {}
@@ -5617,7 +5624,10 @@ def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
     )
 
     market = str(data.get("market") or "us").lower()
-    max_names = int(data.get("maxNames") or 25)
+    try:
+        max_names = int(data.get("maxNames") or 25)
+    except Exception:
+        max_names = 25
     max_names = max(5, min(max_names, 50))
 
     market_cap_filter_raw = data.get("marketCapFilter") if isinstance(data.get("marketCapFilter"), dict) else {}
@@ -5642,17 +5652,44 @@ def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
     if filter_mode not in {"greater_than", "less_than", "any"}:
         filter_mode = "greater_than"
 
-    trending: list[str] = []
-    try:
-        response = requests.get(TRENDING_URL, headers=_yahoo_headers(), timeout=10)
-        response.raise_for_status()
-        payload = response.json()
-        quotes = payload.get("finance", {}).get("result", [{}])[0].get("quotes", [])
-        trending = [str(item.get("symbol") or "").upper() for item in quotes if item.get("symbol")]
-    except Exception:
-        trending = ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "TSLA", "META"]
+    universe_key = str(data.get("universe") or "trending").strip().lower()
+    universe_map: dict[str, list[str]] = {
+        "large-cap": [
+            "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "AVGO", "JPM", "V",
+            "MA", "WMT", "COST", "XOM", "LLY", "UNH", "JNJ", "PG", "HD", "BAC",
+            "KO", "PEP", "ORCL", "CRM", "NFLX", "ADBE", "AMD", "CSCO", "CVX", "MRK",
+        ],
+        "mid-cap": [
+            "HUBS", "ROST", "VRSK", "ANSS", "TTWO", "PAYC", "NVR", "RJF", "PODD", "WAB",
+            "FDS", "MGM", "DKNG", "GL", "MTCH", "OKTA", "ZS", "ULTA", "ETSY", "ON",
+            "COIN", "RBLX", "MELI", "CFLT", "NET", "SQ", "DDOG", "SNAP", "SHOP", "U",
+        ],
+        "small-cap": [
+            "IWM", "CROX", "RXRX", "CRSR", "SMR", "SOFI", "OPEN", "RUN", "TOST", "AI",
+            "SOUN", "UPST", "LMND", "RKLB", "ASTS", "IONQ", "DNA", "BBAI", "ENVX", "ARRY",
+            "CHPT", "QS", "BMBL", "RIVN", "NOVA", "S", "PATH", "JOBY", "ACHR", "PL",
+        ],
+    }
 
-    tickers = [t for t in trending if t][: max(10, min(len(trending), max_names * 2))]
+    trending: list[str] = []
+    if universe_key == "trending" or universe_key not in universe_map:
+        try:
+            response = requests.get(TRENDING_URL, headers=_yahoo_headers(), timeout=10)
+            response.raise_for_status()
+            payload = response.json()
+            quotes = payload.get("finance", {}).get("result", [{}])[0].get("quotes", [])
+            trending = [str(item.get("symbol") or "").upper() for item in quotes if item.get("symbol")]
+        except Exception:
+            trending = []
+
+    fallback_diverse = universe_map["large-cap"]
+    base_tickers = universe_map.get(universe_key) if universe_key in universe_map else trending
+    if not base_tickers:
+        base_tickers = trending or fallback_diverse
+
+    candidate_pool = max(20, min(max_names * 3, 90))
+    tickers = list(dict.fromkeys([str(t).upper().strip() for t in base_tickers if str(t).strip()]))[:candidate_pool]
+
     results: list[dict[str, Any]] = []
     market_cap_cache: dict[str, float | None] = {}
 
@@ -5697,6 +5734,25 @@ def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
         market_cap_cache[symbol] = cap
         return cap
 
+    def _compute_rsi(close_series: Any, period: int = 14) -> float | None:
+        try:
+            series = pd.Series(close_series, dtype="float64").dropna()
+            if len(series) < period + 1:
+                return None
+            delta = series.diff()
+            gain = delta.clip(lower=0)
+            loss = -delta.clip(upper=0)
+            avg_gain = gain.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
+            avg_loss = loss.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
+            rs = avg_gain / avg_loss.replace(0, np.nan)
+            rsi = 100 - (100 / (1 + rs))
+            clean = rsi.dropna()
+            if clean.empty:
+                return None
+            return float(clean.iloc[-1])
+        except Exception:
+            return None
+
     if tickers:
         try:
             history = yf.download(
@@ -5711,22 +5767,38 @@ def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
         except Exception:
             history = pd.DataFrame()
 
-        def _extract(history_frame: pd.DataFrame, symbol: str) -> pd.DataFrame:
-            if history_frame.empty:
-                return pd.DataFrame()
-            if not isinstance(history_frame.columns, pd.MultiIndex):
-                return history_frame.copy()
-            if symbol in history_frame.columns.get_level_values(0):
-                frame = history_frame[symbol].copy()
-                if isinstance(frame.columns, pd.MultiIndex):
-                    frame.columns = frame.columns.get_level_values(-1)
-                return frame
-            if symbol in history_frame.columns.get_level_values(1):
-                frame = history_frame.xs(symbol, level=1, axis=1).copy()
-                if isinstance(frame.columns, pd.MultiIndex):
-                    frame.columns = frame.columns.get_level_values(-1)
-                return frame
-            return pd.DataFrame()
+        per_symbol_history: dict[str, Any] = {}
+
+        def _extract(history_frame: Any, symbol: str) -> Any:
+            if isinstance(history_frame, pd.DataFrame) and not history_frame.empty:
+                if not isinstance(history_frame.columns, pd.MultiIndex):
+                    return history_frame.copy()
+                if symbol in history_frame.columns.get_level_values(0):
+                    frame = history_frame[symbol].copy()
+                    if isinstance(frame.columns, pd.MultiIndex):
+                        frame.columns = frame.columns.get_level_values(-1)
+                    return frame
+                if symbol in history_frame.columns.get_level_values(1):
+                    frame = history_frame.xs(symbol, level=1, axis=1).copy()
+                    if isinstance(frame.columns, pd.MultiIndex):
+                        frame.columns = frame.columns.get_level_values(-1)
+                    return frame
+            cached = per_symbol_history.get(symbol)
+            if cached is not None:
+                return cached
+            try:
+                frame = yf.download(
+                    symbol,
+                    period="6mo",
+                    interval="1d",
+                    progress=False,
+                    auto_adjust=False,
+                    threads=False,
+                )
+            except Exception:
+                frame = pd.DataFrame()
+            per_symbol_history[symbol] = frame
+            return frame
 
         for symbol in tickers:
             market_cap = _market_cap_for_symbol(symbol)
@@ -5739,7 +5811,7 @@ def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
                     continue
 
             frame = _extract(history, symbol)
-            if frame.empty or "Close" not in frame.columns:
+            if frame is None or getattr(frame, "empty", True) or "Close" not in frame.columns:
                 continue
             frame = frame.dropna()
             if frame.empty:
@@ -5755,23 +5827,7 @@ def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
 
             returns = close.pct_change().dropna()
             vol_ann = float(returns.std() * np.sqrt(252)) if len(returns) else None
-
-            rsi_val = None
-            try:
-                ta_frame = frame.rename(
-                    columns={
-                        "Open": "open",
-                        "High": "high",
-                        "Low": "low",
-                        "Close": "close",
-                        "Volume": "volume",
-                    }
-                )
-                rsi_series = TA.RSI(ta_frame)
-                if rsi_series is not None and len(rsi_series.dropna()) > 0:
-                    rsi_val = float(rsi_series.dropna().iloc[-1])
-            except Exception:
-                rsi_val = None
+            rsi_val = _compute_rsi(close, period=14)
 
             score = 0.0
             if isinstance(ret_3m, float):
