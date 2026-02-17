@@ -60,6 +60,31 @@
     anthropic: "Anthropic",
     google: "Google",
   };
+  const UNSPLASH_ACCESS_KEY = "tKqmTYXWxWdvGHHlbO8OtfdtJMYaz0KXKWKyCaG61u4";
+  const UNSPLASH_CACHE_KEY = "quantura_unsplash_gallery_v1";
+  const UNSPLASH_CACHE_TTL_MS = 1000 * 60 * 60 * 6;
+  const UNSPLASH_FALLBACK_IMAGES = [
+    {
+      url: "https://images.unsplash.com/photo-1535320903710-d993d3d77d29?auto=format&fit=crop&w=1280&q=80",
+      alt: "Finance workspace with market charts",
+      link: "https://unsplash.com/photos/laptop-computer-on-glass-top-table-near-window-nA0UDNDbxys",
+    },
+    {
+      url: "https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?auto=format&fit=crop&w=1280&q=80",
+      alt: "Stock market dashboard on laptop",
+      link: "https://unsplash.com/photos/macbook-air-near-white-paper-BStWzy4M7vA",
+    },
+    {
+      url: "https://images.unsplash.com/photo-1642790106117-e829e14a795f?auto=format&fit=crop&w=1280&q=80",
+      alt: "Tablet with candlestick chart",
+      link: "https://unsplash.com/photos/black-and-white-smartphone-on-brown-wooden-table-8wVYO8rK1j0",
+    },
+    {
+      url: "https://images.unsplash.com/photo-1559526324-4b87b5e36e44?auto=format&fit=crop&w=1280&q=80",
+      alt: "Financial team reviewing growth metrics",
+      link: "https://unsplash.com/photos/people-sitting-in-front-of-computer-MYbhN8KaaEc",
+    },
+  ];
   const DEFAULT_AI_AGENTS = [
     {
       id: "quantura-oracle",
@@ -172,6 +197,97 @@
     { key: "metatrader5", label: "MetaTrader 5 (.mq5)", ext: "mq5", mimeType: "text/plain" },
     { key: "tradelocker", label: "TradeLocker (JSON)", ext: "json", mimeType: "application/json" },
   ];
+
+  const hydrateUnsplashGallery = async () => {
+    const gallery = document.getElementById("unsplash-grid");
+    if (!gallery) return;
+
+    const cards = Array.from(gallery.querySelectorAll("[data-unsplash-slot]"));
+    if (!cards.length) return;
+
+    const applyPhotos = (photos) => {
+      if (!Array.isArray(photos) || !photos.length) return;
+      cards.forEach((card, idx) => {
+        const photo = photos[idx % photos.length];
+        if (!photo || !photo.url) return;
+        const img = card.querySelector("[data-unsplash-img]");
+        if (img) {
+          img.src = photo.url;
+          img.alt = photo.alt || "Market imagery from Unsplash";
+        }
+        const credit = card.querySelector("[data-unsplash-credit]");
+        if (credit && photo.link) {
+          credit.href = `${photo.link}?utm_source=quantura&utm_medium=referral`;
+        }
+      });
+    };
+
+    try {
+      const raw = sessionStorage.getItem(UNSPLASH_CACHE_KEY);
+      if (raw) {
+        const cached = JSON.parse(raw);
+        if (
+          cached &&
+          Array.isArray(cached.photos) &&
+          cached.timestamp &&
+          Date.now() - Number(cached.timestamp) < UNSPLASH_CACHE_TTL_MS
+        ) {
+          applyPhotos(cached.photos);
+          return;
+        }
+      }
+    } catch (error) {
+      // Ignore cache read failures and continue to fetch.
+    }
+
+    applyPhotos(UNSPLASH_FALLBACK_IMAGES);
+
+    if (!UNSPLASH_ACCESS_KEY) return;
+
+    const rawQuery = String(gallery.dataset.unsplashQuery || "stock market, trading desk");
+    const count = Math.max(1, Math.min(8, Number(gallery.dataset.unsplashCount || cards.length || 4)));
+
+    try {
+      const endpoint = new URL("https://api.unsplash.com/photos/random");
+      endpoint.searchParams.set("query", rawQuery);
+      endpoint.searchParams.set("orientation", "landscape");
+      endpoint.searchParams.set("content_filter", "high");
+      endpoint.searchParams.set("count", String(count));
+      endpoint.searchParams.set("client_id", UNSPLASH_ACCESS_KEY);
+
+      const response = await fetch(endpoint.toString(), {
+        method: "GET",
+        headers: { "Accept-Version": "v1" },
+      });
+      if (!response.ok) throw new Error(`Unsplash request failed (${response.status})`);
+
+      const payload = await response.json();
+      const list = Array.isArray(payload) ? payload : [payload];
+      const photos = list
+        .map((item) => ({
+          url: item?.urls?.regular || item?.urls?.full || "",
+          alt: item?.alt_description || item?.description || "Market imagery from Unsplash",
+          link: item?.links?.html || "https://unsplash.com",
+        }))
+        .filter((item) => item.url);
+
+      if (!photos.length) return;
+      applyPhotos(photos);
+      try {
+        sessionStorage.setItem(
+          UNSPLASH_CACHE_KEY,
+          JSON.stringify({
+            timestamp: Date.now(),
+            photos,
+          })
+        );
+      } catch (error) {
+        // Ignore cache write failures.
+      }
+    } catch (error) {
+      // Keep fallback visuals when API is unavailable.
+    }
+  };
 
   const ui = {
     headerAuth: document.getElementById("header-auth"),
@@ -6327,6 +6443,7 @@
   };
 
 	  const init = () => {
+    hydrateUnsplashGallery();
 	    if (typeof firebase === "undefined") {
 	      console.error("App SDK not loaded.");
 	      return;
