@@ -12,6 +12,22 @@
   const HOLIDAY_PROMO_SEEN_KEY = "quantura_holiday_promo_seen_v1";
   const AI_LEADERBOARD_DEFAULT_HORIZON = "1y";
   const DEFAULT_VOLATILITY_THRESHOLD = 0.05;
+  const META_PIXEL_ID = "1643823927053003";
+  const META_CAPI_CALLABLE = "track_meta_conversion_event";
+  const META_STANDARD_EVENTS = new Set([
+    "PageView",
+    "CustomizeProduct",
+    "AddToWishlist",
+    "CompleteRegistration",
+    "Search",
+    "SubmitApplication",
+    "AddToCart",
+    "ViewContent",
+    "Schedule",
+    "Lead",
+    "Contact",
+    "Purchase",
+  ]);
   const DEFAULT_BRIEF_TICKERS = [
     "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "NFLX",
     "AMD", "AVGO", "CRM", "ORCL", "JPM", "BAC", "GS", "V", "MA",
@@ -648,14 +664,155 @@
     }
   };
 
+  let metaPixelInitialized = false;
+  let trackMetaConversionCallable = null;
+
+  const resolveMetaEventName = (sourceEventName) => {
+    const raw = String(sourceEventName || "").trim();
+    if (!raw) return "";
+    const key = raw.toLowerCase();
+
+    if (key === "page_view") return "PageView";
+    if (key.includes("customize")) return "CustomizeProduct";
+    if (key.includes("wishlist")) return "AddToWishlist";
+    if (key.includes("complete_registration") || key.includes("registration_complete") || key.includes("signup")) return "CompleteRegistration";
+    if (key === "search" || key.includes("_search") || key.includes("screener_search")) return "Search";
+    if (key.includes("submit_application") || key.includes("application_submitted")) return "SubmitApplication";
+    if (key.includes("add_to_cart") || key.includes("cart_add")) return "AddToCart";
+    if (key.includes("view_content")) return "ViewContent";
+    if (key.includes("schedule")) return "Schedule";
+    if (key === "lead" || key.includes("_lead")) return "Lead";
+    if (key.includes("contact")) return "Contact";
+    if (key.includes("purchase") || key.includes("checkout_completed") || key.includes("payment_confirmed") || key.includes("order_paid")) {
+      return "Purchase";
+    }
+    return raw;
+  };
+
+  const createMetaEventId = (name) =>
+    `q_${String(name || "event").replace(/[^a-z0-9_]/gi, "_").slice(0, 40)}_${Date.now().toString(36)}_${Math.random()
+      .toString(36)
+      .slice(2, 10)}`;
+
+  const normalizeMetaEventParams = (params = {}) => {
+    if (!params || typeof params !== "object") return {};
+    const out = {};
+    const entries = Object.entries(params).slice(0, 40);
+    for (const [rawKey, rawValue] of entries) {
+      const key = String(rawKey || "").trim();
+      if (!key) continue;
+      if (rawValue === null || rawValue === undefined) continue;
+      if (typeof rawValue === "number") {
+        if (!Number.isFinite(rawValue)) continue;
+        out[key] = rawValue;
+        continue;
+      }
+      if (typeof rawValue === "boolean") {
+        out[key] = rawValue;
+        continue;
+      }
+      if (typeof rawValue === "string") {
+        const value = rawValue.trim();
+        if (!value) continue;
+        out[key] = value.slice(0, 512);
+      }
+    }
+    return out;
+  };
+
+  const ensureMetaPixelLoaded = () => {
+    if (state.cookieConsent !== "accepted") return false;
+    if (!META_PIXEL_ID || typeof window === "undefined" || typeof document === "undefined") return false;
+    try {
+      if (!window.fbq) {
+        (function (f, b, e, v, n, t, s) {
+          if (f.fbq) return;
+          n = f.fbq = function () {
+            n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments);
+          };
+          if (!f._fbq) f._fbq = n;
+          n.push = n;
+          n.loaded = true;
+          n.version = "2.0";
+          n.queue = [];
+          t = b.createElement(e);
+          t.async = true;
+          t.src = v;
+          s = b.getElementsByTagName(e)[0];
+          s.parentNode.insertBefore(t, s);
+        })(window, document, "script", "https://connect.facebook.net/en_US/fbevents.js");
+      }
+      if (!metaPixelInitialized) {
+        window.fbq("init", META_PIXEL_ID);
+        metaPixelInitialized = true;
+      }
+      return typeof window.fbq === "function";
+    } catch (error) {
+      return false;
+    }
+  };
+
+  const emitMetaPixelEvent = (name, params = {}) => {
+    const sourceEventName = String(name || "").trim();
+    if (!sourceEventName) return null;
+    if (!ensureMetaPixelLoaded()) return null;
+
+    const metaParams = normalizeMetaEventParams(params);
+    const eventId = createMetaEventId(sourceEventName);
+    const eventName = resolveMetaEventName(sourceEventName);
+
+    try {
+      if (META_STANDARD_EVENTS.has(eventName)) {
+        window.fbq("track", eventName, metaParams, { eventID: eventId });
+      } else {
+        window.fbq("trackCustom", eventName, metaParams, { eventID: eventId });
+      }
+    } catch (error) {
+      // Ignore Meta Pixel failures.
+    }
+
+    return { eventName, sourceEventName, eventId, params: metaParams };
+  };
+
+  const forwardMetaConversionEvent = (metaEvent) => {
+    if (!metaEvent || state.cookieConsent !== "accepted") return;
+    const functionsClient = state.clients?.functions;
+    if (!functionsClient || !functionsClient.httpsCallable) return;
+    try {
+      if (!trackMetaConversionCallable) {
+        trackMetaConversionCallable = functionsClient.httpsCallable(META_CAPI_CALLABLE);
+      }
+      const payload = {
+        eventName: metaEvent.eventName,
+        sourceEventName: metaEvent.sourceEventName,
+        eventId: metaEvent.eventId,
+        eventSourceUrl: window.location.href,
+        actionSource: "website",
+        params: metaEvent.params || {},
+        email: String(state.user?.email || ""),
+        fbp: readCookie("_fbp"),
+        fbc: readCookie("_fbc"),
+        userAgent: navigator.userAgent || "",
+      };
+      trackMetaConversionCallable(payload).catch(() => {
+        // Ignore Meta CAPI forwarding errors.
+      });
+    } catch (error) {
+      // Ignore callable setup errors.
+    }
+  };
+
   const logEvent = (name, params = {}) => {
     const analytics = getAnalytics();
-    if (!analytics) return;
-    try {
-      analytics.logEvent(name, params);
-    } catch (error) {
-      // Ignore analytics errors.
+    if (analytics) {
+      try {
+        analytics.logEvent(name, params);
+      } catch (error) {
+        // Ignore analytics errors.
+      }
     }
+    const metaEvent = emitMetaPixelEvent(name, params);
+    forwardMetaConversionEvent(metaEvent);
   };
 
   const setUserId = (uid) => {
