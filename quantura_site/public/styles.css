@@ -229,6 +229,18 @@ i[class*=" iconoir-"]::before {
   box-shadow: none;
 }
 
+.cta.facebook {
+  background: #1877f2;
+  color: #fff;
+  border: 1px solid rgba(24, 119, 242, 0.55);
+  box-shadow: none;
+}
+
+.cta.facebook:hover {
+  background: #0f66d8;
+  border-color: rgba(24, 119, 242, 0.75);
+}
+
 .cta.small {
   padding: 10px 16px;
   font-size: 0.9rem;
