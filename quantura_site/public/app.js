@@ -643,7 +643,6 @@
       requirePath: true,
     },
   });
-  const UNSPLASH_ACCESS_KEY = "tKqmTYXWxWdvGHHlbO8OtfdtJMYaz0KXKWKyCaG61u4";
   const UNSPLASH_CACHE_KEY = "quantura_unsplash_gallery_v1";
   const UNSPLASH_CACHE_TTL_MS = 1000 * 60 * 60 * 6;
   const UNSPLASH_FALLBACK_IMAGES = [
@@ -951,7 +950,7 @@
     { key: "tradelocker", label: "TradeLocker (JSON)", ext: "json", mimeType: "application/json" },
   ];
 
-  const hydrateUnsplashGallery = async () => {
+  const hydrateUnsplashGallery = async (functionsClient) => {
     const gallery = document.getElementById("unsplash-grid");
     if (!gallery) return;
 
@@ -1003,40 +1002,16 @@
 
     applyPhotos(UNSPLASH_FALLBACK_IMAGES);
 
-    if (!UNSPLASH_ACCESS_KEY) return;
+    if (!functionsClient || typeof functionsClient.httpsCallable !== "function") return;
 
     const rawQuery = String(gallery.dataset.unsplashQuery || "stock market, trading desk");
     const count = Math.max(1, Math.min(8, Number(gallery.dataset.unsplashCount || cards.length || 4)));
 
     try {
-      const endpoint = new URL("https://api.unsplash.com/photos/random");
-      endpoint.searchParams.set("query", rawQuery);
-      endpoint.searchParams.set("orientation", "landscape");
-      endpoint.searchParams.set("content_filter", "high");
-      endpoint.searchParams.set("count", String(count));
-      endpoint.searchParams.set("client_id", UNSPLASH_ACCESS_KEY);
-
-      const response = await fetch(endpoint.toString(), {
-        method: "GET",
-        headers: { "Accept-Version": "v1" },
-      });
-      if (!response.ok) throw new Error(`Unsplash request failed (${response.status})`);
-
-      const payload = await response.json();
-      const list = Array.isArray(payload) ? payload : [payload];
-      const photos = list
-        .map((item) => ({
-          url: item?.urls?.regular || item?.urls?.full || item?.urls?.small || "",
-          alt: item?.alt_description || item?.description || "Market imagery from Unsplash",
-          link: item?.links?.html
-            ? `${item.links.html}${String(item.links.html).includes("?") ? "&" : "?"}utm_source=quantura&utm_medium=referral`
-            : "",
-          photographer: item?.user?.name || "",
-          photographerLink: item?.user?.links?.html
-            ? `${item.user.links.html}${String(item.user.links.html).includes("?") ? "&" : "?"}utm_source=quantura&utm_medium=referral`
-            : "",
-        }))
-        .filter((item) => item.url);
+      const getGallery = functionsClient.httpsCallable("get_unsplash_gallery");
+      const result = await getGallery({ query: rawQuery, count });
+      const payload = result?.data && typeof result.data === "object" ? result.data : {};
+      const photos = Array.isArray(payload.photos) ? payload.photos : [];
 
       if (!photos.length) return;
       applyPhotos(photos);
@@ -9956,23 +9931,24 @@
     }
   };
 
-	  const init = () => {
-    hydrateUnsplashGallery();
-	    if (typeof firebase === "undefined") {
-	      console.error("App SDK not loaded.");
-	      return;
-	    }
+		  const init = () => {
+	    hydrateUnsplashGallery();
+		    if (typeof firebase === "undefined") {
+		      console.error("App SDK not loaded.");
+		      return;
+		    }
 
       applyTheme(resolveThemePreference(), { persist: false });
 
-		    const auth = firebase.auth();
-		    const db = firebase.firestore();
-		    const functions = firebase.functions();
-		    const storage = firebase.storage ? firebase.storage() : null;
-		    const messaging = getMessagingClient();
+			    const auth = firebase.auth();
+			    const db = firebase.firestore();
+			    const functions = firebase.functions();
+			    const storage = firebase.storage ? firebase.storage() : null;
+			    const messaging = getMessagingClient();
 
-      state.clients = { auth, db, functions, storage, messaging };
-      bindFeatureVoteForms(functions);
+	      state.clients = { auth, db, functions, storage, messaging };
+	      hydrateUnsplashGallery(functions);
+	      bindFeatureVoteForms(functions);
 
       window.__quanturaPanelActivated = (panel) => {
         const next = String(panel || "").trim();
