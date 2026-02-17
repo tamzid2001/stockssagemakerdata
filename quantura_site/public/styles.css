@@ -2761,6 +2761,40 @@ textarea {
   border: 1px solid rgba(240, 180, 41, 0.35);
 }
 
+@media (min-width: 981px) {
+  .app-layout.is-sidebar-collapsed {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+
+  .app-layout.is-sidebar-collapsed .sidebar-card {
+    display: none;
+  }
+
+  .app-layout.is-sidebar-collapsed .sidebar-nav {
+    padding: 10px;
+    gap: 8px;
+  }
+
+  .app-layout.is-sidebar-collapsed .sidebar-link {
+    justify-content: center;
+    padding: 12px 0;
+    gap: 0;
+  }
+
+  .app-layout.is-sidebar-collapsed .sidebar-link span {
+    display: none;
+  }
+
+  .app-layout.is-sidebar-collapsed .sidebar-link i {
+    font-size: 1.25rem;
+  }
+
+  .sidebar-toggle {
+    background: rgba(18, 24, 42, 0.04);
+    border: 1px solid rgba(18, 24, 42, 0.1);
+  }
+}
+
 .terminal-grid {
   display: grid;
   grid-template-columns: 360px minmax(0, 1fr);
@@ -3459,6 +3493,40 @@ textarea {
   border-bottom: 1px solid var(--line);
 }
 
+.welcome-banner {
+  background: linear-gradient(135deg, rgba(58, 181, 162, 0.12) 0%, rgba(240, 180, 41, 0.1) 100%);
+  border-bottom: 1px solid var(--line);
+}
+
+.welcome-inner {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.welcome-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(58, 181, 162, 0.14);
+  border: 1px solid rgba(58, 181, 162, 0.28);
+  font-weight: 800;
+  font-size: 0.74rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.welcome-text {
+  font-weight: 650;
+  color: var(--ink);
+}
+
 .promo-inner {
   max-width: 1120px;
   margin: 0 auto;
@@ -3534,6 +3602,16 @@ textarea {
 [data-theme="dark"] .promo-banner {
   background: linear-gradient(135deg, rgba(240, 180, 41, 0.1) 0%, rgba(31, 99, 255, 0.08) 100%);
   border-bottom-color: rgba(233, 237, 247, 0.14);
+}
+
+[data-theme="dark"] .welcome-banner {
+  background: linear-gradient(135deg, rgba(58, 181, 162, 0.1) 0%, rgba(240, 180, 41, 0.08) 100%);
+  border-bottom-color: rgba(233, 237, 247, 0.14);
+}
+
+[data-theme="dark"] .welcome-badge {
+  border-color: rgba(58, 181, 162, 0.22);
+  background: rgba(58, 181, 162, 0.1);
 }
 
 [data-theme="dark"] .promo-title {
