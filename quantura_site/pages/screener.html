@@ -26,22 +26,26 @@
     <script defer src="/__/firebase/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
     <script defer src="/app.js"></script>
-  </head>
+  
+    <script>
+      window.__QUANTURA_RC_TEMPLATE_ID__ = "firebase-server";
+      window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ = {"status":200,"eTag":"etag-quantura-e2e3d-firebase-server-fetch--1213937490","config":{"welcome_message":"Welcome to Quantura","watchlist_enabled":"true","forecast_prophet_enabled":"true","forecast_timemixer_enabled":"true","push_notifications_enabled":"true","webpush_vapid_key":"","stripe_checkout_enabled":"true","stripe_public_key":"","holiday_promo":"true","backtesting_enabled":"true","backtesting_free_daily_limit":"1","backtesting_pro_daily_limit":"25"}};
+    </script>
+  
+</head>
   <body>
     <header class="header">
       <div class="container nav">
         <a class="logo" href="/" aria-label="Quantura home"><span>QUANTURA</span></a>
         <nav class="nav-links">
-          <a href="/forecasting" data-analytics="nav_forecasting"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Terminal</span></a>
           <a href="/screener" data-analytics="nav_screener"><i class="iconoir-search" aria-hidden="true"></i><span>Screener</span></a>
           <a href="/pricing" data-analytics="nav_pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>Pricing</span></a>
           <a href="/contact" data-analytics="nav_contact"><i class="iconoir-mail" aria-hidden="true"></i><span>Contact</span></a>
         </nav>
         <div class="nav-actions">
-          <span id="header-user-email" class="small" style="max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Guest</span>
-          <span id="header-user-status" class="pill">Guest</span>
+          <span id="header-user-status" class="pill">Logged Out</span>
           <button class="cta secondary" id="header-auth" type="button"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></button>
-          <a class="cta" href="#screener"><i class="iconoir-search" aria-hidden="true"></i><span>Run screener</span></a>
+          <a class="cta" href="#screener"><i class="iconoir-search" aria-hidden="true"></i><span>Generate portfolio</span></a>
         </div>
       </div>
     </header>
@@ -52,14 +56,14 @@
           <div class="sidebar-card">
             <div class="small"><strong>Account</strong></div>
             <div class="small">Signed in as <span id="user-email">Not signed in</span></div>
-            <div class="small">Status <span id="user-status" class="pill">Guest</span></div>
+            <div class="small">Status <span id="user-status" class="pill">Logged Out</span></div>
             <a class="cta secondary small" href="/forecasting"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Open terminal</span></a>
             <a class="cta secondary small" href="/dashboard"><i class="iconoir-dashboard" aria-hidden="true"></i><span>Open dashboard</span></a>
             <a class="cta secondary small hidden" id="nav-admin" href="/admin"><i class="iconoir-shield-check" aria-hidden="true"></i><span>Admin dashboard</span></a>
           </div>
           <nav class="sidebar-nav">
-            <a href="#screener"><i class="iconoir-search" aria-hidden="true"></i><span>Run screener</span></a>
-            <a href="#screener-result"><i class="iconoir-bookmark" aria-hidden="true"></i><span>Saved runs</span></a>
+            <a href="#screener"><i class="iconoir-search" aria-hidden="true"></i><span>Generate portfolio</span></a>
+            <a href="#screener-result"><i class="iconoir-bookmark" aria-hidden="true"></i><span>Saved sets</span></a>
             <a href="#screener-output"><i class="iconoir-graph-up" aria-hidden="true"></i><span>Output</span></a>
           </nav>
         </aside>
@@ -68,8 +72,8 @@
       <section class="section" id="screener">
         <div class="container">
           <div class="section-title">
-            <h2>Run the Quantura screener</h2>
-            <p class="small">Run a screen and click any symbol to open it in the terminal.</p>
+            <h2>AI Portfolio Generator</h2>
+            <p class="small">Enter criteria, generate a ranked 5-10 stock portfolio, and publish it as a social AI Agent.</p>
           </div>
 	          <div class="content-grid">
 	            <form id="screener-form" class="card">
@@ -95,18 +99,22 @@
                   <input id="screener-min" name="minCap" type="number" value="5" />
                 </div>
                 <div class="field">
-                  <label class="label" for="screener-max">Max names</label>
-                  <input id="screener-max" name="maxNames" type="number" value="25" />
+                  <label class="label" for="screener-max">Candidate pool (5-25)</label>
+                  <input id="screener-max" name="maxNames" type="number" value="20" min="5" max="25" />
+                </div>
+                <div class="field">
+                  <label class="label" for="screener-agent-name">Agent name (optional)</label>
+                  <input id="screener-agent-name" name="agentName" placeholder="Quantura Horizon" />
                 </div>
               </div>
               <div class="field">
-                <label class="label" for="screener-notes">Notes</label>
-                <textarea id="screener-notes" name="notes" placeholder="Optional focus or exclusions"></textarea>
+                <label class="label" for="screener-notes">Criteria</label>
+                <textarea id="screener-notes" name="notes" placeholder='Example: "Tech, P/E &lt; 20, high free cash flow"' ></textarea>
               </div>
-	              <button class="cta" type="submit" data-analytics="screener_submit"><i class="iconoir-search" aria-hidden="true"></i><span>Run screener</span></button>
+	              <button class="cta" type="submit" data-analytics="screener_submit"><i class="iconoir-search" aria-hidden="true"></i><span>Generate AI Portfolio</span></button>
 	            </form>
               <div class="card">
-                <h3>Load saved run</h3>
+                <h3>Load saved portfolio run</h3>
                 <div class="form-grid">
                   <div class="field">
                     <label class="label" for="screener-load-select">Recent runs</label>
@@ -116,19 +124,19 @@
                   </div>
                 </div>
                 <div class="hero-actions" style="margin-top: 12px;">
-                  <button class="cta secondary" id="screener-load-button" type="button" data-analytics="screener_load_saved"><i class="iconoir-bookmark" aria-hidden="true"></i><span>Load run</span></button>
+                  <button class="cta secondary" id="screener-load-button" type="button" data-analytics="screener_load_saved"><i class="iconoir-bookmark" aria-hidden="true"></i><span>Load portfolio</span></button>
                 </div>
                 <p class="small muted" id="screener-load-status"></p>
                 <details class="learn-more">
                   <summary>Learn more</summary>
                   <p class="small">
-                    Every screener run is saved so you can revisit the ranked list later. Use the run ID to share an exact output with a collaborator.
+                    Every run is saved so you can revisit candidates, regenerate the AI portfolio, and compare leaderboard ROI over time.
                   </p>
                 </details>
               </div>
 	            <div class="results-panel" id="screener-result">
-	              <h3>Screener output</h3>
-	              <p class="small">Top-ranked tickers appear here.</p>
+	              <h3>Portfolio output</h3>
+	              <p class="small">Top-ranked candidates and AI Agent details appear here.</p>
 	              <div id="screener-output" class="panel-output"></div>
 	            </div>
 	          </div>

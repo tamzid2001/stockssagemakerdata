@@ -118,20 +118,24 @@
         ]
       }
     </script>
-  </head>
+  
+    <script>
+      window.__QUANTURA_RC_TEMPLATE_ID__ = "firebase-server";
+      window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ = {"status":200,"eTag":"etag-quantura-e2e3d-firebase-server-fetch--1213937490","config":{"welcome_message":"Welcome to Quantura","watchlist_enabled":"true","forecast_prophet_enabled":"true","forecast_timemixer_enabled":"true","push_notifications_enabled":"true","webpush_vapid_key":"","stripe_checkout_enabled":"true","stripe_public_key":"","holiday_promo":"true","backtesting_enabled":"true","backtesting_free_daily_limit":"1","backtesting_pro_daily_limit":"25"}};
+    </script>
+  
+</head>
   <body>
     <header class="header">
       <div class="container nav">
         <a class="logo" href="/" aria-label="Quantura home"><span>QUANTURA</span></a>
         <nav class="nav-links">
-          <a href="/forecasting" data-analytics="nav_forecasting"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Terminal</span></a>
           <a href="/screener" data-analytics="nav_screener"><i class="iconoir-search" aria-hidden="true"></i><span>Screener</span></a>
           <a href="/pricing" data-analytics="nav_pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>Pricing</span></a>
           <a href="/contact" data-analytics="nav_contact"><i class="iconoir-mail" aria-hidden="true"></i><span>Contact</span></a>
         </nav>
         <div class="nav-actions">
-          <span id="header-user-email" class="small" style="max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Guest</span>
-          <span id="header-user-status" class="pill">Guest</span>
+          <span id="header-user-status" class="pill">Logged Out</span>
           <button class="cta secondary" id="header-auth" type="button" data-analytics="nav_signin"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></button>
           <a class="cta" href="/forecasting" data-analytics="nav_cta"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Open terminal</span></a>
         </div>
@@ -303,95 +307,94 @@
         </div>
       </section>
 
-      <section class="section">
+      <section class="section faq-section">
         <div class="container">
           <div class="section-title">
             <h2>Frequently asked questions</h2>
-            <p class="small">Everything you need before running production research workflows.</p>
+            <p class="small">Clear answers for diligence, implementation, and day-to-day workflow decisions.</p>
           </div>
           <div class="faq-grid">
             <details class="faq-item" open>
               <summary><i class="iconoir-info-circle" aria-hidden="true"></i><span>What is Quantura?</span></summary>
               <p class="small faq-answer">
-                Quantura is a market intelligence platform that combines forecasting, technical context, news, options analysis,
-                and workspace workflows so teams can move from idea to decision with less friction.
+                Quantura is a decision-intelligence platform that unifies forecasting, technical context, macro-aware news,
+                options structure, and shared research workflows so teams can move from signal to action faster.
               </p>
             </details>
             <details class="faq-item">
-              <summary><i class="iconoir-users-group-two-rounded" aria-hidden="true"></i><span>Who should use Quantura?</span></summary>
+              <summary><svg class="faq-icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm9 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM7.5 13c-2.8 0-5 1.9-5 4.2V19h10v-1.8C12.5 14.9 10.3 13 7.5 13Zm9 0c-1.2 0-2.4.4-3.2 1.1 1 .9 1.7 2.1 1.7 3.5V19h6v-1.8c0-2.3-2.2-4.2-4.5-4.2Z" fill="currentColor"/></svg><span>Who should use Quantura?</span></summary>
               <p class="small faq-answer">
-                Quantura is designed for active investors, research teams, founders, and operators who need structured,
-                repeatable analysis rather than ad hoc chart checks.
+                Quantura is built for active investors, research desks, founders, and operators who require repeatable
+                decision systems, auditability, and rigorous scenario framing.
               </p>
             </details>
             <details class="faq-item">
               <summary><i class="iconoir-wallet" aria-hidden="true"></i><span>What is included in Weekly Brief vs Deep Forecast?</span></summary>
               <p class="small faq-answer">
-                Weekly Brief is your recurring market intelligence layer. Deep Forecast is a paid, asset-specific deliverable with
-                forecast bands, scenario planning, risk triggers, and action-oriented commentary.
+                Weekly Brief provides recurring market context and prioritized setups. Deep Forecast is a paid,
+                asset-specific package with probability bands, scenario diagnostics, risk triggers, and execution guidance.
               </p>
             </details>
             <details class="faq-item">
               <summary><i class="iconoir-graph-up" aria-hidden="true"></i><span>Which forecasting methods are supported?</span></summary>
               <p class="small faq-answer">
-                You can run Meta Prophet workflows, TimeMixer alternatives, and an AWS SageMaker Canvas baseline for comparison.
-                Forecast runs are saved so you can revisit assumptions and outcomes over time.
+                Quantura supports Meta Prophet workflows, TimeMixer alternatives, and AWS SageMaker Canvas baselines.
+                Runs are persisted so assumptions, quantiles, and model behavior can be reviewed longitudinally.
               </p>
             </details>
             <details class="faq-item">
-              <summary><i class="iconoir-media-image-list" aria-hidden="true"></i><span>Can I upload my own prediction CSV?</span></summary>
+              <summary><svg class="faq-icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5a2 2 0 0 1 2-2h7v2H5v14h14V12h2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5Zm12-2h2v4h4v2h-4v4h-2V9h-4V7h4V3Zm-9 9.5 2.8 3.4L11 13l3.5 4.2H6Z" fill="currentColor"/></svg><span>Can I upload my own prediction CSV?</span></summary>
               <p class="small faq-answer">
-                Yes. Uploads are tied to your workspace and can be previewed, plotted, renamed, shared, or deleted with full CRUD controls.
-                This supports handoffs between external model pipelines and Quantura workflows.
+                Yes. Uploads are workspace-scoped and support previewing, plotting, renaming, sharing, and deletion.
+                This enables clean handoff from external model pipelines into Quantura analysis.
               </p>
             </details>
             <details class="faq-item">
               <summary><i class="iconoir-bookmark-book" aria-hidden="true"></i><span>Can I save, reload, and share past runs?</span></summary>
               <p class="small faq-answer">
-                Yes. Forecast runs and screener outputs are persisted in your workspace so you can reload them later, compare versions,
-                and share with collaborators for review.
+                Yes. Forecast and screener runs are versionable workspace assets you can reload, compare, and share with collaborators.
               </p>
             </details>
             <details class="faq-item">
               <summary><i class="iconoir-bell-notification" aria-hidden="true"></i><span>Do alerts and notifications run in real time?</span></summary>
               <p class="small faq-answer">
-                Watchlists and price alerts are tracked continuously from connected data feeds. Notification delivery depends on client
-                permissions and service availability, and all alert events are logged to your workspace history.
+                Watchlists and price alerts are continuously evaluated from connected feeds. Delivery depends on device permissions
+                and network conditions, and events are recorded in workspace history for traceability.
               </p>
             </details>
             <details class="faq-item">
               <summary><i class="iconoir-shield-check" aria-hidden="true"></i><span>How does Quantura handle security and privacy?</span></summary>
               <p class="small faq-answer">
-                Quantura uses authenticated access, encrypted transport, role-based permissions, and workspace-level access controls.
-                See the Privacy Policy for full data handling details.
+                Quantura applies authenticated access, encrypted transport, role-based permissions, and workspace-level controls.
+                See the Privacy Policy for retention, transfer, and data-rights details.
               </p>
             </details>
             <details class="faq-item">
               <summary><i class="iconoir-cancel" aria-hidden="true"></i><span>Can I cancel a paid plan?</span></summary>
               <p class="small faq-answer">
-                Yes. Paid plans can be canceled according to the billing terms listed in Pricing and Terms.
-                Cancellation changes future billing and does not retroactively reverse already rendered services.
+                Yes. Plans can be canceled under the billing terms listed in Pricing and Terms.
+                Cancellation affects future billing and does not reverse already-rendered services.
               </p>
             </details>
             <details class="faq-item">
               <summary><i class="iconoir-cursor-pointer" aria-hidden="true"></i><span>Does Quantura execute trades automatically?</span></summary>
               <p class="small faq-answer">
-                No. Quantura is an analytics and decision-support platform. It does not operate as a broker-dealer or investment adviser,
-                and all final trade decisions remain with the user.
+                No. Quantura is analytics and decision-support software. It is not a broker-dealer or investment adviser;
+                all execution decisions remain with the user.
               </p>
             </details>
             <details class="faq-item">
               <summary><i class="iconoir-download-circle" aria-hidden="true"></i><span>Can I export my research artifacts?</span></summary>
               <p class="small faq-answer">
-                Yes. Forecasts, screen outputs, and upload-related artifacts can be downloaded and reused in external BI, model validation,
-                and reporting workflows.
+                Yes. Forecasts, screener outputs, and upload artifacts can be exported for external BI, validation,
+                compliance review, and reporting workflows.
               </p>
             </details>
             <details class="faq-item">
               <summary><i class="iconoir-headset-help" aria-hidden="true"></i><span>Where do I request support or enterprise help?</span></summary>
               <p class="small faq-answer">
-                Use the Contact page for implementation support, enterprise onboarding, and custom forecasting engagements.
-                Quantura support typically replies within one business day.
+                Use the Contact page for onboarding, integration help, and enterprise forecasting engagements.
+                Support generally responds within one business day.
               </p>
             </details>
           </div>
@@ -416,41 +419,47 @@
       <section class="section">
         <div class="container">
           <div class="section-title">
-            <h2>Pricing designed for conviction</h2>
-            <p class="small">Choose the depth you need, when you need it.</p>
+            <h2>Pricing plans built for execution</h2>
+            <p class="small">Start free, scale with automation, and upgrade as your research cadence grows.</p>
           </div>
           <div class="pricing-grid">
             <div class="price-card">
-              <h3>Weekly Brief</h3>
-              <div class="price">Free</div>
-              <p class="small">Curated ideas, catalysts, and a macro pulse.</p>
+              <span class="badge">Starter</span>
+              <h3 style="margin-top: 12px;">Quantura Starter</h3>
+              <div class="price">$0/mo</div>
+              <p class="small">For exploring the platform and running light weekly research.</p>
               <div class="feature-list">
-                <div class="feature"><span></span>Weekly newsletter</div>
-                <div class="feature"><span></span>Sector heatmap</div>
-                <div class="feature"><span></span>Top 5–10 names</div>
+                <div class="feature"><span></span>Weekly Brief newsletter</div>
+                <div class="feature"><span></span>Core forecasting terminal access</div>
+                <div class="feature"><span></span>Saved screener and upload history</div>
               </div>
             </div>
             <div class="price-card">
-              <h3>Deep Forecast</h3>
-              <div class="price">$349</div>
-              <p class="small">Single-asset, decision-ready forecasting.</p>
+              <span class="badge" style="background: #e1f4f0; color: #146a5d;">Most popular</span>
+              <h3 style="margin-top: 12px;">Quantura Pro</h3>
+              <div class="price">$39/mo</div>
+              <p class="small">For serious investors running repeated analysis cycles each week.</p>
               <div class="feature-list">
-                <div class="feature"><span></span>Full report + slides</div>
-                <div class="feature"><span></span>Multiple horizons</div>
-                <div class="feature"><span></span>AWS SageMaker Canvas baseline</div>
-                <div class="feature"><span></span>Interpretation call</div>
+                <div class="feature"><span></span>Higher forecast and indicator limits</div>
+                <div class="feature"><span></span>Collaboration roles and shared workspaces</div>
+                <div class="feature"><span></span>Priority alerts and saved automation outputs</div>
               </div>
             </div>
             <div class="price-card">
-              <h3>Portfolio Retainer</h3>
-              <div class="price">Custom</div>
-              <p class="small">Monthly forecasting and monitoring for teams.</p>
+              <span class="badge" style="background: #fef1cc; color: #6d4c00;">Desk</span>
+              <h3 style="margin-top: 12px;">Quantura Desk</h3>
+              <div class="price">$199/mo</div>
+              <p class="small">For teams that need higher throughput and operational support.</p>
               <div class="feature-list">
-                <div class="feature"><span></span>Dedicated analyst</div>
-                <div class="feature"><span></span>Weekly updates</div>
-                <div class="feature"><span></span>Priority turnaround</div>
+                <div class="feature"><span></span>Highest forecast and screener throughput</div>
+                <div class="feature"><span></span>Expanded collaborator capacity + audit trail</div>
+                <div class="feature"><span></span>Priority support and custom workflow guidance</div>
               </div>
             </div>
+          </div>
+          <div class="hero-actions" style="margin-top: 22px;">
+            <a class="cta" href="/pricing" data-analytics="home_pricing_full"><i class="iconoir-wallet" aria-hidden="true"></i><span>Compare full plan details</span></a>
+            <a class="cta secondary" href="/forecasting" data-analytics="home_pricing_terminal"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Open forecasting terminal</span></a>
           </div>
         </div>
       </section>
