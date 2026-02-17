@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ title or "Quantura" }}</title>
+    <meta
+      name="description"
+      content="Quantura delivers weekly investing intelligence and deep demand forecasting reports for serious builders of wealth."
+    />
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+  </head>
+  <body>
+    <header class="header">
+      <div class="container nav">
+        <a class="logo" href="/">QUANTURA</a>
+        <nav class="nav-links">
+          <a href="/use-cases">Use Cases</a>
+          <a href="/contact">Contact</a>
+          <a href="/terms">Terms</a>
+          <a href="/privacy">Privacy</a>
+        </nav>
+        <a class="cta" href="https://buy.stripe.com/8x24gze7a86K1zE9M20co08" target="_blank" rel="noreferrer">
+          Get Deep Forecast
+        </a>
+      </div>
+    </header>
+
+    {% block content %}{% endblock %}
+
+    <footer class="footer">
+      <div class="container footer-grid">
+        <div>
+          <div class="logo">QUANTURA</div>
+          <p class="small">
+            Weekly investing intelligence and on-demand forecasting reports. Built for
+            founders, operators, and private investors who move early.
+          </p>
+          <span class="tag">Weekly newsletter</span>
+        </div>
+        <div class="small">
+          <strong>Explore</strong>
+          <div><a href="/use-cases">Use Cases</a></div>
+          <div><a href="/contact">Contact</a></div>
+          <div><a href="/terms">Terms</a></div>
+          <div><a href="/privacy">Privacy</a></div>
+        </div>
+        <div class="small">
+          <strong>Product</strong>
+          <div>Demand Forecasting™</div>
+          <div>Deep Forecast Report</div>
+          <div>$349 one-time</div>
+          <div>Delivery in 5 business days</div>
+        </div>
+      </div>
+      <div class="container small" style="margin-top: 24px;">
+        © 2026 Quantura. All rights reserved.
+      </div>
+    </footer>
+  </body>
+</html>

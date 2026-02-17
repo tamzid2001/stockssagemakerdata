@@ -73,20 +73,14 @@ git-push:
 	git commit -m "$(MSG)" || true
 	git push origin main
 
-# Stock Screening Targets
-# Run basic fundamental-based stock screener
-# Usage: make screen (requires tickers.txt)
+# Run stock screening pipeline: generate watchlist, score stocks, upload to S3, send to Slack
+# Usage: make screen
+# Requires: OPENAI_API_KEY, AWS credentials (optional), SLACK_WEBHOOK_URL (optional)
 screen:
-	@echo "Running fundamental-based stock screener..."
-	python stock_screener.py
-	@echo "✓ Results saved to value_candidates.csv"
-
-# Run advanced agent-based stock screener
-# Usage: make screen-agent (requires tickers.txt and OPENAI_API_KEY)
-screen-agent:
-	@echo "Running advanced agent-based stock screener..."
-	python agents_stock_screener.py
-	@echo "✓ Results saved to agent_screening_results.csv"
+	@echo "🚀 Running stock screening pipeline..."
+	python combined_stock_screener.py
+	@echo "✓ Watchlist saved to watchlist.csv"
+	@echo "✓ Results saved to combined_screening_results.csv"
 
 # Run combined screener with headlines + Slack support
 # Usage: make screen-combined (requires tickers.txt and OPENAI_API_KEY)
