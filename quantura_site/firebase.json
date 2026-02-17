@@ -1,0 +1,94 @@
+{
+  "firestore": {
+    "database": "(default)",
+    "location": "nam5",
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "venv",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local",
+        "serviceAccountKey.json",
+        ".env"
+      ],
+      "runtime": "python313"
+    },
+    {
+      "source": "functions_ssr",
+      "codebase": "ssr",
+      "disallowLegacyRuntimeConfig": true,
+      "predeploy": [
+        "node \"$RESOURCE_DIR/scripts/sync-templates.js\""
+      ],
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ],
+      "runtime": "nodejs20"
+    }
+  ],
+  "hosting": {
+    "public": "public",
+    "cleanUrls": false,
+    "trailingSlash": false,
+    "redirects": [
+      { "source": "/trading", "destination": "/dashboard", "type": 301 },
+      { "source": "/purchase", "destination": "/pricing", "type": 301 }
+    ],
+    "rewrites": [
+      { "source": "/", "function": "ssr" },
+      { "source": "/forecasting", "function": "ssr" },
+      { "source": "/ticker-intelligence", "function": "ssr" },
+      { "source": "/indicators", "function": "ssr" },
+      { "source": "/trending", "function": "ssr" },
+      { "source": "/news", "function": "ssr" },
+      { "source": "/events-calendar", "function": "ssr" },
+      { "source": "/market-headlines", "function": "ssr" },
+      { "source": "/ticker-query", "function": "ssr" },
+      { "source": "/options", "function": "ssr" },
+      { "source": "/saved-forecasts", "function": "ssr" },
+      { "source": "/backtesting", "function": "ssr" },
+      { "source": "/studio", "function": "ssr" },
+
+      { "source": "/screener", "function": "ssr" },
+      { "source": "/research", "function": "ssr" },
+      { "source": "/pricing", "function": "ssr" },
+      { "source": "/contact", "function": "ssr" },
+      { "source": "/terms", "function": "ssr" },
+      { "source": "/privacy", "function": "ssr" },
+      { "source": "/disclaimer", "function": "ssr" },
+      { "source": "/admin", "function": "ssr" },
+
+      { "source": "/blog", "function": "ssr" },
+      { "source": "/blog/posts/**", "function": "ssr" },
+
+      { "source": "/dashboard", "function": "ssr" },
+      { "source": "/account", "function": "ssr" },
+      { "source": "/watchlist", "function": "ssr" },
+      { "source": "/productivity", "function": "ssr" },
+      { "source": "/collaboration", "function": "ssr" },
+      { "source": "/uploads", "function": "ssr" },
+      { "source": "/autopilot", "function": "ssr" },
+      { "source": "/notifications", "function": "ssr" }
+    ],
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ]
+  },
+  "storage": {
+    "rules": "storage.rules"
+  }
+}

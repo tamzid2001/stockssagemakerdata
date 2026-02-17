@@ -1,106 +1,171 @@
-# stockssagemakerdata
+# Quantura Monorepo
 
-Small helper to download stock close prices (daily or hourly) using `yfinance` and upload to AWS S3. Also includes utilities for weekday prediction analysis.
+<p align="center">
+  <strong>Execution-grade market intelligence platform + data automation toolkit</strong><br/>
+  Forecasting, screening, portfolio workflows, social intelligence, and MLOps pipelines in one repository.
+</p>
 
-## Features
+<p align="center">
+  <img src="https://img.shields.io/badge/stack-Firebase%20%7C%20Python%20%7C%20Node%20%7C%20JS-0f172a" alt="Stack" />
+  <img src="https://img.shields.io/badge/domain-FinTech%20%26%20Market%20Intelligence-0ea5e9" alt="Domain" />
+  <img src="https://img.shields.io/badge/deploy-Firebase%20Hosting%20%2B%20Cloud%20Functions-16a34a" alt="Deploy" />
+</p>
 
-- Download historical stock data using `yfinance`
-- Upload data to AWS S3 (S3 bucket: `stockscompute` in `us-east-2`)
-- Generate price predictions using technical indicators (SMA, EMA)
-- Upload predictions to S3 in separate folder
-- Check if a given date or prediction window lands on a weekday
-- Support for both daily (1d) and hourly (1h) intervals
+---
 
-## Installation
+## Table of Contents
 
-Install dependencies (recommended inside a virtualenv or Codespace):
+- [1. Project Overview](#1-project-overview)
+- [2. Problem Statement](#2-problem-statement)
+- [3. Core Use Cases](#3-core-use-cases)
+- [4. System Architecture](#4-system-architecture)
+- [5. Repository Structure](#5-repository-structure)
+- [6. Frontend Module Map](#6-frontend-module-map)
+- [7. Backend Function Map](#7-backend-function-map)
+- [8. Data Model (Firestore)](#8-data-model-firestore)
+- [9. Configuration](#9-configuration)
+- [10. Local Development](#10-local-development)
+- [11. Deployments](#11-deployments)
+- [12. Testing and Validation](#12-testing-and-validation)
+- [13. Security and Public-Ready Checklist](#13-security-and-public-ready-checklist)
+- [14. Roadmap](#14-roadmap)
 
-```bash
-pip install -r requirements.txt
+---
+
+## 1. Project Overview
+
+Quantura is a full-stack market intelligence system with:
+
+- A Firebase-hosted web platform (`quantura_site`) for forecasting, screening, backtesting, alerts, and collaboration
+- Python Cloud Functions for market analytics, AI-assisted workflows, billing, social automation, and data APIs
+- SSR layer for SEO-friendly pages and Remote Config hydration
+- Supporting scripts for stock data ingestion, S3 workflows, weekday-aware prediction utilities, and scheduled automation
+- iOS/Android app folders for mobile clients (`quantura_ios`, `quantura_android`)
+
+This monorepo is designed to support both:
+
+1. Productized SaaS workflows (dashboard, subscriptions, sharing, automation)
+2. Operator workflows (data exports, quant research loops, scheduled jobs)
+
+---
+
+## 2. Problem Statement
+
+Most retail and semi-professional investing workflows are fragmented:
+
+- Charting in one tab
+- News and social sentiment in others
+- Forecast assumptions tracked manually
+- Backtest artifacts disconnected from live workflows
+
+Quantura consolidates these into one execution surface, so users can:
+
+- Move from thesis to forecast to backtest faster
+- Track portfolio/watchlist signals in context
+- Persist and share outputs across teams/workspaces
+- Control model access, billing, and feature rollout centrally
+
+---
+
+## 3. Core Use Cases
+
+### A. Forecasting Desk
+- Input ticker + interval + horizon
+- Generate quantile forecasts
+- Save runs and regenerate report assets (PDF/PPT style outputs)
+
+### B. AI Portfolio Screener
+- Apply descriptive/fundamental/technical filters
+- Run ranked candidate generation
+- Publish or keep private AI agent portfolios
+
+### C. Backtesting + Technical Guidance
+- Run rule-based strategy backtests
+- Export backtest source templates (Python/TradingView/MT5/JSON)
+- Generate technical setup suggestions from recent indicators
+
+### D. Social and News Intelligence
+- Pull market headlines by country
+- Integrate social pulse feeds (X/Reddit/Facebook/Instagram)
+- Generate and queue social campaign drafts
+
+### E. Collaboration + Monetization
+- Workspace collaborators/invites
+- Stripe checkout, billing portal, creator support/subscriptions
+- Share links for forecasts/screeners/uploads
+
+---
+
+## 4. System Architecture
+
+```mermaid
+flowchart LR
+    U["User Browser"] --> H["Firebase Hosting (SPA + static assets)"]
+    H --> SSR["SSR Function (Node.js)"]
+    H --> JS["public/app.js"]
+
+    JS --> PY["Cloud Functions (Python)"]
+    JS --> FS["Firestore"]
+    JS --> ST["Cloud Storage"]
+
+    PY --> FS
+    PY --> ST
+    PY --> RC["Firebase Remote Config"]
+    PY --> Stripe["Stripe APIs"]
+    PY --> YF["Yahoo Finance / yfinance"]
+    PY --> MX["Massive (US corporate events)"]
+    PY --> OAI["OpenAI APIs"]
+    PY --> NOVA["Amazon Nova Gateway (optional)"]
+    PY --> SM["Social Platform APIs / Webhooks"]
+
+    GH["GitHub Actions"] --> H
+    GH --> PY
+    GH --> Data["Data Jobs / Artifacts"]
 ```
 
-## Usage
+### Runtime Sequence (Screener Path)
 
-### Basic: Download stocks locally
+```mermaid
+sequenceDiagram
+    participant UI as Forecasting UI
+    participant Fn as run_quick_screener
+    participant RC as Remote Config
+    participant Mkt as yfinance/Yahoo
+    participant AI as OpenAI or Amazon Nova
+    participant DB as Firestore
 
-```bash
-python fetch_data.py -t AAPL,MSFT -s 2024-01-01 -e 2024-01-08 -i 1d -o data
+    UI->>Fn: submit screener payload (filters, model, notes)
+    Fn->>RC: resolve tier + llm_allowed_models
+    Fn->>Mkt: fetch histories/info
+    Fn->>AI: optional note->ticker/query enrichment
+    Fn->>DB: persist screener run + metadata
+    Fn-->>UI: ranked results + runId + modelUsed
 ```
 
-Or using Make:
-```bash
-make sample  # Quick example with AAPL
+---
+
+## 5. Repository Structure
+
+```text
+stockssagemakerdata/
+├── quantura_site/
+│   ├── pages/                 # HTML pages used by Hosting + SSR template sync
+│   ├── public/                # app.js, styles.css, assets, blog output
+│   ├── functions/             # Python Cloud Functions backend
+│   ├── functions_ssr/         # Node SSR function and template hydration
+│   ├── firestore.rules
+│   ├── storage.rules
+│   └── firebase.json
+├── quantura_android/          # Android client workspace
+├── quantura_ios/              # iOS client workspace
+├── scripts/                   # automation/helpers
+├── fetch_data.py              # local stock fetch utility
+├── fetch_data_s3.py           # fetch + S3 upload utility
+├── predictions.py             # prediction CSV helper
+├── combined_stock_screener.py # standalone screener CSV + Slack tool
+├── Makefile
+└── .github/workflows/         # CI/CD + scheduled jobs
 ```
-
-### AWS S3: Upload to S3 bucket
-
-First, configure AWS credentials from your GitHub Codespaces secrets:
-
-```bash
-make setup-aws
-```
-
-Then fetch and upload to the stockscompute bucket:
-
-```bash
-make fetch-s3-bucket TICKERS="AAPL" START=2024-01-01 END=2024-01-08 INTERVAL=1d PREFIX=stock_data/
-```
-
-Or use the Python script directly:
-```bash
-python fetch_data_s3.py -t AAPL,MSFT -s 2024-01-01 -e 2024-01-08 -i 1d -b stockscompute -p stock_data/ -r us-east-2
-```
-
-The script will automatically use `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` environment variables.
-
-### Check Weekday Prediction
-
-Check if a prediction date lands on a weekday:
-
-```bash
-# Check a specific date with N days offset
-python check_weekday.py 2024-01-08 30
-
-# Check today
-python check_weekday.py today
-
-# Check yesterday
-python check_weekday.py yesterday
-```
-
-Or using Make:
-```bash
-make check-weekday START_DATE=2024-01-08 DAYS=30
-make check-weekday-today
-make check-weekday-yesterday
-```
-
-### Generate Price Predictions
-
-Create a predictions CSV file locally and upload it to S3:
-
-```bash
-# Create your own predictions.csv file, then upload it
-python predictions.py -f predictions.csv -b stockscompute -p predictions/ -r us-east-2
-```
-
-Or using Make:
-```bash
-# Create sample predictions and upload
-make predict-sample
-
-# Upload your own CSV file
-make predict FILE=your_predictions.csv PREFIX=predictions/
-```
-
-**Expected CSV Format** (example):
-```csv
-Ticker,Date,Prediction,Confidence
-AAPL,2024-02-06,180.50,0.95
-MSFT,2024-02-07,427.00,0.91
-```
-
-The predictions CSV is uploaded to `stockscompute/predictions/` with a timestamp appended to the filename.
 
 ### Combined Stock Screener + Slack Delivery
 
@@ -137,57 +202,139 @@ and replace the Stripe placeholder buttons with live checkout URLs before deploy
 - [.github/workflows/weekly-stock-screening.yml](.github/workflows/weekly-stock-screening.yml) — Weekly combined screening job with optional Slack delivery.
 - [.github/workflows/linear-sync.yml](.github/workflows/linear-sync.yml) — GitHub → Linear issue sync workflow.
 
-## Makefile Targets
+Use `.env.example` as baseline. Critical categories:
 
-```bash
-make install                  # Install Python dependencies
-make fetch                    # Quick fetch example (AAPL local)
-make fetch-ticker             # Parameterized local fetch
-make sample                   # Sample fetch to local data/
-make fetch-s3                 # Quick fetch to S3
-make fetch-s3-ticker          # Parameterized S3 fetch
-make sample-s3                # Sample fetch to S3
-make setup-aws                # Configure AWS credentials
-make fetch-s3-bucket          # Fetch to stockscompute bucket
-make predict                  # Upload predictions CSV to S3
-make predict-sample           # Create sample CSV and upload
-make check-weekday            # Check if prediction date is weekday
-make check-weekday-today      # Check if today is weekday
-make check-weekday-yesterday  # Check if yesterday is weekday
-make git-push                 # Push changes to main branch
-```
+- AI providers:
+  - `OPENAI_API_KEY`
+  - `AMAZON_NOVA_API_KEY` (optional)
+  - `AMAZON_NOVA_API_ENDPOINT` (optional)
+  - `AMAZON_NOVA_DEFAULT_MODEL` (optional)
+  - `LLM_ALLOWED_MODELS` (fallback allowlist if Remote Config value is absent)
+- Billing:
+  - Stripe keys and webhook secret
+- Messaging:
+  - `FCM_WEB_VAPID_KEY`
+- Data providers:
+  - Massive, Alpaca, yfinance dependencies
+- Social APIs/webhooks:
+  - X/LinkedIn/Facebook/Instagram/etc
 
-## AWS Integration
+---
+
+## 10. Local Development
+
+### Prerequisites
+- Node 18+
+- Python 3.10+
+- Firebase CLI
 
 ### Setup
 
-1. Add `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` to GitHub Codespaces secrets
-2. Run `make setup-aws` to configure the AWS CLI
+```bash
+cd /Users/tamzidullah/Desktop/stockssagemakerdata
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 
-### Bucket Information
+cd /Users/tamzidullah/Desktop/stockssagemakerdata/quantura_site
+npm ci
+```
 
-- **Bucket Name**: `stockscompute`
-- **AWS Region**: `us-east-2`
-- **ARN**: `arn:aws:s3:::stockscompute`
+### Quick validation
 
-### Environment Variables
+```bash
+node --check /Users/tamzidullah/Desktop/stockssagemakerdata/quantura_site/public/app.js
+node --check /Users/tamzidullah/Desktop/stockssagemakerdata/quantura_site/functions_ssr/index.js
+python3 -m py_compile /Users/tamzidullah/Desktop/stockssagemakerdata/quantura_site/functions/main.py
+```
 
-The S3 upload script reads credentials from:
-- `AWS_ACCESS_KEY_ID` — AWS access key ID
-- `AWS_SECRET_ACCESS_KEY` — AWS secret access key
+---
 
-These can be set as environment variables or passed as command-line arguments.
+## 11. Deployments
 
-## Codespace / Devcontainer
+Deploy from `quantura_site`:
 
-Open this repo in GitHub Codespaces or VS Code Remote — the devcontainer will install dependencies automatically via `postCreateCommand`.
+```bash
+cd /Users/tamzidullah/Desktop/stockssagemakerdata/quantura_site
+firebase deploy
+```
 
-## CI / MLOps
+Scoped deploys:
 
-The workflow `mlops-data` runs daily (06:00 UTC) and can be triggered manually. It checks out the repo, installs dependencies, runs a sample fetch, and uploads results as an artifact.
+```bash
+firebase deploy --only hosting
+firebase deploy --only functions
+firebase deploy --only functions:ssr
+firebase deploy --only firestore:rules,firestore:indexes,storage
+```
 
-## Next Steps
+---
 
-- Customize tickers and date ranges in the Makefile targets or workflow files
-- Set up AWS credentials in GitHub Codespaces secrets for S3 uploads
-- Integrate into your own data pipelines or SageMaker workflows
+## 12. Testing and Validation
+
+- Static checks:
+  - JS syntax: `node --check`
+  - Python compile checks: `py_compile`
+- Targeted tests:
+  - `quantura_site/tests/test_public_assets.py`
+- Runtime validation:
+  - Forecasting run
+  - Screener run with tier/model policy
+  - Backtest run + export
+  - Stripe checkout + billing portal
+  - Notification token registration + test push
+
+---
+
+## 13. Security and Public-Ready Checklist
+
+Before making the repo public:
+
+1. Remove any committed secrets and rotate exposed keys.
+2. Keep API keys in secret managers / environment variables only.
+3. Verify `.env`, service accounts, and token files are gitignored.
+4. Keep these files local-only (never committed):
+   - `quantura_site/functions/serviceAccountKey.json`
+   - `quantura_ios/quantura_ios/GoogleService-Info.plist`
+   - `quantura_android/app/google-services.json`
+5. Bootstrap local placeholders with:
+   - `./scripts/setup_local_firebase_credentials.sh`
+6. If key exposure occurred, revoke/rotate immediately and purge Git history for leaked files.
+7. Re-check Firestore and Storage rules for least privilege.
+8. Confirm admin-only features are enforced server-side (not UI-only).
+9. Validate Stripe webhook signature handling and callback allowlists.
+10. Verify social integrations fail safely when credentials are missing.
+11. Keep `llm_allowed_models` constrained to approved models for cost/control.
+
+### Immediate GCP/Firebase leak response
+
+1. Disable and recreate exposed API keys in Google Cloud Console.
+2. Restrict replacement API keys:
+   - iOS key: restrict by bundle ID + only required APIs.
+   - Android key: restrict by package name + SHA-1 + only required APIs.
+   - Web key: restrict by HTTP referrers + only required APIs.
+3. Disable compromised service-account keys and create new credentials only if required.
+4. Prefer Workload Identity / Application Default Credentials over downloadable key files.
+5. Purge leaked files from all Git history and force-push rewritten history.
+6. Invalidate any copied secrets from CI/CD systems and re-seed them as repository/environment secrets.
+
+---
+
+## 14. Roadmap
+
+- Expand model orchestration policy with per-feature model routing
+- Add deeper explainability traces on screener ranking decisions
+- Add benchmark backtest suites and reproducibility snapshots
+- Extend international market coverage for events and social intelligence
+- Harden observability dashboards for function memory/latency/error budgets
+
+---
+
+### Maintainer Note
+
+If you are onboarding as a new contributor, start with:
+
+1. `quantura_site/public/app.js` (client orchestration)
+2. `quantura_site/functions/main.py` (business logic and integrations)
+3. `quantura_site/functions_ssr/index.js` (SSR and Remote Config hydration)
+4. `quantura_site/firebase.json` + rules files (deployment and access control)

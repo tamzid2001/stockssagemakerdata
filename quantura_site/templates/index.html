@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% set title = "Quantura | Weekly Investing Intelligence" %}
+
+{% block content %}
+<section class="hero">
+  <div class="container hero-grid">
+    <div class="fade-in">
+      <span class="badge">Weekly investing newsletter</span>
+      <h1>Quantura delivers the mispriced ideas you want before the market agrees.</h1>
+      <p>
+        A weekly brief for serious investors. Each issue highlights 5–10 mispriced
+        growth or value stocks, one chart that matters, and crisp commentary.
+      </p>
+      <div style="display: flex; gap: 14px; flex-wrap: wrap; margin-top: 20px;">
+        <a class="cta" href="#newsletter">Get the free weekly email</a>
+        <a class="cta secondary" href="/use-cases">See use cases</a>
+      </div>
+      <div style="margin-top: 24px;" class="small">
+        Trusted by private investors, family offices, and product-led founders.
+      </div>
+    </div>
+    <div class="hero-card fade-in delay-1">
+      <h3>This week in Quantura</h3>
+      <ul>
+        <li>Top 5–10 mispriced growth/value stocks</li>
+        <li>1–2 bullets of commentary per name</li>
+        <li>Key chart or metric per stock</li>
+        <li>Soft CTA: full model + ranking inside</li>
+      </ul>
+      <div style="margin-top: 22px;">
+        <span class="tag">Weekly cadence</span>
+        <span class="tag" style="background: #fde7db; color: #7b2b14;">Independent research</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="newsletter">
+  <div class="container">
+    <div class="section-title">
+      <h2>Core free product</h2>
+      <p class="small">Top of funnel designed to build trust and momentum.</p>
+    </div>
+    <div class="grid-3">
+      <div class="card fade-in">
+        <h3>Weekly report</h3>
+        <p>Curated mispricings with a clean narrative that respects your time.</p>
+        <div class="feature-list">
+          <div class="feature"><span></span>5–10 high conviction names</div>
+          <div class="feature"><span></span>Signals, catalysts, and ranking</div>
+          <div class="feature"><span></span>Clear stop/monitor notes</div>
+        </div>
+      </div>
+      <div class="card fade-in delay-1">
+        <h3>Macro overlay</h3>
+        <p>Context for rate regimes, sector rotations, and demand shifts.</p>
+        <div class="feature-list">
+          <div class="feature"><span></span>Sector heatmap snapshot</div>
+          <div class="feature"><span></span>Style factor commentary</div>
+          <div class="feature"><span></span>Forward risk scenario notes</div>
+        </div>
+      </div>
+      <div class="card fade-in delay-2">
+        <h3>Soft CTA</h3>
+        <p>Invite readers into the deep forecast report once they’re warmed.</p>
+        <div class="feature-list">
+          <div class="feature"><span></span>Full model + ranking</div>
+          <div class="feature"><span></span>On-demand forecasting</div>
+          <div class="feature"><span></span>Decision-ready report</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container split">
+    <div>
+      <h2>Demand Forecasting™ — Deep Forecast</h2>
+      <p>
+        High-conviction forecasting for a single asset with regime sensitivity notes,
+        accuracy diagnostics, and structured delivery. Built to feel professional,
+        defensible, and decision-ready.
+      </p>
+      <div class="card" style="margin-top: 24px;">
+        <strong>Includes</strong>
+        <ul>
+          <li>1 asset deep dive</li>
+          <li>Up to 5 prediction lengths</li>
+          <li>Enhanced feature set</li>
+          <li>Accuracy diagnostics + error bands</li>
+          <li>Regime sensitivity notes</li>
+          <li>Structured report delivery</li>
+        </ul>
+      </div>
+    </div>
+    <div class="offer">
+      <div>
+        <span class="badge">One-time report</span>
+        <h2>Deep Forecast</h2>
+        <div class="price">$349</div>
+        <p class="small">Markup: ~2.3×–2.8×, built to feel defensible.</p>
+      </div>
+      <ul>
+        <li>Delivered within 5 business days</li>
+        <li>PDF + summary deck format</li>
+        <li>1:1 interpretation call included</li>
+      </ul>
+      <a class="cta" href="https://buy.stripe.com/8x24gze7a86K1zE9M20co08" target="_blank" rel="noreferrer">
+        Buy the Deep Forecast
+      </a>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <div class="section-title">
+      <h2>Why Quantura wins</h2>
+      <p class="small">A weekly investing newsletter → website → upsell stack that compounds.</p>
+    </div>
+    <div class="grid-3">
+      <div class="card">
+        <h3>Signal density</h3>
+        <p>Every issue is a distilled briefing. No fluff, only ranked ideas.</p>
+      </div>
+      <div class="card">
+        <h3>Research-backed</h3>
+        <p>Blend model outputs with real-world context and operator judgment.</p>
+      </div>
+      <div class="card">
+        <h3>Momentum loop</h3>
+        <p>Free weekly content builds trust and feeds a premium forecast product.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container split">
+    <div>
+      <h2>Get the free weekly update</h2>
+      <p>Join the list for the next issue and receive the latest mispricings.</p>
+    </div>
+    <div class="card">
+      <form>
+        <input type="text" placeholder="Name" />
+        <input type="email" placeholder="Email" />
+        <button class="cta" type="submit">Join Quantura Weekly</button>
+        <p class="small">We respect your inbox. Unsubscribe anytime.</p>
+      </form>
+    </div>
+  </div>
+</section>
+{% endblock %}
