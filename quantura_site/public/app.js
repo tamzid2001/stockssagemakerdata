@@ -1201,6 +1201,7 @@
       updateDynamicPromoBanner(String(flags.promoBannerText || "").trim());
       refreshScreenerModelUi();
       refreshScreenerCreditsUi();
+      bindAIAgentLeaderboardControls();
       // Ensure existing alerts inherit the configured default threshold when no explicit value is set.
       if (Number.isFinite(Number(flags.volatilityThreshold))) {
         state.remoteFlags.volatilityThreshold = Math.max(0.01, Math.min(0.5, Number(flags.volatilityThreshold)));
@@ -3312,6 +3313,35 @@
     URL.revokeObjectURL(url);
   };
 
+  const triggerDownloadFromUrl = async (url, filename = "") => {
+    const href = String(url || "").trim();
+    if (!href) throw new Error("Download URL is unavailable.");
+    try {
+      const resp = await fetch(href, { credentials: "omit" });
+      if (!resp.ok) throw new Error(`Download failed (${resp.status}).`);
+      const blob = await resp.blob();
+      if (!blob || !blob.size) throw new Error("Downloaded file is empty.");
+      triggerDownload(filename || "quantura_report", blob, {
+        mimeType: blob.type || "application/octet-stream",
+      });
+      return;
+    } catch (error) {
+      const link = document.createElement("a");
+      link.href = href;
+      link.rel = "noopener noreferrer";
+      link.target = "_blank";
+      if (filename) link.download = filename;
+      link.click();
+    }
+  };
+
+  const extractErrorMessage = (error, fallback = "Unexpected error.") => {
+    const direct = String(error?.message || "").trim();
+    const details = error?.details && typeof error.details === "object" ? error.details : null;
+    const detailText = String(details?.detail || details?.message || details?.error || "").trim();
+    return detailText || direct || fallback;
+  };
+
   const copyToClipboard = async (text) => {
     const value = String(text || "");
     if (!value) return false;
@@ -4024,7 +4054,7 @@
         dragmode: "pan",
         hoverlabel: { namelength: 32 },
 	      xaxis: {
-	        rangeslider: { visible: !isMobileViewport },
+	        rangeslider: { visible: false },
 	        showspikes: true,
 	        spikemode: "across",
 	        spikesnap: "cursor",
@@ -5304,6 +5334,31 @@
     `;
   };
 
+  const bindAIAgentLeaderboardControls = () => {
+    const horizonSelect = document.getElementById("ai-leaderboard-horizon");
+    if (horizonSelect) {
+      if (horizonSelect.dataset.bound !== "1") {
+        horizonSelect.addEventListener("change", () => {
+          state.aiLeaderboardHorizon = normalizeRoiHorizonKey(horizonSelect.value);
+          renderAIAgentLeaderboard(state.aiAgents);
+        });
+        horizonSelect.dataset.bound = "1";
+      }
+      horizonSelect.value = state.aiLeaderboardHorizon;
+    }
+    const modelFilterSelect = document.getElementById("ai-leaderboard-model-filter");
+    if (modelFilterSelect) {
+      if (modelFilterSelect.dataset.bound !== "1") {
+        modelFilterSelect.addEventListener("change", () => {
+          state.aiModelFilter = String(modelFilterSelect.value || "all");
+          renderAIAgentLeaderboard(state.aiAgents);
+        });
+        modelFilterSelect.dataset.bound = "1";
+      }
+      modelFilterSelect.value = state.aiModelFilter || "all";
+    }
+  };
+
   const renderScreenerRunOutput = (runDoc) => {
     if (!ui.screenerOutput) return;
     const rows = Array.isArray(runDoc?.results) ? runDoc.results : [];
@@ -5344,29 +5399,6 @@
         </div>
         <div id="ai-portfolio-summary" class="small">${portfolioSummary}</div>
       </div>
-      <div class="card" style="margin-top:14px;">
-        <div class="card-head">
-          <h3>AI Portfolio Leaderboard</h3>
-          <div class="form-grid" style="margin:0; min-width: 320px;">
-            <div class="field" style="margin:0; min-width: 140px;">
-              <label class="label" for="ai-leaderboard-horizon">Sort by ROI</label>
-              <select id="ai-leaderboard-horizon">
-                <option value="1m">1M</option>
-                <option value="3m">3M</option>
-                <option value="6m">6M</option>
-                <option value="1y" selected>1Y</option>
-                <option value="5y">5Y</option>
-                <option value="max">Max</option>
-              </select>
-            </div>
-            <div class="field" style="margin:0; min-width: 170px;">
-              <label class="label" for="ai-leaderboard-model-filter">Model filter</label>
-              <select id="ai-leaderboard-model-filter"></select>
-            </div>
-          </div>
-        </div>
-        <div id="ai-agent-leaderboard" class="panel-output small" style="max-height: none;"></div>
-      </div>
       <div class="table-wrap" style="margin-top:12px;">
         <table class="data-table">
           <thead>
@@ -5406,23 +5438,7 @@
         </table>
       </div>
     `;
-
-    const horizonSelect = document.getElementById("ai-leaderboard-horizon");
-    if (horizonSelect) {
-      horizonSelect.value = state.aiLeaderboardHorizon;
-      horizonSelect.addEventListener("change", () => {
-        state.aiLeaderboardHorizon = normalizeRoiHorizonKey(horizonSelect.value);
-        renderAIAgentLeaderboard(state.aiAgents);
-      });
-    }
-    const modelFilterSelect = document.getElementById("ai-leaderboard-model-filter");
-    if (modelFilterSelect) {
-      modelFilterSelect.value = state.aiModelFilter || "all";
-      modelFilterSelect.addEventListener("change", () => {
-        state.aiModelFilter = String(modelFilterSelect.value || "all");
-        renderAIAgentLeaderboard(state.aiAgents);
-      });
-    }
+    bindAIAgentLeaderboardControls();
     renderAIAgentLeaderboard(state.aiAgents);
   };
 
@@ -5870,10 +5886,12 @@
       .onSnapshot(
         (snapshot) => {
           state.aiAgents = snapshot.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) }));
+          bindAIAgentLeaderboardControls();
           renderAIAgentLeaderboard(state.aiAgents);
         },
         () => {
           state.aiAgents = [];
+          bindAIAgentLeaderboardControls();
           renderAIAgentLeaderboard(state.aiAgents);
         }
       );
@@ -7409,13 +7427,19 @@
               if (!path) throw new Error("Report file is not available yet.");
               if (!storage) throw new Error("Storage client is unavailable.");
               const url = await storage.ref().child(path).getDownloadURL();
-              window.open(url, "_blank", "noopener,noreferrer");
-              showToast(kind === "pdf" ? "Executive Brief opened." : "Slide Deck opened.");
+              const ticker = normalizeTicker(doc.ticker || "ticker") || "ticker";
+              const service = String(doc.service || "forecast").replace(/[^a-z0-9_\-]+/gi, "_");
+              const filename =
+                kind === "pdf"
+                  ? `${ticker}_${service}_${forecastId}_executive_brief.pdf`
+                  : `${ticker}_${service}_${forecastId}_slide_deck.pptx`;
+              await triggerDownloadFromUrl(url, filename);
+              showToast(kind === "pdf" ? "Executive Brief downloaded." : "Slide Deck downloaded.");
               logEvent(kind === "pdf" ? "forecast_report_pdf_downloaded" : "forecast_report_pptx_downloaded", {
                 forecast_id: forecastId,
               });
             } catch (error) {
-              showToast(error.message || "Unable to download report.", "warn");
+              showToast(extractErrorMessage(error, "Unable to download report."), "warn");
             } finally {
               button.disabled = false;
             }
@@ -8595,6 +8619,7 @@
       });
       refreshScreenerModelUi();
       refreshScreenerCreditsUi();
+      bindAIAgentLeaderboardControls();
 
 	    ui.screenerForm?.addEventListener("submit", async (event) => {
 	      event.preventDefault();
@@ -8671,7 +8696,13 @@
         showToast("AI Portfolio generation started.");
         logEvent("screener_request", { universe: payload.universe });
       } catch (error) {
-        showToast(error.message || "Unable to generate AI Portfolio.", "warn");
+        const message = extractErrorMessage(error, "Unable to generate AI Portfolio.");
+        if (ui.screenerResultsCount) ui.screenerResultsCount.textContent = "Results Found: 0";
+        if (ui.screenerOutput) {
+          setOutputReady(ui.screenerOutput);
+          ui.screenerOutput.innerHTML = `<div class="small muted">${escapeHtml(message)}</div>`;
+        }
+        showToast(message, "warn");
       }
     });
 

@@ -17,7 +17,7 @@
   --bg: radial-gradient(circle at 15% 10%, #fff7e6 0%, transparent 45%),
     radial-gradient(circle at 80% 20%, #eef7f6 0%, transparent 50%),
     var(--paper);
-  --maxw: 1180px;
+  --maxw: 1540px;
   --header-height: 88px;
   --dock-top: 104px;
   --studio-chart-top: 284px;
@@ -1333,6 +1333,14 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+#ticker-intelligence-output {
+  max-height: none;
+  overflow: visible;
+  padding-right: 0;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
 .output-stack {
   display: grid;
   gap: 8px;
@@ -2121,17 +2129,23 @@ textarea {
 
 .app-layout {
   width: 100%;
-  max-width: var(--maxw);
-  margin: 0 auto;
-  padding: 0 40px 48px;
+  max-width: none;
+  margin: 0;
+  padding: 0 clamp(14px, 2.6vw, 40px) 48px;
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
-  gap: 28px;
+  grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
+  gap: clamp(18px, 2vw, 32px);
   align-items: start;
 }
 
 .app-main {
   min-width: 0;
+}
+
+.app-main > .section > .container {
+  max-width: none;
+  margin: 0;
+  padding: 0;
 }
 
 .app-sidebar {
@@ -2228,7 +2242,7 @@ textarea {
 
 .studio-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.25fr) minmax(420px, 1fr);
   gap: 22px;
   align-items: start;
 }
@@ -2697,6 +2711,7 @@ textarea {
 @media (max-width: 980px) {
   .app-layout {
     grid-template-columns: 1fr;
+    padding: 0 18px 40px;
   }
 
   .app-sidebar {
@@ -2741,6 +2756,12 @@ textarea {
 
   .news-data-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 1400px) {
+  .studio-layout {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -2932,7 +2953,7 @@ select {
 
 .intel-kv-row {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
   font-size: 0.88rem;
@@ -2941,12 +2962,23 @@ select {
 .intel-kv-row span:first-child {
   color: var(--graphite);
   font-weight: 700;
+  flex: 0 1 48%;
+  min-width: 0;
 }
 
 .intel-kv-row span:last-child {
   color: var(--ink);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: right;
+}
+
+.screener-leaderboard-card .panel-output {
+  max-height: none;
+  overflow: visible;
+  padding-right: 0;
 }
 
 .intel-heatmap {
