@@ -95,6 +95,18 @@ SOCIAL_CHANNEL_WEBHOOK_ENV = {
     "youtube": "SOCIAL_WEBHOOK_YOUTUBE",
     "pinterest": "SOCIAL_WEBHOOK_PINTEREST",
 }
+META_PIXEL_ID = str(os.environ.get("META_PIXEL_ID") or "1643823927053003").strip()
+META_CAPI_ACCESS_TOKEN = str(os.environ.get("META_CAPI_ACCESS_TOKEN") or "").strip()
+META_GRAPH_API_VERSION = str(os.environ.get("META_GRAPH_API_VERSION") or "v21.0").strip() or "v21.0"
+META_ALLOWED_ORIGINS = {
+    PUBLIC_ORIGIN,
+    "https://quantura-e2e3d.web.app",
+    "https://quantura-e2e3d.firebaseapp.com",
+    "http://localhost:5000",
+    "http://127.0.0.1:5000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+}
 
 if not firebase_admin._apps:
     options: dict[str, Any] = {}
@@ -865,6 +877,120 @@ def _safe_float(value: Any) -> float | None:
 
 def _normalize_email(value: Any) -> str:
     return str(value or "").strip().lower()
+
+
+def _meta_hash_sha256(value: Any) -> str:
+    raw = str(value or "").strip().lower()
+    if not raw:
+        return ""
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _meta_normalize_phone(value: Any) -> str:
+    digits = re.sub(r"\D+", "", str(value or ""))
+    return digits if len(digits) >= 7 else ""
+
+
+def _meta_header(req: https_fn.CallableRequest, key: str) -> str:
+    raw_request = getattr(req, "raw_request", None)
+    headers = getattr(raw_request, "headers", None)
+    if headers is None:
+        return ""
+    try:
+        return str(headers.get(key, "") or "").strip()
+    except Exception:
+        return ""
+
+
+def _meta_client_ip(req: https_fn.CallableRequest, data: dict[str, Any]) -> str:
+    explicit = str(data.get("clientIpAddress") or data.get("client_ip_address") or "").strip()
+    if explicit:
+        return explicit.split(",")[0].strip()
+    forwarded = _meta_header(req, "x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    raw_request = getattr(req, "raw_request", None)
+    remote_addr = getattr(raw_request, "remote_addr", "")
+    return str(remote_addr or "").strip()
+
+
+def _meta_build_user_data(req: https_fn.CallableRequest, data: dict[str, Any]) -> dict[str, Any]:
+    user_data: dict[str, Any] = {}
+
+    user_agent = str(data.get("userAgent") or data.get("user_agent") or _meta_header(req, "user-agent") or "").strip()
+    client_ip = _meta_client_ip(req, data)
+    if user_agent:
+        user_data["client_user_agent"] = user_agent[:512]
+    if client_ip:
+        user_data["client_ip_address"] = client_ip
+
+    email = str(data.get("email") or "").strip()
+    if not email and getattr(req, "auth", None) and isinstance(req.auth.token, dict):
+        email = str(req.auth.token.get("email") or "").strip()
+    email_hash = _meta_hash_sha256(email)
+    if email_hash:
+        user_data["em"] = [email_hash]
+
+    phone = _meta_normalize_phone(data.get("phone"))
+    phone_hash = _meta_hash_sha256(phone)
+    if phone_hash:
+        user_data["ph"] = [phone_hash]
+
+    external_id = str(data.get("externalId") or "").strip()
+    if not external_id and getattr(req, "auth", None):
+        external_id = str(getattr(req.auth, "uid", "") or "").strip()
+    external_id_hash = _meta_hash_sha256(external_id)
+    if external_id_hash:
+        user_data["external_id"] = [external_id_hash]
+
+    fbc = str(data.get("fbc") or "").strip()
+    fbp = str(data.get("fbp") or "").strip()
+    if fbc:
+        user_data["fbc"] = fbc[:256]
+    if fbp:
+        user_data["fbp"] = fbp[:256]
+
+    return user_data
+
+
+def _meta_build_custom_data(params: Any) -> dict[str, Any]:
+    if not isinstance(params, dict):
+        return {}
+    out: dict[str, Any] = {}
+    allowed_keys = [
+        "currency",
+        "value",
+        "content_name",
+        "content_category",
+        "search_string",
+        "ticker",
+        "workspace_id",
+        "order_id",
+        "status",
+    ]
+    for key in allowed_keys:
+        if key not in params:
+            continue
+        value = params.get(key)
+        if value is None:
+            continue
+        if key == "value":
+            numeric = _safe_float(value)
+            if numeric is None:
+                continue
+            out[key] = round(float(numeric), 6)
+            continue
+        if isinstance(value, bool):
+            out[key] = value
+            continue
+        if isinstance(value, (int, float)):
+            out[key] = value
+            continue
+        if isinstance(value, str):
+            text = value.strip()
+            if text:
+                out[key] = text[:256]
+    return out
 
 
 def _audit_event(uid: str, email: str | None, event_type: str, payload: dict[str, Any]) -> None:
@@ -2429,6 +2555,118 @@ def remove_collaborator(req: https_fn.CallableRequest) -> dict[str, Any]:
     batch.commit()
     _audit_event(owner_id, token.get("email"), "collaborator_removed", {"collaboratorUserId": collaborator_user_id})
     return {"status": "removed", "collaboratorUserId": collaborator_user_id}
+
+
+@https_fn.on_call()
+def track_meta_conversion_event(req: https_fn.CallableRequest) -> dict[str, Any]:
+    data = req.data or {}
+    if not isinstance(data, dict):
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "Event payload must be an object.",
+        )
+
+    if not META_PIXEL_ID or not META_CAPI_ACCESS_TOKEN:
+        return {"ok": False, "skipped": "meta_capi_not_configured"}
+
+    origin = _meta_header(req, "origin")
+    if origin and origin not in META_ALLOWED_ORIGINS:
+        return {"ok": False, "skipped": "origin_not_allowed"}
+
+    source_event_name = str(data.get("sourceEventName") or data.get("eventName") or "").strip()
+    if not source_event_name:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "eventName is required.",
+        )
+    source_event_name = re.sub(r"[^A-Za-z0-9_\\- ]+", "", source_event_name)[:80] or "custom_event"
+
+    event_name = str(data.get("eventName") or source_event_name).strip()
+    event_name = "PageView" if event_name == "page_view" else event_name
+    event_name = re.sub(r"[^A-Za-z0-9_\\- ]+", "", event_name)[:80] or "custom_event"
+
+    now_ts = int(time.time())
+    event_time = int(_safe_float(data.get("eventTime")) or now_ts)
+    if event_time < 946684800 or event_time > now_ts + 3600:
+        event_time = now_ts
+
+    event_id = str(data.get("eventId") or "").strip()
+    if not event_id:
+        seed = f"{source_event_name}:{event_time}:{time.time_ns()}"
+        event_id = f"q_{hashlib.sha256(seed.encode('utf-8')).hexdigest()[:24]}"
+    event_id = re.sub(r"[^A-Za-z0-9_\\-]+", "", event_id)[:100] or f"q_{int(time.time() * 1000)}"
+
+    action_source = str(data.get("actionSource") or "website").strip().lower()
+    valid_action_sources = {
+        "website",
+        "app",
+        "phone_call",
+        "chat",
+        "physical_store",
+        "system_generated",
+        "business_messaging",
+        "other",
+    }
+    if action_source not in valid_action_sources:
+        action_source = "website"
+
+    event_source_url = str(data.get("eventSourceUrl") or "").strip()
+    if event_source_url and not event_source_url.startswith("http"):
+        event_source_url = f"{PUBLIC_ORIGIN}{event_source_url if event_source_url.startswith('/') else '/' + event_source_url}"
+    if not event_source_url:
+        event_source_url = PUBLIC_ORIGIN
+
+    user_data = _meta_build_user_data(req, data)
+    custom_data = _meta_build_custom_data(data.get("params"))
+
+    event_payload: dict[str, Any] = {
+        "event_name": event_name,
+        "event_time": event_time,
+        "event_id": event_id,
+        "event_source_url": event_source_url,
+        "action_source": action_source,
+        "user_data": user_data,
+        "original_event_data": {
+            "event_name": source_event_name,
+            "event_time": event_time,
+        },
+    }
+    if custom_data:
+        event_payload["custom_data"] = custom_data
+
+    payload = {"data": [event_payload]}
+    endpoint = f"https://graph.facebook.com/{META_GRAPH_API_VERSION}/{META_PIXEL_ID}/events"
+
+    try:
+        response = requests.post(
+            endpoint,
+            params={"access_token": META_CAPI_ACCESS_TOKEN},
+            json=payload,
+            timeout=10,
+        )
+    except Exception as exc:
+        return {"ok": False, "eventId": event_id, "error": f"request_failed: {exc}"}
+
+    response_text = response.text[:1200]
+    try:
+        response_json = response.json()
+    except Exception:
+        response_json = {"raw": response_text}
+
+    if response.status_code >= 400:
+        return {
+            "ok": False,
+            "eventId": event_id,
+            "status": response.status_code,
+            "error": response_json,
+        }
+
+    return {
+        "ok": True,
+        "eventId": event_id,
+        "status": response.status_code,
+        "meta": _serialize_for_firestore(response_json),
+    }
 
 
 @https_fn.on_call()
