@@ -187,6 +187,8 @@
     emailCreate: document.getElementById("email-create"),
     emailMessage: document.getElementById("auth-email-message"),
     googleSignin: document.getElementById("google-signin"),
+    githubSignin: document.getElementById("github-signin"),
+    twitterSignin: document.getElementById("twitter-signin"),
     userEmail: document.getElementById("user-email"),
     userProvider: document.getElementById("user-provider"),
     userStatus: document.getElementById("user-status"),
@@ -7857,17 +7859,31 @@
       }
     });
 
-    ui.googleSignin?.addEventListener("click", async () => {
+    const signInWithProvider = async (provider, successMessage, method) => {
       if (ui.emailMessage) ui.emailMessage.textContent = "";
       try {
         await persistenceReady;
-        const provider = new firebase.auth.GoogleAuthProvider();
         await auth.signInWithPopup(provider);
-        showToast("Signed in with Google.");
-        logEvent("login", { method: "google" });
+        showToast(successMessage);
+        logEvent("login", { method });
       } catch (error) {
         if (ui.emailMessage) ui.emailMessage.textContent = error.message;
       }
+    };
+
+    ui.googleSignin?.addEventListener("click", async () => {
+      await signInWithProvider(new firebase.auth.GoogleAuthProvider(), "Signed in with Google.", "google");
+    });
+
+    ui.githubSignin?.addEventListener("click", async () => {
+      const provider = new firebase.auth.GithubAuthProvider();
+      provider.addScope("user:email");
+      await signInWithProvider(provider, "Signed in with GitHub.", "github");
+    });
+
+    ui.twitterSignin?.addEventListener("click", async () => {
+      const provider = new firebase.auth.TwitterAuthProvider();
+      await signInWithProvider(provider, "Signed in with X.", "twitter");
     });
 
 	    ui.purchasePanels.forEach((panel) => {
