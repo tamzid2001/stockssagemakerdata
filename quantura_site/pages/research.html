@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Quantura Research Library | Independent Methodology & Citations</title>
+    <meta
+      name="description"
+      content="Independent methodology notes for Quantura Adaptive Forecasting and citation references for open-source components."
+    />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://quantura-e2e3d.web.app/research" />
+    <meta property="og:title" content="Quantura Research Library" />
+    <meta property="og:description" content="Independent methodology and citation references." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://quantura-e2e3d.web.app/research" />
+    <meta property="og:image" content="/assets/quantura-logo.svg" />
+    <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
+
+    <script defer src="/__/firebase/12.9.0/firebase-app-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-auth-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-firestore-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-functions-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-storage-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-remote-config-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-analytics-compat.js"></script>
+    <script defer src="/__/firebase/init.js?useEmulator=false"></script>
+    <script defer src="/app.js"></script>
+  </head>
+  <body class="research-page">
+    <header class="header">
+      <div class="container nav">
+        <a class="logo" href="/" aria-label="Quantura home"><span>QUANTURA</span></a>
+        <nav class="nav-links">
+          <a href="/forecasting" data-analytics="nav_forecasting"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Terminal</span></a>
+          <a href="/research" data-analytics="nav_research"><i class="iconoir-bookmark-book" aria-hidden="true"></i><span>Research</span></a>
+          <a href="/blog" data-analytics="nav_blog"><i class="iconoir-page" aria-hidden="true"></i><span>Blog</span></a>
+          <a href="/pricing" data-analytics="nav_pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>Pricing</span></a>
+          <a href="/contact" data-analytics="nav_contact"><i class="iconoir-mail" aria-hidden="true"></i><span>Contact</span></a>
+        </nav>
+        <div class="nav-actions">
+          <span id="header-user-status" class="pill">Logged Out</span>
+          <button class="cta secondary" id="header-auth" type="button"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></button>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="section research-shell">
+        <div class="container">
+          <div class="section-title">
+            <h1>Independent Methodology & Citations</h1>
+            <p class="small">A transparent reference for Quantura Adaptive Forecasting and supporting research software.</p>
+          </div>
+
+          <div class="research-grid">
+            <article class="card research-card">
+              <h2>Quantura Adaptive Forecasting</h2>
+              <p>
+                Quantura Adaptive Forecasting combines structural time-series trend decomposition, rolling volatility regime
+                detection, and quantile calibration to generate probabilistic forward ranges rather than single-point targets.
+              </p>
+              <p>
+                The process dynamically shifts confidence weighting by market regime and prioritizes stability of lower-bound
+                outcomes when candidate selection is used for portfolio generation.
+              </p>
+
+              <h3>Investment Thesis Formula</h3>
+              <p class="small">
+                The thesis score blends directional conviction, seasonality persistence, and valuation support while penalizing
+                unstable downside confidence.
+              </p>
+              <pre class="research-code">thesis_score = 0.45 * trend_strength
+             + 0.25 * catalyst_signal
+             + 0.20 * valuation_support
+             + 0.10 * analyst_revision_momentum
+             - downside_confidence_penalty</pre>
+            </article>
+
+            <article class="card research-card">
+              <h2>Research Library</h2>
+              <p class="small">
+                Citations are formatted for auditability and reproducibility. Use Copy BibTeX to export references directly
+                into notebooks or institutional reports.
+              </p>
+
+              <ol class="citation-list" aria-label="Citations">
+                <li class="citation-item">
+                  <div class="citation-body">
+                    Taylor, S. J., &amp; Letham, B. (2018). Forecasting at Scale. <em>The American Statistician, 72</em>(1), 37-45.
+                    <span class="citation-note">[Software: Meta Prophet Library]</span>
+                  </div>
+                  <button
+                    class="cta secondary small"
+                    type="button"
+                    data-action="copy-bibtex"
+                    data-bibtex='@article{taylor2018forecasting, title={Forecasting at Scale}, author={Taylor, Sean J. and Letham, Benjamin}, journal={The American Statistician}, volume={72}, number={1}, pages={37--45}, year={2018}}'
+                  >
+                    <i class="iconoir-copy" aria-hidden="true"></i><span>Copy BibTeX</span>
+                  </button>
+                </li>
+
+                <li class="citation-item">
+                  <div class="citation-body">
+                    OpenAI. (2025). OpenAI Agents SDK documentation.
+                    <span class="citation-note">[Software Documentation]</span>
+                  </div>
+                  <button
+                    class="cta secondary small"
+                    type="button"
+                    data-action="copy-bibtex"
+                    data-bibtex='@misc{openai_agents_sdk, title={OpenAI Agents SDK Documentation}, author={{OpenAI}}, year={2025}, url={https://platform.openai.com/docs/agents}}'
+                  >
+                    <i class="iconoir-copy" aria-hidden="true"></i><span>Copy BibTeX</span>
+                  </button>
+                </li>
+
+                <li class="citation-item">
+                  <div class="citation-body">
+                    Massive.com. (2026). Massive MCP server and market data interfaces.
+                    <span class="citation-note">[Data Interface]</span>
+                  </div>
+                  <button
+                    class="cta secondary small"
+                    type="button"
+                    data-action="copy-bibtex"
+                    data-bibtex='@misc{massive_mcp, title={Massive MCP Market Data Interfaces}, author={{Massive.com}}, year={2026}, url={https://massive.com/docs/websocket/quickstart}}'
+                  >
+                    <i class="iconoir-copy" aria-hidden="true"></i><span>Copy BibTeX</span>
+                  </button>
+                </li>
+              </ol>
+            </article>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="container footer-grid">
+        <div>
+          <div class="logo">QUANTURA</div>
+          <p class="small">Decision intelligence for market research, forecasting, and execution.</p>
+        </div>
+        <div class="small">
+          <strong>Explore</strong>
+          <div><a href="/">Home</a></div>
+          <div><a href="/forecasting">Forecasting</a></div>
+          <div><a href="/research">Research</a></div>
+          <div><a href="/blog">Blog</a></div>
+          <div><a href="/research">Research</a></div>
+        </div>
+        <div class="small">
+          <strong>Legal</strong>
+          <div><a href="/terms">Terms and Conditions</a></div>
+          <div><a href="/privacy">Privacy Policy</a></div>
+          <div><a href="/disclaimer">Disclaimer Policy</a></div>
+        </div>
+      </div>
+    </footer>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>

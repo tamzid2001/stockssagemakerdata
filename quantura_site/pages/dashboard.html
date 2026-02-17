@@ -1,0 +1,584 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Quantura Dashboard | Orders, Forecasts, Uploads</title>
+    <meta
+      name="description"
+      content="Quantura member dashboard for forecasts, orders, uploads, and admin fulfillment."
+    />
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="canonical" href="https://quantura-e2e3d.web.app/dashboard" />
+    <meta property="og:title" content="Quantura Dashboard" />
+    <meta property="og:description" content="Access your forecasts, orders, and uploads in one secure dashboard." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://quantura-e2e3d.web.app/dashboard" />
+    <meta property="og:image" content="/assets/quantura-logo.svg" />
+    <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
+    <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+
+    <script defer src="/__/firebase/12.9.0/firebase-app-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-auth-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-firestore-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-functions-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-storage-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-messaging-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-remote-config-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-analytics-compat.js"></script>
+    <script defer src="/__/firebase/init.js?useEmulator=false"></script>
+    <script defer src="/app.js"></script>
+  
+    <script>
+      window.__QUANTURA_RC_TEMPLATE_ID__ = "firebase-server";
+      window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ = {"status":200,"eTag":"etag-quantura-e2e3d-firebase-server-fetch--1213937490","config":{"welcome_message":"Welcome to Quantura","watchlist_enabled":"true","forecast_prophet_enabled":"true","forecast_timemixer_enabled":"true","push_notifications_enabled":"true","webpush_vapid_key":"","stripe_checkout_enabled":"true","stripe_public_key":"","holiday_promo":"true","backtesting_enabled":"true","backtesting_free_daily_limit":"1","backtesting_pro_daily_limit":"25"}};
+    </script>
+  
+</head>
+  <body>
+    <header class="header">
+      <div class="container nav">
+        <a class="logo" href="/" aria-label="Quantura home"><span>QUANTURA</span></a>
+        <nav class="nav-links">
+          <a href="/forecasting" data-analytics="nav_terminal"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Terminal</span></a>
+          <a href="/research" data-analytics="nav_research"><i class="iconoir-bookmark-book" aria-hidden="true"></i><span>Research</span></a>
+          <a href="/blog" data-analytics="nav_blog"><i class="iconoir-page" aria-hidden="true"></i><span>Blog</span></a>
+          <a href="/pricing" data-analytics="nav_pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>Pricing</span></a>
+          <a href="/contact" data-analytics="nav_contact"><i class="iconoir-mail" aria-hidden="true"></i><span>Contact</span></a>
+        </nav>
+        <div class="nav-actions">
+          <span id="header-user-status" class="pill">Logged Out</span>
+          <button class="cta secondary" id="header-auth" type="button"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></button>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <div class="app-layout">
+        <aside class="app-sidebar">
+	          <div class="sidebar-card">
+	            <div class="small"><strong>Shortcuts</strong></div>
+	            <a class="cta secondary small" href="/forecasting"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Open terminal</span></a>
+	            <a class="cta secondary small" href="/pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>View pricing plans</span></a>
+	            <a class="cta secondary small hidden" id="nav-admin" href="/admin"><i class="iconoir-shield-check" aria-hidden="true"></i><span>Admin dashboard</span></a>
+	          </div>
+		          <nav class="sidebar-nav" aria-label="Dashboard navigation">
+		            <a class="sidebar-link active" href="/dashboard" data-panel-target="orders"><i class="iconoir-shopping-bag-check" aria-hidden="true"></i><span>Orders</span></a>
+		            <a class="sidebar-link" href="/watchlist" data-panel-target="watchlist"><i class="iconoir-bell-notification" aria-hidden="true"></i><span>Watchlist</span></a>
+		            <a class="sidebar-link" href="/productivity" data-panel-target="productivity"><i class="iconoir-kanban-board" aria-hidden="true"></i><span>Productivity</span></a>
+		            <a class="sidebar-link" href="/collaboration" data-panel-target="collaboration"><i class="iconoir-group" aria-hidden="true"></i><span>Collaboration</span></a>
+		            <a class="sidebar-link" href="/uploads" data-panel-target="uploads"><i class="iconoir-upload" aria-hidden="true"></i><span>Uploads</span></a>
+		            <a class="sidebar-link" href="/autopilot" data-panel-target="autopilot"><i class="iconoir-rocket" aria-hidden="true"></i><span>Autopilot</span></a>
+		            <a class="sidebar-link" href="/notifications" data-panel-target="notifications"><i class="iconoir-bell-notification" aria-hidden="true"></i><span>Notifications</span></a>
+		            <a class="sidebar-link" href="/account" data-panel-target="auth" id="dashboard-auth-link"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></a>
+		          </nav>
+	        </aside>
+
+	        <div class="app-main" data-panels data-panel-router="dashboard">
+      <section class="page-hero">
+        <div class="container content-grid">
+	          <div>
+	            <div class="eyebrow">Workspace dashboard</div>
+		            <h1>Manage Deep Forecast orders, uploads, and workspace activity.</h1>
+		            <p>
+		              Every forecast, upload, and order is stored in your secure workspace. Sign in to unlock your
+		              dashboard and keep a complete audit trail for your research workflow.
+		            </p>
+	          </div>
+          <div class="card">
+            <h3>Account status</h3>
+            <div class="profile-item">
+              <span class="label">Signed in as</span>
+              <span id="user-email" class="value">Not signed in</span>
+            </div>
+            <div class="profile-item">
+              <span class="label">Provider</span>
+              <span id="user-provider" class="value">—</span>
+            </div>
+            <div class="profile-item">
+              <span class="label">Status</span>
+              <span id="user-status" class="pill">Logged Out</span>
+            </div>
+            <details class="profile-settings">
+              <summary>Leaderboard profile</summary>
+              <form id="profile-form" class="profile-editor">
+                <label class="label" for="profile-username">Username</label>
+                <input id="profile-username" class="input" type="text" maxlength="32" placeholder="quantura_alpha" />
+                <div class="profile-links-grid">
+                  <label class="label" for="profile-social-x">X</label>
+                  <input id="profile-social-x" class="input" type="url" placeholder="https://x.com/username" />
+                  <label class="label" for="profile-social-linkedin">LinkedIn</label>
+                  <input id="profile-social-linkedin" class="input" type="url" placeholder="https://linkedin.com/in/username" />
+                  <label class="label" for="profile-social-github">GitHub</label>
+                  <input id="profile-social-github" class="input" type="url" placeholder="https://github.com/username" />
+                  <label class="label" for="profile-social-youtube">YouTube</label>
+                  <input id="profile-social-youtube" class="input" type="url" placeholder="https://youtube.com/@channel" />
+                  <label class="label" for="profile-social-tiktok">TikTok</label>
+                  <input id="profile-social-tiktok" class="input" type="url" placeholder="https://tiktok.com/@username" />
+                  <label class="label" for="profile-social-website">Website</label>
+                  <input id="profile-social-website" class="input" type="url" placeholder="https://your-site.com" />
+                </div>
+                <button class="cta secondary small" type="submit">Save profile</button>
+                <p id="profile-status" class="small muted">Sign in to set your public leaderboard profile.</p>
+              </form>
+            </details>
+            <div class="billing-panel">
+              <span class="label">Billing</span>
+              <a id="billing-portal-link" class="cta secondary small" href="/account" data-analytics="billing_portal_open">Sign in to manage billing</a>
+              <span class="small muted">Manage plan, invoices, and payment method in Stripe.</span>
+            </div>
+            <div class="notice" id="dashboard-cta">
+              Sign in to unlock order tracking and fulfillment updates.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section auth-section panel hidden" data-panel="auth" id="auth">
+        <div class="container">
+	          <div class="section-title">
+	            <h2>Sign in to unlock your dashboard</h2>
+	            <p class="small">Email/password plus Google, GitHub, and X sign-in, secured to your account.</p>
+	          </div>
+          <div class="auth-grid">
+            <div class="card">
+              <h3>Email access</h3>
+              <p class="small">Use your email to sign in or create your Quantura account.</p>
+              <form id="email-auth-form" class="auth-form">
+                <label class="label" for="auth-email">Email</label>
+                <input id="auth-email" type="email" placeholder="you@domain.com" required />
+                <label class="label" for="auth-password">Password</label>
+                <input id="auth-password" type="password" minlength="6" placeholder="Minimum 6 characters" required />
+                <div class="auth-actions">
+                  <button class="cta" id="email-signin" type="submit">Sign in</button>
+                  <button class="cta secondary" id="email-create" type="button">Create account</button>
+                </div>
+                <p class="small" id="auth-email-message"></p>
+              </form>
+            </div>
+            <div class="card">
+              <h3>Social sign-in</h3>
+              <p class="small">Use your preferred provider for fast access to your account and purchase history.</p>
+              <div class="auth-actions" style="margin-top: 12px;">
+                <button class="cta google" id="google-signin" type="button">Continue with Google</button>
+                <button class="cta secondary" id="github-signin" type="button">Continue with GitHub</button>
+                <button class="cta secondary" id="twitter-signin" type="button">Continue with X</button>
+              </div>
+              <div class="notice">
+                <strong>Secure by design.</strong> We only store what’s needed to deliver your report and
+                surface your order status in the dashboard.
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section panel hidden" data-panel="notifications" id="notifications">
+        <div class="container">
+          <div class="section-title">
+            <h2>Browser notifications</h2>
+            <p class="small">Enable web push notifications, stream messages live, and keep a timestamped event log.</p>
+          </div>
+          <div class="content-grid">
+            <div class="card">
+              <h3>Web push setup</h3>
+              <div class="feature-list">
+                <div class="feature"><span></span>HTTPS + service worker required</div>
+                <div class="feature"><span></span>Permission must be granted by browser</div>
+                <div class="feature"><span></span>Token stored securely to your account</div>
+              </div>
+              <div class="hero-actions" style="margin-top: 16px;">
+                <button class="cta" id="notifications-enable" type="button">Enable notifications</button>
+                <button class="cta secondary" id="notifications-refresh" type="button">Refresh token</button>
+                <button class="cta secondary" id="notifications-send-test" type="button">Send test push</button>
+              </div>
+              <p class="small" id="notifications-status" style="margin-top: 12px;">Sign in and enable notifications.</p>
+              <div class="notice small" style="margin-top: 10px;">
+                <strong>FCM token:</strong> <span id="notifications-token">No token registered yet.</span>
+              </div>
+            </div>
+            <div class="results-panel">
+              <div class="card-head">
+                <h3>Live notification log</h3>
+                <button class="cta secondary small" id="notifications-clear" type="button">Clear log</button>
+              </div>
+              <div id="notifications-log" class="notification-log">
+                <div class="small muted">No live notifications yet.</div>
+              </div>
+              <h3 style="margin-top: 8px;">How delivery works</h3>
+              <p class="small">
+                Quantura registers your browser token to your account and sends push notifications through the messaging service.
+                You can revoke permission any time from your browser site settings.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+	      <section class="section panel" data-panel="orders" id="dashboard">
+	        <div class="container">
+	          <div class="section-title">
+	            <h2>Your orders</h2>
+	            <p class="small">Track your Deep Forecast requests and fulfillment status.</p>
+	          </div>
+	            <div class="dashboard-grid">
+	            <div class="card">
+	              <h3>Order history</h3>
+	              <div id="user-orders" class="order-list panel-output"></div>
+	            </div>
+	            <div class="card">
+	              <h3>Forecast requests</h3>
+	              <div id="user-forecasts" class="order-list panel-output"></div>
+	            </div>
+	          </div>
+	        </div>
+	      </section>
+
+	      <section class="section panel hidden" data-panel="watchlist" id="watchlist">
+	        <div class="container">
+	          <div class="section-title">
+	            <h2>Watchlist and price alerts</h2>
+	            <p class="small">Save tickers to your active workspace and track actionable levels. Every followed asset gets a default ±5% volatility alert.</p>
+	          </div>
+
+	          <div class="content-grid">
+	            <form id="watchlist-form" class="card">
+	              <h3>Add to watchlist</h3>
+	              <div class="field">
+	                <label class="label" for="watchlist-ticker">Ticker</label>
+	                <input id="watchlist-ticker" name="ticker" placeholder="AAPL" required />
+	              </div>
+	              <div class="field">
+	                <label class="label" for="watchlist-notes">Notes (optional)</label>
+	                <textarea id="watchlist-notes" name="notes" placeholder="Thesis, catalysts, or why this name matters"></textarea>
+	              </div>
+	              <button class="cta" type="submit" data-analytics="watchlist_add">Add</button>
+	              <details class="learn-more">
+	                <summary>Learn more</summary>
+	                <p class="small">
+	                  Watchlists are workspace-scoped. If you’re collaborating, switching workspaces changes the watchlist you see.
+	                  Click a ticker to open it in the Forecasting studio.
+	                </p>
+	              </details>
+	            </form>
+
+	            <div class="results-panel">
+	              <h3>Watchlist</h3>
+	              <div id="watchlist-list" class="panel-output small">Sign in to start saving tickers.</div>
+	            </div>
+	          </div>
+
+	          <div class="content-grid" style="margin-top: 16px;">
+	            <form id="alert-form" class="card">
+	              <h3>Create custom price alert</h3>
+	              <div class="form-grid">
+	                <div class="field">
+	                  <label class="label" for="alert-ticker">Ticker</label>
+	                  <input id="alert-ticker" name="ticker" placeholder="NVDA" required />
+	                </div>
+	                <div class="field">
+	                  <label class="label" for="alert-condition">Condition</label>
+	                  <select id="alert-condition" name="condition">
+	                    <option value="above">Crosses above</option>
+	                    <option value="below">Crosses below</option>
+	                  </select>
+	                </div>
+	                <div class="field">
+	                  <label class="label" for="alert-price">Target price (USD)</label>
+	                  <input id="alert-price" name="target" type="number" step="0.01" placeholder="150.00" required />
+	                </div>
+	              </div>
+	              <div class="field">
+	                <label class="label" for="alert-notes">Notes (optional)</label>
+	                <textarea id="alert-notes" name="notes" placeholder="What should you do when this triggers?"></textarea>
+	              </div>
+	              <div class="hero-actions" style="margin-top: 12px;">
+	                <button class="cta" type="submit" data-analytics="alert_create">Create custom alert</button>
+	                <button class="cta secondary" id="alerts-check" type="button" data-analytics="alert_check">Check alerts now</button>
+	              </div>
+	              <p class="small" id="alerts-status"></p>
+	              <details class="learn-more">
+	                <summary>Learn more</summary>
+	                <p class="small">
+	                  Alerts are evaluated against the latest market price. For push delivery, enable notifications in the Notifications panel.
+	                  Quantura logs trigger events in your workspace so you can review what happened later.
+	                </p>
+	              </details>
+	            </form>
+
+	            <div class="results-panel">
+	              <h3>Active alerts</h3>
+	              <div id="alerts-list" class="panel-output small">Create an alert to see it here.</div>
+	            </div>
+	          </div>
+	        </div>
+	      </section>
+
+	      <section class="section panel hidden" data-panel="productivity" id="productivity">
+	        <div class="container productivity-shell">
+	          <div class="section-title">
+	            <h2>Workspace productivity</h2>
+	            <p class="small">Create tasks quickly and track due dates in one place.</p>
+	          </div>
+
+          <div class="productivity-grid">
+            <form id="task-form" class="card productivity-form">
+              <h3>Create task</h3>
+              <div class="form-grid form-grid-compact">
+                <div class="field">
+                  <label class="label" for="task-title">Title</label>
+                  <input id="task-title" placeholder="Review earnings transcript" required />
+                </div>
+                <div class="field">
+                  <label class="label" for="task-assignee">Assignee (optional)</label>
+                  <input id="task-assignee" type="email" placeholder="collaborator@domain.com" />
+                </div>
+              </div>
+              <div class="form-grid form-grid-compact">
+                <div class="field">
+                  <label class="label" for="task-due">Due date</label>
+                  <input id="task-due" type="date" />
+                </div>
+                <div class="field">
+                  <label class="label" for="task-status">Status</label>
+                  <select id="task-status">
+                    <option value="backlog">Backlog</option>
+                    <option value="doing">Doing</option>
+                    <option value="done">Done</option>
+                  </select>
+                </div>
+              </div>
+              <div class="field">
+                <label class="label" for="task-notes">Notes (optional)</label>
+                <textarea id="task-notes" rows="3" placeholder="Context, handoff, or checklist..."></textarea>
+              </div>
+              <button class="cta" type="submit" data-analytics="task_create">Add task</button>
+              <p class="small" id="task-status-text"></p>
+            </form>
+
+            <div class="results-panel productivity-board-wrap">
+              <div class="productivity-head">
+                <h3>Kanban board</h3>
+                <p class="small">Drag tasks between Backlog, Doing, and Done.</p>
+              </div>
+              <div id="productivity-board" class="kanban-host"></div>
+            </div>
+          </div>
+
+          <div class="card productivity-calendar-wrap">
+            <div class="productivity-head">
+              <h3>Calendar</h3>
+              <p class="small">Due-date view for this workspace.</p>
+            </div>
+            <div id="tasks-calendar" class="tasks-calendar small muted">Tasks with due dates will appear here.</div>
+          </div>
+
+        </div>
+      </section>
+
+      <section class="section panel hidden" data-panel="collaboration" id="collaboration">
+        <div class="container">
+          <div class="section-title">
+            <h2>Workspace collaboration</h2>
+            <p class="small">Invite collaborators, switch workspaces, and share research in a controlled way.</p>
+          </div>
+
+          <div class="content-grid">
+            <div class="card">
+              <h3>Active workspace</h3>
+              <p class="small">Your forecast list and saved runs follow this workspace across pages.</p>
+              <div class="field">
+                <label class="label" for="workspace-select">Workspace</label>
+                <select id="workspace-select"></select>
+              </div>
+              <div class="notice small" id="workspace-hint">
+                Tip: switch workspaces, then open the terminal to plot shared forecasts.
+              </div>
+            </div>
+
+            <div class="card">
+              <h3>Invite a collaborator</h3>
+              <p class="small">Send an invite to an email address. They can accept after signing in.</p>
+              <form id="collab-invite-form" class="auth-form">
+                <label class="label" for="collab-invite-email">Email</label>
+                <input id="collab-invite-email" type="email" placeholder="collaborator@domain.com" required />
+                <label class="label" for="collab-invite-role">Role</label>
+                <select id="collab-invite-role">
+                  <option value="viewer">Viewer (read-only)</option>
+                  <option value="editor">Editor (advanced)</option>
+                </select>
+                <div class="auth-actions" style="margin-top: 14px;">
+                  <button class="cta" type="submit" data-analytics="collab_invite_submit">Send invite</button>
+                </div>
+                <p class="small" id="collab-invite-status"></p>
+              </form>
+            </div>
+          </div>
+
+          <div class="content-grid" style="margin-top: 24px;">
+            <div class="card">
+              <h3>Invites for you</h3>
+              <div id="collab-invites-list" class="small">No invites yet.</div>
+            </div>
+            <div class="card">
+              <h3>Your collaborators</h3>
+              <div id="collab-collaborators-list" class="small">No collaborators yet.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section panel hidden" data-panel="uploads" id="uploads">
+        <div class="container">
+          <div class="section-title">
+            <h2>Upload predictions CSV</h2>
+            <p class="small">Upload predictions.csv to trigger exploratory analysis by the Quantura agent.</p>
+          </div>
+          <div class="content-grid">
+            <form id="predictions-upload-form" class="card">
+              <div class="field">
+                <label class="label" for="predictions-ticker">Ticker</label>
+                <input id="predictions-ticker" name="ticker" placeholder="PLTR" required />
+                <div class="small muted">Used to validate the upload against real highs and map a point forecast.</div>
+              </div>
+              <div class="field">
+                <label class="label" for="predictions-file">predictions.csv</label>
+                <input id="predictions-file" class="file-input" type="file" accept=".csv" />
+              </div>
+              <div class="field">
+                <label class="label" for="predictions-notes">Notes</label>
+                <textarea id="predictions-notes" name="notes" placeholder="What should the analysis focus on?"></textarea>
+              </div>
+              <button class="cta" type="submit" data-analytics="predictions_upload">Upload predictions</button>
+              <p class="small" id="predictions-status"></p>
+            </form>
+            <div class="results-panel" id="predictions-result">
+              <h3>Recent uploads</h3>
+              <div id="predictions-output" class="panel-output small">Uploads will appear here once submitted.</div>
+            </div>
+          </div>
+          <div class="card" style="margin-top: 18px;">
+            <div class="card-head">
+              <h3>Upload plot</h3>
+            </div>
+            <div id="predictions-plot-meta" class="small muted">Select an upload to preview and plot it.</div>
+            <div class="hero-actions" style="margin-top: 12px; justify-content: flex-start;">
+              <button class="cta secondary" id="predictions-agent-button" type="button" data-analytics="predictions_agent_run"><i class="iconoir-sparks" aria-hidden="true"></i><span>Run OpenAI CSV Agent</span></button>
+            </div>
+            <div id="predictions-agent-output" class="panel-output small" style="margin-top: 14px;">Run the OpenAI CSV Agent to compute weekday-aware quantile mapping and return an analyst summary.</div>
+            <div id="predictions-chart" class="chart" style="margin-top: 14px; min-height: 420px;"></div>
+            <div id="predictions-preview" class="panel-output small" style="margin-top: 14px;">Preview will appear here.</div>
+          </div>
+        </div>
+      </section>
+
+	      <section class="section panel hidden" data-panel="autopilot" id="autopilot">
+	        <div class="container">
+	          <div class="section-title">
+	            <h2>Weekly Brief Autopilot</h2>
+            <p class="small">Queue daily/weekly brief runs with a diversified 20-30 stock universe by default, or provide your own ticker list.</p>
+          </div>
+          <div class="content-grid">
+            <form id="autopilot-form" class="card">
+              <div class="form-grid">
+                <div class="field">
+                  <label class="label" for="autopilot-ticker">Tickers (optional)</label>
+                  <input id="autopilot-ticker" name="ticker" placeholder="Leave blank for default 25-stock brief universe, or enter comma-separated tickers" />
+                </div>
+                <div class="field">
+                  <label class="label" for="autopilot-horizon">Prediction length</label>
+                  <input id="autopilot-horizon" name="horizon" type="number" min="5" max="365" value="60" />
+                </div>
+                <div class="field">
+                  <label class="label" for="autopilot-quantiles">Quantiles (comma separated)</label>
+                  <input id="autopilot-quantiles" name="quantiles" placeholder="0.1,0.5,0.9" />
+                </div>
+                <div class="field">
+                  <label class="label" for="autopilot-interval">Timeframe</label>
+                  <select id="autopilot-interval" name="interval">
+                    <option value="1d">Daily</option>
+                    <option value="1h">Hourly</option>
+                  </select>
+                </div>
+              </div>
+              <div class="field">
+                <label class="label" for="autopilot-notes">Notes</label>
+                <textarea id="autopilot-notes" name="notes" placeholder="Special constraints or focus"></textarea>
+              </div>
+              <button class="cta" type="submit" data-analytics="autopilot_submit">Queue Autopilot run</button>
+              <p class="small" id="autopilot-status"></p>
+            </form>
+            <div class="results-panel" id="autopilot-result">
+              <h3>Autopilot runs</h3>
+              <div id="autopilot-output" class="panel-output small">Queued runs will appear here.</div>
+            </div>
+          </div>
+	        </div>
+	      </section>
+
+	        </div>
+	      </div>
+	    </main>
+
+    <footer class="footer">
+      <div class="container footer-grid">
+        <div>
+          <div class="logo">QUANTURA</div>
+          <p class="small">Decision intelligence for market research, forecasting, and execution.</p>
+          <div class="footer-social" aria-label="Quantura social links">
+            <a class="social-link" href="#" data-analytics="social_x" aria-label="X (coming soon)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.9 2H22l-6.8 7.8L23 22h-6.9l-5.4-6.9L4.7 22H1.6l7.3-8.4L1 2h7.1l4.9 6.3L18.9 2zm-1.2 18h1.7L7.2 3.9H5.4L17.7 20z"/></svg>
+            </a>
+            <a class="social-link" href="#" data-analytics="social_linkedin" aria-label="LinkedIn (coming soon)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.98 3.5C4.98 4.88 3.87 6 2.5 6S0 4.88 0 3.5 1.12 1 2.5 1 4.98 2.12 4.98 3.5zM0.5 8.5H4.5V23H0.5V8.5zM8.5 8.5H12.3V10.4h.1c.5-1 1.9-2.1 3.9-2.1 4.2 0 5 2.8 5 6.5V23h-4v-6.7c0-1.6 0-3.7-2.2-3.7-2.3 0-2.6 1.8-2.6 3.6V23h-4V8.5z"/></svg>
+            </a>
+            <a class="social-link" href="#" data-analytics="social_reddit" aria-label="Reddit (coming soon)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21.9 10.7c.1-.4.1-.8 0-1.2-.3-1-1.4-1.6-2.5-1.3-.6.2-1 .6-1.2 1.1-1.5-1-3.4-1.7-5.5-1.8l1-4.6 3.2.7c.1.8.8 1.4 1.7 1.4.9 0 1.7-.8 1.7-1.7S19.5 2 18.6 2c-.6 0-1.2.4-1.5.9l-3.7-.8c-.3-.1-.6.1-.7.4l-1.2 5.2c-2.2.1-4.2.8-5.7 1.8-.2-.5-.6-.9-1.2-1.1-1-.3-2.1.3-2.5 1.3-.1.4-.1.8 0 1.2.1.6.4 1 .9 1.3-.1.4-.1.9-.1 1.3 0 3.6 4.1 6.5 9.1 6.5s9.1-2.9 9.1-6.5c0-.4 0-.9-.1-1.3.5-.3.8-.8.9-1.3zM7.9 12.8c0-.8.7-1.5 1.5-1.5s1.5.7 1.5 1.5-.7 1.5-1.5 1.5-1.5-.6-1.5-1.5zm8.5 4c-.9.9-2.6 1.3-4.4 1.3s-3.5-.4-4.4-1.3c-.2-.2-.2-.5 0-.7.2-.2.5-.2.7 0 .6.6 2 1 3.7 1 1.7 0 3.1-.4 3.7-1 .2-.2.5-.2.7 0 .2.2.2.5 0 .7zm-1.8-2.5c-.8 0-1.5-.7-1.5-1.5s.7-1.5 1.5-1.5 1.5.7 1.5 1.5-.7 1.5-1.5 1.5z"/></svg>
+            </a>
+            <a class="social-link" href="#" data-analytics="social_github" aria-label="GitHub (coming soon)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .5C5.73.5.75 5.63.75 12c0 5.1 3.29 9.41 7.86 10.94.58.11.79-.26.79-.57v-2.1c-3.2.71-3.88-1.57-3.88-1.57-.53-1.37-1.29-1.74-1.29-1.74-1.05-.74.08-.73.08-.73 1.16.08 1.77 1.23 1.77 1.23 1.03 1.8 2.7 1.28 3.36.98.1-.77.4-1.28.72-1.58-2.55-.3-5.23-1.31-5.23-5.84 0-1.29.45-2.35 1.19-3.18-.12-.3-.52-1.53.11-3.2 0 0 .97-.32 3.18 1.21.92-.26 1.9-.39 2.88-.39.98 0 1.96.13 2.88.39 2.2-1.53 3.17-1.21 3.17-1.21.63 1.67.23 2.9.11 3.2.74.83 1.19 1.89 1.19 3.18 0 4.54-2.69 5.54-5.25 5.83.41.37.77 1.1.77 2.22v3.29c0 .31.21.68.8.57A11.3 11.3 0 0 0 23.25 12C23.25 5.63 18.27.5 12 .5z"/></svg>
+            </a>
+          </div>
+        </div>
+        <div class="small">
+          <strong>Explore</strong>
+          <div><a href="/">Home</a></div>
+          <div><a href="/forecasting">Forecasting</a></div>
+          <div><a href="/research">Research</a></div>
+          <div><a href="/blog">Blog</a></div>
+          <div><a href="/dashboard">Dashboard</a></div>
+          <div><a href="/pricing">Pricing</a></div>
+          <div><a href="/contact">Contact</a></div>
+        </div>
+        <div class="small">
+          <strong>Legal</strong>
+          <div><a href="/terms">Terms and Conditions</a></div>
+          <div><a href="/privacy">Privacy Policy</a></div>
+          <div><a href="/disclaimer">Disclaimer Policy</a></div>
+          <details class="footer-terms" style="margin-top:10px;">
+            <summary>Terms summary (important)</summary>
+            <ul class="footer-terms-list">
+              <li>By using Quantura, you confirm you are at least 18 years old and authorized to act for your account or business.</li>
+              <li>Paid plans renew automatically until canceled before the next billing date. Refund and cancellation rules are listed in the full Terms.</li>
+              <li>Quantura provides software and data tooling, not brokerage, investment advisory, legal, or tax services.</li>
+              <li>Market data, forecast outputs, and AI-generated content may be delayed, incomplete, or inaccurate and must be independently verified.</li>
+              <li>Services are provided "as is" to the maximum extent permitted by law, with liability limitations and dispute resolution terms in the full Terms.</li>
+              <li>Where enforceable, disputes may be resolved through individual arbitration and class action waiver terms.</li>
+            </ul>
+          </details>
+          <p class="small legal-copy">
+            Financial disclaimer: nothing on Quantura is investment, tax, accounting, or legal advice. Trading and options involve substantial risk, including possible loss of principal.
+          </p>
+        </div>
+      </div>
+      <div class="container small" style="margin-top: 24px;">
+        © 2026 Quantura. All rights reserved.
+      </div>
+    </footer>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>

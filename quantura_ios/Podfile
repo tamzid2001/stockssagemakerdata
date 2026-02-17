@@ -1,0 +1,18 @@
+platform :ios, '15.0'
+source 'https://cdn.cocoapods.org/'
+
+target 'quantura_ios' do
+  use_frameworks! :linkage => :static
+
+  pod 'Firebase/Core'
+  pod 'Firebase/RemoteConfig'
+  pod 'Google-Mobile-Ads-SDK'
+end
+
+target 'quantura_iosTests' do
+  inherit! :search_paths
+end
+
+target 'quantura_iosUITests' do
+  inherit! :search_paths
+end

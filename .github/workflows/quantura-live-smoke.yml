@@ -1,0 +1,74 @@
+name: Quantura Live Smoke Check
+
+on:
+  schedule:
+    - cron: "30 12 * * *" # Daily 12:30 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    name: Probe key production routes
+    steps:
+      - name: Check live endpoints
+        env:
+          BASE_URL: https://quantura-e2e3d.web.app
+        run: |
+          set -euo pipefail
+
+          paths=(
+            "/"
+            "/forecasting"
+            "/screener"
+            "/dashboard"
+            "/pricing"
+            "/contact"
+            "/terms"
+            "/privacy"
+            "/disclaimer"
+            "/blog"
+          )
+
+          failures=0
+          {
+            echo "## Quantura Live Smoke Report"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          for path in "${paths[@]}"; do
+            url="${BASE_URL}${path}"
+            tmp="$(mktemp)"
+            code="$(curl -L --max-time 30 -sS -o "$tmp" -w "%{http_code}" "$url" || true)"
+
+            if [[ "$code" != "200" ]]; then
+              echo "❌ ${url} returned HTTP ${code}"
+              echo "- ❌ \`${path}\` -> HTTP ${code}" >> "$GITHUB_STEP_SUMMARY"
+              failures=$((failures + 1))
+              rm -f "$tmp"
+              continue
+            fi
+
+            if ! grep -qi "QUANTURA" "$tmp"; then
+              echo "❌ ${url} did not include expected Quantura marker text"
+              echo "- ❌ \`${path}\` -> 200 but marker text missing" >> "$GITHUB_STEP_SUMMARY"
+              failures=$((failures + 1))
+              rm -f "$tmp"
+              continue
+            fi
+
+            echo "✅ ${url}"
+            echo "- ✅ \`${path}\` -> 200" >> "$GITHUB_STEP_SUMMARY"
+            rm -f "$tmp"
+          done
+
+          if [[ "$failures" -gt 0 ]]; then
+            echo ""
+            echo "Smoke check failed with ${failures} failing route(s)." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          echo ""
+          echo "All monitored routes are healthy." >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,56 @@
+name: Workflow Readiness Report
+
+on:
+  schedule:
+    - cron: "0 13 * * 1" # Mondays 13:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  readiness:
+    runs-on: ubuntu-latest
+    name: Report secrets and integration readiness
+    env:
+      HAS_FIREBASE_SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_QUANTURA_E2E3D != '' }}
+      HAS_OPENAI: ${{ secrets.OPENAI_API_KEY != '' }}
+      HAS_SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL != '' }}
+      HAS_SLACK_BOT: ${{ secrets.SLACK_BOT_TOKEN != '' }}
+      HAS_AWS_KEY: ${{ secrets.AWS_ACCESS_KEY_ID != '' }}
+      HAS_AWS_SECRET: ${{ secrets.AWS_SECRET_ACCESS_KEY != '' }}
+      HAS_AUTOPILOT_ROLE: ${{ secrets.AUTOPILOT_ROLE_ARN != '' }}
+      HAS_AUTOPILOT_BUCKET: ${{ secrets.AUTOPILOT_S3_BUCKET != '' }}
+      HAS_LINEAR_KEY: ${{ secrets.LINEAR_API_KEY != '' }}
+      HAS_LINEAR_TEAM: ${{ secrets.LINEAR_TEAM_ID != '' }}
+    steps:
+      - name: Build readiness summary
+        run: |
+          echo "## Integration readiness snapshot" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Integration | Configured |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Firebase deploy service account | ${HAS_FIREBASE_SA} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| OpenAI API | ${HAS_OPENAI} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Slack webhook | ${HAS_SLACK_WEBHOOK} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Slack bot token | ${HAS_SLACK_BOT} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| AWS access key | ${HAS_AWS_KEY} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| AWS secret key | ${HAS_AWS_SECRET} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Autopilot role ARN | ${HAS_AUTOPILOT_ROLE} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Autopilot S3 bucket | ${HAS_AUTOPILOT_BUCKET} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Linear API key | ${HAS_LINEAR_KEY} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Linear team ID | ${HAS_LINEAR_TEAM} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          missing=0
+          for v in HAS_FIREBASE_SA HAS_OPENAI HAS_AWS_KEY HAS_AWS_SECRET; do
+            if [[ "${!v}" != "true" ]]; then
+              missing=$((missing + 1))
+            fi
+          done
+
+          if [[ "$missing" -gt 0 ]]; then
+            echo "⚠️ ${missing} core secret(s) missing. Some automation workflows may skip or fail." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "✅ Core deployment and compute secrets are configured." >> "$GITHUB_STEP_SUMMARY"
+          fi

@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Quantura Pricing | Plans for Research, Forecasting, and Collaboration</title>
+    <meta
+      name="description"
+      content="Choose a Quantura plan for forecasting, screening, collaboration, and premium research workflows. Shipped weekly."
+    />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://quantura-e2e3d.web.app/pricing" />
+    <meta property="og:title" content="Quantura Pricing" />
+    <meta property="og:description" content="Plans for forecasting, screening, collaboration, and premium research workflows." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://quantura-e2e3d.web.app/pricing" />
+    <meta property="og:image" content="/assets/quantura-logo.svg" />
+    <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
+
+    <script defer src="/__/firebase/12.9.0/firebase-app-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-auth-compat.js"></script>
+	    <script defer src="/__/firebase/12.9.0/firebase-firestore-compat.js"></script>
+	    <script defer src="/__/firebase/12.9.0/firebase-functions-compat.js"></script>
+	    <script defer src="/__/firebase/12.9.0/firebase-storage-compat.js"></script>
+	    <script defer src="/__/firebase/12.9.0/firebase-remote-config-compat.js"></script>
+	    <script defer src="/__/firebase/12.9.0/firebase-analytics-compat.js"></script>
+	    <script defer src="/__/firebase/init.js?useEmulator=false"></script>
+	    <script defer src="/app.js"></script>
+  </head>
+  <body class="pricing-page">
+    <header class="header">
+      <div class="container nav">
+        <a class="logo" href="/" aria-label="Quantura home"><span>QUANTURA</span></a>
+        <nav class="nav-links">
+          <a href="/forecasting" data-analytics="nav_forecasting"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Terminal</span></a>
+          <a href="/research" data-analytics="nav_research"><i class="iconoir-bookmark-book" aria-hidden="true"></i><span>Research</span></a>
+          <a href="/blog" data-analytics="nav_blog"><i class="iconoir-page" aria-hidden="true"></i><span>Blog</span></a>
+          <a href="/pricing" data-analytics="nav_pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>Pricing</span></a>
+          <a href="/contact" data-analytics="nav_contact"><i class="iconoir-mail" aria-hidden="true"></i><span>Contact</span></a>
+        </nav>
+        <div class="nav-actions">
+          <span id="header-user-email" class="small" style="max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Guest</span>
+          <span id="header-user-status" class="pill">Guest</span>
+          <button class="cta secondary" id="header-auth" type="button" data-analytics="nav_signin"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></button>
+          <a class="cta" href="/forecasting" data-analytics="nav_cta"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Open terminal</span></a>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="page-hero">
+        <div class="container content-grid">
+          <div>
+            <div class="eyebrow">Pricing</div>
+            <h1>Plans that scale from solo research to a full desk workflow.</h1>
+            <p>
+              Quantura keeps everything structured: forecasts, indicator overlays, screen runs, uploads, audit logs, and collaboration.
+              Choose a plan based on how much compute and automation you want to run each week.
+            </p>
+            <div class="hero-actions">
+              <a class="cta" id="pricing-auth-cta" href="/account" data-analytics="pricing_signin"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></a>
+              <a class="cta secondary" href="/forecasting" data-analytics="pricing_terminal"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Try the terminal</span></a>
+            </div>
+          </div>
+          <div class="card">
+            <h3>What’s included in every plan</h3>
+            <div class="feature-list">
+              <div class="feature"><span></span><i class="iconoir-shield-check" aria-hidden="true"></i>Secure sign-in with persistent sessions</div>
+              <div class="feature"><span></span><i class="iconoir-bookmark" aria-hidden="true"></i>Saved forecasts, screeners, and uploads</div>
+              <div class="feature"><span></span><i class="iconoir-group" aria-hidden="true"></i>Workspace collaboration and invite controls</div>
+              <div class="feature"><span></span><i class="iconoir-bell-notification" aria-hidden="true"></i>Push alerts and operational notifications</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container">
+          <div class="section-title">
+            <h2>Choose your plan</h2>
+            <p class="small">Monthly subscriptions include forecasting compute, screener storage, automation quotas, and collaboration controls.</p>
+          </div>
+
+          <div class="grid-3">
+            <div class="card">
+              <span class="badge">Starter</span>
+              <h3 style="margin-top: 14px;">Quantura Starter</h3>
+              <div class="price">$0</div>
+              <p class="small">For trying the terminal, saving forecasts, and exploring the screener.</p>
+              <div class="feature-list" style="margin-top: 16px;">
+                <div class="feature"><span></span><i class="iconoir-candlestick-chart" aria-hidden="true"></i>Forecasting terminal + saved runs</div>
+                <div class="feature"><span></span><i class="iconoir-graph-up" aria-hidden="true"></i>Indicator overlays and market context</div>
+                <div class="feature"><span></span><i class="iconoir-search" aria-hidden="true"></i>Basic screener runs with history</div>
+                <div class="feature"><span></span><i class="iconoir-bookmark" aria-hidden="true"></i>10 saved forecasts and 10 screener archives</div>
+                <div class="feature"><span></span><i class="iconoir-bell-notification" aria-hidden="true"></i>Email notifications + one browser push endpoint</div>
+              </div>
+              <div class="hero-actions" style="margin-top: 18px;">
+                <a class="cta secondary" id="pricing-starter-cta" href="/account" data-analytics="plan_starter_cta"><i class="iconoir-user-plus" aria-hidden="true"></i><span>Start free</span></a>
+              </div>
+            </div>
+
+            <div class="card">
+              <span class="badge" style="background: #e1f4f0; color: #146a5d;">Most popular</span>
+              <h3 style="margin-top: 14px;">Quantura Pro</h3>
+              <div class="price">$39</div>
+              <p class="small">For investors running weekly screens, forecasts, and export workflows.</p>
+              <div class="feature-list" style="margin-top: 16px;">
+                <div class="feature"><span></span><i class="iconoir-graph-up" aria-hidden="true"></i>Higher forecast and indicator limits</div>
+                <div class="feature"><span></span><i class="iconoir-group" aria-hidden="true"></i>Workspace collaboration (viewer/editor roles)</div>
+                <div class="feature"><span></span><i class="iconoir-message-text" aria-hidden="true"></i>Priority briefing automation and alerts</div>
+                <div class="feature"><span></span><i class="iconoir-share-android" aria-hidden="true"></i>Export strategy logic (Python, Pine, MQL5, TradeLocker JSON)</div>
+                <div class="feature"><span></span><i class="iconoir-reports" aria-hidden="true"></i>Executive Brief PDF + Slide Deck generation</div>
+                <div class="feature"><span></span><i class="iconoir-bell-notification" aria-hidden="true"></i>Live FCM push notifications with event log</div>
+              </div>
+              <div class="purchase-panel" data-product="Quantura Pro" data-price="39" data-currency="USD" data-stripe-url="#">
+                <button class="cta" data-action="purchase" data-label-guest="Sign in to continue" data-label-auth="Request Pro access" disabled>
+                  Sign in to continue
+                </button>
+                <p class="small purchase-note">Sign in to continue.</p>
+                <div class="notice purchase-success hidden"></div>
+                <button class="cta secondary hidden" data-action="stripe" type="button">Proceed to payment</button>
+              </div>
+            </div>
+
+            <div class="card">
+              <span class="badge" style="background: #fef1cc; color: #6d4c00;">Desk</span>
+              <h3 style="margin-top: 14px;">Quantura Desk</h3>
+              <div class="price">$199</div>
+              <p class="small">For teams that need more compute, automation, and internal collaboration.</p>
+              <div class="feature-list" style="margin-top: 16px;">
+                <div class="feature"><span></span><i class="iconoir-rocket" aria-hidden="true"></i>Highest forecast and screener throughput</div>
+                <div class="feature"><span></span><i class="iconoir-journal-page" aria-hidden="true"></i>Collaborator seats + audit trail</div>
+                <div class="feature"><span></span><i class="iconoir-info-circle" aria-hidden="true"></i>Priority support and custom workflows</div>
+                <div class="feature"><span></span><i class="iconoir-brain" aria-hidden="true"></i>Multi-model AI portfolio generation and social leaderboard controls</div>
+                <div class="feature"><span></span><i class="iconoir-calendar" aria-hidden="true"></i>Daily/weekly automation across 20-30 diversified tickers</div>
+                <div class="feature"><span></span><i class="iconoir-lock" aria-hidden="true"></i>Advanced governance, admin approvals, and workspace policy controls</div>
+                <div class="feature"><span></span><i class="iconoir-cloud-sync" aria-hidden="true"></i>Dedicated onboarding + integration support with your internal stack</div>
+              </div>
+              <div class="purchase-panel" data-product="Quantura Desk" data-price="199" data-currency="USD" data-stripe-url="#">
+                <button class="cta" data-action="purchase" data-label-guest="Sign in to continue" data-label-auth="Request Desk access" disabled>
+                  Sign in to continue
+                </button>
+                <p class="small purchase-note">Sign in to continue.</p>
+                <div class="notice purchase-success hidden"></div>
+                <button class="cta secondary hidden" data-action="stripe" type="button">Proceed to payment</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container callout">
+          <span class="badge" style="background: rgba(255,255,255,0.1); color: #f8fafc;">One-time report</span>
+          <h2>Need a bespoke Deep Forecast report?</h2>
+          <p>
+            If you want a decision-ready deck with scenario ranges, implied probability bands, and a clean action plan,
+            the Deep Forecast report is the fastest way to get clarity. Every engagement includes an AWS SageMaker Canvas
+            predictive analysis baseline so you can compare model-driven ranges against the market narrative.
+          </p>
+          <div class="feature-list" style="margin: 12px 0 4px;">
+            <div class="feature"><span></span><i class="iconoir-page" aria-hidden="true"></i>5 forecast horizons with quantile bands</div>
+            <div class="feature"><span></span><i class="iconoir-journal-page" aria-hidden="true"></i>Model-ready outputs saved to your dashboard</div>
+            <div class="feature"><span></span><i class="iconoir-clock" aria-hidden="true"></i>Delivery target: 5 business days</div>
+          </div>
+          <div class="hero-actions">
+            <div class="purchase-panel" data-product="Deep Forecast" data-price="349" data-currency="USD">
+              <button class="cta" data-action="purchase" data-label-guest="Sign in to request report" data-label-auth="Request Deep Forecast" disabled>
+                Sign in to request report
+              </button>
+              <p class="small purchase-note">Sign in to continue.</p>
+              <div class="notice purchase-success hidden"></div>
+              <button class="cta secondary hidden" data-action="stripe" type="button">Proceed to payment</button>
+            </div>
+            <a class="cta secondary" href="/forecasting" data-analytics="pricing_try_terminal"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Try the terminal</span></a>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container">
+          <div class="section-title">
+            <h2>Clarity-first toolset for active investors</h2>
+            <p class="small">From interactive charting to automated alerts and export-ready data workflows.</p>
+          </div>
+          <div class="grid-3">
+            <article class="card">
+              <h3><i class="iconoir-multiple-pages" aria-hidden="true"></i> Multi-layout charting</h3>
+              <p class="small">Switch layouts instantly, keep technical studies organized, and move from watchlist to deep chart inspection without losing context.</p>
+            </article>
+            <article class="card">
+              <h3><i class="iconoir-search" aria-hidden="true"></i> Advanced screener filters</h3>
+              <p class="small">Use descriptive, fundamental, technical, news, and ETF filter groups with fast tab switching and saved presets.</p>
+            </article>
+            <article class="card">
+              <h3><i class="iconoir-bell-notification" aria-hidden="true"></i> Alerts and push workflow</h3>
+              <p class="small">Track price moves, news catalysts, filings, and screener triggers with email and push delivery for time-sensitive decisions.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container">
+          <div class="section-title">
+            <h2>GPT-5 Model Access by Tier</h2>
+            <p class="small">Higher subscriptions unlock stronger GPT-5 variants and larger weekly agent limits.</p>
+          </div>
+          <div class="table-wrap card">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Model</th>
+                  <th>Input / 1M</th>
+                  <th>Cached Input / 1M</th>
+                  <th>Output / 1M</th>
+                  <th>Access Tier</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><i class="iconoir-flash" aria-hidden="true"></i> gpt-5-nano</td>
+                  <td>$0.05</td>
+                  <td>$0.005</td>
+                  <td>$0.40</td>
+                  <td>Free / Pro / Desk</td>
+                </tr>
+                <tr>
+                  <td><i class="iconoir-light-bulb-on" aria-hidden="true"></i> gpt-5-mini</td>
+                  <td>$0.25</td>
+                  <td>$0.025</td>
+                  <td>$2.00</td>
+                  <td>Free / Pro / Desk</td>
+                </tr>
+                <tr>
+                  <td><i class="iconoir-brain" aria-hidden="true"></i> gpt-5</td>
+                  <td>$1.25</td>
+                  <td>$0.125</td>
+                  <td>$10.00</td>
+                  <td>Pro / Desk</td>
+                </tr>
+                <tr>
+                  <td><i class="iconoir-journal-page" aria-hidden="true"></i> gpt-5.1</td>
+                  <td>$1.25</td>
+                  <td>$0.125</td>
+                  <td>$10.00</td>
+                  <td>Pro / Desk</td>
+                </tr>
+                <tr>
+                  <td><i class="iconoir-star" aria-hidden="true"></i> gpt-5.2</td>
+                  <td>$1.75</td>
+                  <td>$0.175</td>
+                  <td>$14.00</td>
+                  <td>Desk</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container">
+          <div class="section-title">
+            <h2>Plan Comparison</h2>
+            <p class="small">Feature depth increases from Starter to Pro and Desk, with the largest model and automation capacity on Desk.</p>
+          </div>
+          <div class="table-wrap card">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Capability</th>
+                  <th>Starter</th>
+                  <th>Pro</th>
+                  <th>Desk</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td><i class="iconoir-candlestick-chart" aria-hidden="true"></i> Live terminal + saved runs</td><td>Included</td><td>Included</td><td>Included</td></tr>
+                <tr><td><i class="iconoir-search" aria-hidden="true"></i> Screener presets</td><td>Up to 50</td><td>Up to 200</td><td>Unlimited workspace presets</td></tr>
+                <tr><td><i class="iconoir-brain" aria-hidden="true"></i> AI model access</td><td>gpt-5-nano, gpt-5-mini</td><td>+ gpt-5, gpt-5.1</td><td>All incl. gpt-5.2</td></tr>
+                <tr><td><i class="iconoir-calendar" aria-hidden="true"></i> Weekly AI screener credits</td><td>3</td><td>25</td><td>75</td></tr>
+                <tr><td><i class="iconoir-bell-notification" aria-hidden="true"></i> Alerts &amp; push notifications</td><td>Basic</td><td>Advanced</td><td>Advanced + team workflow</td></tr>
+                <tr><td><i class="iconoir-share-android" aria-hidden="true"></i> Export/API workflows</td><td>Limited</td><td>Included</td><td>Included + onboarding support</td></tr>
+                <tr><td><i class="iconoir-group" aria-hidden="true"></i> Collaboration seats</td><td>1 workspace owner</td><td>Editor/viewer workflow</td><td>Expanded team governance</td></tr>
+                <tr><td><i class="iconoir-wallet" aria-hidden="true"></i> Creator monetization (subscribe/tips)</td><td>Basic profile</td><td>Enabled</td><td>Enabled + higher throughput</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="container footer-grid">
+        <div>
+          <div class="logo">QUANTURA</div>
+          <p class="small">Decision intelligence for market research, forecasting, and execution.</p>
+          <div class="footer-social" aria-label="Quantura social links">
+            <a class="social-link" href="#" data-analytics="social_x" aria-label="X (coming soon)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.9 2H22l-6.8 7.8L23 22h-6.9l-5.4-6.9L4.7 22H1.6l7.3-8.4L1 2h7.1l4.9 6.3L18.9 2zm-1.2 18h1.7L7.2 3.9H5.4L17.7 20z"/></svg>
+            </a>
+            <a class="social-link" href="#" data-analytics="social_linkedin" aria-label="LinkedIn (coming soon)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.98 3.5C4.98 4.88 3.87 6 2.5 6S0 4.88 0 3.5 1.12 1 2.5 1 4.98 2.12 4.98 3.5zM0.5 8.5H4.5V23H0.5V8.5zM8.5 8.5H12.3V10.4h.1c.5-1 1.9-2.1 3.9-2.1 4.2 0 5 2.8 5 6.5V23h-4v-6.7c0-1.6 0-3.7-2.2-3.7-2.3 0-2.6 1.8-2.6 3.6V23h-4V8.5z"/></svg>
+            </a>
+            <a class="social-link" href="#" data-analytics="social_reddit" aria-label="Reddit (coming soon)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21.9 10.7c.1-.4.1-.8 0-1.2-.3-1-1.4-1.6-2.5-1.3-.6.2-1 .6-1.2 1.1-1.5-1-3.4-1.7-5.5-1.8l1-4.6 3.2.7c.1.8.8 1.4 1.7 1.4.9 0 1.7-.8 1.7-1.7S19.5 2 18.6 2c-.6 0-1.2.4-1.5.9l-3.7-.8c-.3-.1-.6.1-.7.4l-1.2 5.2c-2.2.1-4.2.8-5.7 1.8-.2-.5-.6-.9-1.2-1.1-1-.3-2.1.3-2.5 1.3-.1.4-.1.8 0 1.2.1.6.4 1 .9 1.3-.1.4-.1.9-.1 1.3 0 3.6 4.1 6.5 9.1 6.5s9.1-2.9 9.1-6.5c0-.4 0-.9-.1-1.3.5-.3.8-.8.9-1.3zM7.9 12.8c0-.8.7-1.5 1.5-1.5s1.5.7 1.5 1.5-.7 1.5-1.5 1.5-1.5-.6-1.5-1.5zm8.5 4c-.9.9-2.6 1.3-4.4 1.3s-3.5-.4-4.4-1.3c-.2-.2-.2-.5 0-.7.2-.2.5-.2.7 0 .6.6 2 1 3.7 1 1.7 0 3.1-.4 3.7-1 .2-.2.5-.2.7 0 .2.2.2.5 0 .7zm-1.8-2.5c-.8 0-1.5-.7-1.5-1.5s.7-1.5 1.5-1.5 1.5.7 1.5 1.5-.7 1.5-1.5 1.5z"/></svg>
+            </a>
+            <a class="social-link" href="#" data-analytics="social_github" aria-label="GitHub (coming soon)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .5C5.73.5.75 5.63.75 12c0 5.1 3.29 9.41 7.86 10.94.58.11.79-.26.79-.57v-2.1c-3.2.71-3.88-1.57-3.88-1.57-.53-1.37-1.29-1.74-1.29-1.74-1.05-.74.08-.73.08-.73 1.16.08 1.77 1.23 1.77 1.23 1.03 1.8 2.7 1.28 3.36.98.1-.77.4-1.28.72-1.58-2.55-.3-5.23-1.31-5.23-5.84 0-1.29.45-2.35 1.19-3.18-.12-.3-.52-1.53.11-3.2 0 0 .97-.32 3.18 1.21.92-.26 1.9-.39 2.88-.39.98 0 1.96.13 2.88.39 2.2-1.53 3.17-1.21 3.17-1.21.63 1.67.23 2.9.11 3.2.74.83 1.19 1.89 1.19 3.18 0 4.54-2.69 5.54-5.25 5.83.41.37.77 1.1.77 2.22v3.29c0 .31.21.68.8.57A11.3 11.3 0 0 0 23.25 12C23.25 5.63 18.27.5 12 .5z"/></svg>
+            </a>
+          </div>
+        </div>
+        <div class="small">
+          <strong>Explore</strong>
+          <div><a href="/">Home</a></div>
+          <div><a href="/forecasting">Forecasting</a></div>
+          <div><a href="/research">Research</a></div>
+          <div><a href="/blog">Blog</a></div>
+          <div><a href="/dashboard">Dashboard</a></div>
+          <div><a href="/pricing">Pricing</a></div>
+          <div><a href="/contact">Contact</a></div>
+        </div>
+        <div class="small">
+          <strong>Legal</strong>
+          <div><a href="/terms">Terms and Conditions</a></div>
+          <div><a href="/privacy">Privacy Policy</a></div>
+          <div><a href="/disclaimer">Disclaimer Policy</a></div>
+          <details class="footer-terms" style="margin-top:10px;">
+            <summary>Terms summary (important)</summary>
+            <ul class="footer-terms-list">
+              <li>By using Quantura, you confirm you are at least 18 years old and authorized to act for your account or business.</li>
+              <li>Paid plans renew automatically until canceled before the next billing date. Refund and cancellation rules are listed in the full Terms.</li>
+              <li>Quantura provides software and data tooling, not brokerage, investment advisory, legal, or tax services.</li>
+              <li>Market data, forecast outputs, and AI-generated content may be delayed, incomplete, or inaccurate and must be independently verified.</li>
+              <li>Services are provided "as is" to the maximum extent permitted by law, with liability limitations and dispute resolution terms in the full Terms.</li>
+              <li>Where enforceable, disputes may be resolved through individual arbitration and class action waiver terms.</li>
+            </ul>
+          </details>
+          <p class="small legal-copy">
+            Financial disclaimer: nothing on Quantura is investment, tax, accounting, or legal advice. Trading and options involve substantial risk, including possible loss of principal.
+          </p>
+        </div>
+      </div>
+      <div class="container small" style="margin-top: 24px;">
+        © 2026 Quantura. All rights reserved.
+      </div>
+    </footer>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>
