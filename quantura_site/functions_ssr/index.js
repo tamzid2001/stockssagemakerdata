@@ -79,6 +79,7 @@ const resolveTemplate = (pathname) => {
 
   const forecastingAliases = new Set([
     "/forecasting",
+    "/ticker-intelligence",
     "/indicators",
     "/trending",
     "/news",
@@ -102,6 +103,7 @@ const resolveTemplate = (pathname) => {
   if (dashboardAliases.has(route)) return "dashboard.html";
 
   if (route === "/screener") return "screener.html";
+  if (route === "/research") return "research.html";
   if (route === "/pricing") return "pricing.html";
   if (route === "/purchase") return "pricing.html";
   if (route === "/contact") return "contact.html";
@@ -139,6 +141,23 @@ const getServerTemplate = async () => {
       watchlist_enabled: "true",
       forecast_prophet_enabled: "true",
       forecast_timemixer_enabled: "true",
+      enable_social_leaderboard: "true",
+      forecast_model_primary: "Quantura Horizon",
+      promo_banner_text: "",
+      maintenance_mode: "false",
+      volatility_threshold: "0.05",
+      ai_usage_tiers: JSON.stringify({
+        free: {
+          allowed_models: ["gpt-4o-mini", "gemini-1.5-flash"],
+          daily_limit: 5,
+          volatility_alerts: false,
+        },
+        premium: {
+          allowed_models: ["gpt-4o", "claude-3-5-sonnet", "gemini-1.5-pro", "o1-preview"],
+          daily_limit: 50,
+          volatility_alerts: true,
+        },
+      }),
       push_notifications_enabled: "true",
       webpush_vapid_key: "",
       stripe_checkout_enabled: "true",
