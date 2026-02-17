@@ -33,7 +33,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--s3-uri", help="S3 URI to CSV (s3://bucket/key)")
     parser.add_argument("--timezone", default="America/New_York", help="Timezone for report date")
     parser.add_argument("--lookback-days", type=int, default=7, help="Lookback window for summary")
-    parser.add_argument("--openai-model", default=os.environ.get("OPENAI_MODEL", "gpt-4.1-mini"))
+    parser.add_argument("--openai-model", default=os.environ.get("OPENAI_MODEL", "gpt-5-mini"))
     parser.add_argument("--slack-channel", default=os.environ.get("SLACK_CHANNEL"))
     parser.add_argument("--dry-run", action="store_true", help="Print message without posting to Slack")
     return parser.parse_args()

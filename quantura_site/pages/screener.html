@@ -38,9 +38,9 @@
       <div class="container nav">
         <a class="logo" href="/" aria-label="Quantura home"><span>QUANTURA</span></a>
         <nav class="nav-links">
-          <a href="/screener" data-analytics="nav_screener"><i class="iconoir-search" aria-hidden="true"></i><span>Screener</span></a>
-          <a href="/blog" data-analytics="nav_blog"><i class="iconoir-page" aria-hidden="true"></i><span>Blog</span></a>
+          <a href="/forecasting" data-analytics="nav_forecasting"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Terminal</span></a>
           <a href="/research" data-analytics="nav_research"><i class="iconoir-bookmark-book" aria-hidden="true"></i><span>Research</span></a>
+          <a href="/blog" data-analytics="nav_blog"><i class="iconoir-page" aria-hidden="true"></i><span>Blog</span></a>
           <a href="/pricing" data-analytics="nav_pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>Pricing</span></a>
           <a href="/contact" data-analytics="nav_contact"><i class="iconoir-mail" aria-hidden="true"></i><span>Contact</span></a>
         </nav>
@@ -59,6 +59,29 @@
             <div class="small"><strong>Account</strong></div>
             <div class="small">Signed in as <span id="user-email">Not signed in</span></div>
             <div class="small">Status <span id="user-status" class="pill">Logged Out</span></div>
+            <details class="profile-settings">
+              <summary>Leaderboard profile</summary>
+              <form id="profile-form" class="profile-editor">
+                <label class="label" for="profile-username">Username</label>
+                <input id="profile-username" class="input" type="text" maxlength="32" placeholder="quantura_alpha" />
+                <div class="profile-links-grid">
+                  <label class="label" for="profile-social-x">X</label>
+                  <input id="profile-social-x" class="input" type="url" placeholder="https://x.com/username" />
+                  <label class="label" for="profile-social-linkedin">LinkedIn</label>
+                  <input id="profile-social-linkedin" class="input" type="url" placeholder="https://linkedin.com/in/username" />
+                  <label class="label" for="profile-social-github">GitHub</label>
+                  <input id="profile-social-github" class="input" type="url" placeholder="https://github.com/username" />
+                  <label class="label" for="profile-social-youtube">YouTube</label>
+                  <input id="profile-social-youtube" class="input" type="url" placeholder="https://youtube.com/@channel" />
+                  <label class="label" for="profile-social-tiktok">TikTok</label>
+                  <input id="profile-social-tiktok" class="input" type="url" placeholder="https://tiktok.com/@username" />
+                  <label class="label" for="profile-social-website">Website</label>
+                  <input id="profile-social-website" class="input" type="url" placeholder="https://your-site.com" />
+                </div>
+                <button class="cta secondary small" type="submit">Save profile</button>
+                <p id="profile-status" class="small muted">Sign in to set your public leaderboard profile.</p>
+              </form>
+            </details>
             <a class="cta secondary small" href="/forecasting"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Open terminal</span></a>
             <a class="cta secondary small" href="/dashboard"><i class="iconoir-dashboard" aria-hidden="true"></i><span>Open dashboard</span></a>
             <a class="cta secondary small hidden" id="nav-admin" href="/admin"><i class="iconoir-shield-check" aria-hidden="true"></i><span>Admin dashboard</span></a>
@@ -83,10 +106,10 @@
                 <div class="field">
                   <label class="label" for="screener-universe">Universe</label>
                   <select id="screener-universe" name="universe">
+                    <option value="trending">Trending</option>
                     <option value="large-cap">Large Cap</option>
                     <option value="mid-cap">Mid Cap</option>
                     <option value="small-cap">Small Cap</option>
-                    <option value="custom">Custom list</option>
                   </select>
                 </div>
                 <div class="field">
@@ -117,14 +140,379 @@
                   <input id="screener-agent-name" name="agentName" placeholder="Quantura Horizon" />
                 </div>
                 <div class="field">
-                  <label class="label" for="screener-model">Model settings</label>
-                  <select id="screener-model" name="model"></select>
-                  <div id="screener-model-meta" class="small muted">Model availability is controlled by your usage tier.</div>
+                  <label class="label" for="screener-model">AI Personality</label>
+                  <div class="personality-select-wrap">
+                    <select id="screener-model" name="model" class="personality-select"></select>
+                  </div>
+                  <div id="screener-model-meta" class="small muted">All personalities run on GPT-5 family models. Availability depends on your tier.</div>
                 </div>
+              </div>
+              <div class="screener-filter-tabs" role="tablist" aria-label="Screener filter groups">
+                <button type="button" class="screener-filter-tab is-active" data-screener-filter-tab="descriptive">Descriptive</button>
+                <button type="button" class="screener-filter-tab" data-screener-filter-tab="fundamental">Fundamental</button>
+                <button type="button" class="screener-filter-tab" data-screener-filter-tab="technical">Technical</button>
+                <button type="button" class="screener-filter-tab" data-screener-filter-tab="news">News</button>
+                <button type="button" class="screener-filter-tab" data-screener-filter-tab="etf">ETF</button>
+                <button type="button" class="screener-filter-tab" data-screener-filter-tab="all">All</button>
+              </div>
+              <div class="screener-filter-groups">
+                <section class="screener-filter-group is-active" data-screener-filter-group="descriptive">
+                  <div class="screener-filter-grid">
+                    <div class="field">
+                      <label class="label" for="screener-filter-exchange">Exchange</label>
+                      <select id="screener-filter-exchange" name="filterExchange">
+                        <option value="">Any</option>
+                        <option value="amex">AMEX</option>
+                        <option value="cboe">CBOE</option>
+                        <option value="nasdaq">NASDAQ</option>
+                        <option value="nyse">NYSE</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label class="label" for="screener-filter-index">Index</label>
+                      <select id="screener-filter-index" name="filterIndex">
+                        <option value="">Any</option>
+                        <option value="sp500">S&amp;P 500</option>
+                        <option value="nasdaq100">NASDAQ 100</option>
+                        <option value="djia">DJIA</option>
+                        <option value="russell2000">Russell 2000</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label class="label" for="screener-filter-sector">Sector</label>
+                      <select id="screener-filter-sector" name="filterSector">
+                        <option value="">Any</option>
+                        <option value="Technology">Technology</option>
+                        <option value="Communication Services">Communication Services</option>
+                        <option value="Consumer Cyclical">Consumer Cyclical</option>
+                        <option value="Consumer Defensive">Consumer Defensive</option>
+                        <option value="Energy">Energy</option>
+                        <option value="Financial Services">Financial Services</option>
+                        <option value="Healthcare">Healthcare</option>
+                        <option value="Industrials">Industrials</option>
+                        <option value="Real Estate">Real Estate</option>
+                        <option value="Utilities">Utilities</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label class="label" for="screener-filter-industry">Industry</label>
+                      <select id="screener-filter-industry" name="filterIndustry">
+                        <option value="">Any</option>
+                        <option value="Semiconductors">Semiconductors</option>
+                        <option value="Software - Infrastructure">Software - Infrastructure</option>
+                        <option value="Software - Application">Software - Application</option>
+                        <option value="Internet Content &amp; Information">Internet Content &amp; Information</option>
+                        <option value="Banks - Diversified">Banks - Diversified</option>
+                        <option value="Oil &amp; Gas Integrated">Oil &amp; Gas Integrated</option>
+                        <option value="Drug Manufacturers - General">Drug Manufacturers - General</option>
+                        <option value="Aerospace &amp; Defense">Aerospace &amp; Defense</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label class="label" for="screener-filter-country">Country</label>
+                      <select id="screener-filter-country" name="filterCountry">
+                        <option value="">Any</option>
+                        <option value="United States">USA</option>
+                        <option value="Canada">Canada</option>
+                        <option value="United Kingdom">United Kingdom</option>
+                        <option value="Germany">Germany</option>
+                        <option value="France">France</option>
+                        <option value="Japan">Japan</option>
+                        <option value="China">China</option>
+                        <option value="India">India</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label class="label" for="screener-filter-cap">Market Cap Profile</label>
+                      <select id="screener-filter-cap" name="filterCapProfile">
+                        <option value="">Any</option>
+                        <option value="mega">Mega ($200B+)</option>
+                        <option value="large">Large ($10B-$200B)</option>
+                        <option value="mid">Mid ($2B-$10B)</option>
+                        <option value="small">Small ($300M-$2B)</option>
+                        <option value="micro">Micro ($50M-$300M)</option>
+                        <option value="nano">Nano (&lt;$50M)</option>
+                        <option value="largeover">+Large (over $10B)</option>
+                        <option value="midover">+Mid (over $2B)</option>
+                        <option value="smallover">+Small (over $300M)</option>
+                        <option value="microover">+Micro (over $50M)</option>
+                        <option value="largeunder">-Large (under $200B)</option>
+                        <option value="midunder">-Mid (under $10B)</option>
+                        <option value="smallunder">-Small (under $2B)</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label class="label" for="screener-filter-theme">Theme</label>
+                      <select id="screener-filter-theme" name="filterTheme">
+                        <option value="">Any</option>
+                        <option value="artificialintelligence">Artificial Intelligence</option>
+                        <option value="cloudcomputing">Cloud Computing</option>
+                        <option value="cybersecurity">Cybersecurity</option>
+                        <option value="fintech">FinTech</option>
+                        <option value="semiconductors">Semiconductors</option>
+                        <option value="robotics">Robotics</option>
+                        <option value="energyrenewable">Energy - Renewable</option>
+                        <option value="defenseaerospace">Defense &amp; Aerospace</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label class="label" for="screener-filter-subtheme">Sub-theme</label>
+                      <select id="screener-filter-subtheme" name="filterSubtheme">
+                        <option value="">Any</option>
+                        <option value="aicompute">AI - Compute &amp; Acceleration</option>
+                        <option value="aienterprise">AI - Enterprise Productivity</option>
+                        <option value="cloudsecurity">Cloud - Security</option>
+                        <option value="fintechpayments">FinTech - Digital Payments</option>
+                        <option value="semiscompute">Semis - Logic, CPUs, GPUs</option>
+                        <option value="roboticsautomation">Robotics - Industrial Automation</option>
+                        <option value="energycleansolar">Energy Clean - Solar</option>
+                        <option value="defensedrones">Defense - Drones</option>
+                      </select>
+                    </div>
+                  </div>
+                </section>
+                <section class="screener-filter-group" data-screener-filter-group="fundamental">
+                  <div class="screener-filter-grid">
+                    <div class="field">
+                      <label class="label" for="screener-filter-pe">P/E</label>
+                      <select id="screener-filter-pe" name="filterPe">
+                        <option value="">Any</option>
+                        <option value="u15">Low (&lt;15)</option>
+                        <option value="u25">Under 25</option>
+                        <option value="o25">Over 25</option>
+                        <option value="o50">High (&gt;50)</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label class="label" for="screener-filter-forward-pe">Forward P/E</label>
+                      <select id="screener-filter-forward-pe" name="filterForwardPe">
+                        <option value="">Any</option>
+                        <option value="u15">Low (&lt;15)</option>
+                        <option value="u25">Under 25</option>
+                        <option value="o25">Over 25</option>
+                        <option value="o50">High (&gt;50)</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label class="label" for="screener-filter-peg">PEG</label>
+                      <select id="screener-filter-peg" name="filterPeg">
+                        <option value="">Any</option>
+                        <option value="u1">Low (&lt;1)</option>
+                        <option value="u2">Under 2</option>
+                        <option value="o2">Over 2</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label class="label" for="screener-filter-ps">P/S</label>
+                      <select id="screener-filter-ps" name="filterPs">
+                        <option value="">Any</option>
+                        <option value="u2">Under 2</option>
+                        <option value="u5">Under 5</option>
+                        <option value="o5">Over 5</option>
+                        <option value="o10">High (&gt;10)</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label class="label" for="screener-filter-pb">P/B</label>
+                      <select id="screener-filter-pb" name="filterPb">
+                        <option value="">Any</option>
+                        <option value="u1">Low (&lt;1)</option>
+                        <option value="u3">Under 3</option>
+                        <option value="o3">Over 3</option>
+                        <option value="o5">High (&gt;5)</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label class="label" for="screener-filter-div">Dividend Yield</label>
+                      <select id="screener-filter-div" name="filterDividendYield">
+                        <option value="">Any</option>
+                        <option value="none">None (0%)</option>
+                        <option value="pos">Positive (&gt;0%)</option>
+                        <option value="o2">Over 2%</option>
+                        <option value="o5">Over 5%</option>
+                        <option value="o10">Very High (&gt;10%)</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label class="label" for="screener-filter-roe">Return on Equity</label>
+                      <select id="screener-filter-roe" name="filterRoe">
+                        <option value="">Any</option>
+                        <option value="pos">Positive (&gt;0%)</option>
+                        <option value="o10">Over 10%</option>
+                        <option value="o20">Over 20%</option>
+                        <option value="o30">Over 30%</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label class="label" for="screener-filter-roa">Return on Assets</label>
+                      <select id="screener-filter-roa" name="filterRoa">
+                        <option value="">Any</option>
+                        <option value="pos">Positive (&gt;0%)</option>
+                        <option value="o5">Over 5%</option>
+                        <option value="o10">Over 10%</option>
+                        <option value="o15">Over 15%</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label class="label" for="screener-filter-debteq">Debt/Equity</label>
+                      <select id="screener-filter-debteq" name="filterDebtEq">
+                        <option value="">Any</option>
+                        <option value="u0.5">Low (&lt;0.5)</option>
+                        <option value="u1">Under 1</option>
+                        <option value="o1">Over 1</option>
+                        <option value="o2">Over 2</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label class="label" for="screener-filter-netmargin">Net Profit Margin</label>
+                      <select id="screener-filter-netmargin" name="filterNetMargin">
+                        <option value="">Any</option>
+                        <option value="pos">Positive (&gt;0%)</option>
+                        <option value="o5">Over 5%</option>
+                        <option value="o10">Over 10%</option>
+                        <option value="o20">High (&gt;20%)</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label class="label" for="screener-filter-analyst">Analyst Recom</label>
+                      <select id="screener-filter-analyst" name="filterAnalystRecom">
+                        <option value="">Any</option>
+                        <option value="strongbuy">Strong Buy (1)</option>
+                        <option value="buybetter">Buy or better</option>
+                        <option value="holdbetter">Hold or better</option>
+                        <option value="holdworse">Hold or worse</option>
+                        <option value="strongsell">Strong Sell (5)</option>
+                      </select>
+                    </div>
+                  </div>
+                </section>
+                <section class="screener-filter-group" data-screener-filter-group="technical">
+                  <div class="screener-filter-grid">
+                    <div class="field">
+                      <label class="label" for="screener-filter-price">Price</label>
+                      <select id="screener-filter-price" name="filterPrice">
+                        <option value="">Any</option>
+                        <option value="u5">Under $5</option>
+                        <option value="u20">Under $20</option>
+                        <option value="u50">Under $50</option>
+                        <option value="o10">Over $10</option>
+                        <option value="o50">Over $50</option>
+                        <option value="50to100">$50 to $100</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label class="label" for="screener-filter-short-float">Short Float</label>
+                      <select id="screener-filter-short-float" name="filterShortFloat">
+                        <option value="">Any</option>
+                        <option value="u5">Low (&lt;5%)</option>
+                        <option value="o10">Over 10%</option>
+                        <option value="o20">High (&gt;20%)</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label class="label" for="screener-filter-avg-vol">Average Volume</label>
+                      <select id="screener-filter-avg-vol" name="filterAverageVolume">
+                        <option value="">Any</option>
+                        <option value="o100">Over 100K</option>
+                        <option value="o500">Over 500K</option>
+                        <option value="o1000">Over 1M</option>
+                        <option value="o2000">Over 2M</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label class="label" for="screener-filter-rel-vol">Relative Volume</label>
+                      <select id="screener-filter-rel-vol" name="filterRelativeVolume">
+                        <option value="">Any</option>
+                        <option value="o1">Over 1</option>
+                        <option value="o1.5">Over 1.5</option>
+                        <option value="o2">Over 2</option>
+                        <option value="o3">Over 3</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label class="label" for="screener-filter-cur-vol">Current Volume</label>
+                      <select id="screener-filter-cur-vol" name="filterCurrentVolume">
+                        <option value="">Any</option>
+                        <option value="o500">Over 500K</option>
+                        <option value="o1000">Over 1M</option>
+                        <option value="o5000">Over 5M</option>
+                        <option value="o10000">Over 10M</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label class="label" for="screener-filter-option-short">Option / Short</label>
+                      <select id="screener-filter-option-short" name="filterOptionShort">
+                        <option value="">Any</option>
+                        <option value="option">Optionable</option>
+                        <option value="short">Shortable</option>
+                        <option value="optionshort">Optionable and shortable</option>
+                      </select>
+                    </div>
+                  </div>
+                </section>
+                <section class="screener-filter-group" data-screener-filter-group="news">
+                  <div class="screener-filter-grid">
+                    <div class="field">
+                      <label class="label" for="screener-filter-earnings">Earnings Date</label>
+                      <select id="screener-filter-earnings" name="filterEarningsDate">
+                        <option value="">Any</option>
+                        <option value="today">Today</option>
+                        <option value="tomorrow">Tomorrow</option>
+                        <option value="nextdays5">Next 5 Days</option>
+                        <option value="thisweek">This Week</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label class="label" for="screener-filter-target-price">Target Price</label>
+                      <select id="screener-filter-target-price" name="filterTargetPrice">
+                        <option value="">Any</option>
+                        <option value="above">Above Price</option>
+                        <option value="a10">10% Above Price</option>
+                        <option value="a20">20% Above Price</option>
+                        <option value="below">Below Price</option>
+                        <option value="b10">10% Below Price</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label class="label" for="screener-filter-ipo-date">IPO Date</label>
+                      <select id="screener-filter-ipo-date" name="filterIpoDate">
+                        <option value="">Any</option>
+                        <option value="prevyear">In the last year</option>
+                        <option value="prev5yrs">In the last 5 years</option>
+                        <option value="more5">More than 5 years ago</option>
+                      </select>
+                    </div>
+                  </div>
+                </section>
+                <section class="screener-filter-group" data-screener-filter-group="etf">
+                  <div class="screener-filter-grid">
+                    <div class="field">
+                      <label class="label" for="screener-filter-shares-outstanding">Shares Outstanding</label>
+                      <select id="screener-filter-shares-outstanding" name="filterSharesOutstanding">
+                        <option value="">Any</option>
+                        <option value="u100">Under 100M</option>
+                        <option value="o100">Over 100M</option>
+                        <option value="o500">Over 500M</option>
+                        <option value="o1000">Over 1B</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label class="label" for="screener-filter-float">Float</label>
+                      <select id="screener-filter-float" name="filterFloat">
+                        <option value="">Any</option>
+                        <option value="u50">Under 50M</option>
+                        <option value="o50">Over 50M</option>
+                        <option value="o100">Over 100M</option>
+                        <option value="u50p">Under 50% of shares outstanding</option>
+                        <option value="o70p">Over 70% of shares outstanding</option>
+                      </select>
+                    </div>
+                  </div>
+                </section>
               </div>
               <div class="ai-credits-shell">
                 <div class="ai-credits-head">
-                  <span>Daily Credits</span>
+                  <span>Weekly Credits</span>
                   <span id="screener-credits-text">0 / 0</span>
                 </div>
                 <div class="ai-credits-bar"><span id="screener-credits-fill"></span></div>
@@ -132,7 +520,8 @@
               <div class="small muted" id="screener-results-count">Results Found: —</div>
               <div class="field">
                 <label class="label" for="screener-notes">Criteria</label>
-                <textarea id="screener-notes" name="notes" placeholder='Example: "Tech, P/E &lt; 20, high free cash flow"' ></textarea>
+                <textarea id="screener-notes" name="notes" placeholder='Examples: "Tech, P/E &lt; 20, high free cash flow" or "Nancy Pelosi stock portfolio" or "Jeff Bezos favorite stocks"' ></textarea>
+                <p class="small muted">The screener agent is web-enabled and will infer symbols from natural-language portfolio prompts.</p>
               </div>
 	              <button class="cta" id="screener-generate-button" type="submit" data-analytics="screener_submit"><i class="iconoir-search" aria-hidden="true"></i><span>Generate AI Portfolio</span></button>
 	            </form>
@@ -178,14 +567,32 @@
                         </select>
                       </div>
                       <div class="field" style="margin:0; min-width: 170px;">
-                        <label class="label" for="ai-leaderboard-model-filter">Model filter</label>
+                        <label class="label" for="ai-leaderboard-model-filter">Personality filter</label>
                         <select id="ai-leaderboard-model-filter"></select>
                       </div>
                     </div>
                   </div>
                   <div id="ai-agent-leaderboard" class="panel-output small" style="max-height: none;"></div>
                 </div>
-	          </div>
+                <div class="card help-article">
+                  <h3>Screener help</h3>
+                  <p class="small">
+                    Quantura follows a professional multi-group filtering workflow: start with Descriptive scope, tighten Fundamental quality, confirm Technical participation, then add News/ETF structure filters.
+                  </p>
+                  <div class="help-kv-grid small">
+                    <div><strong>Descriptive:</strong> exchange, index, sector, geography, market cap profile.</div>
+                    <div><strong>Fundamental:</strong> valuation, yield, profitability, leverage, analyst consensus.</div>
+                    <div><strong>Technical:</strong> price/volume pressure and short-float context.</div>
+                    <div><strong>News:</strong> earnings timing, target dislocation, IPO age windows.</div>
+                  </div>
+                  <details class="learn-more">
+                    <summary>Technical analysis introduction</summary>
+                    <p class="small">
+                      Use technical filters for confirmation, not prediction. Prioritize setups where trend, momentum, and participation agree with your fundamental thesis.
+                    </p>
+                  </details>
+                </div>
+		          </div>
         </div>
       </section>
     </div>
@@ -216,7 +623,7 @@
           <strong>Explore</strong>
           <div><a href="/">Home</a></div>
           <div><a href="/forecasting">Forecasting</a></div>
-          <div><a href="/screener">Screener</a></div>
+          <div><a href="/research">Research</a></div>
           <div><a href="/blog">Blog</a></div>
           <div><a href="/dashboard">Dashboard</a></div>
           <div><a href="/pricing">Pricing</a></div>
