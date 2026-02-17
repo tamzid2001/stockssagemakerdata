@@ -149,6 +149,7 @@ const getServerTemplate = async () => {
       promo_banner_text: "",
       maintenance_mode: "false",
       volatility_threshold: "0.05",
+      llm_allowed_models: "gpt-5-nano,gpt-5-mini,gpt-5,gpt-5.1,gpt-5.2",
       ai_usage_tiers: JSON.stringify({
         free: {
           allowed_models: ["gpt-5-nano", "gpt-5-mini"],

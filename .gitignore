@@ -19,6 +19,8 @@ quantura_ios/**/GoogleService-Info.plist
 quantura_ios/**/GoogleService-Info.local.plist
 quantura_android/**/google-services.json
 quantura_android/**/google-services.local.json
+**/xcuserdata/
+*.xcuserstate
 *.local
 .DS_Store
 __pycache__/

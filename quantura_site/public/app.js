@@ -1,6 +1,5 @@
 (() => {
   const ADMIN_EMAIL = "tamzid257@gmail.com";
-  const STRIPE_URL = "https://buy.stripe.com/8x24gze7a86K1zE9M20co08";
   const FCM_TOKEN_CACHE_KEY = "quantura_fcm_token";
   const COOKIE_CONSENT_KEY = "quantura_cookie_consent";
   const FEEDBACK_PROMPT_KEY = "quantura_feedback_prompt_v1";
@@ -13,7 +12,6 @@
   const FCM_LOG_CACHE_KEY = "quantura_fcm_log_v1";
   const CHART_RANGE_CACHE_KEY = "quantura_chart_range_v1";
   const CHART_VIEW_CACHE_KEY = "quantura_chart_view_v1";
-  const CHART_ENGINE_CACHE_KEY = "quantura_chart_engine_v1";
   const TRADINGVIEW_THEME_CACHE_KEY = "quantura_tv_theme_v1";
   const LANGUAGE_PREFERENCE_KEY = "quantura_language_v1";
   const COUNTRY_PREFERENCE_KEY = "quantura_country_v1";
@@ -42,6 +40,11 @@
     "UNH", "LLY", "JNJ", "XOM", "CVX", "CAT", "DE", "KO", "PEP",
     "COST", "WMT", "NKE", "PLTR",
   ];
+  const FEATURE_VOTE_KEYS = new Set(["uploads", "autopilot"]);
+  const FEATURE_VOTE_LABELS = Object.freeze({
+    uploads: "Upload predictions CSV",
+    autopilot: "Weekly Brief Autopilot",
+  });
   const AI_MODEL_CATALOG = [
     {
       id: "gpt-5-nano",
@@ -88,7 +91,26 @@
       helper: "Looks for crowded trades and asymmetric reversals.",
       pricing: { input: 1.75, cached_input: 0.175, output: 14.0 },
     },
+    {
+      id: "amazon.nova-lite-v1:0",
+      provider: "amazon_nova",
+      tier: "Nova",
+      label: "Nova Flow",
+      personality: "balanced",
+      helper: "Amazon Nova lightweight reasoning path.",
+      pricing: { input: null, cached_input: null, output: null },
+    },
+    {
+      id: "amazon.nova-pro-v1:0",
+      provider: "amazon_nova",
+      tier: "Nova",
+      label: "Nova Operator",
+      personality: "deep_research",
+      helper: "Amazon Nova high-depth analysis path.",
+      pricing: { input: null, cached_input: null, output: null },
+    },
   ];
+  const DEFAULT_LLM_ALLOWED_MODELS = ["gpt-5-nano", "gpt-5-mini", "gpt-5", "gpt-5.1", "gpt-5.2"];
   const AI_USAGE_TIER_DEFAULTS = {
     free: {
       allowed_models: ["gpt-5-nano", "gpt-5-mini"],
@@ -111,6 +133,7 @@
   };
   const MODEL_PROVIDER_LABEL = {
     openai: "OpenAI",
+    amazon_nova: "Amazon Nova",
   };
   const SUPPORTED_LANGUAGES = new Set(["en", "es", "fr", "de", "ar", "bn"]);
   const COUNTRY_DEFAULT_LANGUAGE = Object.freeze({
@@ -129,6 +152,438 @@
     CN: "en",
     BR: "en",
     AU: "en",
+  });
+  const UI_I18N_TEXT = Object.freeze({
+    en: Object.freeze({
+      nav_terminal: "Terminal",
+      nav_research: "Research",
+      nav_blog: "Blog",
+      nav_pricing: "Pricing",
+      nav_contact: "Contact",
+      nav_notifications: "Notifications",
+      sign_in: "Sign in",
+      sign_out: "Sign out",
+      dashboard: "Dashboard",
+      open_dashboard: "Open dashboard",
+      go_to_dashboard: "Go to dashboard",
+      start_free: "Start free",
+      logged_in: "Logged In",
+      logged_out: "Logged Out",
+      not_signed_in: "Not signed in",
+      open_billing_portal: "Open Stripe billing portal",
+      signin_manage_billing: "Sign in to manage billing",
+      signin_set_profile: "Sign in to set your public leaderboard profile.",
+      open_notifications: "Open notifications",
+      signin_manage_notifications: "Sign in to manage notifications",
+      account: "Account",
+      leaderboard_profile: "Leaderboard profile",
+      sidebar_forecast: "Forecast",
+      sidebar_ticker_intelligence: "Ticker Intelligence",
+      sidebar_indicators: "Indicators",
+      sidebar_trending: "Trending",
+      sidebar_news_data: "News and data",
+      sidebar_corporate_events: "Corporate events",
+      sidebar_market_headlines: "Market headlines",
+      sidebar_ask_gpt5: "Ask GPT-5",
+      sidebar_options: "Options",
+      sidebar_saved_forecasts: "Saved forecasts",
+      sidebar_backtesting: "Backtesting",
+      sidebar_learn_more: "Learn more",
+      sidebar_screener: "Screener",
+      sidebar_ai_leaderboard: "AI Leaderboard",
+      sidebar_watchlist_alerts: "Watchlist and alerts",
+      panel_forecast_title: "Forecast",
+      panel_forecast_subtitle: "Generate quantile bands for the ticker in your chart and save the run so you can re-plot it later.",
+      panel_market_headlines_title: "Top market headlines",
+      panel_market_headlines_subtitle: "Top country-level market headlines plus social posts from X, Reddit, Facebook, and Instagram.",
+      panel_ticker_query_title: "Ask GPT-5",
+      panel_ticker_query_subtitle: "Query any ticker in plain language. Quantura enriches with market context and headlines.",
+      label_ticker: "Ticker",
+      label_timeframe: "Timeframe",
+      button_load_chart: "Load chart",
+      terminal_tip: "Tip: pick a panel on the left, then click any ticker in results to update the chart immediately.",
+      label_market_country: "Country",
+      button_load_market_feed: "Load market feed",
+      label_response_language: "Response language",
+      label_question: "Question",
+      button_ask_gpt5: "Ask GPT-5",
+      query_result: "Query result",
+      language_selector_label: "Language",
+      language_auto: "Auto",
+      language_english: "English",
+      language_spanish: "Spanish",
+      language_french: "French",
+      language_german: "German",
+      language_arabic: "Arabic",
+      language_bengali: "Bengali",
+      question_placeholder: "Example: Is this stock overvalued vs peers, and what are the top near-term risks?",
+    }),
+    es: Object.freeze({
+      nav_terminal: "Terminal",
+      nav_research: "Investigacion",
+      nav_blog: "Blog",
+      nav_pricing: "Precios",
+      nav_contact: "Contacto",
+      nav_notifications: "Notificaciones",
+      sign_in: "Iniciar sesion",
+      sign_out: "Cerrar sesion",
+      dashboard: "Panel",
+      open_dashboard: "Abrir panel",
+      go_to_dashboard: "Ir al panel",
+      start_free: "Comenzar gratis",
+      logged_in: "Sesion iniciada",
+      logged_out: "Sesion cerrada",
+      not_signed_in: "No has iniciado sesion",
+      open_billing_portal: "Abrir portal de facturacion de Stripe",
+      signin_manage_billing: "Inicia sesion para gestionar la facturacion",
+      signin_set_profile: "Inicia sesion para configurar tu perfil publico del ranking.",
+      open_notifications: "Abrir notificaciones",
+      signin_manage_notifications: "Inicia sesion para gestionar notificaciones",
+      account: "Cuenta",
+      leaderboard_profile: "Perfil del ranking",
+      sidebar_forecast: "Pronostico",
+      sidebar_ticker_intelligence: "Inteligencia del ticker",
+      sidebar_indicators: "Indicadores",
+      sidebar_trending: "Tendencias",
+      sidebar_news_data: "Noticias y datos",
+      sidebar_corporate_events: "Eventos corporativos",
+      sidebar_market_headlines: "Titulares del mercado",
+      sidebar_ask_gpt5: "Preguntar a GPT-5",
+      sidebar_options: "Opciones",
+      sidebar_saved_forecasts: "Pronosticos guardados",
+      sidebar_backtesting: "Backtesting",
+      sidebar_learn_more: "Mas informacion",
+      sidebar_screener: "Screener",
+      sidebar_watchlist_alerts: "Lista y alertas",
+      panel_forecast_title: "Pronostico",
+      panel_forecast_subtitle: "Genera bandas de cuantiles para el ticker de tu grafico y guarda la ejecucion para volver a trazarla despues.",
+      panel_market_headlines_title: "Titulares del mercado",
+      panel_market_headlines_subtitle: "Principales titulares por pais junto con publicaciones de X, Reddit, Facebook e Instagram.",
+      panel_ticker_query_title: "Preguntar a GPT-5",
+      panel_ticker_query_subtitle: "Consulta cualquier ticker en lenguaje natural. Quantura lo enriquece con contexto de mercado y titulares.",
+      label_ticker: "Ticker",
+      label_timeframe: "Periodo",
+      button_load_chart: "Cargar grafico",
+      terminal_tip: "Consejo: elige un panel a la izquierda y luego haz clic en cualquier ticker para actualizar el grafico al instante.",
+      label_market_country: "Pais",
+      button_load_market_feed: "Cargar mercado",
+      label_response_language: "Idioma de respuesta",
+      label_question: "Pregunta",
+      button_ask_gpt5: "Preguntar a GPT-5",
+      query_result: "Resultado de la consulta",
+      language_selector_label: "Idioma",
+      language_auto: "Automatico",
+      language_english: "Ingles",
+      language_spanish: "Espanol",
+      language_french: "Frances",
+      language_german: "Aleman",
+      language_arabic: "Arabe",
+      language_bengali: "Bengali",
+      question_placeholder: "Ejemplo: Este valor esta sobrevalorado frente a sus pares y cuales son los principales riesgos a corto plazo?",
+    }),
+    fr: Object.freeze({
+      nav_terminal: "Terminal",
+      nav_research: "Recherche",
+      nav_blog: "Blog",
+      nav_pricing: "Tarifs",
+      nav_contact: "Contact",
+      nav_notifications: "Notifications",
+      sign_in: "Se connecter",
+      sign_out: "Se deconnecter",
+      dashboard: "Tableau de bord",
+      open_dashboard: "Ouvrir le tableau de bord",
+      go_to_dashboard: "Aller au tableau de bord",
+      start_free: "Commencer gratuitement",
+      logged_in: "Connecte",
+      logged_out: "Deconnecte",
+      not_signed_in: "Non connecte",
+      open_billing_portal: "Ouvrir le portail de facturation Stripe",
+      signin_manage_billing: "Connectez-vous pour gerer la facturation",
+      signin_set_profile: "Connectez-vous pour configurer votre profil public du classement.",
+      open_notifications: "Ouvrir les notifications",
+      signin_manage_notifications: "Connectez-vous pour gerer les notifications",
+      account: "Compte",
+      leaderboard_profile: "Profil du classement",
+      sidebar_forecast: "Prevision",
+      sidebar_ticker_intelligence: "Intelligence du ticker",
+      sidebar_indicators: "Indicateurs",
+      sidebar_trending: "Tendances",
+      sidebar_news_data: "Actualites et donnees",
+      sidebar_corporate_events: "Evenements d'entreprise",
+      sidebar_market_headlines: "Titres du marche",
+      sidebar_ask_gpt5: "Demander a GPT-5",
+      sidebar_options: "Options",
+      sidebar_saved_forecasts: "Previsions enregistrees",
+      sidebar_backtesting: "Backtesting",
+      sidebar_learn_more: "En savoir plus",
+      sidebar_screener: "Screener",
+      sidebar_watchlist_alerts: "Watchlist et alertes",
+      panel_forecast_title: "Prevision",
+      panel_forecast_subtitle: "Generez des bandes de quantiles pour le ticker de votre graphique et enregistrez l'execution pour la recharger plus tard.",
+      panel_market_headlines_title: "Titres du marche",
+      panel_market_headlines_subtitle: "Principaux titres par pays avec des publications de X, Reddit, Facebook et Instagram.",
+      panel_ticker_query_title: "Demander a GPT-5",
+      panel_ticker_query_subtitle: "Interrogez n'importe quel ticker en langage naturel. Quantura ajoute le contexte de marche et les titres.",
+      label_ticker: "Ticker",
+      label_timeframe: "Horizon",
+      button_load_chart: "Charger le graphique",
+      terminal_tip: "Astuce: choisissez un panneau a gauche puis cliquez sur un ticker pour mettre a jour le graphique immediatement.",
+      label_market_country: "Pays",
+      button_load_market_feed: "Charger le flux marche",
+      label_response_language: "Langue de reponse",
+      label_question: "Question",
+      button_ask_gpt5: "Demander a GPT-5",
+      query_result: "Resultat de la requete",
+      language_selector_label: "Langue",
+      language_auto: "Auto",
+      language_english: "Anglais",
+      language_spanish: "Espagnol",
+      language_french: "Francais",
+      language_german: "Allemand",
+      language_arabic: "Arabe",
+      language_bengali: "Bengali",
+      question_placeholder: "Exemple: Cette action est-elle survaluee par rapport a ses pairs et quels sont les principaux risques a court terme?",
+    }),
+    de: Object.freeze({
+      nav_terminal: "Terminal",
+      nav_research: "Research",
+      nav_blog: "Blog",
+      nav_pricing: "Preise",
+      nav_contact: "Kontakt",
+      nav_notifications: "Benachrichtigungen",
+      sign_in: "Anmelden",
+      sign_out: "Abmelden",
+      dashboard: "Dashboard",
+      open_dashboard: "Dashboard offnen",
+      go_to_dashboard: "Zum Dashboard",
+      start_free: "Kostenlos starten",
+      logged_in: "Angemeldet",
+      logged_out: "Abgemeldet",
+      not_signed_in: "Nicht angemeldet",
+      open_billing_portal: "Stripe-Abrechnungsportal offnen",
+      signin_manage_billing: "Zum Verwalten der Abrechnung anmelden",
+      signin_set_profile: "Melden Sie sich an, um Ihr offentliches Leaderboard-Profil einzurichten.",
+      open_notifications: "Benachrichtigungen offnen",
+      signin_manage_notifications: "Zum Verwalten von Benachrichtigungen anmelden",
+      account: "Konto",
+      leaderboard_profile: "Leaderboard-Profil",
+      sidebar_forecast: "Forecast",
+      sidebar_ticker_intelligence: "Ticker-Intelligence",
+      sidebar_indicators: "Indikatoren",
+      sidebar_trending: "Trending",
+      sidebar_news_data: "News und Daten",
+      sidebar_corporate_events: "Unternehmensereignisse",
+      sidebar_market_headlines: "Markt-Schlagzeilen",
+      sidebar_ask_gpt5: "GPT-5 fragen",
+      sidebar_options: "Optionen",
+      sidebar_saved_forecasts: "Gespeicherte Forecasts",
+      sidebar_backtesting: "Backtesting",
+      sidebar_learn_more: "Mehr erfahren",
+      sidebar_screener: "Screener",
+      sidebar_watchlist_alerts: "Watchlist und Alarme",
+      panel_forecast_title: "Forecast",
+      panel_forecast_subtitle: "Erzeuge Quantil-Bander fur den Ticker in deinem Chart und speichere den Lauf fur spatere Vergleiche.",
+      panel_market_headlines_title: "Top-Markt-Schlagzeilen",
+      panel_market_headlines_subtitle: "Wichtigste Schlagzeilen je Land plus Social-Posts von X, Reddit, Facebook und Instagram.",
+      panel_ticker_query_title: "GPT-5 fragen",
+      panel_ticker_query_subtitle: "Stelle Fragen zu jedem Ticker in naturlicher Sprache. Quantura erganzt Markt-Kontext und Schlagzeilen.",
+      label_ticker: "Ticker",
+      label_timeframe: "Zeitrahmen",
+      button_load_chart: "Chart laden",
+      terminal_tip: "Tipp: Wahle links ein Panel und klicke dann auf einen Ticker, um den Chart sofort zu aktualisieren.",
+      label_market_country: "Land",
+      button_load_market_feed: "Markt-Feed laden",
+      label_response_language: "Antwortsprache",
+      label_question: "Frage",
+      button_ask_gpt5: "GPT-5 fragen",
+      query_result: "Abfrageergebnis",
+      language_selector_label: "Sprache",
+      language_auto: "Auto",
+      language_english: "Englisch",
+      language_spanish: "Spanisch",
+      language_french: "Franzosisch",
+      language_german: "Deutsch",
+      language_arabic: "Arabisch",
+      language_bengali: "Bengalisch",
+      question_placeholder: "Beispiel: Ist diese Aktie gegenuber Peers uberbewertet und was sind die wichtigsten kurzfristigen Risiken?",
+    }),
+    ar: Object.freeze({
+      nav_terminal: "المحطة",
+      nav_research: "الابحاث",
+      nav_blog: "المدونة",
+      nav_pricing: "الاسعار",
+      nav_contact: "تواصل",
+      nav_notifications: "الاشعارات",
+      sign_in: "تسجيل الدخول",
+      sign_out: "تسجيل الخروج",
+      dashboard: "لوحة التحكم",
+      open_dashboard: "فتح لوحة التحكم",
+      go_to_dashboard: "اذهب الى لوحة التحكم",
+      start_free: "ابدأ مجانا",
+      logged_in: "تم تسجيل الدخول",
+      logged_out: "تم تسجيل الخروج",
+      not_signed_in: "غير مسجل الدخول",
+      open_billing_portal: "فتح بوابة فواتير Stripe",
+      signin_manage_billing: "سجل الدخول لادارة الفواتير",
+      signin_set_profile: "سجل الدخول لاعداد ملفك العام في لوحة المتصدرين.",
+      open_notifications: "فتح الاشعارات",
+      signin_manage_notifications: "سجل الدخول لادارة الاشعارات",
+      account: "الحساب",
+      leaderboard_profile: "ملف لوحة المتصدرين",
+      sidebar_forecast: "التوقع",
+      sidebar_ticker_intelligence: "ذكاء الرمز",
+      sidebar_indicators: "المؤشرات",
+      sidebar_trending: "الترند",
+      sidebar_news_data: "الاخبار والبيانات",
+      sidebar_corporate_events: "احداث الشركات",
+      sidebar_market_headlines: "عناوين السوق",
+      sidebar_ask_gpt5: "اسأل GPT-5",
+      sidebar_options: "الخيارات",
+      sidebar_saved_forecasts: "التوقعات المحفوظة",
+      sidebar_backtesting: "اختبار رجعي",
+      sidebar_learn_more: "اعرف المزيد",
+      sidebar_screener: "الفلتر",
+      sidebar_watchlist_alerts: "قائمة المراقبة والتنبيهات",
+      panel_forecast_title: "التوقع",
+      panel_forecast_subtitle: "انشئ نطاقات الكوانتايل للرمز في الرسم واحفظ التشغيل لاعادة عرضه لاحقا.",
+      panel_market_headlines_title: "ابرز عناوين السوق",
+      panel_market_headlines_subtitle: "ابرز عناوين السوق حسب البلد مع منشورات من X وReddit وFacebook وInstagram.",
+      panel_ticker_query_title: "اسأل GPT-5",
+      panel_ticker_query_subtitle: "اسأل عن اي رمز بلغة طبيعية. Quantura يضيف سياق السوق والعناوين.",
+      label_ticker: "الرمز",
+      label_timeframe: "الاطار الزمني",
+      button_load_chart: "تحميل الرسم",
+      terminal_tip: "نصيحة: اختر لوحة من اليسار ثم اضغط على اي رمز لتحديث الرسم فورا.",
+      label_market_country: "البلد",
+      button_load_market_feed: "تحميل موجز السوق",
+      label_response_language: "لغة الاجابة",
+      label_question: "السؤال",
+      button_ask_gpt5: "اسأل GPT-5",
+      query_result: "نتيجة الاستعلام",
+      language_selector_label: "اللغة",
+      language_auto: "تلقائي",
+      language_english: "الانجليزية",
+      language_spanish: "الاسبانية",
+      language_french: "الفرنسية",
+      language_german: "الالمانية",
+      language_arabic: "العربية",
+      language_bengali: "البنغالية",
+      question_placeholder: "مثال: هل هذا السهم مبالغ في تقييمه مقارنة بنظرائه وما اهم المخاطر القريبة؟",
+    }),
+    bn: Object.freeze({
+      nav_terminal: "টার্মিনাল",
+      nav_research: "গবেষণা",
+      nav_blog: "ব্লগ",
+      nav_pricing: "মূল্য",
+      nav_contact: "যোগাযোগ",
+      nav_notifications: "নোটিফিকেশন",
+      sign_in: "সাইন ইন",
+      sign_out: "সাইন আউট",
+      dashboard: "ড্যাশবোর্ড",
+      open_dashboard: "ড্যাশবোর্ড খুলুন",
+      go_to_dashboard: "ড্যাশবোর্ডে যান",
+      start_free: "ফ্রি শুরু করুন",
+      logged_in: "লগড ইন",
+      logged_out: "লগড আউট",
+      not_signed_in: "সাইন ইন করা হয়নি",
+      open_billing_portal: "Stripe বিলিং পোর্টাল খুলুন",
+      signin_manage_billing: "বিলিং পরিচালনা করতে সাইন ইন করুন",
+      signin_set_profile: "আপনার পাবলিক লিডারবোর্ড প্রোফাইল সেট করতে সাইন ইন করুন।",
+      open_notifications: "নোটিফিকেশন খুলুন",
+      signin_manage_notifications: "নোটিফিকেশন পরিচালনা করতে সাইন ইন করুন",
+      account: "অ্যাকাউন্ট",
+      leaderboard_profile: "লিডারবোর্ড প্রোফাইল",
+      sidebar_forecast: "ফোরকাস্ট",
+      sidebar_ticker_intelligence: "টিকার ইন্টেলিজেন্স",
+      sidebar_indicators: "ইন্ডিকেটর",
+      sidebar_trending: "ট্রেন্ডিং",
+      sidebar_news_data: "খবর ও ডেটা",
+      sidebar_corporate_events: "করপোরেট ইভেন্ট",
+      sidebar_market_headlines: "মার্কেট হেডলাইন",
+      sidebar_ask_gpt5: "GPT-5 কে জিজ্ঞাসা করুন",
+      sidebar_options: "অপশন",
+      sidebar_saved_forecasts: "সংরক্ষিত ফোরকাস্ট",
+      sidebar_backtesting: "ব্যাকটেস্টিং",
+      sidebar_learn_more: "আরও জানুন",
+      sidebar_screener: "স্ক্রিনার",
+      sidebar_watchlist_alerts: "ওয়াচলিস্ট ও অ্যালার্ট",
+      panel_forecast_title: "ফোরকাস্ট",
+      panel_forecast_subtitle: "চার্টে থাকা টিকারের জন্য কোয়ান্টাইল ব্যান্ড তৈরি করুন এবং পরে পুনরায় দেখার জন্য রান সংরক্ষণ করুন।",
+      panel_market_headlines_title: "শীর্ষ মার্কেট হেডলাইন",
+      panel_market_headlines_subtitle: "দেশভিত্তিক শীর্ষ বাজারের খবরের সাথে X, Reddit, Facebook এবং Instagram পোস্ট দেখুন।",
+      panel_ticker_query_title: "GPT-5 কে জিজ্ঞাসা করুন",
+      panel_ticker_query_subtitle: "স্বাভাবিক ভাষায় যেকোনো টিকার জিজ্ঞাসা করুন। Quantura বাজার প্রসঙ্গ ও হেডলাইন যোগ করে।",
+      label_ticker: "টিকার",
+      label_timeframe: "টাইমফ্রেম",
+      button_load_chart: "চার্ট লোড করুন",
+      terminal_tip: "টিপ: বামে একটি প্যানেল বেছে নিন, তারপর যেকোনো টিকারে ক্লিক করলে চার্ট সাথে সাথে আপডেট হবে।",
+      label_market_country: "দেশ",
+      button_load_market_feed: "মার্কেট ফিড লোড করুন",
+      label_response_language: "উত্তরের ভাষা",
+      label_question: "প্রশ্ন",
+      button_ask_gpt5: "GPT-5 কে জিজ্ঞাসা করুন",
+      query_result: "কুয়েরির ফলাফল",
+      language_selector_label: "ভাষা",
+      language_auto: "অটো",
+      language_english: "ইংরেজি",
+      language_spanish: "স্প্যানিশ",
+      language_french: "ফরাসি",
+      language_german: "জার্মান",
+      language_arabic: "আরবি",
+      language_bengali: "বাংলা",
+      question_placeholder: "উদাহরণ: এই স্টকটি সহকর্মীদের তুলনায় বেশি মূল্যায়িত কি না, এবং নিকটমেয়াদি প্রধান ঝুঁকি কী?",
+    }),
+  });
+  const UI_I18N_SELECTOR_MAP = Object.freeze({
+    nav_terminal: ['a[data-analytics="nav_terminal"] span'],
+    nav_research: ['a[data-analytics="nav_research"] span'],
+    nav_blog: ['a[data-analytics="nav_blog"] span'],
+    nav_pricing: ['a[data-analytics="nav_pricing"] span'],
+    nav_contact: ['a[data-analytics="nav_contact"] span'],
+    nav_notifications: ["#header-notifications span"],
+    account: [".sidebar-card .small strong"],
+    leaderboard_profile: [".profile-settings > summary"],
+    open_dashboard: ['.sidebar-card a[href="/dashboard"] span'],
+    sidebar_forecast: ['[data-panel-target="forecast"] span'],
+    sidebar_ticker_intelligence: ['[data-panel-target="ticker-intelligence"] span'],
+    sidebar_indicators: ['[data-panel-target="indicators"] span'],
+    sidebar_trending: ['[data-panel-target="trending"] span'],
+    sidebar_news_data: ['[data-panel-target="news"] span'],
+    sidebar_corporate_events: ['[data-panel-target="events-calendar"] span'],
+    sidebar_market_headlines: ['[data-panel-target="market-headlines"] span'],
+    sidebar_ask_gpt5: ['[data-panel-target="ticker-query"] span'],
+    sidebar_options: ['[data-panel-target="options"] span'],
+    sidebar_saved_forecasts: ['[data-panel-target="saved"] span'],
+    sidebar_backtesting: ['[data-panel-target="backtesting"] span'],
+    sidebar_learn_more: ['[data-panel-target="learn"] span'],
+    sidebar_screener: ['a[href="/screener"] span'],
+    sidebar_ai_leaderboard: ['[data-panel-target="ai-leaderboard"] span'],
+    sidebar_watchlist_alerts: ['a[href="/watchlist"] span'],
+    panel_forecast_title: ['[data-panel="forecast"] .panel-header h2'],
+    panel_forecast_subtitle: ['[data-panel="forecast"] .panel-header p.small'],
+    panel_market_headlines_title: ['[data-panel="market-headlines"] .panel-header h2'],
+    panel_market_headlines_subtitle: ['[data-panel="market-headlines"] .panel-header p.small'],
+    panel_ticker_query_title: ['[data-panel="ticker-query"] .panel-header h2'],
+    panel_ticker_query_subtitle: ['[data-panel="ticker-query"] .panel-header p.small'],
+    label_ticker: ['label[for="terminal-ticker"]', 'label[for="forecast-ticker"]', 'label[for="ticker-query-ticker"]'],
+    label_timeframe: ['label[for="terminal-interval"]'],
+    button_load_chart: ['button[data-analytics="terminal_load"] span'],
+    terminal_tip: [".ticker-hint"],
+    label_market_country: ['label[for="market-headlines-country"]'],
+    button_load_market_feed: ['button[data-analytics="market_headlines_load"] span'],
+    label_response_language: ['label[for="ticker-query-language"]'],
+    label_question: ['label[for="ticker-query-question"]'],
+    button_ask_gpt5: ['button[data-analytics="ticker_query_submit"] span'],
+    query_result: ['[data-panel="ticker-query"] .results-panel h3'],
+  });
+  const UI_I18N_OPTION_MAP = Object.freeze({
+    auto: "language_auto",
+    en: "language_english",
+    es: "language_spanish",
+    fr: "language_french",
+    de: "language_german",
+    ar: "language_arabic",
+    bn: "language_bengali",
   });
   const PROFILE_AVATAR_OPTIONS = Object.freeze({
     bull: { emoji: "\u{1F402}", label: "Bull Trader" },
@@ -613,11 +1068,13 @@
     emailForm: document.getElementById("email-auth-form"),
     emailInput: document.getElementById("auth-email"),
     passwordInput: document.getElementById("auth-password"),
+    authForgotPassword: document.getElementById("auth-forgot-password"),
     emailCreate: document.getElementById("email-create"),
     emailMessage: document.getElementById("auth-email-message"),
     googleSignin: document.getElementById("google-signin"),
     githubSignin: document.getElementById("github-signin"),
     twitterSignin: document.getElementById("twitter-signin"),
+    anonymousSignin: document.getElementById("anonymous-signin"),
     languageSelect: document.getElementById("language-select"),
     userEmail: document.getElementById("user-email"),
     userProvider: document.getElementById("user-provider"),
@@ -645,6 +1102,7 @@
     adminSection: document.getElementById("admin"),
     adminOrders: document.getElementById("admin-orders"),
     adminAutopilot: document.getElementById("admin-autopilot"),
+    adminFeatureVoteResults: document.getElementById("admin-feature-vote-results"),
     contactForm: document.getElementById("contact-form"),
     navAdmin: document.getElementById("nav-admin"),
     terminalForm: document.getElementById("terminal-form"),
@@ -653,10 +1111,11 @@
     terminalStatus: document.getElementById("terminal-status"),
     tickerChart: document.getElementById("ticker-chart"),
     indicatorChart: document.getElementById("indicator-chart"),
+    intelStrip: document.getElementById("intel-strip"),
     tickerIntelligenceOutput: document.getElementById("ticker-intelligence-output"),
     forecastForm: document.getElementById("forecast-form"),
+    forecastTicker: document.getElementById("forecast-ticker"),
     forecastOutput: document.getElementById("forecast-output"),
-    forecastService: document.getElementById("forecast-service"),
     forecastLoadSelect: document.getElementById("forecast-load-select"),
     forecastLoadButton: document.getElementById("forecast-load-button"),
     forecastLoadStatus: document.getElementById("forecast-load-status"),
@@ -719,9 +1178,17 @@
     predictionsTicker: document.getElementById("predictions-ticker"),
     predictionsOutput: document.getElementById("predictions-output"),
     predictionsStatus: document.getElementById("predictions-status"),
+    uploadsVoteBlock: document.getElementById("uploads-vote-block"),
+    uploadsAdminBlock: document.getElementById("uploads-admin-block"),
+    featureVoteUploadsForm: document.getElementById("feature-vote-uploads-form"),
+    featureVoteUploadsStatus: document.getElementById("feature-vote-uploads-status"),
     autopilotForm: document.getElementById("autopilot-form"),
     autopilotOutput: document.getElementById("autopilot-output"),
     autopilotStatus: document.getElementById("autopilot-status"),
+    autopilotVoteBlock: document.getElementById("autopilot-vote-block"),
+    autopilotAdminBlock: document.getElementById("autopilot-admin-block"),
+    featureVoteAutopilotForm: document.getElementById("feature-vote-autopilot-form"),
+    featureVoteAutopilotStatus: document.getElementById("feature-vote-autopilot-status"),
     savedForecastsList: document.getElementById("saved-forecasts-list"),
     workspaceSelect: document.getElementById("workspace-select"),
     dashboardAuthLink: document.getElementById("dashboard-auth-link"),
@@ -750,18 +1217,12 @@
     billingPortalLink: document.getElementById("billing-portal-link"),
     chartRangeButtons: Array.from(document.querySelectorAll("[data-chart-range]")),
     chartViewButtons: Array.from(document.querySelectorAll("[data-chart-view]")),
-    chartEngineButtons: Array.from(document.querySelectorAll("[data-chart-engine]")),
     chartThemeButtons: Array.from(document.querySelectorAll("[data-tv-theme]")),
     tradingViewRoot: document.getElementById("tradingview-terminal-root"),
     tradingViewStatus: document.getElementById("tv-widget-status"),
     tradingViewSymbolInfo: document.getElementById("tv-symbol-info"),
     tradingViewAdvanced: document.getElementById("tv-advanced-chart"),
-    tradingViewProfile: document.getElementById("tv-symbol-profile"),
-    tradingViewTechnical: document.getElementById("tv-technical-analysis"),
-    tradingViewTimeline: document.getElementById("tv-timeline"),
-    tradingViewFinancials: document.getElementById("tv-financials"),
     tradingViewFallback: document.getElementById("tv-widget-fallback"),
-    tradingViewUseLegacy: document.getElementById("tv-use-legacy"),
     predictionsChart: document.getElementById("predictions-chart"),
     predictionsPreview: document.getElementById("predictions-preview"),
     predictionsPlotMeta: document.getElementById("predictions-plot-meta"),
@@ -770,6 +1231,10 @@
     backtestForm: document.getElementById("backtest-form"),
     backtestStrategy: document.getElementById("backtest-strategy"),
     backtestOutput: document.getElementById("backtest-output"),
+    backtestAgentLookback: document.getElementById("backtest-agent-lookback"),
+    backtestAgentButton: document.getElementById("backtest-agent-button"),
+    backtestAgentStatus: document.getElementById("backtest-agent-status"),
+    backtestAgentOutput: document.getElementById("backtest-agent-output"),
     backtestLoadSelect: document.getElementById("backtest-load-select"),
     backtestLoadId: document.getElementById("backtest-load-id"),
     backtestLoadButton: document.getElementById("backtest-load-button"),
@@ -851,6 +1316,7 @@
 	    unsubscribeOrders: null,
 	    unsubscribeAdmin: null,
 	    unsubscribeAdminAutopilot: null,
+	    featureVoteSummaryTimer: null,
 	    unsubscribeForecasts: null,
 	    unsubscribeAutopilot: null,
 	    unsubscribePredictions: null,
@@ -878,6 +1344,7 @@
 	      pushEnabled: true,
 	      webPushVapidKey: "",
         volatilityThreshold: DEFAULT_VOLATILITY_THRESHOLD,
+        llmAllowedModels: DEFAULT_LLM_ALLOWED_MODELS,
         aiUsageTiers: AI_USAGE_TIER_DEFAULTS,
         stripeCheckoutEnabled: true,
         stripePublicKey: "",
@@ -914,24 +1381,7 @@
       }
       return raw === "line" ? "line" : "candlestick";
     })(),
-    chartEngine: (() => {
-      let raw = "tradingview";
-      try {
-        raw = String(localStorage.getItem(CHART_ENGINE_CACHE_KEY) || "tradingview").trim().toLowerCase();
-      } catch (error) {
-        raw = "tradingview";
-      }
-      return raw === "legacy" ? "legacy" : "tradingview";
-    })(),
-    tradingViewTheme: (() => {
-      let raw = "auto";
-      try {
-        raw = String(localStorage.getItem(TRADINGVIEW_THEME_CACHE_KEY) || "auto").trim().toLowerCase();
-      } catch (error) {
-        raw = "auto";
-      }
-      return raw === "dark" || raw === "light" ? raw : "auto";
-    })(),
+    tradingViewTheme: "auto",
     tradingViewRenderNonce: 0,
     tradingViewLoadTimer: null,
     tradingViewLoadFailed: false,
@@ -980,6 +1430,29 @@
 
   // React-style hook analogue for this vanilla app: subscribe to Remote Config updates.
   const useRemoteConfig = (listener) => remoteConfigStore.subscribe(listener);
+
+  const isAnonymousUser = (user = state.user) => Boolean(user?.isAnonymous);
+  const hasFullAccount = (user = state.user) => Boolean(user && !user.isAnonymous);
+  const isAdminUser = (user = state.user) =>
+    String(user?.email || "").trim().toLowerCase() === String(ADMIN_EMAIL).trim().toLowerCase();
+  const requireFullAccount = (message = "Sign in to continue.", opts = {}) => {
+    if (hasFullAccount()) return true;
+    const redirect = opts && opts.redirect === true;
+    const nextMessage = isAnonymousUser()
+      ? "Create an account or sign in to use this feature."
+      : String(message || "Sign in to continue.");
+    showToast(nextMessage, "warn");
+    if (redirect && window.location.pathname !== "/account") {
+      window.location.href = "/account";
+    }
+    return false;
+  };
+  const requireAdminAccess = (message = "Admin access required for this feature.") => {
+    if (!requireFullAccount(message, { redirect: true })) return false;
+    if (isAdminUser()) return true;
+    showToast(String(message || "Admin access required."), "warn");
+    return false;
+  };
 
 	  const showToast = (message, variant = "default") => {
 	    if (!ui.toast) return;
@@ -1041,6 +1514,7 @@
 		          saved: "/saved-forecasts",
               backtesting: "/backtesting",
 		          learn: "/studio",
+              "ai-leaderboard": "/ai-leaderboard",
 		        },
 		      },
 			      dashboard: {
@@ -1420,6 +1894,7 @@
               promo_banner_text: "",
               maintenance_mode: false,
               volatility_threshold: "0.05",
+              llm_allowed_models: DEFAULT_LLM_ALLOWED_MODELS.join(","),
               ai_usage_tiers: JSON.stringify(AI_USAGE_TIER_DEFAULTS),
 	            push_notifications_enabled: true,
 	            webpush_vapid_key: "",
@@ -1512,6 +1987,7 @@
             promo_banner_text: "",
             maintenance_mode: false,
             volatility_threshold: "0.05",
+            llm_allowed_models: DEFAULT_LLM_ALLOWED_MODELS.join(","),
             ai_usage_tiers: JSON.stringify(AI_USAGE_TIER_DEFAULTS),
             webpush_vapid_key: "",
             stripe_checkout_enabled: true,
@@ -1584,6 +2060,21 @@
           return fallback;
         }
       };
+      const getModelList = (key, fallback) => {
+        const raw = String(getString(key, "") || "").trim();
+        if (!raw) return fallback;
+        let values = [];
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) values = parsed;
+        } catch (error) {
+          values = raw.split(",");
+        }
+        const normalized = values
+          .map((value) => String(value || "").trim().toLowerCase())
+          .filter((value) => value && (value.startsWith("gpt-5") || value.startsWith("amazon.nova")));
+        return normalized.length ? normalized : fallback;
+      };
 		    return {
 		      watchlistEnabled: getBool("watchlist_enabled", true),
 		      forecastProphetEnabled: getBool("forecast_prophet_enabled", true),
@@ -1595,6 +2086,7 @@
 		      pushEnabled: getBool("push_notifications_enabled", true),
 		      webPushVapidKey: getString("webpush_vapid_key", ""),
           volatilityThreshold: getFloat("volatility_threshold", DEFAULT_VOLATILITY_THRESHOLD),
+          llmAllowedModels: getModelList("llm_allowed_models", DEFAULT_LLM_ALLOWED_MODELS),
           aiUsageTiers: getJson("ai_usage_tiers", AI_USAGE_TIER_DEFAULTS),
 	        stripeCheckoutEnabled: getBool("stripe_checkout_enabled", true),
 	        stripePublicKey: getString("stripe_public_key", ""),
@@ -1627,29 +2119,6 @@
 
       const leaderboardCard = document.getElementById("ai-agent-leaderboard")?.closest(".card");
       if (leaderboardCard) leaderboardCard.classList.toggle("hidden", !flags.enableSocialLeaderboard);
-
-	    if (ui.forecastService) {
-	      const setOptionEnabled = (value, enabled) => {
-	        const option = ui.forecastService.querySelector(`option[value="${value}"]`);
-	        if (!option) return;
-	        option.disabled = !enabled;
-	        option.hidden = !enabled;
-	      };
-	      setOptionEnabled("prophet", flags.forecastProphetEnabled);
-	      // UI policy: hide TimeMixer from the selector and expose Quantura Horizon only.
-	      setOptionEnabled("ibm_timemixer", false);
-
-	      const available = Array.from(ui.forecastService.options).filter((opt) => !opt.disabled && !opt.hidden);
-	      if (available.length === 0) {
-	        ui.forecastService.disabled = true;
-	      } else {
-	        ui.forecastService.disabled = false;
-	        const selected = ui.forecastService.selectedOptions?.[0];
-	        if (!selected || selected.disabled || selected.hidden) {
-	          ui.forecastService.value = available[0].value;
-	        }
-	      }
-	    }
 
       updateMaintenanceModeUi(Boolean(flags.maintenanceMode));
       updateDynamicPromoBanner(String(flags.promoBannerText || "").trim());
@@ -2009,6 +2478,160 @@
 	    }
 	  };
 
+  const i18nTextDefaults = new WeakMap();
+  const i18nAttrDefaults = new WeakMap();
+
+  const setLocalizedText = (element, text) => {
+    if (!element) return;
+    if (!i18nTextDefaults.has(element)) {
+      i18nTextDefaults.set(element, element.textContent || "");
+    }
+    if (typeof text === "string" && text.length) {
+      element.textContent = text;
+      return;
+    }
+    element.textContent = i18nTextDefaults.get(element) || "";
+  };
+
+  const setLocalizedAttribute = (element, attribute, text) => {
+    if (!element || !attribute) return;
+    let attrs = i18nAttrDefaults.get(element);
+    if (!attrs) {
+      attrs = {};
+      i18nAttrDefaults.set(element, attrs);
+    }
+    if (!(attribute in attrs)) {
+      attrs[attribute] = element.getAttribute(attribute) || "";
+    }
+    if (typeof text === "string" && text.length) {
+      element.setAttribute(attribute, text);
+      return;
+    }
+    element.setAttribute(attribute, attrs[attribute] || "");
+  };
+
+  const getUiLanguagePack = (languageCode) => {
+    const normalized = normalizeLanguageCode(languageCode);
+    const resolved = normalized === "auto" ? resolveLanguageFromNavigator() : normalized;
+    return UI_I18N_TEXT[resolved] || UI_I18N_TEXT.en;
+  };
+
+  const applyUiTranslations = (languageCode) => {
+    const pack = getUiLanguagePack(languageCode);
+    const fallback = UI_I18N_TEXT.en;
+    const accountAuthed = hasFullAccount();
+    const sessionAuthed = Boolean(state.user);
+    const guestSession = isAnonymousUser();
+
+    Object.entries(UI_I18N_SELECTOR_MAP).forEach(([key, selectors]) => {
+      const text = pack[key] || fallback[key] || "";
+      selectors.forEach((selector) => {
+        document.querySelectorAll(selector).forEach((el) => setLocalizedText(el, text));
+      });
+    });
+
+    const placeholderText = pack.question_placeholder || fallback.question_placeholder || "";
+    if (ui.tickerQueryQuestion) {
+      setLocalizedAttribute(ui.tickerQueryQuestion, "placeholder", placeholderText);
+    }
+
+    const selectorLabel = pack.language_selector_label || fallback.language_selector_label || "Language";
+    if (ui.languageSelect) {
+      setLocalizedAttribute(ui.languageSelect, "aria-label", selectorLabel);
+      Object.entries(UI_I18N_OPTION_MAP).forEach(([value, key]) => {
+        const option = ui.languageSelect.querySelector(`option[value="${value}"]`);
+        if (option) setLocalizedText(option, pack[key] || fallback[key] || option.textContent || "");
+      });
+    }
+    if (ui.tickerQueryLanguage) {
+      Object.entries(UI_I18N_OPTION_MAP).forEach(([value, key]) => {
+        const option = ui.tickerQueryLanguage.querySelector(`option[value="${value}"]`);
+        if (option) setLocalizedText(option, pack[key] || fallback[key] || option.textContent || "");
+      });
+    }
+
+    if (ui.headerAuth) {
+      const authLabel = accountAuthed ? (pack.dashboard || fallback.dashboard || "Dashboard") : (pack.sign_in || fallback.sign_in || "Sign in");
+      const authSpan = ui.headerAuth.querySelector("span");
+      if (authSpan) setLocalizedText(authSpan, authLabel);
+      setLocalizedAttribute(
+        ui.headerAuth,
+        "aria-label",
+        accountAuthed ? (pack.open_dashboard || fallback.open_dashboard || "Open dashboard") : (pack.sign_in || fallback.sign_in || "Sign in")
+      );
+    }
+
+    if (ui.headerUserStatus) {
+      setLocalizedText(
+        ui.headerUserStatus,
+        accountAuthed
+          ? (pack.logged_in || fallback.logged_in || "Logged In")
+          : guestSession
+          ? "Guest Session"
+          : (pack.logged_out || fallback.logged_out || "Logged Out")
+      );
+    }
+    if (ui.userEmail && !sessionAuthed) {
+      setLocalizedText(ui.userEmail, pack.not_signed_in || fallback.not_signed_in || "Not signed in");
+    }
+    if (ui.userStatus) {
+      setLocalizedText(
+        ui.userStatus,
+        accountAuthed
+          ? (pack.logged_in || fallback.logged_in || "Logged In")
+          : guestSession
+          ? "Guest Session"
+          : (pack.logged_out || fallback.logged_out || "Logged Out")
+      );
+    }
+    if (ui.dashboardAuthLink) {
+      const linkSpan = ui.dashboardAuthLink.querySelector("span");
+      const linkLabel = sessionAuthed ? (pack.sign_out || fallback.sign_out || "Sign out") : (pack.sign_in || fallback.sign_in || "Sign in");
+      if (linkSpan) setLocalizedText(linkSpan, linkLabel);
+      setLocalizedAttribute(ui.dashboardAuthLink, "aria-label", linkLabel);
+    }
+    if (ui.billingPortalLink) {
+      setLocalizedText(
+        ui.billingPortalLink,
+        accountAuthed
+          ? (pack.open_billing_portal || fallback.open_billing_portal || "Open Stripe billing portal")
+          : (pack.signin_manage_billing || fallback.signin_manage_billing || "Sign in to manage billing")
+      );
+    }
+    if (ui.headerNotifications) {
+      const notifSpan = ui.headerNotifications.querySelector("span");
+      if (notifSpan) setLocalizedText(notifSpan, pack.nav_notifications || fallback.nav_notifications || "Notifications");
+      setLocalizedAttribute(
+        ui.headerNotifications,
+        "aria-label",
+        accountAuthed
+          ? (pack.open_notifications || fallback.open_notifications || "Open notifications")
+          : (pack.signin_manage_notifications || fallback.signin_manage_notifications || "Sign in to manage notifications")
+      );
+    }
+    if (ui.pricingAuthCta) {
+      const pricingAuthSpan = ui.pricingAuthCta.querySelector("span");
+      if (pricingAuthSpan) {
+        setLocalizedText(
+          pricingAuthSpan,
+          accountAuthed ? (pack.open_dashboard || fallback.open_dashboard || "Open dashboard") : (pack.sign_in || fallback.sign_in || "Sign in")
+        );
+      }
+    }
+    if (ui.pricingStarterCta) {
+      const pricingStarterSpan = ui.pricingStarterCta.querySelector("span");
+      if (pricingStarterSpan) {
+        setLocalizedText(
+          pricingStarterSpan,
+          accountAuthed ? (pack.go_to_dashboard || fallback.go_to_dashboard || "Go to dashboard") : (pack.start_free || fallback.start_free || "Start free")
+        );
+      }
+    }
+    if (!accountAuthed && ui.profileStatus) {
+      setLocalizedText(ui.profileStatus, pack.signin_set_profile || fallback.signin_set_profile || "Sign in to set your public leaderboard profile.");
+    }
+  };
+
   const setCountryControls = (countryCode) => {
     const code = normalizeCountryCode(countryCode);
     state.preferredCountry = code;
@@ -2026,6 +2649,7 @@
     if (ui.tickerQueryLanguage && ui.tickerQueryLanguage.value === "auto") {
       ui.tickerQueryLanguage.value = resolved;
     }
+    applyUiTranslations(resolved);
     if (persist) safeLocalStorageSet(LANGUAGE_PREFERENCE_KEY, normalized);
   };
 
@@ -2214,7 +2838,7 @@
         button.setAttribute("aria-label", next === "dark" ? "Switch to light mode" : "Switch to dark mode");
         button.setAttribute("title", next === "dark" ? "Light mode" : "Dark mode");
       }
-      if (state.tradingViewTheme === "auto" && state.chartEngine === "tradingview" && state.tickerContext.ticker) {
+      if (state.tickerContext.ticker && isPanelVisible("ticker-intelligence")) {
         renderTradingViewTerminal({
           ticker: state.tickerContext.ticker,
           interval: state.tickerContext.interval || "1d",
@@ -2675,6 +3299,7 @@
 		  };
 
   const setPurchaseState = (user) => {
+    const accountAuthed = hasFullAccount(user);
     ui.purchasePanels.forEach((panel) => {
       const button = panel.querySelector('[data-action="purchase"]');
       const note = panel.querySelector(".purchase-note");
@@ -2682,7 +3307,7 @@
       const stripe = panel.querySelector('[data-action="stripe"]');
       if (!button || !note) return;
 
-      if (user) {
+      if (accountAuthed) {
         button.disabled = false;
         button.textContent = button.dataset.labelAuth || "Request Deep Forecast";
         note.textContent = "Orders appear in your dashboard instantly.";
@@ -2697,18 +3322,20 @@
   };
 
   const setAuthUi = (user) => {
-    const isAuthed = Boolean(user);
-    const authLabel = isAuthed ? "Logged In" : "Logged Out";
+    const accountAuthed = hasFullAccount(user);
+    const sessionAuthed = Boolean(user);
+    const guestSession = isAnonymousUser(user);
+    const authLabel = accountAuthed ? "Logged In" : guestSession ? "Guest Session" : "Logged Out";
     ensureHeaderNotificationsCta();
     if (ui.headerAuth) {
-      ui.headerAuth.innerHTML = isAuthed
+      ui.headerAuth.innerHTML = accountAuthed
         ? `${icon("dashboard")}<span>Dashboard</span>`
         : `${icon("log-in")}<span>Sign in</span>`;
-      ui.headerAuth.setAttribute("aria-label", isAuthed ? "Open dashboard" : "Sign in");
+      ui.headerAuth.setAttribute("aria-label", accountAuthed ? "Open dashboard" : "Sign in");
       if (ui.headerAuth.tagName.toLowerCase() === "button") {
-        ui.headerAuth.dataset.route = isAuthed ? "/dashboard" : "/account";
+        ui.headerAuth.dataset.route = accountAuthed ? "/dashboard" : "/account";
       } else {
-        ui.headerAuth.setAttribute("href", isAuthed ? "/dashboard" : "/account");
+        ui.headerAuth.setAttribute("href", accountAuthed ? "/dashboard" : "/account");
       }
     }
 
@@ -2722,51 +3349,227 @@
       ui.headerUserStatus.classList.toggle("pill", true);
     }
 
-    if (ui.userEmail) ui.userEmail.textContent = user?.email || "Not signed in";
-    if (ui.userProvider) ui.userProvider.textContent = user?.providerData?.[0]?.providerId || "—";
+    if (ui.userEmail) ui.userEmail.textContent = accountAuthed ? user?.email || "Not signed in" : guestSession ? "Guest session" : "Not signed in";
+    if (ui.userProvider) ui.userProvider.textContent = accountAuthed ? user?.providerData?.[0]?.providerId || "—" : guestSession ? "anonymous" : "—";
     if (ui.userStatus) {
       ui.userStatus.textContent = authLabel;
       ui.userStatus.classList.toggle("pill", true);
     }
     if (ui.billingPortalLink) {
-      ui.billingPortalLink.textContent = isAuthed ? "Open Stripe billing portal" : "Sign in to manage billing";
-      ui.billingPortalLink.setAttribute("href", isAuthed ? STRIPE_URL : "/account");
-      ui.billingPortalLink.setAttribute("target", isAuthed ? "_blank" : "_self");
-      if (isAuthed) {
-        ui.billingPortalLink.setAttribute("rel", "noopener noreferrer");
-      } else {
-        ui.billingPortalLink.removeAttribute("rel");
-      }
+      ui.billingPortalLink.textContent = accountAuthed ? "Open Stripe billing portal" : "Sign in to manage billing";
+      ui.billingPortalLink.setAttribute("href", accountAuthed ? "#" : "/account");
+      ui.billingPortalLink.setAttribute("target", "_self");
+      ui.billingPortalLink.removeAttribute("rel");
     }
-    ui.dashboardCta?.classList.toggle("hidden", isAuthed);
-    setProfileFormEnabled(isAuthed);
-    if (!isAuthed) {
+    ui.dashboardCta?.classList.toggle("hidden", accountAuthed);
+    setProfileFormEnabled(accountAuthed);
+    if (!accountAuthed) {
       setProfileStatus("Sign in to set your public leaderboard profile.");
     }
 
     if (ui.pricingAuthCta) {
-      ui.pricingAuthCta.innerHTML = isAuthed
+      ui.pricingAuthCta.innerHTML = accountAuthed
         ? `${icon("dashboard")}<span>Open dashboard</span>`
         : `${icon("log-in")}<span>Sign in</span>`;
-      ui.pricingAuthCta.setAttribute("href", isAuthed ? "/dashboard" : "/account");
+      ui.pricingAuthCta.setAttribute("href", accountAuthed ? "/dashboard" : "/account");
     }
 
     if (ui.pricingStarterCta) {
-      ui.pricingStarterCta.innerHTML = isAuthed
+      ui.pricingStarterCta.innerHTML = accountAuthed
         ? `${icon("dashboard")}<span>Go to dashboard</span>`
         : `${icon("user-plus")}<span>Start free</span>`;
-      ui.pricingStarterCta.setAttribute("href", isAuthed ? "/dashboard" : "/account");
+      ui.pricingStarterCta.setAttribute("href", accountAuthed ? "/dashboard" : "/account");
     }
 
     if (ui.dashboardAuthLink) {
-      ui.dashboardAuthLink.innerHTML = isAuthed
+      ui.dashboardAuthLink.innerHTML = sessionAuthed
         ? `${icon("log-out")}<span>Sign out</span>`
         : `${icon("log-in")}<span>Sign in</span>`;
-      ui.dashboardAuthLink.setAttribute("href", isAuthed ? "#" : "/account");
-      ui.dashboardAuthLink.setAttribute("aria-label", isAuthed ? "Sign out" : "Sign in");
+      ui.dashboardAuthLink.setAttribute("href", sessionAuthed ? "#" : "/account");
+      ui.dashboardAuthLink.setAttribute("aria-label", sessionAuthed ? "Sign out" : "Sign in");
     }
 
     setPurchaseState(user);
+    setAdminOnlyFeaturePanels(user);
+    applyUiTranslations(state.preferredLanguage || "en");
+  };
+
+  const setAdminOnlyFeaturePanels = (user = state.user) => {
+    const allowAdminTools = hasFullAccount(user) && isAdminUser(user);
+    ui.uploadsAdminBlock?.classList.toggle("hidden", !allowAdminTools);
+    ui.autopilotAdminBlock?.classList.toggle("hidden", !allowAdminTools);
+    ui.uploadsVoteBlock?.classList.toggle("hidden", allowAdminTools);
+    ui.autopilotVoteBlock?.classList.toggle("hidden", allowAdminTools);
+    if (!allowAdminTools) {
+      if (ui.predictionsStatus) ui.predictionsStatus.textContent = "Admin-only capability.";
+      if (ui.autopilotStatus) ui.autopilotStatus.textContent = "Admin-only capability.";
+    }
+  };
+
+  const setFeatureVoteStatus = (node, message, variant = "muted") => {
+    if (!node) return;
+    node.textContent = String(message || "");
+    node.dataset.variant = String(variant || "muted");
+  };
+
+  const bindFeatureVoteForm = (functions, form, statusNode) => {
+    if (!functions || !form || form.dataset.bound === "1") return;
+    const voteInput = form.querySelector('input[name="vote"]');
+    const voteButtons = Array.from(form.querySelectorAll('[data-action="feature-vote-select"]'));
+    const applySelection = (nextVote) => {
+      const normalized = String(nextVote || "").trim().toLowerCase();
+      if (voteInput) voteInput.value = normalized;
+      voteButtons.forEach((btn) => {
+        btn.classList.toggle("active", String(btn.dataset.vote || "").trim().toLowerCase() === normalized);
+      });
+    };
+
+    voteButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        applySelection(button.dataset.vote);
+      });
+    });
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!requireFullAccount("Sign in to submit feature votes.", { redirect: true })) return;
+      const featureKey = String(form.dataset.featureKey || "").trim().toLowerCase();
+      if (!FEATURE_VOTE_KEYS.has(featureKey)) {
+        setFeatureVoteStatus(statusNode, "Feature key is invalid.", "warn");
+        return;
+      }
+      const vote = String(voteInput?.value || "").trim().toLowerCase();
+      if (vote !== "yes" && vote !== "no") {
+        setFeatureVoteStatus(statusNode, "Pick Yes or No first.", "warn");
+        return;
+      }
+      const feedbackInput = form.querySelector('textarea[name="feedback"]');
+      const feedback = String(feedbackInput?.value || "").trim().slice(0, 2000);
+
+      setFeatureVoteStatus(statusNode, "Submitting vote...");
+      const submitVote = functions.httpsCallable("submit_feature_vote");
+      try {
+        const result = await submitVote({
+          featureKey,
+          vote,
+          feedback,
+          meta: buildMeta(),
+        });
+        const totals = result.data?.totals && typeof result.data.totals === "object" ? result.data.totals : {};
+        const yes = Number(totals.yes || 0);
+        const no = Number(totals.no || 0);
+        const total = Number(totals.total || yes + no);
+        setFeatureVoteStatus(statusNode, `Vote saved. Running total: Yes ${yes}, No ${no} (${total} vote${total === 1 ? "" : "s"}).`, "success");
+        applySelection(vote);
+        showToast("Vote submitted.");
+        logEvent("feature_vote_submitted", { feature_key: featureKey, vote });
+        if (isAdminUser()) {
+          loadAdminFeatureVoteSummary(functions).catch(() => {});
+        }
+      } catch (error) {
+        setFeatureVoteStatus(statusNode, extractErrorMessage(error, "Unable to submit vote."), "warn");
+        showToast(extractErrorMessage(error, "Unable to submit vote."), "warn");
+      }
+    });
+
+    form.dataset.bound = "1";
+  };
+
+  const bindFeatureVoteForms = (functions) => {
+    bindFeatureVoteForm(functions, ui.featureVoteUploadsForm, ui.featureVoteUploadsStatus);
+    bindFeatureVoteForm(functions, ui.featureVoteAutopilotForm, ui.featureVoteAutopilotStatus);
+  };
+
+  const renderAdminFeatureVoteSummary = (payload = {}) => {
+    if (!ui.adminFeatureVoteResults) return;
+    const rawFeatures = payload && typeof payload.features === "object" ? payload.features : {};
+    const cards = Array.from(FEATURE_VOTE_KEYS).map((featureKey) => {
+      const item = rawFeatures[featureKey] && typeof rawFeatures[featureKey] === "object" ? rawFeatures[featureKey] : {};
+      const yes = Math.max(0, Number(item.yes || 0));
+      const no = Math.max(0, Number(item.no || 0));
+      const total = Math.max(0, Number(item.total || yes + no));
+      const yesPercent = total > 0 ? Math.round((yes / total) * 100) : 0;
+      const updatedAt = item.updatedAt ? formatTimestamp(item.updatedAt) : "—";
+      return `
+        <div class="order-card">
+          <div class="order-header">
+            <div class="order-title">${escapeHtml(FEATURE_VOTE_LABELS[featureKey] || featureKey)}</div>
+            <span class="status completed">${yesPercent}% yes</span>
+          </div>
+          <div class="order-meta">
+            <div><strong>Total votes</strong> ${total}</div>
+            <div><strong>Yes</strong> ${yes}</div>
+            <div><strong>No</strong> ${no}</div>
+            <div><strong>Updated</strong> ${escapeHtml(updatedAt)}</div>
+          </div>
+        </div>
+      `;
+    });
+
+    const recentItems = Array.isArray(payload.recent) ? payload.recent : [];
+    const recentMarkup = recentItems.length
+      ? recentItems
+          .map((entry) => {
+            const featureKey = String(entry.featureKey || "").trim().toLowerCase();
+            const label = FEATURE_VOTE_LABELS[featureKey] || featureKey || "feature";
+            const vote = String(entry.vote || "").trim().toLowerCase();
+            const voteLabel = vote === "yes" ? "Yes" : vote === "no" ? "No" : "—";
+            const when = entry.updatedAt ? formatTimestamp(entry.updatedAt) : "—";
+            const who = String(entry.userEmail || "unknown");
+            const feedback = String(entry.feedback || "").trim();
+            return `
+              <div class="order-card">
+                <div class="order-header">
+                  <div class="order-title">${escapeHtml(label)}</div>
+                  <span class="status ${vote === "yes" ? "completed" : "pending"}">${escapeHtml(voteLabel)}</span>
+                </div>
+                <div class="order-meta">
+                  <div><strong>User</strong> ${escapeHtml(who)}</div>
+                  <div><strong>Updated</strong> ${escapeHtml(when)}</div>
+                  ${feedback ? `<div><strong>Feedback</strong> ${escapeHtml(feedback)}</div>` : "<div><strong>Feedback</strong> —</div>"}
+                </div>
+              </div>
+            `;
+          })
+          .join("")
+      : `<div class="small muted">No feature votes yet.</div>`;
+
+    ui.adminFeatureVoteResults.innerHTML = `
+      <div class="feature-vote-admin-grid">
+        ${cards.join("")}
+      </div>
+      <div class="feature-vote-recent">
+        <h3>Recent feedback</h3>
+        ${recentMarkup}
+      </div>
+    `;
+  };
+
+  const loadAdminFeatureVoteSummary = async (functions) => {
+    if (!ui.adminFeatureVoteResults || !functions) return;
+    if (!hasFullAccount() || !isAdminUser()) {
+      ui.adminFeatureVoteResults.innerHTML = `<div class="small muted">Admin access required.</div>`;
+      return;
+    }
+    const getSummary = functions.httpsCallable("get_feature_vote_summary");
+    const result = await getSummary({ limit: 25, meta: buildMeta() });
+    renderAdminFeatureVoteSummary(result.data || {});
+  };
+
+  const setFeatureVoteSummaryPolling = (functions, enabled) => {
+    if (state.featureVoteSummaryTimer) {
+      window.clearInterval(state.featureVoteSummaryTimer);
+      state.featureVoteSummaryTimer = null;
+    }
+    if (!enabled || !ui.adminFeatureVoteResults || !functions) return;
+    loadAdminFeatureVoteSummary(functions).catch((error) => {
+      ui.adminFeatureVoteResults.innerHTML = `<div class="small muted">${escapeHtml(
+        extractErrorMessage(error, "Unable to load feature vote summary.")
+      )}</div>`;
+    });
+    state.featureVoteSummaryTimer = window.setInterval(() => {
+      loadAdminFeatureVoteSummary(functions).catch(() => {});
+    }, 60000);
   };
 
   const formatTimestamp = (value) => {
@@ -3051,7 +3854,7 @@
   };
 
   const refreshCollaboration = async (functions) => {
-    if (!state.user) return;
+    if (!hasFullAccount()) return;
     if (!ui.collabInvitesList && !ui.collabCollaboratorsList) return;
     try {
       const listInvites = functions.httpsCallable("list_collab_invites");
@@ -3146,7 +3949,7 @@
     };
 
 	  const resolveWorkspaceRole = (workspaceId) => {
-	    if (!state.user || !workspaceId) return "guest";
+	    if (!hasFullAccount() || !workspaceId) return "guest";
 	    if (state.user.uid === workspaceId) return "owner";
 	    const shared = (state.sharedWorkspaces || []).find((ws) => ws.workspaceUserId === workspaceId || ws.id === workspaceId);
 	    return shared?.role || "viewer";
@@ -3606,6 +4409,10 @@
   const startAutopilotRequests = (db, user) => {
     if (state.unsubscribeAutopilot) state.unsubscribeAutopilot();
     if (!user || !ui.autopilotOutput) return;
+    if (!isAdminUser(user)) {
+      renderRequestList([], ui.autopilotOutput, "Autopilot is currently admin-only.");
+      return;
+    }
 
     state.unsubscribeAutopilot = db
       .collection("autopilot_requests")
@@ -3620,6 +4427,10 @@
   const startPredictionsUploads = (db, user) => {
     if (state.unsubscribePredictions) state.unsubscribePredictions();
     if (!user || !ui.predictionsOutput) return;
+    if (!isAdminUser(user)) {
+      renderRequestList([], ui.predictionsOutput, "Prediction uploads are currently admin-only.");
+      return;
+    }
 
     state.unsubscribePredictions = db
       .collection("prediction_uploads")
@@ -4224,7 +5035,7 @@
       }
       ui.headerNotifications = link;
     }
-    const authed = Boolean(state.user);
+    const authed = hasFullAccount();
     link.href = authed ? "/notifications" : "/account";
     link.innerHTML = `${icon("bell-notification")}<span>Notifications</span>`;
     link.setAttribute("aria-label", authed ? "Open notifications" : "Sign in to manage notifications");
@@ -4280,12 +5091,7 @@
     renderNotificationLog();
   };
 
-  const resolveTradingViewTheme = () => {
-    if (state.tradingViewTheme === "dark" || state.tradingViewTheme === "light") {
-      return state.tradingViewTheme;
-    }
-    return isDarkMode() ? "dark" : "light";
-  };
+  const resolveTradingViewTheme = () => (isDarkMode() ? "dark" : "light");
 
   const normalizeTradingViewSymbol = (ticker) => {
     const clean = normalizeTicker(ticker);
@@ -4336,27 +5142,6 @@
     return [...forecastOverlays, ...(state.tickerContext.indicatorOverlays || [])];
   };
 
-  const setChartEngine = (engine, { persist = true, rerender = true } = {}) => {
-    const next = engine === "legacy" ? "legacy" : "tradingview";
-    state.chartEngine = next;
-    if (persist) safeLocalStorageSet(CHART_ENGINE_CACHE_KEY, next);
-    setTerminalChartEngineVisibility(next);
-    applyChartControlState();
-    if (
-      rerender &&
-      state.tickerContext.rows?.length &&
-      state.tickerContext.ticker &&
-      ui.tickerChart
-    ) {
-      renderTickerChart(
-        state.tickerContext.rows,
-        state.tickerContext.ticker,
-        state.tickerContext.interval,
-        buildCurrentChartOverlays()
-      ).catch(() => {});
-    }
-  };
-
   const buildTradingViewWidgetSrc = (baseUrl, config) => {
     const payload = encodeURIComponent(JSON.stringify(config || {}));
     return `${baseUrl}#${payload}`;
@@ -4379,7 +5164,7 @@
     return frame;
   };
 
-  const renderTradingViewTerminal = ({ ticker, interval }) => {
+  const renderTradingViewTerminal = ({ ticker, interval, onFallback = null }) => {
     if (!ui.tradingViewRoot || !ui.tradingViewAdvanced) return false;
     const symbol = normalizeTradingViewSymbol(ticker);
     const theme = resolveTradingViewTheme();
@@ -4401,6 +5186,22 @@
       isTransparent: true,
       locale: "en",
     };
+    let fallbackTriggered = false;
+    const triggerFallback = (reason) => {
+      if (fallbackTriggered) return;
+      fallbackTriggered = true;
+      if (state.tradingViewRenderNonce !== nonce) return;
+      state.tradingViewLoadFailed = true;
+      setTradingViewStatus(reason || "TradingView unavailable");
+      ui.tradingViewFallback?.classList.remove("hidden");
+      if (typeof onFallback === "function") {
+        try {
+          onFallback();
+        } catch (error) {
+          // Ignore fallback callback errors.
+        }
+      }
+    };
 
     mountTradingViewIframe({
       container: ui.tradingViewSymbolInfo,
@@ -4410,51 +5211,6 @@
         height: 255,
       }),
       title: `Symbol info ${symbol}`,
-    });
-
-    mountTradingViewIframe({
-      container: ui.tradingViewProfile,
-      src: buildTradingViewWidgetSrc("https://www.tradingview-widget.com/embed-widget/symbol-profile/?locale=en", {
-        ...shared,
-        width: "100%",
-        height: "100%",
-      }),
-      title: `Company profile ${symbol}`,
-    });
-
-    mountTradingViewIframe({
-      container: ui.tradingViewTechnical,
-      src: buildTradingViewWidgetSrc("https://www.tradingview-widget.com/embed-widget/technical-analysis/?locale=en", {
-        ...shared,
-        interval: interval === "1h" ? "60m" : "1D",
-        width: "100%",
-        height: "100%",
-        showIntervalTabs: true,
-        displayMode: "single",
-      }),
-      title: `Technical analysis ${symbol}`,
-    });
-
-    mountTradingViewIframe({
-      container: ui.tradingViewTimeline,
-      src: buildTradingViewWidgetSrc("https://www.tradingview-widget.com/embed-widget/timeline/?locale=en", {
-        ...shared,
-        width: "100%",
-        height: 600,
-        displayMode: "regular",
-      }),
-      title: `Timeline ${symbol}`,
-    });
-
-    mountTradingViewIframe({
-      container: ui.tradingViewFinancials,
-      src: buildTradingViewWidgetSrc("https://www.tradingview-widget.com/embed-widget/financials/?locale=en", {
-        ...shared,
-        width: "100%",
-        height: 775,
-        displayMode: "regular",
-      }),
-      title: `Financials ${symbol}`,
     });
 
     mountTradingViewIframe({
@@ -4482,18 +5238,12 @@
         setTradingViewStatus(`TradingView loaded · ${symbol}`);
       },
       onerror: () => {
-        if (state.tradingViewRenderNonce !== nonce) return;
-        state.tradingViewLoadFailed = true;
-        setTradingViewStatus("TradingView unavailable");
-        ui.tradingViewFallback?.classList.remove("hidden");
+        triggerFallback("TradingView unavailable");
       },
     });
 
     state.tradingViewLoadTimer = window.setTimeout(() => {
-      if (state.tradingViewRenderNonce !== nonce) return;
-      state.tradingViewLoadFailed = true;
-      setTradingViewStatus("TradingView timeout · fallback available");
-      ui.tradingViewFallback?.classList.remove("hidden");
+      triggerFallback("TradingView timeout");
     }, TRADINGVIEW_LOAD_TIMEOUT_MS);
 
     return true;
@@ -4509,11 +5259,6 @@
       const mode = String(button.dataset.chartView || "").toLowerCase();
       button.classList.toggle("active", mode === state.chartViewMode);
       button.setAttribute("aria-pressed", mode === state.chartViewMode ? "true" : "false");
-    });
-    ui.chartEngineButtons.forEach((button) => {
-      const engine = String(button.dataset.chartEngine || "").toLowerCase();
-      button.classList.toggle("active", engine === state.chartEngine);
-      button.setAttribute("aria-pressed", engine === state.chartEngine ? "true" : "false");
     });
     ui.chartThemeButtons.forEach((button) => {
       const theme = String(button.dataset.tvTheme || "").toLowerCase();
@@ -4592,16 +5337,6 @@
       });
     }
 
-    if (ui.chartEngineButtons.length) {
-      ui.chartEngineButtons.forEach((button) => {
-        button.addEventListener("click", () => {
-          const next = String(button.dataset.chartEngine || "").toLowerCase();
-          if (!next || next === state.chartEngine) return;
-          setChartEngine(next, { persist: true, rerender: true });
-        });
-      });
-    }
-
     if (ui.chartThemeButtons.length) {
       ui.chartThemeButtons.forEach((button) => {
         button.addEventListener("click", () => {
@@ -4610,7 +5345,7 @@
           state.tradingViewTheme = next === "dark" || next === "light" ? next : "auto";
           safeLocalStorageSet(TRADINGVIEW_THEME_CACHE_KEY, state.tradingViewTheme);
           applyChartControlState();
-          if (state.chartEngine === "tradingview" && state.tickerContext.ticker) {
+          if (state.tickerContext.ticker && isPanelVisible("ticker-intelligence")) {
             renderTradingViewTerminal({
               ticker: state.tickerContext.ticker,
               interval: state.tickerContext.interval || "1d",
@@ -4620,14 +5355,7 @@
       });
     }
 
-    if (ui.tradingViewUseLegacy) {
-      ui.tradingViewUseLegacy.addEventListener("click", () => {
-        setChartEngine("legacy", { persist: true, rerender: true });
-        showToast("Switched to legacy chart.");
-      });
-    }
-
-    setTerminalChartEngineVisibility(state.chartEngine);
+    setTerminalChartEngineVisibility("legacy");
     applyChartControlState();
   };
 
@@ -5112,50 +5840,92 @@
     }
   };
 
-  const renderTickerXTrends = (posts, ticker, warning = "") => {
+  const renderTickerXTrends = (posts, stories, ticker, warning = "") => {
     if (!ui.xTrendingOutput) return;
     const list = Array.isArray(posts) ? posts : [];
+    const storyList = Array.isArray(stories) ? stories : [];
     const symbol = normalizeTicker(ticker) || "";
     const warningText = String(warning || "").trim();
+    const warningBlock = warningText
+      ? `<div class="small muted" style="margin-top:8px;">${escapeHtml(warningText)}</div>`
+      : "";
 
-    if (!list.length) {
+    if (!list.length && !storyList.length) {
       ui.xTrendingOutput.innerHTML = `
         <div class="small muted">No X posts returned for ${escapeHtml(symbol || "this ticker")}.</div>
-        ${warningText ? `<div class="small muted" style="margin-top:8px;">${escapeHtml(warningText)}</div>` : ""}
+        ${warningBlock}
       `;
       return;
     }
 
-    ui.xTrendingOutput.innerHTML = list
-      .slice(0, 8)
-      .map((post) => {
-        const authorName = escapeHtml(post.authorName || post.authorUsername || "Unknown");
-        const authorHandle = escapeHtml(post.authorUsername ? `@${post.authorUsername}` : "");
-        const text = escapeHtml(post.text || "");
-        const created = formatEpoch(post.createdAt);
-        const metrics = post.metrics && typeof post.metrics === "object" ? post.metrics : {};
-        const likes = Number(metrics.like_count || 0);
-        const reposts = Number(metrics.retweet_count || 0);
-        const replies = Number(metrics.reply_count || 0);
-        const permalink = post.permalink ? escapeHtml(post.permalink) : "";
-        return `
-          <article class="x-post-card">
-            <div class="x-post-top">
-              <div class="x-post-author">${authorName}</div>
-              <div class="x-post-handle small muted">${authorHandle}</div>
-            </div>
-            <div class="x-post-text small">${text}</div>
-            <div class="x-post-meta small">
-              <span>${escapeHtml(created || "Now")}</span>
-              <span>Likes ${Number.isFinite(likes) ? likes.toLocaleString() : "0"}</span>
-              <span>Reposts ${Number.isFinite(reposts) ? reposts.toLocaleString() : "0"}</span>
-              <span>Replies ${Number.isFinite(replies) ? replies.toLocaleString() : "0"}</span>
-            </div>
-            ${permalink ? `<a class="x-post-link" href="${permalink}" target="_blank" rel="noreferrer">View on X</a>` : ""}
-          </article>
-        `;
-      })
-      .join("");
+    const blocks = [];
+
+    if (list.length) {
+      blocks.push(
+        list
+          .slice(0, 8)
+          .map((post) => {
+            const authorName = escapeHtml(post.authorName || post.authorUsername || "Unknown");
+            const authorHandle = escapeHtml(post.authorUsername ? `@${post.authorUsername}` : "");
+            const text = escapeHtml(post.text || post.title || "");
+            const created = formatEpoch(post.createdAt);
+            const metrics = post.metrics && typeof post.metrics === "object" ? post.metrics : {};
+            const likes = Number(metrics.like_count || 0);
+            const reposts = Number(metrics.retweet_count || 0);
+            const replies = Number(metrics.reply_count || 0);
+            const permalink = post.permalink ? escapeHtml(post.permalink) : "";
+            return `
+              <article class="x-post-card">
+                <div class="x-post-top">
+                  <div class="x-post-author">${authorName}</div>
+                  <div class="x-post-handle small muted">${authorHandle}</div>
+                </div>
+                <div class="x-post-text small">${text}</div>
+                <div class="x-post-meta small">
+                  <span>${escapeHtml(created || "Now")}</span>
+                  <span>Likes ${Number.isFinite(likes) ? likes.toLocaleString() : "0"}</span>
+                  <span>Reposts ${Number.isFinite(reposts) ? reposts.toLocaleString() : "0"}</span>
+                  <span>Replies ${Number.isFinite(replies) ? replies.toLocaleString() : "0"}</span>
+                </div>
+                ${permalink ? `<a class="x-post-link" href="${permalink}" target="_blank" rel="noreferrer">View on X</a>` : ""}
+              </article>
+            `;
+          })
+          .join("")
+      );
+    } else if (storyList.length) {
+      blocks.push(`<div class="small muted">No matching X posts returned for ${escapeHtml(symbol || "this ticker")}.</div>`);
+    }
+
+    if (storyList.length) {
+      blocks.push(`<div class="x-story-divider small muted">X News stories</div>`);
+      blocks.push(
+        storyList
+          .slice(0, 6)
+          .map((story) => {
+            const title = escapeHtml(story.name || "X News story");
+            const hook = escapeHtml(story.hook || "");
+            const summary = escapeHtml(story.summary || "");
+            const updated = escapeHtml(formatEpoch(story.updatedAt) || "");
+            const category = escapeHtml(story.category || "");
+            const tickers = Array.isArray(story.tickers) ? story.tickers.filter(Boolean).slice(0, 6).join(", ") : "";
+            const meta = [category, updated, tickers ? `Tickers: ${tickers}` : ""].filter(Boolean).join(" · ");
+            const link = story.searchUrl ? escapeHtml(story.searchUrl) : "";
+            return `
+              <article class="x-story-card">
+                <div class="x-story-title">${title}</div>
+                ${meta ? `<div class="x-story-meta small muted">${meta}</div>` : ""}
+                ${hook ? `<div class="x-story-hook small">${hook}</div>` : ""}
+                ${summary && summary !== hook ? `<div class="x-story-summary small muted">${summary}</div>` : ""}
+                ${link ? `<a class="x-post-link" href="${link}" target="_blank" rel="noreferrer">Open on X</a>` : ""}
+              </article>
+            `;
+          })
+          .join("")
+      );
+    }
+
+    ui.xTrendingOutput.innerHTML = blocks.join("") + warningBlock;
   };
 
   const loadTickerXTrends = async (functions, ticker, { notify = false, force = false } = {}) => {
@@ -5174,10 +5944,11 @@
       const result = await getXTrends({ ticker: symbol, meta: buildMeta() });
       const payload = result.data || {};
       const posts = Array.isArray(payload.posts) ? payload.posts : [];
+      const stories = Array.isArray(payload.stories) ? payload.stories : [];
       const warning = String(payload.warning || "").trim();
       setOutputReady(ui.xTrendingOutput);
-      renderTickerXTrends(posts, symbol, warning);
-      logEvent("x_trends_loaded", { ticker: symbol, count: posts.length });
+      renderTickerXTrends(posts, stories, symbol, warning);
+      logEvent("x_trends_loaded", { ticker: symbol, count: posts.length, stories: stories.length });
     } catch (error) {
       setOutputReady(ui.xTrendingOutput);
       ui.xTrendingOutput.innerHTML = `<div class="small muted">Unable to load X trends right now.</div>`;
@@ -5484,6 +6255,142 @@
     }
   };
 
+  const clampBacktestAgentLookback = (value) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return 90;
+    return Math.max(20, Math.min(730, Math.round(parsed)));
+  };
+
+  const summarizeBacktestTechnicalContext = ({ latestRows, series, lookbackDays, interval } = {}) => {
+    const latest = Array.isArray(latestRows)
+      ? latestRows
+          .map((row) => ({
+            name: String(row?.name || "").trim(),
+            value: Number(row?.value),
+          }))
+          .filter((row) => row.name && Number.isFinite(row.value))
+          .map((row) => ({
+            name: row.name,
+            value: Number(row.value.toFixed(4)),
+          }))
+      : [];
+
+    const latestMap = Object.fromEntries(latest.map((row) => [row.name, row.value]));
+    const pointsPerDay = String(interval || "1d") === "1h" ? 6 : 1;
+    const targetWindow = Math.max(20, Math.min(360, Math.round(Number(lookbackDays || 90) * pointsPerDay)));
+    const seriesItems = Array.isArray(series?.items) ? series.items : [];
+
+    const trend = seriesItems
+      .map((item) => {
+        const name = String(item?.name || "").trim();
+        const numericValues = (Array.isArray(item?.values) ? item.values : [])
+          .map((value) => {
+            const num = Number(value);
+            return Number.isFinite(num) ? num : null;
+          })
+          .filter((value) => value !== null);
+        if (!name || numericValues.length < 2) return null;
+        const windowValues = numericValues.slice(-targetWindow);
+        if (windowValues.length < 2) return null;
+        const start = Number(windowValues[0]);
+        const end = Number(windowValues[windowValues.length - 1]);
+        const delta = end - start;
+        const pctChange = Math.abs(start) > 1e-9 ? (delta / Math.abs(start)) * 100 : null;
+        const magnitude = Math.abs(pctChange ?? delta);
+        const direction =
+          pctChange !== null ? (pctChange > 0.75 ? "up" : pctChange < -0.75 ? "down" : "flat") : delta > 0 ? "up" : delta < 0 ? "down" : "flat";
+        return {
+          name,
+          start: Number(start.toFixed(6)),
+          end: Number(end.toFixed(6)),
+          delta: Number(delta.toFixed(6)),
+          pctChange: pctChange === null ? null : Number(pctChange.toFixed(3)),
+          magnitude: Number(magnitude.toFixed(3)),
+          direction,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => Number(b.magnitude || 0) - Number(a.magnitude || 0))
+      .slice(0, 10);
+
+    const heuristics = [];
+    const rsi = latestMap.RSI;
+    if (Number.isFinite(rsi)) {
+      if (rsi >= 70) heuristics.push(`RSI ${rsi.toFixed(2)} indicates overbought conditions.`);
+      else if (rsi <= 30) heuristics.push(`RSI ${rsi.toFixed(2)} indicates oversold conditions.`);
+      else heuristics.push(`RSI ${rsi.toFixed(2)} is in neutral range.`);
+    }
+    const mfi = latestMap.MFI;
+    if (Number.isFinite(mfi)) {
+      if (mfi >= 80) heuristics.push(`MFI ${mfi.toFixed(2)} suggests strong inflow / overbought pressure.`);
+      else if (mfi <= 20) heuristics.push(`MFI ${mfi.toFixed(2)} suggests outflow / oversold pressure.`);
+    }
+    const adx = latestMap.ADX;
+    if (Number.isFinite(adx)) {
+      if (adx >= 25) heuristics.push(`ADX ${adx.toFixed(2)} indicates trend strength is active.`);
+      else heuristics.push(`ADX ${adx.toFixed(2)} indicates weak or ranging trend.`);
+    }
+    const macd = latestMap.MACD;
+    if (Number.isFinite(macd)) {
+      if (macd > 0) heuristics.push(`MACD is positive (${macd.toFixed(4)}), favoring bullish momentum bias.`);
+      else if (macd < 0) heuristics.push(`MACD is negative (${macd.toFixed(4)}), favoring bearish momentum bias.`);
+      else heuristics.push("MACD is flat near zero.");
+    }
+    const sma = latestMap.SMA;
+    const ema = latestMap.EMA;
+    if (Number.isFinite(sma) && Number.isFinite(ema)) {
+      if (ema > sma) heuristics.push(`EMA (${ema.toFixed(4)}) is above SMA (${sma.toFixed(4)}), showing short-term strength.`);
+      else if (ema < sma) heuristics.push(`EMA (${ema.toFixed(4)}) is below SMA (${sma.toFixed(4)}), showing short-term weakness.`);
+    }
+
+    return {
+      lookbackDays: Number(lookbackDays || 90),
+      interval: String(interval || "1d"),
+      latest,
+      trend,
+      heuristics,
+      generatedAt: new Date().toISOString(),
+    };
+  };
+
+  const renderBacktestAgentResult = (payload, technicalContext) => {
+    if (!ui.backtestAgentOutput) return;
+    const answer = escapeHtml(String(payload?.answer || "").trim() || "No answer returned.");
+    const model = escapeHtml(String(payload?.model || "gpt-5"));
+    const provider = escapeHtml(String(payload?.provider || "openai"));
+    const lookbackDays = Number(technicalContext?.lookbackDays || 0);
+    const interval = escapeHtml(String(technicalContext?.interval || "1d"));
+    const heuristics = Array.isArray(technicalContext?.heuristics) ? technicalContext.heuristics : [];
+    const trend = Array.isArray(technicalContext?.trend) ? technicalContext.trend : [];
+
+    ui.backtestAgentOutput.innerHTML = `
+      <div class="small muted">Provider: ${provider} · Model: ${model} · Window: ${lookbackDays || "n/a"}d (${interval})</div>
+      <div class="small" style="margin-top:10px; white-space:pre-wrap;">${answer}</div>
+      ${
+        heuristics.length
+          ? `<div class="small" style="margin-top:12px;"><strong>Indicator signals</strong></div>
+             <ul class="small" style="margin:6px 0 0 16px;">
+               ${heuristics.slice(0, 6).map((item) => `<li>${escapeHtml(String(item || ""))}</li>`).join("")}
+             </ul>`
+          : ""
+      }
+      ${
+        trend.length
+          ? `<div class="small" style="margin-top:12px;"><strong>Recent trend shifts</strong></div>
+             <ul class="small" style="margin:6px 0 0 16px;">
+               ${trend
+                 .slice(0, 5)
+                 .map((item) => {
+                   const pct = Number.isFinite(Number(item?.pctChange)) ? `${Number(item.pctChange).toFixed(2)}%` : "n/a";
+                   return `<li>${escapeHtml(String(item?.name || "Indicator"))}: ${escapeHtml(pct)} (${escapeHtml(String(item?.direction || "flat"))})</li>`;
+                 })
+                 .join("")}
+             </ul>`
+          : ""
+      }
+    `;
+  };
+
   const isPanelVisible = (panelName) => {
     const panel = document.querySelector(`[data-panel="${String(panelName || "").trim()}"]`);
     return Boolean(panel && !panel.classList.contains("hidden"));
@@ -5497,7 +6404,7 @@
     const tickerInput = document.getElementById("options-ticker");
     if (tickerInput && "value" in tickerInput) tickerInput.value = symbol;
 
-    if (!state.user) {
+    if (!hasFullAccount()) {
       if (isPanelVisible("options")) {
         setOutputReady(ui.optionsOutput);
         ui.optionsOutput.innerHTML = `<div class="small muted">Sign in to load the options chain.</div>`;
@@ -5618,29 +6525,36 @@
     return null;
   };
 
-	  const renderTickerChart = async (rows, ticker, interval, overlays = []) => {
-	    if (!ui.tickerChart) return;
+  const renderTickerChart = async (rows, ticker, interval, overlays = [], options = {}) => {
+    if (!ui.tickerChart) return;
       const cleanTicker = normalizeTicker(ticker || state.tickerContext.ticker || "") || "AAPL";
       const hasOverlays = Array.isArray(overlays) && overlays.length > 0;
+      const skipTradingView = Boolean(options?.skipTradingView);
+      const allowTradingView = isPanelVisible("ticker-intelligence");
 
       if (!rows?.length) {
         ui.tickerChart.textContent = "No price data to plot.";
         return;
       }
 
-      if (state.chartEngine === "tradingview" && !hasOverlays) {
-        const rendered = renderTradingViewTerminal({ ticker: cleanTicker, interval });
+      if (!skipTradingView && !hasOverlays && allowTradingView) {
+        const rendered = renderTradingViewTerminal({
+          ticker: cleanTicker,
+          interval,
+          onFallback: () => {
+            setTerminalStatus("TradingView unavailable. Showing Quantura chart.");
+            renderTickerChart(rows, cleanTicker, interval, overlays, { skipTradingView: true }).catch(() => {});
+          },
+        });
         if (rendered) {
           setTerminalChartEngineVisibility("tradingview");
           return;
         }
       }
 
-      if (state.chartEngine === "tradingview" && hasOverlays) {
-        setChartEngine("legacy", { persist: false, rerender: false });
-        setTerminalStatus("Showing legacy chart for Quantura overlays. Switch back to TradingView anytime.");
-      } else {
-        setTerminalChartEngineVisibility("legacy");
+      setTerminalChartEngineVisibility("legacy");
+      if (hasOverlays) {
+        setTerminalStatus("Quantura overlay mode is active on the chart.");
       }
 
 	    const Plotly = getPlotly();
@@ -6129,7 +7043,7 @@
   };
 
   const runPredictionsQuantileMapping = async (functions) => {
-    if (!state.user) throw new Error("Sign in to run the OpenAI CSV Agent.");
+    if (!hasFullAccount()) throw new Error("Sign in to run the OpenAI CSV Agent.");
     const table = state.predictionsContext.table;
     const uploadDoc = state.predictionsContext.uploadDoc;
     const uploadId = state.predictionsContext.uploadId;
@@ -6679,6 +7593,12 @@
       "gpt5-mini": "gpt-5-mini",
       "gpt5-nano": "gpt-5-nano",
       "gpt-5-thinking": "gpt-5.2",
+      "nova-micro": "amazon.nova-micro-v1:0",
+      "nova-lite": "amazon.nova-lite-v1:0",
+      "nova-pro": "amazon.nova-pro-v1:0",
+      "amazon-nova-micro": "amazon.nova-micro-v1:0",
+      "amazon-nova-lite": "amazon.nova-lite-v1:0",
+      "amazon-nova-pro": "amazon.nova-pro-v1:0",
     };
     if (aliases[lower]) return aliases[lower];
     if (lower.startsWith("gpt-") && lower.charAt(4) === "4") {
@@ -6686,6 +7606,9 @@
     }
     if (lower.startsWith("o1")) {
       return "gpt-5.1";
+    }
+    if (lower.startsWith("amazon.nova")) {
+      return lower;
     }
     return id;
   };
@@ -6707,14 +7630,21 @@
   };
 
   const getCurrentAiTierKey = () => {
-    if (!state.user) return "free";
-    if (String(state.user.email || "").toLowerCase() === String(ADMIN_EMAIL).toLowerCase()) return "desk";
+    if (!hasFullAccount()) return "free";
+    if (isAdminUser()) return "desk";
     if (!state.userHasPaidPlan) return "free";
     return state.userSubscriptionTier || "pro";
   };
 
   const getCurrentAiTierConfig = () => {
     const key = getCurrentAiTierKey();
+    const rawGlobalAllowed = Array.isArray(state.remoteFlags?.llmAllowedModels)
+      ? state.remoteFlags.llmAllowedModels
+      : DEFAULT_LLM_ALLOWED_MODELS;
+    const globalAllowed = rawGlobalAllowed
+      .map((x) => normalizeAiModelId(String(x).trim()))
+      .filter((modelId) => modelId && (modelId.startsWith("gpt-5") || modelId.startsWith("amazon.nova")));
+    const globalSet = new Set(globalAllowed);
     const tiers = state.remoteFlags.aiUsageTiers && typeof state.remoteFlags.aiUsageTiers === "object"
       ? state.remoteFlags.aiUsageTiers
       : AI_USAGE_TIER_DEFAULTS;
@@ -6725,15 +7655,24 @@
     const rawAllowed = Array.isArray(config.allowed_models) ? config.allowed_models : [];
     const allowedModels = rawAllowed
       .map((x) => normalizeAiModelId(String(x).trim()))
-      .filter((modelId) => modelId && modelId.toLowerCase().startsWith("gpt-5"));
+      .filter((modelId) => modelId && (modelId.startsWith("gpt-5") || modelId.startsWith("amazon.nova")))
+      .filter((modelId) => !globalSet.size || globalSet.has(modelId));
     const fallbackAllowed = (AI_USAGE_TIER_DEFAULTS[key]?.allowed_models || AI_USAGE_TIER_DEFAULTS.free.allowed_models)
       .map((x) => normalizeAiModelId(String(x).trim()))
-      .filter(Boolean);
+      .filter((modelId) => modelId && (modelId.startsWith("gpt-5") || modelId.startsWith("amazon.nova")))
+      .filter((modelId) => !globalSet.size || globalSet.has(modelId));
     const weeklyLimitRaw = Number(config.weekly_limit ?? config.daily_limit ?? AI_USAGE_TIER_DEFAULTS[key]?.weekly_limit ?? 3);
     const weeklyLimit = Number.isFinite(weeklyLimitRaw) ? Math.max(1, weeklyLimitRaw) : 3;
+    const finalAllowed = allowedModels.length
+      ? allowedModels
+      : fallbackAllowed.length
+      ? fallbackAllowed
+      : globalAllowed.length
+      ? globalAllowed
+      : DEFAULT_LLM_ALLOWED_MODELS;
     return {
       key,
-      allowedModels: allowedModels.length ? allowedModels : fallbackAllowed,
+      allowedModels: finalAllowed,
       weeklyLimit,
       dailyLimit: weeklyLimit, // Legacy alias for older UI helpers.
       volatilityAlerts: Boolean(config.volatility_alerts),
@@ -7212,7 +8151,10 @@
 
     if (ui.screenerModelMeta) {
       const tierLabel = tier.key === "desk" ? "Desk" : tier.key === "pro" ? "Pro" : "Free";
-      ui.screenerModelMeta.textContent = `${tierLabel} tier · ${tier.weeklyLimit} weekly credits · GPT-5 personalities`;
+      const hasNova = tier.allowedModels.some((modelId) => String(modelId).startsWith("amazon.nova"));
+      ui.screenerModelMeta.textContent = `${tierLabel} tier · ${tier.weeklyLimit} weekly credits · ${
+        hasNova ? "GPT-5 + Nova personalities" : "GPT-5 personalities"
+      }`;
     }
   };
 
@@ -7310,7 +8252,9 @@
     const modelId = normalizeAiModelId(agent?.modelId || "");
     const fromCatalog = getModelMeta(modelId);
     if (fromCatalog) return fromCatalog;
-    const provider = String(agent?.modelProvider || "openai").trim().toLowerCase();
+    const provider =
+      String(agent?.modelProvider || "").trim().toLowerCase() ||
+      (modelId.startsWith("amazon.nova") ? "amazon_nova" : "openai");
     return {
       id: modelId || "unknown",
       provider,
@@ -7323,8 +8267,9 @@
     const meta = getAgentModelMeta(agent);
     const label = meta.label || meta.id || "GPT-5 personality";
     const modelTag = meta.id ? ` · ${meta.id}` : "";
+    const providerClass = `model-badge-${String(meta.provider || "openai").replace(/[^a-z0-9_-]/gi, "").toLowerCase() || "openai"}`;
     return `
-      <span class="model-badge model-badge-openai">
+      <span class="model-badge ${providerClass}">
         <span class="model-badge-dot" aria-hidden="true"></span>
         ${escapeHtml(`${label}${modelTag}`)}
       </span>
@@ -7935,7 +8880,7 @@
     targetId = "",
     targetType = "profile",
   }) => {
-    if (!state.user) {
+    if (!hasFullAccount()) {
       showToast("Sign in to support creators.", "warn");
       return;
     }
@@ -7963,7 +8908,7 @@
   };
 
   const toggleAIAgentSocial = async ({ kind, agentId, db, functions }) => {
-    if (!state.user) {
+    if (!hasFullAccount()) {
       showToast("Sign in to interact with AI Agents.", "warn");
       return;
     }
@@ -8066,7 +9011,7 @@
   };
 
   const generateAIPortfolioForRun = async ({ db, functions, runId, preferredName = "", selectedModel = "" }) => {
-    if (!state.user) {
+    if (!hasFullAccount()) {
       showToast("Sign in to generate AI Portfolios.", "warn");
       return;
     }
@@ -8275,8 +9220,7 @@
 
   const seedAdminPresetScreenerRuns = async (db, workspaceId) => {
     if (!state.user || !db || !workspaceId) return;
-    const email = String(state.user.email || "").trim().toLowerCase();
-    if (email !== String(ADMIN_EMAIL).trim().toLowerCase()) return;
+    if (!isAdminUser(state.user)) return;
 
     const markerRef = db.collection("users").doc(workspaceId).collection("settings").doc("admin_screener_seed");
     const marker = await markerRef.get();
@@ -8362,7 +9306,7 @@
 
   const loadScreenerRunById = async (db, runId) => {
     if (!db || !runId) throw new Error("Run ID is required.");
-    if (!state.user) throw new Error("Sign in to load saved runs.");
+    if (!hasFullAccount()) throw new Error("Sign in to load saved runs.");
 
     const cleanId = String(runId || "").trim();
     if (!cleanId) throw new Error("Run ID is required.");
@@ -8668,15 +9612,33 @@
   };
 
   const loadVapidKey = async (functions) => {
-    if (state.remoteFlags?.webPushVapidKey) return String(state.remoteFlags.webPushVapidKey);
-    if (window.QUANTURA_VAPID_KEY) return String(window.QUANTURA_VAPID_KEY);
+    if (state.remoteFlags?.webPushVapidKey) return String(state.remoteFlags.webPushVapidKey || "").trim();
+    if (window.QUANTURA_VAPID_KEY) return String(window.QUANTURA_VAPID_KEY || "").trim();
     const getWebPushConfig = functions.httpsCallable("get_web_push_config");
     const response = await getWebPushConfig({ meta: buildMeta() });
-    return response.data?.vapidKey || "";
+    return String(response.data?.vapidKey || "").trim();
+  };
+
+  const syncNotificationToken = async (functions, token, opts = {}) => {
+    const cleanToken = String(token || "").trim();
+    if (cleanToken.length < 20) {
+      throw new Error("Valid notification token is required.");
+    }
+    const registerPushToken = functions.httpsCallable("register_notification_token");
+    await registerPushToken({
+      token: cleanToken,
+      forceRefresh: Boolean(opts.forceRefresh),
+      meta: {
+        ...buildMeta(),
+        tokenSource: String(opts.source || "messaging"),
+      },
+    });
+    localStorage.setItem(FCM_TOKEN_CACHE_KEY, cleanToken);
+    return cleanToken;
   };
 
   const registerNotificationToken = async (functions, messaging, opts = {}) => {
-    if (!state.user) throw new Error("Sign in before enabling notifications.");
+    if (!hasFullAccount()) throw new Error("Sign in before enabling notifications.");
     if (!messaging) throw new Error("Messaging SDK is not available.");
     if (!isPushSupported()) throw new Error("Push notifications are not supported in this browser.");
 
@@ -8685,10 +9647,36 @@
       throw new Error("Notification permission was not granted.");
     }
 
-	    const vapidKey = await loadVapidKey(functions);
-	    if (!vapidKey) {
-	      throw new Error("Web push key is missing. Configure the VAPID public key on the server.");
-	    }
+    const cachedToken = String(safeLocalStorageGet(FCM_TOKEN_CACHE_KEY) || "").trim();
+    if (cachedToken && !opts.forceRefresh) {
+      try {
+        return await syncNotificationToken(functions, cachedToken, { forceRefresh: false, source: "cache" });
+      } catch (error) {
+        // Fall through to minting a new token.
+      }
+    }
+
+    let vapidKey = "";
+    try {
+      vapidKey = await loadVapidKey(functions);
+    } catch (error) {
+      if (cachedToken) {
+        return syncNotificationToken(functions, cachedToken, {
+          forceRefresh: false,
+          source: opts.forceRefresh ? "cache_refresh" : "cache",
+        });
+      }
+      throw error;
+    }
+    if (!vapidKey) {
+      if (cachedToken) {
+        return syncNotificationToken(functions, cachedToken, {
+          forceRefresh: false,
+          source: opts.forceRefresh ? "cache_refresh" : "cache",
+        });
+      }
+      throw new Error("Web push key is missing. Configure FCM_WEB_VAPID_KEY on the server.");
+    }
 
     const serviceWorkerRegistration = await ensureMessagingServiceWorker();
     const token = await messaging.getToken({
@@ -8697,19 +9685,20 @@
     });
 
     if (!token) {
+      if (cachedToken) {
+        return syncNotificationToken(functions, cachedToken, {
+          forceRefresh: false,
+          source: opts.forceRefresh ? "cache_refresh" : "cache",
+        });
+      }
       throw new Error("No registration token generated.");
     }
 
-    const registerPushToken = functions.httpsCallable("register_notification_token");
-	    await registerPushToken({
-	      token,
-	      forceRefresh: Boolean(opts.forceRefresh),
-	      meta: buildMeta(),
-	    });
-
-	    localStorage.setItem(FCM_TOKEN_CACHE_KEY, token);
-	    return token;
-	  };
+    return syncNotificationToken(functions, token, {
+      forceRefresh: Boolean(opts.forceRefresh),
+      source: opts.forceRefresh ? "messaging_refresh" : "messaging",
+    });
+  };
 
   const unregisterCachedNotificationToken = async (functions) => {
     const token = localStorage.getItem(FCM_TOKEN_CACHE_KEY);
@@ -8761,10 +9750,7 @@
   };
 
   const handlePurchase = async (panel, functions) => {
-    if (!state.user) {
-      showToast("Sign in to continue.", "warn");
-      return;
-    }
+    if (!requireFullAccount("Sign in to continue.", { redirect: true })) return;
 
     const button = panel.querySelector('[data-action="purchase"]');
     const note = panel.querySelector(".purchase-note");
@@ -8830,10 +9816,7 @@
   };
 
   const handleStripeCheckout = async (panel, functions) => {
-    if (!state.user) {
-      showToast("Sign in to continue.", "warn");
-      return;
-    }
+    if (!requireFullAccount("Sign in to continue.", { redirect: true })) return;
     if (!state.remoteFlags.stripeCheckoutEnabled) {
       showToast("Checkout is temporarily disabled.", "warn");
       return;
@@ -8888,6 +9871,39 @@
     }
   };
 
+  const handleBillingPortalOpen = async (event, functions) => {
+    if (!ui.billingPortalLink) return;
+    if (!hasFullAccount()) return;
+
+    event?.preventDefault?.();
+    if (ui.billingPortalLink.dataset.loading === "1") return;
+    ui.billingPortalLink.dataset.loading = "1";
+
+    const originalText = ui.billingPortalLink.textContent || "Open Stripe billing portal";
+    ui.billingPortalLink.textContent = "Opening billing portal...";
+    ui.billingPortalLink.setAttribute("aria-disabled", "true");
+
+    try {
+      const createPortal = functions.httpsCallable("create_stripe_billing_portal_session");
+      const returnUrl = `${window.location.origin}${window.location.pathname}`;
+      const result = await createPortal({
+        returnUrl,
+        meta: buildMeta(),
+      });
+      const url = String(result.data?.url || "").trim();
+      if (!url) throw new Error("Stripe billing portal URL is missing.");
+      logEvent("billing_portal_open", { provider: "stripe" });
+      window.location.assign(url);
+      return;
+    } catch (error) {
+      showToast(error.message || "Unable to open Stripe billing portal.", "warn");
+    } finally {
+      ui.billingPortalLink.dataset.loading = "0";
+      ui.billingPortalLink.textContent = originalText;
+      ui.billingPortalLink.removeAttribute("aria-disabled");
+    }
+  };
+
   const handleCheckoutReturn = async (functions) => {
     const checkout = String(getQueryParam("checkout") || "").trim().toLowerCase();
     if (!checkout) return;
@@ -8911,10 +9927,7 @@
     }
 
     if (checkout !== "success" || !sessionId) return;
-    if (!state.user) {
-      showToast("Sign in to finalize checkout.", "warn");
-      return;
-    }
+    if (!requireFullAccount("Sign in to finalize checkout.", { redirect: true })) return;
 
     try {
       const confirm = functions.httpsCallable("confirm_stripe_checkout");
@@ -8959,10 +9972,27 @@
 		    const messaging = getMessagingClient();
 
       state.clients = { auth, db, functions, storage, messaging };
+      bindFeatureVoteForms(functions);
 
       window.__quanturaPanelActivated = (panel) => {
         const next = String(panel || "").trim();
         if (!next) return;
+        if (ui.intelStrip) {
+          ui.intelStrip.classList.toggle("hidden", next === "ticker-intelligence");
+        }
+        if (next === "ticker-intelligence") {
+          const activeTicker = normalizeTicker(state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "");
+          if (activeTicker && Array.isArray(state.tickerContext.rows) && state.tickerContext.rows.length) {
+            renderTickerChart(
+              state.tickerContext.rows,
+              activeTicker,
+              state.tickerContext.interval || "1d",
+              buildCurrentChartOverlays()
+            ).catch(() => {});
+          }
+        } else {
+          setTerminalChartEngineVisibility("legacy");
+        }
 
         if (next === "trending") {
           if (!state.panelAutoloaded.trending) {
@@ -9162,7 +10192,7 @@
 		      const ticker = plotButton.dataset.ticker || "";
 		      if (!forecastId) return;
 
-      if (!state.user) {
+      if (!hasFullAccount()) {
         showToast("Sign in to view saved forecasts.", "warn");
         return;
       }
@@ -9193,7 +10223,7 @@
           const dlButton = event.target.closest('[data-action="download-forecast"]');
           if (!dlButton) return;
           event.preventDefault();
-          if (!state.user) {
+          if (!hasFullAccount()) {
             showToast("Sign in to download forecasts.", "warn");
             return;
           }
@@ -9229,7 +10259,7 @@
           const dlButton = event.target.closest('[data-action="download-screener"]');
           if (!dlButton) return;
           event.preventDefault();
-          if (!state.user) {
+          if (!hasFullAccount()) {
             showToast("Sign in to download screener runs.", "warn");
             return;
           }
@@ -9260,7 +10290,7 @@
           const shareForecast = event.target.closest('[data-action="share-forecast"]');
           if (shareForecast) {
             event.preventDefault();
-            if (!state.user) {
+            if (!hasFullAccount()) {
               showToast("Sign in to share forecasts.", "warn");
               return;
             }
@@ -9288,7 +10318,7 @@
 	          const deleteForecast = event.target.closest('[data-action="delete-forecast"]');
 	          if (deleteForecast) {
 	            event.preventDefault();
-	            if (!state.user) {
+	            if (!hasFullAccount()) {
 	              showToast("Sign in to delete forecasts.", "warn");
 	              return;
 	            }
@@ -9324,7 +10354,7 @@
           const renameScreener = event.target.closest('[data-action="rename-screener"]');
           if (renameScreener) {
             event.preventDefault();
-            if (!state.user) {
+            if (!hasFullAccount()) {
               showToast("Sign in to rename screener runs.", "warn");
               return;
             }
@@ -9368,7 +10398,7 @@
           const shareScreener = event.target.closest('[data-action="share-screener"]');
           if (shareScreener) {
             event.preventDefault();
-            if (!state.user) {
+            if (!hasFullAccount()) {
               showToast("Sign in to share screener runs.", "warn");
               return;
             }
@@ -9396,7 +10426,7 @@
           const generatePortfolio = event.target.closest('[data-action="generate-ai-portfolio"]');
           if (generatePortfolio) {
             event.preventDefault();
-            if (!state.user) {
+            if (!hasFullAccount()) {
               showToast("Sign in to generate AI Portfolios.", "warn");
               return;
             }
@@ -9419,7 +10449,7 @@
           const renameAgent = event.target.closest('[data-action="rename-ai-agent"]');
           if (renameAgent) {
             event.preventDefault();
-            if (!state.user) {
+            if (!hasFullAccount()) {
               showToast("Sign in to rename AI Agents.", "warn");
               return;
             }
@@ -9556,7 +10586,7 @@
           const toggleScreenerPublic = event.target.closest('[data-action="toggle-screener-public"]');
           if (toggleScreenerPublic) {
             event.preventDefault();
-            if (!state.user) {
+            if (!hasFullAccount()) {
               showToast("Sign in to update screener visibility.", "warn");
               return;
             }
@@ -9626,7 +10656,7 @@
 	          const deleteScreener = event.target.closest('[data-action="delete-screener"]');
 	          if (deleteScreener) {
 	            event.preventDefault();
-	            if (!state.user) {
+	            if (!hasFullAccount()) {
 	              showToast("Sign in to delete screener runs.", "warn");
 	              return;
 	            }
@@ -9658,10 +10688,7 @@
 	          const deleteAutopilot = event.target.closest('[data-action="delete-autopilot"]');
 	          if (deleteAutopilot) {
 	            event.preventDefault();
-	            if (!state.user) {
-	              showToast("Sign in to delete autopilot requests.", "warn");
-	              return;
-	            }
+	            if (!requireAdminAccess("Autopilot queue is currently admin-only.")) return;
 	            const requestId = String(deleteAutopilot.dataset.requestId || "").trim();
 	            if (!requestId) return;
 	            const ok = await openConfirmModal({
@@ -9689,12 +10716,9 @@
 	          const plotUpload = event.target.closest('[data-action="plot-upload"]');
 	          if (plotUpload) {
 	            event.preventDefault();
-	            if (!state.user) {
-	              showToast("Sign in to view uploads.", "warn");
-              return;
-            }
-            const uploadId = String(plotUpload.dataset.uploadId || "").trim();
-            if (!uploadId) return;
+	            if (!requireAdminAccess("Prediction uploads are currently admin-only.")) return;
+	            const uploadId = String(plotUpload.dataset.uploadId || "").trim();
+	            if (!uploadId) return;
             try {
               await plotPredictionUploadById(db, storage, uploadId);
               showToast("Upload loaded.");
@@ -9704,15 +10728,12 @@
             return;
           }
 
-          const downloadUpload = event.target.closest('[data-action="download-upload"]');
-          if (downloadUpload) {
-            event.preventDefault();
-            if (!state.user) {
-              showToast("Sign in to download uploads.", "warn");
-              return;
-            }
-            const uploadId = String(downloadUpload.dataset.uploadId || "").trim();
-            if (!uploadId) return;
+	          const downloadUpload = event.target.closest('[data-action="download-upload"]');
+	          if (downloadUpload) {
+	            event.preventDefault();
+	            if (!requireAdminAccess("Prediction uploads are currently admin-only.")) return;
+	            const uploadId = String(downloadUpload.dataset.uploadId || "").trim();
+	            if (!uploadId) return;
 
             downloadUpload.disabled = true;
             try {
@@ -9736,10 +10757,7 @@
 	          const renameUpload = event.target.closest('[data-action="rename-upload"]');
 	          if (renameUpload) {
 	            event.preventDefault();
-	            if (!state.user) {
-	              showToast("Sign in to rename uploads.", "warn");
-	              return;
-	            }
+	            if (!requireAdminAccess("Prediction uploads are currently admin-only.")) return;
 	            const uploadId = String(renameUpload.dataset.uploadId || "").trim();
 	            if (!uploadId) return;
 	            let currentTitle = "";
@@ -9773,15 +10791,12 @@
             return;
           }
 
-          const shareUpload = event.target.closest('[data-action="share-upload"]');
-          if (shareUpload) {
-            event.preventDefault();
-            if (!state.user) {
-              showToast("Sign in to share uploads.", "warn");
-              return;
-            }
-            const uploadId = String(shareUpload.dataset.uploadId || "").trim();
-            if (!uploadId) return;
+	          const shareUpload = event.target.closest('[data-action="share-upload"]');
+	          if (shareUpload) {
+	            event.preventDefault();
+	            if (!requireAdminAccess("Prediction uploads are currently admin-only.")) return;
+	            const uploadId = String(shareUpload.dataset.uploadId || "").trim();
+	            if (!uploadId) return;
 
             shareUpload.disabled = true;
             try {
@@ -9801,13 +10816,10 @@
             return;
           }
 
-          const deleteUpload = event.target.closest('[data-action="delete-upload"]');
-          if (deleteUpload) {
-            event.preventDefault();
-            if (!state.user) {
-              showToast("Sign in to delete uploads.", "warn");
-	              return;
-	            }
+	          const deleteUpload = event.target.closest('[data-action="delete-upload"]');
+	          if (deleteUpload) {
+	            event.preventDefault();
+	            if (!requireAdminAccess("Prediction uploads are currently admin-only.")) return;
 	            const uploadId = String(deleteUpload.dataset.uploadId || "").trim();
 	            if (!uploadId) return;
 	            const ok = await openConfirmModal({
@@ -9847,7 +10859,7 @@
           const plotBacktest = event.target.closest('[data-action="plot-backtest"]');
           if (plotBacktest) {
             event.preventDefault();
-            if (!state.user) {
+            if (!hasFullAccount()) {
               showToast("Sign in to load backtests.", "warn");
               return;
             }
@@ -9867,7 +10879,7 @@
             event.target.closest('[data-action="download-backtest-code"]');
           if (downloadBacktestCode) {
             event.preventDefault();
-            if (!state.user) {
+            if (!hasFullAccount()) {
               showToast("Sign in to download backtest code.", "warn");
               return;
             }
@@ -9908,7 +10920,7 @@
           const renameBacktest = event.target.closest('[data-action="rename-backtest"]');
           if (renameBacktest) {
             event.preventDefault();
-            if (!state.user) {
+            if (!hasFullAccount()) {
               showToast("Sign in to rename backtests.", "warn");
               return;
             }
@@ -9947,7 +10959,7 @@
           const deleteBacktest = event.target.closest('[data-action="delete-backtest"]');
           if (deleteBacktest) {
             event.preventDefault();
-            if (!state.user) {
+            if (!hasFullAccount()) {
               showToast("Sign in to delete backtests.", "warn");
               return;
             }
@@ -10014,7 +11026,7 @@
           const reportPptxBtn = event.target.closest('[data-action="forecast-report-pptx"]');
           if (reportPdfBtn || reportPptxBtn) {
             event.preventDefault();
-            if (!state.user) {
+            if (!hasFullAccount()) {
               showToast("Sign in to download forecast reports.", "warn");
               return;
             }
@@ -10112,11 +11124,11 @@
       });
 
 			    ui.headerAuth?.addEventListener("click", () => {
-			      window.location.href = state.user ? "/dashboard" : "/account";
+			      window.location.href = hasFullAccount() ? "/dashboard" : "/account";
 			    });
 
 	    ui.workspaceSelect?.addEventListener("change", () => {
-	      if (!state.user) {
+	      if (!hasFullAccount()) {
 	        showToast("Sign in first.", "warn");
 	        renderWorkspaceSelect(null);
 	        return;
@@ -10142,7 +11154,7 @@
 
 	    ui.collabInviteForm?.addEventListener("submit", async (event) => {
 	      event.preventDefault();
-	      if (!state.user) {
+	      if (!hasFullAccount()) {
 	        showToast("Sign in to invite collaborators.", "warn");
 	        return;
 	      }
@@ -10173,7 +11185,7 @@
 		      if (acceptButton) {
 		        const inviteId = acceptButton.dataset.inviteId;
 		        if (!inviteId) return;
-	        if (!state.user) {
+	        if (!hasFullAccount()) {
 	          showToast("Sign in to accept invites.", "warn");
 	          return;
 	        }
@@ -10196,7 +11208,7 @@
 	      if (!removeButton) return;
 	      const collaboratorUserId = removeButton.dataset.collaboratorId;
 	      if (!collaboratorUserId) return;
-	      if (!state.user) {
+	      if (!hasFullAccount()) {
 	        showToast("Sign in to manage collaborators.", "warn");
 	        return;
 	      }
@@ -10216,7 +11228,7 @@
 
 	    ui.taskForm?.addEventListener("submit", async (event) => {
 	      event.preventDefault();
-	      if (!state.user) {
+	      if (!hasFullAccount()) {
 	        showToast("Sign in to manage tasks.", "warn");
 	        return;
 	      }
@@ -10265,7 +11277,7 @@
 
 	    ui.watchlistForm?.addEventListener("submit", async (event) => {
 	      event.preventDefault();
-	      if (!state.user) {
+	      if (!hasFullAccount()) {
 	        showToast("Sign in to manage your watchlist.", "warn");
 	        return;
 	      }
@@ -10310,7 +11322,7 @@
 
 	    ui.alertForm?.addEventListener("submit", async (event) => {
 	      event.preventDefault();
-	      if (!state.user) {
+	      if (!hasFullAccount()) {
 	        showToast("Sign in to create alerts.", "warn");
 	        return;
 	      }
@@ -10359,7 +11371,7 @@
 	    });
 
 	    ui.alertsCheck?.addEventListener("click", async () => {
-	      if (!state.user) {
+	      if (!hasFullAccount()) {
 	        showToast("Sign in first.", "warn");
 	        return;
 	      }
@@ -10384,7 +11396,7 @@
 	    document.addEventListener("click", async (event) => {
 	      const move = event.target.closest('[data-action="task-move"]');
 	      if (move) {
-	        if (!state.user) return;
+	        if (!hasFullAccount()) return;
 	        const workspaceId = state.activeWorkspaceId || state.user.uid;
 	        if (!canWriteWorkspace(workspaceId)) {
 	          showToast("Editor access required to move tasks.", "warn");
@@ -10416,7 +11428,7 @@
 
 	      const del = event.target.closest('[data-action="task-delete"]');
 	      if (!del) return;
-	      if (!state.user) return;
+	      if (!hasFullAccount()) return;
 	      const workspaceId = state.activeWorkspaceId || state.user.uid;
 	      if (!canWriteWorkspace(workspaceId)) {
 	        showToast("Editor access required to delete tasks.", "warn");
@@ -10439,7 +11451,7 @@
 	    document.addEventListener("click", async (event) => {
 	      const remove = event.target.closest('[data-action="watchlist-remove"]');
 	      if (remove) {
-	        if (!state.user) return;
+	        if (!hasFullAccount()) return;
 	        const workspaceId = state.activeWorkspaceId || state.user.uid;
 	        if (!canWriteWorkspace(workspaceId)) {
 	          showToast("Editor access required to update this workspace.", "warn");
@@ -10463,7 +11475,7 @@
 
 	      const toggle = event.target.closest('[data-action="alert-toggle"]');
 	      if (toggle) {
-	        if (!state.user) return;
+	        if (!hasFullAccount()) return;
 	        const workspaceId = state.activeWorkspaceId || state.user.uid;
 	        if (!canWriteWorkspace(workspaceId)) {
 	          showToast("Editor access required to update alerts.", "warn");
@@ -10498,7 +11510,7 @@
 
 	      const delAlert = event.target.closest('[data-action="alert-delete"]');
 	      if (!delAlert) return;
-	      if (!state.user) return;
+	      if (!hasFullAccount()) return;
 	      const workspaceId = state.activeWorkspaceId || state.user.uid;
 	      if (!canWriteWorkspace(workspaceId)) {
 	        showToast("Editor access required to delete alerts.", "warn");
@@ -10554,7 +11566,7 @@
 	      if (!col) return;
 	      event.preventDefault();
 	      col.classList.remove("drag-over");
-	      if (!state.user) return;
+	      if (!hasFullAccount()) return;
 	      const workspaceId = state.activeWorkspaceId || state.user.uid;
 	      if (!canWriteWorkspace(workspaceId)) return;
 	      const to = col.dataset.taskDropzone;
@@ -10627,6 +11639,26 @@
       }
     });
 
+    ui.authForgotPassword?.addEventListener("click", async () => {
+      if (ui.emailMessage) ui.emailMessage.textContent = "";
+      const email = String(ui.emailInput?.value || "").trim();
+      if (!email) {
+        const message = "Enter your email first, then click Forgot password.";
+        if (ui.emailMessage) ui.emailMessage.textContent = message;
+        showToast(message, "warn");
+        return;
+      }
+      try {
+        await persistenceReady;
+        await auth.sendPasswordResetEmail(email);
+        const message = `Password reset link sent to ${email}.`;
+        if (ui.emailMessage) ui.emailMessage.textContent = message;
+        showToast("Password reset email sent.");
+      } catch (error) {
+        if (ui.emailMessage) ui.emailMessage.textContent = error.message || "Unable to send password reset email.";
+      }
+    });
+
     const signInWithProvider = async (provider, successMessage, method) => {
       if (ui.emailMessage) ui.emailMessage.textContent = "";
       try {
@@ -10654,12 +11686,29 @@
       await signInWithProvider(provider, "Signed in with X.", "twitter");
     });
 
+    ui.anonymousSignin?.addEventListener("click", async () => {
+      if (ui.emailMessage) ui.emailMessage.textContent = "";
+      try {
+        await persistenceReady;
+        await auth.signInAnonymously();
+        showToast("Guest session started.");
+        logEvent("login", { method: "anonymous" });
+      } catch (error) {
+        if (ui.emailMessage) ui.emailMessage.textContent = error.message || "Unable to start guest session.";
+      }
+    });
+
 	    ui.purchasePanels.forEach((panel) => {
 	      const purchaseBtn = panel.querySelector('[data-action="purchase"]');
 	      const stripeBtn = panel.querySelector('[data-action="stripe"]');
 	      purchaseBtn?.addEventListener("click", () => handlePurchase(panel, functions));
 	      stripeBtn?.addEventListener("click", () => handleStripeCheckout(panel, functions));
 	    });
+
+    if (ui.billingPortalLink && ui.billingPortalLink.dataset.bound !== "1") {
+      ui.billingPortalLink.addEventListener("click", (event) => handleBillingPortalOpen(event, functions));
+      ui.billingPortalLink.dataset.bound = "1";
+    }
 
     if (ui.terminalTicker) {
       const initialTicker =
@@ -10828,10 +11877,7 @@
 
 		    ui.forecastForm?.addEventListener("submit", async (event) => {
 		      event.preventDefault();
-		      if (!state.user) {
-		        showToast("Sign in to run a forecast.", "warn");
-		        return;
-		      }
+		      if (!requireFullAccount("Sign in to run a forecast.", { redirect: true })) return;
 		      const formData = new FormData(ui.forecastForm);
 		      let quantiles = [];
 		      try {
@@ -10845,16 +11891,17 @@
 		        showToast(error.message || "Invalid quantiles.", "warn");
 		        return;
 		      }
-          const ticker = normalizeTicker(state.tickerContext.ticker || ui.terminalTicker?.value || "");
+          const ticker = normalizeTicker(formData.get("ticker") || state.tickerContext.ticker || ui.terminalTicker?.value || "");
           if (!ticker) {
-            showToast("Load a ticker in the chart before forecasting.", "warn");
+            showToast("Enter a ticker to forecast.", "warn");
             return;
           }
+          syncTickerInputs(ticker);
 		      const payload = {
 		        ticker,
 	        horizon: Number(formData.get("horizon")),
 	        interval: formData.get("interval"),
-	        service: formData.get("service") || ui.forecastService?.value || "prophet",
+	        service: "prophet",
 	        quantiles,
           workspaceId: state.activeWorkspaceId || state.user.uid,
 	        meta: buildMeta(),
@@ -10930,10 +11977,7 @@
 	    });
 
         ui.forecastLoadButton?.addEventListener("click", async () => {
-          if (!state.user) {
-            showToast("Sign in to load saved forecasts.", "warn");
-            return;
-          }
+          if (!requireFullAccount("Sign in to load saved forecasts.", { redirect: true })) return;
           const forecastId = String(ui.forecastLoadSelect?.value || "").trim();
           if (!forecastId) {
             showToast("Select a saved forecast.", "warn");
@@ -11022,10 +12066,7 @@
 
     ui.downloadForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
-      if (!state.user) {
-        showToast("Sign in to download price history.", "warn");
-        return;
-      }
+      if (!requireFullAccount("Sign in to download price history.", { redirect: true })) return;
       const formData = new FormData(ui.downloadForm);
       const ticker =
         normalizeTicker(formData.get("ticker")) || state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "";
@@ -11114,10 +12155,7 @@
 
 	    ui.optionsForm?.addEventListener("submit", async (event) => {
 	      event.preventDefault();
-	      if (!state.user) {
-	        showToast("Sign in to load options.", "warn");
-	        return;
-	      }
+	      if (!requireFullAccount("Sign in to load options.", { redirect: true })) return;
 	      const formData = new FormData(ui.optionsForm);
 	      const ticker = normalizeTicker(formData.get("ticker"));
 	      const cacheKey = ticker ? `${OPTIONS_EXPIRATION_PREFIX}${ticker}` : "";
@@ -11265,10 +12303,7 @@
 
 	    ui.optionsExpiration?.addEventListener("change", () => {
 	      if (!ui.optionsForm) return;
-	      if (!state.user) {
-	        showToast("Sign in to load options.", "warn");
-	        return;
-	      }
+	      if (!requireFullAccount("Sign in to load options.", { redirect: true })) return;
 	      try {
 	        ui.optionsForm.requestSubmit?.();
 	      } catch (error) {
@@ -11288,10 +12323,7 @@
 
 	    ui.screenerForm?.addEventListener("submit", async (event) => {
 	      event.preventDefault();
-	      if (!state.user) {
-	        showToast("Sign in to generate an AI Portfolio.", "warn");
-	        return;
-	      }
+	      if (!requireFullAccount("Sign in to generate an AI Portfolio.", { redirect: true })) return;
 	      const formData = new FormData(ui.screenerForm);
       const requestedNames = Number(formData.get("maxNames"));
       const boundedNames = Number.isFinite(requestedNames) ? Math.max(5, Math.min(25, requestedNames)) : 10;
@@ -11375,10 +12407,7 @@
     });
 
     ui.screenerLoadButton?.addEventListener("click", async () => {
-      if (!state.user) {
-        showToast("Sign in to load saved screener runs.", "warn");
-        return;
-      }
+      if (!requireFullAccount("Sign in to load saved screener runs.", { redirect: true })) return;
       const runId = String(ui.screenerLoadSelect?.value || "").trim();
       if (!runId) {
         showToast("Select a saved run.", "warn");
@@ -11397,10 +12426,8 @@
 
     ui.predictionsForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
-      if (!state.user) {
-        showToast("Sign in to upload predictions.", "warn");
-        return;
-      }
+      if (!requireFullAccount("Sign in to upload predictions.", { redirect: true })) return;
+      if (!requireAdminAccess("Upload predictions is currently admin-only.")) return;
       if (!storage) {
         showToast("File uploads are not available.", "warn");
         return;
@@ -11455,10 +12482,8 @@
     });
 
     ui.predictionsAgentButton?.addEventListener("click", async () => {
-      if (!state.user) {
-        showToast("Sign in to run the OpenAI CSV Agent.", "warn");
-        return;
-      }
+      if (!requireFullAccount("Sign in to run the OpenAI CSV Agent.", { redirect: true })) return;
+      if (!requireAdminAccess("OpenAI CSV Agent is currently admin-only.")) return;
       if (!functions) {
         showToast("Functions client is not ready.", "warn");
         return;
@@ -11513,6 +12538,89 @@
     });
     syncBacktestStrategyFields();
 
+    ui.backtestAgentButton?.addEventListener("click", async () => {
+      if (!functions) {
+        showToast("Functions client is not ready.", "warn");
+        return;
+      }
+      const ticker = normalizeTicker(state.tickerContext.ticker || ui.terminalTicker?.value || "");
+      if (!ticker) {
+        showToast("Load a ticker in the chart before requesting a suggestion.", "warn");
+        return;
+      }
+      const interval = String(ui.terminalInterval?.value || state.tickerContext.interval || "1d");
+      const lookbackDays = clampBacktestAgentLookback(ui.backtestAgentLookback?.value || document.getElementById("backtest-lookback")?.value || 90);
+      if (ui.backtestAgentLookback) ui.backtestAgentLookback.value = String(lookbackDays);
+      syncTickerInputs(ticker);
+
+      const indicatorList = ["RSI", "MACD", "SMA", "EMA", "BBANDS", "ATR", "ADX", "CCI", "MFI", "OBV", "ROC", "STOCH", "WILLR"];
+      const maxPoints = interval === "1h" ? Math.max(120, Math.min(900, lookbackDays * 8)) : Math.max(90, Math.min(900, lookbackDays + 30));
+
+      try {
+        if (ui.backtestAgentStatus) ui.backtestAgentStatus.textContent = "Computing technical snapshot...";
+        setOutputLoading(ui.backtestAgentOutput, "Computing indicator context...");
+
+        const runIndicators = functions.httpsCallable("get_technicals");
+        const technicalResult = await runIndicators({
+          ticker,
+          interval,
+          lookback: lookbackDays,
+          indicators: indicatorList,
+          includeSeries: true,
+          maxPoints,
+          meta: buildMeta(),
+        });
+        const technicalData = technicalResult.data || {};
+        const latestRows = Array.isArray(technicalData.latest) ? technicalData.latest : [];
+        if (!latestRows.length) {
+          throw new Error("No technical indicator values were returned.");
+        }
+        const technicalContext = summarizeBacktestTechnicalContext({
+          latestRows,
+          series: technicalData.series,
+          lookbackDays,
+          interval,
+        });
+
+        const languageRaw = normalizeLanguageCode(ui.tickerQueryLanguage?.value || state.preferredLanguage || "en");
+        const language = languageRaw === "auto" ? state.preferredLanguage || "en" : languageRaw;
+        const question = [
+          `Generate one backtestable setup idea for ${ticker} using the supplied technical indicator context on ${interval} data.`,
+          "Output should include: bias, entry trigger, invalidation/exit, and position-risk constraints.",
+          "Reference conflicting signals and keep the plan practical for research/backtesting only.",
+        ].join(" ");
+
+        if (ui.backtestAgentStatus) ui.backtestAgentStatus.textContent = "Querying GPT-5...";
+        const queryInsight = functions.httpsCallable("query_ticker_insight");
+        const result = await queryInsight({
+          ticker,
+          question,
+          language,
+          technicalContext,
+          meta: buildMeta(),
+        });
+        const payload = result.data || {};
+        setOutputReady(ui.backtestAgentOutput);
+        renderBacktestAgentResult(payload, technicalContext);
+        if (ui.backtestAgentStatus) ui.backtestAgentStatus.textContent = "Suggestion ready.";
+        logEvent("backtest_agent_suggestion", {
+          ticker,
+          interval,
+          lookback_days: lookbackDays,
+          provider: String(payload.provider || ""),
+          model: String(payload.model || ""),
+        });
+        showToast("OpenAI technical suggestion ready.");
+      } catch (error) {
+        setOutputReady(ui.backtestAgentOutput);
+        if (ui.backtestAgentOutput) {
+          ui.backtestAgentOutput.innerHTML = `<div class="small muted">${escapeHtml(error.message || "Unable to generate technical suggestion.")}</div>`;
+        }
+        if (ui.backtestAgentStatus) ui.backtestAgentStatus.textContent = "Unable to generate suggestion.";
+        showToast(error.message || "Unable to generate technical suggestion.", "warn");
+      }
+    });
+
     ui.backtestLoadSelect?.addEventListener("change", () => {
       if (!ui.backtestLoadId || !ui.backtestLoadSelect) return;
       const value = String(ui.backtestLoadSelect.value || "").trim();
@@ -11520,10 +12628,7 @@
     });
 
     ui.backtestLoadButton?.addEventListener("click", async () => {
-      if (!state.user) {
-        showToast("Sign in to load saved backtests.", "warn");
-        return;
-      }
+      if (!requireFullAccount("Sign in to load saved backtests.", { redirect: true })) return;
       const backtestId = String(ui.backtestLoadId?.value || "").trim() || String(ui.backtestLoadSelect?.value || "").trim();
       if (!backtestId) {
         showToast("Select a backtest or paste an ID.", "warn");
@@ -11542,10 +12647,7 @@
 
     ui.backtestForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
-      if (!state.user) {
-        showToast("Sign in to run backtests.", "warn");
-        return;
-      }
+      if (!requireFullAccount("Sign in to run backtests.", { redirect: true })) return;
       if (!state.remoteFlags.backtestingEnabled) {
         showToast("Backtesting is temporarily disabled.", "warn");
         return;
@@ -11602,10 +12704,8 @@
 
     ui.autopilotForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
-      if (!state.user) {
-        showToast("Sign in to queue autopilot runs.", "warn");
-        return;
-      }
+      if (!requireFullAccount("Sign in to queue autopilot runs.", { redirect: true })) return;
+      if (!requireAdminAccess("Autopilot queue is currently admin-only.")) return;
       const formData = new FormData(ui.autopilotForm);
       const rawTickerInput = String(formData.get("ticker") || "").trim();
       let tickers = rawTickerInput
@@ -11651,10 +12751,7 @@
     });
 
     ui.notificationsEnable?.addEventListener("click", async () => {
-	      if (!state.user) {
-	        showToast("Sign in to enable notifications.", "warn");
-	        return;
-	      }
+	      if (!requireFullAccount("Sign in to enable notifications.", { redirect: true })) return;
 	      if (!state.remoteFlags.pushEnabled) {
 	        showToast("Notifications are temporarily disabled.", "warn");
 	        return;
@@ -11683,10 +12780,7 @@
     });
 
     ui.notificationsRefresh?.addEventListener("click", async () => {
-	      if (!state.user) {
-	        showToast("Sign in first.", "warn");
-	        return;
-	      }
+	      if (!requireFullAccount("Sign in first.", { redirect: true })) return;
 	      if (!state.remoteFlags.pushEnabled) {
 	        showToast("Notifications are temporarily disabled.", "warn");
 	        return;
@@ -11714,10 +12808,7 @@
     });
 
     ui.notificationsSendTest?.addEventListener("click", async () => {
-	      if (!state.user) {
-	        showToast("Sign in first.", "warn");
-	        return;
-	      }
+	      if (!requireFullAccount("Sign in first.", { redirect: true })) return;
 	      if (!state.remoteFlags.pushEnabled) {
 	        showToast("Notifications are temporarily disabled.", "warn");
 	        return;
@@ -11725,6 +12816,7 @@
 	      try {
 	        setNotificationStatus("Sending test notification...");
 	        const sendTestNotification = functions.httpsCallable("send_test_notification");
+          const cachedToken = String(safeLocalStorageGet(FCM_TOKEN_CACHE_KEY) || "").trim();
 	        const result = await sendTestNotification({
 	          title: "Quantura test",
           body: "Web push is active for your dashboard.",
@@ -11732,13 +12824,17 @@
             source: "dashboard_test",
             timestamp: new Date().toISOString(),
           },
+          token: cachedToken,
           meta: buildMeta(),
         });
         const sent = result.data?.successCount ?? 0;
-        setNotificationStatus(`Test sent. Delivered to ${sent} token(s).`);
+        const attempted = result.data?.attemptedTokenCount ?? sent;
+        const usedFallback = Boolean(result.data?.usedFallbackToken);
+        const statusSuffix = usedFallback ? " (used local token fallback)" : "";
+        setNotificationStatus(`Test sent. Delivered to ${sent} of ${attempted} token(s)${statusSuffix}.`);
         appendNotificationLog({
           title: "Test notification sent",
-          body: `Delivered to ${sent} registered token(s).`,
+          body: `Delivered to ${sent} of ${attempted} token(s).${usedFallback ? " Local cached token was used as fallback." : ""}`,
           source: "system",
           at: new Date().toISOString(),
         });
@@ -11761,9 +12857,8 @@
     if (ui.profileForm && ui.profileForm.dataset.bound !== "1") {
       ui.profileForm.addEventListener("submit", async (event) => {
         event.preventDefault();
-        if (!state.user) {
+        if (!requireFullAccount("Sign in to save your profile.", { redirect: true })) {
           setProfileStatus("Sign in to save your profile.", "warn");
-          showToast("Sign in to save your profile.", "warn");
           return;
         }
         try {
@@ -11810,9 +12905,8 @@
     }
     if (ui.profileConnectStripe && ui.profileConnectStripe.dataset.bound !== "1") {
       ui.profileConnectStripe.addEventListener("click", async () => {
-        if (!state.user) {
+        if (!requireFullAccount("Sign in to connect Stripe.", { redirect: true })) {
           setProfileStatus("Sign in to connect Stripe.", "warn");
-          showToast("Sign in to connect Stripe.", "warn");
           return;
         }
         const workspaceId = state.activeWorkspaceId || state.user.uid;
@@ -11848,9 +12942,9 @@
 		      state.authResolved = true;
 		      state.user = user;
 		      setAuthUi(user);
-		      setUserId(user?.uid || null);
+		      setUserId(hasFullAccount(user) ? user.uid : null);
 
-		      if (!user) {
+		      if (!hasFullAccount(user)) {
 		        state.userHasPaidPlan = false;
             state.userSubscriptionTier = "free";
             state.aiUsageToday = 0;
@@ -11869,8 +12963,9 @@
 	        if (ui.alertsStatus) ui.alertsStatus.textContent = "";
 	        if (ui.collabInvitesList) ui.collabInvitesList.textContent = "Sign in to view invites.";
 	        if (ui.collabCollaboratorsList) ui.collabCollaboratorsList.textContent = "Sign in to manage collaborators.";
-	        ui.adminSection?.classList.add("hidden");
-	        ui.navAdmin?.classList.add("hidden");
+		        ui.adminSection?.classList.add("hidden");
+		        ui.navAdmin?.classList.add("hidden");
+                setFeatureVoteSummaryPolling(functions, false);
         if (ui.notificationsStatus) {
           if (!isPushSupported()) {
             setNotificationStatus("Push notifications are not supported in this browser.");
@@ -12015,17 +13110,19 @@
 	        }
 	      }
 
-      if (user.email === ADMIN_EMAIL) {
-        ui.adminSection?.classList.remove("hidden");
-        ui.navAdmin?.classList.remove("hidden");
-        startAdminOrders(db);
-        startAdminAutopilotQueue(db);
-      } else {
-        ui.adminSection?.classList.add("hidden");
-        ui.navAdmin?.classList.add("hidden");
-        if (state.unsubscribeAdmin) state.unsubscribeAdmin();
-        if (state.unsubscribeAdminAutopilot) state.unsubscribeAdminAutopilot();
-      }
+	      if (isAdminUser(user)) {
+	        ui.adminSection?.classList.remove("hidden");
+	        ui.navAdmin?.classList.remove("hidden");
+	        startAdminOrders(db);
+	        startAdminAutopilotQueue(db);
+            setFeatureVoteSummaryPolling(functions, true);
+	      } else {
+	        ui.adminSection?.classList.add("hidden");
+	        ui.navAdmin?.classList.add("hidden");
+	        if (state.unsubscribeAdmin) state.unsubscribeAdmin();
+	        if (state.unsubscribeAdminAutopilot) state.unsubscribeAdminAutopilot();
+            setFeatureVoteSummaryPolling(functions, false);
+	      }
     });
   });
   };

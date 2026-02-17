@@ -89,16 +89,22 @@ service cloud.firestore {
     }
 
     match /autopilot_requests/{requestId} {
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.userId);
-      allow update, delete: if isAdmin();
+      allow read, write: if isAdmin();
     }
 
     match /prediction_uploads/{uploadId} {
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow read: if isAdmin()
-        || (isSignedIn() && (request.auth.uid == resource.data.userId || isWorkspaceCollaborator(resource.data.userId)));
-      allow update, delete: if isAdmin();
+      allow read, write: if isAdmin();
+    }
+
+    match /feature_votes/{voteId} {
+      allow create, update: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.userId);
+      allow delete: if isAdmin();
+    }
+
+    match /feature_vote_totals/{featureKey} {
+      allow read: if isAdmin();
+      allow write: if false;
     }
 
     match /backtests/{backtestId} {
