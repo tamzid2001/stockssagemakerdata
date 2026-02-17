@@ -157,11 +157,34 @@
                   </p>
                 </details>
               </div>
-	            <div class="results-panel" id="screener-result">
-	              <h3>Portfolio output</h3>
-	              <p class="small">Top-ranked candidates and AI Agent details appear here.</p>
-	              <div id="screener-output" class="panel-output"></div>
-	            </div>
+		            <div class="results-panel" id="screener-result">
+		              <h3>Portfolio output</h3>
+		              <p class="small">Top-ranked candidates and AI Agent details appear here.</p>
+		              <div id="screener-output" class="panel-output"></div>
+		            </div>
+                <div class="card screener-leaderboard-card">
+                  <div class="card-head">
+                    <h3>AI Portfolio Leaderboard</h3>
+                    <div class="form-grid" style="margin:0; min-width: 320px;">
+                      <div class="field" style="margin:0; min-width: 140px;">
+                        <label class="label" for="ai-leaderboard-horizon">Sort by ROI</label>
+                        <select id="ai-leaderboard-horizon">
+                          <option value="1m">1M</option>
+                          <option value="3m">3M</option>
+                          <option value="6m">6M</option>
+                          <option value="1y" selected>1Y</option>
+                          <option value="5y">5Y</option>
+                          <option value="max">Max</option>
+                        </select>
+                      </div>
+                      <div class="field" style="margin:0; min-width: 170px;">
+                        <label class="label" for="ai-leaderboard-model-filter">Model filter</label>
+                        <select id="ai-leaderboard-model-filter"></select>
+                      </div>
+                    </div>
+                  </div>
+                  <div id="ai-agent-leaderboard" class="panel-output small" style="max-height: none;"></div>
+                </div>
 	          </div>
         </div>
       </section>
