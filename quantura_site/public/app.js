@@ -1047,6 +1047,7 @@
     emailCreate: document.getElementById("email-create"),
     emailMessage: document.getElementById("auth-email-message"),
     googleSignin: document.getElementById("google-signin"),
+    facebookSignin: document.getElementById("facebook-signin"),
     githubSignin: document.getElementById("github-signin"),
     twitterSignin: document.getElementById("twitter-signin"),
     anonymousSignin: document.getElementById("anonymous-signin"),
@@ -11649,6 +11650,12 @@
 
     ui.googleSignin?.addEventListener("click", async () => {
       await signInWithProvider(new firebase.auth.GoogleAuthProvider(), "Signed in with Google.", "google");
+    });
+
+    ui.facebookSignin?.addEventListener("click", async () => {
+      const provider = new firebase.auth.FacebookAuthProvider();
+      provider.addScope("email");
+      await signInWithProvider(provider, "Signed in with Facebook.", "facebook");
     });
 
     ui.githubSignin?.addEventListener("click", async () => {
