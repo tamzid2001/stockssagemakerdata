@@ -120,6 +120,7 @@ Client and SSR use Remote Config with fallbacks. Current keys in use:
 - `backtesting_enabled` (bool-ish)
 - `backtesting_free_daily_limit` (number)
 - `backtesting_pro_daily_limit` (number)
+- `llm_allowed_models` (string CSV/JSON allowlist)
 
 Server evaluation happens in:
 - SSR: `quantura_site/functions_ssr/index.js`
@@ -131,6 +132,17 @@ Server evaluation happens in:
 
 Use local `.env` files for local development only. Never commit secrets.
 
+Local-only credential files (ignored by git):
+- `quantura_site/functions/serviceAccountKey.json`
+- `quantura_ios/quantura_ios/GoogleService-Info.plist`
+- `quantura_android/app/google-services.json`
+
+You can create placeholders with:
+```bash
+cd /Users/tamzidullah/Desktop/stockssagemakerdata
+./scripts/setup_local_firebase_credentials.sh
+```
+
 ## Root `.env` (automation/scripts)
 See `.env.example` for full template.
 
@@ -138,6 +150,8 @@ See `.env.example` for full template.
 Typical keys:
 - Firebase/service: `SERVICE_ACCOUNT_PATH`, `STORAGE_BUCKET`, `PUBLIC_ORIGIN`
 - OpenAI: `OPENAI_API_KEY`, `SOCIAL_CONTENT_MODEL`, `PREDICTION_AGENT_MODEL`
+- Amazon Nova (optional): `AMAZON_NOVA_API_KEY`, `AMAZON_NOVA_API_ENDPOINT`, `AMAZON_NOVA_DEFAULT_MODEL`
+- Model policy fallback: `LLM_ALLOWED_MODELS`
 - Stripe: `STRIPE_PUBLIC_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`
 - Messaging: `FCM_WEB_VAPID_KEY`
 - Alpaca: `ALPACA_API_KEY`/`ALPACAAPIKEY`, `ALPACA_SECRET_KEY`/`ALPACASECRETKEY`

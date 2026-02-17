@@ -76,26 +76,35 @@ def detect_repo() -> str:
 
 
 def read_firebase_service_account_json() -> str:
-    service_account_path = Path("quantura_site/functions/serviceAccountKey.json")
-    if not service_account_path.exists():
-        return ""
-    text = service_account_path.read_text(encoding="utf-8").strip()
-    if not text:
-        return ""
-    try:
-        parsed = json.loads(text)
-    except Exception:
-        return ""
-    private_key = str(parsed.get("private_key") or "")
-    client_email = str(parsed.get("client_email") or "")
-    if "BEGIN PRIVATE KEY" not in private_key or not client_email:
-        return ""
-    try:
-        from cryptography.hazmat.primitives import serialization  # type: ignore
-        serialization.load_pem_private_key(private_key.encode("utf-8"), password=None)
-    except Exception:
-        return ""
-    return text
+    path_candidates = [
+        Path(str(os.environ.get("FIREBASE_SERVICE_ACCOUNT_PATH") or "").strip()),
+        Path(str(os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") or "").strip()),
+        Path("quantura_site/functions/serviceAccountKey.local.json"),
+        Path("quantura_site/functions/serviceAccountKey.json"),
+    ]
+    for service_account_path in path_candidates:
+        if not str(service_account_path):
+            continue
+        if not service_account_path.exists():
+            continue
+        text = service_account_path.read_text(encoding="utf-8").strip()
+        if not text:
+            continue
+        try:
+            parsed = json.loads(text)
+        except Exception:
+            continue
+        private_key = str(parsed.get("private_key") or "")
+        client_email = str(parsed.get("client_email") or "")
+        if "BEGIN PRIVATE KEY" not in private_key or not client_email:
+            continue
+        try:
+            from cryptography.hazmat.primitives import serialization  # type: ignore
+            serialization.load_pem_private_key(private_key.encode("utf-8"), password=None)
+        except Exception:
+            continue
+        return text
+    return ""
 
 
 def resolve_secret_value(secret_name: str) -> str:
