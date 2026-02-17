@@ -44,6 +44,7 @@
         <a class="logo" href="/" aria-label="Quantura home"><span>QUANTURA</span></a>
         <nav class="nav-links">
           <a href="/screener" data-analytics="nav_screener"><i class="iconoir-search" aria-hidden="true"></i><span>Screener</span></a>
+          <a href="/blog" data-analytics="nav_blog"><i class="iconoir-page" aria-hidden="true"></i><span>Blog</span></a>
           <a href="/pricing" data-analytics="nav_pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>Pricing</span></a>
           <a href="/contact" data-analytics="nav_contact"><i class="iconoir-mail" aria-hidden="true"></i><span>Contact</span></a>
         </nav>
@@ -111,7 +112,7 @@
         <div class="container">
 	          <div class="section-title">
 	            <h2>Sign in to unlock your dashboard</h2>
-	            <p class="small">Email/password and Google sign-in, secured to your account.</p>
+	            <p class="small">Email/password plus Google, GitHub, and X sign-in, secured to your account.</p>
 	          </div>
           <div class="auth-grid">
             <div class="card">
@@ -130,9 +131,13 @@
               </form>
             </div>
             <div class="card">
-              <h3>Google sign-in</h3>
-              <p class="small">Fastest way to access your account and purchase history.</p>
-              <button class="cta google" id="google-signin" type="button">Continue with Google</button>
+              <h3>Social sign-in</h3>
+              <p class="small">Use your preferred provider for fast access to your account and purchase history.</p>
+              <div class="auth-actions" style="margin-top: 12px;">
+                <button class="cta google" id="google-signin" type="button">Continue with Google</button>
+                <button class="cta secondary" id="github-signin" type="button">Continue with GitHub</button>
+                <button class="cta secondary" id="twitter-signin" type="button">Continue with X</button>
+              </div>
               <div class="notice">
                 <strong>Secure by design.</strong> We only store what’s needed to deliver your report and
                 surface your order status in the dashboard.
@@ -504,6 +509,7 @@
           <div><a href="/">Home</a></div>
           <div><a href="/forecasting">Forecasting</a></div>
           <div><a href="/screener">Screener</a></div>
+          <div><a href="/blog">Blog</a></div>
           <div><a href="/dashboard">Dashboard</a></div>
           <div><a href="/pricing">Pricing</a></div>
           <div><a href="/contact">Contact</a></div>

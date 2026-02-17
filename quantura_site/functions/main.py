@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import math
@@ -7,7 +8,7 @@ import os
 import re
 import time
 from datetime import date, datetime, timedelta, timezone
-from io import StringIO
+from io import BytesIO, StringIO
 from statistics import NormalDist
 from typing import Any
 
@@ -39,6 +40,8 @@ ADMIN_EMAIL = "tamzid257@gmail.com"
 ALLOWED_STATUSES = {"pending", "in_progress", "fulfilled", "cancelled"}
 CONTACT_REQUIRED_FIELDS = {"name", "email", "message"}
 FORECAST_SERVICES = {"prophet", "ibm_timemixer"}
+BACKTEST_SOURCE_FORMATS = {"python", "tradingview", "metatrader5", "tradelocker"}
+REPORT_AGENT_BATCH_SIZE = max(1, min(int(os.environ.get("REPORT_AGENT_BATCH_SIZE", "8") or 8), 40))
 
 ALPACA_API_BASE = os.environ.get("ALPACA_API_BASE", "https://paper-api.alpaca.markets")
 ALPACA_DATA_BASE = os.environ.get("ALPACA_DATA_BASE", "https://data.alpaca.markets")
@@ -92,6 +95,18 @@ SOCIAL_CHANNEL_WEBHOOK_ENV = {
     "youtube": "SOCIAL_WEBHOOK_YOUTUBE",
     "pinterest": "SOCIAL_WEBHOOK_PINTEREST",
 }
+META_PIXEL_ID = str(os.environ.get("META_PIXEL_ID") or "1643823927053003").strip()
+META_CAPI_ACCESS_TOKEN = str(os.environ.get("META_CAPI_ACCESS_TOKEN") or "").strip()
+META_GRAPH_API_VERSION = str(os.environ.get("META_GRAPH_API_VERSION") or "v21.0").strip() or "v21.0"
+META_ALLOWED_ORIGINS = {
+    PUBLIC_ORIGIN,
+    "https://quantura-e2e3d.web.app",
+    "https://quantura-e2e3d.firebaseapp.com",
+    "http://localhost:5000",
+    "http://127.0.0.1:5000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+}
 
 if not firebase_admin._apps:
     options: dict[str, Any] = {}
@@ -114,6 +129,25 @@ DEFAULT_REMOTE_CONFIG: dict[str, str] = {
     "watchlist_enabled": "true",
     "forecast_prophet_enabled": "true",
     "forecast_timemixer_enabled": "true",
+    "enable_social_leaderboard": "true",
+    "forecast_model_primary": "Quantura Horizon",
+    "promo_banner_text": "",
+    "maintenance_mode": "false",
+    "volatility_threshold": "0.05",
+    "ai_usage_tiers": json.dumps(
+        {
+            "free": {
+                "allowed_models": ["gpt-4o-mini", "gemini-1.5-flash"],
+                "daily_limit": 5,
+                "volatility_alerts": False,
+            },
+            "premium": {
+                "allowed_models": ["gpt-4o", "claude-3-5-sonnet", "gemini-1.5-pro", "o1-preview"],
+                "daily_limit": 50,
+                "volatility_alerts": True,
+            },
+        }
+    ),
     "push_notifications_enabled": "true",
     "webpush_vapid_key": "",
     "stripe_checkout_enabled": "true",
@@ -226,6 +260,72 @@ def _remote_config_int(key: str, default: int = 0, context: dict[str, Any] | Non
         return int(float(str(raw).strip()))
     except Exception:
         return default
+
+
+def _remote_config_float(key: str, default: float = 0.0, context: dict[str, Any] | None = None) -> float:
+    raw = _remote_config_param(key, str(default), context=context)
+    if raw == "":
+        return default
+    try:
+        return float(str(raw).strip())
+    except Exception:
+        return default
+
+
+def _remote_config_json_param(key: str, default: dict[str, Any], context: dict[str, Any] | None = None) -> dict[str, Any]:
+    raw = _remote_config_param(key, "", context=context)
+    if not raw:
+        return default
+    try:
+        value = json.loads(raw)
+        return value if isinstance(value, dict) else default
+    except Exception:
+        return default
+
+
+def _raise_structured_error(
+    code: https_fn.FunctionsErrorCode,
+    error_key: str,
+    detail: str,
+    extras: dict[str, Any] | None = None,
+) -> None:
+    payload: dict[str, Any] = {"error": error_key, "detail": detail}
+    if extras:
+        payload.update(extras)
+    raise https_fn.HttpsError(code, detail, payload)
+
+
+def _get_ai_usage_tiers(context: dict[str, Any] | None = None) -> dict[str, Any]:
+    fallback = {
+        "free": {
+            "allowed_models": ["gpt-4o-mini", "gemini-1.5-flash"],
+            "daily_limit": 5,
+            "volatility_alerts": False,
+        },
+        "premium": {
+            "allowed_models": ["gpt-4o", "claude-3-5-sonnet", "gemini-1.5-pro", "o1-preview"],
+            "daily_limit": 50,
+            "volatility_alerts": True,
+        },
+    }
+    parsed = _remote_config_json_param("ai_usage_tiers", fallback, context=context)
+    if not isinstance(parsed, dict):
+        return fallback
+    return parsed
+
+
+def _resolve_ai_tier(
+    uid: str,
+    token: dict[str, Any],
+    context: dict[str, Any] | None = None,
+) -> tuple[str, dict[str, Any]]:
+    tiers = _get_ai_usage_tiers(context=context)
+    is_premium = token.get("email") == ADMIN_EMAIL or _is_paid_user(uid)
+    tier_key = "premium" if is_premium else "free"
+    tier = tiers.get(tier_key) if isinstance(tiers.get(tier_key), dict) else {}
+    if not tier:
+        tier = {"allowed_models": [], "daily_limit": 5, "volatility_alerts": bool(is_premium)}
+    return tier_key, tier
 
 
 def _yahoo_headers() -> dict[str, str]:
@@ -779,6 +879,120 @@ def _normalize_email(value: Any) -> str:
     return str(value or "").strip().lower()
 
 
+def _meta_hash_sha256(value: Any) -> str:
+    raw = str(value or "").strip().lower()
+    if not raw:
+        return ""
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _meta_normalize_phone(value: Any) -> str:
+    digits = re.sub(r"\D+", "", str(value or ""))
+    return digits if len(digits) >= 7 else ""
+
+
+def _meta_header(req: https_fn.CallableRequest, key: str) -> str:
+    raw_request = getattr(req, "raw_request", None)
+    headers = getattr(raw_request, "headers", None)
+    if headers is None:
+        return ""
+    try:
+        return str(headers.get(key, "") or "").strip()
+    except Exception:
+        return ""
+
+
+def _meta_client_ip(req: https_fn.CallableRequest, data: dict[str, Any]) -> str:
+    explicit = str(data.get("clientIpAddress") or data.get("client_ip_address") or "").strip()
+    if explicit:
+        return explicit.split(",")[0].strip()
+    forwarded = _meta_header(req, "x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    raw_request = getattr(req, "raw_request", None)
+    remote_addr = getattr(raw_request, "remote_addr", "")
+    return str(remote_addr or "").strip()
+
+
+def _meta_build_user_data(req: https_fn.CallableRequest, data: dict[str, Any]) -> dict[str, Any]:
+    user_data: dict[str, Any] = {}
+
+    user_agent = str(data.get("userAgent") or data.get("user_agent") or _meta_header(req, "user-agent") or "").strip()
+    client_ip = _meta_client_ip(req, data)
+    if user_agent:
+        user_data["client_user_agent"] = user_agent[:512]
+    if client_ip:
+        user_data["client_ip_address"] = client_ip
+
+    email = str(data.get("email") or "").strip()
+    if not email and getattr(req, "auth", None) and isinstance(req.auth.token, dict):
+        email = str(req.auth.token.get("email") or "").strip()
+    email_hash = _meta_hash_sha256(email)
+    if email_hash:
+        user_data["em"] = [email_hash]
+
+    phone = _meta_normalize_phone(data.get("phone"))
+    phone_hash = _meta_hash_sha256(phone)
+    if phone_hash:
+        user_data["ph"] = [phone_hash]
+
+    external_id = str(data.get("externalId") or "").strip()
+    if not external_id and getattr(req, "auth", None):
+        external_id = str(getattr(req.auth, "uid", "") or "").strip()
+    external_id_hash = _meta_hash_sha256(external_id)
+    if external_id_hash:
+        user_data["external_id"] = [external_id_hash]
+
+    fbc = str(data.get("fbc") or "").strip()
+    fbp = str(data.get("fbp") or "").strip()
+    if fbc:
+        user_data["fbc"] = fbc[:256]
+    if fbp:
+        user_data["fbp"] = fbp[:256]
+
+    return user_data
+
+
+def _meta_build_custom_data(params: Any) -> dict[str, Any]:
+    if not isinstance(params, dict):
+        return {}
+    out: dict[str, Any] = {}
+    allowed_keys = [
+        "currency",
+        "value",
+        "content_name",
+        "content_category",
+        "search_string",
+        "ticker",
+        "workspace_id",
+        "order_id",
+        "status",
+    ]
+    for key in allowed_keys:
+        if key not in params:
+            continue
+        value = params.get(key)
+        if value is None:
+            continue
+        if key == "value":
+            numeric = _safe_float(value)
+            if numeric is None:
+                continue
+            out[key] = round(float(numeric), 6)
+            continue
+        if isinstance(value, bool):
+            out[key] = value
+            continue
+        if isinstance(value, (int, float)):
+            out[key] = value
+            continue
+        if isinstance(value, str):
+            text = value.strip()
+            if text:
+                out[key] = text[:256]
+    return out
+
+
 def _audit_event(uid: str, email: str | None, event_type: str, payload: dict[str, Any]) -> None:
     db.collection("user_events").add(
         {
@@ -1276,7 +1490,7 @@ def _run_prophet_engine(close_series: pd.Series, horizon: int, quantiles: list[f
             rows.append(out_row)
 
         forecast_core["engine"] = "prophet"
-        forecast_core["serviceMessage"] = "Forecast generated with Meta Prophet, quantiles derived from model uncertainty."
+        forecast_core["serviceMessage"] = "Forecast generated with Quantura Horizon, quantiles derived from model uncertainty."
         forecast_core["forecastRows"] = rows
         ref_q = min(quantiles, key=lambda q: abs(q - 0.5)) if quantiles else 0.5
         ref_key = f"q{int(round(ref_q * 100)):02d}"
@@ -1363,6 +1577,387 @@ def _run_forecast_service(
 
 def _forecast_preview_rows(rows: list[dict[str, Any]], max_rows: int = 12) -> list[dict[str, Any]]:
     return rows[:max_rows]
+
+
+def _forecast_quantile_entries(rows: list[dict[str, Any]]) -> list[tuple[float, str]]:
+    if not rows:
+        return []
+    keys = set()
+    for row in rows[: min(len(rows), 200)]:
+        for key in (row or {}).keys():
+            if re.match(r"^q\d\d$", str(key)):
+                keys.add(str(key))
+    entries: list[tuple[float, str]] = []
+    for key in sorted(keys):
+        try:
+            q = int(key[1:]) / 100.0
+            entries.append((q, key))
+        except Exception:
+            continue
+    return sorted(entries, key=lambda item: item[0])
+
+
+def _build_forecast_trade_rationale(
+    service: str,
+    horizon: int,
+    metrics: dict[str, Any] | None,
+    forecast_rows: list[dict[str, Any]] | None,
+) -> str:
+    metrics = metrics or {}
+    rows = forecast_rows or []
+    last_close = _safe_float(metrics.get("lastClose")) or 0.0
+    median_end = _safe_float(metrics.get("medianEnd"))
+    drift = _safe_float(metrics.get("drift")) or 0.0
+    coverage = _safe_float(metrics.get("coverage10_90"))
+    volatility = _safe_float(metrics.get("volatility"))
+
+    implied_return = None
+    if last_close > 0 and median_end is not None:
+        implied_return = (median_end - last_close) / last_close
+
+    trend_phrase = "balanced trend profile"
+    if implied_return is not None and implied_return > 0.08:
+        trend_phrase = "strong upward trend profile"
+    elif implied_return is not None and implied_return > 0:
+        trend_phrase = "moderately positive trend profile"
+    elif implied_return is not None and implied_return < -0.05:
+        trend_phrase = "defensive/negative trend profile"
+    elif drift > 0:
+        trend_phrase = "positive drift profile"
+
+    service_label = "Quantura Horizon" if str(service).strip().lower() == "prophet" else "forecast model"
+    sentence_one = (
+        f"{service_label} indicates a {trend_phrase} over the next {int(horizon)} periods "
+        f"with median-path projection anchored around recent price behavior."
+    )
+
+    coverage_text = "coverage unavailable"
+    if coverage is not None:
+        coverage_text = f"{coverage * 100:.1f}% coverage in the 10-90% band"
+    vol_text = "volatility regime unavailable"
+    if volatility is not None:
+        vol_text = f"volatility near {volatility * 100:.2f}%"
+
+    sentence_two = f"Confidence framing is based on {coverage_text} and {vol_text}."
+    if rows:
+        sentence_two += " Decision trigger should be tied to the median path versus lower-band support."
+    return f"{sentence_one} {sentence_two}"
+
+
+def _extract_forecast_key_levels(rows: list[dict[str, Any]]) -> dict[str, float | None]:
+    entries = _forecast_quantile_entries(rows)
+    if not rows or not entries:
+        return {"support": None, "median": None, "resistance": None}
+    last_row = rows[-1] or {}
+    low_key = entries[0][1]
+    high_key = entries[-1][1]
+    mid_key = min(entries, key=lambda item: abs(item[0] - 0.5))[1]
+    return {
+        "support": _safe_float(last_row.get(low_key)),
+        "median": _safe_float(last_row.get(mid_key)),
+        "resistance": _safe_float(last_row.get(high_key)),
+    }
+
+
+def _generate_forecast_chart_png(forecast_doc: dict[str, Any]) -> bytes:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt  # type: ignore
+    import pandas as pd  # type: ignore
+
+    rows = forecast_doc.get("forecastRows") if isinstance(forecast_doc.get("forecastRows"), list) else []
+    if not rows:
+        raise ValueError("No forecast rows are available to chart.")
+
+    entries = _forecast_quantile_entries(rows)
+    if not entries:
+        raise ValueError("No quantile columns detected in forecast rows.")
+
+    low_key = entries[0][1]
+    high_key = entries[-1][1]
+    mid_key = min(entries, key=lambda item: abs(item[0] - 0.5))[1]
+
+    x_vals = []
+    for idx, row in enumerate(rows):
+        ds = row.get("ds")
+        if isinstance(ds, str):
+            try:
+                x_vals.append(pd.to_datetime(ds))
+                continue
+            except Exception:
+                pass
+        x_vals.append(pd.Timestamp.utcnow() + pd.Timedelta(days=idx))
+
+    low = [float(row.get(low_key) or 0.0) for row in rows]
+    high = [float(row.get(high_key) or 0.0) for row in rows]
+    median = [float(row.get(mid_key) or 0.0) for row in rows]
+
+    fig = plt.figure(figsize=(11.2, 5.2), dpi=170, facecolor="#0f172a")
+    ax = fig.add_subplot(111)
+    ax.set_facecolor("#0f172a")
+    ax.plot(x_vals, median, color="#3b82f6", linewidth=2.2, label=f"Median ({mid_key})")
+    ax.fill_between(x_vals, low, high, color="#10b981", alpha=0.18, label=f"Band {low_key}-{high_key}")
+    ax.plot(x_vals, low, color="#ef4444", linewidth=1.2, alpha=0.9, label=f"Lower ({low_key})")
+    ax.plot(x_vals, high, color="#10b981", linewidth=1.2, alpha=0.9, label=f"Upper ({high_key})")
+
+    ticker = str(forecast_doc.get("ticker") or "Ticker")
+    service = str(forecast_doc.get("service") or "Forecast")
+    service_label = "Quantura Horizon" if service.lower() == "prophet" else service
+    ax.set_title(f"{ticker} • {service_label}", color="#f8fafc", fontsize=13, fontweight="bold")
+    ax.grid(alpha=0.22, color="#93c5fd", linewidth=0.5)
+    ax.tick_params(colors="#e2e8f0")
+    for spine in ax.spines.values():
+        spine.set_color("#334155")
+    legend = ax.legend(loc="upper left", frameon=False, fontsize=8)
+    for txt in legend.get_texts():
+        txt.set_color("#e2e8f0")
+
+    fig.tight_layout()
+    out = BytesIO()
+    fig.savefig(out, format="png", bbox_inches="tight", transparent=True)
+    plt.close(fig)
+    return out.getvalue()
+
+
+def _render_forecast_report_html(
+    forecast_doc: dict[str, Any],
+    rationale: str,
+    chart_png_b64: str,
+) -> str:
+    ticker = str(forecast_doc.get("ticker") or "Ticker")
+    horizon = int(forecast_doc.get("horizon") or 0)
+    interval = str(forecast_doc.get("interval") or "1d")
+    created = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    metrics = forecast_doc.get("metrics") if isinstance(forecast_doc.get("metrics"), dict) else {}
+    key_levels = _extract_forecast_key_levels(forecast_doc.get("forecastRows") or [])
+    service = str(forecast_doc.get("service") or "prophet")
+    service_label = "Quantura Horizon" if service.lower() == "prophet" else service
+
+    rows = [
+        ("Last Close", metrics.get("lastClose")),
+        ("Median End", metrics.get("medianEnd")),
+        ("Coverage 10-90", metrics.get("coverage10_90")),
+        ("Support", key_levels.get("support")),
+        ("Resistance", key_levels.get("resistance")),
+    ]
+    metric_rows = "".join(
+        f"<tr><td>{label}</td><td>{value if value is not None else '—'}</td></tr>"
+        for label, value in rows
+    )
+
+    return f"""
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body {{
+        margin: 0;
+        font-family: Inter, Roboto, sans-serif;
+        background: #0f172a;
+        color: #e2e8f0;
+        padding: 28px;
+      }}
+      .wrap {{
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        border-radius: 18px;
+        padding: 22px;
+        background: linear-gradient(180deg, rgba(15, 23, 42, 0.98) 0%, rgba(30, 41, 59, 0.92) 100%);
+      }}
+      .brand {{
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        color: #93c5fd;
+        margin-bottom: 8px;
+      }}
+      h1 {{
+        margin: 0 0 4px;
+        font-size: 24px;
+      }}
+      .meta {{
+        margin: 0 0 16px;
+        color: #cbd5e1;
+        font-size: 13px;
+      }}
+      .mono {{
+        font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+      }}
+      img {{
+        width: 100%;
+        border-radius: 12px;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        background: rgba(15, 23, 42, 0.6);
+      }}
+      table {{
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 14px;
+      }}
+      td {{
+        padding: 8px 10px;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+        font-size: 13px;
+      }}
+      td:first-child {{
+        color: #93c5fd;
+      }}
+      .rationale {{
+        margin-top: 16px;
+        background: rgba(30, 41, 59, 0.7);
+        border: 1px solid rgba(59, 130, 246, 0.28);
+        border-radius: 12px;
+        padding: 12px;
+        line-height: 1.5;
+      }}
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="brand">QUANTURA EXECUTIVE BRIEF</div>
+      <h1>{ticker} • {service_label}</h1>
+      <div class="meta">Generated: {created} • Horizon: {horizon} • Interval: {interval}</div>
+      <img src="data:image/png;base64,{chart_png_b64}" alt="Forecast chart" />
+      <table>
+        {metric_rows}
+      </table>
+      <div class="rationale"><strong>AI Rationale:</strong> {rationale}</div>
+    </div>
+  </body>
+</html>
+""".strip()
+
+
+def _generate_forecast_pdf_bytes(html: str, fallback_title: str, rationale: str) -> bytes:
+    try:
+        from weasyprint import HTML  # type: ignore
+
+        return HTML(string=html, base_url=PUBLIC_ORIGIN).write_pdf()
+    except Exception:
+        import matplotlib
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt  # type: ignore
+
+        fig = plt.figure(figsize=(11.0, 8.5), dpi=170, facecolor="#ffffff")
+        ax = fig.add_subplot(111)
+        ax.axis("off")
+        ax.text(0.02, 0.94, "Quantura Executive Brief", fontsize=16, fontweight="bold")
+        ax.text(0.02, 0.89, fallback_title, fontsize=12)
+        ax.text(0.02, 0.83, rationale, fontsize=10, wrap=True)
+        out = BytesIO()
+        fig.savefig(out, format="pdf", bbox_inches="tight")
+        plt.close(fig)
+        return out.getvalue()
+
+
+def _generate_forecast_pptx_bytes(
+    forecast_doc: dict[str, Any],
+    chart_png: bytes,
+    rationale: str,
+) -> bytes:
+    from pptx import Presentation  # type: ignore
+    from pptx.util import Inches, Pt  # type: ignore
+
+    ticker = str(forecast_doc.get("ticker") or "Ticker")
+    created = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    metrics = forecast_doc.get("metrics") if isinstance(forecast_doc.get("metrics"), dict) else {}
+    rows = forecast_doc.get("forecastRows") if isinstance(forecast_doc.get("forecastRows"), list) else []
+    key_levels = _extract_forecast_key_levels(rows)
+
+    prs = Presentation()
+
+    # Slide 1: Title.
+    slide = prs.slides.add_slide(prs.slide_layouts[5])
+    slide.shapes.title.text = f"{ticker} • Quantura Horizon Brief"
+    subtitle = slide.shapes.add_textbox(Inches(0.8), Inches(1.6), Inches(11.5), Inches(1.2))
+    tf = subtitle.text_frame
+    tf.text = f"Date: {created}\nCurrent Price: {metrics.get('lastClose', '—')}"
+    tf.paragraphs[0].font.size = Pt(20)
+
+    # Slide 2: Analysis chart + key levels.
+    slide2 = prs.slides.add_slide(prs.slide_layouts[5])
+    slide2.shapes.title.text = "Forecast Analysis"
+    slide2.shapes.add_picture(BytesIO(chart_png), Inches(0.6), Inches(1.2), width=Inches(8.4))
+    box = slide2.shapes.add_textbox(Inches(9.1), Inches(1.4), Inches(3.0), Inches(3.8))
+    t2 = box.text_frame
+    t2.text = "Key Levels"
+    p = t2.add_paragraph()
+    p.text = f"Support: {key_levels.get('support') if key_levels.get('support') is not None else '—'}"
+    p.level = 1
+    p = t2.add_paragraph()
+    p.text = f"Median: {key_levels.get('median') if key_levels.get('median') is not None else '—'}"
+    p.level = 1
+    p = t2.add_paragraph()
+    p.text = f"Resistance: {key_levels.get('resistance') if key_levels.get('resistance') is not None else '—'}"
+    p.level = 1
+
+    # Slide 3: Rationale.
+    slide3 = prs.slides.add_slide(prs.slide_layouts[5])
+    slide3.shapes.title.text = "Trade Rationale"
+    rationale_box = slide3.shapes.add_textbox(Inches(0.8), Inches(1.4), Inches(11.3), Inches(4.6))
+    t3 = rationale_box.text_frame
+    t3.word_wrap = True
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", rationale) if s.strip()]
+    if not sentences:
+        sentences = [rationale.strip() or "No rationale available."]
+    t3.text = sentences[0]
+    for sentence in sentences[1:]:
+        p = t3.add_paragraph()
+        p.text = sentence
+        p.level = 0
+
+    out = BytesIO()
+    prs.save(out)
+    return out.getvalue()
+
+
+def _generate_and_store_forecast_report_assets(
+    forecast_id: str,
+    forecast_doc: dict[str, Any],
+) -> dict[str, Any]:
+    workspace_id = str(forecast_doc.get("userId") or forecast_doc.get("createdByUid") or "").strip() or "workspace"
+    ticker = str(forecast_doc.get("ticker") or "ticker").upper()
+    service = str(forecast_doc.get("service") or "prophet")
+    service_label = "Quantura Horizon" if service.lower() == "prophet" else service
+
+    chart_png = _generate_forecast_chart_png(forecast_doc)
+    rationale = str(forecast_doc.get("tradeRationale") or "").strip()
+    if not rationale:
+        rationale = _build_forecast_trade_rationale(
+            service=service,
+            horizon=int(forecast_doc.get("horizon") or 0),
+            metrics=forecast_doc.get("metrics") if isinstance(forecast_doc.get("metrics"), dict) else {},
+            forecast_rows=forecast_doc.get("forecastRows") if isinstance(forecast_doc.get("forecastRows"), list) else [],
+        )
+
+    chart_b64 = base64.b64encode(chart_png).decode("utf-8")
+    html = _render_forecast_report_html(forecast_doc, rationale, chart_b64)
+    pdf_bytes = _generate_forecast_pdf_bytes(html, f"{ticker} • {service_label}", rationale)
+    pptx_bytes = _generate_forecast_pptx_bytes(forecast_doc, chart_png, rationale)
+
+    safe_prefix = re.sub(r"[^A-Z0-9_-]+", "_", f"{ticker}_{forecast_id}".upper())
+    base_path = f"forecast_reports/{workspace_id}"
+    chart_path = f"{base_path}/{safe_prefix}_chart.png"
+    pdf_path = f"{base_path}/{safe_prefix}_executive_brief.pdf"
+    pptx_path = f"{base_path}/{safe_prefix}_slide_deck.pptx"
+
+    bucket = admin_storage.bucket(STORAGE_BUCKET)
+    bucket.blob(chart_path).upload_from_string(chart_png, content_type="image/png")
+    bucket.blob(pdf_path).upload_from_string(pdf_bytes, content_type="application/pdf")
+    bucket.blob(pptx_path).upload_from_string(
+        pptx_bytes,
+        content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    )
+
+    return {
+        "tradeRationale": rationale,
+        "reportAssets": {
+            "chartPath": chart_path,
+            "pdfPath": pdf_path,
+            "pptxPath": pptx_path,
+        },
+    }
 
 
 @https_fn.on_call()
@@ -1963,6 +2558,118 @@ def remove_collaborator(req: https_fn.CallableRequest) -> dict[str, Any]:
 
 
 @https_fn.on_call()
+def track_meta_conversion_event(req: https_fn.CallableRequest) -> dict[str, Any]:
+    data = req.data or {}
+    if not isinstance(data, dict):
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "Event payload must be an object.",
+        )
+
+    if not META_PIXEL_ID or not META_CAPI_ACCESS_TOKEN:
+        return {"ok": False, "skipped": "meta_capi_not_configured"}
+
+    origin = _meta_header(req, "origin")
+    if origin and origin not in META_ALLOWED_ORIGINS:
+        return {"ok": False, "skipped": "origin_not_allowed"}
+
+    source_event_name = str(data.get("sourceEventName") or data.get("eventName") or "").strip()
+    if not source_event_name:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "eventName is required.",
+        )
+    source_event_name = re.sub(r"[^A-Za-z0-9_\\- ]+", "", source_event_name)[:80] or "custom_event"
+
+    event_name = str(data.get("eventName") or source_event_name).strip()
+    event_name = "PageView" if event_name == "page_view" else event_name
+    event_name = re.sub(r"[^A-Za-z0-9_\\- ]+", "", event_name)[:80] or "custom_event"
+
+    now_ts = int(time.time())
+    event_time = int(_safe_float(data.get("eventTime")) or now_ts)
+    if event_time < 946684800 or event_time > now_ts + 3600:
+        event_time = now_ts
+
+    event_id = str(data.get("eventId") or "").strip()
+    if not event_id:
+        seed = f"{source_event_name}:{event_time}:{time.time_ns()}"
+        event_id = f"q_{hashlib.sha256(seed.encode('utf-8')).hexdigest()[:24]}"
+    event_id = re.sub(r"[^A-Za-z0-9_\\-]+", "", event_id)[:100] or f"q_{int(time.time() * 1000)}"
+
+    action_source = str(data.get("actionSource") or "website").strip().lower()
+    valid_action_sources = {
+        "website",
+        "app",
+        "phone_call",
+        "chat",
+        "physical_store",
+        "system_generated",
+        "business_messaging",
+        "other",
+    }
+    if action_source not in valid_action_sources:
+        action_source = "website"
+
+    event_source_url = str(data.get("eventSourceUrl") or "").strip()
+    if event_source_url and not event_source_url.startswith("http"):
+        event_source_url = f"{PUBLIC_ORIGIN}{event_source_url if event_source_url.startswith('/') else '/' + event_source_url}"
+    if not event_source_url:
+        event_source_url = PUBLIC_ORIGIN
+
+    user_data = _meta_build_user_data(req, data)
+    custom_data = _meta_build_custom_data(data.get("params"))
+
+    event_payload: dict[str, Any] = {
+        "event_name": event_name,
+        "event_time": event_time,
+        "event_id": event_id,
+        "event_source_url": event_source_url,
+        "action_source": action_source,
+        "user_data": user_data,
+        "original_event_data": {
+            "event_name": source_event_name,
+            "event_time": event_time,
+        },
+    }
+    if custom_data:
+        event_payload["custom_data"] = custom_data
+
+    payload = {"data": [event_payload]}
+    endpoint = f"https://graph.facebook.com/{META_GRAPH_API_VERSION}/{META_PIXEL_ID}/events"
+
+    try:
+        response = requests.post(
+            endpoint,
+            params={"access_token": META_CAPI_ACCESS_TOKEN},
+            json=payload,
+            timeout=10,
+        )
+    except Exception as exc:
+        return {"ok": False, "eventId": event_id, "error": f"request_failed: {exc}"}
+
+    response_text = response.text[:1200]
+    try:
+        response_json = response.json()
+    except Exception:
+        response_json = {"raw": response_text}
+
+    if response.status_code >= 400:
+        return {
+            "ok": False,
+            "eventId": event_id,
+            "status": response.status_code,
+            "error": response_json,
+        }
+
+    return {
+        "ok": True,
+        "eventId": event_id,
+        "status": response.status_code,
+        "meta": _serialize_for_firestore(response_json),
+    }
+
+
+@https_fn.on_call()
 def get_web_push_config(req: https_fn.CallableRequest) -> dict[str, Any]:
     token = _require_auth(req)
     meta = req.data.get("meta") if isinstance(req.data, dict) else {}
@@ -1981,12 +2688,22 @@ def get_feature_flags(req: https_fn.CallableRequest) -> dict[str, Any]:
     token = _require_auth(req)
     meta = req.data.get("meta") if isinstance(req.data, dict) else {}
     context = _remote_config_context(req, token, meta if isinstance(meta, dict) else None)
+    tier_key, tier = _resolve_ai_tier(req.auth.uid, token, context=context)
+    usage_tiers = _get_ai_usage_tiers(context=context)
     return {
         "forecastProphetEnabled": _remote_config_bool("forecast_prophet_enabled", True, context=context),
         "forecastTimeMixerEnabled": _remote_config_bool("forecast_timemixer_enabled", True, context=context),
         "watchlistEnabled": _remote_config_bool("watchlist_enabled", True, context=context),
+        "enableSocialLeaderboard": _remote_config_bool("enable_social_leaderboard", True, context=context),
         "pushEnabled": _remote_config_bool("push_notifications_enabled", True, context=context),
         "webPushVapidKey": _remote_config_param("webpush_vapid_key", "", context=context),
+        "forecastModelPrimary": _remote_config_param("forecast_model_primary", "Quantura Horizon", context=context),
+        "promoBannerText": _remote_config_param("promo_banner_text", "", context=context),
+        "maintenanceMode": _remote_config_bool("maintenance_mode", False, context=context),
+        "volatilityThreshold": _remote_config_float("volatility_threshold", 0.05, context=context),
+        "aiUsageTiers": _serialize_for_firestore(usage_tiers),
+        "aiUsageTierKey": tier_key,
+        "aiUsageTier": _serialize_for_firestore(tier),
     }
 
 
@@ -2232,10 +2949,16 @@ def _handle_forecast_request(req: https_fn.CallableRequest, forced_service: str 
             {"allowed": sorted(FORECAST_SERVICES)},
         )
     context = _remote_config_context(req, token, data.get("meta") if isinstance(data.get("meta"), dict) else None)
+    if _remote_config_bool("maintenance_mode", False, context=context):
+        _raise_structured_error(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "maintenance_mode",
+            "Quantura is temporarily in maintenance mode.",
+        )
     if service == "prophet" and not _remote_config_bool("forecast_prophet_enabled", True, context=context):
         raise https_fn.HttpsError(
             https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
-            "Prophet forecasting is currently disabled.",
+            "Quantura Horizon forecasting is currently disabled.",
         )
     if service == "ibm_timemixer" and not _remote_config_bool("forecast_timemixer_enabled", True, context=context):
         raise https_fn.HttpsError(
@@ -2251,14 +2974,39 @@ def _handle_forecast_request(req: https_fn.CallableRequest, forced_service: str 
     quantiles = _parse_quantiles(data.get("quantiles"))
     start = data.get("start")
 
-    history = _load_history(ticker=ticker, start=start, interval=interval)
+    try:
+        history = _load_history(ticker=ticker, start=start, interval=interval)
+    except https_fn.HttpsError:
+        raise
+    except Exception as exc:
+        _raise_structured_error(
+            https_fn.FunctionsErrorCode.NOT_FOUND,
+            "ticker_not_found",
+            "Unable to load market data for ticker.",
+            {"ticker": ticker, "raw": str(exc)},
+        )
     close_series = history["Close"].copy()
 
     try:
         result = _run_forecast_service(service, close_series, horizon, quantiles, interval)
     except Exception:
-        result = _generate_quantile_forecast(close_series, horizon, quantiles, interval)
-        result["serviceMessage"] = "Forecast service failed; fallback model executed."
+        try:
+            result = _generate_quantile_forecast(close_series, horizon, quantiles, interval)
+            result["serviceMessage"] = "Forecast service failed; fallback model executed."
+        except Exception as exc:
+            _raise_structured_error(
+                https_fn.FunctionsErrorCode.INTERNAL,
+                "forecast_failed",
+                "Forecast generation failed.",
+                {"ticker": ticker, "service": service, "raw": str(exc)},
+            )
+
+    trade_rationale = _build_forecast_trade_rationale(
+        service=service,
+        horizon=horizon,
+        metrics=result.get("metrics") if isinstance(result.get("metrics"), dict) else {},
+        forecast_rows=result.get("forecastRows") if isinstance(result.get("forecastRows"), list) else [],
+    )
 
     request_doc = {
         "userId": workspace_id,
@@ -2277,6 +3025,9 @@ def _handle_forecast_request(req: https_fn.CallableRequest, forced_service: str 
         "metrics": _serialize_for_firestore(result.get("metrics") or {}),
         "forecastPreview": _serialize_for_firestore(_forecast_preview_rows(result.get("forecastRows") or [])),
         "forecastRows": _serialize_for_firestore(result.get("forecastRows") or []),
+        "tradeRationale": trade_rationale,
+        "reportStatus": "queued",
+        "reportAssets": {},
         "meta": data.get("meta") or {},
         "utm": data.get("utm") or {},
         "createdAt": firestore.SERVER_TIMESTAMP,
@@ -2310,6 +3061,8 @@ def _handle_forecast_request(req: https_fn.CallableRequest, forced_service: str 
         "mae": metrics.get("mae"),
         "coverage10_90": metrics.get("coverage10_90", "n/a"),
         "forecastPreview": request_doc["forecastPreview"],
+        "tradeRationale": trade_rationale,
+        "reportStatus": "queued",
     }
 
 
@@ -2347,6 +3100,116 @@ def delete_forecast_request(req: https_fn.CallableRequest) -> dict[str, Any]:
     ref.delete()
     _audit_event(req.auth.uid, token.get("email"), "forecast_deleted", {"forecastId": forecast_id, "workspaceId": workspace_id})
     return {"deleted": True, "forecastId": forecast_id}
+
+
+@https_fn.on_call()
+def generate_forecast_report_assets(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    data = req.data or {}
+    forecast_id = str(data.get("forecastId") or data.get("id") or "").strip()
+    force = bool(data.get("force"))
+    if not forecast_id:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Forecast ID is required.")
+
+    ref = db.collection("forecast_requests").document(forecast_id)
+    snap = ref.get()
+    if not snap.exists:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "Forecast not found.")
+
+    doc = snap.to_dict() or {}
+    workspace_id = str(doc.get("userId") or "").strip()
+    if workspace_id:
+        _require_workspace_editor(workspace_id, req.auth.uid, token)
+    elif token.get("email") != ADMIN_EMAIL:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.PERMISSION_DENIED, "Access denied.")
+
+    existing_assets = doc.get("reportAssets") if isinstance(doc.get("reportAssets"), dict) else {}
+    existing_status = str(doc.get("reportStatus") or "").strip().lower()
+    if not force and existing_status == "ready" and existing_assets:
+        return {
+            "forecastId": forecast_id,
+            "reportStatus": "ready",
+            "reportAssets": _serialize_for_firestore(existing_assets),
+            "tradeRationale": str(doc.get("tradeRationale") or "").strip(),
+        }
+
+    ref.set(
+        {
+            "reportStatus": "generating",
+            "reportError": "",
+            "reportUpdatedAt": firestore.SERVER_TIMESTAMP,
+        },
+        merge=True,
+    )
+
+    try:
+        generated = _generate_and_store_forecast_report_assets(forecast_id, doc)
+        ref.set(
+            {
+                "reportStatus": "ready",
+                "reportAssets": generated.get("reportAssets") or {},
+                "tradeRationale": generated.get("tradeRationale") or str(doc.get("tradeRationale") or "").strip(),
+                "reportUpdatedAt": firestore.SERVER_TIMESTAMP,
+            },
+            merge=True,
+        )
+        _audit_event(req.auth.uid, token.get("email"), "forecast_report_generated", {"forecastId": forecast_id, "workspaceId": workspace_id})
+        return {
+            "forecastId": forecast_id,
+            "reportStatus": "ready",
+            "reportAssets": _serialize_for_firestore(generated.get("reportAssets") or {}),
+            "tradeRationale": str(generated.get("tradeRationale") or "").strip(),
+        }
+    except Exception as error:
+        ref.set(
+            {
+                "reportStatus": "failed",
+                "reportError": str(error)[:700],
+                "reportUpdatedAt": firestore.SERVER_TIMESTAMP,
+            },
+            merge=True,
+        )
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INTERNAL, f"Unable to generate report assets: {error}")
+
+
+@scheduler_fn.on_schedule(
+    schedule="*/30 * * * *",
+    timezone=scheduler_fn.Timezone(SOCIAL_AUTOMATION_TIMEZONE),
+)
+def forecast_report_agent_scheduler(event: scheduler_fn.ScheduledEvent) -> None:
+    del event
+    docs = list(db.collection("forecast_requests").where("reportStatus", "==", "queued").limit(REPORT_AGENT_BATCH_SIZE).stream())
+    for item in docs:
+        ref = db.collection("forecast_requests").document(item.id)
+        data = item.to_dict() or {}
+        try:
+            ref.set(
+                {
+                    "reportStatus": "generating",
+                    "reportError": "",
+                    "reportUpdatedAt": firestore.SERVER_TIMESTAMP,
+                },
+                merge=True,
+            )
+            generated = _generate_and_store_forecast_report_assets(item.id, data)
+            ref.set(
+                {
+                    "reportStatus": "ready",
+                    "reportAssets": generated.get("reportAssets") or {},
+                    "tradeRationale": generated.get("tradeRationale") or str(data.get("tradeRationale") or "").strip(),
+                    "reportUpdatedAt": firestore.SERVER_TIMESTAMP,
+                },
+                merge=True,
+            )
+        except Exception as error:
+            ref.set(
+                {
+                    "reportStatus": "failed",
+                    "reportError": str(error)[:700],
+                    "reportUpdatedAt": firestore.SERVER_TIMESTAMP,
+                },
+                merge=True,
+            )
 
 
 @https_fn.on_call()
@@ -2404,6 +3267,127 @@ def rename_screener_run(req: https_fn.CallableRequest) -> dict[str, Any]:
     ref.set({"title": title, "updatedAt": firestore.SERVER_TIMESTAMP}, merge=True)
     _audit_event(req.auth.uid, token.get("email"), "screener_renamed", {"runId": run_id, "workspaceId": workspace_id})
     return {"updated": True, "runId": run_id, "title": title}
+
+
+@https_fn.on_call()
+def upsert_ai_agent_social_action(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    data = req.data or {}
+
+    workspace_id = str(data.get("workspaceId") or req.auth.uid or "").strip() or req.auth.uid
+    if workspace_id != req.auth.uid:
+        _require_workspace_editor(workspace_id, req.auth.uid, token)
+
+    agent_id = str(data.get("agentId") or "").strip()
+    action = str(data.get("action") or "").strip().lower()
+    active = bool(data.get("active"))
+    if not agent_id:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Agent ID is required.")
+    if action not in {"follow", "like"}:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Action must be follow or like.")
+
+    social_collection = "ai_agent_followers" if action == "follow" else "ai_agent_likes"
+    count_field = "followersCount" if action == "follow" else "likesCount"
+    user_doc_id = f"{agent_id}__{req.auth.uid}"
+
+    agent_ref = db.collection("users").document(workspace_id).collection("ai_agents").document(agent_id)
+    social_ref = db.collection("users").document(workspace_id).collection(social_collection).document(user_doc_id)
+
+    txn = db.transaction()
+    agent_snap = agent_ref.get(transaction=txn)
+    if not agent_snap.exists:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "AI Agent not found.")
+    social_snap = social_ref.get(transaction=txn)
+
+    agent_doc = agent_snap.to_dict() or {}
+    current_count = int(agent_doc.get(count_field) or 0)
+    now = firestore.SERVER_TIMESTAMP
+
+    changed = False
+    next_active = social_snap.exists
+    if active and not social_snap.exists:
+        txn.set(
+            social_ref,
+            {
+                "agentId": agent_id,
+                "workspaceId": workspace_id,
+                "userId": req.auth.uid,
+                "userEmail": token.get("email"),
+                "action": action,
+                "createdAt": now,
+                "updatedAt": now,
+                "meta": data.get("meta") if isinstance(data.get("meta"), dict) else {},
+            },
+            merge=True,
+        )
+        next_active = True
+        changed = True
+    elif not active and social_snap.exists:
+        txn.delete(social_ref)
+        next_active = False
+        changed = True
+
+    next_count = current_count
+    if changed:
+        next_count = current_count + 1 if next_active else max(0, current_count - 1)
+        txn.set(agent_ref, {count_field: next_count, "updatedAt": now}, merge=True)
+
+    txn.commit()
+
+    # Follow action auto-enables default volatility alerts on holdings.
+    if action == "follow" and next_active:
+        holdings = agent_doc.get("holdings") if isinstance(agent_doc.get("holdings"), list) else []
+        symbols: list[str] = []
+        for item in holdings[:20]:
+            if isinstance(item, str):
+                symbol = str(item).upper().strip()
+            elif isinstance(item, dict):
+                symbol = str(item.get("symbol") or "").upper().strip()
+            else:
+                symbol = ""
+            if symbol and re.match(r"^[A-Z0-9.\-]{1,12}$", symbol):
+                symbols.append(symbol)
+        symbols = list(dict.fromkeys(symbols))
+        for symbol in symbols:
+            alert_ref = db.collection("users").document(workspace_id).collection("price_alerts").document(
+                f"volatility_follow_{agent_id}_{symbol}"
+            )
+            alert_ref.set(
+                {
+                    "workspaceId": workspace_id,
+                    "userId": req.auth.uid,
+                    "createdByUid": req.auth.uid,
+                    "userEmail": token.get("email"),
+                    "ticker": symbol,
+                    "condition": "volatility",
+                    "thresholdPercent": 0.05,
+                    "notes": "Auto-enabled from AI Agent follow action.",
+                    "active": True,
+                    "triggered": False,
+                    "createdAt": now,
+                    "updatedAt": now,
+                    "source": "ai_agent_follow",
+                    "meta": data.get("meta") if isinstance(data.get("meta"), dict) else {},
+                },
+                merge=True,
+            )
+
+    _audit_event(
+        req.auth.uid,
+        token.get("email"),
+        "ai_agent_social_action",
+        {"workspaceId": workspace_id, "agentId": agent_id, "action": action, "active": next_active, "changed": changed},
+    )
+
+    return {
+        "workspaceId": workspace_id,
+        "agentId": agent_id,
+        "action": action,
+        "active": next_active,
+        "countField": count_field,
+        "count": next_count,
+        "changed": changed,
+    }
 
 
 @https_fn.on_call()
@@ -2676,7 +3660,7 @@ def _is_paid_user(uid: str) -> bool:
     return False
 
 
-def _enforce_daily_usage(uid: str, feature_key: str, limit: int) -> None:
+def _enforce_daily_usage(uid: str, feature_key: str, limit: int, limit_message: str | None = None) -> None:
     if limit <= 0:
         return
     day_key = datetime.now(timezone.utc).date().isoformat()
@@ -2688,7 +3672,7 @@ def _enforce_daily_usage(uid: str, feature_key: str, limit: int) -> None:
     if count >= limit:
         raise https_fn.HttpsError(
             https_fn.FunctionsErrorCode.RESOURCE_EXHAUSTED,
-            "Daily usage limit reached. Upgrade your plan to run more backtests.",
+            limit_message or "Daily usage limit reached.",
         )
     transaction.set(
         ref,
@@ -2712,12 +3696,14 @@ def _generate_backtest_code(payload: dict[str, Any]) -> str:
     cash = float(payload.get("cash") or 10_000)
     commission = float(payload.get("commission") or 0.0)
 
-    # Keep the emitted code self-contained so users can run it locally.
+    # Keep emitted code self-contained so users can run it locally.
     fast = int(params.get("fast") or 20)
     slow = int(params.get("slow") or 50)
     rsi_period = int(params.get("rsiPeriod") or 14)
     oversold = float(params.get("oversold") or 30)
     exit_above = float(params.get("exitAbove") or 55)
+    sl_pct = max(0.0, min(float(params.get("slPct") or params.get("sl") or 0.0), 0.5))
+    tp_pct = max(0.0, min(float(params.get("tpPct") or params.get("tp") or 0.0), 0.5))
     strategy_class = "RsiReversion" if strategy == "rsi_reversion" else "SmaCross"
 
     if strategy == "rsi_reversion":
@@ -2726,13 +3712,24 @@ class RsiReversion(Strategy):
     rsi_period = {rsi_period}
     oversold = {oversold}
     exit_above = {exit_above}
+    sl_pct = {sl_pct}
+    tp_pct = {tp_pct}
 
     def init(self):
         self.rsi = self.I(calc_rsi, self.data.Close, self.rsi_period)
 
+    def _risk_args(self):
+        last_close = float(self.data.Close[-1])
+        out = {{}}
+        if self.sl_pct > 0:
+            out["sl"] = last_close * (1 - self.sl_pct)
+        if self.tp_pct > 0:
+            out["tp"] = last_close * (1 + self.tp_pct)
+        return out
+
     def next(self):
         if not self.position and self.rsi[-1] < self.oversold:
-            self.buy()
+            self.buy(**self._risk_args())
         elif self.position and self.rsi[-1] > self.exit_above:
             self.position.close()
 """
@@ -2741,16 +3738,27 @@ class RsiReversion(Strategy):
 class SmaCross(Strategy):
     fast = {fast}
     slow = {slow}
+    sl_pct = {sl_pct}
+    tp_pct = {tp_pct}
 
     def init(self):
         price = self.data.Close
         self.sma_fast = self.I(SMA, price, self.fast)
         self.sma_slow = self.I(SMA, price, self.slow)
 
+    def _risk_args(self):
+        last_close = float(self.data.Close[-1])
+        out = {{}}
+        if self.sl_pct > 0:
+            out["sl"] = last_close * (1 - self.sl_pct)
+        if self.tp_pct > 0:
+            out["tp"] = last_close * (1 + self.tp_pct)
+        return out
+
     def next(self):
         if crossover(self.sma_fast, self.sma_slow):
             self.position.close()
-            self.buy()
+            self.buy(**self._risk_args())
         elif crossover(self.sma_slow, self.sma_fast):
             self.position.close()
 """
@@ -2803,8 +3811,6 @@ def main():
     if getattr(df.index, "tz", None) is not None:
         df.index = df.index.tz_localize(None)
 
-    df = df.rename(columns={{"Open": "Open", "High": "High", "Low": "Low", "Close": "Close", "Volume": "Volume"}})
-
     bt = Backtest(df, {strategy_class}, cash={cash}, commission={commission})
     stats = bt.run()
     print(stats)
@@ -2815,6 +3821,285 @@ if __name__ == "__main__":
     main()
 """
     ).strip()
+
+
+def _render_backtest_tradingview_code(payload: dict[str, Any]) -> str:
+    ticker = str(payload.get("ticker") or "").upper().strip()
+    strategy = str(payload.get("strategy") or "sma_cross").strip().lower()
+    params = payload.get("params") or {}
+    cash = float(payload.get("cash") or 10_000)
+    commission = float(payload.get("commission") or 0.0)
+
+    fast = int(params.get("fast") or 20)
+    slow = int(params.get("slow") or 50)
+    rsi_period = int(params.get("rsiPeriod") or 14)
+    oversold = float(params.get("oversold") or 30)
+    exit_above = float(params.get("exitAbove") or 55)
+    sl_pct = max(0.0, min(float(params.get("slPct") or params.get("sl") or 0.0), 0.5))
+    tp_pct = max(0.0, min(float(params.get("tpPct") or params.get("tp") or 0.0), 0.5))
+
+    label = "RSI Reversion" if strategy == "rsi_reversion" else "SMA Crossover"
+    lines = [
+        "//@version=5",
+        f"strategy(\"Quantura {label} ({ticker})\", overlay=true, initial_capital={int(cash)}, commission_type=strategy.commission.percent, commission_value={commission * 100.0:.6f})",
+        "",
+        f"slPct = input.float({sl_pct:.6f}, \"Stop loss (decimal)\", step=0.001, minval=0.0)",
+        f"tpPct = input.float({tp_pct:.6f}, \"Take profit (decimal)\", step=0.001, minval=0.0)",
+    ]
+
+    if strategy == "rsi_reversion":
+        lines.extend(
+            [
+                f"rsiPeriod = input.int({rsi_period}, \"RSI Period\", minval=2, maxval=60)",
+                f"oversold = input.float({oversold:.2f}, \"Oversold\", minval=1, maxval=49)",
+                f"exitAbove = input.float({exit_above:.2f}, \"Exit Above\", minval=50, maxval=95)",
+                "rsiValue = ta.rsi(close, rsiPeriod)",
+                "longCondition = rsiValue < oversold",
+                "exitCondition = rsiValue > exitAbove",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                f"fastSmaLen = input.int({fast}, \"Fast SMA\", minval=2, maxval=200)",
+                f"slowSmaLen = input.int({slow}, \"Slow SMA\", minval=5, maxval=400)",
+                "fastSma = ta.sma(close, fastSmaLen)",
+                "slowSma = ta.sma(close, slowSmaLen)",
+                "longCondition = ta.crossover(fastSma, slowSma)",
+                "exitCondition = ta.crossunder(fastSma, slowSma)",
+                "plot(fastSma, color=color.new(color.aqua, 0), title=\"Fast SMA\")",
+                "plot(slowSma, color=color.new(color.orange, 0), title=\"Slow SMA\")",
+            ]
+        )
+
+    lines.extend(
+        [
+            "",
+            "if longCondition and strategy.position_size <= 0",
+            "    strategy.entry(\"Long\", strategy.long)",
+            "",
+            "if strategy.position_size > 0",
+            "    stopPrice = slPct > 0 ? strategy.position_avg_price * (1 - slPct) : na",
+            "    takePrice = tpPct > 0 ? strategy.position_avg_price * (1 + tpPct) : na",
+            "    strategy.exit(\"Risk Exit\", from_entry=\"Long\", stop=stopPrice, limit=takePrice)",
+            "",
+            "if exitCondition and strategy.position_size > 0",
+            "    strategy.close(\"Long\")",
+            "",
+            "// Generated by Quantura Export Strategy Logic",
+        ]
+    )
+    return "\n".join(lines).strip()
+
+
+def _render_backtest_mq5_code(payload: dict[str, Any]) -> str:
+    ticker = str(payload.get("ticker") or "").upper().strip()
+    strategy = str(payload.get("strategy") or "sma_cross").strip().lower()
+    params = payload.get("params") or {}
+    commission = float(payload.get("commission") or 0.0)
+    lookback_days = int(payload.get("lookbackDays") or 730)
+
+    fast = int(params.get("fast") or 20)
+    slow = int(params.get("slow") or 50)
+    rsi_period = int(params.get("rsiPeriod") or 14)
+    oversold = float(params.get("oversold") or 30)
+    exit_above = float(params.get("exitAbove") or 55)
+    sl_pct = max(0.0, min(float(params.get("slPct") or params.get("sl") or 0.0), 0.5))
+    tp_pct = max(0.0, min(float(params.get("tpPct") or params.get("tp") or 0.0), 0.5))
+
+    lines = [
+        "#property strict",
+        "#include <Trade/Trade.mqh>",
+        "",
+        f"// Quantura template for {ticker} ({strategy})",
+        f"// Backtest lookback used in Quantura: {lookback_days} days",
+        f"// Commission in Quantura run: {commission:.6f}",
+        "input double LotSize = 0.10;",
+        f"input double StopLossPct = {sl_pct:.6f};",
+        f"input double TakeProfitPct = {tp_pct:.6f};",
+        "",
+        "CTrade trade;",
+        "double ReadBuffer(int handle, int shift)",
+        "{",
+        "  double values[];",
+        "  if(CopyBuffer(handle, 0, shift, 1, values) <= 0) return EMPTY_VALUE;",
+        "  return values[0];",
+        "}",
+        "",
+        "void ApplyRisk()",
+        "{",
+        "  if(!PositionSelect(_Symbol)) return;",
+        "  double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);",
+        "  double sl = 0.0;",
+        "  double tp = 0.0;",
+        "  if(StopLossPct > 0.0) sl = NormalizeDouble(openPrice * (1.0 - StopLossPct), _Digits);",
+        "  if(TakeProfitPct > 0.0) tp = NormalizeDouble(openPrice * (1.0 + TakeProfitPct), _Digits);",
+        "  trade.PositionModify(_Symbol, sl, tp);",
+        "}",
+        "",
+    ]
+
+    if strategy == "rsi_reversion":
+        lines.extend(
+            [
+                f"input int RsiPeriod = {rsi_period};",
+                f"input double Oversold = {oversold:.2f};",
+                f"input double ExitAbove = {exit_above:.2f};",
+                "int rsiHandle = INVALID_HANDLE;",
+                "",
+                "int OnInit()",
+                "{",
+                "  rsiHandle = iRSI(_Symbol, PERIOD_CURRENT, RsiPeriod, PRICE_CLOSE);",
+                "  if(rsiHandle == INVALID_HANDLE) return(INIT_FAILED);",
+                "  return(INIT_SUCCEEDED);",
+                "}",
+                "",
+                "void OnDeinit(const int reason)",
+                "{",
+                "  if(rsiHandle != INVALID_HANDLE) IndicatorRelease(rsiHandle);",
+                "}",
+                "",
+                "void OnTick()",
+                "{",
+                "  double rsiNow = ReadBuffer(rsiHandle, 0);",
+                "  if(rsiNow == EMPTY_VALUE) return;",
+                "  bool hasPosition = PositionSelect(_Symbol);",
+                "  if(!hasPosition && rsiNow < Oversold)",
+                "  {",
+                "    trade.Buy(LotSize, _Symbol);",
+                "    ApplyRisk();",
+                "  }",
+                "  if(hasPosition && rsiNow > ExitAbove)",
+                "  {",
+                "    trade.PositionClose(_Symbol);",
+                "  }",
+                "}",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                f"input int FastSma = {fast};",
+                f"input int SlowSma = {slow};",
+                "int fastHandle = INVALID_HANDLE;",
+                "int slowHandle = INVALID_HANDLE;",
+                "",
+                "int OnInit()",
+                "{",
+                "  fastHandle = iMA(_Symbol, PERIOD_CURRENT, FastSma, 0, MODE_SMA, PRICE_CLOSE);",
+                "  slowHandle = iMA(_Symbol, PERIOD_CURRENT, SlowSma, 0, MODE_SMA, PRICE_CLOSE);",
+                "  if(fastHandle == INVALID_HANDLE || slowHandle == INVALID_HANDLE) return(INIT_FAILED);",
+                "  return(INIT_SUCCEEDED);",
+                "}",
+                "",
+                "void OnDeinit(const int reason)",
+                "{",
+                "  if(fastHandle != INVALID_HANDLE) IndicatorRelease(fastHandle);",
+                "  if(slowHandle != INVALID_HANDLE) IndicatorRelease(slowHandle);",
+                "}",
+                "",
+                "void OnTick()",
+                "{",
+                "  double fastNow = ReadBuffer(fastHandle, 0);",
+                "  double fastPrev = ReadBuffer(fastHandle, 1);",
+                "  double slowNow = ReadBuffer(slowHandle, 0);",
+                "  double slowPrev = ReadBuffer(slowHandle, 1);",
+                "  if(fastNow == EMPTY_VALUE || fastPrev == EMPTY_VALUE || slowNow == EMPTY_VALUE || slowPrev == EMPTY_VALUE) return;",
+                "  bool crossUp = fastPrev <= slowPrev && fastNow > slowNow;",
+                "  bool crossDown = fastPrev >= slowPrev && fastNow < slowNow;",
+                "  bool hasPosition = PositionSelect(_Symbol);",
+                "  if(crossUp && !hasPosition)",
+                "  {",
+                "    trade.Buy(LotSize, _Symbol);",
+                "    ApplyRisk();",
+                "  }",
+                "  if(crossDown && hasPosition)",
+                "  {",
+                "    trade.PositionClose(_Symbol);",
+                "  }",
+                "}",
+            ]
+        )
+
+    return "\n".join(lines).strip()
+
+
+def _render_tradelocker_payload(payload: dict[str, Any]) -> str:
+    ticker = str(payload.get("ticker") or "").upper().strip()
+    interval = str(payload.get("interval") or "1d").strip()
+    strategy = str(payload.get("strategy") or "sma_cross").strip().lower()
+    params = payload.get("params") or {}
+    cash = float(payload.get("cash") or 10_000)
+    commission = float(payload.get("commission") or 0.0)
+    sl_pct = max(0.0, min(float(params.get("slPct") or params.get("sl") or 0.0), 0.5))
+    tp_pct = max(0.0, min(float(params.get("tpPct") or params.get("tp") or 0.0), 0.5))
+
+    if strategy == "rsi_reversion":
+        entry_rules = [f"RSI({int(params.get('rsiPeriod') or 14)}) < {float(params.get('oversold') or 30):.2f}"]
+        exit_rules = [f"RSI({int(params.get('rsiPeriod') or 14)}) > {float(params.get('exitAbove') or 55):.2f}"]
+    else:
+        entry_rules = [f"SMA({int(params.get('fast') or 20)}) crosses above SMA({int(params.get('slow') or 50)})"]
+        exit_rules = [f"SMA({int(params.get('fast') or 20)}) crosses below SMA({int(params.get('slow') or 50)})"]
+
+    doc = {
+        "provider": "tradelocker",
+        "version": "1.0",
+        "strategyName": f"quantura_{strategy}",
+        "symbol": ticker,
+        "interval": interval,
+        "execution": {
+            "side": "buy",
+            "orderType": "market",
+            "quantityType": "notional",
+            "notionalUsd": round(cash, 2),
+            "commissionRate": round(commission, 6),
+        },
+        "risk": {
+            "stopLossPct": round(sl_pct, 6),
+            "takeProfitPct": round(tp_pct, 6),
+        },
+        "entryRules": entry_rules,
+        "exitRules": exit_rules,
+        "notes": [
+            "Generated by Quantura Export Strategy Logic.",
+            "Map these rules into your TradeLocker webhook bot or strategy runner.",
+        ],
+    }
+    return json.dumps(doc, indent=2, sort_keys=False)
+
+
+def _build_backtest_export_sources(payload: dict[str, Any]) -> dict[str, dict[str, str]]:
+    ticker = str(payload.get("ticker") or "backtest").upper().strip() or "backtest"
+    strategy = str(payload.get("strategy") or "strategy").strip().lower()
+    safe_prefix = re.sub(r"[^A-Z0-9_-]+", "_", f"{ticker}_{strategy}")
+    python_code = _generate_backtest_code(payload)
+
+    return {
+        "python": {
+            "label": "Python (.py)",
+            "filename": f"{safe_prefix}.py",
+            "mimeType": "text/x-python",
+            "content": python_code,
+        },
+        "tradingview": {
+            "label": "TradingView (.pine)",
+            "filename": f"{safe_prefix}.pine",
+            "mimeType": "text/plain",
+            "content": _render_backtest_tradingview_code(payload),
+        },
+        "metatrader5": {
+            "label": "MetaTrader 5 (.mq5)",
+            "filename": f"{safe_prefix}.mq5",
+            "mimeType": "text/plain",
+            "content": _render_backtest_mq5_code(payload),
+        },
+        "tradelocker": {
+            "label": "TradeLocker (JSON)",
+            "filename": f"{safe_prefix}_tradelocker.json",
+            "mimeType": "application/json",
+            "content": _render_tradelocker_payload(payload),
+        },
+    }
 
 
 @https_fn.on_call()
@@ -2851,13 +4136,20 @@ def run_backtest(req: https_fn.CallableRequest) -> dict[str, Any]:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Invalid commission.")
 
     params_raw = data.get("params") if isinstance(data.get("params"), dict) else {}
+    sl_pct = float(params_raw.get("slPct") or params_raw.get("sl") or 0.0)
+    tp_pct = float(params_raw.get("tpPct") or params_raw.get("tp") or 0.0)
+    if sl_pct < 0 or sl_pct > 0.5:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Stop-loss percent must be between 0 and 0.5.")
+    if tp_pct < 0 or tp_pct > 0.5:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Take-profit percent must be between 0 and 0.5.")
+
     params: dict[str, Any] = {}
     if strategy == "sma_cross":
         fast = int(params_raw.get("fast") or 20)
         slow = int(params_raw.get("slow") or 50)
         if fast < 2 or slow < 5 or fast >= slow or slow > 400:
             raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Invalid SMA parameters.")
-        params = {"fast": fast, "slow": slow}
+        params = {"fast": fast, "slow": slow, "slPct": sl_pct, "tpPct": tp_pct}
     else:
         rsi_period = int(params_raw.get("rsiPeriod") or params_raw.get("period") or 14)
         oversold = float(params_raw.get("oversold") or 30)
@@ -2868,27 +4160,38 @@ def run_backtest(req: https_fn.CallableRequest) -> dict[str, Any]:
             raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Invalid RSI oversold threshold.")
         if exit_above <= 50 or exit_above >= 95:
             raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Invalid RSI exit threshold.")
-        params = {"rsiPeriod": rsi_period, "oversold": oversold, "exitAbove": exit_above}
+        params = {"rsiPeriod": rsi_period, "oversold": oversold, "exitAbove": exit_above, "slPct": sl_pct, "tpPct": tp_pct}
 
     is_pro = token.get("email") == ADMIN_EMAIL or _is_paid_user(req.auth.uid)
     free_limit = _remote_config_int("backtesting_free_daily_limit", 1, context=context)
     pro_limit = _remote_config_int("backtesting_pro_daily_limit", 25, context=context)
-    _enforce_daily_usage(req.auth.uid, "backtestRuns", pro_limit if is_pro else free_limit)
+    _enforce_daily_usage(
+        req.auth.uid,
+        "backtestRuns",
+        pro_limit if is_pro else free_limit,
+        "Daily usage limit reached. Upgrade your plan to run more backtests.",
+    )
 
     from datetime import timedelta  # local import to reduce cold start
     import io
 
-    import pandas as pd  # type: ignore
-    import yfinance as yf  # type: ignore
+    try:
+        import pandas as pd  # type: ignore
+        import yfinance as yf  # type: ignore
+        from backtesting import Backtest, Strategy  # type: ignore
+        from backtesting.lib import crossover  # type: ignore
+        from backtesting.test import SMA  # type: ignore
+        import matplotlib
 
-    from backtesting import Backtest, Strategy  # type: ignore
-    from backtesting.lib import crossover  # type: ignore
-    from backtesting.test import SMA  # type: ignore
-
-    import matplotlib
-
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt  # type: ignore
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt  # type: ignore
+    except Exception as exc:
+        _raise_structured_error(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "backtest_dependency_error",
+            "Backtest dependencies are unavailable.",
+            {"raw": str(exc)},
+        )
 
     def calc_rsi(series, period: int = 14):
         s = pd.Series(series)
@@ -2904,13 +4207,24 @@ def run_backtest(req: https_fn.CallableRequest) -> dict[str, Any]:
             rsi_period = int(params["rsiPeriod"])
             oversold = float(params["oversold"])
             exit_above = float(params["exitAbove"])
+            sl_pct = float(params.get("slPct") or 0.0)
+            tp_pct = float(params.get("tpPct") or 0.0)
+
+            def _risk_args(self):
+                last_close = float(self.data.Close[-1])
+                out: dict[str, float] = {}
+                if self.sl_pct > 0:
+                    out["sl"] = last_close * (1 - self.sl_pct)
+                if self.tp_pct > 0:
+                    out["tp"] = last_close * (1 + self.tp_pct)
+                return out
 
             def init(self):
                 self.rsi = self.I(calc_rsi, self.data.Close, self.rsi_period)
 
             def next(self):
                 if not self.position and self.rsi[-1] < self.oversold:
-                    self.buy()
+                    self.buy(**self._risk_args())
                 elif self.position and self.rsi[-1] > self.exit_above:
                     self.position.close()
 
@@ -2921,6 +4235,17 @@ def run_backtest(req: https_fn.CallableRequest) -> dict[str, Any]:
         class SmaCross(Strategy):  # type: ignore
             fast = int(params["fast"])
             slow = int(params["slow"])
+            sl_pct = float(params.get("slPct") or 0.0)
+            tp_pct = float(params.get("tpPct") or 0.0)
+
+            def _risk_args(self):
+                last_close = float(self.data.Close[-1])
+                out: dict[str, float] = {}
+                if self.sl_pct > 0:
+                    out["sl"] = last_close * (1 - self.sl_pct)
+                if self.tp_pct > 0:
+                    out["tp"] = last_close * (1 + self.tp_pct)
+                return out
 
             def init(self):
                 price = self.data.Close
@@ -2930,7 +4255,7 @@ def run_backtest(req: https_fn.CallableRequest) -> dict[str, Any]:
             def next(self):
                 if crossover(self.sma_fast, self.sma_slow):
                     self.position.close()
-                    self.buy()
+                    self.buy(**self._risk_args())
                 elif crossover(self.sma_slow, self.sma_fast):
                     self.position.close()
 
@@ -2939,15 +4264,23 @@ def run_backtest(req: https_fn.CallableRequest) -> dict[str, Any]:
 
     end = datetime.now(timezone.utc)
     start = end - timedelta(days=lookback_days)
-    df = yf.download(
-        ticker,
-        start=start.strftime("%Y-%m-%d"),
-        end=end.strftime("%Y-%m-%d"),
-        interval=interval,
-        progress=False,
-        auto_adjust=False,
-        threads=False,
-    )
+    try:
+        df = yf.download(
+            ticker,
+            start=start.strftime("%Y-%m-%d"),
+            end=end.strftime("%Y-%m-%d"),
+            interval=interval,
+            progress=False,
+            auto_adjust=False,
+            threads=False,
+        )
+    except Exception as exc:
+        _raise_structured_error(
+            https_fn.FunctionsErrorCode.NOT_FOUND,
+            "ticker_not_found",
+            "Unable to load ticker history for backtest.",
+            {"ticker": ticker, "raw": str(exc)},
+        )
     if df is None or getattr(df, "empty", True):
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.FAILED_PRECONDITION, "No price history returned.")
     if isinstance(df.columns, pd.MultiIndex):
@@ -2961,43 +4294,53 @@ def run_backtest(req: https_fn.CallableRequest) -> dict[str, Any]:
         if col not in df.columns:
             raise https_fn.HttpsError(https_fn.FunctionsErrorCode.FAILED_PRECONDITION, f"Missing column: {col}")
 
-    bt = Backtest(df, strategy_cls, cash=cash, commission=commission)
-    stats = bt.run()
-    equity = None
     try:
-        equity = stats.get("_equity_curve") if hasattr(stats, "get") else None
-    except Exception:
+        bt = Backtest(df, strategy_cls, cash=cash, commission=commission)
+        stats = bt.run()
         equity = None
+        try:
+            equity = stats.get("_equity_curve") if hasattr(stats, "get") else None
+        except Exception:
+            equity = None
 
-    fig = plt.figure(figsize=(10.5, 4.4), dpi=160)
-    ax = fig.add_subplot(111)
-    ax.set_title(f"{ticker} backtest: {strategy_name}")
-    ax.set_xlabel("Date")
-    ax.set_ylabel("Equity (USD)")
-    ax.grid(True, alpha=0.22)
-    if equity is not None and hasattr(equity, "__getitem__") and "Equity" in equity:
-        ax.plot(equity.index, equity["Equity"], linewidth=1.8)
-    else:
-        # Fall back to close price if equity curve is unavailable.
-        ax.plot(df.index, df["Close"], linewidth=1.6)
-        ax.set_ylabel("Close (USD)")
-    fig.tight_layout()
-    buf = io.BytesIO()
-    fig.savefig(buf, format="png", bbox_inches="tight")
-    plt.close(fig)
-    png_bytes = buf.getvalue()
+        fig = plt.figure(figsize=(10.5, 4.4), dpi=160)
+        ax = fig.add_subplot(111)
+        ax.set_title(f"{ticker} backtest: {strategy_name}")
+        ax.set_xlabel("Date")
+        ax.set_ylabel("Equity (USD)")
+        ax.grid(True, alpha=0.22)
+        if equity is not None and hasattr(equity, "__getitem__") and "Equity" in equity:
+            ax.plot(equity.index, equity["Equity"], linewidth=1.8)
+        else:
+            # Fall back to close price if equity curve is unavailable.
+            ax.plot(df.index, df["Close"], linewidth=1.6)
+            ax.set_ylabel("Close (USD)")
+        fig.tight_layout()
+        buf = io.BytesIO()
+        fig.savefig(buf, format="png", bbox_inches="tight")
+        plt.close(fig)
+        png_bytes = buf.getvalue()
+    except https_fn.HttpsError:
+        raise
+    except Exception as exc:
+        _raise_structured_error(
+            https_fn.FunctionsErrorCode.INTERNAL,
+            "backtest_execution_error",
+            "Backtest execution failed.",
+            {"ticker": ticker, "strategy": strategy, "raw": str(exc)},
+        )
 
-    code = _generate_backtest_code(
-        {
-            "ticker": ticker,
-            "interval": interval,
-            "lookbackDays": lookback_days,
-            "strategy": strategy,
-            "params": params,
-            "cash": cash,
-            "commission": commission,
-        }
-    )
+    export_payload = {
+        "ticker": ticker,
+        "interval": interval,
+        "lookbackDays": lookback_days,
+        "strategy": strategy,
+        "params": params,
+        "cash": cash,
+        "commission": commission,
+    }
+    export_sources = _build_backtest_export_sources(export_payload)
+    code = export_sources.get("python", {}).get("content") or ""
 
     doc_ref = db.collection("backtests").document()
     backtest_id = doc_ref.id
@@ -3036,6 +4379,7 @@ def run_backtest(req: https_fn.CallableRequest) -> dict[str, Any]:
             "metrics": metrics,
             "imagePath": image_path,
             "code": code,
+            "exportSources": export_sources,
             "createdAt": firestore.SERVER_TIMESTAMP,
             "updatedAt": firestore.SERVER_TIMESTAMP,
             "meta": meta,
@@ -3043,7 +4387,13 @@ def run_backtest(req: https_fn.CallableRequest) -> dict[str, Any]:
     )
 
     _audit_event(req.auth.uid, token.get("email"), "backtest_completed", {"backtestId": backtest_id, "ticker": ticker, "strategy": strategy})
-    return {"backtestId": backtest_id, "metrics": metrics, "imagePath": image_path, "title": title}
+    return {
+        "backtestId": backtest_id,
+        "metrics": metrics,
+        "imagePath": image_path,
+        "title": title,
+        "exportFormats": sorted(BACKTEST_SOURCE_FORMATS),
+    }
 
 
 @https_fn.on_call()
@@ -3282,10 +4632,25 @@ def get_ticker_history(req: https_fn.CallableRequest) -> dict[str, Any]:
     start = data.get("start")
     end = data.get("end")
 
-    history = yf.download(ticker, start=start, end=end, interval=interval, progress=False)
+    try:
+        history = yf.download(ticker, start=start, end=end, interval=interval, progress=False)
+    except Exception as exc:
+        _raise_structured_error(
+            https_fn.FunctionsErrorCode.NOT_FOUND,
+            "ticker_not_found",
+            "Unable to load market history for ticker.",
+            {"ticker": ticker, "raw": str(exc)},
+        )
     if isinstance(history.columns, pd.MultiIndex):
         history.columns = history.columns.get_level_values(0)
     history = history.dropna().reset_index()
+    if history.empty:
+        _raise_structured_error(
+            https_fn.FunctionsErrorCode.NOT_FOUND,
+            "ticker_not_found",
+            "No history returned for ticker.",
+            {"ticker": ticker},
+        )
 
     date_col = "Datetime" if "Datetime" in history.columns else "Date"
     if date_col in history.columns:
@@ -3445,12 +4810,46 @@ def get_trending_tickers(req: https_fn.CallableRequest) -> dict[str, Any]:
 
 @https_fn.on_call()
 def get_ticker_intel(req: https_fn.CallableRequest) -> dict[str, Any]:
+    import numpy as np  # type: ignore
+    import pandas as pd  # type: ignore
     import yfinance as yf  # type: ignore
 
     data = req.data or {}
     ticker = str(data.get("ticker") or "").upper().strip()
     if not ticker:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Ticker is required.")
+
+    def _as_float(value: Any) -> float | None:
+        try:
+            num = float(value)
+            return num if math.isfinite(num) else None
+        except Exception:
+            return None
+
+    def _statement_value(frame: Any, labels: list[str]) -> float | None:
+        if frame is None or getattr(frame, "empty", True):
+            return None
+        try:
+            for label in labels:
+                if label in frame.index:
+                    series = frame.loc[label]
+                    if hasattr(series, "dropna"):
+                        series = series.dropna()
+                    if getattr(series, "empty", True):
+                        continue
+                    return _as_float(series.iloc[0])
+        except Exception:
+            return None
+        return None
+
+    def _score_by_range(value: float | None, low: float, high: float, invert: bool = False) -> float | None:
+        if value is None or high <= low:
+            return None
+        clamped = max(low, min(high, value))
+        pct = (clamped - low) / (high - low)
+        if invert:
+            pct = 1 - pct
+        return round(max(0.0, min(1.0, pct)) * 100, 1)
 
     ticker_obj = yf.Ticker(ticker)
 
@@ -3467,7 +4866,7 @@ def get_ticker_intel(req: https_fn.CallableRequest) -> dict[str, Any]:
         summary = summary[:897].rstrip() + "..."
 
     profile = {
-        "name": info.get("longName") or info.get("shortName") or "",
+        "name": info.get("longName") or info.get("shortName") or ticker,
         "sector": info.get("sector") or "",
         "industry": info.get("industry") or "",
         "website": info.get("website") or "",
@@ -3482,7 +4881,176 @@ def get_ticker_intel(req: https_fn.CallableRequest) -> dict[str, Any]:
         "dividendYield": info.get("dividendYield"),
         "fiftyTwoWeekLow": info.get("fiftyTwoWeekLow"),
         "fiftyTwoWeekHigh": info.get("fiftyTwoWeekHigh"),
+        "debtToEquity": info.get("debtToEquity"),
+        "currentRatio": info.get("currentRatio"),
+        "quickRatio": info.get("quickRatio"),
+        "returnOnEquity": info.get("returnOnEquity"),
+        "returnOnAssets": info.get("returnOnAssets"),
     }
+
+    income_stmt = None
+    balance_sheet = None
+    cashflow = None
+    try:
+        income_stmt = ticker_obj.quarterly_income_stmt
+    except Exception:
+        income_stmt = None
+    try:
+        balance_sheet = ticker_obj.quarterly_balance_sheet
+    except Exception:
+        balance_sheet = None
+    try:
+        cashflow = ticker_obj.quarterly_cashflow
+    except Exception:
+        cashflow = None
+
+    total_revenue = _statement_value(income_stmt, ["Total Revenue", "Revenue"])
+    gross_profit = _statement_value(income_stmt, ["Gross Profit"])
+    operating_income = _statement_value(income_stmt, ["Operating Income"])
+    net_income = _statement_value(income_stmt, ["Net Income", "Net Income Common Stockholders"])
+    free_cash_flow = _statement_value(cashflow, ["Free Cash Flow"])
+
+    net_margin = (net_income / total_revenue) if net_income is not None and total_revenue and total_revenue > 0 else None
+    roi = _as_float(info.get("returnOnEquity"))
+    if roi is None:
+        roi = _as_float(info.get("returnOnAssets"))
+    debt_to_equity = _as_float(info.get("debtToEquity"))
+    if debt_to_equity is not None and debt_to_equity > 10:
+        debt_to_equity = debt_to_equity / 100.0
+    current_ratio = _as_float(info.get("currentRatio"))
+    beta = _as_float(info.get("beta"))
+
+    dividend_yield = _as_float(info.get("dividendYield"))
+    payout_ratio = _as_float(info.get("payoutRatio"))
+    shares_outstanding = _as_float(info.get("sharesOutstanding"))
+    float_shares = _as_float(info.get("floatShares"))
+    target_12m = _as_float(info.get("targetMeanPrice"))
+    liquidity_cash = _as_float(info.get("totalCash"))
+    liquidity_debt = _as_float(info.get("totalDebt"))
+
+    dividend_policy = "No regular dividend policy disclosed."
+    if dividend_yield is not None and dividend_yield > 0:
+        payout_text = f"{payout_ratio * 100:.1f}%" if payout_ratio is not None and payout_ratio > 0 else "n/a"
+        dividend_policy = f"Dividend yield near {dividend_yield * 100:.2f}% with payout ratio {payout_text}."
+
+    buyback_summary = "Share buyback signal not explicit in current data."
+    if shares_outstanding and float_shares and shares_outstanding > 0 and float_shares > 0:
+        ratio = float_shares / shares_outstanding
+        if ratio < 0.9:
+            buyback_summary = "Share count structure suggests periodic repurchases versus total outstanding base."
+        elif ratio > 0.98:
+            buyback_summary = "Limited buyback footprint detected in the current share structure."
+
+    risk_mitigation = []
+    if current_ratio is not None:
+        risk_mitigation.append(f"Current ratio {current_ratio:.2f}")
+    if debt_to_equity is not None:
+        risk_mitigation.append(f"Debt-to-equity {debt_to_equity:.2f}")
+    if liquidity_cash is not None and liquidity_cash > 0:
+        risk_mitigation.append(f"Cash buffer ${liquidity_cash:,.0f}")
+    risk_mitigation_text = ", ".join(risk_mitigation) if risk_mitigation else "Liquidity and hedging data is limited for this symbol."
+
+    env_score = _as_float(info.get("environmentScore"))
+    social_score = _as_float(info.get("socialScore"))
+    governance_score = _as_float(info.get("governanceScore"))
+    total_esg = _as_float(info.get("totalEsg"))
+    if total_esg is None:
+        esg_parts = [x for x in [env_score, social_score, governance_score] if x is not None]
+        total_esg = float(np.mean(esg_parts)) if esg_parts else None
+
+    heatmap = [
+        {
+            "label": "Liquidity",
+            "value": current_ratio,
+            "score": _score_by_range(current_ratio, 0.5, 3.0),
+            "hint": "Current ratio",
+        },
+        {
+            "label": "Leverage",
+            "value": debt_to_equity,
+            "score": _score_by_range(debt_to_equity, 0.0, 3.0, invert=True),
+            "hint": "Debt / equity",
+        },
+        {
+            "label": "Net margin",
+            "value": None if net_margin is None else net_margin * 100,
+            "score": _score_by_range(net_margin, -0.05, 0.30),
+            "hint": "Profitability",
+        },
+        {
+            "label": "ROI",
+            "value": None if roi is None else roi * 100,
+            "score": _score_by_range(roi, -0.05, 0.25),
+            "hint": "Return on capital",
+        },
+        {
+            "label": "Cash conversion",
+            "value": (free_cash_flow / total_revenue) * 100
+            if free_cash_flow is not None and total_revenue and total_revenue > 0
+            else None,
+            "score": _score_by_range(
+                (free_cash_flow / total_revenue) if free_cash_flow is not None and total_revenue and total_revenue > 0 else None,
+                -0.05,
+                0.25,
+            ),
+            "hint": "FCF / revenue",
+        },
+        {
+            "label": "Volatility control",
+            "value": beta,
+            "score": _score_by_range(beta, 0.6, 2.0, invert=True),
+            "hint": "Beta stability",
+        },
+    ]
+
+    sector_peer_map: dict[str, list[str]] = {
+        "Technology": ["MSFT", "AAPL", "NVDA", "AMD", "ORCL", "CRM"],
+        "Financial Services": ["JPM", "BAC", "GS", "MS", "C", "WFC"],
+        "Healthcare": ["LLY", "UNH", "JNJ", "PFE", "MRK", "ABBV"],
+        "Energy": ["XOM", "CVX", "COP", "SLB", "EOG"],
+        "Consumer Defensive": ["KO", "PEP", "WMT", "COST", "PG"],
+        "Consumer Cyclical": ["AMZN", "TSLA", "HD", "MCD", "NKE"],
+        "Industrials": ["CAT", "DE", "BA", "HON", "GE"],
+    }
+    sector_key = str(info.get("sector") or "")
+    peer_candidates = [sym for sym in sector_peer_map.get(sector_key, ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL"]) if sym != ticker]
+    peer_symbols = peer_candidates[:3]
+    peer_rows: list[dict[str, Any]] = []
+    for peer in peer_symbols:
+        peer_info: dict[str, Any] = {}
+        try:
+            peer_info = yf.Ticker(peer).info or {}
+            if not isinstance(peer_info, dict):
+                peer_info = {}
+        except Exception:
+            peer_info = {}
+
+        peer_pe = _as_float(peer_info.get("trailingPE"))
+        peer_dte = _as_float(peer_info.get("debtToEquity"))
+        if peer_dte is not None and peer_dte > 10:
+            peer_dte = peer_dte / 100.0
+
+        peer_sharpe = None
+        try:
+            hist = yf.download(peer, period="6mo", interval="1d", progress=False, auto_adjust=False)
+            if hist is not None and getattr(hist, "empty", True) is False and "Close" in hist.columns:
+                close = hist["Close"].astype(float).dropna()
+                if len(close) > 15:
+                    ret = close.pct_change().dropna()
+                    vol = float(ret.std())
+                    if vol > 0:
+                        peer_sharpe = float((ret.mean() / vol) * math.sqrt(252))
+        except Exception:
+            peer_sharpe = None
+
+        peer_rows.append(
+            {
+                "ticker": peer,
+                "pe": None if peer_pe is None else round(peer_pe, 2),
+                "debtToEquity": None if peer_dte is None else round(peer_dte, 2),
+                "sharpeRatio": None if peer_sharpe is None else round(peer_sharpe, 2),
+            }
+        )
 
     calendar_raw: dict[str, Any] = {}
     try:
@@ -3526,12 +5094,58 @@ def get_ticker_intel(req: https_fn.CallableRequest) -> dict[str, Any]:
     except Exception:
         recommendation_trend = []
 
+    executive_summary = {
+        "ticker": ticker,
+        "exchange": profile.get("exchange"),
+        "sector": profile.get("sector"),
+        "marketCap": profile.get("marketCap"),
+        "priceTarget12m": target_12m,
+    }
+    fundamental_deep_dive = {
+        "revenueMechanics": {
+            "totalRevenue": total_revenue,
+            "grossProfit": gross_profit,
+            "operatingIncome": operating_income,
+            "segmentBreakdown": "Segment-level disclosure varies by issuer; this view highlights top-line and operating mechanics from reported statements.",
+        },
+        "profitability": {
+            "netMargin": net_margin,
+            "roi": roi,
+            "returnOnAssets": _as_float(info.get("returnOnAssets")),
+        },
+        "capitalAllocation": {
+            "dividendPolicy": dividend_policy,
+            "shareBuybacks": buyback_summary,
+            "freeCashFlow": free_cash_flow,
+        },
+    }
+    risk_and_esg = {
+        "riskMitigation": risk_mitigation_text,
+        "liquidity": {
+            "totalCash": liquidity_cash,
+            "totalDebt": liquidity_debt,
+            "currentRatio": current_ratio,
+            "quickRatio": _as_float(info.get("quickRatio")),
+        },
+        "esg": {
+            "environmental": env_score,
+            "social": social_score,
+            "governance": governance_score,
+            "overall": total_esg,
+        },
+    }
+
     return {
         "ticker": ticker,
         "profile": _serialize_for_firestore(profile),
         "events": _serialize_for_firestore(events),
         "analyst": _serialize_for_firestore(analyst),
         "recommendationTrend": _serialize_for_firestore(recommendation_trend),
+        "executiveSummary": _serialize_for_firestore(executive_summary),
+        "fundamentalDeepDive": _serialize_for_firestore(fundamental_deep_dive),
+        "riskAndEsg": _serialize_for_firestore(risk_and_esg),
+        "balanceSheetHeatmap": _serialize_for_firestore(heatmap),
+        "peerComparison": _serialize_for_firestore(peer_rows),
     }
 
 
@@ -3947,10 +5561,17 @@ def queue_screener_run(req: https_fn.CallableRequest) -> dict[str, Any]:
 
 @https_fn.on_call()
 def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
-    import numpy as np  # type: ignore
-    import pandas as pd  # type: ignore
-    import yfinance as yf  # type: ignore
-    from finta import TA  # type: ignore
+    try:
+        import numpy as np  # type: ignore
+        import pandas as pd  # type: ignore
+        import yfinance as yf  # type: ignore
+    except Exception as exc:
+        _raise_structured_error(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "screener_dependency_error",
+            "Screener dependencies are unavailable.",
+            {"raw": str(exc)[:400]},
+        )
 
     token = _require_auth(req)
     data = req.data or {}
@@ -3980,22 +5601,157 @@ def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
                 "Editor access is required to run a screener for this workspace.",
             )
 
+    context = _remote_config_context(req, token, data.get("meta") if isinstance(data.get("meta"), dict) else None)
+    tier_key, tier = _resolve_ai_tier(req.auth.uid, token, context=context)
+    allowed_models_raw = tier.get("allowed_models") if isinstance(tier, dict) else []
+    allowed_models = [str(item).strip() for item in (allowed_models_raw or []) if str(item).strip()]
+    daily_limit = int(tier.get("daily_limit") or (50 if tier_key == "premium" else 5))
+
+    selected_model = str(data.get("model") or data.get("selectedModel") or "gpt-4o-mini").strip()
+    if allowed_models and selected_model not in allowed_models:
+        _raise_structured_error(
+            https_fn.FunctionsErrorCode.PERMISSION_DENIED,
+            "model_locked",
+            "Selected model is not available for your current tier.",
+            {"selectedModel": selected_model, "allowedModels": allowed_models, "tier": tier_key},
+        )
+
+    _enforce_daily_usage(
+        req.auth.uid,
+        "aiScreenerRuns",
+        max(1, daily_limit),
+        "Daily AI screener limit reached. Upgrade to Premium for higher throughput.",
+    )
+
     market = str(data.get("market") or "us").lower()
-    max_names = int(data.get("maxNames") or 25)
+    try:
+        max_names = int(data.get("maxNames") or 25)
+    except Exception:
+        max_names = 25
     max_names = max(5, min(max_names, 50))
 
-    trending: list[str] = []
-    try:
-        response = requests.get(TRENDING_URL, headers=_yahoo_headers(), timeout=10)
-        response.raise_for_status()
-        payload = response.json()
-        quotes = payload.get("finance", {}).get("result", [{}])[0].get("quotes", [])
-        trending = [str(item.get("symbol") or "").upper() for item in quotes if item.get("symbol")]
-    except Exception:
-        trending = ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "TSLA", "META"]
+    market_cap_filter_raw = data.get("marketCapFilter") if isinstance(data.get("marketCapFilter"), dict) else {}
+    filter_mode = str(market_cap_filter_raw.get("type") or "greater_than").strip().lower() or "greater_than"
+    filter_value_raw = market_cap_filter_raw.get("value")
+    if filter_value_raw in (None, ""):
+        filter_value_raw = data.get("minCap")
 
-    tickers = [t for t in trending if t][: max(10, min(len(trending), max_names * 2))]
+    market_cap_target_abs: float | None = None
+    try:
+        if filter_value_raw not in (None, ""):
+            parsed = float(filter_value_raw)
+            # Backward compatibility: historical API used billions.
+            market_cap_target_abs = parsed * 1_000_000_000 if parsed < 1_000_000_000 else parsed
+    except Exception:
+        _raise_structured_error(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "invalid_market_cap_filter",
+            "Market cap filter value is invalid.",
+        )
+
+    if filter_mode not in {"greater_than", "less_than", "any"}:
+        filter_mode = "greater_than"
+
+    universe_key = str(data.get("universe") or "trending").strip().lower()
+    universe_map: dict[str, list[str]] = {
+        "large-cap": [
+            "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "AVGO", "JPM", "V",
+            "MA", "WMT", "COST", "XOM", "LLY", "UNH", "JNJ", "PG", "HD", "BAC",
+            "KO", "PEP", "ORCL", "CRM", "NFLX", "ADBE", "AMD", "CSCO", "CVX", "MRK",
+        ],
+        "mid-cap": [
+            "HUBS", "ROST", "VRSK", "ANSS", "TTWO", "PAYC", "NVR", "RJF", "PODD", "WAB",
+            "FDS", "MGM", "DKNG", "GL", "MTCH", "OKTA", "ZS", "ULTA", "ETSY", "ON",
+            "COIN", "RBLX", "MELI", "CFLT", "NET", "SQ", "DDOG", "SNAP", "SHOP", "U",
+        ],
+        "small-cap": [
+            "IWM", "CROX", "RXRX", "CRSR", "SMR", "SOFI", "OPEN", "RUN", "TOST", "AI",
+            "SOUN", "UPST", "LMND", "RKLB", "ASTS", "IONQ", "DNA", "BBAI", "ENVX", "ARRY",
+            "CHPT", "QS", "BMBL", "RIVN", "NOVA", "S", "PATH", "JOBY", "ACHR", "PL",
+        ],
+    }
+
+    trending: list[str] = []
+    if universe_key == "trending" or universe_key not in universe_map:
+        try:
+            response = requests.get(TRENDING_URL, headers=_yahoo_headers(), timeout=10)
+            response.raise_for_status()
+            payload = response.json()
+            quotes = payload.get("finance", {}).get("result", [{}])[0].get("quotes", [])
+            trending = [str(item.get("symbol") or "").upper() for item in quotes if item.get("symbol")]
+        except Exception:
+            trending = []
+
+    fallback_diverse = universe_map["large-cap"]
+    base_tickers = universe_map.get(universe_key) if universe_key in universe_map else trending
+    if not base_tickers:
+        base_tickers = trending or fallback_diverse
+
+    candidate_pool = max(20, min(max_names * 3, 90))
+    tickers = list(dict.fromkeys([str(t).upper().strip() for t in base_tickers if str(t).strip()]))[:candidate_pool]
+
     results: list[dict[str, Any]] = []
+    market_cap_cache: dict[str, float | None] = {}
+
+    def _fmt_market_cap(value: float | None) -> str:
+        if value is None:
+            return "—"
+        abs_value = abs(float(value))
+        if abs_value >= 1_000_000_000_000:
+            return f"${value / 1_000_000_000_000:.2f}T"
+        if abs_value >= 1_000_000_000:
+            return f"${value / 1_000_000_000:.2f}B"
+        if abs_value >= 1_000_000:
+            return f"${value / 1_000_000:.2f}M"
+        return f"${value:,.0f}"
+
+    def _market_cap_for_symbol(symbol: str) -> float | None:
+        if symbol in market_cap_cache:
+            return market_cap_cache[symbol]
+        cap: float | None = None
+        try:
+            tk = yf.Ticker(symbol)
+            fast_info = getattr(tk, "fast_info", None)
+            if fast_info is not None:
+                cap_raw = None
+                try:
+                    cap_raw = fast_info.get("market_cap")
+                except Exception:
+                    cap_raw = getattr(fast_info, "market_cap", None)
+                if cap_raw is not None:
+                    cap_num = float(cap_raw)
+                    if math.isfinite(cap_num) and cap_num > 0:
+                        cap = cap_num
+            if cap is None:
+                info = tk.info or {}
+                cap_raw = info.get("marketCap")
+                if cap_raw is not None:
+                    cap_num = float(cap_raw)
+                    if math.isfinite(cap_num) and cap_num > 0:
+                        cap = cap_num
+        except Exception:
+            cap = None
+        market_cap_cache[symbol] = cap
+        return cap
+
+    def _compute_rsi(close_series: Any, period: int = 14) -> float | None:
+        try:
+            series = pd.Series(close_series, dtype="float64").dropna()
+            if len(series) < period + 1:
+                return None
+            delta = series.diff()
+            gain = delta.clip(lower=0)
+            loss = -delta.clip(upper=0)
+            avg_gain = gain.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
+            avg_loss = loss.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
+            rs = avg_gain / avg_loss.replace(0, np.nan)
+            rsi = 100 - (100 / (1 + rs))
+            clean = rsi.dropna()
+            if clean.empty:
+                return None
+            return float(clean.iloc[-1])
+        except Exception:
+            return None
 
     if tickers:
         try:
@@ -4011,26 +5767,51 @@ def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
         except Exception:
             history = pd.DataFrame()
 
-        def _extract(history_frame: pd.DataFrame, symbol: str) -> pd.DataFrame:
-            if history_frame.empty:
-                return pd.DataFrame()
-            if not isinstance(history_frame.columns, pd.MultiIndex):
-                return history_frame.copy()
-            if symbol in history_frame.columns.get_level_values(0):
-                frame = history_frame[symbol].copy()
-                if isinstance(frame.columns, pd.MultiIndex):
-                    frame.columns = frame.columns.get_level_values(-1)
-                return frame
-            if symbol in history_frame.columns.get_level_values(1):
-                frame = history_frame.xs(symbol, level=1, axis=1).copy()
-                if isinstance(frame.columns, pd.MultiIndex):
-                    frame.columns = frame.columns.get_level_values(-1)
-                return frame
-            return pd.DataFrame()
+        per_symbol_history: dict[str, Any] = {}
+
+        def _extract(history_frame: Any, symbol: str) -> Any:
+            if isinstance(history_frame, pd.DataFrame) and not history_frame.empty:
+                if not isinstance(history_frame.columns, pd.MultiIndex):
+                    return history_frame.copy()
+                if symbol in history_frame.columns.get_level_values(0):
+                    frame = history_frame[symbol].copy()
+                    if isinstance(frame.columns, pd.MultiIndex):
+                        frame.columns = frame.columns.get_level_values(-1)
+                    return frame
+                if symbol in history_frame.columns.get_level_values(1):
+                    frame = history_frame.xs(symbol, level=1, axis=1).copy()
+                    if isinstance(frame.columns, pd.MultiIndex):
+                        frame.columns = frame.columns.get_level_values(-1)
+                    return frame
+            cached = per_symbol_history.get(symbol)
+            if cached is not None:
+                return cached
+            try:
+                frame = yf.download(
+                    symbol,
+                    period="6mo",
+                    interval="1d",
+                    progress=False,
+                    auto_adjust=False,
+                    threads=False,
+                )
+            except Exception:
+                frame = pd.DataFrame()
+            per_symbol_history[symbol] = frame
+            return frame
 
         for symbol in tickers:
+            market_cap = _market_cap_for_symbol(symbol)
+            if market_cap_target_abs is not None and filter_mode != "any":
+                if market_cap is None:
+                    continue
+                if filter_mode == "greater_than" and not (market_cap >= market_cap_target_abs):
+                    continue
+                if filter_mode == "less_than" and not (market_cap <= market_cap_target_abs):
+                    continue
+
             frame = _extract(history, symbol)
-            if frame.empty or "Close" not in frame.columns:
+            if frame is None or getattr(frame, "empty", True) or "Close" not in frame.columns:
                 continue
             frame = frame.dropna()
             if frame.empty:
@@ -4046,23 +5827,7 @@ def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
 
             returns = close.pct_change().dropna()
             vol_ann = float(returns.std() * np.sqrt(252)) if len(returns) else None
-
-            rsi_val = None
-            try:
-                ta_frame = frame.rename(
-                    columns={
-                        "Open": "open",
-                        "High": "high",
-                        "Low": "low",
-                        "Close": "close",
-                        "Volume": "volume",
-                    }
-                )
-                rsi_series = TA.RSI(ta_frame)
-                if rsi_series is not None and len(rsi_series.dropna()) > 0:
-                    rsi_val = float(rsi_series.dropna().iloc[-1])
-            except Exception:
-                rsi_val = None
+            rsi_val = _compute_rsi(close, period=14)
 
             score = 0.0
             if isinstance(ret_3m, float):
@@ -4081,6 +5846,8 @@ def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
                     "rsi14": None if rsi_val is None else round(rsi_val, 2),
                     "volatility": None if vol_ann is None else round(vol_ann, 4),
                     "score": round(score, 6),
+                    "marketCap": None if market_cap is None else int(round(market_cap)),
+                    "marketCapLabel": _fmt_market_cap(market_cap),
                 }
             )
 
@@ -4103,6 +5870,14 @@ def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
         "title": run_title,
         "results": _serialize_for_firestore(results),
         "notes": str(data.get("notes") or ""),
+        "modelUsed": selected_model,
+        "modelTier": tier_key,
+        "allowedModels": allowed_models,
+        "dailyLimit": daily_limit,
+        "marketCapFilter": {
+            "type": filter_mode,
+            "value": market_cap_target_abs,
+        },
         "createdAt": firestore.SERVER_TIMESTAMP,
         "updatedAt": firestore.SERVER_TIMESTAMP,
         "meta": data.get("meta") or {},
@@ -4110,7 +5885,19 @@ def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
     doc_ref.set(run_doc)
     _audit_event(req.auth.uid, token.get("email"), "screener_completed", {"runId": doc_ref.id, "count": len(results)})
 
-    return {"runId": doc_ref.id, "status": "completed", "title": run_title, "results": results, "workspaceId": workspace_id}
+    return {
+        "runId": doc_ref.id,
+        "status": "completed",
+        "title": run_title,
+        "results": results,
+        "workspaceId": workspace_id,
+        "modelUsed": selected_model,
+        "modelTier": tier_key,
+        "dailyLimit": daily_limit,
+        "allowedModels": allowed_models,
+        "resultsFound": len(results),
+        "marketCapFilter": {"type": filter_mode, "value": market_cap_target_abs},
+    }
 
 
 @https_fn.on_call()

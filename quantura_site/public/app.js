@@ -12,11 +12,78 @@
   const HOLIDAY_PROMO_SEEN_KEY = "quantura_holiday_promo_seen_v1";
   const AI_LEADERBOARD_DEFAULT_HORIZON = "1y";
   const DEFAULT_VOLATILITY_THRESHOLD = 0.05;
+  const META_PIXEL_ID = "1643823927053003";
+  const META_CAPI_CALLABLE = "track_meta_conversion_event";
+  const META_STANDARD_EVENTS = new Set([
+    "PageView",
+    "CustomizeProduct",
+    "AddToWishlist",
+    "CompleteRegistration",
+    "Search",
+    "SubmitApplication",
+    "AddToCart",
+    "ViewContent",
+    "Schedule",
+    "Lead",
+    "Contact",
+    "Purchase",
+  ]);
   const DEFAULT_BRIEF_TICKERS = [
     "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "NFLX",
     "AMD", "AVGO", "CRM", "ORCL", "JPM", "BAC", "GS", "V", "MA",
     "UNH", "LLY", "JNJ", "XOM", "CVX", "CAT", "DE", "KO", "PEP",
     "COST", "WMT", "NKE", "PLTR",
+  ];
+  const AI_MODEL_CATALOG = [
+    { id: "gpt-4o-mini", provider: "openai", tier: "Standard", label: "GPT-4o mini" },
+    { id: "gemini-1.5-flash", provider: "google", tier: "Standard", label: "Gemini 1.5 Flash" },
+    { id: "gpt-4o", provider: "openai", tier: "Professional", label: "GPT-4o" },
+    { id: "claude-3-5-sonnet", provider: "anthropic", tier: "Professional", label: "Claude 3.5 Sonnet" },
+    { id: "gemini-1.5-pro", provider: "google", tier: "Professional", label: "Gemini 1.5 Pro" },
+    { id: "o1-preview", provider: "openai", tier: "Research", label: "OpenAI o1-preview" },
+    { id: "claude-3-opus", provider: "anthropic", tier: "Research", label: "Claude 3 Opus" },
+  ];
+  const AI_USAGE_TIER_DEFAULTS = {
+    free: {
+      allowed_models: ["gpt-4o-mini", "gemini-1.5-flash"],
+      daily_limit: 5,
+      volatility_alerts: false,
+    },
+    premium: {
+      allowed_models: ["gpt-4o", "claude-3-5-sonnet", "gemini-1.5-pro", "o1-preview"],
+      daily_limit: 50,
+      volatility_alerts: true,
+    },
+  };
+  const MODEL_PROVIDER_LABEL = {
+    openai: "OpenAI",
+    anthropic: "Anthropic",
+    google: "Google",
+  };
+  const UNSPLASH_ACCESS_KEY = "tKqmTYXWxWdvGHHlbO8OtfdtJMYaz0KXKWKyCaG61u4";
+  const UNSPLASH_CACHE_KEY = "quantura_unsplash_gallery_v1";
+  const UNSPLASH_CACHE_TTL_MS = 1000 * 60 * 60 * 6;
+  const UNSPLASH_FALLBACK_IMAGES = [
+    {
+      url: "https://images.unsplash.com/photo-1535320903710-d993d3d77d29?auto=format&fit=crop&w=1280&q=80",
+      alt: "Finance workspace with market charts",
+      link: "https://unsplash.com/photos/laptop-computer-on-glass-top-table-near-window-nA0UDNDbxys",
+    },
+    {
+      url: "https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?auto=format&fit=crop&w=1280&q=80",
+      alt: "Stock market dashboard on laptop",
+      link: "https://unsplash.com/photos/macbook-air-near-white-paper-BStWzy4M7vA",
+    },
+    {
+      url: "https://images.unsplash.com/photo-1642790106117-e829e14a795f?auto=format&fit=crop&w=1280&q=80",
+      alt: "Tablet with candlestick chart",
+      link: "https://unsplash.com/photos/black-and-white-smartphone-on-brown-wooden-table-8wVYO8rK1j0",
+    },
+    {
+      url: "https://images.unsplash.com/photo-1559526324-4b87b5e36e44?auto=format&fit=crop&w=1280&q=80",
+      alt: "Financial team reviewing growth metrics",
+      link: "https://unsplash.com/photos/people-sitting-in-front-of-computer-MYbhN8KaaEc",
+    },
   ];
   const DEFAULT_AI_AGENTS = [
     {
@@ -28,6 +95,9 @@
       returns: { "1m": 0.019, "3m": 0.057, "6m": 0.11, "1y": 0.183, "5y": 0.745, max: 0.745 },
       rationale:
         "This basket emphasizes high free cash flow consistency, durable balance sheets, and resilient earnings cadence. It is designed for steadier compounding across market regimes.",
+      modelId: "gpt-4o-mini",
+      modelProvider: "openai",
+      modelTier: "Standard",
     },
     {
       id: "quantura-velocity",
@@ -38,6 +108,9 @@
       returns: { "1m": 0.034, "3m": 0.102, "6m": 0.186, "1y": 0.322, "5y": 1.18, max: 1.18 },
       rationale:
         "Names are selected for strong relative strength, liquidity, and acceleration in trend metrics. The agent favors upside capture over downside smoothness.",
+      modelId: "gpt-4o",
+      modelProvider: "openai",
+      modelTier: "Professional",
     },
     {
       id: "quantura-dividend-king",
@@ -48,16 +121,22 @@
       returns: { "1m": 0.012, "3m": 0.033, "6m": 0.064, "1y": 0.121, "5y": 0.392, max: 0.392 },
       rationale:
         "The portfolio tilts toward durable payout profiles and lower drawdown sensitivity. It is tuned for investors prioritizing consistency and downside control.",
+      modelId: "gemini-1.5-flash",
+      modelProvider: "google",
+      modelTier: "Standard",
     },
     {
       id: "quantura-horizon",
       name: "Quantura Horizon",
-      description: "Long-term growth from Prophet scoring.",
+      description: "Long-term growth from Quantura Horizon scoring.",
       strategy: "prophet_growth",
       holdings: ["AAPL", "MSFT", "NVDA", "AMZN", "META", "LLY"],
       returns: { "1m": 0.026, "3m": 0.078, "6m": 0.142, "1y": 0.251, "5y": 0.984, max: 0.984 },
       rationale:
-        "Prophet trend structure favors names with stable long-horizon slope and persistent seasonality. The set is filtered to avoid negative lower-bound outcomes.",
+        "Quantura Horizon trend structure favors names with stable long-horizon slope and persistent seasonality. The set is filtered to avoid negative lower-bound outcomes.",
+      modelId: "gemini-1.5-pro",
+      modelProvider: "google",
+      modelTier: "Professional",
     },
     {
       id: "quantura-contrarian",
@@ -68,6 +147,9 @@
       returns: { "1m": 0.016, "3m": 0.049, "6m": 0.091, "1y": 0.164, "5y": 0.46, max: 0.46 },
       rationale:
         "This set targets deep pullbacks with improving momentum breadth and valuation support. It is tuned for mean-reversion windows with defined upside asymmetry.",
+      modelId: "claude-3-5-sonnet",
+      modelProvider: "anthropic",
+      modelTier: "Professional",
     },
     {
       id: "quantura-alphagen",
@@ -78,6 +160,9 @@
       returns: { "1m": 0.021, "3m": 0.061, "6m": 0.116, "1y": 0.198, "5y": 0.71, max: 0.71 },
       rationale:
         "AlphaGen blends quality, momentum, valuation, and macro sensitivity into one portfolio. The goal is balanced risk-adjusted return through factor diversification.",
+      modelId: "gpt-4o-mini",
+      modelProvider: "openai",
+      modelTier: "Standard",
     },
     {
       id: "quantura-deepvalue",
@@ -88,6 +173,9 @@
       returns: { "1m": 0.014, "3m": 0.041, "6m": 0.083, "1y": 0.146, "5y": 0.402, max: 0.402 },
       rationale:
         "DeepValue looks for discounted multiples with stabilization signals in earnings and cash flow. The portfolio is built for re-rating potential rather than headline momentum.",
+      modelId: "claude-3-opus",
+      modelProvider: "anthropic",
+      modelTier: "Research",
     },
     {
       id: "quantura-momenta",
@@ -98,8 +186,105 @@
       returns: { "1m": 0.031, "3m": 0.094, "6m": 0.171, "1y": 0.302, "5y": 1.05, max: 1.05 },
       rationale:
         "Momenta emphasizes high-conviction trend continuation where breadth and liquidity remain supportive. It is optimized for sustained breakout environments.",
+      modelId: "o1-preview",
+      modelProvider: "openai",
+      modelTier: "Research",
     },
   ];
+  const BACKTEST_SOURCE_OPTIONS = [
+    { key: "python", label: "Python (.py)", ext: "py", mimeType: "text/x-python" },
+    { key: "tradingview", label: "TradingView (.pine)", ext: "pine", mimeType: "text/plain" },
+    { key: "metatrader5", label: "MetaTrader 5 (.mq5)", ext: "mq5", mimeType: "text/plain" },
+    { key: "tradelocker", label: "TradeLocker (JSON)", ext: "json", mimeType: "application/json" },
+  ];
+
+  const hydrateUnsplashGallery = async () => {
+    const gallery = document.getElementById("unsplash-grid");
+    if (!gallery) return;
+
+    const cards = Array.from(gallery.querySelectorAll("[data-unsplash-slot]"));
+    if (!cards.length) return;
+
+    const applyPhotos = (photos) => {
+      if (!Array.isArray(photos) || !photos.length) return;
+      cards.forEach((card, idx) => {
+        const photo = photos[idx % photos.length];
+        if (!photo || !photo.url) return;
+        const img = card.querySelector("[data-unsplash-img]");
+        if (img) {
+          img.src = photo.url;
+          img.alt = photo.alt || "Market imagery from Unsplash";
+          img.loading = "lazy";
+          img.decoding = "async";
+        }
+      });
+    };
+
+    try {
+      const raw = sessionStorage.getItem(UNSPLASH_CACHE_KEY);
+      if (raw) {
+        const cached = JSON.parse(raw);
+        if (
+          cached &&
+          Array.isArray(cached.photos) &&
+          cached.timestamp &&
+          Date.now() - Number(cached.timestamp) < UNSPLASH_CACHE_TTL_MS
+        ) {
+          applyPhotos(cached.photos);
+          return;
+        }
+      }
+    } catch (error) {
+      // Ignore cache read failures and continue to fetch.
+    }
+
+    applyPhotos(UNSPLASH_FALLBACK_IMAGES);
+
+    if (!UNSPLASH_ACCESS_KEY) return;
+
+    const rawQuery = String(gallery.dataset.unsplashQuery || "stock market, trading desk");
+    const count = Math.max(1, Math.min(8, Number(gallery.dataset.unsplashCount || cards.length || 4)));
+
+    try {
+      const endpoint = new URL("https://api.unsplash.com/photos/random");
+      endpoint.searchParams.set("query", rawQuery);
+      endpoint.searchParams.set("orientation", "landscape");
+      endpoint.searchParams.set("content_filter", "high");
+      endpoint.searchParams.set("count", String(count));
+      endpoint.searchParams.set("client_id", UNSPLASH_ACCESS_KEY);
+
+      const response = await fetch(endpoint.toString(), {
+        method: "GET",
+        headers: { "Accept-Version": "v1" },
+      });
+      if (!response.ok) throw new Error(`Unsplash request failed (${response.status})`);
+
+      const payload = await response.json();
+      const list = Array.isArray(payload) ? payload : [payload];
+      const photos = list
+        .map((item) => ({
+          url: item?.urls?.regular || item?.urls?.full || item?.urls?.small || "",
+          alt: item?.alt_description || item?.description || "Market imagery from Unsplash",
+        }))
+        .filter((item) => item.url);
+
+      if (!photos.length) return;
+      applyPhotos(photos);
+      try {
+        sessionStorage.setItem(
+          UNSPLASH_CACHE_KEY,
+          JSON.stringify({
+            timestamp: Date.now(),
+            photos,
+          })
+        );
+      } catch (error) {
+        // Ignore cache write failures.
+      }
+    } catch (error) {
+      // Keep fallback visuals when API is unavailable.
+    }
+  };
 
   const ui = {
     headerAuth: document.getElementById("header-auth"),
@@ -115,6 +300,8 @@
     emailCreate: document.getElementById("email-create"),
     emailMessage: document.getElementById("auth-email-message"),
     googleSignin: document.getElementById("google-signin"),
+    githubSignin: document.getElementById("github-signin"),
+    twitterSignin: document.getElementById("twitter-signin"),
     userEmail: document.getElementById("user-email"),
     userProvider: document.getElementById("user-provider"),
     userStatus: document.getElementById("user-status"),
@@ -132,6 +319,7 @@
     terminalStatus: document.getElementById("terminal-status"),
     tickerChart: document.getElementById("ticker-chart"),
     indicatorChart: document.getElementById("indicator-chart"),
+    tickerIntelligenceOutput: document.getElementById("ticker-intelligence-output"),
     forecastForm: document.getElementById("forecast-form"),
     forecastOutput: document.getElementById("forecast-output"),
     forecastService: document.getElementById("forecast-service"),
@@ -151,6 +339,12 @@
 	    optionsOutput: document.getElementById("options-output"),
 	    screenerForm: document.getElementById("screener-form"),
 	    screenerOutput: document.getElementById("screener-output"),
+    screenerModel: document.getElementById("screener-model"),
+    screenerModelMeta: document.getElementById("screener-model-meta"),
+    screenerCreditsText: document.getElementById("screener-credits-text"),
+    screenerCreditsFill: document.getElementById("screener-credits-fill"),
+    screenerResultsCount: document.getElementById("screener-results-count"),
+    screenerGenerateButton: document.getElementById("screener-generate-button"),
 	    screenerLoadSelect: document.getElementById("screener-load-select"),
 	    screenerLoadButton: document.getElementById("screener-load-button"),
 	    screenerLoadStatus: document.getElementById("screener-load-status"),
@@ -215,6 +409,7 @@
 
   const state = {
     user: null,
+    userHasPaidPlan: false,
     cookieConsent: (() => {
       try {
         return localStorage.getItem(COOKIE_CONSENT_KEY) || "";
@@ -244,9 +439,14 @@
       previewPageSize: 25,
     },
     aiLeaderboardHorizon: AI_LEADERBOARD_DEFAULT_HORIZON,
+    aiModelFilter: "all",
     aiAgents: [],
     aiFollowSet: new Set(),
     aiLikeSet: new Set(),
+    aiUsageToday: 0,
+    aiUsageDateKey: "",
+    aiUsageTierKey: "free",
+    selectedScreenerModel: "gpt-4o-mini",
     aiDefaultsSeededWorkspaceId: "",
     recentWatchlistItems: [],
     volatilityMonitorTimer: null,
@@ -286,8 +486,14 @@
 	      watchlistEnabled: true,
 	      forecastProphetEnabled: true,
 	      forecastTimeMixerEnabled: true,
+        enableSocialLeaderboard: true,
+        forecastModelPrimary: "Quantura Horizon",
+        promoBannerText: "",
+        maintenanceMode: false,
 	      pushEnabled: true,
 	      webPushVapidKey: "",
+        volatilityThreshold: DEFAULT_VOLATILITY_THRESHOLD,
+        aiUsageTiers: AI_USAGE_TIER_DEFAULTS,
         stripeCheckoutEnabled: true,
         stripePublicKey: "",
         holidayPromo: false,
@@ -307,6 +513,30 @@
     sharedWorkspaces: [],
     unsubscribeSharedWorkspaces: null,
   };
+
+  const remoteConfigStore = (() => {
+    const listeners = new Set();
+    return {
+      getSnapshot: () => ({ ...state.remoteFlags }),
+      subscribe: (listener) => {
+        if (typeof listener !== "function") return () => {};
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      publish: (flags) => {
+        listeners.forEach((listener) => {
+          try {
+            listener({ ...flags });
+          } catch (error) {
+            // Ignore listener errors.
+          }
+        });
+      },
+    };
+  })();
+
+  // React-style hook analogue for this vanilla app: subscribe to Remote Config updates.
+  const useRemoteConfig = (listener) => remoteConfigStore.subscribe(listener);
 
 	  const showToast = (message, variant = "default") => {
 	    if (!ui.toast) return;
@@ -357,6 +587,7 @@
 		        defaultPanel: "forecast",
 		        panelToPath: {
 		          forecast: "/forecasting",
+              "ticker-intelligence": "/ticker-intelligence",
 		          indicators: "/indicators",
               trending: "/trending",
 		          news: "/news",
@@ -463,6 +694,63 @@
     });
   };
 
+  const bindMobileNav = () => {
+    const header = document.querySelector(".header");
+    const nav = header?.querySelector(".nav");
+    const links = header?.querySelector(".nav-links");
+    const actions = header?.querySelector(".nav-actions");
+    if (!header || !nav || !links || !actions) return;
+
+    let toggle = header.querySelector(".mobile-nav-toggle");
+    let backdrop = header.querySelector(".mobile-nav-backdrop");
+    if (!toggle) {
+      toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "mobile-nav-toggle";
+      toggle.setAttribute("aria-label", "Toggle navigation menu");
+      toggle.setAttribute("aria-expanded", "false");
+      toggle.innerHTML = `${icon("menu")}`;
+      nav.appendChild(toggle);
+    }
+    if (!backdrop) {
+      backdrop = document.createElement("button");
+      backdrop.type = "button";
+      backdrop.className = "mobile-nav-backdrop hidden";
+      backdrop.setAttribute("aria-label", "Close navigation menu");
+      header.appendChild(backdrop);
+    }
+
+    const close = () => {
+      header.classList.remove("nav-open");
+      toggle?.setAttribute("aria-expanded", "false");
+      backdrop?.classList.add("hidden");
+      document.body.classList.remove("mobile-nav-lock");
+    };
+    const open = () => {
+      header.classList.add("nav-open");
+      toggle?.setAttribute("aria-expanded", "true");
+      backdrop?.classList.remove("hidden");
+      document.body.classList.add("mobile-nav-lock");
+    };
+
+    toggle.addEventListener("click", () => {
+      if (header.classList.contains("nav-open")) {
+        close();
+      } else {
+        open();
+      }
+    });
+    backdrop.addEventListener("click", close);
+    links.querySelectorAll("a").forEach((a) => a.addEventListener("click", close));
+    actions.querySelectorAll("a,button").forEach((el) => {
+      if (el === toggle) return;
+      el.addEventListener("click", close);
+    });
+    window.addEventListener("resize", () => {
+      if (window.innerWidth > 980) close();
+    });
+  };
+
   const syncStickyOffsets = () => {
     const header = document.querySelector(".header");
     const headerHeight = header ? header.getBoundingClientRect().height : 88;
@@ -491,14 +779,155 @@
     }
   };
 
+  let metaPixelInitialized = false;
+  let trackMetaConversionCallable = null;
+
+  const resolveMetaEventName = (sourceEventName) => {
+    const raw = String(sourceEventName || "").trim();
+    if (!raw) return "";
+    const key = raw.toLowerCase();
+
+    if (key === "page_view") return "PageView";
+    if (key.includes("customize")) return "CustomizeProduct";
+    if (key.includes("wishlist")) return "AddToWishlist";
+    if (key.includes("complete_registration") || key.includes("registration_complete") || key.includes("signup")) return "CompleteRegistration";
+    if (key === "search" || key.includes("_search") || key.includes("screener_search")) return "Search";
+    if (key.includes("submit_application") || key.includes("application_submitted")) return "SubmitApplication";
+    if (key.includes("add_to_cart") || key.includes("cart_add")) return "AddToCart";
+    if (key.includes("view_content")) return "ViewContent";
+    if (key.includes("schedule")) return "Schedule";
+    if (key === "lead" || key.includes("_lead")) return "Lead";
+    if (key.includes("contact")) return "Contact";
+    if (key.includes("purchase") || key.includes("checkout_completed") || key.includes("payment_confirmed") || key.includes("order_paid")) {
+      return "Purchase";
+    }
+    return raw;
+  };
+
+  const createMetaEventId = (name) =>
+    `q_${String(name || "event").replace(/[^a-z0-9_]/gi, "_").slice(0, 40)}_${Date.now().toString(36)}_${Math.random()
+      .toString(36)
+      .slice(2, 10)}`;
+
+  const normalizeMetaEventParams = (params = {}) => {
+    if (!params || typeof params !== "object") return {};
+    const out = {};
+    const entries = Object.entries(params).slice(0, 40);
+    for (const [rawKey, rawValue] of entries) {
+      const key = String(rawKey || "").trim();
+      if (!key) continue;
+      if (rawValue === null || rawValue === undefined) continue;
+      if (typeof rawValue === "number") {
+        if (!Number.isFinite(rawValue)) continue;
+        out[key] = rawValue;
+        continue;
+      }
+      if (typeof rawValue === "boolean") {
+        out[key] = rawValue;
+        continue;
+      }
+      if (typeof rawValue === "string") {
+        const value = rawValue.trim();
+        if (!value) continue;
+        out[key] = value.slice(0, 512);
+      }
+    }
+    return out;
+  };
+
+  const ensureMetaPixelLoaded = () => {
+    if (state.cookieConsent !== "accepted") return false;
+    if (!META_PIXEL_ID || typeof window === "undefined" || typeof document === "undefined") return false;
+    try {
+      if (!window.fbq) {
+        (function (f, b, e, v, n, t, s) {
+          if (f.fbq) return;
+          n = f.fbq = function () {
+            n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments);
+          };
+          if (!f._fbq) f._fbq = n;
+          n.push = n;
+          n.loaded = true;
+          n.version = "2.0";
+          n.queue = [];
+          t = b.createElement(e);
+          t.async = true;
+          t.src = v;
+          s = b.getElementsByTagName(e)[0];
+          s.parentNode.insertBefore(t, s);
+        })(window, document, "script", "https://connect.facebook.net/en_US/fbevents.js");
+      }
+      if (!metaPixelInitialized) {
+        window.fbq("init", META_PIXEL_ID);
+        metaPixelInitialized = true;
+      }
+      return typeof window.fbq === "function";
+    } catch (error) {
+      return false;
+    }
+  };
+
+  const emitMetaPixelEvent = (name, params = {}) => {
+    const sourceEventName = String(name || "").trim();
+    if (!sourceEventName) return null;
+    if (!ensureMetaPixelLoaded()) return null;
+
+    const metaParams = normalizeMetaEventParams(params);
+    const eventId = createMetaEventId(sourceEventName);
+    const eventName = resolveMetaEventName(sourceEventName);
+
+    try {
+      if (META_STANDARD_EVENTS.has(eventName)) {
+        window.fbq("track", eventName, metaParams, { eventID: eventId });
+      } else {
+        window.fbq("trackCustom", eventName, metaParams, { eventID: eventId });
+      }
+    } catch (error) {
+      // Ignore Meta Pixel failures.
+    }
+
+    return { eventName, sourceEventName, eventId, params: metaParams };
+  };
+
+  const forwardMetaConversionEvent = (metaEvent) => {
+    if (!metaEvent || state.cookieConsent !== "accepted") return;
+    const functionsClient = state.clients?.functions;
+    if (!functionsClient || !functionsClient.httpsCallable) return;
+    try {
+      if (!trackMetaConversionCallable) {
+        trackMetaConversionCallable = functionsClient.httpsCallable(META_CAPI_CALLABLE);
+      }
+      const payload = {
+        eventName: metaEvent.eventName,
+        sourceEventName: metaEvent.sourceEventName,
+        eventId: metaEvent.eventId,
+        eventSourceUrl: window.location.href,
+        actionSource: "website",
+        params: metaEvent.params || {},
+        email: String(state.user?.email || ""),
+        fbp: readCookie("_fbp"),
+        fbc: readCookie("_fbc"),
+        userAgent: navigator.userAgent || "",
+      };
+      trackMetaConversionCallable(payload).catch(() => {
+        // Ignore Meta CAPI forwarding errors.
+      });
+    } catch (error) {
+      // Ignore callable setup errors.
+    }
+  };
+
   const logEvent = (name, params = {}) => {
     const analytics = getAnalytics();
-    if (!analytics) return;
-    try {
-      analytics.logEvent(name, params);
-    } catch (error) {
-      // Ignore analytics errors.
+    if (analytics) {
+      try {
+        analytics.logEvent(name, params);
+      } catch (error) {
+        // Ignore analytics errors.
+      }
     }
+    const metaEvent = emitMetaPixelEvent(name, params);
+    forwardMetaConversionEvent(metaEvent);
   };
 
   const setUserId = (uid) => {
@@ -518,7 +947,7 @@
 	      const rc = firebase.remoteConfig();
 	      const host = (typeof window !== "undefined" && window.location && window.location.hostname) ? window.location.hostname : "";
 	      const isDev = host === "localhost" || host === "127.0.0.1" || host.endsWith(".localhost");
-	      const minFetchIntervalMillis = isDev ? 5 * 60 * 1000 : 60 * 60 * 1000; // 5 min dev, 1 hr prod.
+	      const minFetchIntervalMillis = isDev ? 0 : 60 * 60 * 1000;
 	      if (rc.settings) {
 	        rc.settings.minimumFetchIntervalMillis = minFetchIntervalMillis;
 	      } else {
@@ -529,6 +958,12 @@
 	            watchlist_enabled: true,
 	            forecast_prophet_enabled: true,
 	            forecast_timemixer_enabled: true,
+              enable_social_leaderboard: true,
+              forecast_model_primary: "Quantura Horizon",
+              promo_banner_text: "",
+              maintenance_mode: false,
+              volatility_threshold: "0.05",
+              ai_usage_tiers: JSON.stringify(AI_USAGE_TIER_DEFAULTS),
 	            push_notifications_enabled: true,
 	            webpush_vapid_key: "",
 	            stripe_checkout_enabled: true,
@@ -608,13 +1043,19 @@
 
           const host = (typeof window !== "undefined" && window.location && window.location.hostname) ? window.location.hostname : "";
           const isDev = host === "localhost" || host === "127.0.0.1" || host.endsWith(".localhost");
-          const minFetchIntervalMillis = isDev ? 5 * 60 * 1000 : 60 * 60 * 1000;
+          const minFetchIntervalMillis = isDev ? 0 : 60 * 60 * 1000;
           rc.settings.minimumFetchIntervalMillis = minFetchIntervalMillis;
           rc.defaultConfig = {
             welcome_message: "Welcome to Quantura",
             watchlist_enabled: true,
             forecast_prophet_enabled: true,
             forecast_timemixer_enabled: true,
+            enable_social_leaderboard: true,
+            forecast_model_primary: "Quantura Horizon",
+            promo_banner_text: "",
+            maintenance_mode: false,
+            volatility_threshold: "0.05",
+            ai_usage_tiers: JSON.stringify(AI_USAGE_TIER_DEFAULTS),
             webpush_vapid_key: "",
             stripe_checkout_enabled: true,
             stripe_public_key: "",
@@ -670,12 +1111,34 @@
         const parsed = Number.parseInt(raw, 10);
         return Number.isFinite(parsed) ? parsed : fallback;
       };
+      const getFloat = (key, fallback) => {
+        const raw = String(getString(key, "") || "").trim();
+        if (!raw) return fallback;
+        const parsed = Number(raw);
+        return Number.isFinite(parsed) ? parsed : fallback;
+      };
+      const getJson = (key, fallback) => {
+        const raw = String(getString(key, "") || "").trim();
+        if (!raw) return fallback;
+        try {
+          const parsed = JSON.parse(raw);
+          return parsed && typeof parsed === "object" ? parsed : fallback;
+        } catch (error) {
+          return fallback;
+        }
+      };
 		    return {
 		      watchlistEnabled: getBool("watchlist_enabled", true),
 		      forecastProphetEnabled: getBool("forecast_prophet_enabled", true),
 		      forecastTimeMixerEnabled: getBool("forecast_timemixer_enabled", true),
+          enableSocialLeaderboard: getBool("enable_social_leaderboard", true),
+          forecastModelPrimary: getString("forecast_model_primary", "Quantura Horizon"),
+          promoBannerText: getString("promo_banner_text", ""),
+          maintenanceMode: getBool("maintenance_mode", false),
 		      pushEnabled: getBool("push_notifications_enabled", true),
 		      webPushVapidKey: getString("webpush_vapid_key", ""),
+          volatilityThreshold: getFloat("volatility_threshold", DEFAULT_VOLATILITY_THRESHOLD),
+          aiUsageTiers: getJson("ai_usage_tiers", AI_USAGE_TIER_DEFAULTS),
 	        stripeCheckoutEnabled: getBool("stripe_checkout_enabled", true),
 	        stripePublicKey: getString("stripe_public_key", ""),
           holidayPromo: getBool("holiday_promo", false),
@@ -705,6 +1168,9 @@
 	      setNotificationControlsEnabled(false);
 	    }
 
+      const leaderboardCard = document.getElementById("ai-agent-leaderboard")?.closest(".card");
+      if (leaderboardCard) leaderboardCard.classList.toggle("hidden", !flags.enableSocialLeaderboard);
+
 	    if (ui.forecastService) {
 	      const setOptionEnabled = (value, enabled) => {
 	        const option = ui.forecastService.querySelector(`option[value="${value}"]`);
@@ -713,7 +1179,8 @@
 	        option.hidden = !enabled;
 	      };
 	      setOptionEnabled("prophet", flags.forecastProphetEnabled);
-	      setOptionEnabled("ibm_timemixer", flags.forecastTimeMixerEnabled);
+	      // UI policy: hide TimeMixer from the selector and expose Quantura Horizon only.
+	      setOptionEnabled("ibm_timemixer", false);
 
 	      const available = Array.from(ui.forecastService.options).filter((opt) => !opt.disabled && !opt.hidden);
 	      if (available.length === 0) {
@@ -726,6 +1193,18 @@
 	        }
 	      }
 	    }
+
+      updateMaintenanceModeUi(Boolean(flags.maintenanceMode));
+      updateDynamicPromoBanner(String(flags.promoBannerText || "").trim());
+      refreshScreenerModelUi();
+      refreshScreenerCreditsUi();
+      bindAIAgentLeaderboardControls();
+      // Ensure existing alerts inherit the configured default threshold when no explicit value is set.
+      if (Number.isFinite(Number(flags.volatilityThreshold))) {
+        state.remoteFlags.volatilityThreshold = Math.max(0.01, Math.min(0.5, Number(flags.volatilityThreshold)));
+      }
+
+      remoteConfigStore.publish(flags);
 	  };
 
     const maybeShowHolidayPromo = () => {
@@ -768,6 +1247,64 @@
       });
 
       logEvent("holiday_promo_shown", {});
+    };
+
+    const updateDynamicPromoBanner = (text) => {
+      const existing = document.getElementById("dynamic-promo-banner");
+      const message = String(text || "").trim();
+      if (!message) {
+        existing?.remove();
+        return;
+      }
+      if (existing) {
+        const node = existing.querySelector(".promo-title");
+        if (node) node.textContent = message;
+        return;
+      }
+      const banner = document.createElement("section");
+      banner.id = "dynamic-promo-banner";
+      banner.className = "promo-banner";
+      banner.innerHTML = `
+        <div class="promo-inner">
+          <div>
+            <div class="promo-badge">Announcement</div>
+            <div class="promo-title">${escapeHtml(message)}</div>
+          </div>
+          <div class="promo-actions">
+            <a class="cta secondary small" href="/pricing">View plans</a>
+          </div>
+        </div>
+      `;
+      const header = document.querySelector("header.header");
+      if (header && typeof header.insertAdjacentElement === "function") header.insertAdjacentElement("afterend", banner);
+      else document.body.prepend(banner);
+    };
+
+    const updateMaintenanceModeUi = (enabled) => {
+      const existing = document.getElementById("maintenance-mode-gate");
+      if (!enabled) {
+        existing?.remove();
+        return;
+      }
+      if (existing) return;
+
+      const gate = document.createElement("div");
+      gate.id = "maintenance-mode-gate";
+      gate.className = "modal";
+      gate.innerHTML = `
+        <div class="modal-backdrop"></div>
+        <div class="modal-card card" role="dialog" aria-modal="true" aria-label="Maintenance mode">
+          <h3>Maintenance Mode</h3>
+          <p class="small">
+            Quantura is temporarily locked for infrastructure updates. Forecasting, screening, and write actions are paused.
+          </p>
+          <div class="modal-actions">
+            <a class="cta secondary" href="/contact">Contact support</a>
+            <a class="cta" href="/pricing">View plans</a>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(gate);
     };
 
 	  const subscribeRemoteConfigUpdates = (rc) => {
@@ -1934,7 +2471,13 @@
       .orderBy("createdAt", "desc")
       .onSnapshot((snapshot) => {
         const orders = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+        state.userHasPaidPlan = orders.some((order) => {
+          const status = String(order?.paymentStatus || "").trim().toLowerCase();
+          return status === "paid" || status === "succeeded";
+        });
         renderOrderList(orders, ui.userOrders);
+        refreshScreenerModelUi();
+        refreshScreenerCreditsUi();
       });
   };
 
@@ -2214,6 +2757,12 @@
 	      .join("");
 	  };
 
+  const getConfiguredVolatilityThreshold = () => {
+    const raw = Number(state.remoteFlags?.volatilityThreshold);
+    if (!Number.isFinite(raw)) return DEFAULT_VOLATILITY_THRESHOLD;
+    return Math.max(0.01, Math.min(0.5, raw));
+  };
+
   const startWatchlist = (db, workspaceId) => {
     if (state.unsubscribeWatchlist) state.unsubscribeWatchlist();
     if (!workspaceId || !ui.watchlistList || !state.remoteFlags.watchlistEnabled) return;
@@ -2239,6 +2788,7 @@
 
   const ensureVolatilityAlertsForWatchlist = async ({ db, workspaceId, items }) => {
     if (!workspaceId || !state.user) return;
+    const threshold = getConfiguredVolatilityThreshold();
     const list = Array.isArray(items) ? items : [];
     for (const item of list) {
       const ticker = normalizeTicker(item?.ticker || item?.id || "");
@@ -2251,7 +2801,7 @@
         {
           ticker,
           condition: "volatility",
-          thresholdPercent: DEFAULT_VOLATILITY_THRESHOLD,
+          thresholdPercent: threshold,
           baselinePrice: null,
           active: true,
           status: "active",
@@ -2260,7 +2810,7 @@
           createdByEmail: state.user.email || "",
           createdAt: firebase.firestore.FieldValue.serverTimestamp(),
           updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-          notes: "Default volatility alert (±5%) for followed assets.",
+          notes: `Default volatility alert (±${Math.round(threshold * 100)}%) for followed assets.`,
           meta: buildMeta(),
         },
         { merge: true }
@@ -2303,7 +2853,7 @@
         const current = rows.length ? extractCloseFromHistoryRow(rows[rows.length - 1]) : null;
         if (current === null || current <= 0) continue;
 
-        const threshold = toFiniteOrNull(data.thresholdPercent) ?? DEFAULT_VOLATILITY_THRESHOLD;
+        const threshold = toFiniteOrNull(data.thresholdPercent) ?? getConfiguredVolatilityThreshold();
         const baseline = toFiniteOrNull(data.baselinePrice);
         if (baseline === null || baseline <= 0) {
           await doc.ref.set(
@@ -2387,9 +2937,9 @@
 	        const triggeredAt = item.triggeredAt ? `Triggered ${formatTimestamp(item.triggeredAt)}` : "";
 	        const metaParts = [createdBy ? `By ${createdBy}` : "", lastChecked, lastPrice, triggeredAt].filter(Boolean);
 	        const meta = metaParts.length ? `<div class="small muted">${metaParts.join(" · ")}</div>` : "";
-        const title = condition === "volatility"
-          ? `${escapeHtml(ticker)} volatility ±${Math.round((toFiniteOrNull(item.thresholdPercent) ?? DEFAULT_VOLATILITY_THRESHOLD) * 100)}%`
-          : `${escapeHtml(ticker)} ${condition === "below" ? "below" : "above"} ${Number.isFinite(target) ? `$${target.toFixed(2)}` : "—"}`;
+	        const title = condition === "volatility"
+	          ? `${escapeHtml(ticker)} volatility ±${Math.round((toFiniteOrNull(item.thresholdPercent) ?? getConfiguredVolatilityThreshold()) * 100)}%`
+	          : `${escapeHtml(ticker)} ${condition === "below" ? "below" : "above"} ${Number.isFinite(target) ? `$${target.toFixed(2)}` : "—"}`;
 	        const actions = editable
 	          ? `
 	            <div class="task-actions">
@@ -2477,6 +3027,50 @@
     });
   };
 
+  const renderBacktestSourceControls = (backtestId, selectedKey = "python") => {
+    const options = BACKTEST_SOURCE_OPTIONS.map(
+      (item) =>
+        `<option value="${item.key}" ${item.key === selectedKey ? "selected" : ""}>${item.label}</option>`
+    ).join("");
+    return `
+      <div class="backtest-source-controls">
+        <label class="label" for="backtest-source-${escapeHtml(backtestId)}">Download source</label>
+        <div class="backtest-source-row">
+          <select id="backtest-source-${escapeHtml(backtestId)}" data-backtest-source-format data-backtest-id="${escapeHtml(backtestId)}">
+            ${options}
+          </select>
+          <button class="cta secondary small" type="button" data-action="download-backtest-source" data-backtest-id="${escapeHtml(
+            backtestId
+          )}">${icon("download")}<span>Download Source</span></button>
+        </div>
+      </div>
+    `;
+  };
+
+  const resolveBacktestSourceExport = (doc, selectedKey) => {
+    const key = String(selectedKey || "python").trim().toLowerCase();
+    const exports = doc?.exportSources && typeof doc.exportSources === "object" ? doc.exportSources : {};
+    const candidate = exports?.[key] && typeof exports[key] === "object" ? exports[key] : null;
+    if (candidate?.content) {
+      return {
+        content: String(candidate.content),
+        filename: String(candidate.filename || ""),
+        mimeType: String(candidate.mimeType || ""),
+      };
+    }
+    if (key === "python") {
+      const fallback = String(doc?.code || "").trim();
+      if (fallback) {
+        return {
+          content: fallback,
+          filename: "",
+          mimeType: "text/x-python",
+        };
+      }
+    }
+    return null;
+  };
+
   const renderBacktestPicker = (items) => {
     if (!ui.backtestLoadSelect) return;
     const list = Array.isArray(items) ? items : [];
@@ -2531,10 +3125,10 @@
         </div>
         <div class="order-actions" style="display:flex; gap:10px; flex-wrap:wrap;">
           <button class="cta secondary small" type="button" data-action="plot-backtest" data-backtest-id="${escapeHtml(item.id)}">Load</button>
-          <button class="cta secondary small" type="button" data-action="download-backtest-code" data-backtest-id="${escapeHtml(item.id)}">Download code</button>
           <button class="cta secondary small" type="button" data-action="rename-backtest" data-backtest-id="${escapeHtml(item.id)}">Rename</button>
           <button class="cta secondary small danger" type="button" data-action="delete-backtest" data-backtest-id="${escapeHtml(item.id)}">Delete</button>
         </div>
+        ${renderBacktestSourceControls(item.id, "python")}
       `;
       ui.savedBacktestsList.appendChild(card);
     });
@@ -2580,11 +3174,7 @@
             ? `<div style="margin-top: 14px;"><img class="backtest-image" src="${escapeHtml(imageUrl)}" alt="Backtest equity curve" loading="lazy" /></div>`
             : `<div class="small muted" style="margin-top: 14px;">Chart unavailable.</div>`
         }
-        <div class="hero-actions" style="margin-top: 14px;">
-          <button class="cta secondary small" type="button" data-action="download-backtest-code" data-backtest-id="${escapeHtml(
-            doc.id
-          )}">Download code</button>
-        </div>
+        <div style="margin-top: 14px;">${renderBacktestSourceControls(doc.id, "python")}</div>
         ${codeMarkup}
       </div>
     `;
@@ -2709,14 +3299,44 @@
     return [headerLine, ...dataLines].join("\n");
   };
 
-  const triggerDownload = (filename, content) => {
-    const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+  const triggerDownload = (filename, content, opts = {}) => {
+    const mimeType = String(opts?.mimeType || "text/plain;charset=utf-8;");
+    const blob = content instanceof Blob ? content : new Blob([content], { type: mimeType });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
     link.download = filename;
     link.click();
     URL.revokeObjectURL(url);
+  };
+
+  const triggerDownloadFromUrl = async (url, filename = "") => {
+    const href = String(url || "").trim();
+    if (!href) throw new Error("Download URL is unavailable.");
+    try {
+      const resp = await fetch(href, { credentials: "omit" });
+      if (!resp.ok) throw new Error(`Download failed (${resp.status}).`);
+      const blob = await resp.blob();
+      if (!blob || !blob.size) throw new Error("Downloaded file is empty.");
+      triggerDownload(filename || "quantura_report", blob, {
+        mimeType: blob.type || "application/octet-stream",
+      });
+      return;
+    } catch (error) {
+      const link = document.createElement("a");
+      link.href = href;
+      link.rel = "noopener noreferrer";
+      link.target = "_blank";
+      if (filename) link.download = filename;
+      link.click();
+    }
+  };
+
+  const extractErrorMessage = (error, fallback = "Unexpected error.") => {
+    const direct = String(error?.message || "").trim();
+    const details = error?.details && typeof error.details === "object" ? error.details : null;
+    const detailText = String(details?.detail || details?.message || details?.error || "").trim();
+    return detailText || direct || fallback;
   };
 
   const copyToClipboard = async (text) => {
@@ -2909,13 +3529,18 @@
   };
 
   const renderTickerIntel = (payload) => {
-    if (!ui.intelOutput) return;
+    if (!ui.intelOutput && !ui.tickerIntelligenceOutput) return;
     const data = payload || {};
     const ticker = normalizeTicker(data.ticker || state.tickerContext.ticker || "") || "";
     const profile = data.profile || {};
     const events = Array.isArray(data.events) ? data.events : [];
     const analyst = data.analyst || {};
     const trend = Array.isArray(data.recommendationTrend) ? data.recommendationTrend : [];
+    const executiveSummary = data.executiveSummary && typeof data.executiveSummary === "object" ? data.executiveSummary : {};
+    const deepDive = data.fundamentalDeepDive && typeof data.fundamentalDeepDive === "object" ? data.fundamentalDeepDive : {};
+    const riskAndEsg = data.riskAndEsg && typeof data.riskAndEsg === "object" ? data.riskAndEsg : {};
+    const heatmap = Array.isArray(data.balanceSheetHeatmap) ? data.balanceSheetHeatmap : [];
+    const peers = Array.isArray(data.peerComparison) ? data.peerComparison : [];
 
     const name = escapeHtml(profile.name || ticker || "Ticker");
     const sector = escapeHtml(profile.sector || "");
@@ -2981,7 +3606,7 @@
       `
       : "";
 
-    ui.intelOutput.innerHTML = `
+    const compactHtml = `
       <div class="intel-head">
         <div class="intel-name">${name}</div>
         <div class="small muted">${[ticker, sector, industry, exchange, currency].filter(Boolean).join(" · ")}</div>
@@ -3010,28 +3635,162 @@
         </div>
       </div>
     `;
+
+    if (ui.intelOutput) {
+      ui.intelOutput.innerHTML = compactHtml;
+    }
+
+    const liquidity = riskAndEsg.liquidity && typeof riskAndEsg.liquidity === "object" ? riskAndEsg.liquidity : {};
+    const esg = riskAndEsg.esg && typeof riskAndEsg.esg === "object" ? riskAndEsg.esg : {};
+    const revenueMechanics = deepDive.revenueMechanics && typeof deepDive.revenueMechanics === "object" ? deepDive.revenueMechanics : {};
+    const profitability = deepDive.profitability && typeof deepDive.profitability === "object" ? deepDive.profitability : {};
+    const capitalAllocation = deepDive.capitalAllocation && typeof deepDive.capitalAllocation === "object" ? deepDive.capitalAllocation : {};
+
+    const toPctOrDash = (value, digits = 2) => {
+      const num = toFiniteOrNull(value);
+      if (num === null) return "—";
+      return `${(num * 100).toFixed(digits)}%`;
+    };
+
+    const heatmapHtml = heatmap.length
+      ? heatmap
+          .map((cell) => {
+            const score = toFiniteOrNull(cell?.score);
+            const numeric = score === null ? null : Math.max(0, Math.min(100, score));
+            const hue = numeric === null ? 210 : Math.round((numeric * 1.2)); // 0=red, 120=green.
+            const bg = numeric === null ? "rgba(148, 163, 184, 0.14)" : `hsla(${hue}, 78%, 42%, 0.18)`;
+            const border = numeric === null ? "rgba(148, 163, 184, 0.36)" : `hsla(${hue}, 82%, 36%, 0.4)`;
+            return `
+              <div class="intel-heat-cell" style="background:${bg}; border-color:${border};">
+                <div class="intel-heat-label">${escapeHtml(String(cell?.label || "Metric"))}</div>
+                <div class="intel-heat-score">${numeric === null ? "—" : `${numeric.toFixed(1)}`}</div>
+                <div class="small muted">${escapeHtml(String(cell?.hint || ""))}</div>
+              </div>
+            `;
+          })
+          .join("")
+      : `<div class="small muted">Balance sheet heatmap is unavailable for this ticker.</div>`;
+
+    const peersHtml = peers.length
+      ? `
+        <div class="table-wrap peer-comparison-wrap">
+          <table class="data-table">
+            <thead>
+              <tr><th>Ticker</th><th>P/E</th><th>Debt/Equity</th><th>Sharpe</th></tr>
+            </thead>
+            <tbody>
+              ${peers
+                .map(
+                  (row) => `
+                  <tr>
+                    <td>${escapeHtml(String(row?.ticker || "—"))}</td>
+                    <td>${toFiniteOrNull(row?.pe) === null ? "—" : Number(row.pe).toFixed(2)}</td>
+                    <td>${toFiniteOrNull(row?.debtToEquity) === null ? "—" : Number(row.debtToEquity).toFixed(2)}</td>
+                    <td>${toFiniteOrNull(row?.sharpeRatio) === null ? "—" : Number(row.sharpeRatio).toFixed(2)}</td>
+                  </tr>
+                `
+                )
+                .join("")}
+            </tbody>
+          </table>
+        </div>
+      `
+      : `<div class="small muted">Peer comparison is unavailable right now.</div>`;
+
+    const institutionalHtml = `
+      <div class="intel-institutional-grid">
+        <article class="intel-column-card">
+          <div class="intel-subhead">Executive Summary</div>
+          <div class="intel-kv">
+            <div class="intel-kv-row"><span>Ticker</span><span>${escapeHtml(String(executiveSummary.ticker || ticker || "—"))}</span></div>
+            <div class="intel-kv-row"><span>Exchange</span><span>${escapeHtml(String(executiveSummary.exchange || profile.exchange || "—"))}</span></div>
+            <div class="intel-kv-row"><span>Sector</span><span>${escapeHtml(String(executiveSummary.sector || profile.sector || "—"))}</span></div>
+            <div class="intel-kv-row"><span>Market Cap</span><span>${profile.marketCap ? escapeHtml(formatCompactNumber(profile.marketCap)) : "—"}</span></div>
+            <div class="intel-kv-row"><span>12M Price Target</span><span>${toFiniteOrNull(executiveSummary.priceTarget12m) === null ? "—" : escapeHtml(formatUsd(executiveSummary.priceTarget12m))}</span></div>
+          </div>
+        </article>
+        <article class="intel-column-card">
+          <div class="intel-subhead">Fundamental Deep Dive</div>
+          <div class="small"><strong>Revenue Mechanics</strong></div>
+          <div class="intel-kv">
+            <div class="intel-kv-row"><span>Total Revenue</span><span>${toFiniteOrNull(revenueMechanics.totalRevenue) === null ? "—" : escapeHtml(formatCompactNumber(revenueMechanics.totalRevenue))}</span></div>
+            <div class="intel-kv-row"><span>Gross Profit</span><span>${toFiniteOrNull(revenueMechanics.grossProfit) === null ? "—" : escapeHtml(formatCompactNumber(revenueMechanics.grossProfit))}</span></div>
+          </div>
+          <div class="small muted">${escapeHtml(String(revenueMechanics.segmentBreakdown || "Segment detail is limited for this issuer."))}</div>
+          <div class="small" style="margin-top:8px;"><strong>Profitability Analysis</strong></div>
+          <div class="intel-kv">
+            <div class="intel-kv-row"><span>Net Margin</span><span>${toPctOrDash(profitability.netMargin)}</span></div>
+            <div class="intel-kv-row"><span>ROI</span><span>${toPctOrDash(profitability.roi)}</span></div>
+          </div>
+          <div class="small" style="margin-top:8px;"><strong>Capital Allocation</strong></div>
+          <div class="small">${escapeHtml(String(capitalAllocation.dividendPolicy || "No dividend policy reported."))}</div>
+          <div class="small">${escapeHtml(String(capitalAllocation.shareBuybacks || "No explicit buyback trend reported."))}</div>
+        </article>
+        <article class="intel-column-card">
+          <div class="intel-subhead">Risk & ESG</div>
+          <div class="small"><strong>Risk Mitigation</strong></div>
+          <div class="small">${escapeHtml(String(riskAndEsg.riskMitigation || "Risk mitigation data is limited."))}</div>
+          <div class="small" style="margin-top:8px;"><strong>Liquidity</strong></div>
+          <div class="intel-kv">
+            <div class="intel-kv-row"><span>Total Cash</span><span>${toFiniteOrNull(liquidity.totalCash) === null ? "—" : escapeHtml(formatCompactNumber(liquidity.totalCash))}</span></div>
+            <div class="intel-kv-row"><span>Total Debt</span><span>${toFiniteOrNull(liquidity.totalDebt) === null ? "—" : escapeHtml(formatCompactNumber(liquidity.totalDebt))}</span></div>
+            <div class="intel-kv-row"><span>Current Ratio</span><span>${toFiniteOrNull(liquidity.currentRatio) === null ? "—" : Number(liquidity.currentRatio).toFixed(2)}</span></div>
+          </div>
+          <div class="small" style="margin-top:8px;"><strong>ESG Score</strong></div>
+          <div class="intel-kv">
+            <div class="intel-kv-row"><span>Environmental</span><span>${toFiniteOrNull(esg.environmental) === null ? "—" : Number(esg.environmental).toFixed(1)}</span></div>
+            <div class="intel-kv-row"><span>Social</span><span>${toFiniteOrNull(esg.social) === null ? "—" : Number(esg.social).toFixed(1)}</span></div>
+            <div class="intel-kv-row"><span>Governance</span><span>${toFiniteOrNull(esg.governance) === null ? "—" : Number(esg.governance).toFixed(1)}</span></div>
+            <div class="intel-kv-row"><span>Overall</span><span>${toFiniteOrNull(esg.overall) === null ? "—" : Number(esg.overall).toFixed(1)}</span></div>
+          </div>
+        </article>
+      </div>
+      <div style="margin-top:16px;">
+        <div class="small"><strong>Balance Sheet Heatmap</strong></div>
+        <div class="intel-heatmap">${heatmapHtml}</div>
+      </div>
+      <div style="margin-top:16px;">
+        <div class="small"><strong>Peer Comparison</strong> · P/E, Debt-to-Equity, Sharpe Ratio</div>
+        ${peersHtml}
+      </div>
+    `;
+
+    if (ui.tickerIntelligenceOutput) {
+      ui.tickerIntelligenceOutput.innerHTML = institutionalHtml;
+    }
   };
 
   const loadTickerIntel = async (functions, ticker, { notify = false, force = false } = {}) => {
-    if (!functions || !ui.intelOutput) return;
+    if (!functions || (!ui.intelOutput && !ui.tickerIntelligenceOutput)) return;
     const symbol = normalizeTicker(ticker);
     if (!symbol) {
-      ui.intelOutput.innerHTML = `<div class="small muted">Load a ticker to see company context.</div>`;
+      if (ui.intelOutput) ui.intelOutput.innerHTML = `<div class="small muted">Load a ticker to see company context.</div>`;
+      if (ui.tickerIntelligenceOutput) {
+        ui.tickerIntelligenceOutput.innerHTML = `<div class="small muted">Load a ticker to generate institutional intelligence.</div>`;
+      }
       return;
     }
     if (!force && state.tickerContext.intelTicker === symbol) return;
     state.tickerContext.intelTicker = symbol;
 
     try {
-      setOutputLoading(ui.intelOutput, "Loading company context...");
+      if (ui.intelOutput) setOutputLoading(ui.intelOutput, "Loading company context...");
+      if (ui.tickerIntelligenceOutput) setOutputLoading(ui.tickerIntelligenceOutput, "Loading institutional intelligence...");
       const getIntel = functions.httpsCallable("get_ticker_intel");
       const result = await getIntel({ ticker: symbol, meta: buildMeta() });
-      setOutputReady(ui.intelOutput);
+      if (ui.intelOutput) setOutputReady(ui.intelOutput);
+      if (ui.tickerIntelligenceOutput) setOutputReady(ui.tickerIntelligenceOutput);
       renderTickerIntel(result.data || {});
       logEvent("ticker_intel_loaded", { ticker: symbol });
     } catch (error) {
-      setOutputReady(ui.intelOutput);
-      ui.intelOutput.innerHTML = `<div class="small muted">Unable to load ticker intelligence right now.</div>`;
+      if (ui.intelOutput) {
+        setOutputReady(ui.intelOutput);
+        ui.intelOutput.innerHTML = `<div class="small muted">Unable to load ticker intelligence right now.</div>`;
+      }
+      if (ui.tickerIntelligenceOutput) {
+        setOutputReady(ui.tickerIntelligenceOutput);
+        ui.tickerIntelligenceOutput.innerHTML = `<div class="small muted">Unable to load institutional intelligence right now.</div>`;
+      }
       if (notify) showToast(error.message || "Unable to load ticker intelligence.", "warn");
     }
   };
@@ -3279,19 +4038,20 @@
         ];
 
       const dark = isDarkMode();
-      const plotBg = dark ? "#0b0f1a" : "#ffffff";
+      const isMobileViewport = typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches;
       const textColor = dark ? "rgba(246, 244, 238, 0.92)" : "#12182a";
       const gridColor = dark ? "rgba(246, 244, 238, 0.14)" : "rgba(18, 24, 42, 0.12)";
 	    const layout = {
 	      title: { text: `${ticker} (${interval})`, font: { family: "Manrope, sans-serif", size: 16, color: textColor } },
 	      font: { family: "Manrope, sans-serif", color: textColor },
 	      paper_bgcolor: "rgba(0,0,0,0)",
-	      plot_bgcolor: plotBg,
-	      margin: { l: 50, r: 30, t: 40, b: 40 },
+	      plot_bgcolor: "rgba(0,0,0,0)",
+	      margin: { l: 50, r: 20, t: 40, b: isMobileViewport ? 92 : 50 },
         hovermode: "x unified",
         dragmode: "pan",
+        hoverlabel: { namelength: 32 },
 	      xaxis: {
-	        rangeslider: { visible: true },
+	        rangeslider: { visible: false },
 	        showspikes: true,
 	        spikemode: "across",
 	        spikesnap: "cursor",
@@ -3305,12 +4065,19 @@
           gridcolor: gridColor,
           zerolinecolor: gridColor,
         },
-	      legend: { orientation: "h" },
+	      legend: {
+          orientation: "h",
+          y: isMobileViewport ? -0.28 : 1.05,
+          yanchor: "top",
+          x: 0,
+          xanchor: "left",
+        },
 	    };
 
     await Plotly.react(ui.tickerChart, [...baseTraces, ...overlays], layout, {
       responsive: true,
       displaylogo: false,
+      scrollZoom: true,
     });
   };
 
@@ -3339,23 +4106,30 @@
     }));
 
       const dark = isDarkMode();
-      const plotBg = dark ? "#0b0f1a" : "#ffffff";
+      const isMobileViewport = typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches;
       const textColor = dark ? "rgba(246, 244, 238, 0.92)" : "#12182a";
       const gridColor = dark ? "rgba(246, 244, 238, 0.14)" : "rgba(18, 24, 42, 0.12)";
 	    const layout = {
 	      title: { text: "Technical indicators", font: { family: "Manrope, sans-serif", size: 14, color: textColor } },
 	      font: { family: "Manrope, sans-serif", color: textColor },
 	      paper_bgcolor: "rgba(0,0,0,0)",
-	      plot_bgcolor: plotBg,
-	      margin: { l: 50, r: 30, t: 40, b: 40 },
+	      plot_bgcolor: "rgba(0,0,0,0)",
+	      margin: { l: 50, r: 20, t: 40, b: isMobileViewport ? 88 : 50 },
 	      xaxis: { showspikes: true, spikemode: "across", spikesnap: "cursor", gridcolor: gridColor, zerolinecolor: gridColor },
 	      yaxis: { zeroline: false, gridcolor: gridColor },
-	      legend: { orientation: "h" },
+	      legend: {
+          orientation: "h",
+          y: isMobileViewport ? -0.28 : 1.05,
+          yanchor: "top",
+          x: 0,
+          xanchor: "left",
+        },
 	    };
 
     await Plotly.react(ui.indicatorChart, traces, layout, {
       responsive: true,
       displaylogo: false,
+      scrollZoom: true,
     });
   };
 
@@ -4105,7 +4879,7 @@
 
   const labelForecastService = (raw) => {
     const key = String(raw || "").trim().toLowerCase();
-    if (key === "prophet") return "Meta Prophet";
+    if (key === "prophet") return "Quantura Horizon";
     if (key === "ibm_timemixer") return "IBM TimeMixer";
     return raw ? String(raw) : "Forecast";
   };
@@ -4155,6 +4929,137 @@
     if (previous) ui.screenerLoadSelect.value = previous;
   };
 
+  const getModelMeta = (modelId) => {
+    const id = String(modelId || "").trim();
+    if (!id) return null;
+    return AI_MODEL_CATALOG.find((item) => item.id === id) || null;
+  };
+
+  const getTodayUsageKey = () => new Date().toISOString().slice(0, 10);
+
+  const getCurrentAiTierKey = () => {
+    if (!state.user) return "free";
+    return state.userHasPaidPlan || String(state.user.email || "").toLowerCase() === String(ADMIN_EMAIL).toLowerCase()
+      ? "premium"
+      : "free";
+  };
+
+  const getCurrentAiTierConfig = () => {
+    const key = getCurrentAiTierKey();
+    const tiers = state.remoteFlags.aiUsageTiers && typeof state.remoteFlags.aiUsageTiers === "object"
+      ? state.remoteFlags.aiUsageTiers
+      : AI_USAGE_TIER_DEFAULTS;
+    const config = tiers[key] && typeof tiers[key] === "object" ? tiers[key] : AI_USAGE_TIER_DEFAULTS[key] || AI_USAGE_TIER_DEFAULTS.free;
+    return {
+      key,
+      allowedModels: Array.isArray(config.allowed_models) ? config.allowed_models.map((x) => String(x).trim()).filter(Boolean) : [],
+      dailyLimit: Math.max(1, Number(config.daily_limit || 5)),
+      volatilityAlerts: Boolean(config.volatility_alerts),
+    };
+  };
+
+  const syncScreenerProviderAccent = () => {
+    if (!ui.screenerForm || !ui.screenerModel) return;
+    const modelId = String(ui.screenerModel.value || "").trim();
+    const meta = getModelMeta(modelId);
+    const provider = meta?.provider || "openai";
+    state.selectedScreenerModel = modelId || "gpt-4o-mini";
+    ui.screenerForm.dataset.providerAccent = provider;
+  };
+
+  const refreshScreenerModelUi = () => {
+    if (!ui.screenerModel) return;
+    const currentValue = String(ui.screenerModel.value || state.selectedScreenerModel || "").trim();
+    const tier = getCurrentAiTierConfig();
+    state.aiUsageTierKey = tier.key;
+    const allowedSet = new Set(tier.allowedModels);
+
+    const grouped = AI_MODEL_CATALOG.reduce((acc, item) => {
+      const key = item.tier || "Standard";
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(item);
+      return acc;
+    }, {});
+
+    const html = Object.keys(grouped)
+      .map((groupKey) => {
+        const options = grouped[groupKey]
+          .map((item) => {
+            const locked = allowedSet.size > 0 && !allowedSet.has(item.id);
+            const provider = MODEL_PROVIDER_LABEL[item.provider] || item.provider;
+            const label = `${provider} · ${item.label}${locked ? " 🔒" : ""}`;
+            return `<option value="${escapeHtml(item.id)}" ${locked ? "disabled" : ""} data-provider="${escapeHtml(item.provider)}">${escapeHtml(label)}</option>`;
+          })
+          .join("");
+        return `<optgroup label="${escapeHtml(groupKey)}">${options}</optgroup>`;
+      })
+      .join("");
+
+    ui.screenerModel.innerHTML = html;
+    let nextValue = currentValue;
+    if (!nextValue || !AI_MODEL_CATALOG.some((item) => item.id === nextValue)) {
+      nextValue = tier.allowedModels[0] || AI_MODEL_CATALOG[0].id;
+    }
+    if (allowedSet.size > 0 && !allowedSet.has(nextValue)) {
+      nextValue = tier.allowedModels[0] || AI_MODEL_CATALOG[0].id;
+    }
+    ui.screenerModel.value = nextValue;
+    state.selectedScreenerModel = nextValue;
+    syncScreenerProviderAccent();
+
+    if (ui.screenerModelMeta) {
+      ui.screenerModelMeta.textContent = `${tier.key === "premium" ? "Premium" : "Free"} tier · ${tier.dailyLimit} daily credits`;
+    }
+  };
+
+  const refreshScreenerCreditsUi = () => {
+    const tier = getCurrentAiTierConfig();
+    const todayKey = getTodayUsageKey();
+    if (state.aiUsageDateKey !== todayKey) {
+      state.aiUsageDateKey = todayKey;
+      state.aiUsageToday = 0;
+    }
+    const used = Math.max(0, Number(state.aiUsageToday || 0));
+    const limit = Math.max(1, Number(tier.dailyLimit || 5));
+    const pct = Math.max(0, Math.min(100, (used / limit) * 100));
+    if (ui.screenerCreditsText) {
+      ui.screenerCreditsText.textContent = `${used} / ${limit}`;
+    }
+    if (ui.screenerCreditsFill) {
+      ui.screenerCreditsFill.style.width = `${pct.toFixed(1)}%`;
+    }
+  };
+
+  const loadScreenerUsageToday = async (db) => {
+    if (!db || !state.user) return;
+    const dayKey = getTodayUsageKey();
+    const docId = `${state.user.uid}_${dayKey}`;
+    try {
+      const snap = await db.collection("usage_daily").doc(docId).get();
+      const raw = snap.exists ? Number(snap.data()?.aiScreenerRuns || 0) : 0;
+      state.aiUsageToday = Number.isFinite(raw) ? Math.max(0, raw) : 0;
+      state.aiUsageDateKey = dayKey;
+    } catch (error) {
+      state.aiUsageToday = 0;
+      state.aiUsageDateKey = dayKey;
+    }
+    refreshScreenerCreditsUi();
+  };
+
+  const showLimitReachedModal = async (message) => {
+    const upgrade = await openConfirmModal({
+      title: "Limit Reached",
+      message:
+        String(message || "").trim() ||
+        "You have reached your daily AI screener credit limit. Upgrade to Premium to unlock higher throughput.",
+      confirmLabel: "Upgrade to Premium",
+      cancelLabel: "Close",
+    });
+    if (upgrade) {
+      window.location.href = "/pricing";
+    }
+  };
+
   const normalizeRoiHorizonKey = (raw) => {
     const key = String(raw || "").trim().toLowerCase();
     if (key === "1m" || key === "3m" || key === "6m" || key === "1y" || key === "5y" || key === "max") return key;
@@ -4197,10 +5102,35 @@
     return toFiniteOrNull(returns[key]);
   };
 
+  const getAgentModelMeta = (agent) => {
+    const modelId = String(agent?.modelId || "").trim();
+    const fromCatalog = getModelMeta(modelId);
+    if (fromCatalog) return fromCatalog;
+    const provider = String(agent?.modelProvider || "openai").trim().toLowerCase();
+    return {
+      id: modelId || "unknown",
+      provider,
+      tier: String(agent?.modelTier || "Standard"),
+      label: modelId || "Unknown model",
+    };
+  };
+
+  const renderModelBadge = (agent) => {
+    const meta = getAgentModelMeta(agent);
+    const provider = meta.provider || "openai";
+    const providerLabel = MODEL_PROVIDER_LABEL[provider] || provider;
+    return `
+      <span class="model-badge model-badge-${escapeHtml(provider)}">
+        <span class="model-badge-dot" aria-hidden="true"></span>
+        ${escapeHtml(providerLabel)} · ${escapeHtml(meta.label)}
+      </span>
+    `;
+  };
+
   const renderAiPortfolioSummary = (runDoc) => {
     const portfolio = runDoc?.aiPortfolio && typeof runDoc.aiPortfolio === "object" ? runDoc.aiPortfolio : null;
     if (!portfolio) {
-      return `<div class="small muted">Generate an AI Portfolio to score long-term growth with Meta Prophet and publish a leaderboard-ready AI Agent.</div>`;
+      return `<div class="small muted">Generate an AI Portfolio to score long-term growth with Quantura Horizon and publish a leaderboard-ready AI Agent.</div>`;
     }
     const holdings = Array.isArray(portfolio.holdings) ? portfolio.holdings : [];
     const chips = holdings
@@ -4212,7 +5142,7 @@
       })
       .join("");
     const rationale = escapeHtml(String(portfolio.rationale || "").trim());
-    const strategy = escapeHtml(String(portfolio.strategy || "Meta Prophet long-term growth").trim());
+    const strategy = escapeHtml(String(portfolio.strategy || "Quantura Horizon long-term growth").trim());
     const updatedAt = portfolio.updatedAt ? escapeHtml(formatTimestamp(portfolio.updatedAt)) : "";
     const footer = [updatedAt ? `Updated ${updatedAt}` : "", portfolio.agentId ? `Agent ID: ${escapeHtml(portfolio.agentId)}` : ""]
       .filter(Boolean)
@@ -4225,13 +5155,57 @@
     `;
   };
 
+  const buildAIAgentSparkline = (agent) => {
+    const returns = ensureReturnsShape(agent?.returns || {});
+    const points = [returns["1m"], returns["3m"], returns["1y"]]
+      .map((value) => toFiniteOrNull(value))
+      .filter((value) => value !== null);
+    if (!points.length) return "";
+    const min = Math.min(...points);
+    const max = Math.max(...points);
+    const span = Math.max(max - min, 0.0001);
+    const width = 120;
+    const height = 36;
+    const coords = points
+      .map((value, idx) => {
+        const x = (idx / Math.max(1, points.length - 1)) * width;
+        const y = height - ((value - min) / span) * height;
+        return `${x.toFixed(2)},${y.toFixed(2)}`;
+      })
+      .join(" ");
+    return `<svg class="agent-sparkline" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true"><polyline points="${coords}" /></svg>`;
+  };
+
   const renderAIAgentLeaderboard = (agents = []) => {
     const container = document.getElementById("ai-agent-leaderboard");
     if (!container) return;
     const selected = normalizeRoiHorizonKey(document.getElementById("ai-leaderboard-horizon")?.value || state.aiLeaderboardHorizon);
+    const modelFilterNode = document.getElementById("ai-leaderboard-model-filter");
+    let selectedModelFilter = String(modelFilterNode?.value || state.aiModelFilter || "all").trim() || "all";
     state.aiLeaderboardHorizon = selected;
     const list = Array.isArray(agents) ? agents.slice() : [];
-    const ranked = list
+    if (modelFilterNode) {
+      const modelSet = new Set(list.map((agent) => String(agent?.modelId || "").trim()).filter(Boolean));
+      if (!modelSet.size) AI_MODEL_CATALOG.forEach((model) => modelSet.add(model.id));
+      const options = [
+        `<option value="all">All models</option>`,
+        ...Array.from(modelSet)
+          .sort((a, b) => a.localeCompare(b))
+          .map((modelId) => {
+            const meta = getModelMeta(modelId);
+            const provider = MODEL_PROVIDER_LABEL[meta?.provider || "openai"] || "Model";
+            return `<option value="${escapeHtml(modelId)}">${escapeHtml(`${provider} · ${meta?.label || modelId}`)}</option>`;
+          }),
+      ];
+      modelFilterNode.innerHTML = options.join("");
+      if (selectedModelFilter !== "all" && !modelSet.has(selectedModelFilter)) {
+        selectedModelFilter = "all";
+      }
+      modelFilterNode.value = selectedModelFilter;
+    }
+    state.aiModelFilter = selectedModelFilter;
+    const filtered = list.filter((agent) => selectedModelFilter === "all" || String(agent?.modelId || "").trim() === selectedModelFilter);
+    const ranked = filtered
       .map((agent) => ({
         ...agent,
         __roi: getAgentReturn(agent, selected),
@@ -4246,7 +5220,55 @@
       });
 
     if (!ranked.length) {
-      container.innerHTML = `<div class="small muted">No AI Agents yet. Generate one from the latest screen to publish into the leaderboard.</div>`;
+      container.innerHTML = `<div class="small muted">No AI Agents for this filter yet. Generate one from the latest screen to publish into the leaderboard.</div>`;
+      return;
+    }
+
+    const isMobile = typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches;
+    if (isMobile) {
+      container.innerHTML = `
+        <div class="ai-leaderboard-cards">
+          ${ranked
+            .map((agent, idx) => {
+              const agentId = escapeHtml(String(agent.id || "").trim());
+              const name = escapeHtml(String(agent.name || "Unnamed Agent").trim());
+              const roi = formatRoiPercent(agent.__roi);
+              const holdings = Array.isArray(agent.holdings) ? agent.holdings : [];
+              const symbols = holdings
+                .slice(0, 6)
+                .map((item) => escapeHtml(typeof item === "string" ? item : item?.symbol || ""))
+                .filter(Boolean)
+                .join(", ");
+              const likes = Number(agent.likesCount || 0);
+              const follows = Number(agent.followersCount || 0);
+              const liked = state.aiLikeSet.has(String(agent.id || ""));
+              const followed = state.aiFollowSet.has(String(agent.id || ""));
+              return `
+                <article class="ai-agent-card">
+                  <div class="ai-agent-head">
+                    <div class="small muted">Rank #${idx + 1}</div>
+                    <div class="small muted">${selected.toUpperCase()} ROI</div>
+                  </div>
+                  <div class="ai-agent-name">${name}</div>
+                  <div class="ai-agent-roi">${roi}</div>
+                  <div class="small">${renderModelBadge(agent)}</div>
+                  ${buildAIAgentSparkline(agent)}
+                  <div class="small muted">${symbols || "No holdings listed."}</div>
+                  <div class="ai-agent-actions">
+                    <button class="task-chip${followed ? " active" : ""}" type="button" data-action="ai-agent-follow" data-agent-id="${agentId}">
+                      ${followed ? "Following" : "Follow"} (${follows})
+                    </button>
+                    <button class="task-chip${liked ? " active" : ""}" type="button" data-action="ai-agent-like" data-agent-id="${agentId}">
+                      ${liked ? "Liked" : "Like"} (${likes})
+                    </button>
+                    <button class="task-chip" type="button" data-action="ai-agent-share" data-agent-id="${agentId}">Share</button>
+                  </div>
+                </article>
+              `;
+            })
+            .join("")}
+        </div>
+      `;
       return;
     }
 
@@ -4283,6 +5305,7 @@
                     <td>${idx + 1}</td>
                     <td>
                       <div><strong>${name}</strong></div>
+                      <div class="small">${renderModelBadge(agent)}</div>
                       <div class="small muted">${escapeHtml(String(agent.description || "").trim() || "AI-generated portfolio agent")}</div>
                     </td>
                     <td><strong>${roi}</strong></td>
@@ -4306,6 +5329,31 @@
         </table>
       </div>
     `;
+  };
+
+  const bindAIAgentLeaderboardControls = () => {
+    const horizonSelect = document.getElementById("ai-leaderboard-horizon");
+    if (horizonSelect) {
+      if (horizonSelect.dataset.bound !== "1") {
+        horizonSelect.addEventListener("change", () => {
+          state.aiLeaderboardHorizon = normalizeRoiHorizonKey(horizonSelect.value);
+          renderAIAgentLeaderboard(state.aiAgents);
+        });
+        horizonSelect.dataset.bound = "1";
+      }
+      horizonSelect.value = state.aiLeaderboardHorizon;
+    }
+    const modelFilterSelect = document.getElementById("ai-leaderboard-model-filter");
+    if (modelFilterSelect) {
+      if (modelFilterSelect.dataset.bound !== "1") {
+        modelFilterSelect.addEventListener("change", () => {
+          state.aiModelFilter = String(modelFilterSelect.value || "all");
+          renderAIAgentLeaderboard(state.aiAgents);
+        });
+        modelFilterSelect.dataset.bound = "1";
+      }
+      modelFilterSelect.value = state.aiModelFilter || "all";
+    }
   };
 
   const renderScreenerRunOutput = (runDoc) => {
@@ -4342,28 +5390,11 @@
         <div class="card-head">
           <h3>AI Portfolio</h3>
           <div class="hero-actions" style="margin-top:0;">
-            <button class="cta secondary small" type="button" data-action="generate-ai-portfolio" data-run-id="${runId}">${icon("magic-wand")}<span>Generate with Meta Prophet</span></button>
+            <button class="cta secondary small" type="button" data-action="generate-ai-portfolio" data-run-id="${runId}">${icon("magic-wand")}<span>Generate with Quantura Horizon</span></button>
             <button class="cta secondary small" type="button" data-action="rename-ai-agent" data-agent-id="${agentId}" ${agentId ? "" : "disabled"}>${icon("edit-pencil")}<span>Rename Agent</span></button>
           </div>
         </div>
         <div id="ai-portfolio-summary" class="small">${portfolioSummary}</div>
-      </div>
-      <div class="card" style="margin-top:14px;">
-        <div class="card-head">
-          <h3>AI Portfolio Leaderboard</h3>
-          <div class="field" style="margin:0; min-width: 170px;">
-            <label class="label" for="ai-leaderboard-horizon">Sort by ROI</label>
-            <select id="ai-leaderboard-horizon">
-              <option value="1m">1M</option>
-              <option value="3m">3M</option>
-              <option value="6m">6M</option>
-              <option value="1y" selected>1Y</option>
-              <option value="5y">5Y</option>
-              <option value="max">Max</option>
-            </select>
-          </div>
-        </div>
-        <div id="ai-agent-leaderboard" class="panel-output small" style="max-height: none;"></div>
       </div>
       <div class="table-wrap" style="margin-top:12px;">
         <table class="data-table">
@@ -4404,15 +5435,7 @@
         </table>
       </div>
     `;
-
-    const horizonSelect = document.getElementById("ai-leaderboard-horizon");
-    if (horizonSelect) {
-      horizonSelect.value = state.aiLeaderboardHorizon;
-      horizonSelect.addEventListener("change", () => {
-        state.aiLeaderboardHorizon = normalizeRoiHorizonKey(horizonSelect.value);
-        renderAIAgentLeaderboard(state.aiAgents);
-      });
-    }
+    bindAIAgentLeaderboardControls();
     renderAIAgentLeaderboard(state.aiAgents);
   };
 
@@ -4445,10 +5468,10 @@
 
   const summarizeTickerRationale = ({ projectedRoi, q4Seasonality }) => {
     if (projectedRoi > 0 && q4Seasonality) {
-      return "Prophet detects strong upward trend with recurring Q4 seasonal strength.";
+      return "Quantura Horizon detects strong upward trend with recurring Q4 seasonal strength.";
     }
     if (projectedRoi > 0) {
-      return "Prophet projects a positive long-term slope with supportive confidence structure.";
+      return "Quantura Horizon projects a positive long-term slope with supportive confidence structure.";
     }
     return "Trend is mixed and confidence is weaker versus peers.";
   };
@@ -4569,10 +5592,10 @@
     const strong = holdings.filter((item) => item.q4Seasonality).length;
     const avgRoi = averageNumber(holdings.map((item) => item.projectedRoi));
     if (strong > 0) {
-      return "Prophet detects strong upward trend with recurring Q4 seasonal strength. The portfolio is further filtered for positive confidence structure and ranked by projected 1-year ROI.";
+      return "Quantura Horizon detects strong upward trend with recurring Q4 seasonal strength. The portfolio is further filtered for positive confidence structure and ranked by projected 1-year ROI.";
     }
     if (avgRoi !== null && avgRoi > 0) {
-      return "This portfolio emphasizes names with positive Prophet slope and favorable 1-year risk-adjusted upside. Selections were constrained to avoid negative lower confidence outcomes.";
+      return "This portfolio emphasizes names with positive Quantura Horizon slope and favorable 1-year risk-adjusted upside. Selections were constrained to avoid negative lower confidence outcomes.";
     }
     return "Selected for relative long-term strength versus peers while preserving diversification across sectors and factor regimes.";
   };
@@ -4680,7 +5703,7 @@
     return nextId;
   };
 
-  const generateAIPortfolioForRun = async ({ db, functions, runId, preferredName = "" }) => {
+  const generateAIPortfolioForRun = async ({ db, functions, runId, preferredName = "", selectedModel = "" }) => {
     if (!state.user) {
       showToast("Sign in to generate AI Portfolios.", "warn");
       return;
@@ -4689,6 +5712,13 @@
     const runSnap = await db.collection("screener_runs").doc(runId).get();
     if (!runSnap.exists) throw new Error("Screener run not found.");
     const runDoc = { id: runSnap.id, ...(runSnap.data() || {}) };
+    const modelId = String(selectedModel || runDoc.modelUsed || state.selectedScreenerModel || "gpt-4o-mini").trim();
+    const modelMeta = getModelMeta(modelId) || {
+      id: modelId,
+      provider: "openai",
+      tier: "Standard",
+      label: modelId || "Model",
+    };
     const rows = Array.isArray(runDoc.results) ? runDoc.results : [];
     const tickers = Array.from(
       new Set(
@@ -4701,7 +5731,7 @@
     if (!tickers.length) throw new Error("No tickers found in this run.");
 
     const summary = document.getElementById("ai-portfolio-summary");
-    if (summary) summary.innerHTML = `<div class="small muted">Running Meta Prophet across ${tickers.length} tickers (2-year history each)...</div>`;
+    if (summary) summary.innerHTML = `<div class="small muted">Running Quantura Horizon across ${tickers.length} tickers (2-year history each)...</div>`;
 
     const scored = [];
     for (let idx = 0; idx < tickers.length; idx += 1) {
@@ -4718,7 +5748,7 @@
     const ranked = scored
       .filter((item) => item.yhatLower === null || item.yhatLower >= 0)
       .sort((a, b) => b.projectedRoi - a.projectedRoi);
-    if (!ranked.length) throw new Error("No eligible Prophet candidates. Try broader screener criteria.");
+    if (!ranked.length) throw new Error("No eligible Quantura Horizon candidates. Try broader screener criteria.");
 
     const topCount = Math.max(5, Math.min(10, ranked.length));
     const holdings = ranked.slice(0, topCount).map((row) => ({
@@ -4746,11 +5776,15 @@
     });
     const agentPayload = {
       name: chosenName,
-      description: "AI Portfolio generated from screener criteria using Meta Prophet long-term growth scoring.",
-      strategy: "meta_prophet_long_term_growth",
+      description: `AI Portfolio generated from screener criteria using Quantura Horizon long-term growth scoring (${modelMeta.label}).`,
+      strategy: "quantura_horizon_long_term_growth",
       holdings,
       returns,
       rationale,
+      modelId: modelMeta.id,
+      modelProvider: modelMeta.provider,
+      modelTier: modelMeta.tier,
+      modelLabel: modelMeta.label,
     };
     const agentId = await upsertAIAgentFromPortfolio({
       db,
@@ -4766,6 +5800,9 @@
       .set(
         {
           results: enrichedResults,
+          modelUsed: modelMeta.id,
+          modelProvider: modelMeta.provider,
+          modelTier: modelMeta.tier,
           aiPortfolio: {
             ...agentPayload,
             agentId,
@@ -4846,10 +5883,12 @@
       .onSnapshot(
         (snapshot) => {
           state.aiAgents = snapshot.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) }));
+          bindAIAgentLeaderboardControls();
           renderAIAgentLeaderboard(state.aiAgents);
         },
         () => {
           state.aiAgents = [];
+          bindAIAgentLeaderboardControls();
           renderAIAgentLeaderboard(state.aiAgents);
         }
       );
@@ -5008,11 +6047,29 @@
       .filter(Boolean)
       .join("");
 
+    const reportStatus = String(forecastDoc.reportStatus || "").trim().toLowerCase();
+    const pdfPath = getForecastReportPath(forecastDoc, "pdf");
+    const pptxPath = getForecastReportPath(forecastDoc, "pptx");
+    const tradeRationale = String(forecastDoc.tradeRationale || "").trim();
+    const reportHint =
+      reportStatus === "ready"
+        ? "Report Agent outputs are ready."
+        : reportStatus === "generating" || reportStatus === "queued"
+          ? "Report Agent is generating PDF/PPT assets..."
+          : reportStatus === "failed"
+            ? "Report Agent failed. Retry generation."
+            : "Generate Executive Brief and Slide Deck for this forecast.";
+
     setOutputReady(ui.forecastOutput);
     ui.forecastOutput.innerHTML = `
-      <div class="output-stack">
+      <div class="output-stack quantura-horizon-widget">
         ${summary}
         ${metricsStrip}
+        ${
+          tradeRationale
+            ? `<div class="horizon-rationale"><strong>AI Trade Rationale:</strong> ${escapeHtml(tradeRationale)}</div>`
+            : ""
+        }
         ${metricsTable}
         <div class="table-controls">
           <button class="cta secondary small" type="button" data-action="forecast-page" data-delta="-1" ${
@@ -5023,7 +6080,14 @@
             page >= totalPages - 1 ? "disabled" : ""
           }>${icon("arrow-right")}<span>Next</span></button>
           <button class="cta secondary small" type="button" data-action="forecast-csv">${icon("download")}<span>Download CSV</span></button>
+          <button class="cta secondary small" type="button" data-action="forecast-report-pdf" data-forecast-id="${escapeHtml(
+            forecastDoc.id
+          )}" ${pdfPath ? "" : 'data-needs-report="1"'}>${icon("download")}<span>Download Executive Brief</span></button>
+          <button class="cta secondary small" type="button" data-action="forecast-report-pptx" data-forecast-id="${escapeHtml(
+            forecastDoc.id
+          )}" ${pptxPath ? "" : 'data-needs-report="1"'}>${icon("download")}<span>Download Slide Deck</span></button>
         </div>
+        <div class="small muted">${escapeHtml(reportHint)}</div>
         <div class="table-wrap" style="margin-top:10px;">
           <table class="data-table">
             <thead>
@@ -5066,6 +6130,41 @@
     const snap = await db.collection("forecast_requests").doc(forecastId).get();
     if (!snap.exists) throw new Error("Forecast not found.");
     return { id: snap.id, ...snap.data() };
+  };
+
+  const getForecastReportPath = (doc, kind) => {
+    const assets = doc?.reportAssets && typeof doc.reportAssets === "object" ? doc.reportAssets : {};
+    if (kind === "pdf") return String(assets.pdfPath || "").trim();
+    if (kind === "pptx") return String(assets.pptxPath || "").trim();
+    if (kind === "chart") return String(assets.chartPath || "").trim();
+    return "";
+  };
+
+  const ensureForecastReportsReady = async ({ db, functions, forecastId, workspaceId, force = false }) => {
+    if (!functions || !forecastId) return null;
+    const action = functions.httpsCallable("generate_forecast_report_assets");
+    const result = await action({
+      forecastId,
+      workspaceId,
+      force,
+      meta: buildMeta(),
+    });
+    const payload = result.data || {};
+    const reportAssets = payload.reportAssets && typeof payload.reportAssets === "object" ? payload.reportAssets : {};
+    const reportStatus = String(payload.reportStatus || "").trim();
+    const tradeRationale = String(payload.tradeRationale || "").trim();
+
+    const ref = db.collection("forecast_requests").doc(forecastId);
+    await ref.set(
+      {
+        reportAssets,
+        reportStatus: reportStatus || "ready",
+        tradeRationale: tradeRationale || firebase.firestore.FieldValue.delete(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    return { reportAssets, reportStatus, tradeRationale };
   };
 
   const plotForecastById = async (db, functions, forecastId) => {
@@ -5359,6 +6458,7 @@
   };
 
 	  const init = () => {
+    hydrateUnsplashGallery();
 	    if (typeof firebase === "undefined") {
 	      console.error("App SDK not loaded.");
 	      return;
@@ -5438,10 +6538,17 @@
 	    syncStickyOffsets();
 	    window.addEventListener("resize", () => window.requestAnimationFrame(syncStickyOffsets));
 	    window.setTimeout(syncStickyOffsets, 280);
-	    loadRemoteConfig();
+      useRemoteConfig(() => {
+        refreshScreenerModelUi();
+        refreshScreenerCreditsUi();
+      });
+	    loadRemoteConfig().then(() => {
+        refreshScreenerModelUi();
+        refreshScreenerCreditsUi();
+      });
       handleCheckoutReturn(functions);
 
-		    document.addEventListener("click", (event) => {
+			    document.addEventListener("click", async (event) => {
 		      const target = event.target.closest("[data-analytics]");
 		      if (!target) return;
 		      logEvent(target.dataset.analytics, {
@@ -5450,13 +6557,34 @@
 	      });
 	    });
 
-		    document.addEventListener("click", (event) => {
+		    document.addEventListener("click", async (event) => {
 		      const social = event.target.closest(".social-link");
 		      if (!social) return;
 		      const href = social.getAttribute("href") || "";
 		      if (!href || href === "#") {
 		        event.preventDefault();
 		        showToast("Social links are coming soon.");
+		      }
+		    });
+
+		    document.addEventListener("click", async (event) => {
+		      const copyButton = event.target.closest('[data-action="copy-bibtex"]');
+		      if (!copyButton) return;
+		      event.preventDefault();
+		      const bibtex = String(copyButton.dataset.bibtex || "").trim();
+		      if (!bibtex) {
+		        showToast("Citation data is unavailable.", "warn");
+		        return;
+		      }
+		      copyButton.disabled = true;
+		      try {
+		        const copied = await copyToClipboard(bibtex);
+		        if (!copied) throw new Error("clipboard_unavailable");
+		        showToast("BibTeX copied.");
+		      } catch (error) {
+		        showToast("Unable to copy BibTeX.", "warn");
+		      } finally {
+		        copyButton.disabled = false;
 		      }
 		    });
 
@@ -5761,7 +6889,8 @@
             generatePortfolio.disabled = true;
             try {
               const preferredName = String(document.getElementById("screener-agent-name")?.value || "").trim();
-              await generateAIPortfolioForRun({ db, functions, runId, preferredName });
+              const selectedModel = String(ui.screenerModel?.value || state.selectedScreenerModel || "").trim();
+              await generateAIPortfolioForRun({ db, functions, runId, preferredName, selectedModel });
               logEvent("ai_portfolio_generated", { run_id: runId });
             } catch (error) {
               showToast(error.message || "Unable to generate AI Portfolio.", "warn");
@@ -6103,7 +7232,9 @@
             return;
           }
 
-          const downloadBacktestCode = event.target.closest('[data-action="download-backtest-code"]');
+          const downloadBacktestCode =
+            event.target.closest('[data-action="download-backtest-source"]') ||
+            event.target.closest('[data-action="download-backtest-code"]');
           if (downloadBacktestCode) {
             event.preventDefault();
             if (!state.user) {
@@ -6117,12 +7248,25 @@
               const snap = await db.collection("backtests").doc(backtestId).get();
               if (!snap.exists) throw new Error("Backtest not found.");
               const doc = { id: snap.id, ...(snap.data() || {}) };
-              const code = String(doc.code || "").trim();
-              if (!code) throw new Error("No source code saved for this backtest.");
+              const sourceSelect = downloadBacktestCode
+                .closest(".backtest-source-controls")
+                ?.querySelector('[data-backtest-source-format]');
+              const sourceKey = String(sourceSelect?.value || "python").trim().toLowerCase();
+              const source = resolveBacktestSourceExport(doc, sourceKey);
+              if (!source || !String(source.content || "").trim()) {
+                throw new Error("No exported source available for the selected format.");
+              }
               const safeTicker = normalizeTicker(doc.ticker || "backtest") || "backtest";
-              triggerDownload(`${safeTicker}_${backtestId}.py`, code);
+              const optionMeta =
+                BACKTEST_SOURCE_OPTIONS.find((item) => item.key === sourceKey) || BACKTEST_SOURCE_OPTIONS[0];
+              const suggestedFilename = source.filename
+                ? String(source.filename)
+                : `${safeTicker}_${backtestId}.${optionMeta.ext}`;
+              triggerDownload(suggestedFilename, source.content, {
+                mimeType: source.mimeType || optionMeta.mimeType,
+              });
               showToast("Source downloaded.");
-              logEvent("backtest_code_downloaded", { backtest_id: backtestId });
+              logEvent("backtest_code_downloaded", { backtest_id: backtestId, source_format: sourceKey });
             } catch (error) {
               showToast(error.message || "Unable to download code.", "warn");
             } finally {
@@ -6202,7 +7346,7 @@
           }
         });
 
-		    document.addEventListener("click", (event) => {
+		    document.addEventListener("click", async (event) => {
 		      const pageBtn = event.target.closest('[data-action="forecast-page"]');
 		      if (pageBtn) {
 		        event.preventDefault();
@@ -6235,6 +7379,69 @@
 		        showToast("CSV downloaded.");
 		        return;
 		      }
+
+          const reportPdfBtn = event.target.closest('[data-action="forecast-report-pdf"]');
+          const reportPptxBtn = event.target.closest('[data-action="forecast-report-pptx"]');
+          if (reportPdfBtn || reportPptxBtn) {
+            event.preventDefault();
+            if (!state.user) {
+              showToast("Sign in to download forecast reports.", "warn");
+              return;
+            }
+            const button = reportPdfBtn || reportPptxBtn;
+            const kind = reportPdfBtn ? "pdf" : "pptx";
+            const forecastId = String(button.dataset.forecastId || state.tickerContext.forecastId || "").trim();
+            if (!forecastId) {
+              showToast("Forecast ID is missing.", "warn");
+              return;
+            }
+            button.disabled = true;
+            try {
+              let doc =
+                state.tickerContext.forecastDoc && String(state.tickerContext.forecastDoc.id || "") === forecastId
+                  ? state.tickerContext.forecastDoc
+                  : await loadForecastDoc(db, forecastId);
+
+              let path = getForecastReportPath(doc, kind);
+              const reportStatus = String(doc.reportStatus || "").trim().toLowerCase();
+              if (!path || reportStatus !== "ready" || button.dataset.needsReport === "1") {
+                showToast("Generating report assets...");
+                await ensureForecastReportsReady({
+                  db,
+                  functions,
+                  forecastId,
+                  workspaceId: state.activeWorkspaceId || state.user.uid,
+                  force: reportStatus === "failed",
+                });
+                doc = await loadForecastDoc(db, forecastId);
+                if (state.tickerContext.forecastDoc && String(state.tickerContext.forecastDoc.id || "") === forecastId) {
+                  state.tickerContext.forecastDoc = doc;
+                  renderForecastDetails(doc);
+                }
+                path = getForecastReportPath(doc, kind);
+              }
+
+              if (!path) throw new Error("Report file is not available yet.");
+              if (!storage) throw new Error("Storage client is unavailable.");
+              const url = await storage.ref().child(path).getDownloadURL();
+              const ticker = normalizeTicker(doc.ticker || "ticker") || "ticker";
+              const service = String(doc.service || "forecast").replace(/[^a-z0-9_\-]+/gi, "_");
+              const filename =
+                kind === "pdf"
+                  ? `${ticker}_${service}_${forecastId}_executive_brief.pdf`
+                  : `${ticker}_${service}_${forecastId}_slide_deck.pptx`;
+              await triggerDownloadFromUrl(url, filename);
+              showToast(kind === "pdf" ? "Executive Brief downloaded." : "Slide Deck downloaded.");
+              logEvent(kind === "pdf" ? "forecast_report_pdf_downloaded" : "forecast_report_pptx_downloaded", {
+                forecast_id: forecastId,
+              });
+            } catch (error) {
+              showToast(extractErrorMessage(error, "Unable to download report."), "warn");
+            } finally {
+              button.disabled = false;
+            }
+            return;
+          }
 
       const pageSizeBtn = event.target.closest('[data-action="csv-page-size"]');
       if (pageSizeBtn) {
@@ -6463,7 +7670,8 @@
 	          );
           await ensureVolatilityAlertsForWatchlist({ db, workspaceId, items: [{ ticker }] });
 	        if (ui.watchlistNotes) ui.watchlistNotes.value = "";
-	        showToast(`${ticker} added to watchlist. Default ±5% volatility alert enabled.`);
+          const defaultVol = Math.round(getConfiguredVolatilityThreshold() * 100);
+	        showToast(`${ticker} added to watchlist. Default ±${defaultVol}% volatility alert enabled.`);
 	        logEvent("watchlist_added", { ticker, workspace_id: workspaceId });
 	      } catch (error) {
 	        showToast(error.message || "Unable to update watchlist.", "warn");
@@ -6789,17 +7997,31 @@
       }
     });
 
-    ui.googleSignin?.addEventListener("click", async () => {
+    const signInWithProvider = async (provider, successMessage, method) => {
       if (ui.emailMessage) ui.emailMessage.textContent = "";
       try {
         await persistenceReady;
-        const provider = new firebase.auth.GoogleAuthProvider();
         await auth.signInWithPopup(provider);
-        showToast("Signed in with Google.");
-        logEvent("login", { method: "google" });
+        showToast(successMessage);
+        logEvent("login", { method });
       } catch (error) {
         if (ui.emailMessage) ui.emailMessage.textContent = error.message;
       }
+    };
+
+    ui.googleSignin?.addEventListener("click", async () => {
+      await signInWithProvider(new firebase.auth.GoogleAuthProvider(), "Signed in with Google.", "google");
+    });
+
+    ui.githubSignin?.addEventListener("click", async () => {
+      const provider = new firebase.auth.GithubAuthProvider();
+      provider.addScope("user:email");
+      await signInWithProvider(provider, "Signed in with GitHub.", "github");
+    });
+
+    ui.twitterSignin?.addEventListener("click", async () => {
+      const provider = new firebase.auth.TwitterAuthProvider();
+      await signInWithProvider(provider, "Signed in with X.", "twitter");
     });
 
 	    ui.purchasePanels.forEach((panel) => {
@@ -7041,6 +8263,13 @@
 
 		        logEvent("forecast_request", { ticker: payload.ticker, interval: payload.interval, service: payload.service });
 		        showToast("Forecast saved.");
+            ensureForecastReportsReady({
+              db,
+              functions,
+              forecastId: requestId,
+              workspaceId: payload.workspaceId,
+              force: false,
+            }).catch(() => {});
 
 		        try {
 		          if (ui.tickerChart) {
@@ -7086,6 +8315,13 @@
             if (ui.forecastLoadStatus) ui.forecastLoadStatus.textContent = "";
             showToast("Forecast loaded.");
             logEvent("forecast_loaded_saved", { forecast_id: forecastId });
+            ensureForecastReportsReady({
+              db,
+              functions,
+              forecastId,
+              workspaceId: state.activeWorkspaceId || state.user.uid,
+              force: false,
+            }).catch(() => {});
             document.getElementById("terminal")?.scrollIntoView({ behavior: "smooth" });
           } catch (error) {
             if (ui.forecastLoadStatus) ui.forecastLoadStatus.textContent = error.message || "Unable to load forecast.";
@@ -7374,6 +8610,14 @@
 	      }
 	    });
 
+      ui.screenerModel?.addEventListener("change", () => {
+        syncScreenerProviderAccent();
+        refreshScreenerCreditsUi();
+      });
+      refreshScreenerModelUi();
+      refreshScreenerCreditsUi();
+      bindAIAgentLeaderboardControls();
+
 	    ui.screenerForm?.addEventListener("submit", async (event) => {
 	      event.preventDefault();
 	      if (!state.user) {
@@ -7383,13 +8627,30 @@
 	      const formData = new FormData(ui.screenerForm);
       const requestedNames = Number(formData.get("maxNames"));
       const boundedNames = Number.isFinite(requestedNames) ? Math.max(5, Math.min(25, requestedNames)) : 10;
+      const minCapBucket = String(formData.get("minCapBucket") || "any").trim().toLowerCase();
+      const minCapAbs = minCapBucket === "any" ? null : Number(minCapBucket);
+      const selectedModel = String(formData.get("model") || state.selectedScreenerModel || "gpt-4o-mini").trim();
+      const tier = getCurrentAiTierConfig();
+      if (tier.allowedModels.length && !tier.allowedModels.includes(selectedModel)) {
+        await showLimitReachedModal("Selected model is locked for your current tier.");
+        return;
+      }
+      if (Number(state.aiUsageToday || 0) >= Number(tier.dailyLimit || 5)) {
+        await showLimitReachedModal("You have reached your daily AI screener credit limit.");
+        return;
+      }
       const payload = {
         universe: formData.get("universe"),
         market: formData.get("market"),
-        minCap: Number(formData.get("minCap")),
+        minCap: minCapAbs,
+        marketCapFilter: {
+          type: minCapAbs === null ? "any" : "greater_than",
+          value: minCapAbs,
+        },
         maxNames: boundedNames,
         notes: formData.get("notes"),
         agentName: String(formData.get("agentName") || "").trim(),
+        model: selectedModel,
         workspaceId: state.activeWorkspaceId || state.user.uid,
         meta: buildMeta(),
       };
@@ -7401,16 +8662,30 @@
 	        const rows = result.data?.results || [];
           const runId = String(result.data?.runId || "").trim();
           const runTitle = String(result.data?.title || "").trim();
+          const resultsFound = Number(result.data?.resultsFound || rows.length || 0);
+          if (ui.screenerResultsCount) {
+            ui.screenerResultsCount.textContent = `Results Found: ${Number.isFinite(resultsFound) ? resultsFound : rows.length}`;
+          }
           renderScreenerRunOutput({
             id: runId || "—",
             title: runTitle || `${payload.universe || "AI Portfolio"} run`,
             results: rows,
             notes: payload.notes,
+            modelUsed: payload.model,
+            modelTier: tier.key,
             createdAt: new Date().toISOString(),
           });
+          state.aiUsageToday = Number(state.aiUsageToday || 0) + 1;
+          refreshScreenerCreditsUi();
           if (runId) {
             try {
-              await generateAIPortfolioForRun({ db, functions, runId, preferredName: payload.agentName });
+              await generateAIPortfolioForRun({
+                db,
+                functions,
+                runId,
+                preferredName: payload.agentName,
+                selectedModel: payload.model,
+              });
             } catch (portfolioError) {
               showToast(portfolioError.message || "Portfolio generated from screener, but AI ranking needs retry.", "warn");
             }
@@ -7418,7 +8693,13 @@
         showToast("AI Portfolio generation started.");
         logEvent("screener_request", { universe: payload.universe });
       } catch (error) {
-        showToast(error.message || "Unable to generate AI Portfolio.", "warn");
+        const message = extractErrorMessage(error, "Unable to generate AI Portfolio.");
+        if (ui.screenerResultsCount) ui.screenerResultsCount.textContent = "Results Found: 0";
+        if (ui.screenerOutput) {
+          setOutputReady(ui.screenerOutput);
+          ui.screenerOutput.innerHTML = `<div class="small muted">${escapeHtml(message)}</div>`;
+        }
+        showToast(message, "warn");
       }
     });
 
@@ -7619,6 +8900,8 @@
         params.oversold = Number(formData.get("oversold") || 30);
         params.exitAbove = Number(formData.get("exitAbove") || 55);
       }
+      params.slPct = Number(formData.get("slPct") || 0);
+      params.tpPct = Number(formData.get("tpPct") || 0);
 
       const payload = {
         ticker,
@@ -7784,6 +9067,9 @@
 		      setUserId(user?.uid || null);
 
 		      if (!user) {
+		        state.userHasPaidPlan = false;
+            state.aiUsageToday = 0;
+            state.aiUsageTierKey = "free";
 		        renderOrderList([], ui.userOrders);
             renderRequestList([], ui.userForecasts, "No forecast requests yet.");
             renderRequestList([], ui.autopilotOutput, "No autopilot requests yet.");
@@ -7840,6 +9126,8 @@
             if (ui.screenerLoadSelect) ui.screenerLoadSelect.innerHTML = `<option value="">Select a run</option>`;
             if (ui.screenerLoadStatus) ui.screenerLoadStatus.textContent = "";
             if (ui.screenerOutput && !ui.screenerOutput.dataset.loading) ui.screenerOutput.textContent = "Sign in to generate an AI Portfolio.";
+            refreshScreenerModelUi();
+            refreshScreenerCreditsUi();
             state.predictionsContext.uploadId = "";
             state.predictionsContext.uploadDoc = null;
             state.predictionsContext.table = null;
@@ -7878,6 +9166,7 @@
 		      renderWorkspaceSelect(user);
 		      startUserForecasts(db, activeWorkspaceId);
           startScreenerRuns(db, activeWorkspaceId);
+          loadScreenerUsageToday(db);
 		      startWorkspaceTasks(db, activeWorkspaceId);
 			      startWatchlist(db, activeWorkspaceId);
 			      startPriceAlerts(db, activeWorkspaceId);
