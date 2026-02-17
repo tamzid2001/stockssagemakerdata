@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Quantura Terminal | Meta Prophet + Indicators</title>
+    <title>Quantura Terminal | Quantura Horizon + Indicators</title>
     <meta
       name="description"
       content="Generate quantile forecasts, toggle technical indicators, and track ticker momentum with Quantura's terminal."
@@ -43,6 +43,7 @@
         <a class="logo" href="/" aria-label="Quantura home"><span>QUANTURA</span></a>
         <nav class="nav-links">
           <a href="/screener" data-analytics="nav_screener"><i class="iconoir-search" aria-hidden="true"></i><span>Screener</span></a>
+          <a href="/research" data-analytics="nav_research"><i class="iconoir-bookmark-book" aria-hidden="true"></i><span>Research</span></a>
           <a href="/pricing" data-analytics="nav_pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>Pricing</span></a>
           <a href="/contact" data-analytics="nav_contact"><i class="iconoir-mail" aria-hidden="true"></i><span>Contact</span></a>
         </nav>
@@ -66,6 +67,7 @@
           </div>
 	          <nav class="sidebar-nav" aria-label="Terminal navigation">
 	            <a class="sidebar-link active" href="/forecasting" data-panel-target="forecast"><i class="iconoir-magic-wand" aria-hidden="true"></i><span>Forecast</span></a>
+	            <a class="sidebar-link" href="/ticker-intelligence" data-panel-target="ticker-intelligence"><i class="iconoir-eye" aria-hidden="true"></i><span>Ticker Intelligence</span></a>
 	            <a class="sidebar-link" href="/indicators" data-panel-target="indicators"><i class="iconoir-sigma-function" aria-hidden="true"></i><span>Indicators</span></a>
               <a class="sidebar-link" href="/trending" data-panel-target="trending"><i class="iconoir-fire-flame" aria-hidden="true"></i><span>Trending</span></a>
 	            <a class="sidebar-link" href="/news" data-panel-target="news"><i class="iconoir-journal-page" aria-hidden="true"></i><span>News and data</span></a>
@@ -111,10 +113,13 @@
                     <div class="studio-secondary" id="intel-strip">
                       <div class="card">
                         <div class="card-head">
-                          <h3>Ticker intelligence</h3>
+                          <h3>Ticker intelligence snapshot</h3>
                         </div>
                         <div class="small muted" style="margin-bottom: 12px;">Auto-updates for the ticker in your chart context.</div>
                         <div id="intel-output" class="panel-output small">Load a ticker to see company overview, events, and analyst signals.</div>
+                        <div class="small" style="margin-top: 10px;">
+                          Need full institutional detail? Open the <strong>Ticker Intelligence</strong> tab for financial reports, balance-sheet heatmap, and peer comparison.
+                        </div>
                         <details class="learn-more">
                           <summary>Learn more</summary>
                           <div class="small">
@@ -164,8 +169,7 @@
 	                        <div class="field">
 	                          <label class="label" for="forecast-service">Forecast service</label>
 	                          <select id="forecast-service" name="service">
-	                            <option value="prophet">Meta Prophet</option>
-	                            <option value="ibm_timemixer">IBM TimeMixer</option>
+	                            <option value="prophet">Quantura Horizon</option>
 	                          </select>
 	                        </div>
 	                      </div>
@@ -187,8 +191,8 @@
                               Hourly forecasts are capped to keep the terminal responsive.
                             </p>
                             <p>
-                              <strong>Meta Prophet</strong> is best when you want a transparent, classical model and stable uncertainty bands. <strong>IBM TimeMixer</strong> is best when you want a fast,
-                              foundation-model style forecast. Quantura saves both so you can compare them on the same chart.
+                              <strong>Quantura Horizon</strong> is optimized for transparent trend and seasonality interpretation with stable uncertainty bands.
+                              Quantura stores each run so you can compare results, review confidence structure, and export files for downstream analysis.
                             </p>
                             <p>
                               After you generate a run, use <strong>Load saved forecast</strong> (or the <strong>Saved forecasts</strong> panel) to re-plot it later and export CSV for backtests.
@@ -214,6 +218,17 @@
                     <div class="results-panel">
                       <h3>Forecast output</h3>
                       <div id="forecast-output" class="panel-output small">Run a forecast to see model summary and preview rows.</div>
+                    </div>
+                  </section>
+
+                  <section class="panel hidden" data-panel="ticker-intelligence">
+                    <div class="panel-header">
+                      <h2>Ticker Intelligence</h2>
+                      <p class="small">Institutional three-column view with fundamentals, risk, ESG, and peer benchmarking.</p>
+                    </div>
+                    <div class="results-panel ticker-intelligence-panel">
+                      <h3>Institutional View</h3>
+                      <div id="ticker-intelligence-output" class="panel-output small">Load a ticker to generate the institutional intelligence panel.</div>
                     </div>
                   </section>
 
@@ -392,7 +407,7 @@
 	                  <section class="panel hidden" data-panel="screener">
                     <div class="panel-header">
                       <h2>AI Portfolio Generator</h2>
-                      <p class="small">Run criteria, rank candidates with Meta Prophet long-term growth scores, and publish an AI Agent.</p>
+                      <p class="small">Run criteria, rank candidates with Quantura Horizon long-term growth scores, and publish an AI Agent.</p>
                     </div>
                     <form id="screener-form" class="card">
                       <div class="form-grid">
@@ -413,8 +428,16 @@
                           </select>
                         </div>
                         <div class="field">
-                          <label class="label" for="screener-min">Minimum market cap ($B)</label>
-                          <input id="screener-min" name="minCap" type="number" value="5" />
+                          <label class="label" for="screener-min">Market cap bracket</label>
+                          <select id="screener-min" name="minCapBucket">
+                            <option value="any">Any</option>
+                            <option value="50000000">&gt; $50M (Nano-Cap)</option>
+                            <option value="300000000">&gt; $300M (Micro-Cap)</option>
+                            <option value="2000000000">&gt; $2B (Small-Cap)</option>
+                            <option value="10000000000">&gt; $10B (Mid-Cap)</option>
+                            <option value="100000000000">&gt; $100B (Large-Cap)</option>
+                            <option value="200000000000">&gt; $200B (Mega-Cap)</option>
+                          </select>
                         </div>
                         <div class="field">
                           <label class="label" for="screener-max">Candidate pool (5-25)</label>
@@ -424,12 +447,25 @@
                           <label class="label" for="screener-agent-name">Agent name (optional)</label>
                           <input id="screener-agent-name" name="agentName" placeholder="Quantura Horizon" />
                         </div>
+                        <div class="field">
+                          <label class="label" for="screener-model">Model settings</label>
+                          <select id="screener-model" name="model"></select>
+                          <div id="screener-model-meta" class="small muted">Model availability is controlled by your usage tier.</div>
+                        </div>
                       </div>
+                      <div class="ai-credits-shell">
+                        <div class="ai-credits-head">
+                          <span>Daily Credits</span>
+                          <span id="screener-credits-text">0 / 0</span>
+                        </div>
+                        <div class="ai-credits-bar"><span id="screener-credits-fill"></span></div>
+                      </div>
+                      <div class="small muted" id="screener-results-count">Results Found: —</div>
                       <div class="field">
                         <label class="label" for="screener-notes">Criteria</label>
                         <textarea id="screener-notes" name="notes" placeholder='Example: "Tech, P/E &lt; 20, high free cash flow"'></textarea>
                       </div>
-                      <button class="cta" type="submit" data-analytics="screener_submit">Generate AI Portfolio</button>
+                      <button class="cta" id="screener-generate-button" type="submit" data-analytics="screener_submit">Generate AI Portfolio</button>
                       <details class="learn-more">
                         <summary>Learn more</summary>
                         <p class="small">
