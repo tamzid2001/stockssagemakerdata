@@ -1,0 +1,1478 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Quantura Terminal | Quantura Horizon + Indicators</title>
+    <meta
+      name="description"
+      content="Generate quantile forecasts, toggle technical indicators, and track ticker momentum with Quantura's terminal."
+    />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://quantura-e2e3d.web.app/forecasting" />
+    <meta property="og:title" content="Quantura Forecasting Studio" />
+    <meta property="og:description" content="Quantile forecasting, technical indicators, and demand intelligence for serious investors." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://quantura-e2e3d.web.app/forecasting" />
+    <meta property="og:image" content="/assets/quantura-logo.svg" />
+    <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
+    <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+
+    <script defer src="/__/firebase/12.9.0/firebase-app-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-auth-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-firestore-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-functions-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-storage-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-remote-config-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-analytics-compat.js"></script>
+    <script defer src="/__/firebase/init.js?useEmulator=false"></script>
+    <script defer src="/app.js"></script>
+  
+    <script>
+      window.__QUANTURA_RC_TEMPLATE_ID__ = "firebase-server";
+      window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ = {"status":200,"eTag":"etag-quantura-e2e3d-firebase-server-fetch--1213937490","config":{"welcome_message":"Welcome to Quantura","watchlist_enabled":"true","forecast_prophet_enabled":"true","forecast_timemixer_enabled":"true","push_notifications_enabled":"true","webpush_vapid_key":"","stripe_checkout_enabled":"true","stripe_public_key":"","holiday_promo":"true","backtesting_enabled":"true","backtesting_free_daily_limit":"1","backtesting_pro_daily_limit":"25"}};
+    </script>
+  
+</head>
+  <body>
+    <header class="header">
+      <div class="container nav">
+        <a class="logo" href="/" aria-label="Quantura home"><span>QUANTURA</span></a>
+        <nav class="nav-links">
+          <a href="/forecasting" data-analytics="nav_terminal"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Terminal</span></a>
+          <a href="/blog" data-analytics="nav_blog"><i class="iconoir-page" aria-hidden="true"></i><span>Blog</span></a>
+          <a href="/research" data-analytics="nav_research"><i class="iconoir-bookmark-book" aria-hidden="true"></i><span>Research</span></a>
+          <a href="/pricing" data-analytics="nav_pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>Pricing</span></a>
+          <a href="/contact" data-analytics="nav_contact"><i class="iconoir-mail" aria-hidden="true"></i><span>Contact</span></a>
+        </nav>
+        <div class="nav-actions">
+          <select id="language-select" class="status-select" aria-label="Language">
+            <option value="auto">Auto</option>
+            <option value="en">English</option>
+            <option value="es">Spanish</option>
+            <option value="fr">French</option>
+            <option value="de">German</option>
+            <option value="ar">Arabic</option>
+            <option value="bn">Bengali</option>
+          </select>
+          <span id="header-user-status" class="pill">Logged Out</span>
+          <button class="cta secondary" id="header-auth" type="button"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></button>
+          <a class="cta" href="/pricing"><i class="iconoir-page" aria-hidden="true"></i><span>Request Deep Forecast</span></a>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <div class="app-layout">
+        <aside class="app-sidebar">
+          <div class="sidebar-card">
+            <div class="small"><strong>Account</strong></div>
+            <div class="small">Signed in as <span id="user-email">Not signed in</span></div>
+            <div class="small">Status <span id="user-status" class="pill">Logged Out</span></div>
+            <details class="profile-settings">
+              <summary>Leaderboard profile</summary>
+              <form id="profile-form" class="profile-editor">
+                <label class="label" for="profile-username">Username</label>
+                <input id="profile-username" class="input" type="text" maxlength="32" placeholder="quantura_alpha" />
+                <label class="label" for="profile-avatar">Avatar</label>
+                <select id="profile-avatar" class="input">
+                  <option value="bull">Bull Trader</option>
+                  <option value="bear">Bear Analyst</option>
+                  <option value="owl">Night Researcher</option>
+                  <option value="fox">Momentum Scout</option>
+                  <option value="hawk">Macro Hawk</option>
+                  <option value="orca">Quant Orca</option>
+                </select>
+                <label class="label" for="profile-bio">Public bio</label>
+                <textarea id="profile-bio" class="input" rows="3" maxlength="300" placeholder="Your investing style, focus sectors, and what people should know about your screeners."></textarea>
+                <div class="checkbox-grid">
+                  <label><input id="profile-public-enabled" type="checkbox" /> Public profile</label>
+                  <label><input id="profile-public-screener" type="checkbox" /> Auto-publish screener runs</label>
+                </div>
+                <div class="profile-links-grid">
+                  <label class="label" for="profile-social-x">X</label>
+                  <input id="profile-social-x" class="input" type="url" placeholder="https://x.com/username" />
+                  <label class="label" for="profile-social-linkedin">LinkedIn</label>
+                  <input id="profile-social-linkedin" class="input" type="url" placeholder="https://linkedin.com/in/username" />
+                  <label class="label" for="profile-social-github">GitHub</label>
+                  <input id="profile-social-github" class="input" type="url" placeholder="https://github.com/username" />
+                  <label class="label" for="profile-social-youtube">YouTube</label>
+                  <input id="profile-social-youtube" class="input" type="url" placeholder="https://youtube.com/@channel" />
+                  <label class="label" for="profile-social-tiktok">TikTok</label>
+                  <input id="profile-social-tiktok" class="input" type="url" placeholder="https://tiktok.com/@username" />
+                  <label class="label" for="profile-social-facebook">Facebook</label>
+                  <input id="profile-social-facebook" class="input" type="url" placeholder="https://facebook.com/username" />
+                  <label class="label" for="profile-social-instagram">Instagram</label>
+                  <input id="profile-social-instagram" class="input" type="url" placeholder="https://instagram.com/username" />
+                  <label class="label" for="profile-social-reddit">Reddit</label>
+                  <input id="profile-social-reddit" class="input" type="url" placeholder="https://reddit.com/u/username" />
+                  <label class="label" for="profile-social-website">Website</label>
+                  <input id="profile-social-website" class="input" type="url" placeholder="https://your-site.com" />
+                </div>
+                <button class="cta secondary small" id="profile-connect-stripe" type="button"><i class="iconoir-wallet" aria-hidden="true"></i><span>Connect Stripe</span></button>
+                <button class="cta secondary small" type="submit">Save profile</button>
+                <p id="profile-status" class="small muted">Sign in to set your public leaderboard profile.</p>
+              </form>
+            </details>
+            <a class="cta secondary small" href="/dashboard"><i class="iconoir-dashboard" aria-hidden="true"></i><span>Open dashboard</span></a>
+            <a class="cta secondary small hidden" id="nav-admin" href="/admin"><i class="iconoir-shield-check" aria-hidden="true"></i><span>Admin dashboard</span></a>
+          </div>
+	          <nav class="sidebar-nav" aria-label="Terminal navigation">
+	            <a class="sidebar-link active" href="/forecasting" data-panel-target="forecast"><i class="iconoir-magic-wand" aria-hidden="true"></i><span>Forecast</span></a>
+	            <a class="sidebar-link" href="/ticker-intelligence" data-panel-target="ticker-intelligence"><i class="iconoir-eye" aria-hidden="true"></i><span>Ticker Intelligence</span></a>
+	            <a class="sidebar-link" href="/indicators" data-panel-target="indicators"><i class="iconoir-sigma-function" aria-hidden="true"></i><span>Indicators</span></a>
+              <a class="sidebar-link" href="/trending" data-panel-target="trending"><i class="iconoir-fire-flame" aria-hidden="true"></i><span>Trending</span></a>
+	            <a class="sidebar-link" href="/news" data-panel-target="news"><i class="iconoir-journal-page" aria-hidden="true"></i><span>News and data</span></a>
+              <a class="sidebar-link" href="/events-calendar" data-panel-target="events-calendar"><i class="iconoir-calendar" aria-hidden="true"></i><span>Corporate events</span></a>
+              <a class="sidebar-link" href="/market-headlines" data-panel-target="market-headlines"><i class="iconoir-globe" aria-hidden="true"></i><span>Market headlines</span></a>
+              <a class="sidebar-link" href="/ticker-query" data-panel-target="ticker-query"><i class="iconoir-brain" aria-hidden="true"></i><span>Ask GPT-5</span></a>
+	            <a class="sidebar-link" href="/options" data-panel-target="options"><i class="iconoir-numbered-list-left" aria-hidden="true"></i><span>Options</span></a>
+	            <a class="sidebar-link" href="/saved-forecasts" data-panel-target="saved"><i class="iconoir-bookmark" aria-hidden="true"></i><span>Saved forecasts</span></a>
+              <a class="sidebar-link" href="/backtesting" data-panel-target="backtesting"><i class="iconoir-flask" aria-hidden="true"></i><span>Backtesting</span></a>
+	            <a class="sidebar-link" href="/studio" data-panel-target="learn"><i class="iconoir-info-circle" aria-hidden="true"></i><span>Learn more</span></a>
+	            <a class="sidebar-link" href="/screener"><i class="iconoir-search" aria-hidden="true"></i><span>Screener</span></a>
+	            <a class="sidebar-link" href="/watchlist"><i class="iconoir-bell-notification" aria-hidden="true"></i><span>Watchlist and alerts</span></a>
+	          </nav>
+        </aside>
+
+        <div class="app-main">
+          <section class="section studio-section" id="terminal">
+            <div class="container">
+	              <div class="studio-layout" data-panels data-panel-router="terminal">
+                <div class="studio-primary">
+                  <div class="ticker-dock card">
+                    <form id="terminal-form" class="ticker-dock-form">
+                      <div class="field">
+                        <label class="label" for="terminal-ticker">Ticker</label>
+                        <input id="terminal-ticker" placeholder="AAPL" required />
+                      </div>
+                      <div class="field">
+                        <label class="label" for="terminal-interval">Timeframe</label>
+                        <select id="terminal-interval">
+                          <option value="1d">Daily</option>
+                          <option value="1h">Hourly</option>
+                        </select>
+                      </div>
+                      <button class="cta" type="submit" data-analytics="terminal_load"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Load chart</span></button>
+                      <p class="small" id="terminal-status"></p>
+                    </form>
+                    <div class="small ticker-hint">
+                      Tip: pick a panel on the left, then click any ticker in results to update the chart immediately.
+                    </div>
+                  </div>
+
+                  <div class="chart-shell studio-chart">
+                    <div class="chart-toolbar" id="chart-toolbar" aria-label="Chart controls">
+                      <div class="chart-range-group" role="group" aria-label="Chart range">
+                        <button class="chart-control-btn" type="button" data-chart-range="1d">1D</button>
+                        <button class="chart-control-btn" type="button" data-chart-range="5d">5D</button>
+                        <button class="chart-control-btn" type="button" data-chart-range="1m">1M</button>
+                        <button class="chart-control-btn" type="button" data-chart-range="3m">3M</button>
+                        <button class="chart-control-btn" type="button" data-chart-range="ytd">YTD</button>
+                        <button class="chart-control-btn" type="button" data-chart-range="1y">1Y</button>
+                        <button class="chart-control-btn" type="button" data-chart-range="5y">5Y</button>
+                        <button class="chart-control-btn" type="button" data-chart-range="max">MAX</button>
+                      </div>
+                      <div class="chart-view-group" role="group" aria-label="Chart view style">
+                        <button class="chart-control-btn" type="button" data-chart-view="candlestick">Candles</button>
+                        <button class="chart-control-btn" type="button" data-chart-view="line">Line</button>
+                      </div>
+                      <div class="chart-engine-group" role="group" aria-label="Chart engine">
+                        <button class="chart-control-btn" type="button" data-chart-engine="tradingview">TradingView</button>
+                        <button class="chart-control-btn" type="button" data-chart-engine="legacy">Legacy</button>
+                      </div>
+                      <div class="chart-theme-group" role="group" aria-label="TradingView theme">
+                        <button class="chart-control-btn" type="button" data-tv-theme="auto">Auto</button>
+                        <button class="chart-control-btn" type="button" data-tv-theme="dark">Dark</button>
+                        <button class="chart-control-btn" type="button" data-tv-theme="light">Light</button>
+                      </div>
+                    </div>
+
+                    <div id="tradingview-terminal-root" class="tradingview-terminal hidden">
+                      <div class="tradingview-grid-top">
+                        <article class="tv-widget-card">
+                          <div class="tv-widget-head">
+                            <h3>Symbol info</h3>
+                          </div>
+                          <div id="tv-symbol-info" class="tv-widget-slot tv-slot-info"></div>
+                        </article>
+                        <article class="tv-widget-card">
+                          <div class="tv-widget-head">
+                            <h3>Company profile</h3>
+                          </div>
+                          <div id="tv-symbol-profile" class="tv-widget-slot tv-slot-profile"></div>
+                        </article>
+                      </div>
+
+                      <article class="tv-widget-card tv-advanced-card">
+                        <div class="tv-widget-head">
+                          <h3>Advanced chart</h3>
+                          <span class="small muted" id="tv-widget-status">Loading TradingView...</span>
+                        </div>
+                        <div id="tv-advanced-chart" class="tv-widget-slot tv-slot-advanced"></div>
+                        <div id="tv-widget-fallback" class="notice tv-widget-fallback hidden">
+                          TradingView widgets did not load. Use the legacy Quantura chart.
+                          <button id="tv-use-legacy" class="cta secondary small" type="button">Use legacy chart</button>
+                        </div>
+                      </article>
+
+                      <div class="tradingview-grid-bottom">
+                        <article class="tv-widget-card">
+                          <div class="tv-widget-head">
+                            <h3>Technical analysis</h3>
+                          </div>
+                          <div id="tv-technical-analysis" class="tv-widget-slot tv-slot-technical"></div>
+                        </article>
+                        <article class="tv-widget-card">
+                          <div class="tv-widget-head">
+                            <h3>Top stories</h3>
+                          </div>
+                          <div id="tv-timeline" class="tv-widget-slot tv-slot-timeline"></div>
+                        </article>
+                      </div>
+
+                      <article class="tv-widget-card">
+                        <div class="tv-widget-head">
+                          <h3>Fundamental data</h3>
+                        </div>
+                        <div id="tv-financials" class="tv-widget-slot tv-slot-financials"></div>
+                      </article>
+
+                      <p class="small muted tv-widget-credit">
+                        Charts and financial information provided by
+                        <a href="https://www.tradingview.com/widget/" target="_blank" rel="noopener noreferrer">TradingView</a>.
+                      </p>
+                    </div>
+                    <div id="ticker-chart" class="chart"></div>
+                  </div>
+
+                    <div class="studio-secondary" id="intel-strip">
+                      <div class="card">
+                        <div class="card-head">
+                          <h3>Ticker intelligence snapshot</h3>
+                        </div>
+                        <div class="small muted" style="margin-bottom: 12px;">Auto-updates for the ticker in your chart context.</div>
+                        <div id="intel-output" class="panel-output small">Load a ticker to see company overview, events, and analyst signals.</div>
+                        <div class="small" style="margin-top: 10px;">
+                          Need full institutional detail? Open the <strong>Ticker Intelligence</strong> tab for financial reports, balance-sheet heatmap, and peer comparison.
+                        </div>
+                        <details class="learn-more">
+                          <summary>Learn more</summary>
+                          <div class="small">
+                            <p>
+                              Use this panel to sanity-check what the market is reacting to. The company overview helps you verify sector and business model,
+                              the events section surfaces upcoming earnings and dividend dates, and the analyst snapshot helps you understand consensus and dispersion.
+                            </p>
+                          </div>
+                        </details>
+                      </div>
+
+                      <div class="card">
+                        <div class="card-head">
+                          <h3>Headlines</h3>
+                        </div>
+                        <div id="news-output" class="panel-output small">Latest headlines will appear here.</div>
+                        <details class="learn-more">
+                          <summary>Learn more</summary>
+                          <p class="small">
+                            Headlines refresh automatically when you load a new ticker. Use them to find catalysts, then confirm with indicator overlays and saved forecast bands.
+                          </p>
+                        </details>
+                      </div>
+
+                      <div class="card">
+                        <div class="card-head">
+                          <h3>X trend pulse</h3>
+                        </div>
+                        <div id="x-trending-output" class="panel-output small">Recent X discussion will appear here for the active ticker.</div>
+                        <details class="learn-more">
+                          <summary>Learn more</summary>
+                          <p class="small">
+                            Quantura surfaces high-engagement X posts tied to your active symbol so you can quickly inspect sentiment, narrative momentum, and social catalysts.
+                          </p>
+                        </details>
+                      </div>
+                    </div>
+		                </div>
+
+                <div class="studio-panel">
+	                  <section class="panel" data-panel="forecast">
+	                    <div class="panel-header">
+	                      <h2>Forecast</h2>
+	                      <p class="small">Generate quantile bands for the ticker in your chart and save the run so you can re-plot it later.</p>
+	                    </div>
+	                    <form id="forecast-form" class="card">
+	                      <div class="form-grid">
+	                        <div class="field">
+	                          <label class="label" for="forecast-horizon">Forecast length</label>
+	                          <input id="forecast-horizon" name="horizon" type="number" min="5" max="365" value="90" />
+	                          <div class="small muted">Daily = trading days. Hourly = hours.</div>
+	                        </div>
+                        <div class="field">
+                          <label class="label" for="forecast-interval">Timeframe</label>
+                          <select id="forecast-interval" name="interval">
+                            <option value="1d">Daily</option>
+                            <option value="1h">Hourly</option>
+                          </select>
+                        </div>
+	                        <div class="field">
+	                          <label class="label" for="forecast-service">Forecast service</label>
+	                          <select id="forecast-service" name="service">
+	                            <option value="prophet">Quantura Horizon</option>
+	                          </select>
+	                        </div>
+	                      </div>
+	                      <div class="field">
+	                        <label class="label" for="forecast-quantiles">Quantiles (comma-delimited)</label>
+	                        <input id="forecast-quantiles" name="quantiles" value="0.1,0.25,0.5,0.75,0.9" placeholder="0.1,0.25,0.5,0.75,0.9" required />
+	                        <div class="small muted">Values must be between 0 and 1 (exclusive). Example: 0.1,0.25,0.5,0.75,0.9</div>
+	                      </div>
+	                      <button class="cta" type="submit" data-analytics="forecast_submit"><i class="iconoir-magic-wand" aria-hidden="true"></i><span>Generate forecast</span></button>
+	                      <details class="learn-more">
+	                        <summary>Learn more</summary>
+	                        <div class="small">
+                            <p>
+                              Forecasts are stored to your workspace as quantile bands. Quantiles are probabilities (not targets): for example, <strong>0.1</strong> is a lower band,
+                              <strong>0.5</strong> is the median path, and <strong>0.9</strong> is an upper band. Use them to reason about uncertainty, not to force a single outcome.
+                            </p>
+                            <p>
+                              <strong>Forecast length</strong> controls how many future timestamps are generated for the selected timeframe. Daily forecasts use trading days (business days).
+                              Hourly forecasts are capped to keep the terminal responsive.
+                            </p>
+                            <p>
+                              <strong>Quantura Horizon</strong> is optimized for transparent trend and seasonality interpretation with stable uncertainty bands.
+                              Quantura stores each run so you can compare results, review confidence structure, and export files for downstream analysis.
+                            </p>
+                            <p>
+                              After you generate a run, use <strong>Load saved forecast</strong> (or the <strong>Saved forecasts</strong> panel) to re-plot it later and export CSV for backtests.
+                            </p>
+                          </div>
+	                      </details>
+	                    </form>
+                      <div class="card">
+                        <h3>Load saved forecast</h3>
+                        <div class="form-grid">
+                          <div class="field">
+                            <label class="label" for="forecast-load-select">Recent forecasts</label>
+                            <select id="forecast-load-select">
+                              <option value="">Select a forecast</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div class="hero-actions" style="margin-top: 12px;">
+                          <button class="cta secondary" id="forecast-load-button" type="button" data-analytics="forecast_load_saved"><i class="iconoir-bookmark" aria-hidden="true"></i><span>Load forecast</span></button>
+                        </div>
+                        <p class="small muted" id="forecast-load-status"></p>
+                      </div>
+                    <div class="results-panel">
+                      <h3>Forecast output</h3>
+                      <div id="forecast-output" class="panel-output small">Run a forecast to see model summary and preview rows.</div>
+                    </div>
+                  </section>
+
+                  <section class="panel hidden" data-panel="ticker-intelligence">
+                    <div class="panel-header">
+                      <h2>Ticker Intelligence</h2>
+                      <p class="small">Institutional three-column view with fundamentals, risk, ESG, and peer benchmarking.</p>
+                    </div>
+                    <div class="results-panel ticker-intelligence-panel">
+                      <h3>Institutional View</h3>
+                      <div id="ticker-intelligence-output" class="panel-output small">Load a ticker to generate the institutional intelligence panel.</div>
+                    </div>
+                  </section>
+
+                  <section class="panel hidden" data-panel="indicators">
+                    <div class="panel-header">
+                      <h2>Indicators</h2>
+                      <p class="small">Toggle indicator stacks. Overlays (SMA/EMA/Bollinger) render on the price chart; full series plot below.</p>
+                    </div>
+                    <form id="technicals-form" class="card">
+                      <div class="form-grid">
+                        <div class="field">
+                          <label class="label" for="technicals-ticker">Ticker</label>
+                          <input id="technicals-ticker" name="ticker" placeholder="MSFT" required />
+                        </div>
+                        <div class="field">
+                          <label class="label" for="technicals-interval">Interval</label>
+                          <select id="technicals-interval" name="interval">
+                            <option value="1d">Daily</option>
+                            <option value="1h">Hourly</option>
+                          </select>
+                        </div>
+                        <div class="field">
+                          <label class="label" for="technicals-lookback">Lookback (days)</label>
+                          <input id="technicals-lookback" name="lookback" type="number" min="30" max="365" value="120" />
+                        </div>
+                      </div>
+                      <div class="field">
+                        <label class="label">Indicators</label>
+                        <div class="checkbox-grid">
+                          <label><input type="checkbox" name="indicators" value="RSI" checked /> RSI</label>
+                          <label><input type="checkbox" name="indicators" value="MACD" checked /> MACD</label>
+                          <label><input type="checkbox" name="indicators" value="SMA" /> SMA</label>
+                          <label><input type="checkbox" name="indicators" value="EMA" /> EMA</label>
+                          <label><input type="checkbox" name="indicators" value="BBANDS" /> Bollinger</label>
+                          <label><input type="checkbox" name="indicators" value="ATR" /> ATR</label>
+                          <label><input type="checkbox" name="indicators" value="ADX" /> ADX</label>
+                          <label><input type="checkbox" name="indicators" value="CCI" /> CCI</label>
+                          <label><input type="checkbox" name="indicators" value="MFI" /> MFI</label>
+                          <label><input type="checkbox" name="indicators" value="OBV" /> OBV</label>
+                          <label><input type="checkbox" name="indicators" value="ROC" /> ROC</label>
+                          <label><input type="checkbox" name="indicators" value="STOCH" /> Stochastic</label>
+                          <label><input type="checkbox" name="indicators" value="WILLR" /> Williams %R</label>
+                        </div>
+                      </div>
+                      <button class="cta" type="submit" data-analytics="technicals_submit">Run indicators</button>
+                      <details class="learn-more">
+                        <summary>Learn more</summary>
+                        <p class="small">
+                          Start with RSI + MACD to spot momentum and regime shifts. Add SMA/EMA overlays for trend confirmation and Bollinger bands for volatility context.
+                        </p>
+                      </details>
+                    </form>
+	                    <div class="results-panel">
+	                      <h3>Indicator output</h3>
+	                      <div id="technicals-output" class="panel-output small">Select indicators to see the latest values.</div>
+	                      <div id="indicator-chart" class="chart" style="margin-top: 16px;"></div>
+	                    </div>
+	                  </section>
+
+                  <section class="panel hidden" data-panel="trending">
+                    <div class="panel-header">
+                      <h2>Trending</h2>
+                      <p class="small">Load the market's most active tickers and click any symbol to drive the chart context.</p>
+                    </div>
+                    <div class="content-grid news-data-grid">
+                      <div class="card">
+                        <div class="card-head">
+                          <h3>Trending tickers</h3>
+                          <button class="cta secondary small" id="load-trending" type="button" data-analytics="load_trending">Refresh</button>
+                        </div>
+                        <div id="trending-list" class="trending-grid" style="margin-top: 16px;"></div>
+                        <details class="learn-more">
+                          <summary>Learn more</summary>
+                          <p class="small">
+                            Trending is a discovery surface. Use it to seed a watchlist, then validate moves with indicators, news, and forecast bands.
+                          </p>
+                        </details>
+                      </div>
+                      <div class="card">
+                        <h3>Quick workflow</h3>
+                        <div class="feature-list">
+                          <div class="feature"><span></span>Load a symbol and choose a timeframe</div>
+                          <div class="feature"><span></span>Overlay indicators to confirm momentum</div>
+                          <div class="feature"><span></span>Store a forecast band and compare later</div>
+                        </div>
+                        <details class="learn-more">
+                          <summary>Learn more</summary>
+                          <p class="small">
+                            Quantura stores runs inside your workspace so you can revisit the same ticker later and share context with collaborators.
+                          </p>
+                        </details>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="panel hidden" data-panel="news">
+                    <div class="panel-header">
+                      <h2>News and data</h2>
+                      <p class="small">Company context and headlines update automatically and render below your chart.</p>
+                    </div>
+                    <div class="content-grid">
+                      <form id="download-form" class="card">
+                        <h3>Download price history</h3>
+                        <input id="download-ticker" name="ticker" type="hidden" />
+                        <div class="small muted" style="margin-bottom: 12px;">Uses the ticker from your chart context.</div>
+                        <div class="form-grid">
+                          <div class="field">
+                            <label class="label" for="download-interval">Interval</label>
+                            <select id="download-interval" name="interval">
+                              <option value="1d">Daily</option>
+                              <option value="1h">Hourly</option>
+                            </select>
+                          </div>
+                          <div class="field">
+                            <label class="label" for="download-end">End date</label>
+                            <input id="download-end" name="end" type="date" />
+                          </div>
+                        </div>
+                        <button class="cta" type="submit" data-analytics="download_prices">Download CSV</button>
+                        <p class="small" id="download-status"></p>
+                      </form>
+                      <div class="card">
+                        <h3>Export guidance</h3>
+                        <p class="small">
+                          Use daily exports for longer-horizon backtests and hourly exports to inspect short-term regime shifts.
+                          Quantura keeps your terminal context consistent so you can pull data without re-entering symbols.
+                        </p>
+                        <details class="learn-more">
+                          <summary>Learn more</summary>
+                          <p class="small">
+                            If you're building your own dashboard, export the same interval you used to generate forecasts so the timestamps align cleanly in downstream tooling.
+                          </p>
+                        </details>
+                      </div>
+                    </div>
+                    <div class="notice" style="margin-top: 16px;">
+                      Ticker intelligence and headlines are shown below the chart for the active symbol.
+                      <a class="news-link" href="#intel-strip">Jump to the intelligence panel</a>.
+                    </div>
+                  </section>
+
+                  <section class="panel hidden" data-panel="events-calendar">
+                    <div class="panel-header">
+                      <h2>Corporate events calendar</h2>
+                      <p class="small">Massive TMX for US symbols and Yahoo Finance fallback for non-US coverage.</p>
+                    </div>
+                    <form id="events-calendar-form" class="card">
+                      <div class="form-grid">
+                        <div class="field">
+                          <label class="label" for="events-calendar-tickers">Tickers</label>
+                          <input id="events-calendar-tickers" name="tickers" placeholder="AAPL, MSFT, NVDA" />
+                          <div class="small muted">Comma-separated symbols. Defaults to active ticker.</div>
+                        </div>
+                        <div class="field">
+                          <label class="label" for="events-calendar-country">Country</label>
+                          <select id="events-calendar-country" name="country">
+                            <option value="US">United States</option>
+                            <option value="CA">Canada</option>
+                            <option value="GB">United Kingdom</option>
+                            <option value="DE">Germany</option>
+                            <option value="FR">France</option>
+                            <option value="JP">Japan</option>
+                            <option value="CN">China</option>
+                            <option value="IN">India</option>
+                            <option value="AU">Australia</option>
+                            <option value="BR">Brazil</option>
+                          </select>
+                        </div>
+                        <div class="field">
+                          <label class="label" for="events-calendar-start">Start</label>
+                          <input id="events-calendar-start" name="startDate" type="date" />
+                        </div>
+                        <div class="field">
+                          <label class="label" for="events-calendar-end">End</label>
+                          <input id="events-calendar-end" name="endDate" type="date" />
+                        </div>
+                        <div class="field">
+                          <label class="label" for="events-calendar-limit">Rows</label>
+                          <input id="events-calendar-limit" name="limit" type="number" min="10" max="500" value="120" />
+                        </div>
+                      </div>
+                      <button class="cta" type="submit" data-analytics="events_calendar_load"><i class="iconoir-calendar" aria-hidden="true"></i><span>Load corporate events</span></button>
+                      <p class="small muted" id="events-calendar-status"></p>
+                    </form>
+                    <div class="results-panel">
+                      <h3>Upcoming events</h3>
+                      <div id="events-calendar-output" class="panel-output small">Load events to see earnings, dividends, splits, and other corporate actions.</div>
+                    </div>
+                  </section>
+
+                  <section class="panel hidden" data-panel="market-headlines">
+                    <div class="panel-header">
+                      <h2>Market headlines</h2>
+                      <p class="small">Top country-level market headlines plus social posts from X, Reddit, Facebook, and Instagram.</p>
+                    </div>
+                    <form id="market-headlines-form" class="card">
+                      <div class="form-grid">
+                        <div class="field">
+                          <label class="label" for="market-headlines-country">Country</label>
+                          <select id="market-headlines-country" name="country">
+                            <option value="US">United States</option>
+                            <option value="CA">Canada</option>
+                            <option value="GB">United Kingdom</option>
+                            <option value="DE">Germany</option>
+                            <option value="FR">France</option>
+                            <option value="JP">Japan</option>
+                            <option value="CN">China</option>
+                            <option value="IN">India</option>
+                            <option value="AU">Australia</option>
+                            <option value="BR">Brazil</option>
+                          </select>
+                        </div>
+                        <div class="field">
+                          <label class="label" for="market-headlines-limit">Headline count</label>
+                          <input id="market-headlines-limit" name="limit" type="number" min="5" max="40" value="18" />
+                        </div>
+                      </div>
+                      <button class="cta" type="submit" data-analytics="market_headlines_load"><i class="iconoir-globe" aria-hidden="true"></i><span>Load market feed</span></button>
+                      <p class="small muted" id="market-headlines-status"></p>
+                    </form>
+                    <div class="content-grid">
+                      <div class="results-panel">
+                        <h3>Headlines</h3>
+                        <div id="market-headlines-output" class="panel-output small">Load market feed to see top headlines for the selected country.</div>
+                      </div>
+                      <div class="results-panel">
+                        <h3>Social feed</h3>
+                        <div id="market-social-output" class="panel-output small">Social posts from X, Reddit, Facebook, and Instagram will appear here.</div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="panel hidden" data-panel="ticker-query">
+                    <div class="panel-header">
+                      <h2>Ask GPT-5</h2>
+                      <p class="small">Query any ticker in plain language. Quantura enriches with market context and headlines.</p>
+                    </div>
+                    <form id="ticker-query-form" class="card">
+                      <div class="form-grid">
+                        <div class="field">
+                          <label class="label" for="ticker-query-ticker">Ticker</label>
+                          <input id="ticker-query-ticker" name="ticker" placeholder="AAPL" required />
+                        </div>
+                        <div class="field">
+                          <label class="label" for="ticker-query-language">Response language</label>
+                          <select id="ticker-query-language" name="language">
+                            <option value="auto">Auto</option>
+                            <option value="en">English</option>
+                            <option value="es">Spanish</option>
+                            <option value="fr">French</option>
+                            <option value="de">German</option>
+                            <option value="ar">Arabic</option>
+                            <option value="bn">Bengali</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div class="field">
+                        <label class="label" for="ticker-query-question">Question</label>
+                        <textarea id="ticker-query-question" name="question" placeholder="Example: Is this stock overvalued vs peers, and what are the top near-term risks?"></textarea>
+                      </div>
+                      <button class="cta" type="submit" data-analytics="ticker_query_submit"><i class="iconoir-brain" aria-hidden="true"></i><span>Ask GPT-5</span></button>
+                      <p class="small muted" id="ticker-query-status"></p>
+                    </form>
+                    <div class="results-panel">
+                      <h3>Query result</h3>
+                      <div id="ticker-query-output" class="panel-output small">Ask a question to generate a GPT-5 response with evidence and risk caveats.</div>
+                    </div>
+                  </section>
+
+                  <section class="panel hidden" data-panel="options">
+                    <div class="panel-header">
+                      <h2>Options</h2>
+                      <p class="small">Pull an options chain and estimate probability of expiring in the money (risk-neutral approximation).</p>
+                    </div>
+                    <form id="options-form" class="card">
+                      <div class="form-grid">
+                        <div class="field">
+                          <label class="label" for="options-ticker">Underlying ticker</label>
+                          <input id="options-ticker" name="ticker" placeholder="AAPL" required />
+                        </div>
+                        <div class="field">
+                          <label class="label" for="options-expiration">Expiration</label>
+                          <select id="options-expiration" name="expiration">
+                            <option value="">Auto (nearest)</option>
+                          </select>
+                          <div class="small muted" style="margin-top:8px;">Quantura loads available expirations from the market and remembers your last choice.</div>
+                        </div>
+                      </div>
+                      <button class="cta" type="submit" data-analytics="options_submit">Load options</button>
+                      <details class="learn-more">
+                        <summary>Learn more</summary>
+                        <p class="small">
+                          Probability is estimated from implied volatility and is not a guarantee.
+                          Use this as a rough sizing input, not a promise of outcomes.
+                        </p>
+                      </details>
+                    </form>
+                    <div class="results-panel options-chain-panel">
+                      <h3>Options chain</h3>
+                      <div id="options-output" class="panel-output small">Calls and puts will appear here.</div>
+                    </div>
+                  </section>
+
+	                  <section class="panel hidden" data-panel="screener">
+                    <div class="panel-header">
+                      <h2>AI Portfolio Generator</h2>
+                      <p class="small">Run criteria, rank candidates with Quantura Horizon long-term growth scores, and publish an AI Agent.</p>
+                    </div>
+                    <form id="screener-form" class="card">
+                      <div class="form-grid">
+                        <div class="field">
+                          <label class="label" for="screener-universe">Universe</label>
+                          <select id="screener-universe" name="universe">
+                            <option value="trending">Trending</option>
+                            <option value="large-cap">Large Cap</option>
+                            <option value="mid-cap">Mid Cap</option>
+                            <option value="small-cap">Small Cap</option>
+                          </select>
+                        </div>
+                        <div class="field">
+                          <label class="label" for="screener-market">Market</label>
+                          <select id="screener-market" name="market">
+                            <option value="us">US</option>
+                            <option value="global">Global</option>
+                          </select>
+                        </div>
+                        <div class="field">
+                          <label class="label" for="screener-min">Market cap bracket</label>
+                          <select id="screener-min" name="minCapBucket">
+                            <option value="any">Any</option>
+                            <option value="50000000">&gt; $50M (Nano-Cap)</option>
+                            <option value="300000000">&gt; $300M (Micro-Cap)</option>
+                            <option value="2000000000">&gt; $2B (Small-Cap)</option>
+                            <option value="10000000000">&gt; $10B (Mid-Cap)</option>
+                            <option value="100000000000">&gt; $100B (Large-Cap)</option>
+                            <option value="200000000000">&gt; $200B (Mega-Cap)</option>
+                          </select>
+                        </div>
+                        <div class="field">
+                          <label class="label" for="screener-max">Candidate pool (5-25)</label>
+                          <input id="screener-max" name="maxNames" type="number" value="20" min="5" max="25" />
+                        </div>
+                        <div class="field">
+                          <label class="label" for="screener-agent-name">Agent name (optional)</label>
+                          <input id="screener-agent-name" name="agentName" placeholder="Quantura Horizon" />
+                        </div>
+                        <div class="field">
+                          <label class="label" for="screener-model">AI personality</label>
+                          <select id="screener-model" name="model"></select>
+                          <div id="screener-model-meta" class="small muted">Model availability is controlled by your usage tier.</div>
+                        </div>
+                      </div>
+                      <div class="screener-filter-tabs" role="tablist" aria-label="Screener filter groups">
+                        <button type="button" class="screener-filter-tab is-active" data-screener-filter-tab="descriptive">Descriptive</button>
+                        <button type="button" class="screener-filter-tab" data-screener-filter-tab="fundamental">Fundamental</button>
+                        <button type="button" class="screener-filter-tab" data-screener-filter-tab="technical">Technical</button>
+                        <button type="button" class="screener-filter-tab" data-screener-filter-tab="news">News</button>
+                        <button type="button" class="screener-filter-tab" data-screener-filter-tab="etf">ETF</button>
+                        <button type="button" class="screener-filter-tab" data-screener-filter-tab="all">All</button>
+                      </div>
+                      <div class="screener-filter-groups">
+                        <section class="screener-filter-group is-active" data-screener-filter-group="descriptive">
+                          <div class="screener-filter-grid">
+                            <div class="field">
+                              <label class="label" for="screener-filter-exchange">Exchange</label>
+                              <select id="screener-filter-exchange" name="filterExchange">
+                                <option value="">Any</option>
+                                <option value="amex">AMEX</option>
+                                <option value="cboe">CBOE</option>
+                                <option value="nasdaq">NASDAQ</option>
+                                <option value="nyse">NYSE</option>
+                              </select>
+                            </div>
+                            <div class="field">
+                              <label class="label" for="screener-filter-index">Index</label>
+                              <select id="screener-filter-index" name="filterIndex">
+                                <option value="">Any</option>
+                                <option value="sp500">S&amp;P 500</option>
+                                <option value="nasdaq100">NASDAQ 100</option>
+                                <option value="djia">DJIA</option>
+                                <option value="russell2000">Russell 2000</option>
+                              </select>
+                            </div>
+                            <div class="field">
+                              <label class="label" for="screener-filter-sector">Sector</label>
+                              <select id="screener-filter-sector" name="filterSector">
+                                <option value="">Any</option>
+                                <option value="Technology">Technology</option>
+                                <option value="Communication Services">Communication Services</option>
+                                <option value="Consumer Cyclical">Consumer Cyclical</option>
+                                <option value="Consumer Defensive">Consumer Defensive</option>
+                                <option value="Energy">Energy</option>
+                                <option value="Financial Services">Financial Services</option>
+                                <option value="Healthcare">Healthcare</option>
+                                <option value="Industrials">Industrials</option>
+                                <option value="Real Estate">Real Estate</option>
+                                <option value="Utilities">Utilities</option>
+                              </select>
+                            </div>
+                            <div class="field">
+                              <label class="label" for="screener-filter-industry">Industry</label>
+                              <select id="screener-filter-industry" name="filterIndustry">
+                                <option value="">Any</option>
+                                <option value="Semiconductors">Semiconductors</option>
+                                <option value="Software - Infrastructure">Software - Infrastructure</option>
+                                <option value="Software - Application">Software - Application</option>
+                                <option value="Internet Content &amp; Information">Internet Content &amp; Information</option>
+                                <option value="Banks - Diversified">Banks - Diversified</option>
+                                <option value="Oil &amp; Gas Integrated">Oil &amp; Gas Integrated</option>
+                                <option value="Drug Manufacturers - General">Drug Manufacturers - General</option>
+                                <option value="Aerospace &amp; Defense">Aerospace &amp; Defense</option>
+                              </select>
+                            </div>
+                            <div class="field">
+                              <label class="label" for="screener-filter-country">Country</label>
+                              <select id="screener-filter-country" name="filterCountry">
+                                <option value="">Any</option>
+                                <option value="United States">USA</option>
+                                <option value="Canada">Canada</option>
+                                <option value="United Kingdom">United Kingdom</option>
+                                <option value="Germany">Germany</option>
+                                <option value="France">France</option>
+                                <option value="Japan">Japan</option>
+                                <option value="China">China</option>
+                                <option value="India">India</option>
+                              </select>
+                            </div>
+                            <div class="field">
+                              <label class="label" for="screener-filter-cap">Market Cap Profile</label>
+                              <select id="screener-filter-cap" name="filterCapProfile">
+                                <option value="">Any</option>
+                                <option value="mega">Mega ($200B+)</option>
+                                <option value="large">Large ($10B-$200B)</option>
+                                <option value="mid">Mid ($2B-$10B)</option>
+                                <option value="small">Small ($300M-$2B)</option>
+                                <option value="micro">Micro ($50M-$300M)</option>
+                                <option value="nano">Nano (&lt;$50M)</option>
+                                <option value="largeover">+Large (over $10B)</option>
+                                <option value="midover">+Mid (over $2B)</option>
+                                <option value="smallover">+Small (over $300M)</option>
+                                <option value="microover">+Micro (over $50M)</option>
+                                <option value="largeunder">-Large (under $200B)</option>
+                                <option value="midunder">-Mid (under $10B)</option>
+                                <option value="smallunder">-Small (under $2B)</option>
+                              </select>
+                            </div>
+                            <div class="field">
+                              <label class="label" for="screener-filter-theme">Theme</label>
+                              <select id="screener-filter-theme" name="filterTheme">
+                                <option value="">Any</option>
+                                <option value="artificialintelligence">Artificial Intelligence</option>
+                                <option value="cloudcomputing">Cloud Computing</option>
+                                <option value="cybersecurity">Cybersecurity</option>
+                                <option value="fintech">FinTech</option>
+                                <option value="semiconductors">Semiconductors</option>
+                                <option value="robotics">Robotics</option>
+                                <option value="energyrenewable">Energy - Renewable</option>
+                                <option value="defenseaerospace">Defense &amp; Aerospace</option>
+                              </select>
+                            </div>
+                            <div class="field">
+                              <label class="label" for="screener-filter-subtheme">Sub-theme</label>
+                              <select id="screener-filter-subtheme" name="filterSubtheme">
+                                <option value="">Any</option>
+                                <option value="aicompute">AI - Compute &amp; Acceleration</option>
+                                <option value="aienterprise">AI - Enterprise Productivity</option>
+                                <option value="cloudsecurity">Cloud - Security</option>
+                                <option value="fintechpayments">FinTech - Digital Payments</option>
+                                <option value="semiscompute">Semis - Logic, CPUs, GPUs</option>
+                                <option value="roboticsautomation">Robotics - Industrial Automation</option>
+                                <option value="energycleansolar">Energy Clean - Solar</option>
+                                <option value="defensedrones">Defense - Drones</option>
+                              </select>
+                            </div>
+                          </div>
+                        </section>
+                        <section class="screener-filter-group" data-screener-filter-group="fundamental">
+                          <div class="screener-filter-grid">
+                            <div class="field">
+                              <label class="label" for="screener-filter-pe">P/E</label>
+                              <select id="screener-filter-pe" name="filterPe">
+                                <option value="">Any</option>
+                                <option value="u15">Low (&lt;15)</option>
+                                <option value="u25">Under 25</option>
+                                <option value="o25">Over 25</option>
+                                <option value="o50">High (&gt;50)</option>
+                              </select>
+                            </div>
+                            <div class="field">
+                              <label class="label" for="screener-filter-forward-pe">Forward P/E</label>
+                              <select id="screener-filter-forward-pe" name="filterForwardPe">
+                                <option value="">Any</option>
+                                <option value="u15">Low (&lt;15)</option>
+                                <option value="u25">Under 25</option>
+                                <option value="o25">Over 25</option>
+                                <option value="o50">High (&gt;50)</option>
+                              </select>
+                            </div>
+                            <div class="field">
+                              <label class="label" for="screener-filter-peg">PEG</label>
+                              <select id="screener-filter-peg" name="filterPeg">
+                                <option value="">Any</option>
+                                <option value="u1">Low (&lt;1)</option>
+                                <option value="u2">Under 2</option>
+                                <option value="o2">Over 2</option>
+                              </select>
+                            </div>
+                            <div class="field">
+                              <label class="label" for="screener-filter-ps">P/S</label>
+                              <select id="screener-filter-ps" name="filterPs">
+                                <option value="">Any</option>
+                                <option value="u2">Under 2</option>
+                                <option value="u5">Under 5</option>
+                                <option value="o5">Over 5</option>
+                                <option value="o10">High (&gt;10)</option>
+                              </select>
+                            </div>
+                            <div class="field">
+                              <label class="label" for="screener-filter-pb">P/B</label>
+                              <select id="screener-filter-pb" name="filterPb">
+                                <option value="">Any</option>
+                                <option value="u1">Low (&lt;1)</option>
+                                <option value="u3">Under 3</option>
+                                <option value="o3">Over 3</option>
+                                <option value="o5">High (&gt;5)</option>
+                              </select>
+                            </div>
+                            <div class="field">
+                              <label class="label" for="screener-filter-div">Dividend Yield</label>
+                              <select id="screener-filter-div" name="filterDividendYield">
+                                <option value="">Any</option>
+                                <option value="none">None (0%)</option>
+                                <option value="pos">Positive (&gt;0%)</option>
+                                <option value="o2">Over 2%</option>
+                                <option value="o5">Over 5%</option>
+                                <option value="o10">Very High (&gt;10%)</option>
+                              </select>
+                            </div>
+                            <div class="field">
+                              <label class="label" for="screener-filter-roe">Return on Equity</label>
+                              <select id="screener-filter-roe" name="filterRoe">
+                                <option value="">Any</option>
+                                <option value="pos">Positive (&gt;0%)</option>
+                                <option value="o10">Over 10%</option>
+                                <option value="o20">Over 20%</option>
+                                <option value="o30">Over 30%</option>
+                              </select>
+                            </div>
+                            <div class="field">
+                              <label class="label" for="screener-filter-roa">Return on Assets</label>
+                              <select id="screener-filter-roa" name="filterRoa">
+                                <option value="">Any</option>
+                                <option value="pos">Positive (&gt;0%)</option>
+                                <option value="o5">Over 5%</option>
+                                <option value="o10">Over 10%</option>
+                                <option value="o15">Over 15%</option>
+                              </select>
+                            </div>
+                            <div class="field">
+                              <label class="label" for="screener-filter-debteq">Debt/Equity</label>
+                              <select id="screener-filter-debteq" name="filterDebtEq">
+                                <option value="">Any</option>
+                                <option value="u0.5">Low (&lt;0.5)</option>
+                                <option value="u1">Under 1</option>
+                                <option value="o1">Over 1</option>
+                                <option value="o2">Over 2</option>
+                              </select>
+                            </div>
+                            <div class="field">
+                              <label class="label" for="screener-filter-netmargin">Net Profit Margin</label>
+                              <select id="screener-filter-netmargin" name="filterNetMargin">
+                                <option value="">Any</option>
+                                <option value="pos">Positive (&gt;0%)</option>
+                                <option value="o5">Over 5%</option>
+                                <option value="o10">Over 10%</option>
+                                <option value="o20">High (&gt;20%)</option>
+                              </select>
+                            </div>
+                            <div class="field">
+                              <label class="label" for="screener-filter-analyst">Analyst Recom</label>
+                              <select id="screener-filter-analyst" name="filterAnalystRecom">
+                                <option value="">Any</option>
+                                <option value="strongbuy">Strong Buy (1)</option>
+                                <option value="buybetter">Buy or better</option>
+                                <option value="holdbetter">Hold or better</option>
+                                <option value="holdworse">Hold or worse</option>
+                                <option value="strongsell">Strong Sell (5)</option>
+                              </select>
+                            </div>
+                          </div>
+                        </section>
+                        <section class="screener-filter-group" data-screener-filter-group="technical">
+                          <div class="screener-filter-grid">
+                            <div class="field">
+                              <label class="label" for="screener-filter-price">Price</label>
+                              <select id="screener-filter-price" name="filterPrice">
+                                <option value="">Any</option>
+                                <option value="u5">Under $5</option>
+                                <option value="u20">Under $20</option>
+                                <option value="u50">Under $50</option>
+                                <option value="o10">Over $10</option>
+                                <option value="o50">Over $50</option>
+                                <option value="50to100">$50 to $100</option>
+                              </select>
+                            </div>
+                            <div class="field">
+                              <label class="label" for="screener-filter-short-float">Short Float</label>
+                              <select id="screener-filter-short-float" name="filterShortFloat">
+                                <option value="">Any</option>
+                                <option value="u5">Low (&lt;5%)</option>
+                                <option value="o10">Over 10%</option>
+                                <option value="o20">High (&gt;20%)</option>
+                              </select>
+                            </div>
+                            <div class="field">
+                              <label class="label" for="screener-filter-avg-vol">Average Volume</label>
+                              <select id="screener-filter-avg-vol" name="filterAverageVolume">
+                                <option value="">Any</option>
+                                <option value="o100">Over 100K</option>
+                                <option value="o500">Over 500K</option>
+                                <option value="o1000">Over 1M</option>
+                                <option value="o2000">Over 2M</option>
+                              </select>
+                            </div>
+                            <div class="field">
+                              <label class="label" for="screener-filter-rel-vol">Relative Volume</label>
+                              <select id="screener-filter-rel-vol" name="filterRelativeVolume">
+                                <option value="">Any</option>
+                                <option value="o1">Over 1</option>
+                                <option value="o1.5">Over 1.5</option>
+                                <option value="o2">Over 2</option>
+                                <option value="o3">Over 3</option>
+                              </select>
+                            </div>
+                            <div class="field">
+                              <label class="label" for="screener-filter-cur-vol">Current Volume</label>
+                              <select id="screener-filter-cur-vol" name="filterCurrentVolume">
+                                <option value="">Any</option>
+                                <option value="o500">Over 500K</option>
+                                <option value="o1000">Over 1M</option>
+                                <option value="o5000">Over 5M</option>
+                                <option value="o10000">Over 10M</option>
+                              </select>
+                            </div>
+                            <div class="field">
+                              <label class="label" for="screener-filter-option-short">Option / Short</label>
+                              <select id="screener-filter-option-short" name="filterOptionShort">
+                                <option value="">Any</option>
+                                <option value="option">Optionable</option>
+                                <option value="short">Shortable</option>
+                                <option value="optionshort">Optionable and shortable</option>
+                              </select>
+                            </div>
+                          </div>
+                        </section>
+                        <section class="screener-filter-group" data-screener-filter-group="news">
+                          <div class="screener-filter-grid">
+                            <div class="field">
+                              <label class="label" for="screener-filter-earnings">Earnings Date</label>
+                              <select id="screener-filter-earnings" name="filterEarningsDate">
+                                <option value="">Any</option>
+                                <option value="today">Today</option>
+                                <option value="tomorrow">Tomorrow</option>
+                                <option value="nextdays5">Next 5 Days</option>
+                                <option value="thisweek">This Week</option>
+                              </select>
+                            </div>
+                            <div class="field">
+                              <label class="label" for="screener-filter-target-price">Target Price</label>
+                              <select id="screener-filter-target-price" name="filterTargetPrice">
+                                <option value="">Any</option>
+                                <option value="above">Above Price</option>
+                                <option value="a10">10% Above Price</option>
+                                <option value="a20">20% Above Price</option>
+                                <option value="below">Below Price</option>
+                                <option value="b10">10% Below Price</option>
+                              </select>
+                            </div>
+                            <div class="field">
+                              <label class="label" for="screener-filter-ipo-date">IPO Date</label>
+                              <select id="screener-filter-ipo-date" name="filterIpoDate">
+                                <option value="">Any</option>
+                                <option value="prevyear">In the last year</option>
+                                <option value="prev5yrs">In the last 5 years</option>
+                                <option value="more5">More than 5 years ago</option>
+                              </select>
+                            </div>
+                          </div>
+                        </section>
+                        <section class="screener-filter-group" data-screener-filter-group="etf">
+                          <div class="screener-filter-grid">
+                            <div class="field">
+                              <label class="label" for="screener-filter-shares-outstanding">Shares Outstanding</label>
+                              <select id="screener-filter-shares-outstanding" name="filterSharesOutstanding">
+                                <option value="">Any</option>
+                                <option value="u100">Under 100M</option>
+                                <option value="o100">Over 100M</option>
+                                <option value="o500">Over 500M</option>
+                                <option value="o1000">Over 1B</option>
+                              </select>
+                            </div>
+                            <div class="field">
+                              <label class="label" for="screener-filter-float">Float</label>
+                              <select id="screener-filter-float" name="filterFloat">
+                                <option value="">Any</option>
+                                <option value="u50">Under 50M</option>
+                                <option value="o50">Over 50M</option>
+                                <option value="o100">Over 100M</option>
+                                <option value="u50p">Under 50% of shares outstanding</option>
+                                <option value="o70p">Over 70% of shares outstanding</option>
+                              </select>
+                            </div>
+                          </div>
+                        </section>
+                      </div>
+                      <div class="ai-credits-shell">
+                        <div class="ai-credits-head">
+                          <span>Daily Credits</span>
+                          <span id="screener-credits-text">0 / 0</span>
+                        </div>
+                        <div class="ai-credits-bar"><span id="screener-credits-fill"></span></div>
+                      </div>
+                      <div class="small muted" id="screener-results-count">Results Found: —</div>
+                      <div class="field">
+                        <label class="label" for="screener-notes">Criteria</label>
+                        <textarea id="screener-notes" name="notes" placeholder='Example: "Tech, P/E &lt; 20, high free cash flow"'></textarea>
+                      </div>
+                      <button class="cta" id="screener-generate-button" type="submit" data-analytics="screener_submit">Generate AI Portfolio</button>
+                      <details class="learn-more">
+                        <summary>Learn more</summary>
+                        <p class="small">
+                          Use the Screener panel for discovery, then jump to Indicators and Forecast to build a thesis.
+                          Quantura stores runs in your workspace for week-over-week comparison.
+                        </p>
+                      </details>
+                    </form>
+	                    <div class="results-panel">
+	                      <h3>Portfolio output</h3>
+	                      <div id="screener-output" class="panel-output small">Generate a portfolio to see ranked candidates and AI Agent performance.</div>
+	                    </div>
+                      <div class="card screener-leaderboard-card">
+                        <div class="card-head">
+                          <h3>AI Portfolio Leaderboard</h3>
+                          <div class="form-grid" style="margin:0; min-width: 320px;">
+                            <div class="field" style="margin:0; min-width: 140px;">
+                              <label class="label" for="ai-leaderboard-horizon">Sort by ROI</label>
+                              <select id="ai-leaderboard-horizon">
+                                <option value="1m">1M</option>
+                                <option value="3m">3M</option>
+                                <option value="6m">6M</option>
+                                <option value="1y" selected>1Y</option>
+                                <option value="5y">5Y</option>
+                                <option value="max">Max</option>
+                              </select>
+                            </div>
+                            <div class="field" style="margin:0; min-width: 170px;">
+                              <label class="label" for="ai-leaderboard-model-filter">Personality filter</label>
+                              <select id="ai-leaderboard-model-filter"></select>
+                            </div>
+                          </div>
+                        </div>
+                        <div id="ai-agent-leaderboard" class="panel-output small" style="max-height: none;"></div>
+                      </div>
+                      <div class="card">
+                        <h3>Load saved portfolio run</h3>
+                        <div class="form-grid">
+                          <div class="field">
+                            <label class="label" for="screener-load-select">Recent runs</label>
+                            <select id="screener-load-select">
+                              <option value="">Select a run</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div class="hero-actions" style="margin-top: 12px;">
+                          <button class="cta secondary" id="screener-load-button" type="button" data-analytics="screener_load_saved">Load portfolio</button>
+                        </div>
+                        <p class="small muted" id="screener-load-status"></p>
+                      </div>
+	                  </section>
+
+	                  <section class="panel hidden" data-panel="watchlist">
+	                    <div class="panel-header">
+	                      <h2>Watchlist and alerts</h2>
+	                      <p class="small">Save symbols to your workspace. Every followed asset automatically gets a default ±5% volatility alert.</p>
+	                    </div>
+
+	                    <div class="content-grid">
+	                      <form id="watchlist-form" class="card">
+	                        <h3>Add to watchlist</h3>
+	                        <div class="field">
+	                          <label class="label" for="watchlist-ticker">Ticker</label>
+	                          <input id="watchlist-ticker" name="ticker" placeholder="AAPL" required />
+	                        </div>
+	                        <div class="field">
+	                          <label class="label" for="watchlist-notes">Notes (optional)</label>
+	                          <textarea id="watchlist-notes" name="notes" placeholder="Thesis, catalysts, or why this name matters"></textarea>
+	                        </div>
+	                        <button class="cta" type="submit" data-analytics="watchlist_add">Add</button>
+	                        <details class="learn-more">
+	                          <summary>Learn more</summary>
+	                          <p class="small">
+	                            Watchlists live in your active workspace. Invite collaborators from the Dashboard to share this list.
+	                            Click any symbol to update the chart instantly.
+	                          </p>
+	                        </details>
+	                      </form>
+
+	                      <div class="results-panel">
+	                        <h3>Watchlist</h3>
+	                        <div id="watchlist-list" class="panel-output small">Sign in to start saving tickers.</div>
+	                      </div>
+	                    </div>
+
+	                    <div class="content-grid" style="margin-top: 16px;">
+	                      <form id="alert-form" class="card">
+	                        <h3>Create custom price alert</h3>
+	                        <div class="form-grid">
+	                          <div class="field">
+	                            <label class="label" for="alert-ticker">Ticker</label>
+	                            <input id="alert-ticker" name="ticker" placeholder="NVDA" required />
+	                          </div>
+	                          <div class="field">
+	                            <label class="label" for="alert-condition">Condition</label>
+	                            <select id="alert-condition" name="condition">
+	                              <option value="above">Crosses above</option>
+	                              <option value="below">Crosses below</option>
+	                            </select>
+	                          </div>
+	                          <div class="field">
+	                            <label class="label" for="alert-price">Target price (USD)</label>
+	                            <input id="alert-price" name="target" type="number" step="0.01" placeholder="150.00" required />
+	                          </div>
+	                        </div>
+	                        <div class="field">
+	                          <label class="label" for="alert-notes">Notes (optional)</label>
+	                          <textarea id="alert-notes" name="notes" placeholder="What should you do when this triggers?"></textarea>
+	                        </div>
+	                        <div class="hero-actions" style="margin-top: 12px;">
+	                          <button class="cta" type="submit" data-analytics="alert_create">Create custom alert</button>
+	                          <button class="cta secondary" id="alerts-check" type="button" data-analytics="alert_check">Check alerts now</button>
+	                        </div>
+	                        <p class="small" id="alerts-status"></p>
+	                        <details class="learn-more">
+	                          <summary>Learn more</summary>
+	                          <p class="small">
+	                            Alerts are evaluated against the latest market price. For push delivery, enable notifications in the Dashboard.
+	                            Quantura stores alerts in your workspace, along with trigger events, so you can audit what happened.
+	                          </p>
+	                        </details>
+	                      </form>
+
+	                      <div class="results-panel">
+	                        <h3>Active alerts</h3>
+	                        <div id="alerts-list" class="panel-output small">Create an alert to see it here.</div>
+	                      </div>
+	                    </div>
+	                  </section>
+
+                  <section class="panel hidden" data-panel="saved">
+	                    <div class="panel-header">
+	                      <h2>Saved forecasts</h2>
+	                      <p class="small">Plot any saved run onto the chart without leaving this page.</p>
+                    </div>
+                    <div id="saved-forecasts-list" class="order-list panel-output"></div>
+                    <details class="learn-more">
+                      <summary>Learn more</summary>
+                      <div class="small">
+                        <p>
+                          Saved forecasts are linked to your active workspace. Use <strong>Plot on chart</strong> to overlay quantile bands, or <strong>Download CSV</strong> to export the full run.
+                        </p>
+                        <p>
+                          If you are working with collaborators, pick the correct workspace in the Dashboard so you are viewing the same saved runs and history.
+                        </p>
+                      </div>
+                    </details>
+                  </section>
+
+                  <section class="panel hidden" data-panel="backtesting">
+                    <div class="panel-header">
+                      <h2>Backtesting</h2>
+                      <p class="small">Backtest strategies on the ticker in your chart. Each run is saved so you can reload it later.</p>
+                    </div>
+
+                    <form id="backtest-form" class="card">
+                      <div class="form-grid">
+                        <div class="field">
+                          <label class="label" for="backtest-strategy">Strategy</label>
+                          <select id="backtest-strategy" name="strategy">
+                            <option value="sma_cross">Moving average crossover</option>
+                            <option value="rsi_reversion">RSI mean reversion</option>
+                          </select>
+                          <div class="small muted">Use the chart for context; the backtest runs against the same ticker/timeframe.</div>
+                        </div>
+                        <div class="field">
+                          <label class="label" for="backtest-lookback">Lookback (days)</label>
+                          <input id="backtest-lookback" name="lookback" type="number" min="30" max="5000" value="730" />
+                          <div class="small muted">Controls how much history is used for the run.</div>
+                        </div>
+                        <div class="field">
+                          <label class="label" for="backtest-cash">Starting cash (USD)</label>
+                          <input id="backtest-cash" name="cash" type="number" min="1000" max="10000000" value="10000" />
+                        </div>
+                        <div class="field">
+                          <label class="label" for="backtest-commission">Commission (decimal)</label>
+                          <input id="backtest-commission" name="commission" type="number" min="0" max="0.05" step="0.0001" value="0.0005" />
+                          <div class="small muted">Example: 0.001 = 0.1% per trade.</div>
+                        </div>
+                      </div>
+
+                      <div class="form-grid" style="margin-top: 10px;">
+                        <div class="field" data-backtest-strategy="sma_cross">
+                          <label class="label" for="backtest-fast">Fast SMA window</label>
+                          <input id="backtest-fast" name="fast" type="number" min="2" max="200" value="20" />
+                        </div>
+                        <div class="field" data-backtest-strategy="sma_cross">
+                          <label class="label" for="backtest-slow">Slow SMA window</label>
+                          <input id="backtest-slow" name="slow" type="number" min="5" max="400" value="50" />
+                        </div>
+                        <div class="field hidden" data-backtest-strategy="rsi_reversion">
+                          <label class="label" for="backtest-rsi-period">RSI period</label>
+                          <input id="backtest-rsi-period" name="rsiPeriod" type="number" min="2" max="60" value="14" />
+                        </div>
+                        <div class="field hidden" data-backtest-strategy="rsi_reversion">
+                          <label class="label" for="backtest-rsi-oversold">Oversold threshold</label>
+                          <input id="backtest-rsi-oversold" name="oversold" type="number" min="1" max="49" value="30" />
+                        </div>
+                        <div class="field hidden" data-backtest-strategy="rsi_reversion">
+                          <label class="label" for="backtest-rsi-exit">Exit above</label>
+                          <input id="backtest-rsi-exit" name="exitAbove" type="number" min="50" max="95" value="55" />
+                        </div>
+                      </div>
+
+                      <button class="cta" type="submit" data-analytics="backtest_submit">Run backtest</button>
+                      <details class="learn-more">
+                        <summary>Learn more</summary>
+                        <div class="small">
+                          <p>
+                            Backtests are a fast way to validate whether a rule has any edge on the selected ticker. Use them for exploration, not certainty.
+                            Quantura saves every run with parameters and an equity curve image, and also generates runnable Python source code.
+                          </p>
+                          <p>
+                            Usage is tiered by plan. If you hit a daily limit, visit Pricing to upgrade and unlock higher throughput.
+                          </p>
+                        </div>
+                      </details>
+                    </form>
+
+                    <div class="results-panel">
+                      <h3>Backtest output</h3>
+                      <div id="backtest-output" class="panel-output small">Run a backtest to see metrics and the equity curve.</div>
+                    </div>
+
+                    <div class="card">
+                      <h3>Saved backtests</h3>
+                      <div class="form-grid">
+                        <div class="field">
+                          <label class="label" for="backtest-load-select">Recent backtests</label>
+                          <select id="backtest-load-select">
+                            <option value="">Select a backtest</option>
+                          </select>
+                        </div>
+                        <div class="field">
+                          <label class="label" for="backtest-load-id">Backtest ID</label>
+                          <input id="backtest-load-id" placeholder="Paste a backtest ID" />
+                        </div>
+                      </div>
+                      <div class="hero-actions" style="margin-top: 12px;">
+                        <button class="cta secondary" id="backtest-load-button" type="button" data-analytics="backtest_load_saved">Load backtest</button>
+                      </div>
+                      <p class="small muted" id="backtest-load-status"></p>
+                      <div id="saved-backtests-list" class="order-list panel-output"></div>
+                    </div>
+                  </section>
+
+                  <section class="panel hidden" data-panel="learn">
+                    <div class="panel-header">
+                      <h2>Learn more</h2>
+                      <p class="small">Structured terminal documentation inspired by professional screener help systems.</p>
+                    </div>
+                    <div class="help-layout">
+                      <aside class="card help-sidebar">
+                        <h3>Help index</h3>
+                        <a href="#help-screener-overview">Screener Overview</a>
+                        <a href="#help-filter-groups">Filter Groups</a>
+                        <a href="#help-tech-intro">Technical Analysis Intro</a>
+                        <a href="#help-research-loop">Research Workflow</a>
+                      </aside>
+                      <div class="help-content">
+                        <article class="card help-article" id="help-screener-overview">
+                          <h3>Screener overview</h3>
+                          <p class="small">
+                            Quantura Screener is designed as a multi-factor filter engine. Start with universe and market-cap scope, then narrow candidates by descriptive, fundamental, technical, and event-driven filters.
+                          </p>
+                          <p class="small">
+                            The AI Portfolio engine ranks resulting symbols for momentum-adjusted conviction, stores each run, and publishes leaderboard-ready agent metadata.
+                          </p>
+                        </article>
+                        <article class="card help-article" id="help-filter-groups">
+                          <h3>Filter groups</h3>
+                          <div class="help-kv-grid small">
+                            <div><strong>Descriptive</strong> covers exchange, index, sector, industry, country, cap profile, theme, and sub-theme.</div>
+                            <div><strong>Fundamental</strong> covers valuation (P/E, PEG, P/S, P/B), yield, profitability, leverage, and analyst consensus.</div>
+                            <div><strong>Technical</strong> covers price bands, short-float pressure, optionability, and volume/liquidity behavior.</div>
+                            <div><strong>News</strong> covers earnings timing, analyst target dislocation, and IPO-age windows.</div>
+                            <div><strong>ETF</strong> covers float and shares-outstanding structure for liquidity profiling.</div>
+                          </div>
+                        </article>
+                        <article class="card help-article" id="help-tech-intro">
+                          <h3>Technical analysis intro</h3>
+                          <p class="small">
+                            Start with trend context (price regime + moving averages), then add momentum (RSI, MACD), and finally confirm participation (relative/current volume, short float).
+                          </p>
+                          <p class="small">
+                            Treat technical signals as probabilistic confirmation layers. Pair them with earnings timing, analyst targets, and sector context before sizing risk.
+                          </p>
+                        </article>
+                        <article class="card help-article" id="help-research-loop">
+                          <h3>Research workflow</h3>
+                          <p class="small">
+                            1) Run Screener to generate candidates. 2) Validate with Indicators, News, and X trend pulse. 3) Build quantile ranges in Forecast. 4) Save and compare runs week-over-week.
+                          </p>
+                          <div class="notice" style="margin-top: 12px;">
+                            For deeper process walkthroughs and model notes, visit the <a href="/blog">Quantura blog</a>.
+                          </div>
+                        </article>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+              </div>
+            </div>
+          </section>
+    </div>
+  </div>
+    </main>
+
+    <footer class="footer">
+      <div class="container footer-grid">
+        <div>
+          <div class="logo">QUANTURA</div>
+          <p class="small">Decision intelligence for market research, forecasting, and execution.</p>
+          <div class="footer-social" aria-label="Quantura social links">
+            <a class="social-link" href="#" data-analytics="social_x" aria-label="X (coming soon)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.9 2H22l-6.8 7.8L23 22h-6.9l-5.4-6.9L4.7 22H1.6l7.3-8.4L1 2h7.1l4.9 6.3L18.9 2zm-1.2 18h1.7L7.2 3.9H5.4L17.7 20z"/></svg>
+            </a>
+            <a class="social-link" href="#" data-analytics="social_linkedin" aria-label="LinkedIn (coming soon)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.98 3.5C4.98 4.88 3.87 6 2.5 6S0 4.88 0 3.5 1.12 1 2.5 1 4.98 2.12 4.98 3.5zM0.5 8.5H4.5V23H0.5V8.5zM8.5 8.5H12.3V10.4h.1c.5-1 1.9-2.1 3.9-2.1 4.2 0 5 2.8 5 6.5V23h-4v-6.7c0-1.6 0-3.7-2.2-3.7-2.3 0-2.6 1.8-2.6 3.6V23h-4V8.5z"/></svg>
+            </a>
+            <a class="social-link" href="#" data-analytics="social_reddit" aria-label="Reddit (coming soon)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21.9 10.7c.1-.4.1-.8 0-1.2-.3-1-1.4-1.6-2.5-1.3-.6.2-1 .6-1.2 1.1-1.5-1-3.4-1.7-5.5-1.8l1-4.6 3.2.7c.1.8.8 1.4 1.7 1.4.9 0 1.7-.8 1.7-1.7S19.5 2 18.6 2c-.6 0-1.2.4-1.5.9l-3.7-.8c-.3-.1-.6.1-.7.4l-1.2 5.2c-2.2.1-4.2.8-5.7 1.8-.2-.5-.6-.9-1.2-1.1-1-.3-2.1.3-2.5 1.3-.1.4-.1.8 0 1.2.1.6.4 1 .9 1.3-.1.4-.1.9-.1 1.3 0 3.6 4.1 6.5 9.1 6.5s9.1-2.9 9.1-6.5c0-.4 0-.9-.1-1.3.5-.3.8-.8.9-1.3zM7.9 12.8c0-.8.7-1.5 1.5-1.5s1.5.7 1.5 1.5-.7 1.5-1.5 1.5-1.5-.6-1.5-1.5zm8.5 4c-.9.9-2.6 1.3-4.4 1.3s-3.5-.4-4.4-1.3c-.2-.2-.2-.5 0-.7.2-.2.5-.2.7 0 .6.6 2 1 3.7 1 1.7 0 3.1-.4 3.7-1 .2-.2.5-.2.7 0 .2.2.2.5 0 .7zm-1.8-2.5c-.8 0-1.5-.7-1.5-1.5s.7-1.5 1.5-1.5 1.5.7 1.5 1.5-.7 1.5-1.5 1.5z"/></svg>
+            </a>
+            <a class="social-link" href="#" data-analytics="social_github" aria-label="GitHub (coming soon)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .5C5.73.5.75 5.63.75 12c0 5.1 3.29 9.41 7.86 10.94.58.11.79-.26.79-.57v-2.1c-3.2.71-3.88-1.57-3.88-1.57-.53-1.37-1.29-1.74-1.29-1.74-1.05-.74.08-.73.08-.73 1.16.08 1.77 1.23 1.77 1.23 1.03 1.8 2.7 1.28 3.36.98.1-.77.4-1.28.72-1.58-2.55-.3-5.23-1.31-5.23-5.84 0-1.29.45-2.35 1.19-3.18-.12-.3-.52-1.53.11-3.2 0 0 .97-.32 3.18 1.21.92-.26 1.9-.39 2.88-.39.98 0 1.96.13 2.88.39 2.2-1.53 3.17-1.21 3.17-1.21.63 1.67.23 2.9.11 3.2.74.83 1.19 1.89 1.19 3.18 0 4.54-2.69 5.54-5.25 5.83.41.37.77 1.1.77 2.22v3.29c0 .31.21.68.8.57A11.3 11.3 0 0 0 23.25 12C23.25 5.63 18.27.5 12 .5z"/></svg>
+            </a>
+          </div>
+        </div>
+        <div class="small">
+          <strong>Explore</strong>
+          <div><a href="/">Home</a></div>
+          <div><a href="/forecasting">Forecasting</a></div>
+          <div><a href="/research">Research</a></div>
+          <div><a href="/blog">Blog</a></div>
+          <div><a href="/dashboard">Dashboard</a></div>
+          <div><a href="/pricing">Pricing</a></div>
+          <div><a href="/contact">Contact</a></div>
+        </div>
+        <div class="small">
+          <strong>Legal</strong>
+          <div><a href="/terms">Terms and Conditions</a></div>
+          <div><a href="/privacy">Privacy Policy</a></div>
+          <div><a href="/disclaimer">Disclaimer Policy</a></div>
+          <details class="footer-terms" style="margin-top:10px;">
+            <summary>Terms summary (important)</summary>
+            <ul class="footer-terms-list">
+              <li>By using Quantura, you confirm you are at least 18 years old and authorized to act for your account or business.</li>
+              <li>Paid plans renew automatically until canceled before the next billing date. Refund and cancellation rules are listed in the full Terms.</li>
+              <li>Quantura provides software and data tooling, not brokerage, investment advisory, legal, or tax services.</li>
+              <li>Market data, forecast outputs, and AI-generated content may be delayed, incomplete, or inaccurate and must be independently verified.</li>
+              <li>Services are provided "as is" to the maximum extent permitted by law, with liability limitations and dispute resolution terms in the full Terms.</li>
+              <li>Where enforceable, disputes may be resolved through individual arbitration and class action waiver terms.</li>
+            </ul>
+          </details>
+          <p class="small legal-copy">
+            Financial disclaimer: nothing on Quantura is investment, tax, accounting, or legal advice. Trading and options involve substantial risk, including possible loss of principal.
+          </p>
+        </div>
+      </div>
+      <div class="container small" style="margin-top: 24px;">
+        © 2026 Quantura. All rights reserved.
+      </div>
+    </footer>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>

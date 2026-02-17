@@ -5,6 +5,9 @@ on:
     - cron: "0 21 * * 2" # Tuesday 21:00 UTC == 4 PM EST
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   run-autopilot:
     runs-on: ubuntu-latest
@@ -13,9 +16,12 @@ jobs:
       TICKERS: ${{ secrets.AUTOPILOT_TICKERS }}
       AUTOPILOT_ROLE_ARN: ${{ secrets.AUTOPILOT_ROLE_ARN }}
       AUTOPILOT_S3_BUCKET: ${{ secrets.AUTOPILOT_S3_BUCKET }}
+      HAS_AUTOPILOT_INPUTS: ${{ secrets.AWS_ACCESS_KEY_ID != '' && secrets.AWS_SECRET_ACCESS_KEY != '' && secrets.AUTOPILOT_ROLE_ARN != '' && secrets.AUTOPILOT_S3_BUCKET != '' && secrets.AUTOPILOT_TICKERS != '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -28,10 +34,12 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run Autopilot time series job
+        if: env.HAS_AUTOPILOT_INPUTS == 'true'
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           python scripts/run_autopilot_timeseries.py \
             --tickers "${TICKERS}" \
@@ -43,3 +51,10 @@ jobs:
             --frequency "1D" \
             --forecast-horizon 7 \
             --skip-if-monday-holiday
+
+      - name: Autopilot step status
+        if: env.HAS_AUTOPILOT_INPUTS != 'true'
+        run: |
+          echo "Autopilot run skipped because required secrets are missing."
+          echo "### Autopilot skipped" >> $GITHUB_STEP_SUMMARY
+          echo "- Set AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AUTOPILOT_ROLE_ARN, AUTOPILOT_S3_BUCKET, and AUTOPILOT_TICKERS." >> $GITHUB_STEP_SUMMARY

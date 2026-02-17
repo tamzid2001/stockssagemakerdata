@@ -1,0 +1,16 @@
+{
+  "name": "Quantura",
+  "short_name": "Quantura",
+  "description": "Demand forecasting and investing intelligence.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f4ee",
+  "theme_color": "#0b0f1a",
+  "icons": [
+    {
+      "src": "/assets/quantura-icon.svg",
+      "sizes": "256x256",
+      "type": "image/svg+xml"
+    }
+  ]
+}

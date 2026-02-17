@@ -2,8 +2,8 @@ name: Weekly Stock Screening
 
 on:
   schedule:
-    # Run every Monday at 9 AM UTC
-    - cron: '0 9 * * 1'
+    # Run every Monday at 21:00 UTC (~4 PM ET in winter, shifts during EDT)
+    - cron: '0 21 * * 1'
   
   # Allow manual trigger for testing
   workflow_dispatch:
