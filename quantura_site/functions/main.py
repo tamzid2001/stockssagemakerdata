@@ -24,7 +24,6 @@ import firebase_admin
 from firebase_admin import credentials, firestore, messaging as admin_messaging, storage as admin_storage
 from firebase_functions import https_fn, scheduler_fn
 from firebase_functions.options import MemoryOption, set_global_options
-from firebase_functions.params import SecretParam
 
 try:
     from firebase_admin import remote_config as admin_remote_config  # type: ignore
@@ -32,9 +31,8 @@ except Exception:  # pragma: no cover - optional dependency until firebase-admin
     admin_remote_config = None
 
 # Bind high-sensitivity API keys via Secret Manager instead of committing them.
-OPENAI_API_KEY_SECRET = SecretParam("OPENAI_API_KEY")
-
-set_global_options(max_instances=10, secrets=[OPENAI_API_KEY_SECRET])
+# Firebase will inject secret values into env vars for deployed functions.
+set_global_options(max_instances=10, secrets=["OPENAI_API_KEY"])
 
 SERVICE_ACCOUNT_PATH = os.environ.get(
     "SERVICE_ACCOUNT_PATH",
@@ -85,7 +83,7 @@ RISK_FREE_RATE = float(os.environ.get("RISK_FREE_RATE", "0.045") or 0.045)
 TRENDING_URL = "https://query1.finance.yahoo.com/v1/finance/trending/US"
 YAHOO_SEARCH_URL = "https://query2.finance.yahoo.com/v1/finance/search"
 DEFAULT_FORECAST_PRICE = 349
-OPENAI_API_KEY = OPENAI_API_KEY_SECRET.value.strip() or os.environ.get("OPENAI_API_KEY", "").strip()
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "").strip()
 AMAZON_NOVA_API_KEY = os.environ.get("AMAZON_NOVA_API_KEY", "").strip()
 AMAZON_NOVA_API_ENDPOINT = str(os.environ.get("AMAZON_NOVA_API_ENDPOINT") or "").strip()
 AMAZON_NOVA_DEFAULT_MODEL = str(os.environ.get("AMAZON_NOVA_DEFAULT_MODEL") or "amazon.nova-lite-v1:0").strip()
