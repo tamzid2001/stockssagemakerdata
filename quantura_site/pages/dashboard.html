@@ -43,7 +43,8 @@
       <div class="container nav">
         <a class="logo" href="/" aria-label="Quantura home"><span>QUANTURA</span></a>
         <nav class="nav-links">
-          <a href="/screener" data-analytics="nav_screener"><i class="iconoir-search" aria-hidden="true"></i><span>Screener</span></a>
+          <a href="/forecasting" data-analytics="nav_terminal"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Terminal</span></a>
+          <a href="/research" data-analytics="nav_research"><i class="iconoir-bookmark-book" aria-hidden="true"></i><span>Research</span></a>
           <a href="/blog" data-analytics="nav_blog"><i class="iconoir-page" aria-hidden="true"></i><span>Blog</span></a>
           <a href="/pricing" data-analytics="nav_pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>Pricing</span></a>
           <a href="/contact" data-analytics="nav_contact"><i class="iconoir-mail" aria-hidden="true"></i><span>Contact</span></a>
@@ -101,6 +102,34 @@
               <span class="label">Status</span>
               <span id="user-status" class="pill">Logged Out</span>
             </div>
+            <details class="profile-settings">
+              <summary>Leaderboard profile</summary>
+              <form id="profile-form" class="profile-editor">
+                <label class="label" for="profile-username">Username</label>
+                <input id="profile-username" class="input" type="text" maxlength="32" placeholder="quantura_alpha" />
+                <div class="profile-links-grid">
+                  <label class="label" for="profile-social-x">X</label>
+                  <input id="profile-social-x" class="input" type="url" placeholder="https://x.com/username" />
+                  <label class="label" for="profile-social-linkedin">LinkedIn</label>
+                  <input id="profile-social-linkedin" class="input" type="url" placeholder="https://linkedin.com/in/username" />
+                  <label class="label" for="profile-social-github">GitHub</label>
+                  <input id="profile-social-github" class="input" type="url" placeholder="https://github.com/username" />
+                  <label class="label" for="profile-social-youtube">YouTube</label>
+                  <input id="profile-social-youtube" class="input" type="url" placeholder="https://youtube.com/@channel" />
+                  <label class="label" for="profile-social-tiktok">TikTok</label>
+                  <input id="profile-social-tiktok" class="input" type="url" placeholder="https://tiktok.com/@username" />
+                  <label class="label" for="profile-social-website">Website</label>
+                  <input id="profile-social-website" class="input" type="url" placeholder="https://your-site.com" />
+                </div>
+                <button class="cta secondary small" type="submit">Save profile</button>
+                <p id="profile-status" class="small muted">Sign in to set your public leaderboard profile.</p>
+              </form>
+            </details>
+            <div class="billing-panel">
+              <span class="label">Billing</span>
+              <a id="billing-portal-link" class="cta secondary small" href="/account" data-analytics="billing_portal_open">Sign in to manage billing</a>
+              <span class="small muted">Manage plan, invoices, and payment method in Stripe.</span>
+            </div>
             <div class="notice" id="dashboard-cta">
               Sign in to unlock order tracking and fulfillment updates.
             </div>
@@ -151,7 +180,7 @@
         <div class="container">
           <div class="section-title">
             <h2>Browser notifications</h2>
-            <p class="small">Enable web push notifications for order updates and forecast events.</p>
+            <p class="small">Enable web push notifications, stream messages live, and keep a timestamped event log.</p>
           </div>
           <div class="content-grid">
             <div class="card">
@@ -167,9 +196,19 @@
                 <button class="cta secondary" id="notifications-send-test" type="button">Send test push</button>
               </div>
               <p class="small" id="notifications-status" style="margin-top: 12px;">Sign in and enable notifications.</p>
+              <div class="notice small" style="margin-top: 10px;">
+                <strong>FCM token:</strong> <span id="notifications-token">No token registered yet.</span>
+              </div>
             </div>
             <div class="results-panel">
-              <h3>How delivery works</h3>
+              <div class="card-head">
+                <h3>Live notification log</h3>
+                <button class="cta secondary small" id="notifications-clear" type="button">Clear log</button>
+              </div>
+              <div id="notifications-log" class="notification-log">
+                <div class="small muted">No live notifications yet.</div>
+              </div>
+              <h3 style="margin-top: 8px;">How delivery works</h3>
               <p class="small">
                 Quantura registers your browser token to your account and sends push notifications through the messaging service.
                 You can revoke permission any time from your browser site settings.
@@ -508,7 +547,7 @@
           <strong>Explore</strong>
           <div><a href="/">Home</a></div>
           <div><a href="/forecasting">Forecasting</a></div>
-          <div><a href="/screener">Screener</a></div>
+          <div><a href="/research">Research</a></div>
           <div><a href="/blog">Blog</a></div>
           <div><a href="/dashboard">Dashboard</a></div>
           <div><a href="/pricing">Pricing</a></div>

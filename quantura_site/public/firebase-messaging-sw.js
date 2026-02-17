@@ -22,6 +22,21 @@ if (messaging) {
       data: payload?.data || {},
       tag: notification.tag || "quantura-webpush",
     };
+    clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then((windowClients) => {
+        windowClients.forEach((client) => {
+          client.postMessage({
+            type: "quantura_push_background",
+            title,
+            body: options.body,
+            data: payload?.data || {},
+          });
+        });
+      })
+      .catch(() => {
+        // Ignore client-post failures.
+      });
     self.registration.showNotification(title, options);
   });
 }
