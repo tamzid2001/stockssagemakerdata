@@ -310,8 +310,9 @@ i[class*=" iconoir-"]::before {
 
 .unsplash-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 14px;
+  align-items: start;
 }
 
 .unsplash-card {
@@ -323,16 +324,19 @@ i[class*=" iconoir-"]::before {
   background: var(--surface);
   box-shadow: 0 12px 24px rgba(26, 33, 56, 0.08);
   overflow: hidden;
+  aspect-ratio: 16 / 11;
+  min-height: 0;
 }
 
 .unsplash-card img {
   width: 100%;
-  height: 188px;
+  height: 100%;
   display: block;
   object-fit: cover;
 }
 
 .unsplash-card figcaption {
+  display: none;
   padding: 0 10px 10px;
 }
 
