@@ -7,10 +7,12 @@ import math
 import os
 import re
 import time
+from html import unescape
 from datetime import date, datetime, timedelta, timezone
 from io import BytesIO, StringIO
 from statistics import NormalDist
 from typing import Any
+from urllib.parse import parse_qs, quote_plus, unquote, urlparse
 
 import requests
 try:
@@ -114,9 +116,33 @@ SOCIAL_AUTOPILOT_CHANNELS = [
     if channel.strip()
 ]
 
-TWITTER_BEARER_TOKEN = str(os.environ.get("TWITTER_BEARER_TOKEN") or "").strip()
-TWITTER_ACCESS_TOKEN = str(os.environ.get("TWITTER_ACCESS_TOKEN") or "").strip()
-TWITTER_ACCESS_TOKEN_SECRET = str(os.environ.get("TWITTER_ACCESS_TOKEN_SECRET") or "").strip()
+TWITTER_BEARER_TOKEN = str(
+    os.environ.get("TWITTER_BEARER_TOKEN")
+    or os.environ.get("X_BEARER_TOKEN")
+    or ""
+).strip()
+TWITTER_API_KEY = str(
+    os.environ.get("TWITTER_API_KEY")
+    or os.environ.get("X_API_KEY")
+    or os.environ.get("TWITTER_CONSUMER_KEY")
+    or ""
+).strip()
+TWITTER_API_SECRET = str(
+    os.environ.get("TWITTER_API_SECRET")
+    or os.environ.get("X_API_SECRET")
+    or os.environ.get("TWITTER_CONSUMER_SECRET")
+    or ""
+).strip()
+TWITTER_ACCESS_TOKEN = str(
+    os.environ.get("TWITTER_ACCESS_TOKEN")
+    or os.environ.get("X_ACCESS_TOKEN")
+    or ""
+).strip()
+TWITTER_ACCESS_TOKEN_SECRET = str(
+    os.environ.get("TWITTER_ACCESS_TOKEN_SECRET")
+    or os.environ.get("X_ACCESS_TOKEN_SECRET")
+    or ""
+).strip()
 LINKEDIN_ACCESS_TOKEN = str(os.environ.get("LINKEDIN_ACCESS_TOKEN") or "").strip()
 LINKEDIN_AUTHOR_URN = str(os.environ.get("LINKEDIN_AUTHOR_URN") or "").strip()
 FACEBOOK_PAGE_ID = str(os.environ.get("FACEBOOK_PAGE_ID") or "").strip()
@@ -223,15 +249,21 @@ DEFAULT_REMOTE_CONFIG: dict[str, str] = {
     "ai_usage_tiers": json.dumps(
         {
             "free": {
-                "allowed_models": ["gpt-5-mini"],
+                "allowed_models": ["gpt-5-nano", "gpt-5-mini"],
                 "weekly_limit": 3,
                 "daily_limit": 3,
                 "volatility_alerts": False,
             },
-            "premium": {
-                "allowed_models": ["gpt-5-mini", "gpt-5", "gpt-5-thinking"],
-                "weekly_limit": 15,
-                "daily_limit": 15,
+            "pro": {
+                "allowed_models": ["gpt-5-mini", "gpt-5", "gpt-5.1"],
+                "weekly_limit": 25,
+                "daily_limit": 25,
+                "volatility_alerts": True,
+            },
+            "desk": {
+                "allowed_models": ["gpt-5-nano", "gpt-5-mini", "gpt-5", "gpt-5.1", "gpt-5.2"],
+                "weekly_limit": 75,
+                "daily_limit": 75,
                 "volatility_alerts": True,
             },
         }
@@ -388,32 +420,50 @@ def _normalize_ai_model_id(raw: Any) -> str:
     if not value:
         return ""
     lowered = value.lower()
+    aliases = {
+        "gpt-5-2": "gpt-5.2",
+        "gpt5.2": "gpt-5.2",
+        "gpt-5-1": "gpt-5.1",
+        "gpt5.1": "gpt-5.1",
+        "gpt5": "gpt-5",
+        "gpt5-mini": "gpt-5-mini",
+        "gpt5-nano": "gpt-5-nano",
+        "gpt-5-thinking": "gpt-5.2",
+    }
+    if lowered in aliases:
+        return aliases[lowered]
     if lowered.startswith("gpt-") and len(lowered) > 4 and lowered[4] == "4":
         return "gpt-5-mini"
     if lowered.startswith("o1"):
-        return "gpt-5-thinking"
+        return "gpt-5.1"
     return value
 
 
 def _get_ai_usage_tiers(context: dict[str, Any] | None = None) -> dict[str, Any]:
     fallback = {
         "free": {
-            "allowed_models": ["gpt-5-mini"],
+            "allowed_models": ["gpt-5-nano", "gpt-5-mini"],
             "weekly_limit": 3,
             "daily_limit": 3,
             "volatility_alerts": False,
         },
-        "premium": {
-            "allowed_models": ["gpt-5-mini", "gpt-5", "gpt-5-thinking"],
-            "weekly_limit": 15,
-            "daily_limit": 15,
+        "pro": {
+            "allowed_models": ["gpt-5-mini", "gpt-5", "gpt-5.1"],
+            "weekly_limit": 25,
+            "daily_limit": 25,
+            "volatility_alerts": True,
+        },
+        "desk": {
+            "allowed_models": ["gpt-5-nano", "gpt-5-mini", "gpt-5", "gpt-5.1", "gpt-5.2"],
+            "weekly_limit": 75,
+            "daily_limit": 75,
             "volatility_alerts": True,
         },
     }
     parsed = _remote_config_json_param("ai_usage_tiers", fallback, context=context)
     if not isinstance(parsed, dict):
         return fallback
-    default_limits = {"free": 3, "premium": 15}
+    default_limits = {"free": 3, "pro": 25, "desk": 75}
     for tier_name, tier_data in parsed.items():
         if not isinstance(tier_data, dict):
             continue
@@ -447,8 +497,10 @@ def _get_ai_usage_tiers(context: dict[str, Any] | None = None) -> dict[str, Any]
             weekly_limit = default_limit
         if tier_key == "free":
             weekly_limit = max(1, min(weekly_limit, 5))
-        elif tier_key == "premium":
-            weekly_limit = max(6, min(weekly_limit, 25))
+        elif tier_key == "pro":
+            weekly_limit = max(6, min(weekly_limit, 40))
+        elif tier_key == "desk":
+            weekly_limit = max(20, min(weekly_limit, 200))
 
         tier_data["weekly_limit"] = weekly_limit
         tier_data["daily_limit"] = weekly_limit  # Backward-compatible alias for older clients.
@@ -457,22 +509,59 @@ def _get_ai_usage_tiers(context: dict[str, Any] | None = None) -> dict[str, Any]
     return parsed
 
 
+def _resolve_paid_plan_tier(uid: str) -> str:
+    """Infers a paid tier from the user's orders. Returns free/pro/desk."""
+    best_rank = 0
+    try:
+        docs = db.collection("orders").where("userId", "==", uid).limit(50).stream()
+    except Exception:
+        return "free"
+
+    for doc in docs:
+        data = doc.to_dict() or {}
+        status = str(data.get("paymentStatus") or "").strip().lower()
+        if status not in {"paid", "succeeded"}:
+            continue
+        product = str(data.get("product") or "").strip().lower()
+        if "desk" in product or "enterprise" in product:
+            best_rank = max(best_rank, 2)
+        elif "pro" in product or "elite" in product or "forecast" in product:
+            best_rank = max(best_rank, 1)
+        else:
+            best_rank = max(best_rank, 1)
+
+    if best_rank >= 2:
+        return "desk"
+    if best_rank >= 1:
+        return "pro"
+    return "free"
+
+
 def _resolve_ai_tier(
     uid: str,
     token: dict[str, Any],
     context: dict[str, Any] | None = None,
 ) -> tuple[str, dict[str, Any]]:
     tiers = _get_ai_usage_tiers(context=context)
-    is_premium = token.get("email") == ADMIN_EMAIL or _is_paid_user(uid)
-    tier_key = "premium" if is_premium else "free"
+    if token.get("email") == ADMIN_EMAIL:
+        tier_key = "desk"
+    else:
+        tier_key = _resolve_paid_plan_tier(uid)
+        if tier_key not in {"free", "pro", "desk"}:
+            tier_key = "free"
     tier = tiers.get(tier_key) if isinstance(tiers.get(tier_key), dict) else {}
     if not tier:
-        fallback_limit = 15 if is_premium else 3
+        fallback_limit = 3 if tier_key == "free" else 25 if tier_key == "pro" else 75
+        fallback_models = {
+            "free": ["gpt-5-nano", "gpt-5-mini"],
+            "pro": ["gpt-5-mini", "gpt-5", "gpt-5.1"],
+            "desk": ["gpt-5-nano", "gpt-5-mini", "gpt-5", "gpt-5.1", "gpt-5.2"],
+        }
         tier = {
-            "allowed_models": ["gpt-5-mini", "gpt-5", "gpt-5-thinking"] if is_premium else ["gpt-5-mini"],
+            "allowed_models": fallback_models.get(tier_key, fallback_models["free"]),
             "weekly_limit": fallback_limit,
             "daily_limit": fallback_limit,
-            "volatility_alerts": bool(is_premium),
+            "volatility_alerts": tier_key != "free",
         }
     return tier_key, tier
 
@@ -499,6 +588,47 @@ def _social_channel_webhooks() -> dict[str, str]:
     for channel, env_key in SOCIAL_CHANNEL_WEBHOOK_ENV.items():
         out[channel] = str(os.environ.get(env_key) or "").strip()
     return out
+
+
+def _social_channel_has_webhook(channel: str) -> bool:
+    key = str(channel or "").strip().lower()
+    if not key:
+        return False
+    return bool(_social_channel_webhooks().get(key))
+
+
+def _social_channel_has_direct_credentials(channel: str) -> bool:
+    key = str(channel or "").strip().lower()
+    if key == "x":
+        return bool(TWITTER_API_KEY and TWITTER_API_SECRET and TWITTER_ACCESS_TOKEN and TWITTER_ACCESS_TOKEN_SECRET)
+    if key == "linkedin":
+        return bool(LINKEDIN_ACCESS_TOKEN and LINKEDIN_AUTHOR_URN)
+    if key == "facebook":
+        return bool(FACEBOOK_PAGE_ID and FACEBOOK_PAGE_ACCESS_TOKEN)
+    if key == "instagram":
+        return bool(INSTAGRAM_BUSINESS_ACCOUNT_ID and INSTAGRAM_ACCESS_TOKEN and INSTAGRAM_DEFAULT_IMAGE_URL)
+    if key == "tiktok":
+        # Direct text-only posting is not supported in this implementation.
+        return False
+    return False
+
+
+def _social_channel_posting_route(channel: str) -> str:
+    key = str(channel or "").strip().lower()
+    has_direct = _social_channel_has_direct_credentials(key)
+    has_webhook = _social_channel_has_webhook(key)
+    if has_direct and has_webhook:
+        return "direct+webhook"
+    if has_direct:
+        return "direct"
+    if has_webhook:
+        return "webhook"
+    return "none"
+
+
+def _configured_social_posting_channels(raw_channels: Any = None) -> list[str]:
+    channels = _normalize_social_channels(raw_channels)
+    return [channel for channel in channels if _social_channel_posting_route(channel) != "none"]
 
 
 def _normalize_social_channels(raw: Any) -> list[str]:
@@ -588,15 +718,44 @@ def _render_social_text(
 
 
 def _post_x_direct(text: str) -> dict[str, Any]:
-    if not TWITTER_BEARER_TOKEN:
-        return {"ok": False, "pendingCredentials": True, "error": "Missing TWITTER_BEARER_TOKEN for X posting."}
+    has_oauth_user_context = bool(
+        TWITTER_API_KEY and TWITTER_API_SECRET and TWITTER_ACCESS_TOKEN and TWITTER_ACCESS_TOKEN_SECRET
+    )
+    has_bearer = bool(TWITTER_BEARER_TOKEN)
+    if not has_oauth_user_context and not has_bearer:
+        return {
+            "ok": False,
+            "pendingCredentials": True,
+            "error": (
+                "Missing X credentials. Provide TWITTER_API_KEY, TWITTER_API_SECRET, "
+                "TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_TOKEN_SECRET (preferred) or TWITTER_BEARER_TOKEN."
+            ),
+        }
     try:
+        auth = None
+        headers = {"Content-Type": "application/json"}
+        if has_oauth_user_context:
+            try:
+                from requests_oauthlib import OAuth1  # type: ignore
+            except Exception:
+                return {
+                    "ok": False,
+                    "pendingCredentials": False,
+                    "error": "requests-oauthlib is required for X user-context posting.",
+                }
+            auth = OAuth1(
+                TWITTER_API_KEY,
+                TWITTER_API_SECRET,
+                TWITTER_ACCESS_TOKEN,
+                TWITTER_ACCESS_TOKEN_SECRET,
+            )
+        elif has_bearer:
+            headers["Authorization"] = f"Bearer {TWITTER_BEARER_TOKEN}"
+
         response = requests.post(
             "https://api.twitter.com/2/tweets",
-            headers={
-                "Authorization": f"Bearer {TWITTER_BEARER_TOKEN}",
-                "Content-Type": "application/json",
-            },
+            headers=headers,
+            auth=auth,
             json={"text": text},
             timeout=20,
         )
@@ -610,7 +769,7 @@ def _post_x_direct(text: str) -> dict[str, Any]:
             )
             return {
                 "ok": False,
-                "pendingCredentials": pending,
+                "pendingCredentials": pending or has_bearer,
                 "error": (
                     "X posting requires OAuth user-context write tokens (TWITTER_ACCESS_TOKEN / "
                     "TWITTER_ACCESS_TOKEN_SECRET) or a posting webhook."
@@ -620,7 +779,12 @@ def _post_x_direct(text: str) -> dict[str, Any]:
             }
         body = response.json() if response.content else {}
         post_id = str((body.get("data") or {}).get("id") or "").strip()
-        return {"ok": True, "externalId": post_id, "statusCode": response.status_code, "provider": "x_api"}
+        return {
+            "ok": True,
+            "externalId": post_id,
+            "statusCode": response.status_code,
+            "provider": "x_api_oauth1" if has_oauth_user_context else "x_api_bearer",
+        }
     except Exception as exc:
         return {"ok": False, "pendingCredentials": False, "error": f"X API exception: {str(exc)[:300]}"}
 
@@ -752,7 +916,7 @@ def _post_tiktok_direct(text: str) -> dict[str, Any]:
         }
     return {
         "ok": False,
-        "pendingCredentials": False,
+        "pendingCredentials": True,
         "error": "TikTok direct text posting is not supported by this endpoint. Use SOCIAL_WEBHOOK_TIKTOK or media-publish integration.",
     }
 
@@ -1234,10 +1398,127 @@ def _fetch_yahoo_news_query(query: str, *, limit: int = 12) -> list[dict[str, An
     return out
 
 
+_SOCIAL_QUERY_STOPWORDS = {
+    "the",
+    "and",
+    "or",
+    "for",
+    "with",
+    "from",
+    "this",
+    "that",
+    "today",
+    "top",
+    "news",
+    "headlines",
+    "stock",
+    "stocks",
+    "market",
+}
+
+
+def _social_query_terms(query: str) -> list[str]:
+    tokens = re.findall(r"[a-z0-9$\.]{2,}", str(query or "").lower())
+    out: list[str] = []
+    for token in tokens:
+        if token in _SOCIAL_QUERY_STOPWORDS:
+            continue
+        if token not in out:
+            out.append(token)
+    return out[:8]
+
+
+def _text_matches_social_query(text: str, query: str) -> bool:
+    body = str(text or "").lower()
+    terms = _social_query_terms(query)
+    if not terms:
+        return True
+    hits = sum(1 for term in terms if term in body)
+    # Soft match: one term for short queries, two terms for longer multi-word queries.
+    needed = 1 if len(terms) <= 3 else 2
+    return hits >= needed
+
+
+def _fetch_social_posts_via_web_search(
+    query: str,
+    *,
+    platform: str,
+    limit: int = 8,
+) -> tuple[list[dict[str, Any]], str]:
+    q = str(query or "").strip()
+    if not q:
+        return [], "Web fallback query is empty."
+
+    domain_map = {
+        "x": "x.com",
+        "reddit": "reddit.com",
+        "facebook": "facebook.com",
+        "instagram": "instagram.com",
+    }
+    domain = domain_map.get(str(platform or "").strip().lower())
+    if not domain:
+        return [], "Unsupported web fallback platform."
+
+    try:
+        search_query = quote_plus(f"site:{domain} {q}")
+        response = requests.get(
+            f"https://duckduckgo.com/html/?q={search_query}",
+            headers={"User-Agent": "Mozilla/5.0 (Quantura)"},
+            timeout=14,
+        )
+        if response.status_code >= 400:
+            return [], f"Web fallback search returned HTTP {response.status_code}."
+        html_text = response.text or ""
+    except Exception as exc:
+        return [], f"Web fallback search error: {str(exc)[:160]}"
+
+    results: list[dict[str, Any]] = []
+    # DuckDuckGo HTML result block parser (best-effort).
+    pattern = re.compile(
+        r'<a[^>]+class="result__a"[^>]+href="(?P<href>[^"]+)"[^>]*>(?P<title>.*?)</a>.*?'
+        r'<a[^>]+class="result__snippet"[^>]*>(?P<snippet>.*?)</a>',
+        re.IGNORECASE | re.DOTALL,
+    )
+    for match in pattern.finditer(html_text):
+        href = unescape(re.sub(r"<[^>]+>", "", match.group("href") or "")).strip()
+        if "uddg=" in href:
+            try:
+                parsed = urlparse(href)
+                redirected = parse_qs(parsed.query).get("uddg", [""])[0]
+                if redirected:
+                    href = unquote(redirected)
+            except Exception:
+                pass
+        title = unescape(re.sub(r"<[^>]+>", "", match.group("title") or "")).strip()
+        snippet = unescape(re.sub(r"<[^>]+>", "", match.group("snippet") or "")).strip()
+        if not href or domain not in href:
+            continue
+        if not _text_matches_social_query(f"{title} {snippet}", q):
+            continue
+        row = {
+            "id": hashlib.sha1(href.encode("utf-8")).hexdigest()[:16],
+            "title": title,
+            "text": snippet or title,
+            "permalink": href,
+            "source": platform,
+            "author": "",
+            "authorUsername": "",
+            "createdAt": None,
+        }
+        results.append(row)
+        if len(results) >= max(1, min(int(limit or 8), 20)):
+            break
+
+    if results:
+        return results, ""
+    return [], "Web fallback search returned no matching posts."
+
+
 def _fetch_reddit_social_posts(query: str, *, limit: int = 8) -> list[dict[str, Any]]:
     q = str(query or "").strip()
     if not q:
         return []
+    fallback_posts, _ = _fetch_social_posts_via_web_search(q, platform="reddit", limit=limit)
     try:
         response = requests.get(
             "https://www.reddit.com/search.json",
@@ -1246,10 +1527,10 @@ def _fetch_reddit_social_posts(query: str, *, limit: int = 8) -> list[dict[str, 
             timeout=12,
         )
         if response.status_code >= 400:
-            return []
+            return fallback_posts
         payload = response.json() if response.text else {}
     except Exception:
-        return []
+        return fallback_posts
 
     out: list[dict[str, Any]] = []
     for child in (payload.get("data") or {}).get("children") or []:
@@ -1273,19 +1554,26 @@ def _fetch_reddit_social_posts(query: str, *, limit: int = 8) -> list[dict[str, 
         )
         if len(out) >= limit:
             break
-    return out
+    if out:
+        return out
+    return fallback_posts
 
 
 def _fetch_x_social_posts(query: str, *, limit: int = 8) -> tuple[list[dict[str, Any]], str]:
-    if not TWITTER_BEARER_TOKEN:
-        return [], "TWITTER_BEARER_TOKEN is not configured."
     q = str(query or "").strip()
     if not q:
         return [], "Query is required."
+    fallback_posts, fallback_warning = _fetch_social_posts_via_web_search(q, platform="x", limit=limit)
+    if not TWITTER_BEARER_TOKEN:
+        if fallback_posts:
+            return fallback_posts, "Using web fallback for X posts because TWITTER_BEARER_TOKEN is missing."
+        return [], "TWITTER_BEARER_TOKEN is not configured."
 
     endpoint = "https://api.twitter.com/2/tweets/search/recent"
+    core_terms = _social_query_terms(q)
+    query_text = " ".join(core_terms[:4]) if core_terms else q
     params = {
-        "query": f"({q}) lang:en -is:retweet -is:reply",
+        "query": f"({query_text}) -is:retweet",
         "max_results": max(10, min(int(limit or 8) * 2, 40)),
         "tweet.fields": "created_at,public_metrics,author_id,lang",
         "expansions": "author_id",
@@ -1299,9 +1587,13 @@ def _fetch_x_social_posts(query: str, *, limit: int = 8) -> tuple[list[dict[str,
             timeout=15,
         )
         if response.status_code >= 400:
+            if fallback_posts:
+                return fallback_posts, f"Using web fallback for X posts because API returned HTTP {response.status_code}."
             return [], f"X API returned HTTP {response.status_code}."
         payload = response.json() if response.text else {}
     except Exception as exc:
+        if fallback_posts:
+            return fallback_posts, f"Using web fallback for X posts because API errored: {str(exc)[:120]}"
         return [], f"X API error: {str(exc)[:160]}"
 
     users = {
@@ -1316,6 +1608,9 @@ def _fetch_x_social_posts(query: str, *, limit: int = 8) -> tuple[list[dict[str,
         post_id = str(row.get("id") or "").strip()
         if not post_id:
             continue
+        text_body = str(row.get("text") or "").strip()
+        if not _text_matches_social_query(text_body, q):
+            continue
         author = users.get(str(row.get("author_id") or "").strip()) or {}
         metrics = row.get("public_metrics") if isinstance(row.get("public_metrics"), dict) else {}
         likes = int(metrics.get("like_count") or 0)
@@ -1328,7 +1623,7 @@ def _fetch_x_social_posts(query: str, *, limit: int = 8) -> tuple[list[dict[str,
                 score,
                 {
                     "id": post_id,
-                    "text": str(row.get("text") or "").strip(),
+                    "text": text_body,
                     "authorName": str(author.get("name") or "").strip(),
                     "authorUsername": username,
                     "createdAt": row.get("created_at"),
@@ -1343,13 +1638,24 @@ def _fetch_x_social_posts(query: str, *, limit: int = 8) -> tuple[list[dict[str,
             )
         )
     ranked.sort(key=lambda item: item[0], reverse=True)
-    return [item[1] for item in ranked[: max(1, min(int(limit or 8), 15))]], ""
+    top = [item[1] for item in ranked[: max(1, min(int(limit or 8), 15))]]
+    if top:
+        return top, ""
+    if fallback_posts:
+        warn = "Using web fallback for X posts because API returned no matching tweets."
+        if fallback_warning:
+            warn = f"{warn} {fallback_warning}"
+        return fallback_posts, warn.strip()
+    return [], "No matching X posts found."
 
 
 def _fetch_meta_social_posts(query: str, *, platform: str, limit: int = 6) -> tuple[list[dict[str, Any]], str]:
     q = str(query or "").strip().lower()
+    fallback_posts, fallback_warning = _fetch_social_posts_via_web_search(q, platform=platform, limit=limit)
     if platform == "facebook":
         if not FACEBOOK_PAGE_ID or not FACEBOOK_PAGE_ACCESS_TOKEN:
+            if fallback_posts:
+                return fallback_posts, "Using web fallback for Facebook because page credentials are missing."
             return [], "Facebook page credentials are not configured."
         try:
             response = requests.get(
@@ -1362,35 +1668,49 @@ def _fetch_meta_social_posts(query: str, *, platform: str, limit: int = 6) -> tu
                 timeout=14,
             )
             if response.status_code >= 400:
+                if fallback_posts:
+                    return fallback_posts, f"Using web fallback for Facebook because API returned HTTP {response.status_code}."
                 return [], f"Facebook API returned HTTP {response.status_code}."
             payload = response.json() if response.text else {}
         except Exception as exc:
+            if fallback_posts:
+                return fallback_posts, f"Using web fallback for Facebook because API errored: {str(exc)[:120]}"
             return [], f"Facebook API error: {str(exc)[:160]}"
 
         out: list[dict[str, Any]] = []
+        backup: list[dict[str, Any]] = []
         for row in payload.get("data") or []:
             if not isinstance(row, dict):
                 continue
             message = str(row.get("message") or "").strip()
-            if q and q not in message.lower():
-                continue
-            out.append(
-                {
-                    "id": str(row.get("id") or "").strip(),
-                    "text": message,
-                    "createdAt": row.get("created_time"),
-                    "permalink": str(row.get("permalink_url") or "").strip(),
-                    "reactions": int(((row.get("reactions") or {}).get("summary") or {}).get("total_count") or 0),
-                    "comments": int(((row.get("comments") or {}).get("summary") or {}).get("total_count") or 0),
-                    "source": "facebook",
-                }
-            )
-            if len(out) >= limit:
+            item = {
+                "id": str(row.get("id") or "").strip(),
+                "text": message,
+                "createdAt": row.get("created_time"),
+                "permalink": str(row.get("permalink_url") or "").strip(),
+                "reactions": int(((row.get("reactions") or {}).get("summary") or {}).get("total_count") or 0),
+                "comments": int(((row.get("comments") or {}).get("summary") or {}).get("total_count") or 0),
+                "source": "facebook",
+            }
+            backup.append(item)
+            if _text_matches_social_query(message, q):
+                out.append(item)
+            if len(backup) >= max(20, limit * 2):
                 break
-        return out, ""
+        chosen = out[:limit] or backup[:limit]
+        if chosen:
+            return chosen, ""
+        if fallback_posts:
+            warn = "Using web fallback for Facebook because API returned no posts."
+            if fallback_warning:
+                warn = f"{warn} {fallback_warning}"
+            return fallback_posts, warn.strip()
+        return [], "No Facebook posts found."
 
     if platform == "instagram":
         if not INSTAGRAM_BUSINESS_ACCOUNT_ID or not INSTAGRAM_ACCESS_TOKEN:
+            if fallback_posts:
+                return fallback_posts, "Using web fallback for Instagram because business credentials are missing."
             return [], "Instagram business credentials are not configured."
         try:
             response = requests.get(
@@ -1403,31 +1723,43 @@ def _fetch_meta_social_posts(query: str, *, platform: str, limit: int = 6) -> tu
                 timeout=14,
             )
             if response.status_code >= 400:
+                if fallback_posts:
+                    return fallback_posts, f"Using web fallback for Instagram because API returned HTTP {response.status_code}."
                 return [], f"Instagram API returned HTTP {response.status_code}."
             payload = response.json() if response.text else {}
         except Exception as exc:
+            if fallback_posts:
+                return fallback_posts, f"Using web fallback for Instagram because API errored: {str(exc)[:120]}"
             return [], f"Instagram API error: {str(exc)[:160]}"
 
         out: list[dict[str, Any]] = []
+        backup: list[dict[str, Any]] = []
         for row in payload.get("data") or []:
             if not isinstance(row, dict):
                 continue
             caption = str(row.get("caption") or "").strip()
-            if q and q not in caption.lower():
-                continue
-            out.append(
-                {
-                    "id": str(row.get("id") or "").strip(),
-                    "text": caption[:600],
-                    "createdAt": row.get("timestamp"),
-                    "permalink": str(row.get("permalink") or "").strip(),
-                    "mediaType": str(row.get("media_type") or "").strip(),
-                    "source": "instagram",
-                }
-            )
-            if len(out) >= limit:
+            item = {
+                "id": str(row.get("id") or "").strip(),
+                "text": caption[:600],
+                "createdAt": row.get("timestamp"),
+                "permalink": str(row.get("permalink") or "").strip(),
+                "mediaType": str(row.get("media_type") or "").strip(),
+                "source": "instagram",
+            }
+            backup.append(item)
+            if _text_matches_social_query(caption, q):
+                out.append(item)
+            if len(backup) >= max(25, limit * 2):
                 break
-        return out, ""
+        chosen = out[:limit] or backup[:limit]
+        if chosen:
+            return chosen, ""
+        if fallback_posts:
+            warn = "Using web fallback for Instagram because API returned no posts."
+            if fallback_warning:
+                warn = f"{warn} {fallback_warning}"
+            return fallback_posts, warn.strip()
+        return [], "No Instagram posts found."
 
     return [], "Unsupported platform."
 
@@ -7473,7 +7805,8 @@ def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
     allowed_models_raw = tier.get("allowed_models") if isinstance(tier, dict) else []
     allowed_models = [_normalize_ai_model_id(item) for item in (allowed_models_raw or []) if str(item).strip()]
     allowed_models = list(dict.fromkeys([item for item in allowed_models if item]))
-    weekly_limit = int(tier.get("weekly_limit") or tier.get("daily_limit") or (15 if tier_key == "premium" else 3))
+    default_weekly = 3 if tier_key == "free" else 25 if tier_key == "pro" else 75
+    weekly_limit = int(tier.get("weekly_limit") or tier.get("daily_limit") or default_weekly)
     weekly_limit = max(1, weekly_limit)
 
     personality = str(data.get("personality") or "").strip().lower()
@@ -7481,8 +7814,9 @@ def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
         "balanced": "gpt-5-mini",
         "deep_research": "gpt-5",
         "deep-research": "gpt-5",
-        "momentum": "gpt-5-mini",
-        "contrarian": "gpt-5-thinking",
+        "momentum": "gpt-5.1",
+        "contrarian": "gpt-5.2",
+        "efficient": "gpt-5-nano",
     }
 
     selected_model = _normalize_ai_model_id(
@@ -8750,6 +9084,9 @@ def generate_social_campaign_drafts(req: https_fn.CallableRequest) -> dict[str, 
     audience = str(data.get("audience") or "").strip() or "active investors and growth-focused teams"
     tone = str(data.get("tone") or "").strip() or "confident, concise, practical"
     channels = _normalize_social_channels(data.get("channels"))
+    posting_routes = {channel: _social_channel_posting_route(channel) for channel in channels}
+    routable_channels = [channel for channel, route in posting_routes.items() if route != "none"]
+    unroutable_channels = [channel for channel in channels if channel not in routable_channels]
     posts_per_channel = max(1, min(int(data.get("postsPerChannel") or 2), 5))
     cta_url = str(data.get("ctaUrl") or SOCIAL_DEFAULT_CTA_URL).strip() or SOCIAL_DEFAULT_CTA_URL
     title = str(data.get("title") or f"{topic} campaign").strip()
@@ -8794,7 +9131,14 @@ def generate_social_campaign_drafts(req: https_fn.CallableRequest) -> dict[str, 
         req.auth.uid,
         token.get("email"),
         "social_drafts_generated",
-        {"campaignId": campaign_id, "channels": channels, "postsPerChannel": posts_per_channel, "model": model_used},
+        {
+            "campaignId": campaign_id,
+            "channels": channels,
+            "routableChannels": routable_channels,
+            "unroutableChannels": unroutable_channels,
+            "postsPerChannel": posts_per_channel,
+            "model": model_used,
+        },
     )
 
     return {
@@ -8802,6 +9146,9 @@ def generate_social_campaign_drafts(req: https_fn.CallableRequest) -> dict[str, 
         "title": title,
         "topic": topic,
         "channels": channels,
+        "routableChannels": routable_channels,
+        "unroutableChannels": unroutable_channels,
+        "postingRoutes": posting_routes,
         "postsPerChannel": posts_per_channel,
         "model": model_used,
         "drafts": drafts,
@@ -8834,6 +9181,14 @@ def queue_social_campaign_posts(req: https_fn.CallableRequest) -> dict[str, Any]
     channels = [channel for channel in requested_channels if channel in drafts] or list(drafts.keys())
     if not channels:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.FAILED_PRECONDITION, "No channels available to queue.")
+    routable_channels = _configured_social_posting_channels(channels)
+    unroutable_channels = [channel for channel in channels if channel not in routable_channels]
+    channels = routable_channels
+    if not channels:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "No posting channels are configured. Add direct API credentials or SOCIAL_WEBHOOK_* targets.",
+        )
 
     scheduled_for = _as_utc_datetime(data.get("scheduledFor")) or datetime.now(timezone.utc)
     if scheduled_for < datetime.now(timezone.utc) - timedelta(minutes=2):
@@ -8855,6 +9210,7 @@ def queue_social_campaign_posts(req: https_fn.CallableRequest) -> dict[str, Any]
             "queuedAt": firestore.SERVER_TIMESTAMP,
             "queuedCount": enqueue["count"],
             "queuedChannels": channels,
+            "unroutableChannels": unroutable_channels,
             "scheduledFor": scheduled_for,
             "updatedAt": firestore.SERVER_TIMESTAMP,
         },
@@ -8865,7 +9221,12 @@ def queue_social_campaign_posts(req: https_fn.CallableRequest) -> dict[str, Any]
         req.auth.uid,
         token.get("email"),
         "social_posts_queued",
-        {"campaignId": campaign_id, "queuedCount": enqueue["count"], "channels": channels},
+        {
+            "campaignId": campaign_id,
+            "queuedCount": enqueue["count"],
+            "channels": channels,
+            "unroutableChannels": unroutable_channels,
+        },
     )
     return {
         "campaignId": campaign_id,
@@ -8873,6 +9234,7 @@ def queue_social_campaign_posts(req: https_fn.CallableRequest) -> dict[str, Any]
         "queueIds": enqueue["queueIds"],
         "scheduledFor": scheduled_for.isoformat(),
         "channels": channels,
+        "unroutableChannels": unroutable_channels,
     }
 
 
@@ -8942,7 +9304,8 @@ def _autopilot_social_channels() -> list[str]:
     channels = [channel for channel in SOCIAL_AUTOPILOT_CHANNELS if channel in SOCIAL_POPULAR_CHANNELS]
     if not channels:
         channels = ["x", "linkedin", "facebook", "instagram", "tiktok"]
-    return list(dict.fromkeys(channels))
+    channels = list(dict.fromkeys(channels))
+    return _configured_social_posting_channels(channels)
 
 
 def _run_social_autopilot_plan(trigger: str, actor_uid: str = "") -> dict[str, Any]:

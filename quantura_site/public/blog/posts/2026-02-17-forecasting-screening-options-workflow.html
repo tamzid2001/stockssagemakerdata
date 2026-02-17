@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Forecasting + Screening + Options: A Faster Quantura Workflow | Quantura Blog</title>
+    <meta
+      name="description"
+      content="A practical Quantura workflow for forecasting, screening, and options validation, plus small process upgrades that keep research consistent."
+    />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://quantura-e2e3d.web.app/blog/posts/2026-02-17-forecasting-screening-options-workflow" />
+    <meta property="og:title" content="Forecasting + Screening + Options: A Faster Quantura Workflow" />
+    <meta property="og:description" content="A practical Quantura workflow for forecasting, screening, and options validation, plus small process upgrades that keep research consistent." />
+    <meta property="og:type" content="article" />
+    <meta property="og:url" content="https://quantura-e2e3d.web.app/blog/posts/2026-02-17-forecasting-screening-options-workflow" />
+    <meta property="og:image" content="/assets/quantura-logo.svg" />
+    <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="stylesheet" href="/styles.css" />
+
+    <script defer src="/__/firebase/12.9.0/firebase-app-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-auth-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-firestore-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-functions-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-storage-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-analytics-compat.js"></script>
+    <script defer src="/__/firebase/init.js?useEmulator=false"></script>
+    <script defer src="/app.js"></script>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "BlogPosting",
+        "headline": "Forecasting + Screening + Options: A Faster Quantura Workflow",
+        "datePublished": "2026-02-17",
+        "dateModified": "2026-02-17",
+        "author": { "@type": "Organization", "name": "Quantura" },
+        "publisher": {
+          "@type": "Organization",
+          "name": "Quantura",
+          "logo": { "@type": "ImageObject", "url": "https://quantura-e2e3d.web.app/assets/quantura-logo.svg" }
+        },
+        "mainEntityOfPage": "https://quantura-e2e3d.web.app/blog/posts/2026-02-17-forecasting-screening-options-workflow"
+      }
+    </script>
+  </head>
+  <body>
+    <header class="header">
+      <div class="container nav">
+        <a class="logo" href="/" aria-label="Quantura home">
+          <img class="logo-img" src="/assets/quantura-logo.svg" alt="Quantura logo" />
+        </a>
+        <nav class="nav-links">
+          <a href="/forecasting" data-analytics="nav_forecasting">Forecasting</a>
+          <a href="/screener" data-analytics="nav_screener">Screener</a>
+          <a href="/dashboard" data-analytics="nav_dashboard">Dashboard</a>
+          <a href="/pricing" data-analytics="nav_pricing">Pricing</a>
+          <a href="/blog" data-analytics="nav_blog">Blog</a>
+          <a href="/contact" data-analytics="nav_contact">Contact</a>
+        </nav>
+        <div class="nav-actions">
+          <span id="header-user-email" class="small" style="max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Guest</span>
+          <span id="header-user-status" class="pill">Guest</span>
+          <button class="cta secondary" id="header-auth" type="button">Sign in</button>
+          <button class="cta secondary hidden" id="header-signout" type="button">Sign out</button>
+          <a class="cta secondary hidden" id="header-dashboard" href="/dashboard">Dashboard</a>
+          <a class="cta" href="/forecasting">Open terminal</a>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="page-hero">
+        <div class="container content-grid">
+          <div>
+            <div class="eyebrow">Workflow playbook</div>
+            <h1>Forecasting + Screening + Options: A Faster Quantura Workflow</h1>
+            <p class="small">Published February 17, 2026</p>
+            <p style="margin-top: 14px;">
+              Forecasts are only as useful as the decisions they unlock. The best teams connect their forecasts to a
+              screening process, validate the market’s own expectations, and log each decision so the loop gets tighter
+              every week. This post outlines a lightweight Quantura workflow that links forecasting, screening, and
+              options analysis, plus small process upgrades that keep research consistent.
+            </p>
+            <div class="hero-actions">
+              <a class="cta" href="/forecasting" data-analytics="blog_open_terminal">Open the terminal</a>
+              <a class="cta secondary" href="/screener" data-analytics="blog_open_screener">Run the screener</a>
+            </div>
+          </div>
+          <div class="card">
+            <h3>Workflow goals</h3>
+            <p class="small">Keep every step aligned to a decision-ready output.</p>
+            <ul style="margin: 14px 0 0 18px; color: var(--graphite); line-height: 1.7;">
+              <li class="small">Forecasts that translate into clear scenarios.</li>
+              <li class="small">Screened lists that shrink the research surface area.</li>
+              <li class="small">Options signals that validate price expectations.</li>
+              <li class="small">A dashboard trail for follow-up and accountability.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container content-grid">
+          <div>
+            <h2>1) Start with a forecast question</h2>
+            <p>
+              The fastest forecasts start with a clear question: “Where does uncertainty expand in the next 5 to 20
+              sessions?” In Quantura, load a ticker in the terminal and run a forecast band with your preferred engine.
+              You are not hunting for a single price target. You are looking for a band that frames where risk shifts.
+              Notice where the upper and lower quantiles diverge, and identify the levels that would invalidate the
+              thesis. Those are your initial decision boundaries.
+            </p>
+            <p>
+              A good practice is to log the forecast horizon and the confidence width as a baseline. If the band is wide,
+              treat the setup as exploratory. If the band is tight and directional, mark it for deeper validation.
+            </p>
+          </div>
+          <div class="card">
+            <h3>Forecast checklist</h3>
+            <div class="feature-list">
+              <div class="feature"><span></span>Pick a horizon and document it</div>
+              <div class="feature"><span></span>Compare trend vs. mean-reversion setups</div>
+              <div class="feature"><span></span>Capture invalidation levels</div>
+              <div class="feature"><span></span>Save the run for review</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container content-grid">
+          <div>
+            <h2>2) Use the screener to filter the universe</h2>
+            <p>
+              Forecasting should never start from the full market. Use the Quantura screener to narrow the list based on
+              liquidity, volatility, and momentum. When the forecast band suggests volatility expansion, filter for names
+              that already show rising ATR or widening ranges. If the band suggests compression, screen for stable,
+              trending names that typically move in measured steps.
+            </p>
+            <p>
+              Once the screener returns a manageable list, push candidates back into the terminal. This keeps the workflow
+              circular: the forecast informs the screen, and the screen feeds back into the forecast. You avoid wandering
+              between tools and keep your hypothesis tied to the filters you actually ran.
+            </p>
+          </div>
+          <div class="card">
+            <h3>Screener upgrades</h3>
+            <div class="feature-list">
+              <div class="feature"><span></span>Save a “volatility expansion” preset</div>
+              <div class="feature"><span></span>Save a “trend confirmation” preset</div>
+              <div class="feature"><span></span>Export candidates directly to the terminal</div>
+              <div class="feature"><span></span>Document filters in your notes</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container content-grid">
+          <div>
+            <h2>3) Validate with the options chain</h2>
+            <p>
+              Options data gives you the market’s probabilistic lens. After identifying your forecast candidates, open the
+              options chain to see where implied volatility is concentrated. Look for clusters of open interest or unusual
+              volume around the levels you flagged in the forecast. If the options market prices a move that aligns with
+              your band, you gain confidence. If the market prices a different direction or a wider move, treat that as a
+              signal to reframe the forecast.
+            </p>
+            <p>
+              The goal is not to trade options by default. The goal is to compare your forecast with the market’s implied
+              probabilities. This also helps you plan position sizing or alert thresholds. If implied volatility is elevated
+              while your forecast band is narrow, you may be missing a catalyst. If implied volatility is low but your band
+              is wide, your model might be overstating risk.
+            </p>
+          </div>
+          <div class="card">
+            <h3>Options validation cues</h3>
+            <div class="feature-list">
+              <div class="feature"><span></span>Map IV skew to forecast direction</div>
+              <div class="feature"><span></span>Note open interest near key levels</div>
+              <div class="feature"><span></span>Compare IV percentile to history</div>
+              <div class="feature"><span></span>Align alerts to implied ranges</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container content-grid">
+          <div>
+            <h2>4) Log the workflow in the dashboard</h2>
+            <p>
+              The dashboard is where the workflow becomes repeatable. Every time you run a forecast, capture the horizon,
+              the band width, the screener filters, and the options validation note. This lets you review what worked,
+              refine your presets, and spot where decisions drifted from the original plan. Over time, you can quantify
+              which forecast questions lead to actionable trades or watchlist outcomes.
+            </p>
+            <p>
+              If you work with a team, this also gives you a shared language. Everyone can see the inputs, the forecast
+              assumptions, and the implied probabilities. It prevents the “one chart screenshot” problem and keeps
+              collaboration grounded in data.
+            </p>
+          </div>
+          <div class="card">
+            <h3>Dashboard habits</h3>
+            <div class="feature-list">
+              <div class="feature"><span></span>Attach forecast runs to each ticker</div>
+              <div class="feature"><span></span>Tag the screener preset used</div>
+              <div class="feature"><span></span>Add options notes and IV levels</div>
+              <div class="feature"><span></span>Schedule a follow-up review date</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container">
+          <h2>Putting it together: a 30-minute workflow</h2>
+          <p>
+            Here is a simple cadence that keeps research tight without cutting corners. Start in the terminal and run your
+            forecast question. Move to the screener and narrow the universe to a handful of candidates. Validate those
+            candidates with the options chain, then log the run in the dashboard. The output is a short list with a clear
+            reason for each name and an agreed range of uncertainty. Repeat weekly, and the logs will show where your
+            models are strongest.
+          </p>
+          <ul style="margin: 14px 0 0 18px; color: var(--graphite); line-height: 1.7;">
+            <li class="small">Minutes 0-10: Forecast bands for two to three candidates.</li>
+            <li class="small">Minutes 10-20: Screener refinement and candidate selection.</li>
+            <li class="small">Minutes 20-30: Options validation and dashboard notes.</li>
+          </ul>
+          <div class="testimonial" style="margin-top: 18px;">
+            “The workflow matters more than any single model. Repeatability wins.”
+            <div class="small">— Quantura workflow note</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container content-grid">
+          <div>
+            <h2>Next steps</h2>
+            <p>
+              If you have not built presets yet, start with one screen for volatility expansion and one for trend
+              confirmation. Then, build a short checklist for every forecast you save. The goal is to remove decision
+              fatigue and focus attention on the handful of names that deserve it.
+            </p>
+            <p>
+              Ready to run the workflow? Launch the terminal, pull your screener preset, and pin the outcome in the
+              dashboard.
+            </p>
+          </div>
+          <div class="card">
+            <h3>Quick links</h3>
+            <div class="feature-list">
+              <div class="feature"><span></span><a href="/forecasting">Forecasting terminal</a></div>
+              <div class="feature"><span></span><a href="/screener">Screener presets</a></div>
+              <div class="feature"><span></span><a href="/dashboard">Research dashboard</a></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="container footer-grid">
+        <div>
+          <div class="logo">QUANTURA</div>
+          <p class="small">Forecasting and market intelligence for high-conviction decisions.</p>
+          <span class="tag">Blog</span>
+          <div class="footer-social" aria-label="Quantura social links">
+            <a class="social-link" href="#" data-analytics="social_x" aria-label="X (coming soon)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.9 2H22l-6.8 7.8L23 22h-6.9l-5.4-6.9L4.7 22H1.6l7.3-8.4L1 2h7.1l4.9 6.3L18.9 2zm-1.2 18h1.7L7.2 3.9H5.4L17.7 20z"/></svg>
+            </a>
+            <a class="social-link" href="#" data-analytics="social_linkedin" aria-label="LinkedIn (coming soon)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.98 3.5C4.98 4.88 3.87 6 2.5 6S0 4.88 0 3.5 1.12 1 2.5 1 4.98 2.12 4.98 3.5zM0.5 8.5H4.5V23H0.5V8.5zM8.5 8.5H12.3V10.4h.1c.5-1 1.9-2.1 3.9-2.1 4.2 0 5 2.8 5 6.5V23h-4v-6.7c0-1.6 0-3.7-2.2-3.7-2.3 0-2.6 1.8-2.6 3.6V23h-4V8.5z"/></svg>
+            </a>
+            <a class="social-link" href="#" data-analytics="social_github" aria-label="GitHub (coming soon)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .5C5.73.5.75 5.63.75 12c0 5.1 3.29 9.41 7.86 10.94.58.11.79-.26.79-.57v-2.1c-3.2.71-3.88-1.57-3.88-1.57-.53-1.37-1.29-1.74-1.29-1.74-1.05-.74.08-.73.08-.73 1.16.08 1.77 1.23 1.77 1.23 1.03 1.8 2.7 1.28 3.36.98.1-.77.4-1.28.72-1.58-2.55-.3-5.23-1.31-5.23-5.84 0-1.29.45-2.35 1.19-3.18-.12-.3-.52-1.53.11-3.2 0 0 .97-.32 3.18 1.21.92-.26 1.9-.39 2.88-.39.98 0 1.96.13 2.88.39 2.2-1.53 3.17-1.21 3.17-1.21.63 1.67.23 2.9.11 3.2.74.83 1.19 1.89 1.19 3.18 0 4.54-2.69 5.54-5.25 5.83.41.37.77 1.1.77 2.22v3.29c0 .31.21.68.8.57A11.3 11.3 0 0 0 23.25 12C23.25 5.63 18.27.5 12 .5z"/></svg>
+            </a>
+          </div>
+          <div class="footer-badges" aria-label="Quantura technology stack">
+            <span class="badge-chip">Forecasting</span>
+            <span class="badge-chip">Screener</span>
+            <span class="badge-chip">Options</span>
+            <span class="badge-chip">Workflow</span>
+          </div>
+        </div>
+        <div class="small">
+          <strong>Explore</strong>
+          <div><a href="/blog">Blog</a></div>
+          <div><a href="/forecasting">Forecasting</a></div>
+          <div><a href="/screener">Screener</a></div>
+          <div><a href="/dashboard">Dashboard</a></div>
+          <div><a href="/pricing">Pricing</a></div>
+        </div>
+        <div class="small">
+          <strong>Product</strong>
+          <div>Terminal</div>
+          <div>Screener</div>
+          <div>Collaboration</div>
+        </div>
+      </div>
+      <div class="container small" style="margin-top: 24px;">
+        © 2026 Quantura. All rights reserved.
+      </div>
+    </footer>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>

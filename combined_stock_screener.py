@@ -74,7 +74,7 @@ Example: ["AAPL", "MSFT", "TSLA", ...]
 """
     
     response = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model="gpt-5-mini",
         messages=[{"role": "user", "content": prompt}],
         temperature=0.7
     )
@@ -352,7 +352,7 @@ Be concise: max 2 sentences for theses, 1 sentence for technical setup.
     }
 
     response = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model="gpt-5-mini",
         messages=[
             {"role": "system", "content": "Return only valid JSON matching the schema."},
             {"role": "user", "content": f"{prompt}\n\n{json.dumps(payload, indent=2, default=str)}"},
