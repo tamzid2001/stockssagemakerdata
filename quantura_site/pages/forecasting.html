@@ -30,20 +30,24 @@
     <script defer src="/__/firebase/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
     <script defer src="/app.js"></script>
-  </head>
+  
+    <script>
+      window.__QUANTURA_RC_TEMPLATE_ID__ = "firebase-server";
+      window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ = {"status":200,"eTag":"etag-quantura-e2e3d-firebase-server-fetch--1213937490","config":{"welcome_message":"Welcome to Quantura","watchlist_enabled":"true","forecast_prophet_enabled":"true","forecast_timemixer_enabled":"true","push_notifications_enabled":"true","webpush_vapid_key":"","stripe_checkout_enabled":"true","stripe_public_key":"","holiday_promo":"true","backtesting_enabled":"true","backtesting_free_daily_limit":"1","backtesting_pro_daily_limit":"25"}};
+    </script>
+  
+</head>
   <body>
     <header class="header">
       <div class="container nav">
         <a class="logo" href="/" aria-label="Quantura home"><span>QUANTURA</span></a>
         <nav class="nav-links">
-          <a href="/forecasting" data-analytics="nav_forecasting"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Terminal</span></a>
           <a href="/screener" data-analytics="nav_screener"><i class="iconoir-search" aria-hidden="true"></i><span>Screener</span></a>
           <a href="/pricing" data-analytics="nav_pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>Pricing</span></a>
           <a href="/contact" data-analytics="nav_contact"><i class="iconoir-mail" aria-hidden="true"></i><span>Contact</span></a>
         </nav>
         <div class="nav-actions">
-          <span id="header-user-email" class="small" style="max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Guest</span>
-          <span id="header-user-status" class="pill">Guest</span>
+          <span id="header-user-status" class="pill">Logged Out</span>
           <button class="cta secondary" id="header-auth" type="button"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></button>
           <a class="cta" href="/pricing"><i class="iconoir-page" aria-hidden="true"></i><span>Request Deep Forecast</span></a>
         </div>
@@ -56,7 +60,7 @@
           <div class="sidebar-card">
             <div class="small"><strong>Account</strong></div>
             <div class="small">Signed in as <span id="user-email">Not signed in</span></div>
-            <div class="small">Status <span id="user-status" class="pill">Guest</span></div>
+            <div class="small">Status <span id="user-status" class="pill">Logged Out</span></div>
             <a class="cta secondary small" href="/dashboard"><i class="iconoir-dashboard" aria-hidden="true"></i><span>Open dashboard</span></a>
             <a class="cta secondary small hidden" id="nav-admin" href="/admin"><i class="iconoir-shield-check" aria-hidden="true"></i><span>Admin dashboard</span></a>
           </div>
@@ -274,7 +278,7 @@
                       <h2>Trending</h2>
                       <p class="small">Load the market's most active tickers and click any symbol to drive the chart context.</p>
                     </div>
-                    <div class="content-grid">
+                    <div class="content-grid news-data-grid">
                       <div class="card">
                         <div class="card-head">
                           <h3>Trending tickers</h3>
@@ -379,7 +383,7 @@
                         </p>
                       </details>
                     </form>
-                    <div class="results-panel">
+                    <div class="results-panel options-chain-panel">
                       <h3>Options chain</h3>
                       <div id="options-output" class="panel-output small">Calls and puts will appear here.</div>
                     </div>
@@ -387,8 +391,8 @@
 
 	                  <section class="panel hidden" data-panel="screener">
                     <div class="panel-header">
-                      <h2>Screener</h2>
-                      <p class="small">Run a quick screen against trending tickers and click any result to load it in the chart.</p>
+                      <h2>AI Portfolio Generator</h2>
+                      <p class="small">Run criteria, rank candidates with Meta Prophet long-term growth scores, and publish an AI Agent.</p>
                     </div>
                     <form id="screener-form" class="card">
                       <div class="form-grid">
@@ -413,15 +417,19 @@
                           <input id="screener-min" name="minCap" type="number" value="5" />
                         </div>
                         <div class="field">
-                          <label class="label" for="screener-max">Max names</label>
-                          <input id="screener-max" name="maxNames" type="number" value="25" />
+                          <label class="label" for="screener-max">Candidate pool (5-25)</label>
+                          <input id="screener-max" name="maxNames" type="number" value="20" min="5" max="25" />
+                        </div>
+                        <div class="field">
+                          <label class="label" for="screener-agent-name">Agent name (optional)</label>
+                          <input id="screener-agent-name" name="agentName" placeholder="Quantura Horizon" />
                         </div>
                       </div>
                       <div class="field">
-                        <label class="label" for="screener-notes">Notes</label>
-                        <textarea id="screener-notes" name="notes" placeholder="Optional focus, exclusions, or themes"></textarea>
+                        <label class="label" for="screener-notes">Criteria</label>
+                        <textarea id="screener-notes" name="notes" placeholder='Example: "Tech, P/E &lt; 20, high free cash flow"'></textarea>
                       </div>
-                      <button class="cta" type="submit" data-analytics="screener_submit">Run screener</button>
+                      <button class="cta" type="submit" data-analytics="screener_submit">Generate AI Portfolio</button>
                       <details class="learn-more">
                         <summary>Learn more</summary>
                         <p class="small">
@@ -431,11 +439,11 @@
                       </details>
                     </form>
 	                    <div class="results-panel">
-	                      <h3>Screener output</h3>
-	                      <div id="screener-output" class="panel-output small">Run the screener to see ranked candidates.</div>
+	                      <h3>Portfolio output</h3>
+	                      <div id="screener-output" class="panel-output small">Generate a portfolio to see ranked candidates and AI Agent performance.</div>
 	                    </div>
                       <div class="card">
-                        <h3>Load saved run</h3>
+                        <h3>Load saved portfolio run</h3>
                         <div class="form-grid">
                           <div class="field">
                             <label class="label" for="screener-load-select">Recent runs</label>
@@ -445,7 +453,7 @@
                           </div>
                         </div>
                         <div class="hero-actions" style="margin-top: 12px;">
-                          <button class="cta secondary" id="screener-load-button" type="button" data-analytics="screener_load_saved">Load run</button>
+                          <button class="cta secondary" id="screener-load-button" type="button" data-analytics="screener_load_saved">Load portfolio</button>
                         </div>
                         <p class="small muted" id="screener-load-status"></p>
                       </div>
@@ -454,7 +462,7 @@
 	                  <section class="panel hidden" data-panel="watchlist">
 	                    <div class="panel-header">
 	                      <h2>Watchlist and alerts</h2>
-	                      <p class="small">Save symbols to your workspace and set price alerts that can trigger notifications.</p>
+	                      <p class="small">Save symbols to your workspace. Every followed asset automatically gets a default ±5% volatility alert.</p>
 	                    </div>
 
 	                    <div class="content-grid">
@@ -486,7 +494,7 @@
 
 	                    <div class="content-grid" style="margin-top: 16px;">
 	                      <form id="alert-form" class="card">
-	                        <h3>Create price alert</h3>
+	                        <h3>Create custom price alert</h3>
 	                        <div class="form-grid">
 	                          <div class="field">
 	                            <label class="label" for="alert-ticker">Ticker</label>
@@ -509,7 +517,7 @@
 	                          <textarea id="alert-notes" name="notes" placeholder="What should you do when this triggers?"></textarea>
 	                        </div>
 	                        <div class="hero-actions" style="margin-top: 12px;">
-	                          <button class="cta" type="submit" data-analytics="alert_create">Create alert</button>
+	                          <button class="cta" type="submit" data-analytics="alert_create">Create custom alert</button>
 	                          <button class="cta secondary" id="alerts-check" type="button" data-analytics="alert_check">Check alerts now</button>
 	                        </div>
 	                        <p class="small" id="alerts-status"></p>
