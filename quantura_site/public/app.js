@@ -44,41 +44,68 @@
   ];
   const AI_MODEL_CATALOG = [
     {
+      id: "gpt-5-nano",
+      provider: "openai",
+      tier: "Core",
+      label: "Nano Scout",
+      personality: "efficient",
+      helper: "Ultra-low-cost triage and quick breadth scans.",
+      pricing: { input: 0.05, cached_input: 0.005, output: 0.4 },
+    },
+    {
       id: "gpt-5-mini",
       provider: "openai",
       tier: "Core",
       label: "Balanced Analyst",
       personality: "balanced",
       helper: "Fast all-round screening for most workflows.",
+      pricing: { input: 0.25, cached_input: 0.025, output: 2.0 },
     },
     {
       id: "gpt-5",
       provider: "openai",
       tier: "Pro",
-      label: "Deep Research",
+      label: "Research Core",
       personality: "deep_research",
-      helper: "Higher-depth thesis and macro cross-checking.",
+      helper: "Higher-depth thesis and cross-factor reasoning.",
+      pricing: { input: 1.25, cached_input: 0.125, output: 10.0 },
     },
     {
-      id: "gpt-5-thinking",
+      id: "gpt-5.1",
       provider: "openai",
       tier: "Pro",
+      label: "Macro Strategist",
+      personality: "momentum",
+      helper: "Stronger macro synthesis and scenario framing.",
+      pricing: { input: 1.25, cached_input: 0.125, output: 10.0 },
+    },
+    {
+      id: "gpt-5.2",
+      provider: "openai",
+      tier: "Desk",
       label: "Contrarian Strategist",
       personality: "contrarian",
       helper: "Looks for crowded trades and asymmetric reversals.",
+      pricing: { input: 1.75, cached_input: 0.175, output: 14.0 },
     },
   ];
   const AI_USAGE_TIER_DEFAULTS = {
     free: {
-      allowed_models: ["gpt-5-mini"],
+      allowed_models: ["gpt-5-nano", "gpt-5-mini"],
       weekly_limit: 3,
       daily_limit: 3,
       volatility_alerts: false,
     },
-    premium: {
-      allowed_models: ["gpt-5-mini", "gpt-5", "gpt-5-thinking"],
-      weekly_limit: 15,
-      daily_limit: 15,
+    pro: {
+      allowed_models: ["gpt-5-mini", "gpt-5", "gpt-5.1"],
+      weekly_limit: 25,
+      daily_limit: 25,
+      volatility_alerts: true,
+    },
+    desk: {
+      allowed_models: ["gpt-5-nano", "gpt-5-mini", "gpt-5", "gpt-5.1", "gpt-5.2"],
+      weekly_limit: 75,
+      daily_limit: 75,
       volatility_alerts: true,
     },
   };
@@ -256,9 +283,9 @@
       returns: { "1m": 0.016, "3m": 0.049, "6m": 0.091, "1y": 0.164, "5y": 0.46, max: 0.46 },
       rationale:
         "This set targets deep pullbacks with improving momentum breadth and valuation support. It is tuned for mean-reversion windows with defined upside asymmetry.",
-      modelId: "gpt-5-thinking",
+      modelId: "gpt-5.2",
       modelProvider: "openai",
-      modelTier: "Pro",
+      modelTier: "Desk",
     },
     {
       id: "quantura-alphagen",
@@ -295,9 +322,9 @@
       returns: { "1m": 0.031, "3m": 0.094, "6m": 0.171, "1y": 0.302, "5y": 1.05, max: 1.05 },
       rationale:
         "Momenta emphasizes high-conviction trend continuation where breadth and liquidity remain supportive. It is optimized for sustained breakout environments.",
-      modelId: "gpt-5-thinking",
+      modelId: "gpt-5.2",
       modelProvider: "openai",
-      modelTier: "Pro",
+      modelTier: "Desk",
     },
     {
       id: "preset-pelosi-radar",
@@ -308,9 +335,9 @@
       returns: { "1m": 0.028, "3m": 0.085, "6m": 0.151, "1y": 0.264, "5y": 0.99, max: 0.99 },
       rationale:
         "Preset built from high-liquidity names commonly discussed in public-trade trackers tied to Nancy Pelosi themed searches.",
-      modelId: "gpt-5-thinking",
+      modelId: "gpt-5.2",
       modelProvider: "openai",
-      modelTier: "Pro",
+      modelTier: "Desk",
     },
     {
       id: "preset-bezos-growth",
@@ -386,9 +413,9 @@
       returns: { "1m": 0.033, "3m": 0.103, "6m": 0.186, "1y": 0.318, "5y": 1.22, max: 1.22 },
       rationale:
         "Captures disruptive-growth themes frequently associated with ARK Invest screens and innovation-centric flows.",
-      modelId: "gpt-5-thinking",
+      modelId: "gpt-5.2",
       modelProvider: "openai",
-      modelTier: "Pro",
+      modelTier: "Desk",
     },
     {
       id: "preset-hedgefund-consensus",
@@ -409,7 +436,7 @@
       id: "pelosi-tracker",
       title: "Nancy Pelosi Portfolio Tracker",
       notes: "Nancy Pelosi stock portfolio",
-      modelUsed: "gpt-5-thinking",
+      modelUsed: "gpt-5.2",
       symbols: ["NVDA", "AAPL", "MSFT", "AMZN", "GOOGL", "PANW"],
     },
     {
@@ -451,7 +478,7 @@
       id: "ark-disruptors",
       title: "ARK Innovation Disruptors",
       notes: "ARK Invest disruptive innovation stocks",
-      modelUsed: "gpt-5-thinking",
+      modelUsed: "gpt-5.2",
       symbols: ["TSLA", "COIN", "ROKU", "SQ", "PATH", "CRSP"],
     },
     {
@@ -755,6 +782,7 @@
   const state = {
     user: null,
     userHasPaidPlan: false,
+    userSubscriptionTier: "free",
     userProfile: {
       username: "",
       socialLinks: { ...DEFAULT_PROFILE_SOCIAL_LINKS },
@@ -3053,10 +3081,20 @@
       .orderBy("createdAt", "desc")
       .onSnapshot((snapshot) => {
         const orders = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-        state.userHasPaidPlan = orders.some((order) => {
+        const paidOrders = orders.filter((order) => {
           const status = String(order?.paymentStatus || "").trim().toLowerCase();
           return status === "paid" || status === "succeeded";
         });
+        state.userHasPaidPlan = paidOrders.length > 0;
+        state.userSubscriptionTier = paidOrders.some((order) =>
+          String(order?.product || "").toLowerCase().includes("desk")
+        )
+          ? "desk"
+          : paidOrders.some((order) => String(order?.product || "").toLowerCase().includes("pro"))
+          ? "pro"
+          : state.userHasPaidPlan
+          ? "pro"
+          : "free";
         renderOrderList(orders, ui.userOrders);
         refreshScreenerModelUi();
         refreshScreenerCreditsUi();
@@ -6632,11 +6670,22 @@
     const id = String(modelId || "").trim();
     if (!id) return "";
     const lower = id.toLowerCase();
+    const aliases = {
+      "gpt-5-2": "gpt-5.2",
+      "gpt5.2": "gpt-5.2",
+      "gpt-5-1": "gpt-5.1",
+      "gpt5.1": "gpt-5.1",
+      "gpt5": "gpt-5",
+      "gpt5-mini": "gpt-5-mini",
+      "gpt5-nano": "gpt-5-nano",
+      "gpt-5-thinking": "gpt-5.2",
+    };
+    if (aliases[lower]) return aliases[lower];
     if (lower.startsWith("gpt-") && lower.charAt(4) === "4") {
       return "gpt-5-mini";
     }
     if (lower.startsWith("o1")) {
-      return "gpt-5-thinking";
+      return "gpt-5.1";
     }
     return id;
   };
@@ -6659,9 +6708,9 @@
 
   const getCurrentAiTierKey = () => {
     if (!state.user) return "free";
-    return state.userHasPaidPlan || String(state.user.email || "").toLowerCase() === String(ADMIN_EMAIL).toLowerCase()
-      ? "premium"
-      : "free";
+    if (String(state.user.email || "").toLowerCase() === String(ADMIN_EMAIL).toLowerCase()) return "desk";
+    if (!state.userHasPaidPlan) return "free";
+    return state.userSubscriptionTier || "pro";
   };
 
   const getCurrentAiTierConfig = () => {
@@ -6669,7 +6718,10 @@
     const tiers = state.remoteFlags.aiUsageTiers && typeof state.remoteFlags.aiUsageTiers === "object"
       ? state.remoteFlags.aiUsageTiers
       : AI_USAGE_TIER_DEFAULTS;
-    const config = tiers[key] && typeof tiers[key] === "object" ? tiers[key] : AI_USAGE_TIER_DEFAULTS[key] || AI_USAGE_TIER_DEFAULTS.free;
+    const config =
+      tiers[key] && typeof tiers[key] === "object"
+        ? tiers[key]
+        : AI_USAGE_TIER_DEFAULTS[key] || AI_USAGE_TIER_DEFAULTS.free;
     const rawAllowed = Array.isArray(config.allowed_models) ? config.allowed_models : [];
     const allowedModels = rawAllowed
       .map((x) => normalizeAiModelId(String(x).trim()))
@@ -7137,7 +7189,8 @@
           .map((item) => {
             const locked = allowedSet.size > 0 && !allowedSet.has(item.id);
             const helper = String(item.helper || "").trim();
-            const label = `${item.label}${helper ? ` - ${helper}` : ""}${locked ? " (Pro)" : ""}`;
+            const lockTier = String(item.tier || "Pro");
+            const label = `${item.label}${helper ? ` - ${helper}` : ""}${locked ? ` (${lockTier})` : ""}`;
             return `<option value="${escapeHtml(item.id)}" ${locked ? "disabled" : ""} data-provider="${escapeHtml(item.provider)}" data-personality="${escapeHtml(item.personality || "balanced")}">${escapeHtml(label)}</option>`;
           })
           .join("");
@@ -7158,7 +7211,8 @@
     syncScreenerProviderAccent();
 
     if (ui.screenerModelMeta) {
-      ui.screenerModelMeta.textContent = `${tier.key === "premium" ? "Pro" : "Free"} tier · ${tier.weeklyLimit} weekly credits · GPT-5 personalities`;
+      const tierLabel = tier.key === "desk" ? "Desk" : tier.key === "pro" ? "Pro" : "Free";
+      ui.screenerModelMeta.textContent = `${tierLabel} tier · ${tier.weeklyLimit} weekly credits · GPT-5 personalities`;
     }
   };
 
@@ -7201,8 +7255,8 @@
       title: "Limit Reached",
       message:
         String(message || "").trim() ||
-        "You have reached your weekly AI screener credit limit. Upgrade to Pro to unlock higher throughput.",
-      confirmLabel: "Upgrade to Pro",
+        "You have reached your weekly AI screener credit limit. Upgrade your plan for higher throughput and model access.",
+      confirmLabel: "Upgrade Plan",
       cancelLabel: "Close",
     });
     if (upgrade) {
@@ -8248,10 +8302,10 @@
           notes: preset.notes,
           results: buildPresetScreenerRows(preset.symbols || []),
           modelUsed: preset.modelUsed,
-          modelTier: "premium",
-          weeklyLimit: 15,
-          dailyLimit: 15,
-          allowedModels: ["gpt-5-mini", "gpt-5", "gpt-5-thinking"],
+          modelTier: "desk",
+          weeklyLimit: 75,
+          dailyLimit: 75,
+          allowedModels: ["gpt-5-nano", "gpt-5-mini", "gpt-5", "gpt-5.1", "gpt-5.2"],
           filters: {},
           noteSignals: {
             tickers: preset.symbols || [],
@@ -11798,6 +11852,7 @@
 
 		      if (!user) {
 		        state.userHasPaidPlan = false;
+            state.userSubscriptionTier = "free";
             state.aiUsageToday = 0;
             state.aiUsageTierKey = "free";
 		        renderOrderList([], ui.userOrders);

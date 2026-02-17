@@ -55,17 +55,25 @@ Functions:
 - `list_social_queue`
 - `publish_social_queue_now` (admin)
 - `social_dispatch_scheduler` (hourly)
+- `schedule_social_autopilot_now` (admin, manual trigger)
+- `social_daily_planner_scheduler` (daily campaign planner)
 
 Model:
-- Default low-cost model: `gpt-4o-mini` via `SOCIAL_CONTENT_MODEL`.
+- Default low-cost model: `gpt-5-mini` via `SOCIAL_CONTENT_MODEL`.
 - If `OPENAI_API_KEY` is missing, template fallback is used so automation still works.
+- GPT-5 generation uses OpenAI Responses API with channel-by-channel drafting to avoid truncation.
+
+Tier model access used by Quantura AI screeners:
+- `free`: `gpt-5-nano`, `gpt-5-mini` (3 weekly runs)
+- `pro`: `gpt-5-mini`, `gpt-5`, `gpt-5.1` (25 weekly runs)
+- `desk`: `gpt-5-nano`, `gpt-5-mini`, `gpt-5`, `gpt-5.1`, `gpt-5.2` (75 weekly runs)
 
 ## 5) Environment variables
 
 Add these in your Functions environment (or `.env` for local emulator):
 - `OPENAI_API_KEY`
 - `SOCIAL_AUTOMATION_ENABLED=true`
-- `SOCIAL_CONTENT_MODEL=gpt-4o-mini`
+- `SOCIAL_CONTENT_MODEL=gpt-5-mini`
 - `SOCIAL_AUTOMATION_TIMEZONE=America/New_York`
 - `SOCIAL_DISPATCH_BATCH_SIZE=30`
 - `SOCIAL_DEFAULT_CTA_URL=https://quantura-e2e3d.web.app`
@@ -78,10 +86,27 @@ Add these in your Functions environment (or `.env` for local emulator):
 - `SOCIAL_WEBHOOK_TIKTOK`
 - `SOCIAL_WEBHOOK_YOUTUBE`
 - `SOCIAL_WEBHOOK_PINTEREST`
+- `SOCIAL_POSTING_TIMEZONE=America/New_York`
+- `SOCIAL_AUTOPILOT_ENABLED=true`
+- `SOCIAL_AUTOPILOT_CHANNELS=x,linkedin,facebook,instagram,tiktok`
+- `SOCIAL_AUTOPILOT_POSTS_PER_CHANNEL=3`
+- `SOCIAL_AUTOPILOT_USER_ID=quantura_system`
+- `SOCIAL_AUTOPILOT_USER_EMAIL=system@quantura.ai`
+- `SOCIAL_AUTOPILOT_TOPIC=Daily Quantura market pulse: top catalysts, risk posture, and setup watchlist`
+- `SOCIAL_AUTOPILOT_OBJECTIVE=Drive qualified users to Quantura forecasting workflows`
+- `SOCIAL_AUTOPILOT_AUDIENCE=active investors, analysts, and portfolio operators`
+- `SOCIAL_AUTOPILOT_TONE=institutional, concise, actionable`
+
+Direct provider posting credentials (optional alternative to webhooks):
+- `TWITTER_BEARER_TOKEN` (read/search) plus user-write credentials `TWITTER_API_KEY` + `TWITTER_API_SECRET` + `TWITTER_ACCESS_TOKEN` + `TWITTER_ACCESS_TOKEN_SECRET` for X posting
+- `LINKEDIN_ACCESS_TOKEN` + `LINKEDIN_AUTHOR_URN`
+- `FACEBOOK_PAGE_ID` + `FACEBOOK_PAGE_ACCESS_TOKEN`
+- `INSTAGRAM_BUSINESS_ACCOUNT_ID` + `INSTAGRAM_ACCESS_TOKEN` + `INSTAGRAM_DEFAULT_IMAGE_URL`
+- `TIKTOK_ACCESS_TOKEN` + `TIKTOK_OPEN_ID` (or webhook integration)
 
 Current adapter pattern:
-- one webhook per channel.
-- later you can swap each webhook to direct official API integrations.
+- tries direct official API integration first for X/LinkedIn/Facebook/Instagram/TikTok.
+- falls back to per-channel webhook when direct credentials are unavailable.
 
 ## 6) Example automation flow (client to backend)
 
@@ -116,6 +141,54 @@ await queue({
 - Automatic: hourly via `social_dispatch_scheduler`.
 - Manual (admin): call `publish_social_queue_now`.
 
+## 6.1) CLI smoke test and strategic queue
+
+Run this locally from repo root:
+
+```bash
+quantura_site/functions/venv/bin/python scripts/social_poster_runner.py --send-now --queue-strategic
+```
+
+- `--send-now` attempts immediate posting once per selected channel.
+- `--queue-strategic` saves queue rows with dayparted `suggestedPostTime`.
+- `--schedule-autopilot` triggers the daily planner path manually.
+
+Health probe (reads/fallback checks across X, Reddit, Facebook, Instagram, LinkedIn, TikTok):
+
+```bash
+python scripts/social_channel_probe.py --query "US stock market top headlines today"
+```
+
+## 6.2) GitHub automations
+
+Use these workflows:
+- `.github/workflows/social-media-automation.yml` for recurring social drafting/posting automation.
+- `.github/workflows/weekly-blog-post.yml` for weekly blog generation and auto-commit.
+
+`social-media-automation.yml` supports two modes:
+- health probe only (no Firebase service account secret)
+- full queue + dispatch mode when `FIREBASE_SERVICE_ACCOUNT_JSON` is configured.
+
+The workflow also accepts `FIREBASE_SERVICE_ACCOUNT_QUANTURA_E2E3D` as a fallback secret name.
+To ensure immediate feed activity each run, it performs:
+- direct `--send-now` publish attempts,
+- strategic queueing,
+- `--publish-now-first` so at least one queued post per routable channel dispatches immediately.
+
+### One-command secret sync (local -> GitHub Actions)
+
+Use:
+
+```bash
+python scripts/sync_github_social_secrets.py
+```
+
+Optional (only selected keys):
+
+```bash
+python scripts/sync_github_social_secrets.py --only OPENAI_API_KEY,TWITTER_API_KEY,TWITTER_API_SECRET,TWITTER_ACCESS_TOKEN,TWITTER_ACCESS_TOKEN_SECRET
+```
+
 ## 7) Launch plan for first 14 days
 
 Day 1-2:
@@ -138,4 +211,3 @@ Use in every post process:
 - include risk-aware phrasing,
 - avoid personalized investment advice in public copy,
 - keep claims evidence-backed.
-

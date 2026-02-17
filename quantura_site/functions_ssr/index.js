@@ -151,15 +151,21 @@ const getServerTemplate = async () => {
       volatility_threshold: "0.05",
       ai_usage_tiers: JSON.stringify({
         free: {
-          allowed_models: ["gpt-5-mini"],
+          allowed_models: ["gpt-5-nano", "gpt-5-mini"],
           weekly_limit: 3,
           daily_limit: 3,
           volatility_alerts: false,
         },
-        premium: {
-          allowed_models: ["gpt-5-mini", "gpt-5", "gpt-5-thinking"],
-          weekly_limit: 15,
-          daily_limit: 15,
+        pro: {
+          allowed_models: ["gpt-5-mini", "gpt-5", "gpt-5.1"],
+          weekly_limit: 25,
+          daily_limit: 25,
+          volatility_alerts: true,
+        },
+        desk: {
+          allowed_models: ["gpt-5-nano", "gpt-5-mini", "gpt-5", "gpt-5.1", "gpt-5.2"],
+          weekly_limit: 75,
+          daily_limit: 75,
           volatility_alerts: true,
         },
       }),
