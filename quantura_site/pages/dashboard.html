@@ -152,6 +152,9 @@
                 <input id="auth-email" type="email" placeholder="you@domain.com" required />
                 <label class="label" for="auth-password">Password</label>
                 <input id="auth-password" type="password" minlength="6" placeholder="Minimum 6 characters" required />
+                <div class="auth-inline">
+                  <button class="link-button auth-link" id="auth-forgot-password" type="button">Forgot password?</button>
+                </div>
                 <div class="auth-actions">
                   <button class="cta" id="email-signin" type="submit">Sign in</button>
                   <button class="cta secondary" id="email-create" type="button">Create account</button>
@@ -161,11 +164,43 @@
             </div>
             <div class="card">
               <h3>Social sign-in</h3>
-              <p class="small">Use your preferred provider for fast access to your account and purchase history.</p>
+              <p class="small">Use your preferred provider for fast access, or continue as a guest and upgrade later.</p>
               <div class="auth-actions" style="margin-top: 12px;">
-                <button class="cta google" id="google-signin" type="button">Continue with Google</button>
-                <button class="cta secondary" id="github-signin" type="button">Continue with GitHub</button>
-                <button class="cta secondary" id="twitter-signin" type="button">Continue with X</button>
+                <button class="cta google auth-provider-button" id="google-signin" type="button">
+                  <span class="auth-provider-logo auth-provider-logo--google" aria-hidden="true">
+                    <svg viewBox="0 0 48 48" focusable="false" aria-hidden="true">
+                      <path fill="#FFC107" d="M43.6 20.2H42V20H24v8h11.3C33.6 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12S17.4 12 24 12c3 0 5.7 1.1 7.8 2.9l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.6-.4-3.8z"/>
+                      <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3 0 5.7 1.1 7.8 2.9l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/>
+                      <path fill="#4CAF50" d="M24 44c5.1 0 9.8-2 13.3-5.2l-6.2-5.2C29 35.2 26.6 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.6 39.6 16.2 44 24 44z"/>
+                      <path fill="#1976D2" d="M43.6 20.2H42V20H24v8h11.3c-.8 2.4-2.3 4.4-4.2 5.6l.1-.1 6.2 5.2C37 38.5 44 33.3 44 24c0-1.3-.1-2.6-.4-3.8z"/>
+                    </svg>
+                  </span>
+                  <span>Continue with Google</span>
+                </button>
+                <button class="cta secondary auth-provider-button" id="github-signin" type="button">
+                  <span class="auth-provider-logo auth-provider-logo--github" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                      <path fill="currentColor" d="M12 .5A12 12 0 0 0 8.2 23.9c.6.1.8-.3.8-.6v-2.1c-3.4.8-4.1-1.6-4.1-1.6-.6-1.4-1.3-1.8-1.3-1.8-1.1-.7.1-.7.1-.7 1.2.1 1.9 1.3 1.9 1.3 1.1 1.9 2.9 1.4 3.6 1.1.1-.8.4-1.4.8-1.8-2.7-.3-5.5-1.4-5.5-6.1 0-1.3.5-2.4 1.2-3.3-.1-.3-.5-1.6.1-3.2 0 0 1-.3 3.3 1.2a11.3 11.3 0 0 1 6.1 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.6.2 2.9.1 3.2.8.9 1.2 2 1.2 3.3 0 4.7-2.8 5.8-5.5 6.1.5.4.9 1.2.9 2.5v3.7c0 .4.2.7.8.6A12 12 0 0 0 12 .5z"/>
+                    </svg>
+                  </span>
+                  <span>Continue with GitHub</span>
+                </button>
+                <button class="cta secondary auth-provider-button" id="twitter-signin" type="button">
+                  <span class="auth-provider-logo auth-provider-logo--x" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                      <path fill="currentColor" d="M18.9 2h3.7l-8 9.1L24 22h-7.4l-5.8-7.6L4.2 22H.5l8.5-9.8L0 2h7.6l5.2 6.9L18.9 2zm-1.3 17.8h2.1L6.5 4.1H4.2z"/>
+                    </svg>
+                  </span>
+                  <span>Continue with X</span>
+                </button>
+                <button class="cta secondary auth-provider-button" id="anonymous-signin" type="button">
+                  <span class="auth-provider-logo auth-provider-logo--guest" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                      <path fill="currentColor" d="M12 2a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 12c4.4 0 8 2 8 4.5V22H4v-3.5C4 16 7.6 14 12 14z"/>
+                    </svg>
+                  </span>
+                  <span>Continue as Guest</span>
+                </button>
               </div>
               <div class="notice">
                 <strong>Secure by design.</strong> We only store what’s needed to deliver your report and
@@ -435,42 +470,89 @@
         <div class="container">
           <div class="section-title">
             <h2>Upload predictions CSV</h2>
-            <p class="small">Upload predictions.csv to trigger exploratory analysis by the Quantura agent.</p>
+            <p class="small">This capability is currently admin-only. Vote below to prioritize public release.</p>
           </div>
-          <div class="content-grid">
-            <form id="predictions-upload-form" class="card">
-              <div class="field">
-                <label class="label" for="predictions-ticker">Ticker</label>
-                <input id="predictions-ticker" name="ticker" placeholder="PLTR" required />
-                <div class="small muted">Used to validate the upload against real highs and map a point forecast.</div>
+
+          <div id="uploads-vote-block" class="content-grid">
+            <form id="feature-vote-uploads-form" class="card feature-vote-form" data-feature-key="uploads">
+              <h3>Should this be public for all users?</h3>
+              <p class="small">Vote yes/no and share what would make this useful for your workflow.</p>
+              <div class="feature-vote-options" role="group" aria-label="Upload predictions vote">
+                <button class="vote-pill" type="button" data-action="feature-vote-select" data-vote="yes">
+                  <i class="iconoir-check-circle" aria-hidden="true"></i><span>Yes, release it</span>
+                </button>
+                <button class="vote-pill" type="button" data-action="feature-vote-select" data-vote="no">
+                  <i class="iconoir-cancel" aria-hidden="true"></i><span>No, not needed</span>
+                </button>
               </div>
+              <input id="feature-vote-uploads-value" name="vote" type="hidden" value="" />
               <div class="field">
-                <label class="label" for="predictions-file">predictions.csv</label>
-                <input id="predictions-file" class="file-input" type="file" accept=".csv" />
+                <label class="label" for="feature-vote-uploads-feedback">Feedback (optional)</label>
+                <textarea id="feature-vote-uploads-feedback" name="feedback" placeholder="What data columns, validations, or outputs should this include?"></textarea>
               </div>
-              <div class="field">
-                <label class="label" for="predictions-notes">Notes</label>
-                <textarea id="predictions-notes" name="notes" placeholder="What should the analysis focus on?"></textarea>
-              </div>
-              <button class="cta" type="submit" data-analytics="predictions_upload">Upload predictions</button>
-              <p class="small" id="predictions-status"></p>
+              <button class="cta" type="submit" data-analytics="feature_vote_uploads_submit">Submit vote</button>
+              <p class="small" id="feature-vote-uploads-status"></p>
             </form>
-            <div class="results-panel" id="predictions-result">
-              <h3>Recent uploads</h3>
-              <div id="predictions-output" class="panel-output small">Uploads will appear here once submitted.</div>
+
+            <div class="card feature-mockup-card">
+              <h3>Feature mockup</h3>
+              <p class="small">Planned flow: CSV upload, validation report, and forecast overlay with agent commentary.</p>
+              <div class="feature-mockup-window" aria-hidden="true">
+                <div class="feature-mockup-toolbar">
+                  <span></span><span></span><span></span>
+                </div>
+                <div class="feature-mockup-lines">
+                  <div></div>
+                  <div></div>
+                  <div></div>
+                  <div></div>
+                </div>
+              </div>
+              <div class="feature-list" style="margin-top: 12px;">
+                <div class="feature"><span></span>Upload `predictions.csv` + ticker mapping</div>
+                <div class="feature"><span></span>Automatic schema and quality checks</div>
+                <div class="feature"><span></span>OpenAI commentary tied to recent indicators</div>
+              </div>
             </div>
           </div>
-          <div class="card" style="margin-top: 18px;">
-            <div class="card-head">
-              <h3>Upload plot</h3>
+
+          <div id="uploads-admin-block" class="hidden">
+            <div class="content-grid">
+              <form id="predictions-upload-form" class="card">
+                <div class="field">
+                  <label class="label" for="predictions-ticker">Ticker</label>
+                  <input id="predictions-ticker" name="ticker" placeholder="PLTR" required />
+                  <div class="small muted">Used to validate the upload against real highs and map a point forecast.</div>
+                </div>
+                <div class="field">
+                  <label class="label" for="predictions-file">predictions.csv</label>
+                  <input id="predictions-file" class="file-input" type="file" accept=".csv" />
+                </div>
+                <div class="field">
+                  <label class="label" for="predictions-notes">Notes</label>
+                  <textarea id="predictions-notes" name="notes" placeholder="What should the analysis focus on?"></textarea>
+                </div>
+                <button class="cta" type="submit" data-analytics="predictions_upload">Upload predictions</button>
+                <p class="small" id="predictions-status"></p>
+              </form>
+              <div class="results-panel" id="predictions-result">
+                <h3>Recent uploads</h3>
+                <div id="predictions-output" class="panel-output small">Uploads will appear here once submitted.</div>
+              </div>
             </div>
-            <div id="predictions-plot-meta" class="small muted">Select an upload to preview and plot it.</div>
-            <div class="hero-actions" style="margin-top: 12px; justify-content: flex-start;">
-              <button class="cta secondary" id="predictions-agent-button" type="button" data-analytics="predictions_agent_run"><i class="iconoir-sparks" aria-hidden="true"></i><span>Run OpenAI CSV Agent</span></button>
+
+            <div class="card" style="margin-top: 18px;">
+              <div class="card-head">
+                <h3>Upload plot</h3>
+              </div>
+              <div id="predictions-plot-meta" class="small muted">Select an upload to preview and plot it.</div>
+              <div class="hero-actions" style="margin-top: 12px; justify-content: flex-start;">
+                <button class="cta secondary" id="predictions-agent-button" type="button" data-analytics="predictions_agent_run"><i class="iconoir-sparks" aria-hidden="true"></i><span>Run OpenAI CSV Agent</span></button>
+              </div>
+              <div id="predictions-agent-output" class="panel-output small" style="margin-top: 14px;">Run the OpenAI CSV Agent to compute weekday-aware quantile mapping and return an analyst summary.</div>
+              <div id="predictions-chart" class="chart" style="margin-top: 14px; min-height: 420px;"></div>
+              <div id="predictions-preview" class="panel-output small" style="margin-top: 14px;">Preview will appear here.</div>
             </div>
-            <div id="predictions-agent-output" class="panel-output small" style="margin-top: 14px;">Run the OpenAI CSV Agent to compute weekday-aware quantile mapping and return an analyst summary.</div>
-            <div id="predictions-chart" class="chart" style="margin-top: 14px; min-height: 420px;"></div>
-            <div id="predictions-preview" class="panel-output small" style="margin-top: 14px;">Preview will appear here.</div>
           </div>
         </div>
       </section>
@@ -479,41 +561,87 @@
 	        <div class="container">
 	          <div class="section-title">
 	            <h2>Weekly Brief Autopilot</h2>
-            <p class="small">Queue daily/weekly brief runs with a diversified 20-30 stock universe by default, or provide your own ticker list.</p>
+            <p class="small">Autopilot queue controls are currently admin-only. Vote to prioritize broader access.</p>
           </div>
-          <div class="content-grid">
-            <form id="autopilot-form" class="card">
-              <div class="form-grid">
-                <div class="field">
-                  <label class="label" for="autopilot-ticker">Tickers (optional)</label>
-                  <input id="autopilot-ticker" name="ticker" placeholder="Leave blank for default 25-stock brief universe, or enter comma-separated tickers" />
-                </div>
-                <div class="field">
-                  <label class="label" for="autopilot-horizon">Prediction length</label>
-                  <input id="autopilot-horizon" name="horizon" type="number" min="5" max="365" value="60" />
-                </div>
-                <div class="field">
-                  <label class="label" for="autopilot-quantiles">Quantiles (comma separated)</label>
-                  <input id="autopilot-quantiles" name="quantiles" placeholder="0.1,0.5,0.9" />
-                </div>
-                <div class="field">
-                  <label class="label" for="autopilot-interval">Timeframe</label>
-                  <select id="autopilot-interval" name="interval">
-                    <option value="1d">Daily</option>
-                    <option value="1h">Hourly</option>
-                  </select>
-                </div>
+
+          <div id="autopilot-vote-block" class="content-grid">
+            <form id="feature-vote-autopilot-form" class="card feature-vote-form" data-feature-key="autopilot">
+              <h3>Should users get Autopilot access?</h3>
+              <p class="small">Vote yes/no and tell us the most important controls you need.</p>
+              <div class="feature-vote-options" role="group" aria-label="Autopilot vote">
+                <button class="vote-pill" type="button" data-action="feature-vote-select" data-vote="yes">
+                  <i class="iconoir-check-circle" aria-hidden="true"></i><span>Yes, release it</span>
+                </button>
+                <button class="vote-pill" type="button" data-action="feature-vote-select" data-vote="no">
+                  <i class="iconoir-cancel" aria-hidden="true"></i><span>No, not needed</span>
+                </button>
               </div>
+              <input id="feature-vote-autopilot-value" name="vote" type="hidden" value="" />
               <div class="field">
-                <label class="label" for="autopilot-notes">Notes</label>
-                <textarea id="autopilot-notes" name="notes" placeholder="Special constraints or focus"></textarea>
+                <label class="label" for="feature-vote-autopilot-feedback">Feedback (optional)</label>
+                <textarea id="feature-vote-autopilot-feedback" name="feedback" placeholder="Which scheduling, alerting, or universe controls matter most?"></textarea>
               </div>
-              <button class="cta" type="submit" data-analytics="autopilot_submit">Queue Autopilot run</button>
-              <p class="small" id="autopilot-status"></p>
+              <button class="cta" type="submit" data-analytics="feature_vote_autopilot_submit">Submit vote</button>
+              <p class="small" id="feature-vote-autopilot-status"></p>
             </form>
-            <div class="results-panel" id="autopilot-result">
-              <h3>Autopilot runs</h3>
-              <div id="autopilot-output" class="panel-output small">Queued runs will appear here.</div>
+
+            <div class="card feature-mockup-card">
+              <h3>Feature mockup</h3>
+              <p class="small">Planned flow: schedule recurring universes, set risk constraints, and auto-generate weekly briefs.</p>
+              <div class="feature-mockup-window" aria-hidden="true">
+                <div class="feature-mockup-toolbar">
+                  <span></span><span></span><span></span>
+                </div>
+                <div class="feature-mockup-lines">
+                  <div></div>
+                  <div></div>
+                  <div></div>
+                  <div></div>
+                </div>
+              </div>
+              <div class="feature-list" style="margin-top: 12px;">
+                <div class="feature"><span></span>Recurring daily/weekly universe jobs</div>
+                <div class="feature"><span></span>Preset basket templates and note prompts</div>
+                <div class="feature"><span></span>Automatic brief delivery + status tracking</div>
+              </div>
+            </div>
+          </div>
+
+          <div id="autopilot-admin-block" class="hidden">
+            <div class="content-grid">
+              <form id="autopilot-form" class="card">
+                <div class="form-grid">
+                  <div class="field">
+                    <label class="label" for="autopilot-ticker">Tickers (optional)</label>
+                    <input id="autopilot-ticker" name="ticker" placeholder="Leave blank for default 25-stock brief universe, or enter comma-separated tickers" />
+                  </div>
+                  <div class="field">
+                    <label class="label" for="autopilot-horizon">Prediction length</label>
+                    <input id="autopilot-horizon" name="horizon" type="number" min="5" max="365" value="60" />
+                  </div>
+                  <div class="field">
+                    <label class="label" for="autopilot-quantiles">Quantiles (comma separated)</label>
+                    <input id="autopilot-quantiles" name="quantiles" placeholder="0.1,0.5,0.9" />
+                  </div>
+                  <div class="field">
+                    <label class="label" for="autopilot-interval">Timeframe</label>
+                    <select id="autopilot-interval" name="interval">
+                      <option value="1d">Daily</option>
+                      <option value="1h">Hourly</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="field">
+                  <label class="label" for="autopilot-notes">Notes</label>
+                  <textarea id="autopilot-notes" name="notes" placeholder="Special constraints or focus"></textarea>
+                </div>
+                <button class="cta" type="submit" data-analytics="autopilot_submit">Queue Autopilot run</button>
+                <p class="small" id="autopilot-status"></p>
+              </form>
+              <div class="results-panel" id="autopilot-result">
+                <h3>Autopilot runs</h3>
+                <div id="autopilot-output" class="panel-output small">Queued runs will appear here.</div>
+              </div>
             </div>
           </div>
 	        </div>
