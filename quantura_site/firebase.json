@@ -12,10 +12,15 @@
       "disallowLegacyRuntimeConfig": true,
       "ignore": [
         "venv",
+        "venv/**",
+        "venv_py314_backup",
+        "venv_py314_backup/**",
+        "__pycache__/**",
         ".git",
         "firebase-debug.log",
         "firebase-debug.*.log",
         "*.local",
+        "*.local.json",
         "serviceAccountKey.json",
         ".env"
       ],
