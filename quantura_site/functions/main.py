@@ -4380,6 +4380,8 @@ def _generate_and_store_forecast_report_assets(
     forecast_id: str,
     forecast_doc: dict[str, Any],
 ) -> dict[str, Any]:
+    import uuid
+
     workspace_id = str(forecast_doc.get("userId") or forecast_doc.get("createdByUid") or "").strip() or "workspace"
     ticker = str(forecast_doc.get("ticker") or "ticker").upper()
     service = str(forecast_doc.get("service") or "prophet")
@@ -4407,9 +4409,24 @@ def _generate_and_store_forecast_report_assets(
     pptx_path = f"{base_path}/{safe_prefix}_slide_deck.pptx"
 
     bucket = admin_storage.bucket(STORAGE_BUCKET)
-    bucket.blob(chart_path).upload_from_string(chart_png, content_type="image/png")
-    bucket.blob(pdf_path).upload_from_string(pdf_bytes, content_type="application/pdf")
-    bucket.blob(pptx_path).upload_from_string(
+
+    def _upload_with_token(path: str, payload: bytes, *, content_type: str) -> None:
+        # Files uploaded via Admin SDK do not automatically get Firebase download tokens.
+        # Setting firebaseStorageDownloadTokens ensures the client SDK can call getDownloadURL().
+        blob = bucket.blob(path)
+        token = str(uuid.uuid4())
+        blob.metadata = dict(blob.metadata or {})
+        blob.metadata["firebaseStorageDownloadTokens"] = token
+        blob.upload_from_string(payload, content_type=content_type)
+        try:
+            blob.patch()
+        except Exception:
+            pass
+
+    _upload_with_token(chart_path, chart_png, content_type="image/png")
+    _upload_with_token(pdf_path, pdf_bytes, content_type="application/pdf")
+    _upload_with_token(
+        pptx_path,
         pptx_bytes,
         content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
     )
