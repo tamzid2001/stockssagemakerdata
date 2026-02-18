@@ -9419,7 +9419,8 @@
     for (let i = 0; i < Math.min(list.length, 500); i += 1) {
       const row = list[i] || {};
       Object.keys(row).forEach((key) => {
-        if (/^q\\d\\d$/.test(key)) set.add(key);
+        // Support q05/q50/q95 plus edge cases like q100 when users request extreme quantiles.
+        if (/^q\\d{1,3}$/.test(key)) set.add(key);
       });
     }
     return Array.from(set).sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));

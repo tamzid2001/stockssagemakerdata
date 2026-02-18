@@ -134,6 +134,12 @@ TWITTER_BEARER_TOKEN = str(
     or os.environ.get("X_BEARER_TOKEN")
     or ""
 ).strip()
+X_USER_OAUTH2_TOKEN = str(
+    os.environ.get("X_USER_OAUTH2_TOKEN")
+    or os.environ.get("X_USER_BEARER_TOKEN")
+    or os.environ.get("TWITTER_USER_OAUTH2_TOKEN")
+    or ""
+).strip()
 TWITTER_API_KEY = str(
     os.environ.get("TWITTER_API_KEY")
     or os.environ.get("X_API_KEY")
@@ -836,23 +842,30 @@ def _render_social_text(
 
 
 def _post_x_direct(text: str) -> dict[str, Any]:
-    has_oauth_user_context = bool(
+    has_oauth1_user_context = bool(
         TWITTER_API_KEY and TWITTER_API_SECRET and TWITTER_ACCESS_TOKEN and TWITTER_ACCESS_TOKEN_SECRET
     )
+    has_oauth2_user_context = bool(X_USER_OAUTH2_TOKEN)
     has_bearer = bool(TWITTER_BEARER_TOKEN)
-    if not has_oauth_user_context and not has_bearer:
+    if not has_oauth2_user_context and not has_oauth1_user_context and not has_bearer:
         return {
             "ok": False,
             "pendingCredentials": True,
             "error": (
-                "Missing X credentials. Provide TWITTER_API_KEY, TWITTER_API_SECRET, "
-                "TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_TOKEN_SECRET (preferred) or TWITTER_BEARER_TOKEN."
+                "Missing X credentials. Provide X_USER_OAUTH2_TOKEN (preferred for posting), "
+                "or TWITTER_API_KEY/TWITTER_API_SECRET + TWITTER_ACCESS_TOKEN/TWITTER_ACCESS_TOKEN_SECRET, "
+                "or TWITTER_BEARER_TOKEN."
             ),
         }
     try:
         auth = None
         headers = {"Content-Type": "application/json"}
-        if has_oauth_user_context:
+        provider = "x_api"
+
+        if has_oauth2_user_context:
+            headers["Authorization"] = f"Bearer {X_USER_OAUTH2_TOKEN}"
+            provider = "x_api_oauth2_user"
+        elif has_oauth1_user_context:
             try:
                 from requests_oauthlib import OAuth1  # type: ignore
             except Exception:
@@ -867,30 +880,63 @@ def _post_x_direct(text: str) -> dict[str, Any]:
                 TWITTER_ACCESS_TOKEN,
                 TWITTER_ACCESS_TOKEN_SECRET,
             )
+            provider = "x_api_oauth1_user"
         elif has_bearer:
             headers["Authorization"] = f"Bearer {TWITTER_BEARER_TOKEN}"
+            provider = "x_api_bearer"
 
-        response = requests.post(
+        # Docs: https://docs.x.com/x-api/posts/create-post
+        endpoints = [
+            "https://api.x.com/2/tweets",
+            # Back-compat: some tenants still resolve writes on api.twitter.com.
             "https://api.twitter.com/2/tweets",
-            headers=headers,
-            auth=auth,
-            json={"text": text},
-            timeout=20,
-        )
+        ]
+        response = None
+        for endpoint in endpoints:
+            candidate = requests.post(
+                endpoint,
+                headers=headers,
+                auth=auth,
+                json={"text": text},
+                timeout=20,
+            )
+            response = candidate
+            # If the new domain isn't enabled for the account yet, fall back.
+            if candidate.status_code in {404, 410} and "api.x.com" in endpoint:
+                continue
+            break
+        if response is None:
+            raise RuntimeError("X API request failed to execute.")
         if response.status_code >= 400:
             err_text = str(response.text or "")[:300]
             err_lower = err_text.lower()
-            pending = response.status_code in {401, 403} and (
-                "unsupported authentication" in err_lower
-                or "application-only is forbidden" in err_lower
-                or "oauth 2.0 application-only" in err_lower
+            if response.status_code == 402:
+                return {
+                    "ok": False,
+                    "pendingCredentials": False,
+                    "error": (
+                        "X API returned HTTP 402 (Payment Required). Your X developer plan may not "
+                        "include posting from server-side automations."
+                    ),
+                }
+            pending = response.status_code == 401 or (
+                response.status_code == 403
+                and (
+                    "unsupported authentication" in err_lower
+                    or "application-only is forbidden" in err_lower
+                    or "oauth 2.0 application-only" in err_lower
+                    or "oauth2scope" in err_lower
+                    or "scope" in err_lower
+                    or "not permitted" in err_lower
+                    or "permission" in err_lower
+                )
             )
             return {
                 "ok": False,
-                "pendingCredentials": pending or has_bearer,
+                "pendingCredentials": pending,
                 "error": (
-                    "X posting requires OAuth user-context write tokens (TWITTER_ACCESS_TOKEN / "
-                    "TWITTER_ACCESS_TOKEN_SECRET) or a posting webhook."
+                    "X posting requires OAuth user-context write tokens (X_USER_OAUTH2_TOKEN or "
+                    "TWITTER_ACCESS_TOKEN / TWITTER_ACCESS_TOKEN_SECRET), or a posting webhook."
                     if pending
                     else f"X API {response.status_code}: {err_text}"
                 ),
@@ -901,7 +947,7 @@ def _post_x_direct(text: str) -> dict[str, Any]:
             "ok": True,
             "externalId": post_id,
             "statusCode": response.status_code,
-            "provider": "x_api_oauth1" if has_oauth_user_context else "x_api_bearer",
+            "provider": provider,
         }
     except Exception as exc:
         return {"ok": False, "pendingCredentials": False, "error": f"X API exception: {str(exc)[:300]}"}
@@ -2084,6 +2130,8 @@ def _fetch_x_news_stories(
             timeout=15,
         )
         if response.status_code >= 400:
+            if response.status_code == 402:
+                return [], "X News API returned HTTP 402 (Payment Required)."
             return [], f"X News API returned HTTP {response.status_code}."
         payload = response.json() if response.text else {}
     except Exception as exc:
@@ -2175,7 +2223,11 @@ def _fetch_x_social_posts(query: str, *, limit: int = 8) -> tuple[list[dict[str,
         return [], "Query is required."
     fallback_posts, fallback_warning = _fetch_social_posts_via_web_search(q, platform="x", limit=limit)
 
-    endpoint = "https://api.twitter.com/2/tweets/search/recent"
+    endpoints = [
+        "https://api.x.com/2/tweets/search/recent",
+        # Back-compat: some accounts still resolve on api.twitter.com.
+        "https://api.twitter.com/2/tweets/search/recent",
+    ]
     core_terms = _social_query_terms(q)
     query_text = " ".join(core_terms[:4]) if core_terms else q
     params = {
@@ -2216,19 +2268,25 @@ def _fetch_x_social_posts(query: str, *, limit: int = 8) -> tuple[list[dict[str,
     api_failure = ""
     try:
         for auth_mode, headers, auth_obj in auth_attempts:
-            response = requests.get(
-                endpoint,
-                headers=headers,
-                auth=auth_obj,
-                params=params,
-                timeout=15,
-            )
-            if response.status_code >= 400:
-                api_failure = f"{auth_mode} HTTP {response.status_code}"
-                continue
-            payload = response.json() if response.text else {}
-            api_failure = ""
-            break
+            for endpoint in endpoints:
+                response = requests.get(
+                    endpoint,
+                    headers=headers,
+                    auth=auth_obj,
+                    params=params,
+                    timeout=15,
+                )
+                if response.status_code >= 400:
+                    api_failure = f"{auth_mode} HTTP {response.status_code}"
+                    # X APIs frequently return 402 on insufficient tiers; don't keep hammering.
+                    if response.status_code == 402:
+                        break
+                    continue
+                payload = response.json() if response.text else {}
+                api_failure = ""
+                break
+            if payload:
+                break
         if not payload:
             if fallback_posts:
                 reason = f"API returned {api_failure}." if api_failure else "API was unavailable."
@@ -3928,7 +3986,8 @@ def _forecast_quantile_entries(rows: list[dict[str, Any]]) -> list[tuple[float, 
     keys = set()
     for row in rows[: min(len(rows), 200)]:
         for key in (row or {}).keys():
-            if re.match(r"^q\d\d$", str(key)):
+            # Support q05/q50/q95 plus edge cases like q100 when users request extreme quantiles.
+            if re.match(r"^q\d{1,3}$", str(key)):
                 keys.add(str(key))
     entries: list[tuple[float, str]] = []
     for key in sorted(keys):
@@ -4076,6 +4135,51 @@ def _render_forecast_report_html(
     key_levels = _extract_forecast_key_levels(forecast_doc.get("forecastRows") or [])
     service = str(forecast_doc.get("service") or "prophet")
     service_label = "Quantura Horizon" if service.lower() == "prophet" else service
+    forecast_rows = forecast_doc.get("forecastRows") if isinstance(forecast_doc.get("forecastRows"), list) else []
+
+    quantile_table = ""
+    try:
+        quant_entries = _forecast_quantile_entries(forecast_rows)
+        if quant_entries and forecast_rows:
+            last_row = forecast_rows[-1] or {}
+            last_close = _safe_float(metrics.get("lastClose"))
+
+            def _fmt_price(value: Any) -> str:
+                num = _safe_float(value)
+                if num is None:
+                    return "—"
+                return f"{num:,.2f}"
+
+            def _fmt_return(value: Any) -> str:
+                if last_close is None or last_close <= 0:
+                    return "—"
+                num = _safe_float(value)
+                if num is None:
+                    return "—"
+                pct = (num - last_close) / last_close * 100.0
+                return f"{pct:+.1f}%"
+
+            quant_rows = []
+            for q, key in quant_entries:
+                label = f"P{int(round(q * 100))}"
+                val = last_row.get(key)
+                quant_rows.append(
+                    f"<tr><td>{label}</td><td class='mono'>{_fmt_price(val)}</td><td class='mono'>{_fmt_return(val)}</td></tr>"
+                )
+
+            quantile_table = f"""
+              <div class="section-title">Quantile Outcomes (Horizon End)</div>
+              <table>
+                <thead>
+                  <tr><th>Quantile</th><th>Price</th><th>Vs last close</th></tr>
+                </thead>
+                <tbody>
+                  {''.join(quant_rows)}
+                </tbody>
+              </table>
+            """.strip()
+    except Exception:
+        quantile_table = ""
 
     rows = [
         ("Last Close", metrics.get("lastClose")),
@@ -4137,6 +4241,14 @@ def _render_forecast_report_html(
         border-collapse: collapse;
         margin-top: 14px;
       }}
+      th {{
+        text-align: left;
+        padding: 8px 10px;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+        font-size: 12px;
+        color: #cbd5e1;
+        font-weight: 700;
+      }}
       td {{
         padding: 8px 10px;
         border-bottom: 1px solid rgba(148, 163, 184, 0.25);
@@ -4153,6 +4265,14 @@ def _render_forecast_report_html(
         padding: 12px;
         line-height: 1.5;
       }}
+      .section-title {{
+        margin-top: 18px;
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: rgba(147, 197, 253, 0.95);
+        font-weight: 800;
+      }}
     </style>
   </head>
   <body>
@@ -4164,6 +4284,7 @@ def _render_forecast_report_html(
       <table>
         {metric_rows}
       </table>
+      {quantile_table}
       <div class="rationale"><strong>AI Rationale:</strong> {rationale}</div>
     </div>
   </body>
@@ -5780,16 +5901,29 @@ def _handle_forecast_request(req: https_fn.CallableRequest, forced_service: str 
     )
 
     metrics = result.get("metrics") or {}
+    forecast_rows_out = result.get("forecastRows") if isinstance(result.get("forecastRows"), list) else []
+    quantile_end: dict[str, Any] = {}
+    try:
+        entries = _forecast_quantile_entries(forecast_rows_out)
+        if entries and forecast_rows_out:
+            last_row = forecast_rows_out[-1] or {}
+            for _, key in entries:
+                if key in last_row:
+                    quantile_end[key] = last_row.get(key)
+    except Exception:
+        quantile_end = {}
     return {
         "requestId": doc_ref.id,
         "status": request_doc["status"],
         "service": service,
         "engine": request_doc["engine"],
         "serviceMessage": request_doc["serviceMessage"],
+        "quantiles": quantiles,
         "lastClose": metrics.get("lastClose"),
         "mae": metrics.get("mae"),
         "coverage10_90": metrics.get("coverage10_90", "n/a"),
         "forecastPreview": request_doc["forecastPreview"],
+        "forecastQuantilesEnd": _serialize_for_firestore(quantile_end),
         "tradeRationale": trade_rationale,
         "reportStatus": "queued",
     }
@@ -5831,7 +5965,7 @@ def delete_forecast_request(req: https_fn.CallableRequest) -> dict[str, Any]:
     return {"deleted": True, "forecastId": forecast_id}
 
 
-@https_fn.on_call()
+@https_fn.on_call(memory=MemoryOption.GB_1, timeout_sec=180)
 def generate_forecast_report_assets(req: https_fn.CallableRequest) -> dict[str, Any]:
     token = _require_auth(req)
     data = req.data or {}
@@ -8104,7 +8238,7 @@ def get_ticker_x_trends(req: https_fn.CallableRequest) -> dict[str, Any]:
     }
 
 
-@https_fn.on_call()
+@https_fn.on_call(memory=MemoryOption.MB_512, timeout_sec=180)
 def get_corporate_events_calendar(req: https_fn.CallableRequest) -> dict[str, Any]:
     data = req.data or {}
     ticker = _normalize_symbol_token(data.get("ticker"))
@@ -8202,7 +8336,7 @@ def get_corporate_events_calendar(req: https_fn.CallableRequest) -> dict[str, An
     }
 
 
-@https_fn.on_call()
+@https_fn.on_call(memory=MemoryOption.MB_512, timeout_sec=75)
 def query_ticker_insight(req: https_fn.CallableRequest) -> dict[str, Any]:
     import yfinance as yf  # type: ignore
 
@@ -8383,6 +8517,19 @@ def query_ticker_insight(req: https_fn.CallableRequest) -> dict[str, Any]:
             )
             response.raise_for_status()
             answer = _extract_responses_output_text(response.json())
+        except requests.HTTPError as exc:
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            provider = "fallback"
+            model_used = "heuristic"
+            if status == 401:
+                answer = (
+                    "Unable to complete GPT-5 query right now (OpenAI 401 Unauthorized). "
+                    "Admin action required: rotate the server-side OPENAI_API_KEY secret."
+                )
+            elif status == 429:
+                answer = "Unable to complete GPT-5 query right now (OpenAI rate limit). Try again shortly."
+            else:
+                answer = f"Unable to complete GPT-5 query right now. Fallback summary: {str(exc)[:160]}"
         except Exception as exc:
             provider = "fallback"
             model_used = "heuristic"
@@ -8506,7 +8653,7 @@ def get_market_headlines_feed(req: https_fn.CallableRequest) -> dict[str, Any]:
     }
 
 
-@https_fn.on_call()
+@https_fn.on_call(memory=MemoryOption.MB_512, timeout_sec=90)
 def get_options_chain(req: https_fn.CallableRequest) -> dict[str, Any]:
     import pandas as pd  # type: ignore
     import yfinance as yf  # type: ignore
@@ -8669,7 +8816,7 @@ def get_options_chain(req: https_fn.CallableRequest) -> dict[str, Any]:
     }
 
 
-@https_fn.on_call()
+@https_fn.on_call(memory=MemoryOption.MB_512, timeout_sec=60)
 def get_technicals(req: https_fn.CallableRequest) -> dict[str, Any]:
     import pandas as pd  # type: ignore
     import yfinance as yf  # type: ignore
