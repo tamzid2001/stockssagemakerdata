@@ -11175,7 +11175,38 @@
 
               if (!path) throw new Error("Report file is not available yet.");
               if (!storage) throw new Error("Storage client is unavailable.");
-              const url = await storage.ref().child(path).getDownloadURL();
+              let url = "";
+              try {
+                url = await storage.ref().child(path).getDownloadURL();
+              } catch (downloadError) {
+                const code = String(downloadError?.code || "").trim();
+                const msg = String(downloadError?.message || "").toLowerCase();
+                const shouldRetry =
+                  code === "storage/unauthorized" ||
+                  code === "storage/no-download-url" ||
+                  code === "storage/object-not-found" ||
+                  msg.includes("download url") ||
+                  msg.includes("unauthorized") ||
+                  msg.includes("permission");
+                if (!shouldRetry) throw downloadError;
+
+                showToast("Refreshing report assets...");
+                await ensureForecastReportsReady({
+                  db,
+                  functions,
+                  forecastId,
+                  workspaceId: state.activeWorkspaceId || state.user.uid,
+                  force: true,
+                });
+                doc = await loadForecastDoc(db, forecastId);
+                if (state.tickerContext.forecastDoc && String(state.tickerContext.forecastDoc.id || "") === forecastId) {
+                  state.tickerContext.forecastDoc = doc;
+                  renderForecastDetails(doc);
+                }
+                path = getForecastReportPath(doc, kind);
+                if (!path) throw new Error("Report file is not available yet.");
+                url = await storage.ref().child(path).getDownloadURL();
+              }
               const ticker = normalizeTicker(doc.ticker || "ticker") || "ticker";
               const service = String(doc.service || "forecast").replace(/[^a-z0-9_\-]+/gi, "_");
               const filename =
