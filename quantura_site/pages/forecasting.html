@@ -134,6 +134,7 @@
               <a class="sidebar-link" href="/backtesting" data-panel-target="backtesting"><i class="iconoir-flask" aria-hidden="true"></i><span>Backtesting</span></a>
 	            <a class="sidebar-link" href="/studio" data-panel-target="learn"><i class="iconoir-info-circle" aria-hidden="true"></i><span>Learn more</span></a>
 	            <a class="sidebar-link" href="/screener"><i class="iconoir-search" aria-hidden="true"></i><span>Screener</span></a>
+              <a class="sidebar-link" href="/ai-leaderboard" data-panel-target="ai-leaderboard"><i class="iconoir-trophy" aria-hidden="true"></i><span>AI Leaderboard</span></a>
 	            <a class="sidebar-link" href="/watchlist"><i class="iconoir-bell-notification" aria-hidden="true"></i><span>Watchlist and alerts</span></a>
 	          </nav>
         </aside>
@@ -180,67 +181,19 @@
                         <button class="chart-control-btn" type="button" data-chart-view="candlestick">Candles</button>
                         <button class="chart-control-btn" type="button" data-chart-view="line">Line</button>
                       </div>
-                      <div class="chart-engine-group" role="group" aria-label="Chart engine">
-                        <button class="chart-control-btn" type="button" data-chart-engine="tradingview">TradingView</button>
-                        <button class="chart-control-btn" type="button" data-chart-engine="legacy">Legacy</button>
-                      </div>
-                      <div class="chart-theme-group" role="group" aria-label="TradingView theme">
-                        <button class="chart-control-btn" type="button" data-tv-theme="auto">Auto</button>
-                        <button class="chart-control-btn" type="button" data-tv-theme="dark">Dark</button>
-                        <button class="chart-control-btn" type="button" data-tv-theme="light">Light</button>
-                      </div>
                     </div>
 
                     <div id="tradingview-terminal-root" class="tradingview-terminal hidden">
-                      <div class="tradingview-grid-top">
-                        <article class="tv-widget-card">
-                          <div class="tv-widget-head">
-                            <h3>Symbol info</h3>
-                          </div>
-                          <div id="tv-symbol-info" class="tv-widget-slot tv-slot-info"></div>
-                        </article>
-                        <article class="tv-widget-card">
-                          <div class="tv-widget-head">
-                            <h3>Company profile</h3>
-                          </div>
-                          <div id="tv-symbol-profile" class="tv-widget-slot tv-slot-profile"></div>
-                        </article>
+                      <div class="tv-widget-status-row">
+                        <span class="small muted" id="tv-widget-status">Loading TradingView...</span>
                       </div>
-
-                      <article class="tv-widget-card tv-advanced-card">
-                        <div class="tv-widget-head">
-                          <h3>Advanced chart</h3>
-                          <span class="small muted" id="tv-widget-status">Loading TradingView...</span>
-                        </div>
+                      <div class="tradingview-grid-top">
+                        <div id="tv-symbol-info" class="tv-widget-slot tv-slot-info"></div>
                         <div id="tv-advanced-chart" class="tv-widget-slot tv-slot-advanced"></div>
                         <div id="tv-widget-fallback" class="notice tv-widget-fallback hidden">
-                          TradingView widgets did not load. Use the legacy Quantura chart.
-                          <button id="tv-use-legacy" class="cta secondary small" type="button">Use legacy chart</button>
+                          TradingView widgets did not load right now. Quantura chart fallback is active.
                         </div>
-                      </article>
-
-                      <div class="tradingview-grid-bottom">
-                        <article class="tv-widget-card">
-                          <div class="tv-widget-head">
-                            <h3>Technical analysis</h3>
-                          </div>
-                          <div id="tv-technical-analysis" class="tv-widget-slot tv-slot-technical"></div>
-                        </article>
-                        <article class="tv-widget-card">
-                          <div class="tv-widget-head">
-                            <h3>Top stories</h3>
-                          </div>
-                          <div id="tv-timeline" class="tv-widget-slot tv-slot-timeline"></div>
-                        </article>
                       </div>
-
-                      <article class="tv-widget-card">
-                        <div class="tv-widget-head">
-                          <h3>Fundamental data</h3>
-                        </div>
-                        <div id="tv-financials" class="tv-widget-slot tv-slot-financials"></div>
-                      </article>
-
                       <p class="small muted tv-widget-credit">
                         Charts and financial information provided by
                         <a href="https://www.tradingview.com/widget/" target="_blank" rel="noopener noreferrer">TradingView</a>.
@@ -250,26 +203,6 @@
                   </div>
 
                     <div class="studio-secondary" id="intel-strip">
-                      <div class="card">
-                        <div class="card-head">
-                          <h3>Ticker intelligence snapshot</h3>
-                        </div>
-                        <div class="small muted" style="margin-bottom: 12px;">Auto-updates for the ticker in your chart context.</div>
-                        <div id="intel-output" class="panel-output small">Load a ticker to see company overview, events, and analyst signals.</div>
-                        <div class="small" style="margin-top: 10px;">
-                          Need full institutional detail? Open the <strong>Ticker Intelligence</strong> tab for financial reports, balance-sheet heatmap, and peer comparison.
-                        </div>
-                        <details class="learn-more">
-                          <summary>Learn more</summary>
-                          <div class="small">
-                            <p>
-                              Use this panel to sanity-check what the market is reacting to. The company overview helps you verify sector and business model,
-                              the events section surfaces upcoming earnings and dividend dates, and the analyst snapshot helps you understand consensus and dispersion.
-                            </p>
-                          </div>
-                        </details>
-                      </div>
-
                       <div class="card">
                         <div class="card-head">
                           <h3>Headlines</h3>
@@ -306,6 +239,10 @@
 	                    </div>
 	                    <form id="forecast-form" class="card">
 	                      <div class="form-grid">
+                        <div class="field">
+                          <label class="label" for="forecast-ticker">Ticker</label>
+                          <input id="forecast-ticker" name="ticker" placeholder="AAPL" required />
+                        </div>
 	                        <div class="field">
 	                          <label class="label" for="forecast-horizon">Forecast length</label>
 	                          <input id="forecast-horizon" name="horizon" type="number" min="5" max="365" value="90" />
@@ -318,12 +255,6 @@
                             <option value="1h">Hourly</option>
                           </select>
                         </div>
-	                        <div class="field">
-	                          <label class="label" for="forecast-service">Forecast service</label>
-	                          <select id="forecast-service" name="service">
-	                            <option value="prophet">Quantura Horizon</option>
-	                          </select>
-	                        </div>
 	                      </div>
 	                      <div class="field">
 	                        <label class="label" for="forecast-quantiles">Quantiles (comma-delimited)</label>
@@ -1121,29 +1052,6 @@
 	                      <h3>Portfolio output</h3>
 	                      <div id="screener-output" class="panel-output small">Generate a portfolio to see ranked candidates and AI Agent performance.</div>
 	                    </div>
-                      <div class="card screener-leaderboard-card">
-                        <div class="card-head">
-                          <h3>AI Portfolio Leaderboard</h3>
-                          <div class="form-grid" style="margin:0; min-width: 320px;">
-                            <div class="field" style="margin:0; min-width: 140px;">
-                              <label class="label" for="ai-leaderboard-horizon">Sort by ROI</label>
-                              <select id="ai-leaderboard-horizon">
-                                <option value="1m">1M</option>
-                                <option value="3m">3M</option>
-                                <option value="6m">6M</option>
-                                <option value="1y" selected>1Y</option>
-                                <option value="5y">5Y</option>
-                                <option value="max">Max</option>
-                              </select>
-                            </div>
-                            <div class="field" style="margin:0; min-width: 170px;">
-                              <label class="label" for="ai-leaderboard-model-filter">Personality filter</label>
-                              <select id="ai-leaderboard-model-filter"></select>
-                            </div>
-                          </div>
-                        </div>
-                        <div id="ai-agent-leaderboard" class="panel-output small" style="max-height: none;"></div>
-                      </div>
                       <div class="card">
                         <h3>Load saved portfolio run</h3>
                         <div class="form-grid">
@@ -1160,6 +1068,36 @@
                         <p class="small muted" id="screener-load-status"></p>
                       </div>
 	                  </section>
+
+                  <section class="panel hidden" data-panel="ai-leaderboard">
+                    <div class="panel-header">
+                      <h2>AI Portfolio Leaderboard</h2>
+                      <p class="small">Track published AI agents by ROI horizon, personality, and social momentum.</p>
+                    </div>
+                    <div class="card screener-leaderboard-card">
+                      <div class="card-head">
+                        <h3>Leaderboard</h3>
+                        <div class="form-grid" style="margin:0; min-width: 320px;">
+                          <div class="field" style="margin:0; min-width: 140px;">
+                            <label class="label" for="ai-leaderboard-horizon">Sort by ROI</label>
+                            <select id="ai-leaderboard-horizon">
+                              <option value="1m">1M</option>
+                              <option value="3m">3M</option>
+                              <option value="6m">6M</option>
+                              <option value="1y" selected>1Y</option>
+                              <option value="5y">5Y</option>
+                              <option value="max">Max</option>
+                            </select>
+                          </div>
+                          <div class="field" style="margin:0; min-width: 170px;">
+                            <label class="label" for="ai-leaderboard-model-filter">Personality filter</label>
+                            <select id="ai-leaderboard-model-filter"></select>
+                          </div>
+                        </div>
+                      </div>
+                      <div id="ai-agent-leaderboard" class="panel-output small" style="max-height: none;"></div>
+                    </div>
+                  </section>
 
 	                  <section class="panel hidden" data-panel="watchlist">
 	                    <div class="panel-header">
@@ -1290,11 +1228,11 @@
                         </div>
                       </div>
 
-                      <div class="form-grid" style="margin-top: 10px;">
-                        <div class="field" data-backtest-strategy="sma_cross">
-                          <label class="label" for="backtest-fast">Fast SMA window</label>
-                          <input id="backtest-fast" name="fast" type="number" min="2" max="200" value="20" />
-                        </div>
+	                      <div class="form-grid" style="margin-top: 10px;">
+	                        <div class="field" data-backtest-strategy="sma_cross">
+	                          <label class="label" for="backtest-fast">Fast SMA window</label>
+	                          <input id="backtest-fast" name="fast" type="number" min="2" max="200" value="20" />
+	                        </div>
                         <div class="field" data-backtest-strategy="sma_cross">
                           <label class="label" for="backtest-slow">Slow SMA window</label>
                           <input id="backtest-slow" name="slow" type="number" min="5" max="400" value="50" />
@@ -1307,16 +1245,27 @@
                           <label class="label" for="backtest-rsi-oversold">Oversold threshold</label>
                           <input id="backtest-rsi-oversold" name="oversold" type="number" min="1" max="49" value="30" />
                         </div>
-                        <div class="field hidden" data-backtest-strategy="rsi_reversion">
-                          <label class="label" for="backtest-rsi-exit">Exit above</label>
-                          <input id="backtest-rsi-exit" name="exitAbove" type="number" min="50" max="95" value="55" />
-                        </div>
-                      </div>
+	                        <div class="field hidden" data-backtest-strategy="rsi_reversion">
+	                          <label class="label" for="backtest-rsi-exit">Exit above</label>
+	                          <input id="backtest-rsi-exit" name="exitAbove" type="number" min="50" max="95" value="55" />
+	                        </div>
+	                      </div>
+	                      <div class="form-grid" style="margin-top: 10px;">
+	                        <div class="field">
+	                          <label class="label" for="backtest-agent-lookback">Agent indicator lookback (days)</label>
+	                          <input id="backtest-agent-lookback" name="agentLookback" type="number" min="20" max="730" value="90" />
+	                          <div class="small muted">Used for GPT-5 technical suggestion only.</div>
+	                        </div>
+	                      </div>
 
-                      <button class="cta" type="submit" data-analytics="backtest_submit">Run backtest</button>
-                      <details class="learn-more">
-                        <summary>Learn more</summary>
-                        <div class="small">
+	                      <div class="hero-actions">
+	                        <button class="cta" type="submit" data-analytics="backtest_submit">Run backtest</button>
+	                        <button class="cta secondary" id="backtest-agent-button" type="button" data-analytics="backtest_agent_submit"><i class="iconoir-brain" aria-hidden="true"></i><span>OpenAI technical suggestion</span></button>
+	                      </div>
+	                      <p class="small muted" id="backtest-agent-status"></p>
+	                      <details class="learn-more">
+	                        <summary>Learn more</summary>
+	                        <div class="small">
                           <p>
                             Backtests are a fast way to validate whether a rule has any edge on the selected ticker. Use them for exploration, not certainty.
                             Quantura saves every run with parameters and an equity curve image, and also generates runnable Python source code.
@@ -1328,12 +1277,16 @@
                       </details>
                     </form>
 
-                    <div class="results-panel">
-                      <h3>Backtest output</h3>
-                      <div id="backtest-output" class="panel-output small">Run a backtest to see metrics and the equity curve.</div>
-                    </div>
+	                    <div class="results-panel">
+	                      <h3>Backtest output</h3>
+	                      <div id="backtest-output" class="panel-output small">Run a backtest to see metrics and the equity curve.</div>
+	                    </div>
+	                    <div class="results-panel">
+	                      <h3>OpenAI technical suggestion</h3>
+	                      <div id="backtest-agent-output" class="panel-output small">Run the OpenAI technical suggestion to get setup ideas from recent indicator behavior.</div>
+	                    </div>
 
-                    <div class="card">
+	                    <div class="card">
                       <h3>Saved backtests</h3>
                       <div class="form-grid">
                         <div class="field">
