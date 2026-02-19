@@ -93,6 +93,29 @@ def probe_x(query: str, limit: int) -> ProbeResult:
         count, note = web_fallback(query, "x.com", limit)
         return ProbeResult("x", "fallback" if count else "missing_credentials", f"bearer_missing ({note})", count)
 
+    # Prefer X News Search (AI-generated stories) when available.
+    news_params = {
+        "query": query,
+        "max_results": max(5, min(limit, 10)),
+        "max_age_hours": 72,
+        "news.fields": "category,contexts,hook,name,summary,updated_at",
+    }
+    try:
+        resp = requests.get(
+            "https://api.x.com/2/news/search",
+            headers={"Authorization": f"Bearer {token}"},
+            params=news_params,
+            timeout=12,
+        )
+        if resp.status_code < 400:
+            payload = resp.json() if resp.text else {}
+            rows = payload.get("data") or []
+            if rows:
+                return ProbeResult("x", "ok", "news_search_ok", min(len(rows), limit))
+        # If news search is not available, fall back to post search.
+    except Exception:
+        pass
+
     params = {
         "query": f"({query}) -is:retweet",
         "max_results": max(10, min(limit * 2, 40)),

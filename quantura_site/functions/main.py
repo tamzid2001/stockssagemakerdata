@@ -23,14 +23,16 @@ except Exception:  # pragma: no cover - Python < 3.9 fallback
 import firebase_admin
 from firebase_admin import credentials, firestore, messaging as admin_messaging, storage as admin_storage
 from firebase_functions import https_fn, scheduler_fn
-from firebase_functions.options import set_global_options
+from firebase_functions.options import MemoryOption, set_global_options
 
 try:
     from firebase_admin import remote_config as admin_remote_config  # type: ignore
 except Exception:  # pragma: no cover - optional dependency until firebase-admin>=7.x
     admin_remote_config = None
 
-set_global_options(max_instances=10)
+# Bind high-sensitivity API keys via Secret Manager instead of committing them.
+# Firebase will inject secret values into env vars for deployed functions.
+set_global_options(max_instances=10, secrets=["OPENAI_API_KEY"])
 
 SERVICE_ACCOUNT_PATH = os.environ.get(
     "SERVICE_ACCOUNT_PATH",
@@ -39,7 +41,8 @@ SERVICE_ACCOUNT_PATH = os.environ.get(
 STORAGE_BUCKET = (
     os.environ.get("STORAGE_BUCKET")
     or os.environ.get("FIREBASE_STORAGE_BUCKET")
-    or "quantura-e2e3d.firebasestorage.app"
+    # Default bucket names use the GCS bucket, not the public "firebasestorage.app" domain.
+    or "quantura-e2e3d.appspot.com"
 )
 PUBLIC_ORIGIN = (os.environ.get("PUBLIC_ORIGIN") or "https://quantura-e2e3d.web.app").rstrip("/")
 ADMIN_EMAIL = "tamzid257@gmail.com"
@@ -47,6 +50,8 @@ ALLOWED_STATUSES = {"pending", "in_progress", "fulfilled", "cancelled"}
 CONTACT_REQUIRED_FIELDS = {"name", "email", "message"}
 FORECAST_SERVICES = {"prophet", "ibm_timemixer"}
 BACKTEST_SOURCE_FORMATS = {"python", "tradingview", "metatrader5", "tradelocker"}
+FEATURE_VOTE_KEYS = {"uploads", "autopilot"}
+FEATURE_VOTE_CHOICES = {"yes", "no"}
 REPORT_AGENT_BATCH_SIZE = max(1, min(int(os.environ.get("REPORT_AGENT_BATCH_SIZE", "8") or 8), 40))
 
 ALPACA_API_BASE = os.environ.get("ALPACA_API_BASE", "https://paper-api.alpaca.markets")
@@ -66,6 +71,11 @@ STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "").strip()
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip()
 MASSIVE_API_KEY = os.environ.get("MASSIVE_API_KEY", "").strip()
 MASSIVE_BASE_URL = (os.environ.get("MASSIVE_BASE_URL") or "https://api.massive.com").rstrip("/")
+UNSPLASH_ACCESS_KEY = str(
+    os.environ.get("UNSPLASH_ACCESS_KEY")
+    or os.environ.get("UNSPLASH_APPLICATION_ID")
+    or ""
+).strip()
 STRIPE_CONNECT_PLATFORM_FEE_PERCENT = float(os.environ.get("STRIPE_CONNECT_PLATFORM_FEE_PERCENT", "12") or 12)
 CREATOR_DEFAULT_SUBSCRIBE_USD = float(os.environ.get("CREATOR_DEFAULT_SUBSCRIBE_USD", "9") or 9)
 CREATOR_DEFAULT_THANKS_USD = float(os.environ.get("CREATOR_DEFAULT_THANKS_USD", "5") or 5)
@@ -74,6 +84,9 @@ TRENDING_URL = "https://query1.finance.yahoo.com/v1/finance/trending/US"
 YAHOO_SEARCH_URL = "https://query2.finance.yahoo.com/v1/finance/search"
 DEFAULT_FORECAST_PRICE = 349
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "").strip()
+AMAZON_NOVA_API_KEY = os.environ.get("AMAZON_NOVA_API_KEY", "").strip()
+AMAZON_NOVA_API_ENDPOINT = str(os.environ.get("AMAZON_NOVA_API_ENDPOINT") or "").strip()
+AMAZON_NOVA_DEFAULT_MODEL = str(os.environ.get("AMAZON_NOVA_DEFAULT_MODEL") or "amazon.nova-lite-v1:0").strip()
 SOCIAL_CONTENT_MODEL = (os.environ.get("SOCIAL_CONTENT_MODEL") or "gpt-5-mini").strip()
 SOCIAL_AUTOMATION_ENABLED = str(os.environ.get("SOCIAL_AUTOMATION_ENABLED") or "true").strip().lower() in {
     "1",
@@ -119,6 +132,12 @@ SOCIAL_AUTOPILOT_CHANNELS = [
 TWITTER_BEARER_TOKEN = str(
     os.environ.get("TWITTER_BEARER_TOKEN")
     or os.environ.get("X_BEARER_TOKEN")
+    or ""
+).strip()
+X_USER_OAUTH2_TOKEN = str(
+    os.environ.get("X_USER_OAUTH2_TOKEN")
+    or os.environ.get("X_USER_BEARER_TOKEN")
+    or os.environ.get("TWITTER_USER_OAUTH2_TOKEN")
     or ""
 ).strip()
 TWITTER_API_KEY = str(
@@ -235,6 +254,13 @@ if not firebase_admin._apps:
 db = firestore.client()
 
 _REMOTE_CONFIG_CACHE: dict[str, Any] = {"template": None, "loadedAt": 0.0}
+DEFAULT_LLM_ALLOWED_MODELS = [
+    "gpt-5-nano",
+    "gpt-5-mini",
+    "gpt-5",
+    "gpt-5.1",
+    "gpt-5.2",
+]
 
 DEFAULT_REMOTE_CONFIG: dict[str, str] = {
     "welcome_message": "Welcome to Quantura",
@@ -246,6 +272,7 @@ DEFAULT_REMOTE_CONFIG: dict[str, str] = {
     "promo_banner_text": "",
     "maintenance_mode": "false",
     "volatility_threshold": "0.05",
+    "llm_allowed_models": ",".join(DEFAULT_LLM_ALLOWED_MODELS),
     "ai_usage_tiers": json.dumps(
         {
             "free": {
@@ -429,6 +456,12 @@ def _normalize_ai_model_id(raw: Any) -> str:
         "gpt5-mini": "gpt-5-mini",
         "gpt5-nano": "gpt-5-nano",
         "gpt-5-thinking": "gpt-5.2",
+        "nova-micro": "amazon.nova-micro-v1:0",
+        "nova-lite": "amazon.nova-lite-v1:0",
+        "nova-pro": "amazon.nova-pro-v1:0",
+        "amazon-nova-micro": "amazon.nova-micro-v1:0",
+        "amazon-nova-lite": "amazon.nova-lite-v1:0",
+        "amazon-nova-pro": "amazon.nova-pro-v1:0",
     }
     if lowered in aliases:
         return aliases[lowered]
@@ -436,7 +469,67 @@ def _normalize_ai_model_id(raw: Any) -> str:
         return "gpt-5-mini"
     if lowered.startswith("o1"):
         return "gpt-5.1"
+    if lowered.startswith("amazon.nova"):
+        return lowered
     return value
+
+
+def _is_supported_llm_model(model_id: str) -> bool:
+    if not model_id:
+        return False
+    normalized = _normalize_ai_model_id(model_id)
+    if not normalized:
+        return False
+    lowered = normalized.lower()
+    return lowered.startswith("gpt-5") or lowered.startswith("amazon.nova")
+
+
+def _model_provider_from_id(model_id: str) -> str:
+    lowered = str(model_id or "").strip().lower()
+    if lowered.startswith("amazon.nova"):
+        return "amazon_nova"
+    return "openai"
+
+
+def _parse_llm_model_allowlist(raw: Any) -> list[str]:
+    values: list[Any] = []
+    if isinstance(raw, list):
+        values = raw
+    elif isinstance(raw, str):
+        text = raw.strip()
+        if not text:
+            values = []
+        else:
+            parsed: Any = None
+            try:
+                parsed = json.loads(text)
+            except Exception:
+                parsed = None
+            if isinstance(parsed, list):
+                values = parsed
+            else:
+                values = [part.strip() for part in text.split(",")]
+    normalized: list[str] = []
+    for value in values:
+        model_id = _normalize_ai_model_id(value)
+        if not _is_supported_llm_model(model_id):
+            continue
+        if model_id not in normalized:
+            normalized.append(model_id)
+    return normalized
+
+
+def _get_llm_allowed_models(context: dict[str, Any] | None = None) -> list[str]:
+    defaults = [_normalize_ai_model_id(item) for item in DEFAULT_LLM_ALLOWED_MODELS if _normalize_ai_model_id(item)]
+    defaults = [item for item in defaults if _is_supported_llm_model(item)]
+    rc_raw = _remote_config_param("llm_allowed_models", ",".join(defaults), context=context)
+    parsed = _parse_llm_model_allowlist(rc_raw)
+    if not parsed:
+        env_raw = str(os.environ.get("LLM_ALLOWED_MODELS") or "").strip()
+        parsed = _parse_llm_model_allowlist(env_raw)
+    if not parsed:
+        parsed = defaults
+    return parsed
 
 
 def _get_ai_usage_tiers(context: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -463,6 +556,8 @@ def _get_ai_usage_tiers(context: dict[str, Any] | None = None) -> dict[str, Any]
     parsed = _remote_config_json_param("ai_usage_tiers", fallback, context=context)
     if not isinstance(parsed, dict):
         return fallback
+    global_allowed = _get_llm_allowed_models(context=context)
+    global_allowed_set = set(global_allowed)
     default_limits = {"free": 3, "pro": 25, "desk": 75}
     for tier_name, tier_data in parsed.items():
         if not isinstance(tier_data, dict):
@@ -474,14 +569,25 @@ def _get_ai_usage_tiers(context: dict[str, Any] | None = None) -> dict[str, Any]
                 model_id = _normalize_ai_model_id(raw)
                 if not model_id:
                     continue
-                if not model_id.lower().startswith("gpt-5"):
+                if not _is_supported_llm_model(model_id):
+                    continue
+                if global_allowed_set and model_id not in global_allowed_set:
                     continue
                 if model_id not in normalized:
                     normalized.append(model_id)
         if not normalized:
             defaults = fallback.get(str(tier_name).lower(), fallback["free"]).get("allowed_models") or []
             for model_id in defaults:
-                if model_id and model_id not in normalized:
+                if not model_id:
+                    continue
+                normalized_id = _normalize_ai_model_id(model_id)
+                if not normalized_id or (global_allowed_set and normalized_id not in global_allowed_set):
+                    continue
+                if normalized_id not in normalized:
+                    normalized.append(normalized_id)
+        if not normalized:
+            for model_id in global_allowed:
+                if model_id not in normalized:
                     normalized.append(model_id)
 
         tier_key = str(tier_name).strip().lower()
@@ -542,6 +648,8 @@ def _resolve_ai_tier(
     token: dict[str, Any],
     context: dict[str, Any] | None = None,
 ) -> tuple[str, dict[str, Any]]:
+    global_allowed = _get_llm_allowed_models(context=context)
+    global_allowed_set = set(global_allowed)
     tiers = _get_ai_usage_tiers(context=context)
     if token.get("email") == ADMIN_EMAIL:
         tier_key = "desk"
@@ -563,6 +671,22 @@ def _resolve_ai_tier(
             "daily_limit": fallback_limit,
             "volatility_alerts": tier_key != "free",
         }
+    tier_allowed_raw = tier.get("allowed_models") if isinstance(tier, dict) else []
+    tier_allowed: list[str] = []
+    if isinstance(tier_allowed_raw, list):
+        for value in tier_allowed_raw:
+            model_id = _normalize_ai_model_id(value)
+            if not _is_supported_llm_model(model_id):
+                continue
+            if global_allowed_set and model_id not in global_allowed_set:
+                continue
+            if model_id not in tier_allowed:
+                tier_allowed.append(model_id)
+    if not tier_allowed:
+        tier_allowed = list(global_allowed)
+    if not tier_allowed:
+        tier_allowed = list(DEFAULT_LLM_ALLOWED_MODELS)
+    tier["allowed_models"] = tier_allowed
     return tier_key, tier
 
 
@@ -718,23 +842,30 @@ def _render_social_text(
 
 
 def _post_x_direct(text: str) -> dict[str, Any]:
-    has_oauth_user_context = bool(
+    has_oauth1_user_context = bool(
         TWITTER_API_KEY and TWITTER_API_SECRET and TWITTER_ACCESS_TOKEN and TWITTER_ACCESS_TOKEN_SECRET
     )
+    has_oauth2_user_context = bool(X_USER_OAUTH2_TOKEN)
     has_bearer = bool(TWITTER_BEARER_TOKEN)
-    if not has_oauth_user_context and not has_bearer:
+    if not has_oauth2_user_context and not has_oauth1_user_context and not has_bearer:
         return {
             "ok": False,
             "pendingCredentials": True,
             "error": (
-                "Missing X credentials. Provide TWITTER_API_KEY, TWITTER_API_SECRET, "
-                "TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_TOKEN_SECRET (preferred) or TWITTER_BEARER_TOKEN."
+                "Missing X credentials. Provide X_USER_OAUTH2_TOKEN (preferred for posting), "
+                "or TWITTER_API_KEY/TWITTER_API_SECRET + TWITTER_ACCESS_TOKEN/TWITTER_ACCESS_TOKEN_SECRET, "
+                "or TWITTER_BEARER_TOKEN."
             ),
         }
     try:
         auth = None
         headers = {"Content-Type": "application/json"}
-        if has_oauth_user_context:
+        provider = "x_api"
+
+        if has_oauth2_user_context:
+            headers["Authorization"] = f"Bearer {X_USER_OAUTH2_TOKEN}"
+            provider = "x_api_oauth2_user"
+        elif has_oauth1_user_context:
             try:
                 from requests_oauthlib import OAuth1  # type: ignore
             except Exception:
@@ -749,30 +880,63 @@ def _post_x_direct(text: str) -> dict[str, Any]:
                 TWITTER_ACCESS_TOKEN,
                 TWITTER_ACCESS_TOKEN_SECRET,
             )
+            provider = "x_api_oauth1_user"
         elif has_bearer:
             headers["Authorization"] = f"Bearer {TWITTER_BEARER_TOKEN}"
+            provider = "x_api_bearer"
 
-        response = requests.post(
+        # Docs: https://docs.x.com/x-api/posts/create-post
+        endpoints = [
+            "https://api.x.com/2/tweets",
+            # Back-compat: some tenants still resolve writes on api.twitter.com.
             "https://api.twitter.com/2/tweets",
-            headers=headers,
-            auth=auth,
-            json={"text": text},
-            timeout=20,
-        )
+        ]
+        response = None
+        for endpoint in endpoints:
+            candidate = requests.post(
+                endpoint,
+                headers=headers,
+                auth=auth,
+                json={"text": text},
+                timeout=20,
+            )
+            response = candidate
+            # If the new domain isn't enabled for the account yet, fall back.
+            if candidate.status_code in {404, 410} and "api.x.com" in endpoint:
+                continue
+            break
+        if response is None:
+            raise RuntimeError("X API request failed to execute.")
         if response.status_code >= 400:
             err_text = str(response.text or "")[:300]
             err_lower = err_text.lower()
-            pending = response.status_code in {401, 403} and (
-                "unsupported authentication" in err_lower
-                or "application-only is forbidden" in err_lower
-                or "oauth 2.0 application-only" in err_lower
+            if response.status_code == 402:
+                return {
+                    "ok": False,
+                    "pendingCredentials": False,
+                    "error": (
+                        "X API returned HTTP 402 (Payment Required). Your X developer plan may not "
+                        "include posting from server-side automations."
+                    ),
+                }
+            pending = response.status_code == 401 or (
+                response.status_code == 403
+                and (
+                    "unsupported authentication" in err_lower
+                    or "application-only is forbidden" in err_lower
+                    or "oauth 2.0 application-only" in err_lower
+                    or "oauth2scope" in err_lower
+                    or "scope" in err_lower
+                    or "not permitted" in err_lower
+                    or "permission" in err_lower
+                )
             )
             return {
                 "ok": False,
-                "pendingCredentials": pending or has_bearer,
+                "pendingCredentials": pending,
                 "error": (
-                    "X posting requires OAuth user-context write tokens (TWITTER_ACCESS_TOKEN / "
-                    "TWITTER_ACCESS_TOKEN_SECRET) or a posting webhook."
+                    "X posting requires OAuth user-context write tokens (X_USER_OAUTH2_TOKEN or "
+                    "TWITTER_ACCESS_TOKEN / TWITTER_ACCESS_TOKEN_SECRET), or a posting webhook."
                     if pending
                     else f"X API {response.status_code}: {err_text}"
                 ),
@@ -783,7 +947,7 @@ def _post_x_direct(text: str) -> dict[str, Any]:
             "ok": True,
             "externalId": post_id,
             "statusCode": response.status_code,
-            "provider": "x_api_oauth1" if has_oauth_user_context else "x_api_bearer",
+            "provider": provider,
         }
     except Exception as exc:
         return {"ok": False, "pendingCredentials": False, "error": f"X API exception: {str(exc)[:300]}"}
@@ -998,6 +1162,88 @@ def _extract_responses_output_text(payload: dict[str, Any]) -> str:
                 if text:
                     chunks.append(text)
     return "\n".join(chunks).strip()
+
+
+def _extract_nova_output_text(payload: dict[str, Any]) -> str:
+    if not isinstance(payload, dict):
+        return ""
+    direct = str(payload.get("outputText") or payload.get("completion") or payload.get("text") or "").strip()
+    if direct:
+        return direct
+
+    output = payload.get("output")
+    if isinstance(output, dict):
+        message = output.get("message")
+        if isinstance(message, dict):
+            content = message.get("content")
+            if isinstance(content, list):
+                pieces: list[str] = []
+                for part in content:
+                    if isinstance(part, dict):
+                        text = str(part.get("text") or "").strip()
+                        if text:
+                            pieces.append(text)
+                if pieces:
+                    return "\n".join(pieces).strip()
+
+    choices = payload.get("choices")
+    if isinstance(choices, list) and choices:
+        first = choices[0] if isinstance(choices[0], dict) else {}
+        message = first.get("message") if isinstance(first, dict) else {}
+        if isinstance(message, dict):
+            content = message.get("content")
+            if isinstance(content, str):
+                return content.strip()
+            if isinstance(content, list):
+                pieces: list[str] = []
+                for part in content:
+                    if isinstance(part, dict):
+                        text = str(part.get("text") or "").strip()
+                        if text:
+                            pieces.append(text)
+                if pieces:
+                    return "\n".join(pieces).strip()
+    return ""
+
+
+def _invoke_amazon_nova_text(
+    *,
+    model_id: str,
+    system_prompt: str,
+    user_prompt: str,
+    max_tokens: int = 800,
+    temperature: float = 0.2,
+) -> str:
+    endpoint = AMAZON_NOVA_API_ENDPOINT
+    if not endpoint or not AMAZON_NOVA_API_KEY:
+        return ""
+
+    resolved_model = _normalize_ai_model_id(model_id or AMAZON_NOVA_DEFAULT_MODEL)
+    if not resolved_model.lower().startswith("amazon.nova"):
+        resolved_model = _normalize_ai_model_id(AMAZON_NOVA_DEFAULT_MODEL)
+
+    payload = {
+        "model": resolved_model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "max_tokens": max(128, min(int(max_tokens), 2400)),
+        "temperature": max(0.0, min(float(temperature), 1.0)),
+    }
+    headers = {
+        "Content-Type": "application/json",
+        # Keep both auth headers for compatibility with API-gateway and OpenAI-compatible Nova proxies.
+        "Authorization": f"Bearer {AMAZON_NOVA_API_KEY}",
+        "x-api-key": AMAZON_NOVA_API_KEY,
+    }
+    try:
+        response = requests.post(endpoint, headers=headers, json=payload, timeout=30)
+        response.raise_for_status()
+        body = response.json() if response.text else {}
+        return _extract_nova_output_text(body)
+    except Exception:
+        return ""
 
 
 def _normalize_symbol_token(raw: Any) -> str:
@@ -1398,6 +1644,92 @@ def _fetch_yahoo_news_query(query: str, *, limit: int = 12) -> list[dict[str, An
     return out
 
 
+def _fetch_unsplash_random_photos(
+    query: str,
+    *,
+    count: int = 1,
+) -> tuple[list[dict[str, Any]], str]:
+    q = str(query or "").strip()
+    if not q:
+        return [], "Query is required."
+    if not UNSPLASH_ACCESS_KEY:
+        return [], "Unsplash access key is not configured."
+
+    try:
+        response = requests.get(
+            "https://api.unsplash.com/photos/random",
+            headers={
+                "Accept-Version": "v1",
+                "Authorization": f"Client-ID {UNSPLASH_ACCESS_KEY}",
+            },
+            params={
+                "query": q,
+                "orientation": "landscape",
+                "content_filter": "high",
+                "count": max(1, min(int(count or 1), 8)),
+            },
+            timeout=12,
+        )
+        if response.status_code >= 400:
+            return [], f"Unsplash API returned HTTP {response.status_code}."
+        payload = response.json() if response.text else {}
+    except Exception as exc:
+        return [], f"Unsplash request failed: {str(exc)[:160]}"
+
+    items = payload if isinstance(payload, list) else [payload]
+    photos: list[dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        url = (
+            str(((item.get("urls") or {}) if isinstance(item.get("urls"), dict) else {}).get("regular") or "")
+            .strip()
+        )
+        if not url:
+            url = (
+                str(((item.get("urls") or {}) if isinstance(item.get("urls"), dict) else {}).get("full") or "")
+                .strip()
+            )
+        if not url:
+            url = (
+                str(((item.get("urls") or {}) if isinstance(item.get("urls"), dict) else {}).get("small") or "")
+                .strip()
+            )
+        if not url:
+            continue
+
+        link = ""
+        links_obj = item.get("links") if isinstance(item.get("links"), dict) else {}
+        if isinstance(links_obj, dict):
+            link = str(links_obj.get("html") or "").strip()
+        if link:
+            link = f"{link}{'&' if '?' in link else '?'}utm_source=quantura&utm_medium=referral"
+
+        user_obj = item.get("user") if isinstance(item.get("user"), dict) else {}
+        photographer = str(user_obj.get("name") or "").strip() if isinstance(user_obj, dict) else ""
+        photographer_link = ""
+        if isinstance(user_obj, dict):
+            ulinks = user_obj.get("links") if isinstance(user_obj.get("links"), dict) else {}
+            if isinstance(ulinks, dict):
+                photographer_link = str(ulinks.get("html") or "").strip()
+        if photographer_link:
+            photographer_link = f"{photographer_link}{'&' if '?' in photographer_link else '?'}utm_source=quantura&utm_medium=referral"
+
+        photos.append(
+            {
+                "url": url,
+                "alt": str(item.get("alt_description") or item.get("description") or "Market imagery from Unsplash").strip(),
+                "link": link,
+                "photographer": photographer,
+                "photographerLink": photographer_link,
+            }
+        )
+
+    if photos:
+        return photos, ""
+    return [], "Unsplash returned no usable photos."
+
+
 _SOCIAL_QUERY_STOPWORDS = {
     "the",
     "and",
@@ -1459,58 +1791,246 @@ def _fetch_social_posts_via_web_search(
     if not domain:
         return [], "Unsupported web fallback platform."
 
-    try:
-        search_query = quote_plus(f"site:{domain} {q}")
-        response = requests.get(
-            f"https://duckduckgo.com/html/?q={search_query}",
-            headers={"User-Agent": "Mozilla/5.0 (Quantura)"},
-            timeout=14,
-        )
-        if response.status_code >= 400:
-            return [], f"Web fallback search returned HTTP {response.status_code}."
-        html_text = response.text or ""
-    except Exception as exc:
-        return [], f"Web fallback search error: {str(exc)[:160]}"
+    def _normalize_search_href(raw_href: str) -> str:
+        href = unescape(str(raw_href or "")).strip()
+        if not href:
+            return ""
+        if href.startswith("//"):
+            href = f"https:{href}"
+        href = href.replace("&amp;", "&")
+        try:
+            parsed = urlparse(href)
+            if "duckduckgo.com" in parsed.netloc.lower():
+                for key in ("uddg", "rut", "u"):
+                    value = parse_qs(parsed.query).get(key, [""])[0]
+                    if value:
+                        href = unquote(value)
+                        parsed = urlparse(href)
+                        break
+        except Exception:
+            pass
+        return href
 
-    results: list[dict[str, Any]] = []
-    # DuckDuckGo HTML result block parser (best-effort).
-    pattern = re.compile(
-        r'<a[^>]+class="result__a"[^>]+href="(?P<href>[^"]+)"[^>]*>(?P<title>.*?)</a>.*?'
-        r'<a[^>]+class="result__snippet"[^>]*>(?P<snippet>.*?)</a>',
-        re.IGNORECASE | re.DOTALL,
-    )
-    for match in pattern.finditer(html_text):
-        href = unescape(re.sub(r"<[^>]+>", "", match.group("href") or "")).strip()
-        if "uddg=" in href:
-            try:
+    def _href_matches_domain(href: str) -> bool:
+        try:
+            parsed = urlparse(str(href or "").strip())
+            host = parsed.netloc.lower().strip()
+            if host.startswith("www."):
+                host = host[4:]
+            return bool(host and (host == domain or host.endswith(f".{domain}")))
+        except Exception:
+            return False
+
+    def _social_permalink_score(target_platform: str, href: str) -> int:
+        href_l = str(href or "").lower()
+        if not _href_matches_domain(href):
+            return -10
+        score = 1
+        if target_platform == "x":
+            if re.search(r"x\.com/[^/?#]+/status/\d+", href_l):
+                score += 10
+            elif "/i/web/status/" in href_l:
+                score += 8
+            elif re.search(r"x\.com/[^/?#]+/?$", href_l):
+                score += 3
+            if any(
+                bad in href_l
+                for bad in (
+                    "about.x.com",
+                    "help.x.com",
+                    "docs.x.com",
+                    "business.x.com",
+                    "/search?",
+                    "/hashtag/",
+                )
+            ):
+                score -= 7
+        elif target_platform == "reddit":
+            if "/comments/" in href_l:
+                score += 9
+            elif "/r/" in href_l:
+                score += 5
+            elif "/user/" in href_l or "/u/" in href_l:
+                score += 2
+        elif target_platform == "facebook":
+            if "/posts/" in href_l or "/permalink.php" in href_l:
+                score += 8
+            elif "/reel/" in href_l or "/watch/" in href_l:
+                score += 6
+            elif "/groups/" in href_l:
+                score += 3
+        elif target_platform == "instagram":
+            if "/p/" in href_l or "/reel/" in href_l or "/tv/" in href_l:
+                score += 9
+            elif re.search(r"instagram\.com/[^/?#]+/?$", href_l):
+                score += 3
+        if href_l.endswith((".ico", ".svg", ".png", ".jpg", ".jpeg", ".webp", ".css", ".js")):
+            score -= 12
+        if href_l.rstrip("/") in {f"https://{domain}", f"http://{domain}"}:
+            score -= 6
+        return score
+
+    def _extract_social_rows(text_blob: str) -> list[dict[str, Any]]:
+        if not text_blob:
+            return []
+        max_rows = max(1, min(int(limit or 8), 20))
+        candidates: list[tuple[int, dict[str, Any]]] = []
+        seen_links: set[str] = set()
+
+        def _push_row(raw_href: str, raw_title: str, context_text: str) -> None:
+            href = _normalize_search_href(raw_href)
+            if not href or href in seen_links:
+                return
+            href_l = href.lower()
+            if not _href_matches_domain(href):
+                return
+            score = _social_permalink_score(platform, href)
+            if score <= 0:
+                return
+            title = unescape(re.sub(r"<[^>]+>", "", str(raw_title or ""))).strip()
+            context = unescape(re.sub(r"<[^>]+>", "", str(context_text or ""))).strip()
+            text_probe = f"{title} {context} {href}".strip()
+            matches = _text_matches_social_query(text_probe, q)
+            if not matches and score < 8:
+                return
+            if not title:
                 parsed = urlparse(href)
-                redirected = parse_qs(parsed.query).get("uddg", [""])[0]
-                if redirected:
-                    href = unquote(redirected)
-            except Exception:
-                pass
-        title = unescape(re.sub(r"<[^>]+>", "", match.group("title") or "")).strip()
-        snippet = unescape(re.sub(r"<[^>]+>", "", match.group("snippet") or "")).strip()
-        if not href or domain not in href:
-            continue
-        if not _text_matches_social_query(f"{title} {snippet}", q):
-            continue
-        row = {
-            "id": hashlib.sha1(href.encode("utf-8")).hexdigest()[:16],
-            "title": title,
-            "text": snippet or title,
-            "permalink": href,
-            "source": platform,
-            "author": "",
-            "authorUsername": "",
-            "createdAt": None,
-        }
-        results.append(row)
-        if len(results) >= max(1, min(int(limit or 8), 20)):
-            break
+                title = (parsed.path or parsed.netloc or platform).strip("/")
+            row = {
+                "id": hashlib.sha1(href.encode("utf-8")).hexdigest()[:16],
+                "title": title[:220],
+                "text": (context or title)[:420],
+                "permalink": href,
+                "source": platform,
+                "author": "",
+                "authorUsername": "",
+                "createdAt": None,
+            }
+            seen_links.add(href)
+            candidates.append((score + (2 if matches else 0), row))
 
-    if results:
-        return results, ""
+        html_anchor_pattern = re.compile(
+            r'<a[^>]+href="(?P<href>[^"]+)"[^>]*>(?P<title>.*?)</a>',
+            re.IGNORECASE | re.DOTALL,
+        )
+        for match in html_anchor_pattern.finditer(text_blob):
+            start = max(0, match.start() - 180)
+            end = min(len(text_blob), match.end() + 260)
+            _push_row(
+                match.group("href") or "",
+                match.group("title") or "",
+                text_blob[start:end],
+            )
+            if len(candidates) >= max_rows * 3:
+                break
+
+        markdown_link_pattern = re.compile(
+            r"\[(?P<title>[^\]\n]{2,220})\]\((?P<href>https?://[^)\s]+)\)",
+            re.IGNORECASE,
+        )
+        for match in markdown_link_pattern.finditer(text_blob):
+            start = max(0, match.start() - 160)
+            end = min(len(text_blob), match.end() + 240)
+            _push_row(
+                match.group("href") or "",
+                match.group("title") or "",
+                text_blob[start:end],
+            )
+            if len(candidates) >= max_rows * 4:
+                break
+
+        plain_url_pattern = re.compile(r"https?://[^\s<>'\"\]\)]+", re.IGNORECASE)
+        for match in plain_url_pattern.finditer(text_blob):
+            start = max(0, match.start() - 140)
+            end = min(len(text_blob), match.end() + 220)
+            href = match.group(0) or ""
+            _push_row(href, href, text_blob[start:end])
+            if len(candidates) >= max_rows * 5:
+                break
+
+        candidates.sort(key=lambda item: item[0], reverse=True)
+        return [row for _, row in candidates[:max_rows]]
+
+    search_query = quote_plus(f"site:{domain} {q}")
+    attempts = [
+        (
+            "duckduckgo",
+            f"https://duckduckgo.com/html/?q={search_query}",
+            {"User-Agent": "Mozilla/5.0 (Quantura)"},
+        ),
+        (
+            "brave",
+            f"https://search.brave.com/search?q={search_query}&source=web",
+            {"User-Agent": "Mozilla/5.0 (Quantura)", "Accept-Encoding": "identity"},
+        ),
+        (
+            "jina-duckduckgo",
+            f"https://r.jina.ai/http://duckduckgo.com/?q={search_query}",
+            {"User-Agent": "Mozilla/5.0 (Quantura)"},
+        ),
+    ]
+    errors: list[str] = []
+    for source_name, source_url, source_headers in attempts:
+        try:
+            response = requests.get(source_url, headers=source_headers, timeout=16)
+            if response.status_code >= 400:
+                errors.append(f"{source_name} HTTP {response.status_code}")
+                continue
+            text_blob = response.text or ""
+            rows = _extract_social_rows(text_blob)
+            if rows:
+                return rows, ""
+            errors.append(f"{source_name} returned no matching posts")
+        except Exception as exc:
+            errors.append(f"{source_name} error: {str(exc)[:120]}")
+
+    max_rows = max(1, min(int(limit or 8), 20))
+    seed_links: dict[str, list[tuple[str, str]]] = {
+        "x": [
+            ("Live X search", f"https://x.com/search?q={quote_plus(q)}&src=typed_query&f=live"),
+            ("Kobeissi Letter", "https://x.com/KobeissiLetter"),
+            ("Seeking Alpha", "https://x.com/SeekingAlpha"),
+            ("Benzinga", "https://x.com/Benzinga"),
+        ],
+        "reddit": [
+            ("Reddit live search", f"https://www.reddit.com/search/?q={quote_plus(q)}"),
+            ("r/investing", "https://www.reddit.com/r/investing/"),
+            ("r/stocks", "https://www.reddit.com/r/stocks/"),
+            ("r/wallstreetbets", "https://www.reddit.com/r/wallstreetbets/"),
+        ],
+        "facebook": [
+            ("Facebook search", f"https://www.facebook.com/search/top?q={quote_plus(q)}"),
+            ("Investing.com", "https://www.facebook.com/investingcom/"),
+            ("CNBC", "https://www.facebook.com/CNBC/"),
+            ("Bloomberg", "https://www.facebook.com/Bloomberg/"),
+        ],
+        "instagram": [
+            ("Instagram finance hashtag", "https://www.instagram.com/explore/tags/stocks/"),
+            ("@investingcom", "https://www.instagram.com/investingcom/"),
+            ("@benzinga", "https://www.instagram.com/benzinga/"),
+            ("@wsj", "https://www.instagram.com/wsj/"),
+        ],
+    }
+    if platform in seed_links:
+        seeded_rows: list[dict[str, Any]] = []
+        for title, href in seed_links.get(platform, [])[:max_rows]:
+            seeded_rows.append(
+                {
+                    "id": hashlib.sha1(f"{platform}:{href}".encode("utf-8")).hexdigest()[:16],
+                    "title": title,
+                    "text": f"Public {platform.upper()} source for: {q}",
+                    "permalink": href,
+                    "source": platform,
+                    "author": "",
+                    "authorUsername": "",
+                    "createdAt": None,
+                }
+            )
+        if seeded_rows:
+            return seeded_rows, "Live social posts were unavailable; showing public search/profile fallback."
+
+    if errors:
+        return [], "; ".join(errors[:2])
     return [], "Web fallback search returned no matching posts."
 
 
@@ -1519,44 +2039,182 @@ def _fetch_reddit_social_posts(query: str, *, limit: int = 8) -> list[dict[str, 
     if not q:
         return []
     fallback_posts, _ = _fetch_social_posts_via_web_search(q, platform="reddit", limit=limit)
+    query_candidates = [q]
+    compact = " ".join(_social_query_terms(q)[:4]).strip()
+    if compact and compact.lower() != q.lower():
+        query_candidates.append(compact)
+    if "stock market" not in q.lower():
+        query_candidates.append(f"{q} stock market")
+    query_candidates.append("stock market investing")
+    seen_queries: set[str] = set()
+    for query_text in query_candidates:
+        clean_query = str(query_text or "").strip()
+        if not clean_query or clean_query.lower() in seen_queries:
+            continue
+        seen_queries.add(clean_query.lower())
+        try:
+            response = requests.get(
+                "https://www.reddit.com/search.json",
+                params={
+                    "q": clean_query,
+                    "sort": "hot",
+                    "limit": max(1, min(int(limit or 8), 25)),
+                    "restrict_sr": "false",
+                },
+                headers={"User-Agent": "quantura/1.0"},
+                timeout=12,
+            )
+            if response.status_code >= 400:
+                continue
+            payload = response.json() if response.text else {}
+        except Exception:
+            continue
+
+        out: list[dict[str, Any]] = []
+        for child in (payload.get("data") or {}).get("children") or []:
+            post = child.get("data") if isinstance(child, dict) else None
+            if not isinstance(post, dict):
+                continue
+            permalink = str(post.get("permalink") or "").strip()
+            out.append(
+                {
+                    "id": str(post.get("id") or "").strip(),
+                    "title": str(post.get("title") or "").strip(),
+                    "text": str(post.get("selftext") or "").strip()[:420],
+                    "author": str(post.get("author") or "").strip(),
+                    "subreddit": str(post.get("subreddit") or "").strip(),
+                    "score": int(post.get("score") or 0),
+                    "numComments": int(post.get("num_comments") or 0),
+                    "createdAt": int(post.get("created_utc") or 0),
+                    "permalink": f"https://www.reddit.com{permalink}" if permalink else "",
+                    "source": "reddit",
+                }
+            )
+            if len(out) >= limit:
+                break
+        if out:
+            return out
+    return fallback_posts
+
+
+def _fetch_x_news_stories(
+    query: str,
+    *,
+    limit: int = 6,
+    max_age_hours: int = 72,
+) -> tuple[list[dict[str, Any]], str]:
+    """Fetch AI-generated news stories from X News Search API.
+
+    Docs: https://docs.x.com/x-api/news/search-news
+    """
+    q = str(query or "").strip()
+    if not q:
+        return [], "Query is required."
+    if not TWITTER_BEARER_TOKEN:
+        return [], "X bearer token is not configured for news search."
+
+    endpoint = "https://api.x.com/2/news/search"
+    max_results = max(1, min(int(limit or 6), 20))
+    params = {
+        "query": q,
+        "max_results": min(100, max_results),
+        "max_age_hours": max(1, min(int(max_age_hours or 72), 720)),
+        "news.fields": "category,contexts,hook,name,summary,updated_at,cluster_posts_results",
+    }
+
     try:
         response = requests.get(
-            "https://www.reddit.com/search.json",
-            params={"q": q, "sort": "hot", "limit": max(1, min(int(limit or 8), 25)), "restrict_sr": "false"},
-            headers={"User-Agent": "quantura/1.0"},
-            timeout=12,
+            endpoint,
+            headers={"Authorization": f"Bearer {TWITTER_BEARER_TOKEN}"},
+            params=params,
+            timeout=15,
         )
         if response.status_code >= 400:
-            return fallback_posts
+            if response.status_code == 402:
+                return [], "X News API returned HTTP 402 (Payment Required)."
+            return [], f"X News API returned HTTP {response.status_code}."
         payload = response.json() if response.text else {}
-    except Exception:
-        return fallback_posts
+    except Exception as exc:
+        return [], f"X News API error: {str(exc)[:160]}"
 
-    out: list[dict[str, Any]] = []
-    for child in (payload.get("data") or {}).get("children") or []:
-        post = child.get("data") if isinstance(child, dict) else None
-        if not isinstance(post, dict):
+    stories: list[dict[str, Any]] = []
+    for row in payload.get("data") or []:
+        if not isinstance(row, dict):
             continue
-        permalink = str(post.get("permalink") or "").strip()
-        out.append(
+        story_id = str(row.get("id") or row.get("rest_id") or "").strip()
+        name = str(row.get("name") or "").strip()
+        summary = str(row.get("summary") or "").strip()
+        hook = str(row.get("hook") or "").strip()
+        category = str(row.get("category") or "").strip()
+        updated_at = row.get("updated_at") or row.get("updatedAt")
+
+        tickers: list[str] = []
+        contexts = row.get("contexts")
+        if isinstance(contexts, dict):
+            finance = contexts.get("finance")
+            if isinstance(finance, dict):
+                raw_tickers = finance.get("tickers") or []
+                if isinstance(raw_tickers, list):
+                    tickers = [str(item).strip().upper() for item in raw_tickers if str(item).strip()]
+
+        post_ids: list[str] = []
+        cluster = row.get("cluster_posts_results")
+        if isinstance(cluster, list):
+            for item in cluster:
+                if not isinstance(item, dict):
+                    continue
+                post_id = str(item.get("post_id") or item.get("tweet_id") or "").strip()
+                if post_id:
+                    post_ids.append(post_id)
+
+        search_term = name or q
+        search_url = f"https://x.com/search?q={quote_plus(search_term)}&src=typed_query&f=live"
+
+        stories.append(
             {
-                "id": str(post.get("id") or "").strip(),
-                "title": str(post.get("title") or "").strip(),
-                "text": str(post.get("selftext") or "").strip()[:420],
-                "author": str(post.get("author") or "").strip(),
-                "subreddit": str(post.get("subreddit") or "").strip(),
-                "score": int(post.get("score") or 0),
-                "numComments": int(post.get("num_comments") or 0),
-                "createdAt": int(post.get("created_utc") or 0),
-                "permalink": f"https://www.reddit.com{permalink}" if permalink else "",
-                "source": "reddit",
+                "id": story_id,
+                "name": name,
+                "summary": summary,
+                "hook": hook,
+                "category": category,
+                "updatedAt": updated_at,
+                "tickers": tickers,
+                "postIds": post_ids[:8],
+                "searchUrl": search_url,
+                "source": "x_news",
             }
         )
-        if len(out) >= limit:
+        if len(stories) >= max_results:
             break
-    if out:
-        return out
-    return fallback_posts
+
+    if stories:
+        return stories, ""
+    return [], "X News API returned no stories."
+
+
+def _x_news_stories_as_pseudo_posts(stories: list[dict[str, Any]], *, limit: int = 8) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for story in stories[: max(1, min(int(limit or 8), 15))]:
+        if not isinstance(story, dict):
+            continue
+        story_id = str(story.get("id") or "").strip()
+        name = str(story.get("name") or "").strip() or "X News story"
+        text = str(story.get("hook") or story.get("summary") or name).strip()
+        out.append(
+            {
+                "id": f"news_{story_id}" if story_id else hashlib.sha1(name.encode("utf-8")).hexdigest()[:16],
+                "text": text[:420],
+                "authorName": "X News",
+                "authorUsername": "",
+                "createdAt": story.get("updatedAt"),
+                "metrics": {"like_count": 0, "retweet_count": 0, "reply_count": 0},
+                "permalink": str(story.get("searchUrl") or "").strip(),
+                "source": "x",
+                "kind": "news_story",
+                "title": name,
+            }
+        )
+    return out
 
 
 def _fetch_x_social_posts(query: str, *, limit: int = 8) -> tuple[list[dict[str, Any]], str]:
@@ -1564,12 +2222,12 @@ def _fetch_x_social_posts(query: str, *, limit: int = 8) -> tuple[list[dict[str,
     if not q:
         return [], "Query is required."
     fallback_posts, fallback_warning = _fetch_social_posts_via_web_search(q, platform="x", limit=limit)
-    if not TWITTER_BEARER_TOKEN:
-        if fallback_posts:
-            return fallback_posts, "Using web fallback for X posts because TWITTER_BEARER_TOKEN is missing."
-        return [], "TWITTER_BEARER_TOKEN is not configured."
 
-    endpoint = "https://api.twitter.com/2/tweets/search/recent"
+    endpoints = [
+        "https://api.x.com/2/tweets/search/recent",
+        # Back-compat: some accounts still resolve on api.twitter.com.
+        "https://api.twitter.com/2/tweets/search/recent",
+    ]
     core_terms = _social_query_terms(q)
     query_text = " ".join(core_terms[:4]) if core_terms else q
     params = {
@@ -1579,18 +2237,63 @@ def _fetch_x_social_posts(query: str, *, limit: int = 8) -> tuple[list[dict[str,
         "expansions": "author_id",
         "user.fields": "username,name,verified",
     }
+
+    auth_attempts: list[tuple[str, dict[str, str], Any]] = []
+    if TWITTER_API_KEY and TWITTER_API_SECRET and TWITTER_ACCESS_TOKEN and TWITTER_ACCESS_TOKEN_SECRET:
+        try:
+            from requests_oauthlib import OAuth1  # type: ignore
+
+            auth_attempts.append(
+                (
+                    "oauth1_user",
+                    {},
+                    OAuth1(
+                        TWITTER_API_KEY,
+                        TWITTER_API_SECRET,
+                        TWITTER_ACCESS_TOKEN,
+                        TWITTER_ACCESS_TOKEN_SECRET,
+                    ),
+                )
+            )
+        except Exception:
+            pass
+    if TWITTER_BEARER_TOKEN:
+        auth_attempts.append(("bearer", {"Authorization": f"Bearer {TWITTER_BEARER_TOKEN}"}, None))
+    if not auth_attempts:
+        if fallback_posts:
+            return fallback_posts, "Using web fallback for X posts because API credentials are missing."
+        return [], "X API credentials are not configured."
+
+    payload: dict[str, Any] = {}
+    api_failure = ""
     try:
-        response = requests.get(
-            endpoint,
-            headers={"Authorization": f"Bearer {TWITTER_BEARER_TOKEN}"},
-            params=params,
-            timeout=15,
-        )
-        if response.status_code >= 400:
+        for auth_mode, headers, auth_obj in auth_attempts:
+            for endpoint in endpoints:
+                response = requests.get(
+                    endpoint,
+                    headers=headers,
+                    auth=auth_obj,
+                    params=params,
+                    timeout=15,
+                )
+                if response.status_code >= 400:
+                    api_failure = f"{auth_mode} HTTP {response.status_code}"
+                    # X APIs frequently return 402 on insufficient tiers; don't keep hammering.
+                    if response.status_code == 402:
+                        break
+                    continue
+                payload = response.json() if response.text else {}
+                api_failure = ""
+                break
+            if payload:
+                break
+        if not payload:
             if fallback_posts:
-                return fallback_posts, f"Using web fallback for X posts because API returned HTTP {response.status_code}."
-            return [], f"X API returned HTTP {response.status_code}."
-        payload = response.json() if response.text else {}
+                reason = f"API returned {api_failure}." if api_failure else "API was unavailable."
+                return fallback_posts, f"Using web fallback for X posts because {reason}"
+            if api_failure:
+                return [], f"X API returned {api_failure}."
+            return [], "X API returned no usable payload."
     except Exception as exc:
         if fallback_posts:
             return fallback_posts, f"Using web fallback for X posts because API errored: {str(exc)[:120]}"
@@ -1764,7 +2467,11 @@ def _fetch_meta_social_posts(query: str, *, platform: str, limit: int = 6) -> tu
     return [], "Unsupported platform."
 
 
-def _resolve_screener_note_signals(notes: str, preferred_model: str = "gpt-5-mini") -> dict[str, Any]:
+def _resolve_screener_note_signals(
+    notes: str,
+    preferred_model: str = "gpt-5-mini",
+    context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     notes_text = str(notes or "").strip()
     if not notes_text:
         return {
@@ -1787,21 +2494,29 @@ def _resolve_screener_note_signals(notes: str, preferred_model: str = "gpt-5-min
                     merged_tickers.append(clean)
 
     used_web_search = False
+    used_provider = "none"
+    allowed_models = _get_llm_allowed_models(context=context)
+    allowed_set = set(allowed_models)
     model_id = _normalize_ai_model_id(preferred_model or "gpt-5-mini")
-    if not model_id.lower().startswith("gpt-5"):
+    if not _is_supported_llm_model(model_id):
         model_id = "gpt-5-mini"
+    if allowed_set and model_id not in allowed_set:
+        model_id = allowed_models[0] if allowed_models else "gpt-5-mini"
 
-    if OPENAI_API_KEY:
-        system_prompt = (
-            "You help convert natural-language investing requests into a stock watchlist. "
-            "Use web search when useful and return strict JSON only with this shape: "
-            '{"tickers":["AAPL"],"queries":["tech mega caps"],"reasoning":"short text"}. '
-            "Use US-listed symbols whenever possible and keep tickers to 20 max."
-        )
-        user_prompt = (
-            "Parse this request and infer likely stock symbols and search phrases for a screener:\\n"
-            f"{notes_text}"
-        )
+    system_prompt = (
+        "You help convert natural-language investing requests into a stock watchlist. "
+        "Use web search when useful and return strict JSON only with this shape: "
+        '{"tickers":["AAPL"],"queries":["tech mega caps"],"reasoning":"short text"}. '
+        "Use US-listed symbols whenever possible and keep tickers to 20 max."
+    )
+    user_prompt = (
+        "Parse this request and infer likely stock symbols and search phrases for a screener:\\n"
+        f"{notes_text}"
+    )
+    parsed: dict[str, Any] = {}
+
+    provider = _model_provider_from_id(model_id)
+    if provider == "openai" and OPENAI_API_KEY:
         responses_payload = {
             "model": model_id,
             "input": [
@@ -1812,7 +2527,6 @@ def _resolve_screener_note_signals(notes: str, preferred_model: str = "gpt-5-min
             "tools": [{"type": "web_search_preview"}],
             "max_output_tokens": 600,
         }
-        parsed: dict[str, Any] = {}
         try:
             response = requests.post(
                 "https://api.openai.com/v1/responses",
@@ -1825,20 +2539,35 @@ def _resolve_screener_note_signals(notes: str, preferred_model: str = "gpt-5-min
             )
             response.raise_for_status()
             used_web_search = True
+            used_provider = "openai"
             content = _extract_responses_output_text(response.json())
             parsed = _extract_json_object(content)
         except Exception:
             # Keep note parsing resilient if web search or model call is unavailable.
             parsed = {}
+    elif provider == "amazon_nova":
+        content = _invoke_amazon_nova_text(
+            model_id=model_id,
+            system_prompt=(
+                f"{system_prompt} Return JSON only. "
+                "If web search is unavailable, infer from the user prompt."
+            ),
+            user_prompt=user_prompt,
+            max_tokens=700,
+            temperature=0.2,
+        )
+        if content:
+            parsed = _extract_json_object(content)
+            used_provider = "amazon_nova"
 
-        for raw_symbol in parsed.get("tickers", []) if isinstance(parsed.get("tickers"), list) else []:
-            symbol = _normalize_symbol_token(raw_symbol)
-            if symbol and symbol not in merged_tickers:
-                merged_tickers.append(symbol)
-        for raw_query in parsed.get("queries", []) if isinstance(parsed.get("queries"), list) else []:
-            query = str(raw_query or "").strip()
-            if query and query not in queries:
-                queries.append(query)
+    for raw_symbol in parsed.get("tickers", []) if isinstance(parsed.get("tickers"), list) else []:
+        symbol = _normalize_symbol_token(raw_symbol)
+        if symbol and symbol not in merged_tickers:
+            merged_tickers.append(symbol)
+    for raw_query in parsed.get("queries", []) if isinstance(parsed.get("queries"), list) else []:
+        query = str(raw_query or "").strip()
+        if query and query not in queries:
+            queries.append(query)
 
     # Resolve natural-language queries through Yahoo symbol search as an extra safety net.
     for query in queries[:8]:
@@ -1851,6 +2580,8 @@ def _resolve_screener_note_signals(notes: str, preferred_model: str = "gpt-5-min
         "queries": queries[:12],
         "matchedHints": matched_hints[:24],
         "usedWebSearch": used_web_search,
+        "provider": used_provider,
+        "model": model_id,
     }
 
 
@@ -1913,6 +2644,31 @@ def _generate_social_copy_with_openai(
         "Avoid guaranteed-return language. Keep content useful and brand-safe. "
         "Return strict JSON only."
     )
+    # Pull a tiny amount of live market context to make scheduled automation feel timely.
+    # All failures should degrade silently to avoid blocking posting.
+    market_context_lines: list[str] = []
+    try:
+        for item in _fetch_yahoo_news_query("US stock market top headlines today", limit=6)[:4]:
+            if not isinstance(item, dict):
+                continue
+            title = str(item.get("title") or "").strip()
+            publisher = str(item.get("publisher") or "").strip()
+            if title:
+                market_context_lines.append(f"- {title}{f' ({publisher})' if publisher else ''}")
+    except Exception:
+        pass
+    try:
+        x_stories, _ = _fetch_x_news_stories("US stock market top headlines today", limit=4, max_age_hours=48)
+        for story in x_stories[:3]:
+            if not isinstance(story, dict):
+                continue
+            name = str(story.get("name") or "").strip()
+            hook = str(story.get("hook") or story.get("summary") or "").strip()
+            if name:
+                market_context_lines.append(f"- X News: {name}{f' — {hook}' if hook else ''}")
+    except Exception:
+        pass
+    market_context = "\n".join(market_context_lines).strip()
     def _request_json_from_openai(user_prompt: str, max_output_tokens: int = 2200) -> dict[str, Any]:
         responses_payload = {
             "model": SOCIAL_CONTENT_MODEL,
@@ -1975,12 +2731,18 @@ def _generate_social_copy_with_openai(
     used_model = False
 
     for channel in channels:
+        context_block = (
+            f"\n\nCurrent market context (for inspiration only, do not quote verbatim):\n{market_context}\n"
+            if market_context
+            else ""
+        )
         per_channel_prompt = (
             "Generate social drafts with this exact JSON shape: "
             '{"channels":{"x":[{"headline":"","body":"","hashtags":[],"cta":"","ctaUrl":"","suggestedPostTime":""}]}}. '
             f"Topic: {topic}. Objective: {objective}. Audience: {audience}. Tone: {tone}. "
             f"Generate only channel: {channel}. Posts per channel: {posts_per_channel}. "
             f"Use CTA URL: {cta_url}. Keep each body optimized for the channel and under typical limits."
+            f"{context_block}"
         )
         rows: list[Any] = []
         try:
@@ -2363,6 +3125,118 @@ def _stripe_module():
     return stripe
 
 
+def _stripe_object_to_dict(obj: Any) -> dict[str, Any]:
+    if obj is None:
+        return {}
+    if isinstance(obj, dict):
+        return dict(obj)
+    if hasattr(obj, "to_dict"):
+        try:
+            parsed = obj.to_dict()  # type: ignore[attr-defined]
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            return {}
+    try:
+        return dict(obj)
+    except Exception:
+        return {}
+
+
+def _stripe_id(value: Any) -> str:
+    if isinstance(value, dict):
+        return str(value.get("id") or "").strip()
+    return str(value or "").strip()
+
+
+def _persist_user_stripe_customer_id(user_id: str, customer_id: str) -> None:
+    clean_customer_id = str(customer_id or "").strip()
+    if not user_id or not clean_customer_id:
+        return
+    db.collection("users").document(user_id).set(
+        {
+            "stripeCustomerId": clean_customer_id,
+            "profile": {
+                "stripeCustomerId": clean_customer_id,
+            },
+            "updatedAt": firestore.SERVER_TIMESTAMP,
+        },
+        merge=True,
+    )
+
+
+def _resolve_stripe_customer_id(
+    stripe: Any,
+    user_id: str,
+    email: str | None = None,
+    *,
+    create_if_missing: bool = False,
+) -> str:
+    user_ref = db.collection("users").document(user_id)
+    user_snap = user_ref.get()
+    user_doc = user_snap.to_dict() if user_snap.exists else {}
+    profile = user_doc.get("profile") if isinstance(user_doc.get("profile"), dict) else {}
+
+    existing_customer = str(
+        user_doc.get("stripeCustomerId")
+        or profile.get("stripeCustomerId")
+        or ""
+    ).strip()
+    if existing_customer:
+        return existing_customer
+
+    normalized_email = _normalize_email(email)
+    if normalized_email:
+        try:
+            existing = stripe.Customer.list(email=normalized_email, limit=1)
+            existing_data = getattr(existing, "data", None)
+            if not isinstance(existing_data, list):
+                existing_data = _stripe_object_to_dict(existing).get("data") or []
+            if isinstance(existing_data, list) and existing_data:
+                customer_id = _stripe_id(existing_data[0])
+                if customer_id:
+                    _persist_user_stripe_customer_id(user_id, customer_id)
+                    return customer_id
+        except Exception:
+            pass
+
+    if not create_if_missing:
+        return ""
+
+    create_kwargs: dict[str, Any] = {"metadata": {"userId": user_id}}
+    if normalized_email:
+        create_kwargs["email"] = normalized_email
+    customer = stripe.Customer.create(**create_kwargs)
+    customer_id = _stripe_id(customer)
+    if customer_id:
+        _persist_user_stripe_customer_id(user_id, customer_id)
+    return customer_id
+
+
+def _extract_checkout_customer_id(session_obj: Any) -> str:
+    session_dict = _stripe_object_to_dict(session_obj)
+    return _stripe_id(session_dict.get("customer"))
+
+
+def _sanitize_portal_return_url(value: Any) -> str:
+    fallback = f"{PUBLIC_ORIGIN}/dashboard"
+    raw = str(value or "").strip()
+    if not raw:
+        return fallback
+
+    if raw.startswith("/"):
+        return f"{PUBLIC_ORIGIN}{raw}"
+
+    parsed = urlparse(raw)
+    if parsed.scheme not in {"http", "https"}:
+        return fallback
+
+    public_host = urlparse(PUBLIC_ORIGIN).netloc
+    if parsed.netloc != public_host:
+        return fallback
+    return raw
+
+
 def _safe_float(value: Any) -> float | None:
     try:
         return float(value)
@@ -2504,6 +3378,13 @@ def _token_doc_id(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
+def _normalize_notification_token(raw: Any) -> str:
+    token = str(raw or "").strip()
+    if len(token) < 20:
+        return ""
+    return token
+
+
 def _active_notification_tokens_for_user(user_id: str) -> list[str]:
     docs = (
         db.collection("notification_tokens")
@@ -2588,8 +3469,29 @@ def _notify_user(
     title: str,
     body: str,
     data: dict[str, Any] | None = None,
+    explicit_token: str | None = None,
 ) -> dict[str, Any]:
     tokens = _active_notification_tokens_for_user(user_id)
+    fallback_token = _normalize_notification_token(explicit_token)
+    used_fallback_token = False
+    if fallback_token:
+        if fallback_token not in tokens:
+            used_fallback_token = True
+            tokens.append(fallback_token)
+        token_hash = _token_doc_id(fallback_token)
+        db.collection("notification_tokens").document(token_hash).set(
+            {
+                "token": fallback_token,
+                "tokenHash": token_hash,
+                "active": True,
+                "userId": user_id,
+                "userEmail": user_email or "",
+                "updatedAt": firestore.SERVER_TIMESTAMP,
+                "lastSeenAt": firestore.SERVER_TIMESTAMP,
+            },
+            merge=True,
+        )
+    tokens = list(dict.fromkeys(tokens))
     result = _send_push_tokens(tokens, title=title, body=body, data=data)
     for stale_hash in result.get("staleTokenHashes", []):
         db.collection("notification_tokens").document(str(stale_hash)).set(
@@ -2607,8 +3509,12 @@ def _notify_user(
             "title": title,
             "successCount": result.get("successCount", 0),
             "failureCount": result.get("failureCount", 0),
+            "attemptedTokenCount": len(tokens),
+            "usedFallbackToken": used_fallback_token,
         },
     )
+    result["attemptedTokenCount"] = len(tokens)
+    result["usedFallbackToken"] = used_fallback_token
     return result
 
 
@@ -3080,7 +3986,8 @@ def _forecast_quantile_entries(rows: list[dict[str, Any]]) -> list[tuple[float, 
     keys = set()
     for row in rows[: min(len(rows), 200)]:
         for key in (row or {}).keys():
-            if re.match(r"^q\d\d$", str(key)):
+            # Support q05/q50/q95 plus edge cases like q100 when users request extreme quantiles.
+            if re.match(r"^q\d{1,3}$", str(key)):
                 keys.add(str(key))
     entries: list[tuple[float, str]] = []
     for key in sorted(keys):
@@ -3228,6 +4135,51 @@ def _render_forecast_report_html(
     key_levels = _extract_forecast_key_levels(forecast_doc.get("forecastRows") or [])
     service = str(forecast_doc.get("service") or "prophet")
     service_label = "Quantura Horizon" if service.lower() == "prophet" else service
+    forecast_rows = forecast_doc.get("forecastRows") if isinstance(forecast_doc.get("forecastRows"), list) else []
+
+    quantile_table = ""
+    try:
+        quant_entries = _forecast_quantile_entries(forecast_rows)
+        if quant_entries and forecast_rows:
+            last_row = forecast_rows[-1] or {}
+            last_close = _safe_float(metrics.get("lastClose"))
+
+            def _fmt_price(value: Any) -> str:
+                num = _safe_float(value)
+                if num is None:
+                    return "—"
+                return f"{num:,.2f}"
+
+            def _fmt_return(value: Any) -> str:
+                if last_close is None or last_close <= 0:
+                    return "—"
+                num = _safe_float(value)
+                if num is None:
+                    return "—"
+                pct = (num - last_close) / last_close * 100.0
+                return f"{pct:+.1f}%"
+
+            quant_rows = []
+            for q, key in quant_entries:
+                label = f"P{int(round(q * 100))}"
+                val = last_row.get(key)
+                quant_rows.append(
+                    f"<tr><td>{label}</td><td class='mono'>{_fmt_price(val)}</td><td class='mono'>{_fmt_return(val)}</td></tr>"
+                )
+
+            quantile_table = f"""
+              <div class="section-title">Quantile Outcomes (Horizon End)</div>
+              <table>
+                <thead>
+                  <tr><th>Quantile</th><th>Price</th><th>Vs last close</th></tr>
+                </thead>
+                <tbody>
+                  {''.join(quant_rows)}
+                </tbody>
+              </table>
+            """.strip()
+    except Exception:
+        quantile_table = ""
 
     rows = [
         ("Last Close", metrics.get("lastClose")),
@@ -3289,6 +4241,14 @@ def _render_forecast_report_html(
         border-collapse: collapse;
         margin-top: 14px;
       }}
+      th {{
+        text-align: left;
+        padding: 8px 10px;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+        font-size: 12px;
+        color: #cbd5e1;
+        font-weight: 700;
+      }}
       td {{
         padding: 8px 10px;
         border-bottom: 1px solid rgba(148, 163, 184, 0.25);
@@ -3305,6 +4265,14 @@ def _render_forecast_report_html(
         padding: 12px;
         line-height: 1.5;
       }}
+      .section-title {{
+        margin-top: 18px;
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: rgba(147, 197, 253, 0.95);
+        font-weight: 800;
+      }}
     </style>
   </head>
   <body>
@@ -3316,6 +4284,7 @@ def _render_forecast_report_html(
       <table>
         {metric_rows}
       </table>
+      {quantile_table}
       <div class="rationale"><strong>AI Rationale:</strong> {rationale}</div>
     </div>
   </body>
@@ -3411,6 +4380,8 @@ def _generate_and_store_forecast_report_assets(
     forecast_id: str,
     forecast_doc: dict[str, Any],
 ) -> dict[str, Any]:
+    import uuid
+
     workspace_id = str(forecast_doc.get("userId") or forecast_doc.get("createdByUid") or "").strip() or "workspace"
     ticker = str(forecast_doc.get("ticker") or "ticker").upper()
     service = str(forecast_doc.get("service") or "prophet")
@@ -3438,9 +4409,24 @@ def _generate_and_store_forecast_report_assets(
     pptx_path = f"{base_path}/{safe_prefix}_slide_deck.pptx"
 
     bucket = admin_storage.bucket(STORAGE_BUCKET)
-    bucket.blob(chart_path).upload_from_string(chart_png, content_type="image/png")
-    bucket.blob(pdf_path).upload_from_string(pdf_bytes, content_type="application/pdf")
-    bucket.blob(pptx_path).upload_from_string(
+
+    def _upload_with_token(path: str, payload: bytes, *, content_type: str) -> None:
+        # Files uploaded via Admin SDK do not automatically get Firebase download tokens.
+        # Setting firebaseStorageDownloadTokens ensures the client SDK can call getDownloadURL().
+        blob = bucket.blob(path)
+        token = str(uuid.uuid4())
+        blob.metadata = dict(blob.metadata or {})
+        blob.metadata["firebaseStorageDownloadTokens"] = token
+        blob.upload_from_string(payload, content_type=content_type)
+        try:
+            blob.patch()
+        except Exception:
+            pass
+
+    _upload_with_token(chart_path, chart_png, content_type="image/png")
+    _upload_with_token(pdf_path, pdf_bytes, content_type="application/pdf")
+    _upload_with_token(
+        pptx_path,
         pptx_bytes,
         content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
     )
@@ -3561,9 +4547,17 @@ def create_stripe_checkout_session(req: https_fn.CallableRequest) -> dict[str, A
         },
     }
 
-    email = token.get("email")
-    if isinstance(email, str) and email.strip():
-        session_kwargs["customer_email"] = email.strip()
+    email = str(token.get("email") or "").strip()
+    customer_id = _resolve_stripe_customer_id(
+        stripe,
+        req.auth.uid,
+        email,
+        create_if_missing=True,
+    )
+    if customer_id:
+        session_kwargs["customer"] = customer_id
+    elif email:
+        session_kwargs["customer_email"] = email
 
     try:
         session = stripe.checkout.Session.create(**session_kwargs)
@@ -3574,11 +4568,16 @@ def create_stripe_checkout_session(req: https_fn.CallableRequest) -> dict[str, A
             {"error": str(exc)},
         )
 
+    session_customer_id = _extract_checkout_customer_id(session) or customer_id
+    if session_customer_id:
+        _persist_user_stripe_customer_id(req.auth.uid, session_customer_id)
+
     order_ref.set(
         {
             "paymentProvider": "stripe",
             "paymentStatus": "checkout_created",
             "stripeCheckoutSessionId": str(getattr(session, "id", "") or ""),
+            "stripeCustomerId": session_customer_id or "",
             "stripeMode": mode,
             "updatedAt": firestore.SERVER_TIMESTAMP,
         },
@@ -3644,6 +4643,7 @@ def confirm_stripe_checkout(req: https_fn.CallableRequest) -> dict[str, Any]:
     session_status = str(session_dict.get("status") or "").lower()
     subscription_id = session_dict.get("subscription")
     payment_intent = session_dict.get("payment_intent")
+    customer_id = _stripe_id(session_dict.get("customer"))
 
     is_paid = False
     if mode == "payment":
@@ -3670,6 +4670,7 @@ def confirm_stripe_checkout(req: https_fn.CallableRequest) -> dict[str, Any]:
         "stripeCheckoutSessionId": session_id,
         "stripePaymentIntentId": payment_intent_id,
         "stripeSubscriptionId": subscription_id_str,
+        "stripeCustomerId": customer_id,
         "stripeMode": mode,
         "stripePaymentStatus": payment_status,
         "stripeSessionStatus": session_status,
@@ -3683,6 +4684,8 @@ def confirm_stripe_checkout(req: https_fn.CallableRequest) -> dict[str, Any]:
         update_payload["paymentStatus"] = "unpaid"
 
     order_ref.set(update_payload, merge=True)
+    if owner_id and customer_id:
+        _persist_user_stripe_customer_id(owner_id, customer_id)
     _audit_event(
         req.auth.uid,
         token.get("email"),
@@ -3698,6 +4701,104 @@ def confirm_stripe_checkout(req: https_fn.CallableRequest) -> dict[str, Any]:
         "product": order.get("product") or "",
         "currency": order.get("currency") or "USD",
         "price": order.get("price") or 0,
+    }
+
+
+@https_fn.on_call()
+def create_stripe_billing_portal_session(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    data = req.data or {}
+    stripe = _stripe_module()
+
+    uid = req.auth.uid
+    email = str(token.get("email") or "").strip()
+    return_url = _sanitize_portal_return_url(data.get("returnUrl"))
+
+    customer_id = _resolve_stripe_customer_id(
+        stripe,
+        uid,
+        email,
+        create_if_missing=False,
+    )
+
+    if not customer_id:
+        order_docs = db.collection("orders").where("userId", "==", uid).limit(200).stream()
+        checkout_sessions: list[tuple[str, Any]] = []
+
+        for doc in order_docs:
+            payload = doc.to_dict() or {}
+            provider = str(payload.get("paymentProvider") or "").strip().lower()
+            if provider and provider != "stripe":
+                continue
+
+            order_customer_id = str(payload.get("stripeCustomerId") or "").strip()
+            if order_customer_id:
+                customer_id = order_customer_id
+                break
+
+            session_id = str(payload.get("stripeCheckoutSessionId") or "").strip()
+            if session_id:
+                checkout_sessions.append((session_id, doc.reference))
+
+        if not customer_id:
+            for session_id, order_ref in checkout_sessions[:25]:
+                try:
+                    session = stripe.checkout.Session.retrieve(session_id)
+                except Exception:
+                    continue
+                session_customer_id = _extract_checkout_customer_id(session)
+                if not session_customer_id:
+                    continue
+                customer_id = session_customer_id
+                order_ref.set(
+                    {
+                        "stripeCustomerId": session_customer_id,
+                        "updatedAt": firestore.SERVER_TIMESTAMP,
+                    },
+                    merge=True,
+                )
+                break
+
+        if customer_id:
+            _persist_user_stripe_customer_id(uid, customer_id)
+
+    if not customer_id:
+        customer_id = _resolve_stripe_customer_id(
+            stripe,
+            uid,
+            email,
+            create_if_missing=True,
+        )
+
+    if not customer_id:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "Unable to resolve Stripe customer for billing portal.",
+        )
+
+    try:
+        portal_session = stripe.billing_portal.Session.create(
+            customer=customer_id,
+            return_url=return_url,
+        )
+    except Exception as exc:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INTERNAL,
+            "Unable to create Stripe billing portal session.",
+            {"error": str(exc)},
+        )
+
+    _audit_event(
+        uid,
+        token.get("email"),
+        "stripe_billing_portal_session_created",
+        {"customerId": customer_id},
+    )
+
+    return {
+        "customerId": customer_id,
+        "url": str(getattr(portal_session, "url", "") or ""),
+        "returnUrl": return_url,
     }
 
 
@@ -3870,7 +4971,15 @@ def create_creator_support_checkout(req: https_fn.CallableRequest) -> dict[str, 
     }
 
     email = str(token.get("email") or "").strip()
-    if email:
+    customer_id = _resolve_stripe_customer_id(
+        stripe,
+        req.auth.uid,
+        email,
+        create_if_missing=True,
+    )
+    if customer_id:
+        session_kwargs["customer"] = customer_id
+    elif email:
         session_kwargs["customer_email"] = email
 
     if connect_account_id:
@@ -3895,6 +5004,10 @@ def create_creator_support_checkout(req: https_fn.CallableRequest) -> dict[str, 
             {"error": str(exc)},
         )
 
+    session_customer_id = _extract_checkout_customer_id(session) or customer_id
+    if session_customer_id:
+        _persist_user_stripe_customer_id(req.auth.uid, session_customer_id)
+
     doc_ref = db.collection("creator_support_sessions").document()
     doc_ref.set(
         {
@@ -3910,6 +5023,7 @@ def create_creator_support_checkout(req: https_fn.CallableRequest) -> dict[str, 
             "amountCents": amount_cents,
             "platformFeePercent": platform_fee_percent,
             "connectAccountId": connect_account_id,
+            "stripeCustomerId": session_customer_id or "",
             "stripeCheckoutSessionId": str(getattr(session, "id", "") or ""),
             "status": "created",
             "createdAt": firestore.SERVER_TIMESTAMP,
@@ -3974,6 +5088,7 @@ def stripe_webhook(req: https_fn.Request) -> tuple[str, int]:
                 mode = str(session_obj.get("mode") or "")
 
                 is_paid = payment_status == "paid" or session_status == "complete"
+                customer_id = _stripe_id(session_obj.get("customer"))
                 db.collection("orders").document(order_id).set(
                     {
                         "paymentProvider": "stripe",
@@ -3981,6 +5096,7 @@ def stripe_webhook(req: https_fn.Request) -> tuple[str, int]:
                         "stripeCheckoutSessionId": str(session_obj.get("id") or ""),
                         "stripePaymentIntentId": str(session_obj.get("payment_intent") or ""),
                         "stripeSubscriptionId": str(session_obj.get("subscription") or ""),
+                        "stripeCustomerId": customer_id,
                         "stripeMode": mode,
                         "stripePaymentStatus": payment_status,
                         "stripeSessionStatus": session_status,
@@ -4317,11 +5433,11 @@ def track_meta_conversion_event(req: https_fn.CallableRequest) -> dict[str, Any]
             https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
             "eventName is required.",
         )
-    source_event_name = re.sub(r"[^A-Za-z0-9_\\- ]+", "", source_event_name)[:80] or "custom_event"
+    source_event_name = re.sub(r"[^A-Za-z0-9_ \-]+", "", source_event_name)[:80] or "custom_event"
 
     event_name = str(data.get("eventName") or source_event_name).strip()
     event_name = "PageView" if event_name == "page_view" else event_name
-    event_name = re.sub(r"[^A-Za-z0-9_\\- ]+", "", event_name)[:80] or "custom_event"
+    event_name = re.sub(r"[^A-Za-z0-9_ \-]+", "", event_name)[:80] or "custom_event"
 
     now_ts = int(time.time())
     event_time = int(_safe_float(data.get("eventTime")) or now_ts)
@@ -4332,7 +5448,7 @@ def track_meta_conversion_event(req: https_fn.CallableRequest) -> dict[str, Any]
     if not event_id:
         seed = f"{source_event_name}:{event_time}:{time.time_ns()}"
         event_id = f"q_{hashlib.sha256(seed.encode('utf-8')).hexdigest()[:24]}"
-    event_id = re.sub(r"[^A-Za-z0-9_\\-]+", "", event_id)[:100] or f"q_{int(time.time() * 1000)}"
+    event_id = re.sub(r"[^A-Za-z0-9_-]+", "", event_id)[:100] or f"q_{int(time.time() * 1000)}"
 
     action_source = str(data.get("actionSource") or "website").strip().lower()
     valid_action_sources = {
@@ -4439,6 +5555,7 @@ def get_feature_flags(req: https_fn.CallableRequest) -> dict[str, Any]:
         "promoBannerText": _remote_config_param("promo_banner_text", "", context=context),
         "maintenanceMode": _remote_config_bool("maintenance_mode", False, context=context),
         "volatilityThreshold": _remote_config_float("volatility_threshold", 0.05, context=context),
+        "llmAllowedModels": _serialize_for_firestore(_get_llm_allowed_models(context=context)),
         "aiUsageTiers": _serialize_for_firestore(usage_tiers),
         "aiUsageTierKey": tier_key,
         "aiUsageTier": _serialize_for_firestore(tier),
@@ -4510,6 +5627,7 @@ def send_test_notification(req: https_fn.CallableRequest) -> dict[str, Any]:
     title = str(data.get("title") or "Quantura notification test")
     body = str(data.get("body") or "Your web push notifications are active.")
     payload_data = data.get("data") if isinstance(data.get("data"), dict) else {}
+    explicit_token = _normalize_notification_token(data.get("token"))
 
     result = _notify_user(
         req.auth.uid,
@@ -4521,7 +5639,9 @@ def send_test_notification(req: https_fn.CallableRequest) -> dict[str, Any]:
             "type": "test",
             "url": "/dashboard",
         },
+        explicit_token=explicit_token or None,
     )
+    result["requestedTokenProvided"] = bool(explicit_token)
     return result
 
 
@@ -4708,7 +5828,12 @@ def _handle_forecast_request(req: https_fn.CallableRequest, forced_service: str 
     if interval not in {"1d", "1h"}:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Interval must be 1d or 1h.")
 
-    horizon = int(data.get("horizon") or 90)
+    try:
+        horizon = int(data.get("horizon") or 90)
+    except Exception:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Horizon must be an integer.")
+    if horizon <= 0:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Horizon must be greater than 0.")
     quantiles = _parse_quantiles(data.get("quantiles"))
     start = data.get("start")
 
@@ -4727,16 +5852,20 @@ def _handle_forecast_request(req: https_fn.CallableRequest, forced_service: str 
 
     try:
         result = _run_forecast_service(service, close_series, horizon, quantiles, interval)
-    except Exception:
+    except https_fn.HttpsError:
+        raise
+    except Exception as service_exc:
         try:
             result = _generate_quantile_forecast(close_series, horizon, quantiles, interval)
             result["serviceMessage"] = "Forecast service failed; fallback model executed."
+        except https_fn.HttpsError:
+            raise
         except Exception as exc:
             _raise_structured_error(
                 https_fn.FunctionsErrorCode.INTERNAL,
                 "forecast_failed",
                 "Forecast generation failed.",
-                {"ticker": ticker, "service": service, "raw": str(exc)},
+                {"ticker": ticker, "service": service, "serviceRaw": str(service_exc), "raw": str(exc)},
             )
 
     trade_rationale = _build_forecast_trade_rationale(
@@ -4789,27 +5918,40 @@ def _handle_forecast_request(req: https_fn.CallableRequest, forced_service: str 
     )
 
     metrics = result.get("metrics") or {}
+    forecast_rows_out = result.get("forecastRows") if isinstance(result.get("forecastRows"), list) else []
+    quantile_end: dict[str, Any] = {}
+    try:
+        entries = _forecast_quantile_entries(forecast_rows_out)
+        if entries and forecast_rows_out:
+            last_row = forecast_rows_out[-1] or {}
+            for _, key in entries:
+                if key in last_row:
+                    quantile_end[key] = last_row.get(key)
+    except Exception:
+        quantile_end = {}
     return {
         "requestId": doc_ref.id,
         "status": request_doc["status"],
         "service": service,
         "engine": request_doc["engine"],
         "serviceMessage": request_doc["serviceMessage"],
+        "quantiles": quantiles,
         "lastClose": metrics.get("lastClose"),
         "mae": metrics.get("mae"),
         "coverage10_90": metrics.get("coverage10_90", "n/a"),
         "forecastPreview": request_doc["forecastPreview"],
+        "forecastQuantilesEnd": _serialize_for_firestore(quantile_end),
         "tradeRationale": trade_rationale,
         "reportStatus": "queued",
     }
 
 
-@https_fn.on_call()
+@https_fn.on_call(memory=MemoryOption.GB_1, timeout_sec=180)
 def run_timeseries_forecast(req: https_fn.CallableRequest) -> dict[str, Any]:
-    return _handle_forecast_request(req)
+    return _handle_forecast_request(req, forced_service="prophet")
 
 
-@https_fn.on_call()
+@https_fn.on_call(memory=MemoryOption.GB_1, timeout_sec=180)
 def run_prophet_forecast(req: https_fn.CallableRequest) -> dict[str, Any]:
     return _handle_forecast_request(req, forced_service="prophet")
 
@@ -4840,7 +5982,7 @@ def delete_forecast_request(req: https_fn.CallableRequest) -> dict[str, Any]:
     return {"deleted": True, "forecastId": forecast_id}
 
 
-@https_fn.on_call()
+@https_fn.on_call(memory=MemoryOption.GB_1, timeout_sec=180)
 def generate_forecast_report_assets(req: https_fn.CallableRequest) -> dict[str, Any]:
     token = _require_auth(req)
     data = req.data or {}
@@ -5172,6 +6314,7 @@ def upsert_ai_agent_social_action(req: https_fn.CallableRequest) -> dict[str, An
 @https_fn.on_call()
 def rename_prediction_upload(req: https_fn.CallableRequest) -> dict[str, Any]:
     token = _require_auth(req)
+    _require_admin(token)
     data = req.data or {}
     upload_id = str(data.get("uploadId") or data.get("id") or "").strip()
     title = str(data.get("title") or "").strip()
@@ -5187,11 +6330,6 @@ def rename_prediction_upload(req: https_fn.CallableRequest) -> dict[str, Any]:
     if not snap.exists:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "Upload not found.")
 
-    doc = snap.to_dict() or {}
-    owner_id = str(doc.get("userId") or "").strip()
-    if token.get("email") != ADMIN_EMAIL and owner_id != req.auth.uid:
-        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.PERMISSION_DENIED, "Access denied.")
-
     ref.set({"title": title, "updatedAt": firestore.SERVER_TIMESTAMP}, merge=True)
     _audit_event(req.auth.uid, token.get("email"), "predictions_renamed", {"uploadId": upload_id})
     return {"updated": True, "uploadId": upload_id, "title": title}
@@ -5200,6 +6338,7 @@ def rename_prediction_upload(req: https_fn.CallableRequest) -> dict[str, Any]:
 @https_fn.on_call()
 def delete_prediction_upload(req: https_fn.CallableRequest) -> dict[str, Any]:
     token = _require_auth(req)
+    _require_admin(token)
     data = req.data or {}
     upload_id = str(data.get("uploadId") or data.get("id") or "").strip()
     if not upload_id:
@@ -5211,9 +6350,6 @@ def delete_prediction_upload(req: https_fn.CallableRequest) -> dict[str, Any]:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "Upload not found.")
 
     doc = snap.to_dict() or {}
-    owner_id = str(doc.get("userId") or "").strip()
-    if token.get("email") != ADMIN_EMAIL and owner_id != req.auth.uid:
-        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.PERMISSION_DENIED, "Access denied.")
 
     file_path = str(doc.get("filePath") or "").strip()
     if file_path:
@@ -5232,6 +6368,7 @@ def delete_prediction_upload(req: https_fn.CallableRequest) -> dict[str, Any]:
 @https_fn.on_call()
 def get_prediction_upload_csv(req: https_fn.CallableRequest) -> dict[str, Any]:
     token = _require_auth(req)
+    _require_admin(token)
     data = req.data or {}
     upload_id = str(data.get("uploadId") or data.get("id") or "").strip()
     if not upload_id:
@@ -5252,9 +6389,6 @@ def get_prediction_upload_csv(req: https_fn.CallableRequest) -> dict[str, Any]:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "Upload not found.")
 
     doc = snap.to_dict() or {}
-    owner_id = str(doc.get("userId") or "").strip()
-    if token.get("email") != ADMIN_EMAIL and owner_id != req.auth.uid:
-        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.PERMISSION_DENIED, "Access denied.")
 
     file_path = str(doc.get("filePath") or "").strip()
     if not file_path:
@@ -5329,6 +6463,7 @@ def _prediction_agent_fallback(summary: dict[str, Any], ticker: str) -> str:
 @https_fn.on_call()
 def run_prediction_upload_agent(req: https_fn.CallableRequest) -> dict[str, Any]:
     token = _require_auth(req)
+    _require_admin(token)
     data = req.data or {}
     upload_id = str(data.get("uploadId") or data.get("id") or "").strip()
     if not upload_id:
@@ -5340,9 +6475,6 @@ def run_prediction_upload_agent(req: https_fn.CallableRequest) -> dict[str, Any]
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "Upload not found.")
 
     doc = snap.to_dict() or {}
-    owner_id = str(doc.get("userId") or "").strip()
-    if token.get("email") != ADMIN_EMAIL and owner_id != req.auth.uid:
-        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.PERMISSION_DENIED, "Access denied.")
 
     mapping_summary = data.get("mappingSummary") if isinstance(data.get("mappingSummary"), dict) else {}
     ticker = str(data.get("ticker") or mapping_summary.get("ticker") or doc.get("ticker") or "").upper().strip()
@@ -5914,7 +7046,7 @@ def _build_backtest_export_sources(payload: dict[str, Any]) -> dict[str, dict[st
     }
 
 
-@https_fn.on_call()
+@https_fn.on_call(memory=MemoryOption.GB_1, timeout_sec=180)
 def run_backtest(req: https_fn.CallableRequest) -> dict[str, Any]:
     token = _require_auth(req)
     data = req.data or {}
@@ -6289,8 +7421,7 @@ def create_share_link(req: https_fn.CallableRequest) -> dict[str, Any]:
         else:
             _require_workspace_access(owner_id, req.auth.uid, token)
     else:
-        if token.get("email") != ADMIN_EMAIL and owner_id != req.auth.uid:
-            raise https_fn.HttpsError(https_fn.FunctionsErrorCode.PERMISSION_DENIED, "Access denied.")
+        _require_admin(token)
 
     share_ref = db.collection("shares").document()
     share_doc = {
@@ -6430,7 +7561,7 @@ def import_shared_item(req: https_fn.CallableRequest) -> dict[str, Any]:
     return {"kind": kind, "importedId": imported_ref.id, "shareId": share_id}
 
 
-@https_fn.on_call()
+@https_fn.on_call(memory=MemoryOption.MB_512, timeout_sec=120)
 def get_ticker_history(req: https_fn.CallableRequest) -> dict[str, Any]:
     import pandas as pd  # type: ignore
     import yfinance as yf  # type: ignore
@@ -6440,12 +7571,22 @@ def get_ticker_history(req: https_fn.CallableRequest) -> dict[str, Any]:
     if not ticker:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Ticker is required.")
 
-    interval = str(data.get("interval") or "1d")
+    interval = str(data.get("interval") or "1d").strip().lower()
+    if interval not in {"1d", "1h"}:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Interval must be 1d or 1h.")
     start = data.get("start")
     end = data.get("end")
 
     try:
-        history = yf.download(ticker, start=start, end=end, interval=interval, progress=False)
+        history = yf.download(
+            ticker,
+            start=start,
+            end=end,
+            interval=interval,
+            progress=False,
+            auto_adjust=False,
+            threads=False,
+        )
     except Exception as exc:
         _raise_structured_error(
             https_fn.FunctionsErrorCode.NOT_FOUND,
@@ -6455,6 +7596,10 @@ def get_ticker_history(req: https_fn.CallableRequest) -> dict[str, Any]:
         )
     if isinstance(history.columns, pd.MultiIndex):
         history.columns = history.columns.get_level_values(0)
+    # Keep only the columns the client chart needs to reduce payload/memory.
+    keep_cols = [col for col in ["Open", "High", "Low", "Close", "Adj Close", "Volume"] if col in history.columns]
+    if keep_cols:
+        history = history[keep_cols]
     history = history.dropna().reset_index()
     if history.empty:
         _raise_structured_error(
@@ -6472,7 +7617,7 @@ def get_ticker_history(req: https_fn.CallableRequest) -> dict[str, Any]:
     return {"rows": _serialize_for_firestore(rows)}
 
 
-@https_fn.on_call()
+@https_fn.on_call(memory=MemoryOption.MB_512, timeout_sec=180)
 def download_price_csv(req: https_fn.CallableRequest) -> dict[str, Any]:
     import pandas as pd  # type: ignore
     import yfinance as yf  # type: ignore
@@ -6550,6 +7695,21 @@ def download_price_csv(req: https_fn.CallableRequest) -> dict[str, Any]:
 
 
 @https_fn.on_call()
+def get_unsplash_gallery(req: https_fn.CallableRequest) -> dict[str, Any]:
+    data = req.data or {}
+    query = str(data.get("query") or data.get("q") or "stock market, trading desk").strip()
+    count = max(1, min(int(data.get("count") or data.get("limit") or 1), 8))
+
+    photos, warning = _fetch_unsplash_random_photos(query, count=count)
+    return {
+        "query": query,
+        "count": count,
+        "photos": _serialize_for_firestore(photos),
+        "warning": str(warning or "").strip(),
+    }
+
+
+@https_fn.on_call()
 def get_trending_tickers(req: https_fn.CallableRequest) -> dict[str, Any]:
     data = req.data or {}
     force = bool(data.get("force"))
@@ -6620,7 +7780,7 @@ def get_trending_tickers(req: https_fn.CallableRequest) -> dict[str, Any]:
     return payload
 
 
-@https_fn.on_call()
+@https_fn.on_call(memory=MemoryOption.GB_1, timeout_sec=180)
 def get_ticker_intel(req: https_fn.CallableRequest) -> dict[str, Any]:
     import numpy as np  # type: ignore
     import pandas as pd  # type: ignore
@@ -7083,97 +8243,19 @@ def get_ticker_x_trends(req: https_fn.CallableRequest) -> dict[str, Any]:
     ticker = str(data.get("ticker") or "").upper().strip()
     if not ticker:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Ticker is required.")
-
-    if not TWITTER_BEARER_TOKEN:
-        return {
-            "ticker": ticker,
-            "posts": [],
-            "warning": "X trend feed is not configured (missing TWITTER_BEARER_TOKEN).",
-        }
-
-    endpoint = "https://api.twitter.com/2/tweets/search/recent"
-    query = f"(${ticker} OR {ticker}) lang:en -is:retweet -is:reply"
-    params = {
-        "query": query,
-        "max_results": 30,
-        "tweet.fields": "created_at,public_metrics,author_id,lang",
-        "expansions": "author_id",
-        "user.fields": "username,name,verified",
+    query = f"${ticker} {ticker} stock"
+    posts, warning = _fetch_x_social_posts(query, limit=8)
+    stories, stories_warning = _fetch_x_news_stories(query, limit=6)
+    combined_warning = " ".join([part for part in [warning, stories_warning] if str(part or "").strip()]).strip()
+    return {
+        "ticker": ticker,
+        "posts": _serialize_for_firestore(posts),
+        "stories": _serialize_for_firestore(stories),
+        "warning": combined_warning,
     }
-    headers = {"Authorization": f"Bearer {TWITTER_BEARER_TOKEN}"}
-
-    try:
-        response = requests.get(endpoint, headers=headers, params=params, timeout=15)
-        if response.status_code >= 400:
-            return {
-                "ticker": ticker,
-                "posts": [],
-                "warning": f"X trend feed unavailable (HTTP {response.status_code}).",
-            }
-
-        payload = response.json() if response.text else {}
-        tweets = payload.get("data") or []
-        includes = payload.get("includes") or {}
-        users = includes.get("users") or []
-
-        user_map: dict[str, dict[str, Any]] = {}
-        for user in users:
-            if not isinstance(user, dict):
-                continue
-            user_id = str(user.get("id") or "").strip()
-            if user_id:
-                user_map[user_id] = user
-
-        ranked_posts: list[tuple[float, dict[str, Any]]] = []
-        for item in tweets:
-            if not isinstance(item, dict):
-                continue
-            post_id = str(item.get("id") or "").strip()
-            if not post_id:
-                continue
-            author_id = str(item.get("author_id") or "").strip()
-            author = user_map.get(author_id) or {}
-            metrics = item.get("public_metrics") if isinstance(item.get("public_metrics"), dict) else {}
-            likes = int(metrics.get("like_count") or 0)
-            reposts = int(metrics.get("retweet_count") or 0)
-            replies = int(metrics.get("reply_count") or 0)
-            quotes = int(metrics.get("quote_count") or 0)
-            score = (likes * 1.0) + (reposts * 2.0) + (replies * 1.5) + (quotes * 1.25)
-
-            username = str(author.get("username") or "").strip()
-            permalink = f"https://x.com/{username}/status/{post_id}" if username else f"https://x.com/i/web/status/{post_id}"
-            ranked_posts.append(
-                (
-                    score,
-                    {
-                        "id": post_id,
-                        "text": str(item.get("text") or "").strip(),
-                        "createdAt": item.get("created_at"),
-                        "authorUsername": username,
-                        "authorName": str(author.get("name") or "").strip(),
-                        "metrics": {
-                            "like_count": likes,
-                            "retweet_count": reposts,
-                            "reply_count": replies,
-                            "quote_count": quotes,
-                        },
-                        "permalink": permalink,
-                    },
-                )
-            )
-
-        ranked_posts.sort(key=lambda row: row[0], reverse=True)
-        posts = [row[1] for row in ranked_posts[:8]]
-        return {"ticker": ticker, "posts": posts}
-    except Exception as exc:
-        return {
-            "ticker": ticker,
-            "posts": [],
-            "warning": f"X trend feed error: {str(exc)[:180]}",
-        }
 
 
-@https_fn.on_call()
+@https_fn.on_call(memory=MemoryOption.MB_512, timeout_sec=180)
 def get_corporate_events_calendar(req: https_fn.CallableRequest) -> dict[str, Any]:
     data = req.data or {}
     ticker = _normalize_symbol_token(data.get("ticker"))
@@ -7271,11 +8353,13 @@ def get_corporate_events_calendar(req: https_fn.CallableRequest) -> dict[str, An
     }
 
 
-@https_fn.on_call()
+@https_fn.on_call(memory=MemoryOption.MB_512, timeout_sec=75)
 def query_ticker_insight(req: https_fn.CallableRequest) -> dict[str, Any]:
     import yfinance as yf  # type: ignore
 
     data = req.data or {}
+    meta = data.get("meta") if isinstance(data.get("meta"), dict) else {}
+    context = _remote_config_context(req, None, meta if isinstance(meta, dict) else None)
     ticker = _normalize_symbol_token(data.get("ticker"))
     question = str(data.get("question") or data.get("query") or "").strip()
     language = str(data.get("language") or "en").strip().lower()[:8]
@@ -7291,6 +8375,62 @@ def query_ticker_insight(req: https_fn.CallableRequest) -> dict[str, Any]:
         "ar": "Arabic",
         "bn": "Bengali",
     }.get(language, "English")
+    technical_raw = data.get("technicalContext") if isinstance(data.get("technicalContext"), dict) else {}
+    technical_context: dict[str, Any] = {}
+    if technical_raw:
+        lookback_days = technical_raw.get("lookbackDays")
+        interval = str(technical_raw.get("interval") or "").strip().lower()
+        if interval not in {"1d", "1h"}:
+            interval = "1d"
+        latest_rows = []
+        for row in (technical_raw.get("latest") if isinstance(technical_raw.get("latest"), list) else [])[:24]:
+            if not isinstance(row, dict):
+                continue
+            name = str(row.get("name") or "").strip()[:40]
+            if not name:
+                continue
+            value = _safe_float(row.get("value"))
+            if value is None:
+                continue
+            latest_rows.append({"name": name, "value": round(float(value), 6)})
+
+        trend_rows = []
+        for row in (technical_raw.get("trend") if isinstance(technical_raw.get("trend"), list) else [])[:16]:
+            if not isinstance(row, dict):
+                continue
+            name = str(row.get("name") or "").strip()[:40]
+            if not name:
+                continue
+            trend_rows.append(
+                {
+                    "name": name,
+                    "direction": str(row.get("direction") or "").strip()[:16],
+                    "pctChange": _safe_float(row.get("pctChange")),
+                    "delta": _safe_float(row.get("delta")),
+                }
+            )
+
+        heuristics = []
+        for line in (technical_raw.get("heuristics") if isinstance(technical_raw.get("heuristics"), list) else [])[:12]:
+            text = str(line or "").strip()
+            if text:
+                heuristics.append(text[:220])
+
+        lookback_normalized = None
+        try:
+            lookback_candidate = int(float(lookback_days))
+            if lookback_candidate > 0:
+                lookback_normalized = lookback_candidate
+        except Exception:
+            lookback_normalized = None
+
+        technical_context = {
+            "lookbackDays": lookback_normalized,
+            "interval": interval,
+            "latest": latest_rows,
+            "trend": trend_rows,
+            "heuristics": heuristics,
+        }
     if not ticker:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Ticker is required.")
     if not question:
@@ -7346,14 +8486,23 @@ def query_ticker_insight(req: https_fn.CallableRequest) -> dict[str, Any]:
         "beta": info.get("beta"),
         "historySummary": history_summary,
         "headlines": headline_compact,
+        "technicalContext": technical_context,
     }
 
     answer = ""
     model_used = "heuristic"
     provider = "local"
+    allowed_models = _get_llm_allowed_models(context=context)
+    allowed_set = set(allowed_models)
+    requested_model = _normalize_ai_model_id(data.get("model") or "gpt-5")
+    if not _is_supported_llm_model(requested_model):
+        requested_model = "gpt-5"
+    if allowed_set and requested_model not in allowed_set:
+        requested_model = allowed_models[0] if allowed_models else "gpt-5"
+    requested_provider = _model_provider_from_id(requested_model)
 
-    if OPENAI_API_KEY:
-        model_used = "gpt-5"
+    if requested_provider == "openai" and OPENAI_API_KEY:
+        model_used = requested_model
         provider = "openai"
         system_prompt = (
             "You are Quantura's market assistant. Answer using the supplied ticker context only. "
@@ -7385,22 +8534,69 @@ def query_ticker_insight(req: https_fn.CallableRequest) -> dict[str, Any]:
             )
             response.raise_for_status()
             answer = _extract_responses_output_text(response.json())
+        except requests.HTTPError as exc:
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            provider = "fallback"
+            model_used = "heuristic"
+            if status == 401:
+                answer = (
+                    "Unable to complete GPT-5 query right now (OpenAI 401 Unauthorized). "
+                    "Admin action required: rotate the server-side OPENAI_API_KEY secret."
+                )
+            elif status == 429:
+                answer = "Unable to complete GPT-5 query right now (OpenAI rate limit). Try again shortly."
+            else:
+                answer = f"Unable to complete GPT-5 query right now. Fallback summary: {str(exc)[:160]}"
         except Exception as exc:
             provider = "fallback"
             model_used = "heuristic"
             answer = f"Unable to complete GPT-5 query right now. Fallback summary: {str(exc)[:160]}"
+    elif requested_provider == "amazon_nova":
+        system_prompt = (
+            "You are Quantura's market assistant. Answer using the supplied ticker context only. "
+            "Be explicit when data is missing. Keep the answer concise, practical, and professional. "
+            f"Write the final response in {language_label}."
+        )
+        user_prompt = (
+            f"Ticker: {ticker}\n"
+            f"Question: {question}\n"
+            f"Preferred language: {language_label}\n"
+            f"Context JSON:\n{json.dumps(context_payload, ensure_ascii=False)}\n\n"
+            "Respond in plain text with: (1) direct answer, (2) key evidence bullets, (3) one risk caveat."
+        )
+        answer = _invoke_amazon_nova_text(
+            model_id=requested_model,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            max_tokens=900,
+            temperature=0.2,
+        )
+        if answer:
+            provider = "amazon_nova"
+            model_used = requested_model
 
     if not answer:
         last_close = history_summary.get("lastClose")
         change_1m = history_summary.get("change1mPct")
         sector = str(context_payload.get("sector") or "Unknown sector")
         pe = context_payload.get("trailingPE")
+        technical_brief = ""
+        if technical_context:
+            lookback_label = technical_context.get("lookbackDays") or "n/a"
+            interval_label = technical_context.get("interval") or "1d"
+            heuristics = technical_context.get("heuristics") if isinstance(technical_context.get("heuristics"), list) else []
+            latest = technical_context.get("latest") if isinstance(technical_context.get("latest"), list) else []
+            latest_text = ", ".join(
+                [f"{str(item.get('name') or '')}:{item.get('value')}" for item in latest[:6] if isinstance(item, dict)]
+            )
+            heuristic_text = str(heuristics[0]) if heuristics else ""
+            technical_brief = f"Technical snapshot ({lookback_label}d/{interval_label}) {latest_text}. {heuristic_text}".strip()
         answer = (
             f"{ticker} currently screens in {sector}. "
             f"Last close: {last_close if last_close is not None else 'n/a'}, "
             f"1M move: {change_1m if change_1m is not None else 'n/a'}%. "
             f"Trailing P/E: {pe if pe is not None else 'n/a'}. "
-            "Recent headlines were attached for context."
+            f"Recent headlines were attached for context.{(' ' + technical_brief) if technical_brief else ''}"
         )
 
     return {
@@ -7442,11 +8638,20 @@ def get_market_headlines_feed(req: https_fn.CallableRequest) -> dict[str, Any]:
     x_posts, x_warning = _fetch_x_social_posts(country_query, limit=8)
     if x_warning:
         warnings.append(x_warning)
-    reddit_posts = _fetch_reddit_social_posts(country_query, limit=8)
-    facebook_posts, facebook_warning = _fetch_meta_social_posts(country_query, platform="facebook", limit=6)
+    x_stories, x_story_warning = _fetch_x_news_stories(country_query, limit=6)
+    if x_story_warning:
+        warnings.append(x_story_warning)
+    if not x_posts and x_stories:
+        x_posts = _x_news_stories_as_pseudo_posts(x_stories, limit=8)
+        warnings.append("Showing X News stories because live X posts were unavailable.")
+    reddit_query = f"{country_code} stock market investing reddit"
+    reddit_posts = _fetch_reddit_social_posts(reddit_query, limit=8)
+    facebook_query = f"{country_code} stock market investing"
+    facebook_posts, facebook_warning = _fetch_meta_social_posts(facebook_query, platform="facebook", limit=6)
     if facebook_warning:
         warnings.append(facebook_warning)
-    instagram_posts, instagram_warning = _fetch_meta_social_posts(country_query, platform="instagram", limit=6)
+    instagram_query = f"{country_code} stock market investing"
+    instagram_posts, instagram_warning = _fetch_meta_social_posts(instagram_query, platform="instagram", limit=6)
     if instagram_warning:
         warnings.append(instagram_warning)
 
@@ -7456,6 +8661,7 @@ def get_market_headlines_feed(req: https_fn.CallableRequest) -> dict[str, Any]:
         "headlines": _serialize_for_firestore(headlines[:limit]),
         "social": {
             "x": _serialize_for_firestore(x_posts),
+            "xStories": _serialize_for_firestore(x_stories),
             "reddit": _serialize_for_firestore(reddit_posts),
             "facebook": _serialize_for_firestore(facebook_posts),
             "instagram": _serialize_for_firestore(instagram_posts),
@@ -7464,7 +8670,7 @@ def get_market_headlines_feed(req: https_fn.CallableRequest) -> dict[str, Any]:
     }
 
 
-@https_fn.on_call()
+@https_fn.on_call(memory=MemoryOption.MB_512, timeout_sec=90)
 def get_options_chain(req: https_fn.CallableRequest) -> dict[str, Any]:
     import pandas as pd  # type: ignore
     import yfinance as yf  # type: ignore
@@ -7627,7 +8833,7 @@ def get_options_chain(req: https_fn.CallableRequest) -> dict[str, Any]:
     }
 
 
-@https_fn.on_call()
+@https_fn.on_call(memory=MemoryOption.MB_512, timeout_sec=60)
 def get_technicals(req: https_fn.CallableRequest) -> dict[str, Any]:
     import pandas as pd  # type: ignore
     import yfinance as yf  # type: ignore
@@ -7758,7 +8964,7 @@ def queue_screener_run(req: https_fn.CallableRequest) -> dict[str, Any]:
     return {"runId": doc_ref.id}
 
 
-@https_fn.on_call()
+@https_fn.on_call(memory=MemoryOption.GB_1, timeout_sec=180)
 def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
     try:
         import numpy as np  # type: ignore
@@ -7877,7 +9083,7 @@ def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
             screener_filters[name] = filter_token
 
     notes_text = str(data.get("notes") or "")
-    note_signals = _resolve_screener_note_signals(notes_text, selected_model)
+    note_signals = _resolve_screener_note_signals(notes_text, selected_model, context=context)
 
     universe_key = str(data.get("universe") or "trending").strip().lower()
     universe_map: dict[str, list[str]] = {
@@ -8991,8 +10197,176 @@ def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
 
 
 @https_fn.on_call()
+def submit_feature_vote(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    data = req.data or {}
+
+    feature_key = str(data.get("featureKey") or data.get("feature") or "").strip().lower()
+    if feature_key not in FEATURE_VOTE_KEYS:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "Feature key must be one of: uploads, autopilot.",
+        )
+
+    vote = str(data.get("vote") or "").strip().lower()
+    if vote not in FEATURE_VOTE_CHOICES:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "Vote must be yes or no.",
+        )
+
+    feedback = str(data.get("feedback") or "").strip()[:2000]
+    meta = data.get("meta") if isinstance(data.get("meta"), dict) else {}
+    user_id = req.auth.uid
+    user_email = str(token.get("email") or "").strip()
+
+    vote_ref = db.collection("feature_votes").document(f"{feature_key}__{user_id}")
+    totals_ref = db.collection("feature_vote_totals").document(feature_key)
+    transaction = db.transaction()
+
+    vote_snap = vote_ref.get(transaction=transaction)
+    previous_vote = ""
+    if vote_snap.exists:
+        previous_vote = str((vote_snap.to_dict() or {}).get("vote") or "").strip().lower()
+
+    totals_snap = totals_ref.get(transaction=transaction)
+    totals_doc = totals_snap.to_dict() if totals_snap.exists else {}
+
+    def _to_int(value: Any) -> int:
+        try:
+            return max(0, int(value or 0))
+        except Exception:
+            return 0
+
+    yes_count = _to_int(totals_doc.get("yes"))
+    no_count = _to_int(totals_doc.get("no"))
+    total_count = _to_int(totals_doc.get("total"))
+
+    had_previous = previous_vote in FEATURE_VOTE_CHOICES
+    if not had_previous:
+        total_count += 1
+    elif previous_vote != vote:
+        if previous_vote == "yes":
+            yes_count = max(0, yes_count - 1)
+        elif previous_vote == "no":
+            no_count = max(0, no_count - 1)
+
+    if not had_previous or previous_vote != vote:
+        if vote == "yes":
+            yes_count += 1
+        elif vote == "no":
+            no_count += 1
+
+    vote_payload = {
+        "featureKey": feature_key,
+        "vote": vote,
+        "feedback": feedback,
+        "userId": user_id,
+        "userEmail": user_email,
+        "meta": meta,
+        "updatedAt": firestore.SERVER_TIMESTAMP,
+    }
+    if not vote_snap.exists:
+        vote_payload["createdAt"] = firestore.SERVER_TIMESTAMP
+    transaction.set(vote_ref, vote_payload, merge=True)
+
+    transaction.set(
+        totals_ref,
+        {
+            "featureKey": feature_key,
+            "yes": yes_count,
+            "no": no_count,
+            "total": total_count,
+            "updatedAt": firestore.SERVER_TIMESTAMP,
+        },
+        merge=True,
+    )
+    transaction.commit()
+
+    _audit_event(
+        user_id,
+        user_email,
+        "feature_vote_submitted",
+        {"featureKey": feature_key, "vote": vote},
+    )
+    return {
+        "featureKey": feature_key,
+        "vote": vote,
+        "totals": {
+            "yes": yes_count,
+            "no": no_count,
+            "total": total_count,
+        },
+    }
+
+
+@https_fn.on_call()
+def get_feature_vote_summary(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    _require_admin(token)
+    data = req.data or {}
+
+    try:
+        limit = int(data.get("limit") or 25)
+    except Exception:
+        limit = 25
+    limit = max(5, min(limit, 100))
+
+    def _to_int(value: Any) -> int:
+        try:
+            return max(0, int(value or 0))
+        except Exception:
+            return 0
+
+    features: dict[str, dict[str, Any]] = {}
+    for feature_key in sorted(FEATURE_VOTE_KEYS):
+        snap = db.collection("feature_vote_totals").document(feature_key).get()
+        doc = snap.to_dict() if snap.exists else {}
+        yes_count = _to_int(doc.get("yes"))
+        no_count = _to_int(doc.get("no"))
+        total_count = _to_int(doc.get("total") or (yes_count + no_count))
+        yes_percent = round((yes_count / total_count) * 100, 1) if total_count > 0 else 0.0
+        features[feature_key] = {
+            "yes": max(0, yes_count),
+            "no": max(0, no_count),
+            "total": max(0, total_count),
+            "yesPercent": yes_percent,
+            "updatedAt": doc.get("updatedAt"),
+        }
+
+    recent_docs = (
+        db.collection("feature_votes")
+        .order_by("updatedAt", direction=firestore.Query.DESCENDING)
+        .limit(limit)
+        .stream()
+    )
+    recent: list[dict[str, Any]] = []
+    for item in recent_docs:
+        payload = item.to_dict() or {}
+        feature_key = str(payload.get("featureKey") or "").strip().lower()
+        if feature_key not in FEATURE_VOTE_KEYS:
+            continue
+        recent.append(
+            {
+                "id": item.id,
+                "featureKey": feature_key,
+                "vote": str(payload.get("vote") or "").strip().lower(),
+                "feedback": str(payload.get("feedback") or "").strip(),
+                "userEmail": str(payload.get("userEmail") or "").strip(),
+                "updatedAt": payload.get("updatedAt"),
+            }
+        )
+
+    return {
+        "features": _serialize_for_firestore(features),
+        "recent": _serialize_for_firestore(recent),
+    }
+
+
+@https_fn.on_call()
 def queue_autopilot_run(req: https_fn.CallableRequest) -> dict[str, Any]:
     token = _require_auth(req)
+    _require_admin(token)
     data = req.data or {}
     payload = {
         "userId": req.auth.uid,
@@ -9017,6 +10391,7 @@ def queue_autopilot_run(req: https_fn.CallableRequest) -> dict[str, Any]:
 @https_fn.on_call()
 def delete_autopilot_request(req: https_fn.CallableRequest) -> dict[str, Any]:
     token = _require_auth(req)
+    _require_admin(token)
     data = req.data or {}
     request_id = str(data.get("requestId") or data.get("id") or "").strip()
     if not request_id:
@@ -9026,11 +10401,6 @@ def delete_autopilot_request(req: https_fn.CallableRequest) -> dict[str, Any]:
     snap = ref.get()
     if not snap.exists:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "Autopilot request not found.")
-
-    doc = snap.to_dict() or {}
-    owner_id = str(doc.get("userId") or "").strip()
-    if token.get("email") != ADMIN_EMAIL and owner_id != req.auth.uid:
-        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.PERMISSION_DENIED, "Access denied.")
 
     ref.delete()
     _audit_event(req.auth.uid, token.get("email"), "autopilot_deleted", {"requestId": request_id})
