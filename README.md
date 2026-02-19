@@ -167,164 +167,40 @@ stockssagemakerdata/
 └── .github/workflows/         # CI/CD + scheduled jobs
 ```
 
----
+### Combined Stock Screener + Slack Delivery
 
-## 6. Frontend Module Map
+Generate a formatted CSV with headlines and optional Slack delivery:
 
-Primary client entry: `quantura_site/public/app.js`
+```bash
+python combined_stock_screener.py
+```
 
-| Module Area | Key Responsibilities |
-|---|---|
-| Auth + Session | Firebase Auth, guest/session states, protected flow guards |
-| Remote Config | SSR hydration + live refresh, feature toggles, tier policy |
-| Forecasting UI | Chart controls, saved forecasts, overlays, ticker sync |
-| Screener UI | Filter groups, model/personality select, run/load/publish |
-| Backtesting UI | Strategy forms, export helpers, technical suggestion flow |
-| Alerts + Notifications | FCM web token registration and test notification path |
-| Collaboration | Workspace switching, collaborator invitations, shared links |
-| Leaderboard + Social | AI portfolio cards, follows/likes, profile identity/social links |
-| Billing UX | Stripe checkout + billing portal actions |
+Optional environment variables:
+- `SLACK_WEBHOOK_URL` for posting a summary message.
+- `SLACK_BOT_TOKEN` + `SLACK_CHANNEL` for uploading the CSV file to Slack.
+- `SCREENING_OUTPUT_FILE` to override the CSV output filename.
 
----
+### Quantura Marketing Site
 
-## 7. Backend Function Map
+Static site assets live in `quantura_site/`. Open `quantura_site/index.html` in a browser
+and replace the Stripe placeholder buttons with live checkout URLs before deploying.
 
-Primary backend: `quantura_site/functions/main.py`
+## Files
 
-### Forecasting
-- `run_timeseries_forecast`
-- `run_prophet_forecast`
-- `delete_forecast_request`
-- `generate_forecast_report_assets`
-- `forecast_report_agent_scheduler` (scheduled)
-
-### Screening + AI Portfolio
-- `queue_screener_run`
-- `run_quick_screener`
-- `rename_screener_run`
-- `delete_screener_run`
-- `set_screener_public_visibility`
-- `upsert_ai_agent_social_action`
-
-### Backtesting
-- `run_backtest`
-- `rename_backtest`
-- `delete_backtest`
-
-### Ticker Intelligence and Market Data
-- `get_ticker_history`
-- `download_price_csv`
-- `get_trending_tickers`
-- `get_ticker_intel`
-- `get_ticker_news`
-- `get_ticker_x_trends`
-- `get_corporate_events_calendar`
-- `query_ticker_insight`
-- `get_market_headlines_feed`
-- `get_options_chain`
-- `get_technicals`
-
-### Uploads and Admin
-- `run_prediction_upload_agent`
-- `rename_prediction_upload`
-- `delete_prediction_upload`
-- `get_prediction_upload_csv`
-
-### Collaboration + Sharing
-- `create_collab_invite`
-- `list_collab_invites`
-- `accept_collab_invite`
-- `revoke_collab_invite`
-- `list_collaborators`
-- `remove_collaborator`
-- `create_share_link`
-- `import_shared_item`
-
-### Billing + Stripe
-- `create_order`
-- `create_stripe_checkout_session`
-- `confirm_stripe_checkout`
-- `create_stripe_billing_portal_session`
-- `create_stripe_connect_onboarding_link`
-- `create_creator_support_checkout`
-- `update_order_status`
-
-### Notifications + Feature Control
-- `get_feature_flags`
-- `get_web_push_config`
-- `register_notification_token`
-- `unregister_notification_token`
-- `send_test_notification`
-- `check_price_alerts`
-
-### Product Feedback + Voting
-- `submit_feedback`
-- `submit_feature_vote`
-- `get_feature_vote_summary`
-
-### Social Automation
-- `generate_social_campaign_drafts`
-- `queue_social_campaign_posts`
-- `list_social_campaigns`
-- `list_social_queue`
-- `publish_social_queue_now`
-- `schedule_social_autopilot_now`
-- `social_dispatch_scheduler` (scheduled)
-- `social_daily_planner_scheduler` (scheduled)
-
-### Broker/Execution Integrations
-- `alpaca_get_options`
-- `alpaca_place_order`
-- `alpaca_get_account`
-- `alpaca_get_positions`
-- `alpaca_list_orders`
-- `alpaca_cancel_order`
-
----
-
-## 8. Data Model (Firestore)
-
-Representative collections used by the app:
-
-- `users/{uid}`
-  - profile, plan state, metadata
-- `forecast_requests/{id}`
-- `screener_runs/{id}`
-- `backtests/{id}`
-- `prediction_uploads/{id}`
-- `orders/{id}`
-- `notification_tokens/{tokenHash}`
-- `feature_votes/{feature_user}`
-- `feature_vote_totals/{feature}`
-- `share_links/{shareId}`
-- `social_campaigns/{id}` and queue subcollections
-
-> Exact access control is enforced by `quantura_site/firestore.rules`.
-
----
-
-## 9. Configuration
-
-### Remote Config (important keys)
-
-- `watchlist_enabled` (boolean)
-- `forecast_prophet_enabled` (boolean)
-- `forecast_timemixer_enabled` (boolean)
-- `enable_social_leaderboard` (boolean)
-- `maintenance_mode` (boolean)
-- `promo_banner_text` (string)
-- `volatility_threshold` (number)
-- `ai_usage_tiers` (JSON string)
-- `llm_allowed_models` (CSV/JSON string)  **new server-side model gate**
-- `push_notifications_enabled` (boolean)
-- `webpush_vapid_key` (string)
-- `stripe_checkout_enabled` (boolean)
-- `stripe_public_key` (string)
-- `backtesting_enabled` (boolean)
-- `backtesting_free_daily_limit` (number)
-- `backtesting_pro_daily_limit` (number)
-
-### Environment Variables
+- [fetch_data.py](fetch_data.py) — CLI to download `Close` prices locally (CSV output).
+- [fetch_data_s3.py](fetch_data_s3.py) — CLI to download `Close` prices and upload to AWS S3.
+- [check_weekday.py](check_weekday.py) — Utility to check if a date is a weekday.
+- [predictions.py](predictions.py) — Generate stock price predictions and upload to S3.
+- [combined_stock_screener.py](combined_stock_screener.py) — Combined screener that outputs formatted CSV with headlines and can send results to Slack.
+- [quantura_site/](quantura_site/) — Static marketing site for Quantura with Stripe-ready CTA placeholders.
+- [Makefile](Makefile) — Convenient targets for common tasks.
+- [requirements.txt](requirements.txt) — Python dependencies.
+- [setup_aws.sh](setup_aws.sh) — Script to configure AWS CLI from environment variables.
+- [.env.example](.env.example) — Template for AWS configuration.
+- [.devcontainer/devcontainer.json](.devcontainer/devcontainer.json) and [.devcontainer/Dockerfile](.devcontainer/Dockerfile) — Codespace/devcontainer setup for development.
+- [.github/workflows/mlops-data.yml](.github/workflows/mlops-data.yml) — Scheduled/manual workflow to fetch data and store artifacts.
+- [.github/workflows/weekly-stock-screening.yml](.github/workflows/weekly-stock-screening.yml) — Weekly combined screening job with optional Slack delivery.
+- [.github/workflows/linear-sync.yml](.github/workflows/linear-sync.yml) — GitHub → Linear issue sync workflow.
 
 Use `.env.example` as baseline. Critical categories:
 
