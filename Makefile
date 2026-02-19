@@ -1,4 +1,4 @@
-.PHONY: install fetch fetch-ticker sample git-push check-weekday setup-aws fetch-s3-bucket predict predict-sample screen create-tickers
+.PHONY: install fetch fetch-ticker sample git-push check-weekday setup-aws fetch-s3-bucket predict predict-sample screen screen-agent screen-combined create-tickers
 
 install:
 	pip install -r requirements.txt
@@ -80,6 +80,13 @@ screen:
 	@echo "🚀 Running stock screening pipeline..."
 	python combined_stock_screener.py
 	@echo "✓ Watchlist saved to watchlist.csv"
+	@echo "✓ Results saved to combined_screening_results.csv"
+
+# Run combined screener with headlines + Slack support
+# Usage: make screen-combined (requires tickers.txt and OPENAI_API_KEY)
+screen-combined:
+	@echo "Running combined stock screener..."
+	python combined_stock_screener.py
 	@echo "✓ Results saved to combined_screening_results.csv"
 
 # Create sample tickers.txt file
