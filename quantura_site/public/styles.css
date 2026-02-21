@@ -21,6 +21,17 @@
   --header-height: 88px;
   --dock-top: 104px;
   --studio-chart-top: 284px;
+
+  /* Liquid Glass design tokens */
+  --glass-blur: 20px;
+  --glass-blur-strong: 32px;
+  --glass-tint: rgba(255, 255, 255, 0.65);
+  --glass-tint-subtle: rgba(255, 255, 255, 0.45);
+  --glass-border: rgba(255, 255, 255, 0.35);
+  --glass-shadow: 0 8px 32px rgba(11, 15, 26, 0.12);
+  --glass-radius: 20px;
+  --glass-radius-sm: 14px;
+  --glass-highlight: linear-gradient(135deg, rgba(255, 255, 255, 0.4) 0%, rgba(255, 255, 255, 0) 50%);
 }
 
 [data-theme="dark"] {
@@ -37,6 +48,32 @@
   --bg: radial-gradient(circle at 15% 10%, rgba(226, 90, 44, 0.18) 0%, transparent 42%),
     radial-gradient(circle at 75% 15%, rgba(58, 181, 162, 0.12) 0%, transparent 48%),
     var(--paper);
+
+  /* Liquid Glass dark variants */
+  --glass-tint: rgba(18, 24, 42, 0.72);
+  --glass-tint-subtle: rgba(18, 24, 42, 0.55);
+  --glass-border: rgba(233, 237, 247, 0.12);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+  --glass-highlight: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, transparent 50%);
+}
+
+/* Liquid Glass reusable surface */
+.liquid-glass {
+  background: var(--glass-tint);
+  backdrop-filter: saturate(180%) blur(var(--glass-blur));
+  -webkit-backdrop-filter: saturate(180%) blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow), var(--glass-highlight);
+  position: relative;
+}
+
+@supports not (backdrop-filter: blur(1px)) and not (-webkit-backdrop-filter: blur(1px)) {
+  .liquid-glass {
+    background: rgba(255, 255, 255, 0.92);
+  }
+  [data-theme="dark"] .liquid-glass {
+    background: rgba(18, 24, 42, 0.94);
+  }
 }
 
 * {
@@ -104,8 +141,10 @@ i[class*=" iconoir-"]::before {
   position: sticky;
   top: 0;
   background: var(--header-bg);
-  backdrop-filter: blur(10px);
+  backdrop-filter: saturate(180%) blur(var(--glass-blur));
+  -webkit-backdrop-filter: saturate(180%) blur(var(--glass-blur));
   border-bottom: 1px solid var(--line);
+  box-shadow: 0 1px 0 var(--glass-border);
   z-index: 10;
 }
 
@@ -461,6 +500,29 @@ i[class*=" iconoir-"]::before {
   border: 1px solid var(--line);
   padding: 26px;
   box-shadow: 0 12px 24px rgba(26, 33, 56, 0.06);
+}
+
+.card.liquid-glass {
+  background: var(--glass-tint);
+  backdrop-filter: saturate(180%) blur(var(--glass-blur));
+  -webkit-backdrop-filter: saturate(180%) blur(var(--glass-blur));
+  border-color: var(--glass-border);
+  box-shadow: var(--glass-shadow), var(--glass-highlight);
+}
+
+@supports not (backdrop-filter: blur(1px)) and not (-webkit-backdrop-filter: blur(1px)) {
+  .card.liquid-glass {
+    background: rgba(255, 255, 255, 0.94);
+  }
+  [data-theme="dark"] .card.liquid-glass {
+    background: rgba(18, 24, 42, 0.94);
+  }
+  .sidebar-card.liquid-glass {
+    background: rgba(255, 255, 255, 0.94);
+  }
+  [data-theme="dark"] .sidebar-card.liquid-glass {
+    background: rgba(18, 24, 42, 0.94);
+  }
 }
 
 .card-head {
@@ -2713,6 +2775,14 @@ textarea {
   gap: 10px;
 }
 
+.sidebar-card.liquid-glass {
+  background: var(--glass-tint);
+  backdrop-filter: saturate(180%) blur(var(--glass-blur));
+  -webkit-backdrop-filter: saturate(180%) blur(var(--glass-blur));
+  border-color: var(--glass-border);
+  box-shadow: var(--glass-shadow), var(--glass-highlight);
+}
+
 .sidebar-nav {
   background: rgba(255, 255, 255, 0.72);
   border: 1px solid var(--line);
@@ -4037,9 +4107,11 @@ form[data-provider-accent="amazon_nova"] #screener-generate-button {
     width: auto;
     gap: 10px;
     margin-top: 0;
-    background: var(--surface-solid);
-    border: 1px solid var(--line);
-    border-radius: 14px;
+    background: var(--glass-tint);
+    backdrop-filter: saturate(180%) blur(var(--glass-blur));
+    -webkit-backdrop-filter: saturate(180%) blur(var(--glass-blur));
+    border: 1px solid var(--glass-border);
+    border-radius: var(--glass-radius-sm);
     padding: 12px;
     position: fixed;
     left: 16px;
@@ -4104,5 +4176,100 @@ form[data-provider-accent="amazon_nova"] #screener-generate-button {
   .citation-body {
     text-indent: 0;
     padding-left: 0;
+  }
+}
+
+/* ==========================================================================
+   Liquid Glass bottom navigation (mobile only)
+   - Fixed to bottom, safe-area insets for iPhone home indicator
+   - Content padding to avoid overlap
+   ========================================================================== */
+
+.bottom-nav {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+  padding-left: env(safe-area-inset-left, 0);
+  padding-right: env(safe-area-inset-right, 0);
+  background: var(--glass-tint);
+  backdrop-filter: saturate(180%) blur(var(--glass-blur));
+  -webkit-backdrop-filter: saturate(180%) blur(var(--glass-blur));
+  border-top: 1px solid var(--glass-border);
+  box-shadow: 0 -4px 24px var(--shadow), var(--glass-highlight);
+}
+
+.bottom-nav.liquid-glass {
+  /* Already uses glass tokens; class enables future overrides */
+}
+
+@supports not (backdrop-filter: blur(1px)) and not (-webkit-backdrop-filter: blur(1px)) {
+  .bottom-nav {
+    background: rgba(255, 255, 255, 0.96);
+  }
+  [data-theme="dark"] .bottom-nav {
+    background: rgba(18, 24, 42, 0.98);
+  }
+}
+
+.bottom-nav-inner {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-around;
+  gap: 2px;
+  padding: 8px 4px 8px;
+  max-width: var(--maxw);
+  margin: 0 auto;
+}
+
+.bottom-nav-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 4px;
+  color: var(--graphite);
+  text-decoration: none;
+  font-size: 0.7rem;
+  font-weight: 500;
+  border-radius: var(--glass-radius-sm);
+  transition: color 0.2s ease, background 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.bottom-nav-item:hover {
+  color: var(--ink);
+  background: var(--glass-tint-subtle);
+}
+
+.bottom-nav-item.active {
+  color: var(--accent);
+}
+
+.bottom-nav-item i {
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+@media (max-width: 980px) {
+  .bottom-nav {
+    display: block;
+  }
+
+  /* Content padding so main content never hides behind the nav */
+  body {
+    padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* App layout and main content get padding when bottom nav is present */
+  .app-layout,
+  main:not(:has(.app-layout)) .container,
+  .app-main {
+    padding-bottom: 0;
   }
 }

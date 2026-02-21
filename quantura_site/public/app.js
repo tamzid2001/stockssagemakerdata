@@ -1659,6 +1659,77 @@
     });
   };
 
+  const BOTTOM_NAV_ITEMS = [
+    { href: "/", icon: "home", label: "Home", match: (p) => p === "/" || p === "" },
+    {
+      href: "/forecasting",
+      icon: "candlestick-chart",
+      label: "Terminal",
+      match: (p) =>
+        /^\/(forecasting|ticker-intelligence|indicators|trending|news|events-calendar|market-headlines|ticker-query|options|saved-forecasts|backtesting|studio)(\/|$)/.test(
+          p
+        ),
+    },
+    { href: "/screener", icon: "filter-list", label: "Screener", match: (p) => p === "/screener" || p.startsWith("/screener/") },
+    { href: "/research", icon: "bookmark-book", label: "Research", match: (p) => p === "/research" || p.startsWith("/research/") },
+    {
+      href: "/dashboard",
+      icon: "dashboard",
+      label: "Dashboard",
+      match: (p) =>
+        /^\/(dashboard|account|watchlist|productivity|collaboration|uploads|autopilot|notifications)(\/|$)/.test(p),
+    },
+  ];
+
+  const ensureBottomNav = () => {
+    if (document.getElementById("quantura-bottom-nav")) return;
+    const path = (window.location.pathname || "/").replace(/\/$/, "") || "/";
+    const nav = document.createElement("nav");
+    nav.id = "quantura-bottom-nav";
+    nav.className = "bottom-nav";
+    nav.setAttribute("aria-label", "Primary navigation");
+    nav.innerHTML = `
+      <div class="bottom-nav-inner">
+        ${BOTTOM_NAV_ITEMS.map(
+          (item) => {
+            const isActive = item.match(path);
+            return `
+              <a href="${item.href}" class="bottom-nav-item${isActive ? " active" : ""}" data-analytics="bottom_nav_${item.label.toLowerCase()}">
+                <i class="iconoir-${item.icon}" aria-hidden="true"></i>
+                <span>${item.label}</span>
+              </a>
+            `;
+          }
+        ).join("")}
+      </div>
+    `;
+    document.body.appendChild(nav);
+
+    nav.querySelectorAll(".bottom-nav-item").forEach((link) => {
+      link.addEventListener("click", (e) => {
+        try {
+          if (navigator.vibrate) navigator.vibrate(8);
+        } catch (_) {}
+        logEvent("bottom_nav_click", {
+          label: link.querySelector("span")?.textContent,
+          href: link.getAttribute("href"),
+        });
+      });
+    });
+  };
+
+  const syncBottomNavActive = () => {
+    const nav = document.getElementById("quantura-bottom-nav");
+    if (!nav) return;
+    const path = (window.location.pathname || "/").replace(/\/$/, "") || "/";
+    nav.querySelectorAll(".bottom-nav-item").forEach((link) => {
+      const href = (link.getAttribute("href") || "").replace(/\/$/, "") || "/";
+      const item = BOTTOM_NAV_ITEMS.find((i) => i.href === href || href === (i.href.replace(/\/$/, "") || "/"));
+      const isActive = item ? item.match(path) : false;
+      link.classList.toggle("active", isActive);
+    });
+  };
+
   const syncStickyOffsets = () => {
     const header = document.querySelector(".header");
     const headerHeight = header ? header.getBoundingClientRect().height : 88;
@@ -4979,6 +5050,44 @@
     const details = error?.details && typeof error.details === "object" ? error.details : null;
     const detailText = String(details?.detail || details?.message || details?.error || "").trim();
     return detailText || direct || fallback;
+  };
+
+  /**
+   * Triggers native share sheet when available (Web Share API, or QuanturaBridge on Android/iOS).
+   * Fallback: copy URL to clipboard.
+   * @param {string} url - URL to share
+   * @param {string} [title] - Optional title for the shared content
+   * @param {string} [text] - Optional text/description
+   * @returns {Promise<"share"|"native"|"clipboard">} How the share was performed
+   */
+  const performShare = async (url, title = "Quantura", text = "") => {
+    const shareUrl = String(url || "").trim();
+    if (!shareUrl) return "clipboard";
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          url: shareUrl,
+          title: String(title || "Quantura").trim(),
+          text: String(text || "").trim(),
+        });
+        return "share";
+      }
+    } catch (err) {
+      if (err?.name === "AbortError") return "share";
+    }
+
+    try {
+      if (typeof window !== "undefined" && window.QuanturaBridge?.postMessage) {
+        window.QuanturaBridge.postMessage(
+          JSON.stringify({ action: "share", url: shareUrl, title: String(title || "Quantura").trim(), text: String(text || "").trim() })
+        );
+        return "native";
+      }
+    } catch (_) {}
+
+    const ok = await copyToClipboard(shareUrl);
+    return ok ? "clipboard" : "clipboard";
   };
 
   const copyToClipboard = async (text) => {
@@ -9734,6 +9843,20 @@
 
   const registerNotificationToken = async (functions, messaging, opts = {}) => {
     if (!hasFullAccount()) throw new Error("Sign in before enabling notifications.");
+
+    const nativeToken =
+      typeof window !== "undefined" &&
+      (window.__NATIVE_FCM_TOKEN__ || (opts.nativeToken && String(opts.nativeToken).trim()));
+    if (nativeToken) {
+      const token = String(nativeToken).trim();
+      if (token.length >= 20) {
+        return syncNotificationToken(functions, token, {
+          forceRefresh: Boolean(opts.forceRefresh),
+          source: opts.source || "native",
+        });
+      }
+    }
+
     if (!messaging) throw new Error("Messaging SDK is not available.");
     if (!isPushSupported()) throw new Error("Push notifications are not supported in this browser.");
 
@@ -10153,6 +10276,8 @@
       ensureHeaderNotificationsCta();
       ensureSidebarCollapseToggle();
       bindMobileNav();
+      ensureBottomNav();
+      window.addEventListener("popstate", syncBottomNavActive);
       initializeLanguageControls().catch(() => {});
       captureShareFromUrl();
       renderNotificationLog();
@@ -10414,9 +10539,9 @@
               const shareId = String(result.data?.shareId || "").trim();
               const url = String(result.data?.shareUrl || "") || buildShareUrl("forecast", shareId);
               if (!shareId || !url) throw new Error("Unable to create share link.");
-              await copyToClipboard(url);
-              showToast("Share link copied.");
-              logEvent("forecast_shared", { forecast_id: forecastId });
+              const how = await performShare(url, "Quantura Forecast", "Check out this forecast");
+              showToast(how === "clipboard" ? "Share link copied." : "Shared.");
+              logEvent("forecast_shared", { forecast_id: forecastId, share_method: how });
             } catch (error) {
               showToast(error.message || "Unable to share forecast.", "warn");
             } finally {
@@ -10522,9 +10647,9 @@
               const shareId = String(result.data?.shareId || "").trim();
               const url = String(result.data?.shareUrl || "") || buildShareUrl("screener", shareId);
               if (!shareId || !url) throw new Error("Unable to create share link.");
-              await copyToClipboard(url);
-              showToast("Share link copied.");
-              logEvent("screener_shared", { run_id: runId });
+              const how = await performShare(url, "Quantura Screener", "Check out this screener run");
+              showToast(how === "clipboard" ? "Share link copied." : "Shared.");
+              logEvent("screener_shared", { run_id: runId, share_method: how });
             } catch (error) {
               showToast(error.message || "Unable to share screener run.", "warn");
             } finally {
@@ -10640,9 +10765,9 @@
             if (!agentId) return;
             const url = buildAIAgentShareUrl(agentId);
             try {
-              await copyToClipboard(url);
-              showToast("Agent link copied.");
-              logEvent("ai_agent_shared", { agent_id: agentId });
+              const how = await performShare(url, "Quantura AI Agent", "Check out this AI Agent");
+              showToast(how === "clipboard" ? "Agent link copied." : "Shared.");
+              logEvent("ai_agent_shared", { agent_id: agentId, share_method: how });
             } catch (error) {
               showToast(error.message || "Unable to copy share link.", "warn");
             }
@@ -10915,9 +11040,9 @@
               const shareId = String(result.data?.shareId || "").trim();
               const url = String(result.data?.shareUrl || "") || buildShareUrl("upload", shareId);
               if (!shareId || !url) throw new Error("Unable to create share link.");
-              await copyToClipboard(url);
-              showToast("Share link copied.");
-              logEvent("upload_shared", { upload_id: uploadId });
+              const how = await performShare(url, "Quantura Upload", "Check out this prediction file");
+              showToast(how === "clipboard" ? "Share link copied." : "Shared.");
+              logEvent("upload_shared", { upload_id: uploadId, share_method: how });
             } catch (error) {
               showToast(error.message || "Unable to share upload.", "warn");
             } finally {
