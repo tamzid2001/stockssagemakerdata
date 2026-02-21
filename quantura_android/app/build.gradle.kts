@@ -10,11 +10,11 @@ if (file("google-services.json").exists()) {
 }
 
 android {
-    namespace = "com.example.quantura_android"
+    namespace = "com.quantura.quanturaapp"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.example.quantura_android"
+        applicationId = "com.quantura.quanturaapp"
         minSdk = 24
         targetSdk = 36
         versionCode = 1
@@ -51,7 +51,7 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
-    implementation("androidx.activity:activity-compose:1.9.3")
+    implementation("androidx.activity:activity-compose:1.12.4")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.webkit:webkit:1.12.1")
 
@@ -69,7 +69,7 @@ dependencies {
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-messaging")
     implementation("com.google.firebase:firebase-functions")
-    implementation("com.google.android.gms:play-services-ads:24.9.0")
+    implementation("com.google.android.gms:play-services-ads:25.0.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
 
     testImplementation(libs.junit)
