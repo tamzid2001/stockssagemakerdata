@@ -54,6 +54,7 @@
     "rewrites": [
       { "source": "/api/openai/models", "function": "api_openai_models" },
       { "source": "/api/chat", "function": "api_chat" },
+      { "source": "/api/massive/capabilities", "function": "api_massive_capabilities" },
       { "source": "/", "function": "ssr" },
       { "source": "/forecasting", "function": "ssr" },
       { "source": "/ticker-intelligence", "function": "ssr" },

@@ -47,6 +47,14 @@
     uploads: "Upload predictions CSV",
     autopilot: "Weekly Brief Autopilot",
   });
+  const MASSIVE_CAPABILITY_LABELS = Object.freeze({
+    economy_treasury_yields: "Economy · Treasury Yields",
+    economy_inflation: "Economy · Inflation",
+    economy_inflation_expectations: "Economy · Inflation Expectations",
+    economy_labor_market: "Economy · Labor Market",
+    stocks_ipos: "Stocks · IPOs",
+    options_all_contracts: "Options · All Contracts",
+  });
   const AI_MODEL_CATALOG = [
     {
       id: "gpt-5-nano",
@@ -1081,6 +1089,8 @@
     adminOrders: document.getElementById("admin-orders"),
     adminAutopilot: document.getElementById("admin-autopilot"),
     adminFeatureVoteResults: document.getElementById("admin-feature-vote-results"),
+    adminMassiveCapabilitiesStatus: document.getElementById("admin-massive-capabilities-status"),
+    adminMassiveCapabilities: document.getElementById("admin-massive-capabilities"),
     contactForm: document.getElementById("contact-form"),
     navAdmin: document.getElementById("nav-admin"),
     terminalForm: document.getElementById("terminal-form"),
@@ -1291,6 +1301,8 @@
     aiAgents: [],
     aiFollowSet: new Set(),
     aiLikeSet: new Set(),
+    massiveCapabilities: null,
+    massiveCapabilitiesLoadedAt: 0,
     aiUsageToday: 0,
     aiUsageDateKey: "",
     aiUsageTierKey: "free",
@@ -3591,6 +3603,93 @@
     const getSummary = functions.httpsCallable("get_feature_vote_summary");
     const result = await getSummary({ limit: 25, meta: buildMeta() });
     renderAdminFeatureVoteSummary(result.data || {});
+  };
+
+  const renderMassiveCapabilitiesAudit = (payload = null) => {
+    if (!ui.adminMassiveCapabilities) return;
+    const capabilities = payload && typeof payload.capabilities === "object" ? payload.capabilities : {};
+    const entries = Object.entries(capabilities);
+    if (!entries.length) {
+      ui.adminMassiveCapabilities.innerHTML = `<div class="small muted">No capability probe results available yet.</div>`;
+      if (ui.adminMassiveCapabilitiesStatus) {
+        ui.adminMassiveCapabilitiesStatus.textContent = "Capability audit did not return endpoint results.";
+      }
+      return;
+    }
+
+    const cards = entries
+      .map(([key, raw]) => {
+        const row = raw && typeof raw === "object" ? raw : {};
+        const status = String(row.status || "ERROR").toUpperCase();
+        const httpStatus = Number(row.httpStatus || 0);
+        const available = status === "AVAILABLE";
+        const label = MASSIVE_CAPABILITY_LABELS[key] || key.replace(/_/g, " ");
+        const statusClass = available ? "completed" : status === "UNAUTHORIZED" ? "pending" : "cancelled";
+        const message = String(row.message || "").trim();
+        return `
+          <div class="order-card">
+            <div class="order-header">
+              <div class="order-title">${escapeHtml(label)}</div>
+              <span class="status ${statusClass}">${escapeHtml(status)}</span>
+            </div>
+            <div class="order-meta">
+              <div><strong>HTTP</strong> ${Number.isFinite(httpStatus) && httpStatus > 0 ? httpStatus : "—"}</div>
+              <div><strong>Path</strong> ${escapeHtml(String(row.path || "—"))}</div>
+              <div><strong>Availability</strong> ${available ? "Enabled" : "Unavailable"}</div>
+              <div><strong>Detail</strong> ${escapeHtml(message || "—")}</div>
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+    ui.adminMassiveCapabilities.innerHTML = cards;
+
+    if (ui.adminMassiveCapabilitiesStatus) {
+      const generated = payload?.generatedAt ? formatTimestamp(payload.generatedAt) : "—";
+      const fromCache = payload?.fromCache ? " (cached)" : "";
+      ui.adminMassiveCapabilitiesStatus.textContent = `Last capability audit: ${generated}${fromCache}.`;
+    }
+  };
+
+  const isMassiveCapabilityAvailable = (key) => {
+    const capabilities = state.massiveCapabilities && typeof state.massiveCapabilities === "object"
+      ? state.massiveCapabilities
+      : {};
+    const row = capabilities[key] && typeof capabilities[key] === "object" ? capabilities[key] : {};
+    return String(row.status || "").toUpperCase() === "AVAILABLE";
+  };
+
+  const loadMassiveCapabilities = async ({ force = false } = {}) => {
+    const now = Date.now();
+    if (!force && state.massiveCapabilities && now - Number(state.massiveCapabilitiesLoadedAt || 0) < 5 * 60 * 1000) {
+      renderMassiveCapabilitiesAudit({
+        generatedAt: new Date(state.massiveCapabilitiesLoadedAt).toISOString(),
+        fromCache: true,
+        capabilities: state.massiveCapabilities,
+      });
+      return state.massiveCapabilities;
+    }
+
+    if (ui.adminMassiveCapabilitiesStatus) {
+      ui.adminMassiveCapabilitiesStatus.textContent = "Running capability audit...";
+    }
+
+    const headers = await buildApiAuthHeaders();
+    const query = force ? "?force=1" : "";
+    const response = await fetch(`/api/massive/capabilities${query}`, {
+      method: "GET",
+      headers,
+      credentials: "same-origin",
+    });
+    if (!response.ok) {
+      throw new Error("Unable to load Massive capabilities.");
+    }
+    const payload = await response.json();
+    const capabilities = payload && typeof payload.capabilities === "object" ? payload.capabilities : {};
+    state.massiveCapabilities = capabilities;
+    state.massiveCapabilitiesLoadedAt = now;
+    renderMassiveCapabilitiesAudit(payload);
+    return capabilities;
   };
 
   const setFeatureVoteSummaryPolling = (functions, enabled) => {
@@ -14255,12 +14354,22 @@
 	        startAdminOrders(db);
 	        startAdminAutopilotQueue(db);
             setFeatureVoteSummaryPolling(functions, true);
+          loadMassiveCapabilities({ force: false }).catch((error) => {
+            if (ui.adminMassiveCapabilitiesStatus) {
+              ui.adminMassiveCapabilitiesStatus.textContent = extractErrorMessage(error, "Unable to load capability audit.");
+            }
+            if (ui.adminMassiveCapabilities) {
+              ui.adminMassiveCapabilities.innerHTML = `<div class="small muted">Capability audit unavailable.</div>`;
+            }
+          });
 	      } else {
 	        ui.adminSection?.classList.add("hidden");
 	        ui.navAdmin?.classList.add("hidden");
 	        if (state.unsubscribeAdmin) state.unsubscribeAdmin();
 	        if (state.unsubscribeAdminAutopilot) state.unsubscribeAdminAutopilot();
             setFeatureVoteSummaryPolling(functions, false);
+          if (ui.adminMassiveCapabilitiesStatus) ui.adminMassiveCapabilitiesStatus.textContent = "Admin access required.";
+          if (ui.adminMassiveCapabilities) ui.adminMassiveCapabilities.innerHTML = `<div class="small muted">Admin access required.</div>`;
 	      }
     });
   });
