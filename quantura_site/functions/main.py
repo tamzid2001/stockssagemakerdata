@@ -7761,13 +7761,41 @@ def download_price_csv(req: https_fn.CallableRequest) -> dict[str, Any]:
     if history.empty or "Close" not in history.columns:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "No data returned for the requested range.")
 
-    out_df = history[["Close"]].rename(columns={"Close": "Price"}).copy()
+    def _price_digits_for_symbol(symbol: str) -> int:
+        normalized = re.sub(r"[^A-Z]", "", str(symbol or "").upper())
+        # FX pairs from Yahoo are commonly represented as 6-char pairs (+ optional X suffix).
+        if re.fullmatch(r"[A-Z]{6}X?", normalized):
+            return 6
+        return 2
+
+    price_digits = _price_digits_for_symbol(ticker)
+    keep_price_cols = [col for col in ["Close", "Open", "High", "Low", "Volume"] if col in history.columns]
+    out_df = history[keep_price_cols].copy()
+    out_df.rename(columns={"Close": "Price"}, inplace=True)
     out_df.reset_index(inplace=True)
     date_col = "Datetime" if "Datetime" in out_df.columns else "Date"
     if date_col != "Date" and date_col in out_df.columns:
         out_df.rename(columns={date_col: "Date"}, inplace=True)
     if "Date" in out_df.columns:
         out_df["Date"] = out_df["Date"].astype(str)
+
+    for col in ["Price", "Open", "High", "Low"]:
+        if col in out_df.columns:
+            out_df[col] = out_df[col].apply(
+                lambda value: (
+                    f"{float(value):.{price_digits}f}"
+                    if value is not None and str(value) != "" and math.isfinite(float(value))
+                    else ""
+                )
+            )
+    if "Volume" in out_df.columns:
+        out_df["Volume"] = out_df["Volume"].apply(
+            lambda value: (
+                int(float(value))
+                if value is not None and str(value) != "" and math.isfinite(float(value))
+                else ""
+            )
+        )
     out_df.insert(0, "Item_Id", ticker.lower())
 
     buffer = StringIO()

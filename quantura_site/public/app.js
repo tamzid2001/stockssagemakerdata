@@ -1100,6 +1100,7 @@
     technicalsOutput: document.getElementById("technicals-output"),
     downloadForm: document.getElementById("download-form"),
     downloadStatus: document.getElementById("download-status"),
+    downloadPreview: document.getElementById("download-preview"),
     trendingButton: document.getElementById("load-trending"),
     trendingList: document.getElementById("trending-list"),
     intelOutput: document.getElementById("intel-output"),
@@ -7425,6 +7426,142 @@
     `;
   };
 
+  const isLikelyFxTicker = (symbol) => {
+    const raw = String(symbol || "").toUpperCase().trim();
+    if (!raw) return false;
+    if (raw.endsWith("=X")) return true;
+    const normalized = raw.replace(/[^A-Z]/g, "");
+    return /^[A-Z]{6}X?$/.test(normalized);
+  };
+
+  const resolveDownloadPriceDigits = (ticker) => (isLikelyFxTicker(ticker) ? 6 : 2);
+
+  const formatDownloadPriceValue = (value, digits) => {
+    const raw = String(value ?? "").trim();
+    if (!raw) return "—";
+    const num = Number(raw.replace(/,/g, ""));
+    if (!Number.isFinite(num)) return "—";
+    return num.toFixed(Math.max(0, digits));
+  };
+
+  const formatDownloadVolumeValue = (value) => {
+    const raw = String(value ?? "").trim();
+    if (!raw) return { compact: "—", full: "" };
+    const num = Number(raw.replace(/,/g, ""));
+    if (!Number.isFinite(num)) return { compact: "—", full: "" };
+    const rounded = Math.round(num);
+    return {
+      compact: formatCompactNumber(rounded),
+      full: rounded.toLocaleString(),
+    };
+  };
+
+  const renderDownloadHistoryPreview = (csvText, { ticker = "", maxRows = 30 } = {}) => {
+    if (!ui.downloadPreview) return;
+
+    let table;
+    try {
+      table = parseCsvTable(csvText, { maxRows: 25000 });
+    } catch (error) {
+      ui.downloadPreview.innerHTML = `<div class="small muted">${escapeHtml(error?.message || "Unable to preview downloaded CSV.")}</div>`;
+      return;
+    }
+
+    const headers = Array.isArray(table?.headers) ? table.headers : [];
+    const rows = Array.isArray(table?.rows) ? table.rows : [];
+    if (!headers.length || !rows.length) {
+      ui.downloadPreview.innerHTML = `<div class="small muted">No history rows returned for ${escapeHtml(ticker || "this ticker")}.</div>`;
+      return;
+    }
+
+    const findIndex = (...names) => {
+      const targets = new Set(names.map((name) => String(name || "").trim().toLowerCase()));
+      return headers.findIndex((header) => targets.has(String(header || "").trim().toLowerCase()));
+    };
+
+    const idxDate = findIndex("date", "datetime");
+    const idxClose = findIndex("price", "close");
+    const idxOpen = findIndex("open");
+    const idxHigh = findIndex("high");
+    const idxLow = findIndex("low");
+    const idxVolume = findIndex("volume");
+    const required = [idxDate, idxClose, idxOpen, idxHigh, idxLow, idxVolume];
+    if (required.some((idx) => idx < 0)) {
+      ui.downloadPreview.innerHTML = `<div class="small muted">CSV preview is available, but expected OHLCV columns were not found.</div>`;
+      return;
+    }
+
+    const priceDigits = resolveDownloadPriceDigits(ticker);
+    const normalizedRows = rows
+      .map((row) => {
+        const dateText = String(row[idxDate] ?? "").trim();
+        const dt = parseDateCell(dateText);
+        return {
+          dateText,
+          ts: dt ? dt.getTime() : Number.NaN,
+          close: row[idxClose],
+          open: row[idxOpen],
+          high: row[idxHigh],
+          low: row[idxLow],
+          volume: row[idxVolume],
+        };
+      })
+      .filter((row) => row.dateText);
+
+    if (!normalizedRows.length) {
+      ui.downloadPreview.innerHTML = `<div class="small muted">No rows available for preview.</div>`;
+      return;
+    }
+
+    normalizedRows.sort((a, b) => {
+      const aFinite = Number.isFinite(a.ts);
+      const bFinite = Number.isFinite(b.ts);
+      if (aFinite && bFinite) return b.ts - a.ts;
+      if (aFinite) return -1;
+      if (bFinite) return 1;
+      return String(b.dateText).localeCompare(String(a.dateText));
+    });
+
+    const previewRows = normalizedRows.slice(0, Math.max(1, maxRows));
+    ui.downloadPreview.innerHTML = `
+      <div class="small muted" style="margin-bottom:10px;">
+        Showing newest ${previewRows.length} of ${normalizedRows.length.toLocaleString()} row(s).
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Close</th>
+              <th>Open</th>
+              <th>High</th>
+              <th>Low</th>
+              <th>Volume</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${previewRows
+              .map((row) => {
+                const volume = formatDownloadVolumeValue(row.volume);
+                const volumeTitle = volume.full ? ` title="${escapeHtml(volume.full)}"` : "";
+                return `
+                  <tr>
+                    <td>${escapeHtml(row.dateText)}</td>
+                    <td>${escapeHtml(formatDownloadPriceValue(row.close, priceDigits))}</td>
+                    <td>${escapeHtml(formatDownloadPriceValue(row.open, priceDigits))}</td>
+                    <td>${escapeHtml(formatDownloadPriceValue(row.high, priceDigits))}</td>
+                    <td>${escapeHtml(formatDownloadPriceValue(row.low, priceDigits))}</td>
+                    <td${volumeTitle}>${escapeHtml(volume.compact)}</td>
+                  </tr>
+                `;
+              })
+              .join("")}
+          </tbody>
+        </table>
+      </div>
+    `;
+  };
+
   const pad2 = (value) => String(value).padStart(2, "0");
 
   const parseDateCell = (raw) => {
@@ -12755,15 +12892,22 @@
 
       try {
         ui.downloadStatus.textContent = "Fetching data...";
+        if (ui.downloadPreview) {
+          ui.downloadPreview.innerHTML = `<div class="small muted">Preparing preview...</div>`;
+        }
         const getDownload = functions.httpsCallable("download_price_csv");
         const result = await getDownload(payload);
         const data = result.data || {};
         const csvText = String(data.csv || "");
         if (!csvText.trim()) {
           ui.downloadStatus.textContent = "No data returned.";
+          if (ui.downloadPreview) {
+            ui.downloadPreview.innerHTML = `<div class="small muted">No history rows returned for ${escapeHtml(ticker)}.</div>`;
+          }
           return;
         }
         const filename = String(data.filename || `${ticker}_${start}_${end}.csv`);
+        renderDownloadHistoryPreview(csvText, { ticker });
         triggerDownload(filename, csvText);
         const rowCount = Number(data.rowCount || 0);
         ui.downloadStatus.textContent = rowCount ? `Download ready (${rowCount} rows).` : "Download ready.";
