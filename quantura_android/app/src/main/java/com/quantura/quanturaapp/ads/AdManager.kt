@@ -1,8 +1,8 @@
-package com.example.quantura_android.ads
+package com.quantura.quanturaapp.ads
 
 import android.app.Activity
 import android.content.Context
-import com.example.quantura_android.config.RemoteConfigManager
+import com.quantura.quanturaapp.config.RemoteConfigManager
 import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.FullScreenContentCallback
 import com.google.android.gms.ads.LoadAdError

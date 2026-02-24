@@ -1,8 +1,8 @@
-package com.example.quantura_android
+package com.quantura.quanturaapp
 
 import android.app.Application
 import android.util.Log
-import com.example.quantura_android.di.AppContainer
+import com.quantura.quanturaapp.di.AppContainer
 import com.google.android.gms.ads.MobileAds
 import com.google.firebase.FirebaseApp
 
