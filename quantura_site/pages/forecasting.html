@@ -310,8 +310,16 @@
                       <p class="small">Institutional three-column view with fundamentals, risk, ESG, and peer benchmarking.</p>
                     </div>
                     <div class="results-panel ticker-intelligence-panel">
-                      <h3>Institutional View</h3>
-                      <div id="ticker-intelligence-output" class="panel-output small">Load a ticker to generate the institutional intelligence panel.</div>
+                      <div class="card-head">
+                        <h3>Institutional View</h3>
+                        <div class="intel-subtabs" id="ticker-intel-tabs" role="tablist" aria-label="Ticker intelligence tabs">
+                          <button class="task-chip active" id="intel-tab-intelligence" type="button" role="tab" aria-selected="true" data-intel-tab="intelligence">Intelligence</button>
+                          <button class="task-chip" id="intel-tab-predictions" type="button" role="tab" aria-selected="false" data-intel-tab="predictions">Predictions</button>
+                        </div>
+                      </div>
+                      <div id="ticker-intelligence-output" class="panel-output small" data-intel-view="intelligence">Load a ticker to generate the institutional intelligence panel.</div>
+                      <div id="ticker-predictions-output" class="panel-output small hidden" data-intel-view="predictions">Load a ticker to view related Polymarket prediction markets.</div>
+                      <p class="small muted" style="margin-top:10px;">Predictions are informational only and not investment advice.</p>
                     </div>
                   </section>
 
