@@ -53,6 +53,7 @@ dependencies {
     implementation(libs.material)
     implementation("androidx.activity:activity-compose:1.12.4")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-process:2.8.7")
     implementation("androidx.webkit:webkit:1.12.1")
 
     implementation("androidx.compose.ui:ui:1.7.5")

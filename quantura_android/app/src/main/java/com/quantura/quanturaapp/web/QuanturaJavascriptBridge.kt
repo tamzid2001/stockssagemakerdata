@@ -2,6 +2,7 @@ package com.quantura.quanturaapp.web
 
 import android.content.Intent
 import android.net.Uri
+import android.util.Log
 import android.webkit.JavascriptInterface
 import androidx.activity.ComponentActivity
 import androidx.core.os.bundleOf
@@ -19,6 +20,8 @@ class QuanturaJavascriptBridge(
     private val onNativeAuthRequest: (provider: String, requestId: String) -> Unit,
     private val onNativeSignOutRequest: (requestId: String) -> Unit,
 ) {
+    private val tag = "QuanturaJsBridge"
+
     @JavascriptInterface
     fun postMessage(rawPayload: String?) {
         val payload = parsePayload(rawPayload)
@@ -52,6 +55,8 @@ class QuanturaJavascriptBridge(
     private fun openNewsLink(url: String) {
         val normalized = url.trim()
         if (!normalized.startsWith("http")) return
+        Log.d(tag, "News link trigger interstitial url=$normalized")
+        adManager.showInterstitial(activity)
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(normalized))
         if (intent.resolveActivity(activity.packageManager) != null) {
             activity.startActivity(intent)
@@ -59,6 +64,8 @@ class QuanturaJavascriptBridge(
     }
 
     private fun handleButtonClick(buttonId: String) {
+        Log.d(tag, "Button trigger rewarded buttonId=${buttonId.trim()}")
+        adManager.showRewarded(activity)
         FirebaseAnalytics.getInstance(activity).logEvent(
             "native_bridge_button_click",
             bundleOf("button_id" to buttonId)

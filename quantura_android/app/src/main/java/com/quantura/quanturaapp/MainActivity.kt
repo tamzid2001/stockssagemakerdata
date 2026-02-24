@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
@@ -29,7 +30,10 @@ import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.tasks.OnCompleteListener
+import com.google.firebase.auth.AuthCredential
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthUserCollisionException
+import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.messaging.FirebaseMessaging
 import com.quantura.quanturaapp.ads.AdManager
@@ -47,6 +51,7 @@ class MainActivity : ComponentActivity() {
     private var webViewRef: WebView? = null
     private var googleSignInClient: GoogleSignInClient? = null
     private var pendingNativeAuthRequestId: String? = null
+    private var authStateListener: FirebaseAuth.AuthStateListener? = null
 
     private val googleSignInLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -63,10 +68,21 @@ class MainActivity : ComponentActivity() {
         requestNotificationPermission()
         fetchFcmToken()
         NativePersonalizedNotificationManager.start(this)
+        if (authStateListener == null) {
+            authStateListener = FirebaseAuth.AuthStateListener { auth ->
+                val user = auth.currentUser
+                Log.i(
+                    "MainActivity",
+                    "Auth state changed uid=${user?.uid.orEmpty()} anonymous=${user?.isAnonymous ?: false}"
+                )
+            }
+            firebaseAuth.addAuthStateListener(authStateListener!!)
+        }
 
         lifecycleScope.launch {
             appContainer.remoteConfigManager.fetchAndActivate()
             appContainer.adManager.primeAds(this@MainActivity)
+            appContainer.appOpenAdManager.loadAdIfNeeded()
         }
 
         val deepLinkUrl = intent?.getStringExtra(QuanturaMessagingService.EXTRA_DEEP_LINK_URL)
@@ -144,6 +160,7 @@ class MainActivity : ComponentActivity() {
             return
         }
 
+        Log.i("MainActivity", "Starting Google Sign-In flow.")
         pendingNativeAuthRequestId = cleanRequestId
         googleSignInLauncher.launch(client.signInIntent)
     }
@@ -173,48 +190,97 @@ class MainActivity : ComponentActivity() {
         }
 
         val credential = GoogleAuthProvider.getCredential(accountIdToken, null)
-        firebaseAuth.signInWithCredential(credential)
-            .addOnSuccessListener { authResult ->
-                authResult.user?.getIdToken(true)
-                    ?.addOnSuccessListener { tokenResult ->
-                        val firebaseIdToken = tokenResult.token?.trim().orEmpty()
-                        if (firebaseIdToken.isEmpty()) {
+        signInOrLinkWithCredential(requestId = requestId, provider = "google", credential = credential)
+    }
+
+    private fun signInOrLinkWithCredential(requestId: String, provider: String, credential: AuthCredential) {
+        val currentUser = firebaseAuth.currentUser
+        if (currentUser?.isAnonymous == true) {
+            Log.i("MainActivity", "Attempting anonymous->${provider} credential link.")
+            currentUser.linkWithCredential(credential)
+                .addOnSuccessListener { authResult ->
+                    completeNativeAuth(requestId, provider, authResult.user)
+                }
+                .addOnFailureListener { error ->
+                    val collisionCredential = (error as? FirebaseAuthUserCollisionException)?.updatedCredential
+                    val fallbackCredential = collisionCredential ?: credential
+                    if (collisionCredential != null) {
+                        Log.w("MainActivity", "Link collision for provider=$provider; using updated credential fallback.")
+                    } else {
+                        Log.w("MainActivity", "Link failed for provider=$provider; trying direct sign-in fallback.", error)
+                    }
+                    firebaseAuth.signInWithCredential(fallbackCredential)
+                        .addOnSuccessListener { authResult ->
+                            completeNativeAuth(requestId, provider, authResult.user)
+                        }
+                        .addOnFailureListener { signInError ->
                             emitNativeAuthResult(
                                 requestId = requestId,
-                                provider = "google",
+                                provider = provider,
                                 ok = false,
-                                error = "Firebase did not return an ID token."
+                                error = signInError.message ?: "Native Firebase sign-in failed."
                             )
-                            return@addOnSuccessListener
                         }
-                        emitNativeAuthResult(
-                            requestId = requestId,
-                            provider = "google",
-                            ok = true,
-                            idToken = firebaseIdToken
-                        )
-                    }
-                    ?.addOnFailureListener { error ->
-                        emitNativeAuthResult(
-                            requestId = requestId,
-                            provider = "google",
-                            ok = false,
-                            error = error.message ?: "Unable to fetch Firebase ID token."
-                        )
-                    }
+                }
+            return
+        }
+
+        firebaseAuth.signInWithCredential(credential)
+            .addOnSuccessListener { authResult ->
+                completeNativeAuth(requestId, provider, authResult.user)
             }
             .addOnFailureListener { error ->
                 emitNativeAuthResult(
                     requestId = requestId,
-                    provider = "google",
+                    provider = provider,
                     ok = false,
                     error = error.message ?: "Native Firebase sign-in failed."
                 )
             }
     }
 
+    private fun completeNativeAuth(requestId: String, provider: String, user: FirebaseUser?) {
+        if (user == null) {
+            emitNativeAuthResult(
+                requestId = requestId,
+                provider = provider,
+                ok = false,
+                error = "Firebase user is unavailable after sign-in."
+            )
+            return
+        }
+        user.getIdToken(true)
+            .addOnSuccessListener { tokenResult ->
+                val firebaseIdToken = tokenResult.token?.trim().orEmpty()
+                if (firebaseIdToken.isEmpty()) {
+                    emitNativeAuthResult(
+                        requestId = requestId,
+                        provider = provider,
+                        ok = false,
+                        error = "Firebase did not return an ID token."
+                    )
+                    return@addOnSuccessListener
+                }
+                emitNativeAuthResult(
+                    requestId = requestId,
+                    provider = provider,
+                    ok = true,
+                    idToken = firebaseIdToken
+                )
+            }
+            .addOnFailureListener { error ->
+                emitNativeAuthResult(
+                    requestId = requestId,
+                    provider = provider,
+                    ok = false,
+                    error = error.message ?: "Unable to fetch Firebase ID token."
+                )
+            }
+    }
+
     private fun handleNativeSignOut(requestId: String) {
         try {
+            Log.i("MainActivity", "Native sign-out requested.")
             firebaseAuth.signOut()
             resolveGoogleSignInClient()?.signOut()
             if (requestId.isNotBlank()) {
@@ -303,6 +369,8 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        authStateListener?.let { firebaseAuth.removeAuthStateListener(it) }
+        authStateListener = null
         webViewRef?.removeJavascriptInterface("QuanturaBridge")
         webViewRef?.destroy()
         webViewRef = null
@@ -341,7 +409,13 @@ private fun QuanturaWebViewScreen(
 
                 webChromeClient = WebChromeClient()
                 webViewClient = object : WebViewClient() {
-                    override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean = false
+                    override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                        val target = request?.url?.toString().orEmpty()
+                        if (request?.isForMainFrame == true && target.isNotBlank()) {
+                            adManager.onPrimaryNavigation(activity, target)
+                        }
+                        return false
+                    }
 
                     override fun onPageFinished(view: WebView?, url: String?) {
                         super.onPageFinished(view, url)

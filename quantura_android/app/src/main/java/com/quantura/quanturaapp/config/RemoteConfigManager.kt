@@ -18,7 +18,7 @@ data class AdUnitIds(
 
 class RemoteConfigManager(
     private val remoteConfig: FirebaseRemoteConfig?,
-    isDebug: Boolean = false,
+    private val isDebug: Boolean = false,
 ) {
     init {
         remoteConfig?.let {
@@ -30,8 +30,8 @@ class RemoteConfigManager(
             it.setConfigSettingsAsync(settings)
             it.setDefaultsAsync(
                 mapOf(
-                    "ads_use_real_android" to false,
-                    "ads_use_real_ios" to false,
+                    "ads_use_real_android" to true,
+                    "ads_use_real_ios" to true,
                     "feature_flags" to DEFAULT_FEATURE_FLAGS_JSON,
                 )
             )
@@ -48,7 +48,11 @@ class RemoteConfigManager(
     }
 
     fun getAdUnitIds(): AdUnitIds {
-        val useRealAndroidAds = remoteConfig?.getBoolean("ads_use_real_android") ?: false
+        val useRealAndroidAds = if (isDebug) {
+            false
+        } else {
+            remoteConfig?.getBoolean("ads_use_real_android") ?: true
+        }
         val seed = if (useRealAndroidAds) LIVE_ANDROID_IDS else DEMO_AD_IDS
 
         val rawOverride = remoteConfig?.getString("ad_unit_ids").orEmpty()
