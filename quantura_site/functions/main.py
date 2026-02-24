@@ -24,6 +24,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore, messaging as admin_messaging, storage as admin_storage
 from firebase_functions import https_fn, scheduler_fn
 from firebase_functions.options import MemoryOption, set_global_options
+import secrets_loader
 
 try:
     from firebase_admin import remote_config as admin_remote_config  # type: ignore
@@ -32,7 +33,7 @@ except Exception:  # pragma: no cover - optional dependency until firebase-admin
 
 # Bind high-sensitivity API keys via Secret Manager instead of committing them.
 # Firebase will inject secret values into env vars for deployed functions.
-set_global_options(max_instances=10, secrets=["OPENAI_API_KEY"])
+set_global_options(max_instances=10, secrets=secrets_loader.secret_bindings())
 
 SERVICE_ACCOUNT_PATH = os.environ.get(
     "SERVICE_ACCOUNT_PATH",
@@ -56,26 +57,22 @@ REPORT_AGENT_BATCH_SIZE = max(1, min(int(os.environ.get("REPORT_AGENT_BATCH_SIZE
 
 ALPACA_API_BASE = os.environ.get("ALPACA_API_BASE", "https://paper-api.alpaca.markets")
 ALPACA_DATA_BASE = os.environ.get("ALPACA_DATA_BASE", "https://data.alpaca.markets")
-ALPACA_API_KEY = os.environ.get("ALPACA_API_KEY") or os.environ.get("ALPACAAPIKEY")
-ALPACA_SECRET_KEY = os.environ.get("ALPACA_SECRET_KEY") or os.environ.get("ALPACASECRETKEY")
+ALPACA_API_KEY = secrets_loader.get_secret("ALPACA_API_KEY")
+ALPACA_SECRET_KEY = secrets_loader.get_secret("ALPACA_SECRET_KEY")
 
 IBM_TIMEMIXER_MODEL_ID = os.environ.get("IBM_TIMEMIXER_MODEL_ID", "ibm-granite/granite-timeseries-ttm-r2")
 IBM_TIMEMIXER_ENDPOINT = os.environ.get("IBM_TIMEMIXER_ENDPOINT", "").strip()
-IBM_TIMEMIXER_API_KEY = os.environ.get("IBM_TIMEMIXER_API_KEY", "").strip()
-HUGGINGFACEHUB_API_TOKEN = os.environ.get("HUGGINGFACEHUB_API_TOKEN", "").strip()
+IBM_TIMEMIXER_API_KEY = secrets_loader.get_secret("IBM_TIMEMIXER_API_KEY")
+HUGGINGFACEHUB_API_TOKEN = secrets_loader.get_secret("HUGGINGFACEHUB_API_TOKEN")
 
-SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL", "").strip()
-FCM_WEB_VAPID_KEY = os.environ.get("FCM_WEB_VAPID_KEY", "").strip()
+SLACK_WEBHOOK_URL = secrets_loader.get_secret("SLACK_WEBHOOK_URL")
+FCM_WEB_VAPID_KEY = secrets_loader.get_secret("FCM_WEB_VAPID_KEY")
 STRIPE_PUBLIC_KEY = os.environ.get("STRIPE_PUBLIC_KEY", "").strip()
-STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "").strip()
-STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip()
-MASSIVE_API_KEY = os.environ.get("MASSIVE_API_KEY", "").strip()
+STRIPE_SECRET_KEY = secrets_loader.get_secret("STRIPE_SECRET_KEY")
+STRIPE_WEBHOOK_SECRET = secrets_loader.get_secret("STRIPE_WEBHOOK_SECRET")
+MASSIVE_API_KEY = secrets_loader.get_secret("MASSIVE_API_KEY")
 MASSIVE_BASE_URL = (os.environ.get("MASSIVE_BASE_URL") or "https://api.massive.com").rstrip("/")
-UNSPLASH_ACCESS_KEY = str(
-    os.environ.get("UNSPLASH_ACCESS_KEY")
-    or os.environ.get("UNSPLASH_APPLICATION_ID")
-    or ""
-).strip()
+UNSPLASH_ACCESS_KEY = secrets_loader.get_secret("UNSPLASH_ACCESS_KEY")
 STRIPE_CONNECT_PLATFORM_FEE_PERCENT = float(os.environ.get("STRIPE_CONNECT_PLATFORM_FEE_PERCENT", "12") or 12)
 CREATOR_DEFAULT_SUBSCRIBE_USD = float(os.environ.get("CREATOR_DEFAULT_SUBSCRIBE_USD", "9") or 9)
 CREATOR_DEFAULT_THANKS_USD = float(os.environ.get("CREATOR_DEFAULT_THANKS_USD", "5") or 5)
@@ -83,8 +80,8 @@ RISK_FREE_RATE = float(os.environ.get("RISK_FREE_RATE", "0.045") or 0.045)
 TRENDING_URL = "https://query1.finance.yahoo.com/v1/finance/trending/US"
 YAHOO_SEARCH_URL = "https://query2.finance.yahoo.com/v1/finance/search"
 DEFAULT_FORECAST_PRICE = 349
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "").strip()
-AMAZON_NOVA_API_KEY = os.environ.get("AMAZON_NOVA_API_KEY", "").strip()
+OPENAI_API_KEY = secrets_loader.get_secret("OPENAI_API_KEY")
+AMAZON_NOVA_API_KEY = secrets_loader.get_secret("AMAZON_NOVA_API_KEY")
 AMAZON_NOVA_API_ENDPOINT = str(os.environ.get("AMAZON_NOVA_API_ENDPOINT") or "").strip()
 AMAZON_NOVA_DEFAULT_MODEL = str(os.environ.get("AMAZON_NOVA_DEFAULT_MODEL") or "amazon.nova-lite-v1:0").strip()
 SOCIAL_CONTENT_MODEL = (os.environ.get("SOCIAL_CONTENT_MODEL") or "gpt-5-mini").strip()
@@ -129,50 +126,23 @@ SOCIAL_AUTOPILOT_CHANNELS = [
     if channel.strip()
 ]
 
-TWITTER_BEARER_TOKEN = str(
-    os.environ.get("TWITTER_BEARER_TOKEN")
-    or os.environ.get("X_BEARER_TOKEN")
-    or ""
-).strip()
-X_USER_OAUTH2_TOKEN = str(
-    os.environ.get("X_USER_OAUTH2_TOKEN")
-    or os.environ.get("X_USER_BEARER_TOKEN")
-    or os.environ.get("TWITTER_USER_OAUTH2_TOKEN")
-    or ""
-).strip()
-TWITTER_API_KEY = str(
-    os.environ.get("TWITTER_API_KEY")
-    or os.environ.get("X_API_KEY")
-    or os.environ.get("TWITTER_CONSUMER_KEY")
-    or ""
-).strip()
-TWITTER_API_SECRET = str(
-    os.environ.get("TWITTER_API_SECRET")
-    or os.environ.get("X_API_SECRET")
-    or os.environ.get("TWITTER_CONSUMER_SECRET")
-    or ""
-).strip()
-TWITTER_ACCESS_TOKEN = str(
-    os.environ.get("TWITTER_ACCESS_TOKEN")
-    or os.environ.get("X_ACCESS_TOKEN")
-    or ""
-).strip()
-TWITTER_ACCESS_TOKEN_SECRET = str(
-    os.environ.get("TWITTER_ACCESS_TOKEN_SECRET")
-    or os.environ.get("X_ACCESS_TOKEN_SECRET")
-    or ""
-).strip()
-LINKEDIN_ACCESS_TOKEN = str(os.environ.get("LINKEDIN_ACCESS_TOKEN") or "").strip()
+TWITTER_BEARER_TOKEN = secrets_loader.get_secret("TWITTER_BEARER_TOKEN")
+X_USER_OAUTH2_TOKEN = secrets_loader.get_secret("X_USER_OAUTH2_TOKEN")
+TWITTER_API_KEY = secrets_loader.get_secret("TWITTER_API_KEY")
+TWITTER_API_SECRET = secrets_loader.get_secret("TWITTER_API_SECRET")
+TWITTER_ACCESS_TOKEN = secrets_loader.get_secret("TWITTER_ACCESS_TOKEN")
+TWITTER_ACCESS_TOKEN_SECRET = secrets_loader.get_secret("TWITTER_ACCESS_TOKEN_SECRET")
+LINKEDIN_ACCESS_TOKEN = secrets_loader.get_secret("LINKEDIN_ACCESS_TOKEN")
 LINKEDIN_AUTHOR_URN = str(os.environ.get("LINKEDIN_AUTHOR_URN") or "").strip()
 FACEBOOK_PAGE_ID = str(os.environ.get("FACEBOOK_PAGE_ID") or "").strip()
-FACEBOOK_PAGE_ACCESS_TOKEN = str(os.environ.get("FACEBOOK_PAGE_ACCESS_TOKEN") or "").strip()
+FACEBOOK_PAGE_ACCESS_TOKEN = secrets_loader.get_secret("FACEBOOK_PAGE_ACCESS_TOKEN")
 INSTAGRAM_BUSINESS_ACCOUNT_ID = str(os.environ.get("INSTAGRAM_BUSINESS_ACCOUNT_ID") or "").strip()
-INSTAGRAM_ACCESS_TOKEN = str(os.environ.get("INSTAGRAM_ACCESS_TOKEN") or FACEBOOK_PAGE_ACCESS_TOKEN).strip()
+INSTAGRAM_ACCESS_TOKEN = secrets_loader.get_secret("INSTAGRAM_ACCESS_TOKEN") or FACEBOOK_PAGE_ACCESS_TOKEN
 INSTAGRAM_DEFAULT_IMAGE_URL = str(
     os.environ.get("INSTAGRAM_DEFAULT_IMAGE_URL")
     or "https://images.unsplash.com/photo-1535320903710-d993d3d77d29?auto=format&fit=crop&w=1280&q=80"
 ).strip()
-TIKTOK_ACCESS_TOKEN = str(os.environ.get("TIKTOK_ACCESS_TOKEN") or "").strip()
+TIKTOK_ACCESS_TOKEN = secrets_loader.get_secret("TIKTOK_ACCESS_TOKEN")
 TIKTOK_OPEN_ID = str(os.environ.get("TIKTOK_OPEN_ID") or "").strip()
 SOCIAL_POPULAR_CHANNELS = [
     "x",
@@ -222,7 +192,7 @@ SCREENER_NOTES_TICKER_HINTS: dict[str, list[str]] = {
     "hedge fund": ["AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL"],
 }
 META_PIXEL_ID = str(os.environ.get("META_PIXEL_ID") or "1643823927053003").strip()
-META_CAPI_ACCESS_TOKEN = str(os.environ.get("META_CAPI_ACCESS_TOKEN") or "").strip()
+META_CAPI_ACCESS_TOKEN = secrets_loader.get_secret("META_CAPI_ACCESS_TOKEN")
 META_GRAPH_API_VERSION = str(os.environ.get("META_GRAPH_API_VERSION") or "v21.0").strip() or "v21.0"
 META_ALLOWED_ORIGINS = {
     PUBLIC_ORIGIN,
@@ -747,7 +717,7 @@ def _force_remove_second_line(csv_text: str) -> str:
 def _social_channel_webhooks() -> dict[str, str]:
     out: dict[str, str] = {}
     for channel, env_key in SOCIAL_CHANNEL_WEBHOOK_ENV.items():
-        out[channel] = str(os.environ.get(env_key) or "").strip()
+        out[channel] = secrets_loader.get_secret(env_key)
     return out
 
 

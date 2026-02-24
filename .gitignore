@@ -1,4 +1,5 @@
 .env
+.env.local
 .venv/
 node_modules/
 *.pem
@@ -22,5 +23,6 @@ quantura_android/**/google-services.local.json
 **/xcuserdata/
 *.xcuserstate
 *.local
+scripts/pull-secrets.sh
 .DS_Store
 __pycache__/
