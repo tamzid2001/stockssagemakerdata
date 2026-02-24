@@ -1245,19 +1245,26 @@
     })(),
 	    initialPageViewSent: false,
 	    authResolved: false,
-    tickerContext: {
-	      ticker: "",
-	      interval: "1d",
-	      rows: [],
-      forecastId: "",
-      forecastDoc: null,
-      indicatorOverlays: [],
-      forecastTablePage: 0,
-      newsTicker: "",
-      xTicker: "",
-      intelTicker: "",
-      optionsTicker: "",
-    },
+	    tickerContext: {
+		      ticker: "",
+		      interval: "1d",
+		      rows: [],
+	      forecastId: "",
+	      forecastDoc: null,
+	      indicatorOverlays: [],
+	      forecastTablePage: 0,
+	      newsTicker: "",
+	      xTicker: "",
+	      xQuery: "",
+	      xPage: 1,
+	      xPosts: [],
+	      xStories: [],
+	      xHasMorePosts: false,
+	      xHasMoreStories: false,
+	      xVariants: [],
+	      intelTicker: "",
+	      optionsTicker: "",
+	    },
     predictionsContext: {
       uploadId: "",
       uploadDoc: null,
@@ -5934,30 +5941,121 @@
     }
   };
 
-  const renderTickerXTrends = (posts, stories, ticker, warning = "") => {
-    if (!ui.xTrendingOutput) return;
-    const list = Array.isArray(posts) ? posts : [];
-    const storyList = Array.isArray(stories) ? stories : [];
+  const normalizeXSocialQuery = (raw) => String(raw || "").trim();
+
+  const uniqueSocialRows = (rows) => {
+    const list = Array.isArray(rows) ? rows : [];
+    const seen = new Set();
+    const out = [];
+    for (const row of list) {
+      const key = String(row?.id || row?.permalink || `${row?.title || ""}_${row?.createdAt || ""}`).trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(row);
+    }
+    return out;
+  };
+
+  const isTransientXTrendsError = (error) => {
+    const code = String(error?.code || "").toLowerCase();
+    const message = String(error?.message || "").toLowerCase();
+    if (["resource-exhausted", "unavailable", "internal", "deadline-exceeded"].some((item) => code.includes(item))) return true;
+    if (message.includes("429")) return true;
+    if (/\b5\d\d\b/.test(message)) return true;
+    if (message.includes("timeout")) return true;
+    return false;
+  };
+
+  const callWithBackoffRetry = async (callable, payload, { attempts = 3, baseDelayMs = 320 } = {}) => {
+    let lastError = null;
+    for (let i = 0; i < Math.max(1, attempts); i += 1) {
+      try {
+        return await callable(payload);
+      } catch (error) {
+        lastError = error;
+        if (!isTransientXTrendsError(error) || i >= attempts - 1) throw error;
+        const jitter = Math.floor(Math.random() * 160);
+        const delay = baseDelayMs * (2 ** i) + jitter;
+        // Exponential backoff keeps noisy 429/5xx from surfacing as immediate hard failures.
+        await new Promise((resolve) => window.setTimeout(resolve, delay));
+      }
+    }
+    throw lastError || new Error("X trends request failed.");
+  };
+
+  const buildXVariantChips = ({ variants, activeQuery, ticker }) => {
     const symbol = normalizeTicker(ticker) || "";
-    const warningText = String(warning || "").trim();
-    const warningBlock = warningText
-      ? `<div class="small muted" style="margin-top:8px;">${escapeHtml(warningText)}</div>`
+    const active = normalizeXSocialQuery(activeQuery).toUpperCase();
+    const chips = (Array.isArray(variants) ? variants : [])
+      .map((item) => normalizeTicker(item))
+      .filter(Boolean)
+      .filter((item, idx, arr) => arr.indexOf(item) === idx)
+      .filter((item) => item !== active)
+      .slice(0, 4);
+    if (!chips.length || !symbol) return "";
+    return `
+      <div class="x-variant-chips">
+        ${chips
+          .map(
+            (variant) =>
+              `<button class="task-chip" type="button" data-action="x-trends-variant" data-ticker="${escapeHtml(symbol)}" data-query="${escapeHtml(
+                variant
+              )}">Try ${escapeHtml(variant)}</button>`
+          )
+          .join("")}
+      </div>
+    `;
+  };
+
+  const renderTickerXTrends = (payload = {}) => {
+    if (!ui.xTrendingOutput) return;
+    const list = Array.isArray(payload.posts) ? payload.posts : [];
+    const storyList = Array.isArray(payload.stories) ? payload.stories : [];
+    const symbol = normalizeTicker(payload.ticker || "") || "";
+    const warningText = String(payload.warning || "").trim();
+    const query = normalizeXSocialQuery(payload.query || symbol);
+    const fallbackUsed = Boolean(payload.fallbackUsed);
+    const fallbackQuery = normalizeXSocialQuery(payload.fallbackQuery || "");
+    const page = Math.max(1, Number(payload.page || 1));
+    const pageSize = Math.max(1, Number(payload.pageSize || 8));
+    const totalPosts = Number(payload.totalPosts || list.length || 0);
+    const hasMorePosts = Boolean(payload.hasMorePosts);
+    const variantChips = buildXVariantChips({
+      variants: payload.queryVariants,
+      activeQuery: query,
+      ticker: symbol,
+    });
+    const warningBlock = warningText ? `<div class="small muted" style="margin-top:10px;">${escapeHtml(warningText)}</div>` : "";
+    const queryBlock = query ? `<div class="small muted" style="margin-bottom:8px;">Query: ${escapeHtml(query)}</div>` : "";
+    const fallbackBlock = fallbackUsed
+      ? `<div class="small muted" style="margin-bottom:8px;">Fallback query used: ${escapeHtml(fallbackQuery || "$" + symbol)}</div>`
       : "";
 
     if (!list.length && !storyList.length) {
       ui.xTrendingOutput.innerHTML = `
-        <div class="small muted">No X posts returned for ${escapeHtml(symbol || "this ticker")}.</div>
-        ${warningBlock}
+        <div class="x-empty-state">
+          <div class="small muted">No posts found for ${escapeHtml(symbol || "this ticker")}.</div>
+          ${queryBlock}
+          ${fallbackBlock}
+          ${variantChips}
+          <div style="margin-top:10px;">
+            <button class="cta secondary small" type="button" data-action="x-trends-retry" data-ticker="${escapeHtml(symbol)}" data-query="${escapeHtml(
+              query
+            )}">Retry</button>
+          </div>
+          ${warningBlock}
+        </div>
       `;
       return;
     }
 
     const blocks = [];
+    if (queryBlock) blocks.push(queryBlock);
+    if (fallbackBlock) blocks.push(fallbackBlock);
 
     if (list.length) {
       blocks.push(
         list
-          .slice(0, 8)
           .map((post) => {
             const authorName = escapeHtml(post.authorName || post.authorUsername || "Unknown");
             const authorHandle = escapeHtml(post.authorUsername ? `@${post.authorUsername}` : "");
@@ -5995,7 +6093,6 @@
       blocks.push(`<div class="x-story-divider small muted">X News stories</div>`);
       blocks.push(
         storyList
-          .slice(0, 6)
           .map((story) => {
             const title = escapeHtml(story.name || "X News story");
             const hook = escapeHtml(story.hook || "");
@@ -6019,33 +6116,118 @@
       );
     }
 
-    ui.xTrendingOutput.innerHTML = blocks.join("") + warningBlock;
+    if (hasMorePosts) {
+      blocks.push(`
+        <div class="x-pagination">
+          <button
+            class="cta secondary small"
+            type="button"
+            data-action="x-trends-more"
+            data-ticker="${escapeHtml(symbol)}"
+            data-query="${escapeHtml(query)}"
+            data-next-page="${page + 1}"
+          >
+            Load more posts
+          </button>
+          <span class="small muted">${Math.min(list.length, totalPosts)} / ${Number.isFinite(totalPosts) ? totalPosts : "?"}</span>
+        </div>
+      `);
+    }
+
+    ui.xTrendingOutput.innerHTML = blocks.join("") + variantChips + warningBlock;
   };
 
-  const loadTickerXTrends = async (functions, ticker, { notify = false, force = false } = {}) => {
+  const loadTickerXTrends = async (
+    functions,
+    ticker,
+    { notify = false, force = false, page = 1, append = false, queryOverride = "", pageSize = 8 } = {}
+  ) => {
     if (!functions || !ui.xTrendingOutput) return;
     const symbol = normalizeTicker(ticker);
     if (!symbol) {
       ui.xTrendingOutput.innerHTML = `<div class="small muted">Load a ticker to see live X discussion.</div>`;
       return;
     }
-    if (!force && state.tickerContext.xTicker === symbol) return;
-    state.tickerContext.xTicker = symbol;
+
+    const query = normalizeXSocialQuery(queryOverride);
+    const normalizedPage = Math.max(1, Number(page || 1));
+    const normalizedPageSize = Math.max(1, Math.min(20, Number(pageSize || 8)));
+    const sameRequest = state.tickerContext.xTicker === symbol && state.tickerContext.xQuery === query;
+    if (!force && !append && sameRequest && state.tickerContext.xPage === normalizedPage) return;
+
+    if (!append) {
+      state.tickerContext.xTicker = symbol;
+      state.tickerContext.xQuery = query;
+      state.tickerContext.xPage = 1;
+      state.tickerContext.xPosts = [];
+      state.tickerContext.xStories = [];
+      state.tickerContext.xHasMorePosts = false;
+      state.tickerContext.xHasMoreStories = false;
+      state.tickerContext.xVariants = [];
+      setOutputLoading(ui.xTrendingOutput, "Loading X trends...");
+    }
 
     try {
-      setOutputLoading(ui.xTrendingOutput, "Loading X trends...");
       const getXTrends = functions.httpsCallable("get_ticker_x_trends");
-      const result = await getXTrends({ ticker: symbol, meta: buildMeta() });
+      const result = await callWithBackoffRetry(getXTrends, {
+        ticker: symbol,
+        query,
+        page: normalizedPage,
+        pageSize: normalizedPageSize,
+        meta: buildMeta(),
+      });
       const payload = result.data || {};
-      const posts = Array.isArray(payload.posts) ? payload.posts : [];
-      const stories = Array.isArray(payload.stories) ? payload.stories : [];
-      const warning = String(payload.warning || "").trim();
+      const incomingPosts = Array.isArray(payload.posts) ? payload.posts : [];
+      const incomingStories = Array.isArray(payload.stories) ? payload.stories : [];
+
+      const mergedPosts = append ? uniqueSocialRows([...(state.tickerContext.xPosts || []), ...incomingPosts]) : uniqueSocialRows(incomingPosts);
+      const mergedStories = append
+        ? uniqueSocialRows([...(state.tickerContext.xStories || []), ...incomingStories])
+        : uniqueSocialRows(incomingStories);
+
+      state.tickerContext.xTicker = symbol;
+      state.tickerContext.xQuery = query;
+      state.tickerContext.xPage = normalizedPage;
+      state.tickerContext.xPosts = mergedPosts;
+      state.tickerContext.xStories = mergedStories;
+      state.tickerContext.xHasMorePosts = Boolean(payload.hasMorePosts);
+      state.tickerContext.xHasMoreStories = Boolean(payload.hasMoreStories);
+      state.tickerContext.xVariants = Array.isArray(payload.queryVariants) ? payload.queryVariants : [];
+
       setOutputReady(ui.xTrendingOutput);
-      renderTickerXTrends(posts, stories, symbol, warning);
-      logEvent("x_trends_loaded", { ticker: symbol, count: posts.length, stories: stories.length });
+      renderTickerXTrends({
+        ticker: symbol,
+        query: payload.query || query || symbol,
+        queryVariants: state.tickerContext.xVariants,
+        posts: mergedPosts,
+        stories: mergedStories,
+        page: normalizedPage,
+        pageSize: Number(payload.pageSize || normalizedPageSize),
+        hasMorePosts: state.tickerContext.xHasMorePosts,
+        hasMoreStories: state.tickerContext.xHasMoreStories,
+        totalPosts: Number(payload.totalPosts || mergedPosts.length || 0),
+        totalStories: Number(payload.totalStories || mergedStories.length || 0),
+        warning: String(payload.warning || "").trim(),
+        fallbackUsed: Boolean(payload.fallbackUsed),
+        fallbackQuery: String(payload.fallbackQuery || "").trim(),
+      });
+      logEvent("x_trends_loaded", {
+        ticker: symbol,
+        query: query || symbol,
+        count: mergedPosts.length,
+        stories: mergedStories.length,
+        page: normalizedPage,
+      });
     } catch (error) {
       setOutputReady(ui.xTrendingOutput);
-      ui.xTrendingOutput.innerHTML = `<div class="small muted">Unable to load X trends right now.</div>`;
+      ui.xTrendingOutput.innerHTML = `
+        <div class="small muted">Unable to load X trends right now.</div>
+        <div style="margin-top:10px;">
+          <button class="cta secondary small" type="button" data-action="x-trends-retry" data-ticker="${escapeHtml(symbol)}" data-query="${escapeHtml(
+            query
+          )}">Retry</button>
+        </div>
+      `;
       if (notify) showToast(error.message || "Unable to load X trends.", "warn");
     }
   };
@@ -10268,6 +10450,61 @@
 		      event.preventDefault();
 		      await pickTicker(button.dataset.ticker || button.textContent);
 		    });
+
+        document.addEventListener("click", async (event) => {
+          const retryBtn = event.target.closest('[data-action="x-trends-retry"]');
+          if (retryBtn) {
+            event.preventDefault();
+            const ticker = normalizeTicker(retryBtn.dataset.ticker || state.tickerContext.xTicker || state.tickerContext.ticker || "");
+            if (!ticker) return;
+            const query = normalizeXSocialQuery(retryBtn.dataset.query || state.tickerContext.xQuery || "");
+            await loadTickerXTrends(functions, ticker, {
+              force: true,
+              notify: true,
+              page: 1,
+              append: false,
+              queryOverride: query,
+            });
+            return;
+          }
+
+          const variantBtn = event.target.closest('[data-action="x-trends-variant"]');
+          if (variantBtn) {
+            event.preventDefault();
+            const ticker = normalizeTicker(variantBtn.dataset.ticker || state.tickerContext.xTicker || state.tickerContext.ticker || "");
+            if (!ticker) return;
+            const query = normalizeXSocialQuery(variantBtn.dataset.query || "");
+            await loadTickerXTrends(functions, ticker, {
+              force: true,
+              notify: true,
+              page: 1,
+              append: false,
+              queryOverride: query,
+            });
+            return;
+          }
+
+          const loadMoreBtn = event.target.closest('[data-action="x-trends-more"]');
+          if (loadMoreBtn) {
+            event.preventDefault();
+            const ticker = normalizeTicker(loadMoreBtn.dataset.ticker || state.tickerContext.xTicker || state.tickerContext.ticker || "");
+            if (!ticker) return;
+            const query = normalizeXSocialQuery(loadMoreBtn.dataset.query || state.tickerContext.xQuery || "");
+            const nextPage = Math.max(2, Number(loadMoreBtn.dataset.nextPage || state.tickerContext.xPage + 1 || 2));
+            loadMoreBtn.disabled = true;
+            try {
+              await loadTickerXTrends(functions, ticker, {
+                force: true,
+                notify: false,
+                page: nextPage,
+                append: true,
+                queryOverride: query,
+              });
+            } finally {
+              loadMoreBtn.disabled = false;
+            }
+          }
+        });
 
         document.addEventListener("click", (event) => {
           const action = event.target.closest("[data-action]")?.dataset?.action;

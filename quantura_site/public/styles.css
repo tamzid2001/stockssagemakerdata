@@ -1883,6 +1883,26 @@ textarea {
   gap: 10px;
 }
 
+.x-empty-state {
+  display: grid;
+  gap: 8px;
+}
+
+.x-variant-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.x-pagination {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
 .x-post-card {
   border: 1px solid var(--line);
   border-radius: 16px;
