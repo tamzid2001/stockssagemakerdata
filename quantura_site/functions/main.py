@@ -32,31 +32,7 @@ except Exception:  # pragma: no cover - optional dependency until firebase-admin
 
 # Bind high-sensitivity API keys via Secret Manager instead of committing them.
 # Firebase will inject secret values into env vars for deployed functions.
-# Secret names must match Google Cloud Secret Manager exactly.
-set_global_options(
-    max_instances=10,
-    secrets=[
-        "ALPACA_API_KEY",
-        "ALPACA_SECRET_KEY",
-        "AMAZON_NOVA_KEY",
-        "FCM_WEB_VAPID_KEY",
-        "MASSIVE_API_KEY",
-        "OPENAI_API_KEY",
-        "SLACK_WEBHOOK_URL",
-        "STRIPE_PRIVATE_KEY",
-        "STRIPE_PUBLIC_KEY",
-        "STRIPE_WEBHOOK_SECRET",
-        "STRIPE_WEBHOOK_SECRET_CONNECT",
-        "UNSPLASH_ACCESS_KEY",
-        "UNSPLASH_APPLICATION_ID",
-        "UNSPLASH_SECRET_KEY",
-        "X_BEARER_TOKEN",
-        "X_CLIENT_KEY",
-        "X_CLIENT_SECRET",
-        "X_CLIENT_SECRET_ID",
-        "X_SECRET_KEY",
-    ],
-)
+set_global_options(max_instances=10, secrets=["OPENAI_API_KEY"])
 
 SERVICE_ACCOUNT_PATH = os.environ.get(
     "SERVICE_ACCOUNT_PATH",
@@ -91,11 +67,8 @@ HUGGINGFACEHUB_API_TOKEN = os.environ.get("HUGGINGFACEHUB_API_TOKEN", "").strip(
 SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL", "").strip()
 FCM_WEB_VAPID_KEY = os.environ.get("FCM_WEB_VAPID_KEY", "").strip()
 STRIPE_PUBLIC_KEY = os.environ.get("STRIPE_PUBLIC_KEY", "").strip()
-STRIPE_SECRET_KEY = (
-    os.environ.get("STRIPE_SECRET_KEY") or os.environ.get("STRIPE_PRIVATE_KEY") or ""
-).strip()
+STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "").strip()
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip()
-STRIPE_WEBHOOK_SECRET_CONNECT = os.environ.get("STRIPE_WEBHOOK_SECRET_CONNECT", "").strip()
 MASSIVE_API_KEY = os.environ.get("MASSIVE_API_KEY", "").strip()
 MASSIVE_BASE_URL = (os.environ.get("MASSIVE_BASE_URL") or "https://api.massive.com").rstrip("/")
 UNSPLASH_ACCESS_KEY = str(
@@ -103,7 +76,6 @@ UNSPLASH_ACCESS_KEY = str(
     or os.environ.get("UNSPLASH_APPLICATION_ID")
     or ""
 ).strip()
-UNSPLASH_SECRET_KEY = str(os.environ.get("UNSPLASH_SECRET_KEY") or "").strip()
 STRIPE_CONNECT_PLATFORM_FEE_PERCENT = float(os.environ.get("STRIPE_CONNECT_PLATFORM_FEE_PERCENT", "12") or 12)
 CREATOR_DEFAULT_SUBSCRIBE_USD = float(os.environ.get("CREATOR_DEFAULT_SUBSCRIBE_USD", "9") or 9)
 CREATOR_DEFAULT_THANKS_USD = float(os.environ.get("CREATOR_DEFAULT_THANKS_USD", "5") or 5)
@@ -112,9 +84,7 @@ TRENDING_URL = "https://query1.finance.yahoo.com/v1/finance/trending/US"
 YAHOO_SEARCH_URL = "https://query2.finance.yahoo.com/v1/finance/search"
 DEFAULT_FORECAST_PRICE = 349
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "").strip()
-AMAZON_NOVA_API_KEY = (
-    os.environ.get("AMAZON_NOVA_API_KEY") or os.environ.get("AMAZON_NOVA_KEY") or ""
-).strip()
+AMAZON_NOVA_API_KEY = os.environ.get("AMAZON_NOVA_API_KEY", "").strip()
 AMAZON_NOVA_API_ENDPOINT = str(os.environ.get("AMAZON_NOVA_API_ENDPOINT") or "").strip()
 AMAZON_NOVA_DEFAULT_MODEL = str(os.environ.get("AMAZON_NOVA_DEFAULT_MODEL") or "amazon.nova-lite-v1:0").strip()
 SOCIAL_CONTENT_MODEL = (os.environ.get("SOCIAL_CONTENT_MODEL") or "gpt-5-mini").strip()
@@ -173,16 +143,12 @@ X_USER_OAUTH2_TOKEN = str(
 TWITTER_API_KEY = str(
     os.environ.get("TWITTER_API_KEY")
     or os.environ.get("X_API_KEY")
-    or os.environ.get("X_CLIENT_KEY")
     or os.environ.get("TWITTER_CONSUMER_KEY")
     or ""
 ).strip()
 TWITTER_API_SECRET = str(
     os.environ.get("TWITTER_API_SECRET")
     or os.environ.get("X_API_SECRET")
-    or os.environ.get("X_CLIENT_SECRET")
-    or os.environ.get("X_SECRET_KEY")
-    or os.environ.get("X_CLIENT_SECRET_ID")
     or os.environ.get("TWITTER_CONSUMER_SECRET")
     or ""
 ).strip()
@@ -5143,30 +5109,6 @@ def stripe_webhook(req: https_fn.Request) -> tuple[str, int]:
         # Webhook processing is best-effort; Stripe will retry on non-2xx, so keep this 200 unless signature fails.
         pass
 
-    return ("ok", 200)
-
-
-@https_fn.on_request()
-def stripe_connect_webhook(req: https_fn.Request) -> tuple[str, int]:
-    """Stripe Connect webhook endpoint at /connect. Integrate Connect event handling later."""
-    if req.method != "POST":
-        return ("Method not allowed", 405)
-
-    if not STRIPE_WEBHOOK_SECRET_CONNECT:
-        return ("Stripe Connect webhook secret is not configured.", 500)
-
-    stripe = _stripe_module()
-    payload = req.get_data(cache=False, as_text=False)
-    sig = req.headers.get("Stripe-Signature", "")
-
-    try:
-        event = stripe.Webhook.construct_event(
-            payload=payload, sig_header=sig, secret=STRIPE_WEBHOOK_SECRET_CONNECT
-        )
-    except Exception:
-        return ("Invalid signature", 400)
-
-    # TODO: Process Connect events (account.updated, etc.) when integrating Connect API.
     return ("ok", 200)
 
 

@@ -52,8 +52,6 @@
       { "source": "/purchase", "destination": "/pricing", "type": 301 }
     ],
     "rewrites": [
-      { "source": "/webhook", "function": "stripe_webhook" },
-      { "source": "/connect", "function": "stripe_connect_webhook" },
       { "source": "/", "function": "ssr" },
       { "source": "/forecasting", "function": "ssr" },
       { "source": "/ticker-intelligence", "function": "ssr" },

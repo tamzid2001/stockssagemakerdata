@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Quantura Dashboard | Orders, Forecasts, Uploads</title>
     <meta
       name="description"
@@ -222,72 +222,26 @@
       <section class="section panel hidden" data-panel="notifications" id="notifications">
         <div class="container">
           <div class="section-title">
-            <h2>Notifications</h2>
-            <p class="small">Choose how Quantura should reach you. Web push works today; email + mobile preferences are saved to your profile.</p>
+            <h2>Browser notifications</h2>
+            <p class="small">Enable web push notifications, stream messages live, and keep a timestamped event log.</p>
           </div>
           <div class="content-grid">
             <div class="card">
-              <h3>Delivery channels</h3>
-              <div class="settings-list" role="list">
-                <div class="setting-row" role="listitem">
-                  <div class="setting-copy">
-                    <div class="setting-title"><i class="iconoir-bell-notification" aria-hidden="true"></i><span>Web push</span></div>
-                    <div class="small muted" id="notifications-meta-web">Instant alerts in this browser.</div>
-                  </div>
-                  <label class="switch" aria-label="Toggle web push notifications">
-                    <input type="checkbox" id="notifications-toggle-web">
-                    <span class="switch-track" aria-hidden="true"></span>
-                  </label>
-                </div>
-
-                <div class="setting-row" role="listitem">
-                  <div class="setting-copy">
-                    <div class="setting-title"><i class="iconoir-mail" aria-hidden="true"></i><span>Email</span></div>
-                    <div class="small muted" id="notifications-meta-email">Order updates and digests to your inbox.</div>
-                  </div>
-                  <label class="switch" aria-label="Toggle email notifications">
-                    <input type="checkbox" id="notifications-toggle-email">
-                    <span class="switch-track" aria-hidden="true"></span>
-                  </label>
-                </div>
-
-                <div class="setting-row" role="listitem">
-                  <div class="setting-copy">
-                    <div class="setting-title"><i class="iconoir-iphone" aria-hidden="true"></i><span>iOS</span></div>
-                    <div class="small muted" id="notifications-meta-ios">Mobile push notifications via the iOS app.</div>
-                  </div>
-                  <label class="switch" aria-label="Toggle iOS notifications">
-                    <input type="checkbox" id="notifications-toggle-ios">
-                    <span class="switch-track" aria-hidden="true"></span>
-                  </label>
-                </div>
-
-                <div class="setting-row" role="listitem">
-                  <div class="setting-copy">
-                    <div class="setting-title"><i class="iconoir-android" aria-hidden="true"></i><span>Android</span></div>
-                    <div class="small muted" id="notifications-meta-android">Mobile push notifications via the Android app.</div>
-                  </div>
-                  <label class="switch" aria-label="Toggle Android notifications">
-                    <input type="checkbox" id="notifications-toggle-android">
-                    <span class="switch-track" aria-hidden="true"></span>
-                  </label>
-                </div>
+              <h3>Web push setup</h3>
+              <div class="feature-list">
+                <div class="feature"><span></span>HTTPS + service worker required</div>
+                <div class="feature"><span></span>Permission must be granted by browser</div>
+                <div class="feature"><span></span>Token stored securely to your account</div>
               </div>
-
-              <div class="notice small" style="margin-top: 14px;">
-                <strong>Web push key:</strong>
-                <span id="notifications-vapid-key" class="mono">Loading…</span>
-                <button class="cta secondary small" id="notifications-copy-vapid" type="button">Copy</button>
-              </div>
-              <div class="notice small" style="margin-top: 10px;">
-                <strong>FCM token:</strong> <span id="notifications-token">No token registered yet.</span>
-              </div>
-
               <div class="hero-actions" style="margin-top: 16px;">
+                <button class="cta" id="notifications-enable" type="button">Enable notifications</button>
                 <button class="cta secondary" id="notifications-refresh" type="button">Refresh token</button>
                 <button class="cta secondary" id="notifications-send-test" type="button">Send test push</button>
               </div>
-              <p class="small" id="notifications-status" style="margin-top: 12px;">Sign in to manage notification settings.</p>
+              <p class="small" id="notifications-status" style="margin-top: 12px;">Sign in and enable notifications.</p>
+              <div class="notice small" style="margin-top: 10px;">
+                <strong>FCM token:</strong> <span id="notifications-token">No token registered yet.</span>
+              </div>
             </div>
             <div class="results-panel">
               <div class="card-head">
@@ -299,8 +253,8 @@
               </div>
               <h3 style="margin-top: 8px;">How delivery works</h3>
               <p class="small">
-                Quantura saves your channel preferences to your profile. Web push uses Firebase Cloud Messaging and a service worker token scoped to this browser.
-                You can revoke web permission any time from your browser site settings.
+                Quantura registers your browser token to your account and sends push notifications through the messaging service.
+                You can revoke permission any time from your browser site settings.
               </p>
             </div>
           </div>
