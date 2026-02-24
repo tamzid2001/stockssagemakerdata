@@ -191,17 +191,32 @@ final class NativePersonalizedNotificationManager {
 enum FirebaseBootstrap {
     static func configureIfAvailable() -> Bool {
         if FirebaseApp.app() != nil {
+            print("[Firebase][iOS] Firebase already configured.")
             return true
         }
-        guard let plistPath = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") else {
-            print("Firebase disabled: missing GoogleService-Info.plist (local-only file).")
+
+        let options: FirebaseOptions? = {
+            let candidates = [
+                ("GoogleService-Info", "plist"),
+                ("GoogleService-Info.local", "plist"),
+            ]
+            for candidate in candidates {
+                if let path = Bundle.main.path(forResource: candidate.0, ofType: candidate.1),
+                   let parsed = FirebaseOptions(contentsOfFile: path) {
+                    print("[Firebase][iOS] Using Firebase config \(candidate.0).\(candidate.1).")
+                    return parsed
+                }
+            }
+            return nil
+        }()
+
+        guard let options else {
+            print("[Firebase][iOS] Firebase disabled: missing GoogleService-Info(.local).plist in app bundle.")
             return false
         }
-        guard let options = FirebaseOptions(contentsOfFile: plistPath) else {
-            print("Firebase disabled: invalid GoogleService-Info.plist.")
-            return false
-        }
+
         FirebaseApp.configure(options: options)
+        print("[Firebase][iOS] Firebase configured successfully.")
         return FirebaseApp.app() != nil
     }
 }
@@ -214,7 +229,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     ) -> Bool {
         let firebaseReady = FirebaseBootstrap.configureIfAvailable()
 #if canImport(GoogleMobileAds)
-        MobileAds.shared.start(completionHandler: nil)
+        #if DEBUG
+        MobileAds.shared.requestConfiguration.testDeviceIdentifiers = ["SIMULATOR"]
+        #endif
+        MobileAds.shared.start { status in
+            print("[Ads][iOS] Mobile Ads initialized adapters=\(status.adapterStatusesByClassName.count)")
+        }
 #endif
 #if canImport(FirebaseMessaging) && canImport(UserNotifications)
         if firebaseReady {
@@ -231,6 +251,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
                let target = remotePayload["url"] as? String {
                 NativeBridgeState.shared.updateDeepLink(target)
             }
+        }
+#endif
+#if canImport(FirebaseAuth)
+        if firebaseReady {
+            NativeAuthSessionManager.shared.startIfNeeded()
         }
 #endif
 #if canImport(FirebaseAuth) && canImport(FirebaseFirestore) && canImport(UserNotifications)

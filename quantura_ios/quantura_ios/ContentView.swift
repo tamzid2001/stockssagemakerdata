@@ -6,6 +6,12 @@ import FirebaseRemoteConfig
 #if canImport(GoogleSignIn)
 import GoogleSignIn
 #endif
+#if canImport(AuthenticationServices)
+import AuthenticationServices
+#endif
+#if canImport(CryptoKit)
+import CryptoKit
+#endif
 #if canImport(Combine)
 import Combine
 #endif
@@ -85,6 +91,7 @@ final class StoreKitIapManager: ObservableObject {
 final class AppContainer {
     let remoteConfigManager = RemoteConfigManager()
     lazy var adManager = AdManager(remoteConfigManager: remoteConfigManager)
+    lazy var appOpenAdManager = AppOpenAdManager(remoteConfigManager: remoteConfigManager, adManager: adManager)
 }
 
 final class RemoteConfigManager {
@@ -102,14 +109,14 @@ final class RemoteConfigManager {
     }
 
     private let demoIDs = AdUnitIDs(
-        appOpen: "ca-app-pub-3940256099942544/9257395921",
-        adaptiveBanner: "ca-app-pub-3940256099942544/9214589741",
-        fixedBanner: "ca-app-pub-3940256099942544/6300978111",
-        interstitial: "ca-app-pub-3940256099942544/1033173712",
-        rewarded: "ca-app-pub-3940256099942544/5224354917",
-        rewardedInterstitial: "ca-app-pub-3940256099942544/5354046379",
-        nativeAdvanced: "ca-app-pub-3940256099942544/2247696110",
-        nativeVideo: "ca-app-pub-3940256099942544/1044960115"
+        appOpen: "ca-app-pub-3940256099942544/5575463023",
+        adaptiveBanner: "ca-app-pub-3940256099942544/2435281174",
+        fixedBanner: "ca-app-pub-3940256099942544/2435281174",
+        interstitial: "ca-app-pub-3940256099942544/4411468910",
+        rewarded: "ca-app-pub-3940256099942544/1712485313",
+        rewardedInterstitial: "ca-app-pub-3940256099942544/6978759866",
+        nativeAdvanced: "ca-app-pub-3940256099942544/3986624511",
+        nativeVideo: "ca-app-pub-3940256099942544/3986624511"
     )
 
     private let liveIOSIDs = AdUnitIDs(
@@ -133,8 +140,8 @@ final class RemoteConfigManager {
         settings.minimumFetchInterval = _isDebugAssertConfiguration() ? 0 : 3600
         rc.configSettings = settings
         rc.setDefaults([
-            "ads_use_real_ios": false as NSObject,
-            "ads_use_real_android": false as NSObject,
+            "ads_use_real_ios": true as NSObject,
+            "ads_use_real_android": true as NSObject,
             "feature_flags": """
             {"native_bridge_enabled":true,"ads_enabled":true}
             """ as NSObject,
@@ -153,7 +160,8 @@ final class RemoteConfigManager {
     }
 
     func adUnitIDs() -> AdUnitIDs {
-        let useRealIOSAds = remoteConfig?.configValue(forKey: "ads_use_real_ios").boolValue ?? false
+        let isDebugBuild = _isDebugAssertConfiguration()
+        let useRealIOSAds = !isDebugBuild && (remoteConfig?.configValue(forKey: "ads_use_real_ios").boolValue ?? true)
         let seed = useRealIOSAds ? liveIOSIDs : demoIDs
 
         guard
@@ -196,6 +204,7 @@ final class AdManager: NSObject, FullScreenContentDelegate {
     private let remoteConfigManager: RemoteConfigManager
     private var interstitialAd: InterstitialAd?
     private var rewardedAd: RewardedAd?
+    private(set) var isShowingFullScreenAd = false
 
     init(remoteConfigManager: RemoteConfigManager) {
         self.remoteConfigManager = remoteConfigManager
@@ -203,6 +212,7 @@ final class AdManager: NSObject, FullScreenContentDelegate {
 
     func primeAds() {
         guard remoteConfigManager.featureFlag("ads_enabled", default: true) else { return }
+        print("[Ads][iOS] Priming interstitial and rewarded ads.")
         loadInterstitial()
         loadRewarded()
     }
@@ -211,11 +221,17 @@ final class AdManager: NSObject, FullScreenContentDelegate {
         DispatchQueue.main.async {
             guard self.remoteConfigManager.featureFlag("ads_enabled", default: true) else { return }
             guard let rootViewController else { return }
+            guard !self.isShowingFullScreenAd else {
+                print("[Ads][iOS] Interstitial show skipped; another fullscreen ad is visible.")
+                return
+            }
             guard let ad = self.interstitialAd else {
+                print("[Ads][iOS] Interstitial unavailable; reloading.")
                 self.loadInterstitial()
                 return
             }
             ad.fullScreenContentDelegate = self
+            print("[Ads][iOS] Presenting interstitial.")
             ad.present(from: rootViewController)
         }
     }
@@ -224,11 +240,17 @@ final class AdManager: NSObject, FullScreenContentDelegate {
         DispatchQueue.main.async {
             guard self.remoteConfigManager.featureFlag("ads_enabled", default: true) else { return }
             guard let rootViewController else { return }
+            guard !self.isShowingFullScreenAd else {
+                print("[Ads][iOS] Rewarded show skipped; another fullscreen ad is visible.")
+                return
+            }
             guard let ad = self.rewardedAd else {
+                print("[Ads][iOS] Rewarded unavailable; reloading.")
                 self.loadRewarded()
                 return
             }
             ad.fullScreenContentDelegate = self
+            print("[Ads][iOS] Presenting rewarded.")
             ad.present(from: rootViewController) {
                 _ = ad.adReward
             }
@@ -237,23 +259,55 @@ final class AdManager: NSObject, FullScreenContentDelegate {
 
     private func loadInterstitial() {
         let adUnitID = remoteConfigManager.adUnitIDs().interstitial
-        InterstitialAd.load(with: adUnitID, request: Request()) { [weak self] ad, _ in
+        print("[Ads][iOS] Loading interstitial unit=\(adUnitID)")
+        InterstitialAd.load(with: adUnitID, request: Request()) { [weak self] ad, error in
             guard let self else { return }
             self.interstitialAd = ad
             self.interstitialAd?.fullScreenContentDelegate = self
+            if let error {
+                print("[Ads][iOS] Interstitial load failed: \(error.localizedDescription)")
+            } else {
+                print("[Ads][iOS] Interstitial load succeeded.")
+            }
         }
     }
 
     private func loadRewarded() {
         let adUnitID = remoteConfigManager.adUnitIDs().rewarded
-        RewardedAd.load(with: adUnitID, request: Request()) { [weak self] ad, _ in
+        print("[Ads][iOS] Loading rewarded unit=\(adUnitID)")
+        RewardedAd.load(with: adUnitID, request: Request()) { [weak self] ad, error in
             guard let self else { return }
             self.rewardedAd = ad
             self.rewardedAd?.fullScreenContentDelegate = self
+            if let error {
+                print("[Ads][iOS] Rewarded load failed: \(error.localizedDescription)")
+            } else {
+                print("[Ads][iOS] Rewarded load succeeded.")
+            }
         }
     }
 
+    func adWillPresentFullScreenContent(_ ad: FullScreenPresentingAd) {
+        isShowingFullScreenAd = true
+    }
+
     func adDidDismissFullScreenContent(_ ad: FullScreenPresentingAd) {
+        isShowingFullScreenAd = false
+        if ad === interstitialAd {
+            interstitialAd = nil
+            loadInterstitial()
+        } else if ad === rewardedAd {
+            rewardedAd = nil
+            loadRewarded()
+        }
+    }
+
+    func ad(
+        _ ad: FullScreenPresentingAd,
+        didFailToPresentFullScreenContentWithError error: Error
+    ) {
+        isShowingFullScreenAd = false
+        print("[Ads][iOS] Fullscreen ad failed to present: \(error.localizedDescription)")
         if ad === interstitialAd {
             interstitialAd = nil
             loadInterstitial()
@@ -366,6 +420,14 @@ struct QuanturaWebView: UIViewRepresentable {
         private let adManager: AdManager
         private var tokenObserver: NSObjectProtocol?
         private var deepLinkObserver: NSObjectProtocol?
+        private var lastNavigationInterstitialAt: Date = .distantPast
+#if canImport(AuthenticationServices)
+        private struct AppleAuthContext {
+            let requestId: String
+            let rawNonce: String
+        }
+        private var pendingAppleAuthContext: AppleAuthContext?
+#endif
         weak var webView: WKWebView?
 
         init(lifecycleController: WebViewLifecycleController, adManager: AdManager) {
@@ -409,6 +471,24 @@ struct QuanturaWebView: UIViewRepresentable {
             }
         }
 
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationAction: WKNavigationAction,
+            decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+        ) {
+            if navigationAction.targetFrame?.isMainFrame == true,
+               let destination = navigationAction.request.url?.absoluteString,
+               !destination.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let now = Date()
+                if now.timeIntervalSince(lastNavigationInterstitialAt) > 3 {
+                    lastNavigationInterstitialAt = now
+                    print("[Ads][iOS] Navigation trigger interstitial url=\(destination)")
+                    adManager.showInterstitial(from: Self.topViewController())
+                }
+            }
+            decisionHandler(.allow)
+        }
+
         // Handles bridge messages from window.webkit.messageHandlers.QuanturaBridge.postMessage(...)
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             guard message.name == "QuanturaBridge" else { return }
@@ -431,10 +511,12 @@ struct QuanturaWebView: UIViewRepresentable {
                     self.adManager.showRewarded(from: Self.topViewController())
                 case "openNewsLink":
                     guard let urlText = payload["url"] as? String, let url = URL(string: urlText) else { return }
+                    self.adManager.showInterstitial(from: Self.topViewController())
                     UIApplication.shared.open(url)
                 case "handleButtonClick":
                     let buttonID = String(describing: payload["buttonId"] ?? "")
-                    print("QuanturaBridge button click: \(buttonID)")
+                    print("[Ads][iOS] Button trigger rewarded buttonId=\(buttonID)")
+                    self.adManager.showRewarded(from: Self.topViewController())
                 case "share":
                     self.openNativeShare(payload: payload)
                 case "authSignIn":
@@ -463,17 +545,23 @@ struct QuanturaWebView: UIViewRepresentable {
             let requestId = String(describing: payload["requestId"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             guard !provider.isEmpty, !requestId.isEmpty else { return }
 
-            guard provider == "google" else {
+            switch provider {
+            case "google":
+                handleNativeGoogleSignIn(requestId: requestId)
+            case "apple":
+                handleNativeAppleSignIn(requestId: requestId)
+            default:
                 dispatchNativeAuthResult(
                     requestId: requestId,
                     provider: provider,
                     ok: false,
                     error: "Native \(provider) sign-in is not configured in this build."
                 )
-                return
             }
+        }
 
 #if canImport(FirebaseAuth) && canImport(GoogleSignIn)
+        private func handleNativeGoogleSignIn(requestId: String) {
             guard FirebaseApp.app() != nil else {
                 dispatchNativeAuthResult(
                     requestId: requestId,
@@ -505,6 +593,7 @@ struct QuanturaWebView: UIViewRepresentable {
                 return
             }
 
+            print("[Auth][iOS] Starting Google Sign-In flow.")
             GIDSignIn.sharedInstance.configuration = GIDConfiguration(clientID: clientID)
             GIDSignIn.sharedInstance.signIn(withPresenting: rootViewController) { signInResult, signInError in
                 if let signInError {
@@ -534,8 +623,7 @@ struct QuanturaWebView: UIViewRepresentable {
                     withIDToken: idToken,
                     accessToken: user.accessToken.tokenString
                 )
-
-                Auth.auth().signIn(with: credential) { authResult, authError in
+                NativeAuthSessionManager.shared.signInOrLink(with: credential, provider: "google") { authResult, authError in
                     if let authError {
                         self.dispatchNativeAuthResult(
                             requestId: requestId,
@@ -545,42 +633,106 @@ struct QuanturaWebView: UIViewRepresentable {
                         )
                         return
                     }
-                    authResult?.user.getIDTokenForcingRefresh(true) { firebaseToken, firebaseTokenError in
-                        if let firebaseTokenError {
-                            self.dispatchNativeAuthResult(
-                                requestId: requestId,
-                                provider: "google",
-                                ok: false,
-                                error: firebaseTokenError.localizedDescription
-                            )
-                            return
-                        }
-                        let token = firebaseToken?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                        guard !token.isEmpty else {
-                            self.dispatchNativeAuthResult(
-                                requestId: requestId,
-                                provider: "google",
-                                ok: false,
-                                error: "Native Firebase ID token is empty."
-                            )
-                            return
-                        }
-                        self.dispatchNativeAuthResult(
-                            requestId: requestId,
-                            provider: "google",
-                            ok: true,
-                            idToken: token
-                        )
-                    }
+                    self.completeNativeAuthFromFirebase(
+                        requestId: requestId,
+                        provider: "google",
+                        user: authResult?.user
+                    )
                 }
             }
+        }
 #else
+        private func handleNativeGoogleSignIn(requestId: String) {
             dispatchNativeAuthResult(
                 requestId: requestId,
                 provider: "google",
                 ok: false,
                 error: "Google/Firebase Auth SDK is unavailable in this build."
             )
+        }
+#endif
+
+#if canImport(FirebaseAuth) && canImport(AuthenticationServices) && canImport(CryptoKit)
+        private func handleNativeAppleSignIn(requestId: String) {
+            guard FirebaseApp.app() != nil else {
+                dispatchNativeAuthResult(
+                    requestId: requestId,
+                    provider: "apple",
+                    ok: false,
+                    error: "Firebase is not configured in this build."
+                )
+                return
+            }
+
+            let rawNonce = Self.randomNonceString()
+            pendingAppleAuthContext = AppleAuthContext(requestId: requestId, rawNonce: rawNonce)
+
+            let request = ASAuthorizationAppleIDProvider().createRequest()
+            request.requestedScopes = [.fullName, .email]
+            request.nonce = Self.sha256(rawNonce)
+            let controller = ASAuthorizationController(authorizationRequests: [request])
+            controller.delegate = self
+            controller.presentationContextProvider = self
+            print("[Auth][iOS] Starting Sign in with Apple flow.")
+            controller.performRequests()
+        }
+#else
+        private func handleNativeAppleSignIn(requestId: String) {
+            dispatchNativeAuthResult(
+                requestId: requestId,
+                provider: "apple",
+                ok: false,
+                error: "Sign in with Apple is unavailable in this build."
+            )
+        }
+#endif
+
+        private func completeNativeAuthFromFirebase(
+            requestId: String,
+            provider: String,
+            user: Any?
+        ) {
+#if canImport(FirebaseAuth)
+            guard let firebaseUser = user as? FirebaseAuth.User else {
+                dispatchNativeAuthResult(
+                    requestId: requestId,
+                    provider: provider,
+                    ok: false,
+                    error: "Firebase user is unavailable after sign-in."
+                )
+                return
+            }
+            firebaseUser.getIDTokenForcingRefresh(true) { firebaseToken, firebaseTokenError in
+                if let firebaseTokenError {
+                    self.dispatchNativeAuthResult(
+                        requestId: requestId,
+                        provider: provider,
+                        ok: false,
+                        error: firebaseTokenError.localizedDescription
+                    )
+                    return
+                }
+                let token = firebaseToken?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                guard !token.isEmpty else {
+                    self.dispatchNativeAuthResult(
+                        requestId: requestId,
+                        provider: provider,
+                        ok: false,
+                        error: "Native Firebase ID token is empty."
+                    )
+                    return
+                }
+                self.dispatchNativeAuthResult(
+                    requestId: requestId,
+                    provider: provider,
+                    ok: true,
+                    idToken: token
+                )
+            }
+#else
+            _ = requestId
+            _ = provider
+            _ = user
 #endif
         }
 
@@ -599,6 +751,27 @@ struct QuanturaWebView: UIViewRepresentable {
             guard !requestId.isEmpty else { return }
             dispatchNativeAuthResult(requestId: requestId, provider: "google", ok: true)
         }
+
+#if canImport(FirebaseAuth) && canImport(AuthenticationServices) && canImport(CryptoKit)
+        private static func randomNonceString(length: Int = 32) -> String {
+            precondition(length > 0)
+            let charset = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
+            var result = ""
+            var remaining = length
+
+            while remaining > 0 {
+                let random = Int.random(in: 0..<charset.count)
+                result.append(charset[random])
+                remaining -= 1
+            }
+            return result
+        }
+
+        private static func sha256(_ input: String) -> String {
+            let digest = SHA256.hash(data: Data(input.utf8))
+            return digest.map { String(format: "%02x", $0) }.joined()
+        }
+#endif
 
         private func dispatchNativeAuthResult(
             requestId: String,
@@ -677,6 +850,85 @@ struct QuanturaWebView: UIViewRepresentable {
         }
     }
 }
+
+#if canImport(FirebaseAuth) && canImport(AuthenticationServices) && canImport(CryptoKit)
+extension QuanturaWebView.Coordinator: ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
+    func authorizationController(
+        controller: ASAuthorizationController,
+        didCompleteWithAuthorization authorization: ASAuthorization
+    ) {
+        guard let context = pendingAppleAuthContext else { return }
+        pendingAppleAuthContext = nil
+
+        guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential else {
+            dispatchNativeAuthResult(
+                requestId: context.requestId,
+                provider: "apple",
+                ok: false,
+                error: "Apple credential was not returned."
+            )
+            return
+        }
+
+        guard let identityTokenData = credential.identityToken,
+              let identityToken = String(data: identityTokenData, encoding: .utf8) else {
+            dispatchNativeAuthResult(
+                requestId: context.requestId,
+                provider: "apple",
+                ok: false,
+                error: "Apple did not return an identity token."
+            )
+            return
+        }
+
+        let firebaseCredential = OAuthProvider.appleCredential(
+            withIDToken: identityToken,
+            rawNonce: context.rawNonce,
+            fullName: credential.fullName
+        )
+
+        NativeAuthSessionManager.shared.signInOrLink(with: firebaseCredential, provider: "apple") { authResult, authError in
+            if let authError {
+                self.dispatchNativeAuthResult(
+                    requestId: context.requestId,
+                    provider: "apple",
+                    ok: false,
+                    error: authError.localizedDescription
+                )
+                return
+            }
+            self.completeNativeAuthFromFirebase(
+                requestId: context.requestId,
+                provider: "apple",
+                user: authResult?.user
+            )
+        }
+    }
+
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
+        let requestId = pendingAppleAuthContext?.requestId ?? ""
+        pendingAppleAuthContext = nil
+        guard !requestId.isEmpty else { return }
+        dispatchNativeAuthResult(
+            requestId: requestId,
+            provider: "apple",
+            ok: false,
+            error: error.localizedDescription
+        )
+    }
+
+    func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+        if let top = QuanturaWebView.Coordinator.topViewController(), let window = top.view.window {
+            return window
+        }
+        let fallbackWindow = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }
+            .first { $0.isKeyWindow }
+        return fallbackWindow ?? ASPresentationAnchor()
+    }
+}
+#endif
 #else
 struct QuanturaWebView: View {
     let url: URL
@@ -708,10 +960,20 @@ struct ContentView: View {
 
     var body: some View {
         QuanturaWebView(url: quanturaURL, lifecycleController: lifecycleController, adManager: container.adManager)
-            .ignoresSafeArea()
+            .ignoresSafeArea(edges: [.top, .leading, .trailing])
+#if canImport(GoogleMobileAds) && canImport(UIKit)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                AdaptiveBannerContainer(adUnitID: container.remoteConfigManager.adUnitIDs().adaptiveBanner)
+                    .frame(height: 60)
+                    .background(.ultraThinMaterial)
+            }
+#endif
             .onAppear {
+                container.adManager.primeAds()
+                container.appOpenAdManager.preloadAdIfNeeded()
                 container.remoteConfigManager.fetchAndActivate { _ in
                     container.adManager.primeAds()
+                    container.appOpenAdManager.preloadAdIfNeeded()
                 }
 #if canImport(StoreKit)
                 if #available(iOS 15.0, *) {
@@ -727,6 +989,7 @@ struct ContentView: View {
                     lifecycleController.sceneDidEnterBackground()
                 case .active:
                     lifecycleController.sceneWillEnterForeground()
+                    container.appOpenAdManager.sceneDidBecomeActive()
                 default:
                     break
                 }
