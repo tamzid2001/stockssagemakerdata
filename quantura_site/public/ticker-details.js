@@ -13,6 +13,10 @@
   const statusNode = document.getElementById("ticker-load-status");
   const rawSearchInput = document.getElementById("ticker-raw-search");
   const rawOutput = document.getElementById("ticker-raw-output");
+  const analysisRunButton = document.getElementById("ticker-analysis-run");
+  const analysisStatusNode = document.getElementById("ticker-analysis-status");
+  const analysisOutputNode = document.getElementById("ticker-analysis-output");
+  const analysisFollowupsNode = document.getElementById("ticker-analysis-followups");
 
   const overviewPanel = root.querySelector('[data-tab-panel="overview"]');
   const fundamentalsPanel = root.querySelector('[data-tab-panel="fundamentals"]');
@@ -20,6 +24,8 @@
 
   let currentPayload = null;
   let currentRawInfo = {};
+  let currentRecord = null;
+  const shouldAutoAnalyze = new URL(window.location.href).searchParams.get("analysis") === "1";
 
   const escapeHtml = (value) =>
     String(value ?? "")
@@ -259,7 +265,105 @@
     ]);
 
     currentRawInfo = record.raw && typeof record.raw === "object" ? record.raw : {};
+    currentRecord = record;
     renderAllFields(currentRawInfo, rawSearchInput.value || "");
+  };
+
+  const setAnalysisStatus = (text, isError = false) => {
+    if (!analysisStatusNode) return;
+    analysisStatusNode.textContent = text;
+    analysisStatusNode.classList.toggle("error", Boolean(isError));
+  };
+
+  const setAnalysisLoading = (loading) => {
+    if (!analysisRunButton) return;
+    analysisRunButton.disabled = loading;
+    const span = analysisRunButton.querySelector("span");
+    if (span) span.textContent = loading ? "Analyzing..." : "Run analysis";
+  };
+
+  const renderList = (items) => {
+    if (!Array.isArray(items) || !items.length) return '<div class="small muted">-</div>';
+    return `<ul>${items.map((item) => `<li>${escapeHtml(String(item || ""))}</li>`).join("")}</ul>`;
+  };
+
+  const renderAnalysisResult = (result, meta = {}) => {
+    if (!analysisOutputNode) return;
+    if (!result || typeof result !== "object") {
+      analysisOutputNode.innerHTML = '<div class="small muted">No analysis returned.</div>';
+      return;
+    }
+
+    analysisOutputNode.innerHTML = `
+      <div class="small muted"><strong>Confidence:</strong> ${escapeHtml(String(result.confidence || "-"))} · ${
+        meta.cached ? "cached (24h)" : "fresh"
+      }</div>
+      <div class="card" style="margin-top: 8px;">
+        <h4>Thesis Summary</h4>
+        <p class="small">${escapeHtml(String(result.thesis_summary || ""))}</p>
+      </div>
+      <div class="card" style="margin-top: 8px;">
+        <h4>Key Drivers</h4>
+        ${renderList(result.key_drivers)}
+      </div>
+      <div class="card" style="margin-top: 8px;">
+        <h4>Risks</h4>
+        ${renderList(result.risks)}
+      </div>
+      <div class="card" style="margin-top: 8px;">
+        <h4>Data Quality Notes</h4>
+        ${renderList(result.data_quality_notes)}
+      </div>
+    `;
+
+    if (analysisFollowupsNode) {
+      const followUps = Array.isArray(result.follow_up_questions) ? result.follow_up_questions.filter(Boolean) : [];
+      analysisFollowupsNode.innerHTML = followUps
+        .map(
+          (question) =>
+            `<button type="button" class="task-chip" data-analysis-followup="${escapeHtml(String(question))}">${escapeHtml(
+              String(question)
+            )}</button>`
+        )
+        .join("");
+    }
+  };
+
+  const runAnalysis = async (followUp = "") => {
+    if (!(window.QuanturaAnalysisService && typeof window.QuanturaAnalysisService.run === "function")) {
+      setAnalysisStatus("Analysis service is not available on this page.", true);
+      return;
+    }
+    if (!currentRecord) {
+      setAnalysisStatus("Load a ticker before running analysis.", true);
+      return;
+    }
+    const symbol = normalizeSymbol(symbolInput.value || currentRecord.symbol || "");
+    if (!symbol) {
+      setAnalysisStatus("Ticker symbol is required.", true);
+      return;
+    }
+
+    setAnalysisLoading(true);
+    setAnalysisStatus(followUp ? "Running follow-up analysis..." : "Running informational analysis...");
+    try {
+      const analysis = await window.QuanturaAnalysisService.run({
+        symbol,
+        record: currentRecord,
+        followUp: String(followUp || ""),
+      });
+      renderAnalysisResult(analysis.result, { cached: Boolean(analysis.cached) });
+      const usage = analysis?.usage || {};
+      setAnalysisStatus(
+        `Analysis complete. prompt_tokens=${Number(usage.prompt_tokens || 0)} completion_tokens=${Number(
+          usage.completion_tokens || 0
+        )} cached_tokens=${Number(usage.cached_tokens || 0)}`
+      );
+    } catch (error) {
+      setAnalysisStatus(error?.message || "Analysis failed.", true);
+    } finally {
+      setAnalysisLoading(false);
+    }
   };
 
   const fetchTicker = async (symbol) => {
@@ -315,9 +419,13 @@
       localStorage.setItem(STORAGE_LAST_SYMBOL, cleanSymbol);
       const nextPath = `/ticker/${encodeURIComponent(cleanSymbol)}`;
       if (window.location.pathname !== nextPath) {
-        history.replaceState({}, "", nextPath);
+        const suffix = shouldAutoAnalyze ? "?analysis=1" : "";
+        history.replaceState({}, "", `${nextPath}${suffix}`);
       }
       setStatus(`Loaded ${cleanSymbol} · ${record.asOf ? new Date(record.asOf).toLocaleString() : "latest"}`);
+      if (shouldAutoAnalyze) {
+        await runAnalysis("");
+      }
     } catch (error) {
       setStatus(error?.message || "Failed to load ticker details.", true);
     } finally {
@@ -333,6 +441,18 @@
 
   rawSearchInput?.addEventListener("input", () => {
     renderAllFields(currentRawInfo, rawSearchInput.value || "");
+  });
+
+  analysisRunButton?.addEventListener("click", async () => {
+    await runAnalysis("");
+  });
+
+  analysisFollowupsNode?.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-analysis-followup]");
+    if (!button) return;
+    const question = String(button.getAttribute("data-analysis-followup") || "").trim();
+    if (!question) return;
+    await runAnalysis(question);
   });
 
   copyJsonButton?.addEventListener("click", async () => {
