@@ -30,6 +30,11 @@ import firebase_admin
 from firebase_admin import auth as admin_auth, credentials, firestore, messaging as admin_messaging, storage as admin_storage
 from firebase_functions import https_fn, scheduler_fn
 from firebase_functions.options import MemoryOption, set_global_options
+from chat_runtime import build_chat_prompt_messages, select_model_for_request
+from massive_client import MassiveApiError, MassiveClient
+from massive_capabilities import classify_capability_status
+from options_fallback import should_use_massive_fallback
+import secrets_loader
 
 try:
     from firebase_admin import remote_config as admin_remote_config  # type: ignore
@@ -38,7 +43,7 @@ except Exception:  # pragma: no cover - optional dependency until firebase-admin
 
 # Bind high-sensitivity API keys via Secret Manager instead of committing them.
 # Firebase will inject secret values into env vars for deployed functions.
-set_global_options(max_instances=10, secrets=["OPENAI_API_KEY"])
+set_global_options(max_instances=10, secrets=secrets_loader.secret_bindings())
 
 SERVICE_ACCOUNT_PATH = os.environ.get(
     "SERVICE_ACCOUNT_PATH",
@@ -62,26 +67,84 @@ REPORT_AGENT_BATCH_SIZE = max(1, min(int(os.environ.get("REPORT_AGENT_BATCH_SIZE
 
 ALPACA_API_BASE = os.environ.get("ALPACA_API_BASE", "https://paper-api.alpaca.markets")
 ALPACA_DATA_BASE = os.environ.get("ALPACA_DATA_BASE", "https://data.alpaca.markets")
-ALPACA_API_KEY = os.environ.get("ALPACA_API_KEY") or os.environ.get("ALPACAAPIKEY")
-ALPACA_SECRET_KEY = os.environ.get("ALPACA_SECRET_KEY") or os.environ.get("ALPACASECRETKEY")
+ALPACA_API_KEY = secrets_loader.get_secret("ALPACA_API_KEY")
+ALPACA_SECRET_KEY = secrets_loader.get_secret("ALPACA_SECRET_KEY")
 
 IBM_TIMEMIXER_MODEL_ID = os.environ.get("IBM_TIMEMIXER_MODEL_ID", "ibm-granite/granite-timeseries-ttm-r2")
 IBM_TIMEMIXER_ENDPOINT = os.environ.get("IBM_TIMEMIXER_ENDPOINT", "").strip()
-IBM_TIMEMIXER_API_KEY = os.environ.get("IBM_TIMEMIXER_API_KEY", "").strip()
-HUGGINGFACEHUB_API_TOKEN = os.environ.get("HUGGINGFACEHUB_API_TOKEN", "").strip()
+IBM_TIMEMIXER_API_KEY = secrets_loader.get_secret("IBM_TIMEMIXER_API_KEY")
+HUGGINGFACEHUB_API_TOKEN = secrets_loader.get_secret("HUGGINGFACEHUB_API_TOKEN")
 
-SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL", "").strip()
-FCM_WEB_VAPID_KEY = os.environ.get("FCM_WEB_VAPID_KEY", "").strip()
+SLACK_WEBHOOK_URL = secrets_loader.get_secret("SLACK_WEBHOOK_URL")
+FCM_WEB_VAPID_KEY = secrets_loader.get_secret("FCM_WEB_VAPID_KEY")
 STRIPE_PUBLIC_KEY = os.environ.get("STRIPE_PUBLIC_KEY", "").strip()
-STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "").strip()
-STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip()
-MASSIVE_API_KEY = os.environ.get("MASSIVE_API_KEY", "").strip()
-MASSIVE_BASE_URL = (os.environ.get("MASSIVE_BASE_URL") or "https://api.massive.com").rstrip("/")
-UNSPLASH_ACCESS_KEY = str(
-    os.environ.get("UNSPLASH_ACCESS_KEY")
-    or os.environ.get("UNSPLASH_APPLICATION_ID")
-    or ""
-).strip()
+STRIPE_SECRET_KEY = secrets_loader.get_secret("STRIPE_SECRET_KEY")
+STRIPE_WEBHOOK_SECRET = secrets_loader.get_secret("STRIPE_WEBHOOK_SECRET")
+MASSIVE_API_KEY = secrets_loader.get_secret("MASSIVE_API_KEY")
+MASSIVE_BASE_URL = (
+    secrets_loader.get_secret("MASSIVE_BASE_URL")
+    or os.environ.get("MASSIVE_BASE_URL")
+    or "https://api.massive.com"
+).rstrip("/")
+MASSIVE_TIMEOUT_SECONDS = max(4.0, float(os.environ.get("MASSIVE_TIMEOUT_SECONDS", "18") or 18.0))
+MASSIVE_MAX_RETRIES = max(0, min(int(os.environ.get("MASSIVE_MAX_RETRIES", "3") or 3), 6))
+MASSIVE_CACHE_TTL_ECONOMY_SECONDS = max(
+    3600,
+    min(int(os.environ.get("MASSIVE_CACHE_TTL_ECONOMY_SECONDS", "7200") or 7200), 21600),
+)
+MASSIVE_CACHE_TTL_IPOS_SECONDS = max(
+    6 * 60 * 60,
+    min(int(os.environ.get("MASSIVE_CACHE_TTL_IPOS_SECONDS", str(12 * 60 * 60)) or (12 * 60 * 60)), 24 * 60 * 60),
+)
+MASSIVE_CACHE_TTL_OPTIONS_CONTRACTS_SECONDS = max(
+    6 * 60 * 60,
+    min(
+        int(os.environ.get("MASSIVE_CACHE_TTL_OPTIONS_CONTRACTS_SECONDS", str(24 * 60 * 60)) or (24 * 60 * 60)),
+        48 * 60 * 60,
+    ),
+)
+MASSIVE_CACHE_TTL_OPTIONS_QUOTES_SECONDS = max(
+    30,
+    min(int(os.environ.get("MASSIVE_CACHE_TTL_OPTIONS_QUOTES_SECONDS", "90") or 90), 120),
+)
+MASSIVE_CLIENT = MassiveClient(
+    api_key=MASSIVE_API_KEY,
+    base_url=MASSIVE_BASE_URL,
+    timeout_seconds=MASSIVE_TIMEOUT_SECONDS,
+    max_retries=MASSIVE_MAX_RETRIES,
+)
+MASSIVE_CAPABILITIES_CACHE_TTL_SECONDS = max(
+    600,
+    min(int(os.environ.get("MASSIVE_CAPABILITIES_CACHE_TTL_SECONDS", "1800") or 1800), 3600),
+)
+MASSIVE_CAPABILITIES_CACHE_KEY = "massive_capabilities_v1"
+MASSIVE_CAPABILITY_PROBES: dict[str, dict[str, Any]] = {
+    "economy_treasury_yields": {
+        "path": "/economy/treasury-yields",
+        "params": {"limit": 1},
+    },
+    "economy_inflation": {
+        "path": "/economy/inflation",
+        "params": {"limit": 1},
+    },
+    "economy_inflation_expectations": {
+        "path": "/economy/inflation-expectations",
+        "params": {"limit": 1},
+    },
+    "economy_labor_market": {
+        "path": "/economy/labor-market",
+        "params": {"limit": 1},
+    },
+    "stocks_ipos": {
+        "path": "/stocks/corporate-actions/ipos",
+        "params": {"limit": 1},
+    },
+    "options_all_contracts": {
+        "path": "/options/contracts/all-contracts",
+        "params": {"limit": 1},
+    },
+}
+UNSPLASH_ACCESS_KEY = secrets_loader.get_secret("UNSPLASH_ACCESS_KEY")
 STRIPE_CONNECT_PLATFORM_FEE_PERCENT = float(os.environ.get("STRIPE_CONNECT_PLATFORM_FEE_PERCENT", "12") or 12)
 CREATOR_DEFAULT_SUBSCRIBE_USD = float(os.environ.get("CREATOR_DEFAULT_SUBSCRIBE_USD", "9") or 9)
 CREATOR_DEFAULT_THANKS_USD = float(os.environ.get("CREATOR_DEFAULT_THANKS_USD", "5") or 5)
@@ -89,10 +152,13 @@ RISK_FREE_RATE = float(os.environ.get("RISK_FREE_RATE", "0.045") or 0.045)
 TRENDING_URL = "https://query1.finance.yahoo.com/v1/finance/trending/US"
 YAHOO_SEARCH_URL = "https://query2.finance.yahoo.com/v1/finance/search"
 DEFAULT_FORECAST_PRICE = 349
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "").strip()
-AMAZON_NOVA_API_KEY = os.environ.get("AMAZON_NOVA_API_KEY", "").strip()
+OPENAI_API_KEY = secrets_loader.get_secret("OPENAI_API_KEY")
+AMAZON_NOVA_API_KEY = secrets_loader.get_secret("AMAZON_NOVA_API_KEY")
 AMAZON_NOVA_API_ENDPOINT = str(os.environ.get("AMAZON_NOVA_API_ENDPOINT") or "").strip()
 AMAZON_NOVA_DEFAULT_MODEL = str(os.environ.get("AMAZON_NOVA_DEFAULT_MODEL") or "amazon.nova-lite-v1:0").strip()
+DEFAULT_CHAT_MODEL = str(os.environ.get("DEFAULT_CHAT_MODEL") or "gpt-5-mini").strip() or "gpt-5-mini"
+OPENAI_LIST_MODELS_URL = "https://api.openai.com/v1/models"
+OPENAI_PROMPT_CACHE_RETENTION = str(os.environ.get("OPENAI_PROMPT_CACHE_RETENTION") or "in_memory").strip().lower() or "in_memory"
 SOCIAL_CONTENT_MODEL = (os.environ.get("SOCIAL_CONTENT_MODEL") or "gpt-5-mini").strip()
 SOCIAL_AUTOMATION_ENABLED = str(os.environ.get("SOCIAL_AUTOMATION_ENABLED") or "true").strip().lower() in {
     "1",
@@ -135,50 +201,23 @@ SOCIAL_AUTOPILOT_CHANNELS = [
     if channel.strip()
 ]
 
-TWITTER_BEARER_TOKEN = str(
-    os.environ.get("TWITTER_BEARER_TOKEN")
-    or os.environ.get("X_BEARER_TOKEN")
-    or ""
-).strip()
-X_USER_OAUTH2_TOKEN = str(
-    os.environ.get("X_USER_OAUTH2_TOKEN")
-    or os.environ.get("X_USER_BEARER_TOKEN")
-    or os.environ.get("TWITTER_USER_OAUTH2_TOKEN")
-    or ""
-).strip()
-TWITTER_API_KEY = str(
-    os.environ.get("TWITTER_API_KEY")
-    or os.environ.get("X_API_KEY")
-    or os.environ.get("TWITTER_CONSUMER_KEY")
-    or ""
-).strip()
-TWITTER_API_SECRET = str(
-    os.environ.get("TWITTER_API_SECRET")
-    or os.environ.get("X_API_SECRET")
-    or os.environ.get("TWITTER_CONSUMER_SECRET")
-    or ""
-).strip()
-TWITTER_ACCESS_TOKEN = str(
-    os.environ.get("TWITTER_ACCESS_TOKEN")
-    or os.environ.get("X_ACCESS_TOKEN")
-    or ""
-).strip()
-TWITTER_ACCESS_TOKEN_SECRET = str(
-    os.environ.get("TWITTER_ACCESS_TOKEN_SECRET")
-    or os.environ.get("X_ACCESS_TOKEN_SECRET")
-    or ""
-).strip()
-LINKEDIN_ACCESS_TOKEN = str(os.environ.get("LINKEDIN_ACCESS_TOKEN") or "").strip()
+TWITTER_BEARER_TOKEN = secrets_loader.get_secret("TWITTER_BEARER_TOKEN")
+X_USER_OAUTH2_TOKEN = secrets_loader.get_secret("X_USER_OAUTH2_TOKEN")
+TWITTER_API_KEY = secrets_loader.get_secret("TWITTER_API_KEY")
+TWITTER_API_SECRET = secrets_loader.get_secret("TWITTER_API_SECRET")
+TWITTER_ACCESS_TOKEN = secrets_loader.get_secret("TWITTER_ACCESS_TOKEN")
+TWITTER_ACCESS_TOKEN_SECRET = secrets_loader.get_secret("TWITTER_ACCESS_TOKEN_SECRET")
+LINKEDIN_ACCESS_TOKEN = secrets_loader.get_secret("LINKEDIN_ACCESS_TOKEN")
 LINKEDIN_AUTHOR_URN = str(os.environ.get("LINKEDIN_AUTHOR_URN") or "").strip()
 FACEBOOK_PAGE_ID = str(os.environ.get("FACEBOOK_PAGE_ID") or "").strip()
-FACEBOOK_PAGE_ACCESS_TOKEN = str(os.environ.get("FACEBOOK_PAGE_ACCESS_TOKEN") or "").strip()
+FACEBOOK_PAGE_ACCESS_TOKEN = secrets_loader.get_secret("FACEBOOK_PAGE_ACCESS_TOKEN")
 INSTAGRAM_BUSINESS_ACCOUNT_ID = str(os.environ.get("INSTAGRAM_BUSINESS_ACCOUNT_ID") or "").strip()
-INSTAGRAM_ACCESS_TOKEN = str(os.environ.get("INSTAGRAM_ACCESS_TOKEN") or FACEBOOK_PAGE_ACCESS_TOKEN).strip()
+INSTAGRAM_ACCESS_TOKEN = secrets_loader.get_secret("INSTAGRAM_ACCESS_TOKEN") or FACEBOOK_PAGE_ACCESS_TOKEN
 INSTAGRAM_DEFAULT_IMAGE_URL = str(
     os.environ.get("INSTAGRAM_DEFAULT_IMAGE_URL")
     or "https://images.unsplash.com/photo-1535320903710-d993d3d77d29?auto=format&fit=crop&w=1280&q=80"
 ).strip()
-TIKTOK_ACCESS_TOKEN = str(os.environ.get("TIKTOK_ACCESS_TOKEN") or "").strip()
+TIKTOK_ACCESS_TOKEN = secrets_loader.get_secret("TIKTOK_ACCESS_TOKEN")
 TIKTOK_OPEN_ID = str(os.environ.get("TIKTOK_OPEN_ID") or "").strip()
 SOCIAL_POPULAR_CHANNELS = [
     "x",
@@ -228,7 +267,7 @@ SCREENER_NOTES_TICKER_HINTS: dict[str, list[str]] = {
     "hedge fund": ["AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL"],
 }
 META_PIXEL_ID = str(os.environ.get("META_PIXEL_ID") or "1643823927053003").strip()
-META_CAPI_ACCESS_TOKEN = str(os.environ.get("META_CAPI_ACCESS_TOKEN") or "").strip()
+META_CAPI_ACCESS_TOKEN = secrets_loader.get_secret("META_CAPI_ACCESS_TOKEN")
 META_GRAPH_API_VERSION = str(os.environ.get("META_GRAPH_API_VERSION") or "v21.0").strip() or "v21.0"
 META_ALLOWED_ORIGINS = {
     PUBLIC_ORIGIN,
@@ -448,6 +487,43 @@ def _raise_structured_error(
     if extras:
         payload.update(extras)
     raise https_fn.HttpsError(code, detail, payload)
+
+
+def _cache_get_payload(cache_key: str, ttl_seconds: int) -> dict[str, Any] | None:
+    key = str(cache_key or "").strip()
+    if not key:
+        return None
+    now = int(time.time())
+    try:
+        snap = db.collection("cache").document(key).get()
+        if not snap.exists:
+            return None
+        doc = snap.to_dict() or {}
+        updated_epoch = int(doc.get("updatedAtEpoch") or 0)
+        if updated_epoch <= 0 or (now - updated_epoch) > max(1, int(ttl_seconds or 0)):
+            return None
+        payload = doc.get("payload")
+        return payload if isinstance(payload, dict) else None
+    except Exception:
+        return None
+
+
+def _cache_set_payload(cache_key: str, payload: dict[str, Any]) -> None:
+    key = str(cache_key or "").strip()
+    if not key or not isinstance(payload, dict):
+        return
+    now = int(time.time())
+    try:
+        db.collection("cache").document(key).set(
+            {
+                "payload": _serialize_for_firestore(payload),
+                "updatedAtEpoch": now,
+                "updatedAt": firestore.SERVER_TIMESTAMP,
+            },
+            merge=True,
+        )
+    except Exception:
+        pass
 
 
 def _normalize_ai_model_id(raw: Any) -> str:
@@ -715,10 +791,447 @@ def _force_remove_second_line(csv_text: str) -> str:
     return "".join(lines)
 
 
+def _http_cors_headers() -> dict[str, str]:
+    return {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "Authorization, Content-Type",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Cache-Control": "no-store",
+    }
+
+
+def _json_http_response(payload: dict[str, Any], status: int = 200) -> https_fn.Response:
+    return https_fn.Response(
+        json.dumps(payload, ensure_ascii=False),
+        status=status,
+        mimetype="application/json",
+        headers=_http_cors_headers(),
+    )
+
+
+def _openai_model_group(model_id: str) -> str:
+    lowered = str(model_id or "").strip().lower()
+    if "nano" in lowered:
+        return "Fast"
+    if "mini" in lowered:
+        return "Balanced"
+    return "Reasoning"
+
+
+def _openai_model_label(model_id: str) -> str:
+    labels = {
+        "gpt-5-nano": "GPT-5 Nano",
+        "gpt-5-mini": "GPT-5 Mini",
+        "gpt-5": "GPT-5",
+        "gpt-5.1": "GPT-5.1",
+        "gpt-5.2": "GPT-5.2",
+    }
+    normalized = _normalize_ai_model_id(model_id)
+    return labels.get(normalized, normalized or "Model")
+
+
+def _list_openai_models_for_app(context: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    allowed = [
+        _normalize_ai_model_id(item)
+        for item in _get_llm_allowed_models(context=context)
+        if _model_provider_from_id(item) == "openai"
+    ]
+    allowed = [item for item in allowed if item and _is_supported_llm_model(item)]
+    allowed = list(dict.fromkeys(allowed))
+    if not allowed:
+        allowed = [
+            _normalize_ai_model_id(DEFAULT_CHAT_MODEL) or "gpt-5-mini",
+            "gpt-5-mini",
+            "gpt-5",
+        ]
+        allowed = list(dict.fromkeys([item for item in allowed if item]))
+    allowed_set = set(allowed)
+
+    discovered_ids: set[str] = set()
+    if OPENAI_API_KEY:
+        try:
+            response = requests.get(
+                OPENAI_LIST_MODELS_URL,
+                headers={"Authorization": f"Bearer {OPENAI_API_KEY}"},
+                timeout=15,
+            )
+            if response.status_code < 400:
+                payload = response.json() if response.text else {}
+                for row in payload.get("data") or []:
+                    if not isinstance(row, dict):
+                        continue
+                    model_id = _normalize_ai_model_id(row.get("id"))
+                    if not model_id:
+                        continue
+                    if not model_id.startswith("gpt-5"):
+                        continue
+                    if allowed_set and model_id not in allowed_set:
+                        continue
+                    discovered_ids.add(model_id)
+        except Exception:
+            discovered_ids = set()
+
+    if not discovered_ids:
+        discovered_ids = allowed_set
+
+    priority = {model_id: idx for idx, model_id in enumerate(allowed)}
+    out: list[dict[str, Any]] = []
+    for model_id in sorted(discovered_ids, key=lambda item: (priority.get(item, 999), item)):
+        out.append(
+            {
+                "id": model_id,
+                "label": _openai_model_label(model_id),
+                "group": _openai_model_group(model_id),
+                "supportsStreaming": True,
+                "supportsText": True,
+            }
+        )
+    return out
+
+
+def _prompt_cache_retention() -> str:
+    value = str(OPENAI_PROMPT_CACHE_RETENTION or "in_memory").strip().lower()
+    if value not in {"in_memory", "24h"}:
+        return "in_memory"
+    return value
+
+
+def _stable_chat_system_prefix() -> str:
+    return (
+        "You are Quantura's market assistant. Follow these fixed rules exactly:\n"
+        "1) Use only the supplied context payload and user message; do not fabricate data.\n"
+        "2) If a field is missing, say it is unavailable.\n"
+        "3) Do not provide financial, legal, or tax advice.\n"
+        "4) Keep output practical, concise, and evidence-first.\n"
+        "5) Use this response contract:\n"
+        "   - Section A: Direct answer (2-4 sentences)\n"
+        "   - Section B: Key evidence bullets\n"
+        "   - Section C: One explicit risk caveat\n"
+        "6) Do not include timestamps unless explicitly present in context.\n"
+        "7) Preserve ticker symbols exactly as given.\n\n"
+        "Context schema reference:\n"
+        "{\n"
+        "  \"ticker\": \"string\",\n"
+        "  \"country\": \"string\",\n"
+        "  \"exchange\": \"string\",\n"
+        "  \"sector\": \"string\",\n"
+        "  \"industry\": \"string\",\n"
+        "  \"marketCap\": \"number|null\",\n"
+        "  \"trailingPE\": \"number|null\",\n"
+        "  \"forwardPE\": \"number|null\",\n"
+        "  \"dividendYield\": \"number|null\",\n"
+        "  \"beta\": \"number|null\",\n"
+        "  \"historySummary\": {\n"
+        "    \"lastClose\": \"number|null\",\n"
+        "    \"periodStartClose\": \"number|null\",\n"
+        "    \"change6mPct\": \"number|null\",\n"
+        "    \"change1mPct\": \"number|null\"\n"
+        "  },\n"
+        "  \"headlines\": [\n"
+        "    {\"title\":\"string\",\"publisher\":\"string\",\"publishedAt\":\"string|number|null\",\"link\":\"string\"}\n"
+        "  ],\n"
+        "  \"technicalContext\": {\n"
+        "    \"lookbackDays\":\"number|null\",\n"
+        "    \"interval\":\"1d|1h\",\n"
+        "    \"latest\":[{\"name\":\"string\",\"value\":\"number\"}],\n"
+        "    \"trend\":[{\"name\":\"string\",\"direction\":\"string\",\"pctChange\":\"number|null\",\"delta\":\"number|null\"}],\n"
+        "    \"heuristics\":[\"string\"]\n"
+        "  }\n"
+        "}\n"
+    )
+
+
+def _massive_capability_label_from_status(status_code: int) -> str:
+    return classify_capability_status(status_code)
+
+
+def _probe_massive_capability(path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    normalized_path = "/" + str(path or "").strip().lstrip("/")
+    if not MASSIVE_CLIENT.is_configured():
+        return {
+            "status": "ERROR",
+            "httpStatus": 503,
+            "available": False,
+            "message": "Massive API key is not configured.",
+        }
+    try:
+        MASSIVE_CLIENT.request_json(path=normalized_path, params=params or {}, cache_ttl_seconds=0)
+        return {
+            "status": "AVAILABLE",
+            "httpStatus": 200,
+            "available": True,
+            "message": "",
+        }
+    except MassiveApiError as exc:
+        http_status = int(exc.status_code or 500)
+        return {
+            "status": _massive_capability_label_from_status(http_status),
+            "httpStatus": http_status,
+            "available": http_status == 200,
+            "message": str(exc)[:220],
+        }
+    except Exception as exc:
+        return {
+            "status": "ERROR",
+            "httpStatus": 500,
+            "available": False,
+            "message": str(exc)[:220],
+        }
+
+
+def _load_massive_capabilities(*, force_refresh: bool = False) -> dict[str, Any]:
+    if not force_refresh:
+        cached = _cache_get_payload(MASSIVE_CAPABILITIES_CACHE_KEY, ttl_seconds=MASSIVE_CAPABILITIES_CACHE_TTL_SECONDS)
+        if isinstance(cached, dict) and cached:
+            payload = dict(cached)
+            payload["fromCache"] = True
+            return payload
+
+    capabilities: dict[str, Any] = {}
+    for key, cfg in MASSIVE_CAPABILITY_PROBES.items():
+        path = str(cfg.get("path") or "").strip()
+        params = cfg.get("params") if isinstance(cfg.get("params"), dict) else {}
+        probe = _probe_massive_capability(path, params=params)
+        capabilities[key] = {
+            "key": key,
+            "path": path,
+            "status": probe.get("status") or "ERROR",
+            "httpStatus": int(probe.get("httpStatus") or 0),
+            "available": bool(probe.get("available")),
+            "message": str(probe.get("message") or "").strip(),
+        }
+
+    payload = {
+        "generatedAt": datetime.now(tz=timezone.utc).isoformat(),
+        "ttlSeconds": MASSIVE_CAPABILITIES_CACHE_TTL_SECONDS,
+        "fromCache": False,
+        "capabilities": capabilities,
+    }
+    _cache_set_payload(MASSIVE_CAPABILITIES_CACHE_KEY, payload)
+    return payload
+
+
+def _normalize_yyyy_mm_dd(raw: Any) -> str:
+    value = str(raw or "").strip()
+    if not value:
+        return ""
+    if re.match(r"^\d{4}-\d{2}-\d{2}$", value):
+        return value
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return parsed.date().isoformat()
+    except Exception:
+        return ""
+
+
+def _parse_query_date(value: Any, *, field: str) -> str:
+    text = _normalize_yyyy_mm_dd(value)
+    if text:
+        return text
+    if value in (None, ""):
+        return ""
+    raise ValueError(f"Invalid {field}. Expected YYYY-MM-DD.")
+
+
+def _massive_capability_guard(capability_key: str) -> tuple[dict[str, Any] | None, https_fn.Response | None]:
+    audit = _load_massive_capabilities(force_refresh=False)
+    capabilities = audit.get("capabilities") if isinstance(audit.get("capabilities"), dict) else {}
+    capability = capabilities.get(capability_key) if isinstance(capabilities, dict) else None
+    if not isinstance(capability, dict):
+        return None, _json_http_response(
+            {
+                "error": "Capability metadata is unavailable.",
+                "capability": capability_key,
+            },
+            status=503,
+        )
+
+    if str(capability.get("status") or "").upper() != "AVAILABLE":
+        return capability, _json_http_response(
+            {
+                "error": "Not available in your Massive plan.",
+                "capability": capability_key,
+                "status": capability.get("status"),
+                "httpStatus": capability.get("httpStatus"),
+                "message": capability.get("message") or "",
+            },
+            status=403,
+        )
+    return capability, None
+
+
+def _is_massive_capability_available(capability_key: str) -> bool:
+    audit = _load_massive_capabilities(force_refresh=False)
+    capabilities = audit.get("capabilities") if isinstance(audit.get("capabilities"), dict) else {}
+    capability = capabilities.get(capability_key) if isinstance(capabilities, dict) else None
+    if not isinstance(capability, dict):
+        return False
+    return str(capability.get("status") or "").upper() == "AVAILABLE"
+
+
+def _normalize_massive_timeseries(rows: Any) -> list[dict[str, Any]]:
+    output: list[dict[str, Any]] = []
+    for row in rows if isinstance(rows, list) else []:
+        if not isinstance(row, dict):
+            continue
+        date_value = (
+            _normalize_yyyy_mm_dd(row.get("date"))
+            or _normalize_yyyy_mm_dd(row.get("timestamp"))
+            or _normalize_yyyy_mm_dd(row.get("published_utc"))
+        )
+        if not date_value:
+            continue
+        value = _safe_float(row.get("value"))
+        if value is None:
+            value = _safe_float(row.get("close"))
+        if value is None:
+            value = _safe_float(row.get("rate"))
+        if value is None:
+            continue
+        output.append(
+            {
+                "date": date_value,
+                "value": round(float(value), 6),
+                "series": str(row.get("series") or row.get("name") or "").strip(),
+                "label": str(row.get("label") or row.get("title") or "").strip(),
+            }
+        )
+    output.sort(key=lambda item: str(item.get("date") or ""), reverse=True)
+    return output
+
+
+def _normalize_massive_ipos(rows: Any) -> list[dict[str, Any]]:
+    output: list[dict[str, Any]] = []
+    for row in rows if isinstance(rows, list) else []:
+        if not isinstance(row, dict):
+            continue
+        date_value = (
+            _normalize_yyyy_mm_dd(row.get("date"))
+            or _normalize_yyyy_mm_dd(row.get("ipo_date"))
+            or _normalize_yyyy_mm_dd(row.get("listing_date"))
+        )
+        symbol = _normalize_symbol_token(row.get("symbol") or row.get("ticker"))
+        if not date_value and not symbol:
+            continue
+        output.append(
+            {
+                "date": date_value,
+                "symbol": symbol,
+                "exchange": str(row.get("exchange") or row.get("primary_exchange") or "").strip(),
+                "status": str(row.get("status") or "scheduled").strip().lower(),
+                "name": str(row.get("name") or row.get("company_name") or symbol).strip(),
+            }
+        )
+    output.sort(
+        key=lambda item: (
+            str(item.get("date") or ""),
+            str(item.get("symbol") or ""),
+        ),
+        reverse=True,
+    )
+    return output
+
+
+def _normalize_option_side(raw: Any) -> str:
+    text = str(raw or "").strip().lower()
+    if text in {"call", "calls", "c"}:
+        return "call"
+    if text in {"put", "puts", "p"}:
+        return "put"
+    return ""
+
+
+def _normalize_massive_options_contracts(rows: Any, *, underlying: str = "") -> list[dict[str, Any]]:
+    output: list[dict[str, Any]] = []
+    expected_underlying = _normalize_symbol_token(underlying)
+    for row in rows if isinstance(rows, list) else []:
+        if not isinstance(row, dict):
+            continue
+        contract_symbol = str(
+            row.get("ticker")
+            or row.get("contract")
+            or row.get("contract_ticker")
+            or row.get("symbol")
+            or ""
+        ).strip().upper()
+        root = _normalize_symbol_token(row.get("underlying") or row.get("underlying_ticker") or row.get("underlying_symbol"))
+        if expected_underlying and root and root != expected_underlying:
+            continue
+        if expected_underlying and not root:
+            root = expected_underlying
+        expiration = (
+            _normalize_yyyy_mm_dd(row.get("expiration"))
+            or _normalize_yyyy_mm_dd(row.get("expiration_date"))
+            or _normalize_yyyy_mm_dd(row.get("expiry"))
+        )
+        strike = _safe_float(row.get("strike") or row.get("strike_price"))
+        option_type = _normalize_option_side(row.get("type") or row.get("contract_type") or row.get("option_type"))
+        output.append(
+            {
+                "contractSymbol": contract_symbol,
+                "underlying": root,
+                "expiration": expiration,
+                "strike": strike,
+                "type": option_type,
+                "exerciseStyle": str(row.get("exercise_style") or row.get("exerciseStyle") or "").strip().lower(),
+            }
+        )
+    output.sort(
+        key=lambda item: (
+            str(item.get("expiration") or ""),
+            float(item.get("strike") or 0.0),
+            str(item.get("contractSymbol") or ""),
+        )
+    )
+    return output
+
+
+def _fetch_massive_options_contracts(
+    *,
+    underlying: str,
+    expiration: str = "",
+    strike_gte: float | None = None,
+    strike_lte: float | None = None,
+    option_type: str = "",
+    limit: int = 250,
+    cursor: str = "",
+) -> dict[str, Any]:
+    params: dict[str, Any] = {
+        "underlying": underlying,
+        "limit": max(1, min(int(limit or 250), 1000)),
+    }
+    if expiration:
+        params["expiration"] = expiration
+    if strike_gte is not None:
+        params["strike_gte"] = strike_gte
+    if strike_lte is not None:
+        params["strike_lte"] = strike_lte
+    if option_type:
+        params["type"] = option_type
+    if cursor:
+        params["cursor"] = cursor
+
+    payload = MASSIVE_CLIENT.request_json(
+        path="/options/contracts/all-contracts",
+        params=params,
+        cache_ttl_seconds=MASSIVE_CACHE_TTL_OPTIONS_CONTRACTS_SECONDS,
+    )
+    rows_raw = payload.get("results")
+    if not isinstance(rows_raw, list):
+        rows_raw = payload.get("data") if isinstance(payload.get("data"), list) else []
+    contracts = _normalize_massive_options_contracts(rows_raw, underlying=underlying)
+    next_cursor = MassiveClient._extract_cursor(payload)
+    return {
+        "contracts": contracts,
+        "nextCursor": next_cursor or "",
+        "rawCount": len(rows_raw),
+    }
+
+
 def _social_channel_webhooks() -> dict[str, str]:
     out: dict[str, str] = {}
     for channel, env_key in SOCIAL_CHANNEL_WEBHOOK_ENV.items():
-        out[channel] = str(os.environ.get(env_key) or "").strip()
+        out[channel] = secrets_loader.get_secret(env_key)
     return out
 
 
@@ -1172,6 +1685,76 @@ def _extract_responses_output_text(payload: dict[str, Any]) -> str:
     return "\n".join(chunks).strip()
 
 
+def _extract_responses_usage(payload: dict[str, Any]) -> dict[str, int]:
+    if not isinstance(payload, dict):
+        return {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "cached_tokens": 0}
+
+    usage = payload.get("usage") if isinstance(payload.get("usage"), dict) else payload
+    prompt_tokens = usage.get("prompt_tokens")
+    if prompt_tokens is None:
+        prompt_tokens = usage.get("input_tokens")
+    completion_tokens = usage.get("completion_tokens")
+    if completion_tokens is None:
+        completion_tokens = usage.get("output_tokens")
+    total_tokens = usage.get("total_tokens")
+
+    details = usage.get("prompt_tokens_details")
+    if not isinstance(details, dict):
+        details = usage.get("input_tokens_details")
+    cached_tokens = details.get("cached_tokens") if isinstance(details, dict) else 0
+
+    def _to_int(value: Any) -> int:
+        try:
+            num = int(float(value))
+        except Exception:
+            num = 0
+        return max(0, num)
+
+    prompt_value = _to_int(prompt_tokens)
+    completion_value = _to_int(completion_tokens)
+    total_value = _to_int(total_tokens)
+    if total_value <= 0:
+        total_value = prompt_value + completion_value
+
+    return {
+        "prompt_tokens": prompt_value,
+        "completion_tokens": completion_value,
+        "total_tokens": total_value,
+        "cached_tokens": _to_int(cached_tokens),
+    }
+
+
+def _extract_latest_user_text(messages: Any) -> str:
+    if not isinstance(messages, list):
+        return ""
+    for item in reversed(messages):
+        if not isinstance(item, dict):
+            continue
+        role = str(item.get("role") or "").strip().lower()
+        if role != "user":
+            continue
+        content = item.get("content")
+        if isinstance(content, str):
+            text = content.strip()
+            if text:
+                return text
+            continue
+        if isinstance(content, list):
+            parts: list[str] = []
+            for part in content:
+                if isinstance(part, str):
+                    part_text = part.strip()
+                elif isinstance(part, dict):
+                    part_text = str(part.get("text") or "").strip()
+                else:
+                    part_text = ""
+                if part_text:
+                    parts.append(part_text)
+            if parts:
+                return "\n".join(parts).strip()
+    return ""
+
+
 def _extract_nova_output_text(payload: dict[str, Any]) -> str:
     if not isinstance(payload, dict):
         return ""
@@ -1520,7 +2103,7 @@ def _fetch_massive_corporate_events(
     event_types: list[str] | None = None,
     statuses: list[str] | None = None,
 ) -> tuple[list[dict[str, Any]], str]:
-    if not MASSIVE_API_KEY:
+    if not MASSIVE_CLIENT.is_configured():
         return [], "Massive TMX API key is not configured."
 
     normalized = [_normalize_symbol_token(t) for t in (tickers or [])]
@@ -1533,7 +2116,6 @@ def _fetch_massive_corporate_events(
         "date.lte": end_date.isoformat(),
         "sort": "date.asc",
         "limit": max(1, min(int(limit or 200), 1000)),
-        "apiKey": MASSIVE_API_KEY,
     }
     if len(normalized) == 1:
         params["ticker"] = normalized[0]
@@ -1549,14 +2131,14 @@ def _fetch_massive_corporate_events(
         if clean_statuses:
             params["status.any_of"] = ",".join(clean_statuses[:20])
 
-    url = f"{MASSIVE_BASE_URL}/tmx/v1/corporate-events"
     try:
-        response = requests.get(url, params=params, timeout=18)
-        response.raise_for_status()
-        payload = response.json() if response.text else {}
+        payload = MASSIVE_CLIENT.request_json(
+            path="/tmx/v1/corporate-events",
+            params=params,
+        )
         rows = payload.get("results") or []
-    except Exception as exc:
-        return [], f"Massive TMX request failed: {str(exc)[:180]}"
+    except MassiveApiError as exc:
+        return [], f"Massive TMX request failed ({exc.status_code})."
 
     out: list[dict[str, Any]] = []
     for idx, row in enumerate(rows):
@@ -1777,6 +2359,62 @@ def _text_matches_social_query(text: str, query: str) -> bool:
     # Soft match: one term for short queries, two terms for longer multi-word queries.
     needed = 1 if len(terms) <= 3 else 2
     return hits >= needed
+
+
+def _safe_datetime_epoch(value: Any) -> int:
+    raw = str(value or "").strip()
+    if not raw:
+        return 0
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return int(parsed.timestamp())
+    except Exception:
+        return 0
+
+
+def _sort_social_items_newest(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    # Deterministic order: newest first, then stable fallback keys.
+    return sorted(
+        items or [],
+        key=lambda row: (
+            -_safe_datetime_epoch(row.get("createdAt") or row.get("updatedAt")),
+            str(row.get("id") or row.get("permalink") or row.get("title") or ""),
+        ),
+    )
+
+
+def _ticker_query_variants(raw_symbol: str) -> list[str]:
+    symbol = str(raw_symbol or "").upper().strip()
+    if not symbol:
+        return []
+    variants: list[str] = []
+    for candidate in [
+        symbol,
+        symbol.replace(".", ""),
+        symbol.replace("-", ""),
+        re.split(r"[.\-]", symbol)[0] if re.search(r"[.\-]", symbol) else symbol,
+    ]:
+        clean = str(candidate or "").strip().upper()
+        if clean and clean not in variants:
+            variants.append(clean)
+    return variants
+
+
+def _lookup_company_name(symbol: str) -> str:
+    clean = str(symbol or "").upper().strip()
+    if not clean:
+        return ""
+    try:
+        import yfinance as yf  # type: ignore
+
+        info = yf.Ticker(clean).info or {}
+        if not isinstance(info, dict):
+            return ""
+        return str(info.get("longName") or info.get("shortName") or "").strip()
+    except Exception:
+        return ""
 
 
 def _fetch_social_posts_via_web_search(
@@ -5309,6 +5947,567 @@ def email_unsubscribe_http(req: https_fn.Request) -> tuple[str, int, dict[str, s
 
 
 @https_fn.on_request()
+def api_openai_models(req: https_fn.Request) -> https_fn.Response:
+    if req.method == "OPTIONS":
+        return https_fn.Response("", status=204, headers=_http_cors_headers())
+    if req.method != "GET":
+        return _json_http_response({"error": "Method not allowed."}, status=405)
+
+    models = _list_openai_models_for_app(context=None)
+    default_model = ""
+    preferred = _normalize_ai_model_id(DEFAULT_CHAT_MODEL)
+    if models:
+        ids = [str(item.get("id") or "").strip() for item in models if isinstance(item, dict)]
+        ids = [item for item in ids if item]
+        default_model = preferred if preferred and preferred in ids else (ids[0] if ids else "")
+
+    return _json_http_response(
+        {
+            "models": models,
+            "defaultModel": default_model or "gpt-5-mini",
+        }
+    )
+
+
+@https_fn.on_request()
+def api_massive_capabilities(req: https_fn.Request) -> https_fn.Response:
+    if req.method == "OPTIONS":
+        return https_fn.Response("", status=204, headers=_http_cors_headers())
+    if req.method != "GET":
+        return _json_http_response({"error": "Method not allowed."}, status=405)
+
+    force_refresh = str(req.args.get("force") or "").strip().lower() in {"1", "true", "yes"}
+    payload = _load_massive_capabilities(force_refresh=force_refresh)
+    return _json_http_response(payload)
+
+
+def _parse_http_limit(args: Any, *, default: int, minimum: int, maximum: int) -> int:
+    raw = ""
+    try:
+        raw = str(args.get("limit") or "").strip()
+    except Exception:
+        raw = ""
+    if not raw:
+        return max(minimum, min(default, maximum))
+    try:
+        parsed = int(float(raw))
+        return max(minimum, min(parsed, maximum))
+    except Exception:
+        return max(minimum, min(default, maximum))
+
+
+def _massive_request_method_guard(req: https_fn.Request) -> https_fn.Response | None:
+    if req.method == "OPTIONS":
+        return https_fn.Response("", status=204, headers=_http_cors_headers())
+    if req.method != "GET":
+        return _json_http_response({"error": "Method not allowed."}, status=405)
+    return None
+
+
+def _massive_economy_route(
+    req: https_fn.Request,
+    *,
+    capability_key: str,
+    endpoint_path: str,
+) -> https_fn.Response:
+    method_error = _massive_request_method_guard(req)
+    if method_error is not None:
+        return method_error
+
+    _, guard_error = _massive_capability_guard(capability_key)
+    if guard_error is not None:
+        return guard_error
+
+    try:
+        start = _parse_query_date(req.args.get("start"), field="start")
+        end = _parse_query_date(req.args.get("end"), field="end")
+    except ValueError as exc:
+        return _json_http_response({"error": str(exc)}, status=400)
+    series = str(req.args.get("series") or "").strip()
+    limit = _parse_http_limit(req.args, default=240, minimum=1, maximum=1000)
+
+    params: dict[str, Any] = {"limit": limit}
+    if start:
+        params["start"] = start
+    if end:
+        params["end"] = end
+    if series:
+        params["series"] = series
+
+    try:
+        payload = MASSIVE_CLIENT.request_json(
+            path=endpoint_path,
+            params=params,
+            cache_ttl_seconds=MASSIVE_CACHE_TTL_ECONOMY_SECONDS,
+        )
+    except MassiveApiError as exc:
+        return _json_http_response(
+            {
+                "error": "Unable to load Massive economy data.",
+                "status": exc.status_code,
+            },
+            status=502,
+        )
+
+    rows_raw = payload.get("results")
+    if not isinstance(rows_raw, list):
+        rows_raw = payload.get("data") if isinstance(payload.get("data"), list) else []
+    rows = _normalize_massive_timeseries(rows_raw)
+    return _json_http_response(
+        {
+            "source": "massive",
+            "capability": capability_key,
+            "series": series,
+            "start": start,
+            "end": end,
+            "count": len(rows),
+            "rows": rows,
+        }
+    )
+
+
+@https_fn.on_request()
+def api_massive_economy_treasury_yields(req: https_fn.Request) -> https_fn.Response:
+    return _massive_economy_route(
+        req,
+        capability_key="economy_treasury_yields",
+        endpoint_path="/economy/treasury-yields",
+    )
+
+
+@https_fn.on_request()
+def api_massive_economy_inflation(req: https_fn.Request) -> https_fn.Response:
+    return _massive_economy_route(
+        req,
+        capability_key="economy_inflation",
+        endpoint_path="/economy/inflation",
+    )
+
+
+@https_fn.on_request()
+def api_massive_economy_inflation_expectations(req: https_fn.Request) -> https_fn.Response:
+    return _massive_economy_route(
+        req,
+        capability_key="economy_inflation_expectations",
+        endpoint_path="/economy/inflation-expectations",
+    )
+
+
+@https_fn.on_request()
+def api_massive_economy_labor_market(req: https_fn.Request) -> https_fn.Response:
+    return _massive_economy_route(
+        req,
+        capability_key="economy_labor_market",
+        endpoint_path="/economy/labor-market",
+    )
+
+
+@https_fn.on_request()
+def api_massive_stocks_ipos(req: https_fn.Request) -> https_fn.Response:
+    method_error = _massive_request_method_guard(req)
+    if method_error is not None:
+        return method_error
+
+    _, guard_error = _massive_capability_guard("stocks_ipos")
+    if guard_error is not None:
+        return guard_error
+
+    try:
+        start = _parse_query_date(req.args.get("start"), field="start")
+        end = _parse_query_date(req.args.get("end"), field="end")
+    except ValueError as exc:
+        return _json_http_response({"error": str(exc)}, status=400)
+    status_filter = str(req.args.get("status") or "").strip().lower()
+    limit = _parse_http_limit(req.args, default=200, minimum=1, maximum=1000)
+
+    params: dict[str, Any] = {"limit": limit}
+    if start:
+        params["start"] = start
+    if end:
+        params["end"] = end
+    if status_filter:
+        params["status"] = status_filter
+
+    try:
+        payload = MASSIVE_CLIENT.request_json(
+            path="/stocks/corporate-actions/ipos",
+            params=params,
+            cache_ttl_seconds=MASSIVE_CACHE_TTL_IPOS_SECONDS,
+        )
+    except MassiveApiError as exc:
+        return _json_http_response(
+            {
+                "error": "Unable to load Massive IPO data.",
+                "status": exc.status_code,
+            },
+            status=502,
+        )
+
+    rows_raw = payload.get("results")
+    if not isinstance(rows_raw, list):
+        rows_raw = payload.get("data") if isinstance(payload.get("data"), list) else []
+    items = _normalize_massive_ipos(rows_raw)
+    return _json_http_response(
+        {
+            "source": "massive",
+            "capability": "stocks_ipos",
+            "start": start,
+            "end": end,
+            "status": status_filter,
+            "count": len(items),
+            "items": items,
+        }
+    )
+
+
+@https_fn.on_request()
+def api_massive_options_contracts(req: https_fn.Request) -> https_fn.Response:
+    method_error = _massive_request_method_guard(req)
+    if method_error is not None:
+        return method_error
+
+    _, guard_error = _massive_capability_guard("options_all_contracts")
+    if guard_error is not None:
+        return guard_error
+
+    underlying = _normalize_symbol_token(req.args.get("underlying"))
+    if not underlying:
+        return _json_http_response({"error": "underlying is required."}, status=400)
+
+    try:
+        expiration = _parse_query_date(req.args.get("expiration"), field="expiration") if req.args.get("expiration") else ""
+    except ValueError as exc:
+        return _json_http_response({"error": str(exc)}, status=400)
+    option_type = _normalize_option_side(req.args.get("type"))
+    if req.args.get("type") and not option_type:
+        return _json_http_response({"error": "Invalid type. Expected call or put."}, status=400)
+
+    strike_gte = _safe_float(req.args.get("strike_gte"))
+    strike_lte = _safe_float(req.args.get("strike_lte"))
+    if strike_gte is not None and strike_lte is not None and strike_gte > strike_lte:
+        return _json_http_response({"error": "strike_gte must be <= strike_lte."}, status=400)
+    limit = _parse_http_limit(req.args, default=250, minimum=1, maximum=1000)
+    cursor = str(req.args.get("cursor") or "").strip()
+
+    try:
+        payload = _fetch_massive_options_contracts(
+            underlying=underlying,
+            expiration=expiration,
+            strike_gte=strike_gte,
+            strike_lte=strike_lte,
+            option_type=option_type,
+            limit=limit,
+            cursor=cursor,
+        )
+    except MassiveApiError as exc:
+        return _json_http_response(
+            {
+                "error": "Unable to load Massive options contracts.",
+                "status": exc.status_code,
+            },
+            status=502,
+        )
+
+    contracts = payload.get("contracts") if isinstance(payload.get("contracts"), list) else []
+    return _json_http_response(
+        {
+            "source": "massive",
+            "capability": "options_all_contracts",
+            "referenceOnly": True,
+            "underlying": underlying,
+            "expiration": expiration,
+            "type": option_type,
+            "limit": limit,
+            "cursor": cursor,
+            "nextCursor": str(payload.get("nextCursor") or ""),
+            "count": len(contracts),
+            "contracts": contracts,
+        }
+    )
+
+
+@https_fn.on_request()
+def api_chat(req: https_fn.Request) -> https_fn.Response:
+    import yfinance as yf  # type: ignore
+
+    if req.method == "OPTIONS":
+        return https_fn.Response("", status=204, headers=_http_cors_headers())
+    if req.method != "POST":
+        return _json_http_response({"error": "Method not allowed."}, status=405)
+
+    data = req.get_json(silent=True) if hasattr(req, "get_json") else None
+    if not isinstance(data, dict):
+        return _json_http_response({"error": "Invalid JSON payload."}, status=400)
+
+    meta = data.get("meta") if isinstance(data.get("meta"), dict) else {}
+    context = _remote_config_context(None, None, meta if isinstance(meta, dict) else None)
+    ticker = _normalize_symbol_token(data.get("ticker"))
+    messages = data.get("messages") if isinstance(data.get("messages"), list) else []
+    question = str(data.get("question") or data.get("query") or _extract_latest_user_text(messages) or "").strip()
+    language = str(data.get("language") or "en").strip().lower()[:8]
+    if language in {"", "auto"}:
+        language = "en"
+    if not re.match(r"^[a-z]{2}(?:-[a-z]{2})?$", language):
+        language = "en"
+    language_label = {
+        "en": "English",
+        "es": "Spanish",
+        "fr": "French",
+        "de": "German",
+        "ar": "Arabic",
+        "bn": "Bengali",
+    }.get(language, "English")
+
+    if not ticker:
+        return _json_http_response({"error": "Ticker is required."}, status=400)
+    if not question:
+        return _json_http_response({"error": "Question is required."}, status=400)
+    if not OPENAI_API_KEY:
+        return _json_http_response({"error": "Chat provider is unavailable."}, status=503)
+
+    requested_model = _normalize_ai_model_id(data.get("model") or DEFAULT_CHAT_MODEL)
+    allowed_models = [
+        item
+        for item in _get_llm_allowed_models(context=context)
+        if _model_provider_from_id(item) == "openai"
+    ]
+    selection = select_model_for_request(
+        requested_model=requested_model,
+        allowed_models=allowed_models,
+        default_model=_normalize_ai_model_id(DEFAULT_CHAT_MODEL) or "gpt-5-mini",
+    )
+    requested_model = str(selection.get("selected_model") or "gpt-5-mini")
+    if not bool(selection.get("requested_allowed")) and str(selection.get("requested_model") or "").strip():
+        return _json_http_response(
+            {
+                "error": "Requested model is not available for this app profile.",
+                "allowedModels": selection.get("allowed_models") or allowed_models,
+            },
+            status=400,
+        )
+
+    technical_raw = data.get("technicalContext") if isinstance(data.get("technicalContext"), dict) else {}
+    technical_context: dict[str, Any] = {}
+    if technical_raw:
+        lookback_days = technical_raw.get("lookbackDays")
+        interval = str(technical_raw.get("interval") or "").strip().lower()
+        if interval not in {"1d", "1h"}:
+            interval = "1d"
+        latest_rows = []
+        for row in (technical_raw.get("latest") if isinstance(technical_raw.get("latest"), list) else [])[:24]:
+            if not isinstance(row, dict):
+                continue
+            name = str(row.get("name") or "").strip()[:40]
+            if not name:
+                continue
+            value = _safe_float(row.get("value"))
+            if value is None:
+                continue
+            latest_rows.append({"name": name, "value": round(float(value), 6)})
+
+        trend_rows = []
+        for row in (technical_raw.get("trend") if isinstance(technical_raw.get("trend"), list) else [])[:16]:
+            if not isinstance(row, dict):
+                continue
+            name = str(row.get("name") or "").strip()[:40]
+            if not name:
+                continue
+            trend_rows.append(
+                {
+                    "name": name,
+                    "direction": str(row.get("direction") or "").strip()[:16],
+                    "pctChange": _safe_float(row.get("pctChange")),
+                    "delta": _safe_float(row.get("delta")),
+                }
+            )
+
+        heuristics = []
+        for line in (technical_raw.get("heuristics") if isinstance(technical_raw.get("heuristics"), list) else [])[:12]:
+            text = str(line or "").strip()
+            if text:
+                heuristics.append(text[:220])
+
+        lookback_normalized = None
+        try:
+            lookback_candidate = int(float(lookback_days))
+            if lookback_candidate > 0:
+                lookback_normalized = lookback_candidate
+        except Exception:
+            lookback_normalized = None
+
+        technical_context = {
+            "lookbackDays": lookback_normalized,
+            "interval": interval,
+            "latest": latest_rows,
+            "trend": trend_rows,
+            "heuristics": heuristics,
+        }
+
+    tk = yf.Ticker(ticker)
+    info: dict[str, Any] = {}
+    try:
+        raw_info = tk.info or {}
+        info = raw_info if isinstance(raw_info, dict) else {}
+    except Exception:
+        info = {}
+
+    history_summary: dict[str, Any] = {}
+    try:
+        hist = tk.history(period="6mo", interval="1d")
+        if hist is not None and getattr(hist, "empty", True) is False and "Close" in hist.columns:
+            close = hist["Close"].astype(float).dropna()
+            if len(close) >= 2:
+                last = float(close.iloc[-1])
+                start = float(close.iloc[0])
+                one_month = float(close.iloc[-22]) if len(close) >= 22 else None
+                history_summary = {
+                    "lastClose": round(last, 4),
+                    "periodStartClose": round(start, 4),
+                    "change6mPct": round(((last / start) - 1.0) * 100.0, 3) if start else None,
+                    "change1mPct": round(((last / one_month) - 1.0) * 100.0, 3) if one_month else None,
+                }
+    except Exception:
+        history_summary = {}
+
+    headlines = _fetch_yahoo_news_query(ticker, limit=6)
+    headline_compact = [
+        {
+            "title": str(item.get("title") or "").strip(),
+            "publisher": str(item.get("publisher") or "").strip(),
+            "publishedAt": item.get("publishedAt"),
+            "link": str(item.get("link") or "").strip(),
+        }
+        for item in headlines[:6]
+    ]
+
+    context_payload = {
+        "ticker": ticker,
+        "country": str(info.get("country") or "").strip(),
+        "exchange": str(info.get("fullExchangeName") or info.get("exchange") or "").strip(),
+        "sector": str(info.get("sector") or "").strip(),
+        "industry": str(info.get("industry") or "").strip(),
+        "marketCap": info.get("marketCap"),
+        "trailingPE": info.get("trailingPE"),
+        "forwardPE": info.get("forwardPE"),
+        "dividendYield": info.get("dividendYield"),
+        "beta": info.get("beta"),
+        "historySummary": history_summary,
+        "headlines": headline_compact,
+        "technicalContext": technical_context,
+    }
+
+    prompt_messages = build_chat_prompt_messages(
+        stable_prefix=_stable_chat_system_prefix(),
+        language_label=language_label,
+        ticker=ticker,
+        question=question,
+        context_payload=context_payload,
+    )
+    system_prompt = str(prompt_messages.get("system_prompt") or "")
+    dynamic_user_prompt = str(prompt_messages.get("dynamic_user_prompt") or "")
+    openai_payload = {
+        "model": requested_model,
+        "stream": True,
+        "prompt_cache_retention": _prompt_cache_retention(),
+        "input": [
+            {"role": "system", "content": [{"type": "input_text", "text": system_prompt}]},
+            {"role": "user", "content": [{"type": "input_text", "text": dynamic_user_prompt}]},
+        ],
+        "max_output_tokens": 900,
+        "tools": [{"type": "web_search_preview"}],
+        "metadata": {
+            "feature": "ticker_query_chat",
+            "ticker": ticker,
+            "language": language,
+        },
+    }
+
+    started_at = time.time()
+
+    def _sse(data_obj: dict[str, Any]) -> str:
+        return f"data: {json.dumps(data_obj, ensure_ascii=False)}\n\n"
+
+    @stream_with_context
+    def _event_stream():
+        usage_payload: dict[str, Any] = {}
+        yield _sse({"type": "meta", "provider": "openai", "model": requested_model})
+        try:
+            response = requests.post(
+                "https://api.openai.com/v1/responses",
+                headers={"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"},
+                json=openai_payload,
+                stream=True,
+                timeout=90,
+            )
+            if response.status_code >= 400:
+                yield _sse({"type": "error", "message": "Unable to complete chat request right now."})
+                return
+
+            for raw_line in response.iter_lines(decode_unicode=True):
+                if not raw_line:
+                    continue
+                line = str(raw_line).strip()
+                if not line.startswith("data:"):
+                    continue
+                data_line = line[5:].strip()
+                if data_line == "[DONE]":
+                    break
+                event_payload: dict[str, Any] | None = None
+                try:
+                    event_payload = json.loads(data_line)
+                except Exception:
+                    event_payload = None
+                if not isinstance(event_payload, dict):
+                    continue
+                event_type = str(event_payload.get("type") or "")
+                if event_type == "response.output_text.delta":
+                    delta = str(event_payload.get("delta") or "")
+                    if delta:
+                        yield _sse({"type": "delta", "text": delta})
+                elif event_type == "response.completed":
+                    response_body = event_payload.get("response")
+                    if isinstance(response_body, dict):
+                        usage_payload = response_body
+                    else:
+                        usage_payload = event_payload
+                elif event_type.startswith("response.error"):
+                    yield _sse({"type": "error", "message": "Unable to complete chat request right now."})
+                    return
+
+            usage = _extract_responses_usage(usage_payload)
+            latency_ms = int(max(0.0, (time.time() - started_at) * 1000.0))
+            print(
+                "api_chat_usage "
+                f"model={requested_model} "
+                f"prompt_tokens={usage.get('prompt_tokens', 0)} "
+                f"completion_tokens={usage.get('completion_tokens', 0)} "
+                f"cached_tokens={usage.get('cached_tokens', 0)}"
+            )
+            yield _sse(
+                {
+                    "type": "done",
+                    "provider": "openai",
+                    "model": requested_model,
+                    "usage": usage,
+                    "latencyMs": latency_ms,
+                }
+            )
+        except Exception:
+            yield _sse({"type": "error", "message": "Unable to complete chat request right now."})
+
+    headers = _http_cors_headers()
+    headers.update(
+        {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )
+    return https_fn.Response(_event_stream(), status=200, headers=headers)
+
+
+@https_fn.on_request()
 def stripe_webhook(req: https_fn.Request) -> tuple[str, int]:
     if req.method != "POST":
         return ("Method not allowed", 405)
@@ -7931,13 +9130,41 @@ def download_price_csv(req: https_fn.CallableRequest) -> dict[str, Any]:
     if history.empty or "Close" not in history.columns:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "No data returned for the requested range.")
 
-    out_df = history[["Close"]].rename(columns={"Close": "Price"}).copy()
+    def _price_digits_for_symbol(symbol: str) -> int:
+        normalized = re.sub(r"[^A-Z]", "", str(symbol or "").upper())
+        # FX pairs from Yahoo are commonly represented as 6-char pairs (+ optional X suffix).
+        if re.fullmatch(r"[A-Z]{6}X?", normalized):
+            return 6
+        return 2
+
+    price_digits = _price_digits_for_symbol(ticker)
+    keep_price_cols = [col for col in ["Close", "Open", "High", "Low", "Volume"] if col in history.columns]
+    out_df = history[keep_price_cols].copy()
+    out_df.rename(columns={"Close": "Price"}, inplace=True)
     out_df.reset_index(inplace=True)
     date_col = "Datetime" if "Datetime" in out_df.columns else "Date"
     if date_col != "Date" and date_col in out_df.columns:
         out_df.rename(columns={date_col: "Date"}, inplace=True)
     if "Date" in out_df.columns:
         out_df["Date"] = out_df["Date"].astype(str)
+
+    for col in ["Price", "Open", "High", "Low"]:
+        if col in out_df.columns:
+            out_df[col] = out_df[col].apply(
+                lambda value: (
+                    f"{float(value):.{price_digits}f}"
+                    if value is not None and str(value) != "" and math.isfinite(float(value))
+                    else ""
+                )
+            )
+    if "Volume" in out_df.columns:
+        out_df["Volume"] = out_df["Volume"].apply(
+            lambda value: (
+                int(float(value))
+                if value is not None and str(value) != "" and math.isfinite(float(value))
+                else ""
+            )
+        )
     out_df.insert(0, "Item_Id", ticker.lower())
 
     buffer = StringIO()
@@ -8043,6 +9270,142 @@ def get_trending_tickers(req: https_fn.CallableRequest) -> dict[str, Any]:
     return payload
 
 
+def _ticker_snapshot_sections(ticker: str, info: dict[str, Any], fast_info: Any = None) -> dict[str, Any]:
+    def _as_float(value: Any) -> float | None:
+        try:
+            num = float(value)
+            return num if math.isfinite(num) else None
+        except Exception:
+            return None
+
+    def _as_text(value: Any) -> str:
+        return str(value or "").strip()
+
+    market_cap = info.get("marketCap")
+    if market_cap in (None, "") and fast_info is not None:
+        try:
+            market_cap = fast_info.get("market_cap")
+        except Exception:
+            market_cap = market_cap
+
+    long_summary = _as_text(info.get("longBusinessSummary"))
+    if len(long_summary) > 1800:
+        long_summary = long_summary[:1797].rstrip() + "..."
+
+    profile = {
+        "longName": _as_text(info.get("longName") or info.get("shortName") or ticker),
+        "sector": _as_text(info.get("sector")),
+        "industry": _as_text(info.get("industry")),
+        "country": _as_text(info.get("country")),
+        "website": _as_text(info.get("website")),
+        "longBusinessSummary": long_summary,
+    }
+    valuation = {
+        "marketCap": market_cap,
+        "trailingPE": _as_float(info.get("trailingPE")),
+        "forwardPE": _as_float(info.get("forwardPE")),
+        "priceToBook": _as_float(info.get("priceToBook")),
+        "enterpriseValue": _as_float(info.get("enterpriseValue")),
+    }
+    trading = {
+        "beta": _as_float(info.get("beta")),
+        "fiftyTwoWeekHigh": _as_float(info.get("fiftyTwoWeekHigh")),
+        "fiftyTwoWeekLow": _as_float(info.get("fiftyTwoWeekLow")),
+        "avgVolume": _as_float(info.get("averageVolume") or info.get("averageVolume10days")),
+        "sharesOutstanding": _as_float(info.get("sharesOutstanding")),
+    }
+    return {"profileDetails": profile, "valuation": valuation, "trading": trading}
+
+
+@https_fn.on_call(memory=MemoryOption.MB_512, timeout_sec=120)
+def get_ticker_info_snapshot(req: https_fn.CallableRequest) -> dict[str, Any]:
+    import yfinance as yf  # type: ignore
+
+    data = req.data or {}
+    ticker = str(data.get("ticker") or "").upper().strip()
+    if not ticker:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Ticker is required.")
+
+    cache_key = f"ticker_info_snapshot_{ticker}"
+    cached = _cache_get_payload(cache_key, ttl_seconds=90)
+    if isinstance(cached, dict) and cached:
+        cached_copy = dict(cached)
+        cached_copy["cached"] = True
+        return cached_copy
+
+    ticker_obj = yf.Ticker(ticker)
+    info: dict[str, Any] = {}
+    try:
+        info = ticker_obj.info or {}
+        if not isinstance(info, dict):
+            info = {}
+    except Exception:
+        info = {}
+
+    fast_info = None
+    try:
+        fast_info = getattr(ticker_obj, "fast_info", None)
+    except Exception:
+        fast_info = None
+
+    sections = _ticker_snapshot_sections(ticker, info, fast_info=fast_info)
+    payload = {
+        "ticker": ticker,
+        **sections,
+        "cached": False,
+        "updatedAtEpoch": int(time.time()),
+    }
+    _cache_set_payload(cache_key, payload)
+    return _serialize_for_firestore(payload)
+
+
+@https_fn.on_call(memory=MemoryOption.MB_512, timeout_sec=120)
+def get_ticker_full_info(req: https_fn.CallableRequest) -> dict[str, Any]:
+    import yfinance as yf  # type: ignore
+
+    data = req.data or {}
+    ticker = str(data.get("ticker") or "").upper().strip()
+    if not ticker:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Ticker is required.")
+
+    cache_key = f"ticker_full_info_{ticker}"
+    cached = _cache_get_payload(cache_key, ttl_seconds=12 * 60 * 60)
+    if isinstance(cached, dict) and cached:
+        cached_copy = dict(cached)
+        cached_copy["cached"] = True
+        return cached_copy
+
+    ticker_obj = yf.Ticker(ticker)
+    info: dict[str, Any] = {}
+    try:
+        info = ticker_obj.info or {}
+        if not isinstance(info, dict):
+            info = {}
+    except Exception:
+        info = {}
+
+    fast_info = None
+    try:
+        fast_info = getattr(ticker_obj, "fast_info", None)
+    except Exception:
+        fast_info = None
+
+    sections = _ticker_snapshot_sections(ticker, info, fast_info=fast_info)
+    serialized_info = _serialize_for_firestore(info) if isinstance(info, dict) else {}
+    if not isinstance(serialized_info, dict):
+        serialized_info = {}
+    payload = {
+        "ticker": ticker,
+        **sections,
+        "rawInfo": serialized_info,
+        "keys": sorted([str(key) for key in serialized_info.keys()]),
+        "cached": False,
+        "updatedAtEpoch": int(time.time()),
+    }
+    _cache_set_payload(cache_key, payload)
+    return _serialize_for_firestore(payload)
+
+
 @https_fn.on_call(memory=MemoryOption.GB_1, timeout_sec=180)
 def get_ticker_intel(req: https_fn.CallableRequest) -> dict[str, Any]:
     import numpy as np  # type: ignore
@@ -8122,6 +9485,7 @@ def get_ticker_intel(req: https_fn.CallableRequest) -> dict[str, Any]:
         "returnOnEquity": info.get("returnOnEquity"),
         "returnOnAssets": info.get("returnOnAssets"),
     }
+    snapshot_sections = _ticker_snapshot_sections(ticker, info)
 
     income_stmt = None
     balance_sheet = None
@@ -8373,6 +9737,9 @@ def get_ticker_intel(req: https_fn.CallableRequest) -> dict[str, Any]:
     return {
         "ticker": ticker,
         "profile": _serialize_for_firestore(profile),
+        "profileDetails": _serialize_for_firestore(snapshot_sections.get("profileDetails") or {}),
+        "valuation": _serialize_for_firestore(snapshot_sections.get("valuation") or {}),
+        "trading": _serialize_for_firestore(snapshot_sections.get("trading") or {}),
         "events": _serialize_for_firestore(events),
         "analyst": _serialize_for_firestore(analyst),
         "recommendationTrend": _serialize_for_firestore(recommendation_trend),
@@ -8506,14 +9873,91 @@ def get_ticker_x_trends(req: https_fn.CallableRequest) -> dict[str, Any]:
     ticker = str(data.get("ticker") or "").upper().strip()
     if not ticker:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Ticker is required.")
-    query = f"${ticker} {ticker} stock"
-    posts, warning = _fetch_x_social_posts(query, limit=8)
-    stories, stories_warning = _fetch_x_news_stories(query, limit=6)
-    combined_warning = " ".join([part for part in [warning, stories_warning] if str(part or "").strip()]).strip()
+
+    page_raw = data.get("page")
+    page_size_raw = data.get("pageSize")
+    query_override = str(data.get("query") or "").strip()
+
+    try:
+        page = int(page_raw or 1)
+    except Exception:
+        page = 1
+    try:
+        page_size = int(page_size_raw or 8)
+    except Exception:
+        page_size = 8
+    page = max(1, page)
+    page_size = max(1, min(page_size, 20))
+
+    query_variants = _ticker_query_variants(ticker)
+    primary_query = query_override or ticker
+    fetch_limit = max(8, min(page_size * 6, 40))
+
+    posts, warning = _fetch_x_social_posts(primary_query, limit=fetch_limit)
+    warnings: list[str] = [warning] if str(warning or "").strip() else []
+
+    fallback_used = False
+    fallback_query = ""
+    if not posts and not query_override:
+        company_name = _lookup_company_name(ticker)
+        fallback_candidates: list[str] = []
+        if company_name:
+            fallback_candidates.append(company_name)
+        fallback_candidates.append(f"${ticker}")
+        seen_fallback: set[str] = set()
+        for candidate in fallback_candidates:
+            probe = str(candidate or "").strip()
+            if not probe:
+                continue
+            key = probe.lower()
+            if key in seen_fallback:
+                continue
+            seen_fallback.add(key)
+            fallback_posts, fallback_warning = _fetch_x_social_posts(probe, limit=fetch_limit)
+            if str(fallback_warning or "").strip():
+                warnings.append(str(fallback_warning).strip())
+            if fallback_posts:
+                posts = fallback_posts
+                fallback_used = True
+                fallback_query = probe
+                break
+
+    stories_query = fallback_query or primary_query
+    stories, stories_warning = _fetch_x_news_stories(stories_query, limit=12)
+    if str(stories_warning or "").strip():
+        warnings.append(str(stories_warning).strip())
+
+    posts_sorted = _sort_social_items_newest(posts)
+    stories_sorted = _sort_social_items_newest(stories)
+
+    start_idx = (page - 1) * page_size
+    end_idx = start_idx + page_size
+    paged_posts = posts_sorted[start_idx:end_idx]
+    paged_stories = stories_sorted[start_idx:end_idx]
+    has_more_posts = end_idx < len(posts_sorted)
+    has_more_stories = end_idx < len(stories_sorted)
+
+    deduped_warnings: list[str] = []
+    for item in warnings:
+        text = str(item or "").strip()
+        if text and text not in deduped_warnings:
+            deduped_warnings.append(text)
+    combined_warning = " ".join(deduped_warnings).strip()
+
     return {
         "ticker": ticker,
-        "posts": _serialize_for_firestore(posts),
-        "stories": _serialize_for_firestore(stories),
+        "query": primary_query,
+        "queryVariants": query_variants,
+        "fallbackUsed": fallback_used,
+        "fallbackQuery": fallback_query,
+        "posts": _serialize_for_firestore(paged_posts),
+        "stories": _serialize_for_firestore(paged_stories),
+        "page": page,
+        "pageSize": page_size,
+        "totalPosts": int(len(posts_sorted)),
+        "totalStories": int(len(stories_sorted)),
+        "hasMorePosts": has_more_posts,
+        "hasMoreStories": has_more_stories,
         "warning": combined_warning,
     }
 
@@ -8953,11 +10397,7 @@ def get_options_chain(req: https_fn.CallableRequest) -> dict[str, Any]:
         expirations = list(ticker_obj.options or [])
     except Exception:
         expirations = []
-
-    if not expirations:
-        return {"ticker": ticker, "underlyingPrice": None, "expirations": [], "selectedExpiration": "", "calls": [], "puts": []}
-
-    selected = expiration if expiration in expirations else expirations[0]
+    selected = expiration if expiration in expirations else (expirations[0] if expirations else expiration)
 
     underlying_price = None
     try:
@@ -8973,22 +10413,29 @@ def get_options_chain(req: https_fn.CallableRequest) -> dict[str, Any]:
         except Exception:
             underlying_price = None
 
+    def _compute_time_to_expiry(expiration_value: str) -> float | None:
+        try:
+            exp_dt = datetime.strptime(str(expiration_value or ""), "%Y-%m-%d").date()
+            today = datetime.now(tz=timezone.utc).date()
+            days = max((exp_dt - today).days, 0)
+            return days / 365.0
+        except Exception:
+            return None
+
     # Time to expiry in years (approx). If we cannot parse, probabilities will be null.
-    T = None
-    try:
-        exp_dt = datetime.strptime(selected, "%Y-%m-%d").date()
-        today = datetime.now(tz=timezone.utc).date()
-        days = max((exp_dt - today).days, 0)
-        T = days / 365.0
-    except Exception:
-        T = None
+    T = _compute_time_to_expiry(selected)
 
     normal = NormalDist()
 
     def _option_metrics(
-        strike: float | None, iv: float | None, is_call: bool
+        strike: float | None,
+        iv: float | None,
+        is_call: bool,
+        *,
+        time_to_expiry: float | None = None,
     ) -> tuple[float, float, float, float] | None:
-        if underlying_price is None or T is None or T <= 0:
+        effective_t = time_to_expiry if time_to_expiry is not None else T
+        if underlying_price is None or effective_t is None or effective_t <= 0:
             return None
         if strike is None or strike <= 0:
             return None
@@ -9000,11 +10447,11 @@ def get_options_chain(req: https_fn.CallableRequest) -> dict[str, Any]:
         # Protect the probability math from extreme / bad IV values.
         if sigma > 5:
             return None
-        denom = sigma * math.sqrt(T)
+        denom = sigma * math.sqrt(effective_t)
         if denom <= 0:
             return None
-        d1 = (math.log(S / K) + (RISK_FREE_RATE + 0.5 * sigma * sigma) * T) / denom
-        d2 = d1 - sigma * math.sqrt(T)
+        d1 = (math.log(S / K) + (RISK_FREE_RATE + 0.5 * sigma * sigma) * effective_t) / denom
+        d2 = d1 - sigma * math.sqrt(effective_t)
         p_call = normal.cdf(d2)
         prob_itm = p_call if is_call else normal.cdf(-d2)
         delta = normal.cdf(d1) if is_call else normal.cdf(d1) - 1.0
@@ -9076,13 +10523,139 @@ def get_options_chain(req: https_fn.CallableRequest) -> dict[str, Any]:
             )
         return items
 
+    def _build_massive_reference_response(reason: str) -> dict[str, Any] | None:
+        if not _is_massive_capability_available("options_all_contracts"):
+            return None
+        try:
+            massive_payload = _fetch_massive_options_contracts(
+                underlying=ticker,
+                expiration=expiration if expiration else "",
+                limit=max(limit * 8, 240),
+            )
+        except MassiveApiError:
+            return None
+        contracts = massive_payload.get("contracts") if isinstance(massive_payload.get("contracts"), list) else []
+        if not contracts:
+            return None
+
+        expiration_values = sorted(
+            {
+                str(item.get("expiration") or "").strip()
+                for item in contracts
+                if str(item.get("expiration") or "").strip()
+            }
+        )
+        selected_exp = (
+            expiration
+            if expiration and expiration in expiration_values
+            else (expiration_values[0] if expiration_values else (expiration if expiration else ""))
+        )
+        selected_contracts = (
+            [item for item in contracts if str(item.get("expiration") or "").strip() == selected_exp]
+            if selected_exp
+            else list(contracts)
+        )
+        if not selected_contracts:
+            selected_contracts = list(contracts)
+
+        selected_contracts = selected_contracts[: max(limit * 2, 80)]
+        reference_time = _compute_time_to_expiry(selected_exp)
+
+        def _contract_to_option_row(contract: dict[str, Any], opt_type: str) -> dict[str, Any]:
+            strike = _safe_float(contract.get("strike"))
+            metrics = _option_metrics(
+                strike,
+                iv=None,
+                is_call=(opt_type == "call"),
+                time_to_expiry=reference_time,
+            )
+            return {
+                "contractSymbol": contract.get("contractSymbol") or "",
+                "type": opt_type,
+                "strike": strike,
+                "lastPrice": None,
+                "bid": None,
+                "ask": None,
+                "mid": None,
+                "impliedVolatility": None,
+                "delta": None if not metrics else round(float(metrics[1]), 4),
+                "volume": 0,
+                "openInterest": 0,
+                "inTheMoney": None,
+                "probabilityITM": None if not metrics else round(float(metrics[0]) * 100.0, 2),
+            }
+
+        calls_ref = [
+            _contract_to_option_row(item, "call")
+            for item in selected_contracts
+            if _normalize_option_side(item.get("type")) == "call"
+        ]
+        puts_ref = [
+            _contract_to_option_row(item, "put")
+            for item in selected_contracts
+            if _normalize_option_side(item.get("type")) == "put"
+        ]
+        calls_ref.sort(key=lambda item: float(item.get("strike") or 0.0))
+        puts_ref.sort(key=lambda item: float(item.get("strike") or 0.0))
+
+        return {
+            "ticker": ticker,
+            "underlyingPrice": underlying_price,
+            "timeToExpiryYears": None if reference_time is None else round(float(reference_time), 6),
+            "riskFreeRate": RISK_FREE_RATE,
+            "expirations": expiration_values,
+            "selectedExpiration": selected_exp,
+            "calls": _serialize_for_firestore(calls_ref),
+            "puts": _serialize_for_firestore(puts_ref),
+            "source": "massive",
+            "fallbackUsed": True,
+            "referenceOnly": True,
+            "fallbackReason": reason,
+            "notice": "Powered by Massive. Quotes are not enabled on the current plan, showing reference-only chain.",
+        }
+
+    if should_use_massive_fallback(
+        yfinance_expirations=expirations,
+        calls=[],
+        puts=[],
+        yfinance_error=False,
+    ):
+        fallback = _build_massive_reference_response("yfinance_expirations_unavailable")
+        if fallback is not None:
+            return fallback
+        return {
+            "ticker": ticker,
+            "underlyingPrice": underlying_price,
+            "timeToExpiryYears": None,
+            "riskFreeRate": RISK_FREE_RATE,
+            "expirations": [],
+            "selectedExpiration": "",
+            "calls": [],
+            "puts": [],
+            "source": "yfinance",
+            "fallbackUsed": False,
+            "referenceOnly": False,
+        }
+
+    yfinance_chain_error = False
     try:
         chain = ticker_obj.option_chain(selected)
         calls = _format_chain(chain.calls, "call")
         puts = _format_chain(chain.puts, "put")
     except Exception:
+        yfinance_chain_error = True
         calls = []
         puts = []
+
+    if should_use_massive_fallback(
+        yfinance_expirations=expirations,
+        calls=calls,
+        puts=puts,
+        yfinance_error=yfinance_chain_error,
+    ):
+        fallback = _build_massive_reference_response("yfinance_chain_empty")
+        if fallback is not None:
+            return fallback
 
     return {
         "ticker": ticker,
@@ -9093,6 +10666,9 @@ def get_options_chain(req: https_fn.CallableRequest) -> dict[str, Any]:
         "selectedExpiration": selected,
         "calls": _serialize_for_firestore(calls),
         "puts": _serialize_for_firestore(puts),
+        "source": "yfinance",
+        "fallbackUsed": False,
+        "referenceOnly": False,
     }
 
 

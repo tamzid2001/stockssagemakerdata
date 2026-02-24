@@ -455,9 +455,13 @@
                         </details>
                       </div>
                     </div>
+                    <div class="results-panel" style="margin-top: 16px;">
+                      <h3>History preview</h3>
+                      <div id="download-preview" class="panel-output small">Run a download to preview Date, Close, Open, High, Low, and Volume.</div>
+                    </div>
                     <div class="notice" style="margin-top: 16px;">
-                      Ticker intelligence and headlines are shown below the chart for the active symbol.
-                      <a class="news-link" href="#intel-strip">Jump to the intelligence panel</a>.
+                      TradingView widgets and the ticker chart are available only in the Ticker Intelligence panel for the active symbol.
+                      <a class="news-link" href="/ticker-intelligence">Open Ticker Intelligence</a>.
                     </div>
                   </section>
 
@@ -575,6 +579,15 @@
                             <option value="bn">Bengali</option>
                           </select>
                         </div>
+                        <div class="field">
+                          <label class="label" for="ticker-query-model">Model</label>
+                          <select id="ticker-query-model" name="model">
+                            <option value="gpt-5-mini">Loading models...</option>
+                          </select>
+                          <div id="ticker-query-model-hint" class="small muted" style="margin-top:8px;">
+                            Some models may cost more and run slower.
+                          </div>
+                        </div>
                       </div>
                       <div class="field">
                         <label class="label" for="ticker-query-question">Question</label>
@@ -582,6 +595,12 @@
                       </div>
                       <button class="cta" type="submit" data-analytics="ticker_query_submit"><i class="iconoir-brain" aria-hidden="true"></i><span>Ask GPT-5</span></button>
                       <p class="small muted" id="ticker-query-status"></p>
+                      <p class="small muted" id="ticker-query-model-info">Latency: — · Tokens: — · Cached: —</p>
+                      <label id="ticker-query-cache-toggle-wrap" class="small muted hidden" style="display:flex;align-items:center;gap:8px;">
+                        <input id="ticker-query-show-cache-stats" type="checkbox" />
+                        Show cache stats (dev)
+                      </label>
+                      <div id="ticker-query-cache-stats" class="panel-output small hidden">Cache stats will appear after a response.</div>
                     </form>
                     <div class="results-panel">
                       <h3>Query result</h3>
