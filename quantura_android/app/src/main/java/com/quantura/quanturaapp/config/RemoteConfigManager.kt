@@ -6,10 +6,14 @@ import kotlinx.coroutines.tasks.await
 import org.json.JSONObject
 
 data class AdUnitIds(
+    val appOpen: String,
+    val adaptiveBanner: String,
+    val fixedBanner: String,
     val interstitial: String,
     val rewarded: String,
-    val adaptiveBanner: String,
-    val appOpen: String,
+    val rewardedInterstitial: String,
+    val nativeAdvanced: String,
+    val nativeVideo: String,
 )
 
 class RemoteConfigManager(
@@ -26,7 +30,8 @@ class RemoteConfigManager(
             it.setConfigSettingsAsync(settings)
             it.setDefaultsAsync(
                 mapOf(
-                    "ad_unit_ids" to DEFAULT_AD_UNIT_IDS_JSON,
+                    "ads_use_real_android" to false,
+                    "ads_use_real_ios" to false,
                     "feature_flags" to DEFAULT_FEATURE_FLAGS_JSON,
                 )
             )
@@ -43,17 +48,26 @@ class RemoteConfigManager(
     }
 
     fun getAdUnitIds(): AdUnitIds {
-        val raw = remoteConfig?.getString("ad_unit_ids").orEmpty().ifBlank { DEFAULT_AD_UNIT_IDS_JSON }
+        val useRealAndroidAds = remoteConfig?.getBoolean("ads_use_real_android") ?: false
+        val seed = if (useRealAndroidAds) LIVE_ANDROID_IDS else DEMO_AD_IDS
+
+        val rawOverride = remoteConfig?.getString("ad_unit_ids").orEmpty()
+        if (rawOverride.isBlank()) return seed
+
         return try {
-            val json = JSONObject(raw)
+            val json = JSONObject(rawOverride)
             AdUnitIds(
-                interstitial = json.optString("interstitial", DEFAULT_INTERSTITIAL_ID),
-                rewarded = json.optString("rewarded", DEFAULT_REWARDED_ID),
-                adaptiveBanner = json.optString("adaptiveBanner", DEFAULT_ADAPTIVE_BANNER_ID),
-                appOpen = json.optString("appOpen", DEFAULT_APP_OPEN_ID),
+                appOpen = json.optString("appOpen", seed.appOpen),
+                adaptiveBanner = json.optString("adaptiveBanner", seed.adaptiveBanner),
+                fixedBanner = json.optString("fixedBanner", seed.fixedBanner),
+                interstitial = json.optString("interstitial", seed.interstitial),
+                rewarded = json.optString("rewarded", seed.rewarded),
+                rewardedInterstitial = json.optString("rewardedInterstitial", seed.rewardedInterstitial),
+                nativeAdvanced = json.optString("nativeAdvanced", seed.nativeAdvanced),
+                nativeVideo = json.optString("nativeVideo", seed.nativeVideo),
             )
         } catch (_: Exception) {
-            AdUnitIds(DEFAULT_INTERSTITIAL_ID, DEFAULT_REWARDED_ID, DEFAULT_ADAPTIVE_BANNER_ID, DEFAULT_APP_OPEN_ID)
+            seed
         }
     }
 
@@ -79,12 +93,28 @@ class RemoteConfigManager(
             return RemoteConfigManager(remoteConfig = remoteConfig, isDebug = isDebug)
         }
 
-        private const val DEFAULT_INTERSTITIAL_ID = "ca-app-pub-3940256099942544/1033173712"
-        private const val DEFAULT_REWARDED_ID = "ca-app-pub-3940256099942544/5224354917"
-        private const val DEFAULT_ADAPTIVE_BANNER_ID = "ca-app-pub-3940256099942544/9214589741"
-        private const val DEFAULT_APP_OPEN_ID = "ca-app-pub-3940256099942544/9257395921"
-        private const val DEFAULT_AD_UNIT_IDS_JSON =
-            """{"interstitial":"ca-app-pub-3940256099942544/1033173712","rewarded":"ca-app-pub-3940256099942544/5224354917","adaptiveBanner":"ca-app-pub-3940256099942544/9214589741","appOpen":"ca-app-pub-3940256099942544/9257395921"}"""
+        private val DEMO_AD_IDS = AdUnitIds(
+            appOpen = "ca-app-pub-3940256099942544/9257395921",
+            adaptiveBanner = "ca-app-pub-3940256099942544/9214589741",
+            fixedBanner = "ca-app-pub-3940256099942544/6300978111",
+            interstitial = "ca-app-pub-3940256099942544/1033173712",
+            rewarded = "ca-app-pub-3940256099942544/5224354917",
+            rewardedInterstitial = "ca-app-pub-3940256099942544/5354046379",
+            nativeAdvanced = "ca-app-pub-3940256099942544/2247696110",
+            nativeVideo = "ca-app-pub-3940256099942544/1044960115",
+        )
+
+        private val LIVE_ANDROID_IDS = AdUnitIds(
+            appOpen = "ca-app-pub-5322412772082850/1802977031",
+            adaptiveBanner = "ca-app-pub-5322412772082850/3390017725",
+            fixedBanner = "ca-app-pub-5322412772082850/3390017725",
+            interstitial = "ca-app-pub-5322412772082850/7358556043",
+            rewarded = "ca-app-pub-5322412772082850/1867749156",
+            rewardedInterstitial = "ca-app-pub-5322412772082850/4780998745",
+            nativeAdvanced = "ca-app-pub-5322412772082850/1144501483",
+            nativeVideo = "ca-app-pub-5322412772082850/1144501483",
+        )
+
         private const val DEFAULT_FEATURE_FLAGS_JSON =
             """{"native_bridge_enabled":true,"ads_enabled":true}"""
     }

@@ -43,18 +43,6 @@ if (messaging) {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const path = event.notification?.data?.url || "/dashboard";
-  const targetUrl = path.startsWith("http") ? path : self.location.origin + (path.startsWith("/") ? path : "/" + path);
-  event.waitUntil(
-    clients.matchAll({ type: "window", includeUncontrolled: true }).then((windowClients) => {
-      const quanturaClient = windowClients.find((c) => c.url && c.url.startsWith(self.location.origin));
-      if (quanturaClient) {
-        quanturaClient.focus();
-        if (typeof quanturaClient.navigate === "function") {
-          return quanturaClient.navigate(targetUrl);
-        }
-      }
-      if (clients.openWindow) return clients.openWindow(targetUrl);
-    })
-  );
+  const targetUrl = event.notification?.data?.url || "/dashboard";
+  event.waitUntil(clients.openWindow(targetUrl));
 });

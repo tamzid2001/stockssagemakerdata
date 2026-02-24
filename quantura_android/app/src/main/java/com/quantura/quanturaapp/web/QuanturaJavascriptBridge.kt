@@ -16,6 +16,8 @@ import org.json.JSONObject
 class QuanturaJavascriptBridge(
     private val activity: ComponentActivity,
     private val adManager: AdManager,
+    private val onNativeAuthRequest: (provider: String, requestId: String) -> Unit,
+    private val onNativeSignOutRequest: (requestId: String) -> Unit,
 ) {
     @JavascriptInterface
     fun postMessage(rawPayload: String?) {
@@ -30,6 +32,8 @@ class QuanturaJavascriptBridge(
                 "openNewsLink" -> openNewsLink(payload.optString("url"))
                 "handleButtonClick" -> handleButtonClick(payload.optString("buttonId"))
                 "share" -> openNativeShare(payload.optString("url"), payload.optString("title"), payload.optString("text"))
+                "authSignIn" -> requestNativeSignIn(payload.optString("provider"), payload.optString("requestId"))
+                "authSignOut" -> onNativeSignOutRequest(payload.optString("requestId"))
             }
         }
     }
@@ -76,5 +80,12 @@ class QuanturaJavascriptBridge(
         if (chooser.resolveActivity(activity.packageManager) != null) {
             activity.startActivity(chooser)
         }
+    }
+
+    private fun requestNativeSignIn(provider: String, requestId: String) {
+        val providerClean = provider.trim().lowercase()
+        val requestIdClean = requestId.trim()
+        if (providerClean.isEmpty() || requestIdClean.isEmpty()) return
+        onNativeAuthRequest(providerClean, requestIdClean)
     }
 }
