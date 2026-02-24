@@ -2,7 +2,6 @@
   const ADMIN_EMAIL = "tamzid257@gmail.com";
   const FCM_TOKEN_CACHE_KEY = "quantura_fcm_token";
   const COOKIE_CONSENT_KEY = "quantura_cookie_consent";
-  const FEEDBACK_PROMPT_KEY = "quantura_feedback_prompt_v1";
   const LAST_TICKER_KEY = "quantura_last_ticker";
   const WORKSPACE_KEY = "quantura_active_workspace";
   const OPTIONS_EXPIRATION_PREFIX = "quantura_options_expiration_";
@@ -3542,7 +3541,6 @@
         if (status) status.textContent = "Sent. Thank you.";
         logEvent("feedback_submitted", { rating: rating || "n/a" });
         showToast("Feedback sent.");
-        safeLocalStorageSet(FEEDBACK_PROMPT_KEY, String(Date.now()));
       } catch (error) {
         if (status) status.textContent = error.message || "Unable to send feedback.";
         showToast(error.message || "Unable to send feedback.", "warn");
@@ -3551,30 +3549,24 @@
     return modal;
   };
 
-		  const ensureFeedbackPrompt = () => {
-		    if (document.getElementById("feedback-fab")) return null;
-
-      const lastShown = Number(safeLocalStorageGet(FEEDBACK_PROMPT_KEY) || "0");
-      const weekMs = 7 * 24 * 60 * 60 * 1000;
-      const shouldPulse = !lastShown || Date.now() - lastShown > weekMs;
-
+  const ensureProfileFeedbackButtons = () => {
+    const editors = Array.from(document.querySelectorAll(".profile-editor"));
+    if (!editors.length) return;
+    editors.forEach((editor) => {
+      if (!(editor instanceof HTMLElement)) return;
+      if (editor.querySelector('[data-action="open-feedback-modal"]')) return;
       const button = document.createElement("button");
-      button.id = "feedback-fab";
       button.type = "button";
-      button.className = `feedback-fab${shouldPulse ? " pulse" : ""}`;
-      button.innerHTML = `${icon("message-text")}<span>Feedback</span>`;
-      button.setAttribute("aria-label", "Send feedback to Quantura");
-      document.body.appendChild(button);
-
+      button.className = "cta secondary small profile-feedback-button";
+      button.dataset.action = "open-feedback-modal";
+      button.innerHTML = `${icon("message-text")}<span>Send feedback</span>`;
       button.addEventListener("click", () => {
         ensureFeedbackModal().classList.remove("hidden");
-        button.classList.remove("pulse");
-        safeLocalStorageSet(FEEDBACK_PROMPT_KEY, String(Date.now()));
-        logEvent("feedback_opened", { page_path: window.location.pathname });
+        logEvent("feedback_opened", { page_path: window.location.pathname, source: "profile_settings" });
       });
-
-      return button;
-		  };
+      editor.appendChild(button);
+    });
+  };
 
   const setPurchaseState = (user) => {
     const accountAuthed = hasFullAccount(user);
@@ -3604,6 +3596,7 @@
     const sessionAuthed = Boolean(user);
     const guestSession = isAnonymousUser(user);
     const authLabel = accountAuthed ? "Logged In" : guestSession ? "Guest Session" : "Logged Out";
+    ensureProfileFeedbackButtons();
     ensureHeaderNotificationsCta();
     if (ui.headerAuth) {
       ui.headerAuth.innerHTML = accountAuthed
@@ -4174,7 +4167,8 @@
     if (!container) return;
     container.innerHTML = "";
     if (!orders.length) {
-      container.innerHTML = "<p class=\"small\">No orders yet. Your Deep Forecast request will appear here.</p>";
+      const emptyMessage = String(opts.emptyMessage || "No orders yet. Your Deep Forecast request will appear here.");
+      container.innerHTML = `<p class="small">${escapeHtml(emptyMessage)}</p>`;
       return;
     }
 
@@ -4300,7 +4294,7 @@
       const actions = isForecast
         ? `
           <div class="order-actions" style="display:flex; gap:10px; flex-wrap:wrap;">
-            <button class="cta secondary small" type="button" data-action="plot-forecast" data-forecast-id="${escapeHtml(item.id)}" data-ticker="${escapeHtml(item.ticker)}">
+            <button class="cta secondary small" type="button" data-action="plot-forecast" data-forecast-id="${escapeHtml(item.id)}">
               ${icon("candlestick-chart")}<span>Plot on chart</span>
             </button>
             <button class="cta secondary small" type="button" data-action="download-forecast" data-forecast-id="${escapeHtml(item.id)}">
@@ -4445,26 +4439,31 @@
       .collection("orders")
       .where("userId", "==", user.uid)
       .orderBy("createdAt", "desc")
-      .onSnapshot((snapshot) => {
-        const orders = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-        const paidOrders = orders.filter((order) => {
-          const status = String(order?.paymentStatus || "").trim().toLowerCase();
-          return status === "paid" || status === "succeeded";
-        });
-        state.userHasPaidPlan = paidOrders.length > 0;
-        state.userSubscriptionTier = paidOrders.some((order) =>
-          String(order?.product || "").toLowerCase().includes("desk")
-        )
-          ? "desk"
-          : paidOrders.some((order) => String(order?.product || "").toLowerCase().includes("pro"))
-          ? "pro"
-          : state.userHasPaidPlan
-          ? "pro"
-          : "free";
-        renderOrderList(orders, ui.userOrders);
-        refreshScreenerModelUi();
-        refreshScreenerCreditsUi();
-      });
+      .onSnapshot(
+        (snapshot) => {
+          const orders = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+          const paidOrders = orders.filter((order) => {
+            const status = String(order?.paymentStatus || "").trim().toLowerCase();
+            return status === "paid" || status === "succeeded";
+          });
+          state.userHasPaidPlan = paidOrders.length > 0;
+          state.userSubscriptionTier = paidOrders.some((order) =>
+            String(order?.product || "").toLowerCase().includes("desk")
+          )
+            ? "desk"
+            : paidOrders.some((order) => String(order?.product || "").toLowerCase().includes("pro"))
+            ? "pro"
+            : state.userHasPaidPlan
+            ? "pro"
+            : "free";
+          renderOrderList(orders, ui.userOrders);
+          refreshScreenerModelUi();
+          refreshScreenerCreditsUi();
+        },
+        () => {
+          renderOrderList([], ui.userOrders, { emptyMessage: "Unable to load orders right now." });
+        }
+      );
   };
 
 	  const startUserForecasts = (db, workspaceUserId) => {
@@ -4476,11 +4475,17 @@
 	      .collection("forecast_requests")
 	      .where("userId", "==", workspaceUserId)
 	      .orderBy("createdAt", "desc")
-	      .onSnapshot((snapshot) => {
-	        const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-	        containers.forEach((container) => renderRequestList(items, container, "No forecast requests yet."));
-          renderForecastPicker(items);
-	      });
+	      .onSnapshot(
+          (snapshot) => {
+            const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+            containers.forEach((container) => renderRequestList(items, container, "No forecast requests yet."));
+            renderForecastPicker(items);
+          },
+          () => {
+            containers.forEach((container) => renderRequestList([], container, "Unable to load forecasts right now."));
+            renderForecastPicker([]);
+          }
+        );
 	  };
 
     const startScreenerRuns = (db, workspaceUserId) => {
@@ -4981,10 +4986,15 @@
       .collection("autopilot_requests")
       .where("userId", "==", user.uid)
       .orderBy("createdAt", "desc")
-      .onSnapshot((snapshot) => {
-        const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-        renderRequestList(items, ui.autopilotOutput, "No autopilot requests yet.");
-      });
+      .onSnapshot(
+        (snapshot) => {
+          const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+          renderRequestList(items, ui.autopilotOutput, "No autopilot requests yet.");
+        },
+        () => {
+          renderRequestList([], ui.autopilotOutput, "Unable to load autopilot requests.");
+        }
+      );
   };
 
   const startPredictionsUploads = (db, user) => {
@@ -4999,17 +5009,22 @@
       .collection("prediction_uploads")
       .where("userId", "==", user.uid)
       .orderBy("createdAt", "desc")
-      .onSnapshot((snapshot) => {
-        const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-        renderRequestList(items, ui.predictionsOutput, "No uploads yet.");
+      .onSnapshot(
+        (snapshot) => {
+          const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+          renderRequestList(items, ui.predictionsOutput, "No uploads yet.");
 
-        const params = new URLSearchParams(window.location.search);
-        const urlUploadId = String(params.get("uploadId") || "").trim();
-        if (urlUploadId && !state.uploadUrlLoaded) {
-          state.uploadUrlLoaded = true;
-          plotPredictionUploadById(db, state.clients?.storage, urlUploadId).catch(() => {});
+          const params = new URLSearchParams(window.location.search);
+          const urlUploadId = String(params.get("uploadId") || "").trim();
+          if (urlUploadId && !state.uploadUrlLoaded) {
+            state.uploadUrlLoaded = true;
+            plotPredictionUploadById(db, state.clients?.storage, urlUploadId).catch(() => {});
+          }
+        },
+        () => {
+          renderRequestList([], ui.predictionsOutput, "Unable to load prediction uploads.");
         }
-      });
+      );
   };
 
   const syncBacktestStrategyFields = () => {
@@ -5233,10 +5248,15 @@
       .collection("orders")
       .orderBy("createdAt", "desc")
       .limit(100)
-      .onSnapshot((snapshot) => {
-        const orders = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-        renderOrderList(orders, ui.adminOrders, { admin: true });
-      });
+      .onSnapshot(
+        (snapshot) => {
+          const orders = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+          renderOrderList(orders, ui.adminOrders, { admin: true });
+        },
+        () => {
+          renderOrderList([], ui.adminOrders, { admin: true, emptyMessage: "Unable to load admin orders." });
+        }
+      );
   };
 
   const startAdminAutopilotQueue = (db) => {
@@ -6987,20 +7007,9 @@
     if (!force && state.tickerContext.intelTicker === symbol) return;
     state.tickerContext.intelTicker = symbol;
 
-    let snapshotPayload = null;
     try {
       if (ui.intelOutput) setOutputLoading(ui.intelOutput, "Loading company context...");
       if (ui.tickerIntelligenceOutput) setOutputLoading(ui.tickerIntelligenceOutput, "Loading institutional intelligence...");
-      try {
-        const getSnapshot = functions.httpsCallable("get_ticker_info_snapshot");
-        const snapshotResult = await getSnapshot({ ticker: symbol, meta: buildMeta() });
-        snapshotPayload = snapshotResult.data && typeof snapshotResult.data === "object" ? snapshotResult.data : {};
-        if (ui.intelOutput) setOutputReady(ui.intelOutput);
-        if (ui.tickerIntelligenceOutput) setOutputReady(ui.tickerIntelligenceOutput);
-        renderTickerIntel({ ...(snapshotPayload || {}), ticker: symbol });
-      } catch (snapshotError) {
-        snapshotPayload = null;
-      }
 
       const getIntel = functions.httpsCallable("get_ticker_intel");
       const result = await getIntel({ ticker: symbol, meta: buildMeta() });
@@ -7012,10 +7021,6 @@
       }
       logEvent("ticker_intel_loaded", { ticker: symbol });
     } catch (error) {
-      if (snapshotPayload) {
-        if (notify) showToast("Detailed intelligence is temporarily unavailable. Showing snapshot data.", "warn");
-        return;
-      }
       if (ui.intelOutput) {
         setOutputReady(ui.intelOutput);
         ui.intelOutput.innerHTML = `<div class="small muted">Unable to load ticker intelligence right now.</div>`;
@@ -11014,20 +11019,32 @@
       .doc(workspaceId)
       .collection("ai_agent_followers")
       .where("userId", "==", userId)
-      .onSnapshot((snapshot) => {
-        state.aiFollowSet = new Set(snapshot.docs.map((doc) => String(doc.data()?.agentId || "").trim()).filter(Boolean));
-        renderAIAgentLeaderboard(state.aiAgents);
-      });
+      .onSnapshot(
+        (snapshot) => {
+          state.aiFollowSet = new Set(snapshot.docs.map((doc) => String(doc.data()?.agentId || "").trim()).filter(Boolean));
+          renderAIAgentLeaderboard(state.aiAgents);
+        },
+        () => {
+          state.aiFollowSet = new Set();
+          renderAIAgentLeaderboard(state.aiAgents);
+        }
+      );
 
     state.unsubscribeAILikes = db
       .collection("users")
       .doc(workspaceId)
       .collection("ai_agent_likes")
       .where("userId", "==", userId)
-      .onSnapshot((snapshot) => {
-        state.aiLikeSet = new Set(snapshot.docs.map((doc) => String(doc.data()?.agentId || "").trim()).filter(Boolean));
-        renderAIAgentLeaderboard(state.aiAgents);
-      });
+      .onSnapshot(
+        (snapshot) => {
+          state.aiLikeSet = new Set(snapshot.docs.map((doc) => String(doc.data()?.agentId || "").trim()).filter(Boolean));
+          renderAIAgentLeaderboard(state.aiAgents);
+        },
+        () => {
+          state.aiLikeSet = new Set();
+          renderAIAgentLeaderboard(state.aiAgents);
+        }
+      );
   };
 
   const seedDefaultAIAgents = async (db, workspaceId) => {
@@ -11191,7 +11208,7 @@
       const row = list[i] || {};
       Object.keys(row).forEach((key) => {
         // Support q05/q50/q95 plus edge cases like q100 when users request extreme quantiles.
-        if (/^q\\d{1,3}$/.test(key)) set.add(key);
+        if (/^q\d{1,3}$/.test(key)) set.add(key);
       });
     }
     return Array.from(set).sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
@@ -11322,18 +11339,7 @@
       .filter(Boolean)
       .join("");
 
-    const reportStatus = String(forecastDoc.reportStatus || "").trim().toLowerCase();
-    const pdfPath = getForecastReportPath(forecastDoc, "pdf");
-    const pptxPath = getForecastReportPath(forecastDoc, "pptx");
     const tradeRationale = String(forecastDoc.tradeRationale || "").trim();
-    const reportHint =
-      reportStatus === "ready"
-        ? "Report Agent outputs are ready."
-        : reportStatus === "generating" || reportStatus === "queued"
-          ? "Report Agent is generating PDF/PPT assets..."
-          : reportStatus === "failed"
-            ? "Report Agent failed. Retry generation."
-            : "Generate Executive Brief and Slide Deck for this forecast.";
 
     setOutputReady(ui.forecastOutput);
     ui.forecastOutput.innerHTML = `
@@ -11355,14 +11361,7 @@
             page >= totalPages - 1 ? "disabled" : ""
           }>${icon("arrow-right")}<span>Next</span></button>
           <button class="cta secondary small" type="button" data-action="forecast-csv">${icon("download")}<span>Download CSV</span></button>
-          <button class="cta secondary small" type="button" data-action="forecast-report-pdf" data-forecast-id="${escapeHtml(
-            forecastDoc.id
-          )}" ${pdfPath ? "" : 'data-needs-report="1"'}>${icon("download")}<span>Download Executive Brief</span></button>
-          <button class="cta secondary small" type="button" data-action="forecast-report-pptx" data-forecast-id="${escapeHtml(
-            forecastDoc.id
-          )}" ${pptxPath ? "" : 'data-needs-report="1"'}>${icon("download")}<span>Download Slide Deck</span></button>
         </div>
-        <div class="small muted">${escapeHtml(reportHint)}</div>
         <div class="table-wrap" style="margin-top:10px;">
           <table class="data-table">
             <thead>
@@ -11405,41 +11404,6 @@
     const snap = await db.collection("forecast_requests").doc(forecastId).get();
     if (!snap.exists) throw new Error("Forecast not found.");
     return { id: snap.id, ...snap.data() };
-  };
-
-  const getForecastReportPath = (doc, kind) => {
-    const assets = doc?.reportAssets && typeof doc.reportAssets === "object" ? doc.reportAssets : {};
-    if (kind === "pdf") return String(assets.pdfPath || "").trim();
-    if (kind === "pptx") return String(assets.pptxPath || "").trim();
-    if (kind === "chart") return String(assets.chartPath || "").trim();
-    return "";
-  };
-
-  const ensureForecastReportsReady = async ({ db, functions, forecastId, workspaceId, force = false }) => {
-    if (!functions || !forecastId) return null;
-    const action = functions.httpsCallable("generate_forecast_report_assets");
-    const result = await action({
-      forecastId,
-      workspaceId,
-      force,
-      meta: buildMeta(),
-    });
-    const payload = result.data || {};
-    const reportAssets = payload.reportAssets && typeof payload.reportAssets === "object" ? payload.reportAssets : {};
-    const reportStatus = String(payload.reportStatus || "").trim();
-    const tradeRationale = String(payload.tradeRationale || "").trim();
-
-    const ref = db.collection("forecast_requests").doc(forecastId);
-    await ref.set(
-      {
-        reportAssets,
-        reportStatus: reportStatus || "ready",
-        tradeRationale: tradeRationale || firebase.firestore.FieldValue.delete(),
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
-    return { reportAssets, reportStatus, tradeRationale };
   };
 
   const plotForecastById = async (db, functions, forecastId) => {
@@ -11969,7 +11933,7 @@
     } else if (state.cookieConsent !== "declined") {
       ensureCookieModal().classList.remove("hidden");
 	    }
-	    window.setTimeout(() => ensureFeedbackPrompt(), 1400);
+      ensureProfileFeedbackButtons();
 	    bindPanelNavigation();
       bindTickerIntelTabs();
       bindFaqAccordion();
@@ -12188,7 +12152,6 @@
 		      const plotButton = event.target.closest('[data-action="plot-forecast"]');
 		      if (!plotButton) return;
 		      const forecastId = plotButton.dataset.forecastId;
-		      const ticker = plotButton.dataset.ticker || "";
 		      if (!forecastId) return;
 
       if (!hasFullAccount()) {
@@ -12198,10 +12161,9 @@
 
 		      const onTerminalPage = Boolean(ui.terminalForm && ui.tickerChart);
 		      if (!onTerminalPage) {
-		        logEvent("forecast_plot_navigate", { forecast_id: forecastId, ticker });
+		        logEvent("forecast_plot_navigate", { forecast_id: forecastId });
 		        const params = new URLSearchParams();
 		        params.set("forecastId", forecastId);
-		        if (ticker) params.set("ticker", ticker);
 		        window.location.href = `/forecasting?${params.toString()}`;
 		        return;
 		      }
@@ -12209,7 +12171,7 @@
 	      try {
 	        setTerminalStatus("Loading saved forecast...");
 	        await plotForecastById(db, functions, forecastId);
-	        logEvent("forecast_plotted", { forecast_id: forecastId, ticker });
+	        logEvent("forecast_plotted", { forecast_id: forecastId });
           document.querySelector('[data-panel-target="forecast"]')?.click?.();
 	        document.getElementById("terminal")?.scrollIntoView({ behavior: "smooth" });
 	      } catch (error) {
@@ -13036,100 +12998,6 @@
 		        showToast("CSV downloaded.");
 		        return;
 		      }
-
-          const reportPdfBtn = event.target.closest('[data-action="forecast-report-pdf"]');
-          const reportPptxBtn = event.target.closest('[data-action="forecast-report-pptx"]');
-          if (reportPdfBtn || reportPptxBtn) {
-            event.preventDefault();
-            if (!hasFullAccount()) {
-              showToast("Sign in to download forecast reports.", "warn");
-              return;
-            }
-            const button = reportPdfBtn || reportPptxBtn;
-            const kind = reportPdfBtn ? "pdf" : "pptx";
-            const forecastId = String(button.dataset.forecastId || state.tickerContext.forecastId || "").trim();
-            if (!forecastId) {
-              showToast("Forecast ID is missing.", "warn");
-              return;
-            }
-            button.disabled = true;
-            try {
-              let doc =
-                state.tickerContext.forecastDoc && String(state.tickerContext.forecastDoc.id || "") === forecastId
-                  ? state.tickerContext.forecastDoc
-                  : await loadForecastDoc(db, forecastId);
-
-              let path = getForecastReportPath(doc, kind);
-              const reportStatus = String(doc.reportStatus || "").trim().toLowerCase();
-              if (!path || reportStatus !== "ready" || button.dataset.needsReport === "1") {
-                showToast("Generating report assets...");
-                await ensureForecastReportsReady({
-                  db,
-                  functions,
-                  forecastId,
-                  workspaceId: state.activeWorkspaceId || state.user.uid,
-                  force: reportStatus === "failed",
-                });
-                doc = await loadForecastDoc(db, forecastId);
-                if (state.tickerContext.forecastDoc && String(state.tickerContext.forecastDoc.id || "") === forecastId) {
-                  state.tickerContext.forecastDoc = doc;
-                  renderForecastDetails(doc);
-                }
-                path = getForecastReportPath(doc, kind);
-              }
-
-              if (!path) throw new Error("Report file is not available yet.");
-              if (!storage) throw new Error("Storage client is unavailable.");
-              let url = "";
-              try {
-                url = await storage.ref().child(path).getDownloadURL();
-              } catch (downloadError) {
-                const code = String(downloadError?.code || "").trim();
-                const msg = String(downloadError?.message || "").toLowerCase();
-                const shouldRetry =
-                  code === "storage/unauthorized" ||
-                  code === "storage/no-download-url" ||
-                  code === "storage/object-not-found" ||
-                  msg.includes("download url") ||
-                  msg.includes("unauthorized") ||
-                  msg.includes("permission");
-                if (!shouldRetry) throw downloadError;
-
-                showToast("Refreshing report assets...");
-                await ensureForecastReportsReady({
-                  db,
-                  functions,
-                  forecastId,
-                  workspaceId: state.activeWorkspaceId || state.user.uid,
-                  force: true,
-                });
-                doc = await loadForecastDoc(db, forecastId);
-                if (state.tickerContext.forecastDoc && String(state.tickerContext.forecastDoc.id || "") === forecastId) {
-                  state.tickerContext.forecastDoc = doc;
-                  renderForecastDetails(doc);
-                }
-                path = getForecastReportPath(doc, kind);
-                if (!path) throw new Error("Report file is not available yet.");
-                url = await storage.ref().child(path).getDownloadURL();
-              }
-              const ticker = normalizeTicker(doc.ticker || "ticker") || "ticker";
-              const service = String(doc.service || "forecast").replace(/[^a-z0-9_\-]+/gi, "_");
-              const filename =
-                kind === "pdf"
-                  ? `${ticker}_${service}_${forecastId}_executive_brief.pdf`
-                  : `${ticker}_${service}_${forecastId}_slide_deck.pptx`;
-              await triggerDownloadFromUrl(url, filename);
-              showToast(kind === "pdf" ? "Executive Brief downloaded." : "Slide Deck downloaded.");
-              logEvent(kind === "pdf" ? "forecast_report_pdf_downloaded" : "forecast_report_pptx_downloaded", {
-                forecast_id: forecastId,
-              });
-            } catch (error) {
-              showToast(extractErrorMessage(error, "Unable to download report."), "warn");
-            } finally {
-              button.disabled = false;
-            }
-            return;
-          }
 
       const pageSizeBtn = event.target.closest('[data-action="csv-page-size"]');
       if (pageSizeBtn) {
@@ -14041,13 +13909,6 @@
 
 		        logEvent("forecast_request", { ticker: payload.ticker, interval: payload.interval, service: payload.service });
 		        showToast("Forecast saved.");
-            ensureForecastReportsReady({
-              db,
-              functions,
-              forecastId: requestId,
-              workspaceId: payload.workspaceId,
-              force: false,
-            }).catch(() => {});
 
 		        try {
 		          if (ui.tickerChart) {
@@ -14090,13 +13951,6 @@
             if (ui.forecastLoadStatus) ui.forecastLoadStatus.textContent = "";
             showToast("Forecast loaded.");
             logEvent("forecast_loaded_saved", { forecast_id: forecastId });
-            ensureForecastReportsReady({
-              db,
-              functions,
-              forecastId,
-              workspaceId: state.activeWorkspaceId || state.user.uid,
-              force: false,
-            }).catch(() => {});
             document.getElementById("terminal")?.scrollIntoView({ behavior: "smooth" });
           } catch (error) {
             if (ui.forecastLoadStatus) ui.forecastLoadStatus.textContent = error.message || "Unable to load forecast.";
