@@ -35,6 +35,111 @@
     "Contact",
     "Purchase",
   ]);
+  let nativeAuthRequestCounter = 0;
+  const nextNativeAuthRequestId = () => `native-auth-${Date.now()}-${++nativeAuthRequestCounter}`;
+
+  const getNativePlatform = () => {
+    try {
+      const explicit = String(window.__QUANTURA_NATIVE_PLATFORM__ || "").trim().toLowerCase();
+      if (explicit === "ios" || explicit === "android") return explicit;
+      if (window.Capacitor?.isNativePlatform?.() === true) {
+        const platform = String(window.Capacitor.getPlatform?.() || "").trim().toLowerCase();
+        if (platform === "ios" || platform === "android") return platform;
+      }
+      if (window.QuanturaBridge?.postMessage) return "android";
+      if (window.webkit?.messageHandlers?.QuanturaBridge?.postMessage) return "ios";
+    } catch (error) {
+      return null;
+    }
+    return null;
+  };
+
+  const isNativeApp = () => Boolean(window.__QUANTURA_NATIVE_APP__ || getNativePlatform());
+
+  const isInstalledPwa = () => {
+    try {
+      if (window.matchMedia?.("(display-mode: standalone)")?.matches) return true;
+      if (navigator.standalone === true) return true;
+    } catch (error) {
+      return false;
+    }
+    return false;
+  };
+
+  const isMobileBrowser = () => {
+    const ua = String(navigator.userAgent || "").toLowerCase();
+    return /iphone|ipad|ipod|android/.test(ua);
+  };
+
+  const resolveRuntimeLabel = () => {
+    if (isNativeApp()) return "native";
+    if (isInstalledPwa()) return "pwa";
+    if (isMobileBrowser()) return "mobile_web";
+    return "web";
+  };
+
+  const sendNativeBridgeMessage = (payload) => {
+    const message = payload && typeof payload === "object" ? payload : {};
+    try {
+      if (window.QuanturaBridge?.postMessage) {
+        window.QuanturaBridge.postMessage(JSON.stringify(message));
+        return true;
+      }
+    } catch (error) {
+      // Try iOS bridge fallback.
+    }
+    try {
+      const iosHandler = window.webkit?.messageHandlers?.QuanturaBridge?.postMessage;
+      if (iosHandler) {
+        iosHandler(message);
+        return true;
+      }
+    } catch (error) {
+      return false;
+    }
+    return false;
+  };
+
+  const requestNativeBridgeAuth = (provider) =>
+    new Promise((resolve, reject) => {
+      const requestId = nextNativeAuthRequestId();
+      let timer = null;
+      const cleanup = () => {
+        window.removeEventListener("quantura:native-auth-result", onResult);
+        if (timer) clearTimeout(timer);
+      };
+      const onResult = (event) => {
+        const detail = event?.detail && typeof event.detail === "object" ? event.detail : {};
+        if (String(detail.requestId || "") !== requestId) return;
+        cleanup();
+        if (!detail.ok) {
+          reject(new Error(String(detail.error || "Native sign-in failed.")));
+          return;
+        }
+        resolve(detail);
+      };
+
+      window.addEventListener("quantura:native-auth-result", onResult);
+      const posted = sendNativeBridgeMessage({
+        action: "authSignIn",
+        provider: String(provider || "").trim().toLowerCase(),
+        requestId,
+      });
+      if (!posted) {
+        cleanup();
+        reject(new Error("Native sign-in bridge is unavailable."));
+        return;
+      }
+      timer = setTimeout(() => {
+        cleanup();
+        reject(new Error("Native sign-in timed out."));
+      }, 90000);
+    });
+
+  const requestNativeBridgeSignOut = () => {
+    const requestId = nextNativeAuthRequestId();
+    return sendNativeBridgeMessage({ action: "authSignOut", requestId });
+  };
   const DEFAULT_BRIEF_TICKERS = [
     "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "NFLX",
     "AMD", "AVGO", "CRM", "ORCL", "JPM", "BAC", "GS", "V", "MA",
@@ -1245,6 +1350,7 @@
     })(),
 	    initialPageViewSent: false,
 	    authResolved: false,
+      authInFlight: false,
     tickerContext: {
 	      ticker: "",
 	      interval: "1d",
@@ -2432,7 +2538,31 @@
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     screen: `${window.screen.width}x${window.screen.height}`,
     platform: navigator.platform,
+    runtime: resolveRuntimeLabel(),
+    nativePlatform: getNativePlatform() || "",
+    nativeApp: isNativeApp(),
+    installedPwa: isInstalledPwa(),
   });
+
+  const exchangeNativeIdTokenForCustomToken = async (idToken) => {
+    const token = String(idToken || "").trim();
+    if (!token) throw new Error("Native ID token is missing.");
+    const response = await fetch("/api/auth/exchange-native-id-token", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idToken: token }),
+    });
+    let payload = null;
+    try {
+      payload = await response.json();
+    } catch (error) {
+      payload = null;
+    }
+    if (!response.ok || !payload?.customToken) {
+      throw new Error(String(payload?.error || "Unable to sync native auth session."));
+    }
+    return String(payload.customToken);
+  };
 
   const getMessagingClient = () => {
     if (typeof firebase === "undefined" || !firebase.messaging) return null;
@@ -2448,6 +2578,8 @@
     "Notification" in window &&
     "serviceWorker" in navigator &&
     "PushManager" in window;
+
+  const isPushChannelAvailable = () => isPushSupported() || isNativeApp();
 
   const setNotificationStatus = (text) => {
     if (ui.notificationsStatus) {
@@ -5005,6 +5137,58 @@
       return Boolean(ok);
     } catch (error) {
       return false;
+    }
+  };
+
+  const performShare = async ({ url, title = "Quantura", text = "" } = {}) => {
+    const shareUrl = String(url || "").trim();
+    if (!shareUrl) return false;
+    await copyToClipboard(shareUrl);
+
+    const payload = {
+      action: "share",
+      url: shareUrl,
+      title: String(title || "Quantura"),
+      text: String(text || "").trim(),
+    };
+
+    try {
+      window.dispatchEvent(new CustomEvent("quantura:native-share", { detail: payload }));
+    } catch (error) {
+      // CustomEvent dispatch is best-effort.
+    }
+
+    if (isNativeApp() && sendNativeBridgeMessage(payload)) {
+      return true;
+    }
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: payload.title,
+          text: payload.text || undefined,
+          url: shareUrl,
+        });
+        return true;
+      } catch (error) {
+        if (error?.name === "AbortError") return true;
+      }
+    }
+    return true;
+  };
+
+  window.__quanturaNativeTokenReady = (token) => {
+    const cleanToken = String(token || "").trim();
+    if (!cleanToken) return;
+    try {
+      window.__NATIVE_FCM_TOKEN__ = cleanToken;
+      localStorage.setItem(FCM_TOKEN_CACHE_KEY, cleanToken);
+    } catch (error) {
+      // Ignore local storage failures.
+    }
+    setNotificationTokenPreview(cleanToken);
+    if (state.user && state.clients.functions && state.remoteFlags.pushEnabled) {
+      syncNotificationToken(state.clients.functions, cleanToken, { source: "native" }).catch(() => {});
     }
   };
 
@@ -9734,6 +9918,14 @@
 
   const registerNotificationToken = async (functions, messaging, opts = {}) => {
     if (!hasFullAccount()) throw new Error("Sign in before enabling notifications.");
+    if (isNativeApp()) {
+      const nativeToken = String(window.__NATIVE_FCM_TOKEN__ || "").trim();
+      if (!nativeToken) throw new Error("Native push token is not available yet.");
+      return syncNotificationToken(functions, nativeToken, {
+        forceRefresh: Boolean(opts.forceRefresh),
+        source: "native",
+      });
+    }
     if (!messaging) throw new Error("Messaging SDK is not available.");
     if (!isPushSupported()) throw new Error("Push notifications are not supported in this browser.");
 
@@ -10169,10 +10361,10 @@
       if (!state.remoteFlags.pushEnabled) {
         setNotificationStatus("Notifications are temporarily disabled.");
         setNotificationControlsEnabled(false);
-	      } else if (!isPushSupported()) {
-	        setNotificationStatus("Push notifications are not supported in this browser.");
+	      } else if (!isPushChannelAvailable()) {
+	        setNotificationStatus("Push notifications are not supported on this device.");
 	        setNotificationControlsEnabled(false);
-	      } else if (!messaging) {
+	      } else if (!isNativeApp() && !messaging) {
 	        setNotificationStatus("Messaging SDK is not loaded on this page.");
 	        setNotificationControlsEnabled(false);
 	      } else {
@@ -10414,7 +10606,11 @@
               const shareId = String(result.data?.shareId || "").trim();
               const url = String(result.data?.shareUrl || "") || buildShareUrl("forecast", shareId);
               if (!shareId || !url) throw new Error("Unable to create share link.");
-              await copyToClipboard(url);
+              await performShare({
+                url,
+                title: "Quantura forecast",
+                text: "Forecast shared from Quantura.",
+              });
               showToast("Share link copied.");
               logEvent("forecast_shared", { forecast_id: forecastId });
             } catch (error) {
@@ -10522,7 +10718,11 @@
               const shareId = String(result.data?.shareId || "").trim();
               const url = String(result.data?.shareUrl || "") || buildShareUrl("screener", shareId);
               if (!shareId || !url) throw new Error("Unable to create share link.");
-              await copyToClipboard(url);
+              await performShare({
+                url,
+                title: "Quantura screener",
+                text: "Screener run shared from Quantura.",
+              });
               showToast("Share link copied.");
               logEvent("screener_shared", { run_id: runId });
             } catch (error) {
@@ -10640,7 +10840,11 @@
             if (!agentId) return;
             const url = buildAIAgentShareUrl(agentId);
             try {
-              await copyToClipboard(url);
+              await performShare({
+                url,
+                title: "Quantura AI Agent",
+                text: "AI Agent shared from Quantura.",
+              });
               showToast("Agent link copied.");
               logEvent("ai_agent_shared", { agent_id: agentId });
             } catch (error) {
@@ -10915,7 +11119,11 @@
               const shareId = String(result.data?.shareId || "").trim();
               const url = String(result.data?.shareUrl || "") || buildShareUrl("upload", shareId);
               if (!shareId || !url) throw new Error("Unable to create share link.");
-              await copyToClipboard(url);
+              await performShare({
+                url,
+                title: "Quantura upload",
+                text: "Prediction upload shared from Quantura.",
+              });
               showToast("Share link copied.");
               logEvent("upload_shared", { upload_id: uploadId });
             } catch (error) {
@@ -11734,14 +11942,19 @@
 	    });
 
       const performSignOut = async () => {
+        const runtime = resolveRuntimeLabel();
         try {
           await unregisterCachedNotificationToken(functions);
         } catch (error) {
           // Ignore token cleanup failures.
         }
+        if (isNativeApp()) {
+          requestNativeBridgeSignOut();
+          window.__NATIVE_FCM_TOKEN__ = "";
+        }
         await auth.signOut();
         showToast("Signed out.");
-        logEvent("logout", { method: "firebase" });
+        logEvent("logout", { method: "firebase", runtime });
       };
 
       ui.headerSignOut?.addEventListener("click", async (event) => {
@@ -11800,17 +12013,60 @@
       }
     });
 
-    const signInWithProvider = async (provider, successMessage, method) => {
-      if (ui.emailMessage) ui.emailMessage.textContent = "";
+    const processRedirectSignInResult = async () => {
+      if (isNativeApp()) return;
+      if (!(isInstalledPwa() || isMobileBrowser())) return;
       try {
         await persistenceReady;
-        await auth.signInWithPopup(provider);
-        showToast(successMessage);
-        logEvent("login", { method });
+        const result = await auth.getRedirectResult();
+        if (result?.user) {
+          showToast("Signed in.");
+          logEvent("login", { method: result.credential?.providerId || "redirect", runtime: resolveRuntimeLabel() });
+        }
       } catch (error) {
-        if (ui.emailMessage) ui.emailMessage.textContent = error.message;
+        if (ui.emailMessage) ui.emailMessage.textContent = error.message || "Redirect sign-in failed.";
+        showToast(error.message || "Redirect sign-in failed.", "warn");
       }
     };
+
+    const signInWithProvider = async (provider, successMessage, method) => {
+      if (ui.emailMessage) ui.emailMessage.textContent = "";
+      if (state.authInFlight) return;
+      state.authInFlight = true;
+      const runtime = resolveRuntimeLabel();
+      try {
+        await persistenceReady;
+        if (isNativeApp()) {
+          const result = await requestNativeBridgeAuth(method);
+          const nativeIdToken = String(result?.idToken || "").trim();
+          if (!nativeIdToken) throw new Error("Native sign-in completed without an ID token.");
+          const customToken = await exchangeNativeIdTokenForCustomToken(nativeIdToken);
+          await auth.signInWithCustomToken(customToken);
+          showToast(successMessage);
+          logEvent("login", { method, runtime, source: "native_bridge" });
+          return;
+        }
+
+        if (isInstalledPwa() || isMobileBrowser()) {
+          await auth.signInWithRedirect(provider);
+          logEvent("login_redirect_started", { method, runtime });
+          return;
+        }
+
+        await auth.signInWithPopup(provider);
+        showToast(successMessage);
+        logEvent("login", { method, runtime, source: "popup" });
+      } catch (error) {
+        const message = error?.message || "Unable to sign in.";
+        if (ui.emailMessage) ui.emailMessage.textContent = message;
+        showToast(message, "warn");
+        logEvent("login_error", { method, runtime });
+      } finally {
+        state.authInFlight = false;
+      }
+    };
+
+    processRedirectSignInResult();
 
     ui.googleSignin?.addEventListener("click", async () => {
       await signInWithProvider(new firebase.auth.GoogleAuthProvider(), "Signed in with Google.", "google");
@@ -12897,13 +13153,17 @@
       }
     });
 
-    ui.notificationsEnable?.addEventListener("click", async () => {
+	    ui.notificationsEnable?.addEventListener("click", async () => {
 	      if (!requireFullAccount("Sign in to enable notifications.", { redirect: true })) return;
 	      if (!state.remoteFlags.pushEnabled) {
 	        showToast("Notifications are temporarily disabled.", "warn");
 	        return;
 	      }
-	      if (!messaging) {
+	      if (!isPushChannelAvailable()) {
+	        showToast("Push notifications are not supported on this device.", "warn");
+	        return;
+	      }
+	      if (!isNativeApp() && !messaging) {
 	        showToast("Messaging SDK is unavailable on this page.", "warn");
 	        return;
 	      }
@@ -12911,14 +13171,14 @@
         setNotificationStatus("Registering notification token...");
         const token = await registerNotificationToken(functions, messaging, { forceRefresh: false });
         setNotificationTokenPreview(token);
-        setNotificationStatus("Notifications are enabled for this browser.");
+        setNotificationStatus("Notifications are enabled for this device.");
         appendNotificationLog({
           title: "Notifications enabled",
-          body: "Browser token registered successfully.",
+          body: "Notification token registered successfully.",
           source: "system",
           at: new Date().toISOString(),
         });
-        logEvent("notifications_enabled", { channel: "webpush" });
+        logEvent("notifications_enabled", { channel: isNativeApp() ? "native" : "webpush" });
         showToast("Notifications enabled.");
       } catch (error) {
 	        setNotificationStatus(error.message || "Unable to enable notifications.");
@@ -12926,13 +13186,17 @@
       }
     });
 
-    ui.notificationsRefresh?.addEventListener("click", async () => {
+	    ui.notificationsRefresh?.addEventListener("click", async () => {
 	      if (!requireFullAccount("Sign in first.", { redirect: true })) return;
 	      if (!state.remoteFlags.pushEnabled) {
 	        showToast("Notifications are temporarily disabled.", "warn");
 	        return;
 	      }
-	      if (!messaging) {
+	      if (!isPushChannelAvailable()) {
+	        showToast("Push notifications are not supported on this device.", "warn");
+	        return;
+	      }
+	      if (!isNativeApp() && !messaging) {
 	        showToast("Messaging SDK is unavailable on this page.", "warn");
 	        return;
 	      }
@@ -12947,7 +13211,7 @@
           source: "system",
           at: new Date().toISOString(),
         });
-        logEvent("notifications_token_refreshed", { channel: "webpush" });
+        logEvent("notifications_token_refreshed", { channel: isNativeApp() ? "native" : "webpush" });
       } catch (error) {
 	        setNotificationStatus(error.message || "Unable to refresh notification token.");
 	        showToast(error.message || "Unable to refresh notification token.", "warn");
@@ -13114,9 +13378,9 @@
 		        ui.navAdmin?.classList.add("hidden");
                 setFeatureVoteSummaryPolling(functions, false);
         if (ui.notificationsStatus) {
-          if (!isPushSupported()) {
-            setNotificationStatus("Push notifications are not supported in this browser.");
-          } else if (!messaging) {
+          if (!isPushChannelAvailable()) {
+            setNotificationStatus("Push notifications are not supported on this device.");
+          } else if (!isNativeApp() && !messaging) {
             setNotificationStatus("Messaging SDK is not loaded on this page.");
           } else {
             setNotificationStatus("Sign in and enable notifications.");
@@ -13229,22 +13493,33 @@
 	        if (!state.remoteFlags.pushEnabled) {
 	          setNotificationControlsEnabled(false);
 	          setNotificationStatus("Notifications are temporarily disabled.");
-        } else if (messaging && isPushSupported()) {
+        } else if (isPushChannelAvailable()) {
           setNotificationControlsEnabled(true);
           const cachedToken = localStorage.getItem(FCM_TOKEN_CACHE_KEY) || "";
           setNotificationTokenPreview(cachedToken);
-          setNotificationStatus(cachedToken ? "Notifications enabled for this browser." : "Click Enable notifications.");
-          if (Notification.permission === "granted") {
+          setNotificationStatus(cachedToken ? "Notifications enabled for this device." : "Click Enable notifications.");
+          if (isNativeApp()) {
             try {
               const token = await registerNotificationToken(functions, messaging, { forceRefresh: !cachedToken });
               setNotificationTokenPreview(token);
-              setNotificationStatus("Notifications enabled for this browser.");
+              setNotificationStatus("Notifications enabled for this device.");
             } catch (error) {
               setNotificationStatus(error.message || "Unable to initialize notifications.");
             }
+          } else if (messaging && Notification.permission === "granted") {
+            try {
+              const token = await registerNotificationToken(functions, messaging, { forceRefresh: !cachedToken });
+              setNotificationTokenPreview(token);
+              setNotificationStatus("Notifications enabled for this device.");
+            } catch (error) {
+              setNotificationStatus(error.message || "Unable to initialize notifications.");
+            }
+          } else if (!messaging) {
+            setNotificationStatus("Messaging SDK is not loaded on this page.");
           }
 	        } else {
 	          setNotificationControlsEnabled(false);
+            setNotificationStatus("Push notifications are not supported on this device.");
 	        }
 	      }
 

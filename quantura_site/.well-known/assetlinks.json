@@ -1,0 +1,15 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls",
+      "delegate_permission/common.get_login_creds"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.quantura.quanturaapp",
+      "sha256_cert_fingerprints": [
+        "E5:48:D8:D1:26:C3:93:34:4B:EE:56:56:C0:D2:02:8D:0E:9D:51:AD:71:4B:40:9C:53:1C:77:0C:CE:06:F0:91"
+      ]
+    }
+  }
+]
