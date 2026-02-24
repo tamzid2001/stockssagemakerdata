@@ -15,14 +15,19 @@ from typing import Any
 from urllib.parse import parse_qs, quote_plus, unquote, urlparse
 
 import requests
-from flask import stream_with_context
+from polymarket_service import (
+    check_rate_limit as polymarket_check_rate_limit,
+    fetch_orderbook_bundle,
+    search_markets_for_ticker,
+)
+from ses_mailer import render_unsubscribe_html, send_newsletter_batch, unsubscribe_with_token
 try:
     from zoneinfo import ZoneInfo
 except Exception:  # pragma: no cover - Python < 3.9 fallback
     ZoneInfo = None  # type: ignore
 
 import firebase_admin
-from firebase_admin import credentials, firestore, messaging as admin_messaging, storage as admin_storage
+from firebase_admin import auth as admin_auth, credentials, firestore, messaging as admin_messaging, storage as admin_storage
 from firebase_functions import https_fn, scheduler_fn
 from firebase_functions.options import MemoryOption, set_global_options
 from chat_runtime import build_chat_prompt_messages, select_model_for_request
@@ -266,6 +271,8 @@ META_CAPI_ACCESS_TOKEN = secrets_loader.get_secret("META_CAPI_ACCESS_TOKEN")
 META_GRAPH_API_VERSION = str(os.environ.get("META_GRAPH_API_VERSION") or "v21.0").strip() or "v21.0"
 META_ALLOWED_ORIGINS = {
     PUBLIC_ORIGIN,
+    "https://quantura.studio",
+    "https://www.quantura.studio",
     "https://quantura-e2e3d.web.app",
     "https://quantura-e2e3d.firebaseapp.com",
     "http://localhost:5000",
@@ -5696,6 +5703,249 @@ def create_creator_support_checkout(req: https_fn.CallableRequest) -> dict[str, 
     }
 
 
+def _request_client_ip(req: https_fn.Request) -> str:
+    forwarded = str(req.headers.get("X-Forwarded-For") or req.headers.get("x-forwarded-for") or "").strip()
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    remote_addr = getattr(req, "remote_addr", "")
+    return str(remote_addr or "").strip()
+
+
+def _allowed_request_origin(req: https_fn.Request) -> str:
+    origin = str(req.headers.get("Origin") or req.headers.get("origin") or "").strip()
+    if origin in META_ALLOWED_ORIGINS:
+        return origin
+    return PUBLIC_ORIGIN
+
+
+def _cors_json_headers(req: https_fn.Request, methods: str) -> dict[str, str]:
+    return {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+        "Access-Control-Allow-Origin": _allowed_request_origin(req),
+        "Access-Control-Allow-Methods": methods,
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        "Vary": "Origin",
+    }
+
+
+def _json_http(payload: dict[str, Any], status: int, headers: dict[str, str]) -> tuple[str, int, dict[str, str]]:
+    return (json.dumps(payload), int(status), headers)
+
+
+@https_fn.on_request()
+def exchange_native_id_token(req: https_fn.Request) -> tuple[str, int, dict[str, str]]:
+    headers = _cors_json_headers(req, "POST, OPTIONS")
+
+    if req.method == "OPTIONS":
+        return ("", 204, headers)
+    if req.method != "POST":
+        return _json_http({"error": "Method not allowed"}, 405, headers)
+
+    payload = req.get_json(silent=True) or {}
+    id_token = str(payload.get("idToken") or "").strip()
+    if not id_token:
+        return _json_http({"error": "idToken is required"}, 400, headers)
+
+    try:
+        decoded = admin_auth.verify_id_token(id_token, check_revoked=False)
+        uid = str(decoded.get("uid") or "").strip()
+        if not uid:
+            raise ValueError("Token missing uid.")
+        custom_token_raw = admin_auth.create_custom_token(uid)
+        custom_token = (
+            custom_token_raw.decode("utf-8")
+            if isinstance(custom_token_raw, (bytes, bytearray))
+            else str(custom_token_raw)
+        )
+        return _json_http({"customToken": custom_token}, 200, headers)
+    except Exception as exc:
+        print(f"exchange_native_id_token verification failed: {exc}")
+        return _json_http({"error": "Invalid native ID token"}, 401, headers)
+
+
+@https_fn.on_request()
+def predictions_search_http(req: https_fn.Request) -> tuple[str, int, dict[str, str]]:
+    headers = _cors_json_headers(req, "GET, OPTIONS")
+    if req.method == "OPTIONS":
+        return ("", 204, headers)
+    if req.method != "GET":
+        return _json_http({"error": "Method not allowed"}, 405, headers)
+
+    client_ip = _request_client_ip(req)
+    allowed, retry_after = polymarket_check_rate_limit(
+        route="predictions_search",
+        client_ip=client_ip,
+        limit=60,
+        window_seconds=60,
+    )
+    if not allowed:
+        headers["Retry-After"] = str(retry_after)
+        return _json_http(
+            {
+                "error": "Rate limit exceeded",
+                "detail": "Too many requests. Try again shortly.",
+                "retryAfter": retry_after,
+            },
+            429,
+            headers,
+        )
+
+    ticker = str(req.args.get("ticker") or "").strip().upper()
+    if not ticker:
+        return _json_http({"error": "ticker is required"}, 400, headers)
+    if len(ticker) > 12 or not re.fullmatch(r"[A-Z0-9.\-]{1,12}", ticker):
+        return _json_http({"error": "Invalid ticker format"}, 400, headers)
+
+    try:
+        payload = search_markets_for_ticker(ticker)
+        return _json_http(payload if isinstance(payload, dict) else {"ticker": ticker, "events": [], "markets": []}, 200, headers)
+    except Exception as exc:
+        print(f"predictions_search_http failed for {ticker}: {exc}")
+        return _json_http(
+            {
+                "error": "Polymarket service temporarily unavailable",
+                "detail": "Unable to fetch predictions data from upstream.",
+                "ticker": ticker,
+                "events": [],
+                "markets": [],
+            },
+            502,
+            headers,
+        )
+
+
+@https_fn.on_request()
+def predictions_orderbook_http(req: https_fn.Request) -> tuple[str, int, dict[str, str]]:
+    headers = _cors_json_headers(req, "POST, OPTIONS")
+    if req.method == "OPTIONS":
+        return ("", 204, headers)
+    if req.method != "POST":
+        return _json_http({"error": "Method not allowed"}, 405, headers)
+
+    client_ip = _request_client_ip(req)
+    allowed, retry_after = polymarket_check_rate_limit(
+        route="predictions_orderbook",
+        client_ip=client_ip,
+        limit=40,
+        window_seconds=60,
+    )
+    if not allowed:
+        headers["Retry-After"] = str(retry_after)
+        return _json_http(
+            {
+                "error": "Rate limit exceeded",
+                "detail": "Too many orderbook requests. Try again shortly.",
+                "retryAfter": retry_after,
+            },
+            429,
+            headers,
+        )
+
+    payload = req.get_json(silent=True) or {}
+    raw_token_ids = payload.get("tokenIds") if isinstance(payload, dict) else None
+    if not isinstance(raw_token_ids, list):
+        return _json_http({"error": "tokenIds must be an array"}, 400, headers)
+
+    token_ids: list[str] = []
+    seen_ids: set[str] = set()
+    for raw in raw_token_ids:
+        token_id = str(raw or "").strip()
+        if not token_id or token_id in seen_ids:
+            continue
+        seen_ids.add(token_id)
+        token_ids.append(token_id)
+
+    if not token_ids:
+        return _json_http({"error": "tokenIds is empty"}, 400, headers)
+
+    max_levels = max(1, min(int(payload.get("maxLevels") or 5), 25))
+    # Keep upstream request bodies bounded while still allowing client batches.
+    token_ids = token_ids[:2000]
+
+    try:
+        orderbooks = fetch_orderbook_bundle(token_ids, max_levels=max_levels)
+        return _json_http(
+            {
+                "orderbooks": orderbooks,
+                "count": len(orderbooks),
+                "tokenCountRequested": len(token_ids),
+            },
+            200,
+            headers,
+        )
+    except Exception as exc:
+        print(f"predictions_orderbook_http failed: {exc}")
+        return _json_http(
+            {
+                "error": "Polymarket orderbook unavailable",
+                "detail": "Unable to fetch orderbook data from upstream.",
+                "orderbooks": {},
+            },
+            502,
+            headers,
+        )
+
+
+def _is_scheduler_or_admin_request(req: https_fn.Request) -> bool:
+    cron_flag = str(req.headers.get("X-Appengine-Cron") or "").strip().lower() == "true"
+    scheduler_flag = str(req.headers.get("X-CloudScheduler") or "").strip().lower() == "true"
+    if cron_flag or scheduler_flag:
+        return True
+
+    auth_header = str(req.headers.get("Authorization") or "").strip()
+    if not auth_header.lower().startswith("bearer "):
+        return False
+    id_token = auth_header.split(" ", 1)[1].strip()
+    if not id_token:
+        return False
+    try:
+        decoded = admin_auth.verify_id_token(id_token, check_revoked=False)
+    except Exception:
+        return False
+    email = _normalize_email(decoded.get("email"))
+    return email == _normalize_email(ADMIN_EMAIL)
+
+
+@https_fn.on_request()
+def send_newsletter_daily_http(req: https_fn.Request) -> tuple[str, int, dict[str, str]]:
+    headers = _cors_json_headers(req, "POST, OPTIONS")
+    if req.method == "OPTIONS":
+        return ("", 204, headers)
+    if req.method != "POST":
+        return _json_http({"error": "Method not allowed"}, 405, headers)
+    if not _is_scheduler_or_admin_request(req):
+        return _json_http({"error": "Unauthorized"}, 401, headers)
+
+    payload = req.get_json(silent=True) or {}
+    content_payload = payload.get("payload") if isinstance(payload, dict) and isinstance(payload.get("payload"), dict) else payload
+    try:
+        result = send_newsletter_batch(db, max_to_send=DAILY_SEND_CAP, payload=content_payload if isinstance(content_payload, dict) else None)
+        return _json_http(result if isinstance(result, dict) else {"status": "ok"}, 200, headers)
+    except Exception as exc:
+        print(f"send_newsletter_daily_http failed: {exc}")
+        return _json_http({"error": "Unable to send newsletter batch."}, 500, headers)
+
+
+@https_fn.on_request()
+def email_unsubscribe_http(req: https_fn.Request) -> tuple[str, int, dict[str, str]]:
+    headers = {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-store",
+    }
+    if req.method == "OPTIONS":
+        headers.update(_cors_json_headers(req, "GET, OPTIONS"))
+        return ("", 204, headers)
+    if req.method != "GET":
+        return ("Method not allowed", 405, headers)
+
+    token = str(req.args.get("token") or "").strip()
+    result = unsubscribe_with_token(db, token)
+    html_response = render_unsubscribe_html(result if isinstance(result, dict) else {"ok": False, "error": "Invalid token"})
+    status = 200 if bool(result.get("ok")) else 400
+    return (html_response, status, headers)
+
+
 @https_fn.on_request()
 def api_openai_models(req: https_fn.Request) -> https_fn.Response:
     if req.method == "OPTIONS":
@@ -7290,6 +7540,18 @@ def forecast_report_agent_scheduler(event: scheduler_fn.ScheduledEvent) -> None:
                 },
                 merge=True,
             )
+
+
+@scheduler_fn.on_schedule(
+    schedule="0 13 * * *",
+    timezone=scheduler_fn.Timezone(SOCIAL_AUTOMATION_TIMEZONE),
+)
+def newsletter_daily_scheduler(event: scheduler_fn.ScheduledEvent) -> None:
+    del event
+    try:
+        send_newsletter_batch(db, max_to_send=DAILY_SEND_CAP, payload=None)
+    except Exception as exc:
+        print(f"newsletter_daily_scheduler failed: {exc}")
 
 
 @https_fn.on_call()
