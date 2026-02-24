@@ -3921,7 +3921,7 @@ textarea {
   cursor: pointer;
 }
 
-.mobile-nav-toggle span {
+.mobile-nav-toggle i {
   font-size: 1.25rem;
   line-height: 1;
 }
@@ -4534,6 +4534,10 @@ form[data-provider-accent="amazon_nova"] #screener-generate-button {
 @media (max-width: 980px) {
   .mobile-nav-toggle {
     display: inline-flex;
+  }
+
+  .sidebar-toggle {
+    display: none !important;
   }
 
   .nav-links,
