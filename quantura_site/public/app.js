@@ -13646,6 +13646,10 @@
 	        const underlyingPrice = data.underlyingPrice;
 	        const riskFreeRate = data.riskFreeRate;
 	        const timeToExpiryYears = data.timeToExpiryYears;
+          const source = String(data.source || "yfinance").trim().toLowerCase();
+          const referenceOnly = Boolean(data.referenceOnly);
+          const fallbackUsed = Boolean(data.fallbackUsed);
+          const notice = String(data.notice || "").trim();
 	        const selectedExpiration = data.selectedExpiration || payload.expiration || "";
 	        const expirations = data.expirations || [];
 	        const calls = data.calls || [];
@@ -13750,10 +13754,18 @@
 	              <div class="options-meta">
 	                <div class="small"><strong>Underlying:</strong> ${money(underlyingPrice)}</div>
 	                <div class="small"><strong>Expiration:</strong> ${escapeHtml(selectedExpiration)}</div>
+                  <div class="small"><strong>Source:</strong> ${escapeHtml(source === "massive" ? "Powered by Massive" : "Yahoo Finance")}</div>
 	                <div class="small"><strong>RFR:</strong> ${typeof riskFreeRate === "number" ? fmt(riskFreeRate, 3) : "—"} · <strong>T:</strong> ${
 	                  typeof timeToExpiryYears === "number" ? fmt(timeToExpiryYears, 3) : "—"
 	                }y</div>
 	              </div>
+                ${
+                  source === "massive" || referenceOnly || fallbackUsed
+                    ? `<div class="notice" style="margin:10px 0;">${escapeHtml(
+                        notice || "Powered by Massive fallback. Quotes are not enabled on current plan; showing reference-only contracts."
+                      )}</div>`
+                    : ""
+                }
 	              <details class="option-block" open>
 	                <summary>Calls</summary>
 	                ${table(callsSorted, "Calls")}

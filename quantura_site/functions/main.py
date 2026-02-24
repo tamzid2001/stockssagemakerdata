@@ -1057,6 +1057,15 @@ def _massive_capability_guard(capability_key: str) -> tuple[dict[str, Any] | Non
     return capability, None
 
 
+def _is_massive_capability_available(capability_key: str) -> bool:
+    audit = _load_massive_capabilities(force_refresh=False)
+    capabilities = audit.get("capabilities") if isinstance(audit.get("capabilities"), dict) else {}
+    capability = capabilities.get(capability_key) if isinstance(capabilities, dict) else None
+    if not isinstance(capability, dict):
+        return False
+    return str(capability.get("status") or "").upper() == "AVAILABLE"
+
+
 def _normalize_massive_timeseries(rows: Any) -> list[dict[str, Any]]:
     output: list[dict[str, Any]] = []
     for row in rows if isinstance(rows, list) else []:
@@ -1118,6 +1127,102 @@ def _normalize_massive_ipos(rows: Any) -> list[dict[str, Any]]:
         reverse=True,
     )
     return output
+
+
+def _normalize_option_side(raw: Any) -> str:
+    text = str(raw or "").strip().lower()
+    if text in {"call", "calls", "c"}:
+        return "call"
+    if text in {"put", "puts", "p"}:
+        return "put"
+    return ""
+
+
+def _normalize_massive_options_contracts(rows: Any, *, underlying: str = "") -> list[dict[str, Any]]:
+    output: list[dict[str, Any]] = []
+    expected_underlying = _normalize_symbol_token(underlying)
+    for row in rows if isinstance(rows, list) else []:
+        if not isinstance(row, dict):
+            continue
+        contract_symbol = str(
+            row.get("ticker")
+            or row.get("contract")
+            or row.get("contract_ticker")
+            or row.get("symbol")
+            or ""
+        ).strip().upper()
+        root = _normalize_symbol_token(row.get("underlying") or row.get("underlying_ticker") or row.get("underlying_symbol"))
+        if expected_underlying and root and root != expected_underlying:
+            continue
+        if expected_underlying and not root:
+            root = expected_underlying
+        expiration = (
+            _normalize_yyyy_mm_dd(row.get("expiration"))
+            or _normalize_yyyy_mm_dd(row.get("expiration_date"))
+            or _normalize_yyyy_mm_dd(row.get("expiry"))
+        )
+        strike = _safe_float(row.get("strike") or row.get("strike_price"))
+        option_type = _normalize_option_side(row.get("type") or row.get("contract_type") or row.get("option_type"))
+        output.append(
+            {
+                "contractSymbol": contract_symbol,
+                "underlying": root,
+                "expiration": expiration,
+                "strike": strike,
+                "type": option_type,
+                "exerciseStyle": str(row.get("exercise_style") or row.get("exerciseStyle") or "").strip().lower(),
+            }
+        )
+    output.sort(
+        key=lambda item: (
+            str(item.get("expiration") or ""),
+            float(item.get("strike") or 0.0),
+            str(item.get("contractSymbol") or ""),
+        )
+    )
+    return output
+
+
+def _fetch_massive_options_contracts(
+    *,
+    underlying: str,
+    expiration: str = "",
+    strike_gte: float | None = None,
+    strike_lte: float | None = None,
+    option_type: str = "",
+    limit: int = 250,
+    cursor: str = "",
+) -> dict[str, Any]:
+    params: dict[str, Any] = {
+        "underlying": underlying,
+        "limit": max(1, min(int(limit or 250), 1000)),
+    }
+    if expiration:
+        params["expiration"] = expiration
+    if strike_gte is not None:
+        params["strike_gte"] = strike_gte
+    if strike_lte is not None:
+        params["strike_lte"] = strike_lte
+    if option_type:
+        params["type"] = option_type
+    if cursor:
+        params["cursor"] = cursor
+
+    payload = MASSIVE_CLIENT.request_json(
+        path="/options/contracts/all-contracts",
+        params=params,
+        cache_ttl_seconds=MASSIVE_CACHE_TTL_OPTIONS_CONTRACTS_SECONDS,
+    )
+    rows_raw = payload.get("results")
+    if not isinstance(rows_raw, list):
+        rows_raw = payload.get("data") if isinstance(payload.get("data"), list) else []
+    contracts = _normalize_massive_options_contracts(rows_raw, underlying=underlying)
+    next_cursor = MassiveClient._extract_cursor(payload)
+    return {
+        "contracts": contracts,
+        "nextCursor": next_cursor or "",
+        "rawCount": len(rows_raw),
+    }
 
 
 def _social_channel_webhooks() -> dict[str, str]:
@@ -5810,6 +5915,72 @@ def api_massive_stocks_ipos(req: https_fn.Request) -> https_fn.Response:
 
 
 @https_fn.on_request()
+def api_massive_options_contracts(req: https_fn.Request) -> https_fn.Response:
+    method_error = _massive_request_method_guard(req)
+    if method_error is not None:
+        return method_error
+
+    _, guard_error = _massive_capability_guard("options_all_contracts")
+    if guard_error is not None:
+        return guard_error
+
+    underlying = _normalize_symbol_token(req.args.get("underlying"))
+    if not underlying:
+        return _json_http_response({"error": "underlying is required."}, status=400)
+
+    try:
+        expiration = _parse_query_date(req.args.get("expiration"), field="expiration") if req.args.get("expiration") else ""
+    except ValueError as exc:
+        return _json_http_response({"error": str(exc)}, status=400)
+    option_type = _normalize_option_side(req.args.get("type"))
+    if req.args.get("type") and not option_type:
+        return _json_http_response({"error": "Invalid type. Expected call or put."}, status=400)
+
+    strike_gte = _safe_float(req.args.get("strike_gte"))
+    strike_lte = _safe_float(req.args.get("strike_lte"))
+    if strike_gte is not None and strike_lte is not None and strike_gte > strike_lte:
+        return _json_http_response({"error": "strike_gte must be <= strike_lte."}, status=400)
+    limit = _parse_http_limit(req.args, default=250, minimum=1, maximum=1000)
+    cursor = str(req.args.get("cursor") or "").strip()
+
+    try:
+        payload = _fetch_massive_options_contracts(
+            underlying=underlying,
+            expiration=expiration,
+            strike_gte=strike_gte,
+            strike_lte=strike_lte,
+            option_type=option_type,
+            limit=limit,
+            cursor=cursor,
+        )
+    except MassiveApiError as exc:
+        return _json_http_response(
+            {
+                "error": "Unable to load Massive options contracts.",
+                "status": exc.status_code,
+            },
+            status=502,
+        )
+
+    contracts = payload.get("contracts") if isinstance(payload.get("contracts"), list) else []
+    return _json_http_response(
+        {
+            "source": "massive",
+            "capability": "options_all_contracts",
+            "referenceOnly": True,
+            "underlying": underlying,
+            "expiration": expiration,
+            "type": option_type,
+            "limit": limit,
+            "cursor": cursor,
+            "nextCursor": str(payload.get("nextCursor") or ""),
+            "count": len(contracts),
+            "contracts": contracts,
+        }
+    )
+
+
+@https_fn.on_request()
 def api_chat(req: https_fn.Request) -> https_fn.Response:
     import yfinance as yf  # type: ignore
 
@@ -9967,11 +10138,7 @@ def get_options_chain(req: https_fn.CallableRequest) -> dict[str, Any]:
         expirations = list(ticker_obj.options or [])
     except Exception:
         expirations = []
-
-    if not expirations:
-        return {"ticker": ticker, "underlyingPrice": None, "expirations": [], "selectedExpiration": "", "calls": [], "puts": []}
-
-    selected = expiration if expiration in expirations else expirations[0]
+    selected = expiration if expiration in expirations else (expirations[0] if expirations else expiration)
 
     underlying_price = None
     try:
@@ -9987,22 +10154,29 @@ def get_options_chain(req: https_fn.CallableRequest) -> dict[str, Any]:
         except Exception:
             underlying_price = None
 
+    def _compute_time_to_expiry(expiration_value: str) -> float | None:
+        try:
+            exp_dt = datetime.strptime(str(expiration_value or ""), "%Y-%m-%d").date()
+            today = datetime.now(tz=timezone.utc).date()
+            days = max((exp_dt - today).days, 0)
+            return days / 365.0
+        except Exception:
+            return None
+
     # Time to expiry in years (approx). If we cannot parse, probabilities will be null.
-    T = None
-    try:
-        exp_dt = datetime.strptime(selected, "%Y-%m-%d").date()
-        today = datetime.now(tz=timezone.utc).date()
-        days = max((exp_dt - today).days, 0)
-        T = days / 365.0
-    except Exception:
-        T = None
+    T = _compute_time_to_expiry(selected)
 
     normal = NormalDist()
 
     def _option_metrics(
-        strike: float | None, iv: float | None, is_call: bool
+        strike: float | None,
+        iv: float | None,
+        is_call: bool,
+        *,
+        time_to_expiry: float | None = None,
     ) -> tuple[float, float, float, float] | None:
-        if underlying_price is None or T is None or T <= 0:
+        effective_t = time_to_expiry if time_to_expiry is not None else T
+        if underlying_price is None or effective_t is None or effective_t <= 0:
             return None
         if strike is None or strike <= 0:
             return None
@@ -10014,11 +10188,11 @@ def get_options_chain(req: https_fn.CallableRequest) -> dict[str, Any]:
         # Protect the probability math from extreme / bad IV values.
         if sigma > 5:
             return None
-        denom = sigma * math.sqrt(T)
+        denom = sigma * math.sqrt(effective_t)
         if denom <= 0:
             return None
-        d1 = (math.log(S / K) + (RISK_FREE_RATE + 0.5 * sigma * sigma) * T) / denom
-        d2 = d1 - sigma * math.sqrt(T)
+        d1 = (math.log(S / K) + (RISK_FREE_RATE + 0.5 * sigma * sigma) * effective_t) / denom
+        d2 = d1 - sigma * math.sqrt(effective_t)
         p_call = normal.cdf(d2)
         prob_itm = p_call if is_call else normal.cdf(-d2)
         delta = normal.cdf(d1) if is_call else normal.cdf(d1) - 1.0
@@ -10090,6 +10264,115 @@ def get_options_chain(req: https_fn.CallableRequest) -> dict[str, Any]:
             )
         return items
 
+    def _build_massive_reference_response(reason: str) -> dict[str, Any] | None:
+        if not _is_massive_capability_available("options_all_contracts"):
+            return None
+        try:
+            massive_payload = _fetch_massive_options_contracts(
+                underlying=ticker,
+                expiration=expiration if expiration else "",
+                limit=max(limit * 8, 240),
+            )
+        except MassiveApiError:
+            return None
+        contracts = massive_payload.get("contracts") if isinstance(massive_payload.get("contracts"), list) else []
+        if not contracts:
+            return None
+
+        expiration_values = sorted(
+            {
+                str(item.get("expiration") or "").strip()
+                for item in contracts
+                if str(item.get("expiration") or "").strip()
+            }
+        )
+        selected_exp = (
+            expiration
+            if expiration and expiration in expiration_values
+            else (expiration_values[0] if expiration_values else (expiration if expiration else ""))
+        )
+        selected_contracts = (
+            [item for item in contracts if str(item.get("expiration") or "").strip() == selected_exp]
+            if selected_exp
+            else list(contracts)
+        )
+        if not selected_contracts:
+            selected_contracts = list(contracts)
+
+        selected_contracts = selected_contracts[: max(limit * 2, 80)]
+        reference_time = _compute_time_to_expiry(selected_exp)
+
+        def _contract_to_option_row(contract: dict[str, Any], opt_type: str) -> dict[str, Any]:
+            strike = _safe_float(contract.get("strike"))
+            metrics = _option_metrics(
+                strike,
+                iv=None,
+                is_call=(opt_type == "call"),
+                time_to_expiry=reference_time,
+            )
+            return {
+                "contractSymbol": contract.get("contractSymbol") or "",
+                "type": opt_type,
+                "strike": strike,
+                "lastPrice": None,
+                "bid": None,
+                "ask": None,
+                "mid": None,
+                "impliedVolatility": None,
+                "delta": None if not metrics else round(float(metrics[1]), 4),
+                "volume": 0,
+                "openInterest": 0,
+                "inTheMoney": None,
+                "probabilityITM": None if not metrics else round(float(metrics[0]) * 100.0, 2),
+            }
+
+        calls_ref = [
+            _contract_to_option_row(item, "call")
+            for item in selected_contracts
+            if _normalize_option_side(item.get("type")) == "call"
+        ]
+        puts_ref = [
+            _contract_to_option_row(item, "put")
+            for item in selected_contracts
+            if _normalize_option_side(item.get("type")) == "put"
+        ]
+        calls_ref.sort(key=lambda item: float(item.get("strike") or 0.0))
+        puts_ref.sort(key=lambda item: float(item.get("strike") or 0.0))
+
+        return {
+            "ticker": ticker,
+            "underlyingPrice": underlying_price,
+            "timeToExpiryYears": None if reference_time is None else round(float(reference_time), 6),
+            "riskFreeRate": RISK_FREE_RATE,
+            "expirations": expiration_values,
+            "selectedExpiration": selected_exp,
+            "calls": _serialize_for_firestore(calls_ref),
+            "puts": _serialize_for_firestore(puts_ref),
+            "source": "massive",
+            "fallbackUsed": True,
+            "referenceOnly": True,
+            "fallbackReason": reason,
+            "notice": "Powered by Massive. Quotes are not enabled on the current plan, showing reference-only chain.",
+        }
+
+    if not expirations:
+        fallback = _build_massive_reference_response("yfinance_expirations_unavailable")
+        if fallback is not None:
+            return fallback
+        return {
+            "ticker": ticker,
+            "underlyingPrice": underlying_price,
+            "timeToExpiryYears": None,
+            "riskFreeRate": RISK_FREE_RATE,
+            "expirations": [],
+            "selectedExpiration": "",
+            "calls": [],
+            "puts": [],
+            "source": "yfinance",
+            "fallbackUsed": False,
+            "referenceOnly": False,
+        }
+
     try:
         chain = ticker_obj.option_chain(selected)
         calls = _format_chain(chain.calls, "call")
@@ -10097,6 +10380,11 @@ def get_options_chain(req: https_fn.CallableRequest) -> dict[str, Any]:
     except Exception:
         calls = []
         puts = []
+
+    if not calls and not puts:
+        fallback = _build_massive_reference_response("yfinance_chain_empty")
+        if fallback is not None:
+            return fallback
 
     return {
         "ticker": ticker,
@@ -10107,6 +10395,9 @@ def get_options_chain(req: https_fn.CallableRequest) -> dict[str, Any]:
         "selectedExpiration": selected,
         "calls": _serialize_for_firestore(calls),
         "puts": _serialize_for_firestore(puts),
+        "source": "yfinance",
+        "fallbackUsed": False,
+        "referenceOnly": False,
     }
 
 
