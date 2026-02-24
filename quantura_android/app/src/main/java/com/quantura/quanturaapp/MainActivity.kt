@@ -36,6 +36,7 @@ import com.quantura.quanturaapp.ads.AdManager
 import com.quantura.quanturaapp.ads.BannerAdView
 import com.quantura.quanturaapp.messaging.QuanturaFcmTokenHolder
 import com.quantura.quanturaapp.messaging.QuanturaMessagingService
+import com.quantura.quanturaapp.messaging.NativePersonalizedNotificationManager
 import com.quantura.quanturaapp.web.QuanturaJavascriptBridge
 import kotlinx.coroutines.launch
 import org.json.JSONObject
@@ -61,6 +62,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         requestNotificationPermission()
         fetchFcmToken()
+        NativePersonalizedNotificationManager.start(this)
 
         lifecycleScope.launch {
             appContainer.remoteConfigManager.fetchAndActivate()
