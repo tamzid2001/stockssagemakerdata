@@ -8,9 +8,15 @@ const { setGlobalOptions } = require("firebase-functions/v2/options");
 const { initializeApp } = require("firebase-admin/app");
 const { getRemoteConfig, RemoteConfigFetchResponse } = require("firebase-admin/remote-config");
 
-setGlobalOptions({ region: "us-central1", maxInstances: 10 });
+setGlobalOptions({ region: "us-central1", maxInstances: 10, memory: "512MiB" });
 
-const adminApp = initializeApp();
+let adminApp = null;
+
+const getAdminApp = () => {
+  if (adminApp) return adminApp;
+  adminApp = initializeApp();
+  return adminApp;
+};
 
 const TEMPLATE_TTL_MS = 5 * 60 * 1000;
 let cachedTemplate = null;
@@ -73,6 +79,22 @@ const normalizePath = (rawPath) => {
   return pathname;
 };
 
+const templateFromRoute = (route) => {
+  const clean = String(route || "").trim();
+  if (!clean || clean === "/") return "index.html";
+  const segments = clean
+    .replace(/^\//, "")
+    .split("/")
+    .filter(Boolean);
+  if (!segments.length) return "index.html";
+  const segmentPattern = /^[a-zA-Z0-9._-]+$/;
+  if (segments.some((segment) => segment === "." || segment === ".." || !segmentPattern.test(segment))) {
+    return null;
+  }
+  const rel = path.join(...segments);
+  return rel.endsWith(".html") ? rel : `${rel}.html`;
+};
+
 const resolveTemplate = (pathname) => {
   const route = normalizePath(pathname);
   if (route === "/" || route === "") return "index.html";
@@ -90,6 +112,14 @@ const resolveTemplate = (pathname) => {
     "/saved-forecasts",
     "/backtesting",
     "/studio",
+    "/ai-leaderboard",
+    "/forecast",
+    "/terminal",
+    "/ask-gpt-5",
+    "/ask-gpt5",
+    "/ask-gpt",
+    "/gpt-5",
+    "/gpt5",
   ]);
   if (forecastingAliases.has(route)) return "forecasting.html";
 
@@ -110,6 +140,7 @@ const resolveTemplate = (pathname) => {
   if (route === "/pricing") return "pricing.html";
   if (route === "/purchase") return "pricing.html";
   if (route === "/contact") return "contact.html";
+  if (route === "/shop") return "shop.html";
   if (route === "/admin") return "admin.html";
   if (route === "/terms") return "terms.html";
   if (route === "/privacy") return "privacy.html";
@@ -124,7 +155,9 @@ const resolveTemplate = (pathname) => {
     return path.join("blog", "posts", withExt);
   }
 
-  return null;
+  if (route === "/ticker" || route.startsWith("/ticker/")) return "ticker.html";
+
+  return templateFromRoute(route);
 };
 
 const loadTemplateHtml = async (relPath) => {
@@ -136,7 +169,7 @@ const loadTemplateHtml = async (relPath) => {
 const getServerTemplate = async () => {
   const now = Date.now();
   if (cachedTemplate && now - cachedTemplateLoadedAt < TEMPLATE_TTL_MS) return cachedTemplate;
-  const rc = getRemoteConfig(adminApp);
+  const rc = getRemoteConfig(getAdminApp());
   const template = rc.initServerTemplate({
     // Keep UI stable even if the server template has not been published yet.
     defaultConfig: {
@@ -231,7 +264,7 @@ exports.ssr = onRequest(async (req, res) => {
       randomizationId,
       path: normalizePath(req.path || "/"),
     });
-    const fetchResponse = new RemoteConfigFetchResponse(adminApp, config);
+    const fetchResponse = new RemoteConfigFetchResponse(getAdminApp(), config);
     initialFetchResponse = typeof fetchResponse.toJSON === "function" ? fetchResponse.toJSON() : fetchResponse;
   } catch (error) {
     const now = Date.now();

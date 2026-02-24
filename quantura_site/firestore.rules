@@ -58,6 +58,22 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin() || canEditWorkspace(userId);
     }
 
+    match /users/{userId}/ai_agents/{agentId} {
+      allow read: if isAdmin()
+        || (isSignedIn() && (request.auth.uid == userId || isWorkspaceCollaborator(userId)));
+      allow create, update, delete: if isAdmin() || canEditWorkspace(userId);
+    }
+
+    match /users/{userId}/ai_agent_followers/{docId} {
+      allow read, create, update, delete: if isAdmin()
+        || (isSignedIn() && (request.auth.uid == userId || isWorkspaceCollaborator(userId)));
+    }
+
+    match /users/{userId}/ai_agent_likes/{docId} {
+      allow read, create, update, delete: if isAdmin()
+        || (isSignedIn() && (request.auth.uid == userId || isWorkspaceCollaborator(userId)));
+    }
+
     match /collab_invites/{inviteId} {
       allow read, write: if false;
     }
