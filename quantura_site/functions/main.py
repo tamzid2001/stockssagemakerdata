@@ -25,7 +25,10 @@ import firebase_admin
 from firebase_admin import credentials, firestore, messaging as admin_messaging, storage as admin_storage
 from firebase_functions import https_fn, scheduler_fn
 from firebase_functions.options import MemoryOption, set_global_options
+from chat_runtime import build_chat_prompt_messages, select_model_for_request
 from massive_client import MassiveApiError, MassiveClient
+from massive_capabilities import classify_capability_status
+from options_fallback import should_use_massive_fallback
 import secrets_loader
 
 try:
@@ -932,14 +935,7 @@ def _stable_chat_system_prefix() -> str:
 
 
 def _massive_capability_label_from_status(status_code: int) -> str:
-    code = int(status_code or 0)
-    if code == 200:
-        return "AVAILABLE"
-    if code == 401:
-        return "UNAUTHORIZED"
-    if code in {402, 403}:
-        return "FORBIDDEN_OR_NOT_IN_PLAN"
-    return "ERROR"
+    return classify_capability_status(status_code)
 
 
 def _probe_massive_capability(path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -6025,14 +6021,17 @@ def api_chat(req: https_fn.Request) -> https_fn.Response:
         for item in _get_llm_allowed_models(context=context)
         if _model_provider_from_id(item) == "openai"
     ]
-    allowed_set = set(allowed_models)
-    if not requested_model:
-        requested_model = allowed_models[0] if allowed_models else "gpt-5-mini"
-    if requested_model not in allowed_set:
+    selection = select_model_for_request(
+        requested_model=requested_model,
+        allowed_models=allowed_models,
+        default_model=_normalize_ai_model_id(DEFAULT_CHAT_MODEL) or "gpt-5-mini",
+    )
+    requested_model = str(selection.get("selected_model") or "gpt-5-mini")
+    if not bool(selection.get("requested_allowed")) and str(selection.get("requested_model") or "").strip():
         return _json_http_response(
             {
                 "error": "Requested model is not available for this app profile.",
-                "allowedModels": allowed_models,
+                "allowedModels": selection.get("allowed_models") or allowed_models,
             },
             status=400,
         )
@@ -6147,17 +6146,15 @@ def api_chat(req: https_fn.Request) -> https_fn.Response:
         "technicalContext": technical_context,
     }
 
-    system_prompt = (
-        f"{_stable_chat_system_prefix()}\n"
-        f"Respond in {language_label}. Keep the language consistent in all sections."
+    prompt_messages = build_chat_prompt_messages(
+        stable_prefix=_stable_chat_system_prefix(),
+        language_label=language_label,
+        ticker=ticker,
+        question=question,
+        context_payload=context_payload,
     )
-    dynamic_user_prompt = (
-        f"Ticker: {ticker}\n"
-        f"Question: {question}\n"
-        f"Language preference: {language_label}\n"
-        "Ticker context payload:\n"
-        f"{json.dumps(context_payload, ensure_ascii=False)}"
-    )
+    system_prompt = str(prompt_messages.get("system_prompt") or "")
+    dynamic_user_prompt = str(prompt_messages.get("dynamic_user_prompt") or "")
     openai_payload = {
         "model": requested_model,
         "stream": True,
@@ -10355,7 +10352,12 @@ def get_options_chain(req: https_fn.CallableRequest) -> dict[str, Any]:
             "notice": "Powered by Massive. Quotes are not enabled on the current plan, showing reference-only chain.",
         }
 
-    if not expirations:
+    if should_use_massive_fallback(
+        yfinance_expirations=expirations,
+        calls=[],
+        puts=[],
+        yfinance_error=False,
+    ):
         fallback = _build_massive_reference_response("yfinance_expirations_unavailable")
         if fallback is not None:
             return fallback
@@ -10373,15 +10375,22 @@ def get_options_chain(req: https_fn.CallableRequest) -> dict[str, Any]:
             "referenceOnly": False,
         }
 
+    yfinance_chain_error = False
     try:
         chain = ticker_obj.option_chain(selected)
         calls = _format_chain(chain.calls, "call")
         puts = _format_chain(chain.puts, "put")
     except Exception:
+        yfinance_chain_error = True
         calls = []
         puts = []
 
-    if not calls and not puts:
+    if should_use_massive_fallback(
+        yfinance_expirations=expirations,
+        calls=calls,
+        puts=puts,
+        yfinance_error=yfinance_chain_error,
+    ):
         fallback = _build_massive_reference_response("yfinance_chain_empty")
         if fallback is not None:
             return fallback

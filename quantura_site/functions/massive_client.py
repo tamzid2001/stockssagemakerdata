@@ -8,7 +8,10 @@ from threading import Lock
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-import requests
+try:
+    import requests
+except Exception:  # pragma: no cover - requests may be absent in minimal test runtimes
+    requests = None  # type: ignore
 
 
 class MassiveApiError(RuntimeError):
@@ -18,12 +21,16 @@ class MassiveApiError(RuntimeError):
         self.body = body
 
 
+def is_blocked_massive_path(path: str) -> bool:
+    clean = "/" + str(path or "").strip().lstrip("/")
+    lowered = clean.lower()
+    return "balance-sheets" in lowered
+
+
 class MassiveClient:
     """
     Thin Massive REST wrapper for shared retries, cursor pagination, and TTL cache.
     """
-
-    _BLOCKED_PATH_TOKENS = ("balance-sheets",)
 
     def __init__(
         self,
@@ -45,8 +52,7 @@ class MassiveClient:
 
     def _assert_allowed_path(self, path: str) -> str:
         clean = "/" + str(path or "").strip().lstrip("/")
-        lowered = clean.lower()
-        if any(token in lowered for token in self._BLOCKED_PATH_TOKENS):
+        if is_blocked_massive_path(clean):
             raise MassiveApiError(
                 400,
                 "Massive balance-sheets endpoint is blocked by policy and cannot be requested.",
@@ -105,6 +111,8 @@ class MassiveClient:
     ) -> dict[str, Any]:
         if not self.api_key:
             raise MassiveApiError(503, "Massive API key is not configured.")
+        if requests is None:
+            raise MassiveApiError(503, "requests dependency is unavailable.")
         clean_path = self._assert_allowed_path(path)
         timeout = max(1.0, float(timeout_seconds or self.timeout_seconds))
         method_norm = str(method or "GET").upper()
