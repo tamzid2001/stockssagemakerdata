@@ -1087,6 +1087,7 @@
     terminalInterval: document.getElementById("terminal-interval"),
     terminalStatus: document.getElementById("terminal-status"),
     tickerChart: document.getElementById("ticker-chart"),
+    studioChartShell: document.querySelector(".chart-shell.studio-chart"),
     indicatorChart: document.getElementById("indicator-chart"),
     intelStrip: document.getElementById("intel-strip"),
     tickerIntelligenceOutput: document.getElementById("ticker-intelligence-output"),
@@ -7028,35 +7029,39 @@
 
   const renderTickerChart = async (rows, ticker, interval, overlays = [], options = {}) => {
     if (!ui.tickerChart) return;
-      const cleanTicker = normalizeTicker(ticker || state.tickerContext.ticker || "") || "AAPL";
-      const hasOverlays = Array.isArray(overlays) && overlays.length > 0;
-      const skipTradingView = Boolean(options?.skipTradingView);
-      const allowTradingView = isPanelVisible("ticker-intelligence");
+    const tickerIntelligenceVisible = isPanelVisible("ticker-intelligence");
+    if (!tickerIntelligenceVisible) {
+      setTerminalChartEngineVisibility("legacy");
+      return;
+    }
+    const cleanTicker = normalizeTicker(ticker || state.tickerContext.ticker || "") || "AAPL";
+    const hasOverlays = Array.isArray(overlays) && overlays.length > 0;
+    const skipTradingView = Boolean(options?.skipTradingView);
 
-      if (!rows?.length) {
-        ui.tickerChart.textContent = "No price data to plot.";
+    if (!rows?.length) {
+      ui.tickerChart.textContent = "No price data to plot.";
+      return;
+    }
+
+    if (!skipTradingView && !hasOverlays) {
+      const rendered = renderTradingViewTerminal({
+        ticker: cleanTicker,
+        interval,
+        onFallback: () => {
+          setTerminalStatus("TradingView unavailable. Showing Quantura chart.");
+          renderTickerChart(rows, cleanTicker, interval, overlays, { skipTradingView: true }).catch(() => {});
+        },
+      });
+      if (rendered) {
+        setTerminalChartEngineVisibility("tradingview");
         return;
       }
+    }
 
-      if (!skipTradingView && !hasOverlays && allowTradingView) {
-        const rendered = renderTradingViewTerminal({
-          ticker: cleanTicker,
-          interval,
-          onFallback: () => {
-            setTerminalStatus("TradingView unavailable. Showing Quantura chart.");
-            renderTickerChart(rows, cleanTicker, interval, overlays, { skipTradingView: true }).catch(() => {});
-          },
-        });
-        if (rendered) {
-          setTerminalChartEngineVisibility("tradingview");
-          return;
-        }
-      }
-
-      setTerminalChartEngineVisibility("legacy");
-      if (hasOverlays) {
-        setTerminalStatus("Quantura overlay mode is active on the chart.");
-      }
+    setTerminalChartEngineVisibility("legacy");
+    if (hasOverlays) {
+      setTerminalStatus("Quantura overlay mode is active on the chart.");
+    }
 
 	    const Plotly = getPlotly();
 	    if (!Plotly) {
@@ -10616,11 +10621,17 @@
       window.__quanturaPanelActivated = (panel) => {
         const next = String(panel || "").trim();
         if (!next) return;
+        const showTickerIntelligenceChart = next === "ticker-intelligence";
+
+        if (ui.studioChartShell) {
+          // Keep the chart window scoped to the ticker intelligence panel only.
+          ui.studioChartShell.classList.toggle("hidden", !showTickerIntelligenceChart);
+        }
         if (ui.intelStrip) {
           // Keep the intel side-strip scoped to the ticker intelligence view.
-          ui.intelStrip.classList.toggle("hidden", next !== "ticker-intelligence");
+          ui.intelStrip.classList.toggle("hidden", !showTickerIntelligenceChart);
         }
-        if (next === "ticker-intelligence") {
+        if (showTickerIntelligenceChart) {
           const activeTicker = normalizeTicker(state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "");
           if (activeTicker && Array.isArray(state.tickerContext.rows) && state.tickerContext.rows.length) {
             renderTickerChart(
@@ -10630,20 +10641,11 @@
               // TradingView does not support Quantura overlays; keep the TI view clean.
               []
             ).catch(() => {});
-          }
-        } else {
-          const activeTicker = normalizeTicker(state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "");
-          if (activeTicker && Array.isArray(state.tickerContext.rows) && state.tickerContext.rows.length) {
-            renderTickerChart(
-              state.tickerContext.rows,
-              activeTicker,
-              state.tickerContext.interval || "1d",
-              buildCurrentChartOverlays(),
-              { skipTradingView: true }
-            ).catch(() => {});
           } else {
             setTerminalChartEngineVisibility("legacy");
           }
+        } else {
+          setTerminalChartEngineVisibility("legacy");
         }
 
         if (next === "trending") {
