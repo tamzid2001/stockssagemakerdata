@@ -1,4 +1,10 @@
 import FirebaseCore
+#if canImport(FirebaseAuth)
+import FirebaseAuth
+#endif
+#if canImport(FirebaseFirestore)
+import FirebaseFirestore
+#endif
 #if canImport(FirebaseMessaging)
 import FirebaseMessaging
 #endif
@@ -48,6 +54,140 @@ final class NativeBridgeState {
     }
 }
 
+#if canImport(FirebaseAuth) && canImport(FirebaseFirestore) && canImport(UserNotifications)
+final class NativePersonalizedNotificationManager {
+    static let shared = NativePersonalizedNotificationManager()
+
+    private let db = Firestore.firestore()
+    private var authHandle: AuthStateDidChangeListenerHandle?
+    private var watchlistListener: ListenerRegistration?
+    private var forecastListener: ListenerRegistration?
+    private var aiLogListener: ListenerRegistration?
+    private var activeUid: String = ""
+    private var primedKeys: Set<String> = []
+    private var lastSentAt: [String: Date] = [:]
+
+    private init() {}
+
+    func start() {
+        guard FirebaseApp.app() != nil else { return }
+        guard authHandle == nil else { return }
+        authHandle = Auth.auth().addStateDidChangeListener { [weak self] _, user in
+            self?.bind(user: user)
+        }
+        bind(user: Auth.auth().currentUser)
+    }
+
+    private func bind(user: FirebaseAuth.User?) {
+        let uid = user?.uid.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if uid == activeUid { return }
+        clearListeners()
+        activeUid = uid
+        guard !uid.isEmpty else { return }
+
+        watchlistListener = db.collection("users").document(uid).collection("watchlist")
+            .order(by: "updatedAt", descending: true)
+            .limit(to: 1)
+            .addSnapshotListener { [weak self] snapshot, _ in
+                self?.handleSnapshot(
+                    key: "watchlist_\(uid)",
+                    snapshot: snapshot,
+                    title: "Watchlist updated",
+                    fallbackBody: "Your Quantura watchlist changed.",
+                    url: "/watchlist"
+                )
+            }
+
+        forecastListener = db.collection("forecast_requests")
+            .whereField("userId", isEqualTo: uid)
+            .limit(to: 1)
+            .addSnapshotListener { [weak self] snapshot, _ in
+                self?.handleSnapshot(
+                    key: "forecast_\(uid)",
+                    snapshot: snapshot,
+                    title: "Forecast update",
+                    fallbackBody: "A forecast was updated in your workspace.",
+                    url: "/saved-forecasts"
+                )
+            }
+
+        aiLogListener = db.collection("users").document(uid).collection("ai_logs")
+            .order(by: "createdAt", descending: true)
+            .limit(to: 1)
+            .addSnapshotListener { [weak self] snapshot, _ in
+                self?.handleSnapshot(
+                    key: "ai_logs_\(uid)",
+                    snapshot: snapshot,
+                    title: "AI log update",
+                    fallbackBody: "New AI activity is available.",
+                    url: "/dashboard"
+                )
+            }
+    }
+
+    private func handleSnapshot(
+        key: String,
+        snapshot: QuerySnapshot?,
+        title: String,
+        fallbackBody: String,
+        url: String
+    ) {
+        guard let snapshot else { return }
+        if !primedKeys.contains(key) {
+            primedKeys.insert(key)
+            return
+        }
+        guard !snapshot.documentChanges.isEmpty else { return }
+        guard let firstChange = snapshot.documentChanges.first else { return }
+        guard firstChange.type == .added || firstChange.type == .modified else { return }
+
+        if let last = lastSentAt[key], Date().timeIntervalSince(last) < 10 {
+            return
+        }
+        lastSentAt[key] = Date()
+
+        let data = firstChange.document.data()
+        let explicitBody = String(
+            data["notificationText"] as? String
+                ?? data["summary"] as? String
+                ?? data["notes"] as? String
+                ?? data["title"] as? String
+                ?? ""
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        let body = explicitBody.isEmpty ? fallbackBody : explicitBody
+        scheduleLocalNotification(title: title, body: body, url: url)
+    }
+
+    private func scheduleLocalNotification(title: String, body: String, url: String) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        content.userInfo = ["url": url]
+
+        let request = UNNotificationRequest(
+            identifier: UUID().uuidString,
+            content: content,
+            trigger: UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+        )
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error {
+                print("Native local notification scheduling failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func clearListeners() {
+        watchlistListener?.remove()
+        watchlistListener = nil
+        forecastListener?.remove()
+        forecastListener = nil
+        aiLogListener?.remove()
+        aiLogListener = nil
+    }
+}
+#endif
+
 enum FirebaseBootstrap {
     static func configureIfAvailable() -> Bool {
         if FirebaseApp.app() != nil {
@@ -91,6 +231,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
                let target = remotePayload["url"] as? String {
                 NativeBridgeState.shared.updateDeepLink(target)
             }
+        }
+#endif
+#if canImport(FirebaseAuth) && canImport(FirebaseFirestore) && canImport(UserNotifications)
+        if firebaseReady {
+            NativePersonalizedNotificationManager.shared.start()
         }
 #endif
         return true
