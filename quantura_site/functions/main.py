@@ -1771,6 +1771,62 @@ def _text_matches_social_query(text: str, query: str) -> bool:
     return hits >= needed
 
 
+def _safe_datetime_epoch(value: Any) -> int:
+    raw = str(value or "").strip()
+    if not raw:
+        return 0
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return int(parsed.timestamp())
+    except Exception:
+        return 0
+
+
+def _sort_social_items_newest(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    # Deterministic order: newest first, then stable fallback keys.
+    return sorted(
+        items or [],
+        key=lambda row: (
+            -_safe_datetime_epoch(row.get("createdAt") or row.get("updatedAt")),
+            str(row.get("id") or row.get("permalink") or row.get("title") or ""),
+        ),
+    )
+
+
+def _ticker_query_variants(raw_symbol: str) -> list[str]:
+    symbol = str(raw_symbol or "").upper().strip()
+    if not symbol:
+        return []
+    variants: list[str] = []
+    for candidate in [
+        symbol,
+        symbol.replace(".", ""),
+        symbol.replace("-", ""),
+        re.split(r"[.\-]", symbol)[0] if re.search(r"[.\-]", symbol) else symbol,
+    ]:
+        clean = str(candidate or "").strip().upper()
+        if clean and clean not in variants:
+            variants.append(clean)
+    return variants
+
+
+def _lookup_company_name(symbol: str) -> str:
+    clean = str(symbol or "").upper().strip()
+    if not clean:
+        return ""
+    try:
+        import yfinance as yf  # type: ignore
+
+        info = yf.Ticker(clean).info or {}
+        if not isinstance(info, dict):
+            return ""
+        return str(info.get("longName") or info.get("shortName") or "").strip()
+    except Exception:
+        return ""
+
+
 def _fetch_social_posts_via_web_search(
     query: str,
     *,
@@ -8243,14 +8299,91 @@ def get_ticker_x_trends(req: https_fn.CallableRequest) -> dict[str, Any]:
     ticker = str(data.get("ticker") or "").upper().strip()
     if not ticker:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Ticker is required.")
-    query = f"${ticker} {ticker} stock"
-    posts, warning = _fetch_x_social_posts(query, limit=8)
-    stories, stories_warning = _fetch_x_news_stories(query, limit=6)
-    combined_warning = " ".join([part for part in [warning, stories_warning] if str(part or "").strip()]).strip()
+
+    page_raw = data.get("page")
+    page_size_raw = data.get("pageSize")
+    query_override = str(data.get("query") or "").strip()
+
+    try:
+        page = int(page_raw or 1)
+    except Exception:
+        page = 1
+    try:
+        page_size = int(page_size_raw or 8)
+    except Exception:
+        page_size = 8
+    page = max(1, page)
+    page_size = max(1, min(page_size, 20))
+
+    query_variants = _ticker_query_variants(ticker)
+    primary_query = query_override or ticker
+    fetch_limit = max(8, min(page_size * 6, 40))
+
+    posts, warning = _fetch_x_social_posts(primary_query, limit=fetch_limit)
+    warnings: list[str] = [warning] if str(warning or "").strip() else []
+
+    fallback_used = False
+    fallback_query = ""
+    if not posts and not query_override:
+        company_name = _lookup_company_name(ticker)
+        fallback_candidates: list[str] = []
+        if company_name:
+            fallback_candidates.append(company_name)
+        fallback_candidates.append(f"${ticker}")
+        seen_fallback: set[str] = set()
+        for candidate in fallback_candidates:
+            probe = str(candidate or "").strip()
+            if not probe:
+                continue
+            key = probe.lower()
+            if key in seen_fallback:
+                continue
+            seen_fallback.add(key)
+            fallback_posts, fallback_warning = _fetch_x_social_posts(probe, limit=fetch_limit)
+            if str(fallback_warning or "").strip():
+                warnings.append(str(fallback_warning).strip())
+            if fallback_posts:
+                posts = fallback_posts
+                fallback_used = True
+                fallback_query = probe
+                break
+
+    stories_query = fallback_query or primary_query
+    stories, stories_warning = _fetch_x_news_stories(stories_query, limit=12)
+    if str(stories_warning or "").strip():
+        warnings.append(str(stories_warning).strip())
+
+    posts_sorted = _sort_social_items_newest(posts)
+    stories_sorted = _sort_social_items_newest(stories)
+
+    start_idx = (page - 1) * page_size
+    end_idx = start_idx + page_size
+    paged_posts = posts_sorted[start_idx:end_idx]
+    paged_stories = stories_sorted[start_idx:end_idx]
+    has_more_posts = end_idx < len(posts_sorted)
+    has_more_stories = end_idx < len(stories_sorted)
+
+    deduped_warnings: list[str] = []
+    for item in warnings:
+        text = str(item or "").strip()
+        if text and text not in deduped_warnings:
+            deduped_warnings.append(text)
+    combined_warning = " ".join(deduped_warnings).strip()
+
     return {
         "ticker": ticker,
-        "posts": _serialize_for_firestore(posts),
-        "stories": _serialize_for_firestore(stories),
+        "query": primary_query,
+        "queryVariants": query_variants,
+        "fallbackUsed": fallback_used,
+        "fallbackQuery": fallback_query,
+        "posts": _serialize_for_firestore(paged_posts),
+        "stories": _serialize_for_firestore(paged_stories),
+        "page": page,
+        "pageSize": page_size,
+        "totalPosts": int(len(posts_sorted)),
+        "totalStories": int(len(stories_sorted)),
+        "hasMorePosts": has_more_posts,
+        "hasMoreStories": has_more_stories,
         "warning": combined_warning,
     }
 
