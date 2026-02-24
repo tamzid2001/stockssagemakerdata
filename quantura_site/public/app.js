@@ -16,6 +16,7 @@
   const SIDEBAR_COLLAPSED_KEY = "quantura_sidebar_collapsed_v1";
   const LANGUAGE_PREFERENCE_KEY = "quantura_language_v1";
   const COUNTRY_PREFERENCE_KEY = "quantura_country_v1";
+  const TICKER_QUERY_MODEL_KEY = "quantura_ticker_query_model_v1";
   const TRADINGVIEW_LOAD_TIMEOUT_MS = 9000;
   const AI_LEADERBOARD_DEFAULT_HORIZON = "1y";
   const DEFAULT_VOLATILITY_THRESHOLD = 0.05;
@@ -160,6 +161,14 @@
   const FEATURE_VOTE_LABELS = Object.freeze({
     uploads: "Upload predictions CSV",
     autopilot: "Weekly Brief Autopilot",
+  });
+  const MASSIVE_CAPABILITY_LABELS = Object.freeze({
+    economy_treasury_yields: "Economy · Treasury Yields",
+    economy_inflation: "Economy · Inflation",
+    economy_inflation_expectations: "Economy · Inflation Expectations",
+    economy_labor_market: "Economy · Labor Market",
+    stocks_ipos: "Stocks · IPOs",
+    options_all_contracts: "Options · All Contracts",
   });
   const AI_MODEL_CATALOG = [
     {
@@ -1195,6 +1204,8 @@
     adminOrders: document.getElementById("admin-orders"),
     adminAutopilot: document.getElementById("admin-autopilot"),
     adminFeatureVoteResults: document.getElementById("admin-feature-vote-results"),
+    adminMassiveCapabilitiesStatus: document.getElementById("admin-massive-capabilities-status"),
+    adminMassiveCapabilities: document.getElementById("admin-massive-capabilities"),
     contactForm: document.getElementById("contact-form"),
     navAdmin: document.getElementById("nav-admin"),
     terminalForm: document.getElementById("terminal-form"),
@@ -1202,6 +1213,7 @@
     terminalInterval: document.getElementById("terminal-interval"),
     terminalStatus: document.getElementById("terminal-status"),
     tickerChart: document.getElementById("ticker-chart"),
+    studioChartShell: document.querySelector(".chart-shell.studio-chart"),
     indicatorChart: document.getElementById("indicator-chart"),
     intelStrip: document.getElementById("intel-strip"),
     tickerIntelligenceOutput: document.getElementById("ticker-intelligence-output"),
@@ -1217,6 +1229,7 @@
     technicalsOutput: document.getElementById("technicals-output"),
     downloadForm: document.getElementById("download-form"),
     downloadStatus: document.getElementById("download-status"),
+    downloadPreview: document.getElementById("download-preview"),
     trendingButton: document.getElementById("load-trending"),
     trendingList: document.getElementById("trending-list"),
     intelOutput: document.getElementById("intel-output"),
@@ -1236,10 +1249,27 @@
     marketHeadlinesStatus: document.getElementById("market-headlines-status"),
     marketHeadlinesOutput: document.getElementById("market-headlines-output"),
     marketSocialOutput: document.getElementById("market-social-output"),
+    massiveEconomyStatus: document.getElementById("massive-economy-status"),
+    massiveEconomyYields: document.getElementById("massive-economy-yields"),
+    massiveEconomyInflation: document.getElementById("massive-economy-inflation"),
+    massiveEconomyInflationExpectations: document.getElementById("massive-economy-inflation-expectations"),
+    massiveEconomyLabor: document.getElementById("massive-economy-labor"),
+    massiveIpoForm: document.getElementById("massive-ipo-form"),
+    massiveIpoStart: document.getElementById("massive-ipo-start"),
+    massiveIpoEnd: document.getElementById("massive-ipo-end"),
+    massiveIpoStatus: document.getElementById("massive-ipo-status"),
+    massiveIpoStatusText: document.getElementById("massive-ipo-status-text"),
+    massiveIpoOutput: document.getElementById("massive-ipo-output"),
     tickerQueryForm: document.getElementById("ticker-query-form"),
     tickerQueryTicker: document.getElementById("ticker-query-ticker"),
     tickerQueryQuestion: document.getElementById("ticker-query-question"),
     tickerQueryLanguage: document.getElementById("ticker-query-language"),
+    tickerQueryModel: document.getElementById("ticker-query-model"),
+    tickerQueryModelHint: document.getElementById("ticker-query-model-hint"),
+    tickerQueryModelInfo: document.getElementById("ticker-query-model-info"),
+    tickerQueryCacheToggleWrap: document.getElementById("ticker-query-cache-toggle-wrap"),
+    tickerQueryShowCacheStats: document.getElementById("ticker-query-show-cache-stats"),
+    tickerQueryCacheStats: document.getElementById("ticker-query-cache-stats"),
     tickerQueryStatus: document.getElementById("ticker-query-status"),
     tickerQueryOutput: document.getElementById("ticker-query-output"),
 	    optionsForm: document.getElementById("options-form"),
@@ -1391,6 +1421,8 @@
     aiAgents: [],
     aiFollowSet: new Set(),
     aiLikeSet: new Set(),
+    massiveCapabilities: null,
+    massiveCapabilitiesLoadedAt: 0,
     aiUsageToday: 0,
     aiUsageDateKey: "",
     aiUsageTierKey: "free",
@@ -3785,6 +3817,291 @@
     renderAdminFeatureVoteSummary(result.data || {});
   };
 
+  const renderMassiveCapabilitiesAudit = (payload = null) => {
+    if (!ui.adminMassiveCapabilities) return;
+    const capabilities = payload && typeof payload.capabilities === "object" ? payload.capabilities : {};
+    const entries = Object.entries(capabilities);
+    if (!entries.length) {
+      ui.adminMassiveCapabilities.innerHTML = `<div class="small muted">No capability probe results available yet.</div>`;
+      if (ui.adminMassiveCapabilitiesStatus) {
+        ui.adminMassiveCapabilitiesStatus.textContent = "Capability audit did not return endpoint results.";
+      }
+      return;
+    }
+
+    const cards = entries
+      .map(([key, raw]) => {
+        const row = raw && typeof raw === "object" ? raw : {};
+        const status = String(row.status || "ERROR").toUpperCase();
+        const httpStatus = Number(row.httpStatus || 0);
+        const available = status === "AVAILABLE";
+        const label = MASSIVE_CAPABILITY_LABELS[key] || key.replace(/_/g, " ");
+        const statusClass = available ? "completed" : status === "UNAUTHORIZED" ? "pending" : "cancelled";
+        const message = String(row.message || "").trim();
+        return `
+          <div class="order-card">
+            <div class="order-header">
+              <div class="order-title">${escapeHtml(label)}</div>
+              <span class="status ${statusClass}">${escapeHtml(status)}</span>
+            </div>
+            <div class="order-meta">
+              <div><strong>HTTP</strong> ${Number.isFinite(httpStatus) && httpStatus > 0 ? httpStatus : "—"}</div>
+              <div><strong>Path</strong> ${escapeHtml(String(row.path || "—"))}</div>
+              <div><strong>Availability</strong> ${available ? "Enabled" : "Unavailable"}</div>
+              <div><strong>Detail</strong> ${escapeHtml(message || "—")}</div>
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+    ui.adminMassiveCapabilities.innerHTML = cards;
+
+    if (ui.adminMassiveCapabilitiesStatus) {
+      const generated = payload?.generatedAt ? formatTimestamp(payload.generatedAt) : "—";
+      const fromCache = payload?.fromCache ? " (cached)" : "";
+      ui.adminMassiveCapabilitiesStatus.textContent = `Last capability audit: ${generated}${fromCache}.`;
+    }
+  };
+
+  const isMassiveCapabilityAvailable = (key) => {
+    const capabilities = state.massiveCapabilities && typeof state.massiveCapabilities === "object"
+      ? state.massiveCapabilities
+      : {};
+    const row = capabilities[key] && typeof capabilities[key] === "object" ? capabilities[key] : {};
+    return String(row.status || "").toUpperCase() === "AVAILABLE";
+  };
+
+  const loadMassiveCapabilities = async ({ force = false } = {}) => {
+    const now = Date.now();
+    if (!force && state.massiveCapabilities && now - Number(state.massiveCapabilitiesLoadedAt || 0) < 5 * 60 * 1000) {
+      renderMassiveCapabilitiesAudit({
+        generatedAt: new Date(state.massiveCapabilitiesLoadedAt).toISOString(),
+        fromCache: true,
+        capabilities: state.massiveCapabilities,
+      });
+      return state.massiveCapabilities;
+    }
+
+    if (ui.adminMassiveCapabilitiesStatus) {
+      ui.adminMassiveCapabilitiesStatus.textContent = "Running capability audit...";
+    }
+
+    const headers = await buildApiAuthHeaders();
+    const query = force ? "?force=1" : "";
+    const response = await fetch(`/api/massive/capabilities${query}`, {
+      method: "GET",
+      headers,
+      credentials: "same-origin",
+    });
+    if (!response.ok) {
+      throw new Error("Unable to load Massive capabilities.");
+    }
+    const payload = await response.json();
+    const capabilities = payload && typeof payload.capabilities === "object" ? payload.capabilities : {};
+    state.massiveCapabilities = capabilities;
+    state.massiveCapabilitiesLoadedAt = now;
+    renderMassiveCapabilitiesAudit(payload);
+    return capabilities;
+  };
+
+  const fetchMassiveApi = async (path, params = {}) => {
+    const query = new URLSearchParams();
+    Object.entries(params || {}).forEach(([key, value]) => {
+      if (value === null || value === undefined) return;
+      const text = String(value).trim();
+      if (!text) return;
+      query.set(key, text);
+    });
+    const headers = await buildApiAuthHeaders();
+    const url = query.toString() ? `${path}?${query.toString()}` : path;
+    const response = await fetch(url, {
+      method: "GET",
+      headers,
+      credentials: "same-origin",
+    });
+    if (!response.ok) {
+      let message = "Massive endpoint unavailable.";
+      try {
+        const payload = await response.json();
+        if (payload && typeof payload.error === "string" && payload.error.trim()) {
+          message = payload.error.trim();
+        }
+      } catch (error) {
+        // Ignore parse failures.
+      }
+      throw new Error(message);
+    }
+    return response.json();
+  };
+
+  const buildMiniLineSvg = (values = []) => {
+    const points = (Array.isArray(values) ? values : [])
+      .map((value) => Number(value))
+      .filter((value) => Number.isFinite(value));
+    if (points.length < 2) return "";
+    const min = Math.min(...points);
+    const max = Math.max(...points);
+    const span = max - min || 1;
+    const width = 220;
+    const height = 48;
+    const mapped = points
+      .map((value, idx) => {
+        const x = (idx / (points.length - 1)) * width;
+        const y = height - ((value - min) / span) * height;
+        return `${x.toFixed(2)},${y.toFixed(2)}`;
+      })
+      .join(" ");
+    return `
+      <svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" role="img" aria-label="Series trend">
+        <polyline fill="none" stroke="currentColor" stroke-width="2" points="${mapped}" />
+      </svg>
+    `;
+  };
+
+  const renderResearchMacroSeries = (container, payload, fallbackLabel) => {
+    if (!container) return;
+    const rows = Array.isArray(payload?.rows) ? payload.rows : [];
+    if (!rows.length) {
+      container.innerHTML = `<div class="small muted">No ${escapeHtml(fallbackLabel)} data returned.</div>`;
+      return;
+    }
+    const latest = rows.slice(0, 8);
+    const values = latest
+      .map((row) => Number(row?.value))
+      .filter((value) => Number.isFinite(value))
+      .reverse();
+    const sparkline = buildMiniLineSvg(values);
+    const listMarkup = latest
+      .map((row) => {
+        const date = escapeHtml(String(row?.date || "—"));
+        const value = Number(row?.value);
+        const pretty = Number.isFinite(value) ? value.toFixed(3) : "—";
+        return `<div class="small"><strong>${date}</strong> · ${escapeHtml(pretty)}</div>`;
+      })
+      .join("");
+    container.innerHTML = `${sparkline}${listMarkup}`;
+  };
+
+  const renderResearchIpoTable = (payload) => {
+    if (!ui.massiveIpoOutput) return;
+    const items = Array.isArray(payload?.items) ? payload.items : [];
+    if (!items.length) {
+      ui.massiveIpoOutput.innerHTML = `<div class="small muted">No IPO rows found for the selected filters.</div>`;
+      return;
+    }
+    const rows = items
+      .slice(0, 120)
+      .map((row) => {
+        const date = escapeHtml(String(row?.date || "—"));
+        const symbol = escapeHtml(String(row?.symbol || "—"));
+        const exchange = escapeHtml(String(row?.exchange || "—"));
+        const status = escapeHtml(String(row?.status || "—"));
+        const name = escapeHtml(String(row?.name || "—"));
+        return `<tr><td>${date}</td><td>${symbol}</td><td>${exchange}</td><td>${status}</td><td>${name}</td></tr>`;
+      })
+      .join("");
+    ui.massiveIpoOutput.innerHTML = `
+      <div style="overflow:auto;">
+        <table class="insider-table">
+          <thead><tr><th>Date</th><th>Symbol</th><th>Exchange</th><th>Status</th><th>Name</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    `;
+  };
+
+  const loadResearchMacroWidgets = async () => {
+    if (!ui.massiveEconomyStatus) return;
+    ui.massiveEconomyStatus.textContent = "Loading Massive macro series...";
+    try {
+      await loadMassiveCapabilities({ force: false });
+      const requests = [
+        {
+          key: "economy_treasury_yields",
+          path: "/api/massive/economy/treasury-yields",
+          node: ui.massiveEconomyYields,
+          label: "treasury yield",
+        },
+        {
+          key: "economy_inflation",
+          path: "/api/massive/economy/inflation",
+          node: ui.massiveEconomyInflation,
+          label: "inflation",
+        },
+        {
+          key: "economy_inflation_expectations",
+          path: "/api/massive/economy/inflation-expectations",
+          node: ui.massiveEconomyInflationExpectations,
+          label: "inflation expectations",
+        },
+        {
+          key: "economy_labor_market",
+          path: "/api/massive/economy/labor-market",
+          node: ui.massiveEconomyLabor,
+          label: "labor market",
+        },
+      ];
+
+      await Promise.all(
+        requests.map(async (item) => {
+          if (!isMassiveCapabilityAvailable(item.key)) {
+            if (item.node) {
+              item.node.innerHTML = `<div class="small muted">Not available on current Massive plan.</div>`;
+            }
+            return;
+          }
+          try {
+            const payload = await fetchMassiveApi(item.path, { limit: 120 });
+            renderResearchMacroSeries(item.node, payload, item.label);
+          } catch (error) {
+            if (item.node) {
+              item.node.innerHTML = `<div class="small muted">${escapeHtml(extractErrorMessage(error, "Unable to load series."))}</div>`;
+            }
+          }
+        })
+      );
+      ui.massiveEconomyStatus.textContent = "Macro context loaded via Massive capability-gated endpoints.";
+    } catch (error) {
+      ui.massiveEconomyStatus.textContent = extractErrorMessage(error, "Macro context is unavailable.");
+      [ui.massiveEconomyYields, ui.massiveEconomyInflation, ui.massiveEconomyInflationExpectations, ui.massiveEconomyLabor].forEach((node) => {
+        if (!node) return;
+        node.innerHTML = `<div class="small muted">Capability audit unavailable.</div>`;
+      });
+    }
+  };
+
+  const loadResearchIpoCalendar = async ({ force = false } = {}) => {
+    if (!ui.massiveIpoOutput || !ui.massiveIpoStatusText) return;
+    try {
+      await loadMassiveCapabilities({ force: false });
+      if (!isMassiveCapabilityAvailable("stocks_ipos")) {
+        ui.massiveIpoStatusText.textContent = "IPO endpoint is not available in the current Massive plan.";
+        ui.massiveIpoOutput.innerHTML = `<div class="small muted">IPO data is currently gated off by plan capability.</div>`;
+        return;
+      }
+
+      const start = String(ui.massiveIpoStart?.value || "").trim();
+      const end = String(ui.massiveIpoEnd?.value || "").trim();
+      const status = String(ui.massiveIpoStatus?.value || "").trim().toLowerCase();
+      ui.massiveIpoStatusText.textContent = "Loading IPO calendar...";
+      const payload = await fetchMassiveApi("/api/massive/stocks/ipos", {
+        start,
+        end,
+        status,
+        limit: 250,
+        force: force ? "1" : "",
+      });
+      renderResearchIpoTable(payload);
+      const count = Number(payload?.count || 0);
+      ui.massiveIpoStatusText.textContent = count
+        ? `Loaded ${count} IPO row${count === 1 ? "" : "s"}.`
+        : "No IPO rows for selected filters.";
+    } catch (error) {
+      ui.massiveIpoStatusText.textContent = extractErrorMessage(error, "Unable to load IPO calendar.");
+      ui.massiveIpoOutput.innerHTML = `<div class="small muted">${escapeHtml(extractErrorMessage(error, "Unable to load IPO calendar."))}</div>`;
+    }
+  };
+
   const setFeatureVoteSummaryPolling = (functions, enabled) => {
     if (state.featureVoteSummaryTimer) {
       window.clearInterval(state.featureVoteSummaryTimer);
@@ -5875,6 +6192,9 @@
     const data = payload || {};
     const ticker = normalizeTicker(data.ticker || state.tickerContext.ticker || "") || "";
     const profile = data.profile || {};
+    const profileDetails = data.profileDetails && typeof data.profileDetails === "object" ? data.profileDetails : {};
+    const valuation = data.valuation && typeof data.valuation === "object" ? data.valuation : {};
+    const trading = data.trading && typeof data.trading === "object" ? data.trading : {};
     const events = Array.isArray(data.events) ? data.events : [];
     const analyst = data.analyst || {};
     const trend = Array.isArray(data.recommendationTrend) ? data.recommendationTrend : [];
@@ -5892,6 +6212,39 @@
     const website = String(profile.website || "").trim();
     const websiteLink = website ? escapeHtml(website) : "";
     const summary = escapeHtml(profile.summary || "");
+    const profileLongName = escapeHtml(String(profileDetails.longName || profile.name || ticker || "Ticker"));
+    const profileSector = escapeHtml(String(profileDetails.sector || profile.sector || "").trim());
+    const profileIndustry = escapeHtml(String(profileDetails.industry || profile.industry || "").trim());
+    const profileCountry = escapeHtml(String(profileDetails.country || profile.country || "").trim());
+    const profileWebsite = String(profileDetails.website || profile.website || "").trim();
+    const profileWebsiteLink = profileWebsite ? escapeHtml(profileWebsite) : websiteLink;
+    const profileBusinessSummary = escapeHtml(String(profileDetails.longBusinessSummary || profile.summary || "").trim());
+
+    const valuationRows = [
+      { label: "Market cap", value: toFiniteOrNull(valuation.marketCap) === null ? "—" : formatCompactNumber(valuation.marketCap) },
+      { label: "Trailing P/E", value: toFiniteOrNull(valuation.trailingPE) === null ? "—" : Number(valuation.trailingPE).toFixed(2) },
+      { label: "Forward P/E", value: toFiniteOrNull(valuation.forwardPE) === null ? "—" : Number(valuation.forwardPE).toFixed(2) },
+      { label: "Price to book", value: toFiniteOrNull(valuation.priceToBook) === null ? "—" : Number(valuation.priceToBook).toFixed(2) },
+      {
+        label: "Enterprise value",
+        value: toFiniteOrNull(valuation.enterpriseValue) === null ? "—" : formatCompactNumber(valuation.enterpriseValue),
+      },
+    ];
+    const tradingRows = [
+      { label: "Beta", value: toFiniteOrNull(trading.beta) === null ? "—" : Number(trading.beta).toFixed(2) },
+      {
+        label: "52-week range",
+        value:
+          toFiniteOrNull(trading.fiftyTwoWeekLow) !== null && toFiniteOrNull(trading.fiftyTwoWeekHigh) !== null
+            ? `${formatUsd(trading.fiftyTwoWeekLow)} - ${formatUsd(trading.fiftyTwoWeekHigh)}`
+            : "—",
+      },
+      { label: "Average volume", value: toFiniteOrNull(trading.avgVolume) === null ? "—" : formatCompactNumber(trading.avgVolume) },
+      {
+        label: "Shares outstanding",
+        value: toFiniteOrNull(trading.sharesOutstanding) === null ? "—" : formatCompactNumber(trading.sharesOutstanding),
+      },
+    ];
 
     const stats = [
       { label: "Market cap", value: profile.marketCap ? formatCompactNumber(profile.marketCap) : "—" },
@@ -5953,6 +6306,46 @@
         <div class="intel-name">${name}</div>
         <div class="small muted">${[ticker, sector, industry, exchange, currency].filter(Boolean).join(" · ")}</div>
         ${websiteLink ? `<a class="news-link" href="${websiteLink}" target="_blank" rel="noreferrer">Company site</a>` : ""}
+      </div>
+
+      <div class="intel-split">
+        <div>
+          <div class="small"><strong>Company / Profile</strong></div>
+          <div class="intel-kv">
+            <div class="intel-kv-row"><span>Name</span><span>${profileLongName || "—"}</span></div>
+            <div class="intel-kv-row"><span>Sector</span><span>${profileSector || "—"}</span></div>
+            <div class="intel-kv-row"><span>Industry</span><span>${profileIndustry || "—"}</span></div>
+            <div class="intel-kv-row"><span>Country</span><span>${profileCountry || "—"}</span></div>
+          </div>
+          ${
+            profileWebsiteLink
+              ? `<a class="news-link" href="${profileWebsiteLink}" target="_blank" rel="noreferrer">Website</a>`
+              : ""
+          }
+          ${profileBusinessSummary ? `<div class="intel-summary small" style="margin-top:8px;">${profileBusinessSummary}</div>` : ""}
+        </div>
+        <div>
+          <div class="small"><strong>Valuation</strong></div>
+          <div class="intel-kv">
+            ${valuationRows
+              .map(
+                (row) => `
+                <div class="intel-kv-row"><span>${escapeHtml(String(row.label || ""))}</span><span>${escapeHtml(String(row.value || "—"))}</span></div>
+              `
+              )
+              .join("")}
+          </div>
+          <div class="small" style="margin-top:8px;"><strong>Trading</strong></div>
+          <div class="intel-kv">
+            ${tradingRows
+              .map(
+                (row) => `
+                <div class="intel-kv-row"><span>${escapeHtml(String(row.label || ""))}</span><span>${escapeHtml(String(row.value || "—"))}</span></div>
+              `
+              )
+              .join("")}
+          </div>
+        </div>
       </div>
 
       <div class="intel-stats">
@@ -6094,6 +6487,24 @@
       <div style="margin-top:16px;">
         <div class="small"><strong>Peer Comparison</strong> · P/E, Debt-to-Equity, Sharpe Ratio</div>
         ${peersHtml}
+      </div>
+      <div class="intel-raw-shell" style="margin-top:16px;">
+        <div class="card-head">
+          <div class="small"><strong>Raw Yahoo Fields</strong> · full `.info` payload</div>
+          <button
+            class="cta secondary small"
+            type="button"
+            data-action="intel-load-full-info"
+            data-ticker="${escapeHtml(ticker)}"
+          >
+            View all fields
+          </button>
+        </div>
+        <div class="intel-raw-controls hidden" data-intel-raw-controls>
+          <label class="label" for="intel-raw-filter">Search keys</label>
+          <input id="intel-raw-filter" data-action="intel-filter-full-info" data-ticker="${escapeHtml(ticker)}" placeholder="marketCap, enterpriseValue, beta..." />
+        </div>
+        <div id="intel-raw-info-output" class="panel-output small hidden">Expand to load all fields.</div>
       </div>
     `;
 
@@ -6552,9 +6963,21 @@
     if (!force && state.tickerContext.intelTicker === symbol) return;
     state.tickerContext.intelTicker = symbol;
 
+    let snapshotPayload = null;
     try {
       if (ui.intelOutput) setOutputLoading(ui.intelOutput, "Loading company context...");
       if (ui.tickerIntelligenceOutput) setOutputLoading(ui.tickerIntelligenceOutput, "Loading institutional intelligence...");
+      try {
+        const getSnapshot = functions.httpsCallable("get_ticker_info_snapshot");
+        const snapshotResult = await getSnapshot({ ticker: symbol, meta: buildMeta() });
+        snapshotPayload = snapshotResult.data && typeof snapshotResult.data === "object" ? snapshotResult.data : {};
+        if (ui.intelOutput) setOutputReady(ui.intelOutput);
+        if (ui.tickerIntelligenceOutput) setOutputReady(ui.tickerIntelligenceOutput);
+        renderTickerIntel({ ...(snapshotPayload || {}), ticker: symbol });
+      } catch (snapshotError) {
+        snapshotPayload = null;
+      }
+
       const getIntel = functions.httpsCallable("get_ticker_intel");
       const result = await getIntel({ ticker: symbol, meta: buildMeta() });
       if (ui.intelOutput) setOutputReady(ui.intelOutput);
@@ -6565,6 +6988,10 @@
       }
       logEvent("ticker_intel_loaded", { ticker: symbol });
     } catch (error) {
+      if (snapshotPayload) {
+        if (notify) showToast("Detailed intelligence is temporarily unavailable. Showing snapshot data.", "warn");
+        return;
+      }
       if (ui.intelOutput) {
         setOutputReady(ui.intelOutput);
         ui.intelOutput.innerHTML = `<div class="small muted">Unable to load ticker intelligence right now.</div>`;
@@ -6643,30 +7070,121 @@
     }
   };
 
-  const renderTickerXTrends = (posts, stories, ticker, warning = "") => {
-    if (!ui.xTrendingOutput) return;
-    const list = Array.isArray(posts) ? posts : [];
-    const storyList = Array.isArray(stories) ? stories : [];
+  const normalizeXSocialQuery = (raw) => String(raw || "").trim();
+
+  const uniqueSocialRows = (rows) => {
+    const list = Array.isArray(rows) ? rows : [];
+    const seen = new Set();
+    const out = [];
+    for (const row of list) {
+      const key = String(row?.id || row?.permalink || `${row?.title || ""}_${row?.createdAt || ""}`).trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(row);
+    }
+    return out;
+  };
+
+  const isTransientXTrendsError = (error) => {
+    const code = String(error?.code || "").toLowerCase();
+    const message = String(error?.message || "").toLowerCase();
+    if (["resource-exhausted", "unavailable", "internal", "deadline-exceeded"].some((item) => code.includes(item))) return true;
+    if (message.includes("429")) return true;
+    if (/\b5\d\d\b/.test(message)) return true;
+    if (message.includes("timeout")) return true;
+    return false;
+  };
+
+  const callWithBackoffRetry = async (callable, payload, { attempts = 3, baseDelayMs = 320 } = {}) => {
+    let lastError = null;
+    for (let i = 0; i < Math.max(1, attempts); i += 1) {
+      try {
+        return await callable(payload);
+      } catch (error) {
+        lastError = error;
+        if (!isTransientXTrendsError(error) || i >= attempts - 1) throw error;
+        const jitter = Math.floor(Math.random() * 160);
+        const delay = baseDelayMs * (2 ** i) + jitter;
+        // Exponential backoff keeps noisy 429/5xx from surfacing as immediate hard failures.
+        await new Promise((resolve) => window.setTimeout(resolve, delay));
+      }
+    }
+    throw lastError || new Error("X trends request failed.");
+  };
+
+  const buildXVariantChips = ({ variants, activeQuery, ticker }) => {
     const symbol = normalizeTicker(ticker) || "";
-    const warningText = String(warning || "").trim();
-    const warningBlock = warningText
-      ? `<div class="small muted" style="margin-top:8px;">${escapeHtml(warningText)}</div>`
+    const active = normalizeXSocialQuery(activeQuery).toUpperCase();
+    const chips = (Array.isArray(variants) ? variants : [])
+      .map((item) => normalizeTicker(item))
+      .filter(Boolean)
+      .filter((item, idx, arr) => arr.indexOf(item) === idx)
+      .filter((item) => item !== active)
+      .slice(0, 4);
+    if (!chips.length || !symbol) return "";
+    return `
+      <div class="x-variant-chips">
+        ${chips
+          .map(
+            (variant) =>
+              `<button class="task-chip" type="button" data-action="x-trends-variant" data-ticker="${escapeHtml(symbol)}" data-query="${escapeHtml(
+                variant
+              )}">Try ${escapeHtml(variant)}</button>`
+          )
+          .join("")}
+      </div>
+    `;
+  };
+
+  const renderTickerXTrends = (payload = {}) => {
+    if (!ui.xTrendingOutput) return;
+    const list = Array.isArray(payload.posts) ? payload.posts : [];
+    const storyList = Array.isArray(payload.stories) ? payload.stories : [];
+    const symbol = normalizeTicker(payload.ticker || "") || "";
+    const warningText = String(payload.warning || "").trim();
+    const query = normalizeXSocialQuery(payload.query || symbol);
+    const fallbackUsed = Boolean(payload.fallbackUsed);
+    const fallbackQuery = normalizeXSocialQuery(payload.fallbackQuery || "");
+    const page = Math.max(1, Number(payload.page || 1));
+    const pageSize = Math.max(1, Number(payload.pageSize || 8));
+    const totalPosts = Number(payload.totalPosts || list.length || 0);
+    const hasMorePosts = Boolean(payload.hasMorePosts);
+    const variantChips = buildXVariantChips({
+      variants: payload.queryVariants,
+      activeQuery: query,
+      ticker: symbol,
+    });
+    const warningBlock = warningText ? `<div class="small muted" style="margin-top:10px;">${escapeHtml(warningText)}</div>` : "";
+    const queryBlock = query ? `<div class="small muted" style="margin-bottom:8px;">Query: ${escapeHtml(query)}</div>` : "";
+    const fallbackBlock = fallbackUsed
+      ? `<div class="small muted" style="margin-bottom:8px;">Fallback query used: ${escapeHtml(fallbackQuery || "$" + symbol)}</div>`
       : "";
 
     if (!list.length && !storyList.length) {
       ui.xTrendingOutput.innerHTML = `
-        <div class="small muted">No X posts returned for ${escapeHtml(symbol || "this ticker")}.</div>
-        ${warningBlock}
+        <div class="x-empty-state">
+          <div class="small muted">No posts found for ${escapeHtml(symbol || "this ticker")}.</div>
+          ${queryBlock}
+          ${fallbackBlock}
+          ${variantChips}
+          <div style="margin-top:10px;">
+            <button class="cta secondary small" type="button" data-action="x-trends-retry" data-ticker="${escapeHtml(symbol)}" data-query="${escapeHtml(
+              query
+            )}">Retry</button>
+          </div>
+          ${warningBlock}
+        </div>
       `;
       return;
     }
 
     const blocks = [];
+    if (queryBlock) blocks.push(queryBlock);
+    if (fallbackBlock) blocks.push(fallbackBlock);
 
     if (list.length) {
       blocks.push(
         list
-          .slice(0, 8)
           .map((post) => {
             const authorName = escapeHtml(post.authorName || post.authorUsername || "Unknown");
             const authorHandle = escapeHtml(post.authorUsername ? `@${post.authorUsername}` : "");
@@ -6704,7 +7222,6 @@
       blocks.push(`<div class="x-story-divider small muted">X News stories</div>`);
       blocks.push(
         storyList
-          .slice(0, 6)
           .map((story) => {
             const title = escapeHtml(story.name || "X News story");
             const hook = escapeHtml(story.hook || "");
@@ -6728,33 +7245,118 @@
       );
     }
 
-    ui.xTrendingOutput.innerHTML = blocks.join("") + warningBlock;
+    if (hasMorePosts) {
+      blocks.push(`
+        <div class="x-pagination">
+          <button
+            class="cta secondary small"
+            type="button"
+            data-action="x-trends-more"
+            data-ticker="${escapeHtml(symbol)}"
+            data-query="${escapeHtml(query)}"
+            data-next-page="${page + 1}"
+          >
+            Load more posts
+          </button>
+          <span class="small muted">${Math.min(list.length, totalPosts)} / ${Number.isFinite(totalPosts) ? totalPosts : "?"}</span>
+        </div>
+      `);
+    }
+
+    ui.xTrendingOutput.innerHTML = blocks.join("") + variantChips + warningBlock;
   };
 
-  const loadTickerXTrends = async (functions, ticker, { notify = false, force = false } = {}) => {
+  const loadTickerXTrends = async (
+    functions,
+    ticker,
+    { notify = false, force = false, page = 1, append = false, queryOverride = "", pageSize = 8 } = {}
+  ) => {
     if (!functions || !ui.xTrendingOutput) return;
     const symbol = normalizeTicker(ticker);
     if (!symbol) {
       ui.xTrendingOutput.innerHTML = `<div class="small muted">Load a ticker to see live X discussion.</div>`;
       return;
     }
-    if (!force && state.tickerContext.xTicker === symbol) return;
-    state.tickerContext.xTicker = symbol;
+
+    const query = normalizeXSocialQuery(queryOverride);
+    const normalizedPage = Math.max(1, Number(page || 1));
+    const normalizedPageSize = Math.max(1, Math.min(20, Number(pageSize || 8)));
+    const sameRequest = state.tickerContext.xTicker === symbol && state.tickerContext.xQuery === query;
+    if (!force && !append && sameRequest && state.tickerContext.xPage === normalizedPage) return;
+
+    if (!append) {
+      state.tickerContext.xTicker = symbol;
+      state.tickerContext.xQuery = query;
+      state.tickerContext.xPage = 1;
+      state.tickerContext.xPosts = [];
+      state.tickerContext.xStories = [];
+      state.tickerContext.xHasMorePosts = false;
+      state.tickerContext.xHasMoreStories = false;
+      state.tickerContext.xVariants = [];
+      setOutputLoading(ui.xTrendingOutput, "Loading X trends...");
+    }
 
     try {
-      setOutputLoading(ui.xTrendingOutput, "Loading X trends...");
       const getXTrends = functions.httpsCallable("get_ticker_x_trends");
-      const result = await getXTrends({ ticker: symbol, meta: buildMeta() });
+      const result = await callWithBackoffRetry(getXTrends, {
+        ticker: symbol,
+        query,
+        page: normalizedPage,
+        pageSize: normalizedPageSize,
+        meta: buildMeta(),
+      });
       const payload = result.data || {};
-      const posts = Array.isArray(payload.posts) ? payload.posts : [];
-      const stories = Array.isArray(payload.stories) ? payload.stories : [];
-      const warning = String(payload.warning || "").trim();
+      const incomingPosts = Array.isArray(payload.posts) ? payload.posts : [];
+      const incomingStories = Array.isArray(payload.stories) ? payload.stories : [];
+
+      const mergedPosts = append ? uniqueSocialRows([...(state.tickerContext.xPosts || []), ...incomingPosts]) : uniqueSocialRows(incomingPosts);
+      const mergedStories = append
+        ? uniqueSocialRows([...(state.tickerContext.xStories || []), ...incomingStories])
+        : uniqueSocialRows(incomingStories);
+
+      state.tickerContext.xTicker = symbol;
+      state.tickerContext.xQuery = query;
+      state.tickerContext.xPage = normalizedPage;
+      state.tickerContext.xPosts = mergedPosts;
+      state.tickerContext.xStories = mergedStories;
+      state.tickerContext.xHasMorePosts = Boolean(payload.hasMorePosts);
+      state.tickerContext.xHasMoreStories = Boolean(payload.hasMoreStories);
+      state.tickerContext.xVariants = Array.isArray(payload.queryVariants) ? payload.queryVariants : [];
+
       setOutputReady(ui.xTrendingOutput);
-      renderTickerXTrends(posts, stories, symbol, warning);
-      logEvent("x_trends_loaded", { ticker: symbol, count: posts.length, stories: stories.length });
+      renderTickerXTrends({
+        ticker: symbol,
+        query: payload.query || query || symbol,
+        queryVariants: state.tickerContext.xVariants,
+        posts: mergedPosts,
+        stories: mergedStories,
+        page: normalizedPage,
+        pageSize: Number(payload.pageSize || normalizedPageSize),
+        hasMorePosts: state.tickerContext.xHasMorePosts,
+        hasMoreStories: state.tickerContext.xHasMoreStories,
+        totalPosts: Number(payload.totalPosts || mergedPosts.length || 0),
+        totalStories: Number(payload.totalStories || mergedStories.length || 0),
+        warning: String(payload.warning || "").trim(),
+        fallbackUsed: Boolean(payload.fallbackUsed),
+        fallbackQuery: String(payload.fallbackQuery || "").trim(),
+      });
+      logEvent("x_trends_loaded", {
+        ticker: symbol,
+        query: query || symbol,
+        count: mergedPosts.length,
+        stories: mergedStories.length,
+        page: normalizedPage,
+      });
     } catch (error) {
       setOutputReady(ui.xTrendingOutput);
-      ui.xTrendingOutput.innerHTML = `<div class="small muted">Unable to load X trends right now.</div>`;
+      ui.xTrendingOutput.innerHTML = `
+        <div class="small muted">Unable to load X trends right now.</div>
+        <div style="margin-top:10px;">
+          <button class="cta secondary small" type="button" data-action="x-trends-retry" data-ticker="${escapeHtml(symbol)}" data-query="${escapeHtml(
+            query
+          )}">Retry</button>
+        </div>
+      `;
       if (notify) showToast(error.message || "Unable to load X trends.", "warn");
     }
   };
@@ -7027,12 +7629,282 @@
     `;
   };
 
+  const buildApiAuthHeaders = async ({ includeJson = false } = {}) => {
+    const headers = {};
+    if (includeJson) headers["Content-Type"] = "application/json";
+    try {
+      const auth = state.clients?.auth;
+      const user = auth?.currentUser;
+      if (user) {
+        const token = await user.getIdToken();
+        if (token) headers.Authorization = `Bearer ${token}`;
+      }
+    } catch (error) {
+      // Ignore token read failures; endpoint can still decide if auth is required.
+    }
+    return headers;
+  };
+
+  const tickerQueryModelGroup = (modelId) => {
+    const id = normalizeAiModelId(modelId).toLowerCase();
+    if (id.includes("nano")) return "Fast";
+    if (id.includes("mini")) return "Balanced";
+    if (id.startsWith("gpt-5")) return "Reasoning";
+    return "Balanced";
+  };
+
+  const tickerQueryModelHint = (modelId) => {
+    const meta = getModelMeta(modelId);
+    if (meta?.helper) return String(meta.helper).trim();
+    const id = normalizeAiModelId(modelId).toLowerCase();
+    if (id.includes("nano")) return "Lowest latency for quick scans.";
+    if (id.includes("mini")) return "Best default for most questions.";
+    return "Higher depth reasoning with slower latency.";
+  };
+
+  const applyTickerQueryModelSelection = (modelId) => {
+    const normalized = normalizeAiModelId(modelId || "") || "gpt-5-mini";
+    state.tickerContext.tickerQueryModel = normalized;
+    safeLocalStorageSet(TICKER_QUERY_MODEL_KEY, normalized);
+    if (ui.tickerQueryModel && ui.tickerQueryModel.value !== normalized) {
+      ui.tickerQueryModel.value = normalized;
+    }
+    if (ui.tickerQueryModelHint) {
+      ui.tickerQueryModelHint.textContent = `${tickerQueryModelHint(normalized)} Some models may cost more and run slower.`;
+    }
+  };
+
+  const renderTickerQueryModels = (models) => {
+    if (!ui.tickerQueryModel) return;
+    const list = Array.isArray(models) ? models : [];
+    if (!list.length) {
+      ui.tickerQueryModel.innerHTML = `<option value="gpt-5-mini">gpt-5-mini</option>`;
+      applyTickerQueryModelSelection("gpt-5-mini");
+      return;
+    }
+
+    const grouped = list.reduce((acc, row) => {
+      const modelId = normalizeAiModelId(row?.id || row?.model || "");
+      if (!modelId) return acc;
+      const group = String(row?.group || tickerQueryModelGroup(modelId) || "Balanced").trim();
+      if (!acc[group]) acc[group] = [];
+      acc[group].push({
+        id: modelId,
+        label: String(row?.label || modelId),
+        hint: String(row?.hint || tickerQueryModelHint(modelId)),
+      });
+      return acc;
+    }, {});
+
+    const order = ["Fast", "Balanced", "Reasoning"];
+    ui.tickerQueryModel.innerHTML = order
+      .filter((group) => Array.isArray(grouped[group]) && grouped[group].length)
+      .map((group) => {
+        const options = grouped[group]
+          .map((item) => `<option value="${escapeHtml(item.id)}" title="${escapeHtml(item.hint)}">${escapeHtml(item.label)}</option>`)
+          .join("");
+        return `<optgroup label="${escapeHtml(group)}">${options}</optgroup>`;
+      })
+      .join("");
+
+    const availableSet = new Set(list.map((row) => normalizeAiModelId(row?.id || row?.model || "")).filter(Boolean));
+    let selected = normalizeAiModelId(state.tickerContext.tickerQueryModel || safeLocalStorageGet(TICKER_QUERY_MODEL_KEY) || "");
+    if (!selected || !availableSet.has(selected)) {
+      selected = normalizeAiModelId(list[0]?.id || list[0]?.model || "gpt-5-mini") || "gpt-5-mini";
+    }
+    applyTickerQueryModelSelection(selected);
+  };
+
+  const loadTickerQueryModels = async ({ force = false } = {}) => {
+    if (!ui.tickerQueryModel) return;
+    if (!force && state.tickerContext.tickerQueryModelsLoaded && state.tickerContext.tickerQueryModels.length) {
+      renderTickerQueryModels(state.tickerContext.tickerQueryModels);
+      return;
+    }
+
+    const fallback = () => {
+      const tier = getCurrentAiTierConfig();
+      const localModels = (tier.allowedModels || [])
+        .map((modelId) => normalizeAiModelId(modelId))
+        .filter((modelId) => modelId && modelId.startsWith("gpt-5"))
+        .map((modelId) => ({
+          id: modelId,
+          label: getModelMeta(modelId)?.label || modelId,
+          group: tickerQueryModelGroup(modelId),
+          hint: tickerQueryModelHint(modelId),
+        }));
+      state.tickerContext.tickerQueryModels = localModels;
+      state.tickerContext.tickerQueryModelsLoaded = true;
+      renderTickerQueryModels(localModels);
+    };
+
+    try {
+      const headers = await buildApiAuthHeaders();
+      const response = await fetch("/api/openai/models", {
+        method: "GET",
+        headers,
+        credentials: "same-origin",
+      });
+      if (!response.ok) throw new Error("Model list unavailable.");
+      const payload = await response.json();
+      const remote = Array.isArray(payload?.models) ? payload.models : [];
+      const models = remote
+        .map((row) => {
+          const id = normalizeAiModelId(row?.id || row?.model || "");
+          if (!id || !id.startsWith("gpt-5")) return null;
+          return {
+            id,
+            label: String(row?.label || getModelMeta(id)?.label || id),
+            group: String(row?.group || tickerQueryModelGroup(id)),
+            hint: String(row?.hint || tickerQueryModelHint(id)),
+          };
+        })
+        .filter(Boolean);
+      if (!models.length) throw new Error("No compatible models returned.");
+      state.tickerContext.tickerQueryModels = models;
+      state.tickerContext.tickerQueryModelsLoaded = true;
+      renderTickerQueryModels(models);
+    } catch (error) {
+      fallback();
+    }
+  };
+
+  const formatTokenStat = (value) => {
+    const num = Number(value);
+    if (!Number.isFinite(num) || num < 0) return "—";
+    return Math.round(num).toLocaleString();
+  };
+
+  const renderTickerQueryCacheStats = (usage, { visible = false } = {}) => {
+    if (!ui.tickerQueryCacheStats) return;
+    const promptTokens = Number(usage?.prompt_tokens || 0);
+    const completionTokens = Number(usage?.completion_tokens || 0);
+    const cachedTokens = Number(usage?.cached_tokens || 0);
+    const totalTokens = Number(usage?.total_tokens || promptTokens + completionTokens || 0);
+    ui.tickerQueryCacheStats.innerHTML = `
+      <div class="small"><strong>prompt_tokens:</strong> ${escapeHtml(formatTokenStat(promptTokens))}</div>
+      <div class="small"><strong>completion_tokens:</strong> ${escapeHtml(formatTokenStat(completionTokens))}</div>
+      <div class="small"><strong>cached_tokens:</strong> ${escapeHtml(formatTokenStat(cachedTokens))}</div>
+      <div class="small"><strong>total_tokens:</strong> ${escapeHtml(formatTokenStat(totalTokens))}</div>
+    `;
+    ui.tickerQueryCacheStats.classList.toggle("hidden", !visible);
+  };
+
+  const updateTickerQueryModelInfo = ({ latencyMs = null, usage = null } = {}) => {
+    if (!ui.tickerQueryModelInfo) return;
+    const promptTokens = Number(usage?.prompt_tokens || 0);
+    const completionTokens = Number(usage?.completion_tokens || 0);
+    const cachedTokens = Number(usage?.cached_tokens || 0);
+    const latencyLabel = Number.isFinite(Number(latencyMs)) && Number(latencyMs) >= 0 ? `${Math.round(Number(latencyMs))}ms` : "—";
+    const cacheHint = cachedTokens > 0 ? " · Cache hit: faster + cheaper." : "";
+    ui.tickerQueryModelInfo.textContent =
+      `Latency: ${latencyLabel} · Tokens: ${formatTokenStat(promptTokens + completionTokens)} · Cached: ${formatTokenStat(cachedTokens)}${cacheHint}`;
+  };
+
+  const streamTickerQueryInsight = async ({ ticker, prompt, language, model, technicalContext = null } = {}) => {
+    const headers = await buildApiAuthHeaders({ includeJson: true });
+    const response = await fetch("/api/chat", {
+      method: "POST",
+      headers,
+      credentials: "same-origin",
+      body: JSON.stringify({
+        ticker,
+        question: prompt,
+        language,
+        model,
+        technicalContext: technicalContext && typeof technicalContext === "object" ? technicalContext : undefined,
+        messages: [{ role: "user", content: prompt }],
+        meta: buildMeta(),
+      }),
+    });
+    if (!response.ok) {
+      let message = "Unable to complete ticker query right now.";
+      try {
+        const payload = await response.json();
+        if (payload && typeof payload.error === "string" && payload.error.trim()) {
+          message = payload.error.trim();
+        }
+      } catch (error) {
+        // Ignore JSON parse failures.
+      }
+      throw new Error(message);
+    }
+    if (!response.body) throw new Error("Streaming response body was not available.");
+
+    const decoder = new TextDecoder();
+    const reader = response.body.getReader();
+    let buffer = "";
+    let answer = "";
+    let usage = null;
+    let modelUsed = model;
+    let provider = "openai";
+    let latencyMs = null;
+    const context = {};
+
+    const flushEventBlock = (block) => {
+      if (!block) return;
+      const lines = String(block || "")
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean);
+      const dataLines = lines.filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trim());
+      if (!dataLines.length) return;
+      const raw = dataLines.join("\n");
+      if (!raw || raw === "[DONE]") return;
+      let payload = null;
+      try {
+        payload = JSON.parse(raw);
+      } catch (error) {
+        payload = null;
+      }
+      if (!payload || typeof payload !== "object") return;
+      const type = String(payload.type || "").trim();
+      if (type === "delta") {
+        const delta = String(payload.text || "");
+        if (delta) {
+          answer += delta;
+          renderTickerQueryResult({ answer, model: modelUsed, provider, context });
+        }
+      } else if (type === "meta") {
+        provider = String(payload.provider || provider || "openai");
+        modelUsed = normalizeAiModelId(payload.model || modelUsed || model) || modelUsed;
+      } else if (type === "done") {
+        provider = String(payload.provider || provider || "openai");
+        modelUsed = normalizeAiModelId(payload.model || modelUsed || model) || modelUsed;
+        usage = payload.usage && typeof payload.usage === "object" ? payload.usage : usage;
+        latencyMs = Number.isFinite(Number(payload.latencyMs)) ? Number(payload.latencyMs) : latencyMs;
+      } else if (type === "error") {
+        throw new Error(String(payload.message || "Unable to complete ticker query right now."));
+      }
+    };
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      while (true) {
+        const boundary = buffer.indexOf("\n\n");
+        if (boundary < 0) break;
+        const eventBlock = buffer.slice(0, boundary);
+        buffer = buffer.slice(boundary + 2);
+        flushEventBlock(eventBlock);
+      }
+    }
+    if (buffer.trim()) {
+      flushEventBlock(buffer.trim());
+      buffer = "";
+    }
+
+    return { answer: answer.trim(), model: modelUsed, provider, usage, latencyMs, context };
+  };
+
   const loadTickerQueryInsight = async (functions, { ticker, question, notify = false } = {}) => {
-    if (!functions || !ui.tickerQueryOutput) return;
+    if (!ui.tickerQueryOutput) return;
     const symbol = normalizeTicker(ticker || ui.tickerQueryTicker?.value || state.tickerContext.ticker || "");
     const prompt = String(question || ui.tickerQueryQuestion?.value || "").trim();
     const languageRaw = normalizeLanguageCode(ui.tickerQueryLanguage?.value || state.preferredLanguage || "en");
     const language = languageRaw === "auto" ? state.preferredLanguage || "en" : languageRaw;
+    const selectedModel = normalizeAiModelId(ui.tickerQueryModel?.value || state.tickerContext.tickerQueryModel || "gpt-5-mini") || "gpt-5-mini";
     if (!symbol) {
       showToast("Ticker is required for GPT-5 query.", "warn");
       return;
@@ -7044,12 +7916,38 @@
     try {
       if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Querying GPT-5...";
       setOutputLoading(ui.tickerQueryOutput, "Running GPT-5 ticker query...");
-      const queryInsight = functions.httpsCallable("query_ticker_insight");
-      const result = await queryInsight({ ticker: symbol, question: prompt, language, meta: buildMeta() });
+      updateTickerQueryModelInfo({});
+      applyTickerQueryModelSelection(selectedModel);
+      renderTickerQueryCacheStats(null, { visible: false });
+      renderTickerQueryResult({ answer: "", model: selectedModel, provider: "openai", context: {} });
+      const started = Date.now();
+      const streamed = await streamTickerQueryInsight({
+        ticker: symbol,
+        prompt,
+        language,
+        model: selectedModel,
+      });
+      const usage = streamed.usage && typeof streamed.usage === "object" ? streamed.usage : null;
+      const latencyMs = Number.isFinite(Number(streamed.latencyMs)) ? Number(streamed.latencyMs) : Date.now() - started;
       setOutputReady(ui.tickerQueryOutput);
-      renderTickerQueryResult(result.data || {});
+      renderTickerQueryResult({
+        answer: streamed.answer || "No answer returned.",
+        model: streamed.model || selectedModel,
+        provider: streamed.provider || "openai",
+        context: streamed.context || {},
+      });
+      updateTickerQueryModelInfo({ latencyMs, usage });
+      const showCacheStats = Boolean(ui.tickerQueryShowCacheStats?.checked);
+      renderTickerQueryCacheStats(usage, { visible: showCacheStats });
       if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Completed.";
-      logEvent("ticker_query_completed", { ticker: symbol, language });
+      logEvent("ticker_query_completed", {
+        ticker: symbol,
+        language,
+        model: streamed.model || selectedModel,
+        prompt_tokens: Number(usage?.prompt_tokens || 0),
+        completion_tokens: Number(usage?.completion_tokens || 0),
+        cached_tokens: Number(usage?.cached_tokens || 0),
+      });
     } catch (error) {
       setOutputReady(ui.tickerQueryOutput);
       ui.tickerQueryOutput.innerHTML = `<div class="small muted">Unable to complete ticker query right now.</div>`;
@@ -7330,35 +8228,39 @@
 
   const renderTickerChart = async (rows, ticker, interval, overlays = [], options = {}) => {
     if (!ui.tickerChart) return;
-      const cleanTicker = normalizeTicker(ticker || state.tickerContext.ticker || "") || "AAPL";
-      const hasOverlays = Array.isArray(overlays) && overlays.length > 0;
-      const skipTradingView = Boolean(options?.skipTradingView);
-      const allowTradingView = isPanelVisible("ticker-intelligence");
+    const tickerIntelligenceVisible = isPanelVisible("ticker-intelligence");
+    if (!tickerIntelligenceVisible) {
+      setTerminalChartEngineVisibility("legacy");
+      return;
+    }
+    const cleanTicker = normalizeTicker(ticker || state.tickerContext.ticker || "") || "AAPL";
+    const hasOverlays = Array.isArray(overlays) && overlays.length > 0;
+    const skipTradingView = Boolean(options?.skipTradingView);
 
-      if (!rows?.length) {
-        ui.tickerChart.textContent = "No price data to plot.";
+    if (!rows?.length) {
+      ui.tickerChart.textContent = "No price data to plot.";
+      return;
+    }
+
+    if (!skipTradingView && !hasOverlays) {
+      const rendered = renderTradingViewTerminal({
+        ticker: cleanTicker,
+        interval,
+        onFallback: () => {
+          setTerminalStatus("TradingView unavailable. Showing Quantura chart.");
+          renderTickerChart(rows, cleanTicker, interval, overlays, { skipTradingView: true }).catch(() => {});
+        },
+      });
+      if (rendered) {
+        setTerminalChartEngineVisibility("tradingview");
         return;
       }
+    }
 
-      if (!skipTradingView && !hasOverlays && allowTradingView) {
-        const rendered = renderTradingViewTerminal({
-          ticker: cleanTicker,
-          interval,
-          onFallback: () => {
-            setTerminalStatus("TradingView unavailable. Showing Quantura chart.");
-            renderTickerChart(rows, cleanTicker, interval, overlays, { skipTradingView: true }).catch(() => {});
-          },
-        });
-        if (rendered) {
-          setTerminalChartEngineVisibility("tradingview");
-          return;
-        }
-      }
-
-      setTerminalChartEngineVisibility("legacy");
-      if (hasOverlays) {
-        setTerminalStatus("Quantura overlay mode is active on the chart.");
-      }
+    setTerminalChartEngineVisibility("legacy");
+    if (hasOverlays) {
+      setTerminalStatus("Quantura overlay mode is active on the chart.");
+    }
 
 	    const Plotly = getPlotly();
 	    if (!Plotly) {
@@ -7724,6 +8626,142 @@
       ${controlsMarkup("bottom")}
       <div class="small csv-footnote" style="margin-top:10px;">
         Showing rows ${start + 1}-${end} of ${rows.length} row(s) and ${cols.length} of ${headers.length} column(s).
+      </div>
+    `;
+  };
+
+  const isLikelyFxTicker = (symbol) => {
+    const raw = String(symbol || "").toUpperCase().trim();
+    if (!raw) return false;
+    if (raw.endsWith("=X")) return true;
+    const normalized = raw.replace(/[^A-Z]/g, "");
+    return /^[A-Z]{6}X?$/.test(normalized);
+  };
+
+  const resolveDownloadPriceDigits = (ticker) => (isLikelyFxTicker(ticker) ? 6 : 2);
+
+  const formatDownloadPriceValue = (value, digits) => {
+    const raw = String(value ?? "").trim();
+    if (!raw) return "—";
+    const num = Number(raw.replace(/,/g, ""));
+    if (!Number.isFinite(num)) return "—";
+    return num.toFixed(Math.max(0, digits));
+  };
+
+  const formatDownloadVolumeValue = (value) => {
+    const raw = String(value ?? "").trim();
+    if (!raw) return { compact: "—", full: "" };
+    const num = Number(raw.replace(/,/g, ""));
+    if (!Number.isFinite(num)) return { compact: "—", full: "" };
+    const rounded = Math.round(num);
+    return {
+      compact: formatCompactNumber(rounded),
+      full: rounded.toLocaleString(),
+    };
+  };
+
+  const renderDownloadHistoryPreview = (csvText, { ticker = "", maxRows = 30 } = {}) => {
+    if (!ui.downloadPreview) return;
+
+    let table;
+    try {
+      table = parseCsvTable(csvText, { maxRows: 25000 });
+    } catch (error) {
+      ui.downloadPreview.innerHTML = `<div class="small muted">${escapeHtml(error?.message || "Unable to preview downloaded CSV.")}</div>`;
+      return;
+    }
+
+    const headers = Array.isArray(table?.headers) ? table.headers : [];
+    const rows = Array.isArray(table?.rows) ? table.rows : [];
+    if (!headers.length || !rows.length) {
+      ui.downloadPreview.innerHTML = `<div class="small muted">No history rows returned for ${escapeHtml(ticker || "this ticker")}.</div>`;
+      return;
+    }
+
+    const findIndex = (...names) => {
+      const targets = new Set(names.map((name) => String(name || "").trim().toLowerCase()));
+      return headers.findIndex((header) => targets.has(String(header || "").trim().toLowerCase()));
+    };
+
+    const idxDate = findIndex("date", "datetime");
+    const idxClose = findIndex("price", "close");
+    const idxOpen = findIndex("open");
+    const idxHigh = findIndex("high");
+    const idxLow = findIndex("low");
+    const idxVolume = findIndex("volume");
+    const required = [idxDate, idxClose, idxOpen, idxHigh, idxLow, idxVolume];
+    if (required.some((idx) => idx < 0)) {
+      ui.downloadPreview.innerHTML = `<div class="small muted">CSV preview is available, but expected OHLCV columns were not found.</div>`;
+      return;
+    }
+
+    const priceDigits = resolveDownloadPriceDigits(ticker);
+    const normalizedRows = rows
+      .map((row) => {
+        const dateText = String(row[idxDate] ?? "").trim();
+        const dt = parseDateCell(dateText);
+        return {
+          dateText,
+          ts: dt ? dt.getTime() : Number.NaN,
+          close: row[idxClose],
+          open: row[idxOpen],
+          high: row[idxHigh],
+          low: row[idxLow],
+          volume: row[idxVolume],
+        };
+      })
+      .filter((row) => row.dateText);
+
+    if (!normalizedRows.length) {
+      ui.downloadPreview.innerHTML = `<div class="small muted">No rows available for preview.</div>`;
+      return;
+    }
+
+    normalizedRows.sort((a, b) => {
+      const aFinite = Number.isFinite(a.ts);
+      const bFinite = Number.isFinite(b.ts);
+      if (aFinite && bFinite) return b.ts - a.ts;
+      if (aFinite) return -1;
+      if (bFinite) return 1;
+      return String(b.dateText).localeCompare(String(a.dateText));
+    });
+
+    const previewRows = normalizedRows.slice(0, Math.max(1, maxRows));
+    ui.downloadPreview.innerHTML = `
+      <div class="small muted" style="margin-bottom:10px;">
+        Showing newest ${previewRows.length} of ${normalizedRows.length.toLocaleString()} row(s).
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Close</th>
+              <th>Open</th>
+              <th>High</th>
+              <th>Low</th>
+              <th>Volume</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${previewRows
+              .map((row) => {
+                const volume = formatDownloadVolumeValue(row.volume);
+                const volumeTitle = volume.full ? ` title="${escapeHtml(volume.full)}"` : "";
+                return `
+                  <tr>
+                    <td>${escapeHtml(row.dateText)}</td>
+                    <td>${escapeHtml(formatDownloadPriceValue(row.close, priceDigits))}</td>
+                    <td>${escapeHtml(formatDownloadPriceValue(row.open, priceDigits))}</td>
+                    <td>${escapeHtml(formatDownloadPriceValue(row.high, priceDigits))}</td>
+                    <td>${escapeHtml(formatDownloadPriceValue(row.low, priceDigits))}</td>
+                    <td${volumeTitle}>${escapeHtml(volume.compact)}</td>
+                  </tr>
+                `;
+              })
+              .join("")}
+          </tbody>
+        </table>
       </div>
     `;
   };
@@ -10790,9 +11828,15 @@
       window.__quanturaPanelActivated = (panel) => {
         const next = String(panel || "").trim();
         if (!next) return;
+        const showTickerIntelligenceChart = next === "ticker-intelligence";
+
+        if (ui.studioChartShell) {
+          // Keep the chart window scoped to the ticker intelligence panel only.
+          ui.studioChartShell.classList.toggle("hidden", !showTickerIntelligenceChart);
+        }
         if (ui.intelStrip) {
           // Keep the intel side-strip scoped to the ticker intelligence view.
-          ui.intelStrip.classList.toggle("hidden", next !== "ticker-intelligence");
+          ui.intelStrip.classList.toggle("hidden", !showTickerIntelligenceChart);
         }
         if (next === "ticker-intelligence") {
           setTickerIntelTab(state.intelActiveTab || "intelligence");
@@ -10805,20 +11849,11 @@
               // TradingView does not support Quantura overlays; keep the TI view clean.
               []
             ).catch(() => {});
-          }
-        } else {
-          const activeTicker = normalizeTicker(state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "");
-          if (activeTicker && Array.isArray(state.tickerContext.rows) && state.tickerContext.rows.length) {
-            renderTickerChart(
-              state.tickerContext.rows,
-              activeTicker,
-              state.tickerContext.interval || "1d",
-              buildCurrentChartOverlays(),
-              { skipTradingView: true }
-            ).catch(() => {});
           } else {
             setTerminalChartEngineVisibility("legacy");
           }
+        } else {
+          setTerminalChartEngineVisibility("legacy");
         }
 
         if (next === "trending") {
@@ -10854,6 +11889,9 @@
           }
           if (ui.tickerQueryLanguage && ui.tickerQueryLanguage.value === "auto") {
             ui.tickerQueryLanguage.value = state.preferredLanguage || "en";
+          }
+          if (!state.tickerContext.tickerQueryModelsLoaded) {
+            loadTickerQueryModels().catch(() => {});
           }
         }
 
@@ -10988,6 +12026,113 @@
 		      event.preventDefault();
 		      await pickTicker(button.dataset.ticker || button.textContent);
 		    });
+
+        document.addEventListener("click", async (event) => {
+          const retryBtn = event.target.closest('[data-action="x-trends-retry"]');
+          if (retryBtn) {
+            event.preventDefault();
+            const ticker = normalizeTicker(retryBtn.dataset.ticker || state.tickerContext.xTicker || state.tickerContext.ticker || "");
+            if (!ticker) return;
+            const query = normalizeXSocialQuery(retryBtn.dataset.query || state.tickerContext.xQuery || "");
+            await loadTickerXTrends(functions, ticker, {
+              force: true,
+              notify: true,
+              page: 1,
+              append: false,
+              queryOverride: query,
+            });
+            return;
+          }
+
+          const variantBtn = event.target.closest('[data-action="x-trends-variant"]');
+          if (variantBtn) {
+            event.preventDefault();
+            const ticker = normalizeTicker(variantBtn.dataset.ticker || state.tickerContext.xTicker || state.tickerContext.ticker || "");
+            if (!ticker) return;
+            const query = normalizeXSocialQuery(variantBtn.dataset.query || "");
+            await loadTickerXTrends(functions, ticker, {
+              force: true,
+              notify: true,
+              page: 1,
+              append: false,
+              queryOverride: query,
+            });
+            return;
+          }
+
+          const loadMoreBtn = event.target.closest('[data-action="x-trends-more"]');
+          if (loadMoreBtn) {
+            event.preventDefault();
+            const ticker = normalizeTicker(loadMoreBtn.dataset.ticker || state.tickerContext.xTicker || state.tickerContext.ticker || "");
+            if (!ticker) return;
+            const query = normalizeXSocialQuery(loadMoreBtn.dataset.query || state.tickerContext.xQuery || "");
+            const nextPage = Math.max(2, Number(loadMoreBtn.dataset.nextPage || state.tickerContext.xPage + 1 || 2));
+            loadMoreBtn.disabled = true;
+            try {
+              await loadTickerXTrends(functions, ticker, {
+                force: true,
+                notify: false,
+                page: nextPage,
+                append: true,
+                queryOverride: query,
+              });
+            } finally {
+              loadMoreBtn.disabled = false;
+            }
+          }
+        });
+
+        document.addEventListener("click", async (event) => {
+          const fullInfoBtn = event.target.closest('[data-action="intel-load-full-info"]');
+          if (!fullInfoBtn) return;
+          event.preventDefault();
+          const symbol = normalizeTicker(fullInfoBtn.dataset.ticker || state.tickerContext.ticker || "");
+          if (!symbol || !functions) return;
+          const output = document.getElementById("intel-raw-info-output");
+          const controls = document.querySelector("[data-intel-raw-controls]");
+          const filterInput = document.querySelector('[data-action="intel-filter-full-info"]');
+          if (!output) return;
+
+          const isExpanded = fullInfoBtn.dataset.expanded === "1";
+          if (isExpanded) {
+            output.classList.add("hidden");
+            controls?.classList.add("hidden");
+            fullInfoBtn.dataset.expanded = "0";
+            fullInfoBtn.innerHTML = "View all fields";
+            return;
+          }
+
+          fullInfoBtn.disabled = true;
+          const originalLabel = fullInfoBtn.innerHTML;
+          if (output.classList.contains("hidden")) {
+            output.classList.remove("hidden");
+          }
+          output.innerHTML = `<div data-skeleton>${skeletonHtml(5)}<div class="small muted" style="margin-top:10px;">Loading full info fields...</div></div>`;
+          try {
+            await loadTickerFullInfo(functions, symbol);
+            controls?.classList.remove("hidden");
+            const filterValue = String(filterInput?.value || "").trim();
+            renderTickerFullInfoEntries(symbol, filterValue);
+            fullInfoBtn.dataset.expanded = "1";
+            fullInfoBtn.innerHTML = "Hide all fields";
+          } catch (error) {
+            output.innerHTML = `<div class="small muted">Unable to load full info fields right now.</div>`;
+            fullInfoBtn.dataset.expanded = "0";
+            fullInfoBtn.innerHTML = originalLabel || "View all fields";
+            showToast(error.message || "Unable to load full info fields.", "warn");
+          } finally {
+            fullInfoBtn.disabled = false;
+          }
+        });
+
+        document.addEventListener("input", (event) => {
+          const filterInput = event.target.closest?.('[data-action="intel-filter-full-info"]');
+          if (!filterInput) return;
+          const symbol = normalizeTicker(filterInput.dataset.ticker || state.tickerContext.ticker || "");
+          if (!symbol) return;
+          state.tickerContext.fullInfoFilter = String(filterInput.value || "");
+          renderTickerFullInfoEntries(symbol, state.tickerContext.fullInfoFilter);
+        });
 
         document.addEventListener("click", (event) => {
           const action = event.target.closest("[data-action]")?.dataset?.action;
@@ -13026,15 +14171,22 @@
 
       try {
         ui.downloadStatus.textContent = "Fetching data...";
+        if (ui.downloadPreview) {
+          ui.downloadPreview.innerHTML = `<div class="small muted">Preparing preview...</div>`;
+        }
         const getDownload = functions.httpsCallable("download_price_csv");
         const result = await getDownload(payload);
         const data = result.data || {};
         const csvText = String(data.csv || "");
         if (!csvText.trim()) {
           ui.downloadStatus.textContent = "No data returned.";
+          if (ui.downloadPreview) {
+            ui.downloadPreview.innerHTML = `<div class="small muted">No history rows returned for ${escapeHtml(ticker)}.</div>`;
+          }
           return;
         }
         const filename = String(data.filename || `${ticker}_${start}_${end}.csv`);
+        renderDownloadHistoryPreview(csvText, { ticker });
         triggerDownload(filename, csvText);
         const rowCount = Number(data.rowCount || 0);
         ui.downloadStatus.textContent = rowCount ? `Download ready (${rowCount} rows).` : "Download ready.";
@@ -13072,9 +14224,58 @@
       await loadMarketHeadlinesFeed(functions, { force: true, notify: true });
     });
 
+    if (ui.massiveIpoStart && ui.massiveIpoEnd) {
+      const today = new Date();
+      const start = new Date(today);
+      start.setDate(start.getDate() - 30);
+      const end = new Date(today);
+      end.setDate(end.getDate() + 180);
+      if (!ui.massiveIpoStart.value) ui.massiveIpoStart.value = start.toISOString().slice(0, 10);
+      if (!ui.massiveIpoEnd.value) ui.massiveIpoEnd.value = end.toISOString().slice(0, 10);
+    }
+    ui.massiveIpoForm?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      await loadResearchIpoCalendar({ force: true });
+    });
+    if (ui.massiveEconomyStatus) {
+      loadResearchMacroWidgets().catch((error) => {
+        ui.massiveEconomyStatus.textContent = extractErrorMessage(error, "Macro context is unavailable.");
+      });
+    }
+    if (ui.massiveIpoOutput) {
+      loadResearchIpoCalendar({ force: false }).catch((error) => {
+        if (ui.massiveIpoStatusText) {
+          ui.massiveIpoStatusText.textContent = extractErrorMessage(error, "Unable to load IPO calendar.");
+        }
+      });
+    }
+
     if (ui.tickerQueryLanguage && !ui.tickerQueryLanguage.value) {
       ui.tickerQueryLanguage.value = state.preferredLanguage || "en";
     }
+    if (ui.tickerQueryModel && ui.tickerQueryModel.dataset.bound !== "1") {
+      ui.tickerQueryModel.addEventListener("change", () => {
+        applyTickerQueryModelSelection(ui.tickerQueryModel?.value || "gpt-5-mini");
+      });
+      ui.tickerQueryModel.dataset.bound = "1";
+    }
+    if (ui.tickerQueryCacheToggleWrap) {
+      const host = (typeof window !== "undefined" && window.location && window.location.hostname) ? window.location.hostname : "";
+      const isDevHost = host === "localhost" || host === "127.0.0.1" || host.endsWith(".localhost");
+      ui.tickerQueryCacheToggleWrap.classList.toggle("hidden", !isDevHost);
+    }
+    if (ui.tickerQueryShowCacheStats && ui.tickerQueryShowCacheStats.dataset.bound !== "1") {
+      ui.tickerQueryShowCacheStats.addEventListener("change", () => {
+        const showCacheStats = Boolean(ui.tickerQueryShowCacheStats?.checked);
+        if (showCacheStats) {
+          renderTickerQueryCacheStats(null, { visible: true });
+          return;
+        }
+        renderTickerQueryCacheStats(null, { visible: false });
+      });
+      ui.tickerQueryShowCacheStats.dataset.bound = "1";
+    }
+    updateTickerQueryModelInfo({});
     ui.tickerQueryForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
       await loadTickerQueryInsight(functions, {
@@ -13083,6 +14284,7 @@
         notify: true,
       });
     });
+    loadTickerQueryModels().catch(() => {});
 
 	    ui.optionsForm?.addEventListener("submit", async (event) => {
 	      event.preventDefault();
@@ -13104,6 +14306,10 @@
 	        const underlyingPrice = data.underlyingPrice;
 	        const riskFreeRate = data.riskFreeRate;
 	        const timeToExpiryYears = data.timeToExpiryYears;
+          const source = String(data.source || "yfinance").trim().toLowerCase();
+          const referenceOnly = Boolean(data.referenceOnly);
+          const fallbackUsed = Boolean(data.fallbackUsed);
+          const notice = String(data.notice || "").trim();
 	        const selectedExpiration = data.selectedExpiration || payload.expiration || "";
 	        const expirations = data.expirations || [];
 	        const calls = data.calls || [];
@@ -13208,10 +14414,18 @@
 	              <div class="options-meta">
 	                <div class="small"><strong>Underlying:</strong> ${money(underlyingPrice)}</div>
 	                <div class="small"><strong>Expiration:</strong> ${escapeHtml(selectedExpiration)}</div>
+                  <div class="small"><strong>Source:</strong> ${escapeHtml(source === "massive" ? "Powered by Massive" : "Yahoo Finance")}</div>
 	                <div class="small"><strong>RFR:</strong> ${typeof riskFreeRate === "number" ? fmt(riskFreeRate, 3) : "—"} · <strong>T:</strong> ${
 	                  typeof timeToExpiryYears === "number" ? fmt(timeToExpiryYears, 3) : "—"
 	                }y</div>
 	              </div>
+                ${
+                  source === "massive" || referenceOnly || fallbackUsed
+                    ? `<div class="notice" style="margin:10px 0;">${escapeHtml(
+                        notice || "Powered by Massive fallback. Quotes are not enabled on current plan; showing reference-only contracts."
+                      )}</div>`
+                    : ""
+                }
 	              <details class="option-block" open>
 	                <summary>Calls</summary>
 	                ${table(callsSorted, "Calls")}
@@ -14066,12 +15280,22 @@
 	        startAdminOrders(db);
 	        startAdminAutopilotQueue(db);
             setFeatureVoteSummaryPolling(functions, true);
+          loadMassiveCapabilities({ force: false }).catch((error) => {
+            if (ui.adminMassiveCapabilitiesStatus) {
+              ui.adminMassiveCapabilitiesStatus.textContent = extractErrorMessage(error, "Unable to load capability audit.");
+            }
+            if (ui.adminMassiveCapabilities) {
+              ui.adminMassiveCapabilities.innerHTML = `<div class="small muted">Capability audit unavailable.</div>`;
+            }
+          });
 	      } else {
 	        ui.adminSection?.classList.add("hidden");
 	        ui.navAdmin?.classList.add("hidden");
 	        if (state.unsubscribeAdmin) state.unsubscribeAdmin();
 	        if (state.unsubscribeAdminAutopilot) state.unsubscribeAdminAutopilot();
             setFeatureVoteSummaryPolling(functions, false);
+          if (ui.adminMassiveCapabilitiesStatus) ui.adminMassiveCapabilitiesStatus.textContent = "Admin access required.";
+          if (ui.adminMassiveCapabilities) ui.adminMassiveCapabilities.innerHTML = `<div class="small muted">Admin access required.</div>`;
 	      }
     });
   });

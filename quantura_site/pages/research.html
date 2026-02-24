@@ -3,15 +3,15 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Quantura Research Library | Independent Methodology & Citations</title>
+    <title>Quantura Research | Demand Forecasting + MLOps Notes</title>
     <meta
       name="description"
-      content="Independent methodology notes for Quantura Adaptive Forecasting and citation references for open-source components."
+      content="Curated Quantura research notes on demand forecasting, demand inflection signals, and production MLOps architecture."
     />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://quantura-e2e3d.web.app/research" />
-    <meta property="og:title" content="Quantura Research Library" />
-    <meta property="og:description" content="Independent methodology and citation references." />
+    <meta property="og:title" content="Quantura Research | Demand Forecasting + MLOps" />
+    <meta property="og:description" content="Curated research notes and architecture blueprint for demand forecasting and MLOps." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://quantura-e2e3d.web.app/research" />
     <meta property="og:image" content="/assets/quantura-logo.svg" />
@@ -51,90 +51,286 @@
     <main>
       <section class="section research-shell">
         <div class="container">
-          <div class="section-title">
-            <h1>Independent Methodology & Citations</h1>
-            <p class="small">A transparent reference for Quantura Adaptive Forecasting and supporting research software.</p>
+          <div class="section-title research-intro">
+            <h1>Demand Forecasting + MLOps Library</h1>
+            <p class="small">
+              Quantura research is organized into two product pillars: demand inflection forecasting and production-grade MLOps.
+              Use the note cards to jump to internal pages and keep your implementation decisions consistent across teams.
+            </p>
           </div>
 
-          <div class="research-grid">
-            <article class="card research-card">
-              <h2>Quantura Adaptive Forecasting</h2>
-              <p>
-                Quantura Adaptive Forecasting combines structural time-series trend decomposition, rolling volatility regime
-                detection, and quantile calibration to generate probabilistic forward ranges rather than single-point targets.
-              </p>
-              <p>
-                The process dynamically shifts confidence weighting by market regime and prioritizes stability of lower-bound
-                outcomes when candidate selection is used for portfolio generation.
-              </p>
-
-              <h3>Investment Thesis Formula</h3>
-              <p class="small">
-                The thesis score blends directional conviction, seasonality persistence, and valuation support while penalizing
-                unstable downside confidence.
-              </p>
-              <pre class="research-code">thesis_score = 0.45 * trend_strength
-             + 0.25 * catalyst_signal
-             + 0.20 * valuation_support
-             + 0.10 * analyst_revision_momentum
-             - downside_confidence_penalty</pre>
+          <div class="research-pillars" aria-label="Research pillars">
+            <article class="card research-pillar">
+              <h2>Pillar A: Demand Forecasting</h2>
+              <ul class="research-bullet-list">
+                <li>Foundations: naive, moving-average, ARIMA/ETS, Prophet-style decomposition.</li>
+                <li>Modern: multi-horizon forecasting with interpretable deep models like TFT.</li>
+                <li>Evaluation: rolling backtests, leakage prevention, interval calibration.</li>
+                <li>Signals: transform forecast deltas into demand inflection features.</li>
+              </ul>
             </article>
-
-            <article class="card research-card">
-              <h2>Research Library</h2>
-              <p class="small">
-                Citations are formatted for auditability and reproducibility. Use Copy BibTeX to export references directly
-                into notebooks or institutional reports.
-              </p>
-
-              <ol class="citation-list" aria-label="Citations">
-                <li class="citation-item">
-                  <div class="citation-body">
-                    Taylor, S. J., &amp; Letham, B. (2018). Forecasting at Scale. <em>The American Statistician, 72</em>(1), 37-45.
-                    <span class="citation-note">[Software: Meta Prophet Library]</span>
-                  </div>
-                  <button
-                    class="cta secondary small"
-                    type="button"
-                    data-action="copy-bibtex"
-                    data-bibtex='@article{taylor2018forecasting, title={Forecasting at Scale}, author={Taylor, Sean J. and Letham, Benjamin}, journal={The American Statistician}, volume={72}, number={1}, pages={37--45}, year={2018}}'
-                  >
-                    <i class="iconoir-copy" aria-hidden="true"></i><span>Copy BibTeX</span>
-                  </button>
-                </li>
-
-                <li class="citation-item">
-                  <div class="citation-body">
-                    OpenAI. (2025). OpenAI Agents SDK documentation.
-                    <span class="citation-note">[Software Documentation]</span>
-                  </div>
-                  <button
-                    class="cta secondary small"
-                    type="button"
-                    data-action="copy-bibtex"
-                    data-bibtex='@misc{openai_agents_sdk, title={OpenAI Agents SDK Documentation}, author={{OpenAI}}, year={2025}, url={https://platform.openai.com/docs/agents}}'
-                  >
-                    <i class="iconoir-copy" aria-hidden="true"></i><span>Copy BibTeX</span>
-                  </button>
-                </li>
-
-                <li class="citation-item">
-                  <div class="citation-body">
-                    Massive.com. (2026). Massive MCP server and market data interfaces.
-                    <span class="citation-note">[Data Interface]</span>
-                  </div>
-                  <button
-                    class="cta secondary small"
-                    type="button"
-                    data-action="copy-bibtex"
-                    data-bibtex='@misc{massive_mcp, title={Massive MCP Market Data Interfaces}, author={{Massive.com}}, year={2026}, url={https://massive.com/docs/websocket/quickstart}}'
-                  >
-                    <i class="iconoir-copy" aria-hidden="true"></i><span>Copy BibTeX</span>
-                  </button>
-                </li>
-              </ol>
+            <article class="card research-pillar">
+              <h2>Pillar B: MLOps</h2>
+              <ul class="research-bullet-list">
+                <li>CI/CD for ML with continuous training and automated validation gates.</li>
+                <li>Data and feature validation, skew/drift monitoring, retraining triggers.</li>
+                <li>Experiment tracking, model registry, reproducible lineage and audit trails.</li>
+                <li>Operational playbooks for safe rollout, rollback, and incident handling.</li>
+              </ul>
             </article>
           </div>
+
+          <section class="research-library" aria-labelledby="macro-context-heading">
+            <div class="research-library-head">
+              <h2 id="macro-context-heading">US Economy + Catalyst Monitor</h2>
+              <p class="small muted" id="massive-economy-status">Loading capability-gated macro context...</p>
+            </div>
+            <div class="research-note-grid">
+              <article class="card research-note-card">
+                <span class="research-note-tag">Macro</span>
+                <h3>Treasury yield curve</h3>
+                <div id="massive-economy-yields" class="panel-output small">Yield curve data will appear here.</div>
+              </article>
+              <article class="card research-note-card">
+                <span class="research-note-tag">Macro</span>
+                <h3>Inflation</h3>
+                <div id="massive-economy-inflation" class="panel-output small">Inflation series will appear here.</div>
+              </article>
+              <article class="card research-note-card">
+                <span class="research-note-tag">Macro</span>
+                <h3>Inflation expectations</h3>
+                <div id="massive-economy-inflation-expectations" class="panel-output small">Expectation series will appear here.</div>
+              </article>
+              <article class="card research-note-card">
+                <span class="research-note-tag">Macro</span>
+                <h3>Labor market</h3>
+                <div id="massive-economy-labor" class="panel-output small">Labor market series will appear here.</div>
+              </article>
+            </div>
+          </section>
+
+          <section class="research-library" aria-labelledby="ipo-calendar-heading">
+            <div class="research-library-head">
+              <h2 id="ipo-calendar-heading">IPO Calendar</h2>
+              <p class="small muted" id="massive-ipo-status-text">Set filters and load upcoming or recent IPOs.</p>
+            </div>
+            <form id="massive-ipo-form" class="card" style="margin-bottom:18px;">
+              <div class="form-grid">
+                <div class="field">
+                  <label class="label" for="massive-ipo-start">Start date</label>
+                  <input id="massive-ipo-start" type="date" />
+                </div>
+                <div class="field">
+                  <label class="label" for="massive-ipo-end">End date</label>
+                  <input id="massive-ipo-end" type="date" />
+                </div>
+                <div class="field">
+                  <label class="label" for="massive-ipo-status">Status</label>
+                  <select id="massive-ipo-status">
+                    <option value="">All</option>
+                    <option value="scheduled">Scheduled</option>
+                    <option value="priced">Priced</option>
+                    <option value="listed">Listed</option>
+                    <option value="withdrawn">Withdrawn</option>
+                  </select>
+                </div>
+              </div>
+              <button class="cta secondary" type="submit"><i class="iconoir-search" aria-hidden="true"></i><span>Load IPOs</span></button>
+            </form>
+            <div class="card">
+              <div id="massive-ipo-output" class="panel-output small">IPO rows will appear here when available.</div>
+            </div>
+          </section>
+
+          <section class="research-library" aria-labelledby="research-notes-heading">
+            <div class="research-library-head">
+              <h2 id="research-notes-heading">Research Notes</h2>
+              <a class="task-chip" href="#blueprint-page"><i class="iconoir-network" aria-hidden="true"></i><span>Open Blueprint</span></a>
+            </div>
+            <div class="research-note-grid">
+              <article class="card research-note-card">
+                <span class="research-note-tag">Demand Forecasting</span>
+                <h3>Foundations and baselines</h3>
+                <p>Reference setup for naive, moving-average, and classical models before introducing advanced architectures.</p>
+                <a class="news-link" href="#note-demand-foundations">Open note</a>
+              </article>
+              <article class="card research-note-card">
+                <span class="research-note-tag">Demand Forecasting</span>
+                <h3>Modern multi-horizon models</h3>
+                <p>Design for direct multi-horizon outputs with explainability hooks suitable for operations and revenue teams.</p>
+                <a class="news-link" href="#note-demand-modern">Open note</a>
+              </article>
+              <article class="card research-note-card">
+                <span class="research-note-tag">Demand Forecasting</span>
+                <h3>Evaluation and leakage controls</h3>
+                <p>Walk-forward backtesting standards with leakage checks, confidence calibration, and error decomposition.</p>
+                <a class="news-link" href="#note-demand-evaluation">Open note</a>
+              </article>
+              <article class="card research-note-card">
+                <span class="research-note-tag">Demand Forecasting</span>
+                <h3>Demand inflection signals</h3>
+                <p>How to derive acceleration, surprise, and regime features from forecast trajectories.</p>
+                <a class="news-link" href="#note-demand-signals">Open note</a>
+              </article>
+              <article class="card research-note-card">
+                <span class="research-note-tag">MLOps</span>
+                <h3>CI/CD and continuous training</h3>
+                <p>Pipeline standards for training automation, validation checks, deployment control, and rollback.</p>
+                <a class="news-link" href="#note-mlops-cicd">Open note</a>
+              </article>
+              <article class="card research-note-card">
+                <span class="research-note-tag">MLOps</span>
+                <h3>Validation and monitoring</h3>
+                <p>Data quality, feature integrity, drift/skew dashboards, and policy-based retraining triggers.</p>
+                <a class="news-link" href="#note-mlops-monitoring">Open note</a>
+              </article>
+              <article class="card research-note-card">
+                <span class="research-note-tag">MLOps</span>
+                <h3>Experiments, registry, lineage</h3>
+                <p>Tracking conventions that connect datasets, code versions, model artifacts, and production outcomes.</p>
+                <a class="news-link" href="#note-mlops-registry">Open note</a>
+              </article>
+            </div>
+          </section>
+
+          <section class="research-note-pages" aria-label="Internal research note pages">
+            <article class="card research-note-page" id="note-demand-foundations">
+              <h3>Foundations: Baselines and classical models</h3>
+              <p>
+                Start with naive and seasonal-naive baselines, then move into moving averages and ARIMA/ETS. This gives a
+                stable benchmark before adding modern architectures that can hide failure modes.
+              </p>
+              <div class="research-diagram" role="img" aria-label="Foundations flow">
+                Baseline (naive) -> Smoothed baseline (MA) -> Classical (ARIMA/ETS) -> Decomposition review
+              </div>
+              <h4>Further Reading</h4>
+              <ul class="research-links">
+                <li><a href="https://otexts.com/fpp3/" target="_blank" rel="noopener noreferrer">Forecasting: Principles and Practice</a></li>
+                <li><a href="https://www.statsmodels.org/stable/tsa.html" target="_blank" rel="noopener noreferrer">Statsmodels Time Series</a></li>
+              </ul>
+            </article>
+
+            <article class="card research-note-page" id="note-demand-modern">
+              <h3>Modern forecasting: Multi-horizon and interpretable deep models</h3>
+              <p>
+                Train models to emit full forward paths, not single points. Pair sequence encoders with interpretable attention
+                and feature importance so commercial stakeholders can audit forecast drivers.
+              </p>
+              <div class="research-diagram" role="img" aria-label="Modern forecasting flow">
+                Features -> Encoder/Decoder -> Multi-horizon quantiles -> Attention attributions -> Decision layer
+              </div>
+              <h4>Further Reading</h4>
+              <ul class="research-links">
+                <li><a href="https://arxiv.org/abs/1912.09363" target="_blank" rel="noopener noreferrer">Temporal Fusion Transformers</a></li>
+                <li><a href="https://pytorch-forecasting.readthedocs.io/" target="_blank" rel="noopener noreferrer">PyTorch Forecasting</a></li>
+              </ul>
+            </article>
+
+            <article class="card research-note-page" id="note-demand-evaluation">
+              <h3>Evaluation: Rolling backtests and leakage controls</h3>
+              <p>
+                Use rolling windows with strict time ordering, then report point and interval metrics side by side. Validate
+                that feature snapshots and joins do not leak future information into training or evaluation windows.
+              </p>
+              <div class="research-diagram" role="img" aria-label="Evaluation loop">
+                Train window -> Validate on next slice -> Roll forward -> Refit -> Compare metrics and calibration
+              </div>
+              <h4>Further Reading</h4>
+              <ul class="research-links">
+                <li><a href="https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.TimeSeriesSplit.html" target="_blank" rel="noopener noreferrer">TimeSeriesSplit</a></li>
+                <li><a href="https://otexts.com/fpp3/accuracy.html" target="_blank" rel="noopener noreferrer">Forecast Accuracy Metrics</a></li>
+              </ul>
+            </article>
+
+            <article class="card research-note-page" id="note-demand-signals">
+              <h3>Signal engineering: Demand inflection features</h3>
+              <p>
+                Convert forecast curves into actionable features: first and second derivative (delta, acceleration), surprise
+                versus realized values, and regime filters that suppress low-confidence transitions.
+              </p>
+              <div class="research-diagram" role="img" aria-label="Signal extraction flow">
+                Forecast curve -> Delta/acceleration -> Surprise vs actual -> Regime filter -> Signal score
+              </div>
+              <h4>Further Reading</h4>
+              <ul class="research-links">
+                <li><a href="https://arxiv.org/abs/2205.13504" target="_blank" rel="noopener noreferrer">Forecasting with uncertainty-aware objectives</a></li>
+                <li><a href="https://mlflow.org/docs/latest/index.html" target="_blank" rel="noopener noreferrer">MLflow tracking and signatures</a></li>
+              </ul>
+            </article>
+
+            <article class="card research-note-page" id="note-mlops-cicd">
+              <h3>MLOps: CI/CD and continuous training</h3>
+              <p>
+                Treat model updates as software releases with deterministic builds, test gates, staged promotion, and automated
+                rollback triggers for unstable live performance.
+              </p>
+              <div class="research-diagram" role="img" aria-label="CI/CD for ML">
+                Commit -> Validate data/features -> Train -> Evaluate gates -> Register -> Deploy canary -> Promote
+              </div>
+              <h4>Further Reading</h4>
+              <ul class="research-links">
+                <li><a href="https://cloud.google.com/architecture/mlops-continuous-delivery-and-automation-pipelines-in-machine-learning" target="_blank" rel="noopener noreferrer">Google MLOps guide</a></li>
+                <li><a href="https://www.kubeflow.org/docs/components/pipelines/" target="_blank" rel="noopener noreferrer">Kubeflow Pipelines</a></li>
+              </ul>
+            </article>
+
+            <article class="card research-note-page" id="note-mlops-monitoring">
+              <h3>MLOps: Data validation and model monitoring</h3>
+              <p>
+                Monitor feature distributions, input quality, prediction drift, and business KPIs together. Trigger retraining
+                only when quality gates or drift thresholds are breached.
+              </p>
+              <div class="research-diagram" role="img" aria-label="Monitoring and retraining">
+                Incoming data -> Quality checks -> Drift/skew checks -> Alerts -> Retraining trigger policy
+              </div>
+              <h4>Further Reading</h4>
+              <ul class="research-links">
+                <li><a href="https://evidentlyai.com/" target="_blank" rel="noopener noreferrer">Evidently monitoring patterns</a></li>
+                <li><a href="https://www.tensorflow.org/tfx/data_validation/get_started" target="_blank" rel="noopener noreferrer">TensorFlow Data Validation</a></li>
+              </ul>
+            </article>
+
+            <article class="card research-note-page" id="note-mlops-registry">
+              <h3>MLOps: Experiment tracking, registry, lineage</h3>
+              <p>
+                Every model should be reproducible from data snapshot to deployment hash. Link experiment IDs to model registry
+                entries and keep inference lineage for governance and postmortem debugging.
+              </p>
+              <div class="research-diagram" role="img" aria-label="Lineage trace">
+                Dataset version + code commit + params -> Run ID -> Registered model -> Deployed endpoint -> Live metrics
+              </div>
+              <h4>Further Reading</h4>
+              <ul class="research-links">
+                <li><a href="https://www.mlflow.org/docs/latest/model-registry.html" target="_blank" rel="noopener noreferrer">MLflow Model Registry</a></li>
+                <li><a href="https://modelcards.withgoogle.com/about" target="_blank" rel="noopener noreferrer">Model Cards</a></li>
+              </ul>
+            </article>
+          </section>
+
+          <section class="card research-note-page research-blueprint" id="blueprint-page" aria-labelledby="blueprint-title">
+            <h2 id="blueprint-title">Blueprint: End-to-End Forecasting + MLOps Architecture</h2>
+            <p>
+              Use this reference architecture for Quantura-aligned deployment: ingestion to monitoring with explicit control
+              points for validation, registration, and rollback.
+            </p>
+            <div class="blueprint-flow" aria-label="Forecasting architecture flow">
+              <div class="blueprint-node">Ingestion</div>
+              <div class="blueprint-arrow">-></div>
+              <div class="blueprint-node">Feature Store</div>
+              <div class="blueprint-arrow">-></div>
+              <div class="blueprint-node">Training</div>
+              <div class="blueprint-arrow">-></div>
+              <div class="blueprint-node">Model Registry</div>
+              <div class="blueprint-arrow">-></div>
+              <div class="blueprint-node">Deployment</div>
+              <div class="blueprint-arrow">-></div>
+              <div class="blueprint-node">Monitoring</div>
+            </div>
+            <p class="small">
+              Expansion points: real-time feature updates, shadow deployments, champion/challenger routing, and automated
+              governance checks for model lifecycle approvals.
+            </p>
+          </section>
         </div>
       </section>
     </main>
