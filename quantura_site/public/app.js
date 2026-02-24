@@ -78,6 +78,16 @@
     return "web";
   };
 
+  const triggerSubtleHaptic = () => {
+    try {
+      if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+        navigator.vibrate(8);
+      }
+    } catch (error) {
+      // Best-effort only.
+    }
+  };
+
   const sendNativeBridgeMessage = (payload) => {
     const message = payload && typeof payload === "object" ? payload : {};
     try {
@@ -1195,6 +1205,8 @@
     indicatorChart: document.getElementById("indicator-chart"),
     intelStrip: document.getElementById("intel-strip"),
     tickerIntelligenceOutput: document.getElementById("ticker-intelligence-output"),
+    tickerPredictionsOutput: document.getElementById("ticker-predictions-output"),
+    tickerIntelTabs: Array.from(document.querySelectorAll("[data-intel-tab]")),
     forecastForm: document.getElementById("forecast-form"),
     forecastTicker: document.getElementById("forecast-ticker"),
     forecastOutput: document.getElementById("forecast-output"),
@@ -1351,6 +1363,7 @@
 	    initialPageViewSent: false,
 	    authResolved: false,
       authInFlight: false,
+    intelActiveTab: "intelligence",
     tickerContext: {
 	      ticker: "",
 	      interval: "1d",
@@ -1362,7 +1375,9 @@
       newsTicker: "",
       xTicker: "",
       intelTicker: "",
+      predictionsTicker: "",
       optionsTicker: "",
+      predictionsData: null,
     },
     predictionsContext: {
       uploadId: "",
@@ -1416,7 +1431,7 @@
       backtestUrlLoaded: false,
 	    messagingBound: false,
 	    remoteConfigLoaded: false,
-	    remoteFlags: {
+    remoteFlags: {
 	      watchlistEnabled: true,
 	      forecastProphetEnabled: true,
 	      forecastTimeMixerEnabled: true,
@@ -1666,6 +1681,7 @@
 		    buttons.forEach((btn) => {
 		      btn.addEventListener("click", (event) => {
 		        event.preventDefault?.();
+            triggerSubtleHaptic();
 		        setActive(btn.dataset.panelTarget);
 		      });
 		    });
@@ -1763,6 +1779,63 @@
       if (window.innerWidth > 980) close();
       else if (header.classList.contains("nav-open")) syncOverlayPositions();
     });
+  };
+
+  const bindMobileBottomNav = () => {
+    const panelRoot = document.querySelector('[data-panel-router="terminal"]');
+    if (!panelRoot) return;
+
+    let nav = document.getElementById("mobile-bottom-nav");
+    if (!nav) {
+      nav = document.createElement("nav");
+      nav.id = "mobile-bottom-nav";
+      nav.className = "mobile-bottom-nav hidden";
+      nav.setAttribute("aria-label", "Mobile navigation");
+      nav.innerHTML = `<div class="mobile-bottom-nav-inner"></div>`;
+      document.body.appendChild(nav);
+    }
+    const inner = nav.querySelector(".mobile-bottom-nav-inner");
+    if (!inner) return;
+
+    const sidebarLinks = Array.from(document.querySelectorAll(".sidebar-nav [data-panel-target]"));
+    const byPanel = new Map();
+    sidebarLinks.forEach((link) => {
+      const panel = String(link.dataset.panelTarget || "").trim();
+      if (!panel || byPanel.has(panel)) return;
+      byPanel.set(panel, link);
+    });
+
+    const preferredPanels = ["forecast", "ticker-intelligence", "indicators", "trending", "news"];
+    const selected = preferredPanels
+      .map((panel) => byPanel.get(panel))
+      .filter(Boolean)
+      .slice(0, 5);
+
+    if (!selected.length) return;
+
+    inner.innerHTML = selected
+      .map((link) => {
+        const panel = String(link.dataset.panelTarget || "").trim();
+        const href = String(link.getAttribute("href") || "#");
+        const iconMarkup = link.querySelector("i")?.outerHTML || "";
+        const label = String(link.textContent || "").trim();
+        return `
+          <a class="mobile-bottom-link" href="${escapeHtml(href)}" data-panel-target="${escapeHtml(panel)}" aria-label="${escapeHtml(label)}">
+            ${iconMarkup}
+            <span>${escapeHtml(label)}</span>
+          </a>
+        `;
+      })
+      .join("");
+
+    const syncVisibility = () => {
+      const visible = window.innerWidth <= 980;
+      nav.classList.toggle("hidden", !visible);
+      document.body.classList.toggle("mobile-bottom-nav-enabled", visible);
+    };
+
+    syncVisibility();
+    window.addEventListener("resize", syncVisibility);
   };
 
   const syncStickyOffsets = () => {
@@ -3328,35 +3401,43 @@
     });
 
   const ensureCookieModal = () => {
-    let modal = document.getElementById("cookie-modal");
-    if (!modal) modal = buildModalShell("cookie-modal");
-    const card = modal.querySelector(".modal-card");
-    card.innerHTML = `
-      <h3>Cookies and analytics</h3>
-      <p class="small">
-        Quantura uses cookies for analytics and to improve reliability. You can opt out at any time.
-      </p>
-      <div class="modal-actions">
-        <button class="cta secondary" type="button" data-action="decline">No thanks</button>
-        <button class="cta" type="button" data-action="accept">Accept</button>
-      </div>
-    `;
-    modal.addEventListener("click", (event) => {
-      const action = event.target?.dataset?.action;
-      if (!action) return;
-      if (action === "accept") {
-        setCookieConsent("accepted");
-        modal.classList.add("hidden");
-      }
-      if (action === "decline") {
-        setCookieConsent("declined");
-        modal.classList.add("hidden");
-      }
-      if (action === "close") {
-        modal.classList.add("hidden");
-      }
-    });
-    return modal;
+    let banner = document.getElementById("cookie-banner");
+    if (!banner) {
+      banner = document.createElement("aside");
+      banner.id = "cookie-banner";
+      banner.className = "cookie-banner hidden";
+      banner.innerHTML = `
+        <div class="cookie-banner-content">
+          <div>
+            <h3>Cookies and analytics</h3>
+            <p class="small">
+              Quantura uses cookies for analytics and reliability. You can opt out at any time.
+            </p>
+          </div>
+          <div class="cookie-banner-actions">
+            <button class="cta secondary small" type="button" data-action="decline">No thanks</button>
+            <button class="cta small" type="button" data-action="accept">Accept</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(banner);
+    }
+    if (banner.dataset.bound !== "1") {
+      banner.dataset.bound = "1";
+      banner.addEventListener("click", (event) => {
+        const action = event.target?.dataset?.action;
+        if (!action) return;
+        if (action === "accept") {
+          setCookieConsent("accepted");
+          banner.classList.add("hidden");
+        }
+        if (action === "decline") {
+          setCookieConsent("declined");
+          banner.classList.add("hidden");
+        }
+      });
+    }
+    return banner;
   };
 
   const ensureFeedbackModal = () => {
@@ -6021,6 +6102,440 @@
     }
   };
 
+  const formatPredictionDate = (value) => {
+    const text = String(value || "").trim();
+    if (!text) return "—";
+    const date = new Date(text);
+    if (Number.isNaN(date.getTime())) return "—";
+    return date.toLocaleString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  };
+
+  const parsePredictionArray = (raw) => {
+    if (Array.isArray(raw)) return raw;
+    if (raw === null || raw === undefined) return [];
+    if (typeof raw === "string") {
+      const text = raw.trim();
+      if (!text) return [];
+      try {
+        const parsed = JSON.parse(text);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (error) {
+        if (text.includes(",")) return text.split(",").map((part) => part.trim()).filter(Boolean);
+      }
+    }
+    return [];
+  };
+
+  const clampPredictionPrice = (value) => {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return null;
+    if (num < 0) return 0;
+    if (num > 1) return 1;
+    return num;
+  };
+
+  const formatPredictionPercent = (value) => {
+    const num = clampPredictionPrice(value);
+    if (num === null) return "—";
+    return `${(num * 100).toFixed(1)}%`;
+  };
+
+  const formatPredictionSpread = (value) => {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return "—";
+    return `${(num * 100).toFixed(2)} pts`;
+  };
+
+  const normalizePredictionMarket = (rawMarket) => {
+    const market = rawMarket && typeof rawMarket === "object" ? rawMarket : {};
+    const outcomes = parsePredictionArray(market.outcomes).map((item) => String(item || "").trim()).filter(Boolean);
+    const outcomePrices = parsePredictionArray(market.outcomePrices)
+      .map((item) => clampPredictionPrice(item))
+      .filter((item) => item !== null);
+    const tokenIds = parsePredictionArray(market.clobTokenIds).map((item) => String(item || "").trim()).filter(Boolean);
+    return {
+      ...market,
+      outcomes,
+      outcomePrices,
+      clobTokenIds: tokenIds,
+      volume24hr: Number(market.volume24hr || 0) || 0,
+      volume: Number(market.volume || 0) || 0,
+      enableOrderBook: Boolean(market.enableOrderBook),
+    };
+  };
+
+  const deriveYesNoProbabilities = (market) => {
+    const normalized = normalizePredictionMarket(market);
+    const outcomes = normalized.outcomes;
+    const prices = normalized.outcomePrices;
+    if (!outcomes.length || !prices.length) {
+      return { yes: null, no: null };
+    }
+    let yesIndex = outcomes.findIndex((outcome) => /^yes$/i.test(outcome));
+    let noIndex = outcomes.findIndex((outcome) => /^no$/i.test(outcome));
+    if (yesIndex < 0 && prices.length >= 1) yesIndex = 0;
+    if (noIndex < 0 && prices.length >= 2) noIndex = 1;
+    return {
+      yes: yesIndex >= 0 ? clampPredictionPrice(prices[yesIndex]) : null,
+      no: noIndex >= 0 ? clampPredictionPrice(prices[noIndex]) : null,
+    };
+  };
+
+  const categorizePredictionMarkets = (markets) => {
+    const categories = {
+      "Price Targets / Ranges": [],
+      "Up/Down / Directional": [],
+      "Earnings / Events / Catalysts": [],
+      "Macro / Regulatory / IPO related": [],
+      Other: [],
+    };
+
+    const priceTargetsRegex = /(close|above|below|at \$|\$[0-9]+)/i;
+    const upDownRegex = /(up or down|up\/down|green|red|higher|lower)/i;
+    const earningsRegex = /(earnings|guidance|revenue|eps)/i;
+    const macroRegex = /(ipo|sec|doj|ftc|rate|inflation|treasury|labor)/i;
+
+    const sorted = [...markets].sort((a, b) => {
+      const a24 = Number(a?.volume24hr || 0) || 0;
+      const b24 = Number(b?.volume24hr || 0) || 0;
+      if (b24 !== a24) return b24 - a24;
+      const aTot = Number(a?.volume || 0) || 0;
+      const bTot = Number(b?.volume || 0) || 0;
+      return bTot - aTot;
+    });
+
+    sorted.forEach((market) => {
+      const question = String(market?.question || "").trim();
+      if (priceTargetsRegex.test(question)) {
+        categories["Price Targets / Ranges"].push(market);
+      } else if (upDownRegex.test(question)) {
+        categories["Up/Down / Directional"].push(market);
+      } else if (earningsRegex.test(question)) {
+        categories["Earnings / Events / Catalysts"].push(market);
+      } else if (macroRegex.test(question)) {
+        categories["Macro / Regulatory / IPO related"].push(market);
+      } else {
+        categories.Other.push(market);
+      }
+    });
+
+    return categories;
+  };
+
+  const predictionMarketUrl = (market) => {
+    const direct = String(market?.marketUrl || "").trim();
+    if (direct) return direct;
+    const eventUrl = String(market?.eventUrl || "").trim();
+    if (eventUrl) return eventUrl;
+    const slug = String(market?.slug || market?.eventSlug || "").trim().replace(/^\/+|\/+$/g, "");
+    return slug ? `https://polymarket.com/event/${slug}` : "";
+  };
+
+  const sparklineSvg = (historyPoints, color = "rgba(29, 78, 216, 0.85)") => {
+    const points = (Array.isArray(historyPoints) ? historyPoints : [])
+      .map((item) => ({ t: Number(item?.t), p: Number(item?.p) }))
+      .filter((item) => Number.isFinite(item.t) && Number.isFinite(item.p));
+    if (points.length < 2) return "";
+    const width = 160;
+    const height = 44;
+    const minPrice = Math.min(...points.map((item) => item.p));
+    const maxPrice = Math.max(...points.map((item) => item.p));
+    const span = maxPrice - minPrice || 0.0001;
+    const xStep = width / Math.max(1, points.length - 1);
+    const path = points
+      .map((point, idx) => {
+        const x = Math.round(idx * xStep * 100) / 100;
+        const y = Math.round((height - ((point.p - minPrice) / span) * (height - 4) - 2) * 100) / 100;
+        return `${x},${y}`;
+      })
+      .join(" ");
+    return `
+      <svg class="predictions-sparkline" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true">
+        <polyline points="${path}" fill="none" stroke="${color}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></polyline>
+      </svg>
+    `;
+  };
+
+  const renderOrderbookWidget = (market, orderbook) => {
+    if (!market?.enableOrderBook) {
+      return `<div class="small muted">Orderbook unavailable for this market.</div>`;
+    }
+    const tokenId = Array.isArray(market.clobTokenIds) && market.clobTokenIds.length ? String(market.clobTokenIds[0]) : "";
+    if (!tokenId || !orderbook || typeof orderbook !== "object") {
+      return `<div class="small muted">Orderbook unavailable for this market.</div>`;
+    }
+
+    const bestBid = clampPredictionPrice(orderbook.bestBid);
+    const bestAsk = clampPredictionPrice(orderbook.bestAsk);
+    const midpoint = clampPredictionPrice(orderbook.midpoint);
+    const spread = Number(orderbook.spread);
+    const bids = Array.isArray(orderbook.bids) ? orderbook.bids.slice(0, 5) : [];
+    const asks = Array.isArray(orderbook.asks) ? orderbook.asks.slice(0, 5) : [];
+    const history1d = Array.isArray(orderbook.history?.["1d"]) ? orderbook.history["1d"] : [];
+    const history1w = Array.isArray(orderbook.history?.["1w"]) ? orderbook.history["1w"] : [];
+
+    const levels = Math.max(bids.length, asks.length, 1);
+    const rows = [];
+    for (let idx = 0; idx < levels; idx += 1) {
+      const bid = bids[idx] || {};
+      const ask = asks[idx] || {};
+      rows.push(`
+        <tr>
+          <td>${formatPredictionPercent(bid.price)}</td>
+          <td>${toFiniteOrNull(bid.size) === null ? "—" : escapeHtml(formatCompactNumber(bid.size))}</td>
+          <td>${formatPredictionPercent(ask.price)}</td>
+          <td>${toFiniteOrNull(ask.size) === null ? "—" : escapeHtml(formatCompactNumber(ask.size))}</td>
+        </tr>
+      `);
+    }
+
+    return `
+      <div class="predictions-orderbook">
+        <div class="predictions-orderbook-head small">
+          <span>Bid ${formatPredictionPercent(bestBid)}</span>
+          <span>Ask ${formatPredictionPercent(bestAsk)}</span>
+          <span>Mid ${formatPredictionPercent(midpoint)}</span>
+          <span>Spread ${formatPredictionSpread(spread)}</span>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table predictions-orderbook-table">
+            <thead>
+              <tr><th>Bid</th><th>Size</th><th>Ask</th><th>Size</th></tr>
+            </thead>
+            <tbody>${rows.join("")}</tbody>
+          </table>
+        </div>
+        <div class="predictions-history-grid">
+          <div class="predictions-history-card">
+            <div class="small muted">Price history (1D)</div>
+            ${sparklineSvg(history1d)}
+          </div>
+          <div class="predictions-history-card">
+            <div class="small muted">Price history (1W)</div>
+            ${sparklineSvg(history1w, "rgba(58, 181, 162, 0.88)")}
+          </div>
+        </div>
+      </div>
+    `;
+  };
+
+  const renderPredictionsOutput = (payload, ticker) => {
+    if (!ui.tickerPredictionsOutput) return;
+    const cleanTicker = normalizeTicker(ticker || payload?.ticker || state.tickerContext.ticker || "");
+    const markets = Array.isArray(payload?.markets) ? payload.markets.map(normalizePredictionMarket) : [];
+    const orderbooks = payload?.orderbooks && typeof payload.orderbooks === "object" ? payload.orderbooks : {};
+
+    if (!cleanTicker || !markets.length) {
+      ui.tickerPredictionsOutput.innerHTML = `<div class="small muted">No Polymarket markets found for ${escapeHtml(cleanTicker || "this ticker")}.</div>`;
+      return;
+    }
+
+    const ranked = [...markets].sort((a, b) => {
+      const b24 = Number(b.volume24hr || 0) || 0;
+      const a24 = Number(a.volume24hr || 0) || 0;
+      if (b24 !== a24) return b24 - a24;
+      return (Number(b.volume || 0) || 0) - (Number(a.volume || 0) || 0);
+    });
+
+    const quick = ranked.slice(0, 3).map((market) => {
+      const probs = deriveYesNoProbabilities(market);
+      const tokenId = Array.isArray(market.clobTokenIds) && market.clobTokenIds.length ? String(market.clobTokenIds[0]) : "";
+      const book = tokenId ? orderbooks[tokenId] : null;
+      const midpoint = clampPredictionPrice(book?.midpoint);
+      const spread = Number(book?.spread);
+      return `
+        <article class="prediction-snapshot-card">
+          <div class="small muted">${escapeHtml(String(market.eventTitle || "Prediction market"))}</div>
+          <div class="prediction-question">${escapeHtml(String(market.question || "Untitled market"))}</div>
+          <div class="prediction-meta-row">
+            <span>Midpoint</span><span>${formatPredictionPercent(midpoint !== null ? midpoint : probs.yes)}</span>
+          </div>
+          <div class="prediction-meta-row">
+            <span>Bid / Ask</span><span>${formatPredictionPercent(book?.bestBid)} / ${formatPredictionPercent(book?.bestAsk)}</span>
+          </div>
+          <div class="prediction-meta-row">
+            <span>Spread</span><span>${formatPredictionSpread(spread)}</span>
+          </div>
+          <div class="prediction-meta-row">
+            <span>24h / Total Vol</span><span>${escapeHtml(formatCompactNumber(market.volume24hr))} / ${escapeHtml(formatCompactNumber(market.volume))}</span>
+          </div>
+          <div class="prediction-meta-row">
+            <span>End Date</span><span>${escapeHtml(formatPredictionDate(market.endDate))}</span>
+          </div>
+          <div class="prediction-meta-row">
+            <span>Yes / No</span><span>${formatPredictionPercent(probs.yes)} / ${formatPredictionPercent(probs.no)}</span>
+          </div>
+          ${predictionMarketUrl(market) ? `<a class="news-link" href="${escapeHtml(predictionMarketUrl(market))}" target="_blank" rel="noreferrer">View on Polymarket</a>` : ""}
+        </article>
+      `;
+    });
+
+    const categories = categorizePredictionMarkets(markets);
+    const categoryHtml = Object.entries(categories)
+      .map(([name, items]) => {
+        if (!Array.isArray(items) || !items.length) return "";
+        const cards = items
+          .map((market) => {
+            const probs = deriveYesNoProbabilities(market);
+            const marketUrl = predictionMarketUrl(market);
+            const tokenId = Array.isArray(market.clobTokenIds) && market.clobTokenIds.length ? String(market.clobTokenIds[0]) : "";
+            const orderbook = tokenId ? orderbooks[tokenId] : null;
+            const tags = Array.isArray(market.tags) ? market.tags.slice(0, 4).map((tag) => String(tag || "").trim()).filter(Boolean) : [];
+            const tagsHtml = tags.length
+              ? `<div class="prediction-tags">${tags.map((tag) => `<span class="status">${escapeHtml(tag)}</span>`).join("")}</div>`
+              : "";
+            return `
+              <article class="prediction-market-card">
+                <div class="prediction-question">${escapeHtml(String(market.question || "Untitled market"))}</div>
+                <div class="prediction-grid">
+                  <div class="prediction-meta-row"><span>Yes</span><span>${formatPredictionPercent(probs.yes)}</span></div>
+                  <div class="prediction-meta-row"><span>No</span><span>${formatPredictionPercent(probs.no)}</span></div>
+                  <div class="prediction-meta-row"><span>24h Volume</span><span>${escapeHtml(formatCompactNumber(market.volume24hr))}</span></div>
+                  <div class="prediction-meta-row"><span>Total Volume</span><span>${escapeHtml(formatCompactNumber(market.volume))}</span></div>
+                  <div class="prediction-meta-row"><span>End Date</span><span>${escapeHtml(formatPredictionDate(market.endDate))}</span></div>
+                </div>
+                ${tagsHtml}
+                ${marketUrl ? `<a class="news-link" href="${escapeHtml(marketUrl)}" target="_blank" rel="noreferrer">View on Polymarket</a>` : ""}
+                ${renderOrderbookWidget(market, orderbook)}
+              </article>
+            `;
+          })
+          .join("");
+        return `
+          <details class="prediction-accordion" open>
+            <summary>${escapeHtml(name)} <span class="small muted">(${items.length})</span></summary>
+            <div class="prediction-category-list">${cards}</div>
+          </details>
+        `;
+      })
+      .join("");
+
+    ui.tickerPredictionsOutput.innerHTML = `
+      <div class="predictions-shell">
+        <div class="predictions-section">
+          <div class="small"><strong>Quick Snapshot</strong></div>
+          <div class="prediction-snapshot-grid">${quick.join("")}</div>
+        </div>
+        <div class="predictions-section">
+          ${categoryHtml || `<div class="small muted">No categorized markets were found for ${escapeHtml(cleanTicker)}.</div>`}
+        </div>
+      </div>
+    `;
+  };
+
+  const loadTickerPredictions = async (ticker, { notify = false, force = false } = {}) => {
+    if (!ui.tickerPredictionsOutput) return;
+    const symbol = normalizeTicker(ticker);
+    if (!symbol) {
+      ui.tickerPredictionsOutput.innerHTML = `<div class="small muted">No Polymarket markets found for this ticker.</div>`;
+      return;
+    }
+    if (!force && state.tickerContext.predictionsTicker === symbol && state.tickerContext.predictionsData) {
+      renderPredictionsOutput(state.tickerContext.predictionsData, symbol);
+      return;
+    }
+
+    state.tickerContext.predictionsTicker = symbol;
+    setOutputLoading(ui.tickerPredictionsOutput, "Loading prediction markets...");
+
+    try {
+      const searchResp = await fetch(`/api/predictions/search?ticker=${encodeURIComponent(symbol)}`, {
+        method: "GET",
+        headers: { Accept: "application/json" },
+      });
+      const searchPayload = await searchResp.json().catch(() => ({}));
+      if (!searchResp.ok) {
+        throw new Error(String(searchPayload?.detail || searchPayload?.error || "Unable to load predictions."));
+      }
+
+      const markets = Array.isArray(searchPayload?.markets) ? searchPayload.markets.map(normalizePredictionMarket) : [];
+      const tokenIds = [];
+      const seen = new Set();
+      markets.forEach((market) => {
+        const ids = Array.isArray(market?.clobTokenIds) ? market.clobTokenIds : [];
+        ids.forEach((id) => {
+          const clean = String(id || "").trim();
+          if (!clean || seen.has(clean)) return;
+          seen.add(clean);
+          tokenIds.push(clean);
+        });
+      });
+
+      let orderbooks = {};
+      if (tokenIds.length) {
+        const orderResp = await fetch("/api/predictions/orderbook", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ tokenIds, maxLevels: 5 }),
+        });
+        const orderPayload = await orderResp.json().catch(() => ({}));
+        if (orderResp.ok && orderPayload?.orderbooks && typeof orderPayload.orderbooks === "object") {
+          orderbooks = orderPayload.orderbooks;
+        }
+      }
+
+      const normalized = {
+        ticker: symbol,
+        events: Array.isArray(searchPayload?.events) ? searchPayload.events : [],
+        markets,
+        orderbooks,
+      };
+      state.tickerContext.predictionsData = normalized;
+      setOutputReady(ui.tickerPredictionsOutput);
+      renderPredictionsOutput(normalized, symbol);
+      logEvent("predictions_loaded", { ticker: symbol, markets: markets.length, token_ids: tokenIds.length });
+    } catch (error) {
+      setOutputReady(ui.tickerPredictionsOutput);
+      ui.tickerPredictionsOutput.innerHTML = `
+        <div class="small muted">Polymarket predictions are temporarily unavailable for ${escapeHtml(symbol)}.</div>
+      `;
+      if (notify) showToast(error.message || "Unable to load predictions.", "warn");
+    }
+  };
+
+  const setTickerIntelTab = (tab, { ensureLoaded = true } = {}) => {
+    const next = tab === "predictions" ? "predictions" : "intelligence";
+    state.intelActiveTab = next;
+
+    if (ui.tickerIntelligenceOutput) {
+      ui.tickerIntelligenceOutput.classList.toggle("hidden", next !== "intelligence");
+    }
+    if (ui.tickerPredictionsOutput) {
+      ui.tickerPredictionsOutput.classList.toggle("hidden", next !== "predictions");
+    }
+    ui.tickerIntelTabs.forEach((button) => {
+      const active = String(button.dataset.intelTab || "") === next;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-selected", active ? "true" : "false");
+    });
+
+    if (next === "predictions" && ensureLoaded) {
+      const activeTicker = normalizeTicker(state.tickerContext.ticker || state.tickerContext.intelTicker || "");
+      if (activeTicker) {
+        loadTickerPredictions(activeTicker, { notify: false }).catch(() => {});
+      }
+    }
+  };
+
+  const bindTickerIntelTabs = () => {
+    if (!ui.tickerIntelTabs.length) return;
+    ui.tickerIntelTabs.forEach((button) => {
+      if (button.dataset.bound === "1") return;
+      button.dataset.bound = "1";
+      button.addEventListener("click", () => {
+        triggerSubtleHaptic();
+        setTickerIntelTab(String(button.dataset.intelTab || "intelligence"));
+      });
+    });
+    setTickerIntelTab(state.intelActiveTab || "intelligence", { ensureLoaded: false });
+  };
+
   const loadTickerIntel = async (functions, ticker, { notify = false, force = false } = {}) => {
     if (!functions || (!ui.intelOutput && !ui.tickerIntelligenceOutput)) return;
     const symbol = normalizeTicker(ticker);
@@ -6028,6 +6543,9 @@
       if (ui.intelOutput) ui.intelOutput.innerHTML = `<div class="small muted">Load a ticker to see company context.</div>`;
       if (ui.tickerIntelligenceOutput) {
         ui.tickerIntelligenceOutput.innerHTML = `<div class="small muted">Load a ticker to generate institutional intelligence.</div>`;
+      }
+      if (ui.tickerPredictionsOutput) {
+        ui.tickerPredictionsOutput.innerHTML = `<div class="small muted">Load a ticker to view related Polymarket markets.</div>`;
       }
       return;
     }
@@ -6042,6 +6560,9 @@
       if (ui.intelOutput) setOutputReady(ui.intelOutput);
       if (ui.tickerIntelligenceOutput) setOutputReady(ui.tickerIntelligenceOutput);
       renderTickerIntel(result.data || {});
+      if (state.intelActiveTab === "predictions") {
+        loadTickerPredictions(symbol, { notify: false, force }).catch(() => {});
+      }
       logEvent("ticker_intel_loaded", { ticker: symbol });
     } catch (error) {
       if (ui.intelOutput) {
@@ -6051,6 +6572,10 @@
       if (ui.tickerIntelligenceOutput) {
         setOutputReady(ui.tickerIntelligenceOutput);
         ui.tickerIntelligenceOutput.innerHTML = `<div class="small muted">Unable to load institutional intelligence right now.</div>`;
+      }
+      if (ui.tickerPredictionsOutput && state.intelActiveTab === "predictions") {
+        setOutputReady(ui.tickerPredictionsOutput);
+        ui.tickerPredictionsOutput.innerHTML = `<div class="small muted">Polymarket predictions are temporarily unavailable for ${escapeHtml(symbol)}.</div>`;
       }
       if (notify) showToast(error.message || "Unable to load ticker intelligence.", "warn");
     }
@@ -10270,6 +10795,7 @@
           ui.intelStrip.classList.toggle("hidden", next !== "ticker-intelligence");
         }
         if (next === "ticker-intelligence") {
+          setTickerIntelTab(state.intelActiveTab || "intelligence");
           const activeTicker = normalizeTicker(state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "");
           if (activeTicker && Array.isArray(state.tickerContext.rows) && state.tickerContext.rows.length) {
             renderTickerChart(
@@ -10345,6 +10871,7 @@
       ensureHeaderNotificationsCta();
       ensureSidebarCollapseToggle();
       bindMobileNav();
+      bindMobileBottomNav();
       initializeLanguageControls().catch(() => {});
       captureShareFromUrl();
       renderNotificationLog();
@@ -10382,6 +10909,7 @@
 	    }
 	    window.setTimeout(() => ensureFeedbackPrompt(), 1400);
 	    bindPanelNavigation();
+      bindTickerIntelTabs();
       bindFaqAccordion();
 	    syncStickyOffsets();
 	    window.addEventListener("resize", () => window.requestAnimationFrame(syncStickyOffsets));
