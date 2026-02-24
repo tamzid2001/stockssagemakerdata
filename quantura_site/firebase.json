@@ -112,7 +112,8 @@
       { "source": "/notifications", "function": "ssr" },
       { "source": "/tools/fx", "function": "ssr" },
       { "source": "/ticker", "function": "ssr" },
-      { "source": "/ticker/**", "function": "ssr" }
+      { "source": "/ticker/**", "function": "ssr" },
+      { "source": "/shop", "function": "ssr" }
     ],
     "ignore": [
       "firebase.json",

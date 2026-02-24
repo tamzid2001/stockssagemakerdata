@@ -14,6 +14,7 @@ def test_pages_exist():
         "dashboard.html",
         "pricing.html",
         "contact.html",
+        "shop.html",
         "ticker.html",
         "tools/fx.html",
     ]:
@@ -42,6 +43,7 @@ def test_pages_include_analytics():
         "dashboard.html",
         "pricing.html",
         "contact.html",
+        "shop.html",
         "ticker.html",
         "tools/fx.html",
     ]:
