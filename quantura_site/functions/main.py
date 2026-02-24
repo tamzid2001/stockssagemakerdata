@@ -25,6 +25,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore, messaging as admin_messaging, storage as admin_storage
 from firebase_functions import https_fn, scheduler_fn
 from firebase_functions.options import MemoryOption, set_global_options
+from massive_client import MassiveApiError, MassiveClient
 import secrets_loader
 
 try:
@@ -72,7 +73,19 @@ STRIPE_PUBLIC_KEY = os.environ.get("STRIPE_PUBLIC_KEY", "").strip()
 STRIPE_SECRET_KEY = secrets_loader.get_secret("STRIPE_SECRET_KEY")
 STRIPE_WEBHOOK_SECRET = secrets_loader.get_secret("STRIPE_WEBHOOK_SECRET")
 MASSIVE_API_KEY = secrets_loader.get_secret("MASSIVE_API_KEY")
-MASSIVE_BASE_URL = (os.environ.get("MASSIVE_BASE_URL") or "https://api.massive.com").rstrip("/")
+MASSIVE_BASE_URL = (
+    secrets_loader.get_secret("MASSIVE_BASE_URL")
+    or os.environ.get("MASSIVE_BASE_URL")
+    or "https://api.massive.com"
+).rstrip("/")
+MASSIVE_TIMEOUT_SECONDS = max(4.0, float(os.environ.get("MASSIVE_TIMEOUT_SECONDS", "18") or 18.0))
+MASSIVE_MAX_RETRIES = max(0, min(int(os.environ.get("MASSIVE_MAX_RETRIES", "3") or 3), 6))
+MASSIVE_CLIENT = MassiveClient(
+    api_key=MASSIVE_API_KEY,
+    base_url=MASSIVE_BASE_URL,
+    timeout_seconds=MASSIVE_TIMEOUT_SECONDS,
+    max_retries=MASSIVE_MAX_RETRIES,
+)
 UNSPLASH_ACCESS_KEY = secrets_loader.get_secret("UNSPLASH_ACCESS_KEY")
 STRIPE_CONNECT_PLATFORM_FEE_PERCENT = float(os.environ.get("STRIPE_CONNECT_PLATFORM_FEE_PERCENT", "12") or 12)
 CREATOR_DEFAULT_SUBSCRIBE_USD = float(os.environ.get("CREATOR_DEFAULT_SUBSCRIBE_USD", "9") or 9)
@@ -1743,7 +1756,7 @@ def _fetch_massive_corporate_events(
     event_types: list[str] | None = None,
     statuses: list[str] | None = None,
 ) -> tuple[list[dict[str, Any]], str]:
-    if not MASSIVE_API_KEY:
+    if not MASSIVE_CLIENT.is_configured():
         return [], "Massive TMX API key is not configured."
 
     normalized = [_normalize_symbol_token(t) for t in (tickers or [])]
@@ -1756,7 +1769,6 @@ def _fetch_massive_corporate_events(
         "date.lte": end_date.isoformat(),
         "sort": "date.asc",
         "limit": max(1, min(int(limit or 200), 1000)),
-        "apiKey": MASSIVE_API_KEY,
     }
     if len(normalized) == 1:
         params["ticker"] = normalized[0]
@@ -1772,14 +1784,14 @@ def _fetch_massive_corporate_events(
         if clean_statuses:
             params["status.any_of"] = ",".join(clean_statuses[:20])
 
-    url = f"{MASSIVE_BASE_URL}/tmx/v1/corporate-events"
     try:
-        response = requests.get(url, params=params, timeout=18)
-        response.raise_for_status()
-        payload = response.json() if response.text else {}
+        payload = MASSIVE_CLIENT.request_json(
+            path="/tmx/v1/corporate-events",
+            params=params,
+        )
         rows = payload.get("results") or []
-    except Exception as exc:
-        return [], f"Massive TMX request failed: {str(exc)[:180]}"
+    except MassiveApiError as exc:
+        return [], f"Massive TMX request failed ({exc.status_code})."
 
     out: list[dict[str, Any]] = []
     for idx, row in enumerate(rows):

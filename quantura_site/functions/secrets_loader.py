@@ -38,6 +38,7 @@ _SECRET_SPECS: dict[str, SecretSpec] = {
     "STRIPE_SECRET_KEY": SecretSpec("STRIPE_SECRET_KEY", usage="Stripe server API"),
     "STRIPE_WEBHOOK_SECRET": SecretSpec("STRIPE_WEBHOOK_SECRET", usage="Stripe webhook verification"),
     "MASSIVE_API_KEY": SecretSpec("MASSIVE_API_KEY", usage="Massive market data"),
+    "MASSIVE_BASE_URL": SecretSpec("MASSIVE_BASE_URL", usage="Massive API base URL override"),
     "UNSPLASH_ACCESS_KEY": SecretSpec(
         "UNSPLASH_ACCESS_KEY",
         aliases=("UNSPLASH_APPLICATION_ID",),
@@ -109,4 +110,3 @@ def require_secret(key: str, feature: str) -> str:
     raise RuntimeError(
         f"Missing required secret '{key}' for {feature}. Configure it in Google Secret Manager and redeploy."
     )
-
