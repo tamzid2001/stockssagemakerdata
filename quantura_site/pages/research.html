@@ -80,6 +80,68 @@
             </article>
           </div>
 
+          <section class="research-library" aria-labelledby="macro-context-heading">
+            <div class="research-library-head">
+              <h2 id="macro-context-heading">US Economy + Catalyst Monitor</h2>
+              <p class="small muted" id="massive-economy-status">Loading capability-gated macro context...</p>
+            </div>
+            <div class="research-note-grid">
+              <article class="card research-note-card">
+                <span class="research-note-tag">Macro</span>
+                <h3>Treasury yield curve</h3>
+                <div id="massive-economy-yields" class="panel-output small">Yield curve data will appear here.</div>
+              </article>
+              <article class="card research-note-card">
+                <span class="research-note-tag">Macro</span>
+                <h3>Inflation</h3>
+                <div id="massive-economy-inflation" class="panel-output small">Inflation series will appear here.</div>
+              </article>
+              <article class="card research-note-card">
+                <span class="research-note-tag">Macro</span>
+                <h3>Inflation expectations</h3>
+                <div id="massive-economy-inflation-expectations" class="panel-output small">Expectation series will appear here.</div>
+              </article>
+              <article class="card research-note-card">
+                <span class="research-note-tag">Macro</span>
+                <h3>Labor market</h3>
+                <div id="massive-economy-labor" class="panel-output small">Labor market series will appear here.</div>
+              </article>
+            </div>
+          </section>
+
+          <section class="research-library" aria-labelledby="ipo-calendar-heading">
+            <div class="research-library-head">
+              <h2 id="ipo-calendar-heading">IPO Calendar</h2>
+              <p class="small muted" id="massive-ipo-status-text">Set filters and load upcoming or recent IPOs.</p>
+            </div>
+            <form id="massive-ipo-form" class="card" style="margin-bottom:18px;">
+              <div class="form-grid">
+                <div class="field">
+                  <label class="label" for="massive-ipo-start">Start date</label>
+                  <input id="massive-ipo-start" type="date" />
+                </div>
+                <div class="field">
+                  <label class="label" for="massive-ipo-end">End date</label>
+                  <input id="massive-ipo-end" type="date" />
+                </div>
+                <div class="field">
+                  <label class="label" for="massive-ipo-status">Status</label>
+                  <select id="massive-ipo-status">
+                    <option value="">All</option>
+                    <option value="scheduled">Scheduled</option>
+                    <option value="priced">Priced</option>
+                    <option value="listed">Listed</option>
+                    <option value="withdrawn">Withdrawn</option>
+                  </select>
+                </div>
+              </div>
+              <button class="cta secondary" type="submit"><i class="iconoir-search" aria-hidden="true"></i><span>Load IPOs</span></button>
+            </form>
+            <div class="card">
+              <div id="massive-ipo-output" class="panel-output small">IPO rows will appear here when available.</div>
+            </div>
+          </section>
+
           <section class="research-library" aria-labelledby="research-notes-heading">
             <div class="research-library-head">
               <h2 id="research-notes-heading">Research Notes</h2>

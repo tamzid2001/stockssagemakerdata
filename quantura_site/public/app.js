@@ -1132,6 +1132,17 @@
     marketHeadlinesStatus: document.getElementById("market-headlines-status"),
     marketHeadlinesOutput: document.getElementById("market-headlines-output"),
     marketSocialOutput: document.getElementById("market-social-output"),
+    massiveEconomyStatus: document.getElementById("massive-economy-status"),
+    massiveEconomyYields: document.getElementById("massive-economy-yields"),
+    massiveEconomyInflation: document.getElementById("massive-economy-inflation"),
+    massiveEconomyInflationExpectations: document.getElementById("massive-economy-inflation-expectations"),
+    massiveEconomyLabor: document.getElementById("massive-economy-labor"),
+    massiveIpoForm: document.getElementById("massive-ipo-form"),
+    massiveIpoStart: document.getElementById("massive-ipo-start"),
+    massiveIpoEnd: document.getElementById("massive-ipo-end"),
+    massiveIpoStatus: document.getElementById("massive-ipo-status"),
+    massiveIpoStatusText: document.getElementById("massive-ipo-status-text"),
+    massiveIpoOutput: document.getElementById("massive-ipo-output"),
     tickerQueryForm: document.getElementById("ticker-query-form"),
     tickerQueryTicker: document.getElementById("ticker-query-ticker"),
     tickerQueryQuestion: document.getElementById("ticker-query-question"),
@@ -3690,6 +3701,204 @@
     state.massiveCapabilitiesLoadedAt = now;
     renderMassiveCapabilitiesAudit(payload);
     return capabilities;
+  };
+
+  const fetchMassiveApi = async (path, params = {}) => {
+    const query = new URLSearchParams();
+    Object.entries(params || {}).forEach(([key, value]) => {
+      if (value === null || value === undefined) return;
+      const text = String(value).trim();
+      if (!text) return;
+      query.set(key, text);
+    });
+    const headers = await buildApiAuthHeaders();
+    const url = query.toString() ? `${path}?${query.toString()}` : path;
+    const response = await fetch(url, {
+      method: "GET",
+      headers,
+      credentials: "same-origin",
+    });
+    if (!response.ok) {
+      let message = "Massive endpoint unavailable.";
+      try {
+        const payload = await response.json();
+        if (payload && typeof payload.error === "string" && payload.error.trim()) {
+          message = payload.error.trim();
+        }
+      } catch (error) {
+        // Ignore parse failures.
+      }
+      throw new Error(message);
+    }
+    return response.json();
+  };
+
+  const buildMiniLineSvg = (values = []) => {
+    const points = (Array.isArray(values) ? values : [])
+      .map((value) => Number(value))
+      .filter((value) => Number.isFinite(value));
+    if (points.length < 2) return "";
+    const min = Math.min(...points);
+    const max = Math.max(...points);
+    const span = max - min || 1;
+    const width = 220;
+    const height = 48;
+    const mapped = points
+      .map((value, idx) => {
+        const x = (idx / (points.length - 1)) * width;
+        const y = height - ((value - min) / span) * height;
+        return `${x.toFixed(2)},${y.toFixed(2)}`;
+      })
+      .join(" ");
+    return `
+      <svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" role="img" aria-label="Series trend">
+        <polyline fill="none" stroke="currentColor" stroke-width="2" points="${mapped}" />
+      </svg>
+    `;
+  };
+
+  const renderResearchMacroSeries = (container, payload, fallbackLabel) => {
+    if (!container) return;
+    const rows = Array.isArray(payload?.rows) ? payload.rows : [];
+    if (!rows.length) {
+      container.innerHTML = `<div class="small muted">No ${escapeHtml(fallbackLabel)} data returned.</div>`;
+      return;
+    }
+    const latest = rows.slice(0, 8);
+    const values = latest
+      .map((row) => Number(row?.value))
+      .filter((value) => Number.isFinite(value))
+      .reverse();
+    const sparkline = buildMiniLineSvg(values);
+    const listMarkup = latest
+      .map((row) => {
+        const date = escapeHtml(String(row?.date || "—"));
+        const value = Number(row?.value);
+        const pretty = Number.isFinite(value) ? value.toFixed(3) : "—";
+        return `<div class="small"><strong>${date}</strong> · ${escapeHtml(pretty)}</div>`;
+      })
+      .join("");
+    container.innerHTML = `${sparkline}${listMarkup}`;
+  };
+
+  const renderResearchIpoTable = (payload) => {
+    if (!ui.massiveIpoOutput) return;
+    const items = Array.isArray(payload?.items) ? payload.items : [];
+    if (!items.length) {
+      ui.massiveIpoOutput.innerHTML = `<div class="small muted">No IPO rows found for the selected filters.</div>`;
+      return;
+    }
+    const rows = items
+      .slice(0, 120)
+      .map((row) => {
+        const date = escapeHtml(String(row?.date || "—"));
+        const symbol = escapeHtml(String(row?.symbol || "—"));
+        const exchange = escapeHtml(String(row?.exchange || "—"));
+        const status = escapeHtml(String(row?.status || "—"));
+        const name = escapeHtml(String(row?.name || "—"));
+        return `<tr><td>${date}</td><td>${symbol}</td><td>${exchange}</td><td>${status}</td><td>${name}</td></tr>`;
+      })
+      .join("");
+    ui.massiveIpoOutput.innerHTML = `
+      <div style="overflow:auto;">
+        <table class="insider-table">
+          <thead><tr><th>Date</th><th>Symbol</th><th>Exchange</th><th>Status</th><th>Name</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    `;
+  };
+
+  const loadResearchMacroWidgets = async () => {
+    if (!ui.massiveEconomyStatus) return;
+    ui.massiveEconomyStatus.textContent = "Loading Massive macro series...";
+    try {
+      await loadMassiveCapabilities({ force: false });
+      const requests = [
+        {
+          key: "economy_treasury_yields",
+          path: "/api/massive/economy/treasury-yields",
+          node: ui.massiveEconomyYields,
+          label: "treasury yield",
+        },
+        {
+          key: "economy_inflation",
+          path: "/api/massive/economy/inflation",
+          node: ui.massiveEconomyInflation,
+          label: "inflation",
+        },
+        {
+          key: "economy_inflation_expectations",
+          path: "/api/massive/economy/inflation-expectations",
+          node: ui.massiveEconomyInflationExpectations,
+          label: "inflation expectations",
+        },
+        {
+          key: "economy_labor_market",
+          path: "/api/massive/economy/labor-market",
+          node: ui.massiveEconomyLabor,
+          label: "labor market",
+        },
+      ];
+
+      await Promise.all(
+        requests.map(async (item) => {
+          if (!isMassiveCapabilityAvailable(item.key)) {
+            if (item.node) {
+              item.node.innerHTML = `<div class="small muted">Not available on current Massive plan.</div>`;
+            }
+            return;
+          }
+          try {
+            const payload = await fetchMassiveApi(item.path, { limit: 120 });
+            renderResearchMacroSeries(item.node, payload, item.label);
+          } catch (error) {
+            if (item.node) {
+              item.node.innerHTML = `<div class="small muted">${escapeHtml(extractErrorMessage(error, "Unable to load series."))}</div>`;
+            }
+          }
+        })
+      );
+      ui.massiveEconomyStatus.textContent = "Macro context loaded via Massive capability-gated endpoints.";
+    } catch (error) {
+      ui.massiveEconomyStatus.textContent = extractErrorMessage(error, "Macro context is unavailable.");
+      [ui.massiveEconomyYields, ui.massiveEconomyInflation, ui.massiveEconomyInflationExpectations, ui.massiveEconomyLabor].forEach((node) => {
+        if (!node) return;
+        node.innerHTML = `<div class="small muted">Capability audit unavailable.</div>`;
+      });
+    }
+  };
+
+  const loadResearchIpoCalendar = async ({ force = false } = {}) => {
+    if (!ui.massiveIpoOutput || !ui.massiveIpoStatusText) return;
+    try {
+      await loadMassiveCapabilities({ force: false });
+      if (!isMassiveCapabilityAvailable("stocks_ipos")) {
+        ui.massiveIpoStatusText.textContent = "IPO endpoint is not available in the current Massive plan.";
+        ui.massiveIpoOutput.innerHTML = `<div class="small muted">IPO data is currently gated off by plan capability.</div>`;
+        return;
+      }
+
+      const start = String(ui.massiveIpoStart?.value || "").trim();
+      const end = String(ui.massiveIpoEnd?.value || "").trim();
+      const status = String(ui.massiveIpoStatus?.value || "").trim().toLowerCase();
+      ui.massiveIpoStatusText.textContent = "Loading IPO calendar...";
+      const payload = await fetchMassiveApi("/api/massive/stocks/ipos", {
+        start,
+        end,
+        status,
+        limit: 250,
+        force: force ? "1" : "",
+      });
+      renderResearchIpoTable(payload);
+      const count = Number(payload?.count || 0);
+      ui.massiveIpoStatusText.textContent = count
+        ? `Loaded ${count} IPO row${count === 1 ? "" : "s"}.`
+        : "No IPO rows for selected filters.";
+    } catch (error) {
+      ui.massiveIpoStatusText.textContent = extractErrorMessage(error, "Unable to load IPO calendar.");
+      ui.massiveIpoOutput.innerHTML = `<div class="small muted">${escapeHtml(extractErrorMessage(error, "Unable to load IPO calendar."))}</div>`;
+    }
   };
 
   const setFeatureVoteSummaryPolling = (functions, enabled) => {
@@ -13354,6 +13563,32 @@
       event.preventDefault();
       await loadMarketHeadlinesFeed(functions, { force: true, notify: true });
     });
+
+    if (ui.massiveIpoStart && ui.massiveIpoEnd) {
+      const today = new Date();
+      const start = new Date(today);
+      start.setDate(start.getDate() - 30);
+      const end = new Date(today);
+      end.setDate(end.getDate() + 180);
+      if (!ui.massiveIpoStart.value) ui.massiveIpoStart.value = start.toISOString().slice(0, 10);
+      if (!ui.massiveIpoEnd.value) ui.massiveIpoEnd.value = end.toISOString().slice(0, 10);
+    }
+    ui.massiveIpoForm?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      await loadResearchIpoCalendar({ force: true });
+    });
+    if (ui.massiveEconomyStatus) {
+      loadResearchMacroWidgets().catch((error) => {
+        ui.massiveEconomyStatus.textContent = extractErrorMessage(error, "Macro context is unavailable.");
+      });
+    }
+    if (ui.massiveIpoOutput) {
+      loadResearchIpoCalendar({ force: false }).catch((error) => {
+        if (ui.massiveIpoStatusText) {
+          ui.massiveIpoStatusText.textContent = extractErrorMessage(error, "Unable to load IPO calendar.");
+        }
+      });
+    }
 
     if (ui.tickerQueryLanguage && !ui.tickerQueryLanguage.value) {
       ui.tickerQueryLanguage.value = state.preferredLanguage || "en";
