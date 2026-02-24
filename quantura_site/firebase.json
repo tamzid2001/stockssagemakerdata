@@ -52,6 +52,7 @@
       { "source": "/purchase", "destination": "/pricing", "type": 301 }
     ],
     "rewrites": [
+      { "source": "/api/auth/exchange-native-id-token", "function": "exchange_native_id_token" },
       { "source": "/", "function": "ssr" },
       { "source": "/forecasting", "function": "ssr" },
       { "source": "/ticker-intelligence", "function": "ssr" },

@@ -1,9 +1,9 @@
-package com.example.quantura_android.di
+package com.quantura.quanturaapp.di
 
 import android.app.Application
 import android.content.pm.ApplicationInfo
-import com.example.quantura_android.ads.AdManager
-import com.example.quantura_android.config.RemoteConfigManager
+import com.quantura.quanturaapp.ads.AdManager
+import com.quantura.quanturaapp.config.RemoteConfigManager
 
 // Simple DI container for shared app services.
 class AppContainer(

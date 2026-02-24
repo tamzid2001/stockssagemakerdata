@@ -21,7 +21,7 @@ except Exception:  # pragma: no cover - Python < 3.9 fallback
     ZoneInfo = None  # type: ignore
 
 import firebase_admin
-from firebase_admin import credentials, firestore, messaging as admin_messaging, storage as admin_storage
+from firebase_admin import auth as admin_auth, credentials, firestore, messaging as admin_messaging, storage as admin_storage
 from firebase_functions import https_fn, scheduler_fn
 from firebase_functions.options import MemoryOption, set_global_options
 
@@ -5055,6 +5055,46 @@ def create_creator_support_checkout(req: https_fn.CallableRequest) -> dict[str, 
         "platformFeePercent": platform_fee_percent,
         "connectLinked": bool(connect_account_id),
     }
+
+
+@https_fn.on_request()
+def exchange_native_id_token(req: https_fn.Request) -> tuple[str, int, dict[str, str]]:
+    origin = str(req.headers.get("Origin") or "").strip()
+    allowed_origin = origin if origin in META_ALLOWED_ORIGINS else PUBLIC_ORIGIN
+    headers = {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+        "Access-Control-Allow-Origin": allowed_origin,
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        "Vary": "Origin",
+    }
+
+    if req.method == "OPTIONS":
+        return ("", 204, headers)
+    if req.method != "POST":
+        return (json.dumps({"error": "Method not allowed"}), 405, headers)
+
+    payload = req.get_json(silent=True) or {}
+    id_token = str(payload.get("idToken") or "").strip()
+    if not id_token:
+        return (json.dumps({"error": "idToken is required"}), 400, headers)
+
+    try:
+        decoded = admin_auth.verify_id_token(id_token, check_revoked=False)
+        uid = str(decoded.get("uid") or "").strip()
+        if not uid:
+            raise ValueError("Token missing uid.")
+        custom_token_raw = admin_auth.create_custom_token(uid)
+        custom_token = (
+            custom_token_raw.decode("utf-8")
+            if isinstance(custom_token_raw, (bytes, bytearray))
+            else str(custom_token_raw)
+        )
+        return (json.dumps({"customToken": custom_token}), 200, headers)
+    except Exception as exc:
+        print(f"exchange_native_id_token verification failed: {exc}")
+        return (json.dumps({"error": "Invalid native ID token"}), 401, headers)
 
 
 @https_fn.on_request()

@@ -1,11 +1,11 @@
-package com.example.quantura_android.web
+package com.quantura.quanturaapp.web
 
 import android.content.Intent
 import android.net.Uri
 import android.webkit.JavascriptInterface
 import androidx.activity.ComponentActivity
 import androidx.core.os.bundleOf
-import com.example.quantura_android.ads.AdManager
+import com.quantura.quanturaapp.ads.AdManager
 import com.google.firebase.analytics.FirebaseAnalytics
 import org.json.JSONObject
 
@@ -16,6 +16,8 @@ import org.json.JSONObject
 class QuanturaJavascriptBridge(
     private val activity: ComponentActivity,
     private val adManager: AdManager,
+    private val onNativeAuthRequest: (provider: String, requestId: String) -> Unit,
+    private val onNativeSignOutRequest: (requestId: String) -> Unit,
 ) {
     @JavascriptInterface
     fun postMessage(rawPayload: String?) {
@@ -29,6 +31,9 @@ class QuanturaJavascriptBridge(
                 "showRewardedAd" -> adManager.showRewarded(activity)
                 "openNewsLink" -> openNewsLink(payload.optString("url"))
                 "handleButtonClick" -> handleButtonClick(payload.optString("buttonId"))
+                "share" -> openNativeShare(payload.optString("url"), payload.optString("title"), payload.optString("text"))
+                "authSignIn" -> requestNativeSignIn(payload.optString("provider"), payload.optString("requestId"))
+                "authSignOut" -> onNativeSignOutRequest(payload.optString("requestId"))
             }
         }
     }
@@ -58,5 +63,29 @@ class QuanturaJavascriptBridge(
             "native_bridge_button_click",
             bundleOf("button_id" to buttonId)
         )
+    }
+
+    private fun openNativeShare(url: String, title: String, text: String) {
+        val urlTrimmed = url.trim()
+        if (urlTrimmed.isEmpty()) return
+        val titleTrimmed = (title.trim().ifBlank { "Quantura" })
+        val textTrimmed = text.trim()
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TITLE, titleTrimmed)
+            putExtra(Intent.EXTRA_TEXT, if (textTrimmed.isNotEmpty()) "$textTrimmed $urlTrimmed" else urlTrimmed)
+            putExtra(Intent.EXTRA_SUBJECT, titleTrimmed)
+        }
+        val chooser = Intent.createChooser(shareIntent, "Share via")
+        if (chooser.resolveActivity(activity.packageManager) != null) {
+            activity.startActivity(chooser)
+        }
+    }
+
+    private fun requestNativeSignIn(provider: String, requestId: String) {
+        val providerClean = provider.trim().lowercase()
+        val requestIdClean = requestId.trim()
+        if (providerClean.isEmpty() || requestIdClean.isEmpty()) return
+        onNativeAuthRequest(providerClean, requestIdClean)
     }
 }
