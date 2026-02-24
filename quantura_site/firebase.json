@@ -60,6 +60,7 @@
       { "source": "/api/massive/economy/inflation-expectations", "function": "api_massive_economy_inflation_expectations" },
       { "source": "/api/massive/economy/labor-market", "function": "api_massive_economy_labor_market" },
       { "source": "/api/massive/stocks/ipos", "function": "api_massive_stocks_ipos" },
+      { "source": "/api/massive/options/contracts", "function": "api_massive_options_contracts" },
       { "source": "/", "function": "ssr" },
       { "source": "/forecasting", "function": "ssr" },
       { "source": "/ticker-intelligence", "function": "ssr" },
