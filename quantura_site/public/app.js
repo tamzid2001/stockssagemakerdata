@@ -1129,6 +1129,9 @@
     tickerQueryModel: document.getElementById("ticker-query-model"),
     tickerQueryModelHint: document.getElementById("ticker-query-model-hint"),
     tickerQueryModelInfo: document.getElementById("ticker-query-model-info"),
+    tickerQueryCacheToggleWrap: document.getElementById("ticker-query-cache-toggle-wrap"),
+    tickerQueryShowCacheStats: document.getElementById("ticker-query-show-cache-stats"),
+    tickerQueryCacheStats: document.getElementById("ticker-query-cache-stats"),
     tickerQueryStatus: document.getElementById("ticker-query-status"),
     tickerQueryOutput: document.getElementById("ticker-query-output"),
 	    optionsForm: document.getElementById("options-form"),
@@ -6873,8 +6876,137 @@
     }
   };
 
+  const formatTokenStat = (value) => {
+    const num = Number(value);
+    if (!Number.isFinite(num) || num < 0) return "—";
+    return Math.round(num).toLocaleString();
+  };
+
+  const renderTickerQueryCacheStats = (usage, { visible = false } = {}) => {
+    if (!ui.tickerQueryCacheStats) return;
+    const promptTokens = Number(usage?.prompt_tokens || 0);
+    const completionTokens = Number(usage?.completion_tokens || 0);
+    const cachedTokens = Number(usage?.cached_tokens || 0);
+    const totalTokens = Number(usage?.total_tokens || promptTokens + completionTokens || 0);
+    ui.tickerQueryCacheStats.innerHTML = `
+      <div class="small"><strong>prompt_tokens:</strong> ${escapeHtml(formatTokenStat(promptTokens))}</div>
+      <div class="small"><strong>completion_tokens:</strong> ${escapeHtml(formatTokenStat(completionTokens))}</div>
+      <div class="small"><strong>cached_tokens:</strong> ${escapeHtml(formatTokenStat(cachedTokens))}</div>
+      <div class="small"><strong>total_tokens:</strong> ${escapeHtml(formatTokenStat(totalTokens))}</div>
+    `;
+    ui.tickerQueryCacheStats.classList.toggle("hidden", !visible);
+  };
+
+  const updateTickerQueryModelInfo = ({ latencyMs = null, usage = null } = {}) => {
+    if (!ui.tickerQueryModelInfo) return;
+    const promptTokens = Number(usage?.prompt_tokens || 0);
+    const completionTokens = Number(usage?.completion_tokens || 0);
+    const cachedTokens = Number(usage?.cached_tokens || 0);
+    const latencyLabel = Number.isFinite(Number(latencyMs)) && Number(latencyMs) >= 0 ? `${Math.round(Number(latencyMs))}ms` : "—";
+    const cacheHint = cachedTokens > 0 ? " · Cache hit: faster + cheaper." : "";
+    ui.tickerQueryModelInfo.textContent =
+      `Latency: ${latencyLabel} · Tokens: ${formatTokenStat(promptTokens + completionTokens)} · Cached: ${formatTokenStat(cachedTokens)}${cacheHint}`;
+  };
+
+  const streamTickerQueryInsight = async ({ ticker, prompt, language, model, technicalContext = null } = {}) => {
+    const headers = await buildApiAuthHeaders({ includeJson: true });
+    const response = await fetch("/api/chat", {
+      method: "POST",
+      headers,
+      credentials: "same-origin",
+      body: JSON.stringify({
+        ticker,
+        question: prompt,
+        language,
+        model,
+        technicalContext: technicalContext && typeof technicalContext === "object" ? technicalContext : undefined,
+        messages: [{ role: "user", content: prompt }],
+        meta: buildMeta(),
+      }),
+    });
+    if (!response.ok) {
+      let message = "Unable to complete ticker query right now.";
+      try {
+        const payload = await response.json();
+        if (payload && typeof payload.error === "string" && payload.error.trim()) {
+          message = payload.error.trim();
+        }
+      } catch (error) {
+        // Ignore JSON parse failures.
+      }
+      throw new Error(message);
+    }
+    if (!response.body) throw new Error("Streaming response body was not available.");
+
+    const decoder = new TextDecoder();
+    const reader = response.body.getReader();
+    let buffer = "";
+    let answer = "";
+    let usage = null;
+    let modelUsed = model;
+    let provider = "openai";
+    let latencyMs = null;
+    const context = {};
+
+    const flushEventBlock = (block) => {
+      if (!block) return;
+      const lines = String(block || "")
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean);
+      const dataLines = lines.filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trim());
+      if (!dataLines.length) return;
+      const raw = dataLines.join("\n");
+      if (!raw || raw === "[DONE]") return;
+      let payload = null;
+      try {
+        payload = JSON.parse(raw);
+      } catch (error) {
+        payload = null;
+      }
+      if (!payload || typeof payload !== "object") return;
+      const type = String(payload.type || "").trim();
+      if (type === "delta") {
+        const delta = String(payload.text || "");
+        if (delta) {
+          answer += delta;
+          renderTickerQueryResult({ answer, model: modelUsed, provider, context });
+        }
+      } else if (type === "meta") {
+        provider = String(payload.provider || provider || "openai");
+        modelUsed = normalizeAiModelId(payload.model || modelUsed || model) || modelUsed;
+      } else if (type === "done") {
+        provider = String(payload.provider || provider || "openai");
+        modelUsed = normalizeAiModelId(payload.model || modelUsed || model) || modelUsed;
+        usage = payload.usage && typeof payload.usage === "object" ? payload.usage : usage;
+        latencyMs = Number.isFinite(Number(payload.latencyMs)) ? Number(payload.latencyMs) : latencyMs;
+      } else if (type === "error") {
+        throw new Error(String(payload.message || "Unable to complete ticker query right now."));
+      }
+    };
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      while (true) {
+        const boundary = buffer.indexOf("\n\n");
+        if (boundary < 0) break;
+        const eventBlock = buffer.slice(0, boundary);
+        buffer = buffer.slice(boundary + 2);
+        flushEventBlock(eventBlock);
+      }
+    }
+    if (buffer.trim()) {
+      flushEventBlock(buffer.trim());
+      buffer = "";
+    }
+
+    return { answer: answer.trim(), model: modelUsed, provider, usage, latencyMs, context };
+  };
+
   const loadTickerQueryInsight = async (functions, { ticker, question, notify = false } = {}) => {
-    if (!functions || !ui.tickerQueryOutput) return;
+    if (!ui.tickerQueryOutput) return;
     const symbol = normalizeTicker(ticker || ui.tickerQueryTicker?.value || state.tickerContext.ticker || "");
     const prompt = String(question || ui.tickerQueryQuestion?.value || "").trim();
     const languageRaw = normalizeLanguageCode(ui.tickerQueryLanguage?.value || state.preferredLanguage || "en");
@@ -6891,13 +7023,38 @@
     try {
       if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Querying GPT-5...";
       setOutputLoading(ui.tickerQueryOutput, "Running GPT-5 ticker query...");
+      updateTickerQueryModelInfo({});
       applyTickerQueryModelSelection(selectedModel);
-      const queryInsight = functions.httpsCallable("query_ticker_insight");
-      const result = await queryInsight({ ticker: symbol, question: prompt, language, model: selectedModel, meta: buildMeta() });
+      renderTickerQueryCacheStats(null, { visible: false });
+      renderTickerQueryResult({ answer: "", model: selectedModel, provider: "openai", context: {} });
+      const started = Date.now();
+      const streamed = await streamTickerQueryInsight({
+        ticker: symbol,
+        prompt,
+        language,
+        model: selectedModel,
+      });
+      const usage = streamed.usage && typeof streamed.usage === "object" ? streamed.usage : null;
+      const latencyMs = Number.isFinite(Number(streamed.latencyMs)) ? Number(streamed.latencyMs) : Date.now() - started;
       setOutputReady(ui.tickerQueryOutput);
-      renderTickerQueryResult(result.data || {});
+      renderTickerQueryResult({
+        answer: streamed.answer || "No answer returned.",
+        model: streamed.model || selectedModel,
+        provider: streamed.provider || "openai",
+        context: streamed.context || {},
+      });
+      updateTickerQueryModelInfo({ latencyMs, usage });
+      const showCacheStats = Boolean(ui.tickerQueryShowCacheStats?.checked);
+      renderTickerQueryCacheStats(usage, { visible: showCacheStats });
       if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Completed.";
-      logEvent("ticker_query_completed", { ticker: symbol, language, model: selectedModel });
+      logEvent("ticker_query_completed", {
+        ticker: symbol,
+        language,
+        model: streamed.model || selectedModel,
+        prompt_tokens: Number(usage?.prompt_tokens || 0),
+        completion_tokens: Number(usage?.completion_tokens || 0),
+        cached_tokens: Number(usage?.cached_tokens || 0),
+      });
     } catch (error) {
       setOutputReady(ui.tickerQueryOutput);
       ui.tickerQueryOutput.innerHTML = `<div class="small muted">Unable to complete ticker query right now.</div>`;
@@ -13108,6 +13265,23 @@
       });
       ui.tickerQueryModel.dataset.bound = "1";
     }
+    if (ui.tickerQueryCacheToggleWrap) {
+      const host = (typeof window !== "undefined" && window.location && window.location.hostname) ? window.location.hostname : "";
+      const isDevHost = host === "localhost" || host === "127.0.0.1" || host.endsWith(".localhost");
+      ui.tickerQueryCacheToggleWrap.classList.toggle("hidden", !isDevHost);
+    }
+    if (ui.tickerQueryShowCacheStats && ui.tickerQueryShowCacheStats.dataset.bound !== "1") {
+      ui.tickerQueryShowCacheStats.addEventListener("change", () => {
+        const showCacheStats = Boolean(ui.tickerQueryShowCacheStats?.checked);
+        if (showCacheStats) {
+          renderTickerQueryCacheStats(null, { visible: true });
+          return;
+        }
+        renderTickerQueryCacheStats(null, { visible: false });
+      });
+      ui.tickerQueryShowCacheStats.dataset.bound = "1";
+    }
+    updateTickerQueryModelInfo({});
     ui.tickerQueryForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
       await loadTickerQueryInsight(functions, {

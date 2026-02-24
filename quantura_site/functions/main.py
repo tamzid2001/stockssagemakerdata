@@ -15,6 +15,7 @@ from typing import Any
 from urllib.parse import parse_qs, quote_plus, unquote, urlparse
 
 import requests
+from flask import stream_with_context
 try:
     from zoneinfo import ZoneInfo
 except Exception:  # pragma: no cover - Python < 3.9 fallback
@@ -86,6 +87,7 @@ AMAZON_NOVA_API_ENDPOINT = str(os.environ.get("AMAZON_NOVA_API_ENDPOINT") or "")
 AMAZON_NOVA_DEFAULT_MODEL = str(os.environ.get("AMAZON_NOVA_DEFAULT_MODEL") or "amazon.nova-lite-v1:0").strip()
 DEFAULT_CHAT_MODEL = str(os.environ.get("DEFAULT_CHAT_MODEL") or "gpt-5-mini").strip() or "gpt-5-mini"
 OPENAI_LIST_MODELS_URL = "https://api.openai.com/v1/models"
+OPENAI_PROMPT_CACHE_RETENTION = str(os.environ.get("OPENAI_PROMPT_CACHE_RETENTION") or "in_memory").strip().lower() or "in_memory"
 SOCIAL_CONTENT_MODEL = (os.environ.get("SOCIAL_CONTENT_MODEL") or "gpt-5-mini").strip()
 SOCIAL_AUTOMATION_ENABLED = str(os.environ.get("SOCIAL_AUTOMATION_ENABLED") or "true").strip().lower() in {
     "1",
@@ -814,6 +816,58 @@ def _list_openai_models_for_app(context: dict[str, Any] | None = None) -> list[d
     return out
 
 
+def _prompt_cache_retention() -> str:
+    value = str(OPENAI_PROMPT_CACHE_RETENTION or "in_memory").strip().lower()
+    if value not in {"in_memory", "24h"}:
+        return "in_memory"
+    return value
+
+
+def _stable_chat_system_prefix() -> str:
+    return (
+        "You are Quantura's market assistant. Follow these fixed rules exactly:\n"
+        "1) Use only the supplied context payload and user message; do not fabricate data.\n"
+        "2) If a field is missing, say it is unavailable.\n"
+        "3) Do not provide financial, legal, or tax advice.\n"
+        "4) Keep output practical, concise, and evidence-first.\n"
+        "5) Use this response contract:\n"
+        "   - Section A: Direct answer (2-4 sentences)\n"
+        "   - Section B: Key evidence bullets\n"
+        "   - Section C: One explicit risk caveat\n"
+        "6) Do not include timestamps unless explicitly present in context.\n"
+        "7) Preserve ticker symbols exactly as given.\n\n"
+        "Context schema reference:\n"
+        "{\n"
+        "  \"ticker\": \"string\",\n"
+        "  \"country\": \"string\",\n"
+        "  \"exchange\": \"string\",\n"
+        "  \"sector\": \"string\",\n"
+        "  \"industry\": \"string\",\n"
+        "  \"marketCap\": \"number|null\",\n"
+        "  \"trailingPE\": \"number|null\",\n"
+        "  \"forwardPE\": \"number|null\",\n"
+        "  \"dividendYield\": \"number|null\",\n"
+        "  \"beta\": \"number|null\",\n"
+        "  \"historySummary\": {\n"
+        "    \"lastClose\": \"number|null\",\n"
+        "    \"periodStartClose\": \"number|null\",\n"
+        "    \"change6mPct\": \"number|null\",\n"
+        "    \"change1mPct\": \"number|null\"\n"
+        "  },\n"
+        "  \"headlines\": [\n"
+        "    {\"title\":\"string\",\"publisher\":\"string\",\"publishedAt\":\"string|number|null\",\"link\":\"string\"}\n"
+        "  ],\n"
+        "  \"technicalContext\": {\n"
+        "    \"lookbackDays\":\"number|null\",\n"
+        "    \"interval\":\"1d|1h\",\n"
+        "    \"latest\":[{\"name\":\"string\",\"value\":\"number\"}],\n"
+        "    \"trend\":[{\"name\":\"string\",\"direction\":\"string\",\"pctChange\":\"number|null\",\"delta\":\"number|null\"}],\n"
+        "    \"heuristics\":[\"string\"]\n"
+        "  }\n"
+        "}\n"
+    )
+
+
 def _social_channel_webhooks() -> dict[str, str]:
     out: dict[str, str] = {}
     for channel, env_key in SOCIAL_CHANNEL_WEBHOOK_ENV.items():
@@ -1269,6 +1323,76 @@ def _extract_responses_output_text(payload: dict[str, Any]) -> str:
                 if text:
                     chunks.append(text)
     return "\n".join(chunks).strip()
+
+
+def _extract_responses_usage(payload: dict[str, Any]) -> dict[str, int]:
+    if not isinstance(payload, dict):
+        return {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "cached_tokens": 0}
+
+    usage = payload.get("usage") if isinstance(payload.get("usage"), dict) else payload
+    prompt_tokens = usage.get("prompt_tokens")
+    if prompt_tokens is None:
+        prompt_tokens = usage.get("input_tokens")
+    completion_tokens = usage.get("completion_tokens")
+    if completion_tokens is None:
+        completion_tokens = usage.get("output_tokens")
+    total_tokens = usage.get("total_tokens")
+
+    details = usage.get("prompt_tokens_details")
+    if not isinstance(details, dict):
+        details = usage.get("input_tokens_details")
+    cached_tokens = details.get("cached_tokens") if isinstance(details, dict) else 0
+
+    def _to_int(value: Any) -> int:
+        try:
+            num = int(float(value))
+        except Exception:
+            num = 0
+        return max(0, num)
+
+    prompt_value = _to_int(prompt_tokens)
+    completion_value = _to_int(completion_tokens)
+    total_value = _to_int(total_tokens)
+    if total_value <= 0:
+        total_value = prompt_value + completion_value
+
+    return {
+        "prompt_tokens": prompt_value,
+        "completion_tokens": completion_value,
+        "total_tokens": total_value,
+        "cached_tokens": _to_int(cached_tokens),
+    }
+
+
+def _extract_latest_user_text(messages: Any) -> str:
+    if not isinstance(messages, list):
+        return ""
+    for item in reversed(messages):
+        if not isinstance(item, dict):
+            continue
+        role = str(item.get("role") or "").strip().lower()
+        if role != "user":
+            continue
+        content = item.get("content")
+        if isinstance(content, str):
+            text = content.strip()
+            if text:
+                return text
+            continue
+        if isinstance(content, list):
+            parts: list[str] = []
+            for part in content:
+                if isinstance(part, str):
+                    part_text = part.strip()
+                elif isinstance(part, dict):
+                    part_text = str(part.get("text") or "").strip()
+                else:
+                    part_text = ""
+                if part_text:
+                    parts.append(part_text)
+            if parts:
+                return "\n".join(parts).strip()
+    return ""
 
 
 def _extract_nova_output_text(payload: dict[str, Any]) -> str:
@@ -5241,6 +5365,286 @@ def api_openai_models(req: https_fn.Request) -> https_fn.Response:
             "defaultModel": default_model or "gpt-5-mini",
         }
     )
+
+
+@https_fn.on_request()
+def api_chat(req: https_fn.Request) -> https_fn.Response:
+    import yfinance as yf  # type: ignore
+
+    if req.method == "OPTIONS":
+        return https_fn.Response("", status=204, headers=_http_cors_headers())
+    if req.method != "POST":
+        return _json_http_response({"error": "Method not allowed."}, status=405)
+
+    data = req.get_json(silent=True) if hasattr(req, "get_json") else None
+    if not isinstance(data, dict):
+        return _json_http_response({"error": "Invalid JSON payload."}, status=400)
+
+    meta = data.get("meta") if isinstance(data.get("meta"), dict) else {}
+    context = _remote_config_context(None, None, meta if isinstance(meta, dict) else None)
+    ticker = _normalize_symbol_token(data.get("ticker"))
+    messages = data.get("messages") if isinstance(data.get("messages"), list) else []
+    question = str(data.get("question") or data.get("query") or _extract_latest_user_text(messages) or "").strip()
+    language = str(data.get("language") or "en").strip().lower()[:8]
+    if language in {"", "auto"}:
+        language = "en"
+    if not re.match(r"^[a-z]{2}(?:-[a-z]{2})?$", language):
+        language = "en"
+    language_label = {
+        "en": "English",
+        "es": "Spanish",
+        "fr": "French",
+        "de": "German",
+        "ar": "Arabic",
+        "bn": "Bengali",
+    }.get(language, "English")
+
+    if not ticker:
+        return _json_http_response({"error": "Ticker is required."}, status=400)
+    if not question:
+        return _json_http_response({"error": "Question is required."}, status=400)
+    if not OPENAI_API_KEY:
+        return _json_http_response({"error": "Chat provider is unavailable."}, status=503)
+
+    requested_model = _normalize_ai_model_id(data.get("model") or DEFAULT_CHAT_MODEL)
+    allowed_models = [
+        item
+        for item in _get_llm_allowed_models(context=context)
+        if _model_provider_from_id(item) == "openai"
+    ]
+    allowed_set = set(allowed_models)
+    if not requested_model:
+        requested_model = allowed_models[0] if allowed_models else "gpt-5-mini"
+    if requested_model not in allowed_set:
+        return _json_http_response(
+            {
+                "error": "Requested model is not available for this app profile.",
+                "allowedModels": allowed_models,
+            },
+            status=400,
+        )
+
+    technical_raw = data.get("technicalContext") if isinstance(data.get("technicalContext"), dict) else {}
+    technical_context: dict[str, Any] = {}
+    if technical_raw:
+        lookback_days = technical_raw.get("lookbackDays")
+        interval = str(technical_raw.get("interval") or "").strip().lower()
+        if interval not in {"1d", "1h"}:
+            interval = "1d"
+        latest_rows = []
+        for row in (technical_raw.get("latest") if isinstance(technical_raw.get("latest"), list) else [])[:24]:
+            if not isinstance(row, dict):
+                continue
+            name = str(row.get("name") or "").strip()[:40]
+            if not name:
+                continue
+            value = _safe_float(row.get("value"))
+            if value is None:
+                continue
+            latest_rows.append({"name": name, "value": round(float(value), 6)})
+
+        trend_rows = []
+        for row in (technical_raw.get("trend") if isinstance(technical_raw.get("trend"), list) else [])[:16]:
+            if not isinstance(row, dict):
+                continue
+            name = str(row.get("name") or "").strip()[:40]
+            if not name:
+                continue
+            trend_rows.append(
+                {
+                    "name": name,
+                    "direction": str(row.get("direction") or "").strip()[:16],
+                    "pctChange": _safe_float(row.get("pctChange")),
+                    "delta": _safe_float(row.get("delta")),
+                }
+            )
+
+        heuristics = []
+        for line in (technical_raw.get("heuristics") if isinstance(technical_raw.get("heuristics"), list) else [])[:12]:
+            text = str(line or "").strip()
+            if text:
+                heuristics.append(text[:220])
+
+        lookback_normalized = None
+        try:
+            lookback_candidate = int(float(lookback_days))
+            if lookback_candidate > 0:
+                lookback_normalized = lookback_candidate
+        except Exception:
+            lookback_normalized = None
+
+        technical_context = {
+            "lookbackDays": lookback_normalized,
+            "interval": interval,
+            "latest": latest_rows,
+            "trend": trend_rows,
+            "heuristics": heuristics,
+        }
+
+    tk = yf.Ticker(ticker)
+    info: dict[str, Any] = {}
+    try:
+        raw_info = tk.info or {}
+        info = raw_info if isinstance(raw_info, dict) else {}
+    except Exception:
+        info = {}
+
+    history_summary: dict[str, Any] = {}
+    try:
+        hist = tk.history(period="6mo", interval="1d")
+        if hist is not None and getattr(hist, "empty", True) is False and "Close" in hist.columns:
+            close = hist["Close"].astype(float).dropna()
+            if len(close) >= 2:
+                last = float(close.iloc[-1])
+                start = float(close.iloc[0])
+                one_month = float(close.iloc[-22]) if len(close) >= 22 else None
+                history_summary = {
+                    "lastClose": round(last, 4),
+                    "periodStartClose": round(start, 4),
+                    "change6mPct": round(((last / start) - 1.0) * 100.0, 3) if start else None,
+                    "change1mPct": round(((last / one_month) - 1.0) * 100.0, 3) if one_month else None,
+                }
+    except Exception:
+        history_summary = {}
+
+    headlines = _fetch_yahoo_news_query(ticker, limit=6)
+    headline_compact = [
+        {
+            "title": str(item.get("title") or "").strip(),
+            "publisher": str(item.get("publisher") or "").strip(),
+            "publishedAt": item.get("publishedAt"),
+            "link": str(item.get("link") or "").strip(),
+        }
+        for item in headlines[:6]
+    ]
+
+    context_payload = {
+        "ticker": ticker,
+        "country": str(info.get("country") or "").strip(),
+        "exchange": str(info.get("fullExchangeName") or info.get("exchange") or "").strip(),
+        "sector": str(info.get("sector") or "").strip(),
+        "industry": str(info.get("industry") or "").strip(),
+        "marketCap": info.get("marketCap"),
+        "trailingPE": info.get("trailingPE"),
+        "forwardPE": info.get("forwardPE"),
+        "dividendYield": info.get("dividendYield"),
+        "beta": info.get("beta"),
+        "historySummary": history_summary,
+        "headlines": headline_compact,
+        "technicalContext": technical_context,
+    }
+
+    system_prompt = (
+        f"{_stable_chat_system_prefix()}\n"
+        f"Respond in {language_label}. Keep the language consistent in all sections."
+    )
+    dynamic_user_prompt = (
+        f"Ticker: {ticker}\n"
+        f"Question: {question}\n"
+        f"Language preference: {language_label}\n"
+        "Ticker context payload:\n"
+        f"{json.dumps(context_payload, ensure_ascii=False)}"
+    )
+    openai_payload = {
+        "model": requested_model,
+        "stream": True,
+        "prompt_cache_retention": _prompt_cache_retention(),
+        "input": [
+            {"role": "system", "content": [{"type": "input_text", "text": system_prompt}]},
+            {"role": "user", "content": [{"type": "input_text", "text": dynamic_user_prompt}]},
+        ],
+        "max_output_tokens": 900,
+        "tools": [{"type": "web_search_preview"}],
+        "metadata": {
+            "feature": "ticker_query_chat",
+            "ticker": ticker,
+            "language": language,
+        },
+    }
+
+    started_at = time.time()
+
+    def _sse(data_obj: dict[str, Any]) -> str:
+        return f"data: {json.dumps(data_obj, ensure_ascii=False)}\n\n"
+
+    @stream_with_context
+    def _event_stream():
+        usage_payload: dict[str, Any] = {}
+        yield _sse({"type": "meta", "provider": "openai", "model": requested_model})
+        try:
+            response = requests.post(
+                "https://api.openai.com/v1/responses",
+                headers={"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"},
+                json=openai_payload,
+                stream=True,
+                timeout=90,
+            )
+            if response.status_code >= 400:
+                yield _sse({"type": "error", "message": "Unable to complete chat request right now."})
+                return
+
+            for raw_line in response.iter_lines(decode_unicode=True):
+                if not raw_line:
+                    continue
+                line = str(raw_line).strip()
+                if not line.startswith("data:"):
+                    continue
+                data_line = line[5:].strip()
+                if data_line == "[DONE]":
+                    break
+                event_payload: dict[str, Any] | None = None
+                try:
+                    event_payload = json.loads(data_line)
+                except Exception:
+                    event_payload = None
+                if not isinstance(event_payload, dict):
+                    continue
+                event_type = str(event_payload.get("type") or "")
+                if event_type == "response.output_text.delta":
+                    delta = str(event_payload.get("delta") or "")
+                    if delta:
+                        yield _sse({"type": "delta", "text": delta})
+                elif event_type == "response.completed":
+                    response_body = event_payload.get("response")
+                    if isinstance(response_body, dict):
+                        usage_payload = response_body
+                    else:
+                        usage_payload = event_payload
+                elif event_type.startswith("response.error"):
+                    yield _sse({"type": "error", "message": "Unable to complete chat request right now."})
+                    return
+
+            usage = _extract_responses_usage(usage_payload)
+            latency_ms = int(max(0.0, (time.time() - started_at) * 1000.0))
+            print(
+                "api_chat_usage "
+                f"model={requested_model} "
+                f"prompt_tokens={usage.get('prompt_tokens', 0)} "
+                f"completion_tokens={usage.get('completion_tokens', 0)} "
+                f"cached_tokens={usage.get('cached_tokens', 0)}"
+            )
+            yield _sse(
+                {
+                    "type": "done",
+                    "provider": "openai",
+                    "model": requested_model,
+                    "usage": usage,
+                    "latencyMs": latency_ms,
+                }
+            )
+        except Exception:
+            yield _sse({"type": "error", "message": "Unable to complete chat request right now."})
+
+    headers = _http_cors_headers()
+    headers.update(
+        {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )
+    return https_fn.Response(_event_stream(), status=200, headers=headers)
 
 
 @https_fn.on_request()

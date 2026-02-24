@@ -53,6 +53,7 @@
     ],
     "rewrites": [
       { "source": "/api/openai/models", "function": "api_openai_models" },
+      { "source": "/api/chat", "function": "api_chat" },
       { "source": "/", "function": "ssr" },
       { "source": "/forecasting", "function": "ssr" },
       { "source": "/ticker-intelligence", "function": "ssr" },
