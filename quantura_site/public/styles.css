@@ -3261,6 +3261,8 @@ textarea {
   gap: 10px;
   line-height: 1.4;
   font-size: 0.97rem;
+  position: relative;
+  padding-right: 36px;
 }
 
 .faq-item summary::-webkit-details-marker {
@@ -3281,19 +3283,25 @@ textarea {
 }
 
 .faq-item summary::after {
-  content: "+";
-  margin-left: auto;
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
   width: 22px;
   height: 22px;
   border-radius: 999px;
   border: 1px solid rgba(18, 24, 42, 0.2);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  place-items: center;
   color: var(--ink-2);
-  font-weight: 900;
-  line-height: 1;
   background: rgba(18, 24, 42, 0.04);
+  background-image:
+    linear-gradient(currentColor, currentColor),
+    linear-gradient(currentColor, currentColor);
+  background-size: 10px 2px, 2px 10px;
+  background-position: center;
+  background-repeat: no-repeat;
   flex: 0 0 auto;
 }
 
@@ -3304,10 +3312,15 @@ textarea {
 }
 
 .faq-item[open] summary::after {
-  content: "−";
   border-color: rgba(240, 180, 41, 0.42);
   color: #7b2b14;
   background: rgba(240, 180, 41, 0.12);
+  background-image:
+    linear-gradient(currentColor, currentColor),
+    linear-gradient(currentColor, currentColor);
+  background-size: 10px 2px, 0 0;
+  background-position: center;
+  background-repeat: no-repeat;
 }
 
 .faq-answer {
@@ -3731,11 +3744,11 @@ textarea {
   .faq-item summary::after {
     width: 26px;
     height: 26px;
-    font-size: 1.05rem;
   }
 
   .faq-item summary {
     align-items: flex-start;
+    padding-right: 40px;
   }
 }
 
