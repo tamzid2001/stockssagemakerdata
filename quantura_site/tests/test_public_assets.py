@@ -7,7 +7,16 @@ PAGES = ROOT / "pages"
 
 
 def test_pages_exist():
-    for name in ["index.html", "forecasting.html", "screener.html", "dashboard.html", "pricing.html", "contact.html"]:
+    for name in [
+        "index.html",
+        "forecasting.html",
+        "screener.html",
+        "dashboard.html",
+        "pricing.html",
+        "contact.html",
+        "ticker.html",
+        "tools/fx.html",
+    ]:
         path = PAGES / name
         assert path.exists(), f"Missing {path}"
 
@@ -26,7 +35,16 @@ def test_manifest_and_robots():
 
 
 def test_pages_include_analytics():
-    for name in ["index.html", "forecasting.html", "screener.html", "dashboard.html", "pricing.html", "contact.html"]:
+    for name in [
+        "index.html",
+        "forecasting.html",
+        "screener.html",
+        "dashboard.html",
+        "pricing.html",
+        "contact.html",
+        "ticker.html",
+        "tools/fx.html",
+    ]:
         html = (PAGES / name).read_text()
         assert "firebase-analytics-compat" in html
         assert "app.js" in html
