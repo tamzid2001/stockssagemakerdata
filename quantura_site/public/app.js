@@ -2707,29 +2707,29 @@
     if (ui.notificationsSendTest) ui.notificationsSendTest.disabled = !enabled;
   };
 
-  const safeLocalStorageGet = (key) => {
+  function safeLocalStorageGet(key) {
     try {
       return localStorage.getItem(key);
     } catch (error) {
       return null;
     }
-  };
+  }
 
-  const safeLocalStorageSet = (key, value) => {
+  function safeLocalStorageSet(key, value) {
     try {
       localStorage.setItem(key, value);
     } catch (error) {
       // Ignore storage failures.
     }
-  };
+  }
 
-	  const safeLocalStorageRemove = (key) => {
-	    try {
-	      localStorage.removeItem(key);
-	    } catch (error) {
-	      // Ignore storage failures.
-	    }
-	  };
+  function safeLocalStorageRemove(key) {
+    try {
+      localStorage.removeItem(key);
+    } catch (error) {
+      // Ignore storage failures.
+    }
+  }
 
   const i18nTextDefaults = new WeakMap();
   const i18nAttrDefaults = new WeakMap();
