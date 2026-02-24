@@ -571,6 +571,15 @@
                             <option value="bn">Bengali</option>
                           </select>
                         </div>
+                        <div class="field">
+                          <label class="label" for="ticker-query-model">Model</label>
+                          <select id="ticker-query-model" name="model">
+                            <option value="gpt-5-mini">Loading models...</option>
+                          </select>
+                          <div id="ticker-query-model-hint" class="small muted" style="margin-top:8px;">
+                            Some models may cost more and run slower.
+                          </div>
+                        </div>
                       </div>
                       <div class="field">
                         <label class="label" for="ticker-query-question">Question</label>
@@ -578,6 +587,7 @@
                       </div>
                       <button class="cta" type="submit" data-analytics="ticker_query_submit"><i class="iconoir-brain" aria-hidden="true"></i><span>Ask GPT-5</span></button>
                       <p class="small muted" id="ticker-query-status"></p>
+                      <p class="small muted" id="ticker-query-model-info">Latency: — · Tokens: — · Cached: —</p>
                     </form>
                     <div class="results-panel">
                       <h3>Query result</h3>

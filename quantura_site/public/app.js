@@ -16,6 +16,7 @@
   const SIDEBAR_COLLAPSED_KEY = "quantura_sidebar_collapsed_v1";
   const LANGUAGE_PREFERENCE_KEY = "quantura_language_v1";
   const COUNTRY_PREFERENCE_KEY = "quantura_country_v1";
+  const TICKER_QUERY_MODEL_KEY = "quantura_ticker_query_model_v1";
   const TRADINGVIEW_LOAD_TIMEOUT_MS = 9000;
   const AI_LEADERBOARD_DEFAULT_HORIZON = "1y";
   const DEFAULT_VOLATILITY_THRESHOLD = 0.05;
@@ -1125,6 +1126,9 @@
     tickerQueryTicker: document.getElementById("ticker-query-ticker"),
     tickerQueryQuestion: document.getElementById("ticker-query-question"),
     tickerQueryLanguage: document.getElementById("ticker-query-language"),
+    tickerQueryModel: document.getElementById("ticker-query-model"),
+    tickerQueryModelHint: document.getElementById("ticker-query-model-hint"),
+    tickerQueryModelInfo: document.getElementById("ticker-query-model-info"),
     tickerQueryStatus: document.getElementById("ticker-query-status"),
     tickerQueryOutput: document.getElementById("ticker-query-output"),
 	    optionsForm: document.getElementById("options-form"),
@@ -1268,6 +1272,9 @@
 	      fullInfoFilter: "",
 	      intelTicker: "",
 	      optionsTicker: "",
+        tickerQueryModel: String(safeLocalStorageGet(TICKER_QUERY_MODEL_KEY) || "gpt-5-mini"),
+        tickerQueryModels: [],
+        tickerQueryModelsLoaded: false,
 	    },
     predictionsContext: {
       uploadId: "",
@@ -6726,12 +6733,153 @@
     `;
   };
 
+  const buildApiAuthHeaders = async ({ includeJson = false } = {}) => {
+    const headers = {};
+    if (includeJson) headers["Content-Type"] = "application/json";
+    try {
+      const auth = state.clients?.auth;
+      const user = auth?.currentUser;
+      if (user) {
+        const token = await user.getIdToken();
+        if (token) headers.Authorization = `Bearer ${token}`;
+      }
+    } catch (error) {
+      // Ignore token read failures; endpoint can still decide if auth is required.
+    }
+    return headers;
+  };
+
+  const tickerQueryModelGroup = (modelId) => {
+    const id = normalizeAiModelId(modelId).toLowerCase();
+    if (id.includes("nano")) return "Fast";
+    if (id.includes("mini")) return "Balanced";
+    if (id.startsWith("gpt-5")) return "Reasoning";
+    return "Balanced";
+  };
+
+  const tickerQueryModelHint = (modelId) => {
+    const meta = getModelMeta(modelId);
+    if (meta?.helper) return String(meta.helper).trim();
+    const id = normalizeAiModelId(modelId).toLowerCase();
+    if (id.includes("nano")) return "Lowest latency for quick scans.";
+    if (id.includes("mini")) return "Best default for most questions.";
+    return "Higher depth reasoning with slower latency.";
+  };
+
+  const applyTickerQueryModelSelection = (modelId) => {
+    const normalized = normalizeAiModelId(modelId || "") || "gpt-5-mini";
+    state.tickerContext.tickerQueryModel = normalized;
+    safeLocalStorageSet(TICKER_QUERY_MODEL_KEY, normalized);
+    if (ui.tickerQueryModel && ui.tickerQueryModel.value !== normalized) {
+      ui.tickerQueryModel.value = normalized;
+    }
+    if (ui.tickerQueryModelHint) {
+      ui.tickerQueryModelHint.textContent = `${tickerQueryModelHint(normalized)} Some models may cost more and run slower.`;
+    }
+  };
+
+  const renderTickerQueryModels = (models) => {
+    if (!ui.tickerQueryModel) return;
+    const list = Array.isArray(models) ? models : [];
+    if (!list.length) {
+      ui.tickerQueryModel.innerHTML = `<option value="gpt-5-mini">gpt-5-mini</option>`;
+      applyTickerQueryModelSelection("gpt-5-mini");
+      return;
+    }
+
+    const grouped = list.reduce((acc, row) => {
+      const modelId = normalizeAiModelId(row?.id || row?.model || "");
+      if (!modelId) return acc;
+      const group = String(row?.group || tickerQueryModelGroup(modelId) || "Balanced").trim();
+      if (!acc[group]) acc[group] = [];
+      acc[group].push({
+        id: modelId,
+        label: String(row?.label || modelId),
+        hint: String(row?.hint || tickerQueryModelHint(modelId)),
+      });
+      return acc;
+    }, {});
+
+    const order = ["Fast", "Balanced", "Reasoning"];
+    ui.tickerQueryModel.innerHTML = order
+      .filter((group) => Array.isArray(grouped[group]) && grouped[group].length)
+      .map((group) => {
+        const options = grouped[group]
+          .map((item) => `<option value="${escapeHtml(item.id)}" title="${escapeHtml(item.hint)}">${escapeHtml(item.label)}</option>`)
+          .join("");
+        return `<optgroup label="${escapeHtml(group)}">${options}</optgroup>`;
+      })
+      .join("");
+
+    const availableSet = new Set(list.map((row) => normalizeAiModelId(row?.id || row?.model || "")).filter(Boolean));
+    let selected = normalizeAiModelId(state.tickerContext.tickerQueryModel || safeLocalStorageGet(TICKER_QUERY_MODEL_KEY) || "");
+    if (!selected || !availableSet.has(selected)) {
+      selected = normalizeAiModelId(list[0]?.id || list[0]?.model || "gpt-5-mini") || "gpt-5-mini";
+    }
+    applyTickerQueryModelSelection(selected);
+  };
+
+  const loadTickerQueryModels = async ({ force = false } = {}) => {
+    if (!ui.tickerQueryModel) return;
+    if (!force && state.tickerContext.tickerQueryModelsLoaded && state.tickerContext.tickerQueryModels.length) {
+      renderTickerQueryModels(state.tickerContext.tickerQueryModels);
+      return;
+    }
+
+    const fallback = () => {
+      const tier = getCurrentAiTierConfig();
+      const localModels = (tier.allowedModels || [])
+        .map((modelId) => normalizeAiModelId(modelId))
+        .filter((modelId) => modelId && modelId.startsWith("gpt-5"))
+        .map((modelId) => ({
+          id: modelId,
+          label: getModelMeta(modelId)?.label || modelId,
+          group: tickerQueryModelGroup(modelId),
+          hint: tickerQueryModelHint(modelId),
+        }));
+      state.tickerContext.tickerQueryModels = localModels;
+      state.tickerContext.tickerQueryModelsLoaded = true;
+      renderTickerQueryModels(localModels);
+    };
+
+    try {
+      const headers = await buildApiAuthHeaders();
+      const response = await fetch("/api/openai/models", {
+        method: "GET",
+        headers,
+        credentials: "same-origin",
+      });
+      if (!response.ok) throw new Error("Model list unavailable.");
+      const payload = await response.json();
+      const remote = Array.isArray(payload?.models) ? payload.models : [];
+      const models = remote
+        .map((row) => {
+          const id = normalizeAiModelId(row?.id || row?.model || "");
+          if (!id || !id.startsWith("gpt-5")) return null;
+          return {
+            id,
+            label: String(row?.label || getModelMeta(id)?.label || id),
+            group: String(row?.group || tickerQueryModelGroup(id)),
+            hint: String(row?.hint || tickerQueryModelHint(id)),
+          };
+        })
+        .filter(Boolean);
+      if (!models.length) throw new Error("No compatible models returned.");
+      state.tickerContext.tickerQueryModels = models;
+      state.tickerContext.tickerQueryModelsLoaded = true;
+      renderTickerQueryModels(models);
+    } catch (error) {
+      fallback();
+    }
+  };
+
   const loadTickerQueryInsight = async (functions, { ticker, question, notify = false } = {}) => {
     if (!functions || !ui.tickerQueryOutput) return;
     const symbol = normalizeTicker(ticker || ui.tickerQueryTicker?.value || state.tickerContext.ticker || "");
     const prompt = String(question || ui.tickerQueryQuestion?.value || "").trim();
     const languageRaw = normalizeLanguageCode(ui.tickerQueryLanguage?.value || state.preferredLanguage || "en");
     const language = languageRaw === "auto" ? state.preferredLanguage || "en" : languageRaw;
+    const selectedModel = normalizeAiModelId(ui.tickerQueryModel?.value || state.tickerContext.tickerQueryModel || "gpt-5-mini") || "gpt-5-mini";
     if (!symbol) {
       showToast("Ticker is required for GPT-5 query.", "warn");
       return;
@@ -6743,12 +6891,13 @@
     try {
       if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Querying GPT-5...";
       setOutputLoading(ui.tickerQueryOutput, "Running GPT-5 ticker query...");
+      applyTickerQueryModelSelection(selectedModel);
       const queryInsight = functions.httpsCallable("query_ticker_insight");
-      const result = await queryInsight({ ticker: symbol, question: prompt, language, meta: buildMeta() });
+      const result = await queryInsight({ ticker: symbol, question: prompt, language, model: selectedModel, meta: buildMeta() });
       setOutputReady(ui.tickerQueryOutput);
       renderTickerQueryResult(result.data || {});
       if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Completed.";
-      logEvent("ticker_query_completed", { ticker: symbol, language });
+      logEvent("ticker_query_completed", { ticker: symbol, language, model: selectedModel });
     } catch (error) {
       setOutputReady(ui.tickerQueryOutput);
       ui.tickerQueryOutput.innerHTML = `<div class="small muted">Unable to complete ticker query right now.</div>`;
@@ -10682,6 +10831,9 @@
           if (ui.tickerQueryLanguage && ui.tickerQueryLanguage.value === "auto") {
             ui.tickerQueryLanguage.value = state.preferredLanguage || "en";
           }
+          if (!state.tickerContext.tickerQueryModelsLoaded) {
+            loadTickerQueryModels().catch(() => {});
+          }
         }
 
         if (next === "options") {
@@ -12950,6 +13102,12 @@
     if (ui.tickerQueryLanguage && !ui.tickerQueryLanguage.value) {
       ui.tickerQueryLanguage.value = state.preferredLanguage || "en";
     }
+    if (ui.tickerQueryModel && ui.tickerQueryModel.dataset.bound !== "1") {
+      ui.tickerQueryModel.addEventListener("change", () => {
+        applyTickerQueryModelSelection(ui.tickerQueryModel?.value || "gpt-5-mini");
+      });
+      ui.tickerQueryModel.dataset.bound = "1";
+    }
     ui.tickerQueryForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
       await loadTickerQueryInsight(functions, {
@@ -12958,6 +13116,7 @@
         notify: true,
       });
     });
+    loadTickerQueryModels().catch(() => {});
 
 	    ui.optionsForm?.addEventListener("submit", async (event) => {
 	      event.preventDefault();
