@@ -86,6 +86,37 @@ MASSIVE_CLIENT = MassiveClient(
     timeout_seconds=MASSIVE_TIMEOUT_SECONDS,
     max_retries=MASSIVE_MAX_RETRIES,
 )
+MASSIVE_CAPABILITIES_CACHE_TTL_SECONDS = max(
+    600,
+    min(int(os.environ.get("MASSIVE_CAPABILITIES_CACHE_TTL_SECONDS", "1800") or 1800), 3600),
+)
+MASSIVE_CAPABILITIES_CACHE_KEY = "massive_capabilities_v1"
+MASSIVE_CAPABILITY_PROBES: dict[str, dict[str, Any]] = {
+    "economy_treasury_yields": {
+        "path": "/economy/treasury-yields",
+        "params": {"limit": 1},
+    },
+    "economy_inflation": {
+        "path": "/economy/inflation",
+        "params": {"limit": 1},
+    },
+    "economy_inflation_expectations": {
+        "path": "/economy/inflation-expectations",
+        "params": {"limit": 1},
+    },
+    "economy_labor_market": {
+        "path": "/economy/labor-market",
+        "params": {"limit": 1},
+    },
+    "stocks_ipos": {
+        "path": "/stocks/corporate-actions/ipos",
+        "params": {"limit": 1},
+    },
+    "options_all_contracts": {
+        "path": "/options/contracts/all-contracts",
+        "params": {"limit": 1},
+    },
+}
 UNSPLASH_ACCESS_KEY = secrets_loader.get_secret("UNSPLASH_ACCESS_KEY")
 STRIPE_CONNECT_PLATFORM_FEE_PERCENT = float(os.environ.get("STRIPE_CONNECT_PLATFORM_FEE_PERCENT", "12") or 12)
 CREATOR_DEFAULT_SUBSCRIBE_USD = float(os.environ.get("CREATOR_DEFAULT_SUBSCRIBE_USD", "9") or 9)
@@ -879,6 +910,83 @@ def _stable_chat_system_prefix() -> str:
         "  }\n"
         "}\n"
     )
+
+
+def _massive_capability_label_from_status(status_code: int) -> str:
+    code = int(status_code or 0)
+    if code == 200:
+        return "AVAILABLE"
+    if code == 401:
+        return "UNAUTHORIZED"
+    if code in {402, 403}:
+        return "FORBIDDEN_OR_NOT_IN_PLAN"
+    return "ERROR"
+
+
+def _probe_massive_capability(path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    normalized_path = "/" + str(path or "").strip().lstrip("/")
+    if not MASSIVE_CLIENT.is_configured():
+        return {
+            "status": "ERROR",
+            "httpStatus": 503,
+            "available": False,
+            "message": "Massive API key is not configured.",
+        }
+    try:
+        MASSIVE_CLIENT.request_json(path=normalized_path, params=params or {}, cache_ttl_seconds=0)
+        return {
+            "status": "AVAILABLE",
+            "httpStatus": 200,
+            "available": True,
+            "message": "",
+        }
+    except MassiveApiError as exc:
+        http_status = int(exc.status_code or 500)
+        return {
+            "status": _massive_capability_label_from_status(http_status),
+            "httpStatus": http_status,
+            "available": http_status == 200,
+            "message": str(exc)[:220],
+        }
+    except Exception as exc:
+        return {
+            "status": "ERROR",
+            "httpStatus": 500,
+            "available": False,
+            "message": str(exc)[:220],
+        }
+
+
+def _load_massive_capabilities(*, force_refresh: bool = False) -> dict[str, Any]:
+    if not force_refresh:
+        cached = _cache_get_payload(MASSIVE_CAPABILITIES_CACHE_KEY, ttl_seconds=MASSIVE_CAPABILITIES_CACHE_TTL_SECONDS)
+        if isinstance(cached, dict) and cached:
+            payload = dict(cached)
+            payload["fromCache"] = True
+            return payload
+
+    capabilities: dict[str, Any] = {}
+    for key, cfg in MASSIVE_CAPABILITY_PROBES.items():
+        path = str(cfg.get("path") or "").strip()
+        params = cfg.get("params") if isinstance(cfg.get("params"), dict) else {}
+        probe = _probe_massive_capability(path, params=params)
+        capabilities[key] = {
+            "key": key,
+            "path": path,
+            "status": probe.get("status") or "ERROR",
+            "httpStatus": int(probe.get("httpStatus") or 0),
+            "available": bool(probe.get("available")),
+            "message": str(probe.get("message") or "").strip(),
+        }
+
+    payload = {
+        "generatedAt": datetime.now(tz=timezone.utc).isoformat(),
+        "ttlSeconds": MASSIVE_CAPABILITIES_CACHE_TTL_SECONDS,
+        "fromCache": False,
+        "capabilities": capabilities,
+    }
+    _cache_set_payload(MASSIVE_CAPABILITIES_CACHE_KEY, payload)
+    return payload
 
 
 def _social_channel_webhooks() -> dict[str, str]:
@@ -5377,6 +5485,18 @@ def api_openai_models(req: https_fn.Request) -> https_fn.Response:
             "defaultModel": default_model or "gpt-5-mini",
         }
     )
+
+
+@https_fn.on_request()
+def api_massive_capabilities(req: https_fn.Request) -> https_fn.Response:
+    if req.method == "OPTIONS":
+        return https_fn.Response("", status=204, headers=_http_cors_headers())
+    if req.method != "GET":
+        return _json_http_response({"error": "Method not allowed."}, status=405)
+
+    force_refresh = str(req.args.get("force") or "").strip().lower() in {"1", "true", "yes"}
+    payload = _load_massive_capabilities(force_refresh=force_refresh)
+    return _json_http_response(payload)
 
 
 @https_fn.on_request()
