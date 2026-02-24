@@ -140,6 +140,7 @@ const resolveTemplate = (pathname) => {
   if (route === "/pricing") return "pricing.html";
   if (route === "/purchase") return "pricing.html";
   if (route === "/contact") return "contact.html";
+  if (route === "/shop") return "shop.html";
   if (route === "/admin") return "admin.html";
   if (route === "/terms") return "terms.html";
   if (route === "/privacy") return "privacy.html";
