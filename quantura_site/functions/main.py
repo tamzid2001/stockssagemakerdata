@@ -84,7 +84,7 @@ _admin_remote_config_loaded = False
 
 # Bind high-sensitivity API keys via Secret Manager instead of committing them.
 # Firebase will inject secret values into env vars for deployed functions.
-set_global_options(max_instances=10, secrets=secrets_loader.secret_bindings())
+set_global_options(max_instances=10, memory=MemoryOption.MB_512, secrets=secrets_loader.secret_bindings())
 
 SERVICE_ACCOUNT_PATH = os.environ.get(
     "SERVICE_ACCOUNT_PATH",
@@ -104,8 +104,6 @@ FORECAST_SERVICES = {"prophet", "ibm_timemixer"}
 BACKTEST_SOURCE_FORMATS = {"python", "tradingview", "metatrader5", "tradelocker"}
 FEATURE_VOTE_KEYS = {"uploads", "autopilot"}
 FEATURE_VOTE_CHOICES = {"yes", "no"}
-REPORT_AGENT_BATCH_SIZE = max(1, min(int(os.environ.get("REPORT_AGENT_BATCH_SIZE", "8") or 8), 40))
-
 ALPACA_API_BASE = os.environ.get("ALPACA_API_BASE", "https://paper-api.alpaca.markets")
 ALPACA_DATA_BASE = os.environ.get("ALPACA_DATA_BASE", "https://data.alpaca.markets")
 ALPACA_API_KEY = secrets_loader.get_secret("ALPACA_API_KEY")
@@ -7397,8 +7395,6 @@ def _handle_forecast_request(req: https_fn.CallableRequest, forced_service: str 
         "forecastPreview": _serialize_for_firestore(_forecast_preview_rows(result.get("forecastRows") or [])),
         "forecastRows": _serialize_for_firestore(result.get("forecastRows") or []),
         "tradeRationale": trade_rationale,
-        "reportStatus": "queued",
-        "reportAssets": {},
         "meta": data.get("meta") or {},
         "utm": data.get("utm") or {},
         "createdAt": firestore.SERVER_TIMESTAMP,
@@ -7446,16 +7442,15 @@ def _handle_forecast_request(req: https_fn.CallableRequest, forced_service: str 
         "forecastPreview": request_doc["forecastPreview"],
         "forecastQuantilesEnd": _serialize_for_firestore(quantile_end),
         "tradeRationale": trade_rationale,
-        "reportStatus": "queued",
     }
 
 
-@https_fn.on_call(memory=MemoryOption.GB_1, timeout_sec=180)
+@https_fn.on_call(memory=MemoryOption.MB_512, timeout_sec=180)
 def run_timeseries_forecast(req: https_fn.CallableRequest) -> dict[str, Any]:
     return _handle_forecast_request(req, forced_service="prophet")
 
 
-@https_fn.on_call(memory=MemoryOption.GB_1, timeout_sec=180)
+@https_fn.on_call(memory=MemoryOption.MB_512, timeout_sec=180)
 def run_prophet_forecast(req: https_fn.CallableRequest) -> dict[str, Any]:
     return _handle_forecast_request(req, forced_service="prophet")
 
@@ -7486,74 +7481,13 @@ def delete_forecast_request(req: https_fn.CallableRequest) -> dict[str, Any]:
     return {"deleted": True, "forecastId": forecast_id}
 
 
-@https_fn.on_call(memory=MemoryOption.GB_1, timeout_sec=180)
+@https_fn.on_call(memory=MemoryOption.MB_512, timeout_sec=180)
 def generate_forecast_report_assets(req: https_fn.CallableRequest) -> dict[str, Any]:
-    token = _require_auth(req)
-    data = req.data or {}
-    forecast_id = str(data.get("forecastId") or data.get("id") or "").strip()
-    force = bool(data.get("force"))
-    if not forecast_id:
-        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Forecast ID is required.")
-
-    ref = db.collection("forecast_requests").document(forecast_id)
-    snap = ref.get()
-    if not snap.exists:
-        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "Forecast not found.")
-
-    doc = snap.to_dict() or {}
-    workspace_id = str(doc.get("userId") or "").strip()
-    if workspace_id:
-        _require_workspace_editor(workspace_id, req.auth.uid, token)
-    elif token.get("email") != ADMIN_EMAIL:
-        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.PERMISSION_DENIED, "Access denied.")
-
-    existing_assets = doc.get("reportAssets") if isinstance(doc.get("reportAssets"), dict) else {}
-    existing_status = str(doc.get("reportStatus") or "").strip().lower()
-    if not force and existing_status == "ready" and existing_assets:
-        return {
-            "forecastId": forecast_id,
-            "reportStatus": "ready",
-            "reportAssets": _serialize_for_firestore(existing_assets),
-            "tradeRationale": str(doc.get("tradeRationale") or "").strip(),
-        }
-
-    ref.set(
-        {
-            "reportStatus": "generating",
-            "reportError": "",
-            "reportUpdatedAt": firestore.SERVER_TIMESTAMP,
-        },
-        merge=True,
+    del req
+    raise https_fn.HttpsError(
+        https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+        "Report agent for forecast assets has been retired.",
     )
-
-    try:
-        generated = _generate_and_store_forecast_report_assets(forecast_id, doc)
-        ref.set(
-            {
-                "reportStatus": "ready",
-                "reportAssets": generated.get("reportAssets") or {},
-                "tradeRationale": generated.get("tradeRationale") or str(doc.get("tradeRationale") or "").strip(),
-                "reportUpdatedAt": firestore.SERVER_TIMESTAMP,
-            },
-            merge=True,
-        )
-        _audit_event(req.auth.uid, token.get("email"), "forecast_report_generated", {"forecastId": forecast_id, "workspaceId": workspace_id})
-        return {
-            "forecastId": forecast_id,
-            "reportStatus": "ready",
-            "reportAssets": _serialize_for_firestore(generated.get("reportAssets") or {}),
-            "tradeRationale": str(generated.get("tradeRationale") or "").strip(),
-        }
-    except Exception as error:
-        ref.set(
-            {
-                "reportStatus": "failed",
-                "reportError": str(error)[:700],
-                "reportUpdatedAt": firestore.SERVER_TIMESTAMP,
-            },
-            merge=True,
-        )
-        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INTERNAL, f"Unable to generate report assets: {error}")
 
 
 @scheduler_fn.on_schedule(
@@ -7562,38 +7496,7 @@ def generate_forecast_report_assets(req: https_fn.CallableRequest) -> dict[str, 
 )
 def forecast_report_agent_scheduler(event: scheduler_fn.ScheduledEvent) -> None:
     del event
-    docs = list(db.collection("forecast_requests").where("reportStatus", "==", "queued").limit(REPORT_AGENT_BATCH_SIZE).stream())
-    for item in docs:
-        ref = db.collection("forecast_requests").document(item.id)
-        data = item.to_dict() or {}
-        try:
-            ref.set(
-                {
-                    "reportStatus": "generating",
-                    "reportError": "",
-                    "reportUpdatedAt": firestore.SERVER_TIMESTAMP,
-                },
-                merge=True,
-            )
-            generated = _generate_and_store_forecast_report_assets(item.id, data)
-            ref.set(
-                {
-                    "reportStatus": "ready",
-                    "reportAssets": generated.get("reportAssets") or {},
-                    "tradeRationale": generated.get("tradeRationale") or str(data.get("tradeRationale") or "").strip(),
-                    "reportUpdatedAt": firestore.SERVER_TIMESTAMP,
-                },
-                merge=True,
-            )
-        except Exception as error:
-            ref.set(
-                {
-                    "reportStatus": "failed",
-                    "reportError": str(error)[:700],
-                    "reportUpdatedAt": firestore.SERVER_TIMESTAMP,
-                },
-                merge=True,
-            )
+    return
 
 
 @scheduler_fn.on_schedule(
@@ -8562,7 +8465,7 @@ def _build_backtest_export_sources(payload: dict[str, Any]) -> dict[str, dict[st
     }
 
 
-@https_fn.on_call(memory=MemoryOption.GB_1, timeout_sec=180)
+@https_fn.on_call(memory=MemoryOption.MB_512, timeout_sec=180)
 def run_backtest(req: https_fn.CallableRequest) -> dict[str, Any]:
     token = _require_auth(req)
     data = req.data or {}
@@ -9460,7 +9363,7 @@ def get_ticker_full_info(req: https_fn.CallableRequest) -> dict[str, Any]:
     return _serialize_for_firestore(payload)
 
 
-@https_fn.on_call(memory=MemoryOption.GB_1, timeout_sec=180)
+@https_fn.on_call(memory=MemoryOption.MB_512, timeout_sec=180)
 def get_ticker_intel(req: https_fn.CallableRequest) -> dict[str, Any]:
     import numpy as np  # type: ignore
     import pandas as pd  # type: ignore
@@ -10857,7 +10760,7 @@ def queue_screener_run(req: https_fn.CallableRequest) -> dict[str, Any]:
     return {"runId": doc_ref.id}
 
 
-@https_fn.on_call(memory=MemoryOption.GB_1, timeout_sec=180)
+@https_fn.on_call(memory=MemoryOption.MB_512, timeout_sec=180)
 def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
     try:
         import numpy as np  # type: ignore
