@@ -8,7 +8,7 @@ const { setGlobalOptions } = require("firebase-functions/v2/options");
 const { initializeApp } = require("firebase-admin/app");
 const { getRemoteConfig, RemoteConfigFetchResponse } = require("firebase-admin/remote-config");
 
-setGlobalOptions({ region: "us-central1", maxInstances: 10 });
+setGlobalOptions({ region: "us-central1", maxInstances: 10, memory: "512MiB" });
 
 let adminApp = null;
 
