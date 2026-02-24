@@ -53,6 +53,10 @@
     ],
     "rewrites": [
       { "source": "/api/auth/exchange-native-id-token", "function": "exchange_native_id_token" },
+      { "source": "/api/predictions/search", "function": "predictions_search_http" },
+      { "source": "/api/predictions/orderbook", "function": "predictions_orderbook_http" },
+      { "source": "/api/email/send-newsletter-daily", "function": "send_newsletter_daily_http" },
+      { "source": "/email/unsubscribe", "function": "email_unsubscribe_http" },
       { "source": "/", "function": "ssr" },
       { "source": "/forecasting", "function": "ssr" },
       { "source": "/ticker-intelligence", "function": "ssr" },
