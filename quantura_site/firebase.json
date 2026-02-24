@@ -52,6 +52,7 @@
       { "source": "/purchase", "destination": "/pricing", "type": 301 }
     ],
     "rewrites": [
+      { "source": "/api/openai/models", "function": "api_openai_models" },
       { "source": "/", "function": "ssr" },
       { "source": "/forecasting", "function": "ssr" },
       { "source": "/ticker-intelligence", "function": "ssr" },

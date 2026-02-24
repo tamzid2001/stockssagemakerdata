@@ -84,6 +84,8 @@ OPENAI_API_KEY = secrets_loader.get_secret("OPENAI_API_KEY")
 AMAZON_NOVA_API_KEY = secrets_loader.get_secret("AMAZON_NOVA_API_KEY")
 AMAZON_NOVA_API_ENDPOINT = str(os.environ.get("AMAZON_NOVA_API_ENDPOINT") or "").strip()
 AMAZON_NOVA_DEFAULT_MODEL = str(os.environ.get("AMAZON_NOVA_DEFAULT_MODEL") or "amazon.nova-lite-v1:0").strip()
+DEFAULT_CHAT_MODEL = str(os.environ.get("DEFAULT_CHAT_MODEL") or "gpt-5-mini").strip() or "gpt-5-mini"
+OPENAI_LIST_MODELS_URL = "https://api.openai.com/v1/models"
 SOCIAL_CONTENT_MODEL = (os.environ.get("SOCIAL_CONTENT_MODEL") or "gpt-5-mini").strip()
 SOCIAL_AUTOMATION_ENABLED = str(os.environ.get("SOCIAL_AUTOMATION_ENABLED") or "true").strip().lower() in {
     "1",
@@ -712,6 +714,104 @@ def _force_remove_second_line(csv_text: str) -> str:
     if len(lines) > 1:
         del lines[1]
     return "".join(lines)
+
+
+def _http_cors_headers() -> dict[str, str]:
+    return {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "Authorization, Content-Type",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Cache-Control": "no-store",
+    }
+
+
+def _json_http_response(payload: dict[str, Any], status: int = 200) -> https_fn.Response:
+    return https_fn.Response(
+        json.dumps(payload, ensure_ascii=False),
+        status=status,
+        mimetype="application/json",
+        headers=_http_cors_headers(),
+    )
+
+
+def _openai_model_group(model_id: str) -> str:
+    lowered = str(model_id or "").strip().lower()
+    if "nano" in lowered:
+        return "Fast"
+    if "mini" in lowered:
+        return "Balanced"
+    return "Reasoning"
+
+
+def _openai_model_label(model_id: str) -> str:
+    labels = {
+        "gpt-5-nano": "GPT-5 Nano",
+        "gpt-5-mini": "GPT-5 Mini",
+        "gpt-5": "GPT-5",
+        "gpt-5.1": "GPT-5.1",
+        "gpt-5.2": "GPT-5.2",
+    }
+    normalized = _normalize_ai_model_id(model_id)
+    return labels.get(normalized, normalized or "Model")
+
+
+def _list_openai_models_for_app(context: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    allowed = [
+        _normalize_ai_model_id(item)
+        for item in _get_llm_allowed_models(context=context)
+        if _model_provider_from_id(item) == "openai"
+    ]
+    allowed = [item for item in allowed if item and _is_supported_llm_model(item)]
+    allowed = list(dict.fromkeys(allowed))
+    if not allowed:
+        allowed = [
+            _normalize_ai_model_id(DEFAULT_CHAT_MODEL) or "gpt-5-mini",
+            "gpt-5-mini",
+            "gpt-5",
+        ]
+        allowed = list(dict.fromkeys([item for item in allowed if item]))
+    allowed_set = set(allowed)
+
+    discovered_ids: set[str] = set()
+    if OPENAI_API_KEY:
+        try:
+            response = requests.get(
+                OPENAI_LIST_MODELS_URL,
+                headers={"Authorization": f"Bearer {OPENAI_API_KEY}"},
+                timeout=15,
+            )
+            if response.status_code < 400:
+                payload = response.json() if response.text else {}
+                for row in payload.get("data") or []:
+                    if not isinstance(row, dict):
+                        continue
+                    model_id = _normalize_ai_model_id(row.get("id"))
+                    if not model_id:
+                        continue
+                    if not model_id.startswith("gpt-5"):
+                        continue
+                    if allowed_set and model_id not in allowed_set:
+                        continue
+                    discovered_ids.add(model_id)
+        except Exception:
+            discovered_ids = set()
+
+    if not discovered_ids:
+        discovered_ids = allowed_set
+
+    priority = {model_id: idx for idx, model_id in enumerate(allowed)}
+    out: list[dict[str, Any]] = []
+    for model_id in sorted(discovered_ids, key=lambda item: (priority.get(item, 999), item)):
+        out.append(
+            {
+                "id": model_id,
+                "label": _openai_model_label(model_id),
+                "group": _openai_model_group(model_id),
+                "supportsStreaming": True,
+                "supportsText": True,
+            }
+        )
+    return out
 
 
 def _social_channel_webhooks() -> dict[str, str]:
@@ -5118,6 +5218,29 @@ def create_creator_support_checkout(req: https_fn.CallableRequest) -> dict[str, 
         "platformFeePercent": platform_fee_percent,
         "connectLinked": bool(connect_account_id),
     }
+
+
+@https_fn.on_request()
+def api_openai_models(req: https_fn.Request) -> https_fn.Response:
+    if req.method == "OPTIONS":
+        return https_fn.Response("", status=204, headers=_http_cors_headers())
+    if req.method != "GET":
+        return _json_http_response({"error": "Method not allowed."}, status=405)
+
+    models = _list_openai_models_for_app(context=None)
+    default_model = ""
+    preferred = _normalize_ai_model_id(DEFAULT_CHAT_MODEL)
+    if models:
+        ids = [str(item.get("id") or "").strip() for item in models if isinstance(item, dict)]
+        ids = [item for item in ids if item]
+        default_model = preferred if preferred and preferred in ids else (ids[0] if ids else "")
+
+    return _json_http_response(
+        {
+            "models": models,
+            "defaultModel": default_model or "gpt-5-mini",
+        }
+    )
 
 
 @https_fn.on_request()
