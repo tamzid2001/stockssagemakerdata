@@ -1,0 +1,22 @@
+Analyze the ticker using the provided feature pack and optional follow-up instruction.
+
+Return STRICT JSON with this exact schema:
+{
+  "thesis_summary": "string",
+  "key_drivers": ["string"],
+  "risks": ["string"],
+  "data_quality_notes": ["string"],
+  "follow_up_questions": ["string"],
+  "confidence": "low|medium|high"
+}
+
+Constraints:
+- Keep thesis_summary concise (2-4 sentences).
+- key_drivers and risks should be factual and tied to provided data.
+- follow_up_questions should be actionable data questions.
+- Do not include markdown code fences.
+
+Ticker: {{TICKER}}
+Follow-up: {{FOLLOW_UP}}
+Feature pack JSON:
+{{FEATURE_PACK_JSON}}

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Quantura Shop</title>
+    <meta name="description" content="Quantura shop for plans, digital products, and platform-aware checkout." />
+    <meta name="robots" content="index,follow" />
+    <link rel="canonical" href="https://quantura-e2e3d.web.app/shop" />
+    <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
+
+    <script defer src="/__/firebase/12.9.0/firebase-app-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-auth-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-firestore-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-functions-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-storage-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-remote-config-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-analytics-compat.js"></script>
+    <script defer src="/__/firebase/init.js?useEmulator=false"></script>
+    <script defer src="/app.js"></script>
+    <script defer src="/shop.js"></script>
+  </head>
+  <body>
+    <header class="header">
+      <div class="container nav">
+        <a class="logo" href="/" aria-label="Quantura home"><span>QUANTURA</span></a>
+        <nav class="nav-links">
+          <a href="/forecasting"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Terminal</span></a>
+          <a href="/screener"><i class="iconoir-search" aria-hidden="true"></i><span>Screener</span></a>
+          <a href="/shop"><i class="iconoir-bag" aria-hidden="true"></i><span>Shop</span></a>
+          <a href="/dashboard"><i class="iconoir-dashboard" aria-hidden="true"></i><span>Dashboard</span></a>
+        </nav>
+        <div class="nav-actions">
+          <span id="header-user-status" class="pill">Logged Out</span>
+          <button class="cta secondary" id="header-auth" type="button"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></button>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="section" id="shop-root">
+        <div class="container" style="max-width: 1160px;">
+          <div class="section-title">
+            <h1>Quantura Shop</h1>
+            <p class="small">Platform-aware checkout: web products use Stripe extension flow, native digital goods route to IAP hooks.</p>
+          </div>
+
+          <div class="card" style="margin-bottom: 14px;">
+            <div class="profile-item"><span class="label">Runtime</span><span id="shop-platform" class="value">Detecting...</span></div>
+            <p id="shop-status" class="small muted" style="margin-top: 8px;">Loading products...</p>
+          </div>
+
+          <div id="shop-products" class="content-grid">
+            <div class="card"><div class="small muted">No products loaded yet.</div></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
