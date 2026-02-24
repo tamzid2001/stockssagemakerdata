@@ -3,6 +3,7 @@ package com.quantura.quanturaapp.di
 import android.app.Application
 import android.content.pm.ApplicationInfo
 import com.quantura.quanturaapp.ads.AdManager
+import com.quantura.quanturaapp.ads.AppOpenAdManager
 import com.quantura.quanturaapp.config.RemoteConfigManager
 
 // Simple DI container for shared app services.
@@ -18,4 +19,5 @@ class AppContainer(
         isDebug = isDebuggable,
     )
     val adManager = AdManager(remoteConfigManager)
+    val appOpenAdManager = AppOpenAdManager(application, remoteConfigManager, adManager)
 }
