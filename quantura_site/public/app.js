@@ -1155,7 +1155,7 @@
     }
   };
 
-  const ui = {
+	  const ui = {
     headerAuth: document.getElementById("header-auth"),
     headerSignOut: document.getElementById("header-signout"),
     headerDashboard: document.getElementById("header-dashboard"),
@@ -1364,11 +1364,17 @@
     backtestLoadStatus: document.getElementById("backtest-load-status"),
     savedBacktestsList: document.getElementById("saved-backtests-list"),
     toast: document.getElementById("toast"),
-    purchasePanels: Array.from(document.querySelectorAll(".purchase-panel")),
-  };
+	    purchasePanels: Array.from(document.querySelectorAll(".purchase-panel")),
+	  };
 
-  const state = {
-    user: null,
+  if (ui.anonymousSignin) {
+    ui.anonymousSignin.style.display = "none";
+    ui.anonymousSignin.disabled = true;
+    ui.anonymousSignin.setAttribute("aria-hidden", "true");
+  }
+
+	  const state = {
+	    user: null,
     userHasPaidPlan: false,
     userSubscriptionTier: "free",
     userProfile: {
@@ -1389,9 +1395,10 @@
         return "";
       }
     })(),
-	    initialPageViewSent: false,
-	    authResolved: false,
-      authInFlight: false,
+		    initialPageViewSent: false,
+		    authResolved: false,
+	      authInFlight: false,
+      anonymousBootstrapInFlight: false,
     intelActiveTab: "intelligence",
     tickerContext: {
 	      ticker: "",
@@ -13533,12 +13540,40 @@
         await performSignOut();
       });
 
+    const isAuthCollision = (code) =>
+      [
+        "auth/credential-already-in-use",
+        "auth/email-already-in-use",
+        "auth/account-exists-with-different-credential",
+        "auth/provider-already-linked",
+      ].includes(String(code || "").trim());
+
+    const linkOrSignInWithCredential = async (credential, fallbackSignIn) => {
+      const current = auth.currentUser;
+      if (current?.isAnonymous) {
+        try {
+          await current.linkWithCredential(credential);
+          return;
+        } catch (linkError) {
+          if (isAuthCollision(linkError?.code)) {
+            await fallbackSignIn();
+            return;
+          }
+          throw linkError;
+        }
+      }
+      await fallbackSignIn();
+    };
+
     ui.emailForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
       if (ui.emailMessage) ui.emailMessage.textContent = "";
       try {
         await persistenceReady;
-        await auth.signInWithEmailAndPassword(ui.emailInput.value, ui.passwordInput.value);
+        const email = String(ui.emailInput?.value || "").trim();
+        const password = String(ui.passwordInput?.value || "");
+        const credential = firebase.auth.EmailAuthProvider.credential(email, password)
+        await linkOrSignInWithCredential(credential, () => auth.signInWithEmailAndPassword(email, password));
         showToast("Signed in successfully.");
         logEvent("login", { method: "password" });
       } catch (error) {
@@ -13550,7 +13585,10 @@
       if (ui.emailMessage) ui.emailMessage.textContent = "";
       try {
         await persistenceReady;
-        await auth.createUserWithEmailAndPassword(ui.emailInput.value, ui.passwordInput.value);
+        const email = String(ui.emailInput?.value || "").trim();
+        const password = String(ui.passwordInput?.value || "");
+        const credential = firebase.auth.EmailAuthProvider.credential(email, password)
+        await linkOrSignInWithCredential(credential, () => auth.createUserWithEmailAndPassword(email, password));
         showToast("Account created.");
         logEvent("sign_up", { method: "password" });
       } catch (error) {
@@ -13599,33 +13637,43 @@
       if (state.authInFlight) return;
       state.authInFlight = true;
       const runtime = resolveRuntimeLabel();
+      const normalizedMethod = String(method || "").trim().toLowerCase();
+      const supportsNativeBridge = normalizedMethod === "google" || normalizedMethod === "apple";
       try {
         await persistenceReady;
-        if (isNativeApp()) {
-          const result = await requestNativeBridgeAuth(method);
+        if (isNativeApp() && supportsNativeBridge) {
+          const result = await requestNativeBridgeAuth(normalizedMethod);
           const nativeIdToken = String(result?.idToken || "").trim();
           if (!nativeIdToken) throw new Error("Native sign-in completed without an ID token.");
           const customToken = await exchangeNativeIdTokenForCustomToken(nativeIdToken);
           await auth.signInWithCustomToken(customToken);
           showToast(successMessage);
-          logEvent("login", { method, runtime, source: "native_bridge" });
+          logEvent("login", { method: normalizedMethod, runtime, source: "native_bridge" });
           return;
         }
 
         if (isInstalledPwa() || isMobileBrowser()) {
-          await auth.signInWithRedirect(provider);
-          logEvent("login_redirect_started", { method, runtime });
+          if (auth.currentUser?.isAnonymous) {
+            await auth.currentUser.linkWithRedirect(provider);
+          } else {
+            await auth.signInWithRedirect(provider);
+          }
+          logEvent("login_redirect_started", { method: normalizedMethod, runtime });
           return;
         }
 
-        await auth.signInWithPopup(provider);
+        if (auth.currentUser?.isAnonymous) {
+          await auth.currentUser.linkWithPopup(provider);
+        } else {
+          await auth.signInWithPopup(provider);
+        }
         showToast(successMessage);
-        logEvent("login", { method, runtime, source: "popup" });
+        logEvent("login", { method: normalizedMethod, runtime, source: "popup" });
       } catch (error) {
         const message = error?.message || "Unable to sign in.";
         if (ui.emailMessage) ui.emailMessage.textContent = message;
         showToast(message, "warn");
-        logEvent("login_error", { method, runtime });
+        logEvent("login_error", { method: normalizedMethod, runtime });
       } finally {
         state.authInFlight = false;
       }
@@ -13654,19 +13702,7 @@
       await signInWithProvider(provider, "Signed in with X.", "twitter");
     });
 
-    ui.anonymousSignin?.addEventListener("click", async () => {
-      if (ui.emailMessage) ui.emailMessage.textContent = "";
-      try {
-        await persistenceReady;
-        await auth.signInAnonymously();
-        showToast("Guest session started.");
-        logEvent("login", { method: "anonymous" });
-      } catch (error) {
-        if (ui.emailMessage) ui.emailMessage.textContent = error.message || "Unable to start guest session.";
-      }
-    });
-
-	    ui.purchasePanels.forEach((panel) => {
+		    ui.purchasePanels.forEach((panel) => {
 	      const purchaseBtn = panel.querySelector('[data-action="purchase"]');
 	      const stripeBtn = panel.querySelector('[data-action="stripe"]');
 	      purchaseBtn?.addEventListener("click", () => handlePurchase(panel, functions));
@@ -14968,12 +15004,32 @@
     setProfileFormEnabled(false);
     renderProfileForm({ username: "", socialLinks: cloneDefaultProfileSocialLinks() }, null);
 
-		    persistenceReady.finally(() => {
-		      auth.onAuthStateChanged(async (user) => {
-		      state.authResolved = true;
-		      state.user = user;
-		      setAuthUi(user);
-		      setUserId(hasFullAccount(user) ? user.uid : null);
+			    persistenceReady.finally(() => {
+			      auth.onAuthStateChanged(async (user) => {
+          if (!user) {
+            state.authResolved = true;
+            state.user = null;
+            setAuthUi(null);
+            setUserId(null);
+            if (!state.anonymousBootstrapInFlight) {
+              state.anonymousBootstrapInFlight = true;
+              try {
+                await auth.signInAnonymously();
+                logEvent("login", { method: "anonymous_auto", runtime: resolveRuntimeLabel() });
+              } catch (anonError) {
+                if (ui.emailMessage) {
+                  ui.emailMessage.textContent = anonError?.message || "Unable to initialize anonymous session.";
+                }
+              } finally {
+                state.anonymousBootstrapInFlight = false;
+              }
+            }
+            return;
+          }
+			      state.authResolved = true;
+			      state.user = user;
+			      setAuthUi(user);
+			      setUserId(hasFullAccount(user) ? user.uid : null);
 
 		      if (!hasFullAccount(user)) {
 		        state.userHasPaidPlan = false;

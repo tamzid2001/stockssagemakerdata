@@ -1,0 +1,42 @@
+# Mobile Auth + Ads Troubleshooting
+
+## Why app open ads may not show immediately
+- App Open ads are preloaded first. On a cold launch, the first foreground may happen before preload completes.
+- iOS shows App Open ads only when no other modal/fullscreen UI is presented.
+- Android App Open ads show on `ProcessLifecycleOwner` foreground transitions and are skipped if another fullscreen ad is active.
+- Use debug logs:
+  - iOS: `[Ads][iOS][AppOpen] ...`
+  - Android: `AppOpenAdManager` / `AdManager`
+
+## Verify Firebase Auth config
+- iOS:
+  - Ensure `GoogleService-Info.plist` is in the app bundle, or `GoogleService-Info.local.plist` is present and bundled.
+  - Confirm startup logs show Firebase configured: `[Firebase][iOS] Firebase configured successfully.`
+- Android:
+  - Ensure `quantura_android/app/google-services.json` exists locally.
+  - Confirm `com.google.gms.google-services` is applied in `app/build.gradle.kts`.
+  - Confirm startup logs do not report Firebase disabled.
+
+## Verify Google Sign-In config
+- iOS:
+  - Confirm URL scheme includes Firebase `REVERSED_CLIENT_ID` in `quantura_ios/quantura-ios-Info.plist`.
+  - Confirm Google sign-in starts from native flow and returns an ID token.
+- Android:
+  - Confirm `default_web_client_id` is generated from `google-services.json`.
+  - Ensure Firebase project has Android app SHA certificates configured; missing SHA commonly causes `DEVELOPER_ERROR`.
+  - Confirm native logs show Google sign-in started and auth success/error details.
+
+## Verify AdMob config and test ads
+- Debug builds use test ad units by default.
+- iOS debug test IDs used:
+  - App Open: `ca-app-pub-3940256099942544/5575463023`
+  - Banner: `ca-app-pub-3940256099942544/2435281174`
+- Android debug test IDs used:
+  - App Open: `ca-app-pub-3940256099942544/9257395921`
+  - Banner: `ca-app-pub-3940256099942544/9214589741`
+- Confirm banner is mounted in UI:
+  - iOS: bottom safe-area banner container
+  - Android: `BannerAdView` under main WebView
+- Check load/show callbacks:
+  - iOS: `[Ads][iOS]` / `[Ads][iOS][Banner]`
+  - Android: `AdManager`, `BannerAdView`, `AppOpenAdManager`
