@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import importlib
 import json
 import math
 import os
@@ -14,7 +15,6 @@ from statistics import NormalDist
 from typing import Any
 from urllib.parse import parse_qs, quote_plus, unquote, urlparse
 
-import requests
 from polymarket_service import (
     check_rate_limit as polymarket_check_rate_limit,
     fetch_orderbook_bundle,
@@ -26,8 +26,6 @@ try:
 except Exception:  # pragma: no cover - Python < 3.9 fallback
     ZoneInfo = None  # type: ignore
 
-import firebase_admin
-from firebase_admin import auth as admin_auth, credentials, firestore, messaging as admin_messaging, storage as admin_storage
 from firebase_functions import https_fn, scheduler_fn
 from firebase_functions.options import MemoryOption, set_global_options
 from chat_runtime import build_chat_prompt_messages, select_model_for_request
@@ -36,10 +34,53 @@ from massive_capabilities import classify_capability_status
 from options_fallback import should_use_massive_fallback
 import secrets_loader
 
-try:
-    from firebase_admin import remote_config as admin_remote_config  # type: ignore
-except Exception:  # pragma: no cover - optional dependency until firebase-admin>=7.x
-    admin_remote_config = None
+
+class _LazyRequestsModule:
+    """Defer importing requests until first network call to speed function discovery."""
+
+    def __init__(self) -> None:
+        self._module: Any | None = None
+
+    def _ensure(self) -> Any:
+        if self._module is None:
+            import requests as _requests  # type: ignore
+
+            self._module = _requests
+        return self._module
+
+    def __getattr__(self, attr: str) -> Any:
+        return getattr(self._ensure(), attr)
+
+
+def _stream_with_context(func: Any) -> Any:
+    from flask import stream_with_context as _flask_stream_with_context  # type: ignore
+
+    return _flask_stream_with_context(func)
+
+
+class _LazyModule:
+    def __init__(self, module_name: str) -> None:
+        self._module_name = module_name
+        self._module: Any | None = None
+
+    def _ensure(self) -> Any:
+        if self._module is None:
+            self._module = importlib.import_module(self._module_name)
+        return self._module
+
+    def __getattr__(self, attr: str) -> Any:
+        return getattr(self._ensure(), attr)
+
+
+requests = _LazyRequestsModule()
+firebase_admin = _LazyModule("firebase_admin")
+admin_auth = _LazyModule("firebase_admin.auth")
+credentials = _LazyModule("firebase_admin.credentials")
+firestore = _LazyModule("firebase_admin.firestore")
+admin_messaging = _LazyModule("firebase_admin.messaging")
+admin_storage = _LazyModule("firebase_admin.storage")
+_admin_remote_config_module: Any | None = None
+_admin_remote_config_loaded = False
 
 # Bind high-sensitivity API keys via Secret Manager instead of committing them.
 # Firebase will inject secret values into env vars for deployed functions.
@@ -353,8 +394,21 @@ DEFAULT_REMOTE_CONFIG: dict[str, str] = {
 }
 
 
+def _get_admin_remote_config() -> Any | None:
+    global _admin_remote_config_loaded, _admin_remote_config_module
+    if _admin_remote_config_loaded:
+        return _admin_remote_config_module
+    _admin_remote_config_loaded = True
+    try:
+        _admin_remote_config_module = importlib.import_module("firebase_admin.remote_config")
+    except Exception:
+        _admin_remote_config_module = None
+    return _admin_remote_config_module
+
+
 def _get_remote_config_template(max_age_seconds: int = 300) -> Any | None:
     """Loads a Remote Config ServerTemplate and keeps it cached between invocations."""
+    admin_remote_config = _get_admin_remote_config()
     if admin_remote_config is None:
         return None
     now = time.time()
@@ -6427,7 +6481,7 @@ def api_chat(req: https_fn.Request) -> https_fn.Response:
     def _sse(data_obj: dict[str, Any]) -> str:
         return f"data: {json.dumps(data_obj, ensure_ascii=False)}\n\n"
 
-    @stream_with_context
+    @_stream_with_context
     def _event_stream():
         usage_payload: dict[str, Any] = {}
         yield _sse({"type": "meta", "provider": "openai", "model": requested_model})
@@ -12861,3 +12915,483 @@ def send_slack_test_message(req: https_fn.CallableRequest) -> dict[str, Any]:
 
     _audit_event(req.auth.uid, token.get("email"), "slack_test_sent", {"message": text})
     return {"ok": True}
+
+# --- Phase 11: Watchlists v2 + Scheduled Alerts ---
+ALERT_SCHEDULER_TIMEZONE = str(os.environ.get("ALERT_SCHEDULER_TIMEZONE") or "America/New_York").strip()
+ALERT_SCHEDULER_BATCH_LIMIT = max(100, min(int(os.environ.get("ALERT_SCHEDULER_BATCH_LIMIT", "1500") or 1500), 5000))
+MARKET_DATA_SERVICE_URL = str(os.environ.get("MARKET_DATA_SERVICE_URL") or "").strip().rstrip("/")
+
+
+def _parse_timestamp(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return None
+        try:
+            parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
+        except Exception:
+            return None
+    return None
+
+
+def _minutes_since(ts: datetime | None) -> float:
+    if ts is None:
+        return float("inf")
+    return max(0.0, (datetime.now(timezone.utc) - ts).total_seconds() / 60.0)
+
+
+def _market_data_batch_quotes(symbols: list[str]) -> dict[str, dict[str, Any]]:
+    clean = [
+        _normalize_symbol_token(symbol)
+        for symbol in (symbols or [])
+        if _normalize_symbol_token(symbol)
+    ]
+    clean = list(dict.fromkeys(clean))
+    if not clean:
+        return {}
+
+    if MARKET_DATA_SERVICE_URL:
+        try:
+            response = requests.get(
+                f"{MARKET_DATA_SERVICE_URL}/stocks/quote",
+                params={"tickers": ",".join(clean), "mode": "fast"},
+                timeout=20,
+            )
+            if response.status_code < 400:
+                payload = response.json() if response.text else {}
+                items = payload.get("items") if isinstance(payload, dict) else []
+                out: dict[str, dict[str, Any]] = {}
+                if isinstance(items, list):
+                    for item in items:
+                        if not isinstance(item, dict):
+                            continue
+                        symbol = _normalize_symbol_token(item.get("symbol"))
+                        price = item.get("price") if isinstance(item.get("price"), dict) else {}
+                        if symbol:
+                            out[symbol] = {
+                                "last": _safe_float(price.get("last")),
+                                "prevClose": _safe_float(price.get("prevClose")),
+                            }
+                if out:
+                    return out
+        except Exception:
+            pass
+
+    # Fallback path if service URL is not configured.
+    fallback_prices = _latest_close_prices(clean)
+    return {
+        symbol: {"last": _safe_float(price), "prevClose": None}
+        for symbol, price in fallback_prices.items()
+    }
+
+
+def _safe_sma_cross(symbol: str, fast_window: int, slow_window: int) -> dict[str, Any]:
+    import pandas as pd  # type: ignore
+
+    fast = max(2, min(int(fast_window or 20), 250))
+    slow = max(fast + 1, min(int(slow_window or 50), 400))
+
+    lookback_days = max(120, slow * 4)
+    start_key = (datetime.now(timezone.utc) - timedelta(days=lookback_days)).date().isoformat()
+    frame = _load_history(symbol, start=start_key, interval="1d")
+    if frame is None or getattr(frame, "empty", True):
+        return {"triggered": False, "reason": "history_unavailable"}
+
+    close = frame["Close"].astype(float).dropna() if "Close" in frame.columns else pd.Series(dtype=float)
+    if len(close) < slow + 2:
+        return {"triggered": False, "reason": "insufficient_history"}
+
+    fast_ma = close.rolling(window=fast, min_periods=fast).mean()
+    slow_ma = close.rolling(window=slow, min_periods=slow).mean()
+    if fast_ma.empty or slow_ma.empty:
+        return {"triggered": False, "reason": "ma_unavailable"}
+
+    latest_fast = _safe_float(fast_ma.iloc[-1])
+    latest_slow = _safe_float(slow_ma.iloc[-1])
+    prev_fast = _safe_float(fast_ma.iloc[-2])
+    prev_slow = _safe_float(slow_ma.iloc[-2])
+
+    if None in {latest_fast, latest_slow, prev_fast, prev_slow}:
+        return {"triggered": False, "reason": "ma_invalid"}
+
+    crossed_up = bool(prev_fast <= prev_slow and latest_fast > latest_slow)
+    return {
+        "triggered": crossed_up,
+        "latestFast": latest_fast,
+        "latestSlow": latest_slow,
+        "prevFast": prev_fast,
+        "prevSlow": prev_slow,
+    }
+
+
+def _send_user_device_push(user_id: str, title: str, body: str, data: dict[str, Any]) -> dict[str, Any]:
+    docs = (
+        db.collection("users")
+        .document(user_id)
+        .collection("devices")
+        .limit(250)
+        .stream()
+    )
+    tokens: list[str] = []
+    for doc in docs:
+        payload = doc.to_dict() or {}
+        token = _normalize_notification_token(payload.get("fcmToken") or payload.get("token"))
+        if token:
+            tokens.append(token)
+
+    tokens = list(dict.fromkeys(tokens))
+    if not tokens:
+        return {"sent": 0, "failed": 0, "tokens": 0}
+
+    message = admin_messaging.MulticastMessage(
+        tokens=tokens,
+        notification=admin_messaging.Notification(title=title, body=body),
+        data={k: str(v) for k, v in (data or {}).items() if v is not None},
+    )
+
+    sender = getattr(admin_messaging, "send_each_for_multicast", None)
+    if callable(sender):
+        result = sender(message)
+    else:
+        result = admin_messaging.send_multicast(message)
+
+    failed_tokens: list[str] = []
+    responses = list(getattr(result, "responses", []) or [])
+    for idx, res in enumerate(responses):
+        if getattr(res, "success", False):
+            continue
+        if idx < len(tokens):
+            failed_tokens.append(tokens[idx])
+
+    if failed_tokens:
+        failed_set = set(failed_tokens)
+        stale_docs = (
+            db.collection("users")
+            .document(user_id)
+            .collection("devices")
+            .limit(250)
+            .stream()
+        )
+        for doc in stale_docs:
+            payload = doc.to_dict() or {}
+            token = _normalize_notification_token(payload.get("fcmToken") or payload.get("token"))
+            if token and token in failed_set:
+                try:
+                    doc.reference.set(
+                        {
+                            "isActive": False,
+                            "lastError": "messaging_send_failed",
+                            "updatedAt": firestore.SERVER_TIMESTAMP,
+                        },
+                        merge=True,
+                    )
+                except Exception:
+                    continue
+
+    return {
+        "sent": int(getattr(result, "success_count", 0) or 0),
+        "failed": int(getattr(result, "failure_count", 0) or 0),
+        "tokens": len(tokens),
+    }
+
+
+@https_fn.on_call()
+def upsert_watchlist_v2(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    data = req.data or {}
+
+    list_id = str(data.get("listId") or "default").strip().lower()[:64] or "default"
+    if not re.fullmatch(r"[a-z0-9_-]{1,64}", list_id):
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Invalid listId.")
+
+    name = str(data.get("name") or "Default watchlist").strip()[:120]
+    raw_symbols = data.get("symbols") if isinstance(data.get("symbols"), list) else []
+    symbols = list(
+        dict.fromkeys(
+            [
+                _normalize_symbol_token(item)
+                for item in raw_symbols
+                if _normalize_symbol_token(item)
+            ]
+        )
+    )[:300]
+
+    now_payload = {
+        "name": name,
+        "symbols": symbols,
+        "updatedAt": firestore.SERVER_TIMESTAMP,
+        "updatedByUid": req.auth.uid,
+    }
+    ref = db.collection("users").document(req.auth.uid).collection("watchlists").document(list_id)
+    if not ref.get().exists:
+        now_payload["createdAt"] = firestore.SERVER_TIMESTAMP
+    ref.set(now_payload, merge=True)
+
+    _audit_event(req.auth.uid, token.get("email"), "watchlist_v2_upserted", {"listId": list_id, "symbols": len(symbols)})
+    return {"ok": True, "listId": list_id, "symbolCount": len(symbols)}
+
+
+@https_fn.on_call()
+def upsert_alert_v2(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    data = req.data or {}
+
+    alert_id = str(data.get("alertId") or "").strip() or db.collection("_tmp").document().id
+    symbol = _normalize_symbol_token(data.get("symbol"))
+    alert_type = str(data.get("type") or "").strip().lower()
+    params = data.get("params") if isinstance(data.get("params"), dict) else {}
+    is_active = bool(data.get("isActive", True))
+    cooldown_mins = max(1, min(int(data.get("cooldownMins") or 60), 1440))
+
+    if not symbol:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "symbol is required.")
+    if alert_type not in {"price_above", "price_below", "pct_up_day", "ma_cross"}:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Invalid alert type.")
+
+    ref = db.collection("users").document(req.auth.uid).collection("alerts").document(alert_id)
+    payload = {
+        "symbol": symbol,
+        "type": alert_type,
+        "params": _serialize_for_firestore(params),
+        "isActive": is_active,
+        "cooldownMins": cooldown_mins,
+        "updatedAt": firestore.SERVER_TIMESTAMP,
+        "updatedByUid": req.auth.uid,
+    }
+    if not ref.get().exists:
+        payload["createdAt"] = firestore.SERVER_TIMESTAMP
+    ref.set(payload, merge=True)
+
+    _audit_event(req.auth.uid, token.get("email"), "alert_v2_upserted", {"alertId": alert_id, "symbol": symbol, "type": alert_type})
+    return {"ok": True, "alertId": alert_id}
+
+
+@https_fn.on_call()
+def register_device_v2(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    data = req.data or {}
+
+    fcm_token = _normalize_notification_token(data.get("fcmToken") or data.get("token"))
+    platform = str(data.get("platform") or "web").strip().lower()[:24]
+    if not fcm_token:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "fcmToken is required.")
+
+    device_id = _token_doc_id(fcm_token)
+    ref = db.collection("users").document(req.auth.uid).collection("devices").document(device_id)
+    ref.set(
+        {
+            "fcmToken": fcm_token,
+            "platform": platform,
+            "isActive": True,
+            "updatedAt": firestore.SERVER_TIMESTAMP,
+            "createdAt": firestore.SERVER_TIMESTAMP,
+            "userAgent": str((data.get("meta") or {}).get("userAgent") or ""),
+        },
+        merge=True,
+    )
+
+    _audit_event(req.auth.uid, token.get("email"), "device_v2_registered", {"deviceId": device_id, "platform": platform})
+    return {"ok": True, "deviceId": device_id}
+
+
+@https_fn.on_call()
+def list_alerts_v2(req: https_fn.CallableRequest) -> dict[str, Any]:
+    _require_auth(req)
+    docs = (
+        db.collection("users")
+        .document(req.auth.uid)
+        .collection("alerts")
+        .where("isActive", "==", True)
+        .limit(300)
+        .stream()
+    )
+    items = []
+    for doc in docs:
+        payload = doc.to_dict() or {}
+        items.append({"id": doc.id, **_serialize_for_firestore(payload)})
+    return {"items": items, "count": len(items)}
+
+
+@scheduler_fn.on_schedule(
+    schedule="every 1 minutes",
+    timezone=scheduler_fn.Timezone(ALERT_SCHEDULER_TIMEZONE),
+)
+def alert_tick_scheduler(event: scheduler_fn.ScheduledEvent) -> None:
+    del event
+
+    docs = list(
+        db.collection_group("alerts")
+        .where("isActive", "==", True)
+        .limit(ALERT_SCHEDULER_BATCH_LIMIT)
+        .stream()
+    )
+    if not docs:
+        print("alert_tick_scheduler: no active alerts")
+        return
+
+    alerts: list[dict[str, Any]] = []
+    symbol_set: set[str] = set()
+    for doc in docs:
+        payload = doc.to_dict() or {}
+        symbol = _normalize_symbol_token(payload.get("symbol"))
+        if not symbol:
+            continue
+
+        path_parts = [part for part in str(doc.reference.path).split("/") if part]
+        # users/{uid}/alerts/{alertId}
+        user_id = path_parts[1] if len(path_parts) >= 2 and path_parts[0] == "users" else ""
+        if not user_id:
+            continue
+
+        alert_type = str(payload.get("type") or "").strip().lower()
+        if alert_type not in {"price_above", "price_below", "pct_up_day", "ma_cross"}:
+            continue
+
+        cooldown_mins = max(1, min(int(payload.get("cooldownMins") or 60), 1440))
+        last_triggered = _parse_timestamp(payload.get("lastTriggeredAt"))
+
+        alerts.append(
+            {
+                "ref": doc.reference,
+                "id": doc.id,
+                "userId": user_id,
+                "symbol": symbol,
+                "type": alert_type,
+                "params": payload.get("params") if isinstance(payload.get("params"), dict) else {},
+                "cooldownMins": cooldown_mins,
+                "lastTriggeredAt": last_triggered,
+            }
+        )
+        symbol_set.add(symbol)
+
+    if not alerts:
+        print("alert_tick_scheduler: no valid alerts")
+        return
+
+    quote_map = _market_data_batch_quotes(sorted(symbol_set))
+    ma_cache: dict[tuple[str, int, int], dict[str, Any]] = {}
+    triggered_by_user: dict[str, list[dict[str, Any]]] = {}
+    batch = db.batch()
+
+    for item in alerts:
+        since_mins = _minutes_since(item.get("lastTriggeredAt"))
+        if since_mins < float(item.get("cooldownMins") or 60):
+            continue
+
+        symbol = item["symbol"]
+        alert_type = item["type"]
+        params = item.get("params") or {}
+        quote = quote_map.get(symbol) or {}
+        last_price = _safe_float(quote.get("last"))
+        prev_close = _safe_float(quote.get("prevClose"))
+
+        triggered = False
+        reason = ""
+        observed: dict[str, Any] = {"last": last_price, "prevClose": prev_close}
+
+        if alert_type == "price_above":
+            threshold = _safe_float(params.get("threshold"))
+            if threshold is not None and last_price is not None and last_price >= threshold:
+                triggered = True
+                reason = f"{symbol} >= {threshold}"
+                observed["threshold"] = threshold
+
+        elif alert_type == "price_below":
+            threshold = _safe_float(params.get("threshold"))
+            if threshold is not None and last_price is not None and last_price <= threshold:
+                triggered = True
+                reason = f"{symbol} <= {threshold}"
+                observed["threshold"] = threshold
+
+        elif alert_type == "pct_up_day":
+            target_pct = _safe_float(params.get("percent"))
+            if target_pct is not None and last_price is not None and prev_close and prev_close > 0:
+                change_pct = ((last_price / prev_close) - 1.0) * 100.0
+                observed["dayChangePct"] = change_pct
+                observed["targetPct"] = target_pct
+                if change_pct >= target_pct:
+                    triggered = True
+                    reason = f"{symbol} day change {round(change_pct, 2)}% >= {target_pct}%"
+
+        elif alert_type == "ma_cross":
+            fast_window = max(2, min(int(params.get("fastWindow") or 20), 120))
+            slow_window = max(fast_window + 1, min(int(params.get("slowWindow") or 50), 300))
+            cache_key = (symbol, fast_window, slow_window)
+            cross_result = ma_cache.get(cache_key)
+            if cross_result is None:
+                cross_result = _safe_sma_cross(symbol, fast_window=fast_window, slow_window=slow_window)
+                ma_cache[cache_key] = cross_result
+            observed.update(cross_result)
+            if bool(cross_result.get("triggered")):
+                triggered = True
+                reason = f"{symbol} SMA{fast_window} crossed above SMA{slow_window}"
+
+        if not triggered:
+            continue
+
+        batch.set(
+            item["ref"],
+            {
+                "lastTriggeredAt": firestore.SERVER_TIMESTAMP,
+                "lastObserved": _serialize_for_firestore(observed),
+                "updatedAt": firestore.SERVER_TIMESTAMP,
+            },
+            merge=True,
+        )
+
+        entry = {
+            "alertId": item["id"],
+            "symbol": symbol,
+            "type": alert_type,
+            "reason": reason,
+            "observed": observed,
+        }
+        triggered_by_user.setdefault(item["userId"], []).append(entry)
+
+    if not triggered_by_user:
+        print(
+            "alert_tick_scheduler: checked=%s triggered=0 symbols=%s"
+            % (len(alerts), len(symbol_set))
+        )
+        return
+
+    batch.commit()
+
+    sent_total = 0
+    for user_id, rows in triggered_by_user.items():
+        first = rows[0]
+        symbol = first.get("symbol") or "ticker"
+        title = f"Alert triggered: {symbol}"
+        body = "; ".join([str(item.get("reason") or "").strip() for item in rows[:3] if str(item.get("reason") or "").strip()])
+        if not body:
+            body = f"{len(rows)} alert(s) triggered for your watchlist."
+
+        push_result = _send_user_device_push(
+            user_id,
+            title=title,
+            body=body,
+            data={
+                "type": "alert_triggered",
+                "symbol": symbol,
+                "url": f"/ticker/{symbol}?alert=1",
+                "count": len(rows),
+            },
+        )
+        sent_total += int(push_result.get("sent") or 0)
+
+        db.collection("users").document(user_id).collection("alert_events").document().set(
+            {
+                "count": len(rows),
+                "alerts": _serialize_for_firestore(rows[:20]),
+                "createdAt": firestore.SERVER_TIMESTAMP,
+                "push": _serialize_for_firestore(push_result),
+            }
+        )
+
+    print(
+        "alert_tick_scheduler: checked=%s triggered=%s users=%s sent=%s symbols=%s"
+        % (len(alerts), sum(len(v) for v in triggered_by_user.values()), len(triggered_by_user), sent_total, len(symbol_set))
+    )
