@@ -3757,6 +3757,24 @@ select {
   text-align: right;
 }
 
+.intel-raw-shell {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface-solid);
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.intel-raw-controls {
+  display: grid;
+  gap: 6px;
+}
+
+.intel-raw-controls input {
+  width: 100%;
+}
+
 .screener-leaderboard-card .panel-output {
   max-height: none;
   overflow: visible;

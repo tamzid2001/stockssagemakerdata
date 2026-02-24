@@ -442,6 +442,43 @@ def _raise_structured_error(
     raise https_fn.HttpsError(code, detail, payload)
 
 
+def _cache_get_payload(cache_key: str, ttl_seconds: int) -> dict[str, Any] | None:
+    key = str(cache_key or "").strip()
+    if not key:
+        return None
+    now = int(time.time())
+    try:
+        snap = db.collection("cache").document(key).get()
+        if not snap.exists:
+            return None
+        doc = snap.to_dict() or {}
+        updated_epoch = int(doc.get("updatedAtEpoch") or 0)
+        if updated_epoch <= 0 or (now - updated_epoch) > max(1, int(ttl_seconds or 0)):
+            return None
+        payload = doc.get("payload")
+        return payload if isinstance(payload, dict) else None
+    except Exception:
+        return None
+
+
+def _cache_set_payload(cache_key: str, payload: dict[str, Any]) -> None:
+    key = str(cache_key or "").strip()
+    if not key or not isinstance(payload, dict):
+        return
+    now = int(time.time())
+    try:
+        db.collection("cache").document(key).set(
+            {
+                "payload": _serialize_for_firestore(payload),
+                "updatedAtEpoch": now,
+                "updatedAt": firestore.SERVER_TIMESTAMP,
+            },
+            merge=True,
+        )
+    except Exception:
+        pass
+
+
 def _normalize_ai_model_id(raw: Any) -> str:
     value = str(raw or "").strip()
     if not value:
@@ -7836,6 +7873,142 @@ def get_trending_tickers(req: https_fn.CallableRequest) -> dict[str, Any]:
     return payload
 
 
+def _ticker_snapshot_sections(ticker: str, info: dict[str, Any], fast_info: Any = None) -> dict[str, Any]:
+    def _as_float(value: Any) -> float | None:
+        try:
+            num = float(value)
+            return num if math.isfinite(num) else None
+        except Exception:
+            return None
+
+    def _as_text(value: Any) -> str:
+        return str(value or "").strip()
+
+    market_cap = info.get("marketCap")
+    if market_cap in (None, "") and fast_info is not None:
+        try:
+            market_cap = fast_info.get("market_cap")
+        except Exception:
+            market_cap = market_cap
+
+    long_summary = _as_text(info.get("longBusinessSummary"))
+    if len(long_summary) > 1800:
+        long_summary = long_summary[:1797].rstrip() + "..."
+
+    profile = {
+        "longName": _as_text(info.get("longName") or info.get("shortName") or ticker),
+        "sector": _as_text(info.get("sector")),
+        "industry": _as_text(info.get("industry")),
+        "country": _as_text(info.get("country")),
+        "website": _as_text(info.get("website")),
+        "longBusinessSummary": long_summary,
+    }
+    valuation = {
+        "marketCap": market_cap,
+        "trailingPE": _as_float(info.get("trailingPE")),
+        "forwardPE": _as_float(info.get("forwardPE")),
+        "priceToBook": _as_float(info.get("priceToBook")),
+        "enterpriseValue": _as_float(info.get("enterpriseValue")),
+    }
+    trading = {
+        "beta": _as_float(info.get("beta")),
+        "fiftyTwoWeekHigh": _as_float(info.get("fiftyTwoWeekHigh")),
+        "fiftyTwoWeekLow": _as_float(info.get("fiftyTwoWeekLow")),
+        "avgVolume": _as_float(info.get("averageVolume") or info.get("averageVolume10days")),
+        "sharesOutstanding": _as_float(info.get("sharesOutstanding")),
+    }
+    return {"profileDetails": profile, "valuation": valuation, "trading": trading}
+
+
+@https_fn.on_call(memory=MemoryOption.MB_512, timeout_sec=120)
+def get_ticker_info_snapshot(req: https_fn.CallableRequest) -> dict[str, Any]:
+    import yfinance as yf  # type: ignore
+
+    data = req.data or {}
+    ticker = str(data.get("ticker") or "").upper().strip()
+    if not ticker:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Ticker is required.")
+
+    cache_key = f"ticker_info_snapshot_{ticker}"
+    cached = _cache_get_payload(cache_key, ttl_seconds=90)
+    if isinstance(cached, dict) and cached:
+        cached_copy = dict(cached)
+        cached_copy["cached"] = True
+        return cached_copy
+
+    ticker_obj = yf.Ticker(ticker)
+    info: dict[str, Any] = {}
+    try:
+        info = ticker_obj.info or {}
+        if not isinstance(info, dict):
+            info = {}
+    except Exception:
+        info = {}
+
+    fast_info = None
+    try:
+        fast_info = getattr(ticker_obj, "fast_info", None)
+    except Exception:
+        fast_info = None
+
+    sections = _ticker_snapshot_sections(ticker, info, fast_info=fast_info)
+    payload = {
+        "ticker": ticker,
+        **sections,
+        "cached": False,
+        "updatedAtEpoch": int(time.time()),
+    }
+    _cache_set_payload(cache_key, payload)
+    return _serialize_for_firestore(payload)
+
+
+@https_fn.on_call(memory=MemoryOption.MB_512, timeout_sec=120)
+def get_ticker_full_info(req: https_fn.CallableRequest) -> dict[str, Any]:
+    import yfinance as yf  # type: ignore
+
+    data = req.data or {}
+    ticker = str(data.get("ticker") or "").upper().strip()
+    if not ticker:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Ticker is required.")
+
+    cache_key = f"ticker_full_info_{ticker}"
+    cached = _cache_get_payload(cache_key, ttl_seconds=12 * 60 * 60)
+    if isinstance(cached, dict) and cached:
+        cached_copy = dict(cached)
+        cached_copy["cached"] = True
+        return cached_copy
+
+    ticker_obj = yf.Ticker(ticker)
+    info: dict[str, Any] = {}
+    try:
+        info = ticker_obj.info or {}
+        if not isinstance(info, dict):
+            info = {}
+    except Exception:
+        info = {}
+
+    fast_info = None
+    try:
+        fast_info = getattr(ticker_obj, "fast_info", None)
+    except Exception:
+        fast_info = None
+
+    sections = _ticker_snapshot_sections(ticker, info, fast_info=fast_info)
+    serialized_info = _serialize_for_firestore(info) if isinstance(info, dict) else {}
+    if not isinstance(serialized_info, dict):
+        serialized_info = {}
+    payload = {
+        "ticker": ticker,
+        **sections,
+        "rawInfo": serialized_info,
+        "keys": sorted([str(key) for key in serialized_info.keys()]),
+        "cached": False,
+        "updatedAtEpoch": int(time.time()),
+    }
+    _cache_set_payload(cache_key, payload)
+    return _serialize_for_firestore(payload)
+
+
 @https_fn.on_call(memory=MemoryOption.GB_1, timeout_sec=180)
 def get_ticker_intel(req: https_fn.CallableRequest) -> dict[str, Any]:
     import numpy as np  # type: ignore
@@ -7915,6 +8088,7 @@ def get_ticker_intel(req: https_fn.CallableRequest) -> dict[str, Any]:
         "returnOnEquity": info.get("returnOnEquity"),
         "returnOnAssets": info.get("returnOnAssets"),
     }
+    snapshot_sections = _ticker_snapshot_sections(ticker, info)
 
     income_stmt = None
     balance_sheet = None
@@ -8166,6 +8340,9 @@ def get_ticker_intel(req: https_fn.CallableRequest) -> dict[str, Any]:
     return {
         "ticker": ticker,
         "profile": _serialize_for_firestore(profile),
+        "profileDetails": _serialize_for_firestore(snapshot_sections.get("profileDetails") or {}),
+        "valuation": _serialize_for_firestore(snapshot_sections.get("valuation") or {}),
+        "trading": _serialize_for_firestore(snapshot_sections.get("trading") or {}),
         "events": _serialize_for_firestore(events),
         "analyst": _serialize_for_firestore(analyst),
         "recommendationTrend": _serialize_for_firestore(recommendation_trend),

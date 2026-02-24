@@ -1262,6 +1262,8 @@
 	      xHasMorePosts: false,
 	      xHasMoreStories: false,
 	      xVariants: [],
+	      fullInfoByTicker: {},
+	      fullInfoFilter: "",
 	      intelTicker: "",
 	      optionsTicker: "",
 	    },
@@ -5617,6 +5619,9 @@
     const data = payload || {};
     const ticker = normalizeTicker(data.ticker || state.tickerContext.ticker || "") || "";
     const profile = data.profile || {};
+    const profileDetails = data.profileDetails && typeof data.profileDetails === "object" ? data.profileDetails : {};
+    const valuation = data.valuation && typeof data.valuation === "object" ? data.valuation : {};
+    const trading = data.trading && typeof data.trading === "object" ? data.trading : {};
     const events = Array.isArray(data.events) ? data.events : [];
     const analyst = data.analyst || {};
     const trend = Array.isArray(data.recommendationTrend) ? data.recommendationTrend : [];
@@ -5634,6 +5639,39 @@
     const website = String(profile.website || "").trim();
     const websiteLink = website ? escapeHtml(website) : "";
     const summary = escapeHtml(profile.summary || "");
+    const profileLongName = escapeHtml(String(profileDetails.longName || profile.name || ticker || "Ticker"));
+    const profileSector = escapeHtml(String(profileDetails.sector || profile.sector || "").trim());
+    const profileIndustry = escapeHtml(String(profileDetails.industry || profile.industry || "").trim());
+    const profileCountry = escapeHtml(String(profileDetails.country || profile.country || "").trim());
+    const profileWebsite = String(profileDetails.website || profile.website || "").trim();
+    const profileWebsiteLink = profileWebsite ? escapeHtml(profileWebsite) : websiteLink;
+    const profileBusinessSummary = escapeHtml(String(profileDetails.longBusinessSummary || profile.summary || "").trim());
+
+    const valuationRows = [
+      { label: "Market cap", value: toFiniteOrNull(valuation.marketCap) === null ? "—" : formatCompactNumber(valuation.marketCap) },
+      { label: "Trailing P/E", value: toFiniteOrNull(valuation.trailingPE) === null ? "—" : Number(valuation.trailingPE).toFixed(2) },
+      { label: "Forward P/E", value: toFiniteOrNull(valuation.forwardPE) === null ? "—" : Number(valuation.forwardPE).toFixed(2) },
+      { label: "Price to book", value: toFiniteOrNull(valuation.priceToBook) === null ? "—" : Number(valuation.priceToBook).toFixed(2) },
+      {
+        label: "Enterprise value",
+        value: toFiniteOrNull(valuation.enterpriseValue) === null ? "—" : formatCompactNumber(valuation.enterpriseValue),
+      },
+    ];
+    const tradingRows = [
+      { label: "Beta", value: toFiniteOrNull(trading.beta) === null ? "—" : Number(trading.beta).toFixed(2) },
+      {
+        label: "52-week range",
+        value:
+          toFiniteOrNull(trading.fiftyTwoWeekLow) !== null && toFiniteOrNull(trading.fiftyTwoWeekHigh) !== null
+            ? `${formatUsd(trading.fiftyTwoWeekLow)} - ${formatUsd(trading.fiftyTwoWeekHigh)}`
+            : "—",
+      },
+      { label: "Average volume", value: toFiniteOrNull(trading.avgVolume) === null ? "—" : formatCompactNumber(trading.avgVolume) },
+      {
+        label: "Shares outstanding",
+        value: toFiniteOrNull(trading.sharesOutstanding) === null ? "—" : formatCompactNumber(trading.sharesOutstanding),
+      },
+    ];
 
     const stats = [
       { label: "Market cap", value: profile.marketCap ? formatCompactNumber(profile.marketCap) : "—" },
@@ -5695,6 +5733,46 @@
         <div class="intel-name">${name}</div>
         <div class="small muted">${[ticker, sector, industry, exchange, currency].filter(Boolean).join(" · ")}</div>
         ${websiteLink ? `<a class="news-link" href="${websiteLink}" target="_blank" rel="noreferrer">Company site</a>` : ""}
+      </div>
+
+      <div class="intel-split">
+        <div>
+          <div class="small"><strong>Company / Profile</strong></div>
+          <div class="intel-kv">
+            <div class="intel-kv-row"><span>Name</span><span>${profileLongName || "—"}</span></div>
+            <div class="intel-kv-row"><span>Sector</span><span>${profileSector || "—"}</span></div>
+            <div class="intel-kv-row"><span>Industry</span><span>${profileIndustry || "—"}</span></div>
+            <div class="intel-kv-row"><span>Country</span><span>${profileCountry || "—"}</span></div>
+          </div>
+          ${
+            profileWebsiteLink
+              ? `<a class="news-link" href="${profileWebsiteLink}" target="_blank" rel="noreferrer">Website</a>`
+              : ""
+          }
+          ${profileBusinessSummary ? `<div class="intel-summary small" style="margin-top:8px;">${profileBusinessSummary}</div>` : ""}
+        </div>
+        <div>
+          <div class="small"><strong>Valuation</strong></div>
+          <div class="intel-kv">
+            ${valuationRows
+              .map(
+                (row) => `
+                <div class="intel-kv-row"><span>${escapeHtml(String(row.label || ""))}</span><span>${escapeHtml(String(row.value || "—"))}</span></div>
+              `
+              )
+              .join("")}
+          </div>
+          <div class="small" style="margin-top:8px;"><strong>Trading</strong></div>
+          <div class="intel-kv">
+            ${tradingRows
+              .map(
+                (row) => `
+                <div class="intel-kv-row"><span>${escapeHtml(String(row.label || ""))}</span><span>${escapeHtml(String(row.value || "—"))}</span></div>
+              `
+              )
+              .join("")}
+          </div>
+        </div>
       </div>
 
       <div class="intel-stats">
@@ -5837,11 +5915,125 @@
         <div class="small"><strong>Peer Comparison</strong> · P/E, Debt-to-Equity, Sharpe Ratio</div>
         ${peersHtml}
       </div>
+      <div class="intel-raw-shell" style="margin-top:16px;">
+        <div class="card-head">
+          <div class="small"><strong>Raw Yahoo Fields</strong> · full `.info` payload</div>
+          <button
+            class="cta secondary small"
+            type="button"
+            data-action="intel-load-full-info"
+            data-ticker="${escapeHtml(ticker)}"
+          >
+            View all fields
+          </button>
+        </div>
+        <div class="intel-raw-controls hidden" data-intel-raw-controls>
+          <label class="label" for="intel-raw-filter">Search keys</label>
+          <input id="intel-raw-filter" data-action="intel-filter-full-info" data-ticker="${escapeHtml(ticker)}" placeholder="marketCap, enterpriseValue, beta..." />
+        </div>
+        <div id="intel-raw-info-output" class="panel-output small hidden">Expand to load all fields.</div>
+      </div>
     `;
 
     if (ui.tickerIntelligenceOutput) {
       ui.tickerIntelligenceOutput.innerHTML = institutionalHtml;
     }
+  };
+
+  const flattenInfoEntries = (value, path = "", acc = []) => {
+    if (acc.length > 2000) return acc;
+    if (value === null || value === undefined) {
+      if (path) acc.push({ key: path, value: "null" });
+      return acc;
+    }
+    if (Array.isArray(value)) {
+      if (path) acc.push({ key: path, value: JSON.stringify(value) });
+      return acc;
+    }
+    if (typeof value === "object") {
+      const entries = Object.entries(value);
+      if (!entries.length) {
+        if (path) acc.push({ key: path, value: "{}" });
+        return acc;
+      }
+      for (const [key, next] of entries) {
+        const nextPath = path ? `${path}.${key}` : String(key);
+        flattenInfoEntries(next, nextPath, acc);
+      }
+      return acc;
+    }
+    if (path) acc.push({ key: path, value: String(value) });
+    return acc;
+  };
+
+  const renderTickerFullInfoEntries = (ticker, filterText = "") => {
+    const symbol = normalizeTicker(ticker);
+    if (!symbol) return;
+    const output = document.getElementById("intel-raw-info-output");
+    if (!output) return;
+    const cacheItem = state.tickerContext.fullInfoByTicker?.[symbol];
+    if (!cacheItem || !Array.isArray(cacheItem.entries)) {
+      output.innerHTML = `<div class="small muted">No raw fields loaded yet.</div>`;
+      return;
+    }
+    const needle = String(filterText || "").trim().toLowerCase();
+    const rows = needle
+      ? cacheItem.entries.filter((item) => String(item.key || "").toLowerCase().includes(needle))
+      : cacheItem.entries;
+    if (!rows.length) {
+      output.innerHTML = `<div class="small muted">No fields match "${escapeHtml(needle)}".</div>`;
+      return;
+    }
+    output.innerHTML = `
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr><th>Key</th><th>Value</th></tr>
+          </thead>
+          <tbody>
+            ${rows
+              .slice(0, 500)
+              .map(
+                (item) => `
+                <tr>
+                  <td>${escapeHtml(String(item.key || ""))}</td>
+                  <td>${escapeHtml(String(item.value || ""))}</td>
+                </tr>
+              `
+              )
+              .join("")}
+          </tbody>
+        </table>
+      </div>
+      ${
+        rows.length > 500
+          ? `<div class="small muted" style="margin-top:8px;">Showing first 500 of ${rows.length.toLocaleString()} matching fields.</div>`
+          : ""
+      }
+    `;
+  };
+
+  const loadTickerFullInfo = async (functions, ticker, { force = false } = {}) => {
+    const symbol = normalizeTicker(ticker);
+    if (!functions || !symbol) return null;
+    if (!force && state.tickerContext.fullInfoByTicker?.[symbol]) {
+      return state.tickerContext.fullInfoByTicker[symbol];
+    }
+    const callable = functions.httpsCallable("get_ticker_full_info");
+    const result = await callable({ ticker: symbol, meta: buildMeta() });
+    const rawInfo = result.data?.rawInfo && typeof result.data.rawInfo === "object" ? result.data.rawInfo : {};
+    const entries = flattenInfoEntries(rawInfo);
+    const payload = {
+      rawInfo,
+      entries,
+      loadedAt: Date.now(),
+      cached: Boolean(result.data?.cached),
+    };
+    state.tickerContext.fullInfoByTicker = {
+      ...(state.tickerContext.fullInfoByTicker || {}),
+      [symbol]: payload,
+    };
+    return payload;
   };
 
   const loadTickerIntel = async (functions, ticker, { notify = false, force = false } = {}) => {
@@ -5857,16 +6049,48 @@
     if (!force && state.tickerContext.intelTicker === symbol) return;
     state.tickerContext.intelTicker = symbol;
 
+    let snapshotPayload = null;
     try {
       if (ui.intelOutput) setOutputLoading(ui.intelOutput, "Loading company context...");
       if (ui.tickerIntelligenceOutput) setOutputLoading(ui.tickerIntelligenceOutput, "Loading institutional intelligence...");
+      try {
+        const getSnapshot = functions.httpsCallable("get_ticker_info_snapshot");
+        const snapshotResult = await getSnapshot({ ticker: symbol, meta: buildMeta() });
+        snapshotPayload = snapshotResult.data && typeof snapshotResult.data === "object" ? snapshotResult.data : {};
+        if (ui.intelOutput) setOutputReady(ui.intelOutput);
+        if (ui.tickerIntelligenceOutput) setOutputReady(ui.tickerIntelligenceOutput);
+        renderTickerIntel({ ...(snapshotPayload || {}), ticker: symbol });
+      } catch (snapshotError) {
+        snapshotPayload = null;
+      }
+
       const getIntel = functions.httpsCallable("get_ticker_intel");
       const result = await getIntel({ ticker: symbol, meta: buildMeta() });
       if (ui.intelOutput) setOutputReady(ui.intelOutput);
       if (ui.tickerIntelligenceOutput) setOutputReady(ui.tickerIntelligenceOutput);
-      renderTickerIntel(result.data || {});
+      const fullPayload = result.data && typeof result.data === "object" ? result.data : {};
+      renderTickerIntel({
+        ...(snapshotPayload || {}),
+        ...fullPayload,
+        profileDetails: {
+          ...(snapshotPayload?.profileDetails || {}),
+          ...((fullPayload && fullPayload.profileDetails) || {}),
+        },
+        valuation: {
+          ...(snapshotPayload?.valuation || {}),
+          ...((fullPayload && fullPayload.valuation) || {}),
+        },
+        trading: {
+          ...(snapshotPayload?.trading || {}),
+          ...((fullPayload && fullPayload.trading) || {}),
+        },
+      });
       logEvent("ticker_intel_loaded", { ticker: symbol });
     } catch (error) {
+      if (snapshotPayload) {
+        if (notify) showToast("Detailed intelligence is temporarily unavailable. Showing snapshot data.", "warn");
+        return;
+      }
       if (ui.intelOutput) {
         setOutputReady(ui.intelOutput);
         ui.intelOutput.innerHTML = `<div class="small muted">Unable to load ticker intelligence right now.</div>`;
@@ -10504,6 +10728,58 @@
               loadMoreBtn.disabled = false;
             }
           }
+        });
+
+        document.addEventListener("click", async (event) => {
+          const fullInfoBtn = event.target.closest('[data-action="intel-load-full-info"]');
+          if (!fullInfoBtn) return;
+          event.preventDefault();
+          const symbol = normalizeTicker(fullInfoBtn.dataset.ticker || state.tickerContext.ticker || "");
+          if (!symbol || !functions) return;
+          const output = document.getElementById("intel-raw-info-output");
+          const controls = document.querySelector("[data-intel-raw-controls]");
+          const filterInput = document.querySelector('[data-action="intel-filter-full-info"]');
+          if (!output) return;
+
+          const isExpanded = fullInfoBtn.dataset.expanded === "1";
+          if (isExpanded) {
+            output.classList.add("hidden");
+            controls?.classList.add("hidden");
+            fullInfoBtn.dataset.expanded = "0";
+            fullInfoBtn.innerHTML = "View all fields";
+            return;
+          }
+
+          fullInfoBtn.disabled = true;
+          const originalLabel = fullInfoBtn.innerHTML;
+          if (output.classList.contains("hidden")) {
+            output.classList.remove("hidden");
+          }
+          output.innerHTML = `<div data-skeleton>${skeletonHtml(5)}<div class="small muted" style="margin-top:10px;">Loading full info fields...</div></div>`;
+          try {
+            await loadTickerFullInfo(functions, symbol);
+            controls?.classList.remove("hidden");
+            const filterValue = String(filterInput?.value || "").trim();
+            renderTickerFullInfoEntries(symbol, filterValue);
+            fullInfoBtn.dataset.expanded = "1";
+            fullInfoBtn.innerHTML = "Hide all fields";
+          } catch (error) {
+            output.innerHTML = `<div class="small muted">Unable to load full info fields right now.</div>`;
+            fullInfoBtn.dataset.expanded = "0";
+            fullInfoBtn.innerHTML = originalLabel || "View all fields";
+            showToast(error.message || "Unable to load full info fields.", "warn");
+          } finally {
+            fullInfoBtn.disabled = false;
+          }
+        });
+
+        document.addEventListener("input", (event) => {
+          const filterInput = event.target.closest?.('[data-action="intel-filter-full-info"]');
+          if (!filterInput) return;
+          const symbol = normalizeTicker(filterInput.dataset.ticker || state.tickerContext.ticker || "");
+          if (!symbol) return;
+          state.tickerContext.fullInfoFilter = String(filterInput.value || "");
+          renderTickerFullInfoEntries(symbol, state.tickerContext.fullInfoFilter);
         });
 
         document.addEventListener("click", (event) => {
