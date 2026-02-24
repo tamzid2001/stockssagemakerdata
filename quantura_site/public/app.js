@@ -1760,7 +1760,7 @@
       toggle.className = "mobile-nav-toggle";
       toggle.setAttribute("aria-label", "Toggle navigation menu");
       toggle.setAttribute("aria-expanded", "false");
-      toggle.innerHTML = `<span aria-hidden="true">☰</span>`;
+      toggle.innerHTML = icon("menu-scale");
       nav.appendChild(toggle);
     }
     if (!backdrop) {
@@ -1814,8 +1814,10 @@
   };
 
   const bindMobileBottomNav = () => {
-    const panelRoot = document.querySelector('[data-panel-router="terminal"]');
-    if (!panelRoot) return;
+    const panelRoot = document.querySelector("[data-panels][data-panel-router]");
+    const sidebarNav = document.querySelector(".app-sidebar .sidebar-nav");
+    if (!panelRoot || !sidebarNav) return;
+    const routerName = String(panelRoot.dataset.panelRouter || "").trim();
 
     let nav = document.getElementById("mobile-bottom-nav");
     if (!nav) {
@@ -1829,19 +1831,32 @@
     const inner = nav.querySelector(".mobile-bottom-nav-inner");
     if (!inner) return;
 
-    const sidebarLinks = Array.from(document.querySelectorAll(".sidebar-nav [data-panel-target]"));
+    const sidebarLinks = Array.from(sidebarNav.querySelectorAll("a.sidebar-link"));
     const byPanel = new Map();
     sidebarLinks.forEach((link) => {
       const panel = String(link.dataset.panelTarget || "").trim();
-      if (!panel || byPanel.has(panel)) return;
-      byPanel.set(panel, link);
+      const href = String(link.getAttribute("href") || "").trim();
+      const key = panel || href;
+      if (!key || byPanel.has(key)) return;
+      byPanel.set(key, link);
     });
 
-    const preferredPanels = ["forecast", "ticker-intelligence", "indicators", "trending", "news"];
+    const preferredByRouter = {
+      terminal: ["forecast", "ticker-intelligence", "indicators", "trending", "news"],
+      dashboard: ["orders", "watchlist", "productivity", "collaboration", "uploads"],
+    };
+    const preferredPanels = preferredByRouter[routerName] || [];
     const selected = preferredPanels
       .map((panel) => byPanel.get(panel))
       .filter(Boolean)
       .slice(0, 5);
+
+    if (selected.length < 5) {
+      for (const link of byPanel.values()) {
+        if (selected.length >= 5) break;
+        if (!selected.includes(link)) selected.push(link);
+      }
+    }
 
     if (!selected.length) return;
 
@@ -1851,8 +1866,10 @@
         const href = String(link.getAttribute("href") || "#");
         const iconMarkup = link.querySelector("i")?.outerHTML || "";
         const label = String(link.textContent || "").trim();
+        const panelAttr = panel ? ` data-panel-target="${escapeHtml(panel)}"` : "";
+        const activeClass = link.classList.contains("active") ? " active" : "";
         return `
-          <a class="mobile-bottom-link" href="${escapeHtml(href)}" data-panel-target="${escapeHtml(panel)}" aria-label="${escapeHtml(label)}">
+          <a class="mobile-bottom-link${activeClass}" href="${escapeHtml(href)}"${panelAttr} aria-label="${escapeHtml(label)}">
             ${iconMarkup}
             <span>${escapeHtml(label)}</span>
           </a>
@@ -5665,8 +5682,14 @@
       }
 
       const updateToggleUi = () => {
-        const collapsed = layout.classList.contains(collapsedClass) && shouldApplyCollapse();
-        toggle.innerHTML = `${icon("side-menu")}<span>${collapsed ? "Expand" : "Collapse"}</span>`;
+        const collapsible = shouldApplyCollapse();
+        const collapsed = layout.classList.contains(collapsedClass) && collapsible;
+        toggle.disabled = !collapsible;
+        toggle.classList.toggle("hidden", !collapsible);
+        toggle.setAttribute("aria-hidden", collapsible ? "false" : "true");
+        if (!collapsible) return;
+        const iconName = collapsed ? "nav-arrow-right" : "nav-arrow-left";
+        toggle.innerHTML = `${icon(iconName)}<span>${collapsed ? "Expand" : "Collapse"}</span>`;
         toggle.setAttribute("aria-pressed", collapsed ? "true" : "false");
         toggle.setAttribute("aria-label", collapsed ? "Expand sidebar" : "Collapse sidebar");
         toggle.setAttribute("title", collapsed ? "Expand sidebar" : "Collapse sidebar");
@@ -5675,6 +5698,7 @@
       if (!toggle.__quanturaSidebarBound) {
         toggle.__quanturaSidebarBound = true;
         toggle.addEventListener("click", () => {
+          if (!shouldApplyCollapse()) return;
           const next = !layout.classList.contains(collapsedClass);
           setCollapsed(next, { persist: true });
           updateToggleUi();
