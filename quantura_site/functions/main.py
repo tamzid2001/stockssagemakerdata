@@ -80,6 +80,25 @@ MASSIVE_BASE_URL = (
 ).rstrip("/")
 MASSIVE_TIMEOUT_SECONDS = max(4.0, float(os.environ.get("MASSIVE_TIMEOUT_SECONDS", "18") or 18.0))
 MASSIVE_MAX_RETRIES = max(0, min(int(os.environ.get("MASSIVE_MAX_RETRIES", "3") or 3), 6))
+MASSIVE_CACHE_TTL_ECONOMY_SECONDS = max(
+    3600,
+    min(int(os.environ.get("MASSIVE_CACHE_TTL_ECONOMY_SECONDS", "7200") or 7200), 21600),
+)
+MASSIVE_CACHE_TTL_IPOS_SECONDS = max(
+    6 * 60 * 60,
+    min(int(os.environ.get("MASSIVE_CACHE_TTL_IPOS_SECONDS", str(12 * 60 * 60)) or (12 * 60 * 60)), 24 * 60 * 60),
+)
+MASSIVE_CACHE_TTL_OPTIONS_CONTRACTS_SECONDS = max(
+    6 * 60 * 60,
+    min(
+        int(os.environ.get("MASSIVE_CACHE_TTL_OPTIONS_CONTRACTS_SECONDS", str(24 * 60 * 60)) or (24 * 60 * 60)),
+        48 * 60 * 60,
+    ),
+)
+MASSIVE_CACHE_TTL_OPTIONS_QUOTES_SECONDS = max(
+    30,
+    min(int(os.environ.get("MASSIVE_CACHE_TTL_OPTIONS_QUOTES_SECONDS", "90") or 90), 120),
+)
 MASSIVE_CLIENT = MassiveClient(
     api_key=MASSIVE_API_KEY,
     base_url=MASSIVE_BASE_URL,
@@ -987,6 +1006,118 @@ def _load_massive_capabilities(*, force_refresh: bool = False) -> dict[str, Any]
     }
     _cache_set_payload(MASSIVE_CAPABILITIES_CACHE_KEY, payload)
     return payload
+
+
+def _normalize_yyyy_mm_dd(raw: Any) -> str:
+    value = str(raw or "").strip()
+    if not value:
+        return ""
+    if re.match(r"^\d{4}-\d{2}-\d{2}$", value):
+        return value
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return parsed.date().isoformat()
+    except Exception:
+        return ""
+
+
+def _parse_query_date(value: Any, *, field: str) -> str:
+    text = _normalize_yyyy_mm_dd(value)
+    if text:
+        return text
+    if value in (None, ""):
+        return ""
+    raise ValueError(f"Invalid {field}. Expected YYYY-MM-DD.")
+
+
+def _massive_capability_guard(capability_key: str) -> tuple[dict[str, Any] | None, https_fn.Response | None]:
+    audit = _load_massive_capabilities(force_refresh=False)
+    capabilities = audit.get("capabilities") if isinstance(audit.get("capabilities"), dict) else {}
+    capability = capabilities.get(capability_key) if isinstance(capabilities, dict) else None
+    if not isinstance(capability, dict):
+        return None, _json_http_response(
+            {
+                "error": "Capability metadata is unavailable.",
+                "capability": capability_key,
+            },
+            status=503,
+        )
+
+    if str(capability.get("status") or "").upper() != "AVAILABLE":
+        return capability, _json_http_response(
+            {
+                "error": "Not available in your Massive plan.",
+                "capability": capability_key,
+                "status": capability.get("status"),
+                "httpStatus": capability.get("httpStatus"),
+                "message": capability.get("message") or "",
+            },
+            status=403,
+        )
+    return capability, None
+
+
+def _normalize_massive_timeseries(rows: Any) -> list[dict[str, Any]]:
+    output: list[dict[str, Any]] = []
+    for row in rows if isinstance(rows, list) else []:
+        if not isinstance(row, dict):
+            continue
+        date_value = (
+            _normalize_yyyy_mm_dd(row.get("date"))
+            or _normalize_yyyy_mm_dd(row.get("timestamp"))
+            or _normalize_yyyy_mm_dd(row.get("published_utc"))
+        )
+        if not date_value:
+            continue
+        value = _safe_float(row.get("value"))
+        if value is None:
+            value = _safe_float(row.get("close"))
+        if value is None:
+            value = _safe_float(row.get("rate"))
+        if value is None:
+            continue
+        output.append(
+            {
+                "date": date_value,
+                "value": round(float(value), 6),
+                "series": str(row.get("series") or row.get("name") or "").strip(),
+                "label": str(row.get("label") or row.get("title") or "").strip(),
+            }
+        )
+    output.sort(key=lambda item: str(item.get("date") or ""), reverse=True)
+    return output
+
+
+def _normalize_massive_ipos(rows: Any) -> list[dict[str, Any]]:
+    output: list[dict[str, Any]] = []
+    for row in rows if isinstance(rows, list) else []:
+        if not isinstance(row, dict):
+            continue
+        date_value = (
+            _normalize_yyyy_mm_dd(row.get("date"))
+            or _normalize_yyyy_mm_dd(row.get("ipo_date"))
+            or _normalize_yyyy_mm_dd(row.get("listing_date"))
+        )
+        symbol = _normalize_symbol_token(row.get("symbol") or row.get("ticker"))
+        if not date_value and not symbol:
+            continue
+        output.append(
+            {
+                "date": date_value,
+                "symbol": symbol,
+                "exchange": str(row.get("exchange") or row.get("primary_exchange") or "").strip(),
+                "status": str(row.get("status") or "scheduled").strip().lower(),
+                "name": str(row.get("name") or row.get("company_name") or symbol).strip(),
+            }
+        )
+    output.sort(
+        key=lambda item: (
+            str(item.get("date") or ""),
+            str(item.get("symbol") or ""),
+        ),
+        reverse=True,
+    )
+    return output
 
 
 def _social_channel_webhooks() -> dict[str, str]:
@@ -5497,6 +5628,185 @@ def api_massive_capabilities(req: https_fn.Request) -> https_fn.Response:
     force_refresh = str(req.args.get("force") or "").strip().lower() in {"1", "true", "yes"}
     payload = _load_massive_capabilities(force_refresh=force_refresh)
     return _json_http_response(payload)
+
+
+def _parse_http_limit(args: Any, *, default: int, minimum: int, maximum: int) -> int:
+    raw = ""
+    try:
+        raw = str(args.get("limit") or "").strip()
+    except Exception:
+        raw = ""
+    if not raw:
+        return max(minimum, min(default, maximum))
+    try:
+        parsed = int(float(raw))
+        return max(minimum, min(parsed, maximum))
+    except Exception:
+        return max(minimum, min(default, maximum))
+
+
+def _massive_request_method_guard(req: https_fn.Request) -> https_fn.Response | None:
+    if req.method == "OPTIONS":
+        return https_fn.Response("", status=204, headers=_http_cors_headers())
+    if req.method != "GET":
+        return _json_http_response({"error": "Method not allowed."}, status=405)
+    return None
+
+
+def _massive_economy_route(
+    req: https_fn.Request,
+    *,
+    capability_key: str,
+    endpoint_path: str,
+) -> https_fn.Response:
+    method_error = _massive_request_method_guard(req)
+    if method_error is not None:
+        return method_error
+
+    _, guard_error = _massive_capability_guard(capability_key)
+    if guard_error is not None:
+        return guard_error
+
+    try:
+        start = _parse_query_date(req.args.get("start"), field="start")
+        end = _parse_query_date(req.args.get("end"), field="end")
+    except ValueError as exc:
+        return _json_http_response({"error": str(exc)}, status=400)
+    series = str(req.args.get("series") or "").strip()
+    limit = _parse_http_limit(req.args, default=240, minimum=1, maximum=1000)
+
+    params: dict[str, Any] = {"limit": limit}
+    if start:
+        params["start"] = start
+    if end:
+        params["end"] = end
+    if series:
+        params["series"] = series
+
+    try:
+        payload = MASSIVE_CLIENT.request_json(
+            path=endpoint_path,
+            params=params,
+            cache_ttl_seconds=MASSIVE_CACHE_TTL_ECONOMY_SECONDS,
+        )
+    except MassiveApiError as exc:
+        return _json_http_response(
+            {
+                "error": "Unable to load Massive economy data.",
+                "status": exc.status_code,
+            },
+            status=502,
+        )
+
+    rows_raw = payload.get("results")
+    if not isinstance(rows_raw, list):
+        rows_raw = payload.get("data") if isinstance(payload.get("data"), list) else []
+    rows = _normalize_massive_timeseries(rows_raw)
+    return _json_http_response(
+        {
+            "source": "massive",
+            "capability": capability_key,
+            "series": series,
+            "start": start,
+            "end": end,
+            "count": len(rows),
+            "rows": rows,
+        }
+    )
+
+
+@https_fn.on_request()
+def api_massive_economy_treasury_yields(req: https_fn.Request) -> https_fn.Response:
+    return _massive_economy_route(
+        req,
+        capability_key="economy_treasury_yields",
+        endpoint_path="/economy/treasury-yields",
+    )
+
+
+@https_fn.on_request()
+def api_massive_economy_inflation(req: https_fn.Request) -> https_fn.Response:
+    return _massive_economy_route(
+        req,
+        capability_key="economy_inflation",
+        endpoint_path="/economy/inflation",
+    )
+
+
+@https_fn.on_request()
+def api_massive_economy_inflation_expectations(req: https_fn.Request) -> https_fn.Response:
+    return _massive_economy_route(
+        req,
+        capability_key="economy_inflation_expectations",
+        endpoint_path="/economy/inflation-expectations",
+    )
+
+
+@https_fn.on_request()
+def api_massive_economy_labor_market(req: https_fn.Request) -> https_fn.Response:
+    return _massive_economy_route(
+        req,
+        capability_key="economy_labor_market",
+        endpoint_path="/economy/labor-market",
+    )
+
+
+@https_fn.on_request()
+def api_massive_stocks_ipos(req: https_fn.Request) -> https_fn.Response:
+    method_error = _massive_request_method_guard(req)
+    if method_error is not None:
+        return method_error
+
+    _, guard_error = _massive_capability_guard("stocks_ipos")
+    if guard_error is not None:
+        return guard_error
+
+    try:
+        start = _parse_query_date(req.args.get("start"), field="start")
+        end = _parse_query_date(req.args.get("end"), field="end")
+    except ValueError as exc:
+        return _json_http_response({"error": str(exc)}, status=400)
+    status_filter = str(req.args.get("status") or "").strip().lower()
+    limit = _parse_http_limit(req.args, default=200, minimum=1, maximum=1000)
+
+    params: dict[str, Any] = {"limit": limit}
+    if start:
+        params["start"] = start
+    if end:
+        params["end"] = end
+    if status_filter:
+        params["status"] = status_filter
+
+    try:
+        payload = MASSIVE_CLIENT.request_json(
+            path="/stocks/corporate-actions/ipos",
+            params=params,
+            cache_ttl_seconds=MASSIVE_CACHE_TTL_IPOS_SECONDS,
+        )
+    except MassiveApiError as exc:
+        return _json_http_response(
+            {
+                "error": "Unable to load Massive IPO data.",
+                "status": exc.status_code,
+            },
+            status=502,
+        )
+
+    rows_raw = payload.get("results")
+    if not isinstance(rows_raw, list):
+        rows_raw = payload.get("data") if isinstance(payload.get("data"), list) else []
+    items = _normalize_massive_ipos(rows_raw)
+    return _json_http_response(
+        {
+            "source": "massive",
+            "capability": "stocks_ipos",
+            "start": start,
+            "end": end,
+            "status": status_filter,
+            "count": len(items),
+            "items": items,
+        }
+    )
 
 
 @https_fn.on_request()
