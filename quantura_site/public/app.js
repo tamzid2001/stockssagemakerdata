@@ -14955,13 +14955,24 @@
               mappingSummary: mappingResult,
               meta: buildMeta(),
             });
-            const agent = agentRes?.data || {};
-            const agentText = String(agent.analysis || "").trim();
-            const modelUsed = normalizeAiModelId(agent.model || "gpt-5-mini") || "gpt-5-mini";
-            if (agentText && ui.predictionsAgentOutput) {
-              ui.predictionsAgentOutput.innerHTML += `
-                <div class="agent-summary" style="margin-top:14px;">
-                  <div class="small"><strong>OpenAI Agent (${escapeHtml(modelUsed)}):</strong></div>
+	            const agent = agentRes?.data || {};
+	            const agentText = String(agent.analysis || "").trim();
+	            const modelUsed = normalizeAiModelId(agent.model || "gpt-5-mini") || "gpt-5-mini";
+              if (db && state.user && agentText) {
+                await db.collection("agent_runs").add({
+                  userId: state.user.uid,
+                  uploadId: mappingResult.uploadId,
+                  ticker: normalizeTicker(mappingResult.ticker || ""),
+                  model: modelUsed,
+                  summary: agentText,
+                  createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                  meta: buildMeta(),
+                });
+              }
+	            if (agentText && ui.predictionsAgentOutput) {
+	              ui.predictionsAgentOutput.innerHTML += `
+	                <div class="agent-summary" style="margin-top:14px;">
+	                  <div class="small"><strong>OpenAI Agent (${escapeHtml(modelUsed)}):</strong></div>
                   <div class="small" style="margin-top:6px; white-space:pre-wrap;">${escapeHtml(agentText)}</div>
                 </div>
               `;

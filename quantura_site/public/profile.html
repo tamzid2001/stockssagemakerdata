@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Profile | Quantura Studio</title>
+    <meta name="description" content="Manage your Quantura profile posts and notification preferences." />
+    <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/explore.css" />
+    <script defer src="/__/firebase/12.9.0/firebase-app-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-auth-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-firestore-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-messaging-compat.js"></script>
+    <script defer src="/__/firebase/init.js?useEmulator=false"></script>
+    <script type="module" src="/profile.js"></script>
+  </head>
+  <body>
+    <div class="explore-bg"></div>
+    <header class="topbar">
+      <a class="brand" href="/explore">
+        <img src="/assets/quantura-icon.svg" alt="Quantura" />
+        <span>Quantura Profile</span>
+      </a>
+      <div class="topbar-actions">
+        <a class="link-btn" href="/explore">Explore</a>
+        <button id="profile-auth-toggle" class="link-btn" type="button">Sign in</button>
+      </div>
+    </header>
+
+    <main class="explore-shell profile-shell">
+      <section class="profile-header card-surface">
+        <div class="avatar-wrap"><img id="profile-avatar" src="/assets/quantura-icon.svg" alt="Avatar" /></div>
+        <div>
+          <h1 id="profile-title">Profile</h1>
+          <p id="profile-subtitle" class="muted">Manage your posts and notification preferences.</p>
+        </div>
+      </section>
+
+      <section class="card-surface">
+        <h2>My Posts</h2>
+        <div id="profile-posts" class="profile-posts"></div>
+        <button id="profile-load-more" class="link-btn hidden" type="button">Load more</button>
+      </section>
+
+      <section id="notification-settings" class="card-surface">
+        <h2>Notifications</h2>
+        <p class="muted">Choose what Explore updates you receive.</p>
+
+        <div class="settings-grid">
+          <label class="setting-item"><input id="notif-global" type="checkbox" /> <span>Global Explore notifications</span></label>
+          <label class="setting-item"><input id="notif-following" type="checkbox" /> <span>Authors I follow</span></label>
+          <label class="setting-item"><input id="notif-tickers" type="checkbox" /> <span>Ticker watchlist updates</span></label>
+        </div>
+
+        <div class="inline-controls">
+          <button id="notif-enable-webpush" type="button">Enable push on this device</button>
+          <button id="notif-save" type="button">Save settings</button>
+        </div>
+
+        <div class="inline-controls">
+          <input id="watch-ticker-input" type="text" maxlength="12" placeholder="Add ticker to watchlist" />
+          <button id="watch-ticker-add" type="button">Add ticker</button>
+        </div>
+        <div id="watch-ticker-list" class="token-list"></div>
+
+        <div class="inline-controls">
+          <input id="follow-author-input" type="text" maxlength="40" placeholder="Follow author UID" />
+          <button id="follow-author-add" type="button">Follow author</button>
+        </div>
+        <div id="follow-author-list" class="token-list"></div>
+
+        <p id="notif-status" class="muted"></p>
+      </section>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Explore | Quantura Studio</title>
+    <meta name="description" content="Discover forecasts, backtests, AI agent runs, and screener results on Quantura Explore." />
+    <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/explore.css" />
+    <script defer src="/__/firebase/12.9.0/firebase-app-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-auth-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-firestore-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-messaging-compat.js"></script>
+    <script defer src="/__/firebase/init.js?useEmulator=false"></script>
+    <script type="module" src="/explore.js"></script>
+  </head>
+  <body>
+    <div class="explore-bg"></div>
+    <header class="topbar">
+      <a class="brand" href="/">
+        <img src="/assets/quantura-icon.svg" alt="Quantura" />
+        <span>Quantura Explore</span>
+      </a>
+      <div class="topbar-actions">
+        <a class="link-btn" href="/profile">Profile</a>
+        <button id="auth-toggle" class="link-btn" type="button">Sign in</button>
+      </div>
+    </header>
+
+    <main class="explore-shell">
+      <section class="explore-toolbar">
+        <form id="explore-search-form" class="search-wrap" autocomplete="off">
+          <input id="explore-search" type="search" placeholder="Search tickers, #tags, @handle" aria-label="Search posts" />
+          <button type="submit">Search</button>
+        </form>
+        <div class="tab-row" role="tablist" aria-label="Explore filters">
+          <button class="tab is-active" data-mode="trending" role="tab" aria-selected="true">Trending</button>
+          <button class="tab" data-mode="latest" role="tab" aria-selected="false">Latest</button>
+          <button class="tab" data-mode="following" role="tab" aria-selected="false">Following</button>
+          <button class="tab" data-mode="tickers" role="tab" aria-selected="false">Tickers</button>
+        </div>
+        <div id="ticker-filter-wrap" class="ticker-filter hidden">
+          <label for="ticker-filter-input">Ticker</label>
+          <input id="ticker-filter-input" type="text" list="ticker-suggestions" placeholder="AAPL" maxlength="12" />
+          <datalist id="ticker-suggestions"></datalist>
+          <button id="ticker-filter-apply" type="button">Apply</button>
+        </div>
+      </section>
+
+      <section id="explore-grid" class="explore-grid" aria-live="polite"></section>
+      <div id="explore-empty" class="empty-state hidden">No posts found for this filter.</div>
+      <div id="explore-loading" class="feed-loading hidden">Loading more insights…</div>
+      <div id="explore-sentinel" class="sentinel" aria-hidden="true"></div>
+    </main>
+
+    <div id="post-modal" class="modal hidden" aria-hidden="true">
+      <div class="modal-backdrop" data-close-modal="true"></div>
+      <article class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="post-modal-title">
+        <button id="modal-close" class="modal-close" type="button" aria-label="Close">×</button>
+        <div id="post-modal-body"></div>
+      </article>
+    </div>
+
+    <template id="post-card-template">
+      <article class="post-card" tabindex="0">
+        <div class="post-preview"></div>
+        <div class="post-body">
+          <h3 class="post-title"></h3>
+          <p class="post-caption"></p>
+          <div class="chip-row"></div>
+          <div class="post-meta"></div>
+          <div class="engagement-row"></div>
+        </div>
+      </article>
+    </template>
+
+    <template id="skeleton-template">
+      <article class="post-card skeleton-card" aria-hidden="true">
+        <div class="skeleton skeleton-preview"></div>
+        <div class="post-body">
+          <div class="skeleton skeleton-line w80"></div>
+          <div class="skeleton skeleton-line w60"></div>
+          <div class="skeleton skeleton-line w40"></div>
+        </div>
+      </article>
+    </template>
+  </body>
+</html>
