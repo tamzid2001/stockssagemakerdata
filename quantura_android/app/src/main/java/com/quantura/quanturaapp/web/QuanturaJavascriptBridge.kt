@@ -17,26 +17,33 @@ import org.json.JSONObject
 class QuanturaJavascriptBridge(
     private val activity: ComponentActivity,
     private val adManager: AdManager,
-    private val onNativeAuthRequest: (provider: String, requestId: String) -> Unit,
-    private val onNativeSignOutRequest: (requestId: String) -> Unit,
+    private val onNativeAuthMessage: (type: String, payload: JSONObject) -> Unit,
 ) {
     private val tag = "QuanturaJsBridge"
 
     @JavascriptInterface
     fun postMessage(rawPayload: String?) {
         val payload = parsePayload(rawPayload)
+        val messageType = payload.optString("type").trim().uppercase()
         val action = payload.optString("action").trim()
-        if (action.isEmpty()) return
+        if (action.isEmpty() && messageType.isEmpty()) return
 
         activity.runOnUiThread {
+            if (messageType.isNotEmpty()) {
+                onNativeAuthMessage(messageType, payload)
+                return@runOnUiThread
+            }
             when (action) {
                 "showInterstitialAd" -> adManager.showInterstitial(activity)
                 "showRewardedAd" -> adManager.showRewarded(activity)
                 "openNewsLink" -> openNewsLink(payload.optString("url"))
                 "handleButtonClick" -> handleButtonClick(payload.optString("buttonId"))
                 "share" -> openNativeShare(payload.optString("url"), payload.optString("title"), payload.optString("text"))
-                "authSignIn" -> requestNativeSignIn(payload.optString("provider"), payload.optString("requestId"))
-                "authSignOut" -> onNativeSignOutRequest(payload.optString("requestId"))
+                "authSignIn" -> onNativeAuthMessage(
+                    "REQUEST_SIGN_IN",
+                    JSONObject().put("provider", payload.optString("provider"))
+                )
+                "authSignOut" -> onNativeAuthMessage("SIGN_OUT", JSONObject())
             }
         }
     }
@@ -87,12 +94,5 @@ class QuanturaJavascriptBridge(
         if (chooser.resolveActivity(activity.packageManager) != null) {
             activity.startActivity(chooser)
         }
-    }
-
-    private fun requestNativeSignIn(provider: String, requestId: String) {
-        val providerClean = provider.trim().lowercase()
-        val requestIdClean = requestId.trim()
-        if (providerClean.isEmpty() || requestIdClean.isEmpty()) return
-        onNativeAuthRequest(providerClean, requestIdClean)
     }
 }
