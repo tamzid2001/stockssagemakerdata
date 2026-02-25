@@ -15,6 +15,9 @@ import AuthenticationServices
 import CryptoKit
 #endif
 import SwiftUI
+#if canImport(Combine)
+import Combine
+#endif
 
 @MainActor
 final class AuthGateViewModel: ObservableObject {
@@ -182,8 +185,8 @@ final class AuthGateViewModel: ObservableObject {
                             Auth.auth().signIn(with: credential, completion: completion)
                         }
                     )
-                case .failure(let message):
-                    self.finishError(message)
+                case .failure(let error):
+                    self.finishError(error.localizedDescription)
                 }
             }
         }
@@ -403,6 +406,17 @@ private extension AuthGateViewModel {
 #endif
 
 #if canImport(FirebaseAuth) && canImport(AuthenticationServices) && canImport(CryptoKit)
+enum AppleSignInFlowError: LocalizedError {
+    case message(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .message(let message):
+            return message
+        }
+    }
+}
+
 final class AppleSignInDelegate: NSObject, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
     static var retainedDelegates: [AppleSignInDelegate] = []
     static func retain(_ delegate: AppleSignInDelegate) {
@@ -412,9 +426,9 @@ final class AppleSignInDelegate: NSObject, ASAuthorizationControllerDelegate, AS
     var presentationAnchor: ASPresentationAnchor = ASPresentationAnchor()
 
     private let rawNonce: String
-    private let completion: (Result<AuthCredential, String>) -> Void
+    private let completion: (Result<AuthCredential, Error>) -> Void
 
-    init(rawNonce: String, completion: @escaping (Result<AuthCredential, String>) -> Void) {
+    init(rawNonce: String, completion: @escaping (Result<AuthCredential, Error>) -> Void) {
         self.rawNonce = rawNonce
         self.completion = completion
     }
@@ -426,11 +440,11 @@ final class AppleSignInDelegate: NSObject, ASAuthorizationControllerDelegate, AS
     func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
         defer { Self.retainedDelegates.removeAll { $0 === self } }
         guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential else {
-            completion(.failure("Apple credential was not returned."))
+            completion(.failure(AppleSignInFlowError.message("Apple credential was not returned.")))
             return
         }
         guard let tokenData = credential.identityToken, let idToken = String(data: tokenData, encoding: .utf8) else {
-            completion(.failure("Apple identity token is missing."))
+            completion(.failure(AppleSignInFlowError.message("Apple identity token is missing.")))
             return
         }
         let authCredential = OAuthProvider.appleCredential(
@@ -443,7 +457,7 @@ final class AppleSignInDelegate: NSObject, ASAuthorizationControllerDelegate, AS
 
     func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
         defer { Self.retainedDelegates.removeAll { $0 === self } }
-        completion(.failure(error.localizedDescription))
+        completion(.failure(error))
     }
 }
 #endif
