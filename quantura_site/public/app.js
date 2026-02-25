@@ -293,6 +293,12 @@
       volatility_alerts: true,
     },
   };
+  const DEFAULT_NATIVE_IAP_PRODUCT_IDS = Object.freeze({
+    pro: "quantura_pro_monthly",
+    desk: "quantura_pro_monthly",
+    forecast: "quantura_pro_monthly",
+    default: "quantura_pro_monthly",
+  });
   const MODEL_PROVIDER_LABEL = {
     openai: "OpenAI",
     amazon_nova: "Amazon Nova",
@@ -1524,6 +1530,11 @@
         aiUsageTiers: AI_USAGE_TIER_DEFAULTS,
         stripeCheckoutEnabled: true,
         stripePublicKey: "",
+        nativeIosStoreKitCheckoutOnly: true,
+        nativeAndroidPlayBillingEnabled: true,
+        nativeIapProductIds: DEFAULT_NATIVE_IAP_PRODUCT_IDS,
+        adsUseRealIOS: true,
+        adsUseRealAndroid: true,
         holidayPromo: false,
         backtestingEnabled: true,
         backtestingFreeDailyLimit: 1,
@@ -1915,9 +1926,8 @@
         const panelAttr = panel ? ` data-panel-target="${escapeHtml(panel)}"` : "";
         const activeClass = link.classList.contains("active") ? " active" : "";
         return `
-          <a class="mobile-bottom-link${activeClass}" href="${escapeHtml(href)}"${panelAttr} aria-label="${escapeHtml(label)}">
+          <a class="mobile-bottom-link${activeClass}" href="${escapeHtml(href)}"${panelAttr} aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">
             ${iconMarkup}
-            <span>${escapeHtml(label)}</span>
           </a>
         `;
       })
@@ -2151,6 +2161,11 @@
 	            webpush_vapid_key: "",
 	            stripe_checkout_enabled: true,
 	            stripe_public_key: "",
+              native_ios_storekit_checkout_only: true,
+              native_android_play_billing_enabled: true,
+              native_iap_product_ids: JSON.stringify(DEFAULT_NATIVE_IAP_PRODUCT_IDS),
+              ads_use_real_ios: true,
+              ads_use_real_android: true,
               holiday_promo: false,
               backtesting_enabled: true,
               backtesting_free_daily_limit: "1",
@@ -2244,6 +2259,11 @@
             webpush_vapid_key: "",
             stripe_checkout_enabled: true,
             stripe_public_key: "",
+            native_ios_storekit_checkout_only: true,
+            native_android_play_billing_enabled: true,
+            native_iap_product_ids: JSON.stringify(DEFAULT_NATIVE_IAP_PRODUCT_IDS),
+            ads_use_real_ios: true,
+            ads_use_real_android: true,
             holiday_promo: false,
             backtesting_enabled: true,
             backtesting_free_daily_limit: "1",
@@ -2343,6 +2363,11 @@
           aiUsageTiers: getJson("ai_usage_tiers", AI_USAGE_TIER_DEFAULTS),
 	        stripeCheckoutEnabled: getBool("stripe_checkout_enabled", true),
 	        stripePublicKey: getString("stripe_public_key", ""),
+          nativeIosStoreKitCheckoutOnly: getBool("native_ios_storekit_checkout_only", true),
+          nativeAndroidPlayBillingEnabled: getBool("native_android_play_billing_enabled", true),
+          nativeIapProductIds: getJson("native_iap_product_ids", DEFAULT_NATIVE_IAP_PRODUCT_IDS),
+          adsUseRealIOS: getBool("ads_use_real_ios", true),
+          adsUseRealAndroid: getBool("ads_use_real_android", true),
           holidayPromo: getBool("holiday_promo", false),
           backtestingEnabled: getBool("backtesting_enabled", true),
           backtestingFreeDailyLimit: getInt("backtesting_free_daily_limit", 1),
@@ -2973,10 +2998,13 @@
       setLocalizedAttribute(ui.dashboardAuthLink, "aria-label", linkLabel);
     }
     if (ui.billingPortalLink) {
+      const nativeBilling = isNativeIosStoreKitCheckoutOnly() || isNativeAndroidPlayBillingCheckout();
       setLocalizedText(
         ui.billingPortalLink,
         accountAuthed
-          ? (pack.open_billing_portal || fallback.open_billing_portal || "Open Stripe billing portal")
+          ? nativeBilling
+            ? "Manage subscriptions"
+            : (pack.open_billing_portal || fallback.open_billing_portal || "Open Stripe billing portal")
           : (pack.signin_manage_billing || fallback.signin_manage_billing || "Sign in to manage billing")
       );
     }
@@ -3740,7 +3768,12 @@
       ui.userStatus.classList.toggle("pill", true);
     }
     if (ui.billingPortalLink) {
-      ui.billingPortalLink.textContent = accountAuthed ? "Open Stripe billing portal" : "Sign in to manage billing";
+      const nativeBilling = isNativeIosStoreKitCheckoutOnly() || isNativeAndroidPlayBillingCheckout();
+      ui.billingPortalLink.textContent = accountAuthed
+        ? nativeBilling
+          ? "Manage subscriptions"
+          : "Open Stripe billing portal"
+        : "Sign in to manage billing";
       ui.billingPortalLink.setAttribute("href", accountAuthed ? "#" : "/account");
       ui.billingPortalLink.setAttribute("target", "_self");
       ui.billingPortalLink.removeAttribute("rel");
@@ -4136,6 +4169,7 @@
   const loadResearchMacroWidgets = async () => {
     if (!ui.massiveEconomyStatus) return;
     ui.massiveEconomyStatus.textContent = "Loading Massive macro series...";
+    logEvent("research_macro_load_started", { source: "massive" });
     try {
       await loadMassiveCapabilities({ force: false });
       const requests = [
@@ -4171,35 +4205,50 @@
             if (item.node) {
               item.node.innerHTML = `<div class="small muted">Not available on current Massive plan.</div>`;
             }
+            logEvent("research_macro_capability_blocked", { series_key: item.key });
             return;
           }
           try {
             const payload = await fetchMassiveApi(item.path, { limit: 120 });
             renderResearchMacroSeries(item.node, payload, item.label);
+            logEvent("research_macro_series_loaded", {
+              series_key: item.key,
+              rows: Number(payload?.count || payload?.rows?.length || 0),
+            });
           } catch (error) {
             if (item.node) {
               item.node.innerHTML = `<div class="small muted">${escapeHtml(extractErrorMessage(error, "Unable to load series."))}</div>`;
             }
+            logEvent("research_macro_series_error", {
+              series_key: item.key,
+              message: String(error?.message || "load_failed").slice(0, 120),
+            });
           }
         })
       );
       ui.massiveEconomyStatus.textContent = "Macro context loaded via Massive capability-gated endpoints.";
+      logEvent("research_macro_loaded", { source: "massive" });
     } catch (error) {
       ui.massiveEconomyStatus.textContent = extractErrorMessage(error, "Macro context is unavailable.");
       [ui.massiveEconomyYields, ui.massiveEconomyInflation, ui.massiveEconomyInflationExpectations, ui.massiveEconomyLabor].forEach((node) => {
         if (!node) return;
         node.innerHTML = `<div class="small muted">Capability audit unavailable.</div>`;
       });
+      logEvent("research_macro_error", {
+        message: String(error?.message || "load_failed").slice(0, 120),
+      });
     }
   };
 
   const loadResearchIpoCalendar = async ({ force = false } = {}) => {
     if (!ui.massiveIpoOutput || !ui.massiveIpoStatusText) return;
+    logEvent("research_ipo_load_started", { force: Boolean(force) });
     try {
       await loadMassiveCapabilities({ force: false });
       if (!isMassiveCapabilityAvailable("stocks_ipos")) {
         ui.massiveIpoStatusText.textContent = "IPO endpoint is not available in the current Massive plan.";
         ui.massiveIpoOutput.innerHTML = `<div class="small muted">IPO data is currently gated off by plan capability.</div>`;
+        logEvent("research_ipo_capability_blocked", {});
         return;
       }
 
@@ -4219,9 +4268,18 @@
       ui.massiveIpoStatusText.textContent = count
         ? `Loaded ${count} IPO row${count === 1 ? "" : "s"}.`
         : "No IPO rows for selected filters.";
+      logEvent("research_ipo_loaded", {
+        count,
+        status: status || "all",
+        start_date: start,
+        end_date: end,
+      });
     } catch (error) {
       ui.massiveIpoStatusText.textContent = extractErrorMessage(error, "Unable to load IPO calendar.");
       ui.massiveIpoOutput.innerHTML = `<div class="small muted">${escapeHtml(extractErrorMessage(error, "Unable to load IPO calendar."))}</div>`;
+      logEvent("research_ipo_error", {
+        message: String(error?.message || "load_failed").slice(0, 120),
+      });
     }
   };
 
@@ -6939,7 +6997,11 @@
           <div class="prediction-meta-row">
             <span>Yes / No</span><span>${formatPredictionPercent(probs.yes)} / ${formatPredictionPercent(probs.no)}</span>
           </div>
-          ${predictionMarketUrl(market) ? `<a class="news-link" href="${escapeHtml(predictionMarketUrl(market))}" target="_blank" rel="noreferrer">View on Polymarket</a>` : ""}
+          ${
+            predictionMarketUrl(market)
+              ? `<a class="news-link" href="${escapeHtml(predictionMarketUrl(market))}" target="_blank" rel="noreferrer" data-analytics="polymarket_market_open" data-label="${escapeHtml(String(market.question || "polymarket_market"))}">View on Polymarket</a>`
+              : ""
+          }
         </article>
       `;
     });
@@ -6969,7 +7031,11 @@
                   <div class="prediction-meta-row"><span>End Date</span><span>${escapeHtml(formatPredictionDate(market.endDate))}</span></div>
                 </div>
                 ${tagsHtml}
-                ${marketUrl ? `<a class="news-link" href="${escapeHtml(marketUrl)}" target="_blank" rel="noreferrer">View on Polymarket</a>` : ""}
+                ${
+                  marketUrl
+                    ? `<a class="news-link" href="${escapeHtml(marketUrl)}" target="_blank" rel="noreferrer" data-analytics="polymarket_market_open" data-label="${escapeHtml(String(market.question || "polymarket_market"))}">View on Polymarket</a>`
+                    : ""
+                }
                 ${renderOrderbookWidget(market, orderbook)}
               </article>
             `;
@@ -7011,6 +7077,7 @@
 
     state.tickerContext.predictionsTicker = symbol;
     setOutputLoading(ui.tickerPredictionsOutput, "Loading prediction markets...");
+    logEvent("polymarket_load_started", { ticker: symbol, force: Boolean(force) });
 
     try {
       const searchResp = await fetch(`/api/predictions/search?ticker=${encodeURIComponent(symbol)}`, {
@@ -7058,17 +7125,26 @@
       setOutputReady(ui.tickerPredictionsOutput);
       renderPredictionsOutput(normalized, symbol);
       logEvent("predictions_loaded", { ticker: symbol, markets: markets.length, token_ids: tokenIds.length });
+      logEvent("polymarket_orderbooks_loaded", {
+        ticker: symbol,
+        orderbooks: Object.keys(orderbooks || {}).length,
+      });
     } catch (error) {
       setOutputReady(ui.tickerPredictionsOutput);
       ui.tickerPredictionsOutput.innerHTML = `
         <div class="small muted">Polymarket predictions are temporarily unavailable for ${escapeHtml(symbol)}.</div>
       `;
+      logEvent("polymarket_load_error", {
+        ticker: symbol,
+        message: String(error?.message || "load_failed").slice(0, 120),
+      });
       if (notify) showToast(error.message || "Unable to load predictions.", "warn");
     }
   };
 
   const setTickerIntelTab = (tab, { ensureLoaded = true } = {}) => {
     const next = tab === "predictions" ? "predictions" : "intelligence";
+    const previous = state.intelActiveTab || "";
     state.intelActiveTab = next;
 
     if (ui.tickerIntelligenceOutput) {
@@ -7083,9 +7159,18 @@
       button.setAttribute("aria-selected", active ? "true" : "false");
     });
 
+    if (previous !== next) {
+      logEvent("ticker_intel_tab_selected", {
+        tab: next,
+        previous_tab: previous || "",
+        ticker: normalizeTicker(state.tickerContext.ticker || state.tickerContext.intelTicker || ""),
+      });
+    }
+
     if (next === "predictions" && ensureLoaded) {
       const activeTicker = normalizeTicker(state.tickerContext.ticker || state.tickerContext.intelTicker || "");
       if (activeTicker) {
+        logEvent("polymarket_tab_opened", { ticker: activeTicker });
         loadTickerPredictions(activeTicker, { notify: false }).catch(() => {});
       }
     }
@@ -11700,6 +11785,144 @@
     }
   };
 
+  const isNativeIosStoreKitCheckoutOnly = () =>
+    isNativeApp() && getNativePlatform() === "ios";
+
+  const isNativeAndroidPlayBillingCheckout = () =>
+    isNativeApp() &&
+    getNativePlatform() === "android" &&
+    Boolean(state.remoteFlags?.nativeAndroidPlayBillingEnabled ?? true);
+
+  const resolveNativeIapProductId = (panel) => {
+    const fromPanel = String(panel?.dataset?.iapProductId || "").trim();
+    if (fromPanel) return fromPanel;
+
+    const configured = state.remoteFlags?.nativeIapProductIds;
+    const map = configured && typeof configured === "object" ? configured : DEFAULT_NATIVE_IAP_PRODUCT_IDS;
+    const product = String(panel?.dataset?.product || "").trim().toLowerCase();
+    if (product.includes("desk")) return String(map.desk || map.pro || map.default || DEFAULT_NATIVE_IAP_PRODUCT_IDS.default).trim();
+    if (product.includes("forecast")) return String(map.forecast || map.pro || map.default || DEFAULT_NATIVE_IAP_PRODUCT_IDS.default).trim();
+    if (product.includes("pro")) return String(map.pro || map.default || DEFAULT_NATIVE_IAP_PRODUCT_IDS.default).trim();
+    return String(map.default || map.pro || DEFAULT_NATIVE_IAP_PRODUCT_IDS.default).trim();
+  };
+
+  const requestNativeInAppPurchase = (panel, opts = {}) => {
+    const requestId = `np_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    const orderId = String(opts.orderId || panel?.dataset?.orderId || "").trim();
+    const product = String(panel?.dataset?.product || "Quantura Pro").trim();
+    const productId = resolveNativeIapProductId(panel);
+    if (!productId) return false;
+
+    const payload = {
+      action: "startNativePurchase",
+      requestId,
+      orderId,
+      source: String(opts.source || "pricing"),
+      product,
+      productId,
+      price: Number(panel?.dataset?.price || 0) || 0,
+      currency: String(panel?.dataset?.currency || "USD"),
+    };
+    const sent = sendNativeBridgeMessage(payload);
+    if (sent) {
+      logEvent("native_purchase_requested", {
+        platform: getNativePlatform() || "unknown",
+        product_id: productId,
+        order_id: orderId,
+        source: payload.source,
+      });
+    }
+    return sent;
+  };
+
+  const requestNativeSubscriptionManager = (source = "billing_portal") => {
+    const requestId = `nsm_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    const sent = sendNativeBridgeMessage({
+      action: "openNativeSubscriptionManager",
+      requestId,
+      source: String(source || "billing_portal"),
+    });
+    if (sent) {
+      logEvent("native_subscription_manager_requested", {
+        platform: getNativePlatform() || "unknown",
+        source: String(source || "billing_portal"),
+      });
+    }
+    return sent;
+  };
+
+  const applyNativePurchaseResult = (detail) => {
+    const payload = detail && typeof detail === "object" ? detail : {};
+    const orderId = String(payload.orderId || "").trim();
+    const status = String(payload.status || "").trim().toLowerCase();
+    const ok = Boolean(payload.ok);
+    const message = String(payload.message || "").trim();
+    const productId = String(payload.productId || "").trim();
+    const panel = orderId
+      ? ui.purchasePanels.find((entry) => String(entry?.dataset?.orderId || "").trim() === orderId)
+      : null;
+    const note = panel?.querySelector(".purchase-note");
+    const success = panel?.querySelector(".purchase-success");
+    const stripe = panel?.querySelector('[data-action="stripe"]');
+
+    logEvent("native_purchase_result", {
+      platform: getNativePlatform() || "unknown",
+      order_id: orderId,
+      product_id: productId,
+      status: status || (ok ? "success" : "failed"),
+    });
+
+    if (status === "purchased" || (ok && status !== "pending")) {
+      if (success) {
+        success.textContent = orderId
+          ? `In-app purchase completed for order ${orderId}.`
+          : "In-app purchase completed.";
+        success.classList.remove("hidden");
+      }
+      if (note) note.textContent = "Purchase completed in native checkout.";
+      stripe?.classList.add("hidden");
+      showToast("In-app purchase completed.");
+      if (orderId) {
+        logEvent("purchase", {
+          transaction_id: orderId,
+          currency: String(panel?.dataset?.currency || "USD"),
+          value: Number(panel?.dataset?.price || 0) || 0,
+          source: "native_iap",
+        });
+      }
+      return;
+    }
+
+    if (status === "cancelled") {
+      if (note) note.textContent = "In-app purchase was cancelled.";
+      showToast("Purchase cancelled.", "warn");
+      return;
+    }
+
+    if (status === "pending") {
+      if (note) note.textContent = "Purchase is pending approval.";
+      showToast("Purchase pending approval.");
+      return;
+    }
+
+    if (message) {
+      if (note) note.textContent = message;
+      showToast(message, "warn");
+    } else {
+      if (note) note.textContent = "Unable to complete native checkout.";
+      showToast("Unable to complete native checkout.", "warn");
+    }
+  };
+
+  const bindNativePurchaseResultBridge = () => {
+    if (typeof window === "undefined") return;
+    if (window.__QUANTURA_NATIVE_PURCHASE_BOUND__ === true) return;
+    window.__QUANTURA_NATIVE_PURCHASE_BOUND__ = true;
+    window.addEventListener("quantura:native-purchase-result", (event) => {
+      applyNativePurchaseResult(event?.detail || {});
+    });
+  };
+
   const handlePurchase = async (panel, functions) => {
     if (!requireFullAccount("Sign in to continue.", { redirect: true })) return;
 
@@ -11734,10 +11957,36 @@
         success.textContent = `Order ${orderId} created. Proceed to payment to finalize.`;
         success.classList.remove("hidden");
       }
-      stripe?.classList.remove("hidden");
-      note.textContent = "Order created. Proceed to payment to finalize.";
+      const nativePlatform = getNativePlatform();
+      if (isNativeIosStoreKitCheckoutOnly() || isNativeAndroidPlayBillingCheckout()) {
+        const sent = requestNativeInAppPurchase(panel, { orderId, source: "order_created" });
+        if (sent) {
+          stripe?.classList.add("hidden");
+          note.textContent =
+            nativePlatform === "ios"
+              ? "Order created. Opening App Store in-app purchase..."
+              : "Order created. Opening Google Play in-app purchase...";
+          showToast(
+            nativePlatform === "ios"
+              ? "Opening native iOS checkout..."
+              : "Opening native Android checkout..."
+          );
+        } else {
+          stripe?.classList.add("hidden");
+          note.textContent =
+            nativePlatform === "ios"
+              ? "Native iOS checkout is required. Please reopen this page in the app."
+              : "Native Android checkout is unavailable right now.";
+          showToast(note.textContent, "warn");
+        }
+      } else {
+        stripe?.classList.remove("hidden");
+        note.textContent = "Order created. Proceed to payment to finalize.";
+      }
       logEvent("order_created", { order_id: orderId, currency: panel.dataset.currency || "USD" });
-      showToast("Order created. Proceed to payment.");
+      if (!isNativeIosStoreKitCheckoutOnly() && !isNativeAndroidPlayBillingCheckout()) {
+        showToast("Order created. Proceed to payment.");
+      }
     } catch (error) {
       showToast(error.message || "Unable to create order.", "warn");
     } finally {
@@ -11768,6 +12017,16 @@
 
   const handleStripeCheckout = async (panel, functions) => {
     if (!requireFullAccount("Sign in to continue.", { redirect: true })) return;
+
+    if (isNativeIosStoreKitCheckoutOnly() || isNativeAndroidPlayBillingCheckout()) {
+      const orderId = String(panel?.dataset?.orderId || "").trim();
+      const sent = requestNativeInAppPurchase(panel, { orderId, source: "stripe_button" });
+      if (!sent) {
+        showToast("Native in-app checkout is required in the mobile app.", "warn");
+      }
+      return;
+    }
+
     if (!state.remoteFlags.stripeCheckoutEnabled) {
       showToast("Checkout is temporarily disabled.", "warn");
       return;
@@ -11826,6 +12085,21 @@
     if (!ui.billingPortalLink) return;
     if (!hasFullAccount()) return;
 
+    if (isNativeIosStoreKitCheckoutOnly() || isNativeAndroidPlayBillingCheckout()) {
+      event?.preventDefault?.();
+      const sent = requestNativeSubscriptionManager("billing_portal");
+      if (sent) {
+        showToast(
+          getNativePlatform() === "ios"
+            ? "Opening App Store subscriptions..."
+            : "Opening Google Play subscriptions..."
+        );
+      } else {
+        showToast("Subscription management is only available in native app settings.", "warn");
+      }
+      return;
+    }
+
     event?.preventDefault?.();
     if (ui.billingPortalLink.dataset.loading === "1") return;
     ui.billingPortalLink.dataset.loading = "1";
@@ -11856,6 +12130,21 @@
   };
 
   const handleCheckoutReturn = async (functions) => {
+    if (isNativeIosStoreKitCheckoutOnly() || isNativeAndroidPlayBillingCheckout()) {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        if (params.has("checkout") || params.has("orderId") || params.has("session_id")) {
+          params.delete("checkout");
+          params.delete("orderId");
+          params.delete("session_id");
+          history.replaceState({}, "", `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ""}`);
+        }
+      } catch (error) {
+        // Ignore URL cleanup errors.
+      }
+      return;
+    }
+
     const checkout = String(getQueryParam("checkout") || "").trim().toLowerCase();
     if (!checkout) return;
 
@@ -12041,6 +12330,7 @@
 	    }
 
     bindForegroundPushHandler(messaging);
+    bindNativePurchaseResultBridge();
 
     if (state.cookieConsent === "accepted") {
       ensureInitialPageView();
