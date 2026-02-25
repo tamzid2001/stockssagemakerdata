@@ -7,7 +7,13 @@
   const OPTIONS_EXPIRATION_PREFIX = "quantura_options_expiration_";
   const THEME_KEY = "quantura_theme";
   const PENDING_SHARE_KEY = "quantura_pending_share_v1";
-  const HOLIDAY_PROMO_SEEN_KEY = "quantura_holiday_promo_seen_v1";
+  const PROMO_BANNER_DISMISSED_KEY = "quantura_promo_banner_dismissed_v2";
+  const PROMO_MODAL_DISMISSED_KEY = "quantura_promo_modal_dismissed_v2";
+  const PROMO_SESSION_COUNT_KEY = "quantura_promo_session_count_v1";
+  const PROMO_FORECAST_COUNT_KEY = "quantura_promo_forecast_count_v1";
+  const PROMO_LAST_SESSION_KEY = "quantura_promo_last_session_v1";
+  const AUTH_PENDING_CREDENTIAL_KEY = "quantura_auth_pending_credential_v1";
+  const NOTIFICATION_PRIVACY_CACHE_KEY = "quantura_notification_privacy_v1";
   const FCM_LOG_CACHE_KEY = "quantura_fcm_log_v1";
   const CHART_RANGE_CACHE_KEY = "quantura_chart_range_v1";
   const CHART_VIEW_CACHE_KEY = "quantura_chart_view_v1";
@@ -1442,6 +1448,11 @@
     notificationsToken: document.getElementById("notifications-token"),
     notificationsLog: document.getElementById("notifications-log"),
     notificationsClear: document.getElementById("notifications-clear"),
+    notificationsPrivacyContainer: document.getElementById("notifications-privacy-controls"),
+    notificationsLocationOptIn: document.getElementById("notifications-location-optin"),
+    notificationsIpOptIn: document.getElementById("notifications-ip-optin"),
+    notificationsRequestLocation: document.getElementById("notifications-request-location"),
+    notificationsPrivacyStatus: document.getElementById("notifications-privacy-status"),
     billingPortalLink: document.getElementById("billing-portal-link"),
     chartRangeButtons: Array.from(document.querySelectorAll("[data-chart-range]")),
     chartViewButtons: Array.from(document.querySelectorAll("[data-chart-view]")),
@@ -1499,6 +1510,23 @@
     },
     preferredLanguage: "en",
     preferredCountry: "US",
+    notificationPrivacy: (() => {
+      let cached = {};
+      try {
+        const raw = localStorage.getItem(NOTIFICATION_PRIVACY_CACHE_KEY);
+        cached = raw ? JSON.parse(raw) : {};
+      } catch (error) {
+        cached = {};
+      }
+      return {
+        locationConsent: Boolean(cached?.locationConsent),
+        ipRegionConsent: Boolean(cached?.ipRegionConsent),
+        coarseLocation: cached?.coarseLocation && typeof cached.coarseLocation === "object" ? cached.coarseLocation : null,
+        ipRegion: String(cached?.ipRegion || "").trim().slice(0, 80),
+        timezone: String(cached?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "").trim().slice(0, 80),
+        lastUpdatedMs: Number(cached?.lastUpdatedMs || 0) || 0,
+      };
+    })(),
     cookieConsent: (() => {
       try {
         return localStorage.getItem(COOKIE_CONSENT_KEY) || "";
@@ -1576,6 +1604,13 @@
     pendingShareId: "",
     pendingShareProcessed: false,
     sharedScreenerView: null,
+    promoStatus: null,
+    promoClockOffsetMs: 0,
+    promoTimer: null,
+    promoSessionCount: 0,
+    promoForecastCount: 0,
+    promoSessionTouched: false,
+    promoModalShown: false,
     taskCalendarCursor: null,
     taskCalendarTasks: [],
 	    unsubscribeOrders: null,
@@ -1618,7 +1653,6 @@
         nativeIapProductIds: DEFAULT_NATIVE_IAP_PRODUCT_IDS,
         adsUseRealIOS: true,
         adsUseRealAndroid: true,
-        holidayPromo: false,
         backtestingEnabled: true,
         backtestingFreeDailyLimit: 1,
         backtestingProDailyLimit: 25,
@@ -1675,6 +1709,8 @@
             body: String(entry?.body || ""),
             source: String(entry?.source || "unknown"),
             at: String(entry?.at || new Date().toISOString()),
+            personalized: Boolean(entry?.personalized),
+            nextSteps: Array.isArray(entry?.nextSteps) ? entry.nextSteps.slice(0, 4).map((item) => String(item)) : [],
           }));
       } catch (error) {
         return [];
@@ -2346,7 +2382,7 @@
 	        rc.settings = { minimumFetchIntervalMillis };
 	      }
 	          rc.defaultConfig = {
-	            welcome_message: "Welcome to Quantura",
+	            welcome_message: "",
 	            watchlist_enabled: true,
 	            forecast_prophet_enabled: true,
 	            forecast_timemixer_enabled: true,
@@ -2366,7 +2402,6 @@
               native_iap_product_ids: JSON.stringify(DEFAULT_NATIVE_IAP_PRODUCT_IDS),
               ads_use_real_ios: true,
               ads_use_real_android: true,
-              holiday_promo: false,
               backtesting_enabled: true,
               backtesting_free_daily_limit: "1",
               backtesting_pro_daily_limit: "25",
@@ -2444,7 +2479,7 @@
           const minFetchIntervalMillis = isDev ? 0 : 60 * 60 * 1000;
           rc.settings.minimumFetchIntervalMillis = minFetchIntervalMillis;
           rc.defaultConfig = {
-            welcome_message: "Welcome to Quantura",
+            welcome_message: "",
             watchlist_enabled: true,
             forecast_prophet_enabled: true,
             forecast_timemixer_enabled: true,
@@ -2464,7 +2499,6 @@
             native_iap_product_ids: JSON.stringify(DEFAULT_NATIVE_IAP_PRODUCT_IDS),
             ads_use_real_ios: true,
             ads_use_real_android: true,
-            holiday_promo: false,
             backtesting_enabled: true,
             backtesting_free_daily_limit: "1",
             backtesting_pro_daily_limit: "25",
@@ -2548,7 +2582,7 @@
         return normalized.length ? normalized : fallback;
       };
 		    return {
-          welcomeMessage: getString("welcome_message", "Welcome to Quantura"),
+          welcomeMessage: getString("welcome_message", ""),
 		      watchlistEnabled: getBool("watchlist_enabled", true),
 		      forecastProphetEnabled: getBool("forecast_prophet_enabled", true),
 		      forecastTimeMixerEnabled: getBool("forecast_timemixer_enabled", true),
@@ -2568,7 +2602,6 @@
           nativeIapProductIds: getJson("native_iap_product_ids", DEFAULT_NATIVE_IAP_PRODUCT_IDS),
           adsUseRealIOS: getBool("ads_use_real_ios", true),
           adsUseRealAndroid: getBool("ads_use_real_android", true),
-          holidayPromo: getBool("holiday_promo", false),
           backtestingEnabled: getBool("backtesting_enabled", true),
           backtestingFreeDailyLimit: getInt("backtesting_free_daily_limit", 1),
           backtestingProDailyLimit: getInt("backtesting_pro_daily_limit", 25),
@@ -2605,6 +2638,7 @@
 
       updateMaintenanceModeUi(Boolean(flags.maintenanceMode));
       updateDynamicPromoBanner(String(flags.promoBannerText || "").trim());
+      renderServerPromoBanner();
       ensureHeaderNotificationsCta();
       const headerNotificationsLink = document.getElementById("header-notifications");
       if (headerNotificationsLink) headerNotificationsLink.classList.toggle("hidden", !flags.pushEnabled);
@@ -2626,46 +2660,246 @@
       existing?.remove();
     };
 
-    const maybeShowHolidayPromo = () => {
-      if (!state.remoteFlags.holidayPromo) return;
-      if (typeof window === "undefined") return;
-      if (window.location.pathname !== "/") return;
-      if (String(safeLocalStorageGet(HOLIDAY_PROMO_SEEN_KEY) || "") === "1") return;
-      if (document.getElementById("holiday-promo")) return;
+    const persistNotificationPrivacyCache = () => {
+      try {
+        localStorage.setItem(
+          NOTIFICATION_PRIVACY_CACHE_KEY,
+          JSON.stringify({
+            locationConsent: Boolean(state.notificationPrivacy?.locationConsent),
+            ipRegionConsent: Boolean(state.notificationPrivacy?.ipRegionConsent),
+            coarseLocation: state.notificationPrivacy?.coarseLocation || null,
+            ipRegion: String(state.notificationPrivacy?.ipRegion || "").trim(),
+            timezone: String(state.notificationPrivacy?.timezone || "").trim(),
+            lastUpdatedMs: Number(state.notificationPrivacy?.lastUpdatedMs || Date.now()),
+          })
+        );
+      } catch (error) {
+        // Ignore storage issues.
+      }
+    };
 
-      const banner = document.createElement("section");
-      banner.id = "holiday-promo";
-      banner.className = "promo-banner";
-      banner.innerHTML = `
+    const getStoredNumber = (key, fallback = 0) => {
+      const raw = String(safeLocalStorageGet(key) || "").trim();
+      if (!raw) return fallback;
+      const parsed = Number(raw);
+      return Number.isFinite(parsed) ? parsed : fallback;
+    };
+
+    const setStoredNumber = (key, value) => {
+      safeLocalStorageSet(key, String(Math.max(0, Math.floor(Number(value) || 0))));
+    };
+
+    const recordPromoSessionUsage = () => {
+      if (state.promoSessionTouched) return;
+      state.promoSessionTouched = true;
+      const now = Date.now();
+      const last = getStoredNumber(PROMO_LAST_SESSION_KEY, 0);
+      let sessions = getStoredNumber(PROMO_SESSION_COUNT_KEY, 0);
+      if (now - last >= 25 * 60 * 1000) {
+        sessions += 1;
+      }
+      state.promoSessionCount = Math.max(1, sessions || 1);
+      setStoredNumber(PROMO_SESSION_COUNT_KEY, state.promoSessionCount);
+      setStoredNumber(PROMO_LAST_SESSION_KEY, now);
+    };
+
+    const recordPromoForecastUsage = () => {
+      const current = getStoredNumber(PROMO_FORECAST_COUNT_KEY, state.promoForecastCount || 0) + 1;
+      state.promoForecastCount = current;
+      setStoredNumber(PROMO_FORECAST_COUNT_KEY, current);
+      maybeShowPromoModal();
+    };
+
+    const isPromoEligibleViewer = () => {
+      const user = state.user;
+      if (!user || user.isAnonymous) return true;
+      if (isAdminUser(user)) return false;
+      if (state.userHasPaidPlan || String(state.userSubscriptionTier || "").toLowerCase() !== "free") return false;
+      return true;
+    };
+
+    const clearPromoTimer = () => {
+      if (state.promoTimer) {
+        window.clearInterval(state.promoTimer);
+        state.promoTimer = null;
+      }
+    };
+
+    const promoNowMs = () => Date.now() + Number(state.promoClockOffsetMs || 0);
+
+    const formatPromoCountdown = (remainingMs) => {
+      const safe = Math.max(0, Math.floor(remainingMs / 1000));
+      const days = Math.floor(safe / 86400);
+      const hours = Math.floor((safe % 86400) / 3600);
+      const mins = Math.floor((safe % 3600) / 60);
+      if (days > 0) return `${days}d ${hours}h ${mins}m`;
+      return `${hours}h ${mins}m`;
+    };
+
+    const dismissPromoBanner = () => {
+      safeLocalStorageSet(PROMO_BANNER_DISMISSED_KEY, "1");
+      const node = document.getElementById("server-promo-banner");
+      node?.remove();
+      logEvent("promo_banner_dismissed", {});
+    };
+
+    const renderServerPromoBanner = () => {
+      const promo = state.promoStatus;
+      const existing = document.getElementById("server-promo-banner");
+      if (!promo?.active || !isPromoEligibleViewer() || String(safeLocalStorageGet(PROMO_BANNER_DISMISSED_KEY) || "") === "1") {
+        existing?.remove();
+        clearPromoTimer();
+        return;
+      }
+      const remaining = Number(promo.endsAtMs || 0) - promoNowMs();
+      if (!Number.isFinite(remaining) || remaining <= 0) {
+        existing?.remove();
+        clearPromoTimer();
+        return;
+      }
+      const badge = `${Number(promo.discountPercent || 50)}% off`;
+      const headline = String(promo.headline || "Limited-time promotional offer");
+      const details = String(promo.body || `Use code ${promo.code || "QUANTURA50"} on checkout.`);
+      const code = String(promo.code || "QUANTURA50").toUpperCase();
+      const countdown = formatPromoCountdown(remaining);
+      const html = `
         <div class="promo-inner">
           <div>
-            <div class="promo-badge">Holiday promo</div>
-            <div class="promo-title">Limited-time discount for new Quantura members.</div>
-            <div class="small muted">Explore plans, unlock higher throughput, and ship your weekly research loop faster.</div>
+            <div class="promo-badge">${escapeHtml(badge)}</div>
+            <div class="promo-title">${escapeHtml(headline)}</div>
+            <div class="small muted">${escapeHtml(details)}</div>
+            <div class="small" style="margin-top:6px;">
+              Code <strong>${escapeHtml(code)}</strong> · Ends in
+              <span id="promo-countdown">${escapeHtml(countdown)}</span>
+            </div>
           </div>
           <div class="promo-actions">
-            <a class="cta small" href="/pricing" data-action="promo-cta">View plans</a>
-            <button class="cta secondary small" type="button" data-action="promo-dismiss">No thanks</button>
+            <a class="cta small" href="/pricing" data-action="promo-view-plans">Claim offer</a>
+            <button class="cta secondary small" type="button" data-action="promo-dismiss-banner">Dismiss</button>
           </div>
         </div>
       `;
-      const header = document.querySelector("header.header");
-      if (header && typeof header.insertAdjacentElement === "function") header.insertAdjacentElement("afterend", banner);
-      else document.body.prepend(banner);
-
-      const dismiss = banner.querySelector('[data-action="promo-dismiss"]');
-      const cta = banner.querySelector('[data-action="promo-cta"]');
-      dismiss?.addEventListener("click", () => {
-        safeLocalStorageSet(HOLIDAY_PROMO_SEEN_KEY, "1");
-        banner.remove();
-        logEvent("holiday_promo_dismissed", {});
+      if (existing) {
+        existing.innerHTML = html;
+      } else {
+        const banner = document.createElement("section");
+        banner.id = "server-promo-banner";
+        banner.className = "promo-banner";
+        banner.innerHTML = html;
+        const header = document.querySelector("header.header");
+        if (header && typeof header.insertAdjacentElement === "function") header.insertAdjacentElement("afterend", banner);
+        else document.body.prepend(banner);
+      }
+      const bannerNode = document.getElementById("server-promo-banner");
+      bannerNode?.querySelector('[data-action="promo-dismiss-banner"]')?.addEventListener("click", dismissPromoBanner);
+      bannerNode?.querySelector('[data-action="promo-view-plans"]')?.addEventListener("click", () => {
+        logEvent("promo_banner_clicked", { code });
       });
-      cta?.addEventListener("click", () => {
-        safeLocalStorageSet(HOLIDAY_PROMO_SEEN_KEY, "1");
-        logEvent("holiday_promo_clicked", {});
-      });
+      clearPromoTimer();
+      state.promoTimer = window.setInterval(() => {
+        const current = document.getElementById("promo-countdown");
+        if (!current) {
+          clearPromoTimer();
+          return;
+        }
+        const ms = Number(state.promoStatus?.endsAtMs || 0) - promoNowMs();
+        if (ms <= 0) {
+          current.textContent = "expired";
+          clearPromoTimer();
+          return;
+        }
+        current.textContent = formatPromoCountdown(ms);
+      }, 1000);
+    };
 
-      logEvent("holiday_promo_shown", {});
+    const closePromoModal = () => {
+      const modal = document.getElementById("promo-offer-modal");
+      modal?.remove();
+    };
+
+    const showPromoModal = () => {
+      if (document.getElementById("promo-offer-modal")) return;
+      const promo = state.promoStatus;
+      if (!promo?.active || !isPromoEligibleViewer()) return;
+
+      const modal = document.createElement("div");
+      modal.id = "promo-offer-modal";
+      modal.className = "modal";
+      modal.innerHTML = `
+        <div class="modal-backdrop" data-action="close-promo-modal"></div>
+        <div class="modal-card card" role="dialog" aria-modal="true" aria-label="Quantura promotional offer">
+          <h3>Unlock Quantura at ${escapeHtml(String(Number(promo.discountPercent || 50)))}% off</h3>
+          <p class="small">
+            You have started active usage. Use code <strong>${escapeHtml(String(promo.code || "QUANTURA50").toUpperCase())}</strong>
+            for a limited-time discount.
+          </p>
+          <div class="small muted">Offer timer is synced to server time for consistency across devices.</div>
+          <div class="modal-actions">
+            <button class="cta secondary" type="button" data-action="close-promo-modal">Not now</button>
+            <a class="cta" href="/pricing" data-action="promo-modal-cta">Claim 50% off</a>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+      modal.querySelectorAll('[data-action="close-promo-modal"]').forEach((node) => {
+        node.addEventListener("click", () => {
+          safeLocalStorageSet(PROMO_MODAL_DISMISSED_KEY, "1");
+          closePromoModal();
+          logEvent("promo_modal_dismissed", {});
+        });
+      });
+      modal.querySelector('[data-action="promo-modal-cta"]')?.addEventListener("click", () => {
+        safeLocalStorageSet(PROMO_MODAL_DISMISSED_KEY, "1");
+        logEvent("promo_modal_clicked", { code: String(promo.code || "QUANTURA50").toUpperCase() });
+      });
+      state.promoModalShown = true;
+      logEvent("promo_modal_shown", {
+        sessions: state.promoSessionCount,
+        forecasts: state.promoForecastCount,
+      });
+    };
+
+    function maybeShowPromoModal() {
+      const promo = state.promoStatus;
+      if (!promo?.active) return;
+      if (!isPromoEligibleViewer()) return;
+      if (String(safeLocalStorageGet(PROMO_MODAL_DISMISSED_KEY) || "") === "1") return;
+      if (state.promoModalShown) return;
+      const sessionCount = getStoredNumber(PROMO_SESSION_COUNT_KEY, state.promoSessionCount || 0);
+      const forecastCount = getStoredNumber(PROMO_FORECAST_COUNT_KEY, state.promoForecastCount || 0);
+      state.promoSessionCount = sessionCount;
+      state.promoForecastCount = forecastCount;
+      if (sessionCount >= 3 || forecastCount >= 2) {
+        showPromoModal();
+      }
+    }
+
+    const loadServerPromoStatus = async () => {
+      try {
+        const response = await fetch("/api/explore/promo/status", { method: "GET", credentials: "omit" });
+        if (!response.ok) return;
+        const payload = await response.json().catch(() => ({}));
+        const promo = payload?.promo && typeof payload.promo === "object" ? payload.promo : null;
+        if (!promo) return;
+        const serverTimeMs = Number(payload?.serverTimeMs || promo?.serverTimeMs || Date.now());
+        if (Number.isFinite(serverTimeMs)) {
+          state.promoClockOffsetMs = serverTimeMs - Date.now();
+        }
+        state.promoStatus = {
+          id: String(promo.id || "promo"),
+          active: Boolean(promo.active),
+          code: String(promo.code || "QUANTURA50"),
+          discountPercent: Number(promo.discountPercent || 50),
+          headline: String(promo.headline || "Limited-time promotional offer"),
+          body: String(promo.body || ""),
+          startsAtMs: Number(promo.startsAtMs || 0) || 0,
+          endsAtMs: Number(promo.endsAtMs || 0) || 0,
+        };
+        renderServerPromoBanner();
+        maybeShowPromoModal();
+      } catch (error) {
+        // Promo UI is optional; keep page resilient.
+      }
     };
 
     const updateDynamicPromoBanner = (text) => {
@@ -2823,7 +3057,7 @@
 	    };
 	    state.remoteConfigLoaded = true;
 	    applyRemoteFlags(state.remoteFlags);
-      maybeShowHolidayPromo();
+      loadServerPromoStatus().catch(() => {});
 	    subscribeRemoteConfigUpdates(rc);
 	    startRemoteConfigRefreshLoop(rc);
 	    logEvent("remote_config_loaded", {
@@ -2896,22 +3130,36 @@
     return normalizeLanguageCode(COUNTRY_DEFAULT_LANGUAGE[key] || "en");
   };
 
-  const buildMeta = () => ({
-    sessionId: getSessionId(),
-    pagePath: window.location.pathname,
-    pageTitle: document.title,
-    referrer: document.referrer || "",
-    userAgent: navigator.userAgent,
-    language: state.preferredLanguage || normalizeLanguageCode(navigator.language),
-    country: state.preferredCountry || "",
-    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    screen: `${window.screen.width}x${window.screen.height}`,
-    platform: navigator.platform,
-    runtime: resolveRuntimeLabel(),
-    nativePlatform: getNativePlatform() || "",
-    nativeApp: isNativeApp(),
-    installedPwa: isInstalledPwa(),
-  });
+  const buildMeta = () => {
+    const privacy = state.notificationPrivacy || {};
+    const locationConsent = Boolean(privacy.locationConsent);
+    const ipRegionConsent = Boolean(privacy.ipRegionConsent);
+    const rawCountry = String(privacy?.coarseLocation?.countryCode || "").trim();
+    const country = locationConsent && rawCountry ? normalizeCountryCode(rawCountry) : "";
+    const timezone = locationConsent
+      ? String(privacy.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "").trim()
+      : "";
+    const ipRegion = locationConsent && ipRegionConsent ? String(privacy.ipRegion || "").trim().slice(0, 80) : "";
+    return {
+      sessionId: getSessionId(),
+      pagePath: window.location.pathname,
+      pageTitle: document.title,
+      referrer: document.referrer || "",
+      userAgent: navigator.userAgent,
+      language: state.preferredLanguage || normalizeLanguageCode(navigator.language),
+      country,
+      timezone,
+      ipRegion,
+      locationConsent,
+      ipRegionConsent,
+      screen: `${window.screen.width}x${window.screen.height}`,
+      platform: navigator.platform,
+      runtime: resolveRuntimeLabel(),
+      nativePlatform: getNativePlatform() || "",
+      nativeApp: isNativeApp(),
+      installedPwa: isInstalledPwa(),
+    };
+  };
 
   const exchangeNativeIdTokenForCustomToken = async (idToken) => {
     const token = String(idToken || "").trim();
@@ -3035,6 +3283,170 @@
     if (ui.notificationsEnable) ui.notificationsEnable.disabled = !enabled;
     if (ui.notificationsRefresh) ui.notificationsRefresh.disabled = !enabled;
     if (ui.notificationsSendTest) ui.notificationsSendTest.disabled = !enabled;
+  };
+
+  const refreshNotificationPrivacyRefs = () => {
+    ui.notificationsPrivacyContainer = document.getElementById("notifications-privacy-controls");
+    ui.notificationsLocationOptIn = document.getElementById("notifications-location-optin");
+    ui.notificationsIpOptIn = document.getElementById("notifications-ip-optin");
+    ui.notificationsRequestLocation = document.getElementById("notifications-request-location");
+    ui.notificationsPrivacyStatus = document.getElementById("notifications-privacy-status");
+  };
+
+  const setNotificationPrivacyStatus = (text, isError = false) => {
+    if (!ui.notificationsPrivacyStatus) return;
+    ui.notificationsPrivacyStatus.textContent = String(text || "");
+    ui.notificationsPrivacyStatus.style.color = isError ? "#d83446" : "";
+  };
+
+  const syncNotificationPrivacyControls = () => {
+    refreshNotificationPrivacyRefs();
+    if (!ui.notificationsPrivacyContainer) return;
+    const privacy = state.notificationPrivacy || {};
+    const locationConsent = Boolean(privacy.locationConsent);
+    const ipRegionConsent = Boolean(privacy.ipRegionConsent);
+    if (ui.notificationsLocationOptIn) ui.notificationsLocationOptIn.checked = locationConsent;
+    if (ui.notificationsIpOptIn) {
+      ui.notificationsIpOptIn.checked = locationConsent && ipRegionConsent;
+      ui.notificationsIpOptIn.disabled = !locationConsent;
+    }
+    if (ui.notificationsRequestLocation) ui.notificationsRequestLocation.disabled = !locationConsent;
+    if (!locationConsent) {
+      setNotificationPrivacyStatus("Location consent is off. Notification text stays generic.");
+      return;
+    }
+    const timezone = String(privacy.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "").trim();
+    const country = String(privacy?.coarseLocation?.countryCode || "").trim();
+    const region = String(privacy.ipRegion || "").trim();
+    const summary = [`Consent on`, country ? `country ${country}` : "", region ? `region ${region}` : "", timezone ? timezone : ""]
+      .filter(Boolean)
+      .join(" · ");
+    setNotificationPrivacyStatus(summary);
+  };
+
+  const ensureNotificationPrivacyControls = () => {
+    if (!ui.notificationsStatus) return;
+    refreshNotificationPrivacyRefs();
+    if (ui.notificationsPrivacyContainer) {
+      syncNotificationPrivacyControls();
+      return;
+    }
+    const anchor = ui.notificationsStatus.parentElement || ui.notificationsStatus;
+    const wrap = document.createElement("div");
+    wrap.id = "notifications-privacy-controls";
+    wrap.className = "notice small";
+    wrap.style.marginTop = "12px";
+    wrap.innerHTML = `
+      <strong>Personalized notifications (optional)</strong>
+      <p class="small" style="margin: 6px 0 8px;">
+        Location and IP-derived region are sensitive. We only store coarse location, timezone, and region after explicit consent.
+      </p>
+      <label class="feature" style="align-items:flex-start;"><span></span><input id="notifications-location-optin" type="checkbox" /> <span>Allow coarse location + timezone for notification context</span></label>
+      <label class="feature" style="align-items:flex-start;"><span></span><input id="notifications-ip-optin" type="checkbox" /> <span>Allow IP-derived region lookup/storage</span></label>
+      <div class="hero-actions" style="margin-top:8px;">
+        <button class="cta secondary small" id="notifications-request-location" type="button">Capture coarse location</button>
+      </div>
+      <p id="notifications-privacy-status" class="small muted" style="margin-top:8px;"></p>
+    `;
+    anchor.insertAdjacentElement("afterend", wrap);
+    refreshNotificationPrivacyRefs();
+    syncNotificationPrivacyControls();
+  };
+
+  const requestCoarseNotificationLocation = async () => {
+    if (!state.notificationPrivacy?.locationConsent) {
+      throw new Error("Enable location consent first.");
+    }
+    if (!navigator.geolocation) {
+      throw new Error("Geolocation is not available in this browser.");
+    }
+    const position = await new Promise((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: false,
+        timeout: 8000,
+        maximumAge: 15 * 60 * 1000,
+      });
+    }).catch((error) => {
+      throw new Error(error?.message || "Location permission was denied.");
+    });
+    const latitude = Number(position?.coords?.latitude);
+    const longitude = Number(position?.coords?.longitude);
+    const coarse = {
+      lat: Number.isFinite(latitude) ? Number(latitude.toFixed(1)) : null,
+      lon: Number.isFinite(longitude) ? Number(longitude.toFixed(1)) : null,
+      accuracyM: Number.isFinite(Number(position?.coords?.accuracy)) ? Math.round(Number(position.coords.accuracy)) : null,
+      countryCode: state.preferredCountry || "US",
+      capturedAt: new Date().toISOString(),
+    };
+    state.notificationPrivacy.coarseLocation = coarse;
+    state.notificationPrivacy.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+    if (state.notificationPrivacy.ipRegionConsent) {
+      const ipContext = await fetchIpLocationContext();
+      if (ipContext.countryCode) {
+        state.notificationPrivacy.coarseLocation.countryCode = ipContext.countryCode;
+        applyCountryPreference(ipContext.countryCode, { persist: true });
+      }
+      state.notificationPrivacy.ipRegion = ipContext.region || "";
+    }
+    state.notificationPrivacy.lastUpdatedMs = Date.now();
+    persistNotificationPrivacyCache();
+    syncNotificationPrivacyControls();
+  };
+
+  const saveNotificationPrivacySettings = async () => {
+    const locationConsent = Boolean(ui.notificationsLocationOptIn?.checked);
+    const ipRegionConsent = locationConsent && Boolean(ui.notificationsIpOptIn?.checked);
+    if (!locationConsent) {
+      state.notificationPrivacy.coarseLocation = null;
+      state.notificationPrivacy.ipRegion = "";
+    }
+    state.notificationPrivacy.locationConsent = locationConsent;
+    state.notificationPrivacy.ipRegionConsent = ipRegionConsent;
+    state.notificationPrivacy.timezone = locationConsent ? (Intl.DateTimeFormat().resolvedOptions().timeZone || "") : "";
+    state.notificationPrivacy.lastUpdatedMs = Date.now();
+    persistNotificationPrivacyCache();
+    syncNotificationPrivacyControls();
+
+    if (!hasFullAccount()) return;
+    const headers = await buildApiAuthHeaders({ includeJson: true });
+    const response = await fetch("/api/notifications/preferences", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        locationConsent,
+        ipRegionConsent,
+        timezone: state.notificationPrivacy.timezone || "",
+        coarseLocation: state.notificationPrivacy.coarseLocation || null,
+        ipRegion: state.notificationPrivacy.ipRegion || "",
+      }),
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(String(payload?.error || "Unable to save notification privacy settings."));
+    }
+  };
+
+  const loadNotificationPrivacySettings = async () => {
+    if (!hasFullAccount()) {
+      syncNotificationPrivacyControls();
+      return;
+    }
+    const headers = await buildApiAuthHeaders({ includeJson: false });
+    const response = await fetch("/api/me/notification-settings", {
+      method: "GET",
+      headers,
+    });
+    if (!response.ok) return;
+    const payload = await response.json().catch(() => ({}));
+    const privacy = payload?.notificationPrivacy && typeof payload.notificationPrivacy === "object" ? payload.notificationPrivacy : {};
+    state.notificationPrivacy.locationConsent = Boolean(privacy.locationConsent);
+    state.notificationPrivacy.ipRegionConsent = Boolean(privacy.ipRegionConsent);
+    state.notificationPrivacy.coarseLocation = privacy.coarseLocation && typeof privacy.coarseLocation === "object" ? privacy.coarseLocation : null;
+    state.notificationPrivacy.ipRegion = String(privacy.ipRegion || "").trim().slice(0, 80);
+    state.notificationPrivacy.timezone = String(privacy.timezone || state.notificationPrivacy.timezone || "").trim().slice(0, 80);
+    state.notificationPrivacy.lastUpdatedMs = Number(privacy.updatedAtMs || Date.now()) || Date.now();
+    persistNotificationPrivacyCache();
+    syncNotificationPrivacyControls();
   };
 
   function safeLocalStorageGet(key) {
@@ -3245,7 +3657,10 @@
     if (persist) safeLocalStorageSet(COUNTRY_PREFERENCE_KEY, normalized);
   };
 
-  const detectCountryFromIp = async () => {
+  const fetchIpLocationContext = async () => {
+    if (!state.notificationPrivacy?.locationConsent || !state.notificationPrivacy?.ipRegionConsent) {
+      return { countryCode: "", region: "" };
+    }
     try {
       const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
       const timeout = window.setTimeout(() => controller?.abort(), 2600);
@@ -3255,12 +3670,16 @@
         signal: controller?.signal,
       });
       window.clearTimeout(timeout);
-      if (!response.ok) return "";
+      if (!response.ok) return { countryCode: "", region: "" };
       const payload = await response.json();
       const raw = String(payload?.country_code || payload?.country || "").trim();
-      return normalizeCountryCode(raw);
+      const region = String(payload?.region_code || payload?.region || payload?.city || "").trim().slice(0, 80);
+      return {
+        countryCode: raw ? normalizeCountryCode(raw) : "",
+        region,
+      };
     } catch (error) {
-      return "";
+      return { countryCode: "", region: "" };
     }
   };
 
@@ -3296,9 +3715,18 @@
         return "";
       }
     })();
-    let country = urlCountry || (storedCountry !== "US" ? storedCountry : "");
-    if (!country) {
-      country = await detectCountryFromIp();
+    const coarseCountryRaw = String(state.notificationPrivacy?.coarseLocation?.countryCode || "").trim();
+    const coarseCountry =
+      state.notificationPrivacy?.locationConsent && coarseCountryRaw ? normalizeCountryCode(coarseCountryRaw) : "";
+    let country = urlCountry || (storedCountry !== "US" ? storedCountry : "") || (coarseCountry !== "US" ? coarseCountry : "");
+    if (!country && state.notificationPrivacy?.locationConsent && state.notificationPrivacy?.ipRegionConsent) {
+      const ipContext = await fetchIpLocationContext();
+      country = ipContext.countryCode || "";
+      if (ipContext.region) {
+        state.notificationPrivacy.ipRegion = ipContext.region;
+        state.notificationPrivacy.lastUpdatedMs = Date.now();
+        persistNotificationPrivacyCache();
+      }
     }
     if (!country) {
       const locale = String(navigator.language || "").split("-")[1] || "";
@@ -6451,6 +6879,7 @@
         const body = escapeHtml(String(entry.body || ""));
         const source = escapeHtml(String(entry.source || "foreground"));
         const at = escapeHtml(new Date(entry.at || Date.now()).toLocaleString());
+        const nextSteps = Array.isArray(entry.nextSteps) ? entry.nextSteps.filter(Boolean).slice(0, 4) : [];
         return `
           <article class="notification-log-item">
             <div class="notification-log-head">
@@ -6458,6 +6887,14 @@
               <span class="small muted">${at}</span>
             </div>
             <p class="small">${body || "No message body provided."}</p>
+            ${
+              nextSteps.length
+                ? `<ol class="small" style="margin: 0 0 6px 18px;">
+                    ${nextSteps.map((step) => `<li>${escapeHtml(String(step))}</li>`).join("")}
+                  </ol>`
+                : ""
+            }
+            ${entry.personalized ? `<div class="small muted">${escapeHtml(MODEL_COUNCIL_OUTPUT_DISCLAIMER)}</div>` : ""}
             <div class="small muted">Source: ${source}</div>
           </article>
         `;
@@ -6480,6 +6917,64 @@
         body: String(body || ""),
         source: String(source || "foreground"),
         at: String(at || new Date().toISOString()),
+        personalized: false,
+        nextSteps: [],
+      },
+      ...(Array.isArray(state.notificationLog) ? state.notificationLog : []),
+    ].slice(0, 30);
+    state.notificationLog = next;
+    persistNotificationLog();
+    renderNotificationLog();
+  };
+
+  const personalizeNotificationEntry = async ({ title, body, source }) => {
+    const cleanTitle = String(title || "Quantura update").trim() || "Quantura update";
+    const cleanBody = String(body || "").trim();
+    if (!state.notificationPrivacy?.locationConsent) {
+      return { title: cleanTitle, body: cleanBody, personalized: false, nextSteps: [] };
+    }
+    try {
+      const headers = await buildApiAuthHeaders({ includeJson: true });
+      const response = await fetch("/api/notifications/personalize", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          title: cleanTitle,
+          body: cleanBody,
+          source: String(source || "foreground"),
+          context: {
+            timezone: String(state.notificationPrivacy?.timezone || ""),
+            countryCode: String(state.notificationPrivacy?.coarseLocation?.countryCode || ""),
+            region: String(state.notificationPrivacy?.ipRegion || ""),
+          },
+        }),
+      });
+      if (!response.ok) {
+        return { title: cleanTitle, body: cleanBody, personalized: false, nextSteps: [] };
+      }
+      const payload = await response.json().catch(() => ({}));
+      const notification = payload?.notification && typeof payload.notification === "object" ? payload.notification : {};
+      return {
+        title: String(notification.title || cleanTitle).trim() || cleanTitle,
+        body: String(notification.body || cleanBody).trim(),
+        nextSteps: Array.isArray(notification.nextSteps) ? notification.nextSteps.slice(0, 4).map((item) => String(item)) : [],
+        personalized: Boolean(notification.personalized),
+      };
+    } catch (error) {
+      return { title: cleanTitle, body: cleanBody, personalized: false, nextSteps: [] };
+    }
+  };
+
+  const appendNotificationLogPersonalized = async ({ title, body, source = "foreground", at = new Date().toISOString() }) => {
+    const rewritten = await personalizeNotificationEntry({ title, body, source });
+    const next = [
+      {
+        title: String(rewritten.title || title || "Quantura update"),
+        body: String(rewritten.body || body || ""),
+        source: String(source || "foreground"),
+        at: String(at || new Date().toISOString()),
+        personalized: Boolean(rewritten.personalized),
+        nextSteps: Array.isArray(rewritten.nextSteps) ? rewritten.nextSteps.slice(0, 4) : [],
       },
       ...(Array.isArray(state.notificationLog) ? state.notificationLog : []),
     ].slice(0, 30);
@@ -12976,12 +13471,12 @@
   const bindForegroundPushHandler = (messaging) => {
     if (!messaging || state.messagingBound) return;
     try {
-      messaging.onMessage((payload) => {
+      messaging.onMessage(async (payload) => {
         const title = payload?.notification?.title || "Quantura update";
         const body = payload?.notification?.body || "You have a new dashboard update.";
         showToast(`${title}: ${body}`);
         setNotificationStatus(`Last message: ${title}`);
-        appendNotificationLog({
+        await appendNotificationLogPersonalized({
           title,
           body,
           source: "foreground",
@@ -12995,7 +13490,7 @@
           if (String(data?.type || "").trim() !== "quantura_push_background") return;
           const title = String(data?.title || "Quantura update");
           const body = String(data?.body || "");
-          appendNotificationLog({
+          appendNotificationLogPersonalized({
             title,
             body,
             source: "background",
@@ -13541,6 +14036,10 @@
       initializeLanguageControls().catch(() => {});
       captureShareFromUrl();
       renderNotificationLog();
+      ensureNotificationPrivacyControls();
+      syncNotificationPrivacyControls();
+      recordPromoSessionUsage();
+      state.promoForecastCount = getStoredNumber(PROMO_FORECAST_COUNT_KEY, 0);
       bindChartControls();
 
 	    if (!state.authResolved) {
@@ -13588,6 +14087,8 @@
 	    loadRemoteConfig().then(() => {
         refreshScreenerModelUi();
         refreshScreenerCreditsUi();
+      }).catch(() => {
+        loadServerPromoStatus().catch(() => {});
       });
       handleCheckoutReturn(functions);
 
@@ -15250,6 +15751,7 @@
           requestNativeBridgeSignOut();
           window.__NATIVE_FCM_TOKEN__ = "";
         }
+        clearPendingAuthCredential();
         await auth.signOut();
         showToast("Signed out.");
         logEvent("logout", { method: "firebase", runtime });
@@ -15274,21 +15776,278 @@
         "auth/provider-already-linked",
       ].includes(String(code || "").trim());
 
-    const linkOrSignInWithCredential = async (credential, fallbackSignIn) => {
+    const providerMethodLabel = (providerMethod) => {
+      const id = String(providerMethod || "").trim().toLowerCase();
+      if (id === "google.com" || id === "google") return "Google";
+      if (id === "facebook.com" || id === "facebook") return "Facebook";
+      if (id === "github.com" || id === "github") return "GitHub";
+      if (id === "twitter.com" || id === "twitter") return "X";
+      if (id === "password" || id === "emailpassword") return "Email and password";
+      return id || "another provider";
+    };
+
+    const buildProviderFromMethod = (providerMethod) => {
+      const id = String(providerMethod || "").trim().toLowerCase();
+      if (id === "google.com" || id === "google") {
+        return new firebase.auth.GoogleAuthProvider();
+      }
+      if (id === "facebook.com" || id === "facebook") {
+        const provider = new firebase.auth.FacebookAuthProvider();
+        provider.addScope("email");
+        return provider;
+      }
+      if (id === "github.com" || id === "github") {
+        const provider = new firebase.auth.GithubAuthProvider();
+        provider.addScope("user:email");
+        return provider;
+      }
+      if (id === "twitter.com" || id === "twitter") {
+        return new firebase.auth.TwitterAuthProvider();
+      }
+      return null;
+    };
+
+    const resolveAuthErrorEmail = (error) =>
+      String(error?.email || error?.customData?.email || error?.customData?._tokenResponse?.email || "").trim();
+
+    const serializeAuthCredential = (credential) => {
+      if (!credential || typeof credential !== "object") return null;
+      try {
+        if (typeof credential.toJSON === "function") return credential.toJSON();
+      } catch (error) {
+        return null;
+      }
+      return null;
+    };
+
+    const deserializeAuthCredential = (value) => {
+      if (!value || typeof value !== "object") return null;
+      try {
+        if (firebase?.auth?.AuthCredential?.fromJSON) {
+          return firebase.auth.AuthCredential.fromJSON(value);
+        }
+      } catch (error) {
+        return null;
+      }
+      return null;
+    };
+
+    const extractAuthErrorCredential = (error, methodHint = "") => {
+      if (error?.credential) return error.credential;
+      const method = String(methodHint || "").trim().toLowerCase();
+      try {
+        if (method === "google" || method === "google.com") {
+          return firebase.auth.GoogleAuthProvider.credentialFromError(error);
+        }
+        if (method === "facebook" || method === "facebook.com") {
+          return firebase.auth.FacebookAuthProvider.credentialFromError(error);
+        }
+        if (method === "github" || method === "github.com") {
+          return firebase.auth.GithubAuthProvider.credentialFromError(error);
+        }
+        if (method === "twitter" || method === "twitter.com") {
+          return firebase.auth.TwitterAuthProvider.credentialFromError(error);
+        }
+      } catch (credentialError) {
+        return null;
+      }
+      return null;
+    };
+
+    const clearPendingAuthCredential = () => {
+      safeLocalStorageRemove(AUTH_PENDING_CREDENTIAL_KEY);
+      try {
+        sessionStorage.removeItem(AUTH_PENDING_CREDENTIAL_KEY);
+      } catch (error) {
+        // Ignore session storage failures.
+      }
+    };
+
+    const savePendingAuthCredential = (credential, context = {}) => {
+      const serialized = serializeAuthCredential(credential);
+      if (!serialized) return false;
+      const payload = {
+        credential: serialized,
+        email: String(context.email || "").trim().toLowerCase(),
+        providerId: String(context.providerId || credential?.providerId || "").trim().toLowerCase(),
+        savedAt: Date.now(),
+      };
+      const json = JSON.stringify(payload);
+      safeLocalStorageSet(AUTH_PENDING_CREDENTIAL_KEY, json);
+      try {
+        sessionStorage.setItem(AUTH_PENDING_CREDENTIAL_KEY, json);
+      } catch (error) {
+        // Ignore session storage failures.
+      }
+      return true;
+    };
+
+    const readPendingAuthCredential = () => {
+      const raw =
+        String(safeLocalStorageGet(AUTH_PENDING_CREDENTIAL_KEY) || "").trim() ||
+        (() => {
+          try {
+            return String(sessionStorage.getItem(AUTH_PENDING_CREDENTIAL_KEY) || "").trim();
+          } catch (error) {
+            return "";
+          }
+        })();
+      if (!raw) return null;
+      try {
+        const parsed = JSON.parse(raw);
+        const credential = deserializeAuthCredential(parsed?.credential);
+        if (!credential) return null;
+        return {
+          credential,
+          email: String(parsed?.email || "").trim().toLowerCase(),
+          providerId: String(parsed?.providerId || credential?.providerId || "").trim().toLowerCase(),
+        };
+      } catch (error) {
+        return null;
+      }
+    };
+
+    const linkPendingCredentialIfPresent = async ({ silent = false } = {}) => {
+      const pending = readPendingAuthCredential();
+      const currentUser = auth.currentUser;
+      if (!pending || !pending.credential || !currentUser) return false;
+      try {
+        await currentUser.linkWithCredential(pending.credential);
+        clearPendingAuthCredential();
+        if (!silent) {
+          const providerLabel = providerMethodLabel(pending.providerId);
+          const message = `Connected ${providerLabel} to your account.`;
+          if (ui.emailMessage) ui.emailMessage.textContent = message;
+          showToast(message);
+        }
+        logEvent("auth_credential_linked", { provider: pending.providerId || "unknown" });
+        return true;
+      } catch (error) {
+        if (isAuthCollision(error?.code) || String(error?.code || "") === "auth/provider-already-linked") {
+          clearPendingAuthCredential();
+          if (!silent) showToast("Provider already linked.");
+          return true;
+        }
+        if (!silent && ui.emailMessage) {
+          ui.emailMessage.textContent = error?.message || "Signed in, but unable to link provider.";
+        }
+        return false;
+      }
+    };
+
+    const recoverFromAuthCollision = async (error, { methodHint = "", preferRuntime = resolveRuntimeLabel() } = {}) => {
+      if (!isAuthCollision(error?.code)) return false;
+      const email = resolveAuthErrorEmail(error);
+      const collisionCredential = extractAuthErrorCredential(error, methodHint);
+      if (collisionCredential) {
+        savePendingAuthCredential(collisionCredential, {
+          email,
+          providerId: collisionCredential.providerId || methodHint,
+        });
+      }
+
+      let methods = [];
+      if (email) {
+        try {
+          methods = await auth.fetchSignInMethodsForEmail(email);
+        } catch (methodsError) {
+          methods = [];
+        }
+      }
+      const primaryMethod = String(methods[0] || "").trim().toLowerCase();
+      if (!primaryMethod) {
+        if (ui.emailMessage) {
+          ui.emailMessage.textContent =
+            "This email is already in use. Sign in with your existing provider, then retry linking.";
+        }
+        showToast("Account exists with another provider. Use your existing sign-in first.", "warn");
+        logEvent("auth_collision_unresolved", { method: methodHint || "unknown" });
+        return true;
+      }
+
+      if (primaryMethod === "password") {
+        const message =
+          "This email already exists with password sign-in. Sign in with email/password first, then provider linking will continue.";
+        if (ui.emailInput && email) ui.emailInput.value = email;
+        if (ui.emailMessage) ui.emailMessage.textContent = message;
+        showToast("Sign in with email/password to continue linking.", "warn");
+        logEvent("auth_collision_requires_password", { method: methodHint || "unknown" });
+        return true;
+      }
+
+      const provider = buildProviderFromMethod(primaryMethod);
+      if (!provider) {
+        const message = `Account exists with ${providerMethodLabel(primaryMethod)}. Complete that sign-in first.`;
+        if (ui.emailMessage) ui.emailMessage.textContent = message;
+        showToast(message, "warn");
+        logEvent("auth_collision_provider_unavailable", { provider: primaryMethod });
+        return true;
+      }
+
+      const providerLabel = providerMethodLabel(primaryMethod);
+      const proceed = window.confirm(
+        `${email || "This account"} is already linked to ${providerLabel}. Sign in with ${providerLabel} now to recover and link providers?`
+      );
+      if (!proceed) {
+        if (ui.emailMessage) {
+          ui.emailMessage.textContent = `Recovery paused. Use ${providerLabel} sign-in to continue account linking.`;
+        }
+        return true;
+      }
+
+      try {
+        if (isInstalledPwa() || isMobileBrowser()) {
+          await auth.signInWithRedirect(provider);
+          logEvent("auth_collision_recovery_redirect_started", {
+            provider: primaryMethod,
+            runtime: preferRuntime,
+          });
+          return true;
+        }
+        await auth.signInWithPopup(provider);
+        await linkPendingCredentialIfPresent({ silent: false });
+        if (ui.emailMessage) ui.emailMessage.textContent = `Signed in with ${providerLabel}.`;
+        showToast(`Signed in with ${providerLabel}.`);
+        logEvent("auth_collision_recovered", { provider: primaryMethod, runtime: preferRuntime });
+        return true;
+      } catch (recoverError) {
+        const message = recoverError?.message || `Unable to sign in with ${providerLabel}.`;
+        if (ui.emailMessage) ui.emailMessage.textContent = message;
+        showToast(message, "warn");
+        logEvent("auth_collision_recovery_error", { provider: primaryMethod, runtime: preferRuntime });
+        return true;
+      }
+    };
+
+    const linkOrSignInWithCredential = async (credential, fallbackSignIn, { methodHint = "password", email = "" } = {}) => {
       const current = auth.currentUser;
       if (current?.isAnonymous) {
         try {
           await current.linkWithCredential(credential);
+          await linkPendingCredentialIfPresent({ silent: true });
           return;
         } catch (linkError) {
+          if (await recoverFromAuthCollision(linkError, { methodHint })) {
+            return;
+          }
           if (isAuthCollision(linkError?.code)) {
             await fallbackSignIn();
+            await linkPendingCredentialIfPresent({ silent: true });
             return;
           }
           throw linkError;
         }
       }
-      await fallbackSignIn();
+      try {
+        await fallbackSignIn();
+        await linkPendingCredentialIfPresent({ silent: true });
+      } catch (fallbackError) {
+        if (await recoverFromAuthCollision(fallbackError, { methodHint })) return;
+        throw fallbackError;
+      }
+      if (email && ui.emailInput && !String(ui.emailInput.value || "").trim()) {
+        ui.emailInput.value = email;
+      }
     };
 
     ui.emailForm?.addEventListener("submit", async (event) => {
@@ -15298,8 +16057,11 @@
         await persistenceReady;
         const email = String(ui.emailInput?.value || "").trim();
         const password = String(ui.passwordInput?.value || "");
-        const credential = firebase.auth.EmailAuthProvider.credential(email, password)
-        await linkOrSignInWithCredential(credential, () => auth.signInWithEmailAndPassword(email, password));
+        const credential = firebase.auth.EmailAuthProvider.credential(email, password);
+        await linkOrSignInWithCredential(credential, () => auth.signInWithEmailAndPassword(email, password), {
+          methodHint: "password",
+          email,
+        });
         showToast("Signed in successfully.");
         logEvent("login", { method: "password" });
       } catch (error) {
@@ -15313,8 +16075,11 @@
         await persistenceReady;
         const email = String(ui.emailInput?.value || "").trim();
         const password = String(ui.passwordInput?.value || "");
-        const credential = firebase.auth.EmailAuthProvider.credential(email, password)
-        await linkOrSignInWithCredential(credential, () => auth.createUserWithEmailAndPassword(email, password));
+        const credential = firebase.auth.EmailAuthProvider.credential(email, password);
+        await linkOrSignInWithCredential(credential, () => auth.createUserWithEmailAndPassword(email, password), {
+          methodHint: "password",
+          email,
+        });
         showToast("Account created.");
         logEvent("sign_up", { method: "password" });
       } catch (error) {
@@ -15349,10 +16114,14 @@
         await persistenceReady;
         const result = await auth.getRedirectResult();
         if (result?.user) {
+          await linkPendingCredentialIfPresent({ silent: true });
           showToast("Signed in.");
           logEvent("login", { method: result.credential?.providerId || "redirect", runtime: resolveRuntimeLabel() });
         }
       } catch (error) {
+        if (await recoverFromAuthCollision(error, { methodHint: "redirect", preferRuntime: resolveRuntimeLabel() })) {
+          return;
+        }
         if (ui.emailMessage) ui.emailMessage.textContent = error.message || "Redirect sign-in failed.";
         showToast(error.message || "Redirect sign-in failed.", "warn");
       }
@@ -15372,6 +16141,7 @@
           const requested = Boolean(bridge?.requestSignIn?.(normalizedMethod));
           if (!requested) throw new Error("Native sign-in bridge is unavailable.");
           await waitForNativeAuthCompletion(auth, 90000);
+          await linkPendingCredentialIfPresent({ silent: true });
           showToast(successMessage);
           logEvent("login", { method: normalizedMethod, runtime, source: "native_bridge" });
           return;
@@ -15392,9 +16162,13 @@
         } else {
           await auth.signInWithPopup(provider);
         }
+        await linkPendingCredentialIfPresent({ silent: true });
         showToast(successMessage);
         logEvent("login", { method: normalizedMethod, runtime, source: "popup" });
       } catch (error) {
+        if (await recoverFromAuthCollision(error, { methodHint: normalizedMethod, preferRuntime: runtime })) {
+          return;
+        }
         const message = error?.message || "Unable to sign in.";
         if (ui.emailMessage) ui.emailMessage.textContent = message;
         showToast(message, "warn");
@@ -15669,6 +16443,7 @@
 
 		        logEvent("forecast_request", { ticker: payload.ticker, interval: payload.interval, service: payload.service });
 		        showToast("Forecast saved.");
+            recordPromoForecastUsage();
 
 		        try {
 		          if (ui.tickerChart) {
@@ -16673,7 +17448,7 @@
         const token = await registerNotificationToken(functions, messaging, { forceRefresh: false });
         setNotificationTokenPreview(token);
         setNotificationStatus("Notifications are enabled for this device.");
-        appendNotificationLog({
+        await appendNotificationLogPersonalized({
           title: "Notifications enabled",
           body: "Notification token registered successfully.",
           source: "system",
@@ -16706,7 +17481,7 @@
         const token = await registerNotificationToken(functions, messaging, { forceRefresh: true });
         setNotificationTokenPreview(token);
         setNotificationStatus("Notification token refreshed.");
-        appendNotificationLog({
+        await appendNotificationLogPersonalized({
           title: "Notification token refreshed",
           body: "FCM token rotated and synced.",
           source: "system",
@@ -16744,7 +17519,7 @@
         const usedFallback = Boolean(result.data?.usedFallbackToken);
         const statusSuffix = usedFallback ? " (used local token fallback)" : "";
         setNotificationStatus(`Test sent. Delivered to ${sent} of ${attempted} token(s)${statusSuffix}.`);
-        appendNotificationLog({
+        await appendNotificationLogPersonalized({
           title: "Test notification sent",
           body: `Delivered to ${sent} of ${attempted} token(s).${usedFallback ? " Local cached token was used as fallback." : ""}`,
           source: "system",
@@ -16764,6 +17539,42 @@
       renderNotificationLog();
       setNotificationStatus("Notification log cleared.");
       showToast("Notification log cleared.");
+    });
+
+    ui.notificationsLocationOptIn?.addEventListener("change", async () => {
+      try {
+        await saveNotificationPrivacySettings();
+        setNotificationPrivacyStatus("Consent preference saved.");
+        logEvent("notifications_location_consent_updated", {
+          enabled: Boolean(ui.notificationsLocationOptIn?.checked),
+        });
+      } catch (error) {
+        setNotificationPrivacyStatus(error.message || "Unable to save location consent.", true);
+      }
+    });
+
+    ui.notificationsIpOptIn?.addEventListener("change", async () => {
+      try {
+        await saveNotificationPrivacySettings();
+        setNotificationPrivacyStatus("IP-region preference saved.");
+        logEvent("notifications_ip_region_consent_updated", {
+          enabled: Boolean(ui.notificationsIpOptIn?.checked),
+        });
+      } catch (error) {
+        setNotificationPrivacyStatus(error.message || "Unable to save IP-region preference.", true);
+      }
+    });
+
+    ui.notificationsRequestLocation?.addEventListener("click", async () => {
+      try {
+        setNotificationPrivacyStatus("Requesting location permission...");
+        await requestCoarseNotificationLocation();
+        await saveNotificationPrivacySettings();
+        setNotificationPrivacyStatus("Coarse location captured.");
+        logEvent("notifications_location_captured", {});
+      } catch (error) {
+        setNotificationPrivacyStatus(error.message || "Unable to capture location.", true);
+      }
     });
 
     if (ui.profileForm && ui.profileForm.dataset.bound !== "1") {
@@ -16883,6 +17694,7 @@
           }
 			      state.authResolved = true;
 			      state.user = user;
+            await linkPendingCredentialIfPresent({ silent: true }).catch(() => {});
             state.tickerContext.tickerHistory = readTickerHistory();
             renderTickerHistory();
 			      setAuthUi(user);
@@ -16932,6 +17744,7 @@
           setNotificationTokenPreview("");
           setNotificationControlsEnabled(false);
         }
+            syncNotificationPrivacyControls();
 			        if (state.unsubscribeOrders) state.unsubscribeOrders();
 			        if (state.unsubscribeAdmin) state.unsubscribeAdmin();
 				        if (state.unsubscribeForecasts) state.unsubscribeForecasts();
@@ -17087,6 +17900,11 @@
             setNotificationStatus("Push notifications are not supported on this device.");
 	        }
 	      }
+        await loadNotificationPrivacySettings().catch(() => {
+          syncNotificationPrivacyControls();
+        });
+        renderServerPromoBanner();
+        maybeShowPromoModal();
 
 	      if (ui.terminalForm && ui.tickerChart && state.tickerContext.forecastId && !state.tickerContext.forecastDoc) {
 	        try {

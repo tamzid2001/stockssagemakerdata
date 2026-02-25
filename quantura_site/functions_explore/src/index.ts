@@ -62,6 +62,27 @@ const MAX_LIMIT = 40;
 const PUBLIC_ORIGIN = asString(process.env.PUBLIC_ORIGIN, "https://quantura-e2e3d.web.app").replace(/\/$/, "");
 const ADMIN_EMAIL = "tamzid257@gmail.com";
 const MODEL_COUNCIL_RESPONSE_COLLECTION = "model_council_responses";
+const OPENAI_API_KEY = asString(process.env.OPENAI_API_KEY).trim();
+const NOTIFICATION_REWRITE_MODEL = asString(process.env.NOTIFICATION_REWRITE_MODEL, "gpt-4o-mini").trim();
+const PROMO_ID = asString(process.env.PROMO_ID, "quantura_generic_50_off").trim();
+const PROMO_CODE = asString(process.env.PROMO_CODE, "QUANTURA50").trim().toUpperCase();
+const PROMO_DISCOUNT_PERCENT = Math.max(1, Math.min(95, asFinite(process.env.PROMO_DISCOUNT_PERCENT, 50)));
+const PROMO_ACTIVE = asBoolean(process.env.PROMO_ACTIVE, true);
+const PROMO_DURATION_DAYS = Math.max(1, Math.min(120, Math.floor(asFinite(process.env.PROMO_DURATION_DAYS, 30))));
+const PROMO_START_MS = (() => {
+  const raw = asString(process.env.PROMO_START_AT).trim();
+  if (!raw) return Date.now() - 24 * 60 * 60 * 1000;
+  const parsed = Date.parse(raw);
+  return Number.isFinite(parsed) ? parsed : Date.now() - 24 * 60 * 60 * 1000;
+})();
+const PROMO_END_MS = (() => {
+  const raw = asString(process.env.PROMO_END_AT).trim();
+  if (raw) {
+    const parsed = Date.parse(raw);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return PROMO_START_MS + PROMO_DURATION_DAYS * 24 * 60 * 60 * 1000;
+})();
 
 type SavedItemType = "forecast" | "screener" | "model_council" | "post";
 
@@ -97,6 +118,181 @@ function asBoolean(value: unknown, fallback = false): boolean {
     if (normalized === "false") return false;
   }
   return fallback;
+}
+
+function requestIpAddress(req: Request): string {
+  const forwarded = asString(req.headers["x-forwarded-for"]);
+  if (forwarded) {
+    const first = forwarded.split(",")[0]?.trim() || "";
+    if (first) return first.slice(0, 120);
+  }
+  const real = asString(req.headers["x-real-ip"]);
+  if (real) return real.slice(0, 120);
+  const socketIp = asString((req.socket as any)?.remoteAddress);
+  return socketIp.slice(0, 120);
+}
+
+function normalizeTimezone(value: unknown): string {
+  return sanitizeText(value, 80).replace(/[^A-Za-z0-9_./+\-]/g, "");
+}
+
+function normalizeCoarseLocation(
+  value: unknown
+): { lat: number | null; lon: number | null; countryCode: string; accuracyM: number | null; capturedAt: string } | null {
+  if (!value || typeof value !== "object") return null;
+  const payload = value as Record<string, unknown>;
+  const latNum = asFinite(payload.lat, NaN);
+  const lonNum = asFinite(payload.lon, NaN);
+  const accNum = asFinite(payload.accuracyM, NaN);
+  const countryRaw = asString(payload.countryCode).trim().toUpperCase();
+  const countryCode = /^[A-Z]{2}$/.test(countryRaw) ? countryRaw : "";
+  const captured = asString(payload.capturedAt);
+  const capturedAt = Number.isFinite(Date.parse(captured)) ? new Date(captured).toISOString() : new Date().toISOString();
+  return {
+    lat: Number.isFinite(latNum) ? Number(latNum.toFixed(1)) : null,
+    lon: Number.isFinite(lonNum) ? Number(lonNum.toFixed(1)) : null,
+    countryCode,
+    accuracyM: Number.isFinite(accNum) ? Math.max(0, Math.round(accNum)) : null,
+    capturedAt,
+  };
+}
+
+async function fetchIpDerivedRegion(ipAddress: string): Promise<{ region: string; countryCode: string }> {
+  const ip = String(ipAddress || "").trim();
+  if (!ip) return { region: "", countryCode: "" };
+  const safeIp = ip.replace(/[^0-9a-fA-F:.]/g, "");
+  if (!safeIp) return { region: "", countryCode: "" };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 2500);
+  try {
+    const response = await fetch(`https://ipapi.co/${encodeURIComponent(safeIp)}/json/`, {
+      method: "GET",
+      signal: controller.signal,
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) return { region: "", countryCode: "" };
+    const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    const region = sanitizeText(payload.region || payload.region_code || payload.city || "", 80);
+    const countryRaw = asString(payload.country_code || payload.country).trim().toUpperCase();
+    const countryCode = /^[A-Z]{2}$/.test(countryRaw) ? countryRaw : "";
+    return { region, countryCode };
+  } catch {
+    return { region: "", countryCode: "" };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function parseJsonObject(text: string): Record<string, unknown> | null {
+  const raw = String(text || "").trim();
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") return parsed as Record<string, unknown>;
+  } catch {
+    // fall through
+  }
+  const firstBrace = raw.indexOf("{");
+  const lastBrace = raw.lastIndexOf("}");
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    const slice = raw.slice(firstBrace, lastBrace + 1);
+    try {
+      const parsed = JSON.parse(slice);
+      if (parsed && typeof parsed === "object") return parsed as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+type NotificationRewriteInput = {
+  title: string;
+  body: string;
+  source: string;
+  context?: Record<string, unknown>;
+};
+
+async function rewriteNotificationWithLlm(input: NotificationRewriteInput): Promise<{
+  title: string;
+  body: string;
+  nextSteps: string[];
+  personalized: boolean;
+}> {
+  const title = sanitizeText(input.title, 160) || "Quantura update";
+  const body = sanitizeText(input.body, 500);
+  const fallback = {
+    title,
+    body: body || "You have a new Quantura notification.",
+    nextSteps: [] as string[],
+    personalized: false,
+  };
+  if (!OPENAI_API_KEY) return fallback;
+
+  const timezone = sanitizeText(input.context?.timezone, 80);
+  const country = sanitizeText(input.context?.countryCode, 12).toUpperCase();
+  const region = sanitizeText(input.context?.region, 80);
+  const source = sanitizeText(input.source, 40);
+
+  const prompt = {
+    title,
+    body,
+    source,
+    context: {
+      timezone,
+      countryCode: country,
+      region,
+    },
+    style: "Keep it short and practical. Return JSON only.",
+    outputSchema: {
+      title: "string (<=90 chars)",
+      body: "string (<=180 chars)",
+      nextSteps: ["array of 0-3 short suggestions"],
+    },
+  };
+
+  try {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: NOTIFICATION_REWRITE_MODEL,
+        temperature: 0.2,
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "system",
+            content:
+              "You rewrite notification text for a finance app. Keep language plain and concise. Never mention policy text. Respond as valid JSON.",
+          },
+          {
+            role: "user",
+            content: JSON.stringify(prompt),
+          },
+        ],
+      }),
+    });
+    if (!response.ok) return fallback;
+    const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    const content = asString((payload?.choices as any)?.[0]?.message?.content);
+    const parsed = parseJsonObject(content);
+    if (!parsed) return fallback;
+    const nextTitle = sanitizeText(parsed.title, 90) || fallback.title;
+    const nextBody = sanitizeText(parsed.body, 180) || fallback.body;
+    const nextStepsRaw = Array.isArray(parsed.nextSteps) ? parsed.nextSteps : [];
+    const nextSteps = nextStepsRaw.map((item) => sanitizeText(item, 90)).filter(Boolean).slice(0, 3);
+    return {
+      title: nextTitle,
+      body: nextBody,
+      nextSteps,
+      personalized: true,
+    };
+  } catch {
+    return fallback;
+  }
 }
 
 function parseLimit(input: unknown): number {
@@ -1963,12 +2159,22 @@ ROUTES.get("/me/notification-settings", async (req, res) => {
 
     const userData = (userSnap.data() || {}) as Record<string, unknown>;
     const prefs = (userData.notificationPrefs || {}) as Record<string, unknown>;
+    const privacyRaw = (userData.notificationPrivacy || {}) as Record<string, unknown>;
+    const coarseLocation = normalizeCoarseLocation(privacyRaw.coarseLocation);
 
     res.status(200).json({
       notificationPrefs: {
         global: asBoolean(prefs.global, true),
         following: asBoolean(prefs.following, true),
         tickers: asBoolean(prefs.tickers, true),
+      },
+      notificationPrivacy: {
+        locationConsent: asBoolean(privacyRaw.locationConsent, false),
+        ipRegionConsent: asBoolean(privacyRaw.ipRegionConsent, false),
+        timezone: normalizeTimezone(privacyRaw.timezone),
+        ipRegion: sanitizeText(privacyRaw.ipRegion, 80),
+        coarseLocation,
+        updatedAtMs: getTimestampMs(privacyRaw.updatedAt || Date.now()),
       },
       follows: followsSnap.docs.map((doc) => doc.id),
       watchTickers: watchSnap.docs
@@ -2003,12 +2209,31 @@ ROUTES.post("/notifications/register-token", async (req, res) => {
     }
 
     const tokenRef = db.collection("users").doc(user.uid).collection("fcmTokens").doc(token);
+    const privacyInput = ((req.body || {}) as Record<string, unknown>).notificationPrivacy;
+    const locationConsent = asBoolean((privacyInput as Record<string, unknown>)?.locationConsent, false);
+    const ipRegionConsent = asBoolean((privacyInput as Record<string, unknown>)?.ipRegionConsent, false);
+    const tokenMeta: Record<string, unknown> = {};
+    if (locationConsent) {
+      const timezone = normalizeTimezone((privacyInput as Record<string, unknown>)?.timezone);
+      const coarseLocation = normalizeCoarseLocation((privacyInput as Record<string, unknown>)?.coarseLocation);
+      tokenMeta.timezone = timezone;
+      tokenMeta.coarseLocation = coarseLocation;
+      tokenMeta.locationConsent = true;
+      tokenMeta.ipRegionConsent = ipRegionConsent;
+      let ipRegion = sanitizeText((privacyInput as Record<string, unknown>)?.ipRegion, 80);
+      if (ipRegionConsent && !ipRegion) {
+        const derived = await fetchIpDerivedRegion(requestIpAddress(req));
+        ipRegion = derived.region;
+      }
+      tokenMeta.ipRegion = ipRegion;
+    }
     await tokenRef.set(
       {
         token,
         platform,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         lastSeenAt: admin.firestore.FieldValue.serverTimestamp(),
+        ...tokenMeta,
       },
       { merge: true }
     );
@@ -2036,10 +2261,49 @@ ROUTES.post("/notifications/preferences", async (req, res) => {
     }
 
     const input = (req.body || {}) as Record<string, unknown>;
+    const userRef = db.collection("users").doc(user.uid);
+    const userSnap = await userRef.get();
+    const userData = (userSnap.data() || {}) as Record<string, unknown>;
+    const existingPrefs = (userData.notificationPrefs || {}) as Record<string, unknown>;
     const notificationPrefs = {
-      global: asBoolean(input.global, true),
-      following: asBoolean(input.following, true),
-      tickers: asBoolean(input.tickers, true),
+      global: typeof input.global === "boolean" ? asBoolean(input.global, true) : asBoolean(existingPrefs.global, true),
+      following:
+        typeof input.following === "boolean" ? asBoolean(input.following, true) : asBoolean(existingPrefs.following, true),
+      tickers: typeof input.tickers === "boolean" ? asBoolean(input.tickers, true) : asBoolean(existingPrefs.tickers, true),
+    };
+
+    const existingPrivacy = (userData.notificationPrivacy || {}) as Record<string, unknown>;
+    const locationConsent =
+      typeof input.locationConsent === "boolean"
+        ? asBoolean(input.locationConsent, false)
+        : asBoolean(existingPrivacy.locationConsent, false);
+    const ipRegionConsent =
+      locationConsent &&
+      (typeof input.ipRegionConsent === "boolean"
+        ? asBoolean(input.ipRegionConsent, false)
+        : asBoolean(existingPrivacy.ipRegionConsent, false));
+    const timezone = locationConsent
+      ? normalizeTimezone(input.timezone || existingPrivacy.timezone || "")
+      : "";
+    const coarseLocation = locationConsent
+      ? normalizeCoarseLocation(input.coarseLocation || existingPrivacy.coarseLocation)
+      : null;
+    let ipRegion = locationConsent && ipRegionConsent ? sanitizeText(input.ipRegion || existingPrivacy.ipRegion, 80) : "";
+    if (locationConsent && ipRegionConsent && !ipRegion) {
+      const derived = await fetchIpDerivedRegion(requestIpAddress(req));
+      ipRegion = derived.region;
+      if (!coarseLocation?.countryCode && derived.countryCode) {
+        if (coarseLocation) coarseLocation.countryCode = derived.countryCode;
+      }
+    }
+    const notificationPrivacy = {
+      locationConsent,
+      ipRegionConsent,
+      timezone,
+      ipRegion,
+      coarseLocation: locationConsent ? coarseLocation : null,
+      ipAddress: locationConsent && ipRegionConsent ? sanitizeText(requestIpAddress(req), 120) : "",
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
 
     await db
@@ -2048,6 +2312,7 @@ ROUTES.post("/notifications/preferences", async (req, res) => {
       .set(
         {
           notificationPrefs,
+          notificationPrivacy,
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         },
         { merge: true }
@@ -2055,7 +2320,18 @@ ROUTES.post("/notifications/preferences", async (req, res) => {
 
     await syncTopicsForUser(user.uid);
 
-    res.status(200).json({ ok: true, notificationPrefs });
+    res.status(200).json({
+      ok: true,
+      notificationPrefs,
+      notificationPrivacy: {
+        locationConsent,
+        ipRegionConsent,
+        timezone,
+        ipRegion,
+        coarseLocation: locationConsent ? coarseLocation : null,
+        updatedAtMs: Date.now(),
+      },
+    });
   } catch (error: any) {
     const code = String(error?.message || "");
     if (code === "unauthenticated" || code === "invalid_token") {
@@ -2064,6 +2340,36 @@ ROUTES.post("/notifications/preferences", async (req, res) => {
     }
     console.error("[Explore] preferences failed", error);
     res.status(500).json({ error: "preferences_update_failed" });
+  }
+});
+
+ROUTES.post("/notifications/personalize", async (req, res) => {
+  try {
+    const input = (req.body || {}) as Record<string, unknown>;
+    const title = sanitizeText(input.title, 160) || "Quantura update";
+    const body = sanitizeText(input.body, 500);
+    const source = sanitizeText(input.source, 40) || "notification";
+    const context = input.context && typeof input.context === "object" ? (input.context as Record<string, unknown>) : {};
+
+    const rewritten = await rewriteNotificationWithLlm({
+      title,
+      body,
+      source,
+      context,
+    });
+
+    res.status(200).json({
+      notification: {
+        title: rewritten.title,
+        body: rewritten.body,
+        nextSteps: rewritten.nextSteps,
+        personalized: rewritten.personalized,
+        disclaimer: "LLMs can sometimes make mistakes.",
+      },
+    });
+  } catch (error) {
+    console.error("[Explore] notification personalize failed", error);
+    res.status(500).json({ error: "notification_personalize_failed" });
   }
 });
 
@@ -2091,6 +2397,27 @@ ROUTES.post("/notifications/sync-topics", async (req, res) => {
 ROUTES.get("/notifications/config", (_req, res) => {
   const vapidPublicKey = sanitizeText(process.env.FCM_WEB_VAPID_KEY || "", 4096);
   res.status(200).json({ vapidPublicKey });
+});
+
+ROUTES.get(["/promo/status", "/explore/promo/status"], (_req, res) => {
+  const serverTimeMs = Date.now();
+  const startsAtMs = PROMO_START_MS;
+  const endsAtMs = PROMO_END_MS;
+  const active = PROMO_ACTIVE && serverTimeMs >= startsAtMs && serverTimeMs < endsAtMs;
+  res.status(200).json({
+    serverTimeMs,
+    promo: {
+      id: PROMO_ID,
+      active,
+      code: PROMO_CODE,
+      discountPercent: PROMO_DISCOUNT_PERCENT,
+      headline: "Upgrade your research workflow with a limited-time offer",
+      body: `Apply code ${PROMO_CODE} for ${PROMO_DISCOUNT_PERCENT}% off your first cycle.`,
+      startsAtMs,
+      endsAtMs,
+      serverTimeMs,
+    },
+  });
 });
 
 ROUTES.post("/follows/:authorUid", async (req, res) => {

@@ -107,6 +107,21 @@
           <button id="notif-save" type="button">Save settings</button>
         </div>
 
+        <div class="card-surface" style="margin-top:12px;">
+          <h3 style="margin-bottom:6px;">Personalized notification context (optional)</h3>
+          <p class="muted">
+            Location and IP-derived region are sensitive. Quantura stores coarse location, timezone, and region only when you opt in.
+          </p>
+          <div class="settings-grid">
+            <label class="setting-item"><input id="notif-location-consent" type="checkbox" /> <span>Allow coarse location + timezone storage</span></label>
+            <label class="setting-item"><input id="notif-ip-consent" type="checkbox" /> <span>Allow IP-derived region + IP storage</span></label>
+          </div>
+          <div class="inline-controls">
+            <button id="notif-capture-location" type="button">Capture coarse location</button>
+          </div>
+          <p id="notif-privacy-status" class="muted"></p>
+        </div>
+
         <div class="inline-controls">
           <input id="watch-ticker-input" type="text" maxlength="12" placeholder="Add ticker to watchlist" />
           <button id="watch-ticker-add" type="button">Add ticker</button>

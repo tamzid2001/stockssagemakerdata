@@ -41,6 +41,10 @@ const refs = {
   notifEnableWebPush: document.getElementById("notif-enable-webpush"),
   notifSave: document.getElementById("notif-save"),
   notifStatus: document.getElementById("notif-status"),
+  notifLocationConsent: document.getElementById("notif-location-consent"),
+  notifIpConsent: document.getElementById("notif-ip-consent"),
+  notifCaptureLocation: document.getElementById("notif-capture-location"),
+  notifPrivacyStatus: document.getElementById("notif-privacy-status"),
   watchTickerInput: document.getElementById("watch-ticker-input"),
   watchTickerAdd: document.getElementById("watch-ticker-add"),
   watchTickerList: document.getElementById("watch-ticker-list"),
@@ -66,6 +70,13 @@ const state = {
       following: true,
       tickers: true,
     },
+    notificationPrivacy: {
+      locationConsent: false,
+      ipRegionConsent: false,
+      timezone: "",
+      ipRegion: "",
+      coarseLocation: null,
+    },
     follows: [],
     watchTickers: [],
   },
@@ -79,6 +90,12 @@ function setStatus(message, isError = false) {
   if (!refs.notifStatus) return;
   refs.notifStatus.textContent = message;
   refs.notifStatus.style.color = isError ? "#d83446" : "";
+}
+
+function setNotifPrivacyStatus(message, isError = false) {
+  if (!refs.notifPrivacyStatus) return;
+  refs.notifPrivacyStatus.textContent = message;
+  refs.notifPrivacyStatus.style.color = isError ? "#d83446" : "";
 }
 
 function setPrivacyStatus(message, isError = false) {
@@ -368,6 +385,23 @@ function renderSettings() {
   refs.notifGlobal.checked = Boolean(state.settings.notificationPrefs.global);
   refs.notifFollowing.checked = Boolean(state.settings.notificationPrefs.following);
   refs.notifTickers.checked = Boolean(state.settings.notificationPrefs.tickers);
+  refs.notifLocationConsent.checked = Boolean(state.settings.notificationPrivacy.locationConsent);
+  refs.notifIpConsent.checked = Boolean(
+    state.settings.notificationPrivacy.locationConsent && state.settings.notificationPrivacy.ipRegionConsent
+  );
+  refs.notifIpConsent.disabled = !Boolean(state.settings.notificationPrivacy.locationConsent);
+  refs.notifCaptureLocation.disabled = !Boolean(state.settings.notificationPrivacy.locationConsent);
+  if (!state.settings.notificationPrivacy.locationConsent) {
+    setNotifPrivacyStatus("Location consent is off. Notifications remain generic.");
+  } else {
+    const timezone = String(state.settings.notificationPrivacy.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "").trim();
+    const country = String(state.settings.notificationPrivacy?.coarseLocation?.countryCode || "").trim();
+    const region = String(state.settings.notificationPrivacy.ipRegion || "").trim();
+    const summary = [`Consent on`, country ? `country ${country}` : "", region ? `region ${region}` : "", timezone ? timezone : ""]
+      .filter(Boolean)
+      .join(" · ");
+    setNotifPrivacyStatus(summary);
+  }
 
   refs.watchTickerList.innerHTML = state.settings.watchTickers
     .map((ticker) => `<span class="token-chip">${escapeHtml(ticker)} <button type="button" data-watch-remove="${escapeHtml(ticker)}">×</button></span>`)
@@ -383,6 +417,7 @@ async function loadNotificationSettings() {
   try {
     const response = await state.api.get("/me/notification-settings");
     state.settings.notificationPrefs = response.notificationPrefs || state.settings.notificationPrefs;
+    state.settings.notificationPrivacy = response.notificationPrivacy || state.settings.notificationPrivacy;
     state.settings.follows = Array.isArray(response.follows) ? response.follows : [];
     state.settings.watchTickers = Array.isArray(response.watchTickers) ? response.watchTickers : [];
     renderSettings();
@@ -423,18 +458,57 @@ async function registerWebPushToken() {
   track("profile_push_enabled", { platform: "web" });
 }
 
+async function captureCoarseLocation() {
+  if (!navigator.geolocation) throw new Error("Geolocation is not available in this browser.");
+  const position = await new Promise((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: false,
+      timeout: 8000,
+      maximumAge: 15 * 60 * 1000,
+    });
+  }).catch((error) => {
+    throw new Error(error?.message || "Location permission denied.");
+  });
+  const lat = Number(position?.coords?.latitude);
+  const lon = Number(position?.coords?.longitude);
+  return {
+    lat: Number.isFinite(lat) ? Number(lat.toFixed(1)) : null,
+    lon: Number.isFinite(lon) ? Number(lon.toFixed(1)) : null,
+    accuracyM: Number.isFinite(Number(position?.coords?.accuracy)) ? Math.round(Number(position.coords.accuracy)) : null,
+    countryCode: "",
+    capturedAt: new Date().toISOString(),
+  };
+}
+
 async function saveNotificationPrefs() {
   if (!state.api) return;
+  const locationConsent = Boolean(refs.notifLocationConsent.checked);
+  const ipRegionConsent = locationConsent && Boolean(refs.notifIpConsent.checked);
+  state.settings.notificationPrivacy.locationConsent = locationConsent;
+  state.settings.notificationPrivacy.ipRegionConsent = ipRegionConsent;
+  state.settings.notificationPrivacy.timezone = locationConsent ? (Intl.DateTimeFormat().resolvedOptions().timeZone || "") : "";
+  if (!locationConsent) {
+    state.settings.notificationPrivacy.coarseLocation = null;
+    state.settings.notificationPrivacy.ipRegion = "";
+  }
   await state.api.post("/notifications/preferences", {
     global: Boolean(refs.notifGlobal.checked),
     following: Boolean(refs.notifFollowing.checked),
     tickers: Boolean(refs.notifTickers.checked),
+    locationConsent,
+    ipRegionConsent,
+    timezone: state.settings.notificationPrivacy.timezone || "",
+    coarseLocation: state.settings.notificationPrivacy.coarseLocation || null,
+    ipRegion: state.settings.notificationPrivacy.ipRegion || "",
   });
   setStatus("Notification preferences saved.");
+  setNotifPrivacyStatus("Notification privacy settings saved.");
   track("profile_notification_prefs_saved", {
     global: Boolean(refs.notifGlobal.checked),
     following: Boolean(refs.notifFollowing.checked),
     tickers: Boolean(refs.notifTickers.checked),
+    location_consent: locationConsent,
+    ip_region_consent: ipRegionConsent,
   });
 }
 
@@ -608,6 +682,49 @@ function bindEvents() {
       await loadNotificationSettings();
     } catch (error) {
       setStatus(error.message || "Unable to save preferences.", true);
+    }
+  });
+
+  refs.notifLocationConsent?.addEventListener("change", async () => {
+    refs.notifIpConsent.disabled = !Boolean(refs.notifLocationConsent.checked);
+    refs.notifCaptureLocation.disabled = !Boolean(refs.notifLocationConsent.checked);
+    if (!refs.notifLocationConsent.checked) {
+      refs.notifIpConsent.checked = false;
+      state.settings.notificationPrivacy.coarseLocation = null;
+      state.settings.notificationPrivacy.ipRegion = "";
+      setNotifPrivacyStatus("Location consent disabled.");
+    }
+    try {
+      await saveNotificationPrefs();
+      await loadNotificationSettings();
+    } catch (error) {
+      setNotifPrivacyStatus(error.message || "Unable to save location consent.", true);
+    }
+  });
+
+  refs.notifIpConsent?.addEventListener("change", async () => {
+    try {
+      await saveNotificationPrefs();
+      await loadNotificationSettings();
+    } catch (error) {
+      setNotifPrivacyStatus(error.message || "Unable to save IP-region consent.", true);
+    }
+  });
+
+  refs.notifCaptureLocation?.addEventListener("click", async () => {
+    if (!refs.notifLocationConsent.checked) {
+      setNotifPrivacyStatus("Enable location consent first.", true);
+      return;
+    }
+    try {
+      setNotifPrivacyStatus("Requesting browser location permission...");
+      state.settings.notificationPrivacy.coarseLocation = await captureCoarseLocation();
+      await saveNotificationPrefs();
+      await loadNotificationSettings();
+      setNotifPrivacyStatus("Coarse location captured.");
+      track("profile_location_captured", {});
+    } catch (error) {
+      setNotifPrivacyStatus(error.message || "Unable to capture location.", true);
     }
   });
 
