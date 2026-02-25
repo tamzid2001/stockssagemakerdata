@@ -16,6 +16,8 @@
   const LANGUAGE_PREFERENCE_KEY = "quantura_language_v1";
   const COUNTRY_PREFERENCE_KEY = "quantura_country_v1";
   const TICKER_QUERY_MODEL_KEY = "quantura_ticker_query_model_v1";
+  const TICKER_HISTORY_KEY_PREFIX = "quantura_ticker_history_v1";
+  const TICKER_HISTORY_LIMIT = 14;
   const TRADINGVIEW_LOAD_TIMEOUT_MS = 9000;
   const AI_LEADERBOARD_DEFAULT_HORIZON = "1y";
   const DEFAULT_VOLATILITY_THRESHOLD = 0.05;
@@ -327,7 +329,7 @@
       nav_research: "Research",
       nav_blog: "Blog",
       nav_pricing: "Pricing",
-      nav_contact: "Contact",
+      nav_contact: "Contact Us",
       nav_notifications: "Notifications",
       sign_in: "Sign in",
       sign_out: "Sign out",
@@ -346,7 +348,7 @@
       account: "Account",
       leaderboard_profile: "Leaderboard profile",
       sidebar_forecast: "Forecast",
-      sidebar_ticker_intelligence: "Ticker Intelligence",
+      sidebar_ticker_intelligence: "Ticker",
       sidebar_indicators: "Indicators",
       sidebar_trending: "Trending",
       sidebar_news_data: "News and data",
@@ -358,7 +360,6 @@
       sidebar_backtesting: "Backtesting",
       sidebar_learn_more: "Learn more",
       sidebar_screener: "Screener",
-      sidebar_ai_leaderboard: "AI Leaderboard",
       sidebar_watchlist_alerts: "Watchlist and alerts",
       panel_forecast_title: "Forecast",
       panel_forecast_subtitle: "Generate quantile bands for the ticker in your chart and save the run so you can re-plot it later.",
@@ -410,7 +411,7 @@
       account: "Cuenta",
       leaderboard_profile: "Perfil del ranking",
       sidebar_forecast: "Pronostico",
-      sidebar_ticker_intelligence: "Inteligencia del ticker",
+      sidebar_ticker_intelligence: "Ticker",
       sidebar_indicators: "Indicadores",
       sidebar_trending: "Tendencias",
       sidebar_news_data: "Noticias y datos",
@@ -473,7 +474,7 @@
       account: "Compte",
       leaderboard_profile: "Profil du classement",
       sidebar_forecast: "Prevision",
-      sidebar_ticker_intelligence: "Intelligence du ticker",
+      sidebar_ticker_intelligence: "Ticker",
       sidebar_indicators: "Indicateurs",
       sidebar_trending: "Tendances",
       sidebar_news_data: "Actualites et donnees",
@@ -536,7 +537,7 @@
       account: "Konto",
       leaderboard_profile: "Leaderboard-Profil",
       sidebar_forecast: "Forecast",
-      sidebar_ticker_intelligence: "Ticker-Intelligence",
+      sidebar_ticker_intelligence: "Ticker",
       sidebar_indicators: "Indikatoren",
       sidebar_trending: "Trending",
       sidebar_news_data: "News und Daten",
@@ -599,7 +600,7 @@
       account: "الحساب",
       leaderboard_profile: "ملف لوحة المتصدرين",
       sidebar_forecast: "التوقع",
-      sidebar_ticker_intelligence: "ذكاء الرمز",
+      sidebar_ticker_intelligence: "الرمز",
       sidebar_indicators: "المؤشرات",
       sidebar_trending: "الترند",
       sidebar_news_data: "الاخبار والبيانات",
@@ -662,7 +663,7 @@
       account: "অ্যাকাউন্ট",
       leaderboard_profile: "লিডারবোর্ড প্রোফাইল",
       sidebar_forecast: "ফোরকাস্ট",
-      sidebar_ticker_intelligence: "টিকার ইন্টেলিজেন্স",
+      sidebar_ticker_intelligence: "টিকার",
       sidebar_indicators: "ইন্ডিকেটর",
       sidebar_trending: "ট্রেন্ডিং",
       sidebar_news_data: "খবর ও ডেটা",
@@ -713,7 +714,7 @@
     leaderboard_profile: [".profile-settings > summary"],
     open_dashboard: ['.sidebar-card a[href="/dashboard"] span'],
     sidebar_forecast: ['[data-panel-target="forecast"] span'],
-    sidebar_ticker_intelligence: ['[data-panel-target="ticker-intelligence"] span'],
+    sidebar_ticker_intelligence: ['[data-panel-target="ticker"] span'],
     sidebar_indicators: ['[data-panel-target="indicators"] span'],
     sidebar_trending: ['[data-panel-target="trending"] span'],
     sidebar_news_data: ['[data-panel-target="news"] span'],
@@ -725,7 +726,6 @@
     sidebar_backtesting: ['[data-panel-target="backtesting"] span'],
     sidebar_learn_more: ['[data-panel-target="learn"] span'],
     sidebar_screener: ['a[href="/screener"] span'],
-    sidebar_ai_leaderboard: ['[data-panel-target="ai-leaderboard"] span'],
     sidebar_watchlist_alerts: ['a[href="/watchlist"] span'],
     panel_forecast_title: ['[data-panel="forecast"] .panel-header h2'],
     panel_forecast_subtitle: ['[data-panel="forecast"] .panel-header p.small'],
@@ -1255,11 +1255,12 @@
     terminalTicker: document.getElementById("terminal-ticker"),
     terminalInterval: document.getElementById("terminal-interval"),
     terminalStatus: document.getElementById("terminal-status"),
+    tickerHistory: document.getElementById("ticker-history"),
     tickerChart: document.getElementById("ticker-chart"),
     studioChartShell: document.querySelector(".chart-shell.studio-chart"),
     indicatorChart: document.getElementById("indicator-chart"),
     intelStrip: document.getElementById("intel-strip"),
-    tickerIntelligenceOutput: document.getElementById("ticker-intelligence-output"),
+    tickerIntelligenceOutput: document.getElementById("ticker-output"),
     tickerPredictionsOutput: document.getElementById("ticker-predictions-output"),
     tickerIntelTabs: Array.from(document.querySelectorAll("[data-intel-tab]")),
     forecastForm: document.getElementById("forecast-form"),
@@ -1387,8 +1388,13 @@
     chartThemeButtons: Array.from(document.querySelectorAll("[data-tv-theme]")),
     tradingViewRoot: document.getElementById("tradingview-terminal-root"),
     tradingViewStatus: document.getElementById("tv-widget-status"),
+    tradingViewTickerTape: document.getElementById("tv-ticker-tape"),
     tradingViewSymbolInfo: document.getElementById("tv-symbol-info"),
     tradingViewAdvanced: document.getElementById("tv-advanced-chart"),
+    tradingViewCompanyProfile: document.getElementById("tv-company-profile"),
+    tradingViewFundamentalData: document.getElementById("tv-fundamental-data"),
+    tradingViewTechnicalAnalysis: document.getElementById("tv-technical-analysis"),
+    tradingViewTopStories: document.getElementById("tv-top-stories"),
     tradingViewFallback: document.getElementById("tv-widget-fallback"),
     predictionsChart: document.getElementById("predictions-chart"),
     predictionsPreview: document.getElementById("predictions-preview"),
@@ -1448,6 +1454,7 @@
     intelActiveTab: "intelligence",
     tickerContext: {
 	      ticker: "",
+      activeTicker: "",
 	      interval: "1d",
 	      rows: [],
       forecastId: "",
@@ -1460,6 +1467,7 @@
       predictionsTicker: "",
       optionsTicker: "",
       predictionsData: null,
+      tickerHistory: [],
     },
     predictionsContext: {
       uploadId: "",
@@ -1568,7 +1576,14 @@
       }
       return raw === "line" ? "line" : "candlestick";
     })(),
-    tradingViewTheme: "auto",
+    tradingViewTheme: (() => {
+      try {
+        const raw = String(localStorage.getItem(TRADINGVIEW_THEME_CACHE_KEY) || "auto").trim().toLowerCase();
+        return raw === "dark" || raw === "light" ? raw : "auto";
+      } catch (error) {
+        return "auto";
+      }
+    })(),
     tradingViewRenderNonce: 0,
     tradingViewLoadTimer: null,
     tradingViewLoadFailed: false,
@@ -1690,7 +1705,7 @@
 		        defaultPanel: "forecast",
 		        panelToPath: {
 		          forecast: "/forecasting",
-              "ticker-intelligence": "/ticker-intelligence",
+              ticker: "/ticker-intelligence",
 		          indicators: "/indicators",
               trending: "/trending",
 		          news: "/news",
@@ -1699,11 +1714,13 @@
               "ticker-query": "/ticker-query",
 		          options: "/options",
 		          saved: "/saved-forecasts",
-              backtesting: "/backtesting",
 		          learn: "/studio",
-              "ai-leaderboard": "/ai-leaderboard",
-		        },
-		      },
+            },
+            pathAliases: {
+              "/backtesting": "indicators",
+              "/ticker-intelligence": "ticker",
+            },
+          },
 			      dashboard: {
 			        defaultPanel: "orders",
 			        panelToPath: {
@@ -1725,6 +1742,9 @@
 		      Object.entries(router.panelToPath || {}).forEach(([panel, path]) => {
 		        mapping[String(path)] = String(panel);
 		      });
+          Object.entries(router.pathAliases || {}).forEach(([path, panel]) => {
+            mapping[String(path)] = String(panel);
+          });
 		      return mapping;
 		    })();
 
@@ -1756,7 +1776,9 @@
 		    const initialFromUrl = () => {
 		      try {
 		        const params = new URLSearchParams(window.location.search);
-		        const panel = params.get("panel");
+		        const panel = String(params.get("panel") || "").trim();
+		        if (panel === "backtesting") return "indicators";
+		        if (panel === "ticker-intelligence") return "ticker";
 		        if (panel) return panel;
 		      } catch (error) {
 		        // Ignore.
@@ -1777,6 +1799,14 @@
 
 		    const initial = initialFromUrl() || router?.defaultPanel || buttons[0].dataset.panelTarget;
 		    setActive(initial, { pushPath: false });
+
+        if (typeof window !== "undefined") {
+          window.__quanturaSetPanel = (panel, options = {}) => {
+            const next = String(panel || "").trim();
+            if (!next) return;
+            setActive(next, options);
+          };
+        }
 
 		    window.addEventListener("popstate", () => {
 		      const next = initialFromUrl();
@@ -1899,8 +1929,8 @@
     });
 
     const preferredByRouter = {
-      terminal: ["forecast", "ticker-intelligence", "indicators", "trending", "news"],
-      dashboard: ["orders", "watchlist", "productivity", "collaboration", "uploads"],
+      terminal: ["forecast", "/explore", "ticker", "indicators", "news"],
+      dashboard: ["orders", "/explore", "watchlist", "productivity", "uploads"],
     };
     const preferredPanels = preferredByRouter[routerName] || [];
     const selected = preferredPanels
@@ -1938,6 +1968,99 @@
       nav.classList.toggle("hidden", !visible);
       document.body.classList.toggle("mobile-bottom-nav-enabled", visible);
     };
+
+    syncVisibility();
+    window.addEventListener("resize", syncVisibility);
+  };
+
+  const bindMobileSidebarDrawer = () => {
+    const sidebar = document.querySelector(".app-sidebar");
+    const sidebarNav = sidebar?.querySelector(".sidebar-nav");
+    if (!sidebar || !sidebarNav) return;
+
+    if (!sidebarNav.id) sidebarNav.id = "mobile-sidebar-nav";
+
+    let toggle = document.getElementById("mobile-sidebar-toggle");
+    if (!toggle) {
+      toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.id = "mobile-sidebar-toggle";
+      toggle.className = "mobile-sidebar-toggle hidden";
+      toggle.setAttribute("aria-controls", sidebarNav.id);
+      toggle.setAttribute("aria-expanded", "false");
+      toggle.setAttribute("aria-label", "Open terminal navigation");
+      toggle.innerHTML = `${icon("menu-scale")}<span>Nav</span>`;
+      document.body.appendChild(toggle);
+    }
+
+    let backdrop = document.getElementById("mobile-sidebar-backdrop");
+    if (!backdrop) {
+      backdrop = document.createElement("button");
+      backdrop.type = "button";
+      backdrop.id = "mobile-sidebar-backdrop";
+      backdrop.className = "mobile-sidebar-backdrop hidden";
+      backdrop.setAttribute("aria-label", "Close terminal navigation");
+      document.body.appendChild(backdrop);
+    }
+
+    let focusReturnNode = null;
+    const close = ({ restoreFocus = true } = {}) => {
+      sidebar.classList.remove("mobile-sidebar-open");
+      backdrop?.classList.add("hidden");
+      document.body.classList.remove("mobile-sidebar-lock");
+      toggle?.setAttribute("aria-expanded", "false");
+      if (restoreFocus) {
+        const target = focusReturnNode instanceof HTMLElement ? focusReturnNode : toggle;
+        target?.focus?.();
+      }
+    };
+
+    const open = () => {
+      if (window.innerWidth > 980) return;
+      focusReturnNode = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      sidebar.classList.add("mobile-sidebar-open");
+      backdrop?.classList.remove("hidden");
+      document.body.classList.add("mobile-sidebar-lock");
+      toggle?.setAttribute("aria-expanded", "true");
+      const firstLink = sidebarNav.querySelector("a.sidebar-link, button.sidebar-link");
+      firstLink?.focus?.();
+    };
+
+    const syncVisibility = () => {
+      const visible = window.innerWidth <= 980;
+      toggle?.classList.toggle("hidden", !visible);
+      if (!visible) close({ restoreFocus: false });
+    };
+
+    if (!toggle.__quanturaSidebarDrawerBound) {
+      toggle.__quanturaSidebarDrawerBound = true;
+      toggle.addEventListener("click", () => {
+        if (sidebar.classList.contains("mobile-sidebar-open")) close();
+        else open();
+      });
+    }
+
+    if (!backdrop.__quanturaSidebarDrawerBound) {
+      backdrop.__quanturaSidebarDrawerBound = true;
+      backdrop.addEventListener("click", () => close());
+    }
+
+    if (!sidebarNav.__quanturaSidebarDrawerBound) {
+      sidebarNav.__quanturaSidebarDrawerBound = true;
+      sidebarNav.querySelectorAll("a.sidebar-link, button.sidebar-link").forEach((node) => {
+        node.addEventListener("click", () => close({ restoreFocus: false }));
+      });
+    }
+
+    if (!document.body.__quanturaSidebarDrawerKeyBound) {
+      document.body.__quanturaSidebarDrawerKeyBound = true;
+      document.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape") return;
+        if (!sidebar.classList.contains("mobile-sidebar-open")) return;
+        event.preventDefault();
+        close();
+      });
+    }
 
     syncVisibility();
     window.addEventListener("resize", syncVisibility);
@@ -2375,8 +2498,8 @@
 		    };
 		  };
 
-	  const applyRemoteFlags = (flags) => {
-      updateWelcomeMessageBanner(String(flags.welcomeMessage || "").trim());
+  const applyRemoteFlags = (flags) => {
+      updateWelcomeMessageBanner();
 	    document.querySelectorAll('[data-panel-target="watchlist"]').forEach((el) => {
 	      el.classList.toggle("hidden", !flags.watchlistEnabled);
 	    });
@@ -2384,11 +2507,8 @@
 	      if (!flags.watchlistEnabled) el.classList.add("hidden");
 	    });
 
-      document.querySelectorAll('[data-panel-target="backtesting"]').forEach((el) => {
+      document.querySelectorAll("[data-backtesting-module]").forEach((el) => {
         el.classList.toggle("hidden", !flags.backtestingEnabled);
-      });
-      document.querySelectorAll('[data-panel="backtesting"]').forEach((el) => {
-        if (!flags.backtestingEnabled) el.classList.add("hidden");
       });
 
       document.querySelectorAll('[data-panel-target="notifications"]').forEach((el) => {
@@ -2424,30 +2544,9 @@
       remoteConfigStore.publish(flags);
 	  };
 
-    const updateWelcomeMessageBanner = (text) => {
-      const message = String(text || "").trim();
+    const updateWelcomeMessageBanner = () => {
       const existing = document.getElementById("welcome-message-banner");
-      if (!message) {
-        existing?.remove();
-        return;
-      }
-      if (existing) {
-        const node = existing.querySelector("[data-welcome-message]");
-        if (node) node.textContent = message;
-        return;
-      }
-      const banner = document.createElement("section");
-      banner.id = "welcome-message-banner";
-      banner.className = "welcome-banner";
-      banner.innerHTML = `
-        <div class="welcome-inner">
-          <span class="welcome-badge">Welcome</span>
-          <span class="welcome-text" data-welcome-message>${escapeHtml(message)}</span>
-        </div>
-      `;
-      const header = document.querySelector("header.header");
-      if (header && typeof header.insertAdjacentElement === "function") header.insertAdjacentElement("afterend", banner);
-      else document.body.prepend(banner);
+      existing?.remove();
     };
 
     const maybeShowHolidayPromo = () => {
@@ -2945,6 +3044,8 @@
     const selectorLabel = pack.language_selector_label || fallback.language_selector_label || "Language";
     if (ui.languageSelect) {
       setLocalizedAttribute(ui.languageSelect, "aria-label", selectorLabel);
+      const languageLabelNode = document.querySelector('label[for="language-select"]');
+      if (languageLabelNode) setLocalizedText(languageLabelNode, selectorLabel);
       Object.entries(UI_I18N_OPTION_MAP).forEach(([value, key]) => {
         const option = ui.languageSelect.querySelector(`option[value="${value}"]`);
         if (option) setLocalizedText(option, pack[key] || fallback[key] || option.textContent || "");
@@ -2959,8 +3060,7 @@
 
     if (ui.headerAuth) {
       const authLabel = accountAuthed ? (pack.dashboard || fallback.dashboard || "Dashboard") : (pack.sign_in || fallback.sign_in || "Sign in");
-      const authSpan = ui.headerAuth.querySelector("span");
-      if (authSpan) setLocalizedText(authSpan, authLabel);
+      setLocalizedAttribute(ui.headerAuth, "title", authLabel);
       setLocalizedAttribute(
         ui.headerAuth,
         "aria-label",
@@ -3009,8 +3109,7 @@
       );
     }
     if (ui.headerNotifications) {
-      const notifSpan = ui.headerNotifications.querySelector("span");
-      if (notifSpan) setLocalizedText(notifSpan, pack.nav_notifications || fallback.nav_notifications || "Notifications");
+      setLocalizedAttribute(ui.headerNotifications, "title", pack.nav_notifications || fallback.nav_notifications || "Notifications");
       setLocalizedAttribute(
         ui.headerNotifications,
         "aria-label",
@@ -3248,9 +3347,9 @@
         button.setAttribute("aria-label", next === "dark" ? "Switch to light mode" : "Switch to dark mode");
         button.setAttribute("title", next === "dark" ? "Light mode" : "Dark mode");
       }
-      if (state.tickerContext.ticker && isPanelVisible("ticker-intelligence")) {
+      if (getActiveTicker() && isPanelVisible("ticker")) {
         renderTradingViewTerminal({
-          ticker: state.tickerContext.ticker,
+          ticker: getActiveTicker(),
           interval: state.tickerContext.interval || "1d",
         });
       }
@@ -3740,9 +3839,11 @@
     ensureProfileFeedbackButtons();
     ensureHeaderNotificationsCta();
     if (ui.headerAuth) {
+      ui.headerAuth.classList.add("icon-only");
       ui.headerAuth.innerHTML = accountAuthed
-        ? `${icon("dashboard")}<span>Dashboard</span>`
-        : `${icon("log-in")}<span>Sign in</span>`;
+        ? `${icon("dashboard")}`
+        : `${icon("log-in")}`;
+      ui.headerAuth.setAttribute("title", accountAuthed ? "Dashboard" : "Sign in");
       ui.headerAuth.setAttribute("aria-label", accountAuthed ? "Open dashboard" : "Sign in");
       if (ui.headerAuth.tagName.toLowerCase() === "button") {
         ui.headerAuth.dataset.route = accountAuthed ? "/dashboard" : "/account";
@@ -5810,19 +5911,36 @@
 
   const toPrettyJson = (value) => `<pre class="small">${escapeHtml(JSON.stringify(value, null, 2))}</pre>`;
 
-	  const normalizeTopNavigation = () => {
-	    const navs = Array.from(document.querySelectorAll(".header .nav-links"));
-	    if (!navs.length) return;
-	    navs.forEach((nav) => {
+  const normalizeTopNavigation = () => {
+    const navs = Array.from(document.querySelectorAll(".header .nav-links"));
+    if (!navs.length) return;
+    navs.forEach((nav) => {
       nav.innerHTML = `
         <a href="/forecasting" data-analytics="nav_terminal">${icon("candlestick-chart")}<span>Terminal</span></a>
+        <a href="/explore" data-analytics="nav_explore">${icon("binocular")}<span>Explore</span></a>
         <a href="/research" data-analytics="nav_research">${icon("bookmark-book")}<span>Research</span></a>
         <a href="/blog" data-analytics="nav_blog">${icon("page")}<span>Blog</span></a>
+        <a href="/events-calendar" data-analytics="nav_events">${icon("calendar")}<span>Events</span></a>
+        <a href="/shop" data-analytics="nav_shop">${icon("shop")}<span>Shop</span></a>
+        <a href="/about" data-analytics="nav_about">${icon("info-circle")}<span>About</span></a>
         <a href="/pricing" data-analytics="nav_pricing">${icon("wallet")}<span>Pricing</span></a>
-        <a href="/contact" data-analytics="nav_contact">${icon("mail")}<span>Contact</span></a>
+        <a href="/contact" data-analytics="nav_contact">${icon("mail")}<span>Contact Us</span></a>
       `;
-	    });
-	  };
+    });
+  };
+
+  const normalizeHeaderBranding = () => {
+    document.querySelectorAll(".header .logo").forEach((logo) => {
+      if (!(logo instanceof HTMLElement)) return;
+      if (logo.querySelector("img.logo-img")) return;
+      const iconImg = document.createElement("img");
+      iconImg.className = "logo-img";
+      iconImg.src = "/assets/quantura-icon.svg";
+      iconImg.alt = "";
+      iconImg.setAttribute("aria-hidden", "true");
+      logo.prepend(iconImg);
+    });
+  };
 
     const ensureSidebarCollapseToggle = () => {
       const layout = document.querySelector(".app-layout");
@@ -5909,14 +6027,31 @@
       });
     };
 
-	  const ensureHeaderNotificationsCta = () => {
-	    const actions = document.querySelector(".header .nav-actions");
-	    if (!actions) return;
-	    let link = document.getElementById("header-notifications");
+  const ensureHeaderSolveNowCta = () => {
+    const actions = document.querySelector(".header .nav-actions");
+    if (!actions) return;
+    let solveLink = document.getElementById("header-solve-now");
+    if (!solveLink) {
+      solveLink = document.createElement("a");
+      solveLink.id = "header-solve-now";
+      solveLink.className = "cta secondary solve-now-cta";
+      solveLink.href = "/ticker-query";
+      solveLink.setAttribute("data-analytics", "nav_solve_now");
+      solveLink.innerHTML = `${icon("brain")}<span>Solve now</span>`;
+      actions.prepend(solveLink);
+    }
+    solveLink.setAttribute("title", "Powered by AI");
+    solveLink.setAttribute("aria-label", "Solve now. Powered by AI");
+  };
+
+  const ensureHeaderNotificationsCta = () => {
+    const actions = document.querySelector(".header .nav-actions");
+    if (!actions) return;
+    let link = document.getElementById("header-notifications");
     if (!link) {
       link = document.createElement("a");
       link.id = "header-notifications";
-      link.className = "cta secondary";
+      link.className = "cta secondary icon-only";
       link.setAttribute("data-analytics", "nav_notifications");
       const authButton = actions.querySelector("#header-auth");
       if (authButton?.parentElement === actions) {
@@ -5925,12 +6060,14 @@
         actions.appendChild(link);
       }
 	      ui.headerNotifications = link;
-	    }
-	    const authed = hasFullAccount();
-	    link.href = authed ? "/notifications" : "/account";
-	    link.innerHTML = `${icon("bell-notification")}<span>Notifications</span>`;
-	    link.setAttribute("aria-label", authed ? "Open notifications" : "Sign in to manage notifications");
-	  };
+    }
+    const authed = hasFullAccount();
+    link.href = authed ? "/notifications" : "/account";
+    link.innerHTML = `${icon("bell-notification")}`;
+    link.classList.add("icon-only");
+    link.setAttribute("title", "Notifications");
+    link.setAttribute("aria-label", authed ? "Open notifications" : "Sign in to manage notifications");
+  };
 
   const renderNotificationLog = () => {
     if (!ui.notificationsLog) return;
@@ -5982,7 +6119,12 @@
     renderNotificationLog();
   };
 
-  const resolveTradingViewTheme = () => (isDarkMode() ? "dark" : "light");
+  const resolveTradingViewTheme = () => {
+    if (state.tradingViewTheme === "dark" || state.tradingViewTheme === "light") {
+      return state.tradingViewTheme;
+    }
+    return isDarkMode() ? "dark" : "light";
+  };
 
   const normalizeTradingViewSymbol = (ticker) => {
     const clean = normalizeTicker(ticker);
@@ -6095,6 +6237,18 @@
     };
 
     mountTradingViewIframe({
+      container: ui.tradingViewTickerTape,
+      src: buildTradingViewWidgetSrc("https://www.tradingview-widget.com/embed-widget/ticker-tape/?locale=en", {
+        symbols: [{ proName: symbol, title: symbol }],
+        showSymbolLogo: true,
+        displayMode: "adaptive",
+        colorTheme: theme,
+        isTransparent: true,
+      }),
+      title: `Ticker tape ${symbol}`,
+    });
+
+    mountTradingViewIframe({
       container: ui.tradingViewSymbolInfo,
       src: buildTradingViewWidgetSrc("https://www.tradingview-widget.com/embed-widget/symbol-info/?locale=en", {
         ...shared,
@@ -6131,6 +6285,57 @@
       onerror: () => {
         triggerFallback("TradingView unavailable");
       },
+    });
+
+    mountTradingViewIframe({
+      container: ui.tradingViewCompanyProfile,
+      src: buildTradingViewWidgetSrc("https://www.tradingview-widget.com/embed-widget/symbol-profile/?locale=en", {
+        ...shared,
+        width: "100%",
+        height: "100%",
+      }),
+      title: `Company profile ${symbol}`,
+    });
+
+    mountTradingViewIframe({
+      container: ui.tradingViewFundamentalData,
+      src: buildTradingViewWidgetSrc("https://www.tradingview-widget.com/embed-widget/financials/?locale=en", {
+        symbol,
+        colorTheme: theme,
+        isTransparent: true,
+        displayMode: "regular",
+        width: "100%",
+        height: 775,
+      }),
+      title: `Fundamentals ${symbol}`,
+    });
+
+    mountTradingViewIframe({
+      container: ui.tradingViewTechnicalAnalysis,
+      src: buildTradingViewWidgetSrc("https://www.tradingview-widget.com/embed-widget/technical-analysis/?locale=en", {
+        interval: "15m",
+        width: "100%",
+        height: "100%",
+        isTransparent: true,
+        symbol,
+        showIntervalTabs: true,
+        displayMode: "single",
+        colorTheme: theme,
+      }),
+      title: `Technical analysis ${symbol}`,
+    });
+
+    mountTradingViewIframe({
+      container: ui.tradingViewTopStories,
+      src: buildTradingViewWidgetSrc("https://www.tradingview-widget.com/embed-widget/timeline/?locale=en", {
+        symbol,
+        colorTheme: theme,
+        isTransparent: true,
+        displayMode: "regular",
+        width: "100%",
+        height: 600,
+      }),
+      title: `Top stories ${symbol}`,
     });
 
     state.tradingViewLoadTimer = window.setTimeout(() => {
@@ -6236,9 +6441,9 @@
           state.tradingViewTheme = next === "dark" || next === "light" ? next : "auto";
           safeLocalStorageSet(TRADINGVIEW_THEME_CACHE_KEY, state.tradingViewTheme);
           applyChartControlState();
-          if (state.tickerContext.ticker && isPanelVisible("ticker-intelligence")) {
+          if (getActiveTicker() && isPanelVisible("ticker")) {
             renderTradingViewTerminal({
-              ticker: state.tickerContext.ticker,
+              ticker: getActiveTicker(),
               interval: state.tickerContext.interval || "1d",
             });
           }
@@ -6345,30 +6550,150 @@
     }
   };
 
-  const syncTickerInputs = (ticker) => {
-    const t = normalizeTicker(ticker);
-    if (!t) return;
-    const ids = [
-      "forecast-ticker",
-      "technicals-ticker",
-      "download-ticker",
-      "news-ticker",
-      "intel-ticker",
-      "options-ticker",
-      "events-calendar-tickers",
-      "ticker-query-ticker",
-      "watchlist-ticker",
-      "alert-ticker",
-      "autopilot-ticker",
-    ];
-    ids.forEach((id) => {
+  const TICKER_SYNC_INPUT_IDS = Object.freeze([
+    "terminal-ticker",
+    "forecast-ticker",
+    "technicals-ticker",
+    "download-ticker",
+    "news-ticker",
+    "intel-ticker",
+    "options-ticker",
+    "events-calendar-tickers",
+    "ticker-query-ticker",
+    "watchlist-ticker",
+    "alert-ticker",
+    "autopilot-ticker",
+    "predictions-ticker",
+  ]);
+
+  const getActiveTicker = () => normalizeTicker(state.tickerContext.activeTicker || state.tickerContext.ticker || "");
+
+  const getTickerHistoryStorageKey = () => {
+    const uid = String(state.user?.uid || "anon").trim() || "anon";
+    return `${TICKER_HISTORY_KEY_PREFIX}:${uid}`;
+  };
+
+  const readTickerHistory = () => {
+    try {
+      const raw = String(safeLocalStorageGet(getTickerHistoryStorageKey()) || "").trim();
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      const normalized = parsed
+        .map((entry) => normalizeTicker(entry))
+        .filter(Boolean);
+      return Array.from(new Set(normalized)).slice(0, TICKER_HISTORY_LIMIT);
+    } catch (error) {
+      return [];
+    }
+  };
+
+  const writeTickerHistory = (entries) => {
+    const normalized = Array.from(
+      new Set(
+        (Array.isArray(entries) ? entries : [])
+          .map((entry) => normalizeTicker(entry))
+          .filter(Boolean)
+      )
+    ).slice(0, TICKER_HISTORY_LIMIT);
+    state.tickerContext.tickerHistory = normalized;
+    safeLocalStorageSet(getTickerHistoryStorageKey(), JSON.stringify(normalized));
+    return normalized;
+  };
+
+  const renderTickerHistory = () => {
+    if (!ui.tickerHistory) return;
+    const history = state.tickerContext.tickerHistory?.length ? state.tickerContext.tickerHistory : readTickerHistory();
+    state.tickerContext.tickerHistory = history;
+    if (!history.length) {
+      ui.tickerHistory.innerHTML = `<div class="small muted">Recent tickers will appear here as you research.</div>`;
+      return;
+    }
+    ui.tickerHistory.innerHTML = `
+      <div class="ticker-history-title small muted">Recent tickers</div>
+      <div class="ticker-history-list">
+        ${history
+          .map(
+            (ticker) => `
+          <span class="ticker-history-item">
+            <button class="ticker-history-chip" type="button" data-action="ticker-history-select" data-ticker="${escapeHtml(ticker)}">${escapeHtml(ticker)}</button>
+            <button class="ticker-history-remove" type="button" data-action="ticker-history-delete" data-ticker="${escapeHtml(ticker)}" aria-label="Delete ${escapeHtml(ticker)} from ticker history">&times;</button>
+          </span>
+        `
+          )
+          .join("")}
+      </div>
+    `;
+  };
+
+  const rememberTickerInHistory = (ticker) => {
+    const clean = normalizeTicker(ticker);
+    if (!clean) return;
+    const existing = state.tickerContext.tickerHistory?.length ? state.tickerContext.tickerHistory : readTickerHistory();
+    const next = [clean, ...existing.filter((entry) => entry !== clean)].slice(0, TICKER_HISTORY_LIMIT);
+    writeTickerHistory(next);
+    renderTickerHistory();
+  };
+
+  const removeTickerFromHistory = (ticker) => {
+    const clean = normalizeTicker(ticker);
+    if (!clean) return;
+    const existing = state.tickerContext.tickerHistory?.length ? state.tickerContext.tickerHistory : readTickerHistory();
+    writeTickerHistory(existing.filter((entry) => entry !== clean));
+    renderTickerHistory();
+  };
+
+  const refreshTradingViewForTicker = (ticker) => {
+    const clean = normalizeTicker(ticker);
+    if (!clean || !isPanelVisible("ticker")) return;
+    const interval = String(ui.terminalInterval?.value || state.tickerContext.interval || "1d");
+    const rendered = renderTradingViewTerminal({ ticker: clean, interval });
+    if (rendered && !(state.tickerContext.indicatorOverlays || []).length) {
+      setTerminalChartEngineVisibility("tradingview");
+    }
+  };
+
+  const syncTickerInputs = (ticker, { source = "sync", skipHistory = false, emitAnalytics = false } = {}) => {
+    const clean = normalizeTicker(ticker);
+    if (!clean) return false;
+    const previous = getActiveTicker();
+    state.tickerContext.activeTicker = clean;
+    state.tickerContext.ticker = clean;
+    safeLocalStorageSet(LAST_TICKER_KEY, clean);
+    if (!skipHistory) rememberTickerInHistory(clean);
+
+    TICKER_SYNC_INPUT_IDS.forEach((id) => {
       const el = document.getElementById(id);
-      if (!el) return;
-      if ("value" in el && !String(el.value || "").trim()) {
-        el.value = t;
-      } else if ("value" in el) {
-        el.value = t;
+      if (!el || !("value" in el)) return;
+      if (String(el.value || "").trim() !== clean) {
+        el.value = clean;
       }
+    });
+
+    if (previous !== clean) {
+      refreshTradingViewForTicker(clean);
+      scheduleSideDataRefresh(clean, { force: false });
+      if (emitAnalytics) {
+        logEvent("active_ticker_changed", { ticker: clean, source });
+      }
+    }
+    return previous !== clean;
+  };
+
+  const bindTickerInputSync = () => {
+    const seen = new Set();
+    TICKER_SYNC_INPUT_IDS.forEach((id) => {
+      if (id === "events-calendar-tickers") return;
+      const el = document.getElementById(id);
+      if (!el || seen.has(el)) return;
+      seen.add(el);
+      const commitTicker = () => {
+        const clean = normalizeTicker(el.value);
+        if (!clean) return;
+        syncTickerInputs(clean, { source: `input:${id}` });
+      };
+      el.addEventListener("change", commitTicker);
+      el.addEventListener("blur", commitTicker);
     });
   };
 
@@ -8403,14 +8728,14 @@
         const subLabel = absChangeLabel && changeOk ? `${absChangeLabel} · ${changeLabel}` : changeLabel;
 
         return `
-          <button class="trending-card" type="button" data-action="pick-ticker" data-ticker="${escapeHtml(symbol)}">
+          <button class="trending-hot-chip" type="button" data-action="pick-ticker" data-ticker="${escapeHtml(symbol)}">
             <div class="trending-top">
               <div class="trending-symbol">${escapeHtml(symbol)}</div>
               <div class="trending-price">${escapeHtml(priceLabel)}</div>
             </div>
             <div class="trending-bottom">
               <span class="trending-chip trending-chip--${direction}">${escapeHtml(subLabel)}</span>
-              <span class="small muted">Tap to load</span>
+              <span class="small muted">Open ticker</span>
             </div>
           </button>
         `;
@@ -8455,8 +8780,8 @@
 
   const renderTickerChart = async (rows, ticker, interval, overlays = [], options = {}) => {
     if (!ui.tickerChart) return;
-    const tickerIntelligenceVisible = isPanelVisible("ticker-intelligence");
-    if (!tickerIntelligenceVisible) {
+    const tickerPanelVisible = isPanelVisible("ticker");
+    if (!tickerPanelVisible) {
       setTerminalChartEngineVisibility("legacy");
       return;
     }
@@ -11612,16 +11937,14 @@
     state.tickerContext.forecastId = forecastId;
     state.tickerContext.forecastDoc = doc;
     state.tickerContext.forecastTablePage = 0;
-    safeLocalStorageSet(LAST_TICKER_KEY, ticker);
+    syncTickerInputs(ticker, { source: "forecast_load" });
 
     if (!ticker) throw new Error("Forecast ticker is missing.");
-    if (!state.tickerContext.rows.length || state.tickerContext.ticker !== ticker || state.tickerContext.interval !== interval) {
+    if (!state.tickerContext.rows.length || getActiveTicker() !== ticker || state.tickerContext.interval !== interval) {
       setTerminalStatus("Loading price history...");
       const rows = await loadTickerHistory(functions, ticker, interval);
       state.tickerContext.rows = rows;
-      state.tickerContext.ticker = ticker;
       state.tickerContext.interval = interval;
-      syncTickerInputs(ticker);
     }
 
     const forecastOverlays = buildForecastOverlays(doc.forecastRows || []);
@@ -12219,19 +12542,23 @@
       window.__quanturaPanelActivated = (panel) => {
         const next = String(panel || "").trim();
         if (!next) return;
-        const showTickerIntelligenceChart = next === "ticker-intelligence";
+        const showTickerChart = next === "ticker";
 
         if (ui.studioChartShell) {
-          // Keep the chart window scoped to the ticker intelligence panel only.
-          ui.studioChartShell.classList.toggle("hidden", !showTickerIntelligenceChart);
+          // Keep the chart window scoped to the ticker panel only.
+          ui.studioChartShell.classList.toggle("hidden", !showTickerChart);
         }
         if (ui.intelStrip) {
-          // Keep the intel side-strip scoped to the ticker intelligence view.
-          ui.intelStrip.classList.toggle("hidden", !showTickerIntelligenceChart);
+          // Keep the intel side-strip scoped to the ticker view.
+          ui.intelStrip.classList.toggle("hidden", !showTickerChart);
         }
-        if (next === "ticker-intelligence") {
+        if (next === "ticker") {
           setTickerIntelTab(state.intelActiveTab || "intelligence");
-          const activeTicker = normalizeTicker(state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "");
+          const activeTicker = getActiveTicker() || normalizeTicker(safeLocalStorageGet(LAST_TICKER_KEY) || "");
+          if (activeTicker) {
+            syncTickerInputs(activeTicker, { source: "panel_open_ticker", skipHistory: true });
+            refreshTradingViewForTicker(activeTicker);
+          }
           if (activeTicker && Array.isArray(state.tickerContext.rows) && state.tickerContext.rows.length) {
             renderTickerChart(
               state.tickerContext.rows,
@@ -12240,6 +12567,8 @@
               // TradingView does not support Quantura overlays; keep the TI view clean.
               []
             ).catch(() => {});
+          } else if (activeTicker) {
+            setTerminalChartEngineVisibility("tradingview");
           } else {
             setTerminalChartEngineVisibility("legacy");
           }
@@ -12255,7 +12584,7 @@
         }
 
         if (next === "news") {
-          const ticker = normalizeTicker(state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "");
+          const ticker = getActiveTicker() || normalizeTicker(safeLocalStorageGet(LAST_TICKER_KEY) || "");
           if (!ticker) return;
           scheduleSideDataRefresh(ticker, { force: !state.panelAutoloaded.news });
           state.panelAutoloaded.news = true;
@@ -12274,7 +12603,7 @@
         }
 
         if (next === "ticker-query") {
-          const ticker = normalizeTicker(state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "");
+          const ticker = getActiveTicker() || normalizeTicker(safeLocalStorageGet(LAST_TICKER_KEY) || "");
           if (ticker && ui.tickerQueryTicker && !String(ui.tickerQueryTicker.value || "").trim()) {
             ui.tickerQueryTicker.value = ticker;
           }
@@ -12287,7 +12616,7 @@
         }
 
         if (next === "options") {
-          const ticker = normalizeTicker(state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "");
+          const ticker = getActiveTicker() || normalizeTicker(safeLocalStorageGet(LAST_TICKER_KEY) || "");
           if (!ticker) return;
           const first = !state.panelAutoloaded.options;
           state.panelAutoloaded.options = true;
@@ -12296,10 +12625,13 @@
       };
 
       ensureThemeToggle();
+      normalizeHeaderBranding();
       normalizeTopNavigation();
+      ensureHeaderSolveNowCta();
       ensureHeaderNotificationsCta();
       ensureSidebarCollapseToggle();
       bindMobileNav();
+      bindMobileSidebarDrawer();
       bindMobileBottomNav();
       initializeLanguageControls().catch(() => {});
       captureShareFromUrl();
@@ -12397,22 +12729,36 @@
 		    const pickTicker = async (rawTicker) => {
 		      const ticker = normalizeTicker(rawTicker);
 		      if (!ticker) return;
-		      safeLocalStorageSet(LAST_TICKER_KEY, ticker);
-		      syncTickerInputs(ticker);
+		      syncTickerInputs(ticker, { source: "pick_ticker", emitAnalytics: true });
 		      logEvent("ticker_selected", { ticker, page_path: window.location.pathname });
 
 			      // If we're in the terminal, load the chart immediately. Otherwise, jump to the terminal.
 			      if (ui.terminalForm && ui.terminalTicker && ui.tickerChart) {
+              window.__quanturaSetPanel?.("ticker");
 			        ui.terminalTicker.value = ticker;
 			        ui.terminalForm.requestSubmit?.();
 			      } else {
 		        const params = new URLSearchParams();
 		        params.set("ticker", ticker);
-		        window.location.href = `/forecasting?${params.toString()}`;
+		        window.location.href = `/ticker-intelligence?${params.toString()}`;
 		      }
 		    };
 
 		    document.addEventListener("click", async (event) => {
+          const historySelect = event.target.closest('[data-action="ticker-history-select"]');
+          if (historySelect) {
+            event.preventDefault();
+            await pickTicker(historySelect.dataset.ticker || "");
+            return;
+          }
+
+          const historyDelete = event.target.closest('[data-action="ticker-history-delete"]');
+          if (historyDelete) {
+            event.preventDefault();
+            removeTickerFromHistory(historyDelete.dataset.ticker || "");
+            return;
+          }
+
 		      const button = event.target.closest('[data-action="pick-ticker"]');
 		      if (!button) return;
 		      event.preventDefault();
@@ -14120,9 +14466,10 @@
       const initialInterval = getQueryParam("interval") || (ui.terminalInterval?.value || "1d");
       ui.terminalTicker.value = initialTicker;
       if (ui.terminalInterval) ui.terminalInterval.value = initialInterval;
-      state.tickerContext.ticker = initialTicker;
       state.tickerContext.interval = initialInterval;
-      syncTickerInputs(initialTicker);
+      syncTickerInputs(initialTicker, { source: "initial_ticker" });
+      bindTickerInputSync();
+      renderTickerHistory();
 
       const forecastId = getQueryParam("forecastId");
       if (forecastId) state.tickerContext.forecastId = forecastId;
@@ -14135,8 +14482,7 @@
           showToast("Enter a ticker.", "warn");
           return;
         }
-        safeLocalStorageSet(LAST_TICKER_KEY, ticker);
-        state.tickerContext.ticker = ticker;
+        syncTickerInputs(ticker, { source: "terminal_submit", emitAnalytics: true });
         state.tickerContext.interval = interval;
         state.tickerContext.forecastDoc = null;
         state.tickerContext.forecastId = "";
@@ -14147,7 +14493,6 @@
 	          await renderTickerChart(rows, ticker, interval, state.tickerContext.indicatorOverlays || []);
 	          setTerminalStatus("Loaded.");
 	          logEvent("terminal_load", { ticker, interval });
-	          syncTickerInputs(ticker);
 	          scheduleSideDataRefresh(ticker, { force: true });
 	        } catch (error) {
 	          setTerminalStatus(error.message || "Unable to load ticker data.");
@@ -14296,7 +14641,7 @@
             showToast("Enter a ticker to forecast.", "warn");
             return;
           }
-          syncTickerInputs(ticker);
+          syncTickerInputs(ticker, { source: "forecast_form" });
 		      const payload = {
 		        ticker,
 	        horizon: Number(formData.get("horizon")),
@@ -14312,7 +14657,7 @@
             if (
               Array.isArray(state.tickerContext.rows) &&
               state.tickerContext.rows.length &&
-              state.tickerContext.ticker === ticker &&
+              getActiveTicker() === ticker &&
               state.tickerContext.interval === desiredInterval
             ) {
               const dateKey = extractDateKey(state.tickerContext.rows);
@@ -14395,7 +14740,7 @@
 	      const formData = new FormData(ui.technicalsForm);
 	      const indicators = formData.getAll("indicators");
 	      const includeSeries = Boolean(ui.indicatorChart || ui.tickerChart);
-      const payload = {
+	      const payload = {
         ticker: formData.get("ticker"),
         interval: formData.get("interval"),
         lookback: Number(formData.get("lookback")),
@@ -14406,6 +14751,11 @@
 	      };
 
 	      try {
+          const activeTicker = normalizeTicker(payload.ticker || state.tickerContext.ticker || "");
+          if (activeTicker) {
+            payload.ticker = activeTicker;
+            syncTickerInputs(activeTicker, { source: "technicals_form" });
+          }
 	        setOutputLoading(ui.technicalsOutput, "Computing indicators...");
 	        const runIndicators = functions.httpsCallable("get_technicals");
 	        const result = await runIndicators(payload);
@@ -14433,7 +14783,7 @@
           await renderIndicatorChart(data.series);
           state.tickerContext.indicatorOverlays = buildIndicatorOverlays(data.series);
           const ticker = normalizeTicker(payload.ticker);
-          if (ticker && ui.tickerChart && state.tickerContext.rows.length && state.tickerContext.ticker === ticker) {
+          if (ticker && ui.tickerChart && state.tickerContext.rows.length && getActiveTicker() === ticker) {
             const forecastOverlays =
               state.tickerContext.forecastDoc && normalizeTicker(state.tickerContext.forecastDoc.ticker) === ticker
                 ? buildForecastOverlays(state.tickerContext.forecastDoc.forecastRows || [])
@@ -15416,6 +15766,8 @@
           if (!user) {
             state.authResolved = true;
             state.user = null;
+            state.tickerContext.tickerHistory = readTickerHistory();
+            renderTickerHistory();
             setAuthUi(null);
             setUserId(null);
             if (!state.anonymousBootstrapInFlight) {
@@ -15442,6 +15794,8 @@
           }
 			      state.authResolved = true;
 			      state.user = user;
+            state.tickerContext.tickerHistory = readTickerHistory();
+            renderTickerHistory();
 			      setAuthUi(user);
 			      setUserId(hasFullAccount(user) ? user.uid : null);
             if (isNativeApp()) {
