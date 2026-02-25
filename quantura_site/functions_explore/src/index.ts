@@ -59,6 +59,24 @@ type ExploreCursor = {
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 40;
+const PUBLIC_ORIGIN = asString(process.env.PUBLIC_ORIGIN, "https://quantura-e2e3d.web.app").replace(/\/$/, "");
+const ADMIN_EMAIL = "tamzid257@gmail.com";
+const MODEL_COUNCIL_RESPONSE_COLLECTION = "model_council_responses";
+
+type SavedItemType = "forecast" | "screener" | "model_council" | "post";
+
+type SystemFolderConfig = {
+  id: string;
+  displayName: string;
+  flag: "liked" | "reposted" | "saved" | "shared";
+};
+
+const SYSTEM_FOLDERS: SystemFolderConfig[] = [
+  { id: "liked-posts", displayName: "Liked posts", flag: "liked" },
+  { id: "reposted-posts", displayName: "Reposted posts", flag: "reposted" },
+  { id: "saved-posts", displayName: "Saved posts", flag: "saved" },
+  { id: "shared-posts", displayName: "Shared posts", flag: "shared" },
+];
 
 const ROUTES = express.Router();
 
@@ -101,6 +119,33 @@ function sanitizeText(value: unknown, maxLen = 600): string {
   const raw = asString(value).replace(/\s+/g, " ").trim();
   if (!raw) return "";
   return raw.slice(0, maxLen);
+}
+
+function normalizeFolderId(value: unknown): string {
+  const raw = asString(value).trim().toLowerCase();
+  if (!raw) return "";
+  return raw.replace(/[^a-z0-9_-]/g, "-").replace(/-+/g, "-").slice(0, 80);
+}
+
+function normalizeSavedItemType(value: unknown): SavedItemType | "" {
+  const raw = asString(value).trim().toLowerCase();
+  if (raw === "forecast" || raw === "screener" || raw === "model_council" || raw === "post") return raw;
+  return "";
+}
+
+function normalizeSourceId(value: unknown): string {
+  return sanitizeText(value, 220).replace(/[^A-Za-z0-9._:\-]/g, "");
+}
+
+function normalizeShareId(value: unknown): string {
+  const raw = asString(value).trim();
+  if (!raw) return "";
+  return /^[A-Za-z0-9_-]{8,220}$/.test(raw) ? raw : "";
+}
+
+function buildFolderItemDocId(itemType: SavedItemType, sourceId: string): string {
+  const cleanSource = normalizeSourceId(sourceId).replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 180);
+  return `${itemType}__${cleanSource || "item"}`;
 }
 
 function getTimestampMs(value: unknown): number {
@@ -476,7 +521,7 @@ function isPostVisibleToViewer(post: Record<string, unknown>, viewerUid: string 
 
 function toPostResponse(
   snap: admin.firestore.QueryDocumentSnapshot | admin.firestore.DocumentSnapshot,
-  viewerState: { liked: boolean; reposted: boolean } = { liked: false, reposted: false }
+  viewerState: { liked: boolean; reposted: boolean; saved: boolean } = { liked: false, reposted: false, saved: false }
 ): Record<string, unknown> {
   const data = (snap.data() || {}) as Record<string, unknown>;
   const createdAtMs = getTimestampMs(data.createdAt);
@@ -505,6 +550,7 @@ function toPostResponse(
     viewer: {
       liked: viewerState.liked,
       reposted: viewerState.reposted,
+      saved: viewerState.saved,
     },
   };
 }
@@ -512,31 +558,41 @@ function toPostResponse(
 async function fetchViewerEngagement(
   postIds: string[],
   viewerUid: string | null
-): Promise<Map<string, { liked: boolean; reposted: boolean }>> {
-  const engagement = new Map<string, { liked: boolean; reposted: boolean }>();
-  postIds.forEach((id) => engagement.set(id, { liked: false, reposted: false }));
+): Promise<Map<string, { liked: boolean; reposted: boolean; saved: boolean }>> {
+  const engagement = new Map<string, { liked: boolean; reposted: boolean; saved: boolean }>();
+  postIds.forEach((id) => engagement.set(id, { liked: false, reposted: false, saved: false }));
 
   if (!viewerUid || postIds.length === 0) return engagement;
 
   const likeRefs = postIds.map((postId) => db.collection("postLikes").doc(postId).collection("users").doc(viewerUid));
   const repostRefs = postIds.map((postId) => db.collection("postReposts").doc(postId).collection("users").doc(viewerUid));
+  const savedRefs = postIds.map((postId) => db.collection("users").doc(viewerUid).collection("saved_post_state").doc(postId));
 
-  const [likeDocs, repostDocs] = await Promise.all([
+  const [likeDocs, repostDocs, savedDocs] = await Promise.all([
     db.getAll(...likeRefs),
     db.getAll(...repostRefs),
+    db.getAll(...savedRefs),
   ]);
 
   likeDocs.forEach((doc, index) => {
     const postId = postIds[index];
-    const current = engagement.get(postId) || { liked: false, reposted: false };
+    const current = engagement.get(postId) || { liked: false, reposted: false, saved: false };
     if (doc.exists) current.liked = true;
     engagement.set(postId, current);
   });
 
   repostDocs.forEach((doc, index) => {
     const postId = postIds[index];
-    const current = engagement.get(postId) || { liked: false, reposted: false };
+    const current = engagement.get(postId) || { liked: false, reposted: false, saved: false };
     if (doc.exists) current.reposted = true;
+    engagement.set(postId, current);
+  });
+
+  savedDocs.forEach((doc, index) => {
+    const postId = postIds[index];
+    const current = engagement.get(postId) || { liked: false, reposted: false, saved: false };
+    const data = (doc.data() || {}) as Record<string, unknown>;
+    current.saved = asBoolean(data.saved, false);
     engagement.set(postId, current);
   });
 
@@ -738,6 +794,236 @@ async function deleteCollectionDocs(query: admin.firestore.Query, batchSize = 20
   }
 }
 
+function isAdminEmail(email: unknown): boolean {
+  return asString(email).trim().toLowerCase() === ADMIN_EMAIL;
+}
+
+function systemFolderById(folderId: string): SystemFolderConfig | null {
+  return SYSTEM_FOLDERS.find((folder) => folder.id === folderId) || null;
+}
+
+async function inferPremiumUser(uid: string): Promise<boolean> {
+  try {
+    const orders = await db
+      .collection("orders")
+      .where("userId", "==", uid)
+      .orderBy("createdAt", "desc")
+      .limit(30)
+      .get();
+    return orders.docs.some((doc) => {
+      const data = doc.data() || {};
+      const paymentStatus = asString(data.paymentStatus).trim().toLowerCase();
+      const stripePaymentStatus = asString(data.stripePaymentStatus).trim().toLowerCase();
+      const status = asString(data.status).trim().toLowerCase();
+      return ["paid", "succeeded", "complete", "completed", "active"].includes(paymentStatus)
+        || ["paid", "succeeded", "complete", "completed", "active"].includes(stripePaymentStatus)
+        || ["paid", "completed", "active"].includes(status);
+    });
+  } catch {
+    return false;
+  }
+}
+
+async function buildProfilePayload(
+  userDocId: string,
+  userData: Record<string, unknown>,
+  viewerUid: string | null
+): Promise<Record<string, unknown>> {
+  const profile = (userData.profile || {}) as Record<string, unknown>;
+  const handle = normalizeHandle(userData.handle || profile.username || userDocId.slice(0, 12)) || `user-${userDocId.slice(0, 8)}`;
+  const isOwner = viewerUid === userDocId;
+  const email = asString(userData.email).trim().toLowerCase();
+  const isAdmin = isAdminEmail(email);
+  const explicitPremium =
+    asBoolean(profile.premium, false)
+    || asBoolean(userData.premium, false)
+    || asBoolean(profile.verified, false)
+    || ["pro", "desk", "premium"].includes(asString(profile.plan || userData.plan || userData.subscriptionTier).trim().toLowerCase());
+  const premium = explicitPremium ? true : await inferPremiumUser(userDocId);
+  const verified = isAdmin || premium || asBoolean(profile.verified, false);
+  const publicEmailOptIn = asBoolean(profile.publicEmailOptIn, false);
+  const publicProfile = asBoolean(profile.publicProfile, false);
+  const photoURL = asString(userData.photoURL || profile.photoURL || profile.avatarUrl || "");
+  const name = sanitizeText(userData.name || userData.displayName || profile.name || "", 120);
+  const username = normalizeHandle(profile.username || userData.handle || "") || handle;
+  const profileUrl = `${PUBLIC_ORIGIN}/u/${encodeURIComponent(handle)}`;
+
+  return {
+    uid: userDocId,
+    handle,
+    username,
+    name,
+    photoURL,
+    bio: sanitizeText(profile.bio || "", 400),
+    publicProfile,
+    publicEmailOptIn,
+    email: isOwner || publicEmailOptIn ? email : "",
+    emailVisible: Boolean(isOwner || publicEmailOptIn),
+    verified,
+    premium,
+    isAdmin,
+    profileUrl,
+    canEdit: isOwner,
+  };
+}
+
+async function upsertSavedPostState(
+  uid: string,
+  postId: string,
+  patch: Partial<{ liked: boolean; reposted: boolean; saved: boolean; shared: boolean }>
+): Promise<void> {
+  if (!uid || !postId) return;
+  const ref = db.collection("users").doc(uid).collection("saved_post_state").doc(postId);
+  const payload: Record<string, unknown> = {
+    postId,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+  if (typeof patch.liked === "boolean") payload.liked = patch.liked;
+  if (typeof patch.reposted === "boolean") payload.reposted = patch.reposted;
+  if (typeof patch.saved === "boolean") payload.saved = patch.saved;
+  if (typeof patch.shared === "boolean") payload.shared = patch.shared;
+  await ref.set(payload, { merge: true });
+}
+
+async function listSystemFolderCounts(uid: string): Promise<Record<string, number>> {
+  const counts: Record<string, number> = {};
+  const base = db.collection("users").doc(uid).collection("saved_post_state");
+  await Promise.all(
+    SYSTEM_FOLDERS.map(async (folder) => {
+      const snap = await base.where(folder.flag, "==", true).limit(400).get();
+      counts[folder.id] = snap.size;
+    })
+  );
+  return counts;
+}
+
+function buildPostSavedItem(postId: string, data: Record<string, unknown>): Record<string, unknown> {
+  const createdAtMs = getTimestampMs(data.createdAt);
+  const updatedAtMs = getTimestampMs(data.updatedAt || data.createdAt);
+  const tickers = Array.isArray(data.tickers) ? data.tickers : [];
+  return {
+    itemType: "post",
+    sourceId: postId,
+    itemId: `post__${postId}`,
+    title: asString(data.title, "Explore post"),
+    subtitle: asString(data.caption, ""),
+    ticker: asString(tickers[0] || ""),
+    targetUrl: `/explore?post=${encodeURIComponent(postId)}`,
+    createdAtMs,
+    updatedAtMs,
+    visibility: asString(data.visibility, "public"),
+  };
+}
+
+async function resolveSavedItem(
+  uid: string,
+  itemType: SavedItemType,
+  sourceId: string
+): Promise<Record<string, unknown> | null> {
+  const cleanSourceId = normalizeSourceId(sourceId);
+  if (!uid || !cleanSourceId) return null;
+
+  if (itemType === "forecast") {
+    const snap = await db.collection("forecast_requests").doc(cleanSourceId).get();
+    if (!snap.exists) return null;
+    const data = (snap.data() || {}) as Record<string, unknown>;
+    if (asString(data.userId) !== uid) return null;
+    return {
+      itemType,
+      sourceId: snap.id,
+      itemId: buildFolderItemDocId(itemType, snap.id),
+      title: asString(data.title, `${normalizeTicker(data.ticker)} forecast`),
+      subtitle: asString(data.serviceMessage || data.notes || ""),
+      ticker: normalizeTicker(data.ticker),
+      targetUrl: `/forecasting?forecastId=${encodeURIComponent(snap.id)}`,
+      createdAtMs: getTimestampMs(data.createdAt),
+      updatedAtMs: getTimestampMs(data.updatedAt || data.createdAt),
+    };
+  }
+
+  if (itemType === "screener") {
+    const snap = await db.collection("screener_runs").doc(cleanSourceId).get();
+    if (!snap.exists) return null;
+    const data = (snap.data() || {}) as Record<string, unknown>;
+    if (asString(data.userId) !== uid) return null;
+    return {
+      itemType,
+      sourceId: snap.id,
+      itemId: buildFolderItemDocId(itemType, snap.id),
+      title: asString(data.title, "Screener run"),
+      subtitle: asString(data.notes || ""),
+      ticker: normalizeTicker(((data.results as Array<Record<string, unknown>> | undefined) || [])[0]?.symbol),
+      targetUrl: `/screener?runId=${encodeURIComponent(snap.id)}`,
+      createdAtMs: getTimestampMs(data.createdAt),
+      updatedAtMs: getTimestampMs(data.updatedAt || data.createdAt),
+    };
+  }
+
+  if (itemType === "model_council") {
+    const snap = await db.collection(MODEL_COUNCIL_RESPONSE_COLLECTION).doc(cleanSourceId).get();
+    if (!snap.exists) return null;
+    const data = (snap.data() || {}) as Record<string, unknown>;
+    if (asString(data.userId) !== uid) return null;
+    return {
+      itemType,
+      sourceId: snap.id,
+      itemId: buildFolderItemDocId(itemType, snap.id),
+      title: `${normalizeTicker(data.ticker) || "Ticker"} Model Council`,
+      subtitle: asString(data.question || ""),
+      ticker: normalizeTicker(data.ticker),
+      targetUrl: `/model-council`,
+      createdAtMs: getTimestampMs(data.createdAt),
+      updatedAtMs: getTimestampMs(data.updatedAt || data.createdAt),
+    };
+  }
+
+  const snap = await db.collection("posts").doc(cleanSourceId).get();
+  if (!snap.exists) return null;
+  const data = (snap.data() || {}) as Record<string, unknown>;
+  if (!isPostVisibleToViewer(data, uid)) return null;
+  return buildPostSavedItem(snap.id, data);
+}
+
+async function listSystemFolderItems(uid: string, folderId: string, limit: number): Promise<Record<string, unknown>[]> {
+  const folder = systemFolderById(folderId);
+  if (!folder) return [];
+  const stateSnap = await db
+    .collection("users")
+    .doc(uid)
+    .collection("saved_post_state")
+    .where(folder.flag, "==", true)
+    .limit(Math.max(limit, 80))
+    .get();
+  if (stateSnap.empty) return [];
+
+  const postRefs = stateSnap.docs.map((doc) => db.collection("posts").doc(doc.id));
+  const postDocs = await db.getAll(...postRefs);
+
+  const out = postDocs
+    .filter((snap) => snap.exists)
+    .map((snap) => {
+      const data = (snap.data() || {}) as Record<string, unknown>;
+      return buildPostSavedItem(snap.id, data);
+    })
+    .sort((a, b) => asFinite(b.updatedAtMs, 0) - asFinite(a.updatedAtMs, 0));
+
+  return out.slice(0, limit);
+}
+
+function matchesSearchQuery(item: Record<string, unknown>, query: string): boolean {
+  const normalized = sanitizeText(query, 140).toLowerCase();
+  if (!normalized) return true;
+  const haystack = [
+    asString(item.title),
+    asString(item.subtitle),
+    asString(item.ticker),
+    asString(item.itemType),
+  ]
+    .join(" ")
+    .toLowerCase();
+  return haystack.includes(normalized);
+}
+
 ROUTES.get("/health", (_req, res) => {
   res.status(200).json({ ok: true, service: "quantura-explore-api", ts: new Date().toISOString() });
 });
@@ -884,7 +1170,7 @@ ROUTES.get("/explore", async (req, res) => {
     const engagement = await fetchViewerEngagement(postIds, viewer?.uid || null);
 
     const posts = visibleDocs.map((doc) => {
-      const viewerState = engagement.get(doc.id) || { liked: false, reposted: false };
+      const viewerState = engagement.get(doc.id) || { liked: false, reposted: false, saved: false };
       return toPostResponse(doc, viewerState);
     });
 
@@ -943,7 +1229,7 @@ ROUTES.get("/posts/:postId", async (req, res) => {
       };
     });
 
-    const viewerState = engagement.get(postId) || { liked: false, reposted: false };
+    const viewerState = engagement.get(postId) || { liked: false, reposted: false, saved: false };
 
     res.status(200).json({
       post: toPostResponse(postSnap, viewerState),
@@ -1001,6 +1287,8 @@ ROUTES.post("/posts/:postId/like", async (req, res) => {
         score,
       };
     });
+
+    await upsertSavedPostState(user.uid, postId, { liked: asBoolean((result as any).liked, false) });
 
     res.status(200).json(result);
   } catch (error: any) {
@@ -1069,6 +1357,8 @@ ROUTES.post("/posts/:postId/repost", async (req, res) => {
       };
     });
 
+    await upsertSavedPostState(user.uid, postId, { reposted: asBoolean((result as any).reposted, false) });
+
     res.status(200).json(result);
   } catch (error: any) {
     const code = String(error?.message || "");
@@ -1131,6 +1421,10 @@ ROUTES.post("/posts/:postId/share", async (req, res) => {
       };
     });
 
+    if (user?.uid) {
+      await upsertSavedPostState(user.uid, postId, { shared: true });
+    }
+
     res.status(200).json(result);
   } catch (error: any) {
     const code = String(error?.message || "");
@@ -1144,6 +1438,45 @@ ROUTES.post("/posts/:postId/share", async (req, res) => {
     }
     console.error("[Explore] share failed", error);
     res.status(500).json({ error: "share_failed" });
+  }
+});
+
+ROUTES.post("/posts/:postId/save", async (req, res) => {
+  try {
+    const user = await verifyRequestUser(req, true);
+    const postId = sanitizeText(req.params.postId, 180);
+    if (!user || !postId) {
+      res.status(400).json({ error: "invalid_post_id" });
+      return;
+    }
+
+    const postSnap = await db.collection("posts").doc(postId).get();
+    if (!postSnap.exists) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    const postData = (postSnap.data() || {}) as Record<string, unknown>;
+    if (!isPostVisibleToViewer(postData, user.uid)) {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
+
+    const stateRef = db.collection("users").doc(user.uid).collection("saved_post_state").doc(postId);
+    const stateSnap = await stateRef.get();
+    const currentSaved = asBoolean((stateSnap.data() || {}).saved, false);
+    const explicit = (req.body || {}).save;
+    const nextSaved = typeof explicit === "boolean" ? explicit : !currentSaved;
+
+    await upsertSavedPostState(user.uid, postId, { saved: nextSaved });
+    res.status(200).json({ ok: true, saved: nextSaved });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Explore] save post failed", error);
+    res.status(500).json({ error: "save_post_failed" });
   }
 });
 
@@ -1460,6 +1793,8 @@ ROUTES.get("/profile/handle/:handle", async (req, res) => {
       return;
     }
 
+    const viewer = await verifyRequestUser(req, false).catch(() => null);
+
     let snap = await db.collection("users").where("handle", "==", handle).limit(1).get();
     if (snap.empty) {
       snap = await db.collection("users").where("profile.username", "==", handle).limit(1).get();
@@ -1472,15 +1807,14 @@ ROUTES.get("/profile/handle/:handle", async (req, res) => {
 
     const userDoc = snap.docs[0];
     const userData = userDoc.data() || {};
-    const profile = (userData.profile || {}) as Record<string, unknown>;
+    const payload = await buildProfilePayload(userDoc.id, userData, viewer?.uid || null);
 
-    res.status(200).json({
-      uid: userDoc.id,
-      handle: normalizeHandle(userData.handle || profile.username || handle),
-      photoURL: asString(userData.photoURL || profile.photoURL || ""),
-      bio: asString(profile.bio || ""),
-      publicProfile: asBoolean(profile.publicProfile, false),
-    });
+    if (!asBoolean(payload.publicProfile, false) && viewer?.uid !== userDoc.id) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+
+    res.status(200).json(payload);
   } catch (error) {
     console.error("[Explore] profile by handle failed", error);
     res.status(500).json({ error: "profile_lookup_failed" });
@@ -1531,7 +1865,7 @@ ROUTES.get("/profile/:uid/posts", async (req, res) => {
     const postIds = page.map((doc) => doc.id);
     const engagement = await fetchViewerEngagement(postIds, viewer?.uid || null);
 
-    const posts = page.map((doc) => toPostResponse(doc, engagement.get(doc.id) || { liked: false, reposted: false }));
+    const posts = page.map((doc) => toPostResponse(doc, engagement.get(doc.id) || { liked: false, reposted: false, saved: false }));
     const next = hasMore && posts.length
       ? encodeCursor(buildNextCursor(posts[posts.length - 1] as Record<string, unknown>, false))
       : null;
@@ -1540,6 +1874,74 @@ ROUTES.get("/profile/:uid/posts", async (req, res) => {
   } catch (error) {
     console.error("[Explore] profile posts failed", error);
     res.status(500).json({ error: "profile_posts_failed" });
+  }
+});
+
+ROUTES.get("/me/profile", async (req, res) => {
+  try {
+    const viewer = await verifyRequestUser(req, true);
+    if (!viewer) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const userSnap = await db.collection("users").doc(viewer.uid).get();
+    if (!userSnap.exists) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    const payload = await buildProfilePayload(viewer.uid, (userSnap.data() || {}) as Record<string, unknown>, viewer.uid);
+    res.status(200).json(payload);
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Explore] me profile failed", error);
+    res.status(500).json({ error: "me_profile_failed" });
+  }
+});
+
+ROUTES.patch("/me/profile", async (req, res) => {
+  try {
+    const viewer = await verifyRequestUser(req, true);
+    if (!viewer) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+
+    const body = (req.body || {}) as Record<string, unknown>;
+    const profilePatch: Record<string, unknown> = {};
+    if (typeof body.publicEmailOptIn === "boolean") {
+      profilePatch.publicEmailOptIn = body.publicEmailOptIn;
+    }
+    if (typeof body.publicProfile === "boolean") {
+      profilePatch.publicProfile = body.publicProfile;
+    }
+    if (!Object.keys(profilePatch).length) {
+      res.status(400).json({ error: "no_supported_fields" });
+      return;
+    }
+
+    await db.collection("users").doc(viewer.uid).set(
+      {
+        profile: profilePatch,
+        profileUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    const userSnap = await db.collection("users").doc(viewer.uid).get();
+    const payload = await buildProfilePayload(viewer.uid, (userSnap.data() || {}) as Record<string, unknown>, viewer.uid);
+    res.status(200).json({ ok: true, profile: payload });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Explore] me profile update failed", error);
+    res.status(500).json({ error: "me_profile_update_failed" });
   }
 });
 
@@ -1779,6 +2181,457 @@ ROUTES.post("/watch-tickers/:ticker", async (req, res) => {
     }
     console.error("[Explore] watch ticker failed", error);
     res.status(500).json({ error: "watch_ticker_failed" });
+  }
+});
+
+ROUTES.get("/saved/folders", async (req, res) => {
+  try {
+    const viewer = await verifyRequestUser(req, true);
+    if (!viewer) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+
+    const userRef = db.collection("users").doc(viewer.uid);
+    const [customSnap, systemCounts] = await Promise.all([
+      userRef.collection("saved_folders").orderBy("updatedAt", "desc").limit(80).get(),
+      listSystemFolderCounts(viewer.uid),
+    ]);
+
+    const folders = [
+      ...SYSTEM_FOLDERS.map((folder) => ({
+        id: folder.id,
+        name: folder.displayName,
+        isSystem: true,
+        itemCount: asFinite(systemCounts[folder.id], 0),
+      })),
+      ...customSnap.docs
+        .map((doc) => ({ id: doc.id, ...(doc.data() || {}) }))
+        .filter((row) => !asBoolean((row as Record<string, unknown>).isSystem, false))
+        .map((row) => ({
+          id: asString((row as Record<string, unknown>).id),
+          name: asString((row as Record<string, unknown>).name, "Untitled folder"),
+          isSystem: false,
+          itemCount: asFinite((row as Record<string, unknown>).itemCount, 0),
+          createdAtMs: getTimestampMs((row as Record<string, unknown>).createdAt),
+          updatedAtMs: getTimestampMs((row as Record<string, unknown>).updatedAt),
+        })),
+    ];
+
+    res.status(200).json({ folders });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Explore] list saved folders failed", error);
+    res.status(500).json({ error: "saved_folders_failed" });
+  }
+});
+
+ROUTES.post("/saved/folders", async (req, res) => {
+  try {
+    const viewer = await verifyRequestUser(req, true);
+    if (!viewer) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+
+    const requestedName = sanitizeText((req.body || {}).name, 80);
+    const requestedId = normalizeFolderId((req.body || {}).id);
+    if (!requestedName || requestedName.length < 2) {
+      res.status(400).json({ error: "invalid_folder_name" });
+      return;
+    }
+
+    let folderId = requestedId || normalizeFolderId(requestedName);
+    if (!folderId || systemFolderById(folderId)) {
+      folderId = `folder-${Date.now()}`;
+    }
+
+    const folderRef = db.collection("users").doc(viewer.uid).collection("saved_folders").doc(folderId);
+    const existing = await folderRef.get();
+    if (existing.exists) {
+      folderId = `${folderId}-${Math.floor(Date.now() / 1000)}`;
+    }
+
+    await db
+      .collection("users")
+      .doc(viewer.uid)
+      .collection("saved_folders")
+      .doc(folderId)
+      .set(
+        {
+          name: requestedName,
+          isSystem: false,
+          itemCount: 0,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+    res.status(200).json({
+      ok: true,
+      folder: {
+        id: folderId,
+        name: requestedName,
+        isSystem: false,
+        itemCount: 0,
+      },
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Explore] create saved folder failed", error);
+    res.status(500).json({ error: "saved_folder_create_failed" });
+  }
+});
+
+ROUTES.get("/saved/folders/:folderId/items", async (req, res) => {
+  try {
+    const viewer = await verifyRequestUser(req, true);
+    if (!viewer) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+
+    const folderId = normalizeFolderId(req.params.folderId);
+    const limit = parseLimit(req.query.limit);
+    if (!folderId) {
+      res.status(400).json({ error: "invalid_folder_id" });
+      return;
+    }
+
+    if (systemFolderById(folderId)) {
+      const items = await listSystemFolderItems(viewer.uid, folderId, limit);
+      res.status(200).json({ folderId, isSystem: true, items });
+      return;
+    }
+
+    const folderRef = db.collection("users").doc(viewer.uid).collection("saved_folders").doc(folderId);
+    const folderSnap = await folderRef.get();
+    if (!folderSnap.exists) {
+      res.status(404).json({ error: "folder_not_found" });
+      return;
+    }
+
+    const itemsSnap = await folderRef.collection("items").orderBy("updatedAt", "desc").limit(limit).get();
+    const items = itemsSnap.docs.map((doc) => ({ itemId: doc.id, ...(doc.data() || {}) }));
+    res.status(200).json({ folderId, isSystem: false, items });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Explore] list folder items failed", error);
+    res.status(500).json({ error: "saved_folder_items_failed" });
+  }
+});
+
+ROUTES.post("/saved/folders/:folderId/items", async (req, res) => {
+  try {
+    const viewer = await verifyRequestUser(req, true);
+    if (!viewer) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+
+    const folderId = normalizeFolderId(req.params.folderId);
+    if (!folderId || systemFolderById(folderId)) {
+      res.status(400).json({ error: "invalid_folder_id" });
+      return;
+    }
+    const itemType = normalizeSavedItemType((req.body || {}).itemType);
+    const sourceId = normalizeSourceId((req.body || {}).sourceId);
+    if (!itemType || !sourceId) {
+      res.status(400).json({ error: "invalid_item_payload" });
+      return;
+    }
+
+    const folderRef = db.collection("users").doc(viewer.uid).collection("saved_folders").doc(folderId);
+    const folderSnap = await folderRef.get();
+    if (!folderSnap.exists) {
+      res.status(404).json({ error: "folder_not_found" });
+      return;
+    }
+
+    const resolved = await resolveSavedItem(viewer.uid, itemType, sourceId);
+    if (!resolved) {
+      res.status(404).json({ error: "source_not_found" });
+      return;
+    }
+
+    const itemId = buildFolderItemDocId(itemType, sourceId);
+    const itemRef = folderRef.collection("items").doc(itemId);
+
+    await db.runTransaction(async (tx) => {
+      const existing = await tx.get(itemRef);
+      tx.set(
+        itemRef,
+        {
+          ...resolved,
+          itemType,
+          sourceId,
+          itemId,
+          createdAt: existing.exists ? existing.get("createdAt") || admin.firestore.FieldValue.serverTimestamp() : admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      if (!existing.exists) {
+        tx.set(
+          folderRef,
+          {
+            itemCount: admin.firestore.FieldValue.increment(1),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+      }
+    });
+
+    res.status(200).json({ ok: true, folderId, itemId, item: resolved });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Explore] save folder item failed", error);
+    res.status(500).json({ error: "saved_folder_item_create_failed" });
+  }
+});
+
+ROUTES.delete("/saved/folders/:folderId/items/:itemType/:sourceId", async (req, res) => {
+  try {
+    const viewer = await verifyRequestUser(req, true);
+    if (!viewer) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+
+    const folderId = normalizeFolderId(req.params.folderId);
+    const itemType = normalizeSavedItemType(req.params.itemType);
+    const sourceId = normalizeSourceId(req.params.sourceId);
+    if (!folderId || !itemType || !sourceId || systemFolderById(folderId)) {
+      res.status(400).json({ error: "invalid_request" });
+      return;
+    }
+
+    const folderRef = db.collection("users").doc(viewer.uid).collection("saved_folders").doc(folderId);
+    const itemId = buildFolderItemDocId(itemType, sourceId);
+    const itemRef = folderRef.collection("items").doc(itemId);
+
+    await db.runTransaction(async (tx) => {
+      const existing = await tx.get(itemRef);
+      if (!existing.exists) return;
+      tx.delete(itemRef);
+      tx.set(
+        folderRef,
+        {
+          itemCount: admin.firestore.FieldValue.increment(-1),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    });
+
+    res.status(200).json({ ok: true, folderId, itemId });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Explore] delete folder item failed", error);
+    res.status(500).json({ error: "saved_folder_item_delete_failed" });
+  }
+});
+
+ROUTES.get("/saved/search", async (req, res) => {
+  try {
+    const viewer = await verifyRequestUser(req, true);
+    if (!viewer) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const queryText = sanitizeText(req.query.q, 140);
+    const limit = parseLimit(req.query.limit);
+
+    const [forecastSnap, screenerSnap, councilSnap, ownPostsSnap, savedStateSnap] = await Promise.all([
+      db.collection("forecast_requests").where("userId", "==", viewer.uid).orderBy("createdAt", "desc").limit(60).get(),
+      db.collection("screener_runs").where("userId", "==", viewer.uid).orderBy("createdAt", "desc").limit(60).get(),
+      db.collection(MODEL_COUNCIL_RESPONSE_COLLECTION).where("userId", "==", viewer.uid).limit(60).get(),
+      db.collection("posts").where("authorUid", "==", viewer.uid).orderBy("createdAt", "desc").limit(60).get(),
+      db.collection("users").doc(viewer.uid).collection("saved_post_state").limit(140).get(),
+    ]);
+
+    const items: Record<string, unknown>[] = [];
+    forecastSnap.docs.forEach((doc) => {
+      const data = doc.data() || {};
+      items.push({
+        itemType: "forecast",
+        sourceId: doc.id,
+        itemId: buildFolderItemDocId("forecast", doc.id),
+        title: asString(data.title, `${normalizeTicker(data.ticker)} forecast`),
+        subtitle: asString(data.serviceMessage || ""),
+        ticker: normalizeTicker(data.ticker),
+        targetUrl: `/forecasting?forecastId=${encodeURIComponent(doc.id)}`,
+        createdAtMs: getTimestampMs(data.createdAt),
+        updatedAtMs: getTimestampMs(data.updatedAt || data.createdAt),
+      });
+    });
+
+    screenerSnap.docs.forEach((doc) => {
+      const data = doc.data() || {};
+      items.push({
+        itemType: "screener",
+        sourceId: doc.id,
+        itemId: buildFolderItemDocId("screener", doc.id),
+        title: asString(data.title, "Screener run"),
+        subtitle: asString(data.notes || ""),
+        ticker: normalizeTicker(((data.results as Array<Record<string, unknown>> | undefined) || [])[0]?.symbol),
+        targetUrl: `/screener?runId=${encodeURIComponent(doc.id)}`,
+        createdAtMs: getTimestampMs(data.createdAt),
+        updatedAtMs: getTimestampMs(data.updatedAt || data.createdAt),
+      });
+    });
+
+    councilSnap.docs.forEach((doc) => {
+      const data = doc.data() || {};
+      items.push({
+        itemType: "model_council",
+        sourceId: doc.id,
+        itemId: buildFolderItemDocId("model_council", doc.id),
+        title: `${normalizeTicker(data.ticker) || "Ticker"} Model Council`,
+        subtitle: asString(data.question || ""),
+        ticker: normalizeTicker(data.ticker),
+        targetUrl: "/model-council",
+        createdAtMs: getTimestampMs(data.createdAt),
+        updatedAtMs: getTimestampMs(data.updatedAt || data.createdAt),
+      });
+    });
+
+    ownPostsSnap.docs.forEach((doc) => {
+      const data = (doc.data() || {}) as Record<string, unknown>;
+      if (asString(data.visibility) === "deleted") return;
+      items.push(buildPostSavedItem(doc.id, data));
+    });
+
+    if (!savedStateSnap.empty) {
+      const refs = savedStateSnap.docs.map((doc) => db.collection("posts").doc(doc.id));
+      const postDocs = await db.getAll(...refs);
+      postDocs.forEach((doc) => {
+        if (!doc.exists) return;
+        const data = (doc.data() || {}) as Record<string, unknown>;
+        if (!isPostVisibleToViewer(data, viewer.uid)) return;
+        items.push(buildPostSavedItem(doc.id, data));
+      });
+    }
+
+    const dedup = new Map<string, Record<string, unknown>>();
+    items.forEach((item) => {
+      const key = `${asString(item.itemType)}:${asString(item.sourceId)}`;
+      if (!dedup.has(key)) dedup.set(key, item);
+    });
+
+    const filtered = Array.from(dedup.values())
+      .filter((item) => matchesSearchQuery(item, queryText))
+      .sort((a, b) => asFinite(b.updatedAtMs, 0) - asFinite(a.updatedAtMs, 0));
+
+    res.status(200).json({
+      q: queryText,
+      count: filtered.length,
+      items: filtered.slice(0, limit),
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Explore] saved search failed", error);
+    res.status(500).json({ error: "saved_search_failed" });
+  }
+});
+
+ROUTES.get("/shares/:shareId", async (req, res) => {
+  try {
+    const shareId = normalizeShareId(req.params.shareId);
+    if (!shareId) {
+      res.status(400).json({ error: "invalid_share_id" });
+      return;
+    }
+
+    const viewer = await verifyRequestUser(req, false).catch(() => null);
+    const shareSnap = await db.collection("shares").doc(shareId).get();
+    if (!shareSnap.exists) {
+      res.status(404).json({ error: "share_not_found" });
+      return;
+    }
+    const shareDoc = (shareSnap.data() || {}) as Record<string, unknown>;
+    const kind = asString(shareDoc.kind).trim().toLowerCase();
+    const sourceCollection = asString(shareDoc.sourceCollection);
+    const sourceId = asString(shareDoc.sourceId);
+    if (!kind || !sourceCollection || !sourceId) {
+      res.status(404).json({ error: "share_invalid" });
+      return;
+    }
+
+    const sourceSnap = await db.collection(sourceCollection).doc(sourceId).get();
+    if (!sourceSnap.exists) {
+      res.status(404).json({ error: "source_not_found" });
+      return;
+    }
+
+    if (kind !== "screener") {
+      res.status(200).json({
+        shareId,
+        kind,
+        sourceId,
+        sourceCollection,
+        readOnly: true,
+        unsupported: true,
+      });
+      return;
+    }
+
+    const source = (sourceSnap.data() || {}) as Record<string, unknown>;
+    const ownerUid = asString(source.userId);
+    const readOnly = !(viewer?.uid && ownerUid && viewer.uid === ownerUid);
+    const results = Array.isArray(source.results) ? source.results.slice(0, 300) : [];
+    const ownerProfile = ownerUid ? await readAuthorProfile(ownerUid) : { handle: "", photoURL: "" };
+
+    res.status(200).json({
+      shareId,
+      kind: "screener",
+      sourceId: sourceSnap.id,
+      readOnly,
+      canImport: Boolean(viewer?.uid && readOnly),
+      screener: {
+        id: sourceSnap.id,
+        title: asString(source.title, "Screener run"),
+        notes: asString(source.notes, ""),
+        market: asString(source.market, ""),
+        universe: asString(source.universe, ""),
+        userId: ownerUid,
+        ownerUsername: asString(source.ownerUsername || ownerProfile.handle),
+        ownerAvatar: asString(source.ownerAvatar || "bull"),
+        isPublic: asBoolean(source.isPublic, false),
+        results,
+        createdAt: source.createdAt || null,
+        updatedAt: source.updatedAt || null,
+      },
+    });
+  } catch (error) {
+    console.error("[Explore] share lookup failed", error);
+    res.status(500).json({ error: "share_lookup_failed" });
   }
 });
 

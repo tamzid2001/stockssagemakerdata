@@ -3,8 +3,8 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Profile | Quantura Studio</title>
-    <meta name="description" content="Manage your Quantura profile posts and notification preferences." />
+    <title>Profile | Quantura Explore</title>
+    <meta name="description" content="Public Quantura profiles with posts, sharing, and saved folders." />
     <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/explore.css" />
     <script defer src="/__/firebase/12.9.0/firebase-app-compat.js"></script>
@@ -23,6 +23,7 @@
       </a>
       <div class="topbar-actions">
         <a class="link-btn" href="/explore">Explore</a>
+        <a class="link-btn" href="/dashboard">Dashboard</a>
         <button id="profile-auth-toggle" class="link-btn" type="button">Sign in</button>
       </div>
     </header>
@@ -30,16 +31,65 @@
     <main class="explore-shell profile-shell">
       <section class="profile-header card-surface">
         <div class="avatar-wrap"><img id="profile-avatar" src="/assets/quantura-icon.svg" alt="Avatar" /></div>
-        <div>
-          <h1 id="profile-title">Profile</h1>
-          <p id="profile-subtitle" class="muted">Manage your posts and notification preferences.</p>
+        <div class="profile-header-main">
+          <h1 id="profile-title">Profile <span id="profile-verified-badge" class="verified-badge hidden">Verified</span></h1>
+          <p id="profile-subtitle" class="muted">Public profile posts and saved research assets.</p>
+          <div class="profile-meta-grid">
+            <div><strong>Name:</strong> <span id="profile-name">-</span></div>
+            <div><strong>Handle:</strong> <span id="profile-handle">-</span></div>
+            <div><strong>Email:</strong> <span id="profile-email">Hidden</span></div>
+          </div>
+          <div class="inline-controls">
+            <button id="profile-share-button" type="button">Share profile</button>
+          </div>
         </div>
       </section>
 
+      <section id="profile-privacy-section" class="card-surface hidden">
+        <h2>Profile visibility</h2>
+        <p class="muted">Control what appears on your public profile page.</p>
+        <div class="settings-grid">
+          <label class="setting-item"><input id="profile-public-toggle" type="checkbox" /> <span>Public profile enabled</span></label>
+          <label class="setting-item"><input id="profile-email-optin" type="checkbox" /> <span>Show my email publicly</span></label>
+        </div>
+        <div class="inline-controls">
+          <button id="profile-privacy-save" type="button">Save visibility settings</button>
+        </div>
+        <p id="profile-privacy-status" class="muted"></p>
+      </section>
+
       <section class="card-surface">
-        <h2>My Posts</h2>
+        <h2>Posts</h2>
         <div id="profile-posts" class="profile-posts"></div>
         <button id="profile-load-more" class="link-btn hidden" type="button">Load more</button>
+      </section>
+
+      <section id="saved-folders-section" class="card-surface">
+        <h2>Saved folders</h2>
+        <p class="muted">System folders are read-only. Create custom folders and save forecasts, screener runs, Model Council responses, and posts.</p>
+
+        <div class="inline-controls">
+          <input id="saved-folder-name" type="text" maxlength="80" placeholder="Create folder (e.g. Earnings week)" />
+          <button id="saved-folder-create" type="button">Create folder</button>
+        </div>
+
+        <div id="saved-folder-list" class="token-list"></div>
+
+        <form id="saved-search-form" class="search-wrap" autocomplete="off" style="margin-top:12px;">
+          <input id="saved-search-input" type="search" placeholder="Search saved forecasts, Model Council responses, screeners, and posts" />
+          <button type="submit">Search</button>
+        </form>
+
+        <div class="saved-grid">
+          <div>
+            <h3>Search results</h3>
+            <div id="saved-search-results" class="profile-posts"></div>
+          </div>
+          <div>
+            <h3 id="saved-folder-items-title">Folder items</h3>
+            <div id="saved-folder-items" class="profile-posts"></div>
+          </div>
+        </div>
       </section>
 
       <section id="notification-settings" class="card-surface">

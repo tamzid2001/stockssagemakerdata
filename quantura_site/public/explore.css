@@ -377,6 +377,15 @@ button:hover,
   resize: vertical;
 }
 
+.comment-form select {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px;
+  background: #fff;
+  color: var(--ink);
+}
+
 .skeleton {
   border-radius: 10px;
   background: linear-gradient(90deg, rgba(220, 232, 252, 0.9), rgba(241, 248, 255, 1), rgba(220, 232, 252, 0.9));
@@ -412,6 +421,29 @@ button:hover,
   display: flex;
   align-items: center;
   gap: 14px;
+}
+
+.profile-header-main {
+  min-width: 0;
+}
+
+.profile-meta-grid {
+  margin-top: 8px;
+  display: grid;
+  gap: 6px;
+}
+
+.verified-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #0a6f2f;
+  background: rgba(47, 178, 92, 0.16);
+  border: 1px solid rgba(47, 178, 92, 0.34);
 }
 
 .avatar-wrap img {
@@ -452,6 +484,31 @@ button:hover,
 .profile-post-row h3 {
   margin: 0 0 6px;
   font-size: 15px;
+}
+
+.saved-grid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.saved-item-row {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.saved-item-title {
+  font-weight: 700;
+  margin: 0 0 5px;
+}
+
+.saved-item-meta {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 8px;
 }
 
 .inline-controls {
@@ -518,6 +575,10 @@ button:hover,
   }
 
   .profile-post-row {
+    grid-template-columns: 1fr;
+  }
+
+  .saved-grid {
     grid-template-columns: 1fr;
   }
 }
