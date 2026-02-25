@@ -40,3 +40,18 @@
 - Check load/show callbacks:
   - iOS: `[Ads][iOS]` / `[Ads][iOS][Banner]`
   - Android: `AdManager`, `BannerAdView`, `AppOpenAdManager`
+
+## Remote Config keys to set in Firebase Console
+- Ads rollout (test -> production):
+  - `ads_use_real_ios` (`true` to use production iOS IDs, `false` for test IDs)
+  - `ads_use_real_android` (`true` to use production Android IDs, `false` for test IDs)
+  - `ad_unit_ids` (JSON override for all unit IDs; optional)
+- Native checkout policy:
+  - `native_ios_storekit_checkout_only` (`true` recommended; iOS native app enforces StoreKit checkout path)
+  - `native_android_play_billing_enabled` (`true` to route Android native checkout through Play Billing bridge)
+  - `native_iap_product_ids` (JSON map for plan -> productId, e.g. `{"pro":"quantura_pro_monthly","desk":"quantura_pro_monthly","forecast":"quantura_pro_monthly","default":"quantura_pro_monthly"}`)
+- Web checkout controls:
+  - `stripe_checkout_enabled`
+  - `stripe_public_key`
+
+Note: the same keys should exist in the server-side template defaults (SSR function) and in client defaults so first paint and hydrated runtime stay consistent.
