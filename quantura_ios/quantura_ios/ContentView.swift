@@ -27,7 +27,7 @@ import UIKit
 import GoogleMobileAds
 #endif
 
-private let quanturaURL = URL(string: "https://quantura-e2e3d.web.app/")!
+private let quanturaURL = URL(string: "https://quantura.studio/")!
 
 #if canImport(StoreKit)
 @available(iOS 15.0, *)
@@ -378,14 +378,20 @@ struct QuanturaWebView: UIViewRepresentable {
     let url: URL
     let lifecycleController: WebViewLifecycleController
     let adManager: AdManager
+    @ObservedObject var authGateViewModel: AuthGateViewModel
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(lifecycleController: lifecycleController, adManager: adManager)
+        Coordinator(
+            lifecycleController: lifecycleController,
+            adManager: adManager,
+            authGateViewModel: authGateViewModel
+        )
     }
 
     func makeUIView(context: Context) -> WKWebView {
         let userContentController = WKUserContentController()
         userContentController.add(context.coordinator, name: "QuanturaBridge")
+        userContentController.add(context.coordinator, name: "quanturaAuth")
 
         let configuration = WKWebViewConfiguration()
         configuration.userContentController = userContentController
@@ -397,6 +403,7 @@ struct QuanturaWebView: UIViewRepresentable {
         webView.navigationDelegate = context.coordinator
         webView.scrollView.keyboardDismissMode = .onDrag
         context.coordinator.webView = webView
+        NativeAuthWebBridge.shared.attach(webView: webView)
         lifecycleController.attach(webView)
         context.coordinator.injectNativeRuntime()
         context.coordinator.injectPushTokenIfAvailable()
@@ -413,14 +420,25 @@ struct QuanturaWebView: UIViewRepresentable {
 
     static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
         uiView.configuration.userContentController.removeScriptMessageHandler(forName: "QuanturaBridge")
+        uiView.configuration.userContentController.removeScriptMessageHandler(forName: "quanturaAuth")
+        NativeAuthWebBridge.shared.detach(webView: uiView)
     }
 
     final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         private let lifecycleController: WebViewLifecycleController
         private let adManager: AdManager
+        private weak var authGateViewModel: AuthGateViewModel?
         private var tokenObserver: NSObjectProtocol?
         private var deepLinkObserver: NSObjectProtocol?
         private var lastNavigationInterstitialAt: Date = .distantPast
+        private let trustedHosts: Set<String> = [
+            "quantura.studio",
+            "www.quantura.studio",
+            "quantura-e2e3d.web.app",
+            "quantura-e2e3d.firebaseapp.com",
+            "localhost",
+            "127.0.0.1",
+        ]
 #if canImport(AuthenticationServices)
         private struct AppleAuthContext {
             let requestId: String
@@ -430,9 +448,14 @@ struct QuanturaWebView: UIViewRepresentable {
 #endif
         weak var webView: WKWebView?
 
-        init(lifecycleController: WebViewLifecycleController, adManager: AdManager) {
+        init(
+            lifecycleController: WebViewLifecycleController,
+            adManager: AdManager,
+            authGateViewModel: AuthGateViewModel
+        ) {
             self.lifecycleController = lifecycleController
             self.adManager = adManager
+            self.authGateViewModel = authGateViewModel
             super.init()
 
             tokenObserver = NotificationCenter.default.addObserver(
@@ -464,8 +487,21 @@ struct QuanturaWebView: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            NativeAuthWebBridge.shared.attach(webView: webView)
             injectNativeRuntime()
             injectPushTokenIfAvailable()
+            NativeAuthWebBridge.shared.pushCurrentAuthState()
+#if canImport(FirebaseAuth)
+            if let user = Auth.auth().currentUser, !user.isAnonymous {
+                Task {
+                    do {
+                        try await NativeAuthWebBridge.shared.syncWebSessionFromCurrentUser(forceRefresh: false)
+                    } catch {
+                        print("[AuthBridge][iOS] Silent sync on page load failed: \(error.localizedDescription)")
+                    }
+                }
+            }
+#endif
             if !NativeBridgeState.shared.pendingDeepLink.isEmpty {
                 navigateToDeepLink(NativeBridgeState.shared.pendingDeepLink)
             }
@@ -476,6 +512,18 @@ struct QuanturaWebView: UIViewRepresentable {
             decidePolicyFor navigationAction: WKNavigationAction,
             decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
         ) {
+            if navigationAction.targetFrame?.isMainFrame == true {
+                let destinationURL = navigationAction.request.url
+                if let destinationURL, !isTrustedURL(destinationURL) {
+                    print("[WebView][iOS] Blocked untrusted main-frame navigation: \(destinationURL.absoluteString)")
+                    DispatchQueue.main.async {
+                        UIApplication.shared.open(destinationURL)
+                    }
+                    decisionHandler(.cancel)
+                    return
+                }
+            }
+
             if navigationAction.targetFrame?.isMainFrame == true,
                let destination = navigationAction.request.url?.absoluteString,
                !destination.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -491,6 +539,10 @@ struct QuanturaWebView: UIViewRepresentable {
 
         // Handles bridge messages from window.webkit.messageHandlers.QuanturaBridge.postMessage(...)
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            if message.name == "quanturaAuth" {
+                handleQuanturaAuthBridgeMessage(message.body)
+                return
+            }
             guard message.name == "QuanturaBridge" else { return }
 
             var payload: [String: Any] = [:]
@@ -520,11 +572,50 @@ struct QuanturaWebView: UIViewRepresentable {
                 case "share":
                     self.openNativeShare(payload: payload)
                 case "authSignIn":
-                    self.handleNativeAuthSignIn(payload: payload)
+                    self.authGateViewModel?.presentGate(trigger: "legacy_bridge_signin")
                 case "authSignOut":
-                    self.handleNativeAuthSignOut(payload: payload)
+                    self.authGateViewModel?.signOutToAnonymous()
+                    let requestId = String(describing: payload["requestId"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !requestId.isEmpty {
+                        self.dispatchNativeAuthResult(requestId: requestId, provider: "native", ok: true)
+                    }
                 default:
                     break
+                }
+            }
+        }
+
+        private func handleQuanturaAuthBridgeMessage(_ body: Any) {
+            guard let sourceURL = webView?.url, isTrustedURL(sourceURL) else {
+                print("[AuthBridge][iOS] Ignored quanturaAuth message from untrusted page.")
+                return
+            }
+
+            var payload: [String: Any] = [:]
+            if let dictionary = body as? [String: Any] {
+                payload = dictionary
+            } else if let text = body as? String,
+                      let data = text.data(using: .utf8),
+                      let dictionary = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                payload = dictionary
+            }
+
+            let type = String(describing: payload["type"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+            guard !type.isEmpty else { return }
+
+            DispatchQueue.main.async {
+                switch type {
+                case "REQUEST_SIGN_IN":
+                    print("[AuthBridge][iOS] Received REQUEST_SIGN_IN from web.")
+                    self.authGateViewModel?.presentGate(trigger: "web_request")
+                case "GET_AUTH_STATE":
+                    print("[AuthBridge][iOS] Received GET_AUTH_STATE from web.")
+                    NativeAuthWebBridge.shared.pushCurrentAuthState()
+                case "SIGN_OUT":
+                    print("[AuthBridge][iOS] Received SIGN_OUT from web.")
+                    self.authGateViewModel?.signOutToAnonymous()
+                default:
+                    print("[AuthBridge][iOS] Unknown bridge message type=\(type)")
                 }
             }
         }
@@ -799,7 +890,8 @@ struct QuanturaWebView: UIViewRepresentable {
             webView?.evaluateJavaScript("""
                 window.__QUANTURA_NATIVE_APP__ = true;
                 window.__QUANTURA_NATIVE_PLATFORM__ = 'ios';
-                window.dispatchEvent(new CustomEvent('quantura:native-runtime-ready', { detail: { platform: 'ios' } }));
+                window.__QUANTURA_NATIVE_AUTH_BRIDGE__ = true;
+                window.dispatchEvent(new CustomEvent('quantura:native-runtime-ready', { detail: { platform: 'ios', authBridge: true } }));
             """)
         }
 
@@ -830,7 +922,15 @@ struct QuanturaWebView: UIViewRepresentable {
             NativeBridgeState.shared.clearPendingDeepLink()
         }
 
-        private static func topViewController(
+        private func isTrustedURL(_ url: URL) -> Bool {
+            guard let host = url.host?.lowercased() else { return false }
+            if trustedHosts.contains(host) {
+                return true
+            }
+            return host.hasSuffix(".quantura.studio")
+        }
+
+        static func topViewController(
             base: UIViewController? = UIApplication.shared.connectedScenes
                 .compactMap { $0 as? UIWindowScene }
                 .flatMap { $0.windows }
@@ -934,6 +1034,7 @@ struct QuanturaWebView: View {
     let url: URL
     let lifecycleController: WebViewLifecycleController
     let adManager: AdManager
+    @ObservedObject var authGateViewModel: AuthGateViewModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -953,47 +1054,66 @@ struct QuanturaWebView: View {
 struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var lifecycleController = WebViewLifecycleController()
+    @StateObject private var authGateViewModel = AuthGateViewModel()
 #if canImport(StoreKit)
     @StateObject private var storeKitManager = StoreKitIapManager()
 #endif
     private let container = AppContainer()
 
     var body: some View {
-        QuanturaWebView(url: quanturaURL, lifecycleController: lifecycleController, adManager: container.adManager)
+        ZStack {
+            QuanturaWebView(
+                url: quanturaURL,
+                lifecycleController: lifecycleController,
+                adManager: container.adManager,
+                authGateViewModel: authGateViewModel
+            )
             .ignoresSafeArea(edges: [.top, .leading, .trailing])
-#if canImport(GoogleMobileAds) && canImport(UIKit)
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                AdaptiveBannerContainer(adUnitID: container.remoteConfigManager.adUnitIDs().adaptiveBanner)
-                    .frame(height: 60)
-                    .background(.ultraThinMaterial)
+
+            if authGateViewModel.isGateVisible {
+                AuthGateView(viewModel: authGateViewModel)
+                    .transition(.opacity)
+                    .zIndex(999)
             }
+        }
+#if canImport(GoogleMobileAds) && canImport(UIKit)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            AdaptiveBannerContainer(adUnitID: container.remoteConfigManager.adUnitIDs().adaptiveBanner)
+                .frame(height: 60)
+                .background(.ultraThinMaterial)
+        }
 #endif
-            .onAppear {
+        .onAppear {
+            authGateViewModel.start()
+            container.appOpenAdManager.setPresentationBlockedByAuthGate(authGateViewModel.isGateVisible)
+            container.adManager.primeAds()
+            container.appOpenAdManager.preloadAdIfNeeded()
+            container.remoteConfigManager.fetchAndActivate { _ in
                 container.adManager.primeAds()
                 container.appOpenAdManager.preloadAdIfNeeded()
-                container.remoteConfigManager.fetchAndActivate { _ in
-                    container.adManager.primeAds()
-                    container.appOpenAdManager.preloadAdIfNeeded()
-                }
+            }
 #if canImport(StoreKit)
-                if #available(iOS 15.0, *) {
-                    Task {
-                        await storeKitManager.fetchProducts(["quantura_pro_monthly"])
-                    }
+            if #available(iOS 15.0, *) {
+                Task {
+                    await storeKitManager.fetchProducts(["quantura_pro_monthly"])
                 }
+            }
 #endif
+        }
+        .onChange(of: authGateViewModel.isGateVisible) { isVisible in
+            container.appOpenAdManager.setPresentationBlockedByAuthGate(isVisible)
+        }
+        .onChange(of: scenePhase) { nextPhase in
+            switch nextPhase {
+            case .background:
+                lifecycleController.sceneDidEnterBackground()
+            case .active:
+                lifecycleController.sceneWillEnterForeground()
+                container.appOpenAdManager.sceneDidBecomeActive()
+            default:
+                break
             }
-            .onChange(of: scenePhase) { nextPhase in
-                switch nextPhase {
-                case .background:
-                    lifecycleController.sceneDidEnterBackground()
-                case .active:
-                    lifecycleController.sceneWillEnterForeground()
-                    container.appOpenAdManager.sceneDidBecomeActive()
-                default:
-                    break
-                }
-            }
+        }
     }
 }
 
