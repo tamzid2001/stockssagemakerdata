@@ -66,6 +66,7 @@ import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.messaging.FirebaseMessaging
 import com.quantura.quanturaapp.ads.AdManager
 import com.quantura.quanturaapp.ads.BannerAdView
+import com.quantura.quanturaapp.iap.PlayBillingIapService
 import com.quantura.quanturaapp.messaging.NativePersonalizedNotificationManager
 import com.quantura.quanturaapp.messaging.QuanturaFcmTokenHolder
 import com.quantura.quanturaapp.messaging.QuanturaMessagingService
@@ -86,6 +87,7 @@ private const val DEFAULT_START_URL = "https://quantura.studio/"
 class MainActivity : ComponentActivity() {
     private val appContainer by lazy { (application as QuanturaApplication).container }
     private val firebaseAuth by lazy { FirebaseAuth.getInstance() }
+    private val playBillingIapService by lazy { PlayBillingIapService(applicationContext) }
 
     private var webViewRef: WebView? = null
     private var googleSignInClient: GoogleSignInClient? = null
@@ -560,10 +562,140 @@ class MainActivity : ComponentActivity() {
                 signOutToAnonymous()
             }
 
+            "NATIVE_PURCHASE" -> {
+                Log.i("MainActivity", "[IAP][Android] NATIVE_PURCHASE requested from web.")
+                startNativePlayPurchase(payload)
+            }
+
+            "OPEN_NATIVE_SUBSCRIPTIONS" -> {
+                Log.i("MainActivity", "[IAP][Android] OPEN_NATIVE_SUBSCRIPTIONS requested from web.")
+                openNativeSubscriptionManager(payload)
+            }
+
             else -> {
                 Log.w("MainActivity", "[Auth][Android] Unknown auth bridge type=$typeRaw")
             }
         }
+    }
+
+    private fun startNativePlayPurchase(payload: JSONObject) {
+        val requestId = payload.optString("requestId").trim().ifBlank {
+            "np_${System.currentTimeMillis()}"
+        }
+        val orderId = payload.optString("orderId").trim()
+        val productId = payload.optString("productId").trim().ifBlank { "quantura_pro_monthly" }
+
+        lifecycleScope.launch {
+            try {
+                val ready = playBillingIapService.initialize()
+                if (!ready) {
+                    emitNativePurchaseResult(
+                        requestId = requestId,
+                        orderId = orderId,
+                        productId = productId,
+                        ok = false,
+                        status = "failed",
+                        message = "Google Play Billing is unavailable."
+                    )
+                    return@launch
+                }
+
+                when (val result = playBillingIapService.purchase(this@MainActivity, productId)) {
+                    is com.quantura.quanturaapp.iap.IapService.PurchaseResult.Success -> {
+                        emitNativePurchaseResult(
+                            requestId = requestId,
+                            orderId = orderId,
+                            productId = result.productId,
+                            ok = true,
+                            status = "purchased"
+                        )
+                    }
+
+                    is com.quantura.quanturaapp.iap.IapService.PurchaseResult.Cancelled -> {
+                        emitNativePurchaseResult(
+                            requestId = requestId,
+                            orderId = orderId,
+                            productId = result.productId,
+                            ok = false,
+                            status = "cancelled"
+                        )
+                    }
+
+                    is com.quantura.quanturaapp.iap.IapService.PurchaseResult.Error -> {
+                        emitNativePurchaseResult(
+                            requestId = requestId,
+                            orderId = orderId,
+                            productId = productId,
+                            ok = false,
+                            status = "failed",
+                            message = result.message
+                        )
+                    }
+                }
+            } catch (error: Exception) {
+                emitNativePurchaseResult(
+                    requestId = requestId,
+                    orderId = orderId,
+                    productId = productId,
+                    ok = false,
+                    status = "failed",
+                    message = error.message ?: "Native purchase failed."
+                )
+            }
+        }
+    }
+
+    private fun openNativeSubscriptionManager(payload: JSONObject) {
+        val requestId = payload.optString("requestId").trim().ifBlank {
+            "nsm_${System.currentTimeMillis()}"
+        }
+        val orderId = payload.optString("orderId").trim()
+        val playUri = Uri.parse("https://play.google.com/store/account/subscriptions")
+
+        val opened = runCatching {
+            startActivity(
+                Intent(Intent.ACTION_VIEW, playUri).apply {
+                    setPackage("com.android.vending")
+                }
+            )
+            true
+        }.getOrElse {
+            runCatching {
+                startActivity(Intent(Intent.ACTION_VIEW, playUri))
+                true
+            }.getOrDefault(false)
+        }
+
+        emitNativePurchaseResult(
+            requestId = requestId,
+            orderId = orderId,
+            productId = "",
+            ok = opened,
+            status = if (opened) "subscriptions_opened" else "failed",
+            message = if (opened) "" else "Unable to open Google Play subscriptions."
+        )
+    }
+
+    private fun emitNativePurchaseResult(
+        requestId: String,
+        orderId: String,
+        productId: String,
+        ok: Boolean,
+        status: String,
+        message: String = "",
+    ) {
+        val payload = JSONObject()
+            .put("requestId", requestId)
+            .put("orderId", orderId)
+            .put("productId", productId)
+            .put("ok", ok)
+            .put("status", status)
+            .put("message", message)
+            .put("platform", "android")
+
+        emitJs(
+            "window.dispatchEvent(new CustomEvent('quantura:native-purchase-result',{detail:${payload}}));"
+        )
     }
 
     private fun signOutToAnonymous() {
