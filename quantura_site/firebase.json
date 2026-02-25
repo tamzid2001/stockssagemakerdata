@@ -52,10 +52,13 @@
       { "source": "/purchase", "destination": "/pricing", "type": 301 },
       { "source": "/forecast", "destination": "/forecasting", "type": 302 },
       { "source": "/terminal", "destination": "/forecasting", "type": 302 },
+      { "source": "/backtesting", "destination": "/indicators", "type": 302 },
       { "source": "/ask-gpt-5", "destination": "/ticker-query", "type": 302 },
       { "source": "/ask-gpt5", "destination": "/ticker-query", "type": 302 },
       { "source": "/ask-gpt", "destination": "/ticker-query", "type": 302 },
-      { "source": "/ai-leaderboard", "destination": "/forecasting?panel=ai-leaderboard", "type": 302 },
+      { "source": "/ai-leaderboard", "destination": "/explore", "type": 302 },
+      { "source": "/about", "destination": "/research", "type": 302 },
+      { "source": "/events", "destination": "/events-calendar", "type": 302 },
       { "source": "/fx", "destination": "/tools/fx", "type": 302 }
     ],
     "rewrites": [
@@ -103,8 +106,6 @@
       { "source": "/saved-forecasts", "function": "ssr" },
       { "source": "/backtesting", "function": "ssr" },
       { "source": "/studio", "function": "ssr" },
-      { "source": "/ai-leaderboard", "function": "ssr" },
-
       { "source": "/screener", "function": "ssr" },
       { "source": "/research", "function": "ssr" },
       { "source": "/pricing", "function": "ssr" },
