@@ -3688,6 +3688,234 @@
       }, 0);
     });
 
+  const buildSolveNowPrompt = (request, ticker) =>
+    [
+      "You are the Quantura AI assistant.",
+      `Primary ticker context: ${ticker}.`,
+      "Respond in this exact structure:",
+      "Summary:",
+      "- one concise paragraph",
+      "Suggested next steps:",
+      "1. action one",
+      "2. action two",
+      "3. action three",
+      "Keep the guidance practical and risk-aware.",
+      "",
+      `User request: ${String(request || "").trim()}`,
+    ].join("\n");
+
+  const extractSolveNowSuggestedSteps = (answer) => {
+    const text = String(answer || "").trim();
+    if (!text) return [];
+    const listMatches = Array.from(
+      text.matchAll(/(?:^|\n)\s*(?:[-*]\s+|\d+\.\s+)(.+?)(?=\n|$)/g)
+    )
+      .map((match) => String(match[1] || "").trim())
+      .filter(Boolean);
+    if (listMatches.length) return listMatches.slice(0, 4);
+    const sentenceMatches = text
+      .split(/(?<=[.!?])\s+/)
+      .map((row) => row.trim())
+      .filter((row) => row.length >= 20);
+    return sentenceMatches.slice(0, 3);
+  };
+
+  const ensureSolveNowModal = () => {
+    let modal = document.getElementById("solve-now-modal");
+    if (!modal) {
+      modal = buildModalShell("solve-now-modal");
+      modal.classList.add("solve-now-modal");
+      const card = modal.querySelector(".modal-card");
+      if (card) {
+        card.classList.add("solve-now-modal-card");
+        card.innerHTML = `
+          <div class="solve-now-head">
+            <div>
+              <h3>Solve now</h3>
+              <p class="small muted">Powered by AI. Tell us what you need and we will map out the next steps.</p>
+            </div>
+            <button class="cta secondary icon-only" type="button" data-action="close-solve-now" aria-label="Close Solve now">
+              ${icon("xmark")}
+            </button>
+          </div>
+          <form id="solve-now-form" class="solve-now-form">
+            <div class="field">
+              <label class="label" for="solve-now-request">What do you need help with?</label>
+              <textarea id="solve-now-request" class="modal-input solve-now-input" rows="4" placeholder="Example: I need a macro-aware plan for NVDA earnings risk this week." required></textarea>
+            </div>
+            <div class="solve-now-controls">
+              <div class="field">
+                <label class="label" for="solve-now-ticker">Ticker context</label>
+                <input id="solve-now-ticker" class="modal-input solve-now-ticker" type="text" maxlength="12" placeholder="SPY" />
+              </div>
+              <div class="modal-actions solve-now-actions">
+                <button class="cta secondary" type="button" data-action="close-solve-now">Cancel</button>
+                <button class="cta" type="submit" data-action="run-solve-now">${icon("brain")}<span>Solve now</span></button>
+              </div>
+            </div>
+            <p id="solve-now-status" class="small muted" aria-live="polite"></p>
+            <section id="solve-now-output" class="solve-now-output hidden" aria-live="polite"></section>
+          </form>
+        `;
+      }
+    }
+    return modal;
+  };
+
+  const closeSolveNowModal = () => {
+    const modal = document.getElementById("solve-now-modal");
+    if (!modal) return;
+    modal.classList.add("hidden");
+    if (window.location.hash === "#solve-now" && window.history?.replaceState) {
+      window.history.replaceState({}, "", `${window.location.pathname}${window.location.search}`);
+    }
+  };
+
+  const renderSolveNowOutput = ({ answer, model, provider, ticker }) => {
+    const output = document.getElementById("solve-now-output");
+    if (!output) return;
+    const cleanAnswer = String(answer || "").trim();
+    const summaryParagraph =
+      cleanAnswer
+        .split(/\n{2,}/)
+        .map((block) => block.trim())
+        .find(Boolean) || cleanAnswer;
+    const steps = extractSolveNowSuggestedSteps(cleanAnswer);
+    output.innerHTML = `
+      <article class="solve-now-response">
+        <h4>Summary</h4>
+        <p>${escapeHtml(summaryParagraph || "No summary was returned.")}</p>
+        <h4>Suggested next steps</h4>
+        <ol>
+          ${steps.length ? steps.map((step) => `<li>${escapeHtml(step)}</li>`).join("") : "<li>Refine your request with ticker, timeframe, and risk limits.</li>"}
+        </ol>
+        <details>
+          <summary>Full AI output</summary>
+          <pre class="small">${escapeHtml(cleanAnswer || "No output returned.")}</pre>
+        </details>
+        <div class="small muted solve-now-meta">Context ticker: ${escapeHtml(ticker)} · Model: ${escapeHtml(model || "gpt-5-mini")} · Provider: ${escapeHtml(provider || "openai")}</div>
+        <p class="small muted solve-now-disclaimer">LLMs can sometimes make mistakes.</p>
+      </article>
+    `;
+    output.classList.remove("hidden");
+  };
+
+  const openSolveNowModal = ({ prefillPrompt = "", source = "header" } = {}) => {
+    const modal = ensureSolveNowModal();
+    const form = modal.querySelector("#solve-now-form");
+    const input = modal.querySelector("#solve-now-request");
+    const tickerInput = modal.querySelector("#solve-now-ticker");
+    const status = modal.querySelector("#solve-now-status");
+    const output = modal.querySelector("#solve-now-output");
+    const submitButton = modal.querySelector('[data-action="run-solve-now"]');
+    if (!form || !input || !tickerInput || !status || !output || !submitButton) return;
+
+    if (modal.dataset.bound !== "1") {
+      modal.dataset.bound = "1";
+      modal.addEventListener("click", (event) => {
+        const action = event.target?.dataset?.action;
+        if (action === "close" || action === "close-solve-now") {
+          closeSolveNowModal();
+        }
+      });
+      window.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && !modal.classList.contains("hidden")) {
+          closeSolveNowModal();
+        }
+      });
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const request = String(input.value || "").trim();
+        const tickerFallback = getActiveTicker() || normalizeTicker(safeLocalStorageGet(LAST_TICKER_KEY) || "") || "SPY";
+        const ticker = normalizeTicker(tickerInput.value || tickerFallback) || "SPY";
+        if (!request) {
+          status.textContent = "Tell us what you need so AI can help.";
+          return;
+        }
+        const language = normalizeLanguageCode(state.preferredLanguage || ui.tickerQueryLanguage?.value || "en");
+        const model = normalizeAiModelId(ui.tickerQueryModel?.value || state.tickerContext.tickerQueryModel || "gpt-5-mini") || "gpt-5-mini";
+        const prompt = buildSolveNowPrompt(request, ticker);
+        input.disabled = true;
+        tickerInput.disabled = true;
+        submitButton.disabled = true;
+        status.textContent = "Generating your plan...";
+        output.classList.add("hidden");
+        output.innerHTML = "";
+        try {
+          const streamed = await streamTickerQueryInsight({
+            ticker,
+            prompt,
+            language,
+            model,
+            technicalContext: null,
+          });
+          renderSolveNowOutput({
+            answer: streamed.answer || "",
+            model: streamed.model || model,
+            provider: streamed.provider || "openai",
+            ticker,
+          });
+          status.textContent = "Done.";
+          logEvent("solve_now_completed", {
+            source,
+            ticker,
+            model: streamed.model || model,
+            page_path: window.location.pathname,
+          });
+        } catch (error) {
+          const message = String(error?.message || "Unable to complete Solve now right now.");
+          status.textContent = message;
+          output.classList.remove("hidden");
+          output.innerHTML = `<div class="small muted">${escapeHtml(message)}</div><p class="small muted solve-now-disclaimer">LLMs can sometimes make mistakes.</p>`;
+          logEvent("solve_now_failed", {
+            source,
+            ticker,
+            error: message.slice(0, 120),
+            page_path: window.location.pathname,
+          });
+        } finally {
+          input.disabled = false;
+          tickerInput.disabled = false;
+          submitButton.disabled = false;
+        }
+      });
+    }
+
+    const fallbackTicker = getActiveTicker() || normalizeTicker(safeLocalStorageGet(LAST_TICKER_KEY) || "") || "SPY";
+    if (!String(tickerInput.value || "").trim()) tickerInput.value = fallbackTicker;
+    if (prefillPrompt && !String(input.value || "").trim()) input.value = String(prefillPrompt || "").trim();
+    status.textContent = "";
+    modal.classList.remove("hidden");
+    if (window.history?.replaceState) {
+      window.history.replaceState({}, "", `${window.location.pathname}${window.location.search}#solve-now`);
+    }
+    window.setTimeout(() => input.focus(), 0);
+    logEvent("solve_now_opened", { source, page_path: window.location.pathname });
+  };
+
+  const bindSolveNowModalTriggers = () => {
+    const bindClick = (element, source) => {
+      if (!(element instanceof HTMLElement)) return;
+      if (element.dataset.solveNowBound === "1") return;
+      element.dataset.solveNowBound = "1";
+      element.addEventListener("click", (event) => {
+        event.preventDefault();
+        openSolveNowModal({ source });
+      });
+    };
+    bindClick(document.getElementById("header-solve-now"), "header");
+    document.querySelectorAll('[data-action="open-solve-now"]').forEach((element) => {
+      const source = String(element.getAttribute("data-solve-source") || "").trim() || "contact";
+      bindClick(element, source);
+    });
+    if (!state.solveNowHashChecked) {
+      state.solveNowHashChecked = true;
+      if (window.location.hash === "#solve-now") {
+        window.setTimeout(() => openSolveNowModal({ source: "hash" }), 80);
+      }
+    }
+  };
+
   const ensureCookieModal = () => {
     let banner = document.getElementById("cookie-banner");
     if (!banner) {
@@ -5911,6 +6139,45 @@
 
   const toPrettyJson = (value) => `<pre class="small">${escapeHtml(JSON.stringify(value, null, 2))}</pre>`;
 
+  const FOOTER_SOCIAL_LINKS = [
+    {
+      key: "tiktok",
+      label: "TikTok",
+      href: "http://www.tiktok.com/@quanturaai",
+      icon: "/assets/social/tiktok.svg",
+    },
+    {
+      key: "instagram",
+      label: "Instagram",
+      href: "https://www.instagram.com/quanturaai_market_forecasts?igsh=ZTZuNW16ZmxuaHl4&utm_source=qr",
+      icon: "/assets/social/instagram.svg",
+    },
+    {
+      key: "facebook",
+      label: "Facebook",
+      href: "https://www.facebook.com/quanturaai/",
+      icon: "/assets/social/facebook-f.svg",
+    },
+    {
+      key: "threads",
+      label: "Threads",
+      href: "https://www.threads.com/@quanturaai_market_forecasts",
+      icon: "/assets/social/threads.svg",
+    },
+    {
+      key: "reddit",
+      label: "Reddit",
+      href: "https://www.reddit.com/r/Quantura_AI/",
+      icon: "/assets/social/reddit-alien.svg",
+    },
+    {
+      key: "linkedin",
+      label: "LinkedIn",
+      href: "https://www.linkedin.com/company/quanturaai/?viewAsMember=true",
+      icon: "/assets/social/linkedin-in.svg",
+    },
+  ];
+
   const normalizeTopNavigation = () => {
     const navs = Array.from(document.querySelectorAll(".header .nav-links"));
     if (!navs.length) return;
@@ -5920,12 +6187,26 @@
         <a href="/explore" data-analytics="nav_explore">${icon("binocular")}<span>Explore</span></a>
         <a href="/research" data-analytics="nav_research">${icon("bookmark-book")}<span>Research</span></a>
         <a href="/blog" data-analytics="nav_blog">${icon("page")}<span>Blog</span></a>
-        <a href="/events-calendar" data-analytics="nav_events">${icon("calendar")}<span>Events</span></a>
+        <a href="/events" data-analytics="nav_events">${icon("calendar")}<span>Events</span></a>
         <a href="/shop" data-analytics="nav_shop">${icon("shop")}<span>Shop</span></a>
         <a href="/about" data-analytics="nav_about">${icon("info-circle")}<span>About</span></a>
         <a href="/pricing" data-analytics="nav_pricing">${icon("wallet")}<span>Pricing</span></a>
         <a href="/contact" data-analytics="nav_contact">${icon("mail")}<span>Contact Us</span></a>
       `;
+    });
+  };
+
+  const normalizeFooterSocialLinks = () => {
+    const groups = Array.from(document.querySelectorAll(".footer-social"));
+    if (!groups.length) return;
+    groups.forEach((group) => {
+      group.innerHTML = FOOTER_SOCIAL_LINKS.map(
+        (entry) => `
+          <a class="social-link" href="${entry.href}" target="_blank" rel="noopener noreferrer" data-analytics="social_${entry.key}" aria-label="${entry.label}">
+            <img src="${entry.icon}" alt="" loading="lazy" decoding="async" />
+          </a>
+        `
+      ).join("");
     });
   };
 
@@ -6035,11 +6316,12 @@
       solveLink = document.createElement("a");
       solveLink.id = "header-solve-now";
       solveLink.className = "cta secondary solve-now-cta";
-      solveLink.href = "/ticker-query";
+      solveLink.href = "/contact#solve-now";
       solveLink.setAttribute("data-analytics", "nav_solve_now");
       solveLink.innerHTML = `${icon("brain")}<span>Solve now</span>`;
       actions.prepend(solveLink);
     }
+    solveLink.href = "/contact#solve-now";
     solveLink.setAttribute("title", "Powered by AI");
     solveLink.setAttribute("aria-label", "Solve now. Powered by AI");
   };
@@ -12627,7 +12909,9 @@
       ensureThemeToggle();
       normalizeHeaderBranding();
       normalizeTopNavigation();
+      normalizeFooterSocialLinks();
       ensureHeaderSolveNowCta();
+      bindSolveNowModalTriggers();
       ensureHeaderNotificationsCta();
       ensureSidebarCollapseToggle();
       bindMobileNav();

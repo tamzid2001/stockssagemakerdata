@@ -112,7 +112,6 @@ const resolveTemplate = (pathname) => {
     "/saved-forecasts",
     "/backtesting",
     "/studio",
-    "/ai-leaderboard",
     "/forecast",
     "/terminal",
     "/ask-gpt-5",

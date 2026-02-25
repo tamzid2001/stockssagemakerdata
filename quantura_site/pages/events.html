@@ -3,13 +3,18 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Quantura Shop | Plans and Digital Products</title>
+    <title>Quantura Events | Market Intelligence Calendar</title>
     <meta
       name="description"
-      content="Quantura Shop for subscriptions, digital research packs, and platform-aware checkout."
+      content="Track Quantura webinars, market briefings, and releases. Placeholder metadata can be updated for production SEO."
     />
-    <meta name="robots" content="index,follow" />
-    <link rel="canonical" href="https://quantura.studio/shop" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://quantura.studio/events" />
+    <meta property="og:title" content="Quantura Events" />
+    <meta property="og:description" content="Upcoming Quantura live sessions, macro briefings, and product workshops." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://quantura.studio/events" />
+    <meta property="og:image" content="/assets/quantura-logo.svg" />
     <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="stylesheet" href="/styles.css" />
@@ -24,7 +29,6 @@
     <script defer src="/__/firebase/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
     <script defer src="/app.js"></script>
-    <script defer src="/shop.js"></script>
   </head>
   <body>
     <header class="header">
@@ -42,47 +46,66 @@
           <a href="/contact" data-analytics="nav_contact"><i class="iconoir-mail" aria-hidden="true"></i><span>Contact Us</span></a>
         </nav>
         <div class="nav-actions">
-          <span id="header-user-status" class="pill">Logged Out</span>
+          <span id="header-user-email" class="small" style="max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Guest</span>
+          <span id="header-user-status" class="pill">Guest</span>
           <button class="cta secondary" id="header-auth" type="button"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></button>
+          <a class="cta" href="/pricing"><i class="iconoir-page" aria-hidden="true"></i><span>Request Deep Forecast</span></a>
         </div>
       </div>
     </header>
 
     <main>
       <section class="page-hero">
-        <div class="container content-grid" style="max-width: 1160px;">
+        <div class="container content-grid">
           <div>
-            <div class="eyebrow">Shop</div>
-            <h1>Get the plan that matches your workflow.</h1>
+            <div class="eyebrow">Events</div>
+            <h1>Live sessions, releases, and market briefings.</h1>
             <p>
-              Purchase subscriptions and digital products with checkout that respects web and native platform policy.
+              Follow upcoming Quantura events, from macro update rooms to deep-dive product walkthroughs.
             </p>
+            <a class="cta" href="/contact#solve-now" data-action="open-solve-now" data-solve-source="events" data-analytics="events_solve_now">
+              <i class="iconoir-brain" aria-hidden="true"></i><span>Solve now</span>
+            </a>
           </div>
           <aside class="card">
-            <h3>Checkout behavior</h3>
+            <h3>What to expect</h3>
             <div class="feature-list">
-              <div class="feature"><span></span>Web checkout routes through Stripe.</div>
-              <div class="feature"><span></span>Native iOS routes through StoreKit.</div>
-              <div class="feature"><span></span>Native Android routes through Google Play Billing.</div>
+              <div class="feature"><span></span>Weekly US macro and rates digest</div>
+              <div class="feature"><span></span>AI forecasting workflow walkthroughs</div>
+              <div class="feature"><span></span>Q&A for enterprise teams</div>
             </div>
           </aside>
         </div>
       </section>
 
-      <section class="section" id="shop-root">
-        <div class="container" style="max-width: 1160px;">
+      <section class="section">
+        <div class="container">
           <div class="section-title">
-            <h1>Quantura Shop</h1>
-            <p class="small">Platform-aware checkout: web products use Stripe extension flow, native digital goods route to IAP hooks.</p>
+            <h2>Upcoming</h2>
+            <p class="small muted">These cards are ready to be fed from Firestore/Eventarc later.</p>
           </div>
-
-          <div class="card" style="margin-bottom: 14px;">
-            <div class="profile-item"><span class="label">Runtime</span><span id="shop-platform" class="value">Detecting...</span></div>
-            <p id="shop-status" class="small muted" style="margin-top: 8px;">Loading products...</p>
-          </div>
-
-          <div id="shop-products" class="content-grid">
-            <div class="card"><div class="small muted">No products loaded yet.</div></div>
+          <div class="content-grid">
+            <article class="card">
+              <div class="badge-chip">Webinar</div>
+              <h3 style="margin-top: 12px;">Macro Pulse: CPI + Rates Setup</h3>
+              <p class="small muted">March 2026 · Live stream</p>
+              <p>Scenario planning for inflation surprises, treasury volatility, and sector rotation.</p>
+              <a class="cta secondary" href="/contact" data-analytics="events_register_macro"><i class="iconoir-send" aria-hidden="true"></i><span>Request invite</span></a>
+            </article>
+            <article class="card">
+              <div class="badge-chip">Workshop</div>
+              <h3 style="margin-top: 12px;">Forecast + Backtest Workbench</h3>
+              <p class="small muted">April 2026 · Interactive</p>
+              <p>Hands-on build session for forecast runs, indicators, and risk-aware review workflows.</p>
+              <a class="cta secondary" href="/contact" data-analytics="events_register_workshop"><i class="iconoir-send" aria-hidden="true"></i><span>Join waitlist</span></a>
+            </article>
+            <article class="card">
+              <div class="badge-chip">Product</div>
+              <h3 style="margin-top: 12px;">Quantura Release Notes Live</h3>
+              <p class="small muted">Monthly · Recorded + live Q&A</p>
+              <p>Roadmap, shipped features, and migration notes for teams using Quantura in production.</p>
+              <a class="cta secondary" href="/blog" data-analytics="events_release_notes"><i class="iconoir-page" aria-hidden="true"></i><span>Read updates</span></a>
+            </article>
           </div>
         </div>
       </section>
@@ -120,7 +143,8 @@
           <div><a href="/forecasting">Forecasting</a></div>
           <div><a href="/explore">Explore feed</a></div>
           <div><a href="/research">Research</a></div>
-          <div><a href="/pricing">Pricing</a></div>
+          <div><a href="/blog">Blog</a></div>
+          <div><a href="/shop">Shop</a></div>
           <div><a href="/contact">Contact Us</a></div>
         </div>
         <div class="small">

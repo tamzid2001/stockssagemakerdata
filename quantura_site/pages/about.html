@@ -3,13 +3,18 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Quantura Shop | Plans and Digital Products</title>
+    <title>About Quantura | Developer Story</title>
     <meta
       name="description"
-      content="Quantura Shop for subscriptions, digital research packs, and platform-aware checkout."
+      content="Learn about Quantura's developer, mission, and roadmap. Placeholder metadata can be updated for production SEO."
     />
-    <meta name="robots" content="index,follow" />
-    <link rel="canonical" href="https://quantura.studio/shop" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://quantura.studio/about" />
+    <meta property="og:title" content="About Quantura" />
+    <meta property="og:description" content="Developer profile, mission, and product direction for Quantura Studio." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://quantura.studio/about" />
+    <meta property="og:image" content="/assets/quantura-logo.svg" />
     <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="stylesheet" href="/styles.css" />
@@ -24,7 +29,6 @@
     <script defer src="/__/firebase/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
     <script defer src="/app.js"></script>
-    <script defer src="/shop.js"></script>
   </head>
   <body>
     <header class="header">
@@ -42,48 +46,80 @@
           <a href="/contact" data-analytics="nav_contact"><i class="iconoir-mail" aria-hidden="true"></i><span>Contact Us</span></a>
         </nav>
         <div class="nav-actions">
-          <span id="header-user-status" class="pill">Logged Out</span>
+          <span id="header-user-email" class="small" style="max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Guest</span>
+          <span id="header-user-status" class="pill">Guest</span>
           <button class="cta secondary" id="header-auth" type="button"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></button>
+          <a class="cta" href="/pricing"><i class="iconoir-page" aria-hidden="true"></i><span>Request Deep Forecast</span></a>
         </div>
       </div>
     </header>
 
     <main>
       <section class="page-hero">
-        <div class="container content-grid" style="max-width: 1160px;">
+        <div class="container content-grid">
           <div>
-            <div class="eyebrow">Shop</div>
-            <h1>Get the plan that matches your workflow.</h1>
+            <div class="eyebrow">About Quantura</div>
+            <h1>Built for clarity when markets are noisy.</h1>
             <p>
-              Purchase subscriptions and digital products with checkout that respects web and native platform policy.
+              Quantura blends forecasting, research, and execution workflows into one interface.
+              The goal is simple: help teams move from signal to decision faster.
             </p>
+            <div class="metric-strip" style="margin-top: 14px;">
+              <span class="metric-chip"><span class="metric-label">Role</span><span class="metric-value">Founder + Engineer</span></span>
+              <span class="metric-chip"><span class="metric-label">Focus</span><span class="metric-value">AI x Markets</span></span>
+            </div>
           </div>
           <aside class="card">
-            <h3>Checkout behavior</h3>
-            <div class="feature-list">
-              <div class="feature"><span></span>Web checkout routes through Stripe.</div>
-              <div class="feature"><span></span>Native iOS routes through StoreKit.</div>
-              <div class="feature"><span></span>Native Android routes through Google Play Billing.</div>
-            </div>
+            <div class="badge-chip" style="margin-bottom: 10px;">Developer</div>
+            <h3 style="margin-bottom: 8px;">Tamzid Ullah</h3>
+            <p class="small" style="margin: 0 0 12px;">
+              Masters in Computer Science from New York Institute of Technology
+            </p>
+            <a
+              class="cta secondary"
+              href="https://www.linkedin.com/in/tamzid-ullah-8a50a2234/"
+              target="_blank"
+              rel="noopener noreferrer"
+              data-analytics="about_linkedin_profile"
+            >
+              <i class="iconoir-link" aria-hidden="true"></i><span>LinkedIn profile</span>
+            </a>
           </aside>
         </div>
       </section>
 
-      <section class="section" id="shop-root">
-        <div class="container" style="max-width: 1160px;">
-          <div class="section-title">
-            <h1>Quantura Shop</h1>
-            <p class="small">Platform-aware checkout: web products use Stripe extension flow, native digital goods route to IAP hooks.</p>
-          </div>
+      <section class="section">
+        <div class="container content-grid">
+          <article class="card">
+            <h3>Developer profile image</h3>
+            <p class="small muted">Upload a profile photo preview for this page.</p>
+            <img
+              id="about-profile-preview"
+              src="/assets/quantura-icon.svg"
+              alt="Developer profile preview"
+              style="width: 140px; height: 140px; border-radius: 20px; object-fit: cover; border: 1px solid var(--line); margin-top: 8px;"
+            />
+            <div class="field" style="margin-top: 12px;">
+              <label class="label" for="about-profile-upload">Profile image</label>
+              <input id="about-profile-upload" class="modal-input" type="file" accept="image/*" />
+            </div>
+            <p class="small muted" style="margin-top: 8px;">Local preview only. Upload persistence can be connected in dashboard settings.</p>
+          </article>
 
-          <div class="card" style="margin-bottom: 14px;">
-            <div class="profile-item"><span class="label">Runtime</span><span id="shop-platform" class="value">Detecting...</span></div>
-            <p id="shop-status" class="small muted" style="margin-top: 8px;">Loading products...</p>
-          </div>
-
-          <div id="shop-products" class="content-grid">
-            <div class="card"><div class="small muted">No products loaded yet.</div></div>
-          </div>
+          <article class="card">
+            <h3>Why Quantura exists</h3>
+            <div class="feature-list" style="margin-top: 10px;">
+              <div class="feature"><span></span>Make research and forecasting transparent and auditable.</div>
+              <div class="feature"><span></span>Unify discretionary and systematic workflows in one place.</div>
+              <div class="feature"><span></span>Deliver practical, explainable AI outputs with human control.</div>
+            </div>
+            <div class="card" style="margin-top: 14px; background: var(--surface);">
+              <h4 style="margin: 0 0 8px;">Hook</h4>
+              <p class="small" style="margin: 0;">
+                Quantura started as a builder's attempt to reduce decision latency for market operators who need fast answers and strong guardrails.
+              </p>
+            </div>
+          </article>
         </div>
       </section>
     </main>
@@ -118,8 +154,9 @@
           <strong>Explore</strong>
           <div><a href="/">Home</a></div>
           <div><a href="/forecasting">Forecasting</a></div>
-          <div><a href="/explore">Explore feed</a></div>
           <div><a href="/research">Research</a></div>
+          <div><a href="/blog">Blog</a></div>
+          <div><a href="/dashboard">Dashboard</a></div>
           <div><a href="/pricing">Pricing</a></div>
           <div><a href="/contact">Contact Us</a></div>
         </div>
@@ -134,6 +171,21 @@
         © 2026 Quantura. All rights reserved.
       </div>
     </footer>
+
+    <script>
+      document.addEventListener("DOMContentLoaded", () => {
+        const input = document.getElementById("about-profile-upload");
+        const preview = document.getElementById("about-profile-preview");
+        if (!(input instanceof HTMLInputElement) || !(preview instanceof HTMLImageElement)) return;
+        input.addEventListener("change", () => {
+          const file = input.files && input.files[0];
+          if (!file) return;
+          const nextUrl = URL.createObjectURL(file);
+          preview.src = nextUrl;
+          preview.onload = () => URL.revokeObjectURL(nextUrl);
+        });
+      });
+    </script>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
   </body>
