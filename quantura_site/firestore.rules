@@ -112,6 +112,12 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    match /agent_runs/{runId} {
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.userId);
+      allow update, delete: if isAdmin();
+    }
+
     match /feature_votes/{voteId} {
       allow create, update: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow read: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.userId);
@@ -149,6 +155,53 @@ service cloud.firestore {
     match /social_dispatch_logs/{logId} {
       allow read: if isAdmin();
       allow write: if false;
+    }
+
+    match /posts/{postId} {
+      allow read: if resource.data.visibility == "public"
+        || (isSignedIn() && request.auth.uid == resource.data.authorUid);
+      allow create: if isSignedIn() && request.resource.data.authorUid == request.auth.uid;
+      allow update, delete: if isSignedIn() && request.auth.uid == resource.data.authorUid;
+    }
+
+    match /posts/{postId}/comments/{commentId} {
+      allow read: if exists(/databases/$(database)/documents/posts/$(postId))
+        && (
+          get(/databases/$(database)/documents/posts/$(postId)).data.visibility == "public"
+          || (isSignedIn() && request.auth.uid == get(/databases/$(database)/documents/posts/$(postId)).data.authorUid)
+        );
+      allow create: if isSignedIn() && request.resource.data.authorUid == request.auth.uid;
+      allow delete: if isSignedIn() && request.auth.uid == resource.data.authorUid;
+      allow update: if false;
+    }
+
+    match /postLikes/{postId}/users/{uid} {
+      allow read: if isSignedIn();
+      allow create, delete: if isSignedIn() && request.auth.uid == uid;
+      allow update: if false;
+    }
+
+    match /postReposts/{postId}/users/{uid} {
+      allow read: if isSignedIn();
+      allow create, delete: if isSignedIn() && request.auth.uid == uid;
+      allow update: if false;
+    }
+
+    match /reports/{reportId} {
+      allow create: if isSignedIn() && request.resource.data.reporterUid == request.auth.uid;
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /users/{userId}/follows/{authorUid} {
+      allow read, create, update, delete: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /users/{userId}/watchTickers/{ticker} {
+      allow read, create, update, delete: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /users/{userId}/fcmTokens/{token} {
+      allow read, create, update, delete: if isSignedIn() && request.auth.uid == userId;
     }
   }
 }
