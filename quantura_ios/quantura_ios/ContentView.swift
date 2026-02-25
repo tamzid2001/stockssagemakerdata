@@ -512,6 +512,14 @@ struct QuanturaWebView: UIViewRepresentable {
             decidePolicyFor navigationAction: WKNavigationAction,
             decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
         ) {
+            if navigationAction.targetFrame?.isMainFrame == true,
+               let destinationURL = navigationAction.request.url,
+               isStripeCheckoutURL(destinationURL) {
+                print("[Billing][iOS] Blocked Stripe checkout URL inside native app: \(destinationURL.absoluteString)")
+                decisionHandler(.cancel)
+                return
+            }
+
             if navigationAction.targetFrame?.isMainFrame == true {
                 let destinationURL = navigationAction.request.url
                 if let destinationURL, !isTrustedURL(destinationURL) {
@@ -544,6 +552,10 @@ struct QuanturaWebView: UIViewRepresentable {
                 return
             }
             guard message.name == "QuanturaBridge" else { return }
+            guard let sourceURL = webView?.url, isTrustedURL(sourceURL) else {
+                print("[Bridge][iOS] Ignored QuanturaBridge message from untrusted page.")
+                return
+            }
 
             var payload: [String: Any] = [:]
             if let body = message.body as? [String: Any] {
@@ -579,6 +591,10 @@ struct QuanturaWebView: UIViewRepresentable {
                     if !requestId.isEmpty {
                         self.dispatchNativeAuthResult(requestId: requestId, provider: "native", ok: true)
                     }
+                case "startNativePurchase":
+                    self.handleNativeStoreKitPurchase(payload: payload)
+                case "openNativeSubscriptionManager":
+                    self.handleNativeSubscriptionManager(payload: payload)
                 default:
                     break
                 }
@@ -629,6 +645,212 @@ struct QuanturaWebView: UIViewRepresentable {
             let finalText = text.isEmpty ? url : "\(text) \(url)"
             let activityVC = UIActivityViewController(activityItems: [title, finalText], applicationActivities: nil)
             presenter.present(activityVC, animated: true)
+        }
+
+        private func handleNativeStoreKitPurchase(payload: [String: Any]) {
+            let requestId = String(describing: payload["requestId"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let orderId = String(describing: payload["orderId"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let productId = String(describing: payload["productId"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !requestId.isEmpty else { return }
+            guard !productId.isEmpty else {
+                dispatchNativePurchaseResult(
+                    requestId: requestId,
+                    orderId: orderId,
+                    productId: "",
+                    ok: false,
+                    status: "failed",
+                    message: "Missing App Store product identifier."
+                )
+                return
+            }
+
+#if canImport(StoreKit)
+            guard #available(iOS 15.0, *) else {
+                dispatchNativePurchaseResult(
+                    requestId: requestId,
+                    orderId: orderId,
+                    productId: productId,
+                    ok: false,
+                    status: "failed",
+                    message: "StoreKit checkout requires iOS 15 or later."
+                )
+                return
+            }
+
+            Task { @MainActor in
+                do {
+                    let products = try await Product.products(for: [productId])
+                    guard let product = products.first else {
+                        dispatchNativePurchaseResult(
+                            requestId: requestId,
+                            orderId: orderId,
+                            productId: productId,
+                            ok: false,
+                            status: "failed",
+                            message: "App Store product was not found."
+                        )
+                        return
+                    }
+
+                    let result = try await product.purchase()
+                    switch result {
+                    case .success(let verification):
+                        switch verification {
+                        case .verified(let transaction):
+                            await transaction.finish()
+                            dispatchNativePurchaseResult(
+                                requestId: requestId,
+                                orderId: orderId,
+                                productId: productId,
+                                ok: true,
+                                status: "purchased"
+                            )
+                        case .unverified(_, let verificationError):
+                            dispatchNativePurchaseResult(
+                                requestId: requestId,
+                                orderId: orderId,
+                                productId: productId,
+                                ok: false,
+                                status: "failed",
+                                message: verificationError.localizedDescription
+                            )
+                        }
+                    case .userCancelled:
+                        dispatchNativePurchaseResult(
+                            requestId: requestId,
+                            orderId: orderId,
+                            productId: productId,
+                            ok: false,
+                            status: "cancelled"
+                        )
+                    case .pending:
+                        dispatchNativePurchaseResult(
+                            requestId: requestId,
+                            orderId: orderId,
+                            productId: productId,
+                            ok: false,
+                            status: "pending"
+                        )
+                    @unknown default:
+                        dispatchNativePurchaseResult(
+                            requestId: requestId,
+                            orderId: orderId,
+                            productId: productId,
+                            ok: false,
+                            status: "failed",
+                            message: "Unknown StoreKit purchase state."
+                        )
+                    }
+                } catch {
+                    dispatchNativePurchaseResult(
+                        requestId: requestId,
+                        orderId: orderId,
+                        productId: productId,
+                        ok: false,
+                        status: "failed",
+                        message: error.localizedDescription
+                    )
+                }
+            }
+#else
+            dispatchNativePurchaseResult(
+                requestId: requestId,
+                orderId: orderId,
+                productId: productId,
+                ok: false,
+                status: "failed",
+                message: "StoreKit is unavailable in this build."
+            )
+#endif
+        }
+
+        private func handleNativeSubscriptionManager(payload: [String: Any]) {
+            let requestId = String(describing: payload["requestId"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !requestId.isEmpty else { return }
+
+#if canImport(StoreKit)
+            if #available(iOS 15.0, *) {
+                Task { @MainActor in
+                    do {
+                        if let scene = UIApplication.shared.connectedScenes
+                            .compactMap({ $0 as? UIWindowScene })
+                            .first(where: { $0.activationState == .foregroundActive }) {
+                            try await AppStore.showManageSubscriptions(in: scene)
+                            dispatchNativePurchaseResult(
+                                requestId: requestId,
+                                orderId: "",
+                                productId: "",
+                                ok: true,
+                                status: "subscriptions_opened"
+                            )
+                            return
+                        }
+                        throw NSError(
+                            domain: "QuanturaStoreKit",
+                            code: -1001,
+                            userInfo: [NSLocalizedDescriptionKey: "No active scene available."]
+                        )
+                    } catch {
+                        dispatchNativePurchaseResult(
+                            requestId: requestId,
+                            orderId: "",
+                            productId: "",
+                            ok: false,
+                            status: "failed",
+                            message: error.localizedDescription
+                        )
+                    }
+                }
+                return
+            }
+#endif
+
+            guard let url = URL(string: "https://apps.apple.com/account/subscriptions") else {
+                dispatchNativePurchaseResult(
+                    requestId: requestId,
+                    orderId: "",
+                    productId: "",
+                    ok: false,
+                    status: "failed",
+                    message: "Unable to open subscription settings."
+                )
+                return
+            }
+            UIApplication.shared.open(url) { opened in
+                self.dispatchNativePurchaseResult(
+                    requestId: requestId,
+                    orderId: "",
+                    productId: "",
+                    ok: opened,
+                    status: opened ? "subscriptions_opened" : "failed",
+                    message: opened ? "" : "Unable to open subscription settings."
+                )
+            }
+        }
+
+        private func dispatchNativePurchaseResult(
+            requestId: String,
+            orderId: String,
+            productId: String,
+            ok: Bool,
+            status: String,
+            message: String = ""
+        ) {
+            guard
+                let data = try? JSONSerialization.data(withJSONObject: [
+                    "requestId": requestId,
+                    "orderId": orderId,
+                    "productId": productId,
+                    "ok": ok,
+                    "status": status,
+                    "message": message,
+                    "platform": "ios",
+                ], options: []),
+                let detail = String(data: data, encoding: .utf8)
+            else { return }
+            webView?.evaluateJavaScript(
+                "window.dispatchEvent(new CustomEvent('quantura:native-purchase-result',{detail:\(detail)}));"
+            )
         }
 
         private func handleNativeAuthSignIn(payload: [String: Any]) {
@@ -928,6 +1150,14 @@ struct QuanturaWebView: UIViewRepresentable {
                 return true
             }
             return host.hasSuffix(".quantura.studio")
+        }
+
+        private func isStripeCheckoutURL(_ url: URL) -> Bool {
+            guard let host = url.host?.lowercased() else { return false }
+            if host == "checkout.stripe.com" || host == "buy.stripe.com" || host.hasSuffix(".stripe.com") {
+                return true
+            }
+            return false
         }
 
         static func topViewController(
