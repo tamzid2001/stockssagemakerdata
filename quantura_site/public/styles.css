@@ -3597,6 +3597,68 @@ textarea {
   margin: 0;
 }
 
+.module-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 8px;
+}
+
+.module-picker-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--ink);
+  font-size: 0.82rem;
+}
+
+.module-picker-chip input {
+  margin: 0;
+}
+
+.model-council-improve-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#ticker-query-improve-preview {
+  min-height: 130px;
+}
+
+.model-council-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  margin-bottom: 8px;
+}
+
+.model-council-module {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.64);
+}
+
+.model-council-module + .model-council-module {
+  margin-top: 8px;
+}
+
+.model-council-module summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.model-council-module pre {
+  margin-top: 8px;
+  max-height: 220px;
+  overflow: auto;
+}
+
 .profile-feedback-button {
   margin-top: 10px;
 }
@@ -3664,6 +3726,12 @@ textarea {
 [data-theme="dark"] .badge-chip {
   background: rgba(18, 24, 42, 0.78);
   border-color: rgba(233, 237, 247, 0.18);
+}
+
+[data-theme="dark"] .module-picker-chip,
+[data-theme="dark"] .model-council-module {
+  background: rgba(18, 24, 42, 0.82);
+  border-color: rgba(233, 237, 247, 0.2);
 }
 
 [data-theme="dark"] .order-card,

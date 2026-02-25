@@ -69,7 +69,7 @@
             </select>
           </div>
           <span id="header-user-status" class="pill">Logged Out</span>
-          <a class="cta secondary solve-now-cta" id="header-solve-now" href="/ticker-query" data-analytics="nav_solve_now" aria-label="Solve now. Powered by AI" title="Powered by AI"><i class="iconoir-brain" aria-hidden="true"></i><span>Solve now</span></a>
+          <a class="cta secondary solve-now-cta" id="header-solve-now" href="/model-council" data-analytics="nav_solve_now" aria-label="Solve now. Powered by AI" title="Powered by AI"><i class="iconoir-brain" aria-hidden="true"></i><span>Solve now</span></a>
           <a class="cta secondary icon-only" id="header-notifications" href="/account" data-analytics="nav_notifications" aria-label="Sign in to manage notifications" title="Notifications"><i class="iconoir-bell-notification" aria-hidden="true"></i></a>
           <button class="cta secondary icon-only" id="header-auth" type="button" aria-label="Sign in" title="Sign in"><i class="iconoir-log-in" aria-hidden="true"></i></button>
           <a class="cta" href="/pricing"><i class="iconoir-page" aria-hidden="true"></i><span>Request Deep Forecast</span></a>
@@ -88,7 +88,7 @@
 	            <a class="sidebar-link" href="/news" data-panel-target="news"><i class="iconoir-journal-page" aria-hidden="true"></i><span>News and data</span></a>
               <a class="sidebar-link" href="/events-calendar" data-panel-target="events-calendar"><i class="iconoir-calendar" aria-hidden="true"></i><span>Corporate events</span></a>
               <a class="sidebar-link" href="/market-headlines" data-panel-target="market-headlines"><i class="iconoir-globe" aria-hidden="true"></i><span>Market headlines</span></a>
-              <a class="sidebar-link" href="/ticker-query" data-panel-target="ticker-query"><i class="iconoir-brain" aria-hidden="true"></i><span>Ask GPT-5</span></a>
+              <a class="sidebar-link" href="/model-council" data-panel-target="ticker-query"><i class="iconoir-brain" aria-hidden="true"></i><span>Model Council</span></a>
 	            <a class="sidebar-link" href="/options" data-panel-target="options"><i class="iconoir-numbered-list-left" aria-hidden="true"></i><span>Options</span></a>
 	            <a class="sidebar-link" href="/saved-forecasts" data-panel-target="saved"><i class="iconoir-bookmark" aria-hidden="true"></i><span>Saved forecasts</span></a>
 	            <a class="sidebar-link" href="/studio" data-panel-target="learn"><i class="iconoir-info-circle" aria-hidden="true"></i><span>Learn more</span></a>
@@ -523,8 +523,8 @@
 
                   <section class="panel hidden" data-panel="ticker-query">
                     <div class="panel-header">
-                      <h2>Ask GPT-5</h2>
-                      <p class="small">Query any ticker in plain language. Quantura enriches with market context and headlines.</p>
+                      <h2>Model Council</h2>
+                      <p class="small">Run multi-provider analysis with structured Yahoo Finance context modules for the ticker.</p>
                     </div>
                     <form id="ticker-query-form" class="card">
                       <div class="form-grid">
@@ -545,6 +545,15 @@
                           </select>
                         </div>
                         <div class="field">
+                          <label class="label" for="ticker-query-provider">Provider</label>
+                          <select id="ticker-query-provider" name="provider">
+                            <option value="openai">Loading providers...</option>
+                          </select>
+                          <div id="ticker-query-provider-hint" class="small muted" style="margin-top:8px;">
+                            All provider calls are server-side only.
+                          </div>
+                        </div>
+                        <div class="field">
                           <label class="label" for="ticker-query-model">Model</label>
                           <select id="ticker-query-model" name="model">
                             <option value="gpt-5-mini">Loading models...</option>
@@ -555,10 +564,29 @@
                         </div>
                       </div>
                       <div class="field">
+                        <label class="label">Yahoo Finance info picker</label>
+                        <div id="ticker-query-modules-picker" class="module-picker-grid"></div>
+                        <div class="small muted" style="margin-top:8px;">
+                          Selected modules are attached as structured context.
+                        </div>
+                      </div>
+                      <div class="field">
                         <label class="label" for="ticker-query-question">Question</label>
                         <textarea id="ticker-query-question" name="question" placeholder="Example: Is this stock overvalued vs peers, and what are the top near-term risks?"></textarea>
                       </div>
-                      <button class="cta" type="submit" data-analytics="ticker_query_submit"><i class="iconoir-brain" aria-hidden="true"></i><span>Ask GPT-5</span></button>
+                      <label class="small muted model-council-improve-toggle">
+                        <input id="ticker-query-improve-toggle" type="checkbox" checked />
+                        Improve my prompt before final run
+                      </label>
+                      <div id="ticker-query-improve-preview-wrap" class="field hidden">
+                        <label class="label" for="ticker-query-improve-preview">Improved prompt preview</label>
+                        <textarea id="ticker-query-improve-preview" name="improvedPrompt"></textarea>
+                        <div class="small muted" style="margin-top:8px;">Edit this preview, then run Model Council.</div>
+                        <button class="cta secondary" id="ticker-query-run-final" type="button">
+                          <i class="iconoir-play" aria-hidden="true"></i><span>Run Model Council</span>
+                        </button>
+                      </div>
+                      <button class="cta" type="submit" data-analytics="model_council_submit"><i class="iconoir-brain" aria-hidden="true"></i><span>Prepare Model Council</span></button>
                       <p class="small muted" id="ticker-query-status"></p>
                       <p class="small muted" id="ticker-query-model-info">Latency: — · Tokens: — · Cached: —</p>
                       <label id="ticker-query-cache-toggle-wrap" class="small muted hidden" style="display:flex;align-items:center;gap:8px;">
@@ -568,8 +596,9 @@
                       <div id="ticker-query-cache-stats" class="panel-output small hidden">Cache stats will appear after a response.</div>
                     </form>
                     <div class="results-panel">
-                      <h3>Query result</h3>
-                      <div id="ticker-query-output" class="panel-output small">Ask a question to generate a GPT-5 response with evidence and risk caveats.</div>
+                      <h3>Model Council output</h3>
+                      <div id="ticker-query-output" class="panel-output small">Ask a question to generate a Model Council response with evidence and risk caveats.</div>
+                      <div id="ticker-query-modules-output" class="panel-output small hidden" style="margin-top:10px;">Selected yfinance modules will render here.</div>
                     </div>
                   </section>
 
