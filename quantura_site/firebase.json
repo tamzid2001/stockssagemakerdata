@@ -61,6 +61,7 @@
     "rewrites": [
       { "source": "/blog", "destination": "/blog/index.html" },
       { "source": "/blog/posts/:slug", "destination": "/blog/posts/:slug.html" },
+      { "source": "/api/auth/exchange", "function": "exchange_native_auth" },
       { "source": "/api/auth/exchange-native-id-token", "function": "exchange_native_id_token" },
       { "source": "/api/predictions/search", "function": "predictions_search_http" },
       { "source": "/api/predictions/orderbook", "function": "predictions_orderbook_http" },
