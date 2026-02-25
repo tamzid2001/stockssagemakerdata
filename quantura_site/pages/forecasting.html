@@ -40,26 +40,38 @@
   <body>
     <header class="header">
       <div class="container nav">
-        <a class="logo" href="/" aria-label="Quantura home"><span>QUANTURA</span></a>
+        <a class="logo" href="/" aria-label="Quantura home">
+          <img class="logo-img" src="/assets/quantura-icon.svg" alt="" aria-hidden="true" />
+          <span>QUANTURA</span>
+        </a>
         <nav class="nav-links">
           <a href="/forecasting" data-analytics="nav_terminal"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Terminal</span></a>
+          <a href="/explore" data-analytics="nav_explore"><i class="iconoir-binocular" aria-hidden="true"></i><span>Explore</span></a>
           <a href="/blog" data-analytics="nav_blog"><i class="iconoir-page" aria-hidden="true"></i><span>Blog</span></a>
           <a href="/research" data-analytics="nav_research"><i class="iconoir-bookmark-book" aria-hidden="true"></i><span>Research</span></a>
+          <a href="/events-calendar" data-analytics="nav_events"><i class="iconoir-calendar" aria-hidden="true"></i><span>Events</span></a>
+          <a href="/shop" data-analytics="nav_shop"><i class="iconoir-shop" aria-hidden="true"></i><span>Shop</span></a>
+          <a href="/about" data-analytics="nav_about"><i class="iconoir-info-circle" aria-hidden="true"></i><span>About</span></a>
           <a href="/pricing" data-analytics="nav_pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>Pricing</span></a>
-          <a href="/contact" data-analytics="nav_contact"><i class="iconoir-mail" aria-hidden="true"></i><span>Contact</span></a>
+          <a href="/contact" data-analytics="nav_contact"><i class="iconoir-mail" aria-hidden="true"></i><span>Contact Us</span></a>
         </nav>
         <div class="nav-actions">
-          <select id="language-select" class="status-select" aria-label="Language">
-            <option value="auto">Auto</option>
-            <option value="en">English</option>
-            <option value="es">Spanish</option>
-            <option value="fr">French</option>
-            <option value="de">German</option>
-            <option value="ar">Arabic</option>
-            <option value="bn">Bengali</option>
-          </select>
+          <div class="language-picker">
+            <label class="language-picker-label" for="language-select">Language</label>
+            <select id="language-select" class="status-select language-select" aria-label="Language">
+              <option value="auto">Auto</option>
+              <option value="en">English</option>
+              <option value="es">Spanish</option>
+              <option value="fr">French</option>
+              <option value="de">German</option>
+              <option value="ar">Arabic</option>
+              <option value="bn">Bengali</option>
+            </select>
+          </div>
           <span id="header-user-status" class="pill">Logged Out</span>
-          <button class="cta secondary" id="header-auth" type="button"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></button>
+          <a class="cta secondary solve-now-cta" id="header-solve-now" href="/ticker-query" data-analytics="nav_solve_now" aria-label="Solve now. Powered by AI" title="Powered by AI"><i class="iconoir-brain" aria-hidden="true"></i><span>Solve now</span></a>
+          <a class="cta secondary icon-only" id="header-notifications" href="/account" data-analytics="nav_notifications" aria-label="Sign in to manage notifications" title="Notifications"><i class="iconoir-bell-notification" aria-hidden="true"></i></a>
+          <button class="cta secondary icon-only" id="header-auth" type="button" aria-label="Sign in" title="Sign in"><i class="iconoir-log-in" aria-hidden="true"></i></button>
           <a class="cta" href="/pricing"><i class="iconoir-page" aria-hidden="true"></i><span>Request Deep Forecast</span></a>
         </div>
       </div>
@@ -68,61 +80,9 @@
     <main>
       <div class="app-layout">
         <aside class="app-sidebar">
-          <div class="sidebar-card">
-            <div class="small"><strong>Account</strong></div>
-            <div class="small">Signed in as <span id="user-email">Not signed in</span></div>
-            <div class="small">Status <span id="user-status" class="pill">Logged Out</span></div>
-            <details class="profile-settings">
-              <summary>Leaderboard profile</summary>
-              <form id="profile-form" class="profile-editor">
-                <label class="label" for="profile-username">Username</label>
-                <input id="profile-username" class="input" type="text" maxlength="32" placeholder="quantura_alpha" />
-                <label class="label" for="profile-avatar">Avatar</label>
-                <select id="profile-avatar" class="input">
-                  <option value="bull">Bull Trader</option>
-                  <option value="bear">Bear Analyst</option>
-                  <option value="owl">Night Researcher</option>
-                  <option value="fox">Momentum Scout</option>
-                  <option value="hawk">Macro Hawk</option>
-                  <option value="orca">Quant Orca</option>
-                </select>
-                <label class="label" for="profile-bio">Public bio</label>
-                <textarea id="profile-bio" class="input" rows="3" maxlength="300" placeholder="Your investing style, focus sectors, and what people should know about your screeners."></textarea>
-                <div class="checkbox-grid">
-                  <label><input id="profile-public-enabled" type="checkbox" /> Public profile</label>
-                  <label><input id="profile-public-screener" type="checkbox" /> Auto-publish screener runs</label>
-                </div>
-                <div class="profile-links-grid">
-                  <label class="label" for="profile-social-x">X</label>
-                  <input id="profile-social-x" class="input" type="url" placeholder="https://x.com/username" />
-                  <label class="label" for="profile-social-linkedin">LinkedIn</label>
-                  <input id="profile-social-linkedin" class="input" type="url" placeholder="https://linkedin.com/in/username" />
-                  <label class="label" for="profile-social-github">GitHub</label>
-                  <input id="profile-social-github" class="input" type="url" placeholder="https://github.com/username" />
-                  <label class="label" for="profile-social-youtube">YouTube</label>
-                  <input id="profile-social-youtube" class="input" type="url" placeholder="https://youtube.com/@channel" />
-                  <label class="label" for="profile-social-tiktok">TikTok</label>
-                  <input id="profile-social-tiktok" class="input" type="url" placeholder="https://tiktok.com/@username" />
-                  <label class="label" for="profile-social-facebook">Facebook</label>
-                  <input id="profile-social-facebook" class="input" type="url" placeholder="https://facebook.com/username" />
-                  <label class="label" for="profile-social-instagram">Instagram</label>
-                  <input id="profile-social-instagram" class="input" type="url" placeholder="https://instagram.com/username" />
-                  <label class="label" for="profile-social-reddit">Reddit</label>
-                  <input id="profile-social-reddit" class="input" type="url" placeholder="https://reddit.com/u/username" />
-                  <label class="label" for="profile-social-website">Website</label>
-                  <input id="profile-social-website" class="input" type="url" placeholder="https://your-site.com" />
-                </div>
-                <button class="cta secondary small" id="profile-connect-stripe" type="button"><i class="iconoir-wallet" aria-hidden="true"></i><span>Connect Stripe</span></button>
-                <button class="cta secondary small" type="submit">Save profile</button>
-                <p id="profile-status" class="small muted">Sign in to set your public leaderboard profile.</p>
-              </form>
-            </details>
-            <a class="cta secondary small" href="/dashboard"><i class="iconoir-dashboard" aria-hidden="true"></i><span>Open dashboard</span></a>
-            <a class="cta secondary small hidden" id="nav-admin" href="/admin"><i class="iconoir-shield-check" aria-hidden="true"></i><span>Admin dashboard</span></a>
-          </div>
 	          <nav class="sidebar-nav" aria-label="Terminal navigation">
 	            <a class="sidebar-link active" href="/forecasting" data-panel-target="forecast"><i class="iconoir-magic-wand" aria-hidden="true"></i><span>Forecast</span></a>
-	            <a class="sidebar-link" href="/ticker-intelligence" data-panel-target="ticker-intelligence"><i class="iconoir-eye" aria-hidden="true"></i><span>Ticker Intelligence</span></a>
+	            <a class="sidebar-link" href="/ticker-intelligence" data-panel-target="ticker"><i class="iconoir-eye" aria-hidden="true"></i><span>Ticker</span></a>
 	            <a class="sidebar-link" href="/indicators" data-panel-target="indicators"><i class="iconoir-sigma-function" aria-hidden="true"></i><span>Indicators</span></a>
               <a class="sidebar-link" href="/trending" data-panel-target="trending"><i class="iconoir-fire-flame" aria-hidden="true"></i><span>Trending</span></a>
 	            <a class="sidebar-link" href="/news" data-panel-target="news"><i class="iconoir-journal-page" aria-hidden="true"></i><span>News and data</span></a>
@@ -131,10 +91,9 @@
               <a class="sidebar-link" href="/ticker-query" data-panel-target="ticker-query"><i class="iconoir-brain" aria-hidden="true"></i><span>Ask GPT-5</span></a>
 	            <a class="sidebar-link" href="/options" data-panel-target="options"><i class="iconoir-numbered-list-left" aria-hidden="true"></i><span>Options</span></a>
 	            <a class="sidebar-link" href="/saved-forecasts" data-panel-target="saved"><i class="iconoir-bookmark" aria-hidden="true"></i><span>Saved forecasts</span></a>
-              <a class="sidebar-link" href="/backtesting" data-panel-target="backtesting"><i class="iconoir-flask" aria-hidden="true"></i><span>Backtesting</span></a>
 	            <a class="sidebar-link" href="/studio" data-panel-target="learn"><i class="iconoir-info-circle" aria-hidden="true"></i><span>Learn more</span></a>
 	            <a class="sidebar-link" href="/screener"><i class="iconoir-search" aria-hidden="true"></i><span>Screener</span></a>
-              <a class="sidebar-link" href="/ai-leaderboard" data-panel-target="ai-leaderboard"><i class="iconoir-trophy" aria-hidden="true"></i><span>AI Leaderboard</span></a>
+              <a class="sidebar-link" href="/explore"><i class="iconoir-binocular" aria-hidden="true"></i><span>Explore</span></a>
 	            <a class="sidebar-link" href="/watchlist"><i class="iconoir-bell-notification" aria-hidden="true"></i><span>Watchlist and alerts</span></a>
 	          </nav>
         </aside>
@@ -163,6 +122,7 @@
                     <div class="small ticker-hint">
                       Tip: pick a panel on the left, then click any ticker in results to update the chart immediately.
                     </div>
+                    <div id="ticker-history" class="ticker-history" aria-live="polite"></div>
                   </div>
 
                   <div class="chart-shell studio-chart">
@@ -187,9 +147,14 @@
                       <div class="tv-widget-status-row">
                         <span class="small muted" id="tv-widget-status">Loading TradingView...</span>
                       </div>
-                      <div class="tradingview-grid-top">
-                        <div id="tv-symbol-info" class="tv-widget-slot tv-slot-info"></div>
-                        <div id="tv-advanced-chart" class="tv-widget-slot tv-slot-advanced"></div>
+                      <div class="tradingview-grid">
+                        <div id="tv-ticker-tape" class="tv-widget-slot tv-slot-tape tv-span-2"></div>
+                        <div id="tv-symbol-info" class="tv-widget-slot tv-slot-info tv-span-2"></div>
+                        <div id="tv-advanced-chart" class="tv-widget-slot tv-slot-advanced tv-span-2"></div>
+                        <div id="tv-company-profile" class="tv-widget-slot tv-slot-company tv-span-2"></div>
+                        <div id="tv-fundamental-data" class="tv-widget-slot tv-slot-fundamentals tv-span-2"></div>
+                        <div id="tv-technical-analysis" class="tv-widget-slot tv-slot-technical"></div>
+                        <div id="tv-top-stories" class="tv-widget-slot tv-slot-news"></div>
                         <div id="tv-widget-fallback" class="notice tv-widget-fallback hidden">
                           TradingView widgets did not load right now. Quantura chart fallback is active.
                         </div>
@@ -304,9 +269,9 @@
                     </div>
                   </section>
 
-                  <section class="panel hidden" data-panel="ticker-intelligence">
+                  <section class="panel hidden" data-panel="ticker">
                     <div class="panel-header">
-                      <h2>Ticker Intelligence</h2>
+                      <h2>Ticker</h2>
                       <p class="small">Institutional three-column view with fundamentals, risk, ESG, and peer benchmarking.</p>
                     </div>
                     <div class="results-panel ticker-intelligence-panel">
@@ -317,7 +282,7 @@
                           <button class="task-chip" id="intel-tab-predictions" type="button" role="tab" aria-selected="false" data-intel-tab="predictions">Predictions</button>
                         </div>
                       </div>
-                      <div id="ticker-intelligence-output" class="panel-output small" data-intel-view="intelligence">Load a ticker to generate the institutional intelligence panel.</div>
+                      <div id="ticker-output" class="panel-output small" data-intel-view="intelligence">Load a ticker to generate the institutional intelligence panel.</div>
                       <div id="ticker-predictions-output" class="panel-output small hidden" data-intel-view="predictions">Load a ticker to view related Polymarket prediction markets.</div>
                       <p class="small muted" style="margin-top:10px;">Predictions are informational only and not investment advice.</p>
                     </div>
@@ -326,7 +291,7 @@
                   <section class="panel hidden" data-panel="indicators">
                     <div class="panel-header">
                       <h2>Indicators</h2>
-                      <p class="small">Toggle indicator stacks. Overlays (SMA/EMA/Bollinger) render on the price chart; full series plot below.</p>
+                      <p class="small">Toggle indicator stacks, then run and manage backtests using the same active ticker and timeframe.</p>
                     </div>
                     <form id="technicals-form" class="card">
                       <div class="form-grid">
@@ -460,8 +425,8 @@
                       <div id="download-preview" class="panel-output small">Run a download to preview Date, Close, Open, High, Low, and Volume.</div>
                     </div>
                     <div class="notice" style="margin-top: 16px;">
-                      TradingView widgets and the ticker chart are available only in the Ticker Intelligence panel for the active symbol.
-                      <a class="news-link" href="/ticker-intelligence">Open Ticker Intelligence</a>.
+                      TradingView widgets and the ticker chart are available only in the Ticker panel for the active symbol.
+                      <a class="news-link" href="/ticker-intelligence">Open Ticker</a>.
                     </div>
                   </section>
 
@@ -1096,36 +1061,6 @@
                       </div>
 	                  </section>
 
-                  <section class="panel hidden" data-panel="ai-leaderboard">
-                    <div class="panel-header">
-                      <h2>AI Portfolio Leaderboard</h2>
-                      <p class="small">Track published AI agents by ROI horizon, personality, and social momentum.</p>
-                    </div>
-                    <div class="card screener-leaderboard-card">
-                      <div class="card-head">
-                        <h3>Leaderboard</h3>
-                        <div class="form-grid" style="margin:0; min-width: 320px;">
-                          <div class="field" style="margin:0; min-width: 140px;">
-                            <label class="label" for="ai-leaderboard-horizon">Sort by ROI</label>
-                            <select id="ai-leaderboard-horizon">
-                              <option value="1m">1M</option>
-                              <option value="3m">3M</option>
-                              <option value="6m">6M</option>
-                              <option value="1y" selected>1Y</option>
-                              <option value="5y">5Y</option>
-                              <option value="max">Max</option>
-                            </select>
-                          </div>
-                          <div class="field" style="margin:0; min-width: 170px;">
-                            <label class="label" for="ai-leaderboard-model-filter">Personality filter</label>
-                            <select id="ai-leaderboard-model-filter"></select>
-                          </div>
-                        </div>
-                      </div>
-                      <div id="ai-agent-leaderboard" class="panel-output small" style="max-height: none;"></div>
-                    </div>
-                  </section>
-
 	                  <section class="panel hidden" data-panel="watchlist">
 	                    <div class="panel-header">
 	                      <h2>Watchlist and alerts</h2>
@@ -1223,9 +1158,9 @@
                     </details>
                   </section>
 
-                  <section class="panel hidden" data-panel="backtesting">
+                  <section class="panel hidden" data-panel="indicators" data-backtesting-module>
                     <div class="panel-header">
-                      <h2>Backtesting</h2>
+                      <h2>Backtest</h2>
                       <p class="small">Backtest strategies on the ticker in your chart. Each run is saved so you can reload it later.</p>
                     </div>
 
