@@ -107,6 +107,7 @@ const resolveTemplate = (pathname) => {
     "/news",
     "/events-calendar",
     "/market-headlines",
+    "/model-council",
     "/ticker-query",
     "/options",
     "/saved-forecasts",

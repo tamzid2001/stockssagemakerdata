@@ -27,6 +27,10 @@ SOCIAL_WEBHOOK_SECRET_NAMES: Final[tuple[str, ...]] = (
 
 DEFAULT_SECRET_BINDING_KEYS: Final[tuple[str, ...]] = (
     "OPENAI_API_KEY",
+    "GEMINI_API_KEY",
+    "MISTRAL_API_KEY",
+    "PERPLEXITY_API_KEY",
+    "MODEL_COUNCIL_OTHER_API_KEY",
     "AMAZON_NOVA_API_KEY",
     "ALPACA_API_KEY",
     "ALPACA_SECRET_KEY",
@@ -49,6 +53,10 @@ SECRET_BINDING_ALIAS_OVERRIDES: Final[dict[str, tuple[str, ...]]] = {
 
 _SECRET_SPECS: dict[str, SecretSpec] = {
     "OPENAI_API_KEY": SecretSpec("OPENAI_API_KEY", usage="OpenAI completions and agent analysis"),
+    "GEMINI_API_KEY": SecretSpec("GEMINI_API_KEY", usage="Google Gemini provider routing"),
+    "MISTRAL_API_KEY": SecretSpec("MISTRAL_API_KEY", usage="Mistral provider routing"),
+    "PERPLEXITY_API_KEY": SecretSpec("PERPLEXITY_API_KEY", usage="Perplexity Sonar provider routing"),
+    "MODEL_COUNCIL_OTHER_API_KEY": SecretSpec("MODEL_COUNCIL_OTHER_API_KEY", usage="Custom Model Council provider routing"),
     "AMAZON_NOVA_API_KEY": SecretSpec(
         "AMAZON_NOVA_API_KEY",
         aliases=("AMAZON_NOVA_KEY",),

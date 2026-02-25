@@ -16,6 +16,9 @@
   const LANGUAGE_PREFERENCE_KEY = "quantura_language_v1";
   const COUNTRY_PREFERENCE_KEY = "quantura_country_v1";
   const TICKER_QUERY_MODEL_KEY = "quantura_ticker_query_model_v1";
+  const TICKER_QUERY_PROVIDER_KEY = "quantura_ticker_query_provider_v1";
+  const TICKER_QUERY_MODULES_KEY = "quantura_ticker_query_modules_v1";
+  const TICKER_QUERY_IMPROVE_TOGGLE_KEY = "quantura_ticker_query_improve_toggle_v1";
   const TICKER_HISTORY_KEY_PREFIX = "quantura_ticker_history_v1";
   const TICKER_HISTORY_LIMIT = 14;
   const TRADINGVIEW_LOAD_TIMEOUT_MS = 9000;
@@ -37,6 +40,7 @@
     "Contact",
     "Purchase",
   ]);
+  const MODEL_COUNCIL_OUTPUT_DISCLAIMER = "LLMs can sometimes make mistakes.";
   const getNativePlatform = () => {
     try {
       const explicit = String(window.__QUANTURA_NATIVE_PLATFORM__ || "").trim().toLowerCase();
@@ -273,6 +277,33 @@
       helper: "Amazon Nova high-depth analysis path.",
       pricing: { input: null, cached_input: null, output: null },
     },
+    {
+      id: "gemini-2.0-flash",
+      provider: "gemini",
+      tier: "Council",
+      label: "Gemini 2.0 Flash",
+      personality: "balanced",
+      helper: "Google Gemini fast-response path.",
+      pricing: { input: null, cached_input: null, output: null },
+    },
+    {
+      id: "mistral-small-latest",
+      provider: "mistral",
+      tier: "Council",
+      label: "Mistral Small",
+      personality: "balanced",
+      helper: "Mistral low-latency reasoning path.",
+      pricing: { input: null, cached_input: null, output: null },
+    },
+    {
+      id: "sonar",
+      provider: "perplexity",
+      tier: "Council",
+      label: "Perplexity Sonar",
+      personality: "research",
+      helper: "Perplexity web-grounded answer path.",
+      pricing: { input: null, cached_input: null, output: null },
+    },
   ];
   const DEFAULT_LLM_ALLOWED_MODELS = ["gpt-5-nano", "gpt-5-mini", "gpt-5", "gpt-5.1", "gpt-5.2"];
   const AI_USAGE_TIER_DEFAULTS = {
@@ -304,7 +335,27 @@
   const MODEL_PROVIDER_LABEL = {
     openai: "OpenAI",
     amazon_nova: "Amazon Nova",
+    gemini: "Gemini",
+    mistral: "Mistral",
+    perplexity: "Perplexity Sonar",
+    other: "Other",
   };
+  const MODEL_COUNCIL_MODULE_CATALOG = Object.freeze([
+    { id: "info", label: "Info", checkedByDefault: true },
+    { id: "history", label: "History", checkedByDefault: true },
+    { id: "actions", label: "Actions", checkedByDefault: false },
+    { id: "dividends", label: "Dividends", checkedByDefault: false },
+    { id: "splits", label: "Splits", checkedByDefault: false },
+    { id: "calendar", label: "Calendar", checkedByDefault: false },
+    { id: "news", label: "News", checkedByDefault: true },
+    { id: "recommendations", label: "Recommendations", checkedByDefault: true },
+    { id: "balance_sheet", label: "Balance sheet", checkedByDefault: false },
+    { id: "quarterly_balance_sheet", label: "Quarterly balance sheet", checkedByDefault: false },
+    { id: "income_stmt", label: "Income statement", checkedByDefault: false },
+    { id: "quarterly_income_stmt", label: "Quarterly income statement", checkedByDefault: false },
+    { id: "cashflow", label: "Cashflow", checkedByDefault: false },
+    { id: "quarterly_cashflow", label: "Quarterly cashflow", checkedByDefault: false },
+  ]);
   const SUPPORTED_LANGUAGES = new Set(["en", "es", "fr", "de", "ar", "bn"]);
   const COUNTRY_DEFAULT_LANGUAGE = Object.freeze({
     US: "en",
@@ -354,7 +405,7 @@
       sidebar_news_data: "News and data",
       sidebar_corporate_events: "Corporate events",
       sidebar_market_headlines: "Market headlines",
-      sidebar_ask_gpt5: "Ask GPT-5",
+      sidebar_ask_gpt5: "Model Council",
       sidebar_options: "Options",
       sidebar_saved_forecasts: "Saved forecasts",
       sidebar_backtesting: "Backtesting",
@@ -365,8 +416,8 @@
       panel_forecast_subtitle: "Generate quantile bands for the ticker in your chart and save the run so you can re-plot it later.",
       panel_market_headlines_title: "Top market headlines",
       panel_market_headlines_subtitle: "Top country-level market headlines plus social posts from X, Reddit, Facebook, and Instagram.",
-      panel_ticker_query_title: "Ask GPT-5",
-      panel_ticker_query_subtitle: "Query any ticker in plain language. Quantura enriches with market context and headlines.",
+      panel_ticker_query_title: "Model Council",
+      panel_ticker_query_subtitle: "Run multi-provider analysis with structured Yahoo Finance context modules.",
       label_ticker: "Ticker",
       label_timeframe: "Timeframe",
       button_load_chart: "Load chart",
@@ -375,8 +426,8 @@
       button_load_market_feed: "Load market feed",
       label_response_language: "Response language",
       label_question: "Question",
-      button_ask_gpt5: "Ask GPT-5",
-      query_result: "Query result",
+      button_ask_gpt5: "Prepare Model Council",
+      query_result: "Model Council output",
       language_selector_label: "Language",
       language_auto: "Auto",
       language_english: "English",
@@ -417,7 +468,7 @@
       sidebar_news_data: "Noticias y datos",
       sidebar_corporate_events: "Eventos corporativos",
       sidebar_market_headlines: "Titulares del mercado",
-      sidebar_ask_gpt5: "Preguntar a GPT-5",
+      sidebar_ask_gpt5: "Model Council",
       sidebar_options: "Opciones",
       sidebar_saved_forecasts: "Pronosticos guardados",
       sidebar_backtesting: "Backtesting",
@@ -428,8 +479,8 @@
       panel_forecast_subtitle: "Genera bandas de cuantiles para el ticker de tu grafico y guarda la ejecucion para volver a trazarla despues.",
       panel_market_headlines_title: "Titulares del mercado",
       panel_market_headlines_subtitle: "Principales titulares por pais junto con publicaciones de X, Reddit, Facebook e Instagram.",
-      panel_ticker_query_title: "Preguntar a GPT-5",
-      panel_ticker_query_subtitle: "Consulta cualquier ticker en lenguaje natural. Quantura lo enriquece con contexto de mercado y titulares.",
+      panel_ticker_query_title: "Model Council",
+      panel_ticker_query_subtitle: "Analisis multi-modelo con contexto estructurado de Yahoo Finance.",
       label_ticker: "Ticker",
       label_timeframe: "Periodo",
       button_load_chart: "Cargar grafico",
@@ -438,8 +489,8 @@
       button_load_market_feed: "Cargar mercado",
       label_response_language: "Idioma de respuesta",
       label_question: "Pregunta",
-      button_ask_gpt5: "Preguntar a GPT-5",
-      query_result: "Resultado de la consulta",
+      button_ask_gpt5: "Preparar Model Council",
+      query_result: "Salida de Model Council",
       language_selector_label: "Idioma",
       language_auto: "Automatico",
       language_english: "Ingles",
@@ -480,7 +531,7 @@
       sidebar_news_data: "Actualites et donnees",
       sidebar_corporate_events: "Evenements d'entreprise",
       sidebar_market_headlines: "Titres du marche",
-      sidebar_ask_gpt5: "Demander a GPT-5",
+      sidebar_ask_gpt5: "Model Council",
       sidebar_options: "Options",
       sidebar_saved_forecasts: "Previsions enregistrees",
       sidebar_backtesting: "Backtesting",
@@ -491,8 +542,8 @@
       panel_forecast_subtitle: "Generez des bandes de quantiles pour le ticker de votre graphique et enregistrez l'execution pour la recharger plus tard.",
       panel_market_headlines_title: "Titres du marche",
       panel_market_headlines_subtitle: "Principaux titres par pays avec des publications de X, Reddit, Facebook et Instagram.",
-      panel_ticker_query_title: "Demander a GPT-5",
-      panel_ticker_query_subtitle: "Interrogez n'importe quel ticker en langage naturel. Quantura ajoute le contexte de marche et les titres.",
+      panel_ticker_query_title: "Model Council",
+      panel_ticker_query_subtitle: "Analyse multi-modeles avec contexte Yahoo Finance structure.",
       label_ticker: "Ticker",
       label_timeframe: "Horizon",
       button_load_chart: "Charger le graphique",
@@ -501,8 +552,8 @@
       button_load_market_feed: "Charger le flux marche",
       label_response_language: "Langue de reponse",
       label_question: "Question",
-      button_ask_gpt5: "Demander a GPT-5",
-      query_result: "Resultat de la requete",
+      button_ask_gpt5: "Preparer Model Council",
+      query_result: "Sortie Model Council",
       language_selector_label: "Langue",
       language_auto: "Auto",
       language_english: "Anglais",
@@ -543,7 +594,7 @@
       sidebar_news_data: "News und Daten",
       sidebar_corporate_events: "Unternehmensereignisse",
       sidebar_market_headlines: "Markt-Schlagzeilen",
-      sidebar_ask_gpt5: "GPT-5 fragen",
+      sidebar_ask_gpt5: "Model Council",
       sidebar_options: "Optionen",
       sidebar_saved_forecasts: "Gespeicherte Forecasts",
       sidebar_backtesting: "Backtesting",
@@ -554,8 +605,8 @@
       panel_forecast_subtitle: "Erzeuge Quantil-Bander fur den Ticker in deinem Chart und speichere den Lauf fur spatere Vergleiche.",
       panel_market_headlines_title: "Top-Markt-Schlagzeilen",
       panel_market_headlines_subtitle: "Wichtigste Schlagzeilen je Land plus Social-Posts von X, Reddit, Facebook und Instagram.",
-      panel_ticker_query_title: "GPT-5 fragen",
-      panel_ticker_query_subtitle: "Stelle Fragen zu jedem Ticker in naturlicher Sprache. Quantura erganzt Markt-Kontext und Schlagzeilen.",
+      panel_ticker_query_title: "Model Council",
+      panel_ticker_query_subtitle: "Multi-Provider-Analyse mit strukturiertem Yahoo-Finance-Kontext.",
       label_ticker: "Ticker",
       label_timeframe: "Zeitrahmen",
       button_load_chart: "Chart laden",
@@ -564,8 +615,8 @@
       button_load_market_feed: "Markt-Feed laden",
       label_response_language: "Antwortsprache",
       label_question: "Frage",
-      button_ask_gpt5: "GPT-5 fragen",
-      query_result: "Abfrageergebnis",
+      button_ask_gpt5: "Model Council vorbereiten",
+      query_result: "Model Council Ausgabe",
       language_selector_label: "Sprache",
       language_auto: "Auto",
       language_english: "Englisch",
@@ -606,7 +657,7 @@
       sidebar_news_data: "الاخبار والبيانات",
       sidebar_corporate_events: "احداث الشركات",
       sidebar_market_headlines: "عناوين السوق",
-      sidebar_ask_gpt5: "اسأل GPT-5",
+      sidebar_ask_gpt5: "Model Council",
       sidebar_options: "الخيارات",
       sidebar_saved_forecasts: "التوقعات المحفوظة",
       sidebar_backtesting: "اختبار رجعي",
@@ -617,8 +668,8 @@
       panel_forecast_subtitle: "انشئ نطاقات الكوانتايل للرمز في الرسم واحفظ التشغيل لاعادة عرضه لاحقا.",
       panel_market_headlines_title: "ابرز عناوين السوق",
       panel_market_headlines_subtitle: "ابرز عناوين السوق حسب البلد مع منشورات من X وReddit وFacebook وInstagram.",
-      panel_ticker_query_title: "اسأل GPT-5",
-      panel_ticker_query_subtitle: "اسأل عن اي رمز بلغة طبيعية. Quantura يضيف سياق السوق والعناوين.",
+      panel_ticker_query_title: "Model Council",
+      panel_ticker_query_subtitle: "تحليل متعدد النماذج مع سياق Yahoo Finance المنظم.",
       label_ticker: "الرمز",
       label_timeframe: "الاطار الزمني",
       button_load_chart: "تحميل الرسم",
@@ -627,8 +678,8 @@
       button_load_market_feed: "تحميل موجز السوق",
       label_response_language: "لغة الاجابة",
       label_question: "السؤال",
-      button_ask_gpt5: "اسأل GPT-5",
-      query_result: "نتيجة الاستعلام",
+      button_ask_gpt5: "تحضير Model Council",
+      query_result: "مخرجات Model Council",
       language_selector_label: "اللغة",
       language_auto: "تلقائي",
       language_english: "الانجليزية",
@@ -669,7 +720,7 @@
       sidebar_news_data: "খবর ও ডেটা",
       sidebar_corporate_events: "করপোরেট ইভেন্ট",
       sidebar_market_headlines: "মার্কেট হেডলাইন",
-      sidebar_ask_gpt5: "GPT-5 কে জিজ্ঞাসা করুন",
+      sidebar_ask_gpt5: "Model Council",
       sidebar_options: "অপশন",
       sidebar_saved_forecasts: "সংরক্ষিত ফোরকাস্ট",
       sidebar_backtesting: "ব্যাকটেস্টিং",
@@ -680,8 +731,8 @@
       panel_forecast_subtitle: "চার্টে থাকা টিকারের জন্য কোয়ান্টাইল ব্যান্ড তৈরি করুন এবং পরে পুনরায় দেখার জন্য রান সংরক্ষণ করুন।",
       panel_market_headlines_title: "শীর্ষ মার্কেট হেডলাইন",
       panel_market_headlines_subtitle: "দেশভিত্তিক শীর্ষ বাজারের খবরের সাথে X, Reddit, Facebook এবং Instagram পোস্ট দেখুন।",
-      panel_ticker_query_title: "GPT-5 কে জিজ্ঞাসা করুন",
-      panel_ticker_query_subtitle: "স্বাভাবিক ভাষায় যেকোনো টিকার জিজ্ঞাসা করুন। Quantura বাজার প্রসঙ্গ ও হেডলাইন যোগ করে।",
+      panel_ticker_query_title: "Model Council",
+      panel_ticker_query_subtitle: "স্ট্রাকচার্ড Yahoo Finance কনটেক্সটে মাল্টি-মডেল বিশ্লেষণ।",
       label_ticker: "টিকার",
       label_timeframe: "টাইমফ্রেম",
       button_load_chart: "চার্ট লোড করুন",
@@ -690,8 +741,8 @@
       button_load_market_feed: "মার্কেট ফিড লোড করুন",
       label_response_language: "উত্তরের ভাষা",
       label_question: "প্রশ্ন",
-      button_ask_gpt5: "GPT-5 কে জিজ্ঞাসা করুন",
-      query_result: "কুয়েরির ফলাফল",
+      button_ask_gpt5: "Model Council প্রস্তুত করুন",
+      query_result: "Model Council আউটপুট",
       language_selector_label: "ভাষা",
       language_auto: "অটো",
       language_english: "ইংরেজি",
@@ -741,7 +792,7 @@
     button_load_market_feed: ['button[data-analytics="market_headlines_load"] span'],
     label_response_language: ['label[for="ticker-query-language"]'],
     label_question: ['label[for="ticker-query-question"]'],
-    button_ask_gpt5: ['button[data-analytics="ticker_query_submit"] span'],
+    button_ask_gpt5: ['button[data-analytics="model_council_submit"] span'],
     query_result: ['[data-panel="ticker-query"] .results-panel h3'],
   });
   const UI_I18N_OPTION_MAP = Object.freeze({
@@ -1308,8 +1359,16 @@
     tickerQueryTicker: document.getElementById("ticker-query-ticker"),
     tickerQueryQuestion: document.getElementById("ticker-query-question"),
     tickerQueryLanguage: document.getElementById("ticker-query-language"),
+    tickerQueryProvider: document.getElementById("ticker-query-provider"),
+    tickerQueryProviderHint: document.getElementById("ticker-query-provider-hint"),
     tickerQueryModel: document.getElementById("ticker-query-model"),
     tickerQueryModelHint: document.getElementById("ticker-query-model-hint"),
+    tickerQueryModulesPicker: document.getElementById("ticker-query-modules-picker"),
+    tickerQueryModulesOutput: document.getElementById("ticker-query-modules-output"),
+    tickerQueryImproveToggle: document.getElementById("ticker-query-improve-toggle"),
+    tickerQueryImprovePreviewWrap: document.getElementById("ticker-query-improve-preview-wrap"),
+    tickerQueryImprovePreview: document.getElementById("ticker-query-improve-preview"),
+    tickerQueryRunFinal: document.getElementById("ticker-query-run-final"),
     tickerQueryModelInfo: document.getElementById("ticker-query-model-info"),
     tickerQueryCacheToggleWrap: document.getElementById("ticker-query-cache-toggle-wrap"),
     tickerQueryShowCacheStats: document.getElementById("ticker-query-show-cache-stats"),
@@ -1468,6 +1527,19 @@
       optionsTicker: "",
       predictionsData: null,
       tickerHistory: [],
+      tickerQueryProvider: "openai",
+      tickerQueryModel: "gpt-5-mini",
+      tickerQueryModels: [],
+      tickerQueryProviders: [],
+      tickerQueryModelsLoaded: false,
+      tickerQueryModules: [],
+      tickerQueryLastResponseId: "",
+      tickerQueryLastResponse: null,
+      tickerQueryShareUrl: "",
+      tickerQueryPendingQuestion: "",
+      tickerQueryPendingProvider: "",
+      tickerQueryPendingModel: "",
+      tickerQueryFeedback: "",
     },
     predictionsContext: {
       uploadId: "",
@@ -1711,14 +1783,16 @@
 		          news: "/news",
               "events-calendar": "/events-calendar",
               "market-headlines": "/market-headlines",
-              "ticker-query": "/ticker-query",
-		          options: "/options",
-		          saved: "/saved-forecasts",
-		          learn: "/studio",
+              "ticker-query": "/model-council",
+	          options: "/options",
+	          saved: "/saved-forecasts",
+	          learn: "/studio",
             },
             pathAliases: {
               "/backtesting": "indicators",
               "/ticker-intelligence": "ticker",
+              "/ticker-query": "ticker-query",
+              "/model-council": "ticker-query",
             },
           },
 			      dashboard: {
@@ -8426,20 +8500,179 @@
     }
   };
 
+  const normalizeModelCouncilProviderId = (provider) => {
+    const value = String(provider || "").trim().toLowerCase();
+    if (!value) return "";
+    if (value === "amazon_nova") return "amazon_nova";
+    if (value === "perplexity_sonar") return "perplexity";
+    return value;
+  };
+
+  const modelCouncilProviderFromModel = (modelId) => {
+    const id = normalizeAiModelId(modelId || "").toLowerCase();
+    if (!id) return "openai";
+    if (id.startsWith("amazon.nova")) return "amazon_nova";
+    if (id.startsWith("gemini")) return "gemini";
+    if (id.startsWith("mistral")) return "mistral";
+    if (id.startsWith("sonar")) return "perplexity";
+    if (id.startsWith("other/")) return "other";
+    return "openai";
+  };
+
+  const tickerQueryModelGroup = (modelId, providerId = "") => {
+    const provider = normalizeModelCouncilProviderId(providerId || modelCouncilProviderFromModel(modelId));
+    const id = normalizeAiModelId(modelId).toLowerCase();
+    if (provider === "openai") {
+      if (id.includes("nano")) return "Fast";
+      if (id.includes("mini")) return "Balanced";
+      if (id.startsWith("gpt-5")) return "Reasoning";
+    }
+    if (provider === "perplexity") return "Research";
+    if (provider === "other") return "Custom";
+    return "Balanced";
+  };
+
+  const tickerQueryModelHint = (modelId, providerId = "") => {
+    const meta = getModelMeta(modelId);
+    if (meta?.helper) return String(meta.helper).trim();
+    const provider = normalizeModelCouncilProviderId(providerId || modelCouncilProviderFromModel(modelId));
+    const id = normalizeAiModelId(modelId).toLowerCase();
+    if (provider === "openai" && id.includes("nano")) return "Lowest latency for quick scans.";
+    if (provider === "openai" && id.includes("mini")) return "Best default for most questions.";
+    if (provider === "gemini") return "Gemini provider path running server-side.";
+    if (provider === "mistral") return "Mistral provider path running server-side.";
+    if (provider === "perplexity") return "Perplexity Sonar provider path running server-side.";
+    if (provider === "other") return "Custom provider routed through backend.";
+    return "Higher depth reasoning with slower latency.";
+  };
+
+  const normalizeTickerQueryModules = (values) => {
+    const allowed = new Set(MODEL_COUNCIL_MODULE_CATALOG.map((item) => String(item.id || "").trim()).filter(Boolean));
+    const raw = Array.isArray(values)
+      ? values
+      : typeof values === "string"
+      ? String(values)
+          .split(",")
+          .map((item) => item.trim())
+      : [];
+    const seen = new Set();
+    const out = [];
+    raw.forEach((item) => {
+      const token = String(item || "").trim();
+      if (!token || !allowed.has(token) || seen.has(token)) return;
+      seen.add(token);
+      out.push(token);
+    });
+    if (!out.length) {
+      return MODEL_COUNCIL_MODULE_CATALOG.filter((item) => item.checkedByDefault).map((item) => item.id);
+    }
+    return out;
+  };
+
+  const getSelectedTickerQueryModules = () => {
+    if (!ui.tickerQueryModulesPicker) {
+      return normalizeTickerQueryModules(state.tickerContext.tickerQueryModules);
+    }
+    const selected = Array.from(ui.tickerQueryModulesPicker.querySelectorAll('input[type="checkbox"][data-module-id]'))
+      .filter((node) => node.checked)
+      .map((node) => String(node.dataset.moduleId || "").trim())
+      .filter(Boolean);
+    return normalizeTickerQueryModules(selected);
+  };
+
+  const setTickerQueryModulesSelection = (moduleIds, { persist = true } = {}) => {
+    const normalized = normalizeTickerQueryModules(moduleIds);
+    state.tickerContext.tickerQueryModules = normalized;
+    if (persist) safeLocalStorageSet(TICKER_QUERY_MODULES_KEY, normalized.join(","));
+    if (!ui.tickerQueryModulesPicker) return;
+    const selectedSet = new Set(normalized);
+    ui.tickerQueryModulesPicker.querySelectorAll('input[type="checkbox"][data-module-id]').forEach((node) => {
+      const token = String(node.dataset.moduleId || "").trim();
+      node.checked = selectedSet.has(token);
+    });
+  };
+
+  const renderTickerQueryModulePicker = () => {
+    if (!ui.tickerQueryModulesPicker) return;
+    const stored = safeLocalStorageGet(TICKER_QUERY_MODULES_KEY) || "";
+    const selected = normalizeTickerQueryModules(state.tickerContext.tickerQueryModules || stored);
+    const selectedSet = new Set(selected);
+    ui.tickerQueryModulesPicker.innerHTML = MODEL_COUNCIL_MODULE_CATALOG.map((module) => {
+      const id = String(module.id || "").trim();
+      const label = String(module.label || id);
+      return `
+        <label class="module-picker-chip">
+          <input type="checkbox" data-module-id="${escapeHtml(id)}" ${selectedSet.has(id) ? "checked" : ""} />
+          <span>${escapeHtml(label)}</span>
+        </label>
+      `;
+    }).join("");
+    setTickerQueryModulesSelection(selected, { persist: true });
+    if (ui.tickerQueryModulesPicker.dataset.bound !== "1") {
+      ui.tickerQueryModulesPicker.addEventListener("change", () => {
+        const next = getSelectedTickerQueryModules();
+        setTickerQueryModulesSelection(next, { persist: true });
+      });
+      ui.tickerQueryModulesPicker.dataset.bound = "1";
+    }
+  };
+
+  const renderTickerQueryModulesOutput = (moduleData, selectedModules) => {
+    if (!ui.tickerQueryModulesOutput) return;
+    const modules = normalizeTickerQueryModules(selectedModules);
+    const data = moduleData && typeof moduleData === "object" ? moduleData : {};
+    if (!modules.length) {
+      ui.tickerQueryModulesOutput.classList.add("hidden");
+      return;
+    }
+    const details = modules
+      .map((moduleId) => {
+        const label = MODEL_COUNCIL_MODULE_CATALOG.find((item) => item.id === moduleId)?.label || moduleId;
+        const payload = data[moduleId];
+        const serialized = JSON.stringify(payload ?? { message: "No data." }, null, 2);
+        const clipped = serialized.length > 5000 ? `${serialized.slice(0, 5000)}\n...truncated` : serialized;
+        return `
+          <details class="model-council-module" open>
+            <summary>${escapeHtml(label)}</summary>
+            <pre class="small">${escapeHtml(clipped)}</pre>
+          </details>
+        `;
+      })
+      .join("");
+    ui.tickerQueryModulesOutput.innerHTML = `
+      <div class="small"><strong>Selected yfinance modules</strong></div>
+      <div class="model-council-modules-stack">${details}</div>
+    `;
+    ui.tickerQueryModulesOutput.classList.remove("hidden");
+  };
+
   const renderTickerQueryResult = (payload) => {
     if (!ui.tickerQueryOutput) return;
     const answer = escapeHtml(String(payload?.answer || "").trim() || "No answer returned.");
-    const model = escapeHtml(String(payload?.model || "gpt-5"));
-    const provider = escapeHtml(String(payload?.provider || "openai"));
+    const modelRaw = String(payload?.model || "gpt-5-mini");
+    const providerRaw = normalizeModelCouncilProviderId(payload?.provider || modelCouncilProviderFromModel(modelRaw) || "openai");
+    const model = escapeHtml(modelRaw);
+    const provider = escapeHtml(MODEL_PROVIDER_LABEL[providerRaw] || providerRaw || "OpenAI");
     const context = payload?.context && typeof payload.context === "object" ? payload.context : {};
     const sector = escapeHtml(String(context.sector || "").trim());
     const industry = escapeHtml(String(context.industry || "").trim());
     const exchange = escapeHtml(String(context.exchange || "").trim());
     const headlines = Array.isArray(context.headlines) ? context.headlines : [];
+    const citations = Array.isArray(payload?.citations) ? payload.citations : [];
+    const responseId = String(payload?.responseId || state.tickerContext.tickerQueryLastResponseId || "").trim();
+    const feedbackState = String(payload?.feedback || state.tickerContext.tickerQueryFeedback || "").trim().toLowerCase();
+    const shareUrl = String(payload?.shareUrl || state.tickerContext.tickerQueryShareUrl || "").trim();
 
     ui.tickerQueryOutput.innerHTML = `
       <div class="small muted">Provider: ${provider} · Model: ${model}</div>
       <div class="small" style="margin-top:10px; white-space:pre-wrap;">${answer}</div>
+      <div class="model-council-actions">
+        <button class="task-chip${feedbackState === "like" ? " active" : ""}" type="button" data-action="model-council-like" data-response-id="${escapeHtml(responseId)}">Like</button>
+        <button class="task-chip${feedbackState === "dislike" ? " active" : ""}" type="button" data-action="model-council-dislike" data-response-id="${escapeHtml(responseId)}">Dislike</button>
+        <button class="task-chip" type="button" data-action="model-council-share" data-response-id="${escapeHtml(responseId)}">${icon("share-ios")}<span>Share link</span></button>
+      </div>
+      ${shareUrl ? `<div class="small muted">Shared: <a href="${escapeHtml(shareUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(shareUrl)}</a></div>` : ""}
+      <p class="small muted solve-now-disclaimer">${escapeHtml(MODEL_COUNCIL_OUTPUT_DISCLAIMER)}</p>
       <div class="small muted" style="margin-top:10px;">
         ${sector ? `Sector: ${sector}` : ""}${industry ? ` · Industry: ${industry}` : ""}${exchange ? ` · Exchange: ${exchange}` : ""}
       </div>
@@ -8460,6 +8693,41 @@
             </div>`
           : ""
       }
+      ${
+        citations.length
+          ? `<div style="margin-top:12px;">
+              <div class="small"><strong>Citations</strong></div>
+              <ul class="small" style="margin:6px 0 0 16px;">
+                ${citations
+                  .slice(0, 8)
+                  .map((item) => {
+                    const title = escapeHtml(String(item?.title || item?.url || "Source").trim());
+                    const url = escapeHtml(String(item?.url || "").trim());
+                    return `<li>${url ? `<a class="news-link" href="${url}" target="_blank" rel="noopener noreferrer">${title}</a>` : title}</li>`;
+                  })
+                  .join("")}
+              </ul>
+            </div>`
+          : ""
+      }
+    `;
+  };
+
+  const renderTickerQueryErrorState = ({ message = "", retryProvider = "", retryModel = "" } = {}) => {
+    if (!ui.tickerQueryOutput) return;
+    const text = escapeHtml(String(message || "Unable to complete Model Council request right now."));
+    const provider = escapeHtml(String(retryProvider || "").trim());
+    const model = escapeHtml(String(retryModel || "").trim());
+    ui.tickerQueryOutput.innerHTML = `
+      <div class="small muted">${text}</div>
+      ${
+        provider && model
+          ? `<button class="cta secondary small" type="button" data-action="model-council-retry" data-provider="${provider}" data-model="${model}" style="margin-top:12px;">
+              ${icon("refresh")}<span>Retry with ${provider}/${model}</span>
+            </button>`
+          : ""
+      }
+      <p class="small muted solve-now-disclaimer" style="margin-top:10px;">${escapeHtml(MODEL_COUNCIL_OUTPUT_DISCLAIMER)}</p>
     `;
   };
 
@@ -8479,125 +8747,169 @@
     return headers;
   };
 
-  const tickerQueryModelGroup = (modelId) => {
-    const id = normalizeAiModelId(modelId).toLowerCase();
-    if (id.includes("nano")) return "Fast";
-    if (id.includes("mini")) return "Balanced";
-    if (id.startsWith("gpt-5")) return "Reasoning";
-    return "Balanced";
-  };
-
-  const tickerQueryModelHint = (modelId) => {
-    const meta = getModelMeta(modelId);
-    if (meta?.helper) return String(meta.helper).trim();
-    const id = normalizeAiModelId(modelId).toLowerCase();
-    if (id.includes("nano")) return "Lowest latency for quick scans.";
-    if (id.includes("mini")) return "Best default for most questions.";
-    return "Higher depth reasoning with slower latency.";
-  };
-
-  const applyTickerQueryModelSelection = (modelId) => {
-    const normalized = normalizeAiModelId(modelId || "") || "gpt-5-mini";
-    state.tickerContext.tickerQueryModel = normalized;
-    safeLocalStorageSet(TICKER_QUERY_MODEL_KEY, normalized);
-    if (ui.tickerQueryModel && ui.tickerQueryModel.value !== normalized) {
-      ui.tickerQueryModel.value = normalized;
+  const applyTickerQueryModelSelection = (modelId, providerId = "") => {
+    const normalizedModel = normalizeAiModelId(modelId || "") || "gpt-5-mini";
+    const normalizedProvider = normalizeModelCouncilProviderId(providerId || modelCouncilProviderFromModel(normalizedModel) || "openai");
+    state.tickerContext.tickerQueryModel = normalizedModel;
+    state.tickerContext.tickerQueryProvider = normalizedProvider;
+    safeLocalStorageSet(TICKER_QUERY_MODEL_KEY, normalizedModel);
+    safeLocalStorageSet(TICKER_QUERY_PROVIDER_KEY, normalizedProvider);
+    if (ui.tickerQueryModel && ui.tickerQueryModel.value !== normalizedModel) {
+      ui.tickerQueryModel.value = normalizedModel;
+    }
+    if (ui.tickerQueryProvider && ui.tickerQueryProvider.value !== normalizedProvider) {
+      ui.tickerQueryProvider.value = normalizedProvider;
+    }
+    if (ui.tickerQueryProviderHint) {
+      ui.tickerQueryProviderHint.textContent = `${MODEL_PROVIDER_LABEL[normalizedProvider] || normalizedProvider} provider · server-side only.`;
     }
     if (ui.tickerQueryModelHint) {
-      ui.tickerQueryModelHint.textContent = `${tickerQueryModelHint(normalized)} Some models may cost more and run slower.`;
+      ui.tickerQueryModelHint.textContent = `${tickerQueryModelHint(normalizedModel, normalizedProvider)} Some models may cost more and run slower.`;
     }
   };
 
-  const renderTickerQueryModels = (models) => {
+  const renderTickerQueryModels = (models, { provider = "" } = {}) => {
     if (!ui.tickerQueryModel) return;
     const list = Array.isArray(models) ? models : [];
-    if (!list.length) {
+    const providerFilter = normalizeModelCouncilProviderId(provider || ui.tickerQueryProvider?.value || state.tickerContext.tickerQueryProvider || "");
+    const scoped = providerFilter ? list.filter((row) => normalizeModelCouncilProviderId(row?.provider || "") === providerFilter) : list;
+    const source = scoped.length ? scoped : list;
+    if (!source.length) {
       ui.tickerQueryModel.innerHTML = `<option value="gpt-5-mini">gpt-5-mini</option>`;
-      applyTickerQueryModelSelection("gpt-5-mini");
+      applyTickerQueryModelSelection("gpt-5-mini", "openai");
       return;
     }
-
-    const grouped = list.reduce((acc, row) => {
+    const grouped = source.reduce((acc, row) => {
       const modelId = normalizeAiModelId(row?.id || row?.model || "");
       if (!modelId) return acc;
-      const group = String(row?.group || tickerQueryModelGroup(modelId) || "Balanced").trim();
+      const providerId = normalizeModelCouncilProviderId(row?.provider || modelCouncilProviderFromModel(modelId) || "");
+      const group = String(row?.group || tickerQueryModelGroup(modelId, providerId) || "Balanced").trim();
       if (!acc[group]) acc[group] = [];
       acc[group].push({
         id: modelId,
-        label: String(row?.label || modelId),
-        hint: String(row?.hint || tickerQueryModelHint(modelId)),
+        provider: providerId,
+        label: String(row?.label || getModelMeta(modelId)?.label || modelId),
+        hint: String(row?.hint || tickerQueryModelHint(modelId, providerId)),
       });
       return acc;
     }, {});
-
-    const order = ["Fast", "Balanced", "Reasoning"];
+    const order = ["Fast", "Balanced", "Reasoning", "Research", "Custom"];
     ui.tickerQueryModel.innerHTML = order
       .filter((group) => Array.isArray(grouped[group]) && grouped[group].length)
       .map((group) => {
         const options = grouped[group]
-          .map((item) => `<option value="${escapeHtml(item.id)}" title="${escapeHtml(item.hint)}">${escapeHtml(item.label)}</option>`)
+          .map((item) => `<option value="${escapeHtml(item.id)}" data-provider="${escapeHtml(item.provider)}" title="${escapeHtml(item.hint)}">${escapeHtml(item.label)}</option>`)
           .join("");
         return `<optgroup label="${escapeHtml(group)}">${options}</optgroup>`;
       })
       .join("");
-
-    const availableSet = new Set(list.map((row) => normalizeAiModelId(row?.id || row?.model || "")).filter(Boolean));
+    const availableSet = new Set(source.map((row) => normalizeAiModelId(row?.id || row?.model || "")).filter(Boolean));
     let selected = normalizeAiModelId(state.tickerContext.tickerQueryModel || safeLocalStorageGet(TICKER_QUERY_MODEL_KEY) || "");
     if (!selected || !availableSet.has(selected)) {
-      selected = normalizeAiModelId(list[0]?.id || list[0]?.model || "gpt-5-mini") || "gpt-5-mini";
+      selected = normalizeAiModelId(source[0]?.id || source[0]?.model || "gpt-5-mini") || "gpt-5-mini";
     }
-    applyTickerQueryModelSelection(selected);
+    const selectedProvider = normalizeModelCouncilProviderId(
+      source.find((row) => normalizeAiModelId(row?.id || row?.model || "") === selected)?.provider ||
+      providerFilter ||
+      modelCouncilProviderFromModel(selected)
+    );
+    applyTickerQueryModelSelection(selected, selectedProvider);
+  };
+
+  const renderTickerQueryProviderOptions = (providers, models) => {
+    if (!ui.tickerQueryProvider) return;
+    const rows = Array.isArray(providers) ? providers : [];
+    const fallbackRows = Array.isArray(models)
+      ? Array.from(
+          new Map(
+            models
+              .map((row) => normalizeModelCouncilProviderId(row?.provider || ""))
+              .filter(Boolean)
+              .map((providerId) => [providerId, { id: providerId, displayName: MODEL_PROVIDER_LABEL[providerId] || providerId }])
+          ).values()
+        )
+      : [];
+    const source = rows.length ? rows.filter((row) => row?.available !== false) : fallbackRows;
+    if (!source.length) {
+      ui.tickerQueryProvider.innerHTML = `<option value="openai">OpenAI</option>`;
+      applyTickerQueryModelSelection("gpt-5-mini", "openai");
+      return;
+    }
+    ui.tickerQueryProvider.innerHTML = source
+      .map((row) => {
+        const id = normalizeModelCouncilProviderId(row?.id || "");
+        const label = String(row?.displayName || MODEL_PROVIDER_LABEL[id] || id || "").trim();
+        return `<option value="${escapeHtml(id)}">${escapeHtml(label)}</option>`;
+      })
+      .join("");
+    const available = new Set(source.map((row) => normalizeModelCouncilProviderId(row?.id || "")).filter(Boolean));
+    let selectedProvider = normalizeModelCouncilProviderId(
+      state.tickerContext.tickerQueryProvider || safeLocalStorageGet(TICKER_QUERY_PROVIDER_KEY) || ""
+    );
+    if (!selectedProvider || !available.has(selectedProvider)) {
+      selectedProvider = normalizeModelCouncilProviderId(source[0]?.id || "openai");
+    }
+    ui.tickerQueryProvider.value = selectedProvider;
+    safeLocalStorageSet(TICKER_QUERY_PROVIDER_KEY, selectedProvider);
+    state.tickerContext.tickerQueryProvider = selectedProvider;
+    renderTickerQueryModels(models, { provider: selectedProvider });
   };
 
   const loadTickerQueryModels = async ({ force = false } = {}) => {
     if (!ui.tickerQueryModel) return;
     if (!force && state.tickerContext.tickerQueryModelsLoaded && state.tickerContext.tickerQueryModels.length) {
-      renderTickerQueryModels(state.tickerContext.tickerQueryModels);
+      renderTickerQueryProviderOptions(state.tickerContext.tickerQueryProviders || [], state.tickerContext.tickerQueryModels);
       return;
     }
 
     const fallback = () => {
-      const tier = getCurrentAiTierConfig();
-      const localModels = (tier.allowedModels || [])
-        .map((modelId) => normalizeAiModelId(modelId))
-        .filter((modelId) => modelId && modelId.startsWith("gpt-5"))
-        .map((modelId) => ({
-          id: modelId,
-          label: getModelMeta(modelId)?.label || modelId,
-          group: tickerQueryModelGroup(modelId),
-          hint: tickerQueryModelHint(modelId),
-        }));
+      const localModels = AI_MODEL_CATALOG.map((model) => ({
+        id: normalizeAiModelId(model.id),
+        provider: normalizeModelCouncilProviderId(model.provider || modelCouncilProviderFromModel(model.id)),
+        label: String(model.label || model.id),
+        group: tickerQueryModelGroup(model.id, model.provider),
+        hint: tickerQueryModelHint(model.id, model.provider),
+      })).filter((row) => row.id);
       state.tickerContext.tickerQueryModels = localModels;
+      state.tickerContext.tickerQueryProviders = Array.from(
+        new Map(
+          localModels.map((row) => [row.provider, { id: row.provider, displayName: MODEL_PROVIDER_LABEL[row.provider] || row.provider, available: true }])
+        ).values()
+      );
       state.tickerContext.tickerQueryModelsLoaded = true;
-      renderTickerQueryModels(localModels);
+      renderTickerQueryProviderOptions(state.tickerContext.tickerQueryProviders, localModels);
     };
 
     try {
       const headers = await buildApiAuthHeaders();
-      const response = await fetch("/api/openai/models", {
+      const response = await fetch("/api/model-council/models", {
         method: "GET",
         headers,
         credentials: "same-origin",
       });
       if (!response.ok) throw new Error("Model list unavailable.");
       const payload = await response.json();
-      const remote = Array.isArray(payload?.models) ? payload.models : [];
-      const models = remote
+      const remoteModels = Array.isArray(payload?.models) ? payload.models : [];
+      const models = remoteModels
         .map((row) => {
           const id = normalizeAiModelId(row?.id || row?.model || "");
-          if (!id || !id.startsWith("gpt-5")) return null;
+          if (!id) return null;
+          const provider = normalizeModelCouncilProviderId(row?.provider || modelCouncilProviderFromModel(id));
           return {
             id,
+            provider,
             label: String(row?.label || getModelMeta(id)?.label || id),
-            group: String(row?.group || tickerQueryModelGroup(id)),
-            hint: String(row?.hint || tickerQueryModelHint(id)),
+            group: String(row?.group || tickerQueryModelGroup(id, provider)),
+            hint: String(row?.hint || tickerQueryModelHint(id, provider)),
           };
         })
         .filter(Boolean);
       if (!models.length) throw new Error("No compatible models returned.");
+      const providers = Array.isArray(payload?.providers) ? payload.providers : [];
       state.tickerContext.tickerQueryModels = models;
+      state.tickerContext.tickerQueryProviders = providers;
       state.tickerContext.tickerQueryModelsLoaded = true;
-      renderTickerQueryModels(models);
+      renderTickerQueryProviderOptions(providers, models);
     } catch (error) {
       fallback();
     }
@@ -8635,9 +8947,9 @@
       `Latency: ${latencyLabel} · Tokens: ${formatTokenStat(promptTokens + completionTokens)} · Cached: ${formatTokenStat(cachedTokens)}${cacheHint}`;
   };
 
-  const streamTickerQueryInsight = async ({ ticker, prompt, language, model, technicalContext = null } = {}) => {
+  const streamTickerQueryInsight = async ({ ticker, prompt, language, model, provider, modules = [], technicalContext = null } = {}) => {
     const headers = await buildApiAuthHeaders({ includeJson: true });
-    const response = await fetch("/api/chat", {
+    const response = await fetch("/api/model-council/query", {
       method: "POST",
       headers,
       credentials: "same-origin",
@@ -8646,147 +8958,284 @@
         question: prompt,
         language,
         model,
+        provider,
+        modules,
         technicalContext: technicalContext && typeof technicalContext === "object" ? technicalContext : undefined,
         messages: [{ role: "user", content: prompt }],
         meta: buildMeta(),
       }),
     });
+    const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      let message = "Unable to complete ticker query right now.";
-      try {
-        const payload = await response.json();
-        if (payload && typeof payload.error === "string" && payload.error.trim()) {
-          message = payload.error.trim();
-        }
-      } catch (error) {
-        // Ignore JSON parse failures.
-      }
-      throw new Error(message);
+      const message = String(payload?.error || "Unable to complete Model Council request right now.").trim();
+      const err = new Error(message);
+      err.retryProvider = String(payload?.retryProvider || "").trim();
+      err.retryModel = String(payload?.retryModel || "").trim();
+      throw err;
     }
-    if (!response.body) throw new Error("Streaming response body was not available.");
-
-    const decoder = new TextDecoder();
-    const reader = response.body.getReader();
-    let buffer = "";
-    let answer = "";
-    let usage = null;
-    let modelUsed = model;
-    let provider = "openai";
-    let latencyMs = null;
-    const context = {};
-
-    const flushEventBlock = (block) => {
-      if (!block) return;
-      const lines = String(block || "")
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(Boolean);
-      const dataLines = lines.filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trim());
-      if (!dataLines.length) return;
-      const raw = dataLines.join("\n");
-      if (!raw || raw === "[DONE]") return;
-      let payload = null;
-      try {
-        payload = JSON.parse(raw);
-      } catch (error) {
-        payload = null;
-      }
-      if (!payload || typeof payload !== "object") return;
-      const type = String(payload.type || "").trim();
-      if (type === "delta") {
-        const delta = String(payload.text || "");
-        if (delta) {
-          answer += delta;
-          renderTickerQueryResult({ answer, model: modelUsed, provider, context });
-        }
-      } else if (type === "meta") {
-        provider = String(payload.provider || provider || "openai");
-        modelUsed = normalizeAiModelId(payload.model || modelUsed || model) || modelUsed;
-      } else if (type === "done") {
-        provider = String(payload.provider || provider || "openai");
-        modelUsed = normalizeAiModelId(payload.model || modelUsed || model) || modelUsed;
-        usage = payload.usage && typeof payload.usage === "object" ? payload.usage : usage;
-        latencyMs = Number.isFinite(Number(payload.latencyMs)) ? Number(payload.latencyMs) : latencyMs;
-      } else if (type === "error") {
-        throw new Error(String(payload.message || "Unable to complete ticker query right now."));
-      }
+    return {
+      answer: String(payload?.answer || "").trim(),
+      model: normalizeAiModelId(payload?.model || model) || model,
+      provider: normalizeModelCouncilProviderId(payload?.provider || provider || "openai"),
+      usage: payload?.usage && typeof payload.usage === "object" ? payload.usage : {},
+      latencyMs: Number.isFinite(Number(payload?.latencyMs)) ? Number(payload.latencyMs) : null,
+      context: payload?.context && typeof payload.context === "object" ? payload.context : {},
+      moduleData: payload?.moduleData && typeof payload.moduleData === "object" ? payload.moduleData : {},
+      selectedModules: Array.isArray(payload?.selectedModules) ? payload.selectedModules : modules,
+      responseId: String(payload?.responseId || "").trim(),
+      citations: Array.isArray(payload?.citations) ? payload.citations : [],
     };
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      while (true) {
-        const boundary = buffer.indexOf("\n\n");
-        if (boundary < 0) break;
-        const eventBlock = buffer.slice(0, boundary);
-        buffer = buffer.slice(boundary + 2);
-        flushEventBlock(eventBlock);
-      }
-    }
-    if (buffer.trim()) {
-      flushEventBlock(buffer.trim());
-      buffer = "";
-    }
-
-    return { answer: answer.trim(), model: modelUsed, provider, usage, latencyMs, context };
   };
 
-  const loadTickerQueryInsight = async (functions, { ticker, question, notify = false } = {}) => {
+  const improveTickerQueryPrompt = async ({ ticker, question, language, modules, model, provider } = {}) => {
+    const headers = await buildApiAuthHeaders({ includeJson: true });
+    const response = await fetch("/api/model-council/improve-prompt", {
+      method: "POST",
+      headers,
+      credentials: "same-origin",
+      body: JSON.stringify({
+        ticker,
+        question,
+        language,
+        modules,
+        model,
+        provider,
+        meta: buildMeta(),
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const message = String(payload?.error || "Unable to improve prompt right now.").trim();
+      throw new Error(message);
+    }
+    return {
+      improvedPrompt: String(payload?.improvedPrompt || question || "").trim() || String(question || "").trim(),
+      model: String(payload?.model || "").trim(),
+      provider: String(payload?.provider || "").trim(),
+    };
+  };
+
+  const submitModelCouncilFeedback = async ({ responseId, action } = {}) => {
+    const id = String(responseId || "").trim();
+    const normalizedAction = String(action || "").trim().toLowerCase();
+    if (!id || !normalizedAction) return;
+    const headers = await buildApiAuthHeaders({ includeJson: true });
+    await fetch("/api/model-council/feedback", {
+      method: "POST",
+      headers,
+      credentials: "same-origin",
+      body: JSON.stringify({
+        responseId: id,
+        action: normalizedAction,
+        meta: buildMeta(),
+      }),
+    }).catch(() => {});
+  };
+
+  const createModelCouncilShareLink = async (responseId) => {
+    const id = String(responseId || "").trim();
+    if (!id) throw new Error("Response ID is required.");
+    const headers = await buildApiAuthHeaders({ includeJson: true });
+    const response = await fetch("/api/model-council/share", {
+      method: "POST",
+      headers,
+      credentials: "same-origin",
+      body: JSON.stringify({ responseId: id, meta: buildMeta() }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(String(payload?.error || "Unable to create share link.").trim());
+    return String(payload?.shareUrl || "").trim();
+  };
+
+  const loadPublicModelCouncilShare = async ({ setPanel = true } = {}) => {
+    if (!ui.tickerQueryOutput) return false;
+    let shareId = "";
+    try {
+      const params = new URLSearchParams(window.location.search);
+      shareId = String(params.get("publicShare") || "").trim();
+    } catch (error) {
+      shareId = "";
+    }
+    if (!shareId) return false;
+
+    try {
+      setOutputLoading(ui.tickerQueryOutput, "Loading shared Model Council response...");
+      const response = await fetch(`/api/model-council/share/${encodeURIComponent(shareId)}`, {
+        method: "GET",
+        credentials: "same-origin",
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(String(payload?.error || "Shared response unavailable.").trim());
+      }
+      setOutputReady(ui.tickerQueryOutput);
+      state.tickerContext.tickerQueryLastResponseId = String(payload?.responseId || "").trim();
+      state.tickerContext.tickerQueryLastResponse = payload;
+      state.tickerContext.tickerQueryShareUrl = `${window.location.origin}/model-council?publicShare=${encodeURIComponent(shareId)}`;
+      renderTickerQueryResult({
+        answer: String(payload?.answer || "").trim(),
+        model: String(payload?.model || "").trim(),
+        provider: String(payload?.provider || "").trim(),
+        context: payload?.context || {},
+        responseId: String(payload?.responseId || "").trim(),
+        citations: Array.isArray(payload?.citations) ? payload.citations : [],
+        shareUrl: state.tickerContext.tickerQueryShareUrl,
+      });
+      renderTickerQueryModulesOutput(payload?.moduleData || {}, payload?.selectedModules || []);
+      if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Viewing shared read-only Model Council response.";
+      if (setPanel && typeof window.__quanturaSetPanel === "function") {
+        window.__quanturaSetPanel("ticker-query", { pushPath: false });
+      }
+      return true;
+    } catch (error) {
+      setOutputReady(ui.tickerQueryOutput);
+      renderTickerQueryErrorState({ message: error.message || "Shared response unavailable." });
+      if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Unable to load shared response.";
+      return false;
+    }
+  };
+
+  const syncModelCouncilSeo = () => {
+    const title = "Model Council | Quantura";
+    const description = "Multi-provider Model Council with structured Yahoo Finance module context for ticker analysis.";
+    try {
+      if (window.location.pathname === "/model-council" || window.location.pathname === "/ticker-query") {
+        document.title = title;
+      }
+      const metaDescription = document.querySelector('meta[name="description"]');
+      if (metaDescription && window.location.pathname === "/model-council") {
+        metaDescription.setAttribute("content", description);
+      }
+    } catch (error) {
+      // Best-effort only.
+    }
+  };
+
+  const loadTickerQueryInsight = async (
+    functions,
+    { ticker, question, notify = false, skipImprove = false, providerOverride = "", modelOverride = "" } = {}
+  ) => {
     if (!ui.tickerQueryOutput) return;
     const symbol = normalizeTicker(ticker || ui.tickerQueryTicker?.value || state.tickerContext.ticker || "");
     const prompt = String(question || ui.tickerQueryQuestion?.value || "").trim();
     const languageRaw = normalizeLanguageCode(ui.tickerQueryLanguage?.value || state.preferredLanguage || "en");
     const language = languageRaw === "auto" ? state.preferredLanguage || "en" : languageRaw;
-    const selectedModel = normalizeAiModelId(ui.tickerQueryModel?.value || state.tickerContext.tickerQueryModel || "gpt-5-mini") || "gpt-5-mini";
+    const selectedProvider = normalizeModelCouncilProviderId(
+      providerOverride || ui.tickerQueryProvider?.value || state.tickerContext.tickerQueryProvider || "openai"
+    );
+    const selectedModel = normalizeAiModelId(
+      modelOverride || ui.tickerQueryModel?.value || state.tickerContext.tickerQueryModel || "gpt-5-mini"
+    ) || "gpt-5-mini";
+    const selectedModules = getSelectedTickerQueryModules();
+
     if (!symbol) {
-      showToast("Ticker is required for GPT-5 query.", "warn");
+      showToast("Ticker is required for Model Council.", "warn");
       return;
     }
     if (!prompt) {
-      showToast("Enter a question for GPT-5.", "warn");
+      showToast("Enter a question for Model Council.", "warn");
       return;
     }
+
+    const improveEnabled = Boolean(ui.tickerQueryImproveToggle?.checked);
+    if (improveEnabled && !skipImprove) {
+      try {
+        if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Improving prompt preview...";
+        const improved = await improveTickerQueryPrompt({
+          ticker: symbol,
+          question: prompt,
+          language,
+          modules: selectedModules,
+          model: selectedModel,
+          provider: selectedProvider,
+        });
+        if (ui.tickerQueryImprovePreview) ui.tickerQueryImprovePreview.value = improved.improvedPrompt || prompt;
+        if (ui.tickerQueryImprovePreviewWrap) ui.tickerQueryImprovePreviewWrap.classList.remove("hidden");
+        state.tickerContext.tickerQueryPendingQuestion = prompt;
+        state.tickerContext.tickerQueryPendingProvider = selectedProvider;
+        state.tickerContext.tickerQueryPendingModel = selectedModel;
+        if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Prompt improved. Review preview, then run Model Council.";
+        return;
+      } catch (error) {
+        if (notify) showToast(error.message || "Unable to improve prompt preview.", "warn");
+      }
+    }
+
+    const finalPrompt = String(
+      (skipImprove && ui.tickerQueryImprovePreview ? ui.tickerQueryImprovePreview.value : prompt) || prompt
+    ).trim();
+    if (!finalPrompt) {
+      showToast("Prompt cannot be empty.", "warn");
+      return;
+    }
+
     try {
-      if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Querying GPT-5...";
-      setOutputLoading(ui.tickerQueryOutput, "Running GPT-5 ticker query...");
+      if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Running Model Council...";
+      setOutputLoading(ui.tickerQueryOutput, "Running Model Council analysis...");
+      if (ui.tickerQueryModulesOutput) {
+        ui.tickerQueryModulesOutput.classList.add("hidden");
+      }
       updateTickerQueryModelInfo({});
-      applyTickerQueryModelSelection(selectedModel);
+      applyTickerQueryModelSelection(selectedModel, selectedProvider);
+      setTickerQueryModulesSelection(selectedModules, { persist: true });
       renderTickerQueryCacheStats(null, { visible: false });
-      renderTickerQueryResult({ answer: "", model: selectedModel, provider: "openai", context: {} });
+      renderTickerQueryResult({
+        answer: "",
+        model: selectedModel,
+        provider: selectedProvider,
+        context: {},
+      });
       const started = Date.now();
-      const streamed = await streamTickerQueryInsight({
+      const responsePayload = await streamTickerQueryInsight({
         ticker: symbol,
-        prompt,
+        prompt: finalPrompt,
         language,
         model: selectedModel,
+        provider: selectedProvider,
+        modules: selectedModules,
       });
-      const usage = streamed.usage && typeof streamed.usage === "object" ? streamed.usage : null;
-      const latencyMs = Number.isFinite(Number(streamed.latencyMs)) ? Number(streamed.latencyMs) : Date.now() - started;
+      const usage = responsePayload.usage && typeof responsePayload.usage === "object" ? responsePayload.usage : {};
+      const latencyMs = Number.isFinite(Number(responsePayload.latencyMs)) ? Number(responsePayload.latencyMs) : Date.now() - started;
+      state.tickerContext.tickerQueryLastResponseId = String(responsePayload.responseId || "").trim();
+      state.tickerContext.tickerQueryLastResponse = responsePayload;
+      state.tickerContext.tickerQueryFeedback = "";
+      state.tickerContext.tickerQueryShareUrl = "";
       setOutputReady(ui.tickerQueryOutput);
       renderTickerQueryResult({
-        answer: streamed.answer || "No answer returned.",
-        model: streamed.model || selectedModel,
-        provider: streamed.provider || "openai",
-        context: streamed.context || {},
+        answer: responsePayload.answer || "No answer returned.",
+        model: responsePayload.model || selectedModel,
+        provider: responsePayload.provider || selectedProvider,
+        context: responsePayload.context || {},
+        responseId: responsePayload.responseId || "",
+        citations: responsePayload.citations || [],
       });
+      renderTickerQueryModulesOutput(responsePayload.moduleData || {}, responsePayload.selectedModules || selectedModules);
       updateTickerQueryModelInfo({ latencyMs, usage });
       const showCacheStats = Boolean(ui.tickerQueryShowCacheStats?.checked);
       renderTickerQueryCacheStats(usage, { visible: showCacheStats });
-      if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Completed.";
-      logEvent("ticker_query_completed", {
+      if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Model Council completed.";
+      if (ui.tickerQueryImprovePreviewWrap && skipImprove) {
+        ui.tickerQueryImprovePreviewWrap.classList.add("hidden");
+      }
+      logEvent("model_council_completed", {
         ticker: symbol,
         language,
-        model: streamed.model || selectedModel,
+        provider: responsePayload.provider || selectedProvider,
+        model: responsePayload.model || selectedModel,
+        modules_count: (responsePayload.selectedModules || selectedModules || []).length,
         prompt_tokens: Number(usage?.prompt_tokens || 0),
         completion_tokens: Number(usage?.completion_tokens || 0),
         cached_tokens: Number(usage?.cached_tokens || 0),
       });
     } catch (error) {
       setOutputReady(ui.tickerQueryOutput);
-      ui.tickerQueryOutput.innerHTML = `<div class="small muted">Unable to complete ticker query right now.</div>`;
-      if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Unable to complete query.";
-      if (notify) showToast(error.message || "Unable to run ticker query.", "warn");
+      renderTickerQueryErrorState({
+        message: error.message || "Unable to run Model Council right now.",
+        retryProvider: error.retryProvider || "",
+        retryModel: error.retryModel || "",
+      });
+      if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Unable to complete Model Council request.";
+      if (notify) showToast(error.message || "Unable to run Model Council.", "warn");
     }
   };
 
@@ -10274,6 +10723,13 @@
       "amazon-nova-micro": "amazon.nova-micro-v1:0",
       "amazon-nova-lite": "amazon.nova-lite-v1:0",
       "amazon-nova-pro": "amazon.nova-pro-v1:0",
+      "gemini-pro": "gemini-1.5-pro",
+      "gemini-flash": "gemini-2.0-flash",
+      "mistral-small": "mistral-small-latest",
+      "mistral-medium": "mistral-medium-latest",
+      "mistral-large": "mistral-large-latest",
+      "perplexity-sonar": "sonar",
+      "perplexity-sonar-pro": "sonar-pro",
     };
     if (aliases[lower]) return aliases[lower];
     if (lower.startsWith("gpt-") && lower.charAt(4) === "4") {
@@ -10283,6 +10739,18 @@
       return "gpt-5.1";
     }
     if (lower.startsWith("amazon.nova")) {
+      return lower;
+    }
+    if (lower.startsWith("gemini")) {
+      return lower;
+    }
+    if (lower.startsWith("mistral")) {
+      return lower;
+    }
+    if (lower.startsWith("sonar") || lower.startsWith("perplexity/sonar")) {
+      return lower.replace("perplexity/", "");
+    }
+    if (lower.startsWith("other/")) {
       return lower;
     }
     return id;
@@ -12889,6 +13357,7 @@
           if (ticker && ui.tickerQueryTicker && !String(ui.tickerQueryTicker.value || "").trim()) {
             ui.tickerQueryTicker.value = ticker;
           }
+          syncModelCouncilSeo();
           if (ui.tickerQueryLanguage && ui.tickerQueryLanguage.value === "auto") {
             ui.tickerQueryLanguage.value = state.preferredLanguage || "en";
           }
@@ -15197,9 +15666,35 @@
     if (ui.tickerQueryLanguage && !ui.tickerQueryLanguage.value) {
       ui.tickerQueryLanguage.value = state.preferredLanguage || "en";
     }
+    renderTickerQueryModulePicker();
+    const improvePref = String(safeLocalStorageGet(TICKER_QUERY_IMPROVE_TOGGLE_KEY) || "1");
+    if (ui.tickerQueryImproveToggle) {
+      ui.tickerQueryImproveToggle.checked = improvePref !== "0";
+      if (ui.tickerQueryImproveToggle.dataset.bound !== "1") {
+        ui.tickerQueryImproveToggle.addEventListener("change", () => {
+          const active = Boolean(ui.tickerQueryImproveToggle?.checked);
+          safeLocalStorageSet(TICKER_QUERY_IMPROVE_TOGGLE_KEY, active ? "1" : "0");
+          if (!active && ui.tickerQueryImprovePreviewWrap) {
+            ui.tickerQueryImprovePreviewWrap.classList.add("hidden");
+          }
+        });
+        ui.tickerQueryImproveToggle.dataset.bound = "1";
+      }
+    }
+    if (ui.tickerQueryProvider && ui.tickerQueryProvider.dataset.bound !== "1") {
+      ui.tickerQueryProvider.addEventListener("change", () => {
+        const providerId = normalizeModelCouncilProviderId(ui.tickerQueryProvider?.value || "openai");
+        state.tickerContext.tickerQueryProvider = providerId;
+        safeLocalStorageSet(TICKER_QUERY_PROVIDER_KEY, providerId);
+        renderTickerQueryModels(state.tickerContext.tickerQueryModels || [], { provider: providerId });
+      });
+      ui.tickerQueryProvider.dataset.bound = "1";
+    }
     if (ui.tickerQueryModel && ui.tickerQueryModel.dataset.bound !== "1") {
       ui.tickerQueryModel.addEventListener("change", () => {
-        applyTickerQueryModelSelection(ui.tickerQueryModel?.value || "gpt-5-mini");
+        const selectedOption = ui.tickerQueryModel?.selectedOptions?.[0];
+        const providerId = normalizeModelCouncilProviderId(selectedOption?.dataset?.provider || ui.tickerQueryProvider?.value || "openai");
+        applyTickerQueryModelSelection(ui.tickerQueryModel?.value || "gpt-5-mini", providerId);
       });
       ui.tickerQueryModel.dataset.bound = "1";
     }
@@ -15228,7 +15723,86 @@
         notify: true,
       });
     });
+    if (ui.tickerQueryRunFinal && ui.tickerQueryRunFinal.dataset.bound !== "1") {
+      ui.tickerQueryRunFinal.addEventListener("click", async () => {
+        await loadTickerQueryInsight(functions, {
+          ticker: ui.tickerQueryTicker?.value || state.tickerContext.ticker || "",
+          question: ui.tickerQueryImprovePreview?.value || ui.tickerQueryQuestion?.value || "",
+          notify: true,
+          skipImprove: true,
+        });
+      });
+      ui.tickerQueryRunFinal.dataset.bound = "1";
+    }
+    if (ui.tickerQueryOutput && ui.tickerQueryOutput.dataset.bound !== "1") {
+      ui.tickerQueryOutput.addEventListener("click", async (event) => {
+        const likeBtn = event.target.closest('[data-action="model-council-like"]');
+        if (likeBtn) {
+          event.preventDefault();
+          const responseId = String(likeBtn.dataset.responseId || state.tickerContext.tickerQueryLastResponseId || "").trim();
+          if (!responseId) return;
+          state.tickerContext.tickerQueryFeedback = "like";
+          await submitModelCouncilFeedback({ responseId, action: "like" });
+          renderTickerQueryResult({ ...(state.tickerContext.tickerQueryLastResponse || {}), feedback: "like" });
+          showToast("Feedback saved.");
+          return;
+        }
+
+        const dislikeBtn = event.target.closest('[data-action="model-council-dislike"]');
+        if (dislikeBtn) {
+          event.preventDefault();
+          const responseId = String(dislikeBtn.dataset.responseId || state.tickerContext.tickerQueryLastResponseId || "").trim();
+          if (!responseId) return;
+          state.tickerContext.tickerQueryFeedback = "dislike";
+          await submitModelCouncilFeedback({ responseId, action: "dislike" });
+          renderTickerQueryResult({ ...(state.tickerContext.tickerQueryLastResponse || {}), feedback: "dislike" });
+          showToast("Feedback saved.");
+          return;
+        }
+
+        const shareBtn = event.target.closest('[data-action="model-council-share"]');
+        if (shareBtn) {
+          event.preventDefault();
+          const responseId = String(shareBtn.dataset.responseId || state.tickerContext.tickerQueryLastResponseId || "").trim();
+          if (!responseId) return;
+          shareBtn.disabled = true;
+          try {
+            const shareUrl = await createModelCouncilShareLink(responseId);
+            state.tickerContext.tickerQueryShareUrl = shareUrl;
+            await submitModelCouncilFeedback({ responseId, action: "share" });
+            renderTickerQueryResult({ ...(state.tickerContext.tickerQueryLastResponse || {}), shareUrl });
+            await performShare({
+              url: shareUrl,
+              title: "Quantura Model Council",
+              text: "Read-only Model Council response",
+            });
+            showToast("Share link copied.");
+          } catch (error) {
+            showToast(error.message || "Unable to create share link.", "warn");
+          } finally {
+            shareBtn.disabled = false;
+          }
+          return;
+        }
+
+        const retryBtn = event.target.closest('[data-action="model-council-retry"]');
+        if (retryBtn) {
+          event.preventDefault();
+          await loadTickerQueryInsight(functions, {
+            ticker: ui.tickerQueryTicker?.value || state.tickerContext.ticker || "",
+            question: ui.tickerQueryQuestion?.value || "",
+            notify: true,
+            skipImprove: true,
+            providerOverride: retryBtn.dataset.provider || "",
+            modelOverride: retryBtn.dataset.model || "",
+          });
+        }
+      });
+      ui.tickerQueryOutput.dataset.bound = "1";
+    }
     loadTickerQueryModels().catch(() => {});
+    loadPublicModelCouncilShare({ setPanel: false }).catch(() => {});
+    syncModelCouncilSeo();
 
 	    ui.optionsForm?.addEventListener("submit", async (event) => {
 	      event.preventDefault();
