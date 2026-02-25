@@ -44,6 +44,8 @@ class QuanturaJavascriptBridge(
                     JSONObject().put("provider", payload.optString("provider"))
                 )
                 "authSignOut" -> onNativeAuthMessage("SIGN_OUT", JSONObject())
+                "startNativePurchase" -> onNativeAuthMessage("NATIVE_PURCHASE", payload)
+                "openNativeSubscriptionManager" -> onNativeAuthMessage("OPEN_NATIVE_SUBSCRIPTIONS", payload)
             }
         }
     }
