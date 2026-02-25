@@ -32,6 +32,8 @@ class AppOpenAdManager(
     private var loadedAtMs = 0L
     @Volatile
     private var currentActivity: Activity? = null
+    @Volatile
+    private var presentationBlockedByAuthGate = false
 
     fun start() {
         application.registerActivityLifecycleCallbacks(this)
@@ -41,6 +43,13 @@ class AppOpenAdManager(
 
     override fun onStart(owner: LifecycleOwner) {
         showAdIfAvailable()
+    }
+
+    fun setPresentationBlockedByAuthGate(blocked: Boolean) {
+        presentationBlockedByAuthGate = blocked
+        if (blocked) {
+            Log.d(tag, "App open ad presentation blocked by auth gate.")
+        }
     }
 
     fun loadAdIfNeeded() {
@@ -77,6 +86,10 @@ class AppOpenAdManager(
     fun showAdIfAvailable() {
         if (!remoteConfigManager.isFeatureEnabled("ads_enabled")) return
         if (isShowingAd) return
+        if (presentationBlockedByAuthGate) {
+            Log.d(tag, "Skipping app open show; auth gate is visible.")
+            return
+        }
         if (adManager.isShowingFullScreenAd()) {
             Log.d(tag, "Skipping app open show; another fullscreen ad is visible.")
             return
