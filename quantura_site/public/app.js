@@ -35,9 +35,6 @@
     "Contact",
     "Purchase",
   ]);
-  let nativeAuthRequestCounter = 0;
-  const nextNativeAuthRequestId = () => `native-auth-${Date.now()}-${++nativeAuthRequestCounter}`;
-
   const getNativePlatform = () => {
     try {
       const explicit = String(window.__QUANTURA_NATIVE_PLATFORM__ || "").trim().toLowerCase();
@@ -46,7 +43,9 @@
         const platform = String(window.Capacitor.getPlatform?.() || "").trim().toLowerCase();
         if (platform === "ios" || platform === "android") return platform;
       }
+      if (window.quanturaAuth?.postMessage) return "android";
       if (window.QuanturaBridge?.postMessage) return "android";
+      if (window.webkit?.messageHandlers?.quanturaAuth?.postMessage) return "ios";
       if (window.webkit?.messageHandlers?.QuanturaBridge?.postMessage) return "ios";
     } catch (error) {
       return null;
@@ -110,46 +109,85 @@
     return false;
   };
 
-  const requestNativeBridgeAuth = (provider) =>
-    new Promise((resolve, reject) => {
-      const requestId = nextNativeAuthRequestId();
-      let timer = null;
-      const cleanup = () => {
-        window.removeEventListener("quantura:native-auth-result", onResult);
-        if (timer) clearTimeout(timer);
-      };
-      const onResult = (event) => {
-        const detail = event?.detail && typeof event.detail === "object" ? event.detail : {};
-        if (String(detail.requestId || "") !== requestId) return;
-        cleanup();
-        if (!detail.ok) {
-          reject(new Error(String(detail.error || "Native sign-in failed.")));
-          return;
+  const sendNativeAuthMessage = (payload) => {
+    const message = payload && typeof payload === "object" ? payload : {};
+    try {
+      if (window.quanturaAuth?.postMessage) {
+        window.quanturaAuth.postMessage(JSON.stringify(message));
+        return true;
+      }
+    } catch (error) {
+      // Try fallbacks below.
+    }
+    try {
+      if (window.QuanturaBridge?.postMessage) {
+        window.QuanturaBridge.postMessage(JSON.stringify(message));
+        return true;
+      }
+    } catch (error) {
+      // Try iOS handlers below.
+    }
+    try {
+      const iosAuthHandler = window.webkit?.messageHandlers?.quanturaAuth?.postMessage;
+      if (iosAuthHandler) {
+        iosAuthHandler(message);
+        return true;
+      }
+    } catch (error) {
+      // Ignore and try legacy bridge.
+    }
+    try {
+      const iosLegacyHandler = window.webkit?.messageHandlers?.QuanturaBridge?.postMessage;
+      if (iosLegacyHandler) {
+        const type = String(message.type || "").trim().toUpperCase();
+        if (type === "SIGN_OUT") {
+          iosLegacyHandler({ action: "authSignOut" });
+        } else if (type === "GET_AUTH_STATE") {
+          return false;
+        } else {
+          iosLegacyHandler({ action: "authSignIn", provider: String(message.provider || "").trim().toLowerCase() });
         }
-        resolve(detail);
-      };
+        return true;
+      }
+    } catch (error) {
+      return false;
+    }
+    return false;
+  };
 
-      window.addEventListener("quantura:native-auth-result", onResult);
-      const posted = sendNativeBridgeMessage({
-        action: "authSignIn",
-        provider: String(provider || "").trim().toLowerCase(),
-        requestId,
-      });
-      if (!posted) {
-        cleanup();
-        reject(new Error("Native sign-in bridge is unavailable."));
+  const requestNativeBridgeSignOut = () => sendNativeAuthMessage({ type: "SIGN_OUT" });
+
+  const waitForNativeAuthCompletion = (auth, timeoutMs = 90000) =>
+    new Promise((resolve, reject) => {
+      if (!auth) {
+        reject(new Error("Firebase Auth is unavailable."));
         return;
       }
-      timer = setTimeout(() => {
-        cleanup();
+      if (auth.currentUser && !auth.currentUser.isAnonymous) {
+        resolve(auth.currentUser);
+        return;
+      }
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        try {
+          unsubscribe?.();
+        } catch (_) {
+          // no-op
+        }
         reject(new Error("Native sign-in timed out."));
-      }, 90000);
+      }, timeoutMs);
+      const unsubscribe = auth.onAuthStateChanged((user) => {
+        if (settled) return;
+        if (user && !user.isAnonymous) {
+          settled = true;
+          clearTimeout(timer);
+          unsubscribe();
+          resolve(user);
+        }
+      });
     });
-
-  const requestNativeBridgeSignOut = () => {
-    const requestId = nextNativeAuthRequestId();
-    return sendNativeBridgeMessage({ action: "authSignOut", requestId });
-  };
   const DEFAULT_BRIEF_TICKERS = [
     "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "NFLX",
     "AMD", "AVGO", "CRM", "ORCL", "JPM", "BAC", "GS", "V", "MA",
@@ -1396,9 +1434,11 @@
       }
     })(),
 		    initialPageViewSent: false,
-		    authResolved: false,
+	    authResolved: false,
 	      authInFlight: false,
       anonymousBootstrapInFlight: false,
+      nativeAuthPromptRequested: false,
+      nativeAuthState: null,
     intelActiveTab: "intelligence",
     tickerContext: {
 	      ticker: "",
@@ -2675,10 +2715,13 @@
   const exchangeNativeIdTokenForCustomToken = async (idToken) => {
     const token = String(idToken || "").trim();
     if (!token) throw new Error("Native ID token is missing.");
-    const response = await fetch("/api/auth/exchange-native-id-token", {
+    const response = await fetch("/api/auth/exchange", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ idToken: token }),
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({}),
     });
     let payload = null;
     try {
@@ -2690,6 +2733,69 @@
       throw new Error(String(payload?.error || "Unable to sync native auth session."));
     }
     return String(payload.customToken);
+  };
+
+  const installNativeAuthBridge = (auth) => {
+    if (!isNativeApp() || !auth) return null;
+    const existingBridge = window.__quanturaAuthBridge && typeof window.__quanturaAuthBridge === "object"
+      ? window.__quanturaAuthBridge
+      : {};
+
+    if (existingBridge.__nativeInstalled === true) {
+      return existingBridge;
+    }
+
+    const bridge = existingBridge;
+    bridge.receiveCustomToken = async (token) => {
+      const cleanToken = String(token || "").trim();
+      if (!cleanToken) return false;
+      try {
+        await auth.signInWithCustomToken(cleanToken);
+        window.dispatchEvent(new CustomEvent("quantura:native-custom-token-consumed", { detail: { ok: true } }));
+        return true;
+      } catch (error) {
+        window.dispatchEvent(new CustomEvent("quantura:native-custom-token-consumed", { detail: { ok: false, error: error?.message || "custom token failed" } }));
+        throw error;
+      }
+    };
+
+    bridge.onNativeAuthState = (authState) => {
+      const nextState = authState && typeof authState === "object" ? authState : {};
+      state.nativeAuthState = nextState;
+      window.dispatchEvent(new CustomEvent("quantura:native-auth-state-bridge", { detail: nextState }));
+      return nextState;
+    };
+
+    bridge.requestSignIn = (provider = "") =>
+      sendNativeAuthMessage({
+        type: "REQUEST_SIGN_IN",
+        provider: String(provider || "").trim().toLowerCase(),
+      });
+
+    bridge.requestAuthState = () => sendNativeAuthMessage({ type: "GET_AUTH_STATE" });
+    bridge.signOut = () => sendNativeAuthMessage({ type: "SIGN_OUT" });
+    bridge.__nativeInstalled = true;
+
+    window.__quanturaAuthBridge = bridge;
+
+    try {
+      if (window.__QUANTURA_PENDING_AUTH_STATE__) {
+        bridge.onNativeAuthState(window.__QUANTURA_PENDING_AUTH_STATE__);
+      }
+    } catch (error) {
+      // Ignore stale pending state errors.
+    }
+    try {
+      const pendingToken = String(window.__QUANTURA_PENDING_CUSTOM_TOKEN__ || "").trim();
+      if (pendingToken) {
+        bridge.receiveCustomToken(pendingToken).catch(() => {});
+      }
+    } catch (error) {
+      // Ignore stale pending token errors.
+    }
+
+    bridge.requestAuthState();
+    return bridge;
   };
 
   const getMessagingClient = () => {
@@ -11815,6 +11921,7 @@
 			    const functions = firebase.functions();
 			    const storage = firebase.storage ? firebase.storage() : null;
 			    const messaging = getMessagingClient();
+          const nativeAuthBridge = installNativeAuthBridge(auth);
 
 	      state.clients = { auth, db, functions, storage, messaging };
 	      hydrateUnsplashGallery(functions);
@@ -13642,11 +13749,10 @@
       try {
         await persistenceReady;
         if (isNativeApp() && supportsNativeBridge) {
-          const result = await requestNativeBridgeAuth(normalizedMethod);
-          const nativeIdToken = String(result?.idToken || "").trim();
-          if (!nativeIdToken) throw new Error("Native sign-in completed without an ID token.");
-          const customToken = await exchangeNativeIdTokenForCustomToken(nativeIdToken);
-          await auth.signInWithCustomToken(customToken);
+          const bridge = installNativeAuthBridge(auth);
+          const requested = Boolean(bridge?.requestSignIn?.(normalizedMethod));
+          if (!requested) throw new Error("Native sign-in bridge is unavailable.");
+          await waitForNativeAuthCompletion(auth, 90000);
           showToast(successMessage);
           logEvent("login", { method: normalizedMethod, runtime, source: "native_bridge" });
           return;
@@ -15024,12 +15130,30 @@
                 state.anonymousBootstrapInFlight = false;
               }
             }
+            if (isNativeApp()) {
+              const bridge = installNativeAuthBridge(auth);
+              if (!state.nativeAuthPromptRequested) {
+                state.nativeAuthPromptRequested = true;
+                bridge?.requestSignIn?.();
+              }
+            }
             return;
           }
 			      state.authResolved = true;
 			      state.user = user;
 			      setAuthUi(user);
 			      setUserId(hasFullAccount(user) ? user.uid : null);
+            if (isNativeApp()) {
+              installNativeAuthBridge(auth);
+              if (user.isAnonymous) {
+                if (!state.nativeAuthPromptRequested) {
+                  state.nativeAuthPromptRequested = true;
+                  window.__quanturaAuthBridge?.requestSignIn?.();
+                }
+              } else {
+                state.nativeAuthPromptRequested = false;
+              }
+            }
 
 		      if (!hasFullAccount(user)) {
 		        state.userHasPaidPlan = false;

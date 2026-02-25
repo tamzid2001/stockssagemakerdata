@@ -5794,10 +5794,17 @@ def exchange_native_id_token(req: https_fn.Request) -> tuple[str, int, dict[str,
     if req.method != "POST":
         return _json_http({"error": "Method not allowed"}, 405, headers)
 
-    payload = req.get_json(silent=True) or {}
-    id_token = str(payload.get("idToken") or "").strip()
+    auth_header = str(req.headers.get("Authorization") or req.headers.get("authorization") or "").strip()
+    id_token = ""
+    if auth_header.lower().startswith("bearer "):
+        id_token = auth_header[7:].strip()
+
     if not id_token:
-        return _json_http({"error": "idToken is required"}, 400, headers)
+        payload = req.get_json(silent=True) or {}
+        id_token = str(payload.get("idToken") or "").strip()
+
+    if not id_token:
+        return _json_http({"error": "Bearer token or idToken is required"}, 400, headers)
 
     try:
         decoded = admin_auth.verify_id_token(id_token, check_revoked=False)
@@ -5810,10 +5817,16 @@ def exchange_native_id_token(req: https_fn.Request) -> tuple[str, int, dict[str,
             if isinstance(custom_token_raw, (bytes, bytearray))
             else str(custom_token_raw)
         )
+        print(f"exchange_native_id_token success uid={uid}")
         return _json_http({"customToken": custom_token}, 200, headers)
     except Exception as exc:
         print(f"exchange_native_id_token verification failed: {exc}")
         return _json_http({"error": "Invalid native ID token"}, 401, headers)
+
+
+@https_fn.on_request()
+def exchange_native_auth(req: https_fn.Request) -> tuple[str, int, dict[str, str]]:
+    return exchange_native_id_token(req)
 
 
 @https_fn.on_request()

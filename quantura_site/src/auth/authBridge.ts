@@ -11,11 +11,14 @@ export const resolveAuthMode = (provider: AuthProvider): AuthMode => {
 };
 
 export const exchangeNativeIdToken = async (idToken: string): Promise<string> => {
-  const response = await fetch("/api/auth/exchange-native-id-token", {
+  const response = await fetch("/api/auth/exchange", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${idToken}`,
+    },
     credentials: "same-origin",
-    body: JSON.stringify({ idToken }),
+    body: JSON.stringify({}),
   });
 
   const payload = await response.json().catch(() => ({}));
