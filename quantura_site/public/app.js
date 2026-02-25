@@ -393,11 +393,11 @@
       not_signed_in: "Not signed in",
       open_billing_portal: "Open Stripe billing portal",
       signin_manage_billing: "Sign in to manage billing",
-      signin_set_profile: "Sign in to set your public leaderboard profile.",
+      signin_set_profile: "Sign in to set your public profile.",
       open_notifications: "Open notifications",
       signin_manage_notifications: "Sign in to manage notifications",
       account: "Account",
-      leaderboard_profile: "Leaderboard profile",
+      leaderboard_profile: "Public profile",
       sidebar_forecast: "Forecast",
       sidebar_ticker_intelligence: "Ticker",
       sidebar_indicators: "Indicators",
@@ -460,7 +460,7 @@
       open_notifications: "Abrir notificaciones",
       signin_manage_notifications: "Inicia sesion para gestionar notificaciones",
       account: "Cuenta",
-      leaderboard_profile: "Perfil del ranking",
+      leaderboard_profile: "Perfil publico",
       sidebar_forecast: "Pronostico",
       sidebar_ticker_intelligence: "Ticker",
       sidebar_indicators: "Indicadores",
@@ -523,7 +523,7 @@
       open_notifications: "Ouvrir les notifications",
       signin_manage_notifications: "Connectez-vous pour gerer les notifications",
       account: "Compte",
-      leaderboard_profile: "Profil du classement",
+      leaderboard_profile: "Profil public",
       sidebar_forecast: "Prevision",
       sidebar_ticker_intelligence: "Ticker",
       sidebar_indicators: "Indicateurs",
@@ -582,11 +582,11 @@
       not_signed_in: "Nicht angemeldet",
       open_billing_portal: "Stripe-Abrechnungsportal offnen",
       signin_manage_billing: "Zum Verwalten der Abrechnung anmelden",
-      signin_set_profile: "Melden Sie sich an, um Ihr offentliches Leaderboard-Profil einzurichten.",
+      signin_set_profile: "Melden Sie sich an, um Ihr offentliches Profil einzurichten.",
       open_notifications: "Benachrichtigungen offnen",
       signin_manage_notifications: "Zum Verwalten von Benachrichtigungen anmelden",
       account: "Konto",
-      leaderboard_profile: "Leaderboard-Profil",
+      leaderboard_profile: "Offentliches Profil",
       sidebar_forecast: "Forecast",
       sidebar_ticker_intelligence: "Ticker",
       sidebar_indicators: "Indikatoren",
@@ -649,7 +649,7 @@
       open_notifications: "فتح الاشعارات",
       signin_manage_notifications: "سجل الدخول لادارة الاشعارات",
       account: "الحساب",
-      leaderboard_profile: "ملف لوحة المتصدرين",
+      leaderboard_profile: "الملف العام",
       sidebar_forecast: "التوقع",
       sidebar_ticker_intelligence: "الرمز",
       sidebar_indicators: "المؤشرات",
@@ -708,11 +708,11 @@
       not_signed_in: "সাইন ইন করা হয়নি",
       open_billing_portal: "Stripe বিলিং পোর্টাল খুলুন",
       signin_manage_billing: "বিলিং পরিচালনা করতে সাইন ইন করুন",
-      signin_set_profile: "আপনার পাবলিক লিডারবোর্ড প্রোফাইল সেট করতে সাইন ইন করুন।",
+      signin_set_profile: "আপনার পাবলিক প্রোফাইল সেট করতে সাইন ইন করুন।",
       open_notifications: "নোটিফিকেশন খুলুন",
       signin_manage_notifications: "নোটিফিকেশন পরিচালনা করতে সাইন ইন করুন",
       account: "অ্যাকাউন্ট",
-      leaderboard_profile: "লিডারবোর্ড প্রোফাইল",
+      leaderboard_profile: "পাবলিক প্রোফাইল",
       sidebar_forecast: "ফোরকাস্ট",
       sidebar_ticker_intelligence: "টিকার",
       sidebar_indicators: "ইন্ডিকেটর",
@@ -1280,6 +1280,7 @@
     profileBio: document.getElementById("profile-bio"),
     profilePublicEnabled: document.getElementById("profile-public-enabled"),
     profilePublicScreener: document.getElementById("profile-public-screener"),
+    profilePublicEmail: document.getElementById("profile-public-email"),
     profileWebsite: document.getElementById("profile-social-website"),
     profileX: document.getElementById("profile-social-x"),
     profileLinkedin: document.getElementById("profile-social-linkedin"),
@@ -1493,6 +1494,7 @@
       bio: "",
       publicProfile: false,
       publicScreenerSharing: false,
+      publicEmailOptIn: false,
       stripeConnectAccountId: "",
     },
     preferredLanguage: "en",
@@ -1573,6 +1575,7 @@
     sideDataRefreshTimer: null,
     pendingShareId: "",
     pendingShareProcessed: false,
+    sharedScreenerView: null,
     taskCalendarCursor: null,
     taskCalendarTasks: [],
 	    unsubscribeOrders: null,
@@ -3211,7 +3214,7 @@
       }
     }
     if (!accountAuthed && ui.profileStatus) {
-      setLocalizedText(ui.profileStatus, pack.signin_set_profile || fallback.signin_set_profile || "Sign in to set your public leaderboard profile.");
+      setLocalizedText(ui.profileStatus, pack.signin_set_profile || fallback.signin_set_profile || "Sign in to set your public profile.");
     }
   };
 
@@ -3346,11 +3349,16 @@
 
     const setPendingShareId = (shareId) => {
       const id = String(shareId || "").trim();
+      const previous = String(state.pendingShareId || "").trim();
       state.pendingShareId = id;
+      if (id !== previous) {
+        state.pendingShareProcessed = false;
+      }
       if (id) {
         safeLocalStorageSet(PENDING_SHARE_KEY, id);
         writeCookie(PENDING_SHARE_KEY, id, { days: 14 });
       } else {
+        state.pendingShareProcessed = false;
         safeLocalStorageRemove(PENDING_SHARE_KEY);
         deleteCookie(PENDING_SHARE_KEY);
       }
@@ -4184,7 +4192,7 @@
     ui.dashboardCta?.classList.toggle("hidden", accountAuthed);
     setProfileFormEnabled(accountAuthed);
     if (!accountAuthed) {
-      setProfileStatus("Sign in to set your public leaderboard profile.");
+      setProfileStatus("Sign in to set your public profile.");
     }
 
     if (ui.pricingAuthCta) {
@@ -5974,14 +5982,16 @@
     const bio = normalizeProfileBio(safeProfile.bio);
     const publicProfile = Boolean(safeProfile.publicProfile);
     const publicScreenerSharing = Boolean(safeProfile.publicScreenerSharing);
+    const publicEmailOptIn = Boolean(safeProfile.publicEmailOptIn);
     const stripeConnectAccountId = String(safeProfile.stripeConnectAccountId || "").trim();
-    state.userProfile = { username, socialLinks, avatar, bio, publicProfile, publicScreenerSharing, stripeConnectAccountId };
+    state.userProfile = { username, socialLinks, avatar, bio, publicProfile, publicScreenerSharing, publicEmailOptIn, stripeConnectAccountId };
 
     if (ui.profileUsername) ui.profileUsername.value = username;
     if (ui.profileAvatar) ui.profileAvatar.value = avatar;
     if (ui.profileBio) ui.profileBio.value = bio;
     if (ui.profilePublicEnabled) ui.profilePublicEnabled.checked = publicProfile;
     if (ui.profilePublicScreener) ui.profilePublicScreener.checked = publicScreenerSharing;
+    if (ui.profilePublicEmail) ui.profilePublicEmail.checked = publicEmailOptIn;
     if (ui.profileWebsite) ui.profileWebsite.value = socialLinks.website || "";
     if (ui.profileX) ui.profileX.value = socialLinks.x || "";
     if (ui.profileLinkedin) ui.profileLinkedin.value = socialLinks.linkedin || "";
@@ -6009,6 +6019,7 @@
         bio: "",
         publicProfile: false,
         publicScreenerSharing: false,
+        publicEmailOptIn: false,
         stripeConnectAccountId: "",
       };
       renderProfileForm(state.userProfile, null);
@@ -6040,6 +6051,7 @@
     const profileBio = normalizeProfileBio(existingProfile.bio);
     const publicProfile = Boolean(existingProfile.publicProfile);
     const publicScreenerSharing = Boolean(existingProfile.publicScreenerSharing);
+    const publicEmailOptIn = Boolean(existingProfile.publicEmailOptIn);
     const stripeConnectAccountId = String(
       existingProfile.stripeConnectAccountId || existing?.stripeConnectAccountId || ""
     ).trim();
@@ -6059,6 +6071,7 @@
           bio: profileBio,
           publicProfile,
           publicScreenerSharing,
+          publicEmailOptIn,
           stripeConnectAccountId,
         },
         metadata: buildMeta(),
@@ -6866,6 +6879,90 @@
     return `${window.location.origin}${path}?share=${id}`;
   };
 
+  const fetchSharedScreenerPayload = async (shareId) => {
+    const cleanShareId = String(shareId || "").trim();
+    if (!cleanShareId) throw new Error("Share ID is required.");
+    const headers = await buildApiAuthHeaders();
+    const response = await fetch(`/api/shares/${encodeURIComponent(cleanShareId)}`, {
+      method: "GET",
+      headers,
+      credentials: "same-origin",
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(String(payload?.error || "Shared screener unavailable.").trim());
+    }
+    if (String(payload?.kind || "").trim().toLowerCase() !== "screener" || !payload?.screener) {
+      throw new Error("Shared item is not a screener run.");
+    }
+    return payload;
+  };
+
+  const renderSharedScreenerRun = async (shareId, { notify = false } = {}) => {
+    if (window.location.pathname !== "/screener" || !ui.screenerOutput) return null;
+    const cleanShareId = String(shareId || "").trim();
+    if (!cleanShareId) return null;
+
+    try {
+      setOutputLoading(ui.screenerOutput, "Loading shared screener...");
+      if (ui.screenerLoadStatus) ui.screenerLoadStatus.textContent = "Loading shared screener...";
+      const payload = await fetchSharedScreenerPayload(cleanShareId);
+      const screener = payload?.screener && typeof payload.screener === "object" ? payload.screener : {};
+      const shareUrl = buildShareUrl("screener", cleanShareId);
+      const runDoc = {
+        ...screener,
+        id: String(screener.id || payload.sourceId || "").trim(),
+        __sharedMeta: {
+          shareId: cleanShareId,
+          shareUrl,
+          readOnly: Boolean(payload.readOnly),
+          canImport: Boolean(payload.canImport),
+        },
+      };
+      state.pendingShareProcessed = true;
+      setPendingShareId("");
+      renderScreenerRunOutput(runDoc);
+      if (ui.screenerLoadStatus) {
+        ui.screenerLoadStatus.textContent = runDoc.__sharedMeta.readOnly
+          ? "Viewing shared screener (read-only)."
+          : "Viewing shared screener as owner.";
+      }
+      if (notify) showToast("Shared screener loaded.");
+      return runDoc;
+    } catch (error) {
+      setOutputReady(ui.screenerOutput);
+      if (ui.screenerLoadStatus) ui.screenerLoadStatus.textContent = "Unable to load shared screener.";
+      if (ui.screenerOutput) {
+        ui.screenerOutput.innerHTML = `<div class="small muted">${escapeHtml(
+          extractErrorMessage(error, "Shared screener unavailable.")
+        )}</div>`;
+      }
+      if (notify) showToast(extractErrorMessage(error, "Unable to load shared screener."), "warn");
+      throw error;
+    }
+  };
+
+  const importSharedItemById = async (functions, shareId, { redirect = true } = {}) => {
+    if (!functions) throw new Error("Import service is unavailable.");
+    const cleanShareId = String(shareId || "").trim();
+    if (!cleanShareId) throw new Error("Share ID is required.");
+    const importShare = functions.httpsCallable("import_shared_item");
+    const result = await importShare({ shareId: cleanShareId, meta: buildMeta() });
+    const kind = String(result.data?.kind || "").trim().toLowerCase();
+    const importedId = String(result.data?.importedId || "").trim();
+    if (!kind || !importedId) throw new Error("Shared item import did not return an ID.");
+    if (redirect) {
+      if (kind === "forecast") {
+        window.location.href = `/forecasting?forecastId=${encodeURIComponent(importedId)}`;
+      } else if (kind === "screener") {
+        window.location.href = `/screener?runId=${encodeURIComponent(importedId)}`;
+      } else if (kind === "upload") {
+        window.location.href = `/uploads?uploadId=${encodeURIComponent(importedId)}`;
+      }
+    }
+    return { kind, importedId };
+  };
+
   const processPendingShareImport = async (functions) => {
     if (!functions || !state.user) return null;
     const shareId = String(getPendingShareId() || "").trim();
@@ -6875,12 +6972,7 @@
 
     try {
       setPendingShareId(shareId);
-      const importShare = functions.httpsCallable("import_shared_item");
-      const result = await importShare({ shareId, meta: buildMeta() });
-      const kind = String(result.data?.kind || "").trim().toLowerCase();
-      const importedId = String(result.data?.importedId || "").trim();
-      if (!kind || !importedId) throw new Error("Shared item import did not return an ID.");
-
+      const { kind, importedId } = await importSharedItemById(functions, shareId, { redirect: false });
       setPendingShareId("");
       showToast("Shared item saved to your dashboard.");
       logEvent("shared_item_imported", { kind });
@@ -11466,7 +11558,7 @@
   const renderAiPortfolioSummary = (runDoc) => {
     const portfolio = runDoc?.aiPortfolio && typeof runDoc.aiPortfolio === "object" ? runDoc.aiPortfolio : null;
     if (!portfolio) {
-      return `<div class="small muted">Generate an AI Portfolio to score long-term growth with Quantura Horizon and publish a leaderboard-ready AI Agent.</div>`;
+      return `<div class="small muted">Generate an AI Portfolio to score long-term growth with Quantura Horizon and publish an Explore-ready AI Agent.</div>`;
     }
     const holdings = Array.isArray(portfolio.holdings) ? portfolio.holdings : [];
     const chips = holdings
@@ -11557,7 +11649,7 @@
       });
 
     if (!ranked.length) {
-      container.innerHTML = `<div class="small muted">No AI Agents for this filter yet. Generate one from the latest screen to publish into the leaderboard.</div>`;
+      container.innerHTML = `<div class="small muted">No AI Agents for this filter yet. Generate one from the latest screen to publish to Explore.</div>`;
       return;
     }
 
@@ -11741,10 +11833,31 @@
     setOutputReady(ui.screenerOutput);
 
     if (!rows.length) {
+      state.sharedScreenerView = null;
       ui.screenerOutput.innerHTML = `
         <div class="small muted">No screener rows stored for this run.</div>
       `;
       return;
+    }
+
+    const sharedMeta = runDoc && typeof runDoc.__sharedMeta === "object" ? runDoc.__sharedMeta : null;
+    const sharedShareId = String(sharedMeta?.shareId || "").trim();
+    const sharedShareUrl = String(sharedMeta?.shareUrl || (sharedShareId ? buildShareUrl("screener", sharedShareId) : "")).trim();
+    const sharedReadOnly = Boolean(sharedMeta?.readOnly);
+    const sharedCanImport = Boolean(sharedMeta?.canImport);
+    const isSharedView = Boolean(sharedShareId);
+
+    if (isSharedView) {
+      state.sharedScreenerView = {
+        shareId: sharedShareId,
+        shareUrl: sharedShareUrl,
+        readOnly: sharedReadOnly,
+        canImport: sharedCanImport,
+        runId: String(runDoc.id || "").trim(),
+        rows,
+      };
+    } else {
+      state.sharedScreenerView = null;
     }
 
     const runId = escapeHtml(runDoc.id || "");
@@ -11759,12 +11872,58 @@
     const ownerUsername = escapeHtml(String(runDoc?.ownerUsername || "").trim());
     const ownerBio = escapeHtml(String(runDoc?.ownerBio || "").trim());
     const ownerAvatarMeta = getProfileAvatarMeta(String(runDoc?.ownerAvatar || "bull").trim());
+    const canEditRun = !sharedReadOnly;
+
+    const actionButtons = [];
+    if (canEditRun) {
+      actionButtons.push(
+        `<button class="cta secondary small" type="button" data-action="download-screener" data-run-id="${runId}">Download CSV</button>`,
+        `<button class="cta secondary small" type="button" data-action="rename-screener" data-run-id="${runId}">Rename</button>`,
+        `<button class="cta secondary small" type="button" data-action="share-screener" data-run-id="${runId}">Share link</button>`,
+        `<button class="cta secondary small" type="button" data-action="toggle-screener-public" data-run-id="${runId}" data-is-public="${
+          isPublic ? "1" : "0"
+        }">${isPublic ? "Make private" : "Publish public"}</button>`,
+        `<button class="cta secondary small danger" type="button" data-action="delete-screener" data-run-id="${runId}">Delete</button>`
+      );
+    } else {
+      actionButtons.push(
+        `<button class="cta secondary small" type="button" data-action="download-shared-screener">Download CSV</button>`,
+        `<button class="cta secondary small" type="button" data-action="copy-shared-screener-link" data-share-id="${escapeHtml(
+          sharedShareId
+        )}">Copy share link</button>`
+      );
+      if (sharedShareId && (sharedCanImport || !hasFullAccount())) {
+        actionButtons.push(
+          `<button class="cta secondary small" type="button" data-action="import-shared-screener" data-share-id="${escapeHtml(
+            sharedShareId
+          )}">${hasFullAccount() ? "Save to dashboard" : "Sign in to save"}</button>`
+        );
+      }
+    }
+
+    if (canSupportOwner) {
+      actionButtons.push(
+        `<button class="cta secondary small" type="button" data-action="screener-owner-thanks" data-creator-workspace-id="${escapeHtml(
+          ownerWorkspaceId
+        )}" data-target-id="${runId}">Send thanks</button>`,
+        `<button class="cta secondary small" type="button" data-action="screener-owner-subscribe" data-creator-workspace-id="${escapeHtml(
+          ownerWorkspaceId
+        )}" data-target-id="${runId}">Subscribe</button>`
+      );
+    }
+
+    const sharedNotice = isSharedView
+      ? `<div class="small muted"><strong>Shared:</strong> ${
+          sharedReadOnly ? "Read-only view. Only the owner can edit this run." : "Owner view from shared link."
+        }</div>`
+      : "";
 
     ui.screenerOutput.innerHTML = `
       ${title ? `<div class="small"><strong>Title:</strong> ${escapeHtml(title)}</div>` : ""}
       <div class="small"><strong>Run ID:</strong> ${runId || "—"}</div>
       <div class="small"><strong>Created:</strong> ${createdAt}</div>
       <div class="small"><strong>Visibility:</strong> ${isPublic ? "Public" : "Private"}</div>
+      ${sharedNotice}
       ${
         ownerUsername || ownerBio
           ? `<div class="small muted"><strong>Owner:</strong> ${escapeHtml(ownerAvatarMeta.emoji || "")} ${
@@ -11774,31 +11933,23 @@
       }
       ${notes ? `<div class="small" style="margin-top:10px;"><strong>Notes:</strong> ${escapeHtml(notes)}</div>` : ""}
       <div class="hero-actions" style="margin-top:12px;">
-        <button class="cta secondary small" type="button" data-action="download-screener" data-run-id="${runId}">Download CSV</button>
-        <button class="cta secondary small" type="button" data-action="rename-screener" data-run-id="${runId}">Rename</button>
-        <button class="cta secondary small" type="button" data-action="share-screener" data-run-id="${runId}">Share link</button>
-        <button class="cta secondary small" type="button" data-action="toggle-screener-public" data-run-id="${runId}" data-is-public="${
-          isPublic ? "1" : "0"
-        }">${isPublic ? "Make private" : "Publish public"}</button>
-        ${
-          canSupportOwner
-            ? `<button class="cta secondary small" type="button" data-action="screener-owner-thanks" data-creator-workspace-id="${escapeHtml(
-                ownerWorkspaceId
-              )}" data-target-id="${runId}">Send thanks</button>
-               <button class="cta secondary small" type="button" data-action="screener-owner-subscribe" data-creator-workspace-id="${escapeHtml(
-                 ownerWorkspaceId
-               )}" data-target-id="${runId}">Subscribe</button>`
-            : ""
-        }
-        <button class="cta secondary small danger" type="button" data-action="delete-screener" data-run-id="${runId}">Delete</button>
+        ${actionButtons.join("")}
       </div>
       <div class="card" style="margin-top:14px;">
         <div class="card-head">
           <h3>AI Portfolio</h3>
-          <div class="hero-actions" style="margin-top:0;">
-            <button class="cta secondary small" type="button" data-action="generate-ai-portfolio" data-run-id="${runId}">${icon("magic-wand")}<span>Generate with Quantura Horizon</span></button>
-            <button class="cta secondary small" type="button" data-action="rename-ai-agent" data-agent-id="${agentId}" ${agentId ? "" : "disabled"}>${icon("edit-pencil")}<span>Rename Agent</span></button>
-          </div>
+          ${
+            canEditRun
+              ? `<div class="hero-actions" style="margin-top:0;">
+                  <button class="cta secondary small" type="button" data-action="generate-ai-portfolio" data-run-id="${runId}">${icon(
+                    "magic-wand"
+                  )}<span>Generate with Quantura Horizon</span></button>
+                  <button class="cta secondary small" type="button" data-action="rename-ai-agent" data-agent-id="${agentId}" ${
+                    agentId ? "" : "disabled"
+                  }>${icon("edit-pencil")}<span>Rename Agent</span></button>
+                </div>`
+              : `<div class="small muted">AI actions are disabled in read-only mode.</div>`
+          }
         </div>
         <div id="ai-portfolio-summary" class="small">${portfolioSummary}</div>
       </div>
@@ -12276,7 +12427,7 @@
     if (refreshed.exists) {
       renderScreenerRunOutput({ id: refreshed.id, ...(refreshed.data() || {}) });
     }
-    showToast("AI Portfolio generated and published to leaderboard.");
+    showToast("AI Portfolio generated and published to Explore.");
   };
 
   const startAIAgentSocial = (db, workspaceId) => {
@@ -12470,6 +12621,7 @@
     const doc = await db.collection("screener_runs").doc(cleanId).get();
     if (!doc.exists) throw new Error("Run not found.");
     const data = doc.data() || {};
+    state.sharedScreenerView = null;
     renderScreenerRunOutput({ id: doc.id, ...data });
     logEvent("screener_loaded_saved", { run_id: doc.id });
   };
@@ -13721,8 +13873,31 @@
 
         document.addEventListener("click", async (event) => {
           const dlButton = event.target.closest('[data-action="download-screener"]');
-          if (!dlButton) return;
+          const sharedDlButton = event.target.closest('[data-action="download-shared-screener"]');
+          if (!dlButton && !sharedDlButton) return;
           event.preventDefault();
+          if (sharedDlButton) {
+            const sharedRows = Array.isArray(state.sharedScreenerView?.rows) ? state.sharedScreenerView.rows : [];
+            if (!sharedRows.length) {
+              showToast("No shared screener rows are loaded.", "warn");
+              return;
+            }
+            try {
+              sharedDlButton.disabled = true;
+              const headers = ["symbol", "lastClose", "return1m", "return3m", "rsi14", "volatility", "score", "projectedRoi"];
+              const csv = buildCsv(sharedRows, headers);
+              const runId = String(state.sharedScreenerView?.runId || "shared").trim() || "shared";
+              triggerDownload(`quantura_screener_${runId}.csv`, csv);
+              showToast("CSV downloaded.");
+              logEvent("screener_csv_downloaded_shared", { share_id: state.sharedScreenerView?.shareId || "" });
+            } catch (error) {
+              showToast(error.message || "Unable to download shared screener run.", "warn");
+            } finally {
+              sharedDlButton.disabled = false;
+            }
+            return;
+          }
+
           if (!hasFullAccount()) {
             showToast("Sign in to download screener runs.", "warn");
             return;
@@ -13751,6 +13926,61 @@
         });
 
         document.addEventListener("click", async (event) => {
+          const copySharedScreener = event.target.closest('[data-action="copy-shared-screener-link"]');
+          if (copySharedScreener) {
+            event.preventDefault();
+            const shareId = String(copySharedScreener.dataset.shareId || state.sharedScreenerView?.shareId || "").trim();
+            if (!shareId) return;
+            const url = buildShareUrl("screener", shareId);
+            copySharedScreener.disabled = true;
+            try {
+              await performShare({
+                url,
+                title: "Quantura screener",
+                text: "Shared screener run",
+              });
+              showToast("Share link copied.");
+            } catch (error) {
+              showToast(error.message || "Unable to copy share link.", "warn");
+            } finally {
+              copySharedScreener.disabled = false;
+            }
+            return;
+          }
+
+          const importSharedScreener = event.target.closest('[data-action="import-shared-screener"]');
+          if (importSharedScreener) {
+            event.preventDefault();
+            const shareId = String(importSharedScreener.dataset.shareId || state.sharedScreenerView?.shareId || "").trim();
+            if (!shareId) return;
+            if (!hasFullAccount()) {
+              setPendingShareId(shareId);
+              window.location.href = "/account";
+              return;
+            }
+            importSharedScreener.disabled = true;
+            try {
+              setPendingShareId(shareId);
+              const result = await importSharedItemById(functions, shareId, { redirect: false });
+              setPendingShareId("");
+              showToast("Shared screener saved to your dashboard.");
+              logEvent("shared_item_imported", { kind: result.kind });
+              if (result.kind === "screener") {
+                window.location.href = `/screener?runId=${encodeURIComponent(result.importedId)}`;
+              } else if (result.kind === "forecast") {
+                window.location.href = `/forecasting?forecastId=${encodeURIComponent(result.importedId)}`;
+              } else if (result.kind === "upload") {
+                window.location.href = `/uploads?uploadId=${encodeURIComponent(result.importedId)}`;
+              }
+            } catch (error) {
+              setPendingShareId(shareId);
+              showToast(error.message || "Unable to import shared screener.", "warn");
+            } finally {
+              importSharedScreener.disabled = false;
+            }
+            return;
+          }
+
           const shareForecast = event.target.closest('[data-action="share-forecast"]');
           if (shareForecast) {
             event.preventDefault();
@@ -13931,7 +14161,7 @@
             const current = state.aiAgents.find((agent) => String(agent.id || "") === agentId);
             const nextName = await openPromptModal({
               title: "Rename AI Agent",
-              message: "Update the custom name shown in the leaderboard.",
+              message: "Update the custom name shown in Explore.",
               label: "Agent name",
               placeholder: "Quantura Horizon",
               initialValue: String(current?.name || "").trim(),
@@ -16550,6 +16780,7 @@
             bio: normalizeProfileBio(ui.profileBio?.value || ""),
             publicProfile: Boolean(ui.profilePublicEnabled?.checked),
             publicScreenerSharing: Boolean(ui.profilePublicScreener?.checked),
+            publicEmailOptIn: Boolean(ui.profilePublicEmail?.checked),
             stripeConnectAccountId: String(state.userProfile?.stripeConnectAccountId || "").trim(),
             socialLinks: normalizeProfileSocialLinks(
               {
@@ -16724,6 +16955,7 @@
             state.aiLikeSet = new Set();
             state.aiDefaultsSeededWorkspaceId = "";
 		        state.sharedWorkspaces = [];
+            state.sharedScreenerView = null;
 		        setActiveWorkspaceId("");
             state.userProfile = {
               username: "",
@@ -16732,6 +16964,7 @@
               bio: "",
               publicProfile: false,
               publicScreenerSharing: false,
+              publicEmailOptIn: false,
               stripeConnectAccountId: "",
             };
             renderProfileForm(state.userProfile, null);
@@ -16753,7 +16986,17 @@
             }
 
             const pendingShare = String(getPendingShareId() || "").trim();
-            if (pendingShare && window.location.pathname !== "/account") {
+            const onScreenerPage = window.location.pathname === "/screener";
+            if (pendingShare && onScreenerPage) {
+              try {
+                await renderSharedScreenerRun(pendingShare);
+              } catch (error) {
+                if (window.location.pathname !== "/account") {
+                  window.location.href = "/account";
+                  return;
+                }
+              }
+            } else if (pendingShare && window.location.pathname !== "/account") {
               window.location.href = "/account";
               return;
             }
@@ -16775,7 +17018,7 @@
 
 	      await ensureUserProfile(db, user);
         await loadUserProfile(db, user);
-        setProfileStatus("Profile is used when publishing AI Agents to the leaderboard.");
+        setProfileStatus("Profile is used when publishing AI agents in Explore.");
 	      startUserOrders(db, user);
 	      subscribeSharedWorkspaces(db, user);
 		      const activeWorkspaceId = resolveActiveWorkspaceId(user);
@@ -16796,7 +17039,16 @@
         startBacktests(db, user);
 	      refreshCollaboration(functions);
 
-        await processPendingShareImport(functions);
+        const pendingShare = String(getPendingShareId() || "").trim();
+        if (pendingShare && window.location.pathname === "/screener") {
+          try {
+            await renderSharedScreenerRun(pendingShare);
+          } catch (error) {
+            await processPendingShareImport(functions);
+          }
+        } else {
+          await processPendingShareImport(functions);
+        }
 
         if (window.location.pathname === "/account" && !String(getPendingShareId() || "").trim()) {
           window.location.href = "/dashboard";

@@ -13,8 +13,27 @@ const refs = {
   profileAvatar: document.getElementById("profile-avatar"),
   profileTitle: document.getElementById("profile-title"),
   profileSubtitle: document.getElementById("profile-subtitle"),
+  profileName: document.getElementById("profile-name"),
+  profileHandle: document.getElementById("profile-handle"),
+  profileEmail: document.getElementById("profile-email"),
+  profileVerifiedBadge: document.getElementById("profile-verified-badge"),
+  profileShareButton: document.getElementById("profile-share-button"),
+  profilePrivacySection: document.getElementById("profile-privacy-section"),
+  profilePublicToggle: document.getElementById("profile-public-toggle"),
+  profileEmailOptIn: document.getElementById("profile-email-optin"),
+  profilePrivacySave: document.getElementById("profile-privacy-save"),
+  profilePrivacyStatus: document.getElementById("profile-privacy-status"),
   posts: document.getElementById("profile-posts"),
   loadMore: document.getElementById("profile-load-more"),
+  savedFoldersSection: document.getElementById("saved-folders-section"),
+  savedFolderName: document.getElementById("saved-folder-name"),
+  savedFolderCreate: document.getElementById("saved-folder-create"),
+  savedFolderList: document.getElementById("saved-folder-list"),
+  savedSearchForm: document.getElementById("saved-search-form"),
+  savedSearchInput: document.getElementById("saved-search-input"),
+  savedSearchResults: document.getElementById("saved-search-results"),
+  savedFolderItemsTitle: document.getElementById("saved-folder-items-title"),
+  savedFolderItems: document.getElementById("saved-folder-items"),
   settingsSection: document.getElementById("notification-settings"),
   notifGlobal: document.getElementById("notif-global"),
   notifFollowing: document.getElementById("notif-following"),
@@ -50,12 +69,22 @@ const state = {
     follows: [],
     watchTickers: [],
   },
+  folders: [],
+  activeFolderId: "",
+  folderItems: [],
+  searchResults: [],
 };
 
 function setStatus(message, isError = false) {
   if (!refs.notifStatus) return;
   refs.notifStatus.textContent = message;
   refs.notifStatus.style.color = isError ? "#d83446" : "";
+}
+
+function setPrivacyStatus(message, isError = false) {
+  if (!refs.profilePrivacyStatus) return;
+  refs.profilePrivacyStatus.textContent = message;
+  refs.profilePrivacyStatus.style.color = isError ? "#d83446" : "";
 }
 
 function setAuthButton() {
@@ -70,14 +99,52 @@ function resolveHandleFromPath() {
   return "";
 }
 
+function currentProfileUrl() {
+  const handle = String(state.viewedProfile?.handle || "").trim();
+  if (!handle) return "";
+  return `${window.location.origin}/u/${encodeURIComponent(handle)}`;
+}
+
+async function shareProfile() {
+  const url = currentProfileUrl();
+  if (!url) return;
+  const title = state.viewedProfile?.name
+    ? `${state.viewedProfile.name} on Quantura`
+    : `@${state.viewedProfile?.handle || "profile"} on Quantura`;
+  try {
+    if (navigator.share) {
+      await navigator.share({ title, url, text: "Quantura public profile" });
+    } else if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(url);
+      window.alert("Profile link copied.");
+    }
+  } catch {
+    // Ignore cancelled share actions.
+  }
+}
+
 function renderProfileHeader() {
   const profile = state.viewedProfile || {};
-  const titleHandle = profile.handle || (state.ownProfile && state.user ? state.user.uid.slice(0, 8) : "profile");
-  refs.profileTitle.textContent = `@${titleHandle}`;
-  refs.profileSubtitle.textContent = state.ownProfile
-    ? "Manage your Explore posts and notification subscriptions."
-    : "Public profile posts";
-  if (profile.photoURL) refs.profileAvatar.src = profile.photoURL;
+  const handle = String(profile.handle || "").trim() || "profile";
+
+  if (refs.profileTitle) refs.profileTitle.childNodes[0].textContent = `@${handle} `;
+  if (refs.profileSubtitle) {
+    refs.profileSubtitle.textContent = state.ownProfile
+      ? "Manage your public profile, posts, and saved folders."
+      : "Public profile posts";
+  }
+  if (refs.profileName) refs.profileName.textContent = profile.name || "-";
+  if (refs.profileHandle) refs.profileHandle.textContent = `@${handle}`;
+  if (refs.profileEmail) refs.profileEmail.textContent = profile.emailVisible ? profile.email || "-" : "Hidden";
+  if (refs.profileAvatar) refs.profileAvatar.src = profile.photoURL || "/assets/quantura-icon.svg";
+  refs.profileVerifiedBadge?.classList.toggle("hidden", !profile.verified);
+  refs.profilePrivacySection?.classList.toggle("hidden", !state.ownProfile);
+  refs.savedFoldersSection?.classList.toggle("hidden", !state.ownProfile);
+
+  if (state.ownProfile) {
+    if (refs.profilePublicToggle) refs.profilePublicToggle.checked = Boolean(profile.publicProfile);
+    if (refs.profileEmailOptIn) refs.profileEmailOptIn.checked = Boolean(profile.publicEmailOptIn);
+  }
 }
 
 function renderPosts(append = false) {
@@ -117,6 +184,146 @@ function renderPosts(append = false) {
   });
 
   refs.loadMore?.classList.toggle("hidden", !state.cursor);
+}
+
+function renderSavedFolderList() {
+  if (!refs.savedFolderList) return;
+  refs.savedFolderList.innerHTML = "";
+  if (!state.folders.length) {
+    refs.savedFolderList.innerHTML = `<span class="muted">No folders yet.</span>`;
+    return;
+  }
+
+  state.folders.forEach((folder) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `token-chip ${state.activeFolderId === folder.id ? "active" : ""}`;
+    button.dataset.folderSelect = folder.id;
+    button.innerHTML = `${escapeHtml(folder.name)} <span>(${Number(folder.itemCount || 0)})</span>`;
+    refs.savedFolderList.appendChild(button);
+  });
+}
+
+function renderSavedSearchResults() {
+  if (!refs.savedSearchResults) return;
+  refs.savedSearchResults.innerHTML = "";
+  if (!state.searchResults.length) {
+    refs.savedSearchResults.innerHTML = `<div class="muted">No saved assets matched this query.</div>`;
+    return;
+  }
+
+  const activeFolder = state.folders.find((folder) => folder.id === state.activeFolderId);
+  const canSaveToFolder = Boolean(activeFolder && !activeFolder.isSystem);
+
+  state.searchResults.forEach((item) => {
+    const row = document.createElement("article");
+    row.className = "saved-item-row";
+    row.innerHTML = `
+      <div class="saved-item-title">${escapeHtml(item.title || "Untitled")}</div>
+      <div class="saved-item-meta">${escapeHtml(item.itemType || "item")}${item.ticker ? ` • ${escapeHtml(item.ticker)}` : ""}</div>
+      ${item.subtitle ? `<div class="muted">${escapeHtml(item.subtitle)}</div>` : ""}
+      <div class="inline-controls">
+        <a class="link-btn" href="${escapeHtml(item.targetUrl || "/")}">Open</a>
+        ${canSaveToFolder ? `<button type="button" data-save-item-type="${escapeHtml(item.itemType)}" data-save-source-id="${escapeHtml(item.sourceId)}">Save to folder</button>` : ""}
+      </div>
+    `;
+    refs.savedSearchResults.appendChild(row);
+  });
+}
+
+function renderFolderItems() {
+  if (!refs.savedFolderItems) return;
+  refs.savedFolderItems.innerHTML = "";
+  const activeFolder = state.folders.find((folder) => folder.id === state.activeFolderId);
+  if (refs.savedFolderItemsTitle) {
+    refs.savedFolderItemsTitle.textContent = activeFolder ? `${activeFolder.name} items` : "Folder items";
+  }
+
+  if (!state.folderItems.length) {
+    refs.savedFolderItems.innerHTML = `<div class="muted">No items in this folder.</div>`;
+    return;
+  }
+
+  state.folderItems.forEach((item) => {
+    const row = document.createElement("article");
+    row.className = "saved-item-row";
+    row.innerHTML = `
+      <div class="saved-item-title">${escapeHtml(item.title || "Untitled")}</div>
+      <div class="saved-item-meta">${escapeHtml(item.itemType || "item")}${item.ticker ? ` • ${escapeHtml(item.ticker)}` : ""}</div>
+      ${item.subtitle ? `<div class="muted">${escapeHtml(item.subtitle)}</div>` : ""}
+      <div class="inline-controls">
+        <a class="link-btn" href="${escapeHtml(item.targetUrl || "/")}">Open</a>
+        ${activeFolder && !activeFolder.isSystem ? `<button type="button" data-remove-item-type="${escapeHtml(item.itemType)}" data-remove-source-id="${escapeHtml(item.sourceId)}">Remove</button>` : ""}
+      </div>
+    `;
+    refs.savedFolderItems.appendChild(row);
+  });
+}
+
+async function loadFolders() {
+  if (!state.api || !state.ownProfile) return;
+  const response = await state.api.get("/saved/folders");
+  state.folders = Array.isArray(response.folders) ? response.folders : [];
+  if (!state.activeFolderId || !state.folders.some((folder) => folder.id === state.activeFolderId)) {
+    const firstCustom = state.folders.find((folder) => !folder.isSystem);
+    state.activeFolderId = (firstCustom || state.folders[0] || {}).id || "";
+  }
+  renderSavedFolderList();
+  await loadActiveFolderItems();
+}
+
+async function loadActiveFolderItems() {
+  if (!state.api || !state.ownProfile || !state.activeFolderId) {
+    state.folderItems = [];
+    renderFolderItems();
+    return;
+  }
+  const response = await state.api.get(`/saved/folders/${encodeURIComponent(state.activeFolderId)}/items?limit=40`);
+  state.folderItems = Array.isArray(response.items) ? response.items : [];
+  renderFolderItems();
+}
+
+async function loadSavedSearch(query = "") {
+  if (!state.api || !state.ownProfile) return;
+  const url = `/saved/search?q=${encodeURIComponent(query)}&limit=40`;
+  const response = await state.api.get(url);
+  state.searchResults = Array.isArray(response.items) ? response.items : [];
+  renderSavedSearchResults();
+}
+
+async function saveItemToActiveFolder(itemType, sourceId) {
+  if (!state.api || !state.ownProfile || !state.activeFolderId) return;
+  const folder = state.folders.find((row) => row.id === state.activeFolderId);
+  if (!folder || folder.isSystem) {
+    window.alert("Select a custom folder first.");
+    return;
+  }
+
+  await state.api.post(`/saved/folders/${encodeURIComponent(state.activeFolderId)}/items`, {
+    itemType,
+    sourceId,
+  });
+  await loadFolders();
+  track("profile_folder_item_saved", { item_type: itemType });
+}
+
+async function removeFolderItem(itemType, sourceId) {
+  if (!state.api || !state.ownProfile || !state.activeFolderId) return;
+  await state.api.delete(
+    `/saved/folders/${encodeURIComponent(state.activeFolderId)}/items/${encodeURIComponent(itemType)}/${encodeURIComponent(sourceId)}`
+  );
+  await loadFolders();
+  track("profile_folder_item_removed", { item_type: itemType });
+}
+
+async function createFolder() {
+  if (!state.api || !state.ownProfile) return;
+  const name = String(refs.savedFolderName?.value || "").trim();
+  if (!name) return;
+  await state.api.post("/saved/folders", { name });
+  if (refs.savedFolderName) refs.savedFolderName.value = "";
+  await loadFolders();
+  track("profile_folder_created", { name });
 }
 
 async function loadPosts(reset = false) {
@@ -163,15 +370,11 @@ function renderSettings() {
   refs.notifTickers.checked = Boolean(state.settings.notificationPrefs.tickers);
 
   refs.watchTickerList.innerHTML = state.settings.watchTickers
-    .map(
-      (ticker) => `<span class="token-chip">${escapeHtml(ticker)} <button type="button" data-watch-remove="${escapeHtml(ticker)}">×</button></span>`
-    )
+    .map((ticker) => `<span class="token-chip">${escapeHtml(ticker)} <button type="button" data-watch-remove="${escapeHtml(ticker)}">×</button></span>`)
     .join("");
 
   refs.followAuthorList.innerHTML = state.settings.follows
-    .map(
-      (uid) => `<span class="token-chip">${escapeHtml(uid)} <button type="button" data-follow-remove="${escapeHtml(uid)}">×</button></span>`
-    )
+    .map((uid) => `<span class="token-chip">${escapeHtml(uid)} <button type="button" data-follow-remove="${escapeHtml(uid)}">×</button></span>`)
     .join("");
 }
 
@@ -243,19 +446,49 @@ async function resolveViewedProfile() {
     const response = await state.api.get(`/profile/handle/${encodeURIComponent(state.viewedHandle)}`);
     state.viewedUid = response.uid;
     state.viewedProfile = response;
-    state.ownProfile = Boolean(state.user && state.user.uid === state.viewedUid);
+    state.ownProfile = Boolean(state.user && !state.user.isAnonymous && state.user.uid === state.viewedUid);
+  } else if (state.user && !state.user.isAnonymous) {
+    const response = await state.api.get("/me/profile");
+    state.viewedUid = response.uid;
+    state.viewedProfile = response;
+    state.ownProfile = true;
   } else {
-    state.viewedUid = state.user?.uid || "";
-    state.ownProfile = Boolean(state.user);
+    state.viewedUid = "";
+    state.ownProfile = false;
     state.viewedProfile = {
-      uid: state.viewedUid,
-      handle: state.user?.displayName || state.user?.email?.split("@")[0] || state.user?.uid?.slice(0, 8) || "profile",
-      photoURL: state.user?.photoURL || "",
+      uid: "",
+      handle: "guest",
+      name: "Guest",
+      emailVisible: false,
+      photoURL: "",
+      verified: false,
+      publicProfile: false,
+      publicEmailOptIn: false,
     };
   }
 
   renderProfileHeader();
   renderSettings();
+}
+
+async function saveProfileVisibility() {
+  if (!state.api || !state.ownProfile) return;
+  setPrivacyStatus("Saving visibility settings...");
+  try {
+    const response = await state.api.patch("/me/profile", {
+      publicProfile: Boolean(refs.profilePublicToggle?.checked),
+      publicEmailOptIn: Boolean(refs.profileEmailOptIn?.checked),
+    });
+    state.viewedProfile = response.profile || state.viewedProfile;
+    renderProfileHeader();
+    setPrivacyStatus("Visibility settings saved.");
+    track("profile_visibility_saved", {
+      public_profile: Boolean(refs.profilePublicToggle?.checked),
+      public_email: Boolean(refs.profileEmailOptIn?.checked),
+    });
+  } catch (error) {
+    setPrivacyStatus(error.message || "Unable to save visibility settings.", true);
+  }
 }
 
 function bindEvents() {
@@ -267,6 +500,15 @@ function bindEvents() {
     } catch (error) {
       setStatus(error.message || "Auth action failed.", true);
     }
+  });
+
+  refs.profileShareButton?.addEventListener("click", async () => {
+    await shareProfile();
+    track("profile_shared", { handle: state.viewedProfile?.handle || "" });
+  });
+
+  refs.profilePrivacySave?.addEventListener("click", async () => {
+    await saveProfileVisibility();
   });
 
   refs.loadMore?.addEventListener("click", async () => {
@@ -303,6 +545,51 @@ function bindEvents() {
       track("profile_post_deleted", { post_id: deleteBtn.dataset.postDelete });
     } catch (error) {
       setStatus(error.message || "Unable to delete post.", true);
+    }
+  });
+
+  refs.savedFolderCreate?.addEventListener("click", async () => {
+    try {
+      await createFolder();
+    } catch (error) {
+      window.alert(error.message || "Unable to create folder.");
+    }
+  });
+
+  refs.savedFolderList?.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-folder-select]");
+    if (!button) return;
+    state.activeFolderId = button.dataset.folderSelect;
+    renderSavedFolderList();
+    await loadActiveFolderItems();
+  });
+
+  refs.savedSearchForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      await loadSavedSearch(String(refs.savedSearchInput?.value || "").trim());
+    } catch (error) {
+      window.alert(error.message || "Unable to search saved assets.");
+    }
+  });
+
+  refs.savedSearchResults?.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-save-item-type][data-save-source-id]");
+    if (!button) return;
+    try {
+      await saveItemToActiveFolder(button.dataset.saveItemType, button.dataset.saveSourceId);
+    } catch (error) {
+      window.alert(error.message || "Unable to save item to folder.");
+    }
+  });
+
+  refs.savedFolderItems?.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-remove-item-type][data-remove-source-id]");
+    if (!button) return;
+    try {
+      await removeFolderItem(button.dataset.removeItemType, button.dataset.removeSourceId);
+    } catch (error) {
+      window.alert(error.message || "Unable to remove folder item.");
     }
   });
 
@@ -388,8 +675,12 @@ async function bootstrap() {
 
     try {
       await resolveViewedProfile();
-      await loadPosts(true);
-      if (state.ownProfile) await loadNotificationSettings();
+      if (state.viewedUid) await loadPosts(true);
+      if (state.ownProfile) {
+        await loadNotificationSettings();
+        await loadFolders();
+        await loadSavedSearch("");
+      }
     } catch (error) {
       if (refs.posts) refs.posts.innerHTML = `<div class="muted">${escapeHtml(error.message || "Unable to load profile.")}</div>`;
     }

@@ -23,6 +23,11 @@ const refs = {
   postModal: document.getElementById("post-modal"),
   postModalBody: document.getElementById("post-modal-body"),
   modalClose: document.getElementById("modal-close"),
+  reportModal: document.getElementById("report-modal"),
+  reportModalClose: document.getElementById("report-modal-close"),
+  reportForm: document.getElementById("report-form"),
+  reportReason: document.getElementById("report-reason"),
+  reportDetails: document.getElementById("report-details"),
   cardTemplate: document.getElementById("post-card-template"),
   skeletonTemplate: document.getElementById("skeleton-template"),
 };
@@ -41,6 +46,7 @@ const state = {
   observer: null,
   postsById: new Map(),
   activePostId: "",
+  reportPostId: "",
 };
 
 function setAuthButton() {
@@ -107,6 +113,7 @@ function getEngagementMarkup(post) {
     <button type="button" data-action="comment" data-post-id="${escapeHtml(post.id)}">💬 ${Number(counts.comments || 0)}</button>
     <button type="button" data-action="repost" data-post-id="${escapeHtml(post.id)}" class="${viewer.reposted ? "active" : ""}">↻ ${Number(counts.reposts || 0)}</button>
     <button type="button" data-action="share" data-post-id="${escapeHtml(post.id)}">↗ ${Number(counts.shares || 0)}</button>
+    <button type="button" data-action="save" data-post-id="${escapeHtml(post.id)}" class="${viewer.saved ? "active" : ""}">★ Save</button>
     <button type="button" data-action="report" data-post-id="${escapeHtml(post.id)}">⚑</button>
   `;
 }
@@ -261,12 +268,14 @@ async function doPostAction(action, postId) {
   }
 
   if (action === "report") {
-    const reason = window.prompt("Report reason (spam, abuse, misinformation, other):", "spam");
-    if (!reason) return;
-    const details = window.prompt("Optional details", "") || "";
-    await state.api.post(`/posts/${encodeURIComponent(postId)}/report`, { reason, details });
-    window.alert("Thanks. The report has been submitted.");
-    track("explore_post_reported", { post_id: postId, reason });
+    openReportModal(postId);
+    return;
+  }
+
+  if (action === "save") {
+    const response = await state.api.post(`/posts/${encodeURIComponent(postId)}/save`, {});
+    await refreshPost(postId);
+    track("explore_post_saved", { post_id: postId, saved: Boolean(response.saved) });
     return;
   }
 
@@ -288,6 +297,21 @@ function closeModal() {
   refs.postModal?.classList.add("hidden");
   refs.postModal?.setAttribute("aria-hidden", "true");
   state.activePostId = "";
+}
+
+function closeReportModal() {
+  refs.reportModal?.classList.add("hidden");
+  refs.reportModal?.setAttribute("aria-hidden", "true");
+  state.reportPostId = "";
+  if (refs.reportForm) refs.reportForm.reset();
+}
+
+function openReportModal(postId) {
+  state.reportPostId = String(postId || "");
+  if (refs.reportReason) refs.reportReason.value = "spam";
+  if (refs.reportDetails) refs.reportDetails.value = "";
+  refs.reportModal?.classList.remove("hidden");
+  refs.reportModal?.setAttribute("aria-hidden", "false");
 }
 
 function renderModal(post, comments) {
@@ -408,6 +432,11 @@ function bindEvents() {
     const closeTrigger = event.target.closest("[data-close-modal='true']");
     if (closeTrigger) closeModal();
   });
+  refs.reportModalClose?.addEventListener("click", closeReportModal);
+  refs.reportModal?.addEventListener("click", (event) => {
+    const closeTrigger = event.target.closest("[data-report-close='true']");
+    if (closeTrigger) closeReportModal();
+  });
 
   refs.postModalBody?.addEventListener("click", async (event) => {
     const actionBtn = event.target.closest("[data-action][data-post-id]");
@@ -445,6 +474,23 @@ function bindEvents() {
       track("explore_comment_created", { post_id: postId });
     } catch (error) {
       window.alert(error.message || "Unable to add comment.");
+    }
+  });
+
+  refs.reportForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!state.api || !state.reportPostId) return;
+    const reason = String(refs.reportReason?.value || "").trim().toLowerCase();
+    const details = String(refs.reportDetails?.value || "").trim();
+    if (!reason) return;
+    try {
+      await state.api.post(`/posts/${encodeURIComponent(state.reportPostId)}/report`, { reason, details });
+      closeReportModal();
+      window.alert("Thanks. The report has been submitted.");
+      track("explore_post_reported", { post_id: state.reportPostId, reason });
+      await refreshPost(state.reportPostId);
+    } catch (error) {
+      window.alert(error.message || "Unable to submit report.");
     }
   });
 

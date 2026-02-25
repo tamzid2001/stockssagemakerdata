@@ -61,6 +61,26 @@
       </article>
     </div>
 
+    <div id="report-modal" class="modal hidden" aria-hidden="true">
+      <div class="modal-backdrop" data-report-close="true"></div>
+      <article class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="report-modal-title">
+        <button id="report-modal-close" class="modal-close" type="button" aria-label="Close">×</button>
+        <h2 id="report-modal-title">Report post</h2>
+        <form id="report-form" class="comment-form">
+          <label for="report-reason">Reason</label>
+          <select id="report-reason" required>
+            <option value="spam">Spam</option>
+            <option value="abuse">Abusive content</option>
+            <option value="misinformation">Misinformation</option>
+            <option value="copyright">Copyright/IP</option>
+            <option value="other">Other</option>
+          </select>
+          <textarea id="report-details" maxlength="1000" placeholder="Optional details"></textarea>
+          <button type="submit">Submit report</button>
+        </form>
+      </article>
+    </div>
+
     <template id="post-card-template">
       <article class="post-card" tabindex="0">
         <div class="post-preview"></div>

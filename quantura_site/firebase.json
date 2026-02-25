@@ -58,6 +58,8 @@
       { "source": "/ask-gpt5", "destination": "/model-council", "type": 302 },
       { "source": "/ask-gpt", "destination": "/model-council", "type": 302 },
       { "source": "/ai-leaderboard", "destination": "/explore", "type": 302 },
+      { "source": "/leaderboard", "destination": "/explore", "type": 302 },
+      { "source": "/ai-agent-leaderboard", "destination": "/explore", "type": 302 },
       { "source": "/fx", "destination": "/tools/fx", "type": 302 }
     ],
     "rewrites": [
@@ -72,6 +74,9 @@
       { "source": "/api/follows/**", "function": "quanturaExploreApi" },
       { "source": "/api/watch-tickers/**", "function": "quanturaExploreApi" },
       { "source": "/api/notifications/**", "function": "quanturaExploreApi" },
+      { "source": "/api/saved", "function": "quanturaExploreApi" },
+      { "source": "/api/saved/**", "function": "quanturaExploreApi" },
+      { "source": "/api/shares/**", "function": "quanturaExploreApi" },
       { "source": "/api/auth/exchange", "function": "exchange_native_auth" },
       { "source": "/api/auth/exchange-native-id-token", "function": "exchange_native_id_token" },
       { "source": "/api/predictions/search", "function": "predictions_search_http" },
