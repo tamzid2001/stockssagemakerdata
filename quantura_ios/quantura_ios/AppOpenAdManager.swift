@@ -9,6 +9,7 @@ final class AppOpenAdManager: NSObject, FullScreenContentDelegate {
     private var appOpenAd: AppOpenAd?
     private var isLoading = false
     private var isShowing = false
+    private var presentationBlockedByAuthGate = false
     private var loadedAt: Date?
     private let maxCacheAgeSeconds: TimeInterval = 4 * 60 * 60
 
@@ -29,6 +30,13 @@ final class AppOpenAdManager: NSObject, FullScreenContentDelegate {
 
     func sceneDidBecomeActive() {
         showIfAvailable()
+    }
+
+    func setPresentationBlockedByAuthGate(_ blocked: Bool) {
+        presentationBlockedByAuthGate = blocked
+        if blocked {
+            print("[Ads][iOS][AppOpen] Presentation blocked by auth gate.")
+        }
     }
 
     private var isAdFresh: Bool {
@@ -59,6 +67,10 @@ final class AppOpenAdManager: NSObject, FullScreenContentDelegate {
     private func showIfAvailable() {
         guard remoteConfigManager.featureFlag("ads_enabled", default: true) else { return }
         guard !isShowing else { return }
+        guard !presentationBlockedByAuthGate else {
+            print("[Ads][iOS][AppOpen] Skipping show; auth gate is visible.")
+            return
+        }
         guard !adManager.isShowingFullScreenAd else {
             print("[Ads][iOS][AppOpen] Skipping show; another fullscreen ad is already visible.")
             return
@@ -150,6 +162,10 @@ final class AppOpenAdManager {
     func preloadAdIfNeeded() {}
 
     func sceneDidBecomeActive() {}
+
+    func setPresentationBlockedByAuthGate(_ blocked: Bool) {
+        _ = blocked
+    }
 }
 #else
 final class AppOpenAdManager {
@@ -161,5 +177,9 @@ final class AppOpenAdManager {
     func preloadAdIfNeeded() {}
 
     func sceneDidBecomeActive() {}
+
+    func setPresentationBlockedByAuthGate(_ blocked: Bool) {
+        _ = blocked
+    }
 }
 #endif
