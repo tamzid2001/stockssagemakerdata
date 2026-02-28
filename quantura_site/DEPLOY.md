@@ -27,7 +27,7 @@ npm run build
 ```bash
 gcloud functions deploy quanturaExploreApi \
   --gen2 \
-  --runtime=nodejs20 \
+  --runtime=nodejs24 \
   --region=us-central1 \
   --source=. \
   --entry-point=quanturaExploreApi \
@@ -41,7 +41,7 @@ gcloud functions deploy quanturaExploreApi \
 ```bash
 gcloud functions deploy onForecastCreated \
   --gen2 \
-  --runtime=nodejs20 \
+  --runtime=nodejs24 \
   --region=us-central1 \
   --source=. \
   --entry-point=onForecastCreated \
@@ -51,7 +51,7 @@ gcloud functions deploy onForecastCreated \
 
 gcloud functions deploy onBacktestCreated \
   --gen2 \
-  --runtime=nodejs20 \
+  --runtime=nodejs24 \
   --region=us-central1 \
   --source=. \
   --entry-point=onBacktestCreated \
@@ -61,7 +61,7 @@ gcloud functions deploy onBacktestCreated \
 
 gcloud functions deploy onScreenerRunCreated \
   --gen2 \
-  --runtime=nodejs20 \
+  --runtime=nodejs24 \
   --region=us-central1 \
   --source=. \
   --entry-point=onScreenerRunCreated \
@@ -71,7 +71,7 @@ gcloud functions deploy onScreenerRunCreated \
 
 gcloud functions deploy onAgentRunCreated \
   --gen2 \
-  --runtime=nodejs20 \
+  --runtime=nodejs24 \
   --region=us-central1 \
   --source=. \
   --entry-point=onAgentRunCreated \

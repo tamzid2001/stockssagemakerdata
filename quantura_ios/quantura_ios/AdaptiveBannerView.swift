@@ -70,6 +70,11 @@ private struct BannerRepresentable: UIViewRepresentable {
 
         func bannerViewDidRecordImpression(_ bannerView: BannerView) {
             print("[Ads][iOS][Banner] Impression recorded.")
+            AdImpressionReporter.shared.report(
+                adFormat: "banner",
+                adUnitId: bannerView.adUnitID ?? "",
+                placement: "bottom_banner"
+            )
         }
     }
 }

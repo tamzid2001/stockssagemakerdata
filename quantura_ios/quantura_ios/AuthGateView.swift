@@ -142,6 +142,15 @@ private struct EmailAuthSheet: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 14) {
+                Picker("Mode", selection: Binding(
+                    get: { viewModel.emailAuthMode },
+                    set: { viewModel.emailAuthMode = $0 }
+                )) {
+                    Text("Sign in").tag(EmailAuthMode.signIn)
+                    Text("Create").tag(EmailAuthMode.signUp)
+                }
+                .pickerStyle(.segmented)
+
                 TextField("Email", text: $viewModel.emailAddress)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled(true)
@@ -149,20 +158,38 @@ private struct EmailAuthSheet: View {
                     .padding(12)
                     .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
 
+                if viewModel.emailAuthMode == .signUp {
+                    TextField("Username", text: $viewModel.emailUsername)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled(true)
+                        .padding(12)
+                        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
+                }
+
                 SecureField("Password", text: $viewModel.emailPassword)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled(true)
                     .padding(12)
                     .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
 
-                Button("Continue") {
-                    viewModel.signInWithEmail()
+                if viewModel.emailAuthMode == .signUp {
+                    SecureField("Confirm password", text: $viewModel.emailConfirmPassword)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled(true)
+                        .padding(12)
+                        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
+                }
+
+                Button(viewModel.emailAuthMode == .signUp ? "Create account" : "Continue") {
+                    viewModel.submitEmailAuth()
                 }
                 .buttonStyle(.borderedProminent)
                 .frame(maxWidth: .infinity, minHeight: 48)
                 .disabled(viewModel.isBusy)
 
-                Text("If this email has no account yet, Quantura will create it and link it to your current app session.")
+                Text(viewModel.emailAuthMode == .signUp
+                     ? "Create an account with email, username, password, and confirmation. Existing emails must use their current provider."
+                     : "Sign in with your existing email and password. Switch to Create to open a new account.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)

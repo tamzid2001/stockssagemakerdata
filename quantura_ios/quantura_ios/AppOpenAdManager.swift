@@ -99,6 +99,11 @@ final class AppOpenAdManager: NSObject, FullScreenContentDelegate {
 
     func adDidRecordImpression(_ ad: FullScreenPresentingAd) {
         print("[Ads][iOS][AppOpen] Impression recorded.")
+        AdImpressionReporter.shared.report(
+            adFormat: "app_open",
+            adUnitId: remoteConfigManager.adUnitIDs().appOpen,
+            placement: "app_open"
+        )
     }
 
     func adWillPresentFullScreenContent(_ ad: FullScreenPresentingAd) {

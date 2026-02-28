@@ -1,6 +1,7 @@
 import cors from "cors";
 import express, { Request, Response } from "express";
 import admin from "firebase-admin";
+import { GoogleAuth } from "google-auth-library";
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -63,7 +64,18 @@ const PUBLIC_ORIGIN = asString(process.env.PUBLIC_ORIGIN, "https://quantura-e2e3
 const ADMIN_EMAIL = "tamzid257@gmail.com";
 const MODEL_COUNCIL_RESPONSE_COLLECTION = "model_council_responses";
 const OPENAI_API_KEY = asString(process.env.OPENAI_API_KEY).trim();
+const GEMINI_API_KEY = asString(process.env.GEMINI_API_KEY).trim();
+const MISTRAL_API_KEY = asString(process.env.MISTRAL_API_KEY).trim();
+const PERPLEXITY_API_KEY = asString(process.env.PERPLEXITY_API_KEY).trim();
 const NOTIFICATION_REWRITE_MODEL = asString(process.env.NOTIFICATION_REWRITE_MODEL, "gpt-4o-mini").trim();
+const FMP_API_KEY = asString(process.env.FMP_API_KEY).trim();
+const PLAY_INTEGRITY_ANDROID_PACKAGE = asString(process.env.PLAY_INTEGRITY_ANDROID_PACKAGE).trim();
+const REQUIRE_PLAY_INTEGRITY = asBoolean(process.env.REQUIRE_PLAY_INTEGRITY, false);
+const IOS_IAP_WEBHOOK_SECRET = asString(process.env.IOS_IAP_WEBHOOK_SECRET).trim();
+const APPLE_NOTIFICATIONS_WEBHOOK_SECRET = asString(process.env.APPLE_NOTIFICATIONS_WEBHOOK_SECRET).trim();
+const ADMOB_SSV_WEBHOOK_SECRET = asString(process.env.ADMOB_SSV_WEBHOOK_SECRET).trim();
+const DEFAULT_LLM_MODEL = asString(process.env.DEFAULT_LLM_MODEL, "gpt-5-mini").trim();
+const LLM_TIMEOUT_MS = Math.max(5000, Math.min(120000, Math.floor(asFinite(process.env.LLM_TIMEOUT_MS, 30000))));
 const PROMO_ID = asString(process.env.PROMO_ID, "quantura_generic_50_off").trim();
 const PROMO_CODE = asString(process.env.PROMO_CODE, "QUANTURA50").trim().toUpperCase();
 const PROMO_DISCOUNT_PERCENT = Math.max(1, Math.min(95, asFinite(process.env.PROMO_DISCOUNT_PERCENT, 50)));
@@ -100,6 +112,9 @@ const SYSTEM_FOLDERS: SystemFolderConfig[] = [
 ];
 
 const ROUTES = express.Router();
+const PLAY_INTEGRITY_AUTH = new GoogleAuth({
+  scopes: ["https://www.googleapis.com/auth/playintegrity"],
+});
 
 function asString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
@@ -708,6 +723,336 @@ async function verifyRequestUser(req: Request, required = false): Promise<admin.
   }
 }
 
+function getBearerToken(req: Request): string {
+  const authHeader = asString(req.headers["authorization"] || (req.headers as any)["Authorization"]).trim();
+  if (!authHeader) return "";
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  return match ? match[1].trim() : "";
+}
+
+function normalizeAdFormat(value: unknown): string {
+  const normalized = sanitizeText(value, 40)
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, "");
+  if (!normalized) return "unknown";
+  return normalized;
+}
+
+function normalizeCurrency(value: unknown): string {
+  const normalized = sanitizeText(value, 8).toUpperCase();
+  if (/^[A-Z]{3}$/.test(normalized)) return normalized;
+  return "USD";
+}
+
+function asPlainObject(value: unknown): Record<string, unknown> {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return {};
+}
+
+function summarizeWebhookPayload(req: Request): Record<string, unknown> {
+  const body = asPlainObject(req.body);
+  const query = asPlainObject(req.query);
+  return {
+    path: req.path,
+    method: req.method,
+    ip: requestIpAddress(req),
+    userAgent: sanitizeText(req.headers["user-agent"], 300),
+    query,
+    body,
+    receivedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+}
+
+function normalizeLlmMessages(raw: unknown): Array<{ role: "system" | "user" | "assistant"; content: string }> {
+  const rows = Array.isArray(raw) ? raw : [];
+  return rows
+    .map((entry) => {
+      const item = (entry || {}) as Record<string, unknown>;
+      const roleRaw = asString(item.role).trim().toLowerCase();
+      const role: "system" | "user" | "assistant" =
+        roleRaw === "system" || roleRaw === "assistant" || roleRaw === "user" ? (roleRaw as any) : "user";
+      const content = sanitizeText(item.content, 12000);
+      return { role, content };
+    })
+    .filter((item) => item.content.length > 0)
+    .slice(0, 40);
+}
+
+function normalizeProvider(raw: unknown): "openai" | "gemini" | "mistral" | "perplexity" {
+  const value = asString(raw).trim().toLowerCase();
+  if (value === "gemini" || value === "mistral" || value === "perplexity" || value === "openai") return value;
+  return "openai";
+}
+
+function parseWebhookSecret(req: Request): string {
+  return sanitizeText(req.headers["x-quantura-webhook-secret"] || req.query.secret, 500);
+}
+
+function checkWebhookSecret(req: Request, expected: string): boolean {
+  if (!expected) return true;
+  const provided = parseWebhookSecret(req);
+  return provided.length > 0 && provided === expected;
+}
+
+function llmTimeoutSignal(timeoutMs = LLM_TIMEOUT_MS): { signal: AbortSignal; clear: () => void } {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return {
+    signal: controller.signal,
+    clear: () => clearTimeout(timer),
+  };
+}
+
+async function invokeOpenAiLlm(payload: {
+  model: string;
+  messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
+  temperature: number;
+  maxTokens: number;
+}): Promise<{ text: string; usage: Record<string, unknown> }> {
+  if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is not configured.");
+  const { signal, clear } = llmTimeoutSignal();
+  try {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      signal,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: payload.model,
+        messages: payload.messages,
+        temperature: payload.temperature,
+        max_tokens: payload.maxTokens,
+      }),
+    });
+    const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!response.ok) {
+      throw new Error(`OpenAI request failed (${response.status}).`);
+    }
+    const text = sanitizeText((((body.choices as any)?.[0] || {}).message || {}).content, 20000);
+    if (!text) throw new Error("OpenAI returned an empty response.");
+    return { text, usage: ((body.usage as any) || {}) as Record<string, unknown> };
+  } finally {
+    clear();
+  }
+}
+
+async function invokeGeminiLlm(payload: {
+  model: string;
+  messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
+  temperature: number;
+  maxTokens: number;
+}): Promise<{ text: string; usage: Record<string, unknown> }> {
+  if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY is not configured.");
+  const prompt = payload.messages.map((item) => `${item.role.toUpperCase()}: ${item.content}`).join("\n\n");
+  const { signal, clear } = llmTimeoutSignal();
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(payload.model)}:generateContent?key=${encodeURIComponent(
+        GEMINI_API_KEY
+      )}`,
+      {
+        method: "POST",
+        signal,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: payload.temperature,
+            maxOutputTokens: payload.maxTokens,
+          },
+        }),
+      }
+    );
+    const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!response.ok) throw new Error(`Gemini request failed (${response.status}).`);
+    const parts = ((((body.candidates as any)?.[0] || {}).content || {}).parts || []) as Array<Record<string, unknown>>;
+    const text = sanitizeText(parts.map((part) => asString(part.text)).join("\n"), 20000);
+    if (!text) throw new Error("Gemini returned an empty response.");
+    return { text, usage: ((body.usageMetadata as any) || {}) as Record<string, unknown> };
+  } finally {
+    clear();
+  }
+}
+
+async function invokeMistralLlm(payload: {
+  model: string;
+  messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
+  temperature: number;
+  maxTokens: number;
+}): Promise<{ text: string; usage: Record<string, unknown> }> {
+  if (!MISTRAL_API_KEY) throw new Error("MISTRAL_API_KEY is not configured.");
+  const { signal, clear } = llmTimeoutSignal();
+  try {
+    const response = await fetch("https://api.mistral.ai/v1/chat/completions", {
+      method: "POST",
+      signal,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${MISTRAL_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: payload.model,
+        messages: payload.messages,
+        temperature: payload.temperature,
+        max_tokens: payload.maxTokens,
+      }),
+    });
+    const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!response.ok) throw new Error(`Mistral request failed (${response.status}).`);
+    const text = sanitizeText((((body.choices as any)?.[0] || {}).message || {}).content, 20000);
+    if (!text) throw new Error("Mistral returned an empty response.");
+    return { text, usage: ((body.usage as any) || {}) as Record<string, unknown> };
+  } finally {
+    clear();
+  }
+}
+
+async function invokePerplexityLlm(payload: {
+  model: string;
+  messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
+  temperature: number;
+  maxTokens: number;
+}): Promise<{ text: string; usage: Record<string, unknown>; citations: unknown[] }> {
+  if (!PERPLEXITY_API_KEY) throw new Error("PERPLEXITY_API_KEY is not configured.");
+  const { signal, clear } = llmTimeoutSignal();
+  try {
+    const response = await fetch("https://api.perplexity.ai/chat/completions", {
+      method: "POST",
+      signal,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${PERPLEXITY_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: payload.model,
+        messages: payload.messages,
+        temperature: payload.temperature,
+        max_tokens: payload.maxTokens,
+      }),
+    });
+    const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!response.ok) throw new Error(`Perplexity request failed (${response.status}).`);
+    const text = sanitizeText((((body.choices as any)?.[0] || {}).message || {}).content, 20000);
+    if (!text) throw new Error("Perplexity returned an empty response.");
+    return {
+      text,
+      usage: ((body.usage as any) || {}) as Record<string, unknown>,
+      citations: Array.isArray(body.citations) ? body.citations : [],
+    };
+  } finally {
+    clear();
+  }
+}
+
+async function invokeLlmWithFallback(rawPayload: Record<string, unknown>): Promise<{
+  provider: string;
+  model: string;
+  text: string;
+  usage: Record<string, unknown>;
+  citations?: unknown[];
+}> {
+  const provider = normalizeProvider(rawPayload.provider);
+  const fallbackProviders = Array.isArray(rawPayload.fallbackProviders)
+    ? rawPayload.fallbackProviders.map((item) => normalizeProvider(item))
+    : [];
+  const providers = Array.from(new Set([provider, ...fallbackProviders]));
+  const messages = normalizeLlmMessages(rawPayload.messages);
+  if (!messages.length) throw new Error("messages are required.");
+  const model = sanitizeText(rawPayload.model, 120) || DEFAULT_LLM_MODEL;
+  const params = (rawPayload.params || {}) as Record<string, unknown>;
+  const temperature = Math.max(0, Math.min(2, asFinite(params.temperature, 0.2)));
+  const maxTokens = Math.max(64, Math.min(4000, Math.floor(asFinite(params.maxTokens, 600))));
+
+  const errors: string[] = [];
+  for (const currentProvider of providers) {
+    try {
+      if (currentProvider === "openai") {
+        const result = await invokeOpenAiLlm({ model, messages, temperature, maxTokens });
+        return { provider: currentProvider, model, text: result.text, usage: result.usage };
+      }
+      if (currentProvider === "gemini") {
+        const result = await invokeGeminiLlm({ model, messages, temperature, maxTokens });
+        return { provider: currentProvider, model, text: result.text, usage: result.usage };
+      }
+      if (currentProvider === "mistral") {
+        const result = await invokeMistralLlm({ model, messages, temperature, maxTokens });
+        return { provider: currentProvider, model, text: result.text, usage: result.usage };
+      }
+      if (currentProvider === "perplexity") {
+        const result = await invokePerplexityLlm({ model, messages, temperature, maxTokens });
+        return {
+          provider: currentProvider,
+          model,
+          text: result.text,
+          usage: result.usage,
+          citations: result.citations,
+        };
+      }
+    } catch (error: any) {
+      errors.push(`${currentProvider}:${sanitizeText(error?.message || error, 180) || "failed"}`);
+    }
+  }
+
+  throw new Error(errors.join(" | ") || "No provider succeeded.");
+}
+
+async function decodePlayIntegrityToken(input: {
+  integrityToken: string;
+  packageName: string;
+}): Promise<{
+  ok: boolean;
+  packageName: string;
+  appRecognitionVerdict: string;
+  deviceRecognitionVerdicts: string[];
+  licensingVerdict: string;
+  nonce: string;
+  timestampMillis: string;
+  raw: Record<string, unknown>;
+}> {
+  const client = await PLAY_INTEGRITY_AUTH.getClient();
+  const endpoint = `https://playintegrity.googleapis.com/v1/${encodeURIComponent(input.packageName)}:decodeIntegrityToken`;
+  const response = await client.request({
+    url: endpoint,
+    method: "POST",
+    data: {
+      integrity_token: input.integrityToken,
+    },
+  });
+  const payload = ((response.data as any)?.tokenPayloadExternal || {}) as Record<string, unknown>;
+  const appIntegrity = (payload.appIntegrity || {}) as Record<string, unknown>;
+  const deviceIntegrity = (payload.deviceIntegrity || {}) as Record<string, unknown>;
+  const accountDetails = (payload.accountDetails || {}) as Record<string, unknown>;
+  const requestDetails = (payload.requestDetails || {}) as Record<string, unknown>;
+
+  const appRecognitionVerdict = sanitizeText(appIntegrity.appRecognitionVerdict, 120);
+  const deviceRecognitionVerdicts = Array.isArray(deviceIntegrity.deviceRecognitionVerdict)
+    ? deviceIntegrity.deviceRecognitionVerdict.map((item: unknown) => sanitizeText(item, 120)).filter(Boolean)
+    : [];
+  const licensingVerdict = sanitizeText(accountDetails.appLicensingVerdict, 120);
+  const nonce = sanitizeText(requestDetails.nonce, 320);
+  const timestampMillis = sanitizeText(requestDetails.timestampMillis, 40);
+
+  const ok =
+    appRecognitionVerdict === "PLAY_RECOGNIZED" &&
+    deviceRecognitionVerdicts.length > 0 &&
+    licensingVerdict !== "UNLICENSED";
+
+  return {
+    ok,
+    packageName: input.packageName,
+    appRecognitionVerdict,
+    deviceRecognitionVerdicts,
+    licensingVerdict,
+    nonce,
+    timestampMillis,
+    raw: payload,
+  };
+}
+
 function isPostVisibleToViewer(post: Record<string, unknown>, viewerUid: string | null): boolean {
   const visibility = asString(post.visibility, "public");
   if (visibility === "public") return true;
@@ -1222,6 +1567,494 @@ function matchesSearchQuery(item: Record<string, unknown>, query: string): boole
 
 ROUTES.get("/health", (_req, res) => {
   res.status(200).json({ ok: true, service: "quantura-explore-api", ts: new Date().toISOString() });
+});
+
+ROUTES.post("/llm/run", async (req, res) => {
+  try {
+    const payload = asPlainObject(req.body);
+    const result = await invokeLlmWithFallback(payload);
+    res.status(200).json({
+      ok: true,
+      provider: result.provider,
+      model: result.model,
+      output: result.text,
+      usage: result.usage,
+      citations: result.citations || [],
+      disclaimer: "LLMs can sometimes make mistakes.",
+    });
+  } catch (error: any) {
+    const message = sanitizeText(error?.message || error, 220) || "llm_run_failed";
+    res.status(400).json({ error: "llm_run_failed", message });
+  }
+});
+
+ROUTES.post("/mobile/play-integrity/verify", async (req, res) => {
+  try {
+    let user: admin.auth.DecodedIdToken | null = null;
+    try {
+      user = await verifyRequestUser(req, false);
+    } catch (error: any) {
+      if (String(error?.message) === "invalid_token") {
+        res.status(401).json({ error: "invalid_token" });
+        return;
+      }
+      throw error;
+    }
+
+    const body = asPlainObject(req.body);
+    const integrityToken = sanitizeText(body.integrityToken || body.token, 12000);
+    const providedPackage = sanitizeText(body.packageName, 220);
+    const packageName = providedPackage || PLAY_INTEGRITY_ANDROID_PACKAGE;
+    const expectedNonce = sanitizeText(body.nonce || body.integrityNonce, 320);
+
+    if (!integrityToken) {
+      res.status(400).json({ error: "missing_integrity_token" });
+      return;
+    }
+    if (!packageName) {
+      res.status(400).json({ error: "missing_package_name" });
+      return;
+    }
+
+    const verdict = await decodePlayIntegrityToken({
+      integrityToken,
+      packageName,
+    });
+    const packageMatches = !PLAY_INTEGRITY_ANDROID_PACKAGE || packageName === PLAY_INTEGRITY_ANDROID_PACKAGE;
+    const nonceMatches = !expectedNonce || verdict.nonce === expectedNonce;
+    const ok = verdict.ok && packageMatches && nonceMatches;
+
+    await db.collection("mobile_play_integrity_events").add({
+      uid: user?.uid || "",
+      packageName,
+      expectedNonce,
+      nonceMatches,
+      packageMatches,
+      ok,
+      verdict: {
+        appRecognitionVerdict: verdict.appRecognitionVerdict,
+        deviceRecognitionVerdicts: verdict.deviceRecognitionVerdicts,
+        licensingVerdict: verdict.licensingVerdict,
+        nonce: verdict.nonce,
+        timestampMillis: verdict.timestampMillis,
+      },
+      ipAddress: requestIpAddress(req),
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    if (REQUIRE_PLAY_INTEGRITY && !ok) {
+      res.status(403).json({
+        error: "play_integrity_failed",
+        ok: false,
+        packageMatches,
+        nonceMatches,
+      });
+      return;
+    }
+
+    res.status(200).json({
+      ok,
+      packageMatches,
+      nonceMatches,
+      verdict: {
+        appRecognitionVerdict: verdict.appRecognitionVerdict,
+        deviceRecognitionVerdicts: verdict.deviceRecognitionVerdicts,
+        licensingVerdict: verdict.licensingVerdict,
+        nonce: verdict.nonce,
+        timestampMillis: verdict.timestampMillis,
+      },
+    });
+  } catch (error: any) {
+    console.error("[Mobile] play integrity verify failed", error);
+    const detail = sanitizeText(error?.message || error, 220);
+    res.status(500).json({ error: "play_integrity_verify_failed", detail });
+  }
+});
+
+ROUTES.post("/mobile/auth/exchange", async (req, res) => {
+  try {
+    const nativeIdToken = getBearerToken(req);
+    if (!nativeIdToken) {
+      res.status(400).json({ error: "missing_bearer_token" });
+      return;
+    }
+
+    let decoded: admin.auth.DecodedIdToken;
+    try {
+      decoded = await auth.verifyIdToken(nativeIdToken);
+    } catch {
+      res.status(401).json({ error: "invalid_token" });
+      return;
+    }
+
+    const body = asPlainObject(req.body);
+    const integrityToken = sanitizeText(body.integrityToken, 12000);
+    const expectedNonce = sanitizeText(body.integrityNonce || body.nonce, 320);
+    const providedPackage = sanitizeText(body.packageName, 220);
+    const packageName = providedPackage || PLAY_INTEGRITY_ANDROID_PACKAGE;
+
+    let integrityChecked = false;
+    let integrityOk = true;
+    let integrityReason = "not_required";
+    let packageMatches = true;
+    let nonceMatches = true;
+    let integritySummary: Record<string, unknown> = {};
+
+    if (integrityToken) {
+      if (!packageName) {
+        res.status(400).json({ error: "missing_package_name" });
+        return;
+      }
+
+      integrityChecked = true;
+      const verdict = await decodePlayIntegrityToken({
+        integrityToken,
+        packageName,
+      });
+      packageMatches = !PLAY_INTEGRITY_ANDROID_PACKAGE || packageName === PLAY_INTEGRITY_ANDROID_PACKAGE;
+      nonceMatches = !expectedNonce || verdict.nonce === expectedNonce;
+      integrityOk = verdict.ok && packageMatches && nonceMatches;
+      integrityReason = integrityOk ? "passed" : "failed";
+      integritySummary = {
+        appRecognitionVerdict: verdict.appRecognitionVerdict,
+        deviceRecognitionVerdicts: verdict.deviceRecognitionVerdicts,
+        licensingVerdict: verdict.licensingVerdict,
+        nonce: verdict.nonce,
+        timestampMillis: verdict.timestampMillis,
+      };
+    } else if (REQUIRE_PLAY_INTEGRITY) {
+      integrityChecked = true;
+      integrityOk = false;
+      integrityReason = "missing_integrity_token";
+    }
+
+    if (REQUIRE_PLAY_INTEGRITY && !integrityOk) {
+      await db.collection("mobile_auth_exchange_events").add({
+        uid: decoded.uid,
+        status: "blocked",
+        reason: integrityReason,
+        packageName,
+        expectedNonce,
+        packageMatches,
+        nonceMatches,
+        ipAddress: requestIpAddress(req),
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      res.status(403).json({
+        error: "play_integrity_failed",
+        reason: integrityReason,
+        packageMatches,
+        nonceMatches,
+      });
+      return;
+    }
+
+    const customTokenRaw = await auth.createCustomToken(decoded.uid);
+    const customToken = typeof customTokenRaw === "string" ? customTokenRaw : String(customTokenRaw);
+
+    await db.collection("mobile_auth_exchange_events").add({
+      uid: decoded.uid,
+      status: "issued",
+      provider: sanitizeText(decoded.firebase?.sign_in_provider, 80),
+      packageName,
+      expectedNonce,
+      integrityChecked,
+      integrityOk,
+      integrityReason,
+      packageMatches,
+      nonceMatches,
+      ipAddress: requestIpAddress(req),
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    res.status(200).json({
+      customToken,
+      uid: decoded.uid,
+      integrity: {
+        checked: integrityChecked,
+        ok: integrityOk,
+        reason: integrityReason,
+        packageMatches,
+        nonceMatches,
+        summary: integritySummary,
+      },
+    });
+  } catch (error: any) {
+    console.error("[Mobile] auth exchange failed", error);
+    const detail = sanitizeText(error?.message || error, 220);
+    res.status(500).json({ error: "auth_exchange_failed", detail });
+  }
+});
+
+ROUTES.post("/analytics/ad-impression", async (req, res) => {
+  try {
+    let user: admin.auth.DecodedIdToken | null = null;
+    try {
+      user = await verifyRequestUser(req, false);
+    } catch (error: any) {
+      if (String(error?.message) === "invalid_token") {
+        res.status(401).json({ error: "invalid_token" });
+        return;
+      }
+      throw error;
+    }
+
+    const body = asPlainObject(req.body);
+    const adFormat = normalizeAdFormat(body.adFormat);
+    const adUnitId = sanitizeText(body.adUnitId || body.adUnitName, 220);
+    const adPlatform = sanitizeText(body.adPlatform || "admob", 60).toLowerCase();
+    const adSource = sanitizeText(body.adSource || "admob", 120);
+    const placement = sanitizeText(body.placement || body.source || "", 120);
+    const impressionId = sanitizeText(body.impressionId, 220);
+    const rewardType = sanitizeText(body.rewardType, 120);
+    const rewardAmount = Number.isFinite(Number(body.rewardAmount)) ? Number(body.rewardAmount) : null;
+    const currency = normalizeCurrency(body.currency);
+    const value = Number.isFinite(Number(body.value)) ? Number(body.value) : null;
+    const platform = sanitizeText(body.platform, 30).toLowerCase() || "unknown";
+
+    if (!adFormat || adFormat === "unknown") {
+      res.status(400).json({ error: "invalid_ad_format" });
+      return;
+    }
+
+    const docId = impressionId ? sanitizeText(impressionId, 180) : "";
+    const collection = db.collection("ad_impressions");
+    const docRef = docId ? collection.doc(docId) : collection.doc();
+    await docRef.set(
+      {
+        uid: user?.uid || sanitizeText(body.uid, 220),
+        adFormat,
+        adUnitId,
+        adPlatform,
+        adSource,
+        placement,
+        platform,
+        rewardType,
+        rewardAmount,
+        currency,
+        value,
+        impressionId: docId || docRef.id,
+        deviceId: sanitizeText(body.deviceId, 220),
+        appVersion: sanitizeText(body.appVersion, 80),
+        ipAddress: requestIpAddress(req),
+        userAgent: sanitizeText(req.headers["user-agent"], 300),
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    res.status(200).json({ ok: true, id: docRef.id });
+  } catch (error) {
+    console.error("[Ads] ad impression callback failed", error);
+    res.status(500).json({ error: "ad_impression_failed" });
+  }
+});
+
+ROUTES.post("/notify/sendTest", async (req, res) => {
+  try {
+    const user = await verifyRequestUser(req, true);
+    if (!user) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+
+    const body = asPlainObject(req.body);
+    const explicitTokens = Array.isArray(body.tokens)
+      ? body.tokens.map((item) => sanitizeText(item, 4096)).filter(Boolean)
+      : [];
+    const singleToken = sanitizeText(body.token, 4096);
+    if (singleToken) explicitTokens.push(singleToken);
+
+    let tokens = Array.from(new Set(explicitTokens));
+    if (!tokens.length) {
+      const tokenSnap = await db.collection("users").doc(user.uid).collection("fcmTokens").limit(100).get();
+      tokens = tokenSnap.docs.map((doc) => sanitizeText(doc.id, 4096)).filter(Boolean);
+    }
+
+    if (!tokens.length) {
+      res.status(404).json({ error: "no_tokens_available" });
+      return;
+    }
+
+    const title = sanitizeText(body.title, 120) || "Quantura test notification";
+    const message = sanitizeText(body.message, 240) || "Push delivery check from Quantura.";
+    const targetPath = sanitizeText(body.path || "/notifications", 280);
+
+    const result = await messaging.sendEachForMulticast({
+      tokens,
+      notification: {
+        title,
+        body: message,
+      },
+      data: {
+        type: "test",
+        path: targetPath,
+      },
+    });
+
+    res.status(200).json({
+      ok: true,
+      requested: tokens.length,
+      successCount: result.successCount,
+      failureCount: result.failureCount,
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Notify] sendTest failed", error);
+    res.status(500).json({ error: "notify_send_test_failed" });
+  }
+});
+
+ROUTES.post("/earnings/refresh", async (req, res) => {
+  try {
+    const user = await verifyRequestUser(req, true);
+    if (!user) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    if (!user.email || user.email.toLowerCase() !== ADMIN_EMAIL) {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
+    if (!FMP_API_KEY) {
+      res.status(503).json({ error: "missing_fmp_api_key" });
+      return;
+    }
+
+    const body = asPlainObject(req.body);
+    const from = sanitizeText(body.from, 20) || new Date().toISOString().slice(0, 10);
+    const to = sanitizeText(body.to, 20) || new Date(Date.now() + 21 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const limit = Math.max(10, Math.min(500, Math.floor(asFinite(body.limit, 200))));
+
+    const endpoint = `https://financialmodelingprep.com/api/v3/earning_calendar?from=${encodeURIComponent(
+      from
+    )}&to=${encodeURIComponent(to)}&apikey=${encodeURIComponent(FMP_API_KEY)}`;
+    const response = await fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      res.status(502).json({ error: "fmp_fetch_failed", status: response.status });
+      return;
+    }
+    const rows = (await response.json().catch(() => [])) as Array<Record<string, unknown>>;
+    const records = Array.isArray(rows) ? rows.slice(0, limit) : [];
+
+    const batch = db.batch();
+    records.forEach((row) => {
+      const symbol = normalizeTicker(row.symbol || row.ticker);
+      const date = sanitizeText(row.date, 20);
+      if (!symbol || !date) return;
+      const docId = `${symbol}_${date}`;
+      const ref = db.collection("earnings_calendar_cache").doc(docId);
+      batch.set(
+        ref,
+        {
+          symbol,
+          date,
+          eps: asFinite(row.eps, NaN),
+          epsEstimated: asFinite(row.epsEstimated, NaN),
+          revenue: asFinite(row.revenue, NaN),
+          revenueEstimated: asFinite(row.revenueEstimated, NaN),
+          fiscalDateEnding: sanitizeText(row.fiscalDateEnding, 20),
+          time: sanitizeText(row.time, 40),
+          source: "fmp",
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          payload: row,
+        },
+        { merge: true }
+      );
+    });
+    await batch.commit();
+
+    await db.collection("earnings_refresh_runs").add({
+      from,
+      to,
+      fetchedCount: records.length,
+      triggeredBy: user.uid,
+      triggeredByEmail: sanitizeText(user.email, 200),
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    res.status(200).json({
+      ok: true,
+      from,
+      to,
+      fetchedCount: records.length,
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Earnings] refresh failed", error);
+    res.status(500).json({ error: "earnings_refresh_failed" });
+  }
+});
+
+ROUTES.post("/webhooks/inapppurchasesios", async (req, res) => {
+  try {
+    if (!checkWebhookSecret(req, IOS_IAP_WEBHOOK_SECRET)) {
+      res.status(401).json({ error: "invalid_webhook_secret" });
+      return;
+    }
+    await db.collection("webhook_ios_iap").add(summarizeWebhookPayload(req));
+    res.status(200).json({ ok: true });
+  } catch (error) {
+    console.error("[Webhook] inapppurchasesios failed", error);
+    res.status(500).json({ error: "webhook_store_failed" });
+  }
+});
+
+ROUTES.post("/webhooks/applenotifications", async (req, res) => {
+  try {
+    if (!checkWebhookSecret(req, APPLE_NOTIFICATIONS_WEBHOOK_SECRET)) {
+      res.status(401).json({ error: "invalid_webhook_secret" });
+      return;
+    }
+    await db.collection("webhook_apple_notifications").add(summarizeWebhookPayload(req));
+    res.status(200).json({ ok: true });
+  } catch (error) {
+    console.error("[Webhook] applenotifications failed", error);
+    res.status(500).json({ error: "webhook_store_failed" });
+  }
+});
+
+ROUTES.post("/webhooks/admob/reward", async (req, res) => {
+  try {
+    if (!checkWebhookSecret(req, ADMOB_SSV_WEBHOOK_SECRET)) {
+      res.status(401).json({ error: "invalid_webhook_secret" });
+      return;
+    }
+    const query = asPlainObject(req.query);
+    const body = asPlainObject(req.body);
+    const rewardAmount = asFinite(query.reward_amount || body.reward_amount, NaN);
+    const rewardType = sanitizeText(query.reward_type || body.reward_type, 120);
+    const adUnit = sanitizeText(query.ad_unit || body.ad_unit, 220);
+    const userId = sanitizeText(query.user_id || body.user_id, 220);
+    const customData = sanitizeText(query.custom_data || body.custom_data, 1200);
+
+    await db.collection("webhook_admob_ssv").add({
+      ...summarizeWebhookPayload(req),
+      rewardAmount: Number.isFinite(rewardAmount) ? rewardAmount : null,
+      rewardType,
+      adUnit,
+      userId,
+      customData,
+      transactionId: sanitizeText(query.transaction_id || body.transaction_id, 220),
+      adNetwork: sanitizeText(query.ad_network || body.ad_network, 120),
+      timestamp: sanitizeText(query.timestamp || body.timestamp, 40),
+      signature: sanitizeText(query.signature || body.signature, 600),
+      keyId: sanitizeText(query.key_id || body.key_id, 120),
+    });
+
+    res.status(200).send("ok");
+  } catch (error) {
+    console.error("[Webhook] admob reward failed", error);
+    res.status(500).json({ error: "webhook_store_failed" });
+  }
 });
 
 ROUTES.get("/explore/suggestions", async (req, res) => {

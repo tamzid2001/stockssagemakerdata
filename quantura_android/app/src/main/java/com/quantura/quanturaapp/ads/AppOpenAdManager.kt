@@ -114,6 +114,16 @@ class AppOpenAdManager(
                 Log.d(tag, "App open ad shown.")
             }
 
+            override fun onAdImpression() {
+                val adUnitId = remoteConfigManager.getAdUnitIds().appOpen
+                AdImpressionReporter.report(
+                    context = application.applicationContext,
+                    adFormat = "app_open",
+                    adUnitId = adUnitId,
+                    placement = "app_open"
+                )
+            }
+
             override fun onAdFailedToShowFullScreenContent(adError: com.google.android.gms.ads.AdError) {
                 Log.w(tag, "App open ad failed to show: ${adError.message}")
                 isShowingAd = false

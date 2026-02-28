@@ -53,6 +53,12 @@ class BannerAdView @JvmOverloads constructor(
 
                 override fun onAdImpression() {
                     Log.d(this@BannerAdView.tag, "Banner impression recorded.")
+                    AdImpressionReporter.report(
+                        context = context,
+                        adFormat = "banner",
+                        adUnitId = adUnitId,
+                        placement = "bottom_banner"
+                    )
                 }
             }
         }

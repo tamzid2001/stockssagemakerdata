@@ -19,13 +19,21 @@ import SwiftUI
 import Combine
 #endif
 
+enum EmailAuthMode: Hashable {
+    case signIn
+    case signUp
+}
+
 @MainActor
 final class AuthGateViewModel: ObservableObject {
     @Published var isGateVisible: Bool = true
     @Published var isBusy: Bool = false
     @Published var errorText: String = ""
+    @Published var emailAuthMode: EmailAuthMode = .signIn
     @Published var emailAddress: String = ""
+    @Published var emailUsername: String = ""
     @Published var emailPassword: String = ""
+    @Published var emailConfirmPassword: String = ""
     @Published var isEmailSheetVisible: Bool = false
 
 #if canImport(FirebaseAuth)
@@ -88,10 +96,22 @@ final class AuthGateViewModel: ObservableObject {
     }
 
     func openEmailSheet() {
+        emailAuthMode = .signIn
         emailAddress = ""
+        emailUsername = ""
         emailPassword = ""
+        emailConfirmPassword = ""
         errorText = ""
         isEmailSheetVisible = true
+    }
+
+    func submitEmailAuth() {
+        switch emailAuthMode {
+        case .signIn:
+            signInWithEmail()
+        case .signUp:
+            createAccountWithEmail()
+        }
     }
 
     func signInWithEmail() {
@@ -107,12 +127,71 @@ final class AuthGateViewModel: ObservableObject {
         signInOrLink(
             credential: credential,
             provider: "email",
+            emailHint: email,
             fallback: { completion in
                 Auth.auth().signIn(with: credential, completion: completion)
             }
         )
 #else
         errorText = "Email sign-in is unavailable in this build."
+#endif
+    }
+
+    func createAccountWithEmail() {
+#if canImport(FirebaseAuth)
+        let email = emailAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+        let username = emailUsername.trimmingCharacters(in: .whitespacesAndNewlines)
+        let password = emailPassword
+        let confirmPassword = emailConfirmPassword
+
+        guard !email.isEmpty, !username.isEmpty, !password.isEmpty, !confirmPassword.isEmpty else {
+            errorText = "Enter email, username, password, and confirm password."
+            return
+        }
+        guard username.count >= 3 else {
+            errorText = "Username must be at least 3 characters."
+            return
+        }
+        guard password == confirmPassword else {
+            errorText = "Passwords do not match."
+            return
+        }
+        guard password.count >= 8 else {
+            errorText = "Password must be at least 8 characters."
+            return
+        }
+
+        beginInteractiveSignIn(provider: "email_signup")
+        let credential = EmailAuthProvider.credential(withEmail: email, password: password)
+
+        if let currentUser = Auth.auth().currentUser, currentUser.isAnonymous {
+            currentUser.link(with: credential) { [weak self] result, error in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    if let error {
+                        await self.handleSignInError(error, provider: "email_signup", emailHint: email)
+                        return
+                    }
+                    await self.updateDisplayNameIfNeeded(result?.user, username: username)
+                    self.finishSuccess(user: result?.user)
+                }
+            }
+            return
+        }
+
+        Auth.auth().createUser(withEmail: email, password: password) { [weak self] result, error in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if let error {
+                    await self.handleSignInError(error, provider: "email_signup", emailHint: email)
+                    return
+                }
+                await self.updateDisplayNameIfNeeded(result?.user, username: username)
+                self.finishSuccess(user: result?.user)
+            }
+        }
+#else
+        errorText = "Email sign-up is unavailable in this build."
 #endif
     }
 
@@ -151,6 +230,7 @@ final class AuthGateViewModel: ObservableObject {
                 self.signInOrLink(
                     credential: credential,
                     provider: "google",
+                    emailHint: googleUser.profile?.email ?? "",
                     fallback: { completion in
                         Auth.auth().signIn(with: credential, completion: completion)
                     }
@@ -181,6 +261,7 @@ final class AuthGateViewModel: ObservableObject {
                     self.signInOrLink(
                         credential: credential,
                         provider: "apple",
+                        emailHint: "",
                         fallback: { completion in
                             Auth.auth().signIn(with: credential, completion: completion)
                         }
@@ -294,6 +375,7 @@ private extension AuthGateViewModel {
     func signInOrLink(
         credential: AuthCredential,
         provider: String,
+        emailHint: String,
         fallback: @escaping (@escaping (AuthDataResult?, Error?) -> Void) -> Void
     ) {
         if let currentUser = Auth.auth().currentUser, currentUser.isAnonymous {
@@ -307,7 +389,7 @@ private extension AuthGateViewModel {
                             Task { @MainActor [weak self] in
                                 guard let self else { return }
                                 if let signInError {
-                                    self.finishError(signInError.localizedDescription)
+                                    await self.handleSignInError(signInError, provider: provider, emailHint: emailHint)
                                     return
                                 }
                                 let linkedUser = authResult?.user ?? result?.user
@@ -317,7 +399,7 @@ private extension AuthGateViewModel {
                         return
                     }
                     if let error {
-                        self.finishError(error.localizedDescription)
+                        await self.handleSignInError(error, provider: provider, emailHint: emailHint)
                         return
                     }
                     self.finishSuccess(user: result?.user)
@@ -330,7 +412,7 @@ private extension AuthGateViewModel {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 if let error {
-                    self.finishError(error.localizedDescription)
+                    await self.handleSignInError(error, provider: provider, emailHint: emailHint)
                     return
                 }
                 self.finishSuccess(user: result?.user)
@@ -351,11 +433,84 @@ private extension AuthGateViewModel {
                 isBusy = false
                 errorText = ""
                 isEmailSheetVisible = false
+                emailAuthMode = .signIn
+                emailAddress = ""
+                emailUsername = ""
+                emailPassword = ""
+                emailConfirmPassword = ""
                 isGateVisible = false
                 print("[AuthGate][iOS] Web session sync succeeded uid=\(user.uid).")
             } catch {
                 finishError("Signed in, but web sync failed: \(error.localizedDescription)")
             }
+        }
+    }
+
+    func updateDisplayNameIfNeeded(_ user: FirebaseAuth.User?, username: String) async {
+        guard let user else { return }
+        let trimmed = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        await withCheckedContinuation { continuation in
+            let request = user.createProfileChangeRequest()
+            request.displayName = trimmed
+            request.commitChanges { _ in
+                continuation.resume()
+            }
+        }
+    }
+
+    func handleSignInError(_ error: Error, provider: String, emailHint: String) async {
+        let nsError = error as NSError
+        let code = AuthErrorCode(rawValue: nsError.code)
+        let collisionCodes: Set<AuthErrorCode> = [
+            .credentialAlreadyInUse,
+            .emailAlreadyInUse,
+            .accountExistsWithDifferentCredential,
+            .providerAlreadyLinked,
+        ]
+        if let code, collisionCodes.contains(code) {
+            let candidateEmail = (nsError.userInfo[AuthErrorUserInfoEmailKey] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? emailHint.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !candidateEmail.isEmpty {
+                let methods = await fetchSignInMethods(for: candidateEmail).map(friendlyProviderName)
+                let providerLabel = friendlyProviderName(provider)
+                if !methods.isEmpty {
+                    finishError("This email already uses \(methods.joined(separator: ", ")). Sign in with that provider first, then link \(providerLabel).")
+                    return
+                }
+            }
+        }
+        finishError(error.localizedDescription)
+    }
+
+    func fetchSignInMethods(for email: String) async -> [String] {
+        await withCheckedContinuation { continuation in
+            Auth.auth().fetchSignInMethods(forEmail: email) { methods, _ in
+                continuation.resume(returning: methods ?? [])
+            }
+        }
+    }
+
+    func friendlyProviderName(_ provider: String) -> String {
+        switch provider.lowercased() {
+        case "password", "email", "email_signup":
+            return "Email/Password"
+        case "google.com", "google":
+            return "Google"
+        case "apple.com", "apple":
+            return "Apple"
+        case "facebook.com":
+            return "Facebook"
+        case "twitter.com":
+            return "Twitter/X"
+        case "github.com":
+            return "GitHub"
+        case "yahoo.com":
+            return "Yahoo"
+        case "microsoft.com":
+            return "Microsoft"
+        default:
+            return provider
         }
     }
 

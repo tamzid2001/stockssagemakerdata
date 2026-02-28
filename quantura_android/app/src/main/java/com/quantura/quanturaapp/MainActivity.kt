@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.util.Base64
 import android.util.Log
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -20,6 +21,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -63,9 +65,11 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.auth.UserProfileChangeRequest
 import com.google.firebase.messaging.FirebaseMessaging
 import com.quantura.quanturaapp.ads.AdManager
 import com.quantura.quanturaapp.ads.BannerAdView
+import com.quantura.quanturaapp.auth.PlayIntegrityClient
 import com.quantura.quanturaapp.iap.PlayBillingIapService
 import com.quantura.quanturaapp.messaging.NativePersonalizedNotificationManager
 import com.quantura.quanturaapp.messaging.QuanturaFcmTokenHolder
@@ -79,15 +83,22 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.SecureRandom
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 private const val DEFAULT_START_URL = "https://quantura.studio/"
 
+private enum class EmailDialogMode {
+    SIGN_IN,
+    SIGN_UP,
+}
+
 class MainActivity : ComponentActivity() {
     private val appContainer by lazy { (application as QuanturaApplication).container }
     private val firebaseAuth by lazy { FirebaseAuth.getInstance() }
     private val playBillingIapService by lazy { PlayBillingIapService(applicationContext) }
+    private val playIntegrityClient by lazy { PlayIntegrityClient(applicationContext) }
 
     private var webViewRef: WebView? = null
     private var googleSignInClient: GoogleSignInClient? = null
@@ -102,8 +113,11 @@ class MainActivity : ComponentActivity() {
     private var authBusy by mutableStateOf(false)
     private var authErrorText by mutableStateOf("")
     private var emailDialogVisible by mutableStateOf(false)
+    private var emailDialogMode by mutableStateOf(EmailDialogMode.SIGN_IN)
     private var emailValue by mutableStateOf("")
+    private var usernameValue by mutableStateOf("")
     private var passwordValue by mutableStateOf("")
+    private var confirmPasswordValue by mutableStateOf("")
 
     private val googleSignInLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -164,7 +178,7 @@ class MainActivity : ComponentActivity() {
                                 onGoogle = { startGoogleSignInFlow(trigger = "auth_gate") },
                                 onEmail = {
                                     authErrorText = ""
-                                    emailDialogVisible = true
+                                    openEmailDialog(EmailDialogMode.SIGN_IN)
                                 },
                                 onNotNow = { continueAnonymouslyForNow() },
                             )
@@ -172,16 +186,31 @@ class MainActivity : ComponentActivity() {
 
                         if (emailDialogVisible) {
                             EmailSignInDialog(
+                                mode = emailDialogMode,
                                 email = emailValue,
+                                username = usernameValue,
                                 password = passwordValue,
+                                confirmPassword = confirmPasswordValue,
                                 isBusy = authBusy,
+                                onModeChanged = { emailDialogMode = it },
                                 onEmailChanged = { emailValue = it },
+                                onUsernameChanged = { usernameValue = it },
                                 onPasswordChanged = { passwordValue = it },
+                                onConfirmPasswordChanged = { confirmPasswordValue = it },
                                 onDismiss = {
                                     if (!authBusy) emailDialogVisible = false
                                 },
                                 onContinue = {
-                                    signInWithEmail(emailValue, passwordValue)
+                                    if (emailDialogMode == EmailDialogMode.SIGN_UP) {
+                                        signUpWithEmail(
+                                            emailRaw = emailValue,
+                                            usernameRaw = usernameValue,
+                                            passwordRaw = passwordValue,
+                                            confirmPasswordRaw = confirmPasswordValue,
+                                        )
+                                    } else {
+                                        signInWithEmail(emailValue, passwordValue)
+                                    }
                                 },
                             )
                         }
@@ -271,6 +300,16 @@ class MainActivity : ComponentActivity() {
         emitAuthStateToWeb(firebaseAuth.currentUser, idTokenFresh = false)
     }
 
+    private fun openEmailDialog(mode: EmailDialogMode) {
+        emailDialogMode = mode
+        emailDialogVisible = true
+        authErrorText = ""
+        if (mode == EmailDialogMode.SIGN_IN) {
+            usernameValue = ""
+            confirmPasswordValue = ""
+        }
+    }
+
     private fun startGoogleSignInFlow(trigger: String) {
         val client = resolveGoogleSignInClient()
         if (client == null) {
@@ -311,7 +350,11 @@ class MainActivity : ComponentActivity() {
         }
 
         val credential = GoogleAuthProvider.getCredential(idToken, null)
-        signInOrLinkWithCredential(provider = "google", credential = credential)
+        signInOrLinkWithCredential(
+            provider = "google",
+            credential = credential,
+            emailHint = account.email?.trim().orEmpty()
+        )
     }
 
     private fun signInWithEmail(emailRaw: String, passwordRaw: String) {
@@ -323,7 +366,65 @@ class MainActivity : ComponentActivity() {
         }
         beginInteractiveSignIn("email", "auth_gate_email")
         val credential = EmailAuthProvider.getCredential(email, password)
-        signInOrLinkWithCredential(provider = "email", credential = credential)
+        signInOrLinkWithCredential(provider = "email", credential = credential, emailHint = email)
+    }
+
+    private fun signUpWithEmail(
+        emailRaw: String,
+        usernameRaw: String,
+        passwordRaw: String,
+        confirmPasswordRaw: String,
+    ) {
+        val email = emailRaw.trim()
+        val username = usernameRaw.trim()
+        val password = passwordRaw
+        val confirmPassword = confirmPasswordRaw
+        if (email.isEmpty() || username.isEmpty() || password.isEmpty() || confirmPassword.isEmpty()) {
+            authErrorText = "Enter email, username, password, and confirm password."
+            return
+        }
+        if (username.length < 3) {
+            authErrorText = "Username must be at least 3 characters."
+            return
+        }
+        if (password != confirmPassword) {
+            authErrorText = "Passwords do not match."
+            return
+        }
+        if (password.length < 8) {
+            authErrorText = "Password must be at least 8 characters."
+            return
+        }
+
+        beginInteractiveSignIn("email_signup", "auth_gate_email_signup")
+        val credential = EmailAuthProvider.getCredential(email, password)
+        val currentUser = firebaseAuth.currentUser
+        if (currentUser?.isAnonymous == true) {
+            currentUser.linkWithCredential(credential)
+                .addOnSuccessListener { authResult ->
+                    applyDisplayNameAndComplete(
+                        provider = "email_signup",
+                        user = authResult.user,
+                        username = username
+                    )
+                }
+                .addOnFailureListener { error ->
+                    handleSignInFailure(provider = "email_signup", error = error, emailHint = email)
+                }
+            return
+        }
+
+        firebaseAuth.createUserWithEmailAndPassword(email, password)
+            .addOnSuccessListener { authResult ->
+                applyDisplayNameAndComplete(
+                    provider = "email_signup",
+                    user = authResult.user,
+                    username = username
+                )
+            }
+            .addOnFailureListener { error ->
+                handleSignInFailure(provider = "email_signup", error = error, emailHint = email)
+            }
     }
 
     private fun beginInteractiveSignIn(provider: String, trigger: String) {
@@ -335,7 +436,11 @@ class MainActivity : ComponentActivity() {
         updateAuthGateVisibility(true)
     }
 
-    private fun signInOrLinkWithCredential(provider: String, credential: AuthCredential) {
+    private fun signInOrLinkWithCredential(
+        provider: String,
+        credential: AuthCredential,
+        emailHint: String = "",
+    ) {
         val currentUser = firebaseAuth.currentUser
         if (currentUser?.isAnonymous == true) {
             Log.i("MainActivity", "[Auth][Android] Attempting anonymous link provider=$provider")
@@ -356,7 +461,7 @@ class MainActivity : ComponentActivity() {
                             completeInteractiveSignIn(provider, authResult.user)
                         }
                         .addOnFailureListener { signInError ->
-                            failInteractiveSignIn(signInError.message ?: "Native Firebase sign-in failed.")
+                            handleSignInFailure(provider, signInError, emailHint)
                         }
                 }
             return
@@ -367,8 +472,67 @@ class MainActivity : ComponentActivity() {
                 completeInteractiveSignIn(provider, authResult.user)
             }
             .addOnFailureListener { error ->
-                failInteractiveSignIn(error.message ?: "Native Firebase sign-in failed.")
+                handleSignInFailure(provider, error, emailHint)
             }
+    }
+
+    private fun applyDisplayNameAndComplete(provider: String, user: FirebaseUser?, username: String) {
+        val trimmedName = username.trim()
+        if (user == null) {
+            failInteractiveSignIn("Firebase user is unavailable after sign-in.")
+            return
+        }
+        if (trimmedName.isEmpty()) {
+            completeInteractiveSignIn(provider, user)
+            return
+        }
+        val request = UserProfileChangeRequest.Builder()
+            .setDisplayName(trimmedName)
+            .build()
+        user.updateProfile(request)
+            .addOnSuccessListener {
+                completeInteractiveSignIn(provider, firebaseAuth.currentUser ?: user)
+            }
+            .addOnFailureListener {
+                completeInteractiveSignIn(provider, firebaseAuth.currentUser ?: user)
+            }
+    }
+
+    private fun handleSignInFailure(provider: String, error: Exception, emailHint: String = "") {
+        val collision = error as? FirebaseAuthUserCollisionException
+        val candidateEmail = collision?.email?.trim().orEmpty().ifBlank { emailHint.trim() }
+        if (candidateEmail.isNotEmpty()) {
+            firebaseAuth.fetchSignInMethodsForEmail(candidateEmail)
+                .addOnSuccessListener { methodsResult ->
+                    val methods = methodsResult.signInMethods.orEmpty().map(::friendlyProviderName)
+                    val providerLabel = friendlyProviderName(provider)
+                    val detail = if (methods.isNotEmpty()) {
+                        "This email already uses ${methods.joinToString(", ")}. Sign in with that provider first, then link $providerLabel."
+                    } else {
+                        error.message ?: "Native Firebase sign-in failed."
+                    }
+                    failInteractiveSignIn(detail)
+                }
+                .addOnFailureListener {
+                    failInteractiveSignIn(error.message ?: "Native Firebase sign-in failed.")
+                }
+            return
+        }
+        failInteractiveSignIn(error.message ?: "Native Firebase sign-in failed.")
+    }
+
+    private fun friendlyProviderName(provider: String): String {
+        return when (provider.lowercase()) {
+            "password", "email", "email_signup" -> "Email/Password"
+            "google.com", "google" -> "Google"
+            "apple.com", "apple" -> "Apple"
+            "facebook.com" -> "Facebook"
+            "twitter.com" -> "Twitter/X"
+            "github.com" -> "GitHub"
+            "yahoo.com" -> "Yahoo"
+            "microsoft.com" -> "Microsoft"
+            else -> provider
+        }
     }
 
     private fun completeInteractiveSignIn(provider: String, user: FirebaseUser?) {
@@ -415,6 +579,11 @@ class MainActivity : ComponentActivity() {
                 bridgeSyncRequired = false
                 authErrorText = ""
                 emailDialogVisible = false
+                emailDialogMode = EmailDialogMode.SIGN_IN
+                emailValue = ""
+                usernameValue = ""
+                passwordValue = ""
+                confirmPasswordValue = ""
                 if (interactive) {
                     authBusy = false
                     updateAuthGateVisibility(false)
@@ -431,46 +600,113 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private data class AuthExchangeHttpError(val status: Int, val detail: String) :
+        IllegalStateException("$detail ($status)")
+
     private suspend fun exchangeNativeIdTokenForCustomToken(nativeIdToken: String): String {
         val idToken = nativeIdToken.trim()
         if (idToken.isEmpty()) throw IllegalStateException("Native ID token is empty.")
 
         return withContext(Dispatchers.IO) {
-            val endpoint = "${resolveTrustedOrigin()}/api/auth/exchange"
-            val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                connectTimeout = 30_000
-                readTimeout = 30_000
-                doOutput = true
-                setRequestProperty("Content-Type", "application/json")
-                setRequestProperty("Authorization", "Bearer $idToken")
+            val origin = resolveTrustedOrigin()
+            val playIntegrityEnabled = appContainer.remoteConfigManager.isPlayIntegrityEnabled()
+            val playIntegrityRequired = appContainer.remoteConfigManager.isPlayIntegrityRequired()
+            val playIntegrityCloudProjectNumber =
+                appContainer.remoteConfigManager.playIntegrityCloudProjectNumber()
+
+            var integrityNonce = ""
+            var integrityToken = ""
+            if (playIntegrityEnabled) {
+                integrityNonce = generatePlayIntegrityNonce()
+                try {
+                    integrityToken = playIntegrityClient.requestToken(
+                        nonce = integrityNonce,
+                        cloudProjectNumber = playIntegrityCloudProjectNumber
+                    )
+                } catch (error: Exception) {
+                    if (playIntegrityRequired) {
+                        throw IllegalStateException(
+                            "Play Integrity verification failed: ${error.message ?: "unknown error"}"
+                        )
+                    }
+                    Log.w("MainActivity", "[Auth][Android] Play Integrity token request failed; continuing in optional mode.", error)
+                }
             }
+
+            val mobilePayload = JSONObject().apply {
+                put("platform", "android")
+                put("packageName", packageName)
+                if (integrityNonce.isNotBlank()) put("integrityNonce", integrityNonce)
+                if (integrityToken.isNotBlank()) put("integrityToken", integrityToken)
+            }
+
             try {
-                connection.outputStream.use { output ->
-                    output.write("{}".toByteArray(Charsets.UTF_8))
-                }
-
-                val status = connection.responseCode
-                val body = runCatching {
-                    val stream = if (status in 200..299) connection.inputStream else connection.errorStream
-                    stream?.bufferedReader()?.use { it.readText() }.orEmpty()
-                }.getOrDefault("")
-
-                val payload = if (body.isNotBlank()) runCatching { JSONObject(body) }.getOrNull() else null
-                if (status !in 200..299) {
-                    val detail = payload?.optString("error")?.ifBlank { payload.optString("message") } ?: "Token exchange failed"
-                    throw IllegalStateException("$detail ($status)")
-                }
-
-                val customToken = payload?.optString("customToken")?.trim().orEmpty()
-                if (customToken.isEmpty()) {
-                    throw IllegalStateException("Server returned an empty custom token.")
-                }
-                customToken
-            } finally {
-                connection.disconnect()
+                postAuthExchangeRequest(
+                    endpoint = "$origin/api/mobile/auth/exchange",
+                    idToken = idToken,
+                    payload = mobilePayload
+                )
+            } catch (error: AuthExchangeHttpError) {
+                if (error.status !in setOf(404, 405, 501)) throw error
+                Log.w("MainActivity", "[Auth][Android] Mobile exchange endpoint unavailable; falling back to legacy endpoint.")
+                postAuthExchangeRequest(
+                    endpoint = "$origin/api/auth/exchange",
+                    idToken = idToken,
+                    payload = JSONObject()
+                )
             }
         }
+    }
+
+    private fun postAuthExchangeRequest(
+        endpoint: String,
+        idToken: String,
+        payload: JSONObject,
+    ): String {
+        val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            connectTimeout = 30_000
+            readTimeout = 30_000
+            doOutput = true
+            setRequestProperty("Content-Type", "application/json")
+            setRequestProperty("Authorization", "Bearer $idToken")
+        }
+        try {
+            connection.outputStream.use { output ->
+                output.write(payload.toString().toByteArray(Charsets.UTF_8))
+            }
+
+            val status = connection.responseCode
+            val body = runCatching {
+                val stream = if (status in 200..299) connection.inputStream else connection.errorStream
+                stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+            }.getOrDefault("")
+
+            val parsed = if (body.isNotBlank()) runCatching { JSONObject(body) }.getOrNull() else null
+            if (status !in 200..299) {
+                val detail =
+                    parsed?.optString("error")?.ifBlank { parsed.optString("message") }?.ifBlank { "Token exchange failed" }
+                        ?: "Token exchange failed"
+                throw AuthExchangeHttpError(status, detail)
+            }
+
+            val customToken = parsed?.optString("customToken")?.trim().orEmpty()
+            if (customToken.isEmpty()) {
+                throw IllegalStateException("Server returned an empty custom token.")
+            }
+            return customToken
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private fun generatePlayIntegrityNonce(): String {
+        val nonceBytes = ByteArray(24)
+        SecureRandom().nextBytes(nonceBytes)
+        return Base64.encodeToString(
+            nonceBytes,
+            Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING
+        )
     }
 
     private fun resolveTrustedOrigin(): String {
@@ -548,7 +784,7 @@ class MainActivity : ComponentActivity() {
                 if (provider == "google" && !authBusy) {
                     startGoogleSignInFlow(trigger = "web_request")
                 } else if (provider == "email") {
-                    emailDialogVisible = true
+                    openEmailDialog(EmailDialogMode.SIGN_IN)
                 }
             }
 
@@ -838,6 +1074,11 @@ private fun QuanturaWebViewScreen(
                             window.__QUANTURA_NATIVE_APP__=true;
                             window.__QUANTURA_NATIVE_PLATFORM__='android';
                             window.__QUANTURA_NATIVE_AUTH_BRIDGE__=true;
+                            try {
+                              localStorage.setItem('quantura_cookie_consent', 'accepted');
+                              var banner=document.getElementById('cookie-banner');
+                              if (banner) banner.classList.add('hidden');
+                            } catch (_) {}
                             window.dispatchEvent(new CustomEvent('quantura:native-runtime-ready',{detail:{platform:'android',authBridge:true}}));
                             """.trimIndent(),
                             null
@@ -965,19 +1206,42 @@ private fun NativeAuthGate(
 
 @Composable
 private fun EmailSignInDialog(
+    mode: EmailDialogMode,
     email: String,
+    username: String,
     password: String,
+    confirmPassword: String,
     isBusy: Boolean,
+    onModeChanged: (EmailDialogMode) -> Unit,
     onEmailChanged: (String) -> Unit,
+    onUsernameChanged: (String) -> Unit,
     onPasswordChanged: (String) -> Unit,
+    onConfirmPasswordChanged: (String) -> Unit,
     onDismiss: () -> Unit,
     onContinue: () -> Unit,
 ) {
+    val isSignUp = mode == EmailDialogMode.SIGN_UP
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Continue with Email") },
+        title = { Text(if (isSignUp) "Create account" else "Continue with Email") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(
+                        onClick = { onModeChanged(EmailDialogMode.SIGN_IN) },
+                        enabled = !isBusy && isSignUp,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text("Sign in")
+                    }
+                    OutlinedButton(
+                        onClick = { onModeChanged(EmailDialogMode.SIGN_UP) },
+                        enabled = !isBusy && !isSignUp,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text("Create")
+                    }
+                }
                 OutlinedTextField(
                     value = email,
                     onValueChange = onEmailChanged,
@@ -986,6 +1250,16 @@ private fun EmailSignInDialog(
                     enabled = !isBusy,
                     modifier = Modifier.fillMaxWidth(),
                 )
+                if (isSignUp) {
+                    OutlinedTextField(
+                        value = username,
+                        onValueChange = onUsernameChanged,
+                        label = { Text("Username") },
+                        singleLine = true,
+                        enabled = !isBusy,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
                 OutlinedTextField(
                     value = password,
                     onValueChange = onPasswordChanged,
@@ -995,8 +1269,23 @@ private fun EmailSignInDialog(
                     visualTransformation = PasswordVisualTransformation(),
                     modifier = Modifier.fillMaxWidth(),
                 )
+                if (isSignUp) {
+                    OutlinedTextField(
+                        value = confirmPassword,
+                        onValueChange = onConfirmPasswordChanged,
+                        label = { Text("Confirm password") },
+                        singleLine = true,
+                        enabled = !isBusy,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
                 Text(
-                    text = "If this email is new, Quantura links it to your current app session.",
+                    text = if (isSignUp) {
+                        "Create a production account with email, username, and password. Existing emails must sign in with their current provider first."
+                    } else {
+                        "Use your existing email/password account. New users can switch to Create account."
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1004,7 +1293,7 @@ private fun EmailSignInDialog(
         },
         confirmButton = {
             TextButton(onClick = onContinue, enabled = !isBusy) {
-                Text("Continue")
+                Text(if (isSignUp) "Create account" else "Continue")
             }
         },
         dismissButton = {

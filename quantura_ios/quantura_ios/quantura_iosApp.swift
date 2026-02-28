@@ -15,6 +15,12 @@ import UserNotifications
 #if canImport(UIKit)
 import UIKit
 #endif
+#if canImport(AppTrackingTransparency)
+import AppTrackingTransparency
+#endif
+#if canImport(AdSupport)
+import AdSupport
+#endif
 #if canImport(GoogleMobileAds)
 import GoogleMobileAds
 #endif
@@ -266,6 +272,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         return true
     }
 
+    func applicationDidBecomeActive(_ application: UIApplication) {
+        _ = application
+        requestTrackingPermissionIfNeeded()
+    }
+
 #if canImport(GoogleSignIn)
     func application(
         _ app: UIApplication,
@@ -284,6 +295,25 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         Messaging.messaging().apnsToken = deviceToken
     }
 #endif
+
+    private func requestTrackingPermissionIfNeeded() {
+#if canImport(AppTrackingTransparency)
+        guard #available(iOS 14, *) else { return }
+        guard ATTrackingManager.trackingAuthorizationStatus == .notDetermined else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            ATTrackingManager.requestTrackingAuthorization { status in
+                switch status {
+                case .authorized:
+                    print("[Privacy][iOS] ATT authorized.")
+                case .denied, .restricted, .notDetermined:
+                    print("[Privacy][iOS] ATT denied/restricted/notDetermined.")
+                @unknown default:
+                    break
+                }
+            }
+        }
+#endif
+    }
 }
 #endif
 

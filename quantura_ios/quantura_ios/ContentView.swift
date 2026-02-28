@@ -2,6 +2,9 @@ import FirebaseCore
 #if canImport(FirebaseAuth)
 import FirebaseAuth
 #endif
+#if canImport(FirebaseAnalytics)
+import FirebaseAnalytics
+#endif
 import FirebaseRemoteConfig
 #if canImport(GoogleSignIn)
 import GoogleSignIn
@@ -28,6 +31,90 @@ import GoogleMobileAds
 #endif
 
 private let quanturaURL = URL(string: "https://quantura.studio/")!
+
+final class AdImpressionReporter {
+    static let shared = AdImpressionReporter()
+
+    private let callbackURL = URL(string: "https://quantura.studio/api/analytics/ad-impression")
+
+    private init() {}
+
+    func report(
+        adFormat: String,
+        adUnitId: String,
+        placement: String = "",
+        rewardType: String = "",
+        rewardAmount: Double? = nil
+    ) {
+        let normalizedFormat = adFormat.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let normalizedUnitId = adUnitId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedPlacement = placement.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedRewardType = rewardType.trimmingCharacters(in: .whitespacesAndNewlines)
+
+#if canImport(FirebaseAnalytics)
+        var params: [String: Any] = [
+            AnalyticsParameterAdPlatform: "admob",
+            AnalyticsParameterAdSource: "admob",
+            AnalyticsParameterAdFormat: normalizedFormat,
+            AnalyticsParameterAdUnitName: normalizedUnitId,
+            "platform": "ios",
+        ]
+        if !normalizedPlacement.isEmpty {
+            params["placement"] = normalizedPlacement
+        }
+        if !normalizedRewardType.isEmpty {
+            params["reward_type"] = normalizedRewardType
+        }
+        if let rewardAmount {
+            params["reward_amount"] = rewardAmount
+        }
+        Analytics.logEvent(AnalyticsEventAdImpression, parameters: params)
+#endif
+
+        guard callbackURL != nil else { return }
+        Task {
+            await postCallback(
+                payload: [
+                    "platform": "ios",
+                    "adPlatform": "admob",
+                    "adSource": "admob",
+                    "adFormat": normalizedFormat,
+                    "adUnitId": normalizedUnitId,
+                    "placement": normalizedPlacement,
+                    "rewardType": normalizedRewardType,
+                    "rewardAmount": rewardAmount as Any,
+                    "impressionId": UUID().uuidString,
+                ]
+            )
+        }
+    }
+
+    private func postCallback(payload: [String: Any]) async {
+        guard let callbackURL else { return }
+        var request = URLRequest(url: callbackURL)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 12
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let idToken = await currentIdToken(), !idToken.isEmpty {
+            request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+        }
+        request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
+        _ = try? await URLSession.shared.data(for: request)
+    }
+
+    private func currentIdToken() async -> String? {
+#if canImport(FirebaseAuth)
+        guard let user = Auth.auth().currentUser else { return nil }
+        return await withCheckedContinuation { continuation in
+            user.getIDTokenForcingRefresh(false) { token, _ in
+                continuation.resume(returning: token)
+            }
+        }
+#else
+        return nil
+#endif
+    }
+}
 
 #if canImport(StoreKit)
 @available(iOS 15.0, *)
@@ -204,6 +291,7 @@ final class AdManager: NSObject, FullScreenContentDelegate {
     private let remoteConfigManager: RemoteConfigManager
     private var interstitialAd: InterstitialAd?
     private var rewardedAd: RewardedAd?
+    private var rewardedInterstitialAd: RewardedInterstitialAd?
     private(set) var isShowingFullScreenAd = false
 
     init(remoteConfigManager: RemoteConfigManager) {
@@ -215,6 +303,7 @@ final class AdManager: NSObject, FullScreenContentDelegate {
         print("[Ads][iOS] Priming interstitial and rewarded ads.")
         loadInterstitial()
         loadRewarded()
+        loadRewardedInterstitial()
     }
 
     func showInterstitial(from rootViewController: UIViewController?) {
@@ -244,9 +333,18 @@ final class AdManager: NSObject, FullScreenContentDelegate {
                 print("[Ads][iOS] Rewarded show skipped; another fullscreen ad is visible.")
                 return
             }
+            if let rewardedInterstitial = self.rewardedInterstitialAd {
+                rewardedInterstitial.fullScreenContentDelegate = self
+                print("[Ads][iOS] Presenting rewarded interstitial.")
+                rewardedInterstitial.present(from: rootViewController) {
+                    _ = rewardedInterstitial.adReward
+                }
+                return
+            }
             guard let ad = self.rewardedAd else {
                 print("[Ads][iOS] Rewarded unavailable; reloading.")
                 self.loadRewarded()
+                self.loadRewardedInterstitial()
                 return
             }
             ad.fullScreenContentDelegate = self
@@ -279,11 +377,103 @@ final class AdManager: NSObject, FullScreenContentDelegate {
             guard let self else { return }
             self.rewardedAd = ad
             self.rewardedAd?.fullScreenContentDelegate = self
+            self.configureServerSideVerification(for: self.rewardedAd, adFormat: "rewarded")
             if let error {
                 print("[Ads][iOS] Rewarded load failed: \(error.localizedDescription)")
             } else {
                 print("[Ads][iOS] Rewarded load succeeded.")
             }
+        }
+    }
+
+    private func loadRewardedInterstitial() {
+        let adUnitID = remoteConfigManager.adUnitIDs().rewardedInterstitial
+        print("[Ads][iOS] Loading rewarded interstitial unit=\(adUnitID)")
+        RewardedInterstitialAd.load(with: adUnitID, request: Request()) { [weak self] ad, error in
+            guard let self else { return }
+            self.rewardedInterstitialAd = ad
+            self.rewardedInterstitialAd?.fullScreenContentDelegate = self
+            self.configureServerSideVerification(for: self.rewardedInterstitialAd, adFormat: "rewarded_interstitial")
+            if let error {
+                print("[Ads][iOS] Rewarded interstitial load failed: \(error.localizedDescription)")
+            } else {
+                print("[Ads][iOS] Rewarded interstitial load succeeded.")
+            }
+        }
+    }
+
+    private func configureServerSideVerification(for ad: RewardedAd?, adFormat: String) {
+        guard let ad else { return }
+        let options = ServerSideVerificationOptions()
+#if canImport(FirebaseAuth)
+        let uid = Auth.auth().currentUser?.uid.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+#else
+        let uid = ""
+#endif
+        if !uid.isEmpty {
+            options.userIdentifier = String(uid.prefix(120))
+        }
+        let payload = [
+            "platform": "ios",
+            "uid": uid,
+            "adFormat": adFormat,
+            "ts": Int(Date().timeIntervalSince1970 * 1000),
+        ] as [String : Any]
+        if let jsonData = try? JSONSerialization.data(withJSONObject: payload),
+           let json = String(data: jsonData, encoding: .utf8) {
+            options.customRewardText = String(json.prefix(450))
+        }
+        ad.serverSideVerificationOptions = options
+    }
+
+    private func configureServerSideVerification(for ad: RewardedInterstitialAd?, adFormat: String) {
+        guard let ad else { return }
+        let options = ServerSideVerificationOptions()
+#if canImport(FirebaseAuth)
+        let uid = Auth.auth().currentUser?.uid.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+#else
+        let uid = ""
+#endif
+        if !uid.isEmpty {
+            options.userIdentifier = String(uid.prefix(120))
+        }
+        let payload = [
+            "platform": "ios",
+            "uid": uid,
+            "adFormat": adFormat,
+            "ts": Int(Date().timeIntervalSince1970 * 1000),
+        ] as [String : Any]
+        if let jsonData = try? JSONSerialization.data(withJSONObject: payload),
+           let json = String(data: jsonData, encoding: .utf8) {
+            options.customRewardText = String(json.prefix(450))
+        }
+        ad.serverSideVerificationOptions = options
+    }
+
+    func adDidRecordImpression(_ ad: FullScreenPresentingAd) {
+        let adUnits = remoteConfigManager.adUnitIDs()
+        if ad === interstitialAd {
+            AdImpressionReporter.shared.report(
+                adFormat: "interstitial",
+                adUnitId: adUnits.interstitial,
+                placement: "navigation"
+            )
+            return
+        }
+        if ad === rewardedAd {
+            AdImpressionReporter.shared.report(
+                adFormat: "rewarded",
+                adUnitId: adUnits.rewarded,
+                placement: "reward_action"
+            )
+            return
+        }
+        if ad === rewardedInterstitialAd {
+            AdImpressionReporter.shared.report(
+                adFormat: "rewarded_interstitial",
+                adUnitId: adUnits.rewardedInterstitial,
+                placement: "reward_action"
+            )
         }
     }
 
@@ -299,6 +489,9 @@ final class AdManager: NSObject, FullScreenContentDelegate {
         } else if ad === rewardedAd {
             rewardedAd = nil
             loadRewarded()
+        } else if ad === rewardedInterstitialAd {
+            rewardedInterstitialAd = nil
+            loadRewardedInterstitial()
         }
     }
 
@@ -314,6 +507,9 @@ final class AdManager: NSObject, FullScreenContentDelegate {
         } else if ad === rewardedAd {
             rewardedAd = nil
             loadRewarded()
+        } else if ad === rewardedInterstitialAd {
+            rewardedInterstitialAd = nil
+            loadRewardedInterstitial()
         }
     }
 }
@@ -390,6 +586,18 @@ struct QuanturaWebView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> WKWebView {
         let userContentController = WKUserContentController()
+        let nativeConsentScript = WKUserScript(
+            source: """
+            try {
+              localStorage.setItem('quantura_cookie_consent', 'accepted');
+              var banner = document.getElementById('cookie-banner');
+              if (banner) { banner.classList.add('hidden'); }
+            } catch (e) {}
+            """,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: false
+        )
+        userContentController.addUserScript(nativeConsentScript)
         userContentController.add(context.coordinator, name: "QuanturaBridge")
         userContentController.add(context.coordinator, name: "quanturaAuth")
 
