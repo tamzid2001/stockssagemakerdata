@@ -3,6 +3,14 @@ export type NativePlatform = "ios" | "android" | null;
 declare global {
   interface Window {
     __QUANTURA_NATIVE_PLATFORM__?: string;
+    __quanturaAuthBridge?: {
+      receiveCustomToken?: (token: string) => Promise<boolean> | boolean;
+      onNativeAuthState?: (state: Record<string, unknown>) => unknown;
+      requestSignIn?: (provider?: string) => boolean;
+      requestAuthState?: () => boolean;
+      signOut?: () => boolean;
+    };
+    quanturaAuth?: { postMessage?: (payload: string) => void };
     Capacitor?: {
       isNativePlatform?: () => boolean;
       getPlatform?: () => string;
@@ -10,6 +18,9 @@ declare global {
     QuanturaBridge?: { postMessage?: (payload: string) => void };
     webkit?: {
       messageHandlers?: {
+        quanturaAuth?: {
+          postMessage?: (payload: unknown) => void;
+        };
         QuanturaBridge?: {
           postMessage?: (payload: unknown) => void;
         };
@@ -40,7 +51,17 @@ export const getNativePlatform = (): NativePlatform => {
   if (ua.includes("quanturaiosapp")) return "ios";
 
   try {
+    if (window.quanturaAuth?.postMessage) return "android";
+  } catch {
+    // no-op
+  }
+  try {
     if (window.QuanturaBridge?.postMessage) return "android";
+  } catch {
+    // no-op
+  }
+  try {
+    if (window.webkit?.messageHandlers?.quanturaAuth?.postMessage) return "ios";
   } catch {
     // no-op
   }

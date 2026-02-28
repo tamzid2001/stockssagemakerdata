@@ -15,6 +15,12 @@ import UserNotifications
 #if canImport(UIKit)
 import UIKit
 #endif
+#if canImport(AppTrackingTransparency)
+import AppTrackingTransparency
+#endif
+#if canImport(AdSupport)
+import AdSupport
+#endif
 #if canImport(GoogleMobileAds)
 import GoogleMobileAds
 #endif
@@ -191,17 +197,32 @@ final class NativePersonalizedNotificationManager {
 enum FirebaseBootstrap {
     static func configureIfAvailable() -> Bool {
         if FirebaseApp.app() != nil {
+            print("[Firebase][iOS] Firebase already configured.")
             return true
         }
-        guard let plistPath = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") else {
-            print("Firebase disabled: missing GoogleService-Info.plist (local-only file).")
+
+        let options: FirebaseOptions? = {
+            let candidates = [
+                ("GoogleService-Info", "plist"),
+                ("GoogleService-Info.local", "plist"),
+            ]
+            for candidate in candidates {
+                if let path = Bundle.main.path(forResource: candidate.0, ofType: candidate.1),
+                   let parsed = FirebaseOptions(contentsOfFile: path) {
+                    print("[Firebase][iOS] Using Firebase config \(candidate.0).\(candidate.1).")
+                    return parsed
+                }
+            }
+            return nil
+        }()
+
+        guard let options else {
+            print("[Firebase][iOS] Firebase disabled: missing GoogleService-Info(.local).plist in app bundle.")
             return false
         }
-        guard let options = FirebaseOptions(contentsOfFile: plistPath) else {
-            print("Firebase disabled: invalid GoogleService-Info.plist.")
-            return false
-        }
+
         FirebaseApp.configure(options: options)
+        print("[Firebase][iOS] Firebase configured successfully.")
         return FirebaseApp.app() != nil
     }
 }
@@ -214,7 +235,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     ) -> Bool {
         let firebaseReady = FirebaseBootstrap.configureIfAvailable()
 #if canImport(GoogleMobileAds)
-        MobileAds.shared.start(completionHandler: nil)
+        #if DEBUG
+        MobileAds.shared.requestConfiguration.testDeviceIdentifiers = ["SIMULATOR"]
+        #endif
+        MobileAds.shared.start { status in
+            print("[Ads][iOS] Mobile Ads initialized adapters=\(status.adapterStatusesByClassName.count)")
+        }
 #endif
 #if canImport(FirebaseMessaging) && canImport(UserNotifications)
         if firebaseReady {
@@ -233,12 +259,22 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
             }
         }
 #endif
+#if canImport(FirebaseAuth)
+        if firebaseReady {
+            NativeAuthSessionManager.shared.startIfNeeded()
+        }
+#endif
 #if canImport(FirebaseAuth) && canImport(FirebaseFirestore) && canImport(UserNotifications)
         if firebaseReady {
             NativePersonalizedNotificationManager.shared.start()
         }
 #endif
         return true
+    }
+
+    func applicationDidBecomeActive(_ application: UIApplication) {
+        _ = application
+        requestTrackingPermissionIfNeeded()
     }
 
 #if canImport(GoogleSignIn)
@@ -259,6 +295,25 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         Messaging.messaging().apnsToken = deviceToken
     }
 #endif
+
+    private func requestTrackingPermissionIfNeeded() {
+#if canImport(AppTrackingTransparency)
+        guard #available(iOS 14, *) else { return }
+        guard ATTrackingManager.trackingAuthorizationStatus == .notDetermined else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            ATTrackingManager.requestTrackingAuthorization { status in
+                switch status {
+                case .authorized:
+                    print("[Privacy][iOS] ATT authorized.")
+                case .denied, .restricted, .notDetermined:
+                    print("[Privacy][iOS] ATT denied/restricted/notDetermined.")
+                @unknown default:
+                    break
+                }
+            }
+        }
+#endif
+    }
 }
 #endif
 

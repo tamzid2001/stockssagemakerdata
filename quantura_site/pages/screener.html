@@ -30,7 +30,7 @@
   
     <script>
       window.__QUANTURA_RC_TEMPLATE_ID__ = "firebase-server";
-      window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ = {"status":200,"eTag":"etag-quantura-e2e3d-firebase-server-fetch--1213937490","config":{"welcome_message":"Welcome to Quantura","watchlist_enabled":"true","forecast_prophet_enabled":"true","forecast_timemixer_enabled":"true","push_notifications_enabled":"true","webpush_vapid_key":"","stripe_checkout_enabled":"true","stripe_public_key":"","holiday_promo":"true","backtesting_enabled":"true","backtesting_free_daily_limit":"1","backtesting_pro_daily_limit":"25"}};
+      window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ = {"status":200,"eTag":"etag-quantura-e2e3d-firebase-server-fetch--1213937490","config":{"welcome_message":"","watchlist_enabled":"true","forecast_prophet_enabled":"true","forecast_timemixer_enabled":"true","push_notifications_enabled":"true","webpush_vapid_key":"","stripe_checkout_enabled":"true","stripe_public_key":"","holiday_promo":"false","backtesting_enabled":"true","backtesting_free_daily_limit":"1","backtesting_pro_daily_limit":"25"}};
     </script>
   
 </head>
@@ -40,10 +40,11 @@
         <a class="logo" href="/" aria-label="Quantura home"><span>QUANTURA</span></a>
         <nav class="nav-links">
           <a href="/forecasting" data-analytics="nav_forecasting"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Terminal</span></a>
+          <a href="/explore" data-analytics="nav_explore"><i class="iconoir-binocular" aria-hidden="true"></i><span>Explore</span></a>
           <a href="/research" data-analytics="nav_research"><i class="iconoir-bookmark-book" aria-hidden="true"></i><span>Research</span></a>
           <a href="/blog" data-analytics="nav_blog"><i class="iconoir-page" aria-hidden="true"></i><span>Blog</span></a>
           <a href="/pricing" data-analytics="nav_pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>Pricing</span></a>
-          <a href="/contact" data-analytics="nav_contact"><i class="iconoir-mail" aria-hidden="true"></i><span>Contact</span></a>
+          <a href="/contact" data-analytics="nav_contact"><i class="iconoir-mail" aria-hidden="true"></i><span>Contact Us</span></a>
         </nav>
         <div class="nav-actions">
           <span id="header-user-status" class="pill">Logged Out</span>
@@ -61,7 +62,7 @@
             <div class="small">Signed in as <span id="user-email">Not signed in</span></div>
             <div class="small">Status <span id="user-status" class="pill">Logged Out</span></div>
             <details class="profile-settings">
-              <summary>Leaderboard profile</summary>
+              <summary>Public profile</summary>
               <form id="profile-form" class="profile-editor">
                 <label class="label" for="profile-username">Username</label>
                 <input id="profile-username" class="input" type="text" maxlength="32" placeholder="quantura_alpha" />
@@ -80,7 +81,7 @@
                   <input id="profile-social-website" class="input" type="url" placeholder="https://your-site.com" />
                 </div>
                 <button class="cta secondary small" type="submit">Save profile</button>
-                <p id="profile-status" class="small muted">Sign in to set your public leaderboard profile.</p>
+                <p id="profile-status" class="small muted">Sign in to set your public profile.</p>
               </form>
             </details>
             <a class="cta secondary small" href="/forecasting"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Open terminal</span></a>
@@ -543,7 +544,7 @@
                 <details class="learn-more">
                   <summary>Learn more</summary>
                   <p class="small">
-                    Every run is saved so you can revisit candidates, regenerate the AI portfolio, and compare leaderboard ROI over time.
+                    Every run is saved so you can revisit candidates, regenerate the AI portfolio, and publish the best runs into Explore.
                   </p>
                 </details>
               </div>
@@ -552,28 +553,16 @@
 		              <p class="small">Top-ranked candidates and AI Agent details appear here.</p>
 		              <div id="screener-output" class="panel-output"></div>
 		            </div>
-                <div class="card screener-leaderboard-card">
+                <div class="card">
                   <div class="card-head">
-                    <h3>AI Portfolio Leaderboard</h3>
-                    <div class="form-grid" style="margin:0; min-width: 320px;">
-                      <div class="field" style="margin:0; min-width: 140px;">
-                        <label class="label" for="ai-leaderboard-horizon">Sort by ROI</label>
-                        <select id="ai-leaderboard-horizon">
-                          <option value="1m">1M</option>
-                          <option value="3m">3M</option>
-                          <option value="6m">6M</option>
-                          <option value="1y" selected>1Y</option>
-                          <option value="5y">5Y</option>
-                          <option value="max">Max</option>
-                        </select>
-                      </div>
-                      <div class="field" style="margin:0; min-width: 170px;">
-                        <label class="label" for="ai-leaderboard-model-filter">Personality filter</label>
-                        <select id="ai-leaderboard-model-filter"></select>
-                      </div>
-                    </div>
+                    <h3>Explore feed</h3>
                   </div>
-                  <div id="ai-agent-leaderboard" class="panel-output small" style="max-height: none;"></div>
+                  <p class="small">
+                    Explore is the canonical discovery feed for published screener runs, forecasts, backtests, and AI agent outputs.
+                  </p>
+                  <div class="hero-actions">
+                    <a class="cta secondary" href="/explore"><i class="iconoir-binocular" aria-hidden="true"></i><span>Open Explore</span></a>
+                  </div>
                 </div>
                 <div class="card help-article">
                   <h3>Screener help</h3>
