@@ -14068,6 +14068,16 @@
     bindForegroundPushHandler(messaging);
     bindNativePurchaseResultBridge();
 
+    const nativeRuntime = isNativeApp();
+    if (nativeRuntime && state.cookieConsent !== "accepted") {
+      state.cookieConsent = "accepted";
+      safeLocalStorageSet(COOKIE_CONSENT_KEY, "accepted");
+      ensureInitialPageView();
+      setUserId(state.user?.uid || null);
+      const existingCookieBanner = document.getElementById("cookie-banner");
+      if (existingCookieBanner) existingCookieBanner.classList.add("hidden");
+    }
+
     if (state.cookieConsent === "accepted") {
       ensureInitialPageView();
     } else if (state.cookieConsent !== "declined") {

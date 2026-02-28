@@ -32,6 +32,9 @@ class RemoteConfigManager(
                 mapOf(
                     "ads_use_real_android" to true,
                     "ads_use_real_ios" to true,
+                    "play_integrity_enabled" to true,
+                    "play_integrity_required" to false,
+                    "play_integrity_cloud_project_number" to "",
                     "feature_flags" to DEFAULT_FEATURE_FLAGS_JSON,
                 )
             )
@@ -82,6 +85,20 @@ class RemoteConfigManager(
         } catch (_: Exception) {
             false
         }
+    }
+
+    fun isPlayIntegrityEnabled(): Boolean {
+        return remoteConfig?.getBoolean("play_integrity_enabled") ?: true
+    }
+
+    fun isPlayIntegrityRequired(): Boolean {
+        return remoteConfig?.getBoolean("play_integrity_required") ?: false
+    }
+
+    fun playIntegrityCloudProjectNumber(): Long? {
+        val raw = remoteConfig?.getString("play_integrity_cloud_project_number").orEmpty().trim()
+        if (raw.isBlank()) return null
+        return raw.toLongOrNull()
     }
 
     companion object {

@@ -13,6 +13,11 @@ import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
 import com.google.android.gms.ads.rewarded.RewardItem
 import com.google.android.gms.ads.rewarded.RewardedAd
 import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback
+import com.google.android.gms.ads.rewarded.ServerSideVerificationOptions
+import com.google.android.gms.ads.rewardedinterstitial.RewardedInterstitialAd
+import com.google.android.gms.ads.rewardedinterstitial.RewardedInterstitialAdLoadCallback
+import com.google.firebase.auth.FirebaseAuth
+import org.json.JSONObject
 
 class AdManager(
     private val remoteConfigManager: RemoteConfigManager,
@@ -26,6 +31,9 @@ class AdManager(
     private var rewardedAd: RewardedAd? = null
 
     @Volatile
+    private var rewardedInterstitialAd: RewardedInterstitialAd? = null
+
+    @Volatile
     private var isShowingFullScreenAdInternal = false
     private var lastNavigationInterstitialAt = 0L
 
@@ -34,6 +42,7 @@ class AdManager(
         Log.d(tag, "Priming interstitial and rewarded ads.")
         loadInterstitial(context)
         loadRewarded(context)
+        loadRewardedInterstitial(context)
     }
 
     fun showInterstitial(activity: Activity) {
@@ -53,6 +62,16 @@ class AdManager(
             override fun onAdShowedFullScreenContent() {
                 isShowingFullScreenAdInternal = true
                 Log.d(tag, "Interstitial shown.")
+            }
+
+            override fun onAdImpression() {
+                val adUnitId = remoteConfigManager.getAdUnitIds().interstitial
+                AdImpressionReporter.report(
+                    context = activity,
+                    adFormat = "interstitial",
+                    adUnitId = adUnitId,
+                    placement = "navigation"
+                )
             }
 
             override fun onAdDismissedFullScreenContent() {
@@ -79,10 +98,48 @@ class AdManager(
             Log.d(tag, "Rewarded show skipped; fullscreen ad already visible.")
             return
         }
+        val rewardedInterstitial = rewardedInterstitialAd
+        if (rewardedInterstitial != null) {
+            rewardedInterstitial.fullScreenContentCallback = object : FullScreenContentCallback() {
+                override fun onAdShowedFullScreenContent() {
+                    isShowingFullScreenAdInternal = true
+                    Log.d(tag, "Rewarded interstitial ad shown.")
+                }
+
+                override fun onAdImpression() {
+                    val adUnitId = remoteConfigManager.getAdUnitIds().rewardedInterstitial
+                    AdImpressionReporter.report(
+                        context = activity,
+                        adFormat = "rewarded_interstitial",
+                        adUnitId = adUnitId,
+                        placement = "reward_action"
+                    )
+                }
+
+                override fun onAdDismissedFullScreenContent() {
+                    isShowingFullScreenAdInternal = false
+                    Log.d(tag, "Rewarded interstitial ad dismissed.")
+                    rewardedInterstitialAd = null
+                    loadRewardedInterstitial(activity)
+                }
+
+                override fun onAdFailedToShowFullScreenContent(adError: com.google.android.gms.ads.AdError) {
+                    isShowingFullScreenAdInternal = false
+                    Log.w(tag, "Rewarded interstitial failed to show: ${adError.message}")
+                    rewardedInterstitialAd = null
+                    loadRewardedInterstitial(activity)
+                }
+            }
+            Log.d(tag, "Presenting rewarded interstitial ad.")
+            rewardedInterstitial.show(activity) { reward -> onReward(reward) }
+            return
+        }
+
         val cachedAd = rewardedAd
         if (cachedAd == null) {
             Log.d(tag, "Rewarded unavailable; loading.")
             loadRewarded(activity)
+            loadRewardedInterstitial(activity)
             return
         }
 
@@ -90,6 +147,16 @@ class AdManager(
             override fun onAdShowedFullScreenContent() {
                 isShowingFullScreenAdInternal = true
                 Log.d(tag, "Rewarded ad shown.")
+            }
+
+            override fun onAdImpression() {
+                val adUnitId = remoteConfigManager.getAdUnitIds().rewarded
+                AdImpressionReporter.report(
+                    context = activity,
+                    adFormat = "rewarded",
+                    adUnitId = adUnitId,
+                    placement = "reward_action"
+                )
             }
 
             override fun onAdDismissedFullScreenContent() {
@@ -127,7 +194,7 @@ class AdManager(
     }
 
     fun onResume(context: Context) {
-        if (interstitialAd == null || rewardedAd == null) {
+        if (interstitialAd == null || rewardedAd == null || rewardedInterstitialAd == null) {
             primeAds(context)
         }
     }
@@ -163,6 +230,7 @@ class AdManager(
             object : RewardedAdLoadCallback() {
                 override fun onAdLoaded(ad: RewardedAd) {
                     rewardedAd = ad
+                    configureRewardedSsv(ad, "rewarded")
                     Log.d(tag, "Rewarded load succeeded.")
                 }
 
@@ -172,5 +240,53 @@ class AdManager(
                 }
             }
         )
+    }
+
+    private fun loadRewardedInterstitial(context: Context) {
+        val adUnits = remoteConfigManager.getAdUnitIds()
+        Log.d(tag, "Loading rewarded interstitial unit=${adUnits.rewardedInterstitial}")
+        RewardedInterstitialAd.load(
+            context,
+            adUnits.rewardedInterstitial,
+            AdRequest.Builder().build(),
+            object : RewardedInterstitialAdLoadCallback() {
+                override fun onAdLoaded(ad: RewardedInterstitialAd) {
+                    rewardedInterstitialAd = ad
+                    configureRewardedInterstitialSsv(ad, "rewarded_interstitial")
+                    Log.d(tag, "Rewarded interstitial load succeeded.")
+                }
+
+                override fun onAdFailedToLoad(loadAdError: LoadAdError) {
+                    rewardedInterstitialAd = null
+                    Log.w(tag, "Rewarded interstitial load failed: ${loadAdError.message}")
+                }
+            }
+        )
+    }
+
+    private fun configureRewardedSsv(ad: RewardedAd, adFormat: String) {
+        val uid = FirebaseAuth.getInstance().currentUser?.uid?.trim().orEmpty()
+        val optionsBuilder = ServerSideVerificationOptions.Builder()
+            .setCustomData(buildSsvCustomData(uid, adFormat))
+        if (uid.isNotEmpty()) optionsBuilder.setUserId(uid.take(120))
+        ad.setServerSideVerificationOptions(optionsBuilder.build())
+    }
+
+    private fun configureRewardedInterstitialSsv(ad: RewardedInterstitialAd, adFormat: String) {
+        val uid = FirebaseAuth.getInstance().currentUser?.uid?.trim().orEmpty()
+        val optionsBuilder = ServerSideVerificationOptions.Builder()
+            .setCustomData(buildSsvCustomData(uid, adFormat))
+        if (uid.isNotEmpty()) optionsBuilder.setUserId(uid.take(120))
+        ad.setServerSideVerificationOptions(optionsBuilder.build())
+    }
+
+    private fun buildSsvCustomData(uid: String, adFormat: String): String {
+        return JSONObject()
+            .put("platform", "android")
+            .put("uid", uid)
+            .put("adFormat", adFormat)
+            .put("ts", System.currentTimeMillis())
+            .toString()
+            .take(450)
     }
 }
