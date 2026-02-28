@@ -74,6 +74,7 @@
       { "source": "/api/follows/**", "function": "quanturaExploreApi" },
       { "source": "/api/watch-tickers/**", "function": "quanturaExploreApi" },
       { "source": "/api/notifications/**", "function": "quanturaExploreApi" },
+      { "source": "/api/health", "function": "quanturaExploreApi" },
       { "source": "/api/llm/run", "function": "quanturaExploreApi" },
       { "source": "/api/mobile/auth/exchange", "function": "quanturaExploreApi" },
       { "source": "/api/mobile/play-integrity/verify", "function": "quanturaExploreApi" },
