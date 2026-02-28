@@ -17,8 +17,8 @@ android {
         applicationId = "com.quantura.quanturaapp"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -53,6 +53,7 @@ dependencies {
     implementation(libs.material)
     implementation("androidx.activity:activity-compose:1.12.4")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-process:2.8.7")
     implementation("androidx.webkit:webkit:1.12.1")
 
     implementation("androidx.compose.ui:ui:1.7.5")
@@ -71,6 +72,7 @@ dependencies {
     implementation("com.google.firebase:firebase-functions")
     implementation("com.google.android.gms:play-services-ads:25.0.0")
     implementation("com.google.android.gms:play-services-auth:21.2.0")
+    implementation("com.google.android.play:integrity:1.4.0")
     implementation("com.android.billingclient:billing:7.1.1")
     implementation("com.android.billingclient:billing-ktx:7.1.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")

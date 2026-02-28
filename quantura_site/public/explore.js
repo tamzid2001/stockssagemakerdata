@@ -1,0 +1,546 @@
+import {
+  createApiClient,
+  escapeHtml,
+  formatRelativeTime,
+  initAuth,
+  normalizeTicker,
+  track,
+} from "./explore-common.js";
+
+const refs = {
+  authToggle: document.getElementById("auth-toggle"),
+  searchForm: document.getElementById("explore-search-form"),
+  searchInput: document.getElementById("explore-search"),
+  tabs: Array.from(document.querySelectorAll(".tab[data-mode]")),
+  tickerWrap: document.getElementById("ticker-filter-wrap"),
+  tickerInput: document.getElementById("ticker-filter-input"),
+  tickerApply: document.getElementById("ticker-filter-apply"),
+  tickerSuggestions: document.getElementById("ticker-suggestions"),
+  grid: document.getElementById("explore-grid"),
+  loading: document.getElementById("explore-loading"),
+  empty: document.getElementById("explore-empty"),
+  sentinel: document.getElementById("explore-sentinel"),
+  postModal: document.getElementById("post-modal"),
+  postModalBody: document.getElementById("post-modal-body"),
+  modalClose: document.getElementById("modal-close"),
+  reportModal: document.getElementById("report-modal"),
+  reportModalClose: document.getElementById("report-modal-close"),
+  reportForm: document.getElementById("report-form"),
+  reportReason: document.getElementById("report-reason"),
+  reportDetails: document.getElementById("report-details"),
+  cardTemplate: document.getElementById("post-card-template"),
+  skeletonTemplate: document.getElementById("skeleton-template"),
+};
+
+const state = {
+  mode: "trending",
+  q: "",
+  ticker: "",
+  cursor: null,
+  loading: false,
+  done: false,
+  initialized: false,
+  user: null,
+  authClient: null,
+  api: null,
+  observer: null,
+  postsById: new Map(),
+  activePostId: "",
+  reportPostId: "",
+};
+
+function setAuthButton() {
+  if (!refs.authToggle) return;
+  const user = state.user;
+  if (!user || user.isAnonymous) {
+    refs.authToggle.textContent = "Sign in";
+    return;
+  }
+  refs.authToggle.textContent = "Sign out";
+}
+
+function showLoading(visible) {
+  refs.loading?.classList.toggle("hidden", !visible);
+}
+
+function showEmpty(visible) {
+  refs.empty?.classList.toggle("hidden", !visible);
+}
+
+function setTabState() {
+  refs.tabs.forEach((tab) => {
+    const active = tab.dataset.mode === state.mode;
+    tab.classList.toggle("is-active", active);
+    tab.setAttribute("aria-selected", active ? "true" : "false");
+  });
+  refs.tickerWrap?.classList.toggle("hidden", state.mode !== "tickers");
+}
+
+function getPreviewMarkup(post) {
+  const preview = post.preview || {};
+  if (preview.kind === "image" && preview.imageUrl) {
+    return `<img src="${escapeHtml(preview.imageUrl)}" alt="${escapeHtml(post.title)}" loading="lazy" />`;
+  }
+
+  const metrics = preview.metrics || {};
+  const entries = Object.entries(metrics).slice(0, 6);
+  if (!entries.length) {
+    return `
+      <div class="preview-summary">
+        <div class="metric-pill"><span>Type</span><b>${escapeHtml(post.type)}</b></div>
+        <div class="metric-pill"><span>Ticker</span><b>${escapeHtml((post.tickers || [])[0] || "N/A")}</b></div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="preview-summary">
+      ${entries
+        .map(
+          ([key, value]) =>
+            `<div class="metric-pill"><span>${escapeHtml(key)}</span><b>${escapeHtml(String(value))}</b></div>`
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function getEngagementMarkup(post) {
+  const counts = post.counts || {};
+  const viewer = post.viewer || {};
+  return `
+    <button type="button" data-action="like" data-post-id="${escapeHtml(post.id)}" class="${viewer.liked ? "active" : ""}">♥ ${Number(counts.likes || 0)}</button>
+    <button type="button" data-action="comment" data-post-id="${escapeHtml(post.id)}">💬 ${Number(counts.comments || 0)}</button>
+    <button type="button" data-action="repost" data-post-id="${escapeHtml(post.id)}" class="${viewer.reposted ? "active" : ""}">↻ ${Number(counts.reposts || 0)}</button>
+    <button type="button" data-action="share" data-post-id="${escapeHtml(post.id)}">↗ ${Number(counts.shares || 0)}</button>
+    <button type="button" data-action="save" data-post-id="${escapeHtml(post.id)}" class="${viewer.saved ? "active" : ""}">★ Save</button>
+    <button type="button" data-action="report" data-post-id="${escapeHtml(post.id)}">⚑</button>
+  `;
+}
+
+function renderCard(post) {
+  const fragment = refs.cardTemplate?.content?.firstElementChild?.cloneNode(true);
+  if (!fragment) return null;
+
+  fragment.dataset.postId = post.id;
+  fragment.querySelector(".post-preview").innerHTML = getPreviewMarkup(post);
+  fragment.querySelector(".post-title").textContent = post.title || "Untitled";
+  fragment.querySelector(".post-caption").textContent = post.caption || "";
+  fragment.querySelector(".chip-row").innerHTML = (post.tickers || [])
+    .slice(0, 4)
+    .map((ticker) => `<span class="chip">${escapeHtml(ticker)}</span>`)
+    .join("");
+  fragment.querySelector(".post-meta").textContent = `@${post.authorHandle || "quantura"} • ${formatRelativeTime(post.createdAtMs)}`;
+  fragment.querySelector(".engagement-row").innerHTML = getEngagementMarkup(post);
+
+  return fragment;
+}
+
+function renderSkeleton(count = 8) {
+  if (!refs.grid || !refs.skeletonTemplate) return;
+  refs.grid.innerHTML = "";
+  for (let i = 0; i < count; i += 1) {
+    const node = refs.skeletonTemplate.content?.firstElementChild?.cloneNode(true);
+    if (node) refs.grid.appendChild(node);
+  }
+}
+
+function upsertPost(post) {
+  state.postsById.set(post.id, post);
+  const existing = refs.grid?.querySelector(`[data-post-id="${CSS.escape(post.id)}"]`);
+  const next = renderCard(post);
+  if (!next) return;
+  if (existing) existing.replaceWith(next);
+  else refs.grid?.appendChild(next);
+}
+
+function appendPosts(posts, reset = false) {
+  if (!refs.grid) return;
+  if (reset) refs.grid.innerHTML = "";
+  posts.forEach((post) => {
+    state.postsById.set(post.id, post);
+    const node = renderCard(post);
+    if (node) refs.grid.appendChild(node);
+  });
+
+  showEmpty(state.postsById.size === 0);
+}
+
+async function loadSuggestions() {
+  if (!state.api || !refs.tickerSuggestions) return;
+  try {
+    const response = await state.api.get(`/explore/suggestions?query=${encodeURIComponent(refs.tickerInput?.value || "")}`);
+    const suggestions = Array.isArray(response.suggestions) ? response.suggestions : [];
+    refs.tickerSuggestions.innerHTML = suggestions.map((item) => `<option value="${escapeHtml(item)}"></option>`).join("");
+  } catch {
+    // Ignore suggestion errors.
+  }
+}
+
+async function loadPosts(reset = false) {
+  if (!state.api || state.loading || (state.done && !reset)) return;
+  state.loading = true;
+
+  if (reset) {
+    state.cursor = null;
+    state.done = false;
+    state.postsById.clear();
+    renderSkeleton(8);
+  }
+
+  showLoading(true);
+
+  try {
+    const params = new URLSearchParams();
+    params.set("mode", state.mode);
+    params.set("limit", "20");
+    if (state.cursor) params.set("cursor", state.cursor);
+    if (state.q) params.set("q", state.q);
+    if (state.ticker) params.set("ticker", state.ticker);
+
+    const response = await state.api.get(`/explore?${params.toString()}`);
+    const posts = Array.isArray(response.posts) ? response.posts : [];
+
+    appendPosts(posts, reset);
+    state.cursor = response.cursor || null;
+    state.done = !state.cursor;
+
+    track("explore_feed_loaded", {
+      mode: state.mode,
+      count: posts.length,
+      has_cursor: Boolean(state.cursor),
+    });
+  } catch (error) {
+    if (refs.grid) {
+      refs.grid.innerHTML = `<div class="empty-state">${escapeHtml(error.message || "Unable to load Explore feed.")}</div>`;
+    }
+  } finally {
+    state.loading = false;
+    showLoading(false);
+    showEmpty(!state.postsById.size);
+  }
+}
+
+async function refreshPost(postId) {
+  if (!postId || !state.api) return;
+  try {
+    const detail = await state.api.get(`/posts/${encodeURIComponent(postId)}`);
+    if (detail?.post) {
+      state.postsById.set(postId, detail.post);
+      upsertPost(detail.post);
+      if (state.activePostId === postId) {
+        renderModal(detail.post, detail.comments || []);
+      }
+    }
+  } catch {
+    // Ignore refresh failures.
+  }
+}
+
+async function doPostAction(action, postId) {
+  if (!state.api || !postId) return;
+  if (action === "comment") {
+    await openPostModal(postId);
+    return;
+  }
+
+  if (action === "share") {
+    const shareUrl = `${window.location.origin}/explore?post=${encodeURIComponent(postId)}`;
+    const post = state.postsById.get(postId);
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: post?.title || "Quantura Explore",
+          text: post?.caption || "",
+          url: shareUrl,
+        });
+      } else if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+      }
+    } catch {
+      // User cancelled share.
+    }
+
+    await state.api.post(`/posts/${encodeURIComponent(postId)}/share`, { source: "web_share" });
+    await refreshPost(postId);
+    track("explore_post_shared", { post_id: postId });
+    return;
+  }
+
+  if (action === "report") {
+    openReportModal(postId);
+    return;
+  }
+
+  if (action === "save") {
+    const response = await state.api.post(`/posts/${encodeURIComponent(postId)}/save`, {});
+    await refreshPost(postId);
+    track("explore_post_saved", { post_id: postId, saved: Boolean(response.saved) });
+    return;
+  }
+
+  if (action === "like") {
+    await state.api.post(`/posts/${encodeURIComponent(postId)}/like`, {});
+    await refreshPost(postId);
+    track("explore_post_liked", { post_id: postId });
+    return;
+  }
+
+  if (action === "repost") {
+    await state.api.post(`/posts/${encodeURIComponent(postId)}/repost`, {});
+    await refreshPost(postId);
+    track("explore_post_reposted", { post_id: postId });
+  }
+}
+
+function closeModal() {
+  refs.postModal?.classList.add("hidden");
+  refs.postModal?.setAttribute("aria-hidden", "true");
+  state.activePostId = "";
+}
+
+function closeReportModal() {
+  refs.reportModal?.classList.add("hidden");
+  refs.reportModal?.setAttribute("aria-hidden", "true");
+  state.reportPostId = "";
+  if (refs.reportForm) refs.reportForm.reset();
+}
+
+function openReportModal(postId) {
+  state.reportPostId = String(postId || "");
+  if (refs.reportReason) refs.reportReason.value = "spam";
+  if (refs.reportDetails) refs.reportDetails.value = "";
+  refs.reportModal?.classList.remove("hidden");
+  refs.reportModal?.setAttribute("aria-hidden", "false");
+}
+
+function renderModal(post, comments) {
+  if (!refs.postModalBody) return;
+  const commentsHtml = (comments || [])
+    .map(
+      (item) => `
+        <div class="comment-item">
+          <div class="comment-meta">@${escapeHtml(item.authorHandle || "user")} • ${formatRelativeTime(item.createdAtMs)}</div>
+          <div>${escapeHtml(item.text || "")}</div>
+          ${state.user?.uid === item.authorUid ? `<button type="button" data-comment-delete="${escapeHtml(item.id)}" data-post-id="${escapeHtml(post.id)}">Delete</button>` : ""}
+        </div>
+      `
+    )
+    .join("");
+
+  refs.postModalBody.innerHTML = `
+    <div class="post-preview">${getPreviewMarkup(post)}</div>
+    <h2 id="post-modal-title">${escapeHtml(post.title || "")}</h2>
+    <p class="muted">@${escapeHtml(post.authorHandle || "quantura")} • ${formatRelativeTime(post.createdAtMs)}</p>
+    <p>${escapeHtml(post.caption || "")}</p>
+    <div class="chip-row">${(post.tickers || []).map((ticker) => `<span class="chip">${escapeHtml(ticker)}</span>`).join("")}</div>
+    <div class="engagement-row">${getEngagementMarkup(post)}</div>
+
+    <section>
+      <h3>Comments (${Number(post?.counts?.comments || 0)})</h3>
+      <form class="comment-form" data-comment-form="${escapeHtml(post.id)}">
+        <textarea name="comment" maxlength="500" placeholder="Add a comment"></textarea>
+        <button type="submit">Post comment</button>
+      </form>
+      <div class="comment-list">${commentsHtml || `<div class="muted">No comments yet.</div>`}</div>
+    </section>
+  `;
+}
+
+async function openPostModal(postId) {
+  if (!state.api || !postId) return;
+  try {
+    const detail = await state.api.get(`/posts/${encodeURIComponent(postId)}`);
+    if (!detail?.post) return;
+
+    state.activePostId = postId;
+    state.postsById.set(postId, detail.post);
+    upsertPost(detail.post);
+    renderModal(detail.post, detail.comments || []);
+    refs.postModal?.classList.remove("hidden");
+    refs.postModal?.setAttribute("aria-hidden", "false");
+    track("explore_post_opened", { post_id: postId });
+  } catch (error) {
+    window.alert(error.message || "Unable to load post details.");
+  }
+}
+
+function bindEvents() {
+  refs.authToggle?.addEventListener("click", async () => {
+    if (!state.authClient) return;
+    try {
+      if (!state.user || state.user.isAnonymous) {
+        await state.authClient.signInWithGoogle();
+      } else {
+        await state.authClient.signOut();
+      }
+    } catch (error) {
+      window.alert(error.message || "Authentication action failed.");
+    }
+  });
+
+  refs.searchForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    state.q = String(refs.searchInput?.value || "").trim();
+    await loadPosts(true);
+  });
+
+  refs.tabs.forEach((tab) => {
+    tab.addEventListener("click", async () => {
+      const mode = tab.dataset.mode || "trending";
+      state.mode = mode;
+      if (mode !== "tickers") state.ticker = "";
+      setTabState();
+      await loadPosts(true);
+    });
+  });
+
+  refs.tickerInput?.addEventListener("input", () => {
+    loadSuggestions().catch(() => undefined);
+  });
+
+  refs.tickerApply?.addEventListener("click", async () => {
+    state.ticker = normalizeTicker(refs.tickerInput?.value || "");
+    state.mode = "tickers";
+    setTabState();
+    await loadPosts(true);
+  });
+
+  refs.grid?.addEventListener("click", async (event) => {
+    const actionBtn = event.target.closest("[data-action][data-post-id]");
+    if (actionBtn) {
+      event.preventDefault();
+      event.stopPropagation();
+      await doPostAction(actionBtn.dataset.action, actionBtn.dataset.postId);
+      return;
+    }
+
+    const card = event.target.closest("[data-post-id]");
+    if (!card) return;
+    await openPostModal(card.dataset.postId);
+  });
+
+  refs.grid?.addEventListener("keydown", async (event) => {
+    if (event.key !== "Enter") return;
+    const card = event.target.closest("[data-post-id]");
+    if (!card) return;
+    await openPostModal(card.dataset.postId);
+  });
+
+  refs.modalClose?.addEventListener("click", closeModal);
+  refs.postModal?.addEventListener("click", (event) => {
+    const closeTrigger = event.target.closest("[data-close-modal='true']");
+    if (closeTrigger) closeModal();
+  });
+  refs.reportModalClose?.addEventListener("click", closeReportModal);
+  refs.reportModal?.addEventListener("click", (event) => {
+    const closeTrigger = event.target.closest("[data-report-close='true']");
+    if (closeTrigger) closeReportModal();
+  });
+
+  refs.postModalBody?.addEventListener("click", async (event) => {
+    const actionBtn = event.target.closest("[data-action][data-post-id]");
+    if (actionBtn) {
+      await doPostAction(actionBtn.dataset.action, actionBtn.dataset.postId);
+      return;
+    }
+
+    const deleteBtn = event.target.closest("[data-comment-delete][data-post-id]");
+    if (!deleteBtn || !state.api) return;
+    try {
+      await state.api.delete(
+        `/posts/${encodeURIComponent(deleteBtn.dataset.postId)}/comment/${encodeURIComponent(deleteBtn.dataset.commentDelete)}`
+      );
+      await refreshPost(deleteBtn.dataset.postId);
+    } catch (error) {
+      window.alert(error.message || "Unable to delete comment.");
+    }
+  });
+
+  refs.postModalBody?.addEventListener("submit", async (event) => {
+    const form = event.target.closest("[data-comment-form]");
+    if (!form || !state.api) return;
+    event.preventDefault();
+
+    const postId = form.dataset.commentForm;
+    const textarea = form.querySelector("textarea[name='comment']");
+    const text = String(textarea?.value || "").trim();
+    if (!text) return;
+
+    try {
+      await state.api.post(`/posts/${encodeURIComponent(postId)}/comment`, { text });
+      textarea.value = "";
+      await refreshPost(postId);
+      track("explore_comment_created", { post_id: postId });
+    } catch (error) {
+      window.alert(error.message || "Unable to add comment.");
+    }
+  });
+
+  refs.reportForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!state.api || !state.reportPostId) return;
+    const reason = String(refs.reportReason?.value || "").trim().toLowerCase();
+    const details = String(refs.reportDetails?.value || "").trim();
+    if (!reason) return;
+    try {
+      await state.api.post(`/posts/${encodeURIComponent(state.reportPostId)}/report`, { reason, details });
+      closeReportModal();
+      window.alert("Thanks. The report has been submitted.");
+      track("explore_post_reported", { post_id: state.reportPostId, reason });
+      await refreshPost(state.reportPostId);
+    } catch (error) {
+      window.alert(error.message || "Unable to submit report.");
+    }
+  });
+
+  state.observer = new IntersectionObserver(
+    (entries) => {
+      const first = entries[0];
+      if (!first?.isIntersecting) return;
+      loadPosts(false).catch(() => undefined);
+    },
+    {
+      rootMargin: "200px",
+    }
+  );
+
+  if (refs.sentinel) state.observer.observe(refs.sentinel);
+}
+
+async function bootstrap() {
+  const params = new URLSearchParams(window.location.search);
+  state.mode = params.get("mode") || "trending";
+  if (!["trending", "latest", "following", "tickers"].includes(state.mode)) state.mode = "trending";
+  state.q = String(params.get("q") || "").trim();
+  state.ticker = normalizeTicker(params.get("ticker") || "");
+
+  setTabState();
+  if (refs.searchInput) refs.searchInput.value = state.q;
+  if (refs.tickerInput) refs.tickerInput.value = state.ticker;
+
+  state.authClient = await initAuth((user) => {
+    state.user = user;
+    setAuthButton();
+    if (state.initialized) {
+      loadPosts(true).catch(() => undefined);
+    }
+  });
+
+  state.api = await createApiClient(() => state.authClient.getAuthToken());
+  bindEvents();
+  await loadSuggestions();
+  await loadPosts(true);
+  state.initialized = true;
+
+  const deepLinkPost = params.get("post");
+  if (deepLinkPost) {
+    openPostModal(deepLinkPost).catch(() => undefined);
+  }
+}
+
+bootstrap().catch((error) => {
+  if (refs.grid) {
+    refs.grid.innerHTML = `<div class="empty-state">${escapeHtml(error.message || "Unable to initialize Explore.")}</div>`;
+  }
+});

@@ -15,6 +15,7 @@ quantura_site/functions/serviceAccountKey.json
 quantura_site/functions/serviceAccountKey.local.json
 quantura_site/functions/venv/
 quantura_site/functions_ssr/templates/
+quantura_site/functions_explore/dist/
 quantura_site/.firebase/
 quantura_ios/**/GoogleService-Info.plist
 quantura_ios/**/GoogleService-Info.local.plist

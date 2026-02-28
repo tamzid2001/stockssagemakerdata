@@ -7,7 +7,13 @@
   const OPTIONS_EXPIRATION_PREFIX = "quantura_options_expiration_";
   const THEME_KEY = "quantura_theme";
   const PENDING_SHARE_KEY = "quantura_pending_share_v1";
-  const HOLIDAY_PROMO_SEEN_KEY = "quantura_holiday_promo_seen_v1";
+  const PROMO_BANNER_DISMISSED_KEY = "quantura_promo_banner_dismissed_v2";
+  const PROMO_MODAL_DISMISSED_KEY = "quantura_promo_modal_dismissed_v2";
+  const PROMO_SESSION_COUNT_KEY = "quantura_promo_session_count_v1";
+  const PROMO_FORECAST_COUNT_KEY = "quantura_promo_forecast_count_v1";
+  const PROMO_LAST_SESSION_KEY = "quantura_promo_last_session_v1";
+  const AUTH_PENDING_CREDENTIAL_KEY = "quantura_auth_pending_credential_v1";
+  const NOTIFICATION_PRIVACY_CACHE_KEY = "quantura_notification_privacy_v1";
   const FCM_LOG_CACHE_KEY = "quantura_fcm_log_v1";
   const CHART_RANGE_CACHE_KEY = "quantura_chart_range_v1";
   const CHART_VIEW_CACHE_KEY = "quantura_chart_view_v1";
@@ -16,6 +22,11 @@
   const LANGUAGE_PREFERENCE_KEY = "quantura_language_v1";
   const COUNTRY_PREFERENCE_KEY = "quantura_country_v1";
   const TICKER_QUERY_MODEL_KEY = "quantura_ticker_query_model_v1";
+  const TICKER_QUERY_PROVIDER_KEY = "quantura_ticker_query_provider_v1";
+  const TICKER_QUERY_MODULES_KEY = "quantura_ticker_query_modules_v1";
+  const TICKER_QUERY_IMPROVE_TOGGLE_KEY = "quantura_ticker_query_improve_toggle_v1";
+  const TICKER_HISTORY_KEY_PREFIX = "quantura_ticker_history_v1";
+  const TICKER_HISTORY_LIMIT = 14;
   const TRADINGVIEW_LOAD_TIMEOUT_MS = 9000;
   const AI_LEADERBOARD_DEFAULT_HORIZON = "1y";
   const DEFAULT_VOLATILITY_THRESHOLD = 0.05;
@@ -35,9 +46,7 @@
     "Contact",
     "Purchase",
   ]);
-  let nativeAuthRequestCounter = 0;
-  const nextNativeAuthRequestId = () => `native-auth-${Date.now()}-${++nativeAuthRequestCounter}`;
-
+  const MODEL_COUNCIL_OUTPUT_DISCLAIMER = "LLMs can sometimes make mistakes.";
   const getNativePlatform = () => {
     try {
       const explicit = String(window.__QUANTURA_NATIVE_PLATFORM__ || "").trim().toLowerCase();
@@ -46,7 +55,9 @@
         const platform = String(window.Capacitor.getPlatform?.() || "").trim().toLowerCase();
         if (platform === "ios" || platform === "android") return platform;
       }
+      if (window.quanturaAuth?.postMessage) return "android";
       if (window.QuanturaBridge?.postMessage) return "android";
+      if (window.webkit?.messageHandlers?.quanturaAuth?.postMessage) return "ios";
       if (window.webkit?.messageHandlers?.QuanturaBridge?.postMessage) return "ios";
     } catch (error) {
       return null;
@@ -110,46 +121,85 @@
     return false;
   };
 
-  const requestNativeBridgeAuth = (provider) =>
-    new Promise((resolve, reject) => {
-      const requestId = nextNativeAuthRequestId();
-      let timer = null;
-      const cleanup = () => {
-        window.removeEventListener("quantura:native-auth-result", onResult);
-        if (timer) clearTimeout(timer);
-      };
-      const onResult = (event) => {
-        const detail = event?.detail && typeof event.detail === "object" ? event.detail : {};
-        if (String(detail.requestId || "") !== requestId) return;
-        cleanup();
-        if (!detail.ok) {
-          reject(new Error(String(detail.error || "Native sign-in failed.")));
-          return;
+  const sendNativeAuthMessage = (payload) => {
+    const message = payload && typeof payload === "object" ? payload : {};
+    try {
+      if (window.quanturaAuth?.postMessage) {
+        window.quanturaAuth.postMessage(JSON.stringify(message));
+        return true;
+      }
+    } catch (error) {
+      // Try fallbacks below.
+    }
+    try {
+      if (window.QuanturaBridge?.postMessage) {
+        window.QuanturaBridge.postMessage(JSON.stringify(message));
+        return true;
+      }
+    } catch (error) {
+      // Try iOS handlers below.
+    }
+    try {
+      const iosAuthHandler = window.webkit?.messageHandlers?.quanturaAuth?.postMessage;
+      if (iosAuthHandler) {
+        iosAuthHandler(message);
+        return true;
+      }
+    } catch (error) {
+      // Ignore and try legacy bridge.
+    }
+    try {
+      const iosLegacyHandler = window.webkit?.messageHandlers?.QuanturaBridge?.postMessage;
+      if (iosLegacyHandler) {
+        const type = String(message.type || "").trim().toUpperCase();
+        if (type === "SIGN_OUT") {
+          iosLegacyHandler({ action: "authSignOut" });
+        } else if (type === "GET_AUTH_STATE") {
+          return false;
+        } else {
+          iosLegacyHandler({ action: "authSignIn", provider: String(message.provider || "").trim().toLowerCase() });
         }
-        resolve(detail);
-      };
+        return true;
+      }
+    } catch (error) {
+      return false;
+    }
+    return false;
+  };
 
-      window.addEventListener("quantura:native-auth-result", onResult);
-      const posted = sendNativeBridgeMessage({
-        action: "authSignIn",
-        provider: String(provider || "").trim().toLowerCase(),
-        requestId,
-      });
-      if (!posted) {
-        cleanup();
-        reject(new Error("Native sign-in bridge is unavailable."));
+  const requestNativeBridgeSignOut = () => sendNativeAuthMessage({ type: "SIGN_OUT" });
+
+  const waitForNativeAuthCompletion = (auth, timeoutMs = 90000) =>
+    new Promise((resolve, reject) => {
+      if (!auth) {
+        reject(new Error("Firebase Auth is unavailable."));
         return;
       }
-      timer = setTimeout(() => {
-        cleanup();
+      if (auth.currentUser && !auth.currentUser.isAnonymous) {
+        resolve(auth.currentUser);
+        return;
+      }
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        try {
+          unsubscribe?.();
+        } catch (_) {
+          // no-op
+        }
         reject(new Error("Native sign-in timed out."));
-      }, 90000);
+      }, timeoutMs);
+      const unsubscribe = auth.onAuthStateChanged((user) => {
+        if (settled) return;
+        if (user && !user.isAnonymous) {
+          settled = true;
+          clearTimeout(timer);
+          unsubscribe();
+          resolve(user);
+        }
+      });
     });
-
-  const requestNativeBridgeSignOut = () => {
-    const requestId = nextNativeAuthRequestId();
-    return sendNativeBridgeMessage({ action: "authSignOut", requestId });
-  };
   const DEFAULT_BRIEF_TICKERS = [
     "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "NFLX",
     "AMD", "AVGO", "CRM", "ORCL", "JPM", "BAC", "GS", "V", "MA",
@@ -233,6 +283,33 @@
       helper: "Amazon Nova high-depth analysis path.",
       pricing: { input: null, cached_input: null, output: null },
     },
+    {
+      id: "gemini-2.0-flash",
+      provider: "gemini",
+      tier: "Council",
+      label: "Gemini 2.0 Flash",
+      personality: "balanced",
+      helper: "Google Gemini fast-response path.",
+      pricing: { input: null, cached_input: null, output: null },
+    },
+    {
+      id: "mistral-small-latest",
+      provider: "mistral",
+      tier: "Council",
+      label: "Mistral Small",
+      personality: "balanced",
+      helper: "Mistral low-latency reasoning path.",
+      pricing: { input: null, cached_input: null, output: null },
+    },
+    {
+      id: "sonar",
+      provider: "perplexity",
+      tier: "Council",
+      label: "Perplexity Sonar",
+      personality: "research",
+      helper: "Perplexity web-grounded answer path.",
+      pricing: { input: null, cached_input: null, output: null },
+    },
   ];
   const DEFAULT_LLM_ALLOWED_MODELS = ["gpt-5-nano", "gpt-5-mini", "gpt-5", "gpt-5.1", "gpt-5.2"];
   const AI_USAGE_TIER_DEFAULTS = {
@@ -255,10 +332,36 @@
       volatility_alerts: true,
     },
   };
+  const DEFAULT_NATIVE_IAP_PRODUCT_IDS = Object.freeze({
+    pro: "quantura_pro_monthly",
+    desk: "quantura_pro_monthly",
+    forecast: "quantura_pro_monthly",
+    default: "quantura_pro_monthly",
+  });
   const MODEL_PROVIDER_LABEL = {
     openai: "OpenAI",
     amazon_nova: "Amazon Nova",
+    gemini: "Gemini",
+    mistral: "Mistral",
+    perplexity: "Perplexity Sonar",
+    other: "Other",
   };
+  const MODEL_COUNCIL_MODULE_CATALOG = Object.freeze([
+    { id: "info", label: "Info", checkedByDefault: true },
+    { id: "history", label: "History", checkedByDefault: true },
+    { id: "actions", label: "Actions", checkedByDefault: false },
+    { id: "dividends", label: "Dividends", checkedByDefault: false },
+    { id: "splits", label: "Splits", checkedByDefault: false },
+    { id: "calendar", label: "Calendar", checkedByDefault: false },
+    { id: "news", label: "News", checkedByDefault: true },
+    { id: "recommendations", label: "Recommendations", checkedByDefault: true },
+    { id: "balance_sheet", label: "Balance sheet", checkedByDefault: false },
+    { id: "quarterly_balance_sheet", label: "Quarterly balance sheet", checkedByDefault: false },
+    { id: "income_stmt", label: "Income statement", checkedByDefault: false },
+    { id: "quarterly_income_stmt", label: "Quarterly income statement", checkedByDefault: false },
+    { id: "cashflow", label: "Cashflow", checkedByDefault: false },
+    { id: "quarterly_cashflow", label: "Quarterly cashflow", checkedByDefault: false },
+  ]);
   const SUPPORTED_LANGUAGES = new Set(["en", "es", "fr", "de", "ar", "bn"]);
   const COUNTRY_DEFAULT_LANGUAGE = Object.freeze({
     US: "en",
@@ -283,7 +386,7 @@
       nav_research: "Research",
       nav_blog: "Blog",
       nav_pricing: "Pricing",
-      nav_contact: "Contact",
+      nav_contact: "Contact Us",
       nav_notifications: "Notifications",
       sign_in: "Sign in",
       sign_out: "Sign out",
@@ -296,32 +399,31 @@
       not_signed_in: "Not signed in",
       open_billing_portal: "Open Stripe billing portal",
       signin_manage_billing: "Sign in to manage billing",
-      signin_set_profile: "Sign in to set your public leaderboard profile.",
+      signin_set_profile: "Sign in to set your public profile.",
       open_notifications: "Open notifications",
       signin_manage_notifications: "Sign in to manage notifications",
       account: "Account",
-      leaderboard_profile: "Leaderboard profile",
+      leaderboard_profile: "Public profile",
       sidebar_forecast: "Forecast",
-      sidebar_ticker_intelligence: "Ticker Intelligence",
+      sidebar_ticker_intelligence: "Ticker",
       sidebar_indicators: "Indicators",
       sidebar_trending: "Trending",
       sidebar_news_data: "News and data",
       sidebar_corporate_events: "Corporate events",
       sidebar_market_headlines: "Market headlines",
-      sidebar_ask_gpt5: "Ask GPT-5",
+      sidebar_ask_gpt5: "Model Council",
       sidebar_options: "Options",
       sidebar_saved_forecasts: "Saved forecasts",
       sidebar_backtesting: "Backtesting",
       sidebar_learn_more: "Learn more",
       sidebar_screener: "Screener",
-      sidebar_ai_leaderboard: "AI Leaderboard",
       sidebar_watchlist_alerts: "Watchlist and alerts",
       panel_forecast_title: "Forecast",
       panel_forecast_subtitle: "Generate quantile bands for the ticker in your chart and save the run so you can re-plot it later.",
       panel_market_headlines_title: "Top market headlines",
       panel_market_headlines_subtitle: "Top country-level market headlines plus social posts from X, Reddit, Facebook, and Instagram.",
-      panel_ticker_query_title: "Ask GPT-5",
-      panel_ticker_query_subtitle: "Query any ticker in plain language. Quantura enriches with market context and headlines.",
+      panel_ticker_query_title: "Model Council",
+      panel_ticker_query_subtitle: "Run multi-provider analysis with structured Yahoo Finance context modules.",
       label_ticker: "Ticker",
       label_timeframe: "Timeframe",
       button_load_chart: "Load chart",
@@ -330,8 +432,8 @@
       button_load_market_feed: "Load market feed",
       label_response_language: "Response language",
       label_question: "Question",
-      button_ask_gpt5: "Ask GPT-5",
-      query_result: "Query result",
+      button_ask_gpt5: "Prepare Model Council",
+      query_result: "Model Council output",
       language_selector_label: "Language",
       language_auto: "Auto",
       language_english: "English",
@@ -364,15 +466,15 @@
       open_notifications: "Abrir notificaciones",
       signin_manage_notifications: "Inicia sesion para gestionar notificaciones",
       account: "Cuenta",
-      leaderboard_profile: "Perfil del ranking",
+      leaderboard_profile: "Perfil publico",
       sidebar_forecast: "Pronostico",
-      sidebar_ticker_intelligence: "Inteligencia del ticker",
+      sidebar_ticker_intelligence: "Ticker",
       sidebar_indicators: "Indicadores",
       sidebar_trending: "Tendencias",
       sidebar_news_data: "Noticias y datos",
       sidebar_corporate_events: "Eventos corporativos",
       sidebar_market_headlines: "Titulares del mercado",
-      sidebar_ask_gpt5: "Preguntar a GPT-5",
+      sidebar_ask_gpt5: "Model Council",
       sidebar_options: "Opciones",
       sidebar_saved_forecasts: "Pronosticos guardados",
       sidebar_backtesting: "Backtesting",
@@ -383,8 +485,8 @@
       panel_forecast_subtitle: "Genera bandas de cuantiles para el ticker de tu grafico y guarda la ejecucion para volver a trazarla despues.",
       panel_market_headlines_title: "Titulares del mercado",
       panel_market_headlines_subtitle: "Principales titulares por pais junto con publicaciones de X, Reddit, Facebook e Instagram.",
-      panel_ticker_query_title: "Preguntar a GPT-5",
-      panel_ticker_query_subtitle: "Consulta cualquier ticker en lenguaje natural. Quantura lo enriquece con contexto de mercado y titulares.",
+      panel_ticker_query_title: "Model Council",
+      panel_ticker_query_subtitle: "Analisis multi-modelo con contexto estructurado de Yahoo Finance.",
       label_ticker: "Ticker",
       label_timeframe: "Periodo",
       button_load_chart: "Cargar grafico",
@@ -393,8 +495,8 @@
       button_load_market_feed: "Cargar mercado",
       label_response_language: "Idioma de respuesta",
       label_question: "Pregunta",
-      button_ask_gpt5: "Preguntar a GPT-5",
-      query_result: "Resultado de la consulta",
+      button_ask_gpt5: "Preparar Model Council",
+      query_result: "Salida de Model Council",
       language_selector_label: "Idioma",
       language_auto: "Automatico",
       language_english: "Ingles",
@@ -427,15 +529,15 @@
       open_notifications: "Ouvrir les notifications",
       signin_manage_notifications: "Connectez-vous pour gerer les notifications",
       account: "Compte",
-      leaderboard_profile: "Profil du classement",
+      leaderboard_profile: "Profil public",
       sidebar_forecast: "Prevision",
-      sidebar_ticker_intelligence: "Intelligence du ticker",
+      sidebar_ticker_intelligence: "Ticker",
       sidebar_indicators: "Indicateurs",
       sidebar_trending: "Tendances",
       sidebar_news_data: "Actualites et donnees",
       sidebar_corporate_events: "Evenements d'entreprise",
       sidebar_market_headlines: "Titres du marche",
-      sidebar_ask_gpt5: "Demander a GPT-5",
+      sidebar_ask_gpt5: "Model Council",
       sidebar_options: "Options",
       sidebar_saved_forecasts: "Previsions enregistrees",
       sidebar_backtesting: "Backtesting",
@@ -446,8 +548,8 @@
       panel_forecast_subtitle: "Generez des bandes de quantiles pour le ticker de votre graphique et enregistrez l'execution pour la recharger plus tard.",
       panel_market_headlines_title: "Titres du marche",
       panel_market_headlines_subtitle: "Principaux titres par pays avec des publications de X, Reddit, Facebook et Instagram.",
-      panel_ticker_query_title: "Demander a GPT-5",
-      panel_ticker_query_subtitle: "Interrogez n'importe quel ticker en langage naturel. Quantura ajoute le contexte de marche et les titres.",
+      panel_ticker_query_title: "Model Council",
+      panel_ticker_query_subtitle: "Analyse multi-modeles avec contexte Yahoo Finance structure.",
       label_ticker: "Ticker",
       label_timeframe: "Horizon",
       button_load_chart: "Charger le graphique",
@@ -456,8 +558,8 @@
       button_load_market_feed: "Charger le flux marche",
       label_response_language: "Langue de reponse",
       label_question: "Question",
-      button_ask_gpt5: "Demander a GPT-5",
-      query_result: "Resultat de la requete",
+      button_ask_gpt5: "Preparer Model Council",
+      query_result: "Sortie Model Council",
       language_selector_label: "Langue",
       language_auto: "Auto",
       language_english: "Anglais",
@@ -486,19 +588,19 @@
       not_signed_in: "Nicht angemeldet",
       open_billing_portal: "Stripe-Abrechnungsportal offnen",
       signin_manage_billing: "Zum Verwalten der Abrechnung anmelden",
-      signin_set_profile: "Melden Sie sich an, um Ihr offentliches Leaderboard-Profil einzurichten.",
+      signin_set_profile: "Melden Sie sich an, um Ihr offentliches Profil einzurichten.",
       open_notifications: "Benachrichtigungen offnen",
       signin_manage_notifications: "Zum Verwalten von Benachrichtigungen anmelden",
       account: "Konto",
-      leaderboard_profile: "Leaderboard-Profil",
+      leaderboard_profile: "Offentliches Profil",
       sidebar_forecast: "Forecast",
-      sidebar_ticker_intelligence: "Ticker-Intelligence",
+      sidebar_ticker_intelligence: "Ticker",
       sidebar_indicators: "Indikatoren",
       sidebar_trending: "Trending",
       sidebar_news_data: "News und Daten",
       sidebar_corporate_events: "Unternehmensereignisse",
       sidebar_market_headlines: "Markt-Schlagzeilen",
-      sidebar_ask_gpt5: "GPT-5 fragen",
+      sidebar_ask_gpt5: "Model Council",
       sidebar_options: "Optionen",
       sidebar_saved_forecasts: "Gespeicherte Forecasts",
       sidebar_backtesting: "Backtesting",
@@ -509,8 +611,8 @@
       panel_forecast_subtitle: "Erzeuge Quantil-Bander fur den Ticker in deinem Chart und speichere den Lauf fur spatere Vergleiche.",
       panel_market_headlines_title: "Top-Markt-Schlagzeilen",
       panel_market_headlines_subtitle: "Wichtigste Schlagzeilen je Land plus Social-Posts von X, Reddit, Facebook und Instagram.",
-      panel_ticker_query_title: "GPT-5 fragen",
-      panel_ticker_query_subtitle: "Stelle Fragen zu jedem Ticker in naturlicher Sprache. Quantura erganzt Markt-Kontext und Schlagzeilen.",
+      panel_ticker_query_title: "Model Council",
+      panel_ticker_query_subtitle: "Multi-Provider-Analyse mit strukturiertem Yahoo-Finance-Kontext.",
       label_ticker: "Ticker",
       label_timeframe: "Zeitrahmen",
       button_load_chart: "Chart laden",
@@ -519,8 +621,8 @@
       button_load_market_feed: "Markt-Feed laden",
       label_response_language: "Antwortsprache",
       label_question: "Frage",
-      button_ask_gpt5: "GPT-5 fragen",
-      query_result: "Abfrageergebnis",
+      button_ask_gpt5: "Model Council vorbereiten",
+      query_result: "Model Council Ausgabe",
       language_selector_label: "Sprache",
       language_auto: "Auto",
       language_english: "Englisch",
@@ -553,15 +655,15 @@
       open_notifications: "فتح الاشعارات",
       signin_manage_notifications: "سجل الدخول لادارة الاشعارات",
       account: "الحساب",
-      leaderboard_profile: "ملف لوحة المتصدرين",
+      leaderboard_profile: "الملف العام",
       sidebar_forecast: "التوقع",
-      sidebar_ticker_intelligence: "ذكاء الرمز",
+      sidebar_ticker_intelligence: "الرمز",
       sidebar_indicators: "المؤشرات",
       sidebar_trending: "الترند",
       sidebar_news_data: "الاخبار والبيانات",
       sidebar_corporate_events: "احداث الشركات",
       sidebar_market_headlines: "عناوين السوق",
-      sidebar_ask_gpt5: "اسأل GPT-5",
+      sidebar_ask_gpt5: "Model Council",
       sidebar_options: "الخيارات",
       sidebar_saved_forecasts: "التوقعات المحفوظة",
       sidebar_backtesting: "اختبار رجعي",
@@ -572,8 +674,8 @@
       panel_forecast_subtitle: "انشئ نطاقات الكوانتايل للرمز في الرسم واحفظ التشغيل لاعادة عرضه لاحقا.",
       panel_market_headlines_title: "ابرز عناوين السوق",
       panel_market_headlines_subtitle: "ابرز عناوين السوق حسب البلد مع منشورات من X وReddit وFacebook وInstagram.",
-      panel_ticker_query_title: "اسأل GPT-5",
-      panel_ticker_query_subtitle: "اسأل عن اي رمز بلغة طبيعية. Quantura يضيف سياق السوق والعناوين.",
+      panel_ticker_query_title: "Model Council",
+      panel_ticker_query_subtitle: "تحليل متعدد النماذج مع سياق Yahoo Finance المنظم.",
       label_ticker: "الرمز",
       label_timeframe: "الاطار الزمني",
       button_load_chart: "تحميل الرسم",
@@ -582,8 +684,8 @@
       button_load_market_feed: "تحميل موجز السوق",
       label_response_language: "لغة الاجابة",
       label_question: "السؤال",
-      button_ask_gpt5: "اسأل GPT-5",
-      query_result: "نتيجة الاستعلام",
+      button_ask_gpt5: "تحضير Model Council",
+      query_result: "مخرجات Model Council",
       language_selector_label: "اللغة",
       language_auto: "تلقائي",
       language_english: "الانجليزية",
@@ -612,19 +714,19 @@
       not_signed_in: "সাইন ইন করা হয়নি",
       open_billing_portal: "Stripe বিলিং পোর্টাল খুলুন",
       signin_manage_billing: "বিলিং পরিচালনা করতে সাইন ইন করুন",
-      signin_set_profile: "আপনার পাবলিক লিডারবোর্ড প্রোফাইল সেট করতে সাইন ইন করুন।",
+      signin_set_profile: "আপনার পাবলিক প্রোফাইল সেট করতে সাইন ইন করুন।",
       open_notifications: "নোটিফিকেশন খুলুন",
       signin_manage_notifications: "নোটিফিকেশন পরিচালনা করতে সাইন ইন করুন",
       account: "অ্যাকাউন্ট",
-      leaderboard_profile: "লিডারবোর্ড প্রোফাইল",
+      leaderboard_profile: "পাবলিক প্রোফাইল",
       sidebar_forecast: "ফোরকাস্ট",
-      sidebar_ticker_intelligence: "টিকার ইন্টেলিজেন্স",
+      sidebar_ticker_intelligence: "টিকার",
       sidebar_indicators: "ইন্ডিকেটর",
       sidebar_trending: "ট্রেন্ডিং",
       sidebar_news_data: "খবর ও ডেটা",
       sidebar_corporate_events: "করপোরেট ইভেন্ট",
       sidebar_market_headlines: "মার্কেট হেডলাইন",
-      sidebar_ask_gpt5: "GPT-5 কে জিজ্ঞাসা করুন",
+      sidebar_ask_gpt5: "Model Council",
       sidebar_options: "অপশন",
       sidebar_saved_forecasts: "সংরক্ষিত ফোরকাস্ট",
       sidebar_backtesting: "ব্যাকটেস্টিং",
@@ -635,8 +737,8 @@
       panel_forecast_subtitle: "চার্টে থাকা টিকারের জন্য কোয়ান্টাইল ব্যান্ড তৈরি করুন এবং পরে পুনরায় দেখার জন্য রান সংরক্ষণ করুন।",
       panel_market_headlines_title: "শীর্ষ মার্কেট হেডলাইন",
       panel_market_headlines_subtitle: "দেশভিত্তিক শীর্ষ বাজারের খবরের সাথে X, Reddit, Facebook এবং Instagram পোস্ট দেখুন।",
-      panel_ticker_query_title: "GPT-5 কে জিজ্ঞাসা করুন",
-      panel_ticker_query_subtitle: "স্বাভাবিক ভাষায় যেকোনো টিকার জিজ্ঞাসা করুন। Quantura বাজার প্রসঙ্গ ও হেডলাইন যোগ করে।",
+      panel_ticker_query_title: "Model Council",
+      panel_ticker_query_subtitle: "স্ট্রাকচার্ড Yahoo Finance কনটেক্সটে মাল্টি-মডেল বিশ্লেষণ।",
       label_ticker: "টিকার",
       label_timeframe: "টাইমফ্রেম",
       button_load_chart: "চার্ট লোড করুন",
@@ -645,8 +747,8 @@
       button_load_market_feed: "মার্কেট ফিড লোড করুন",
       label_response_language: "উত্তরের ভাষা",
       label_question: "প্রশ্ন",
-      button_ask_gpt5: "GPT-5 কে জিজ্ঞাসা করুন",
-      query_result: "কুয়েরির ফলাফল",
+      button_ask_gpt5: "Model Council প্রস্তুত করুন",
+      query_result: "Model Council আউটপুট",
       language_selector_label: "ভাষা",
       language_auto: "অটো",
       language_english: "ইংরেজি",
@@ -669,7 +771,7 @@
     leaderboard_profile: [".profile-settings > summary"],
     open_dashboard: ['.sidebar-card a[href="/dashboard"] span'],
     sidebar_forecast: ['[data-panel-target="forecast"] span'],
-    sidebar_ticker_intelligence: ['[data-panel-target="ticker-intelligence"] span'],
+    sidebar_ticker_intelligence: ['[data-panel-target="ticker"] span'],
     sidebar_indicators: ['[data-panel-target="indicators"] span'],
     sidebar_trending: ['[data-panel-target="trending"] span'],
     sidebar_news_data: ['[data-panel-target="news"] span'],
@@ -681,7 +783,6 @@
     sidebar_backtesting: ['[data-panel-target="backtesting"] span'],
     sidebar_learn_more: ['[data-panel-target="learn"] span'],
     sidebar_screener: ['a[href="/screener"] span'],
-    sidebar_ai_leaderboard: ['[data-panel-target="ai-leaderboard"] span'],
     sidebar_watchlist_alerts: ['a[href="/watchlist"] span'],
     panel_forecast_title: ['[data-panel="forecast"] .panel-header h2'],
     panel_forecast_subtitle: ['[data-panel="forecast"] .panel-header p.small'],
@@ -697,7 +798,7 @@
     button_load_market_feed: ['button[data-analytics="market_headlines_load"] span'],
     label_response_language: ['label[for="ticker-query-language"]'],
     label_question: ['label[for="ticker-query-question"]'],
-    button_ask_gpt5: ['button[data-analytics="ticker_query_submit"] span'],
+    button_ask_gpt5: ['button[data-analytics="model_council_submit"] span'],
     query_result: ['[data-panel="ticker-query"] .results-panel h3'],
   });
   const UI_I18N_OPTION_MAP = Object.freeze({
@@ -1155,7 +1256,7 @@
     }
   };
 
-  const ui = {
+	  const ui = {
     headerAuth: document.getElementById("header-auth"),
     headerSignOut: document.getElementById("header-signout"),
     headerDashboard: document.getElementById("header-dashboard"),
@@ -1185,6 +1286,7 @@
     profileBio: document.getElementById("profile-bio"),
     profilePublicEnabled: document.getElementById("profile-public-enabled"),
     profilePublicScreener: document.getElementById("profile-public-screener"),
+    profilePublicEmail: document.getElementById("profile-public-email"),
     profileWebsite: document.getElementById("profile-social-website"),
     profileX: document.getElementById("profile-social-x"),
     profileLinkedin: document.getElementById("profile-social-linkedin"),
@@ -1211,11 +1313,12 @@
     terminalTicker: document.getElementById("terminal-ticker"),
     terminalInterval: document.getElementById("terminal-interval"),
     terminalStatus: document.getElementById("terminal-status"),
+    tickerHistory: document.getElementById("ticker-history"),
     tickerChart: document.getElementById("ticker-chart"),
     studioChartShell: document.querySelector(".chart-shell.studio-chart"),
     indicatorChart: document.getElementById("indicator-chart"),
     intelStrip: document.getElementById("intel-strip"),
-    tickerIntelligenceOutput: document.getElementById("ticker-intelligence-output"),
+    tickerIntelligenceOutput: document.getElementById("ticker-output"),
     tickerPredictionsOutput: document.getElementById("ticker-predictions-output"),
     tickerIntelTabs: Array.from(document.querySelectorAll("[data-intel-tab]")),
     forecastForm: document.getElementById("forecast-form"),
@@ -1263,8 +1366,16 @@
     tickerQueryTicker: document.getElementById("ticker-query-ticker"),
     tickerQueryQuestion: document.getElementById("ticker-query-question"),
     tickerQueryLanguage: document.getElementById("ticker-query-language"),
+    tickerQueryProvider: document.getElementById("ticker-query-provider"),
+    tickerQueryProviderHint: document.getElementById("ticker-query-provider-hint"),
     tickerQueryModel: document.getElementById("ticker-query-model"),
     tickerQueryModelHint: document.getElementById("ticker-query-model-hint"),
+    tickerQueryModulesPicker: document.getElementById("ticker-query-modules-picker"),
+    tickerQueryModulesOutput: document.getElementById("ticker-query-modules-output"),
+    tickerQueryImproveToggle: document.getElementById("ticker-query-improve-toggle"),
+    tickerQueryImprovePreviewWrap: document.getElementById("ticker-query-improve-preview-wrap"),
+    tickerQueryImprovePreview: document.getElementById("ticker-query-improve-preview"),
+    tickerQueryRunFinal: document.getElementById("ticker-query-run-final"),
     tickerQueryModelInfo: document.getElementById("ticker-query-model-info"),
     tickerQueryCacheToggleWrap: document.getElementById("ticker-query-cache-toggle-wrap"),
     tickerQueryShowCacheStats: document.getElementById("ticker-query-show-cache-stats"),
@@ -1337,14 +1448,24 @@
     notificationsToken: document.getElementById("notifications-token"),
     notificationsLog: document.getElementById("notifications-log"),
     notificationsClear: document.getElementById("notifications-clear"),
+    notificationsPrivacyContainer: document.getElementById("notifications-privacy-controls"),
+    notificationsLocationOptIn: document.getElementById("notifications-location-optin"),
+    notificationsIpOptIn: document.getElementById("notifications-ip-optin"),
+    notificationsRequestLocation: document.getElementById("notifications-request-location"),
+    notificationsPrivacyStatus: document.getElementById("notifications-privacy-status"),
     billingPortalLink: document.getElementById("billing-portal-link"),
     chartRangeButtons: Array.from(document.querySelectorAll("[data-chart-range]")),
     chartViewButtons: Array.from(document.querySelectorAll("[data-chart-view]")),
     chartThemeButtons: Array.from(document.querySelectorAll("[data-tv-theme]")),
     tradingViewRoot: document.getElementById("tradingview-terminal-root"),
     tradingViewStatus: document.getElementById("tv-widget-status"),
+    tradingViewTickerTape: document.getElementById("tv-ticker-tape"),
     tradingViewSymbolInfo: document.getElementById("tv-symbol-info"),
     tradingViewAdvanced: document.getElementById("tv-advanced-chart"),
+    tradingViewCompanyProfile: document.getElementById("tv-company-profile"),
+    tradingViewFundamentalData: document.getElementById("tv-fundamental-data"),
+    tradingViewTechnicalAnalysis: document.getElementById("tv-technical-analysis"),
+    tradingViewTopStories: document.getElementById("tv-top-stories"),
     tradingViewFallback: document.getElementById("tv-widget-fallback"),
     predictionsChart: document.getElementById("predictions-chart"),
     predictionsPreview: document.getElementById("predictions-preview"),
@@ -1364,11 +1485,17 @@
     backtestLoadStatus: document.getElementById("backtest-load-status"),
     savedBacktestsList: document.getElementById("saved-backtests-list"),
     toast: document.getElementById("toast"),
-    purchasePanels: Array.from(document.querySelectorAll(".purchase-panel")),
-  };
+	    purchasePanels: Array.from(document.querySelectorAll(".purchase-panel")),
+	  };
 
-  const state = {
-    user: null,
+  if (ui.anonymousSignin) {
+    ui.anonymousSignin.style.display = "none";
+    ui.anonymousSignin.disabled = true;
+    ui.anonymousSignin.setAttribute("aria-hidden", "true");
+  }
+
+	  const state = {
+	    user: null,
     userHasPaidPlan: false,
     userSubscriptionTier: "free",
     userProfile: {
@@ -1378,10 +1505,28 @@
       bio: "",
       publicProfile: false,
       publicScreenerSharing: false,
+      publicEmailOptIn: false,
       stripeConnectAccountId: "",
     },
     preferredLanguage: "en",
     preferredCountry: "US",
+    notificationPrivacy: (() => {
+      let cached = {};
+      try {
+        const raw = localStorage.getItem(NOTIFICATION_PRIVACY_CACHE_KEY);
+        cached = raw ? JSON.parse(raw) : {};
+      } catch (error) {
+        cached = {};
+      }
+      return {
+        locationConsent: Boolean(cached?.locationConsent),
+        ipRegionConsent: Boolean(cached?.ipRegionConsent),
+        coarseLocation: cached?.coarseLocation && typeof cached.coarseLocation === "object" ? cached.coarseLocation : null,
+        ipRegion: String(cached?.ipRegion || "").trim().slice(0, 80),
+        timezone: String(cached?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "").trim().slice(0, 80),
+        lastUpdatedMs: Number(cached?.lastUpdatedMs || 0) || 0,
+      };
+    })(),
     cookieConsent: (() => {
       try {
         return localStorage.getItem(COOKIE_CONSENT_KEY) || "";
@@ -1389,12 +1534,16 @@
         return "";
       }
     })(),
-	    initialPageViewSent: false,
+		    initialPageViewSent: false,
 	    authResolved: false,
-      authInFlight: false,
+	      authInFlight: false,
+      anonymousBootstrapInFlight: false,
+      nativeAuthPromptRequested: false,
+      nativeAuthState: null,
     intelActiveTab: "intelligence",
     tickerContext: {
 	      ticker: "",
+      activeTicker: "",
 	      interval: "1d",
 	      rows: [],
       forecastId: "",
@@ -1407,6 +1556,20 @@
       predictionsTicker: "",
       optionsTicker: "",
       predictionsData: null,
+      tickerHistory: [],
+      tickerQueryProvider: "openai",
+      tickerQueryModel: "gpt-5-mini",
+      tickerQueryModels: [],
+      tickerQueryProviders: [],
+      tickerQueryModelsLoaded: false,
+      tickerQueryModules: [],
+      tickerQueryLastResponseId: "",
+      tickerQueryLastResponse: null,
+      tickerQueryShareUrl: "",
+      tickerQueryPendingQuestion: "",
+      tickerQueryPendingProvider: "",
+      tickerQueryPendingModel: "",
+      tickerQueryFeedback: "",
     },
     predictionsContext: {
       uploadId: "",
@@ -1440,6 +1603,14 @@
     sideDataRefreshTimer: null,
     pendingShareId: "",
     pendingShareProcessed: false,
+    sharedScreenerView: null,
+    promoStatus: null,
+    promoClockOffsetMs: 0,
+    promoTimer: null,
+    promoSessionCount: 0,
+    promoForecastCount: 0,
+    promoSessionTouched: false,
+    promoModalShown: false,
     taskCalendarCursor: null,
     taskCalendarTasks: [],
 	    unsubscribeOrders: null,
@@ -1477,7 +1648,11 @@
         aiUsageTiers: AI_USAGE_TIER_DEFAULTS,
         stripeCheckoutEnabled: true,
         stripePublicKey: "",
-        holidayPromo: false,
+        nativeIosStoreKitCheckoutOnly: true,
+        nativeAndroidPlayBillingEnabled: true,
+        nativeIapProductIds: DEFAULT_NATIVE_IAP_PRODUCT_IDS,
+        adsUseRealIOS: true,
+        adsUseRealAndroid: true,
         backtestingEnabled: true,
         backtestingFreeDailyLimit: 1,
         backtestingProDailyLimit: 25,
@@ -1510,7 +1685,14 @@
       }
       return raw === "line" ? "line" : "candlestick";
     })(),
-    tradingViewTheme: "auto",
+    tradingViewTheme: (() => {
+      try {
+        const raw = String(localStorage.getItem(TRADINGVIEW_THEME_CACHE_KEY) || "auto").trim().toLowerCase();
+        return raw === "dark" || raw === "light" ? raw : "auto";
+      } catch (error) {
+        return "auto";
+      }
+    })(),
     tradingViewRenderNonce: 0,
     tradingViewLoadTimer: null,
     tradingViewLoadFailed: false,
@@ -1527,6 +1709,8 @@
             body: String(entry?.body || ""),
             source: String(entry?.source || "unknown"),
             at: String(entry?.at || new Date().toISOString()),
+            personalized: Boolean(entry?.personalized),
+            nextSteps: Array.isArray(entry?.nextSteps) ? entry.nextSteps.slice(0, 4).map((item) => String(item)) : [],
           }));
       } catch (error) {
         return [];
@@ -1632,20 +1816,24 @@
 		        defaultPanel: "forecast",
 		        panelToPath: {
 		          forecast: "/forecasting",
-              "ticker-intelligence": "/ticker-intelligence",
+              ticker: "/ticker-intelligence",
 		          indicators: "/indicators",
               trending: "/trending",
 		          news: "/news",
               "events-calendar": "/events-calendar",
               "market-headlines": "/market-headlines",
-              "ticker-query": "/ticker-query",
-		          options: "/options",
-		          saved: "/saved-forecasts",
-              backtesting: "/backtesting",
-		          learn: "/studio",
-              "ai-leaderboard": "/ai-leaderboard",
-		        },
-		      },
+              "ticker-query": "/model-council",
+	          options: "/options",
+	          saved: "/saved-forecasts",
+	          learn: "/studio",
+            },
+            pathAliases: {
+              "/backtesting": "indicators",
+              "/ticker-intelligence": "ticker",
+              "/ticker-query": "ticker-query",
+              "/model-council": "ticker-query",
+            },
+          },
 			      dashboard: {
 			        defaultPanel: "orders",
 			        panelToPath: {
@@ -1667,6 +1855,9 @@
 		      Object.entries(router.panelToPath || {}).forEach(([panel, path]) => {
 		        mapping[String(path)] = String(panel);
 		      });
+          Object.entries(router.pathAliases || {}).forEach(([path, panel]) => {
+            mapping[String(path)] = String(panel);
+          });
 		      return mapping;
 		    })();
 
@@ -1698,7 +1889,9 @@
 		    const initialFromUrl = () => {
 		      try {
 		        const params = new URLSearchParams(window.location.search);
-		        const panel = params.get("panel");
+		        const panel = String(params.get("panel") || "").trim();
+		        if (panel === "backtesting") return "indicators";
+		        if (panel === "ticker-intelligence") return "ticker";
 		        if (panel) return panel;
 		      } catch (error) {
 		        // Ignore.
@@ -1719,6 +1912,14 @@
 
 		    const initial = initialFromUrl() || router?.defaultPanel || buttons[0].dataset.panelTarget;
 		    setActive(initial, { pushPath: false });
+
+        if (typeof window !== "undefined") {
+          window.__quanturaSetPanel = (panel, options = {}) => {
+            const next = String(panel || "").trim();
+            if (!next) return;
+            setActive(next, options);
+          };
+        }
 
 		    window.addEventListener("popstate", () => {
 		      const next = initialFromUrl();
@@ -1841,8 +2042,8 @@
     });
 
     const preferredByRouter = {
-      terminal: ["forecast", "ticker-intelligence", "indicators", "trending", "news"],
-      dashboard: ["orders", "watchlist", "productivity", "collaboration", "uploads"],
+      terminal: ["forecast", "/explore", "ticker", "indicators", "news"],
+      dashboard: ["orders", "/explore", "watchlist", "productivity", "uploads"],
     };
     const preferredPanels = preferredByRouter[routerName] || [];
     const selected = preferredPanels
@@ -1868,9 +2069,8 @@
         const panelAttr = panel ? ` data-panel-target="${escapeHtml(panel)}"` : "";
         const activeClass = link.classList.contains("active") ? " active" : "";
         return `
-          <a class="mobile-bottom-link${activeClass}" href="${escapeHtml(href)}"${panelAttr} aria-label="${escapeHtml(label)}">
+          <a class="mobile-bottom-link${activeClass}" href="${escapeHtml(href)}"${panelAttr} aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">
             ${iconMarkup}
-            <span>${escapeHtml(label)}</span>
           </a>
         `;
       })
@@ -1881,6 +2081,99 @@
       nav.classList.toggle("hidden", !visible);
       document.body.classList.toggle("mobile-bottom-nav-enabled", visible);
     };
+
+    syncVisibility();
+    window.addEventListener("resize", syncVisibility);
+  };
+
+  const bindMobileSidebarDrawer = () => {
+    const sidebar = document.querySelector(".app-sidebar");
+    const sidebarNav = sidebar?.querySelector(".sidebar-nav");
+    if (!sidebar || !sidebarNav) return;
+
+    if (!sidebarNav.id) sidebarNav.id = "mobile-sidebar-nav";
+
+    let toggle = document.getElementById("mobile-sidebar-toggle");
+    if (!toggle) {
+      toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.id = "mobile-sidebar-toggle";
+      toggle.className = "mobile-sidebar-toggle hidden";
+      toggle.setAttribute("aria-controls", sidebarNav.id);
+      toggle.setAttribute("aria-expanded", "false");
+      toggle.setAttribute("aria-label", "Open terminal navigation");
+      toggle.innerHTML = `${icon("menu-scale")}<span>Nav</span>`;
+      document.body.appendChild(toggle);
+    }
+
+    let backdrop = document.getElementById("mobile-sidebar-backdrop");
+    if (!backdrop) {
+      backdrop = document.createElement("button");
+      backdrop.type = "button";
+      backdrop.id = "mobile-sidebar-backdrop";
+      backdrop.className = "mobile-sidebar-backdrop hidden";
+      backdrop.setAttribute("aria-label", "Close terminal navigation");
+      document.body.appendChild(backdrop);
+    }
+
+    let focusReturnNode = null;
+    const close = ({ restoreFocus = true } = {}) => {
+      sidebar.classList.remove("mobile-sidebar-open");
+      backdrop?.classList.add("hidden");
+      document.body.classList.remove("mobile-sidebar-lock");
+      toggle?.setAttribute("aria-expanded", "false");
+      if (restoreFocus) {
+        const target = focusReturnNode instanceof HTMLElement ? focusReturnNode : toggle;
+        target?.focus?.();
+      }
+    };
+
+    const open = () => {
+      if (window.innerWidth > 980) return;
+      focusReturnNode = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      sidebar.classList.add("mobile-sidebar-open");
+      backdrop?.classList.remove("hidden");
+      document.body.classList.add("mobile-sidebar-lock");
+      toggle?.setAttribute("aria-expanded", "true");
+      const firstLink = sidebarNav.querySelector("a.sidebar-link, button.sidebar-link");
+      firstLink?.focus?.();
+    };
+
+    const syncVisibility = () => {
+      const visible = window.innerWidth <= 980;
+      toggle?.classList.toggle("hidden", !visible);
+      if (!visible) close({ restoreFocus: false });
+    };
+
+    if (!toggle.__quanturaSidebarDrawerBound) {
+      toggle.__quanturaSidebarDrawerBound = true;
+      toggle.addEventListener("click", () => {
+        if (sidebar.classList.contains("mobile-sidebar-open")) close();
+        else open();
+      });
+    }
+
+    if (!backdrop.__quanturaSidebarDrawerBound) {
+      backdrop.__quanturaSidebarDrawerBound = true;
+      backdrop.addEventListener("click", () => close());
+    }
+
+    if (!sidebarNav.__quanturaSidebarDrawerBound) {
+      sidebarNav.__quanturaSidebarDrawerBound = true;
+      sidebarNav.querySelectorAll("a.sidebar-link, button.sidebar-link").forEach((node) => {
+        node.addEventListener("click", () => close({ restoreFocus: false }));
+      });
+    }
+
+    if (!document.body.__quanturaSidebarDrawerKeyBound) {
+      document.body.__quanturaSidebarDrawerKeyBound = true;
+      document.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape") return;
+        if (!sidebar.classList.contains("mobile-sidebar-open")) return;
+        event.preventDefault();
+        close();
+      });
+    }
 
     syncVisibility();
     window.addEventListener("resize", syncVisibility);
@@ -2089,7 +2382,7 @@
 	        rc.settings = { minimumFetchIntervalMillis };
 	      }
 	          rc.defaultConfig = {
-	            welcome_message: "Welcome to Quantura",
+	            welcome_message: "",
 	            watchlist_enabled: true,
 	            forecast_prophet_enabled: true,
 	            forecast_timemixer_enabled: true,
@@ -2104,7 +2397,11 @@
 	            webpush_vapid_key: "",
 	            stripe_checkout_enabled: true,
 	            stripe_public_key: "",
-              holiday_promo: false,
+              native_ios_storekit_checkout_only: true,
+              native_android_play_billing_enabled: true,
+              native_iap_product_ids: JSON.stringify(DEFAULT_NATIVE_IAP_PRODUCT_IDS),
+              ads_use_real_ios: true,
+              ads_use_real_android: true,
               backtesting_enabled: true,
               backtesting_free_daily_limit: "1",
               backtesting_pro_daily_limit: "25",
@@ -2182,7 +2479,7 @@
           const minFetchIntervalMillis = isDev ? 0 : 60 * 60 * 1000;
           rc.settings.minimumFetchIntervalMillis = minFetchIntervalMillis;
           rc.defaultConfig = {
-            welcome_message: "Welcome to Quantura",
+            welcome_message: "",
             watchlist_enabled: true,
             forecast_prophet_enabled: true,
             forecast_timemixer_enabled: true,
@@ -2197,7 +2494,11 @@
             webpush_vapid_key: "",
             stripe_checkout_enabled: true,
             stripe_public_key: "",
-            holiday_promo: false,
+            native_ios_storekit_checkout_only: true,
+            native_android_play_billing_enabled: true,
+            native_iap_product_ids: JSON.stringify(DEFAULT_NATIVE_IAP_PRODUCT_IDS),
+            ads_use_real_ios: true,
+            ads_use_real_android: true,
             backtesting_enabled: true,
             backtesting_free_daily_limit: "1",
             backtesting_pro_daily_limit: "25",
@@ -2281,7 +2582,7 @@
         return normalized.length ? normalized : fallback;
       };
 		    return {
-          welcomeMessage: getString("welcome_message", "Welcome to Quantura"),
+          welcomeMessage: getString("welcome_message", ""),
 		      watchlistEnabled: getBool("watchlist_enabled", true),
 		      forecastProphetEnabled: getBool("forecast_prophet_enabled", true),
 		      forecastTimeMixerEnabled: getBool("forecast_timemixer_enabled", true),
@@ -2296,15 +2597,19 @@
           aiUsageTiers: getJson("ai_usage_tiers", AI_USAGE_TIER_DEFAULTS),
 	        stripeCheckoutEnabled: getBool("stripe_checkout_enabled", true),
 	        stripePublicKey: getString("stripe_public_key", ""),
-          holidayPromo: getBool("holiday_promo", false),
+          nativeIosStoreKitCheckoutOnly: getBool("native_ios_storekit_checkout_only", true),
+          nativeAndroidPlayBillingEnabled: getBool("native_android_play_billing_enabled", true),
+          nativeIapProductIds: getJson("native_iap_product_ids", DEFAULT_NATIVE_IAP_PRODUCT_IDS),
+          adsUseRealIOS: getBool("ads_use_real_ios", true),
+          adsUseRealAndroid: getBool("ads_use_real_android", true),
           backtestingEnabled: getBool("backtesting_enabled", true),
           backtestingFreeDailyLimit: getInt("backtesting_free_daily_limit", 1),
           backtestingProDailyLimit: getInt("backtesting_pro_daily_limit", 25),
 		    };
 		  };
 
-	  const applyRemoteFlags = (flags) => {
-      updateWelcomeMessageBanner(String(flags.welcomeMessage || "").trim());
+  const applyRemoteFlags = (flags) => {
+      updateWelcomeMessageBanner();
 	    document.querySelectorAll('[data-panel-target="watchlist"]').forEach((el) => {
 	      el.classList.toggle("hidden", !flags.watchlistEnabled);
 	    });
@@ -2312,11 +2617,8 @@
 	      if (!flags.watchlistEnabled) el.classList.add("hidden");
 	    });
 
-      document.querySelectorAll('[data-panel-target="backtesting"]').forEach((el) => {
+      document.querySelectorAll("[data-backtesting-module]").forEach((el) => {
         el.classList.toggle("hidden", !flags.backtestingEnabled);
-      });
-      document.querySelectorAll('[data-panel="backtesting"]').forEach((el) => {
-        if (!flags.backtestingEnabled) el.classList.add("hidden");
       });
 
       document.querySelectorAll('[data-panel-target="notifications"]').forEach((el) => {
@@ -2336,6 +2638,7 @@
 
       updateMaintenanceModeUi(Boolean(flags.maintenanceMode));
       updateDynamicPromoBanner(String(flags.promoBannerText || "").trim());
+      renderServerPromoBanner();
       ensureHeaderNotificationsCta();
       const headerNotificationsLink = document.getElementById("header-notifications");
       if (headerNotificationsLink) headerNotificationsLink.classList.toggle("hidden", !flags.pushEnabled);
@@ -2352,72 +2655,251 @@
       remoteConfigStore.publish(flags);
 	  };
 
-    const updateWelcomeMessageBanner = (text) => {
-      const message = String(text || "").trim();
+    const updateWelcomeMessageBanner = () => {
       const existing = document.getElementById("welcome-message-banner");
-      if (!message) {
-        existing?.remove();
-        return;
-      }
-      if (existing) {
-        const node = existing.querySelector("[data-welcome-message]");
-        if (node) node.textContent = message;
-        return;
-      }
-      const banner = document.createElement("section");
-      banner.id = "welcome-message-banner";
-      banner.className = "welcome-banner";
-      banner.innerHTML = `
-        <div class="welcome-inner">
-          <span class="welcome-badge">Welcome</span>
-          <span class="welcome-text" data-welcome-message>${escapeHtml(message)}</span>
-        </div>
-      `;
-      const header = document.querySelector("header.header");
-      if (header && typeof header.insertAdjacentElement === "function") header.insertAdjacentElement("afterend", banner);
-      else document.body.prepend(banner);
+      existing?.remove();
     };
 
-    const maybeShowHolidayPromo = () => {
-      if (!state.remoteFlags.holidayPromo) return;
-      if (typeof window === "undefined") return;
-      if (window.location.pathname !== "/") return;
-      if (String(safeLocalStorageGet(HOLIDAY_PROMO_SEEN_KEY) || "") === "1") return;
-      if (document.getElementById("holiday-promo")) return;
+    const persistNotificationPrivacyCache = () => {
+      try {
+        localStorage.setItem(
+          NOTIFICATION_PRIVACY_CACHE_KEY,
+          JSON.stringify({
+            locationConsent: Boolean(state.notificationPrivacy?.locationConsent),
+            ipRegionConsent: Boolean(state.notificationPrivacy?.ipRegionConsent),
+            coarseLocation: state.notificationPrivacy?.coarseLocation || null,
+            ipRegion: String(state.notificationPrivacy?.ipRegion || "").trim(),
+            timezone: String(state.notificationPrivacy?.timezone || "").trim(),
+            lastUpdatedMs: Number(state.notificationPrivacy?.lastUpdatedMs || Date.now()),
+          })
+        );
+      } catch (error) {
+        // Ignore storage issues.
+      }
+    };
 
-      const banner = document.createElement("section");
-      banner.id = "holiday-promo";
-      banner.className = "promo-banner";
-      banner.innerHTML = `
+    const getStoredNumber = (key, fallback = 0) => {
+      const raw = String(safeLocalStorageGet(key) || "").trim();
+      if (!raw) return fallback;
+      const parsed = Number(raw);
+      return Number.isFinite(parsed) ? parsed : fallback;
+    };
+
+    const setStoredNumber = (key, value) => {
+      safeLocalStorageSet(key, String(Math.max(0, Math.floor(Number(value) || 0))));
+    };
+
+    const recordPromoSessionUsage = () => {
+      if (state.promoSessionTouched) return;
+      state.promoSessionTouched = true;
+      const now = Date.now();
+      const last = getStoredNumber(PROMO_LAST_SESSION_KEY, 0);
+      let sessions = getStoredNumber(PROMO_SESSION_COUNT_KEY, 0);
+      if (now - last >= 25 * 60 * 1000) {
+        sessions += 1;
+      }
+      state.promoSessionCount = Math.max(1, sessions || 1);
+      setStoredNumber(PROMO_SESSION_COUNT_KEY, state.promoSessionCount);
+      setStoredNumber(PROMO_LAST_SESSION_KEY, now);
+    };
+
+    const recordPromoForecastUsage = () => {
+      const current = getStoredNumber(PROMO_FORECAST_COUNT_KEY, state.promoForecastCount || 0) + 1;
+      state.promoForecastCount = current;
+      setStoredNumber(PROMO_FORECAST_COUNT_KEY, current);
+      maybeShowPromoModal();
+    };
+
+    const isPromoEligibleViewer = () => {
+      const user = state.user;
+      if (!user || user.isAnonymous) return true;
+      if (isAdminUser(user)) return false;
+      if (state.userHasPaidPlan || String(state.userSubscriptionTier || "").toLowerCase() !== "free") return false;
+      return true;
+    };
+
+    const clearPromoTimer = () => {
+      if (state.promoTimer) {
+        window.clearInterval(state.promoTimer);
+        state.promoTimer = null;
+      }
+    };
+
+    const promoNowMs = () => Date.now() + Number(state.promoClockOffsetMs || 0);
+
+    const formatPromoCountdown = (remainingMs) => {
+      const safe = Math.max(0, Math.floor(remainingMs / 1000));
+      const days = Math.floor(safe / 86400);
+      const hours = Math.floor((safe % 86400) / 3600);
+      const mins = Math.floor((safe % 3600) / 60);
+      if (days > 0) return `${days}d ${hours}h ${mins}m`;
+      return `${hours}h ${mins}m`;
+    };
+
+    const dismissPromoBanner = () => {
+      safeLocalStorageSet(PROMO_BANNER_DISMISSED_KEY, "1");
+      const node = document.getElementById("server-promo-banner");
+      node?.remove();
+      logEvent("promo_banner_dismissed", {});
+    };
+
+    const renderServerPromoBanner = () => {
+      const promo = state.promoStatus;
+      const existing = document.getElementById("server-promo-banner");
+      if (!promo?.active || !isPromoEligibleViewer() || String(safeLocalStorageGet(PROMO_BANNER_DISMISSED_KEY) || "") === "1") {
+        existing?.remove();
+        clearPromoTimer();
+        return;
+      }
+      const remaining = Number(promo.endsAtMs || 0) - promoNowMs();
+      if (!Number.isFinite(remaining) || remaining <= 0) {
+        existing?.remove();
+        clearPromoTimer();
+        return;
+      }
+      const badge = `${Number(promo.discountPercent || 50)}% off`;
+      const headline = String(promo.headline || "Limited-time promotional offer");
+      const details = String(promo.body || `Use code ${promo.code || "QUANTURA50"} on checkout.`);
+      const code = String(promo.code || "QUANTURA50").toUpperCase();
+      const countdown = formatPromoCountdown(remaining);
+      const html = `
         <div class="promo-inner">
           <div>
-            <div class="promo-badge">Holiday promo</div>
-            <div class="promo-title">Limited-time discount for new Quantura members.</div>
-            <div class="small muted">Explore plans, unlock higher throughput, and ship your weekly research loop faster.</div>
+            <div class="promo-badge">${escapeHtml(badge)}</div>
+            <div class="promo-title">${escapeHtml(headline)}</div>
+            <div class="small muted">${escapeHtml(details)}</div>
+            <div class="small" style="margin-top:6px;">
+              Code <strong>${escapeHtml(code)}</strong> · Ends in
+              <span id="promo-countdown">${escapeHtml(countdown)}</span>
+            </div>
           </div>
           <div class="promo-actions">
-            <a class="cta small" href="/pricing" data-action="promo-cta">View plans</a>
-            <button class="cta secondary small" type="button" data-action="promo-dismiss">No thanks</button>
+            <a class="cta small" href="/pricing" data-action="promo-view-plans">Claim offer</a>
+            <button class="cta secondary small" type="button" data-action="promo-dismiss-banner">Dismiss</button>
           </div>
         </div>
       `;
-      const header = document.querySelector("header.header");
-      if (header && typeof header.insertAdjacentElement === "function") header.insertAdjacentElement("afterend", banner);
-      else document.body.prepend(banner);
-
-      const dismiss = banner.querySelector('[data-action="promo-dismiss"]');
-      const cta = banner.querySelector('[data-action="promo-cta"]');
-      dismiss?.addEventListener("click", () => {
-        safeLocalStorageSet(HOLIDAY_PROMO_SEEN_KEY, "1");
-        banner.remove();
-        logEvent("holiday_promo_dismissed", {});
+      if (existing) {
+        existing.innerHTML = html;
+      } else {
+        const banner = document.createElement("section");
+        banner.id = "server-promo-banner";
+        banner.className = "promo-banner";
+        banner.innerHTML = html;
+        const header = document.querySelector("header.header");
+        if (header && typeof header.insertAdjacentElement === "function") header.insertAdjacentElement("afterend", banner);
+        else document.body.prepend(banner);
+      }
+      const bannerNode = document.getElementById("server-promo-banner");
+      bannerNode?.querySelector('[data-action="promo-dismiss-banner"]')?.addEventListener("click", dismissPromoBanner);
+      bannerNode?.querySelector('[data-action="promo-view-plans"]')?.addEventListener("click", () => {
+        logEvent("promo_banner_clicked", { code });
       });
-      cta?.addEventListener("click", () => {
-        safeLocalStorageSet(HOLIDAY_PROMO_SEEN_KEY, "1");
-        logEvent("holiday_promo_clicked", {});
-      });
+      clearPromoTimer();
+      state.promoTimer = window.setInterval(() => {
+        const current = document.getElementById("promo-countdown");
+        if (!current) {
+          clearPromoTimer();
+          return;
+        }
+        const ms = Number(state.promoStatus?.endsAtMs || 0) - promoNowMs();
+        if (ms <= 0) {
+          current.textContent = "expired";
+          clearPromoTimer();
+          return;
+        }
+        current.textContent = formatPromoCountdown(ms);
+      }, 1000);
+    };
 
-      logEvent("holiday_promo_shown", {});
+    const closePromoModal = () => {
+      const modal = document.getElementById("promo-offer-modal");
+      modal?.remove();
+    };
+
+    const showPromoModal = () => {
+      if (document.getElementById("promo-offer-modal")) return;
+      const promo = state.promoStatus;
+      if (!promo?.active || !isPromoEligibleViewer()) return;
+
+      const modal = document.createElement("div");
+      modal.id = "promo-offer-modal";
+      modal.className = "modal";
+      modal.innerHTML = `
+        <div class="modal-backdrop" data-action="close-promo-modal"></div>
+        <div class="modal-card card" role="dialog" aria-modal="true" aria-label="Quantura promotional offer">
+          <h3>Unlock Quantura at ${escapeHtml(String(Number(promo.discountPercent || 50)))}% off</h3>
+          <p class="small">
+            You have started active usage. Use code <strong>${escapeHtml(String(promo.code || "QUANTURA50").toUpperCase())}</strong>
+            for a limited-time discount.
+          </p>
+          <div class="small muted">Offer timer is synced to server time for consistency across devices.</div>
+          <div class="modal-actions">
+            <button class="cta secondary" type="button" data-action="close-promo-modal">Not now</button>
+            <a class="cta" href="/pricing" data-action="promo-modal-cta">Claim 50% off</a>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+      modal.querySelectorAll('[data-action="close-promo-modal"]').forEach((node) => {
+        node.addEventListener("click", () => {
+          safeLocalStorageSet(PROMO_MODAL_DISMISSED_KEY, "1");
+          closePromoModal();
+          logEvent("promo_modal_dismissed", {});
+        });
+      });
+      modal.querySelector('[data-action="promo-modal-cta"]')?.addEventListener("click", () => {
+        safeLocalStorageSet(PROMO_MODAL_DISMISSED_KEY, "1");
+        logEvent("promo_modal_clicked", { code: String(promo.code || "QUANTURA50").toUpperCase() });
+      });
+      state.promoModalShown = true;
+      logEvent("promo_modal_shown", {
+        sessions: state.promoSessionCount,
+        forecasts: state.promoForecastCount,
+      });
+    };
+
+    function maybeShowPromoModal() {
+      const promo = state.promoStatus;
+      if (!promo?.active) return;
+      if (!isPromoEligibleViewer()) return;
+      if (String(safeLocalStorageGet(PROMO_MODAL_DISMISSED_KEY) || "") === "1") return;
+      if (state.promoModalShown) return;
+      const sessionCount = getStoredNumber(PROMO_SESSION_COUNT_KEY, state.promoSessionCount || 0);
+      const forecastCount = getStoredNumber(PROMO_FORECAST_COUNT_KEY, state.promoForecastCount || 0);
+      state.promoSessionCount = sessionCount;
+      state.promoForecastCount = forecastCount;
+      if (sessionCount >= 3 || forecastCount >= 2) {
+        showPromoModal();
+      }
+    }
+
+    const loadServerPromoStatus = async () => {
+      try {
+        const response = await fetch("/api/explore/promo/status", { method: "GET", credentials: "omit" });
+        if (!response.ok) return;
+        const payload = await response.json().catch(() => ({}));
+        const promo = payload?.promo && typeof payload.promo === "object" ? payload.promo : null;
+        if (!promo) return;
+        const serverTimeMs = Number(payload?.serverTimeMs || promo?.serverTimeMs || Date.now());
+        if (Number.isFinite(serverTimeMs)) {
+          state.promoClockOffsetMs = serverTimeMs - Date.now();
+        }
+        state.promoStatus = {
+          id: String(promo.id || "promo"),
+          active: Boolean(promo.active),
+          code: String(promo.code || "QUANTURA50"),
+          discountPercent: Number(promo.discountPercent || 50),
+          headline: String(promo.headline || "Limited-time promotional offer"),
+          body: String(promo.body || ""),
+          startsAtMs: Number(promo.startsAtMs || 0) || 0,
+          endsAtMs: Number(promo.endsAtMs || 0) || 0,
+        };
+        renderServerPromoBanner();
+        maybeShowPromoModal();
+      } catch (error) {
+        // Promo UI is optional; keep page resilient.
+      }
     };
 
     const updateDynamicPromoBanner = (text) => {
@@ -2575,7 +3057,7 @@
 	    };
 	    state.remoteConfigLoaded = true;
 	    applyRemoteFlags(state.remoteFlags);
-      maybeShowHolidayPromo();
+      loadServerPromoStatus().catch(() => {});
 	    subscribeRemoteConfigUpdates(rc);
 	    startRemoteConfigRefreshLoop(rc);
 	    logEvent("remote_config_loaded", {
@@ -2648,30 +3130,47 @@
     return normalizeLanguageCode(COUNTRY_DEFAULT_LANGUAGE[key] || "en");
   };
 
-  const buildMeta = () => ({
-    sessionId: getSessionId(),
-    pagePath: window.location.pathname,
-    pageTitle: document.title,
-    referrer: document.referrer || "",
-    userAgent: navigator.userAgent,
-    language: state.preferredLanguage || normalizeLanguageCode(navigator.language),
-    country: state.preferredCountry || "",
-    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    screen: `${window.screen.width}x${window.screen.height}`,
-    platform: navigator.platform,
-    runtime: resolveRuntimeLabel(),
-    nativePlatform: getNativePlatform() || "",
-    nativeApp: isNativeApp(),
-    installedPwa: isInstalledPwa(),
-  });
+  const buildMeta = () => {
+    const privacy = state.notificationPrivacy || {};
+    const locationConsent = Boolean(privacy.locationConsent);
+    const ipRegionConsent = Boolean(privacy.ipRegionConsent);
+    const rawCountry = String(privacy?.coarseLocation?.countryCode || "").trim();
+    const country = locationConsent && rawCountry ? normalizeCountryCode(rawCountry) : "";
+    const timezone = locationConsent
+      ? String(privacy.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "").trim()
+      : "";
+    const ipRegion = locationConsent && ipRegionConsent ? String(privacy.ipRegion || "").trim().slice(0, 80) : "";
+    return {
+      sessionId: getSessionId(),
+      pagePath: window.location.pathname,
+      pageTitle: document.title,
+      referrer: document.referrer || "",
+      userAgent: navigator.userAgent,
+      language: state.preferredLanguage || normalizeLanguageCode(navigator.language),
+      country,
+      timezone,
+      ipRegion,
+      locationConsent,
+      ipRegionConsent,
+      screen: `${window.screen.width}x${window.screen.height}`,
+      platform: navigator.platform,
+      runtime: resolveRuntimeLabel(),
+      nativePlatform: getNativePlatform() || "",
+      nativeApp: isNativeApp(),
+      installedPwa: isInstalledPwa(),
+    };
+  };
 
   const exchangeNativeIdTokenForCustomToken = async (idToken) => {
     const token = String(idToken || "").trim();
     if (!token) throw new Error("Native ID token is missing.");
-    const response = await fetch("/api/auth/exchange-native-id-token", {
+    const response = await fetch("/api/auth/exchange", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ idToken: token }),
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({}),
     });
     let payload = null;
     try {
@@ -2683,6 +3182,69 @@
       throw new Error(String(payload?.error || "Unable to sync native auth session."));
     }
     return String(payload.customToken);
+  };
+
+  const installNativeAuthBridge = (auth) => {
+    if (!isNativeApp() || !auth) return null;
+    const existingBridge = window.__quanturaAuthBridge && typeof window.__quanturaAuthBridge === "object"
+      ? window.__quanturaAuthBridge
+      : {};
+
+    if (existingBridge.__nativeInstalled === true) {
+      return existingBridge;
+    }
+
+    const bridge = existingBridge;
+    bridge.receiveCustomToken = async (token) => {
+      const cleanToken = String(token || "").trim();
+      if (!cleanToken) return false;
+      try {
+        await auth.signInWithCustomToken(cleanToken);
+        window.dispatchEvent(new CustomEvent("quantura:native-custom-token-consumed", { detail: { ok: true } }));
+        return true;
+      } catch (error) {
+        window.dispatchEvent(new CustomEvent("quantura:native-custom-token-consumed", { detail: { ok: false, error: error?.message || "custom token failed" } }));
+        throw error;
+      }
+    };
+
+    bridge.onNativeAuthState = (authState) => {
+      const nextState = authState && typeof authState === "object" ? authState : {};
+      state.nativeAuthState = nextState;
+      window.dispatchEvent(new CustomEvent("quantura:native-auth-state-bridge", { detail: nextState }));
+      return nextState;
+    };
+
+    bridge.requestSignIn = (provider = "") =>
+      sendNativeAuthMessage({
+        type: "REQUEST_SIGN_IN",
+        provider: String(provider || "").trim().toLowerCase(),
+      });
+
+    bridge.requestAuthState = () => sendNativeAuthMessage({ type: "GET_AUTH_STATE" });
+    bridge.signOut = () => sendNativeAuthMessage({ type: "SIGN_OUT" });
+    bridge.__nativeInstalled = true;
+
+    window.__quanturaAuthBridge = bridge;
+
+    try {
+      if (window.__QUANTURA_PENDING_AUTH_STATE__) {
+        bridge.onNativeAuthState(window.__QUANTURA_PENDING_AUTH_STATE__);
+      }
+    } catch (error) {
+      // Ignore stale pending state errors.
+    }
+    try {
+      const pendingToken = String(window.__QUANTURA_PENDING_CUSTOM_TOKEN__ || "").trim();
+      if (pendingToken) {
+        bridge.receiveCustomToken(pendingToken).catch(() => {});
+      }
+    } catch (error) {
+      // Ignore stale pending token errors.
+    }
+
+    bridge.requestAuthState();
+    return bridge;
   };
 
   const getMessagingClient = () => {
@@ -2721,6 +3283,170 @@
     if (ui.notificationsEnable) ui.notificationsEnable.disabled = !enabled;
     if (ui.notificationsRefresh) ui.notificationsRefresh.disabled = !enabled;
     if (ui.notificationsSendTest) ui.notificationsSendTest.disabled = !enabled;
+  };
+
+  const refreshNotificationPrivacyRefs = () => {
+    ui.notificationsPrivacyContainer = document.getElementById("notifications-privacy-controls");
+    ui.notificationsLocationOptIn = document.getElementById("notifications-location-optin");
+    ui.notificationsIpOptIn = document.getElementById("notifications-ip-optin");
+    ui.notificationsRequestLocation = document.getElementById("notifications-request-location");
+    ui.notificationsPrivacyStatus = document.getElementById("notifications-privacy-status");
+  };
+
+  const setNotificationPrivacyStatus = (text, isError = false) => {
+    if (!ui.notificationsPrivacyStatus) return;
+    ui.notificationsPrivacyStatus.textContent = String(text || "");
+    ui.notificationsPrivacyStatus.style.color = isError ? "#d83446" : "";
+  };
+
+  const syncNotificationPrivacyControls = () => {
+    refreshNotificationPrivacyRefs();
+    if (!ui.notificationsPrivacyContainer) return;
+    const privacy = state.notificationPrivacy || {};
+    const locationConsent = Boolean(privacy.locationConsent);
+    const ipRegionConsent = Boolean(privacy.ipRegionConsent);
+    if (ui.notificationsLocationOptIn) ui.notificationsLocationOptIn.checked = locationConsent;
+    if (ui.notificationsIpOptIn) {
+      ui.notificationsIpOptIn.checked = locationConsent && ipRegionConsent;
+      ui.notificationsIpOptIn.disabled = !locationConsent;
+    }
+    if (ui.notificationsRequestLocation) ui.notificationsRequestLocation.disabled = !locationConsent;
+    if (!locationConsent) {
+      setNotificationPrivacyStatus("Location consent is off. Notification text stays generic.");
+      return;
+    }
+    const timezone = String(privacy.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "").trim();
+    const country = String(privacy?.coarseLocation?.countryCode || "").trim();
+    const region = String(privacy.ipRegion || "").trim();
+    const summary = [`Consent on`, country ? `country ${country}` : "", region ? `region ${region}` : "", timezone ? timezone : ""]
+      .filter(Boolean)
+      .join(" · ");
+    setNotificationPrivacyStatus(summary);
+  };
+
+  const ensureNotificationPrivacyControls = () => {
+    if (!ui.notificationsStatus) return;
+    refreshNotificationPrivacyRefs();
+    if (ui.notificationsPrivacyContainer) {
+      syncNotificationPrivacyControls();
+      return;
+    }
+    const anchor = ui.notificationsStatus.parentElement || ui.notificationsStatus;
+    const wrap = document.createElement("div");
+    wrap.id = "notifications-privacy-controls";
+    wrap.className = "notice small";
+    wrap.style.marginTop = "12px";
+    wrap.innerHTML = `
+      <strong>Personalized notifications (optional)</strong>
+      <p class="small" style="margin: 6px 0 8px;">
+        Location and IP-derived region are sensitive. We only store coarse location, timezone, and region after explicit consent.
+      </p>
+      <label class="feature" style="align-items:flex-start;"><span></span><input id="notifications-location-optin" type="checkbox" /> <span>Allow coarse location + timezone for notification context</span></label>
+      <label class="feature" style="align-items:flex-start;"><span></span><input id="notifications-ip-optin" type="checkbox" /> <span>Allow IP-derived region lookup/storage</span></label>
+      <div class="hero-actions" style="margin-top:8px;">
+        <button class="cta secondary small" id="notifications-request-location" type="button">Capture coarse location</button>
+      </div>
+      <p id="notifications-privacy-status" class="small muted" style="margin-top:8px;"></p>
+    `;
+    anchor.insertAdjacentElement("afterend", wrap);
+    refreshNotificationPrivacyRefs();
+    syncNotificationPrivacyControls();
+  };
+
+  const requestCoarseNotificationLocation = async () => {
+    if (!state.notificationPrivacy?.locationConsent) {
+      throw new Error("Enable location consent first.");
+    }
+    if (!navigator.geolocation) {
+      throw new Error("Geolocation is not available in this browser.");
+    }
+    const position = await new Promise((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: false,
+        timeout: 8000,
+        maximumAge: 15 * 60 * 1000,
+      });
+    }).catch((error) => {
+      throw new Error(error?.message || "Location permission was denied.");
+    });
+    const latitude = Number(position?.coords?.latitude);
+    const longitude = Number(position?.coords?.longitude);
+    const coarse = {
+      lat: Number.isFinite(latitude) ? Number(latitude.toFixed(1)) : null,
+      lon: Number.isFinite(longitude) ? Number(longitude.toFixed(1)) : null,
+      accuracyM: Number.isFinite(Number(position?.coords?.accuracy)) ? Math.round(Number(position.coords.accuracy)) : null,
+      countryCode: state.preferredCountry || "US",
+      capturedAt: new Date().toISOString(),
+    };
+    state.notificationPrivacy.coarseLocation = coarse;
+    state.notificationPrivacy.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+    if (state.notificationPrivacy.ipRegionConsent) {
+      const ipContext = await fetchIpLocationContext();
+      if (ipContext.countryCode) {
+        state.notificationPrivacy.coarseLocation.countryCode = ipContext.countryCode;
+        applyCountryPreference(ipContext.countryCode, { persist: true });
+      }
+      state.notificationPrivacy.ipRegion = ipContext.region || "";
+    }
+    state.notificationPrivacy.lastUpdatedMs = Date.now();
+    persistNotificationPrivacyCache();
+    syncNotificationPrivacyControls();
+  };
+
+  const saveNotificationPrivacySettings = async () => {
+    const locationConsent = Boolean(ui.notificationsLocationOptIn?.checked);
+    const ipRegionConsent = locationConsent && Boolean(ui.notificationsIpOptIn?.checked);
+    if (!locationConsent) {
+      state.notificationPrivacy.coarseLocation = null;
+      state.notificationPrivacy.ipRegion = "";
+    }
+    state.notificationPrivacy.locationConsent = locationConsent;
+    state.notificationPrivacy.ipRegionConsent = ipRegionConsent;
+    state.notificationPrivacy.timezone = locationConsent ? (Intl.DateTimeFormat().resolvedOptions().timeZone || "") : "";
+    state.notificationPrivacy.lastUpdatedMs = Date.now();
+    persistNotificationPrivacyCache();
+    syncNotificationPrivacyControls();
+
+    if (!hasFullAccount()) return;
+    const headers = await buildApiAuthHeaders({ includeJson: true });
+    const response = await fetch("/api/notifications/preferences", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        locationConsent,
+        ipRegionConsent,
+        timezone: state.notificationPrivacy.timezone || "",
+        coarseLocation: state.notificationPrivacy.coarseLocation || null,
+        ipRegion: state.notificationPrivacy.ipRegion || "",
+      }),
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(String(payload?.error || "Unable to save notification privacy settings."));
+    }
+  };
+
+  const loadNotificationPrivacySettings = async () => {
+    if (!hasFullAccount()) {
+      syncNotificationPrivacyControls();
+      return;
+    }
+    const headers = await buildApiAuthHeaders({ includeJson: false });
+    const response = await fetch("/api/me/notification-settings", {
+      method: "GET",
+      headers,
+    });
+    if (!response.ok) return;
+    const payload = await response.json().catch(() => ({}));
+    const privacy = payload?.notificationPrivacy && typeof payload.notificationPrivacy === "object" ? payload.notificationPrivacy : {};
+    state.notificationPrivacy.locationConsent = Boolean(privacy.locationConsent);
+    state.notificationPrivacy.ipRegionConsent = Boolean(privacy.ipRegionConsent);
+    state.notificationPrivacy.coarseLocation = privacy.coarseLocation && typeof privacy.coarseLocation === "object" ? privacy.coarseLocation : null;
+    state.notificationPrivacy.ipRegion = String(privacy.ipRegion || "").trim().slice(0, 80);
+    state.notificationPrivacy.timezone = String(privacy.timezone || state.notificationPrivacy.timezone || "").trim().slice(0, 80);
+    state.notificationPrivacy.lastUpdatedMs = Number(privacy.updatedAtMs || Date.now()) || Date.now();
+    persistNotificationPrivacyCache();
+    syncNotificationPrivacyControls();
   };
 
   function safeLocalStorageGet(key) {
@@ -2807,6 +3533,8 @@
     const selectorLabel = pack.language_selector_label || fallback.language_selector_label || "Language";
     if (ui.languageSelect) {
       setLocalizedAttribute(ui.languageSelect, "aria-label", selectorLabel);
+      const languageLabelNode = document.querySelector('label[for="language-select"]');
+      if (languageLabelNode) setLocalizedText(languageLabelNode, selectorLabel);
       Object.entries(UI_I18N_OPTION_MAP).forEach(([value, key]) => {
         const option = ui.languageSelect.querySelector(`option[value="${value}"]`);
         if (option) setLocalizedText(option, pack[key] || fallback[key] || option.textContent || "");
@@ -2821,8 +3549,7 @@
 
     if (ui.headerAuth) {
       const authLabel = accountAuthed ? (pack.dashboard || fallback.dashboard || "Dashboard") : (pack.sign_in || fallback.sign_in || "Sign in");
-      const authSpan = ui.headerAuth.querySelector("span");
-      if (authSpan) setLocalizedText(authSpan, authLabel);
+      setLocalizedAttribute(ui.headerAuth, "title", authLabel);
       setLocalizedAttribute(
         ui.headerAuth,
         "aria-label",
@@ -2860,16 +3587,18 @@
       setLocalizedAttribute(ui.dashboardAuthLink, "aria-label", linkLabel);
     }
     if (ui.billingPortalLink) {
+      const nativeBilling = isNativeIosStoreKitCheckoutOnly() || isNativeAndroidPlayBillingCheckout();
       setLocalizedText(
         ui.billingPortalLink,
         accountAuthed
-          ? (pack.open_billing_portal || fallback.open_billing_portal || "Open Stripe billing portal")
+          ? nativeBilling
+            ? "Manage subscriptions"
+            : (pack.open_billing_portal || fallback.open_billing_portal || "Open Stripe billing portal")
           : (pack.signin_manage_billing || fallback.signin_manage_billing || "Sign in to manage billing")
       );
     }
     if (ui.headerNotifications) {
-      const notifSpan = ui.headerNotifications.querySelector("span");
-      if (notifSpan) setLocalizedText(notifSpan, pack.nav_notifications || fallback.nav_notifications || "Notifications");
+      setLocalizedAttribute(ui.headerNotifications, "title", pack.nav_notifications || fallback.nav_notifications || "Notifications");
       setLocalizedAttribute(
         ui.headerNotifications,
         "aria-label",
@@ -2897,7 +3626,7 @@
       }
     }
     if (!accountAuthed && ui.profileStatus) {
-      setLocalizedText(ui.profileStatus, pack.signin_set_profile || fallback.signin_set_profile || "Sign in to set your public leaderboard profile.");
+      setLocalizedText(ui.profileStatus, pack.signin_set_profile || fallback.signin_set_profile || "Sign in to set your public profile.");
     }
   };
 
@@ -2928,7 +3657,10 @@
     if (persist) safeLocalStorageSet(COUNTRY_PREFERENCE_KEY, normalized);
   };
 
-  const detectCountryFromIp = async () => {
+  const fetchIpLocationContext = async () => {
+    if (!state.notificationPrivacy?.locationConsent || !state.notificationPrivacy?.ipRegionConsent) {
+      return { countryCode: "", region: "" };
+    }
     try {
       const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
       const timeout = window.setTimeout(() => controller?.abort(), 2600);
@@ -2938,12 +3670,16 @@
         signal: controller?.signal,
       });
       window.clearTimeout(timeout);
-      if (!response.ok) return "";
+      if (!response.ok) return { countryCode: "", region: "" };
       const payload = await response.json();
       const raw = String(payload?.country_code || payload?.country || "").trim();
-      return normalizeCountryCode(raw);
+      const region = String(payload?.region_code || payload?.region || payload?.city || "").trim().slice(0, 80);
+      return {
+        countryCode: raw ? normalizeCountryCode(raw) : "",
+        region,
+      };
     } catch (error) {
-      return "";
+      return { countryCode: "", region: "" };
     }
   };
 
@@ -2979,9 +3715,18 @@
         return "";
       }
     })();
-    let country = urlCountry || (storedCountry !== "US" ? storedCountry : "");
-    if (!country) {
-      country = await detectCountryFromIp();
+    const coarseCountryRaw = String(state.notificationPrivacy?.coarseLocation?.countryCode || "").trim();
+    const coarseCountry =
+      state.notificationPrivacy?.locationConsent && coarseCountryRaw ? normalizeCountryCode(coarseCountryRaw) : "";
+    let country = urlCountry || (storedCountry !== "US" ? storedCountry : "") || (coarseCountry !== "US" ? coarseCountry : "");
+    if (!country && state.notificationPrivacy?.locationConsent && state.notificationPrivacy?.ipRegionConsent) {
+      const ipContext = await fetchIpLocationContext();
+      country = ipContext.countryCode || "";
+      if (ipContext.region) {
+        state.notificationPrivacy.ipRegion = ipContext.region;
+        state.notificationPrivacy.lastUpdatedMs = Date.now();
+        persistNotificationPrivacyCache();
+      }
     }
     if (!country) {
       const locale = String(navigator.language || "").split("-")[1] || "";
@@ -3032,11 +3777,16 @@
 
     const setPendingShareId = (shareId) => {
       const id = String(shareId || "").trim();
+      const previous = String(state.pendingShareId || "").trim();
       state.pendingShareId = id;
+      if (id !== previous) {
+        state.pendingShareProcessed = false;
+      }
       if (id) {
         safeLocalStorageSet(PENDING_SHARE_KEY, id);
         writeCookie(PENDING_SHARE_KEY, id, { days: 14 });
       } else {
+        state.pendingShareProcessed = false;
         safeLocalStorageRemove(PENDING_SHARE_KEY);
         deleteCookie(PENDING_SHARE_KEY);
       }
@@ -3107,9 +3857,9 @@
         button.setAttribute("aria-label", next === "dark" ? "Switch to light mode" : "Switch to dark mode");
         button.setAttribute("title", next === "dark" ? "Light mode" : "Dark mode");
       }
-      if (state.tickerContext.ticker && isPanelVisible("ticker-intelligence")) {
+      if (getActiveTicker() && isPanelVisible("ticker")) {
         renderTradingViewTerminal({
-          ticker: state.tickerContext.ticker,
+          ticker: getActiveTicker(),
           interval: state.tickerContext.interval || "1d",
         });
       }
@@ -3448,6 +4198,234 @@
       }, 0);
     });
 
+  const buildSolveNowPrompt = (request, ticker) =>
+    [
+      "You are the Quantura AI assistant.",
+      `Primary ticker context: ${ticker}.`,
+      "Respond in this exact structure:",
+      "Summary:",
+      "- one concise paragraph",
+      "Suggested next steps:",
+      "1. action one",
+      "2. action two",
+      "3. action three",
+      "Keep the guidance practical and risk-aware.",
+      "",
+      `User request: ${String(request || "").trim()}`,
+    ].join("\n");
+
+  const extractSolveNowSuggestedSteps = (answer) => {
+    const text = String(answer || "").trim();
+    if (!text) return [];
+    const listMatches = Array.from(
+      text.matchAll(/(?:^|\n)\s*(?:[-*]\s+|\d+\.\s+)(.+?)(?=\n|$)/g)
+    )
+      .map((match) => String(match[1] || "").trim())
+      .filter(Boolean);
+    if (listMatches.length) return listMatches.slice(0, 4);
+    const sentenceMatches = text
+      .split(/(?<=[.!?])\s+/)
+      .map((row) => row.trim())
+      .filter((row) => row.length >= 20);
+    return sentenceMatches.slice(0, 3);
+  };
+
+  const ensureSolveNowModal = () => {
+    let modal = document.getElementById("solve-now-modal");
+    if (!modal) {
+      modal = buildModalShell("solve-now-modal");
+      modal.classList.add("solve-now-modal");
+      const card = modal.querySelector(".modal-card");
+      if (card) {
+        card.classList.add("solve-now-modal-card");
+        card.innerHTML = `
+          <div class="solve-now-head">
+            <div>
+              <h3>Solve now</h3>
+              <p class="small muted">Powered by AI. Tell us what you need and we will map out the next steps.</p>
+            </div>
+            <button class="cta secondary icon-only" type="button" data-action="close-solve-now" aria-label="Close Solve now">
+              ${icon("xmark")}
+            </button>
+          </div>
+          <form id="solve-now-form" class="solve-now-form">
+            <div class="field">
+              <label class="label" for="solve-now-request">What do you need help with?</label>
+              <textarea id="solve-now-request" class="modal-input solve-now-input" rows="4" placeholder="Example: I need a macro-aware plan for NVDA earnings risk this week." required></textarea>
+            </div>
+            <div class="solve-now-controls">
+              <div class="field">
+                <label class="label" for="solve-now-ticker">Ticker context</label>
+                <input id="solve-now-ticker" class="modal-input solve-now-ticker" type="text" maxlength="12" placeholder="SPY" />
+              </div>
+              <div class="modal-actions solve-now-actions">
+                <button class="cta secondary" type="button" data-action="close-solve-now">Cancel</button>
+                <button class="cta" type="submit" data-action="run-solve-now">${icon("brain")}<span>Solve now</span></button>
+              </div>
+            </div>
+            <p id="solve-now-status" class="small muted" aria-live="polite"></p>
+            <section id="solve-now-output" class="solve-now-output hidden" aria-live="polite"></section>
+          </form>
+        `;
+      }
+    }
+    return modal;
+  };
+
+  const closeSolveNowModal = () => {
+    const modal = document.getElementById("solve-now-modal");
+    if (!modal) return;
+    modal.classList.add("hidden");
+    if (window.location.hash === "#solve-now" && window.history?.replaceState) {
+      window.history.replaceState({}, "", `${window.location.pathname}${window.location.search}`);
+    }
+  };
+
+  const renderSolveNowOutput = ({ answer, model, provider, ticker }) => {
+    const output = document.getElementById("solve-now-output");
+    if (!output) return;
+    const cleanAnswer = String(answer || "").trim();
+    const summaryParagraph =
+      cleanAnswer
+        .split(/\n{2,}/)
+        .map((block) => block.trim())
+        .find(Boolean) || cleanAnswer;
+    const steps = extractSolveNowSuggestedSteps(cleanAnswer);
+    output.innerHTML = `
+      <article class="solve-now-response">
+        <h4>Summary</h4>
+        <p>${escapeHtml(summaryParagraph || "No summary was returned.")}</p>
+        <h4>Suggested next steps</h4>
+        <ol>
+          ${steps.length ? steps.map((step) => `<li>${escapeHtml(step)}</li>`).join("") : "<li>Refine your request with ticker, timeframe, and risk limits.</li>"}
+        </ol>
+        <details>
+          <summary>Full AI output</summary>
+          <pre class="small">${escapeHtml(cleanAnswer || "No output returned.")}</pre>
+        </details>
+        <div class="small muted solve-now-meta">Context ticker: ${escapeHtml(ticker)} · Model: ${escapeHtml(model || "gpt-5-mini")} · Provider: ${escapeHtml(provider || "openai")}</div>
+        <p class="small muted solve-now-disclaimer">LLMs can sometimes make mistakes.</p>
+      </article>
+    `;
+    output.classList.remove("hidden");
+  };
+
+  const openSolveNowModal = ({ prefillPrompt = "", source = "header" } = {}) => {
+    const modal = ensureSolveNowModal();
+    const form = modal.querySelector("#solve-now-form");
+    const input = modal.querySelector("#solve-now-request");
+    const tickerInput = modal.querySelector("#solve-now-ticker");
+    const status = modal.querySelector("#solve-now-status");
+    const output = modal.querySelector("#solve-now-output");
+    const submitButton = modal.querySelector('[data-action="run-solve-now"]');
+    if (!form || !input || !tickerInput || !status || !output || !submitButton) return;
+
+    if (modal.dataset.bound !== "1") {
+      modal.dataset.bound = "1";
+      modal.addEventListener("click", (event) => {
+        const action = event.target?.dataset?.action;
+        if (action === "close" || action === "close-solve-now") {
+          closeSolveNowModal();
+        }
+      });
+      window.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && !modal.classList.contains("hidden")) {
+          closeSolveNowModal();
+        }
+      });
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const request = String(input.value || "").trim();
+        const tickerFallback = getActiveTicker() || normalizeTicker(safeLocalStorageGet(LAST_TICKER_KEY) || "") || "SPY";
+        const ticker = normalizeTicker(tickerInput.value || tickerFallback) || "SPY";
+        if (!request) {
+          status.textContent = "Tell us what you need so AI can help.";
+          return;
+        }
+        const language = normalizeLanguageCode(state.preferredLanguage || ui.tickerQueryLanguage?.value || "en");
+        const model = normalizeAiModelId(ui.tickerQueryModel?.value || state.tickerContext.tickerQueryModel || "gpt-5-mini") || "gpt-5-mini";
+        const prompt = buildSolveNowPrompt(request, ticker);
+        input.disabled = true;
+        tickerInput.disabled = true;
+        submitButton.disabled = true;
+        status.textContent = "Generating your plan...";
+        output.classList.add("hidden");
+        output.innerHTML = "";
+        try {
+          const streamed = await streamTickerQueryInsight({
+            ticker,
+            prompt,
+            language,
+            model,
+            technicalContext: null,
+          });
+          renderSolveNowOutput({
+            answer: streamed.answer || "",
+            model: streamed.model || model,
+            provider: streamed.provider || "openai",
+            ticker,
+          });
+          status.textContent = "Done.";
+          logEvent("solve_now_completed", {
+            source,
+            ticker,
+            model: streamed.model || model,
+            page_path: window.location.pathname,
+          });
+        } catch (error) {
+          const message = String(error?.message || "Unable to complete Solve now right now.");
+          status.textContent = message;
+          output.classList.remove("hidden");
+          output.innerHTML = `<div class="small muted">${escapeHtml(message)}</div><p class="small muted solve-now-disclaimer">LLMs can sometimes make mistakes.</p>`;
+          logEvent("solve_now_failed", {
+            source,
+            ticker,
+            error: message.slice(0, 120),
+            page_path: window.location.pathname,
+          });
+        } finally {
+          input.disabled = false;
+          tickerInput.disabled = false;
+          submitButton.disabled = false;
+        }
+      });
+    }
+
+    const fallbackTicker = getActiveTicker() || normalizeTicker(safeLocalStorageGet(LAST_TICKER_KEY) || "") || "SPY";
+    if (!String(tickerInput.value || "").trim()) tickerInput.value = fallbackTicker;
+    if (prefillPrompt && !String(input.value || "").trim()) input.value = String(prefillPrompt || "").trim();
+    status.textContent = "";
+    modal.classList.remove("hidden");
+    if (window.history?.replaceState) {
+      window.history.replaceState({}, "", `${window.location.pathname}${window.location.search}#solve-now`);
+    }
+    window.setTimeout(() => input.focus(), 0);
+    logEvent("solve_now_opened", { source, page_path: window.location.pathname });
+  };
+
+  const bindSolveNowModalTriggers = () => {
+    const bindClick = (element, source) => {
+      if (!(element instanceof HTMLElement)) return;
+      if (element.dataset.solveNowBound === "1") return;
+      element.dataset.solveNowBound = "1";
+      element.addEventListener("click", (event) => {
+        event.preventDefault();
+        openSolveNowModal({ source });
+      });
+    };
+    bindClick(document.getElementById("header-solve-now"), "header");
+    document.querySelectorAll('[data-action="open-solve-now"]').forEach((element) => {
+      const source = String(element.getAttribute("data-solve-source") || "").trim() || "contact";
+      bindClick(element, source);
+    });
+    if (!state.solveNowHashChecked) {
+      state.solveNowHashChecked = true;
+      if (window.location.hash === "#solve-now") {
+        window.setTimeout(() => openSolveNowModal({ source: "hash" }), 80);
+      }
+    }
+  };
+
   const ensureCookieModal = () => {
     let banner = document.getElementById("cookie-banner");
     if (!banner) {
@@ -3599,9 +4577,11 @@
     ensureProfileFeedbackButtons();
     ensureHeaderNotificationsCta();
     if (ui.headerAuth) {
+      ui.headerAuth.classList.add("icon-only");
       ui.headerAuth.innerHTML = accountAuthed
-        ? `${icon("dashboard")}<span>Dashboard</span>`
-        : `${icon("log-in")}<span>Sign in</span>`;
+        ? `${icon("dashboard")}`
+        : `${icon("log-in")}`;
+      ui.headerAuth.setAttribute("title", accountAuthed ? "Dashboard" : "Sign in");
       ui.headerAuth.setAttribute("aria-label", accountAuthed ? "Open dashboard" : "Sign in");
       if (ui.headerAuth.tagName.toLowerCase() === "button") {
         ui.headerAuth.dataset.route = accountAuthed ? "/dashboard" : "/account";
@@ -3627,7 +4607,12 @@
       ui.userStatus.classList.toggle("pill", true);
     }
     if (ui.billingPortalLink) {
-      ui.billingPortalLink.textContent = accountAuthed ? "Open Stripe billing portal" : "Sign in to manage billing";
+      const nativeBilling = isNativeIosStoreKitCheckoutOnly() || isNativeAndroidPlayBillingCheckout();
+      ui.billingPortalLink.textContent = accountAuthed
+        ? nativeBilling
+          ? "Manage subscriptions"
+          : "Open Stripe billing portal"
+        : "Sign in to manage billing";
       ui.billingPortalLink.setAttribute("href", accountAuthed ? "#" : "/account");
       ui.billingPortalLink.setAttribute("target", "_self");
       ui.billingPortalLink.removeAttribute("rel");
@@ -3635,7 +4620,7 @@
     ui.dashboardCta?.classList.toggle("hidden", accountAuthed);
     setProfileFormEnabled(accountAuthed);
     if (!accountAuthed) {
-      setProfileStatus("Sign in to set your public leaderboard profile.");
+      setProfileStatus("Sign in to set your public profile.");
     }
 
     if (ui.pricingAuthCta) {
@@ -4023,6 +5008,7 @@
   const loadResearchMacroWidgets = async () => {
     if (!ui.massiveEconomyStatus) return;
     ui.massiveEconomyStatus.textContent = "Loading Massive macro series...";
+    logEvent("research_macro_load_started", { source: "massive" });
     try {
       await loadMassiveCapabilities({ force: false });
       const requests = [
@@ -4058,35 +5044,50 @@
             if (item.node) {
               item.node.innerHTML = `<div class="small muted">Not available on current Massive plan.</div>`;
             }
+            logEvent("research_macro_capability_blocked", { series_key: item.key });
             return;
           }
           try {
             const payload = await fetchMassiveApi(item.path, { limit: 120 });
             renderResearchMacroSeries(item.node, payload, item.label);
+            logEvent("research_macro_series_loaded", {
+              series_key: item.key,
+              rows: Number(payload?.count || payload?.rows?.length || 0),
+            });
           } catch (error) {
             if (item.node) {
               item.node.innerHTML = `<div class="small muted">${escapeHtml(extractErrorMessage(error, "Unable to load series."))}</div>`;
             }
+            logEvent("research_macro_series_error", {
+              series_key: item.key,
+              message: String(error?.message || "load_failed").slice(0, 120),
+            });
           }
         })
       );
       ui.massiveEconomyStatus.textContent = "Macro context loaded via Massive capability-gated endpoints.";
+      logEvent("research_macro_loaded", { source: "massive" });
     } catch (error) {
       ui.massiveEconomyStatus.textContent = extractErrorMessage(error, "Macro context is unavailable.");
       [ui.massiveEconomyYields, ui.massiveEconomyInflation, ui.massiveEconomyInflationExpectations, ui.massiveEconomyLabor].forEach((node) => {
         if (!node) return;
         node.innerHTML = `<div class="small muted">Capability audit unavailable.</div>`;
       });
+      logEvent("research_macro_error", {
+        message: String(error?.message || "load_failed").slice(0, 120),
+      });
     }
   };
 
   const loadResearchIpoCalendar = async ({ force = false } = {}) => {
     if (!ui.massiveIpoOutput || !ui.massiveIpoStatusText) return;
+    logEvent("research_ipo_load_started", { force: Boolean(force) });
     try {
       await loadMassiveCapabilities({ force: false });
       if (!isMassiveCapabilityAvailable("stocks_ipos")) {
         ui.massiveIpoStatusText.textContent = "IPO endpoint is not available in the current Massive plan.";
         ui.massiveIpoOutput.innerHTML = `<div class="small muted">IPO data is currently gated off by plan capability.</div>`;
+        logEvent("research_ipo_capability_blocked", {});
         return;
       }
 
@@ -4106,9 +5107,18 @@
       ui.massiveIpoStatusText.textContent = count
         ? `Loaded ${count} IPO row${count === 1 ? "" : "s"}.`
         : "No IPO rows for selected filters.";
+      logEvent("research_ipo_loaded", {
+        count,
+        status: status || "all",
+        start_date: start,
+        end_date: end,
+      });
     } catch (error) {
       ui.massiveIpoStatusText.textContent = extractErrorMessage(error, "Unable to load IPO calendar.");
       ui.massiveIpoOutput.innerHTML = `<div class="small muted">${escapeHtml(extractErrorMessage(error, "Unable to load IPO calendar."))}</div>`;
+      logEvent("research_ipo_error", {
+        message: String(error?.message || "load_failed").slice(0, 120),
+      });
     }
   };
 
@@ -5400,14 +6410,16 @@
     const bio = normalizeProfileBio(safeProfile.bio);
     const publicProfile = Boolean(safeProfile.publicProfile);
     const publicScreenerSharing = Boolean(safeProfile.publicScreenerSharing);
+    const publicEmailOptIn = Boolean(safeProfile.publicEmailOptIn);
     const stripeConnectAccountId = String(safeProfile.stripeConnectAccountId || "").trim();
-    state.userProfile = { username, socialLinks, avatar, bio, publicProfile, publicScreenerSharing, stripeConnectAccountId };
+    state.userProfile = { username, socialLinks, avatar, bio, publicProfile, publicScreenerSharing, publicEmailOptIn, stripeConnectAccountId };
 
     if (ui.profileUsername) ui.profileUsername.value = username;
     if (ui.profileAvatar) ui.profileAvatar.value = avatar;
     if (ui.profileBio) ui.profileBio.value = bio;
     if (ui.profilePublicEnabled) ui.profilePublicEnabled.checked = publicProfile;
     if (ui.profilePublicScreener) ui.profilePublicScreener.checked = publicScreenerSharing;
+    if (ui.profilePublicEmail) ui.profilePublicEmail.checked = publicEmailOptIn;
     if (ui.profileWebsite) ui.profileWebsite.value = socialLinks.website || "";
     if (ui.profileX) ui.profileX.value = socialLinks.x || "";
     if (ui.profileLinkedin) ui.profileLinkedin.value = socialLinks.linkedin || "";
@@ -5435,6 +6447,7 @@
         bio: "",
         publicProfile: false,
         publicScreenerSharing: false,
+        publicEmailOptIn: false,
         stripeConnectAccountId: "",
       };
       renderProfileForm(state.userProfile, null);
@@ -5466,6 +6479,7 @@
     const profileBio = normalizeProfileBio(existingProfile.bio);
     const publicProfile = Boolean(existingProfile.publicProfile);
     const publicScreenerSharing = Boolean(existingProfile.publicScreenerSharing);
+    const publicEmailOptIn = Boolean(existingProfile.publicEmailOptIn);
     const stripeConnectAccountId = String(
       existingProfile.stripeConnectAccountId || existing?.stripeConnectAccountId || ""
     ).trim();
@@ -5485,6 +6499,7 @@
           bio: profileBio,
           publicProfile,
           publicScreenerSharing,
+          publicEmailOptIn,
           stripeConnectAccountId,
         },
         metadata: buildMeta(),
@@ -5639,19 +6654,89 @@
 
   const toPrettyJson = (value) => `<pre class="small">${escapeHtml(JSON.stringify(value, null, 2))}</pre>`;
 
-	  const normalizeTopNavigation = () => {
-	    const navs = Array.from(document.querySelectorAll(".header .nav-links"));
-	    if (!navs.length) return;
-	    navs.forEach((nav) => {
+  const FOOTER_SOCIAL_LINKS = [
+    {
+      key: "tiktok",
+      label: "TikTok",
+      href: "http://www.tiktok.com/@quanturaai",
+      icon: "/assets/social/tiktok.svg",
+    },
+    {
+      key: "instagram",
+      label: "Instagram",
+      href: "https://www.instagram.com/quanturaai_market_forecasts?igsh=ZTZuNW16ZmxuaHl4&utm_source=qr",
+      icon: "/assets/social/instagram.svg",
+    },
+    {
+      key: "facebook",
+      label: "Facebook",
+      href: "https://www.facebook.com/quanturaai/",
+      icon: "/assets/social/facebook-f.svg",
+    },
+    {
+      key: "threads",
+      label: "Threads",
+      href: "https://www.threads.com/@quanturaai_market_forecasts",
+      icon: "/assets/social/threads.svg",
+    },
+    {
+      key: "reddit",
+      label: "Reddit",
+      href: "https://www.reddit.com/r/Quantura_AI/",
+      icon: "/assets/social/reddit-alien.svg",
+    },
+    {
+      key: "linkedin",
+      label: "LinkedIn",
+      href: "https://www.linkedin.com/company/quanturaai/?viewAsMember=true",
+      icon: "/assets/social/linkedin-in.svg",
+    },
+  ];
+
+  const normalizeTopNavigation = () => {
+    const navs = Array.from(document.querySelectorAll(".header .nav-links"));
+    if (!navs.length) return;
+    navs.forEach((nav) => {
       nav.innerHTML = `
         <a href="/forecasting" data-analytics="nav_terminal">${icon("candlestick-chart")}<span>Terminal</span></a>
+        <a href="/explore" data-analytics="nav_explore">${icon("binocular")}<span>Explore</span></a>
         <a href="/research" data-analytics="nav_research">${icon("bookmark-book")}<span>Research</span></a>
         <a href="/blog" data-analytics="nav_blog">${icon("page")}<span>Blog</span></a>
+        <a href="/events" data-analytics="nav_events">${icon("calendar")}<span>Events</span></a>
+        <a href="/shop" data-analytics="nav_shop">${icon("shop")}<span>Shop</span></a>
+        <a href="/about" data-analytics="nav_about">${icon("info-circle")}<span>About</span></a>
         <a href="/pricing" data-analytics="nav_pricing">${icon("wallet")}<span>Pricing</span></a>
-        <a href="/contact" data-analytics="nav_contact">${icon("mail")}<span>Contact</span></a>
+        <a href="/contact" data-analytics="nav_contact">${icon("mail")}<span>Contact Us</span></a>
       `;
-	    });
-	  };
+    });
+  };
+
+  const normalizeFooterSocialLinks = () => {
+    const groups = Array.from(document.querySelectorAll(".footer-social"));
+    if (!groups.length) return;
+    groups.forEach((group) => {
+      group.innerHTML = FOOTER_SOCIAL_LINKS.map(
+        (entry) => `
+          <a class="social-link" href="${entry.href}" target="_blank" rel="noopener noreferrer" data-analytics="social_${entry.key}" aria-label="${entry.label}">
+            <img src="${entry.icon}" alt="" loading="lazy" decoding="async" />
+          </a>
+        `
+      ).join("");
+    });
+  };
+
+  const normalizeHeaderBranding = () => {
+    document.querySelectorAll(".header .logo").forEach((logo) => {
+      if (!(logo instanceof HTMLElement)) return;
+      if (logo.querySelector("img.logo-img")) return;
+      const iconImg = document.createElement("img");
+      iconImg.className = "logo-img";
+      iconImg.src = "/assets/quantura-icon.svg";
+      iconImg.alt = "";
+      iconImg.setAttribute("aria-hidden", "true");
+      logo.prepend(iconImg);
+    });
+  };
 
     const ensureSidebarCollapseToggle = () => {
       const layout = document.querySelector(".app-layout");
@@ -5738,14 +6823,32 @@
       });
     };
 
-	  const ensureHeaderNotificationsCta = () => {
-	    const actions = document.querySelector(".header .nav-actions");
-	    if (!actions) return;
-	    let link = document.getElementById("header-notifications");
+  const ensureHeaderSolveNowCta = () => {
+    const actions = document.querySelector(".header .nav-actions");
+    if (!actions) return;
+    let solveLink = document.getElementById("header-solve-now");
+    if (!solveLink) {
+      solveLink = document.createElement("a");
+      solveLink.id = "header-solve-now";
+      solveLink.className = "cta secondary solve-now-cta";
+      solveLink.href = "/contact#solve-now";
+      solveLink.setAttribute("data-analytics", "nav_solve_now");
+      solveLink.innerHTML = `${icon("brain")}<span>Solve now</span>`;
+      actions.prepend(solveLink);
+    }
+    solveLink.href = "/contact#solve-now";
+    solveLink.setAttribute("title", "Powered by AI");
+    solveLink.setAttribute("aria-label", "Solve now. Powered by AI");
+  };
+
+  const ensureHeaderNotificationsCta = () => {
+    const actions = document.querySelector(".header .nav-actions");
+    if (!actions) return;
+    let link = document.getElementById("header-notifications");
     if (!link) {
       link = document.createElement("a");
       link.id = "header-notifications";
-      link.className = "cta secondary";
+      link.className = "cta secondary icon-only";
       link.setAttribute("data-analytics", "nav_notifications");
       const authButton = actions.querySelector("#header-auth");
       if (authButton?.parentElement === actions) {
@@ -5754,12 +6857,14 @@
         actions.appendChild(link);
       }
 	      ui.headerNotifications = link;
-	    }
-	    const authed = hasFullAccount();
-	    link.href = authed ? "/notifications" : "/account";
-	    link.innerHTML = `${icon("bell-notification")}<span>Notifications</span>`;
-	    link.setAttribute("aria-label", authed ? "Open notifications" : "Sign in to manage notifications");
-	  };
+    }
+    const authed = hasFullAccount();
+    link.href = authed ? "/notifications" : "/account";
+    link.innerHTML = `${icon("bell-notification")}`;
+    link.classList.add("icon-only");
+    link.setAttribute("title", "Notifications");
+    link.setAttribute("aria-label", authed ? "Open notifications" : "Sign in to manage notifications");
+  };
 
   const renderNotificationLog = () => {
     if (!ui.notificationsLog) return;
@@ -5774,6 +6879,7 @@
         const body = escapeHtml(String(entry.body || ""));
         const source = escapeHtml(String(entry.source || "foreground"));
         const at = escapeHtml(new Date(entry.at || Date.now()).toLocaleString());
+        const nextSteps = Array.isArray(entry.nextSteps) ? entry.nextSteps.filter(Boolean).slice(0, 4) : [];
         return `
           <article class="notification-log-item">
             <div class="notification-log-head">
@@ -5781,6 +6887,14 @@
               <span class="small muted">${at}</span>
             </div>
             <p class="small">${body || "No message body provided."}</p>
+            ${
+              nextSteps.length
+                ? `<ol class="small" style="margin: 0 0 6px 18px;">
+                    ${nextSteps.map((step) => `<li>${escapeHtml(String(step))}</li>`).join("")}
+                  </ol>`
+                : ""
+            }
+            ${entry.personalized ? `<div class="small muted">${escapeHtml(MODEL_COUNCIL_OUTPUT_DISCLAIMER)}</div>` : ""}
             <div class="small muted">Source: ${source}</div>
           </article>
         `;
@@ -5803,6 +6917,8 @@
         body: String(body || ""),
         source: String(source || "foreground"),
         at: String(at || new Date().toISOString()),
+        personalized: false,
+        nextSteps: [],
       },
       ...(Array.isArray(state.notificationLog) ? state.notificationLog : []),
     ].slice(0, 30);
@@ -5811,7 +6927,68 @@
     renderNotificationLog();
   };
 
-  const resolveTradingViewTheme = () => (isDarkMode() ? "dark" : "light");
+  const personalizeNotificationEntry = async ({ title, body, source }) => {
+    const cleanTitle = String(title || "Quantura update").trim() || "Quantura update";
+    const cleanBody = String(body || "").trim();
+    if (!state.notificationPrivacy?.locationConsent) {
+      return { title: cleanTitle, body: cleanBody, personalized: false, nextSteps: [] };
+    }
+    try {
+      const headers = await buildApiAuthHeaders({ includeJson: true });
+      const response = await fetch("/api/notifications/personalize", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          title: cleanTitle,
+          body: cleanBody,
+          source: String(source || "foreground"),
+          context: {
+            timezone: String(state.notificationPrivacy?.timezone || ""),
+            countryCode: String(state.notificationPrivacy?.coarseLocation?.countryCode || ""),
+            region: String(state.notificationPrivacy?.ipRegion || ""),
+          },
+        }),
+      });
+      if (!response.ok) {
+        return { title: cleanTitle, body: cleanBody, personalized: false, nextSteps: [] };
+      }
+      const payload = await response.json().catch(() => ({}));
+      const notification = payload?.notification && typeof payload.notification === "object" ? payload.notification : {};
+      return {
+        title: String(notification.title || cleanTitle).trim() || cleanTitle,
+        body: String(notification.body || cleanBody).trim(),
+        nextSteps: Array.isArray(notification.nextSteps) ? notification.nextSteps.slice(0, 4).map((item) => String(item)) : [],
+        personalized: Boolean(notification.personalized),
+      };
+    } catch (error) {
+      return { title: cleanTitle, body: cleanBody, personalized: false, nextSteps: [] };
+    }
+  };
+
+  const appendNotificationLogPersonalized = async ({ title, body, source = "foreground", at = new Date().toISOString() }) => {
+    const rewritten = await personalizeNotificationEntry({ title, body, source });
+    const next = [
+      {
+        title: String(rewritten.title || title || "Quantura update"),
+        body: String(rewritten.body || body || ""),
+        source: String(source || "foreground"),
+        at: String(at || new Date().toISOString()),
+        personalized: Boolean(rewritten.personalized),
+        nextSteps: Array.isArray(rewritten.nextSteps) ? rewritten.nextSteps.slice(0, 4) : [],
+      },
+      ...(Array.isArray(state.notificationLog) ? state.notificationLog : []),
+    ].slice(0, 30);
+    state.notificationLog = next;
+    persistNotificationLog();
+    renderNotificationLog();
+  };
+
+  const resolveTradingViewTheme = () => {
+    if (state.tradingViewTheme === "dark" || state.tradingViewTheme === "light") {
+      return state.tradingViewTheme;
+    }
+    return isDarkMode() ? "dark" : "light";
+  };
 
   const normalizeTradingViewSymbol = (ticker) => {
     const clean = normalizeTicker(ticker);
@@ -5924,6 +7101,18 @@
     };
 
     mountTradingViewIframe({
+      container: ui.tradingViewTickerTape,
+      src: buildTradingViewWidgetSrc("https://www.tradingview-widget.com/embed-widget/ticker-tape/?locale=en", {
+        symbols: [{ proName: symbol, title: symbol }],
+        showSymbolLogo: true,
+        displayMode: "adaptive",
+        colorTheme: theme,
+        isTransparent: true,
+      }),
+      title: `Ticker tape ${symbol}`,
+    });
+
+    mountTradingViewIframe({
       container: ui.tradingViewSymbolInfo,
       src: buildTradingViewWidgetSrc("https://www.tradingview-widget.com/embed-widget/symbol-info/?locale=en", {
         ...shared,
@@ -5960,6 +7149,57 @@
       onerror: () => {
         triggerFallback("TradingView unavailable");
       },
+    });
+
+    mountTradingViewIframe({
+      container: ui.tradingViewCompanyProfile,
+      src: buildTradingViewWidgetSrc("https://www.tradingview-widget.com/embed-widget/symbol-profile/?locale=en", {
+        ...shared,
+        width: "100%",
+        height: "100%",
+      }),
+      title: `Company profile ${symbol}`,
+    });
+
+    mountTradingViewIframe({
+      container: ui.tradingViewFundamentalData,
+      src: buildTradingViewWidgetSrc("https://www.tradingview-widget.com/embed-widget/financials/?locale=en", {
+        symbol,
+        colorTheme: theme,
+        isTransparent: true,
+        displayMode: "regular",
+        width: "100%",
+        height: 775,
+      }),
+      title: `Fundamentals ${symbol}`,
+    });
+
+    mountTradingViewIframe({
+      container: ui.tradingViewTechnicalAnalysis,
+      src: buildTradingViewWidgetSrc("https://www.tradingview-widget.com/embed-widget/technical-analysis/?locale=en", {
+        interval: "15m",
+        width: "100%",
+        height: "100%",
+        isTransparent: true,
+        symbol,
+        showIntervalTabs: true,
+        displayMode: "single",
+        colorTheme: theme,
+      }),
+      title: `Technical analysis ${symbol}`,
+    });
+
+    mountTradingViewIframe({
+      container: ui.tradingViewTopStories,
+      src: buildTradingViewWidgetSrc("https://www.tradingview-widget.com/embed-widget/timeline/?locale=en", {
+        symbol,
+        colorTheme: theme,
+        isTransparent: true,
+        displayMode: "regular",
+        width: "100%",
+        height: 600,
+      }),
+      title: `Top stories ${symbol}`,
     });
 
     state.tradingViewLoadTimer = window.setTimeout(() => {
@@ -6065,9 +7305,9 @@
           state.tradingViewTheme = next === "dark" || next === "light" ? next : "auto";
           safeLocalStorageSet(TRADINGVIEW_THEME_CACHE_KEY, state.tradingViewTheme);
           applyChartControlState();
-          if (state.tickerContext.ticker && isPanelVisible("ticker-intelligence")) {
+          if (getActiveTicker() && isPanelVisible("ticker")) {
             renderTradingViewTerminal({
-              ticker: state.tickerContext.ticker,
+              ticker: getActiveTicker(),
               interval: state.tickerContext.interval || "1d",
             });
           }
@@ -6134,6 +7374,90 @@
     return `${window.location.origin}${path}?share=${id}`;
   };
 
+  const fetchSharedScreenerPayload = async (shareId) => {
+    const cleanShareId = String(shareId || "").trim();
+    if (!cleanShareId) throw new Error("Share ID is required.");
+    const headers = await buildApiAuthHeaders();
+    const response = await fetch(`/api/shares/${encodeURIComponent(cleanShareId)}`, {
+      method: "GET",
+      headers,
+      credentials: "same-origin",
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(String(payload?.error || "Shared screener unavailable.").trim());
+    }
+    if (String(payload?.kind || "").trim().toLowerCase() !== "screener" || !payload?.screener) {
+      throw new Error("Shared item is not a screener run.");
+    }
+    return payload;
+  };
+
+  const renderSharedScreenerRun = async (shareId, { notify = false } = {}) => {
+    if (window.location.pathname !== "/screener" || !ui.screenerOutput) return null;
+    const cleanShareId = String(shareId || "").trim();
+    if (!cleanShareId) return null;
+
+    try {
+      setOutputLoading(ui.screenerOutput, "Loading shared screener...");
+      if (ui.screenerLoadStatus) ui.screenerLoadStatus.textContent = "Loading shared screener...";
+      const payload = await fetchSharedScreenerPayload(cleanShareId);
+      const screener = payload?.screener && typeof payload.screener === "object" ? payload.screener : {};
+      const shareUrl = buildShareUrl("screener", cleanShareId);
+      const runDoc = {
+        ...screener,
+        id: String(screener.id || payload.sourceId || "").trim(),
+        __sharedMeta: {
+          shareId: cleanShareId,
+          shareUrl,
+          readOnly: Boolean(payload.readOnly),
+          canImport: Boolean(payload.canImport),
+        },
+      };
+      state.pendingShareProcessed = true;
+      setPendingShareId("");
+      renderScreenerRunOutput(runDoc);
+      if (ui.screenerLoadStatus) {
+        ui.screenerLoadStatus.textContent = runDoc.__sharedMeta.readOnly
+          ? "Viewing shared screener (read-only)."
+          : "Viewing shared screener as owner.";
+      }
+      if (notify) showToast("Shared screener loaded.");
+      return runDoc;
+    } catch (error) {
+      setOutputReady(ui.screenerOutput);
+      if (ui.screenerLoadStatus) ui.screenerLoadStatus.textContent = "Unable to load shared screener.";
+      if (ui.screenerOutput) {
+        ui.screenerOutput.innerHTML = `<div class="small muted">${escapeHtml(
+          extractErrorMessage(error, "Shared screener unavailable.")
+        )}</div>`;
+      }
+      if (notify) showToast(extractErrorMessage(error, "Unable to load shared screener."), "warn");
+      throw error;
+    }
+  };
+
+  const importSharedItemById = async (functions, shareId, { redirect = true } = {}) => {
+    if (!functions) throw new Error("Import service is unavailable.");
+    const cleanShareId = String(shareId || "").trim();
+    if (!cleanShareId) throw new Error("Share ID is required.");
+    const importShare = functions.httpsCallable("import_shared_item");
+    const result = await importShare({ shareId: cleanShareId, meta: buildMeta() });
+    const kind = String(result.data?.kind || "").trim().toLowerCase();
+    const importedId = String(result.data?.importedId || "").trim();
+    if (!kind || !importedId) throw new Error("Shared item import did not return an ID.");
+    if (redirect) {
+      if (kind === "forecast") {
+        window.location.href = `/forecasting?forecastId=${encodeURIComponent(importedId)}`;
+      } else if (kind === "screener") {
+        window.location.href = `/screener?runId=${encodeURIComponent(importedId)}`;
+      } else if (kind === "upload") {
+        window.location.href = `/uploads?uploadId=${encodeURIComponent(importedId)}`;
+      }
+    }
+    return { kind, importedId };
+  };
+
   const processPendingShareImport = async (functions) => {
     if (!functions || !state.user) return null;
     const shareId = String(getPendingShareId() || "").trim();
@@ -6143,12 +7467,7 @@
 
     try {
       setPendingShareId(shareId);
-      const importShare = functions.httpsCallable("import_shared_item");
-      const result = await importShare({ shareId, meta: buildMeta() });
-      const kind = String(result.data?.kind || "").trim().toLowerCase();
-      const importedId = String(result.data?.importedId || "").trim();
-      if (!kind || !importedId) throw new Error("Shared item import did not return an ID.");
-
+      const { kind, importedId } = await importSharedItemById(functions, shareId, { redirect: false });
       setPendingShareId("");
       showToast("Shared item saved to your dashboard.");
       logEvent("shared_item_imported", { kind });
@@ -6174,30 +7493,150 @@
     }
   };
 
-  const syncTickerInputs = (ticker) => {
-    const t = normalizeTicker(ticker);
-    if (!t) return;
-    const ids = [
-      "forecast-ticker",
-      "technicals-ticker",
-      "download-ticker",
-      "news-ticker",
-      "intel-ticker",
-      "options-ticker",
-      "events-calendar-tickers",
-      "ticker-query-ticker",
-      "watchlist-ticker",
-      "alert-ticker",
-      "autopilot-ticker",
-    ];
-    ids.forEach((id) => {
+  const TICKER_SYNC_INPUT_IDS = Object.freeze([
+    "terminal-ticker",
+    "forecast-ticker",
+    "technicals-ticker",
+    "download-ticker",
+    "news-ticker",
+    "intel-ticker",
+    "options-ticker",
+    "events-calendar-tickers",
+    "ticker-query-ticker",
+    "watchlist-ticker",
+    "alert-ticker",
+    "autopilot-ticker",
+    "predictions-ticker",
+  ]);
+
+  const getActiveTicker = () => normalizeTicker(state.tickerContext.activeTicker || state.tickerContext.ticker || "");
+
+  const getTickerHistoryStorageKey = () => {
+    const uid = String(state.user?.uid || "anon").trim() || "anon";
+    return `${TICKER_HISTORY_KEY_PREFIX}:${uid}`;
+  };
+
+  const readTickerHistory = () => {
+    try {
+      const raw = String(safeLocalStorageGet(getTickerHistoryStorageKey()) || "").trim();
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      const normalized = parsed
+        .map((entry) => normalizeTicker(entry))
+        .filter(Boolean);
+      return Array.from(new Set(normalized)).slice(0, TICKER_HISTORY_LIMIT);
+    } catch (error) {
+      return [];
+    }
+  };
+
+  const writeTickerHistory = (entries) => {
+    const normalized = Array.from(
+      new Set(
+        (Array.isArray(entries) ? entries : [])
+          .map((entry) => normalizeTicker(entry))
+          .filter(Boolean)
+      )
+    ).slice(0, TICKER_HISTORY_LIMIT);
+    state.tickerContext.tickerHistory = normalized;
+    safeLocalStorageSet(getTickerHistoryStorageKey(), JSON.stringify(normalized));
+    return normalized;
+  };
+
+  const renderTickerHistory = () => {
+    if (!ui.tickerHistory) return;
+    const history = state.tickerContext.tickerHistory?.length ? state.tickerContext.tickerHistory : readTickerHistory();
+    state.tickerContext.tickerHistory = history;
+    if (!history.length) {
+      ui.tickerHistory.innerHTML = `<div class="small muted">Recent tickers will appear here as you research.</div>`;
+      return;
+    }
+    ui.tickerHistory.innerHTML = `
+      <div class="ticker-history-title small muted">Recent tickers</div>
+      <div class="ticker-history-list">
+        ${history
+          .map(
+            (ticker) => `
+          <span class="ticker-history-item">
+            <button class="ticker-history-chip" type="button" data-action="ticker-history-select" data-ticker="${escapeHtml(ticker)}">${escapeHtml(ticker)}</button>
+            <button class="ticker-history-remove" type="button" data-action="ticker-history-delete" data-ticker="${escapeHtml(ticker)}" aria-label="Delete ${escapeHtml(ticker)} from ticker history">&times;</button>
+          </span>
+        `
+          )
+          .join("")}
+      </div>
+    `;
+  };
+
+  const rememberTickerInHistory = (ticker) => {
+    const clean = normalizeTicker(ticker);
+    if (!clean) return;
+    const existing = state.tickerContext.tickerHistory?.length ? state.tickerContext.tickerHistory : readTickerHistory();
+    const next = [clean, ...existing.filter((entry) => entry !== clean)].slice(0, TICKER_HISTORY_LIMIT);
+    writeTickerHistory(next);
+    renderTickerHistory();
+  };
+
+  const removeTickerFromHistory = (ticker) => {
+    const clean = normalizeTicker(ticker);
+    if (!clean) return;
+    const existing = state.tickerContext.tickerHistory?.length ? state.tickerContext.tickerHistory : readTickerHistory();
+    writeTickerHistory(existing.filter((entry) => entry !== clean));
+    renderTickerHistory();
+  };
+
+  const refreshTradingViewForTicker = (ticker) => {
+    const clean = normalizeTicker(ticker);
+    if (!clean || !isPanelVisible("ticker")) return;
+    const interval = String(ui.terminalInterval?.value || state.tickerContext.interval || "1d");
+    const rendered = renderTradingViewTerminal({ ticker: clean, interval });
+    if (rendered && !(state.tickerContext.indicatorOverlays || []).length) {
+      setTerminalChartEngineVisibility("tradingview");
+    }
+  };
+
+  const syncTickerInputs = (ticker, { source = "sync", skipHistory = false, emitAnalytics = false } = {}) => {
+    const clean = normalizeTicker(ticker);
+    if (!clean) return false;
+    const previous = getActiveTicker();
+    state.tickerContext.activeTicker = clean;
+    state.tickerContext.ticker = clean;
+    safeLocalStorageSet(LAST_TICKER_KEY, clean);
+    if (!skipHistory) rememberTickerInHistory(clean);
+
+    TICKER_SYNC_INPUT_IDS.forEach((id) => {
       const el = document.getElementById(id);
-      if (!el) return;
-      if ("value" in el && !String(el.value || "").trim()) {
-        el.value = t;
-      } else if ("value" in el) {
-        el.value = t;
+      if (!el || !("value" in el)) return;
+      if (String(el.value || "").trim() !== clean) {
+        el.value = clean;
       }
+    });
+
+    if (previous !== clean) {
+      refreshTradingViewForTicker(clean);
+      scheduleSideDataRefresh(clean, { force: false });
+      if (emitAnalytics) {
+        logEvent("active_ticker_changed", { ticker: clean, source });
+      }
+    }
+    return previous !== clean;
+  };
+
+  const bindTickerInputSync = () => {
+    const seen = new Set();
+    TICKER_SYNC_INPUT_IDS.forEach((id) => {
+      if (id === "events-calendar-tickers") return;
+      const el = document.getElementById(id);
+      if (!el || seen.has(el)) return;
+      seen.add(el);
+      const commitTicker = () => {
+        const clean = normalizeTicker(el.value);
+        if (!clean) return;
+        syncTickerInputs(clean, { source: `input:${id}` });
+      };
+      el.addEventListener("change", commitTicker);
+      el.addEventListener("blur", commitTicker);
     });
   };
 
@@ -6826,7 +8265,11 @@
           <div class="prediction-meta-row">
             <span>Yes / No</span><span>${formatPredictionPercent(probs.yes)} / ${formatPredictionPercent(probs.no)}</span>
           </div>
-          ${predictionMarketUrl(market) ? `<a class="news-link" href="${escapeHtml(predictionMarketUrl(market))}" target="_blank" rel="noreferrer">View on Polymarket</a>` : ""}
+          ${
+            predictionMarketUrl(market)
+              ? `<a class="news-link" href="${escapeHtml(predictionMarketUrl(market))}" target="_blank" rel="noreferrer" data-analytics="polymarket_market_open" data-label="${escapeHtml(String(market.question || "polymarket_market"))}">View on Polymarket</a>`
+              : ""
+          }
         </article>
       `;
     });
@@ -6856,7 +8299,11 @@
                   <div class="prediction-meta-row"><span>End Date</span><span>${escapeHtml(formatPredictionDate(market.endDate))}</span></div>
                 </div>
                 ${tagsHtml}
-                ${marketUrl ? `<a class="news-link" href="${escapeHtml(marketUrl)}" target="_blank" rel="noreferrer">View on Polymarket</a>` : ""}
+                ${
+                  marketUrl
+                    ? `<a class="news-link" href="${escapeHtml(marketUrl)}" target="_blank" rel="noreferrer" data-analytics="polymarket_market_open" data-label="${escapeHtml(String(market.question || "polymarket_market"))}">View on Polymarket</a>`
+                    : ""
+                }
                 ${renderOrderbookWidget(market, orderbook)}
               </article>
             `;
@@ -6898,6 +8345,7 @@
 
     state.tickerContext.predictionsTicker = symbol;
     setOutputLoading(ui.tickerPredictionsOutput, "Loading prediction markets...");
+    logEvent("polymarket_load_started", { ticker: symbol, force: Boolean(force) });
 
     try {
       const searchResp = await fetch(`/api/predictions/search?ticker=${encodeURIComponent(symbol)}`, {
@@ -6945,17 +8393,26 @@
       setOutputReady(ui.tickerPredictionsOutput);
       renderPredictionsOutput(normalized, symbol);
       logEvent("predictions_loaded", { ticker: symbol, markets: markets.length, token_ids: tokenIds.length });
+      logEvent("polymarket_orderbooks_loaded", {
+        ticker: symbol,
+        orderbooks: Object.keys(orderbooks || {}).length,
+      });
     } catch (error) {
       setOutputReady(ui.tickerPredictionsOutput);
       ui.tickerPredictionsOutput.innerHTML = `
         <div class="small muted">Polymarket predictions are temporarily unavailable for ${escapeHtml(symbol)}.</div>
       `;
+      logEvent("polymarket_load_error", {
+        ticker: symbol,
+        message: String(error?.message || "load_failed").slice(0, 120),
+      });
       if (notify) showToast(error.message || "Unable to load predictions.", "warn");
     }
   };
 
   const setTickerIntelTab = (tab, { ensureLoaded = true } = {}) => {
     const next = tab === "predictions" ? "predictions" : "intelligence";
+    const previous = state.intelActiveTab || "";
     state.intelActiveTab = next;
 
     if (ui.tickerIntelligenceOutput) {
@@ -6970,9 +8427,18 @@
       button.setAttribute("aria-selected", active ? "true" : "false");
     });
 
+    if (previous !== next) {
+      logEvent("ticker_intel_tab_selected", {
+        tab: next,
+        previous_tab: previous || "",
+        ticker: normalizeTicker(state.tickerContext.ticker || state.tickerContext.intelTicker || ""),
+      });
+    }
+
     if (next === "predictions" && ensureLoaded) {
       const activeTicker = normalizeTicker(state.tickerContext.ticker || state.tickerContext.intelTicker || "");
       if (activeTicker) {
+        logEvent("polymarket_tab_opened", { ticker: activeTicker });
         loadTickerPredictions(activeTicker, { notify: false }).catch(() => {});
       }
     }
@@ -7621,20 +9087,179 @@
     }
   };
 
+  const normalizeModelCouncilProviderId = (provider) => {
+    const value = String(provider || "").trim().toLowerCase();
+    if (!value) return "";
+    if (value === "amazon_nova") return "amazon_nova";
+    if (value === "perplexity_sonar") return "perplexity";
+    return value;
+  };
+
+  const modelCouncilProviderFromModel = (modelId) => {
+    const id = normalizeAiModelId(modelId || "").toLowerCase();
+    if (!id) return "openai";
+    if (id.startsWith("amazon.nova")) return "amazon_nova";
+    if (id.startsWith("gemini")) return "gemini";
+    if (id.startsWith("mistral")) return "mistral";
+    if (id.startsWith("sonar")) return "perplexity";
+    if (id.startsWith("other/")) return "other";
+    return "openai";
+  };
+
+  const tickerQueryModelGroup = (modelId, providerId = "") => {
+    const provider = normalizeModelCouncilProviderId(providerId || modelCouncilProviderFromModel(modelId));
+    const id = normalizeAiModelId(modelId).toLowerCase();
+    if (provider === "openai") {
+      if (id.includes("nano")) return "Fast";
+      if (id.includes("mini")) return "Balanced";
+      if (id.startsWith("gpt-5")) return "Reasoning";
+    }
+    if (provider === "perplexity") return "Research";
+    if (provider === "other") return "Custom";
+    return "Balanced";
+  };
+
+  const tickerQueryModelHint = (modelId, providerId = "") => {
+    const meta = getModelMeta(modelId);
+    if (meta?.helper) return String(meta.helper).trim();
+    const provider = normalizeModelCouncilProviderId(providerId || modelCouncilProviderFromModel(modelId));
+    const id = normalizeAiModelId(modelId).toLowerCase();
+    if (provider === "openai" && id.includes("nano")) return "Lowest latency for quick scans.";
+    if (provider === "openai" && id.includes("mini")) return "Best default for most questions.";
+    if (provider === "gemini") return "Gemini provider path running server-side.";
+    if (provider === "mistral") return "Mistral provider path running server-side.";
+    if (provider === "perplexity") return "Perplexity Sonar provider path running server-side.";
+    if (provider === "other") return "Custom provider routed through backend.";
+    return "Higher depth reasoning with slower latency.";
+  };
+
+  const normalizeTickerQueryModules = (values) => {
+    const allowed = new Set(MODEL_COUNCIL_MODULE_CATALOG.map((item) => String(item.id || "").trim()).filter(Boolean));
+    const raw = Array.isArray(values)
+      ? values
+      : typeof values === "string"
+      ? String(values)
+          .split(",")
+          .map((item) => item.trim())
+      : [];
+    const seen = new Set();
+    const out = [];
+    raw.forEach((item) => {
+      const token = String(item || "").trim();
+      if (!token || !allowed.has(token) || seen.has(token)) return;
+      seen.add(token);
+      out.push(token);
+    });
+    if (!out.length) {
+      return MODEL_COUNCIL_MODULE_CATALOG.filter((item) => item.checkedByDefault).map((item) => item.id);
+    }
+    return out;
+  };
+
+  const getSelectedTickerQueryModules = () => {
+    if (!ui.tickerQueryModulesPicker) {
+      return normalizeTickerQueryModules(state.tickerContext.tickerQueryModules);
+    }
+    const selected = Array.from(ui.tickerQueryModulesPicker.querySelectorAll('input[type="checkbox"][data-module-id]'))
+      .filter((node) => node.checked)
+      .map((node) => String(node.dataset.moduleId || "").trim())
+      .filter(Boolean);
+    return normalizeTickerQueryModules(selected);
+  };
+
+  const setTickerQueryModulesSelection = (moduleIds, { persist = true } = {}) => {
+    const normalized = normalizeTickerQueryModules(moduleIds);
+    state.tickerContext.tickerQueryModules = normalized;
+    if (persist) safeLocalStorageSet(TICKER_QUERY_MODULES_KEY, normalized.join(","));
+    if (!ui.tickerQueryModulesPicker) return;
+    const selectedSet = new Set(normalized);
+    ui.tickerQueryModulesPicker.querySelectorAll('input[type="checkbox"][data-module-id]').forEach((node) => {
+      const token = String(node.dataset.moduleId || "").trim();
+      node.checked = selectedSet.has(token);
+    });
+  };
+
+  const renderTickerQueryModulePicker = () => {
+    if (!ui.tickerQueryModulesPicker) return;
+    const stored = safeLocalStorageGet(TICKER_QUERY_MODULES_KEY) || "";
+    const selected = normalizeTickerQueryModules(state.tickerContext.tickerQueryModules || stored);
+    const selectedSet = new Set(selected);
+    ui.tickerQueryModulesPicker.innerHTML = MODEL_COUNCIL_MODULE_CATALOG.map((module) => {
+      const id = String(module.id || "").trim();
+      const label = String(module.label || id);
+      return `
+        <label class="module-picker-chip">
+          <input type="checkbox" data-module-id="${escapeHtml(id)}" ${selectedSet.has(id) ? "checked" : ""} />
+          <span>${escapeHtml(label)}</span>
+        </label>
+      `;
+    }).join("");
+    setTickerQueryModulesSelection(selected, { persist: true });
+    if (ui.tickerQueryModulesPicker.dataset.bound !== "1") {
+      ui.tickerQueryModulesPicker.addEventListener("change", () => {
+        const next = getSelectedTickerQueryModules();
+        setTickerQueryModulesSelection(next, { persist: true });
+      });
+      ui.tickerQueryModulesPicker.dataset.bound = "1";
+    }
+  };
+
+  const renderTickerQueryModulesOutput = (moduleData, selectedModules) => {
+    if (!ui.tickerQueryModulesOutput) return;
+    const modules = normalizeTickerQueryModules(selectedModules);
+    const data = moduleData && typeof moduleData === "object" ? moduleData : {};
+    if (!modules.length) {
+      ui.tickerQueryModulesOutput.classList.add("hidden");
+      return;
+    }
+    const details = modules
+      .map((moduleId) => {
+        const label = MODEL_COUNCIL_MODULE_CATALOG.find((item) => item.id === moduleId)?.label || moduleId;
+        const payload = data[moduleId];
+        const serialized = JSON.stringify(payload ?? { message: "No data." }, null, 2);
+        const clipped = serialized.length > 5000 ? `${serialized.slice(0, 5000)}\n...truncated` : serialized;
+        return `
+          <details class="model-council-module" open>
+            <summary>${escapeHtml(label)}</summary>
+            <pre class="small">${escapeHtml(clipped)}</pre>
+          </details>
+        `;
+      })
+      .join("");
+    ui.tickerQueryModulesOutput.innerHTML = `
+      <div class="small"><strong>Selected yfinance modules</strong></div>
+      <div class="model-council-modules-stack">${details}</div>
+    `;
+    ui.tickerQueryModulesOutput.classList.remove("hidden");
+  };
+
   const renderTickerQueryResult = (payload) => {
     if (!ui.tickerQueryOutput) return;
     const answer = escapeHtml(String(payload?.answer || "").trim() || "No answer returned.");
-    const model = escapeHtml(String(payload?.model || "gpt-5"));
-    const provider = escapeHtml(String(payload?.provider || "openai"));
+    const modelRaw = String(payload?.model || "gpt-5-mini");
+    const providerRaw = normalizeModelCouncilProviderId(payload?.provider || modelCouncilProviderFromModel(modelRaw) || "openai");
+    const model = escapeHtml(modelRaw);
+    const provider = escapeHtml(MODEL_PROVIDER_LABEL[providerRaw] || providerRaw || "OpenAI");
     const context = payload?.context && typeof payload.context === "object" ? payload.context : {};
     const sector = escapeHtml(String(context.sector || "").trim());
     const industry = escapeHtml(String(context.industry || "").trim());
     const exchange = escapeHtml(String(context.exchange || "").trim());
     const headlines = Array.isArray(context.headlines) ? context.headlines : [];
+    const citations = Array.isArray(payload?.citations) ? payload.citations : [];
+    const responseId = String(payload?.responseId || state.tickerContext.tickerQueryLastResponseId || "").trim();
+    const feedbackState = String(payload?.feedback || state.tickerContext.tickerQueryFeedback || "").trim().toLowerCase();
+    const shareUrl = String(payload?.shareUrl || state.tickerContext.tickerQueryShareUrl || "").trim();
 
     ui.tickerQueryOutput.innerHTML = `
       <div class="small muted">Provider: ${provider} · Model: ${model}</div>
       <div class="small" style="margin-top:10px; white-space:pre-wrap;">${answer}</div>
+      <div class="model-council-actions">
+        <button class="task-chip${feedbackState === "like" ? " active" : ""}" type="button" data-action="model-council-like" data-response-id="${escapeHtml(responseId)}">Like</button>
+        <button class="task-chip${feedbackState === "dislike" ? " active" : ""}" type="button" data-action="model-council-dislike" data-response-id="${escapeHtml(responseId)}">Dislike</button>
+        <button class="task-chip" type="button" data-action="model-council-share" data-response-id="${escapeHtml(responseId)}">${icon("share-ios")}<span>Share link</span></button>
+      </div>
+      ${shareUrl ? `<div class="small muted">Shared: <a href="${escapeHtml(shareUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(shareUrl)}</a></div>` : ""}
+      <p class="small muted solve-now-disclaimer">${escapeHtml(MODEL_COUNCIL_OUTPUT_DISCLAIMER)}</p>
       <div class="small muted" style="margin-top:10px;">
         ${sector ? `Sector: ${sector}` : ""}${industry ? ` · Industry: ${industry}` : ""}${exchange ? ` · Exchange: ${exchange}` : ""}
       </div>
@@ -7655,6 +9280,41 @@
             </div>`
           : ""
       }
+      ${
+        citations.length
+          ? `<div style="margin-top:12px;">
+              <div class="small"><strong>Citations</strong></div>
+              <ul class="small" style="margin:6px 0 0 16px;">
+                ${citations
+                  .slice(0, 8)
+                  .map((item) => {
+                    const title = escapeHtml(String(item?.title || item?.url || "Source").trim());
+                    const url = escapeHtml(String(item?.url || "").trim());
+                    return `<li>${url ? `<a class="news-link" href="${url}" target="_blank" rel="noopener noreferrer">${title}</a>` : title}</li>`;
+                  })
+                  .join("")}
+              </ul>
+            </div>`
+          : ""
+      }
+    `;
+  };
+
+  const renderTickerQueryErrorState = ({ message = "", retryProvider = "", retryModel = "" } = {}) => {
+    if (!ui.tickerQueryOutput) return;
+    const text = escapeHtml(String(message || "Unable to complete Model Council request right now."));
+    const provider = escapeHtml(String(retryProvider || "").trim());
+    const model = escapeHtml(String(retryModel || "").trim());
+    ui.tickerQueryOutput.innerHTML = `
+      <div class="small muted">${text}</div>
+      ${
+        provider && model
+          ? `<button class="cta secondary small" type="button" data-action="model-council-retry" data-provider="${provider}" data-model="${model}" style="margin-top:12px;">
+              ${icon("refresh")}<span>Retry with ${provider}/${model}</span>
+            </button>`
+          : ""
+      }
+      <p class="small muted solve-now-disclaimer" style="margin-top:10px;">${escapeHtml(MODEL_COUNCIL_OUTPUT_DISCLAIMER)}</p>
     `;
   };
 
@@ -7674,125 +9334,169 @@
     return headers;
   };
 
-  const tickerQueryModelGroup = (modelId) => {
-    const id = normalizeAiModelId(modelId).toLowerCase();
-    if (id.includes("nano")) return "Fast";
-    if (id.includes("mini")) return "Balanced";
-    if (id.startsWith("gpt-5")) return "Reasoning";
-    return "Balanced";
-  };
-
-  const tickerQueryModelHint = (modelId) => {
-    const meta = getModelMeta(modelId);
-    if (meta?.helper) return String(meta.helper).trim();
-    const id = normalizeAiModelId(modelId).toLowerCase();
-    if (id.includes("nano")) return "Lowest latency for quick scans.";
-    if (id.includes("mini")) return "Best default for most questions.";
-    return "Higher depth reasoning with slower latency.";
-  };
-
-  const applyTickerQueryModelSelection = (modelId) => {
-    const normalized = normalizeAiModelId(modelId || "") || "gpt-5-mini";
-    state.tickerContext.tickerQueryModel = normalized;
-    safeLocalStorageSet(TICKER_QUERY_MODEL_KEY, normalized);
-    if (ui.tickerQueryModel && ui.tickerQueryModel.value !== normalized) {
-      ui.tickerQueryModel.value = normalized;
+  const applyTickerQueryModelSelection = (modelId, providerId = "") => {
+    const normalizedModel = normalizeAiModelId(modelId || "") || "gpt-5-mini";
+    const normalizedProvider = normalizeModelCouncilProviderId(providerId || modelCouncilProviderFromModel(normalizedModel) || "openai");
+    state.tickerContext.tickerQueryModel = normalizedModel;
+    state.tickerContext.tickerQueryProvider = normalizedProvider;
+    safeLocalStorageSet(TICKER_QUERY_MODEL_KEY, normalizedModel);
+    safeLocalStorageSet(TICKER_QUERY_PROVIDER_KEY, normalizedProvider);
+    if (ui.tickerQueryModel && ui.tickerQueryModel.value !== normalizedModel) {
+      ui.tickerQueryModel.value = normalizedModel;
+    }
+    if (ui.tickerQueryProvider && ui.tickerQueryProvider.value !== normalizedProvider) {
+      ui.tickerQueryProvider.value = normalizedProvider;
+    }
+    if (ui.tickerQueryProviderHint) {
+      ui.tickerQueryProviderHint.textContent = `${MODEL_PROVIDER_LABEL[normalizedProvider] || normalizedProvider} provider · server-side only.`;
     }
     if (ui.tickerQueryModelHint) {
-      ui.tickerQueryModelHint.textContent = `${tickerQueryModelHint(normalized)} Some models may cost more and run slower.`;
+      ui.tickerQueryModelHint.textContent = `${tickerQueryModelHint(normalizedModel, normalizedProvider)} Some models may cost more and run slower.`;
     }
   };
 
-  const renderTickerQueryModels = (models) => {
+  const renderTickerQueryModels = (models, { provider = "" } = {}) => {
     if (!ui.tickerQueryModel) return;
     const list = Array.isArray(models) ? models : [];
-    if (!list.length) {
+    const providerFilter = normalizeModelCouncilProviderId(provider || ui.tickerQueryProvider?.value || state.tickerContext.tickerQueryProvider || "");
+    const scoped = providerFilter ? list.filter((row) => normalizeModelCouncilProviderId(row?.provider || "") === providerFilter) : list;
+    const source = scoped.length ? scoped : list;
+    if (!source.length) {
       ui.tickerQueryModel.innerHTML = `<option value="gpt-5-mini">gpt-5-mini</option>`;
-      applyTickerQueryModelSelection("gpt-5-mini");
+      applyTickerQueryModelSelection("gpt-5-mini", "openai");
       return;
     }
-
-    const grouped = list.reduce((acc, row) => {
+    const grouped = source.reduce((acc, row) => {
       const modelId = normalizeAiModelId(row?.id || row?.model || "");
       if (!modelId) return acc;
-      const group = String(row?.group || tickerQueryModelGroup(modelId) || "Balanced").trim();
+      const providerId = normalizeModelCouncilProviderId(row?.provider || modelCouncilProviderFromModel(modelId) || "");
+      const group = String(row?.group || tickerQueryModelGroup(modelId, providerId) || "Balanced").trim();
       if (!acc[group]) acc[group] = [];
       acc[group].push({
         id: modelId,
-        label: String(row?.label || modelId),
-        hint: String(row?.hint || tickerQueryModelHint(modelId)),
+        provider: providerId,
+        label: String(row?.label || getModelMeta(modelId)?.label || modelId),
+        hint: String(row?.hint || tickerQueryModelHint(modelId, providerId)),
       });
       return acc;
     }, {});
-
-    const order = ["Fast", "Balanced", "Reasoning"];
+    const order = ["Fast", "Balanced", "Reasoning", "Research", "Custom"];
     ui.tickerQueryModel.innerHTML = order
       .filter((group) => Array.isArray(grouped[group]) && grouped[group].length)
       .map((group) => {
         const options = grouped[group]
-          .map((item) => `<option value="${escapeHtml(item.id)}" title="${escapeHtml(item.hint)}">${escapeHtml(item.label)}</option>`)
+          .map((item) => `<option value="${escapeHtml(item.id)}" data-provider="${escapeHtml(item.provider)}" title="${escapeHtml(item.hint)}">${escapeHtml(item.label)}</option>`)
           .join("");
         return `<optgroup label="${escapeHtml(group)}">${options}</optgroup>`;
       })
       .join("");
-
-    const availableSet = new Set(list.map((row) => normalizeAiModelId(row?.id || row?.model || "")).filter(Boolean));
+    const availableSet = new Set(source.map((row) => normalizeAiModelId(row?.id || row?.model || "")).filter(Boolean));
     let selected = normalizeAiModelId(state.tickerContext.tickerQueryModel || safeLocalStorageGet(TICKER_QUERY_MODEL_KEY) || "");
     if (!selected || !availableSet.has(selected)) {
-      selected = normalizeAiModelId(list[0]?.id || list[0]?.model || "gpt-5-mini") || "gpt-5-mini";
+      selected = normalizeAiModelId(source[0]?.id || source[0]?.model || "gpt-5-mini") || "gpt-5-mini";
     }
-    applyTickerQueryModelSelection(selected);
+    const selectedProvider = normalizeModelCouncilProviderId(
+      source.find((row) => normalizeAiModelId(row?.id || row?.model || "") === selected)?.provider ||
+      providerFilter ||
+      modelCouncilProviderFromModel(selected)
+    );
+    applyTickerQueryModelSelection(selected, selectedProvider);
+  };
+
+  const renderTickerQueryProviderOptions = (providers, models) => {
+    if (!ui.tickerQueryProvider) return;
+    const rows = Array.isArray(providers) ? providers : [];
+    const fallbackRows = Array.isArray(models)
+      ? Array.from(
+          new Map(
+            models
+              .map((row) => normalizeModelCouncilProviderId(row?.provider || ""))
+              .filter(Boolean)
+              .map((providerId) => [providerId, { id: providerId, displayName: MODEL_PROVIDER_LABEL[providerId] || providerId }])
+          ).values()
+        )
+      : [];
+    const source = rows.length ? rows.filter((row) => row?.available !== false) : fallbackRows;
+    if (!source.length) {
+      ui.tickerQueryProvider.innerHTML = `<option value="openai">OpenAI</option>`;
+      applyTickerQueryModelSelection("gpt-5-mini", "openai");
+      return;
+    }
+    ui.tickerQueryProvider.innerHTML = source
+      .map((row) => {
+        const id = normalizeModelCouncilProviderId(row?.id || "");
+        const label = String(row?.displayName || MODEL_PROVIDER_LABEL[id] || id || "").trim();
+        return `<option value="${escapeHtml(id)}">${escapeHtml(label)}</option>`;
+      })
+      .join("");
+    const available = new Set(source.map((row) => normalizeModelCouncilProviderId(row?.id || "")).filter(Boolean));
+    let selectedProvider = normalizeModelCouncilProviderId(
+      state.tickerContext.tickerQueryProvider || safeLocalStorageGet(TICKER_QUERY_PROVIDER_KEY) || ""
+    );
+    if (!selectedProvider || !available.has(selectedProvider)) {
+      selectedProvider = normalizeModelCouncilProviderId(source[0]?.id || "openai");
+    }
+    ui.tickerQueryProvider.value = selectedProvider;
+    safeLocalStorageSet(TICKER_QUERY_PROVIDER_KEY, selectedProvider);
+    state.tickerContext.tickerQueryProvider = selectedProvider;
+    renderTickerQueryModels(models, { provider: selectedProvider });
   };
 
   const loadTickerQueryModels = async ({ force = false } = {}) => {
     if (!ui.tickerQueryModel) return;
     if (!force && state.tickerContext.tickerQueryModelsLoaded && state.tickerContext.tickerQueryModels.length) {
-      renderTickerQueryModels(state.tickerContext.tickerQueryModels);
+      renderTickerQueryProviderOptions(state.tickerContext.tickerQueryProviders || [], state.tickerContext.tickerQueryModels);
       return;
     }
 
     const fallback = () => {
-      const tier = getCurrentAiTierConfig();
-      const localModels = (tier.allowedModels || [])
-        .map((modelId) => normalizeAiModelId(modelId))
-        .filter((modelId) => modelId && modelId.startsWith("gpt-5"))
-        .map((modelId) => ({
-          id: modelId,
-          label: getModelMeta(modelId)?.label || modelId,
-          group: tickerQueryModelGroup(modelId),
-          hint: tickerQueryModelHint(modelId),
-        }));
+      const localModels = AI_MODEL_CATALOG.map((model) => ({
+        id: normalizeAiModelId(model.id),
+        provider: normalizeModelCouncilProviderId(model.provider || modelCouncilProviderFromModel(model.id)),
+        label: String(model.label || model.id),
+        group: tickerQueryModelGroup(model.id, model.provider),
+        hint: tickerQueryModelHint(model.id, model.provider),
+      })).filter((row) => row.id);
       state.tickerContext.tickerQueryModels = localModels;
+      state.tickerContext.tickerQueryProviders = Array.from(
+        new Map(
+          localModels.map((row) => [row.provider, { id: row.provider, displayName: MODEL_PROVIDER_LABEL[row.provider] || row.provider, available: true }])
+        ).values()
+      );
       state.tickerContext.tickerQueryModelsLoaded = true;
-      renderTickerQueryModels(localModels);
+      renderTickerQueryProviderOptions(state.tickerContext.tickerQueryProviders, localModels);
     };
 
     try {
       const headers = await buildApiAuthHeaders();
-      const response = await fetch("/api/openai/models", {
+      const response = await fetch("/api/model-council/models", {
         method: "GET",
         headers,
         credentials: "same-origin",
       });
       if (!response.ok) throw new Error("Model list unavailable.");
       const payload = await response.json();
-      const remote = Array.isArray(payload?.models) ? payload.models : [];
-      const models = remote
+      const remoteModels = Array.isArray(payload?.models) ? payload.models : [];
+      const models = remoteModels
         .map((row) => {
           const id = normalizeAiModelId(row?.id || row?.model || "");
-          if (!id || !id.startsWith("gpt-5")) return null;
+          if (!id) return null;
+          const provider = normalizeModelCouncilProviderId(row?.provider || modelCouncilProviderFromModel(id));
           return {
             id,
+            provider,
             label: String(row?.label || getModelMeta(id)?.label || id),
-            group: String(row?.group || tickerQueryModelGroup(id)),
-            hint: String(row?.hint || tickerQueryModelHint(id)),
+            group: String(row?.group || tickerQueryModelGroup(id, provider)),
+            hint: String(row?.hint || tickerQueryModelHint(id, provider)),
           };
         })
         .filter(Boolean);
       if (!models.length) throw new Error("No compatible models returned.");
+      const providers = Array.isArray(payload?.providers) ? payload.providers : [];
       state.tickerContext.tickerQueryModels = models;
+      state.tickerContext.tickerQueryProviders = providers;
       state.tickerContext.tickerQueryModelsLoaded = true;
-      renderTickerQueryModels(models);
+      renderTickerQueryProviderOptions(providers, models);
     } catch (error) {
       fallback();
     }
@@ -7830,9 +9534,9 @@
       `Latency: ${latencyLabel} · Tokens: ${formatTokenStat(promptTokens + completionTokens)} · Cached: ${formatTokenStat(cachedTokens)}${cacheHint}`;
   };
 
-  const streamTickerQueryInsight = async ({ ticker, prompt, language, model, technicalContext = null } = {}) => {
+  const streamTickerQueryInsight = async ({ ticker, prompt, language, model, provider, modules = [], technicalContext = null } = {}) => {
     const headers = await buildApiAuthHeaders({ includeJson: true });
-    const response = await fetch("/api/chat", {
+    const response = await fetch("/api/model-council/query", {
       method: "POST",
       headers,
       credentials: "same-origin",
@@ -7841,147 +9545,284 @@
         question: prompt,
         language,
         model,
+        provider,
+        modules,
         technicalContext: technicalContext && typeof technicalContext === "object" ? technicalContext : undefined,
         messages: [{ role: "user", content: prompt }],
         meta: buildMeta(),
       }),
     });
+    const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      let message = "Unable to complete ticker query right now.";
-      try {
-        const payload = await response.json();
-        if (payload && typeof payload.error === "string" && payload.error.trim()) {
-          message = payload.error.trim();
-        }
-      } catch (error) {
-        // Ignore JSON parse failures.
-      }
-      throw new Error(message);
+      const message = String(payload?.error || "Unable to complete Model Council request right now.").trim();
+      const err = new Error(message);
+      err.retryProvider = String(payload?.retryProvider || "").trim();
+      err.retryModel = String(payload?.retryModel || "").trim();
+      throw err;
     }
-    if (!response.body) throw new Error("Streaming response body was not available.");
-
-    const decoder = new TextDecoder();
-    const reader = response.body.getReader();
-    let buffer = "";
-    let answer = "";
-    let usage = null;
-    let modelUsed = model;
-    let provider = "openai";
-    let latencyMs = null;
-    const context = {};
-
-    const flushEventBlock = (block) => {
-      if (!block) return;
-      const lines = String(block || "")
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(Boolean);
-      const dataLines = lines.filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trim());
-      if (!dataLines.length) return;
-      const raw = dataLines.join("\n");
-      if (!raw || raw === "[DONE]") return;
-      let payload = null;
-      try {
-        payload = JSON.parse(raw);
-      } catch (error) {
-        payload = null;
-      }
-      if (!payload || typeof payload !== "object") return;
-      const type = String(payload.type || "").trim();
-      if (type === "delta") {
-        const delta = String(payload.text || "");
-        if (delta) {
-          answer += delta;
-          renderTickerQueryResult({ answer, model: modelUsed, provider, context });
-        }
-      } else if (type === "meta") {
-        provider = String(payload.provider || provider || "openai");
-        modelUsed = normalizeAiModelId(payload.model || modelUsed || model) || modelUsed;
-      } else if (type === "done") {
-        provider = String(payload.provider || provider || "openai");
-        modelUsed = normalizeAiModelId(payload.model || modelUsed || model) || modelUsed;
-        usage = payload.usage && typeof payload.usage === "object" ? payload.usage : usage;
-        latencyMs = Number.isFinite(Number(payload.latencyMs)) ? Number(payload.latencyMs) : latencyMs;
-      } else if (type === "error") {
-        throw new Error(String(payload.message || "Unable to complete ticker query right now."));
-      }
+    return {
+      answer: String(payload?.answer || "").trim(),
+      model: normalizeAiModelId(payload?.model || model) || model,
+      provider: normalizeModelCouncilProviderId(payload?.provider || provider || "openai"),
+      usage: payload?.usage && typeof payload.usage === "object" ? payload.usage : {},
+      latencyMs: Number.isFinite(Number(payload?.latencyMs)) ? Number(payload.latencyMs) : null,
+      context: payload?.context && typeof payload.context === "object" ? payload.context : {},
+      moduleData: payload?.moduleData && typeof payload.moduleData === "object" ? payload.moduleData : {},
+      selectedModules: Array.isArray(payload?.selectedModules) ? payload.selectedModules : modules,
+      responseId: String(payload?.responseId || "").trim(),
+      citations: Array.isArray(payload?.citations) ? payload.citations : [],
     };
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      while (true) {
-        const boundary = buffer.indexOf("\n\n");
-        if (boundary < 0) break;
-        const eventBlock = buffer.slice(0, boundary);
-        buffer = buffer.slice(boundary + 2);
-        flushEventBlock(eventBlock);
-      }
-    }
-    if (buffer.trim()) {
-      flushEventBlock(buffer.trim());
-      buffer = "";
-    }
-
-    return { answer: answer.trim(), model: modelUsed, provider, usage, latencyMs, context };
   };
 
-  const loadTickerQueryInsight = async (functions, { ticker, question, notify = false } = {}) => {
+  const improveTickerQueryPrompt = async ({ ticker, question, language, modules, model, provider } = {}) => {
+    const headers = await buildApiAuthHeaders({ includeJson: true });
+    const response = await fetch("/api/model-council/improve-prompt", {
+      method: "POST",
+      headers,
+      credentials: "same-origin",
+      body: JSON.stringify({
+        ticker,
+        question,
+        language,
+        modules,
+        model,
+        provider,
+        meta: buildMeta(),
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const message = String(payload?.error || "Unable to improve prompt right now.").trim();
+      throw new Error(message);
+    }
+    return {
+      improvedPrompt: String(payload?.improvedPrompt || question || "").trim() || String(question || "").trim(),
+      model: String(payload?.model || "").trim(),
+      provider: String(payload?.provider || "").trim(),
+    };
+  };
+
+  const submitModelCouncilFeedback = async ({ responseId, action } = {}) => {
+    const id = String(responseId || "").trim();
+    const normalizedAction = String(action || "").trim().toLowerCase();
+    if (!id || !normalizedAction) return;
+    const headers = await buildApiAuthHeaders({ includeJson: true });
+    await fetch("/api/model-council/feedback", {
+      method: "POST",
+      headers,
+      credentials: "same-origin",
+      body: JSON.stringify({
+        responseId: id,
+        action: normalizedAction,
+        meta: buildMeta(),
+      }),
+    }).catch(() => {});
+  };
+
+  const createModelCouncilShareLink = async (responseId) => {
+    const id = String(responseId || "").trim();
+    if (!id) throw new Error("Response ID is required.");
+    const headers = await buildApiAuthHeaders({ includeJson: true });
+    const response = await fetch("/api/model-council/share", {
+      method: "POST",
+      headers,
+      credentials: "same-origin",
+      body: JSON.stringify({ responseId: id, meta: buildMeta() }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(String(payload?.error || "Unable to create share link.").trim());
+    return String(payload?.shareUrl || "").trim();
+  };
+
+  const loadPublicModelCouncilShare = async ({ setPanel = true } = {}) => {
+    if (!ui.tickerQueryOutput) return false;
+    let shareId = "";
+    try {
+      const params = new URLSearchParams(window.location.search);
+      shareId = String(params.get("publicShare") || "").trim();
+    } catch (error) {
+      shareId = "";
+    }
+    if (!shareId) return false;
+
+    try {
+      setOutputLoading(ui.tickerQueryOutput, "Loading shared Model Council response...");
+      const response = await fetch(`/api/model-council/share/${encodeURIComponent(shareId)}`, {
+        method: "GET",
+        credentials: "same-origin",
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(String(payload?.error || "Shared response unavailable.").trim());
+      }
+      setOutputReady(ui.tickerQueryOutput);
+      state.tickerContext.tickerQueryLastResponseId = String(payload?.responseId || "").trim();
+      state.tickerContext.tickerQueryLastResponse = payload;
+      state.tickerContext.tickerQueryShareUrl = `${window.location.origin}/model-council?publicShare=${encodeURIComponent(shareId)}`;
+      renderTickerQueryResult({
+        answer: String(payload?.answer || "").trim(),
+        model: String(payload?.model || "").trim(),
+        provider: String(payload?.provider || "").trim(),
+        context: payload?.context || {},
+        responseId: String(payload?.responseId || "").trim(),
+        citations: Array.isArray(payload?.citations) ? payload.citations : [],
+        shareUrl: state.tickerContext.tickerQueryShareUrl,
+      });
+      renderTickerQueryModulesOutput(payload?.moduleData || {}, payload?.selectedModules || []);
+      if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Viewing shared read-only Model Council response.";
+      if (setPanel && typeof window.__quanturaSetPanel === "function") {
+        window.__quanturaSetPanel("ticker-query", { pushPath: false });
+      }
+      return true;
+    } catch (error) {
+      setOutputReady(ui.tickerQueryOutput);
+      renderTickerQueryErrorState({ message: error.message || "Shared response unavailable." });
+      if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Unable to load shared response.";
+      return false;
+    }
+  };
+
+  const syncModelCouncilSeo = () => {
+    const title = "Model Council | Quantura";
+    const description = "Multi-provider Model Council with structured Yahoo Finance module context for ticker analysis.";
+    try {
+      if (window.location.pathname === "/model-council" || window.location.pathname === "/ticker-query") {
+        document.title = title;
+      }
+      const metaDescription = document.querySelector('meta[name="description"]');
+      if (metaDescription && window.location.pathname === "/model-council") {
+        metaDescription.setAttribute("content", description);
+      }
+    } catch (error) {
+      // Best-effort only.
+    }
+  };
+
+  const loadTickerQueryInsight = async (
+    functions,
+    { ticker, question, notify = false, skipImprove = false, providerOverride = "", modelOverride = "" } = {}
+  ) => {
     if (!ui.tickerQueryOutput) return;
     const symbol = normalizeTicker(ticker || ui.tickerQueryTicker?.value || state.tickerContext.ticker || "");
     const prompt = String(question || ui.tickerQueryQuestion?.value || "").trim();
     const languageRaw = normalizeLanguageCode(ui.tickerQueryLanguage?.value || state.preferredLanguage || "en");
     const language = languageRaw === "auto" ? state.preferredLanguage || "en" : languageRaw;
-    const selectedModel = normalizeAiModelId(ui.tickerQueryModel?.value || state.tickerContext.tickerQueryModel || "gpt-5-mini") || "gpt-5-mini";
+    const selectedProvider = normalizeModelCouncilProviderId(
+      providerOverride || ui.tickerQueryProvider?.value || state.tickerContext.tickerQueryProvider || "openai"
+    );
+    const selectedModel = normalizeAiModelId(
+      modelOverride || ui.tickerQueryModel?.value || state.tickerContext.tickerQueryModel || "gpt-5-mini"
+    ) || "gpt-5-mini";
+    const selectedModules = getSelectedTickerQueryModules();
+
     if (!symbol) {
-      showToast("Ticker is required for GPT-5 query.", "warn");
+      showToast("Ticker is required for Model Council.", "warn");
       return;
     }
     if (!prompt) {
-      showToast("Enter a question for GPT-5.", "warn");
+      showToast("Enter a question for Model Council.", "warn");
       return;
     }
+
+    const improveEnabled = Boolean(ui.tickerQueryImproveToggle?.checked);
+    if (improveEnabled && !skipImprove) {
+      try {
+        if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Improving prompt preview...";
+        const improved = await improveTickerQueryPrompt({
+          ticker: symbol,
+          question: prompt,
+          language,
+          modules: selectedModules,
+          model: selectedModel,
+          provider: selectedProvider,
+        });
+        if (ui.tickerQueryImprovePreview) ui.tickerQueryImprovePreview.value = improved.improvedPrompt || prompt;
+        if (ui.tickerQueryImprovePreviewWrap) ui.tickerQueryImprovePreviewWrap.classList.remove("hidden");
+        state.tickerContext.tickerQueryPendingQuestion = prompt;
+        state.tickerContext.tickerQueryPendingProvider = selectedProvider;
+        state.tickerContext.tickerQueryPendingModel = selectedModel;
+        if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Prompt improved. Review preview, then run Model Council.";
+        return;
+      } catch (error) {
+        if (notify) showToast(error.message || "Unable to improve prompt preview.", "warn");
+      }
+    }
+
+    const finalPrompt = String(
+      (skipImprove && ui.tickerQueryImprovePreview ? ui.tickerQueryImprovePreview.value : prompt) || prompt
+    ).trim();
+    if (!finalPrompt) {
+      showToast("Prompt cannot be empty.", "warn");
+      return;
+    }
+
     try {
-      if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Querying GPT-5...";
-      setOutputLoading(ui.tickerQueryOutput, "Running GPT-5 ticker query...");
+      if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Running Model Council...";
+      setOutputLoading(ui.tickerQueryOutput, "Running Model Council analysis...");
+      if (ui.tickerQueryModulesOutput) {
+        ui.tickerQueryModulesOutput.classList.add("hidden");
+      }
       updateTickerQueryModelInfo({});
-      applyTickerQueryModelSelection(selectedModel);
+      applyTickerQueryModelSelection(selectedModel, selectedProvider);
+      setTickerQueryModulesSelection(selectedModules, { persist: true });
       renderTickerQueryCacheStats(null, { visible: false });
-      renderTickerQueryResult({ answer: "", model: selectedModel, provider: "openai", context: {} });
+      renderTickerQueryResult({
+        answer: "",
+        model: selectedModel,
+        provider: selectedProvider,
+        context: {},
+      });
       const started = Date.now();
-      const streamed = await streamTickerQueryInsight({
+      const responsePayload = await streamTickerQueryInsight({
         ticker: symbol,
-        prompt,
+        prompt: finalPrompt,
         language,
         model: selectedModel,
+        provider: selectedProvider,
+        modules: selectedModules,
       });
-      const usage = streamed.usage && typeof streamed.usage === "object" ? streamed.usage : null;
-      const latencyMs = Number.isFinite(Number(streamed.latencyMs)) ? Number(streamed.latencyMs) : Date.now() - started;
+      const usage = responsePayload.usage && typeof responsePayload.usage === "object" ? responsePayload.usage : {};
+      const latencyMs = Number.isFinite(Number(responsePayload.latencyMs)) ? Number(responsePayload.latencyMs) : Date.now() - started;
+      state.tickerContext.tickerQueryLastResponseId = String(responsePayload.responseId || "").trim();
+      state.tickerContext.tickerQueryLastResponse = responsePayload;
+      state.tickerContext.tickerQueryFeedback = "";
+      state.tickerContext.tickerQueryShareUrl = "";
       setOutputReady(ui.tickerQueryOutput);
       renderTickerQueryResult({
-        answer: streamed.answer || "No answer returned.",
-        model: streamed.model || selectedModel,
-        provider: streamed.provider || "openai",
-        context: streamed.context || {},
+        answer: responsePayload.answer || "No answer returned.",
+        model: responsePayload.model || selectedModel,
+        provider: responsePayload.provider || selectedProvider,
+        context: responsePayload.context || {},
+        responseId: responsePayload.responseId || "",
+        citations: responsePayload.citations || [],
       });
+      renderTickerQueryModulesOutput(responsePayload.moduleData || {}, responsePayload.selectedModules || selectedModules);
       updateTickerQueryModelInfo({ latencyMs, usage });
       const showCacheStats = Boolean(ui.tickerQueryShowCacheStats?.checked);
       renderTickerQueryCacheStats(usage, { visible: showCacheStats });
-      if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Completed.";
-      logEvent("ticker_query_completed", {
+      if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Model Council completed.";
+      if (ui.tickerQueryImprovePreviewWrap && skipImprove) {
+        ui.tickerQueryImprovePreviewWrap.classList.add("hidden");
+      }
+      logEvent("model_council_completed", {
         ticker: symbol,
         language,
-        model: streamed.model || selectedModel,
+        provider: responsePayload.provider || selectedProvider,
+        model: responsePayload.model || selectedModel,
+        modules_count: (responsePayload.selectedModules || selectedModules || []).length,
         prompt_tokens: Number(usage?.prompt_tokens || 0),
         completion_tokens: Number(usage?.completion_tokens || 0),
         cached_tokens: Number(usage?.cached_tokens || 0),
       });
     } catch (error) {
       setOutputReady(ui.tickerQueryOutput);
-      ui.tickerQueryOutput.innerHTML = `<div class="small muted">Unable to complete ticker query right now.</div>`;
-      if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Unable to complete query.";
-      if (notify) showToast(error.message || "Unable to run ticker query.", "warn");
+      renderTickerQueryErrorState({
+        message: error.message || "Unable to run Model Council right now.",
+        retryProvider: error.retryProvider || "",
+        retryModel: error.retryModel || "",
+      });
+      if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Unable to complete Model Council request.";
+      if (notify) showToast(error.message || "Unable to run Model Council.", "warn");
     }
   };
 
@@ -8205,14 +10046,14 @@
         const subLabel = absChangeLabel && changeOk ? `${absChangeLabel} · ${changeLabel}` : changeLabel;
 
         return `
-          <button class="trending-card" type="button" data-action="pick-ticker" data-ticker="${escapeHtml(symbol)}">
+          <button class="trending-hot-chip" type="button" data-action="pick-ticker" data-ticker="${escapeHtml(symbol)}">
             <div class="trending-top">
               <div class="trending-symbol">${escapeHtml(symbol)}</div>
               <div class="trending-price">${escapeHtml(priceLabel)}</div>
             </div>
             <div class="trending-bottom">
               <span class="trending-chip trending-chip--${direction}">${escapeHtml(subLabel)}</span>
-              <span class="small muted">Tap to load</span>
+              <span class="small muted">Open ticker</span>
             </div>
           </button>
         `;
@@ -8257,8 +10098,8 @@
 
   const renderTickerChart = async (rows, ticker, interval, overlays = [], options = {}) => {
     if (!ui.tickerChart) return;
-    const tickerIntelligenceVisible = isPanelVisible("ticker-intelligence");
-    if (!tickerIntelligenceVisible) {
+    const tickerPanelVisible = isPanelVisible("ticker");
+    if (!tickerPanelVisible) {
       setTerminalChartEngineVisibility("legacy");
       return;
     }
@@ -9469,6 +11310,13 @@
       "amazon-nova-micro": "amazon.nova-micro-v1:0",
       "amazon-nova-lite": "amazon.nova-lite-v1:0",
       "amazon-nova-pro": "amazon.nova-pro-v1:0",
+      "gemini-pro": "gemini-1.5-pro",
+      "gemini-flash": "gemini-2.0-flash",
+      "mistral-small": "mistral-small-latest",
+      "mistral-medium": "mistral-medium-latest",
+      "mistral-large": "mistral-large-latest",
+      "perplexity-sonar": "sonar",
+      "perplexity-sonar-pro": "sonar-pro",
     };
     if (aliases[lower]) return aliases[lower];
     if (lower.startsWith("gpt-") && lower.charAt(4) === "4") {
@@ -9478,6 +11326,18 @@
       return "gpt-5.1";
     }
     if (lower.startsWith("amazon.nova")) {
+      return lower;
+    }
+    if (lower.startsWith("gemini")) {
+      return lower;
+    }
+    if (lower.startsWith("mistral")) {
+      return lower;
+    }
+    if (lower.startsWith("sonar") || lower.startsWith("perplexity/sonar")) {
+      return lower.replace("perplexity/", "");
+    }
+    if (lower.startsWith("other/")) {
       return lower;
     }
     return id;
@@ -10193,7 +12053,7 @@
   const renderAiPortfolioSummary = (runDoc) => {
     const portfolio = runDoc?.aiPortfolio && typeof runDoc.aiPortfolio === "object" ? runDoc.aiPortfolio : null;
     if (!portfolio) {
-      return `<div class="small muted">Generate an AI Portfolio to score long-term growth with Quantura Horizon and publish a leaderboard-ready AI Agent.</div>`;
+      return `<div class="small muted">Generate an AI Portfolio to score long-term growth with Quantura Horizon and publish an Explore-ready AI Agent.</div>`;
     }
     const holdings = Array.isArray(portfolio.holdings) ? portfolio.holdings : [];
     const chips = holdings
@@ -10284,7 +12144,7 @@
       });
 
     if (!ranked.length) {
-      container.innerHTML = `<div class="small muted">No AI Agents for this filter yet. Generate one from the latest screen to publish into the leaderboard.</div>`;
+      container.innerHTML = `<div class="small muted">No AI Agents for this filter yet. Generate one from the latest screen to publish to Explore.</div>`;
       return;
     }
 
@@ -10468,10 +12328,31 @@
     setOutputReady(ui.screenerOutput);
 
     if (!rows.length) {
+      state.sharedScreenerView = null;
       ui.screenerOutput.innerHTML = `
         <div class="small muted">No screener rows stored for this run.</div>
       `;
       return;
+    }
+
+    const sharedMeta = runDoc && typeof runDoc.__sharedMeta === "object" ? runDoc.__sharedMeta : null;
+    const sharedShareId = String(sharedMeta?.shareId || "").trim();
+    const sharedShareUrl = String(sharedMeta?.shareUrl || (sharedShareId ? buildShareUrl("screener", sharedShareId) : "")).trim();
+    const sharedReadOnly = Boolean(sharedMeta?.readOnly);
+    const sharedCanImport = Boolean(sharedMeta?.canImport);
+    const isSharedView = Boolean(sharedShareId);
+
+    if (isSharedView) {
+      state.sharedScreenerView = {
+        shareId: sharedShareId,
+        shareUrl: sharedShareUrl,
+        readOnly: sharedReadOnly,
+        canImport: sharedCanImport,
+        runId: String(runDoc.id || "").trim(),
+        rows,
+      };
+    } else {
+      state.sharedScreenerView = null;
     }
 
     const runId = escapeHtml(runDoc.id || "");
@@ -10486,12 +12367,58 @@
     const ownerUsername = escapeHtml(String(runDoc?.ownerUsername || "").trim());
     const ownerBio = escapeHtml(String(runDoc?.ownerBio || "").trim());
     const ownerAvatarMeta = getProfileAvatarMeta(String(runDoc?.ownerAvatar || "bull").trim());
+    const canEditRun = !sharedReadOnly;
+
+    const actionButtons = [];
+    if (canEditRun) {
+      actionButtons.push(
+        `<button class="cta secondary small" type="button" data-action="download-screener" data-run-id="${runId}">Download CSV</button>`,
+        `<button class="cta secondary small" type="button" data-action="rename-screener" data-run-id="${runId}">Rename</button>`,
+        `<button class="cta secondary small" type="button" data-action="share-screener" data-run-id="${runId}">Share link</button>`,
+        `<button class="cta secondary small" type="button" data-action="toggle-screener-public" data-run-id="${runId}" data-is-public="${
+          isPublic ? "1" : "0"
+        }">${isPublic ? "Make private" : "Publish public"}</button>`,
+        `<button class="cta secondary small danger" type="button" data-action="delete-screener" data-run-id="${runId}">Delete</button>`
+      );
+    } else {
+      actionButtons.push(
+        `<button class="cta secondary small" type="button" data-action="download-shared-screener">Download CSV</button>`,
+        `<button class="cta secondary small" type="button" data-action="copy-shared-screener-link" data-share-id="${escapeHtml(
+          sharedShareId
+        )}">Copy share link</button>`
+      );
+      if (sharedShareId && (sharedCanImport || !hasFullAccount())) {
+        actionButtons.push(
+          `<button class="cta secondary small" type="button" data-action="import-shared-screener" data-share-id="${escapeHtml(
+            sharedShareId
+          )}">${hasFullAccount() ? "Save to dashboard" : "Sign in to save"}</button>`
+        );
+      }
+    }
+
+    if (canSupportOwner) {
+      actionButtons.push(
+        `<button class="cta secondary small" type="button" data-action="screener-owner-thanks" data-creator-workspace-id="${escapeHtml(
+          ownerWorkspaceId
+        )}" data-target-id="${runId}">Send thanks</button>`,
+        `<button class="cta secondary small" type="button" data-action="screener-owner-subscribe" data-creator-workspace-id="${escapeHtml(
+          ownerWorkspaceId
+        )}" data-target-id="${runId}">Subscribe</button>`
+      );
+    }
+
+    const sharedNotice = isSharedView
+      ? `<div class="small muted"><strong>Shared:</strong> ${
+          sharedReadOnly ? "Read-only view. Only the owner can edit this run." : "Owner view from shared link."
+        }</div>`
+      : "";
 
     ui.screenerOutput.innerHTML = `
       ${title ? `<div class="small"><strong>Title:</strong> ${escapeHtml(title)}</div>` : ""}
       <div class="small"><strong>Run ID:</strong> ${runId || "—"}</div>
       <div class="small"><strong>Created:</strong> ${createdAt}</div>
       <div class="small"><strong>Visibility:</strong> ${isPublic ? "Public" : "Private"}</div>
+      ${sharedNotice}
       ${
         ownerUsername || ownerBio
           ? `<div class="small muted"><strong>Owner:</strong> ${escapeHtml(ownerAvatarMeta.emoji || "")} ${
@@ -10501,31 +12428,23 @@
       }
       ${notes ? `<div class="small" style="margin-top:10px;"><strong>Notes:</strong> ${escapeHtml(notes)}</div>` : ""}
       <div class="hero-actions" style="margin-top:12px;">
-        <button class="cta secondary small" type="button" data-action="download-screener" data-run-id="${runId}">Download CSV</button>
-        <button class="cta secondary small" type="button" data-action="rename-screener" data-run-id="${runId}">Rename</button>
-        <button class="cta secondary small" type="button" data-action="share-screener" data-run-id="${runId}">Share link</button>
-        <button class="cta secondary small" type="button" data-action="toggle-screener-public" data-run-id="${runId}" data-is-public="${
-          isPublic ? "1" : "0"
-        }">${isPublic ? "Make private" : "Publish public"}</button>
-        ${
-          canSupportOwner
-            ? `<button class="cta secondary small" type="button" data-action="screener-owner-thanks" data-creator-workspace-id="${escapeHtml(
-                ownerWorkspaceId
-              )}" data-target-id="${runId}">Send thanks</button>
-               <button class="cta secondary small" type="button" data-action="screener-owner-subscribe" data-creator-workspace-id="${escapeHtml(
-                 ownerWorkspaceId
-               )}" data-target-id="${runId}">Subscribe</button>`
-            : ""
-        }
-        <button class="cta secondary small danger" type="button" data-action="delete-screener" data-run-id="${runId}">Delete</button>
+        ${actionButtons.join("")}
       </div>
       <div class="card" style="margin-top:14px;">
         <div class="card-head">
           <h3>AI Portfolio</h3>
-          <div class="hero-actions" style="margin-top:0;">
-            <button class="cta secondary small" type="button" data-action="generate-ai-portfolio" data-run-id="${runId}">${icon("magic-wand")}<span>Generate with Quantura Horizon</span></button>
-            <button class="cta secondary small" type="button" data-action="rename-ai-agent" data-agent-id="${agentId}" ${agentId ? "" : "disabled"}>${icon("edit-pencil")}<span>Rename Agent</span></button>
-          </div>
+          ${
+            canEditRun
+              ? `<div class="hero-actions" style="margin-top:0;">
+                  <button class="cta secondary small" type="button" data-action="generate-ai-portfolio" data-run-id="${runId}">${icon(
+                    "magic-wand"
+                  )}<span>Generate with Quantura Horizon</span></button>
+                  <button class="cta secondary small" type="button" data-action="rename-ai-agent" data-agent-id="${agentId}" ${
+                    agentId ? "" : "disabled"
+                  }>${icon("edit-pencil")}<span>Rename Agent</span></button>
+                </div>`
+              : `<div class="small muted">AI actions are disabled in read-only mode.</div>`
+          }
         </div>
         <div id="ai-portfolio-summary" class="small">${portfolioSummary}</div>
       </div>
@@ -11003,7 +12922,7 @@
     if (refreshed.exists) {
       renderScreenerRunOutput({ id: refreshed.id, ...(refreshed.data() || {}) });
     }
-    showToast("AI Portfolio generated and published to leaderboard.");
+    showToast("AI Portfolio generated and published to Explore.");
   };
 
   const startAIAgentSocial = (db, workspaceId) => {
@@ -11197,6 +13116,7 @@
     const doc = await db.collection("screener_runs").doc(cleanId).get();
     if (!doc.exists) throw new Error("Run not found.");
     const data = doc.data() || {};
+    state.sharedScreenerView = null;
     renderScreenerRunOutput({ id: doc.id, ...data });
     logEvent("screener_loaded_saved", { run_id: doc.id });
   };
@@ -11414,16 +13334,14 @@
     state.tickerContext.forecastId = forecastId;
     state.tickerContext.forecastDoc = doc;
     state.tickerContext.forecastTablePage = 0;
-    safeLocalStorageSet(LAST_TICKER_KEY, ticker);
+    syncTickerInputs(ticker, { source: "forecast_load" });
 
     if (!ticker) throw new Error("Forecast ticker is missing.");
-    if (!state.tickerContext.rows.length || state.tickerContext.ticker !== ticker || state.tickerContext.interval !== interval) {
+    if (!state.tickerContext.rows.length || getActiveTicker() !== ticker || state.tickerContext.interval !== interval) {
       setTerminalStatus("Loading price history...");
       const rows = await loadTickerHistory(functions, ticker, interval);
       state.tickerContext.rows = rows;
-      state.tickerContext.ticker = ticker;
       state.tickerContext.interval = interval;
-      syncTickerInputs(ticker);
     }
 
     const forecastOverlays = buildForecastOverlays(doc.forecastRows || []);
@@ -11553,12 +13471,12 @@
   const bindForegroundPushHandler = (messaging) => {
     if (!messaging || state.messagingBound) return;
     try {
-      messaging.onMessage((payload) => {
+      messaging.onMessage(async (payload) => {
         const title = payload?.notification?.title || "Quantura update";
         const body = payload?.notification?.body || "You have a new dashboard update.";
         showToast(`${title}: ${body}`);
         setNotificationStatus(`Last message: ${title}`);
-        appendNotificationLog({
+        await appendNotificationLogPersonalized({
           title,
           body,
           source: "foreground",
@@ -11572,7 +13490,7 @@
           if (String(data?.type || "").trim() !== "quantura_push_background") return;
           const title = String(data?.title || "Quantura update");
           const body = String(data?.body || "");
-          appendNotificationLog({
+          appendNotificationLogPersonalized({
             title,
             body,
             source: "background",
@@ -11585,6 +13503,144 @@
     } catch (error) {
       // Ignore foreground messaging bind errors.
     }
+  };
+
+  const isNativeIosStoreKitCheckoutOnly = () =>
+    isNativeApp() && getNativePlatform() === "ios";
+
+  const isNativeAndroidPlayBillingCheckout = () =>
+    isNativeApp() &&
+    getNativePlatform() === "android" &&
+    Boolean(state.remoteFlags?.nativeAndroidPlayBillingEnabled ?? true);
+
+  const resolveNativeIapProductId = (panel) => {
+    const fromPanel = String(panel?.dataset?.iapProductId || "").trim();
+    if (fromPanel) return fromPanel;
+
+    const configured = state.remoteFlags?.nativeIapProductIds;
+    const map = configured && typeof configured === "object" ? configured : DEFAULT_NATIVE_IAP_PRODUCT_IDS;
+    const product = String(panel?.dataset?.product || "").trim().toLowerCase();
+    if (product.includes("desk")) return String(map.desk || map.pro || map.default || DEFAULT_NATIVE_IAP_PRODUCT_IDS.default).trim();
+    if (product.includes("forecast")) return String(map.forecast || map.pro || map.default || DEFAULT_NATIVE_IAP_PRODUCT_IDS.default).trim();
+    if (product.includes("pro")) return String(map.pro || map.default || DEFAULT_NATIVE_IAP_PRODUCT_IDS.default).trim();
+    return String(map.default || map.pro || DEFAULT_NATIVE_IAP_PRODUCT_IDS.default).trim();
+  };
+
+  const requestNativeInAppPurchase = (panel, opts = {}) => {
+    const requestId = `np_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    const orderId = String(opts.orderId || panel?.dataset?.orderId || "").trim();
+    const product = String(panel?.dataset?.product || "Quantura Pro").trim();
+    const productId = resolveNativeIapProductId(panel);
+    if (!productId) return false;
+
+    const payload = {
+      action: "startNativePurchase",
+      requestId,
+      orderId,
+      source: String(opts.source || "pricing"),
+      product,
+      productId,
+      price: Number(panel?.dataset?.price || 0) || 0,
+      currency: String(panel?.dataset?.currency || "USD"),
+    };
+    const sent = sendNativeBridgeMessage(payload);
+    if (sent) {
+      logEvent("native_purchase_requested", {
+        platform: getNativePlatform() || "unknown",
+        product_id: productId,
+        order_id: orderId,
+        source: payload.source,
+      });
+    }
+    return sent;
+  };
+
+  const requestNativeSubscriptionManager = (source = "billing_portal") => {
+    const requestId = `nsm_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    const sent = sendNativeBridgeMessage({
+      action: "openNativeSubscriptionManager",
+      requestId,
+      source: String(source || "billing_portal"),
+    });
+    if (sent) {
+      logEvent("native_subscription_manager_requested", {
+        platform: getNativePlatform() || "unknown",
+        source: String(source || "billing_portal"),
+      });
+    }
+    return sent;
+  };
+
+  const applyNativePurchaseResult = (detail) => {
+    const payload = detail && typeof detail === "object" ? detail : {};
+    const orderId = String(payload.orderId || "").trim();
+    const status = String(payload.status || "").trim().toLowerCase();
+    const ok = Boolean(payload.ok);
+    const message = String(payload.message || "").trim();
+    const productId = String(payload.productId || "").trim();
+    const panel = orderId
+      ? ui.purchasePanels.find((entry) => String(entry?.dataset?.orderId || "").trim() === orderId)
+      : null;
+    const note = panel?.querySelector(".purchase-note");
+    const success = panel?.querySelector(".purchase-success");
+    const stripe = panel?.querySelector('[data-action="stripe"]');
+
+    logEvent("native_purchase_result", {
+      platform: getNativePlatform() || "unknown",
+      order_id: orderId,
+      product_id: productId,
+      status: status || (ok ? "success" : "failed"),
+    });
+
+    if (status === "purchased" || (ok && status !== "pending")) {
+      if (success) {
+        success.textContent = orderId
+          ? `In-app purchase completed for order ${orderId}.`
+          : "In-app purchase completed.";
+        success.classList.remove("hidden");
+      }
+      if (note) note.textContent = "Purchase completed in native checkout.";
+      stripe?.classList.add("hidden");
+      showToast("In-app purchase completed.");
+      if (orderId) {
+        logEvent("purchase", {
+          transaction_id: orderId,
+          currency: String(panel?.dataset?.currency || "USD"),
+          value: Number(panel?.dataset?.price || 0) || 0,
+          source: "native_iap",
+        });
+      }
+      return;
+    }
+
+    if (status === "cancelled") {
+      if (note) note.textContent = "In-app purchase was cancelled.";
+      showToast("Purchase cancelled.", "warn");
+      return;
+    }
+
+    if (status === "pending") {
+      if (note) note.textContent = "Purchase is pending approval.";
+      showToast("Purchase pending approval.");
+      return;
+    }
+
+    if (message) {
+      if (note) note.textContent = message;
+      showToast(message, "warn");
+    } else {
+      if (note) note.textContent = "Unable to complete native checkout.";
+      showToast("Unable to complete native checkout.", "warn");
+    }
+  };
+
+  const bindNativePurchaseResultBridge = () => {
+    if (typeof window === "undefined") return;
+    if (window.__QUANTURA_NATIVE_PURCHASE_BOUND__ === true) return;
+    window.__QUANTURA_NATIVE_PURCHASE_BOUND__ = true;
+    window.addEventListener("quantura:native-purchase-result", (event) => {
+      applyNativePurchaseResult(event?.detail || {});
+    });
   };
 
   const handlePurchase = async (panel, functions) => {
@@ -11621,10 +13677,36 @@
         success.textContent = `Order ${orderId} created. Proceed to payment to finalize.`;
         success.classList.remove("hidden");
       }
-      stripe?.classList.remove("hidden");
-      note.textContent = "Order created. Proceed to payment to finalize.";
+      const nativePlatform = getNativePlatform();
+      if (isNativeIosStoreKitCheckoutOnly() || isNativeAndroidPlayBillingCheckout()) {
+        const sent = requestNativeInAppPurchase(panel, { orderId, source: "order_created" });
+        if (sent) {
+          stripe?.classList.add("hidden");
+          note.textContent =
+            nativePlatform === "ios"
+              ? "Order created. Opening App Store in-app purchase..."
+              : "Order created. Opening Google Play in-app purchase...";
+          showToast(
+            nativePlatform === "ios"
+              ? "Opening native iOS checkout..."
+              : "Opening native Android checkout..."
+          );
+        } else {
+          stripe?.classList.add("hidden");
+          note.textContent =
+            nativePlatform === "ios"
+              ? "Native iOS checkout is required. Please reopen this page in the app."
+              : "Native Android checkout is unavailable right now.";
+          showToast(note.textContent, "warn");
+        }
+      } else {
+        stripe?.classList.remove("hidden");
+        note.textContent = "Order created. Proceed to payment to finalize.";
+      }
       logEvent("order_created", { order_id: orderId, currency: panel.dataset.currency || "USD" });
-      showToast("Order created. Proceed to payment.");
+      if (!isNativeIosStoreKitCheckoutOnly() && !isNativeAndroidPlayBillingCheckout()) {
+        showToast("Order created. Proceed to payment.");
+      }
     } catch (error) {
       showToast(error.message || "Unable to create order.", "warn");
     } finally {
@@ -11655,6 +13737,16 @@
 
   const handleStripeCheckout = async (panel, functions) => {
     if (!requireFullAccount("Sign in to continue.", { redirect: true })) return;
+
+    if (isNativeIosStoreKitCheckoutOnly() || isNativeAndroidPlayBillingCheckout()) {
+      const orderId = String(panel?.dataset?.orderId || "").trim();
+      const sent = requestNativeInAppPurchase(panel, { orderId, source: "stripe_button" });
+      if (!sent) {
+        showToast("Native in-app checkout is required in the mobile app.", "warn");
+      }
+      return;
+    }
+
     if (!state.remoteFlags.stripeCheckoutEnabled) {
       showToast("Checkout is temporarily disabled.", "warn");
       return;
@@ -11713,6 +13805,21 @@
     if (!ui.billingPortalLink) return;
     if (!hasFullAccount()) return;
 
+    if (isNativeIosStoreKitCheckoutOnly() || isNativeAndroidPlayBillingCheckout()) {
+      event?.preventDefault?.();
+      const sent = requestNativeSubscriptionManager("billing_portal");
+      if (sent) {
+        showToast(
+          getNativePlatform() === "ios"
+            ? "Opening App Store subscriptions..."
+            : "Opening Google Play subscriptions..."
+        );
+      } else {
+        showToast("Subscription management is only available in native app settings.", "warn");
+      }
+      return;
+    }
+
     event?.preventDefault?.();
     if (ui.billingPortalLink.dataset.loading === "1") return;
     ui.billingPortalLink.dataset.loading = "1";
@@ -11743,6 +13850,21 @@
   };
 
   const handleCheckoutReturn = async (functions) => {
+    if (isNativeIosStoreKitCheckoutOnly() || isNativeAndroidPlayBillingCheckout()) {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        if (params.has("checkout") || params.has("orderId") || params.has("session_id")) {
+          params.delete("checkout");
+          params.delete("orderId");
+          params.delete("session_id");
+          history.replaceState({}, "", `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ""}`);
+        }
+      } catch (error) {
+        // Ignore URL cleanup errors.
+      }
+      return;
+    }
+
     const checkout = String(getQueryParam("checkout") || "").trim().toLowerCase();
     if (!checkout) return;
 
@@ -11808,6 +13930,7 @@
 			    const functions = firebase.functions();
 			    const storage = firebase.storage ? firebase.storage() : null;
 			    const messaging = getMessagingClient();
+          const nativeAuthBridge = installNativeAuthBridge(auth);
 
 	      state.clients = { auth, db, functions, storage, messaging };
 	      hydrateUnsplashGallery(functions);
@@ -11816,19 +13939,23 @@
       window.__quanturaPanelActivated = (panel) => {
         const next = String(panel || "").trim();
         if (!next) return;
-        const showTickerIntelligenceChart = next === "ticker-intelligence";
+        const showTickerChart = next === "ticker";
 
         if (ui.studioChartShell) {
-          // Keep the chart window scoped to the ticker intelligence panel only.
-          ui.studioChartShell.classList.toggle("hidden", !showTickerIntelligenceChart);
+          // Keep the chart window scoped to the ticker panel only.
+          ui.studioChartShell.classList.toggle("hidden", !showTickerChart);
         }
         if (ui.intelStrip) {
-          // Keep the intel side-strip scoped to the ticker intelligence view.
-          ui.intelStrip.classList.toggle("hidden", !showTickerIntelligenceChart);
+          // Keep the intel side-strip scoped to the ticker view.
+          ui.intelStrip.classList.toggle("hidden", !showTickerChart);
         }
-        if (next === "ticker-intelligence") {
+        if (next === "ticker") {
           setTickerIntelTab(state.intelActiveTab || "intelligence");
-          const activeTicker = normalizeTicker(state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "");
+          const activeTicker = getActiveTicker() || normalizeTicker(safeLocalStorageGet(LAST_TICKER_KEY) || "");
+          if (activeTicker) {
+            syncTickerInputs(activeTicker, { source: "panel_open_ticker", skipHistory: true });
+            refreshTradingViewForTicker(activeTicker);
+          }
           if (activeTicker && Array.isArray(state.tickerContext.rows) && state.tickerContext.rows.length) {
             renderTickerChart(
               state.tickerContext.rows,
@@ -11837,6 +13964,8 @@
               // TradingView does not support Quantura overlays; keep the TI view clean.
               []
             ).catch(() => {});
+          } else if (activeTicker) {
+            setTerminalChartEngineVisibility("tradingview");
           } else {
             setTerminalChartEngineVisibility("legacy");
           }
@@ -11852,7 +13981,7 @@
         }
 
         if (next === "news") {
-          const ticker = normalizeTicker(state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "");
+          const ticker = getActiveTicker() || normalizeTicker(safeLocalStorageGet(LAST_TICKER_KEY) || "");
           if (!ticker) return;
           scheduleSideDataRefresh(ticker, { force: !state.panelAutoloaded.news });
           state.panelAutoloaded.news = true;
@@ -11871,10 +14000,11 @@
         }
 
         if (next === "ticker-query") {
-          const ticker = normalizeTicker(state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "");
+          const ticker = getActiveTicker() || normalizeTicker(safeLocalStorageGet(LAST_TICKER_KEY) || "");
           if (ticker && ui.tickerQueryTicker && !String(ui.tickerQueryTicker.value || "").trim()) {
             ui.tickerQueryTicker.value = ticker;
           }
+          syncModelCouncilSeo();
           if (ui.tickerQueryLanguage && ui.tickerQueryLanguage.value === "auto") {
             ui.tickerQueryLanguage.value = state.preferredLanguage || "en";
           }
@@ -11884,7 +14014,7 @@
         }
 
         if (next === "options") {
-          const ticker = normalizeTicker(state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "");
+          const ticker = getActiveTicker() || normalizeTicker(safeLocalStorageGet(LAST_TICKER_KEY) || "");
           if (!ticker) return;
           const first = !state.panelAutoloaded.options;
           state.panelAutoloaded.options = true;
@@ -11893,14 +14023,23 @@
       };
 
       ensureThemeToggle();
+      normalizeHeaderBranding();
       normalizeTopNavigation();
+      normalizeFooterSocialLinks();
+      ensureHeaderSolveNowCta();
+      bindSolveNowModalTriggers();
       ensureHeaderNotificationsCta();
       ensureSidebarCollapseToggle();
       bindMobileNav();
+      bindMobileSidebarDrawer();
       bindMobileBottomNav();
       initializeLanguageControls().catch(() => {});
       captureShareFromUrl();
       renderNotificationLog();
+      ensureNotificationPrivacyControls();
+      syncNotificationPrivacyControls();
+      recordPromoSessionUsage();
+      state.promoForecastCount = getStoredNumber(PROMO_FORECAST_COUNT_KEY, 0);
       bindChartControls();
 
 	    if (!state.authResolved) {
@@ -11927,6 +14066,17 @@
 	    }
 
     bindForegroundPushHandler(messaging);
+    bindNativePurchaseResultBridge();
+
+    const nativeRuntime = isNativeApp();
+    if (nativeRuntime && state.cookieConsent !== "accepted") {
+      state.cookieConsent = "accepted";
+      safeLocalStorageSet(COOKIE_CONSENT_KEY, "accepted");
+      ensureInitialPageView();
+      setUserId(state.user?.uid || null);
+      const existingCookieBanner = document.getElementById("cookie-banner");
+      if (existingCookieBanner) existingCookieBanner.classList.add("hidden");
+    }
 
     if (state.cookieConsent === "accepted") {
       ensureInitialPageView();
@@ -11947,6 +14097,8 @@
 	    loadRemoteConfig().then(() => {
         refreshScreenerModelUi();
         refreshScreenerCreditsUi();
+      }).catch(() => {
+        loadServerPromoStatus().catch(() => {});
       });
       handleCheckoutReturn(functions);
 
@@ -11993,22 +14145,36 @@
 		    const pickTicker = async (rawTicker) => {
 		      const ticker = normalizeTicker(rawTicker);
 		      if (!ticker) return;
-		      safeLocalStorageSet(LAST_TICKER_KEY, ticker);
-		      syncTickerInputs(ticker);
+		      syncTickerInputs(ticker, { source: "pick_ticker", emitAnalytics: true });
 		      logEvent("ticker_selected", { ticker, page_path: window.location.pathname });
 
 			      // If we're in the terminal, load the chart immediately. Otherwise, jump to the terminal.
 			      if (ui.terminalForm && ui.terminalTicker && ui.tickerChart) {
+              window.__quanturaSetPanel?.("ticker");
 			        ui.terminalTicker.value = ticker;
 			        ui.terminalForm.requestSubmit?.();
 			      } else {
 		        const params = new URLSearchParams();
 		        params.set("ticker", ticker);
-		        window.location.href = `/forecasting?${params.toString()}`;
+		        window.location.href = `/ticker-intelligence?${params.toString()}`;
 		      }
 		    };
 
 		    document.addEventListener("click", async (event) => {
+          const historySelect = event.target.closest('[data-action="ticker-history-select"]');
+          if (historySelect) {
+            event.preventDefault();
+            await pickTicker(historySelect.dataset.ticker || "");
+            return;
+          }
+
+          const historyDelete = event.target.closest('[data-action="ticker-history-delete"]');
+          if (historyDelete) {
+            event.preventDefault();
+            removeTickerFromHistory(historyDelete.dataset.ticker || "");
+            return;
+          }
+
 		      const button = event.target.closest('[data-action="pick-ticker"]');
 		      if (!button) return;
 		      event.preventDefault();
@@ -12218,8 +14384,31 @@
 
         document.addEventListener("click", async (event) => {
           const dlButton = event.target.closest('[data-action="download-screener"]');
-          if (!dlButton) return;
+          const sharedDlButton = event.target.closest('[data-action="download-shared-screener"]');
+          if (!dlButton && !sharedDlButton) return;
           event.preventDefault();
+          if (sharedDlButton) {
+            const sharedRows = Array.isArray(state.sharedScreenerView?.rows) ? state.sharedScreenerView.rows : [];
+            if (!sharedRows.length) {
+              showToast("No shared screener rows are loaded.", "warn");
+              return;
+            }
+            try {
+              sharedDlButton.disabled = true;
+              const headers = ["symbol", "lastClose", "return1m", "return3m", "rsi14", "volatility", "score", "projectedRoi"];
+              const csv = buildCsv(sharedRows, headers);
+              const runId = String(state.sharedScreenerView?.runId || "shared").trim() || "shared";
+              triggerDownload(`quantura_screener_${runId}.csv`, csv);
+              showToast("CSV downloaded.");
+              logEvent("screener_csv_downloaded_shared", { share_id: state.sharedScreenerView?.shareId || "" });
+            } catch (error) {
+              showToast(error.message || "Unable to download shared screener run.", "warn");
+            } finally {
+              sharedDlButton.disabled = false;
+            }
+            return;
+          }
+
           if (!hasFullAccount()) {
             showToast("Sign in to download screener runs.", "warn");
             return;
@@ -12248,6 +14437,61 @@
         });
 
         document.addEventListener("click", async (event) => {
+          const copySharedScreener = event.target.closest('[data-action="copy-shared-screener-link"]');
+          if (copySharedScreener) {
+            event.preventDefault();
+            const shareId = String(copySharedScreener.dataset.shareId || state.sharedScreenerView?.shareId || "").trim();
+            if (!shareId) return;
+            const url = buildShareUrl("screener", shareId);
+            copySharedScreener.disabled = true;
+            try {
+              await performShare({
+                url,
+                title: "Quantura screener",
+                text: "Shared screener run",
+              });
+              showToast("Share link copied.");
+            } catch (error) {
+              showToast(error.message || "Unable to copy share link.", "warn");
+            } finally {
+              copySharedScreener.disabled = false;
+            }
+            return;
+          }
+
+          const importSharedScreener = event.target.closest('[data-action="import-shared-screener"]');
+          if (importSharedScreener) {
+            event.preventDefault();
+            const shareId = String(importSharedScreener.dataset.shareId || state.sharedScreenerView?.shareId || "").trim();
+            if (!shareId) return;
+            if (!hasFullAccount()) {
+              setPendingShareId(shareId);
+              window.location.href = "/account";
+              return;
+            }
+            importSharedScreener.disabled = true;
+            try {
+              setPendingShareId(shareId);
+              const result = await importSharedItemById(functions, shareId, { redirect: false });
+              setPendingShareId("");
+              showToast("Shared screener saved to your dashboard.");
+              logEvent("shared_item_imported", { kind: result.kind });
+              if (result.kind === "screener") {
+                window.location.href = `/screener?runId=${encodeURIComponent(result.importedId)}`;
+              } else if (result.kind === "forecast") {
+                window.location.href = `/forecasting?forecastId=${encodeURIComponent(result.importedId)}`;
+              } else if (result.kind === "upload") {
+                window.location.href = `/uploads?uploadId=${encodeURIComponent(result.importedId)}`;
+              }
+            } catch (error) {
+              setPendingShareId(shareId);
+              showToast(error.message || "Unable to import shared screener.", "warn");
+            } finally {
+              importSharedScreener.disabled = false;
+            }
+            return;
+          }
+
           const shareForecast = event.target.closest('[data-action="share-forecast"]');
           if (shareForecast) {
             event.preventDefault();
@@ -12428,7 +14672,7 @@
             const current = state.aiAgents.find((agent) => String(agent.id || "") === agentId);
             const nextName = await openPromptModal({
               title: "Rename AI Agent",
-              message: "Update the custom name shown in the leaderboard.",
+              message: "Update the custom name shown in Explore.",
               label: "Agent name",
               placeholder: "Quantura Horizon",
               initialValue: String(current?.name || "").trim(),
@@ -13517,6 +15761,7 @@
           requestNativeBridgeSignOut();
           window.__NATIVE_FCM_TOKEN__ = "";
         }
+        clearPendingAuthCredential();
         await auth.signOut();
         showToast("Signed out.");
         logEvent("logout", { method: "firebase", runtime });
@@ -13533,12 +15778,300 @@
         await performSignOut();
       });
 
+    const isAuthCollision = (code) =>
+      [
+        "auth/credential-already-in-use",
+        "auth/email-already-in-use",
+        "auth/account-exists-with-different-credential",
+        "auth/provider-already-linked",
+      ].includes(String(code || "").trim());
+
+    const providerMethodLabel = (providerMethod) => {
+      const id = String(providerMethod || "").trim().toLowerCase();
+      if (id === "google.com" || id === "google") return "Google";
+      if (id === "facebook.com" || id === "facebook") return "Facebook";
+      if (id === "github.com" || id === "github") return "GitHub";
+      if (id === "twitter.com" || id === "twitter") return "X";
+      if (id === "password" || id === "emailpassword") return "Email and password";
+      return id || "another provider";
+    };
+
+    const buildProviderFromMethod = (providerMethod) => {
+      const id = String(providerMethod || "").trim().toLowerCase();
+      if (id === "google.com" || id === "google") {
+        return new firebase.auth.GoogleAuthProvider();
+      }
+      if (id === "facebook.com" || id === "facebook") {
+        const provider = new firebase.auth.FacebookAuthProvider();
+        provider.addScope("email");
+        return provider;
+      }
+      if (id === "github.com" || id === "github") {
+        const provider = new firebase.auth.GithubAuthProvider();
+        provider.addScope("user:email");
+        return provider;
+      }
+      if (id === "twitter.com" || id === "twitter") {
+        return new firebase.auth.TwitterAuthProvider();
+      }
+      return null;
+    };
+
+    const resolveAuthErrorEmail = (error) =>
+      String(error?.email || error?.customData?.email || error?.customData?._tokenResponse?.email || "").trim();
+
+    const serializeAuthCredential = (credential) => {
+      if (!credential || typeof credential !== "object") return null;
+      try {
+        if (typeof credential.toJSON === "function") return credential.toJSON();
+      } catch (error) {
+        return null;
+      }
+      return null;
+    };
+
+    const deserializeAuthCredential = (value) => {
+      if (!value || typeof value !== "object") return null;
+      try {
+        if (firebase?.auth?.AuthCredential?.fromJSON) {
+          return firebase.auth.AuthCredential.fromJSON(value);
+        }
+      } catch (error) {
+        return null;
+      }
+      return null;
+    };
+
+    const extractAuthErrorCredential = (error, methodHint = "") => {
+      if (error?.credential) return error.credential;
+      const method = String(methodHint || "").trim().toLowerCase();
+      try {
+        if (method === "google" || method === "google.com") {
+          return firebase.auth.GoogleAuthProvider.credentialFromError(error);
+        }
+        if (method === "facebook" || method === "facebook.com") {
+          return firebase.auth.FacebookAuthProvider.credentialFromError(error);
+        }
+        if (method === "github" || method === "github.com") {
+          return firebase.auth.GithubAuthProvider.credentialFromError(error);
+        }
+        if (method === "twitter" || method === "twitter.com") {
+          return firebase.auth.TwitterAuthProvider.credentialFromError(error);
+        }
+      } catch (credentialError) {
+        return null;
+      }
+      return null;
+    };
+
+    const clearPendingAuthCredential = () => {
+      safeLocalStorageRemove(AUTH_PENDING_CREDENTIAL_KEY);
+      try {
+        sessionStorage.removeItem(AUTH_PENDING_CREDENTIAL_KEY);
+      } catch (error) {
+        // Ignore session storage failures.
+      }
+    };
+
+    const savePendingAuthCredential = (credential, context = {}) => {
+      const serialized = serializeAuthCredential(credential);
+      if (!serialized) return false;
+      const payload = {
+        credential: serialized,
+        email: String(context.email || "").trim().toLowerCase(),
+        providerId: String(context.providerId || credential?.providerId || "").trim().toLowerCase(),
+        savedAt: Date.now(),
+      };
+      const json = JSON.stringify(payload);
+      safeLocalStorageSet(AUTH_PENDING_CREDENTIAL_KEY, json);
+      try {
+        sessionStorage.setItem(AUTH_PENDING_CREDENTIAL_KEY, json);
+      } catch (error) {
+        // Ignore session storage failures.
+      }
+      return true;
+    };
+
+    const readPendingAuthCredential = () => {
+      const raw =
+        String(safeLocalStorageGet(AUTH_PENDING_CREDENTIAL_KEY) || "").trim() ||
+        (() => {
+          try {
+            return String(sessionStorage.getItem(AUTH_PENDING_CREDENTIAL_KEY) || "").trim();
+          } catch (error) {
+            return "";
+          }
+        })();
+      if (!raw) return null;
+      try {
+        const parsed = JSON.parse(raw);
+        const credential = deserializeAuthCredential(parsed?.credential);
+        if (!credential) return null;
+        return {
+          credential,
+          email: String(parsed?.email || "").trim().toLowerCase(),
+          providerId: String(parsed?.providerId || credential?.providerId || "").trim().toLowerCase(),
+        };
+      } catch (error) {
+        return null;
+      }
+    };
+
+    const linkPendingCredentialIfPresent = async ({ silent = false } = {}) => {
+      const pending = readPendingAuthCredential();
+      const currentUser = auth.currentUser;
+      if (!pending || !pending.credential || !currentUser) return false;
+      try {
+        await currentUser.linkWithCredential(pending.credential);
+        clearPendingAuthCredential();
+        if (!silent) {
+          const providerLabel = providerMethodLabel(pending.providerId);
+          const message = `Connected ${providerLabel} to your account.`;
+          if (ui.emailMessage) ui.emailMessage.textContent = message;
+          showToast(message);
+        }
+        logEvent("auth_credential_linked", { provider: pending.providerId || "unknown" });
+        return true;
+      } catch (error) {
+        if (isAuthCollision(error?.code) || String(error?.code || "") === "auth/provider-already-linked") {
+          clearPendingAuthCredential();
+          if (!silent) showToast("Provider already linked.");
+          return true;
+        }
+        if (!silent && ui.emailMessage) {
+          ui.emailMessage.textContent = error?.message || "Signed in, but unable to link provider.";
+        }
+        return false;
+      }
+    };
+
+    const recoverFromAuthCollision = async (error, { methodHint = "", preferRuntime = resolveRuntimeLabel() } = {}) => {
+      if (!isAuthCollision(error?.code)) return false;
+      const email = resolveAuthErrorEmail(error);
+      const collisionCredential = extractAuthErrorCredential(error, methodHint);
+      if (collisionCredential) {
+        savePendingAuthCredential(collisionCredential, {
+          email,
+          providerId: collisionCredential.providerId || methodHint,
+        });
+      }
+
+      let methods = [];
+      if (email) {
+        try {
+          methods = await auth.fetchSignInMethodsForEmail(email);
+        } catch (methodsError) {
+          methods = [];
+        }
+      }
+      const primaryMethod = String(methods[0] || "").trim().toLowerCase();
+      if (!primaryMethod) {
+        if (ui.emailMessage) {
+          ui.emailMessage.textContent =
+            "This email is already in use. Sign in with your existing provider, then retry linking.";
+        }
+        showToast("Account exists with another provider. Use your existing sign-in first.", "warn");
+        logEvent("auth_collision_unresolved", { method: methodHint || "unknown" });
+        return true;
+      }
+
+      if (primaryMethod === "password") {
+        const message =
+          "This email already exists with password sign-in. Sign in with email/password first, then provider linking will continue.";
+        if (ui.emailInput && email) ui.emailInput.value = email;
+        if (ui.emailMessage) ui.emailMessage.textContent = message;
+        showToast("Sign in with email/password to continue linking.", "warn");
+        logEvent("auth_collision_requires_password", { method: methodHint || "unknown" });
+        return true;
+      }
+
+      const provider = buildProviderFromMethod(primaryMethod);
+      if (!provider) {
+        const message = `Account exists with ${providerMethodLabel(primaryMethod)}. Complete that sign-in first.`;
+        if (ui.emailMessage) ui.emailMessage.textContent = message;
+        showToast(message, "warn");
+        logEvent("auth_collision_provider_unavailable", { provider: primaryMethod });
+        return true;
+      }
+
+      const providerLabel = providerMethodLabel(primaryMethod);
+      const proceed = window.confirm(
+        `${email || "This account"} is already linked to ${providerLabel}. Sign in with ${providerLabel} now to recover and link providers?`
+      );
+      if (!proceed) {
+        if (ui.emailMessage) {
+          ui.emailMessage.textContent = `Recovery paused. Use ${providerLabel} sign-in to continue account linking.`;
+        }
+        return true;
+      }
+
+      try {
+        if (isInstalledPwa() || isMobileBrowser()) {
+          await auth.signInWithRedirect(provider);
+          logEvent("auth_collision_recovery_redirect_started", {
+            provider: primaryMethod,
+            runtime: preferRuntime,
+          });
+          return true;
+        }
+        await auth.signInWithPopup(provider);
+        await linkPendingCredentialIfPresent({ silent: false });
+        if (ui.emailMessage) ui.emailMessage.textContent = `Signed in with ${providerLabel}.`;
+        showToast(`Signed in with ${providerLabel}.`);
+        logEvent("auth_collision_recovered", { provider: primaryMethod, runtime: preferRuntime });
+        return true;
+      } catch (recoverError) {
+        const message = recoverError?.message || `Unable to sign in with ${providerLabel}.`;
+        if (ui.emailMessage) ui.emailMessage.textContent = message;
+        showToast(message, "warn");
+        logEvent("auth_collision_recovery_error", { provider: primaryMethod, runtime: preferRuntime });
+        return true;
+      }
+    };
+
+    const linkOrSignInWithCredential = async (credential, fallbackSignIn, { methodHint = "password", email = "" } = {}) => {
+      const current = auth.currentUser;
+      if (current?.isAnonymous) {
+        try {
+          await current.linkWithCredential(credential);
+          await linkPendingCredentialIfPresent({ silent: true });
+          return;
+        } catch (linkError) {
+          if (await recoverFromAuthCollision(linkError, { methodHint })) {
+            return;
+          }
+          if (isAuthCollision(linkError?.code)) {
+            await fallbackSignIn();
+            await linkPendingCredentialIfPresent({ silent: true });
+            return;
+          }
+          throw linkError;
+        }
+      }
+      try {
+        await fallbackSignIn();
+        await linkPendingCredentialIfPresent({ silent: true });
+      } catch (fallbackError) {
+        if (await recoverFromAuthCollision(fallbackError, { methodHint })) return;
+        throw fallbackError;
+      }
+      if (email && ui.emailInput && !String(ui.emailInput.value || "").trim()) {
+        ui.emailInput.value = email;
+      }
+    };
+
     ui.emailForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
       if (ui.emailMessage) ui.emailMessage.textContent = "";
       try {
         await persistenceReady;
-        await auth.signInWithEmailAndPassword(ui.emailInput.value, ui.passwordInput.value);
+        const email = String(ui.emailInput?.value || "").trim();
+        const password = String(ui.passwordInput?.value || "");
+        const credential = firebase.auth.EmailAuthProvider.credential(email, password);
+        await linkOrSignInWithCredential(credential, () => auth.signInWithEmailAndPassword(email, password), {
+          methodHint: "password",
+          email,
+        });
         showToast("Signed in successfully.");
         logEvent("login", { method: "password" });
       } catch (error) {
@@ -13550,7 +16083,13 @@
       if (ui.emailMessage) ui.emailMessage.textContent = "";
       try {
         await persistenceReady;
-        await auth.createUserWithEmailAndPassword(ui.emailInput.value, ui.passwordInput.value);
+        const email = String(ui.emailInput?.value || "").trim();
+        const password = String(ui.passwordInput?.value || "");
+        const credential = firebase.auth.EmailAuthProvider.credential(email, password);
+        await linkOrSignInWithCredential(credential, () => auth.createUserWithEmailAndPassword(email, password), {
+          methodHint: "password",
+          email,
+        });
         showToast("Account created.");
         logEvent("sign_up", { method: "password" });
       } catch (error) {
@@ -13585,10 +16124,14 @@
         await persistenceReady;
         const result = await auth.getRedirectResult();
         if (result?.user) {
+          await linkPendingCredentialIfPresent({ silent: true });
           showToast("Signed in.");
           logEvent("login", { method: result.credential?.providerId || "redirect", runtime: resolveRuntimeLabel() });
         }
       } catch (error) {
+        if (await recoverFromAuthCollision(error, { methodHint: "redirect", preferRuntime: resolveRuntimeLabel() })) {
+          return;
+        }
         if (ui.emailMessage) ui.emailMessage.textContent = error.message || "Redirect sign-in failed.";
         showToast(error.message || "Redirect sign-in failed.", "warn");
       }
@@ -13599,33 +16142,47 @@
       if (state.authInFlight) return;
       state.authInFlight = true;
       const runtime = resolveRuntimeLabel();
+      const normalizedMethod = String(method || "").trim().toLowerCase();
+      const supportsNativeBridge = normalizedMethod === "google" || normalizedMethod === "apple";
       try {
         await persistenceReady;
-        if (isNativeApp()) {
-          const result = await requestNativeBridgeAuth(method);
-          const nativeIdToken = String(result?.idToken || "").trim();
-          if (!nativeIdToken) throw new Error("Native sign-in completed without an ID token.");
-          const customToken = await exchangeNativeIdTokenForCustomToken(nativeIdToken);
-          await auth.signInWithCustomToken(customToken);
+        if (isNativeApp() && supportsNativeBridge) {
+          const bridge = installNativeAuthBridge(auth);
+          const requested = Boolean(bridge?.requestSignIn?.(normalizedMethod));
+          if (!requested) throw new Error("Native sign-in bridge is unavailable.");
+          await waitForNativeAuthCompletion(auth, 90000);
+          await linkPendingCredentialIfPresent({ silent: true });
           showToast(successMessage);
-          logEvent("login", { method, runtime, source: "native_bridge" });
+          logEvent("login", { method: normalizedMethod, runtime, source: "native_bridge" });
           return;
         }
 
         if (isInstalledPwa() || isMobileBrowser()) {
-          await auth.signInWithRedirect(provider);
-          logEvent("login_redirect_started", { method, runtime });
+          if (auth.currentUser?.isAnonymous) {
+            await auth.currentUser.linkWithRedirect(provider);
+          } else {
+            await auth.signInWithRedirect(provider);
+          }
+          logEvent("login_redirect_started", { method: normalizedMethod, runtime });
           return;
         }
 
-        await auth.signInWithPopup(provider);
+        if (auth.currentUser?.isAnonymous) {
+          await auth.currentUser.linkWithPopup(provider);
+        } else {
+          await auth.signInWithPopup(provider);
+        }
+        await linkPendingCredentialIfPresent({ silent: true });
         showToast(successMessage);
-        logEvent("login", { method, runtime, source: "popup" });
+        logEvent("login", { method: normalizedMethod, runtime, source: "popup" });
       } catch (error) {
+        if (await recoverFromAuthCollision(error, { methodHint: normalizedMethod, preferRuntime: runtime })) {
+          return;
+        }
         const message = error?.message || "Unable to sign in.";
         if (ui.emailMessage) ui.emailMessage.textContent = message;
         showToast(message, "warn");
-        logEvent("login_error", { method, runtime });
+        logEvent("login_error", { method: normalizedMethod, runtime });
       } finally {
         state.authInFlight = false;
       }
@@ -13654,19 +16211,7 @@
       await signInWithProvider(provider, "Signed in with X.", "twitter");
     });
 
-    ui.anonymousSignin?.addEventListener("click", async () => {
-      if (ui.emailMessage) ui.emailMessage.textContent = "";
-      try {
-        await persistenceReady;
-        await auth.signInAnonymously();
-        showToast("Guest session started.");
-        logEvent("login", { method: "anonymous" });
-      } catch (error) {
-        if (ui.emailMessage) ui.emailMessage.textContent = error.message || "Unable to start guest session.";
-      }
-    });
-
-	    ui.purchasePanels.forEach((panel) => {
+		    ui.purchasePanels.forEach((panel) => {
 	      const purchaseBtn = panel.querySelector('[data-action="purchase"]');
 	      const stripeBtn = panel.querySelector('[data-action="stripe"]');
 	      purchaseBtn?.addEventListener("click", () => handlePurchase(panel, functions));
@@ -13688,9 +16233,10 @@
       const initialInterval = getQueryParam("interval") || (ui.terminalInterval?.value || "1d");
       ui.terminalTicker.value = initialTicker;
       if (ui.terminalInterval) ui.terminalInterval.value = initialInterval;
-      state.tickerContext.ticker = initialTicker;
       state.tickerContext.interval = initialInterval;
-      syncTickerInputs(initialTicker);
+      syncTickerInputs(initialTicker, { source: "initial_ticker" });
+      bindTickerInputSync();
+      renderTickerHistory();
 
       const forecastId = getQueryParam("forecastId");
       if (forecastId) state.tickerContext.forecastId = forecastId;
@@ -13703,8 +16249,7 @@
           showToast("Enter a ticker.", "warn");
           return;
         }
-        safeLocalStorageSet(LAST_TICKER_KEY, ticker);
-        state.tickerContext.ticker = ticker;
+        syncTickerInputs(ticker, { source: "terminal_submit", emitAnalytics: true });
         state.tickerContext.interval = interval;
         state.tickerContext.forecastDoc = null;
         state.tickerContext.forecastId = "";
@@ -13715,7 +16260,6 @@
 	          await renderTickerChart(rows, ticker, interval, state.tickerContext.indicatorOverlays || []);
 	          setTerminalStatus("Loaded.");
 	          logEvent("terminal_load", { ticker, interval });
-	          syncTickerInputs(ticker);
 	          scheduleSideDataRefresh(ticker, { force: true });
 	        } catch (error) {
 	          setTerminalStatus(error.message || "Unable to load ticker data.");
@@ -13864,7 +16408,7 @@
             showToast("Enter a ticker to forecast.", "warn");
             return;
           }
-          syncTickerInputs(ticker);
+          syncTickerInputs(ticker, { source: "forecast_form" });
 		      const payload = {
 		        ticker,
 	        horizon: Number(formData.get("horizon")),
@@ -13880,7 +16424,7 @@
             if (
               Array.isArray(state.tickerContext.rows) &&
               state.tickerContext.rows.length &&
-              state.tickerContext.ticker === ticker &&
+              getActiveTicker() === ticker &&
               state.tickerContext.interval === desiredInterval
             ) {
               const dateKey = extractDateKey(state.tickerContext.rows);
@@ -13909,6 +16453,7 @@
 
 		        logEvent("forecast_request", { ticker: payload.ticker, interval: payload.interval, service: payload.service });
 		        showToast("Forecast saved.");
+            recordPromoForecastUsage();
 
 		        try {
 		          if (ui.tickerChart) {
@@ -13963,7 +16508,7 @@
 	      const formData = new FormData(ui.technicalsForm);
 	      const indicators = formData.getAll("indicators");
 	      const includeSeries = Boolean(ui.indicatorChart || ui.tickerChart);
-      const payload = {
+	      const payload = {
         ticker: formData.get("ticker"),
         interval: formData.get("interval"),
         lookback: Number(formData.get("lookback")),
@@ -13974,6 +16519,11 @@
 	      };
 
 	      try {
+          const activeTicker = normalizeTicker(payload.ticker || state.tickerContext.ticker || "");
+          if (activeTicker) {
+            payload.ticker = activeTicker;
+            syncTickerInputs(activeTicker, { source: "technicals_form" });
+          }
 	        setOutputLoading(ui.technicalsOutput, "Computing indicators...");
 	        const runIndicators = functions.httpsCallable("get_technicals");
 	        const result = await runIndicators(payload);
@@ -14001,7 +16551,7 @@
           await renderIndicatorChart(data.series);
           state.tickerContext.indicatorOverlays = buildIndicatorOverlays(data.series);
           const ticker = normalizeTicker(payload.ticker);
-          if (ticker && ui.tickerChart && state.tickerContext.rows.length && state.tickerContext.ticker === ticker) {
+          if (ticker && ui.tickerChart && state.tickerContext.rows.length && getActiveTicker() === ticker) {
             const forecastOverlays =
               state.tickerContext.forecastDoc && normalizeTicker(state.tickerContext.forecastDoc.ticker) === ticker
                 ? buildForecastOverlays(state.tickerContext.forecastDoc.forecastRows || [])
@@ -14131,9 +16681,35 @@
     if (ui.tickerQueryLanguage && !ui.tickerQueryLanguage.value) {
       ui.tickerQueryLanguage.value = state.preferredLanguage || "en";
     }
+    renderTickerQueryModulePicker();
+    const improvePref = String(safeLocalStorageGet(TICKER_QUERY_IMPROVE_TOGGLE_KEY) || "1");
+    if (ui.tickerQueryImproveToggle) {
+      ui.tickerQueryImproveToggle.checked = improvePref !== "0";
+      if (ui.tickerQueryImproveToggle.dataset.bound !== "1") {
+        ui.tickerQueryImproveToggle.addEventListener("change", () => {
+          const active = Boolean(ui.tickerQueryImproveToggle?.checked);
+          safeLocalStorageSet(TICKER_QUERY_IMPROVE_TOGGLE_KEY, active ? "1" : "0");
+          if (!active && ui.tickerQueryImprovePreviewWrap) {
+            ui.tickerQueryImprovePreviewWrap.classList.add("hidden");
+          }
+        });
+        ui.tickerQueryImproveToggle.dataset.bound = "1";
+      }
+    }
+    if (ui.tickerQueryProvider && ui.tickerQueryProvider.dataset.bound !== "1") {
+      ui.tickerQueryProvider.addEventListener("change", () => {
+        const providerId = normalizeModelCouncilProviderId(ui.tickerQueryProvider?.value || "openai");
+        state.tickerContext.tickerQueryProvider = providerId;
+        safeLocalStorageSet(TICKER_QUERY_PROVIDER_KEY, providerId);
+        renderTickerQueryModels(state.tickerContext.tickerQueryModels || [], { provider: providerId });
+      });
+      ui.tickerQueryProvider.dataset.bound = "1";
+    }
     if (ui.tickerQueryModel && ui.tickerQueryModel.dataset.bound !== "1") {
       ui.tickerQueryModel.addEventListener("change", () => {
-        applyTickerQueryModelSelection(ui.tickerQueryModel?.value || "gpt-5-mini");
+        const selectedOption = ui.tickerQueryModel?.selectedOptions?.[0];
+        const providerId = normalizeModelCouncilProviderId(selectedOption?.dataset?.provider || ui.tickerQueryProvider?.value || "openai");
+        applyTickerQueryModelSelection(ui.tickerQueryModel?.value || "gpt-5-mini", providerId);
       });
       ui.tickerQueryModel.dataset.bound = "1";
     }
@@ -14162,7 +16738,86 @@
         notify: true,
       });
     });
+    if (ui.tickerQueryRunFinal && ui.tickerQueryRunFinal.dataset.bound !== "1") {
+      ui.tickerQueryRunFinal.addEventListener("click", async () => {
+        await loadTickerQueryInsight(functions, {
+          ticker: ui.tickerQueryTicker?.value || state.tickerContext.ticker || "",
+          question: ui.tickerQueryImprovePreview?.value || ui.tickerQueryQuestion?.value || "",
+          notify: true,
+          skipImprove: true,
+        });
+      });
+      ui.tickerQueryRunFinal.dataset.bound = "1";
+    }
+    if (ui.tickerQueryOutput && ui.tickerQueryOutput.dataset.bound !== "1") {
+      ui.tickerQueryOutput.addEventListener("click", async (event) => {
+        const likeBtn = event.target.closest('[data-action="model-council-like"]');
+        if (likeBtn) {
+          event.preventDefault();
+          const responseId = String(likeBtn.dataset.responseId || state.tickerContext.tickerQueryLastResponseId || "").trim();
+          if (!responseId) return;
+          state.tickerContext.tickerQueryFeedback = "like";
+          await submitModelCouncilFeedback({ responseId, action: "like" });
+          renderTickerQueryResult({ ...(state.tickerContext.tickerQueryLastResponse || {}), feedback: "like" });
+          showToast("Feedback saved.");
+          return;
+        }
+
+        const dislikeBtn = event.target.closest('[data-action="model-council-dislike"]');
+        if (dislikeBtn) {
+          event.preventDefault();
+          const responseId = String(dislikeBtn.dataset.responseId || state.tickerContext.tickerQueryLastResponseId || "").trim();
+          if (!responseId) return;
+          state.tickerContext.tickerQueryFeedback = "dislike";
+          await submitModelCouncilFeedback({ responseId, action: "dislike" });
+          renderTickerQueryResult({ ...(state.tickerContext.tickerQueryLastResponse || {}), feedback: "dislike" });
+          showToast("Feedback saved.");
+          return;
+        }
+
+        const shareBtn = event.target.closest('[data-action="model-council-share"]');
+        if (shareBtn) {
+          event.preventDefault();
+          const responseId = String(shareBtn.dataset.responseId || state.tickerContext.tickerQueryLastResponseId || "").trim();
+          if (!responseId) return;
+          shareBtn.disabled = true;
+          try {
+            const shareUrl = await createModelCouncilShareLink(responseId);
+            state.tickerContext.tickerQueryShareUrl = shareUrl;
+            await submitModelCouncilFeedback({ responseId, action: "share" });
+            renderTickerQueryResult({ ...(state.tickerContext.tickerQueryLastResponse || {}), shareUrl });
+            await performShare({
+              url: shareUrl,
+              title: "Quantura Model Council",
+              text: "Read-only Model Council response",
+            });
+            showToast("Share link copied.");
+          } catch (error) {
+            showToast(error.message || "Unable to create share link.", "warn");
+          } finally {
+            shareBtn.disabled = false;
+          }
+          return;
+        }
+
+        const retryBtn = event.target.closest('[data-action="model-council-retry"]');
+        if (retryBtn) {
+          event.preventDefault();
+          await loadTickerQueryInsight(functions, {
+            ticker: ui.tickerQueryTicker?.value || state.tickerContext.ticker || "",
+            question: ui.tickerQueryQuestion?.value || "",
+            notify: true,
+            skipImprove: true,
+            providerOverride: retryBtn.dataset.provider || "",
+            modelOverride: retryBtn.dataset.model || "",
+          });
+        }
+      });
+      ui.tickerQueryOutput.dataset.bound = "1";
+    }
     loadTickerQueryModels().catch(() => {});
+    loadPublicModelCouncilShare({ setPanel: false }).catch(() => {});
+    syncModelCouncilSeo();
 
 	    ui.optionsForm?.addEventListener("submit", async (event) => {
 	      event.preventDefault();
@@ -14523,13 +17178,24 @@
               mappingSummary: mappingResult,
               meta: buildMeta(),
             });
-            const agent = agentRes?.data || {};
-            const agentText = String(agent.analysis || "").trim();
-            const modelUsed = normalizeAiModelId(agent.model || "gpt-5-mini") || "gpt-5-mini";
-            if (agentText && ui.predictionsAgentOutput) {
-              ui.predictionsAgentOutput.innerHTML += `
-                <div class="agent-summary" style="margin-top:14px;">
-                  <div class="small"><strong>OpenAI Agent (${escapeHtml(modelUsed)}):</strong></div>
+	            const agent = agentRes?.data || {};
+	            const agentText = String(agent.analysis || "").trim();
+	            const modelUsed = normalizeAiModelId(agent.model || "gpt-5-mini") || "gpt-5-mini";
+              if (db && state.user && agentText) {
+                await db.collection("agent_runs").add({
+                  userId: state.user.uid,
+                  uploadId: mappingResult.uploadId,
+                  ticker: normalizeTicker(mappingResult.ticker || ""),
+                  model: modelUsed,
+                  summary: agentText,
+                  createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                  meta: buildMeta(),
+                });
+              }
+	            if (agentText && ui.predictionsAgentOutput) {
+	              ui.predictionsAgentOutput.innerHTML += `
+	                <div class="agent-summary" style="margin-top:14px;">
+	                  <div class="small"><strong>OpenAI Agent (${escapeHtml(modelUsed)}):</strong></div>
                   <div class="small" style="margin-top:6px; white-space:pre-wrap;">${escapeHtml(agentText)}</div>
                 </div>
               `;
@@ -14792,7 +17458,7 @@
         const token = await registerNotificationToken(functions, messaging, { forceRefresh: false });
         setNotificationTokenPreview(token);
         setNotificationStatus("Notifications are enabled for this device.");
-        appendNotificationLog({
+        await appendNotificationLogPersonalized({
           title: "Notifications enabled",
           body: "Notification token registered successfully.",
           source: "system",
@@ -14825,7 +17491,7 @@
         const token = await registerNotificationToken(functions, messaging, { forceRefresh: true });
         setNotificationTokenPreview(token);
         setNotificationStatus("Notification token refreshed.");
-        appendNotificationLog({
+        await appendNotificationLogPersonalized({
           title: "Notification token refreshed",
           body: "FCM token rotated and synced.",
           source: "system",
@@ -14863,7 +17529,7 @@
         const usedFallback = Boolean(result.data?.usedFallbackToken);
         const statusSuffix = usedFallback ? " (used local token fallback)" : "";
         setNotificationStatus(`Test sent. Delivered to ${sent} of ${attempted} token(s)${statusSuffix}.`);
-        appendNotificationLog({
+        await appendNotificationLogPersonalized({
           title: "Test notification sent",
           body: `Delivered to ${sent} of ${attempted} token(s).${usedFallback ? " Local cached token was used as fallback." : ""}`,
           source: "system",
@@ -14885,6 +17551,42 @@
       showToast("Notification log cleared.");
     });
 
+    ui.notificationsLocationOptIn?.addEventListener("change", async () => {
+      try {
+        await saveNotificationPrivacySettings();
+        setNotificationPrivacyStatus("Consent preference saved.");
+        logEvent("notifications_location_consent_updated", {
+          enabled: Boolean(ui.notificationsLocationOptIn?.checked),
+        });
+      } catch (error) {
+        setNotificationPrivacyStatus(error.message || "Unable to save location consent.", true);
+      }
+    });
+
+    ui.notificationsIpOptIn?.addEventListener("change", async () => {
+      try {
+        await saveNotificationPrivacySettings();
+        setNotificationPrivacyStatus("IP-region preference saved.");
+        logEvent("notifications_ip_region_consent_updated", {
+          enabled: Boolean(ui.notificationsIpOptIn?.checked),
+        });
+      } catch (error) {
+        setNotificationPrivacyStatus(error.message || "Unable to save IP-region preference.", true);
+      }
+    });
+
+    ui.notificationsRequestLocation?.addEventListener("click", async () => {
+      try {
+        setNotificationPrivacyStatus("Requesting location permission...");
+        await requestCoarseNotificationLocation();
+        await saveNotificationPrivacySettings();
+        setNotificationPrivacyStatus("Coarse location captured.");
+        logEvent("notifications_location_captured", {});
+      } catch (error) {
+        setNotificationPrivacyStatus(error.message || "Unable to capture location.", true);
+      }
+    });
+
     if (ui.profileForm && ui.profileForm.dataset.bound !== "1") {
       ui.profileForm.addEventListener("submit", async (event) => {
         event.preventDefault();
@@ -14899,6 +17601,7 @@
             bio: normalizeProfileBio(ui.profileBio?.value || ""),
             publicProfile: Boolean(ui.profilePublicEnabled?.checked),
             publicScreenerSharing: Boolean(ui.profilePublicScreener?.checked),
+            publicEmailOptIn: Boolean(ui.profilePublicEmail?.checked),
             stripeConnectAccountId: String(state.userProfile?.stripeConnectAccountId || "").trim(),
             socialLinks: normalizeProfileSocialLinks(
               {
@@ -14968,12 +17671,55 @@
     setProfileFormEnabled(false);
     renderProfileForm({ username: "", socialLinks: cloneDefaultProfileSocialLinks() }, null);
 
-		    persistenceReady.finally(() => {
-		      auth.onAuthStateChanged(async (user) => {
-		      state.authResolved = true;
-		      state.user = user;
-		      setAuthUi(user);
-		      setUserId(hasFullAccount(user) ? user.uid : null);
+			    persistenceReady.finally(() => {
+			      auth.onAuthStateChanged(async (user) => {
+          if (!user) {
+            state.authResolved = true;
+            state.user = null;
+            state.tickerContext.tickerHistory = readTickerHistory();
+            renderTickerHistory();
+            setAuthUi(null);
+            setUserId(null);
+            if (!state.anonymousBootstrapInFlight) {
+              state.anonymousBootstrapInFlight = true;
+              try {
+                await auth.signInAnonymously();
+                logEvent("login", { method: "anonymous_auto", runtime: resolveRuntimeLabel() });
+              } catch (anonError) {
+                if (ui.emailMessage) {
+                  ui.emailMessage.textContent = anonError?.message || "Unable to initialize anonymous session.";
+                }
+              } finally {
+                state.anonymousBootstrapInFlight = false;
+              }
+            }
+            if (isNativeApp()) {
+              const bridge = installNativeAuthBridge(auth);
+              if (!state.nativeAuthPromptRequested) {
+                state.nativeAuthPromptRequested = true;
+                bridge?.requestSignIn?.();
+              }
+            }
+            return;
+          }
+			      state.authResolved = true;
+			      state.user = user;
+            await linkPendingCredentialIfPresent({ silent: true }).catch(() => {});
+            state.tickerContext.tickerHistory = readTickerHistory();
+            renderTickerHistory();
+			      setAuthUi(user);
+			      setUserId(hasFullAccount(user) ? user.uid : null);
+            if (isNativeApp()) {
+              installNativeAuthBridge(auth);
+              if (user.isAnonymous) {
+                if (!state.nativeAuthPromptRequested) {
+                  state.nativeAuthPromptRequested = true;
+                  window.__quanturaAuthBridge?.requestSignIn?.();
+                }
+              } else {
+                state.nativeAuthPromptRequested = false;
+              }
+            }
 
 		      if (!hasFullAccount(user)) {
 		        state.userHasPaidPlan = false;
@@ -15008,6 +17754,7 @@
           setNotificationTokenPreview("");
           setNotificationControlsEnabled(false);
         }
+            syncNotificationPrivacyControls();
 			        if (state.unsubscribeOrders) state.unsubscribeOrders();
 			        if (state.unsubscribeAdmin) state.unsubscribeAdmin();
 				        if (state.unsubscribeForecasts) state.unsubscribeForecasts();
@@ -15031,6 +17778,7 @@
             state.aiLikeSet = new Set();
             state.aiDefaultsSeededWorkspaceId = "";
 		        state.sharedWorkspaces = [];
+            state.sharedScreenerView = null;
 		        setActiveWorkspaceId("");
             state.userProfile = {
               username: "",
@@ -15039,6 +17787,7 @@
               bio: "",
               publicProfile: false,
               publicScreenerSharing: false,
+              publicEmailOptIn: false,
               stripeConnectAccountId: "",
             };
             renderProfileForm(state.userProfile, null);
@@ -15060,7 +17809,17 @@
             }
 
             const pendingShare = String(getPendingShareId() || "").trim();
-            if (pendingShare && window.location.pathname !== "/account") {
+            const onScreenerPage = window.location.pathname === "/screener";
+            if (pendingShare && onScreenerPage) {
+              try {
+                await renderSharedScreenerRun(pendingShare);
+              } catch (error) {
+                if (window.location.pathname !== "/account") {
+                  window.location.href = "/account";
+                  return;
+                }
+              }
+            } else if (pendingShare && window.location.pathname !== "/account") {
               window.location.href = "/account";
               return;
             }
@@ -15082,7 +17841,7 @@
 
 	      await ensureUserProfile(db, user);
         await loadUserProfile(db, user);
-        setProfileStatus("Profile is used when publishing AI Agents to the leaderboard.");
+        setProfileStatus("Profile is used when publishing AI agents in Explore.");
 	      startUserOrders(db, user);
 	      subscribeSharedWorkspaces(db, user);
 		      const activeWorkspaceId = resolveActiveWorkspaceId(user);
@@ -15103,7 +17862,16 @@
         startBacktests(db, user);
 	      refreshCollaboration(functions);
 
-        await processPendingShareImport(functions);
+        const pendingShare = String(getPendingShareId() || "").trim();
+        if (pendingShare && window.location.pathname === "/screener") {
+          try {
+            await renderSharedScreenerRun(pendingShare);
+          } catch (error) {
+            await processPendingShareImport(functions);
+          }
+        } else {
+          await processPendingShareImport(functions);
+        }
 
         if (window.location.pathname === "/account" && !String(getPendingShareId() || "").trim()) {
           window.location.href = "/dashboard";
@@ -15142,6 +17910,11 @@
             setNotificationStatus("Push notifications are not supported on this device.");
 	        }
 	      }
+        await loadNotificationPrivacySettings().catch(() => {
+          syncNotificationPrivacyControls();
+        });
+        renderServerPromoBanner();
+        maybeShowPromoModal();
 
 	      if (ui.terminalForm && ui.tickerChart && state.tickerContext.forecastId && !state.tickerContext.forecastDoc) {
 	        try {

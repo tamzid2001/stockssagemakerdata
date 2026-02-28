@@ -34,24 +34,33 @@
   
     <script>
       window.__QUANTURA_RC_TEMPLATE_ID__ = "firebase-server";
-      window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ = {"status":200,"eTag":"etag-quantura-e2e3d-firebase-server-fetch--1213937490","config":{"welcome_message":"Welcome to Quantura","watchlist_enabled":"true","forecast_prophet_enabled":"true","forecast_timemixer_enabled":"true","push_notifications_enabled":"true","webpush_vapid_key":"","stripe_checkout_enabled":"true","stripe_public_key":"","holiday_promo":"true","backtesting_enabled":"true","backtesting_free_daily_limit":"1","backtesting_pro_daily_limit":"25"}};
+      window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ = {"status":200,"eTag":"etag-quantura-e2e3d-firebase-server-fetch--1213937490","config":{"welcome_message":"","watchlist_enabled":"true","forecast_prophet_enabled":"true","forecast_timemixer_enabled":"true","push_notifications_enabled":"true","webpush_vapid_key":"","stripe_checkout_enabled":"true","stripe_public_key":"","holiday_promo":"false","backtesting_enabled":"true","backtesting_free_daily_limit":"1","backtesting_pro_daily_limit":"25"}};
     </script>
   
 </head>
   <body>
     <header class="header">
       <div class="container nav">
-        <a class="logo" href="/" aria-label="Quantura home"><span>QUANTURA</span></a>
+        <a class="logo" href="/" aria-label="Quantura home">
+          <img class="logo-img" src="/assets/quantura-icon.svg" alt="" aria-hidden="true" />
+          <span>QUANTURA</span>
+        </a>
         <nav class="nav-links">
           <a href="/forecasting" data-analytics="nav_terminal"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Terminal</span></a>
+          <a href="/explore" data-analytics="nav_explore"><i class="iconoir-binocular" aria-hidden="true"></i><span>Explore</span></a>
           <a href="/research" data-analytics="nav_research"><i class="iconoir-bookmark-book" aria-hidden="true"></i><span>Research</span></a>
           <a href="/blog" data-analytics="nav_blog"><i class="iconoir-page" aria-hidden="true"></i><span>Blog</span></a>
+          <a href="/events-calendar" data-analytics="nav_events"><i class="iconoir-calendar" aria-hidden="true"></i><span>Events</span></a>
+          <a href="/shop" data-analytics="nav_shop"><i class="iconoir-shop" aria-hidden="true"></i><span>Shop</span></a>
+          <a href="/about" data-analytics="nav_about"><i class="iconoir-info-circle" aria-hidden="true"></i><span>About</span></a>
           <a href="/pricing" data-analytics="nav_pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>Pricing</span></a>
-          <a href="/contact" data-analytics="nav_contact"><i class="iconoir-mail" aria-hidden="true"></i><span>Contact</span></a>
+          <a href="/contact" data-analytics="nav_contact"><i class="iconoir-mail" aria-hidden="true"></i><span>Contact Us</span></a>
         </nav>
         <div class="nav-actions">
+          <a class="cta secondary solve-now-cta" id="header-solve-now" href="/model-council" data-analytics="nav_solve_now" aria-label="Solve now. Powered by AI" title="Powered by AI"><i class="iconoir-brain" aria-hidden="true"></i><span>Solve now</span></a>
+          <a class="cta secondary icon-only" id="header-notifications" href="/account" data-analytics="nav_notifications" aria-label="Sign in to manage notifications" title="Notifications"><i class="iconoir-bell-notification" aria-hidden="true"></i></a>
           <span id="header-user-status" class="pill">Logged Out</span>
-          <button class="cta secondary" id="header-auth" type="button"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></button>
+          <button class="cta secondary icon-only" id="header-auth" type="button" aria-label="Sign in" title="Sign in"><i class="iconoir-log-in" aria-hidden="true"></i></button>
         </div>
       </div>
     </header>
@@ -65,9 +74,11 @@
 	            <a class="cta secondary small" href="/pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>View pricing plans</span></a>
 	            <a class="cta secondary small hidden" id="nav-admin" href="/admin"><i class="iconoir-shield-check" aria-hidden="true"></i><span>Admin dashboard</span></a>
 	          </div>
-		          <nav class="sidebar-nav" aria-label="Dashboard navigation">
-		            <a class="sidebar-link active" href="/dashboard" data-panel-target="orders"><i class="iconoir-shopping-bag-check" aria-hidden="true"></i><span>Orders</span></a>
-		            <a class="sidebar-link" href="/watchlist" data-panel-target="watchlist"><i class="iconoir-bell-notification" aria-hidden="true"></i><span>Watchlist</span></a>
+			          <nav class="sidebar-nav" aria-label="Dashboard navigation">
+			            <a class="sidebar-link active" href="/dashboard" data-panel-target="orders"><i class="iconoir-shopping-bag-check" aria-hidden="true"></i><span>Orders</span></a>
+			            <a class="sidebar-link" href="/explore"><i class="iconoir-binocular" aria-hidden="true"></i><span>Explore</span></a>
+			            <a class="sidebar-link" href="/dashboard?panel=profile" data-panel-target="profile"><i class="iconoir-user" aria-hidden="true"></i><span>Profile</span></a>
+			            <a class="sidebar-link" href="/watchlist" data-panel-target="watchlist"><i class="iconoir-bell-notification" aria-hidden="true"></i><span>Watchlist</span></a>
 		            <a class="sidebar-link" href="/productivity" data-panel-target="productivity"><i class="iconoir-kanban-board" aria-hidden="true"></i><span>Productivity</span></a>
 		            <a class="sidebar-link" href="/collaboration" data-panel-target="collaboration"><i class="iconoir-group" aria-hidden="true"></i><span>Collaboration</span></a>
 		            <a class="sidebar-link" href="/uploads" data-panel-target="uploads"><i class="iconoir-upload" aria-hidden="true"></i><span>Uploads</span></a>
@@ -102,29 +113,11 @@
               <span class="label">Status</span>
               <span id="user-status" class="pill">Logged Out</span>
             </div>
-            <details class="profile-settings">
-              <summary>Leaderboard profile</summary>
-              <form id="profile-form" class="profile-editor">
-                <label class="label" for="profile-username">Username</label>
-                <input id="profile-username" class="input" type="text" maxlength="32" placeholder="quantura_alpha" />
-                <div class="profile-links-grid">
-                  <label class="label" for="profile-social-x">X</label>
-                  <input id="profile-social-x" class="input" type="url" placeholder="https://x.com/username" />
-                  <label class="label" for="profile-social-linkedin">LinkedIn</label>
-                  <input id="profile-social-linkedin" class="input" type="url" placeholder="https://linkedin.com/in/username" />
-                  <label class="label" for="profile-social-github">GitHub</label>
-                  <input id="profile-social-github" class="input" type="url" placeholder="https://github.com/username" />
-                  <label class="label" for="profile-social-youtube">YouTube</label>
-                  <input id="profile-social-youtube" class="input" type="url" placeholder="https://youtube.com/@channel" />
-                  <label class="label" for="profile-social-tiktok">TikTok</label>
-                  <input id="profile-social-tiktok" class="input" type="url" placeholder="https://tiktok.com/@username" />
-                  <label class="label" for="profile-social-website">Website</label>
-                  <input id="profile-social-website" class="input" type="url" placeholder="https://your-site.com" />
-                </div>
-                <button class="cta secondary small" type="submit">Save profile</button>
-                <p id="profile-status" class="small muted">Sign in to set your public leaderboard profile.</p>
-              </form>
-            </details>
+            <div class="billing-panel">
+              <span class="label">Public profile</span>
+              <a class="cta secondary small" href="/dashboard?panel=profile" data-panel-target="profile">Manage profile page</a>
+              <span class="small muted">Set your public profile metadata and sharing visibility in the Profile section.</span>
+            </div>
             <div class="billing-panel">
               <span class="label">Billing</span>
               <a id="billing-portal-link" class="cta secondary small" href="/account" data-analytics="billing_portal_open">Sign in to manage billing</a>
@@ -213,6 +206,86 @@
               <div class="notice">
                 <strong>Secure by design.</strong> We only store what’s needed to deliver your report and
                 surface your order status in the dashboard.
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section panel hidden" data-panel="profile" id="profile">
+        <div class="container">
+          <div class="section-title">
+            <h2>Public profile</h2>
+            <p class="small">Public profile page fields for Explore attribution and shareable profile URLs.</p>
+          </div>
+          <div class="content-grid">
+            <div class="card">
+              <h3>Profile details</h3>
+              <form id="profile-form" class="profile-editor">
+                <label class="label" for="profile-username">Username</label>
+                <input id="profile-username" class="input" type="text" maxlength="32" placeholder="quantura_alpha" />
+
+                <div class="form-grid" style="margin-top:10px;">
+                  <div class="field">
+                    <label class="label" for="profile-avatar">Avatar style</label>
+                    <select id="profile-avatar" class="input">
+                      <option value="bull">Bull</option>
+                      <option value="bear">Bear</option>
+                      <option value="owl">Owl</option>
+                      <option value="rocket">Rocket</option>
+                      <option value="shield">Shield</option>
+                      <option value="wave">Wave</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label class="label" for="profile-bio">Bio</label>
+                    <input id="profile-bio" class="input" maxlength="300" placeholder="Short public bio for your profile page" />
+                  </div>
+                </div>
+
+                <div class="settings-grid" style="margin-top:10px;">
+                  <label class="setting-item"><input id="profile-public-enabled" type="checkbox" /> <span>Public profile URL enabled</span></label>
+                  <label class="setting-item"><input id="profile-public-screener" type="checkbox" /> <span>Default screener runs to public</span></label>
+                  <label class="setting-item"><input id="profile-public-email" type="checkbox" /> <span>Show email on public profile</span></label>
+                </div>
+
+                <div class="profile-links-grid" style="margin-top:10px;">
+                  <label class="label" for="profile-social-x">X</label>
+                  <input id="profile-social-x" class="input" type="url" placeholder="https://x.com/username" />
+                  <label class="label" for="profile-social-linkedin">LinkedIn</label>
+                  <input id="profile-social-linkedin" class="input" type="url" placeholder="https://linkedin.com/in/username" />
+                  <label class="label" for="profile-social-github">GitHub</label>
+                  <input id="profile-social-github" class="input" type="url" placeholder="https://github.com/username" />
+                  <label class="label" for="profile-social-youtube">YouTube</label>
+                  <input id="profile-social-youtube" class="input" type="url" placeholder="https://youtube.com/@channel" />
+                  <label class="label" for="profile-social-tiktok">TikTok</label>
+                  <input id="profile-social-tiktok" class="input" type="url" placeholder="https://tiktok.com/@username" />
+                  <label class="label" for="profile-social-facebook">Facebook</label>
+                  <input id="profile-social-facebook" class="input" type="url" placeholder="https://facebook.com/username" />
+                  <label class="label" for="profile-social-instagram">Instagram</label>
+                  <input id="profile-social-instagram" class="input" type="url" placeholder="https://instagram.com/username" />
+                  <label class="label" for="profile-social-reddit">Reddit</label>
+                  <input id="profile-social-reddit" class="input" type="url" placeholder="https://reddit.com/u/username" />
+                  <label class="label" for="profile-social-website">Website</label>
+                  <input id="profile-social-website" class="input" type="url" placeholder="https://your-site.com" />
+                </div>
+
+                <div class="hero-actions" style="margin-top:12px;">
+                  <button class="cta secondary small" type="submit">Save profile</button>
+                  <button class="cta secondary small" id="profile-connect-stripe" type="button"><i class="iconoir-wallet" aria-hidden="true"></i><span>Connect Stripe</span></button>
+                </div>
+                <p id="profile-status" class="small muted">Sign in to set your public profile.</p>
+              </form>
+            </div>
+            <div class="card">
+              <h3>Public profile page</h3>
+              <p class="small">
+                Your public profile is available at <code>/u/&lt;handle&gt;</code> and can be shared directly.
+                Verified badges are shown for premium plans and admins.
+              </p>
+              <div class="hero-actions">
+                <a class="cta secondary" href="/profile">Open profile page</a>
+                <a class="cta secondary" href="/explore">Open Explore</a>
               </div>
             </div>
           </div>

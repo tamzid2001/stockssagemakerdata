@@ -12,7 +12,8 @@ from html import unescape
 from datetime import date, datetime, timedelta, timezone
 from io import BytesIO, StringIO
 from statistics import NormalDist
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Protocol
 from urllib.parse import parse_qs, quote_plus, unquote, urlparse
 
 from polymarket_service import (
@@ -193,8 +194,37 @@ YAHOO_SEARCH_URL = "https://query2.finance.yahoo.com/v1/finance/search"
 DEFAULT_FORECAST_PRICE = 349
 OPENAI_API_KEY = secrets_loader.get_secret("OPENAI_API_KEY")
 AMAZON_NOVA_API_KEY = secrets_loader.get_secret("AMAZON_NOVA_API_KEY")
+GEMINI_API_KEY = secrets_loader.get_secret("GEMINI_API_KEY")
+MISTRAL_API_KEY = secrets_loader.get_secret("MISTRAL_API_KEY")
+PERPLEXITY_API_KEY = secrets_loader.get_secret("PERPLEXITY_API_KEY")
+MODEL_COUNCIL_OTHER_API_KEY = secrets_loader.get_secret("MODEL_COUNCIL_OTHER_API_KEY")
 AMAZON_NOVA_API_ENDPOINT = str(os.environ.get("AMAZON_NOVA_API_ENDPOINT") or "").strip()
 AMAZON_NOVA_DEFAULT_MODEL = str(os.environ.get("AMAZON_NOVA_DEFAULT_MODEL") or "amazon.nova-lite-v1:0").strip()
+MODEL_COUNCIL_OTHER_API_BASE = str(os.environ.get("MODEL_COUNCIL_OTHER_API_BASE") or "").strip().rstrip("/")
+MODEL_COUNCIL_OTHER_DEFAULT_MODEL = str(os.environ.get("MODEL_COUNCIL_OTHER_DEFAULT_MODEL") or "other-default").strip() or "other-default"
+MODEL_COUNCIL_PROMPT_IMPROVER_MODEL = str(os.environ.get("MODEL_COUNCIL_PROMPT_IMPROVER_MODEL") or "gpt-5-mini").strip() or "gpt-5-mini"
+MODEL_COUNCIL_PROVIDER_TIMEOUT_SECONDS = max(10, min(int(os.environ.get("MODEL_COUNCIL_PROVIDER_TIMEOUT_SECONDS", "45") or 45), 90))
+MODEL_COUNCIL_RESPONSE_COLLECTION = "model_council_responses"
+MODEL_COUNCIL_FEEDBACK_COLLECTION = "model_council_feedback"
+MODEL_COUNCIL_SHARE_COLLECTION = "model_council_shares"
+MODEL_COUNCIL_DEFAULT_MODULES: tuple[str, ...] = ("info", "history", "news", "recommendations")
+MODEL_COUNCIL_AVAILABLE_MODULES: tuple[str, ...] = (
+    "info",
+    "history",
+    "actions",
+    "dividends",
+    "splits",
+    "calendar",
+    "news",
+    "recommendations",
+    "balance_sheet",
+    "quarterly_balance_sheet",
+    "income_stmt",
+    "quarterly_income_stmt",
+    "cashflow",
+    "quarterly_cashflow",
+)
+MODEL_COUNCIL_SHARE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
 DEFAULT_CHAT_MODEL = str(os.environ.get("DEFAULT_CHAT_MODEL") or "gpt-5-mini").strip() or "gpt-5-mini"
 OPENAI_LIST_MODELS_URL = "https://api.openai.com/v1/models"
 OPENAI_PROMPT_CACHE_RETENTION = str(os.environ.get("OPENAI_PROMPT_CACHE_RETENTION") or "in_memory").strip().lower() or "in_memory"
@@ -598,6 +628,13 @@ def _normalize_ai_model_id(raw: Any) -> str:
         "amazon-nova-micro": "amazon.nova-micro-v1:0",
         "amazon-nova-lite": "amazon.nova-lite-v1:0",
         "amazon-nova-pro": "amazon.nova-pro-v1:0",
+        "gemini-pro": "gemini-1.5-pro",
+        "gemini-flash": "gemini-2.0-flash",
+        "mistral-small": "mistral-small-latest",
+        "mistral-medium": "mistral-medium-latest",
+        "mistral-large": "mistral-large-latest",
+        "perplexity-sonar": "sonar",
+        "perplexity-sonar-pro": "sonar-pro",
     }
     if lowered in aliases:
         return aliases[lowered]
@@ -606,6 +643,14 @@ def _normalize_ai_model_id(raw: Any) -> str:
     if lowered.startswith("o1"):
         return "gpt-5.1"
     if lowered.startswith("amazon.nova"):
+        return lowered
+    if lowered.startswith("gemini"):
+        return lowered
+    if lowered.startswith("mistral"):
+        return lowered
+    if lowered.startswith("sonar") or lowered.startswith("perplexity/sonar"):
+        return lowered.replace("perplexity/", "")
+    if lowered.startswith("other/"):
         return lowered
     return value
 
@@ -617,13 +662,28 @@ def _is_supported_llm_model(model_id: str) -> bool:
     if not normalized:
         return False
     lowered = normalized.lower()
-    return lowered.startswith("gpt-5") or lowered.startswith("amazon.nova")
+    return (
+        lowered.startswith("gpt-5")
+        or lowered.startswith("amazon.nova")
+        or lowered.startswith("gemini")
+        or lowered.startswith("mistral")
+        or lowered.startswith("sonar")
+        or lowered.startswith("other/")
+    )
 
 
 def _model_provider_from_id(model_id: str) -> str:
     lowered = str(model_id or "").strip().lower()
     if lowered.startswith("amazon.nova"):
         return "amazon_nova"
+    if lowered.startswith("gemini"):
+        return "gemini"
+    if lowered.startswith("mistral"):
+        return "mistral"
+    if lowered.startswith("sonar"):
+        return "perplexity"
+    if lowered.startswith("other/"):
+        return "other"
     return "openai"
 
 
@@ -861,6 +921,513 @@ def _json_http_response(payload: dict[str, Any], status: int = 200) -> https_fn.
     )
 
 
+def _request_identity_from_bearer(req: https_fn.Request) -> dict[str, Any]:
+    auth_header = str(req.headers.get("Authorization") or req.headers.get("authorization") or "").strip()
+    if not auth_header.lower().startswith("bearer "):
+        return {"uid": "", "email": "", "isAdmin": False}
+    id_token = auth_header.split(" ", 1)[1].strip()
+    if not id_token:
+        return {"uid": "", "email": "", "isAdmin": False}
+    try:
+        decoded = admin_auth.verify_id_token(id_token, check_revoked=False)
+    except Exception:
+        return {"uid": "", "email": "", "isAdmin": False}
+    uid = str(decoded.get("uid") or "").strip()
+    email = str(decoded.get("email") or "").strip()
+    is_admin = _normalize_email(email) == _normalize_email(ADMIN_EMAIL)
+    return {"uid": uid, "email": email, "isAdmin": is_admin}
+
+
+def _normalize_model_council_module_token(raw: Any) -> str:
+    token = str(raw or "").strip().lower()
+    if not token:
+        return ""
+    token = token.replace(" ", "_").replace("-", "_").replace("/", "_")
+    aliases = {
+        "income_statement": "income_stmt",
+        "quarterly_income_statement": "quarterly_income_stmt",
+        "income": "income_stmt",
+        "recommendation": "recommendations",
+        "analyst_signals": "recommendations",
+    }
+    return aliases.get(token, token)
+
+
+def _normalize_model_council_modules(raw_modules: Any) -> list[str]:
+    values: list[Any]
+    if isinstance(raw_modules, list):
+        values = raw_modules
+    elif isinstance(raw_modules, str):
+        values = [part.strip() for part in raw_modules.split(",")]
+    else:
+        values = []
+    seen: set[str] = set()
+    out: list[str] = []
+    allowed = set(MODEL_COUNCIL_AVAILABLE_MODULES)
+    for raw in values:
+        token = _normalize_model_council_module_token(raw)
+        if not token or token not in allowed or token in seen:
+            continue
+        seen.add(token)
+        out.append(token)
+    if not out:
+        return list(MODEL_COUNCIL_DEFAULT_MODULES)
+    return out
+
+
+def _series_preview_rows(series: Any, *, max_rows: int = 24) -> list[dict[str, Any]]:
+    if series is None:
+        return []
+    rows: list[dict[str, Any]] = []
+    try:
+        series_obj = series.dropna() if hasattr(series, "dropna") else series
+        if hasattr(series_obj, "tail"):
+            series_obj = series_obj.tail(max_rows)
+        iterator = series_obj.items() if hasattr(series_obj, "items") else []
+        for idx, value in iterator:
+            num = _safe_float(value)
+            serialized = round(float(num), 6) if num is not None else _serialize_for_firestore(value)
+            rows.append({"label": str(idx), "value": serialized})
+    except Exception:
+        return []
+    return rows
+
+
+def _frame_preview_rows(frame: Any, *, max_rows: int = 16, max_cols: int = 8) -> dict[str, Any]:
+    if frame is None or getattr(frame, "empty", True):
+        return {"columns": [], "rows": [], "rowCount": 0}
+    try:
+        import pandas as pd  # type: ignore
+    except Exception:
+        return {"columns": [], "rows": [], "rowCount": 0}
+
+    try:
+        df = frame.copy()
+    except Exception:
+        df = frame
+    if df is None or getattr(df, "empty", True):
+        return {"columns": [], "rows": [], "rowCount": 0}
+
+    try:
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = [" / ".join([str(piece) for piece in col if str(piece)]) for col in df.columns.to_list()]
+    except Exception:
+        pass
+
+    total_rows = 0
+    try:
+        total_rows = int(getattr(df, "shape", [0])[0] or 0)
+    except Exception:
+        total_rows = 0
+
+    try:
+        if int(getattr(df, "shape", [0, 0])[1] or 0) > max_cols:
+            df = df.iloc[:, :max_cols]
+    except Exception:
+        pass
+
+    try:
+        preview = df.head(max_rows).reset_index(drop=False)
+    except Exception:
+        preview = df.head(max_rows) if hasattr(df, "head") else df
+
+    rows: list[dict[str, Any]] = []
+    try:
+        records = preview.to_dict(orient="records")
+    except Exception:
+        records = []
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        row_payload: dict[str, Any] = {}
+        for key, value in record.items():
+            col = str(key or "").strip()[:64]
+            if not col:
+                continue
+            num = _safe_float(value)
+            row_payload[col] = round(float(num), 6) if num is not None else _serialize_for_firestore(value)
+        if row_payload:
+            rows.append(row_payload)
+
+    columns = list(rows[0].keys()) if rows else [str(col) for col in list(getattr(preview, "columns", []))[: max_cols + 1]]
+    return {
+        "columns": columns,
+        "rows": rows,
+        "rowCount": total_rows if total_rows > 0 else len(rows),
+    }
+
+
+def _fetch_model_council_ticker_modules(
+    *,
+    ticker: str,
+    selected_modules: list[str],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    import yfinance as yf  # type: ignore
+
+    ticker_obj = yf.Ticker(ticker)
+    module_data: dict[str, Any] = {}
+    module_context: dict[str, Any] = {}
+
+    info_cache: dict[str, Any] | None = None
+
+    def _load_info() -> dict[str, Any]:
+        nonlocal info_cache
+        if isinstance(info_cache, dict):
+            return info_cache
+        try:
+            raw = ticker_obj.info or {}
+            info_cache = raw if isinstance(raw, dict) else {}
+        except Exception:
+            info_cache = {}
+        return info_cache
+
+    if "info" in selected_modules:
+        info = _load_info()
+        info_fields = [
+            "longName",
+            "shortName",
+            "sector",
+            "industry",
+            "country",
+            "website",
+            "exchange",
+            "fullExchangeName",
+            "currency",
+            "marketCap",
+            "trailingPE",
+            "forwardPE",
+            "beta",
+            "dividendYield",
+            "recommendationKey",
+            "recommendationMean",
+        ]
+        info_payload: dict[str, Any] = {}
+        for key in info_fields:
+            if key not in info:
+                continue
+            value = info.get(key)
+            if value in (None, ""):
+                continue
+            info_payload[key] = _serialize_for_firestore(value)
+        module_data["info"] = info_payload
+        module_context["info"] = info_payload
+
+    if "history" in selected_modules:
+        history_payload: dict[str, Any] = {"columns": [], "rows": [], "rowCount": 0}
+        history_summary: dict[str, Any] = {}
+        try:
+            hist = ticker_obj.history(period="1y", interval="1d")
+            history_payload = _frame_preview_rows(hist, max_rows=80, max_cols=6)
+            if hist is not None and getattr(hist, "empty", True) is False and "Close" in hist.columns:
+                close = hist["Close"].astype(float).dropna()
+                if len(close) >= 2:
+                    last_close = float(close.iloc[-1])
+                    start_close = float(close.iloc[0])
+                    one_month_close = float(close.iloc[-22]) if len(close) >= 22 else None
+                    six_month_close = float(close.iloc[-126]) if len(close) >= 126 else None
+                    history_summary = {
+                        "lastClose": round(last_close, 4),
+                        "periodStartClose": round(start_close, 4),
+                        "change1mPct": round(((last_close / one_month_close) - 1.0) * 100.0, 3) if one_month_close else None,
+                        "change6mPct": round(((last_close / six_month_close) - 1.0) * 100.0, 3) if six_month_close else None,
+                    }
+        except Exception:
+            history_payload = {"columns": [], "rows": [], "rowCount": 0}
+            history_summary = {}
+        module_data["history"] = history_payload
+        module_context["history"] = history_summary
+
+    if "actions" in selected_modules:
+        try:
+            actions = ticker_obj.actions
+            actions_payload = _frame_preview_rows(actions, max_rows=24, max_cols=6)
+        except Exception:
+            actions_payload = {"columns": [], "rows": [], "rowCount": 0}
+        module_data["actions"] = actions_payload
+        module_context["actions"] = {"rowCount": int(actions_payload.get("rowCount") or 0)}
+
+    if "dividends" in selected_modules:
+        try:
+            dividend_rows = _series_preview_rows(ticker_obj.dividends, max_rows=24)
+        except Exception:
+            dividend_rows = []
+        module_data["dividends"] = {"rows": dividend_rows, "rowCount": len(dividend_rows)}
+        module_context["dividends"] = {"rowCount": len(dividend_rows), "recent": dividend_rows[-5:]}
+
+    if "splits" in selected_modules:
+        try:
+            split_rows = _series_preview_rows(ticker_obj.splits, max_rows=24)
+        except Exception:
+            split_rows = []
+        module_data["splits"] = {"rows": split_rows, "rowCount": len(split_rows)}
+        module_context["splits"] = {"rowCount": len(split_rows), "recent": split_rows[-5:]}
+
+    if "calendar" in selected_modules:
+        calendar_payload: dict[str, Any] = {}
+        try:
+            calendar_raw = ticker_obj.calendar or {}
+            if isinstance(calendar_raw, dict):
+                for key, value in calendar_raw.items():
+                    text_key = str(key or "").strip()
+                    if not text_key:
+                        continue
+                    calendar_payload[text_key] = _serialize_for_firestore(value)
+            else:
+                frame_payload = _frame_preview_rows(calendar_raw, max_rows=12, max_cols=6)
+                calendar_payload = {"columns": frame_payload.get("columns") or [], "rows": frame_payload.get("rows") or []}
+        except Exception:
+            calendar_payload = {}
+        module_data["calendar"] = calendar_payload
+        module_context["calendar"] = calendar_payload
+
+    if "news" in selected_modules:
+        news_rows: list[dict[str, Any]] = []
+        seen_news: set[str] = set()
+        try:
+            fetched = _fetch_yahoo_news_query(ticker, limit=12)
+            for row in fetched[:12]:
+                if not isinstance(row, dict):
+                    continue
+                title = str(row.get("title") or "").strip()
+                link = str(row.get("link") or "").strip()
+                key = (link or title).lower()
+                if not title or key in seen_news:
+                    continue
+                seen_news.add(key)
+                news_rows.append(
+                    {
+                        "title": title,
+                        "publisher": str(row.get("publisher") or "").strip(),
+                        "publishedAt": _serialize_for_firestore(row.get("publishedAt")),
+                        "link": link,
+                        "summary": str(row.get("summary") or "").strip(),
+                    }
+                )
+        except Exception:
+            news_rows = []
+        if not news_rows:
+            try:
+                for row in (ticker_obj.news or [])[:10]:
+                    if not isinstance(row, dict):
+                        continue
+                    title = str(row.get("title") or "").strip()
+                    link = str(row.get("link") or row.get("url") or "").strip()
+                    key = (link or title).lower()
+                    if not title or key in seen_news:
+                        continue
+                    seen_news.add(key)
+                    news_rows.append(
+                        {
+                            "title": title,
+                            "publisher": str(row.get("publisher") or row.get("source") or "").strip(),
+                            "publishedAt": _serialize_for_firestore(row.get("providerPublishTime") or row.get("publishedAt")),
+                            "link": link,
+                            "summary": str(row.get("summary") or row.get("description") or "").strip(),
+                        }
+                    )
+            except Exception:
+                news_rows = news_rows
+        module_data["news"] = {"rows": news_rows}
+        module_context["news"] = news_rows[:6]
+
+    if "recommendations" in selected_modules:
+        info = _load_info()
+        snapshot = {
+            "recommendationKey": info.get("recommendationKey"),
+            "recommendationMean": _safe_float(info.get("recommendationMean")),
+            "numberOfAnalystOpinions": _safe_float(info.get("numberOfAnalystOpinions")),
+            "targetLowPrice": _safe_float(info.get("targetLowPrice")),
+            "targetMeanPrice": _safe_float(info.get("targetMeanPrice")),
+            "targetHighPrice": _safe_float(info.get("targetHighPrice")),
+        }
+        try:
+            rec_payload = _frame_preview_rows(ticker_obj.recommendations, max_rows=8, max_cols=6)
+        except Exception:
+            rec_payload = {"columns": [], "rows": [], "rowCount": 0}
+        module_data["recommendations"] = {
+            "snapshot": _serialize_for_firestore(snapshot),
+            "columns": rec_payload.get("columns") or [],
+            "rows": rec_payload.get("rows") or [],
+            "rowCount": int(rec_payload.get("rowCount") or 0),
+        }
+        module_context["recommendations"] = {
+            "snapshot": _serialize_for_firestore(snapshot),
+            "rows": (rec_payload.get("rows") or [])[:4],
+        }
+
+    statement_map = {
+        "balance_sheet": "balance_sheet",
+        "quarterly_balance_sheet": "quarterly_balance_sheet",
+        "income_stmt": "income_stmt",
+        "quarterly_income_stmt": "quarterly_income_stmt",
+        "cashflow": "cashflow",
+        "quarterly_cashflow": "quarterly_cashflow",
+    }
+    for module_id, attr_name in statement_map.items():
+        if module_id not in selected_modules:
+            continue
+        try:
+            frame = getattr(ticker_obj, attr_name, None)
+            frame_payload = _frame_preview_rows(frame, max_rows=14, max_cols=6)
+        except Exception:
+            frame_payload = {"columns": [], "rows": [], "rowCount": 0}
+        module_data[module_id] = frame_payload
+        module_context[module_id] = {
+            "columns": frame_payload.get("columns") or [],
+            "rows": (frame_payload.get("rows") or [])[:4],
+            "rowCount": int(frame_payload.get("rowCount") or 0),
+        }
+
+    for module_id in selected_modules:
+        if module_id in module_data:
+            continue
+        module_data[module_id] = {"error": "Data unavailable."}
+        module_context[module_id] = {"error": "Data unavailable."}
+
+    return module_data, module_context
+
+
+def _build_model_council_context_payload(
+    *,
+    ticker: str,
+    module_context: dict[str, Any],
+    technical_context: dict[str, Any],
+) -> dict[str, Any]:
+    info_context = module_context.get("info") if isinstance(module_context.get("info"), dict) else {}
+    history_summary = module_context.get("history") if isinstance(module_context.get("history"), dict) else {}
+    headlines = module_context.get("news") if isinstance(module_context.get("news"), list) else []
+    return {
+        "ticker": ticker,
+        "country": str(info_context.get("country") or "").strip(),
+        "exchange": str(info_context.get("fullExchangeName") or info_context.get("exchange") or "").strip(),
+        "sector": str(info_context.get("sector") or "").strip(),
+        "industry": str(info_context.get("industry") or "").strip(),
+        "marketCap": info_context.get("marketCap"),
+        "trailingPE": info_context.get("trailingPE"),
+        "forwardPE": info_context.get("forwardPE"),
+        "dividendYield": info_context.get("dividendYield"),
+        "beta": info_context.get("beta"),
+        "historySummary": history_summary,
+        "headlines": headlines[:6],
+        "technicalContext": technical_context,
+        "selectedModules": module_context,
+    }
+
+
+def _select_model_council_model(
+    *,
+    models: list[dict[str, Any]],
+    requested_model: str,
+    requested_provider: str,
+) -> dict[str, Any]:
+    normalized_model = _normalize_ai_model_id(requested_model)
+    provider_hint = str(requested_provider or "").strip().lower()
+    if not provider_hint and normalized_model:
+        provider_hint = _model_provider_from_id(normalized_model)
+
+    selected: dict[str, Any] | None = None
+    if normalized_model and provider_hint:
+        selected = next(
+            (
+                row
+                for row in models
+                if _normalize_ai_model_id(row.get("id")) == normalized_model
+                and str(row.get("provider") or "").strip().lower() == provider_hint
+            ),
+            None,
+        )
+    if selected is None and normalized_model:
+        selected = next((row for row in models if _normalize_ai_model_id(row.get("id")) == normalized_model), None)
+    if selected is None and provider_hint:
+        selected = next((row for row in models if str(row.get("provider") or "").strip().lower() == provider_hint), None)
+
+    if selected is None:
+        preferred_default = _normalize_ai_model_id(DEFAULT_CHAT_MODEL)
+        selected = next((row for row in models if _normalize_ai_model_id(row.get("id")) == preferred_default), None)
+    if selected is None and models:
+        selected = models[0]
+
+    selected_model = _normalize_ai_model_id((selected or {}).get("id"))
+    selected_provider = str((selected or {}).get("provider") or _model_provider_from_id(selected_model)).strip().lower()
+    requested_allowed = bool(
+        normalized_model
+        and selected_model == normalized_model
+        and (not provider_hint or provider_hint == selected_provider)
+    )
+    return {
+        "selected_model": selected_model,
+        "selected_provider": selected_provider,
+        "requested_model": normalized_model,
+        "requested_provider": provider_hint,
+        "requested_allowed": requested_allowed,
+    }
+
+
+def _next_model_council_fallback_candidate(
+    *,
+    models: list[dict[str, Any]],
+    failed_provider: str,
+    failed_model: str,
+) -> dict[str, str]:
+    failed_provider_norm = str(failed_provider or "").strip().lower()
+    failed_model_norm = _normalize_ai_model_id(failed_model)
+    for row in models:
+        provider = str(row.get("provider") or "").strip().lower()
+        model = _normalize_ai_model_id(row.get("id"))
+        if not provider or not model:
+            continue
+        if provider == failed_provider_norm:
+            continue
+        return {"provider": provider, "model": model}
+    for row in models:
+        provider = str(row.get("provider") or "").strip().lower()
+        model = _normalize_ai_model_id(row.get("id"))
+        if not provider or not model:
+            continue
+        if model == failed_model_norm:
+            continue
+        return {"provider": provider, "model": model}
+    return {}
+
+
+def _persist_model_council_response(
+    *,
+    uid: str,
+    email: str,
+    ticker: str,
+    question: str,
+    answer: str,
+    provider: str,
+    model: str,
+    usage: dict[str, Any],
+    context_payload: dict[str, Any],
+    module_data: dict[str, Any],
+    selected_modules: list[str],
+    citations: list[dict[str, Any]],
+) -> str:
+    ref = db.collection(MODEL_COUNCIL_RESPONSE_COLLECTION).document()
+    ref.set(
+        {
+            "userId": uid,
+            "userEmail": email,
+            "ticker": ticker,
+            "question": question,
+            "answer": answer,
+            "provider": provider,
+            "model": model,
+            "usage": _serialize_for_firestore(usage),
+            "selectedModules": selected_modules,
+            "context": _serialize_for_firestore(context_payload),
+            "moduleData": _serialize_for_firestore(module_data),
+            "citations": _serialize_for_firestore(citations),
+            "createdAtEpoch": int(time.time()),
+            "createdAt": firestore.SERVER_TIMESTAMP,
+            "updatedAt": firestore.SERVER_TIMESTAMP,
+        }
+    )
+    return ref.id
+
+
 def _openai_model_group(model_id: str) -> str:
     lowered = str(model_id or "").strip().lower()
     if "nano" in lowered:
@@ -941,6 +1508,283 @@ def _list_openai_models_for_app(context: dict[str, Any] | None = None) -> list[d
     return out
 
 
+class ModelCouncilProvider(Protocol):
+    id: str
+    display_name: str
+    supports_tools: bool
+    supports_streaming: bool
+
+    def invoke(
+        self,
+        *,
+        messages: list[dict[str, str]],
+        model: str,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        ...
+
+
+@dataclass(frozen=True)
+class ModelCouncilProviderSpec:
+    id: str
+    display_name: str
+    supports_tools: bool = False
+    supports_streaming: bool = False
+
+
+MODEL_COUNCIL_PROVIDER_SPECS: dict[str, ModelCouncilProviderSpec] = {
+    "openai": ModelCouncilProviderSpec("openai", "OpenAI", supports_tools=True, supports_streaming=True),
+    "gemini": ModelCouncilProviderSpec("gemini", "Gemini"),
+    "mistral": ModelCouncilProviderSpec("mistral", "Mistral"),
+    "perplexity": ModelCouncilProviderSpec("perplexity", "Perplexity Sonar", supports_tools=True),
+    "other": ModelCouncilProviderSpec("other", "Other"),
+}
+
+MODEL_COUNCIL_DEFAULT_MODELS: list[dict[str, Any]] = [
+    {
+        "id": "gpt-5-nano",
+        "provider": "openai",
+        "label": "GPT-5 Nano",
+        "group": "Fast",
+        "supportsStreaming": True,
+        "supportsTools": True,
+    },
+    {
+        "id": "gpt-5-mini",
+        "provider": "openai",
+        "label": "GPT-5 Mini",
+        "group": "Balanced",
+        "supportsStreaming": True,
+        "supportsTools": True,
+    },
+    {
+        "id": "gpt-5",
+        "provider": "openai",
+        "label": "GPT-5",
+        "group": "Reasoning",
+        "supportsStreaming": True,
+        "supportsTools": True,
+    },
+    {
+        "id": "gpt-5.1",
+        "provider": "openai",
+        "label": "GPT-5.1",
+        "group": "Reasoning",
+        "supportsStreaming": True,
+        "supportsTools": True,
+    },
+    {
+        "id": "gpt-5.2",
+        "provider": "openai",
+        "label": "GPT-5.2",
+        "group": "Reasoning",
+        "supportsStreaming": True,
+        "supportsTools": True,
+    },
+    {
+        "id": "gemini-2.0-flash",
+        "provider": "gemini",
+        "label": "Gemini 2.0 Flash",
+        "group": "Balanced",
+        "supportsStreaming": False,
+        "supportsTools": False,
+    },
+    {
+        "id": "gemini-1.5-pro",
+        "provider": "gemini",
+        "label": "Gemini 1.5 Pro",
+        "group": "Reasoning",
+        "supportsStreaming": False,
+        "supportsTools": False,
+    },
+    {
+        "id": "mistral-small-latest",
+        "provider": "mistral",
+        "label": "Mistral Small",
+        "group": "Balanced",
+        "supportsStreaming": False,
+        "supportsTools": False,
+    },
+    {
+        "id": "mistral-medium-latest",
+        "provider": "mistral",
+        "label": "Mistral Medium",
+        "group": "Reasoning",
+        "supportsStreaming": False,
+        "supportsTools": False,
+    },
+    {
+        "id": "mistral-large-latest",
+        "provider": "mistral",
+        "label": "Mistral Large",
+        "group": "Reasoning",
+        "supportsStreaming": False,
+        "supportsTools": False,
+    },
+    {
+        "id": "sonar",
+        "provider": "perplexity",
+        "label": "Perplexity Sonar",
+        "group": "Balanced",
+        "supportsStreaming": False,
+        "supportsTools": True,
+    },
+    {
+        "id": "sonar-pro",
+        "provider": "perplexity",
+        "label": "Perplexity Sonar Pro",
+        "group": "Reasoning",
+        "supportsStreaming": False,
+        "supportsTools": True,
+    },
+    {
+        "id": f"other/{MODEL_COUNCIL_OTHER_DEFAULT_MODEL}",
+        "provider": "other",
+        "label": "Other (custom provider)",
+        "group": "Custom",
+        "supportsStreaming": False,
+        "supportsTools": False,
+    },
+]
+
+
+def _model_council_provider_secret(provider_id: str) -> str:
+    provider = str(provider_id or "").strip().lower()
+    if provider == "openai":
+        return str(OPENAI_API_KEY or "").strip()
+    if provider == "gemini":
+        return str(GEMINI_API_KEY or "").strip()
+    if provider == "mistral":
+        return str(MISTRAL_API_KEY or "").strip()
+    if provider == "perplexity":
+        return str(PERPLEXITY_API_KEY or "").strip()
+    if provider == "other":
+        return str(MODEL_COUNCIL_OTHER_API_KEY or "").strip()
+    return ""
+
+
+def _model_council_provider_available(provider_id: str) -> bool:
+    provider = str(provider_id or "").strip().lower()
+    if provider == "other":
+        return bool(_model_council_provider_secret(provider) and MODEL_COUNCIL_OTHER_API_BASE)
+    return bool(_model_council_provider_secret(provider))
+
+
+def _list_model_council_models_for_app(context: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    allowed_models = [_normalize_ai_model_id(item) for item in _get_llm_allowed_models(context=context)]
+    allowed_models = [item for item in allowed_models if item and _is_supported_llm_model(item)]
+    allowed_set = set(allowed_models)
+    models: list[dict[str, Any]] = []
+
+    openai_rows = _list_openai_models_for_app(context=context)
+    openai_by_id = {str(row.get("id") or "").strip(): row for row in openai_rows if isinstance(row, dict)}
+    if _model_council_provider_available("openai"):
+        for row in openai_rows:
+            if not isinstance(row, dict):
+                continue
+            model_id = _normalize_ai_model_id(row.get("id"))
+            if not model_id:
+                continue
+            models.append(
+                {
+                    "id": model_id,
+                    "provider": "openai",
+                    "label": str(row.get("label") or _openai_model_label(model_id)),
+                    "group": str(row.get("group") or _openai_model_group(model_id)),
+                    "supportsStreaming": True,
+                    "supportsTools": True,
+                }
+            )
+
+    for entry in MODEL_COUNCIL_DEFAULT_MODELS:
+        if not isinstance(entry, dict):
+            continue
+        model_id = _normalize_ai_model_id(entry.get("id"))
+        if not model_id:
+            continue
+        provider = _model_provider_from_id(entry.get("provider") or model_id)
+        if provider == "openai":
+            # OpenAI entries are sourced from the live list above.
+            continue
+        if not _model_council_provider_available(provider):
+            continue
+        if provider == "other" and not MODEL_COUNCIL_OTHER_API_BASE:
+            continue
+        if allowed_set and model_id in allowed_set:
+            pass
+        elif provider == "openai" and allowed_set and model_id not in allowed_set:
+            continue
+        models.append(
+            {
+                "id": model_id,
+                "provider": provider,
+                "label": str(entry.get("label") or model_id),
+                "group": str(entry.get("group") or "Balanced"),
+                "supportsStreaming": bool(entry.get("supportsStreaming")),
+                "supportsTools": bool(entry.get("supportsTools")),
+            }
+        )
+
+    # Support pluggable extra models via env (format: provider:model_id:label,provider:model_id:label)
+    extras_raw = str(os.environ.get("MODEL_COUNCIL_EXTRA_MODELS") or "").strip()
+    if extras_raw:
+        for row in extras_raw.split(","):
+            token = str(row or "").strip()
+            if not token:
+                continue
+            pieces = token.split(":")
+            if len(pieces) < 2:
+                continue
+            provider = str(pieces[0] or "").strip().lower()
+            model_id = _normalize_ai_model_id(pieces[1])
+            label = str(pieces[2] or model_id).strip() if len(pieces) >= 3 else model_id
+            if not provider or not model_id:
+                continue
+            if not _model_council_provider_available(provider):
+                continue
+            models.append(
+                {
+                    "id": model_id,
+                    "provider": provider,
+                    "label": label,
+                    "group": "Custom",
+                    "supportsStreaming": provider == "openai",
+                    "supportsTools": provider in {"openai", "perplexity"},
+                }
+            )
+
+    seen: set[str] = set()
+    ordered: list[dict[str, Any]] = []
+    provider_rank = {"openai": 0, "gemini": 1, "mistral": 2, "perplexity": 3, "other": 4}
+    for item in sorted(
+        models,
+        key=lambda row: (
+            provider_rank.get(str(row.get("provider") or "").strip().lower(), 99),
+            str(row.get("group") or ""),
+            str(row.get("label") or ""),
+        ),
+    ):
+        model_id = _normalize_ai_model_id(item.get("id"))
+        provider = str(item.get("provider") or _model_provider_from_id(model_id)).strip().lower()
+        if not model_id or not provider:
+            continue
+        key = f"{provider}:{model_id}"
+        if key in seen:
+            continue
+        seen.add(key)
+        ordered.append(
+            {
+                "id": model_id,
+                "provider": provider,
+                "label": str(item.get("label") or model_id),
+                "group": str(item.get("group") or "Balanced"),
+                "supportsStreaming": bool(item.get("supportsStreaming")),
+                "supportsTools": bool(item.get("supportsTools")),
+            }
+        )
+    return ordered
+
+
 def _prompt_cache_retention() -> str:
     value = str(OPENAI_PROMPT_CACHE_RETENTION or "in_memory").strip().lower()
     if value not in {"in_memory", "24h"}:
@@ -988,9 +1832,406 @@ def _stable_chat_system_prefix() -> str:
         "    \"latest\":[{\"name\":\"string\",\"value\":\"number\"}],\n"
         "    \"trend\":[{\"name\":\"string\",\"direction\":\"string\",\"pctChange\":\"number|null\",\"delta\":\"number|null\"}],\n"
         "    \"heuristics\":[\"string\"]\n"
+        "  },\n"
+        "  \"selectedModules\": {\n"
+        "    \"moduleId\": \"object\"\n"
         "  }\n"
         "}\n"
     )
+
+
+def _extract_responses_citations(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    if not isinstance(payload, dict):
+        return []
+    output = payload.get("output")
+    if not isinstance(output, list):
+        return []
+    items: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for block in output:
+        if not isinstance(block, dict):
+            continue
+        content = block.get("content")
+        if not isinstance(content, list):
+            continue
+        for part in content:
+            if not isinstance(part, dict):
+                continue
+            annotations = part.get("annotations")
+            if not isinstance(annotations, list):
+                continue
+            for ann in annotations:
+                if not isinstance(ann, dict):
+                    continue
+                url = str(ann.get("url") or ann.get("source_url") or "").strip()
+                title = str(ann.get("title") or ann.get("source_title") or "").strip()
+                if not url:
+                    continue
+                key = f"{title}::{url}".lower()
+                if key in seen:
+                    continue
+                seen.add(key)
+                items.append({"title": title, "url": url})
+    return items[:12]
+
+
+def _normalize_chat_messages(raw_messages: Any, *, fallback_prompt: str = "") -> list[dict[str, str]]:
+    out: list[dict[str, str]] = []
+    if isinstance(raw_messages, list):
+        for row in raw_messages:
+            if not isinstance(row, dict):
+                continue
+            role = str(row.get("role") or "").strip().lower()
+            if role not in {"system", "user", "assistant"}:
+                continue
+            content_value = row.get("content")
+            if isinstance(content_value, list):
+                pieces = []
+                for piece in content_value:
+                    if isinstance(piece, dict):
+                        text = str(piece.get("text") or piece.get("content") or "").strip()
+                    else:
+                        text = str(piece or "").strip()
+                    if text:
+                        pieces.append(text)
+                content = "\n".join(pieces).strip()
+            else:
+                content = str(content_value or "").strip()
+            if not content:
+                continue
+            out.append({"role": role, "content": content})
+    if not out and fallback_prompt:
+        out.append({"role": "user", "content": str(fallback_prompt or "").strip()})
+    return out
+
+
+def _invoke_openai_model_council(
+    *,
+    model_id: str,
+    messages: list[dict[str, str]],
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if not OPENAI_API_KEY:
+        raise RuntimeError("OpenAI provider is unavailable.")
+    params = params or {}
+    response_input: list[dict[str, Any]] = []
+    for msg in messages:
+        role = str(msg.get("role") or "user").strip().lower()
+        content = str(msg.get("content") or "").strip()
+        if not content:
+            continue
+        if role not in {"system", "user", "assistant"}:
+            role = "user"
+        response_input.append({"role": role, "content": [{"type": "input_text", "text": content}]})
+    if not response_input:
+        raise RuntimeError("Model Council request was empty.")
+    tools = []
+    if bool(params.get("allow_web_search", True)):
+        tools = [{"type": "web_search_preview"}]
+
+    payload = {
+        "model": model_id,
+        "input": response_input,
+        "max_output_tokens": max(200, min(int(params.get("max_output_tokens") or 900), 1400)),
+        "prompt_cache_retention": _prompt_cache_retention(),
+    }
+    if tools:
+        payload["tools"] = tools
+
+    response = requests.post(
+        "https://api.openai.com/v1/responses",
+        headers={"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"},
+        json=payload,
+        timeout=MODEL_COUNCIL_PROVIDER_TIMEOUT_SECONDS,
+    )
+    if response.status_code >= 400:
+        raise RuntimeError(f"OpenAI request failed with HTTP {response.status_code}.")
+    body = response.json() if response.text else {}
+    text = _extract_responses_output_text(body)
+    usage = _extract_responses_usage(body)
+    citations = _extract_responses_citations(body)
+    return {
+        "text": text,
+        "usage": usage,
+        "citations": citations,
+        "provider": "openai",
+        "model": model_id,
+    }
+
+
+def _invoke_gemini_model_council(
+    *,
+    model_id: str,
+    messages: list[dict[str, str]],
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if not GEMINI_API_KEY:
+        raise RuntimeError("Gemini provider is unavailable.")
+    params = params or {}
+    system_parts = [m.get("content", "") for m in messages if str(m.get("role") or "").strip().lower() == "system"]
+    non_system = [m for m in messages if str(m.get("role") or "").strip().lower() != "system"]
+    if not non_system and system_parts:
+        non_system = [{"role": "user", "content": system_parts[-1]}]
+
+    contents: list[dict[str, Any]] = []
+    for msg in non_system:
+        role = str(msg.get("role") or "user").strip().lower()
+        api_role = "model" if role == "assistant" else "user"
+        content = str(msg.get("content") or "").strip()
+        if not content:
+            continue
+        contents.append({"role": api_role, "parts": [{"text": content}]})
+    if not contents:
+        raise RuntimeError("Gemini request was empty.")
+
+    payload: dict[str, Any] = {
+        "contents": contents,
+        "generationConfig": {
+            "temperature": float(params.get("temperature") or 0.2),
+            "maxOutputTokens": max(200, min(int(params.get("max_output_tokens") or 900), 1400)),
+        },
+    }
+    if system_parts:
+        payload["system_instruction"] = {"parts": [{"text": "\n\n".join(system_parts).strip()}]}
+
+    endpoint = (
+        f"https://generativelanguage.googleapis.com/v1beta/models/{quote_plus(model_id)}:generateContent"
+        f"?key={quote_plus(str(GEMINI_API_KEY).strip())}"
+    )
+    response = requests.post(
+        endpoint,
+        headers={"Content-Type": "application/json"},
+        json=payload,
+        timeout=MODEL_COUNCIL_PROVIDER_TIMEOUT_SECONDS,
+    )
+    if response.status_code >= 400:
+        raise RuntimeError(f"Gemini request failed with HTTP {response.status_code}.")
+    body = response.json() if response.text else {}
+    text_chunks: list[str] = []
+    for candidate in body.get("candidates") or []:
+        if not isinstance(candidate, dict):
+            continue
+        content = candidate.get("content")
+        if not isinstance(content, dict):
+            continue
+        for part in content.get("parts") or []:
+            if not isinstance(part, dict):
+                continue
+            piece = str(part.get("text") or "").strip()
+            if piece:
+                text_chunks.append(piece)
+    usage_raw = body.get("usageMetadata") if isinstance(body.get("usageMetadata"), dict) else {}
+    usage = {
+        "prompt_tokens": int(usage_raw.get("promptTokenCount") or 0),
+        "completion_tokens": int(usage_raw.get("candidatesTokenCount") or 0),
+        "total_tokens": int(usage_raw.get("totalTokenCount") or 0),
+        "cached_tokens": 0,
+    }
+    return {
+        "text": "\n".join(text_chunks).strip(),
+        "usage": usage,
+        "citations": [],
+        "provider": "gemini",
+        "model": model_id,
+    }
+
+
+def _invoke_mistral_model_council(
+    *,
+    model_id: str,
+    messages: list[dict[str, str]],
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if not MISTRAL_API_KEY:
+        raise RuntimeError("Mistral provider is unavailable.")
+    params = params or {}
+    payload_messages: list[dict[str, str]] = []
+    for msg in messages:
+        role = str(msg.get("role") or "user").strip().lower()
+        if role not in {"system", "user", "assistant"}:
+            role = "user"
+        content = str(msg.get("content") or "").strip()
+        if not content:
+            continue
+        payload_messages.append({"role": role, "content": content})
+    if not payload_messages:
+        raise RuntimeError("Mistral request was empty.")
+    response = requests.post(
+        "https://api.mistral.ai/v1/chat/completions",
+        headers={"Authorization": f"Bearer {MISTRAL_API_KEY}", "Content-Type": "application/json"},
+        json={
+            "model": model_id,
+            "messages": payload_messages,
+            "temperature": float(params.get("temperature") or 0.2),
+            "max_tokens": max(200, min(int(params.get("max_output_tokens") or 900), 1400)),
+        },
+        timeout=MODEL_COUNCIL_PROVIDER_TIMEOUT_SECONDS,
+    )
+    if response.status_code >= 400:
+        raise RuntimeError(f"Mistral request failed with HTTP {response.status_code}.")
+    body = response.json() if response.text else {}
+    choices = body.get("choices") if isinstance(body.get("choices"), list) else []
+    content = ""
+    if choices:
+        message = choices[0].get("message") if isinstance(choices[0], dict) else {}
+        content = str((message or {}).get("content") or "").strip()
+    usage_raw = body.get("usage") if isinstance(body.get("usage"), dict) else {}
+    usage = {
+        "prompt_tokens": int(usage_raw.get("prompt_tokens") or 0),
+        "completion_tokens": int(usage_raw.get("completion_tokens") or 0),
+        "total_tokens": int(usage_raw.get("total_tokens") or 0),
+        "cached_tokens": 0,
+    }
+    return {
+        "text": content,
+        "usage": usage,
+        "citations": [],
+        "provider": "mistral",
+        "model": model_id,
+    }
+
+
+def _invoke_perplexity_model_council(
+    *,
+    model_id: str,
+    messages: list[dict[str, str]],
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if not PERPLEXITY_API_KEY:
+        raise RuntimeError("Perplexity provider is unavailable.")
+    params = params or {}
+    payload_messages: list[dict[str, str]] = []
+    for msg in messages:
+        role = str(msg.get("role") or "user").strip().lower()
+        if role not in {"system", "user", "assistant"}:
+            role = "user"
+        content = str(msg.get("content") or "").strip()
+        if not content:
+            continue
+        payload_messages.append({"role": role, "content": content})
+    if not payload_messages:
+        raise RuntimeError("Perplexity request was empty.")
+
+    payload = {
+        "model": model_id,
+        "messages": payload_messages,
+        "temperature": float(params.get("temperature") or 0.2),
+        "max_tokens": max(200, min(int(params.get("max_output_tokens") or 900), 1400)),
+    }
+    response = requests.post(
+        "https://api.perplexity.ai/chat/completions",
+        headers={"Authorization": f"Bearer {PERPLEXITY_API_KEY}", "Content-Type": "application/json"},
+        json=payload,
+        timeout=MODEL_COUNCIL_PROVIDER_TIMEOUT_SECONDS,
+    )
+    if response.status_code >= 400:
+        raise RuntimeError(f"Perplexity request failed with HTTP {response.status_code}.")
+    body = response.json() if response.text else {}
+    choices = body.get("choices") if isinstance(body.get("choices"), list) else []
+    content = ""
+    if choices:
+        message = choices[0].get("message") if isinstance(choices[0], dict) else {}
+        content = str((message or {}).get("content") or "").strip()
+    usage_raw = body.get("usage") if isinstance(body.get("usage"), dict) else {}
+    citations_raw = body.get("citations") if isinstance(body.get("citations"), list) else []
+    citations = []
+    for item in citations_raw[:12]:
+        text = str(item or "").strip()
+        if text:
+            citations.append({"title": "", "url": text})
+    usage = {
+        "prompt_tokens": int(usage_raw.get("prompt_tokens") or 0),
+        "completion_tokens": int(usage_raw.get("completion_tokens") or 0),
+        "total_tokens": int(usage_raw.get("total_tokens") or 0),
+        "cached_tokens": 0,
+    }
+    return {
+        "text": content,
+        "usage": usage,
+        "citations": citations,
+        "provider": "perplexity",
+        "model": model_id,
+    }
+
+
+def _invoke_other_model_council(
+    *,
+    model_id: str,
+    messages: list[dict[str, str]],
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if not MODEL_COUNCIL_OTHER_API_BASE or not MODEL_COUNCIL_OTHER_API_KEY:
+        raise RuntimeError("Custom provider is unavailable.")
+    params = params or {}
+    payload_messages: list[dict[str, str]] = []
+    for msg in messages:
+        role = str(msg.get("role") or "user").strip().lower()
+        if role not in {"system", "user", "assistant"}:
+            role = "user"
+        content = str(msg.get("content") or "").strip()
+        if not content:
+            continue
+        payload_messages.append({"role": role, "content": content})
+    if not payload_messages:
+        raise RuntimeError("Custom provider request was empty.")
+    endpoint = f"{MODEL_COUNCIL_OTHER_API_BASE}/chat/completions"
+    response = requests.post(
+        endpoint,
+        headers={"Authorization": f"Bearer {MODEL_COUNCIL_OTHER_API_KEY}", "Content-Type": "application/json"},
+        json={
+            "model": model_id.replace("other/", "", 1),
+            "messages": payload_messages,
+            "temperature": float(params.get("temperature") or 0.2),
+            "max_tokens": max(200, min(int(params.get("max_output_tokens") or 900), 1400)),
+        },
+        timeout=MODEL_COUNCIL_PROVIDER_TIMEOUT_SECONDS,
+    )
+    if response.status_code >= 400:
+        raise RuntimeError(f"Custom provider request failed with HTTP {response.status_code}.")
+    body = response.json() if response.text else {}
+    choices = body.get("choices") if isinstance(body.get("choices"), list) else []
+    content = ""
+    if choices:
+        message = choices[0].get("message") if isinstance(choices[0], dict) else {}
+        content = str((message or {}).get("content") or "").strip()
+    usage_raw = body.get("usage") if isinstance(body.get("usage"), dict) else {}
+    usage = {
+        "prompt_tokens": int(usage_raw.get("prompt_tokens") or 0),
+        "completion_tokens": int(usage_raw.get("completion_tokens") or 0),
+        "total_tokens": int(usage_raw.get("total_tokens") or 0),
+        "cached_tokens": 0,
+    }
+    return {
+        "text": content,
+        "usage": usage,
+        "citations": [],
+        "provider": "other",
+        "model": model_id,
+    }
+
+
+def _invoke_model_council_provider(
+    *,
+    provider_id: str,
+    model_id: str,
+    messages: list[dict[str, str]],
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    provider = str(provider_id or "").strip().lower()
+    model = _normalize_ai_model_id(model_id or "")
+    if not model:
+        raise RuntimeError("Model Council model is required.")
+    if provider == "openai":
+        return _invoke_openai_model_council(model_id=model, messages=messages, params=params)
+    if provider == "gemini":
+        return _invoke_gemini_model_council(model_id=model, messages=messages, params=params)
+    if provider == "mistral":
+        return _invoke_mistral_model_council(model_id=model, messages=messages, params=params)
+    if provider == "perplexity":
+        return _invoke_perplexity_model_council(model_id=model, messages=messages, params=params)
+    if provider == "other":
+        return _invoke_other_model_council(model_id=model, messages=messages, params=params)
+    raise RuntimeError(f"Unsupported provider '{provider}'.")
 
 
 def _massive_capability_label_from_status(status_code: int) -> str:
@@ -5794,10 +7035,17 @@ def exchange_native_id_token(req: https_fn.Request) -> tuple[str, int, dict[str,
     if req.method != "POST":
         return _json_http({"error": "Method not allowed"}, 405, headers)
 
-    payload = req.get_json(silent=True) or {}
-    id_token = str(payload.get("idToken") or "").strip()
+    auth_header = str(req.headers.get("Authorization") or req.headers.get("authorization") or "").strip()
+    id_token = ""
+    if auth_header.lower().startswith("bearer "):
+        id_token = auth_header[7:].strip()
+
     if not id_token:
-        return _json_http({"error": "idToken is required"}, 400, headers)
+        payload = req.get_json(silent=True) or {}
+        id_token = str(payload.get("idToken") or "").strip()
+
+    if not id_token:
+        return _json_http({"error": "Bearer token or idToken is required"}, 400, headers)
 
     try:
         decoded = admin_auth.verify_id_token(id_token, check_revoked=False)
@@ -5810,10 +7058,16 @@ def exchange_native_id_token(req: https_fn.Request) -> tuple[str, int, dict[str,
             if isinstance(custom_token_raw, (bytes, bytearray))
             else str(custom_token_raw)
         )
+        print(f"exchange_native_id_token success uid={uid}")
         return _json_http({"customToken": custom_token}, 200, headers)
     except Exception as exc:
         print(f"exchange_native_id_token verification failed: {exc}")
         return _json_http({"error": "Invalid native ID token"}, 401, headers)
+
+
+@https_fn.on_request()
+def exchange_native_auth(req: https_fn.Request) -> tuple[str, int, dict[str, str]]:
+    return exchange_native_id_token(req)
 
 
 @https_fn.on_request()
@@ -6019,6 +7273,540 @@ def api_openai_models(req: https_fn.Request) -> https_fn.Response:
             "defaultModel": default_model or "gpt-5-mini",
         }
     )
+
+
+def _normalize_request_language(raw_language: Any) -> tuple[str, str]:
+    language = str(raw_language or "en").strip().lower()[:8]
+    if language in {"", "auto"}:
+        language = "en"
+    if not re.match(r"^[a-z]{2}(?:-[a-z]{2})?$", language):
+        language = "en"
+    label = {
+        "en": "English",
+        "es": "Spanish",
+        "fr": "French",
+        "de": "German",
+        "ar": "Arabic",
+        "bn": "Bengali",
+    }.get(language, "English")
+    return language, label
+
+
+def _parse_request_technical_context(raw_value: Any) -> dict[str, Any]:
+    technical_raw = raw_value if isinstance(raw_value, dict) else {}
+    if not technical_raw:
+        return {}
+
+    lookback_days = technical_raw.get("lookbackDays")
+    interval = str(technical_raw.get("interval") or "").strip().lower()
+    if interval not in {"1d", "1h"}:
+        interval = "1d"
+
+    latest_rows = []
+    for row in (technical_raw.get("latest") if isinstance(technical_raw.get("latest"), list) else [])[:24]:
+        if not isinstance(row, dict):
+            continue
+        name = str(row.get("name") or "").strip()[:40]
+        if not name:
+            continue
+        value = _safe_float(row.get("value"))
+        if value is None:
+            continue
+        latest_rows.append({"name": name, "value": round(float(value), 6)})
+
+    trend_rows = []
+    for row in (technical_raw.get("trend") if isinstance(technical_raw.get("trend"), list) else [])[:16]:
+        if not isinstance(row, dict):
+            continue
+        name = str(row.get("name") or "").strip()[:40]
+        if not name:
+            continue
+        trend_rows.append(
+            {
+                "name": name,
+                "direction": str(row.get("direction") or "").strip()[:16],
+                "pctChange": _safe_float(row.get("pctChange")),
+                "delta": _safe_float(row.get("delta")),
+            }
+        )
+
+    heuristics = []
+    for line in (technical_raw.get("heuristics") if isinstance(technical_raw.get("heuristics"), list) else [])[:12]:
+        text = str(line or "").strip()
+        if text:
+            heuristics.append(text[:220])
+
+    lookback_normalized = None
+    try:
+        lookback_candidate = int(float(lookback_days))
+        if lookback_candidate > 0:
+            lookback_normalized = lookback_candidate
+    except Exception:
+        lookback_normalized = None
+
+    return {
+        "lookbackDays": lookback_normalized,
+        "interval": interval,
+        "latest": latest_rows,
+        "trend": trend_rows,
+        "heuristics": heuristics,
+    }
+
+
+def _build_model_council_messages(
+    *,
+    ticker: str,
+    question: str,
+    language_label: str,
+    context_payload: dict[str, Any],
+    raw_messages: Any,
+) -> list[dict[str, str]]:
+    prompt_messages = build_chat_prompt_messages(
+        stable_prefix=_stable_chat_system_prefix(),
+        language_label=language_label,
+        ticker=ticker,
+        question=question,
+        context_payload=context_payload,
+    )
+    system_prompt = str(prompt_messages.get("system_prompt") or "").strip()
+    dynamic_user_prompt = str(prompt_messages.get("dynamic_user_prompt") or "").strip()
+    normalized_history = _normalize_chat_messages(raw_messages, fallback_prompt=question)
+    conversation = [row for row in normalized_history[-8:] if row.get("role") in {"user", "assistant"}]
+    if not conversation:
+        conversation = [{"role": "user", "content": dynamic_user_prompt}]
+    else:
+        # Always anchor the final user turn to the structured context payload.
+        conversation[-1] = {"role": "user", "content": dynamic_user_prompt}
+    out = [{"role": "system", "content": system_prompt}] if system_prompt else []
+    out.extend(conversation)
+    return out
+
+
+@https_fn.on_request()
+def api_model_council_models(req: https_fn.Request) -> https_fn.Response:
+    if req.method == "OPTIONS":
+        return https_fn.Response("", status=204, headers=_http_cors_headers())
+    if req.method != "GET":
+        return _json_http_response({"error": "Method not allowed."}, status=405)
+
+    models = _list_model_council_models_for_app(context=None)
+    providers: list[dict[str, Any]] = []
+    available_by_provider: dict[str, bool] = {}
+    for row in models:
+        provider_id = str(row.get("provider") or "").strip().lower()
+        if provider_id:
+            available_by_provider[provider_id] = True
+    for provider_id, spec in MODEL_COUNCIL_PROVIDER_SPECS.items():
+        providers.append(
+            {
+                "id": provider_id,
+                "displayName": spec.display_name,
+                "supportsTools": bool(spec.supports_tools),
+                "supportsStreaming": bool(spec.supports_streaming),
+                "available": bool(available_by_provider.get(provider_id)),
+            }
+        )
+
+    default_model = ""
+    default_provider = ""
+    preferred = _normalize_ai_model_id(DEFAULT_CHAT_MODEL)
+    if models:
+        selected = next((row for row in models if _normalize_ai_model_id(row.get("id")) == preferred), models[0])
+        default_model = _normalize_ai_model_id(selected.get("id"))
+        default_provider = str(selected.get("provider") or _model_provider_from_id(default_model)).strip().lower()
+
+    return _json_http_response(
+        {
+            "providers": providers,
+            "models": models,
+            "defaultProvider": default_provider,
+            "defaultModel": default_model or "gpt-5-mini",
+        }
+    )
+
+
+@https_fn.on_request()
+def api_ticker_modules(req: https_fn.Request) -> https_fn.Response:
+    if req.method == "OPTIONS":
+        return https_fn.Response("", status=204, headers=_http_cors_headers())
+    if req.method not in {"GET", "POST"}:
+        return _json_http_response({"error": "Method not allowed."}, status=405)
+
+    payload = req.get_json(silent=True) if hasattr(req, "get_json") else None
+    if not isinstance(payload, dict):
+        payload = {}
+
+    ticker = _normalize_symbol_token(payload.get("ticker") or req.args.get("ticker"))
+    if not ticker:
+        return _json_http_response({"error": "Ticker is required."}, status=400)
+    modules_raw = payload.get("modules")
+    if modules_raw is None:
+        modules_raw = req.args.get("modules")
+    selected_modules = _normalize_model_council_modules(modules_raw)
+
+    try:
+        module_data, module_context = _fetch_model_council_ticker_modules(
+            ticker=ticker,
+            selected_modules=selected_modules,
+        )
+    except Exception:
+        return _json_http_response({"error": "Unable to load ticker modules right now."}, status=502)
+
+    return _json_http_response(
+        {
+            "ticker": ticker,
+            "selectedModules": selected_modules,
+            "moduleData": _serialize_for_firestore(module_data),
+            "moduleContext": _serialize_for_firestore(module_context),
+        }
+    )
+
+
+@https_fn.on_request()
+def api_model_council_improve_prompt(req: https_fn.Request) -> https_fn.Response:
+    if req.method == "OPTIONS":
+        return https_fn.Response("", status=204, headers=_http_cors_headers())
+    if req.method != "POST":
+        return _json_http_response({"error": "Method not allowed."}, status=405)
+
+    data = req.get_json(silent=True) if hasattr(req, "get_json") else None
+    if not isinstance(data, dict):
+        return _json_http_response({"error": "Invalid JSON payload."}, status=400)
+
+    ticker = _normalize_symbol_token(data.get("ticker"))
+    question = str(data.get("question") or data.get("prompt") or "").strip()
+    selected_modules = _normalize_model_council_modules(data.get("modules"))
+    if not question:
+        return _json_http_response({"error": "Question is required."}, status=400)
+
+    language, language_label = _normalize_request_language(data.get("language"))
+    improver_model = _normalize_ai_model_id(data.get("model") or MODEL_COUNCIL_PROMPT_IMPROVER_MODEL or "gpt-5-mini")
+    improver_provider = _model_provider_from_id(improver_model)
+    if not _model_council_provider_available(improver_provider):
+        return _json_http_response(
+            {
+                "error": "Prompt improver provider is unavailable.",
+                "model": improver_model,
+                "provider": improver_provider,
+            },
+            status=503,
+        )
+
+    user_prompt = (
+        "Rewrite this user prompt for better clarity and structure while preserving intent.\n"
+        "Return plain text only. No markdown, no preface, no apology.\n"
+        f"Ticker: {ticker or 'N/A'}\n"
+        f"Language: {language_label}\n"
+        f"Selected yfinance modules: {', '.join(selected_modules)}\n"
+        f"Original prompt:\n{question}"
+    )
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You improve financial analysis prompts for an LLM assistant. "
+                "Keep requests specific, testable, and evidence-oriented."
+            ),
+        },
+        {"role": "user", "content": user_prompt},
+    ]
+
+    try:
+        response = _invoke_model_council_provider(
+            provider_id=improver_provider,
+            model_id=improver_model,
+            messages=messages,
+            params={"max_output_tokens": 420, "allow_web_search": False},
+        )
+    except Exception as exc:
+        return _json_http_response(
+            {
+                "error": "Unable to improve prompt right now.",
+                "detail": str(exc)[:220],
+                "improvedPrompt": question,
+                "provider": improver_provider,
+                "model": improver_model,
+            },
+            status=502,
+        )
+
+    improved = str(response.get("text") or "").strip() or question
+    return _json_http_response(
+        {
+            "improvedPrompt": improved,
+            "provider": str(response.get("provider") or improver_provider),
+            "model": str(response.get("model") or improver_model),
+            "language": language,
+        }
+    )
+
+
+@https_fn.on_request()
+def api_model_council_query(req: https_fn.Request) -> https_fn.Response:
+    if req.method == "OPTIONS":
+        return https_fn.Response("", status=204, headers=_http_cors_headers())
+    if req.method != "POST":
+        return _json_http_response({"error": "Method not allowed."}, status=405)
+
+    data = req.get_json(silent=True) if hasattr(req, "get_json") else None
+    if not isinstance(data, dict):
+        return _json_http_response({"error": "Invalid JSON payload."}, status=400)
+
+    identity = _request_identity_from_bearer(req)
+    meta = data.get("meta") if isinstance(data.get("meta"), dict) else {}
+    context = _remote_config_context(None, None, meta if isinstance(meta, dict) else None)
+    ticker = _normalize_symbol_token(data.get("ticker"))
+    messages = data.get("messages") if isinstance(data.get("messages"), list) else []
+    question = str(data.get("question") or data.get("query") or _extract_latest_user_text(messages) or "").strip()
+    if not ticker:
+        return _json_http_response({"error": "Ticker is required."}, status=400)
+    if not question:
+        return _json_http_response({"error": "Question is required."}, status=400)
+
+    language, language_label = _normalize_request_language(data.get("language"))
+    technical_context = _parse_request_technical_context(data.get("technicalContext"))
+    selected_modules = _normalize_model_council_modules(data.get("modules"))
+
+    models = _list_model_council_models_for_app(context=context)
+    if not models:
+        return _json_http_response({"error": "No Model Council providers are currently available."}, status=503)
+
+    selection = _select_model_council_model(
+        models=models,
+        requested_model=str(data.get("model") or ""),
+        requested_provider=str(data.get("provider") or ""),
+    )
+    selected_model = str(selection.get("selected_model") or "").strip()
+    selected_provider = str(selection.get("selected_provider") or "").strip().lower()
+    requested_model = str(selection.get("requested_model") or "").strip()
+    requested_provider = str(selection.get("requested_provider") or "").strip().lower()
+    if requested_model and not bool(selection.get("requested_allowed")):
+        return _json_http_response(
+            {
+                "error": "Requested model is not available for Model Council.",
+                "requestedModel": requested_model,
+                "requestedProvider": requested_provider,
+                "models": models,
+            },
+            status=400,
+        )
+    if requested_provider and requested_provider not in {str(row.get("provider") or "").strip().lower() for row in models}:
+        return _json_http_response(
+            {
+                "error": "Requested provider is unavailable for this app profile.",
+                "requestedProvider": requested_provider,
+                "models": models,
+            },
+            status=400,
+        )
+    if not selected_model or not selected_provider:
+        return _json_http_response({"error": "Unable to resolve Model Council selection."}, status=400)
+
+    started_at = time.time()
+    try:
+        module_data, module_context = _fetch_model_council_ticker_modules(
+            ticker=ticker,
+            selected_modules=selected_modules,
+        )
+    except Exception:
+        return _json_http_response({"error": "Unable to load selected ticker modules right now."}, status=502)
+
+    context_payload = _build_model_council_context_payload(
+        ticker=ticker,
+        module_context=module_context,
+        technical_context=technical_context,
+    )
+    prompt_messages = _build_model_council_messages(
+        ticker=ticker,
+        question=question,
+        language_label=language_label,
+        context_payload=context_payload,
+        raw_messages=messages,
+    )
+
+    try:
+        provider_response = _invoke_model_council_provider(
+            provider_id=selected_provider,
+            model_id=selected_model,
+            messages=prompt_messages,
+            params={"max_output_tokens": int(data.get("maxOutputTokens") or 900), "allow_web_search": True},
+        )
+    except Exception as exc:
+        retry = _next_model_council_fallback_candidate(
+            models=models,
+            failed_provider=selected_provider,
+            failed_model=selected_model,
+        )
+        return _json_http_response(
+            {
+                "error": "Unable to complete Model Council request right now.",
+                "detail": str(exc)[:240],
+                "failedProvider": selected_provider,
+                "failedModel": selected_model,
+                "retryProvider": retry.get("provider") or "",
+                "retryModel": retry.get("model") or "",
+            },
+            status=502,
+        )
+
+    answer_text = str(provider_response.get("text") or "").strip()
+    usage = provider_response.get("usage") if isinstance(provider_response.get("usage"), dict) else {}
+    citations = provider_response.get("citations") if isinstance(provider_response.get("citations"), list) else []
+    if not answer_text:
+        answer_text = "No answer was returned for this request."
+
+    latency_ms = int(max(0.0, (time.time() - started_at) * 1000.0))
+    response_id = ""
+    try:
+        response_id = _persist_model_council_response(
+            uid=str(identity.get("uid") or ""),
+            email=str(identity.get("email") or ""),
+            ticker=ticker,
+            question=question,
+            answer=answer_text,
+            provider=str(provider_response.get("provider") or selected_provider),
+            model=str(provider_response.get("model") or selected_model),
+            usage=usage if isinstance(usage, dict) else {},
+            context_payload=context_payload,
+            module_data=module_data,
+            selected_modules=selected_modules,
+            citations=citations if isinstance(citations, list) else [],
+        )
+    except Exception:
+        response_id = ""
+
+    return _json_http_response(
+        {
+            "ticker": ticker,
+            "question": question,
+            "answer": answer_text,
+            "provider": str(provider_response.get("provider") or selected_provider),
+            "model": str(provider_response.get("model") or selected_model),
+            "usage": _serialize_for_firestore(usage if isinstance(usage, dict) else {}),
+            "citations": _serialize_for_firestore(citations if isinstance(citations, list) else []),
+            "context": _serialize_for_firestore(context_payload),
+            "moduleData": _serialize_for_firestore(module_data),
+            "selectedModules": selected_modules,
+            "responseId": response_id,
+            "latencyMs": latency_ms,
+            "language": language,
+        }
+    )
+
+
+@https_fn.on_request()
+def api_model_council_feedback(req: https_fn.Request) -> https_fn.Response:
+    if req.method == "OPTIONS":
+        return https_fn.Response("", status=204, headers=_http_cors_headers())
+    if req.method != "POST":
+        return _json_http_response({"error": "Method not allowed."}, status=405)
+
+    data = req.get_json(silent=True) if hasattr(req, "get_json") else None
+    if not isinstance(data, dict):
+        return _json_http_response({"error": "Invalid JSON payload."}, status=400)
+
+    response_id = str(data.get("responseId") or "").strip()
+    action = str(data.get("action") or "").strip().lower()
+    if not response_id:
+        return _json_http_response({"error": "responseId is required."}, status=400)
+    if action not in {"like", "dislike", "share"}:
+        return _json_http_response({"error": "action must be like, dislike, or share."}, status=400)
+
+    identity = _request_identity_from_bearer(req)
+    actor_uid = str(identity.get("uid") or "").strip()
+    actor_email = str(identity.get("email") or "").strip()
+    actor_key = actor_uid
+    if not actor_key:
+        ip = _request_client_ip(req)
+        ua = str(req.headers.get("User-Agent") or req.headers.get("user-agent") or "").strip()
+        actor_key = hashlib.sha256(f"{ip}:{ua}".encode("utf-8")).hexdigest()[:20]
+
+    doc_id = hashlib.sha256(f"{response_id}:{actor_key}:{action}".encode("utf-8")).hexdigest()
+    db.collection(MODEL_COUNCIL_FEEDBACK_COLLECTION).document(doc_id).set(
+        {
+            "responseId": response_id,
+            "action": action,
+            "actorUid": actor_uid,
+            "actorEmail": actor_email,
+            "actorKey": actor_key,
+            "createdAt": firestore.SERVER_TIMESTAMP,
+        },
+        merge=True,
+    )
+    return _json_http_response({"ok": True})
+
+
+@https_fn.on_request()
+def api_model_council_share(req: https_fn.Request) -> https_fn.Response:
+    if req.method == "OPTIONS":
+        return https_fn.Response("", status=204, headers=_http_cors_headers())
+
+    route_path = str(getattr(req, "path", "") or getattr(req, "full_path", "") or "").split("?")[0]
+    prefix = "/api/model-council/share"
+    suffix = route_path[len(prefix) :].lstrip("/") if route_path.startswith(prefix) else ""
+
+    if req.method == "GET":
+        share_id = str(req.args.get("shareId") or suffix or "").strip()
+        if not MODEL_COUNCIL_SHARE_ID_RE.match(share_id):
+            return _json_http_response({"error": "Invalid share id."}, status=400)
+        share_snap = db.collection(MODEL_COUNCIL_SHARE_COLLECTION).document(share_id).get()
+        if not share_snap.exists:
+            return _json_http_response({"error": "Share link not found."}, status=404)
+        share_doc = share_snap.to_dict() or {}
+        response_id = str(share_doc.get("responseId") or "").strip()
+        if not response_id:
+            return _json_http_response({"error": "Share payload is invalid."}, status=410)
+        response_snap = db.collection(MODEL_COUNCIL_RESPONSE_COLLECTION).document(response_id).get()
+        if not response_snap.exists:
+            return _json_http_response({"error": "Shared response no longer exists."}, status=410)
+        response_doc = response_snap.to_dict() or {}
+        payload = {
+            "shareId": share_id,
+            "responseId": response_id,
+            "ticker": response_doc.get("ticker") or "",
+            "question": response_doc.get("question") or "",
+            "answer": response_doc.get("answer") or "",
+            "provider": response_doc.get("provider") or "",
+            "model": response_doc.get("model") or "",
+            "selectedModules": response_doc.get("selectedModules") or [],
+            "moduleData": response_doc.get("moduleData") or {},
+            "context": response_doc.get("context") or {},
+            "citations": response_doc.get("citations") or [],
+            "createdAtEpoch": int(response_doc.get("createdAtEpoch") or 0),
+            "readOnly": True,
+        }
+        return _json_http_response(_serialize_for_firestore(payload))
+
+    if req.method != "POST":
+        return _json_http_response({"error": "Method not allowed."}, status=405)
+
+    data = req.get_json(silent=True) if hasattr(req, "get_json") else None
+    if not isinstance(data, dict):
+        return _json_http_response({"error": "Invalid JSON payload."}, status=400)
+    response_id = str(data.get("responseId") or "").strip()
+    if not response_id:
+        return _json_http_response({"error": "responseId is required."}, status=400)
+
+    identity = _request_identity_from_bearer(req)
+    response_snap = db.collection(MODEL_COUNCIL_RESPONSE_COLLECTION).document(response_id).get()
+    if not response_snap.exists:
+        return _json_http_response({"error": "Response not found."}, status=404)
+    response_doc = response_snap.to_dict() or {}
+    owner_uid = str(response_doc.get("userId") or "").strip()
+    if owner_uid and owner_uid != str(identity.get("uid") or "").strip() and not bool(identity.get("isAdmin")):
+        return _json_http_response({"error": "Permission denied."}, status=403)
+
+    share_ref = db.collection(MODEL_COUNCIL_SHARE_COLLECTION).document()
+    share_ref.set(
+        {
+            "responseId": response_id,
+            "createdByUid": str(identity.get("uid") or ""),
+            "createdByEmail": str(identity.get("email") or ""),
+            "createdAt": firestore.SERVER_TIMESTAMP,
+        }
+    )
+    share_url = f"{PUBLIC_ORIGIN}/model-council?publicShare={share_ref.id}"
+    return _json_http_response({"shareId": share_ref.id, "shareUrl": share_url})
 
 
 @https_fn.on_request()
