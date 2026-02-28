@@ -24,10 +24,17 @@ Deployment is only considered complete after both stages succeed.
 
 ## Required environment / config
 
-Set the active GCP project first:
+`deploy.sh` resolves `PROJECT_ID` in this order:
+
+1. `PROJECT_ID` environment variable.
+2. `quantura_site/.firebaserc` default project.
+
+If neither is available, export `PROJECT_ID` before deploy.
+
+Example:
 
 ```bash
-gcloud config set project <PROJECT_ID>
+export PROJECT_ID=<PROJECT_ID>
 ```
 
 Optional overrides:
@@ -35,11 +42,18 @@ Optional overrides:
 ```bash
 export PROJECT_ID=<PROJECT_ID>
 export REGION=us-central1
+export FIRESTORE_TRIGGER_LOCATION=nam5
 export FUNCTIONS_RUNTIME=nodejs24
 export PUBLIC_ORIGIN=https://quantura.studio
 export PLAY_INTEGRITY_ANDROID_PACKAGE=com.quantura.quanturaapp
 export REQUIRE_PLAY_INTEGRITY=false
+export LOCAL_FUNCTIONS_BUILD=false
+export CLOUDSDK_PYTHON=/usr/bin/python3
 ```
+
+By default `LOCAL_FUNCTIONS_BUILD=false` to avoid local Node-version/tooling drift; Cloud Build compiles functions during `gcloud functions deploy`. Set `LOCAL_FUNCTIONS_BUILD=true` only if you want a local pre-deploy compile step.
+
+`deploy.sh` also defaults `CLOUDSDK_PYTHON` to `/usr/bin/python3` when unset, because some Homebrew Python runtimes can stall with this Cloud SDK install.
 
 ## Secrets
 
