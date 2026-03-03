@@ -67,7 +67,7 @@ This README documents architecture, setup, deployment, and operations.
 
 ## Pricing + purchase
 - Monthly pricing plans in `/pricing`
-- Deep Forecast request integrated into pricing page
+- Subscription plan checkout integrated into pricing page
 - `/purchase` redirected to `/pricing`
 
 ## Admin fulfillment

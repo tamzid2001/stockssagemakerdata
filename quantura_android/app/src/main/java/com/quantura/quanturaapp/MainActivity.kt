@@ -65,12 +65,14 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.auth.OAuthProvider
 import com.google.firebase.auth.UserProfileChangeRequest
 import com.google.firebase.messaging.FirebaseMessaging
 import com.quantura.quanturaapp.ads.AdManager
 import com.quantura.quanturaapp.ads.BannerAdView
 import com.quantura.quanturaapp.auth.PlayIntegrityClient
 import com.quantura.quanturaapp.iap.PlayBillingIapService
+import com.quantura.quanturaapp.messaging.InactivityNotificationScheduler
 import com.quantura.quanturaapp.messaging.NativePersonalizedNotificationManager
 import com.quantura.quanturaapp.messaging.QuanturaFcmTokenHolder
 import com.quantura.quanturaapp.messaging.QuanturaMessagingService
@@ -101,6 +103,7 @@ class MainActivity : ComponentActivity() {
     private val playIntegrityClient by lazy { PlayIntegrityClient(applicationContext) }
 
     private var webViewRef: WebView? = null
+    private var bannerAdViewRef: BannerAdView? = null
     private var googleSignInClient: GoogleSignInClient? = null
     private var authStateListener: FirebaseAuth.AuthStateListener? = null
 
@@ -108,6 +111,8 @@ class MainActivity : ComponentActivity() {
     private var bridgeSyncRequired = false
     private var gateDismissedForSession = false
     private var anonymousBootstrapInFlight = false
+    private var lastNotificationSessionPingAtMs = 0L
+    private var lastRegisteredNotificationTokenKey: String = ""
 
     private var authGateVisible by mutableStateOf(true)
     private var authBusy by mutableStateOf(false)
@@ -131,12 +136,14 @@ class MainActivity : ComponentActivity() {
         requestNotificationPermission()
         fetchFcmToken()
         NativePersonalizedNotificationManager.start(this)
+        InactivityNotificationScheduler.reschedule(this)
         registerAuthStateListener()
 
         lifecycleScope.launch {
             appContainer.remoteConfigManager.fetchAndActivate()
             appContainer.adManager.primeAds(this@MainActivity)
             appContainer.appOpenAdManager.loadAdIfNeeded()
+            refreshBannerAdVisibility()
         }
 
         val deepLinkUrl = intent?.getStringExtra(QuanturaMessagingService.EXTRA_DEEP_LINK_URL)
@@ -165,8 +172,13 @@ class MainActivity : ComponentActivity() {
                                 modifier = Modifier.fillMaxWidth().wrapContentHeight(),
                                 factory = { ctx ->
                                     BannerAdView(ctx).apply {
+                                        bannerAdViewRef = this
                                         loadAd(appContainer.remoteConfigManager)
                                     }
+                                },
+                                update = { banner ->
+                                    bannerAdViewRef = banner
+                                    banner.refreshAdVisibility()
                                 },
                             )
                         }
@@ -176,6 +188,10 @@ class MainActivity : ComponentActivity() {
                                 isBusy = authBusy,
                                 errorText = authErrorText,
                                 onGoogle = { startGoogleSignInFlow(trigger = "auth_gate") },
+                                onGithub = { startOAuthProviderSignIn(providerId = "github.com", trigger = "auth_gate_github") },
+                                onTwitter = { startOAuthProviderSignIn(providerId = "twitter.com", trigger = "auth_gate_twitter") },
+                                onYahoo = { startOAuthProviderSignIn(providerId = "yahoo.com", trigger = "auth_gate_yahoo") },
+                                onMicrosoft = { startOAuthProviderSignIn(providerId = "microsoft.com", trigger = "auth_gate_microsoft") },
                                 onEmail = {
                                     authErrorText = ""
                                     openEmailDialog(EmailDialogMode.SIGN_IN)
@@ -238,6 +254,7 @@ class MainActivity : ComponentActivity() {
                 "[Auth][Android] state uid=${user?.uid.orEmpty()} anonymous=${user?.isAnonymous ?: false}"
             )
             emitAuthStateToWeb(user, idTokenFresh = false)
+            syncNotificationSession(forcePing = true)
 
             if (user == null) {
                 updateAuthGateVisibility(!gateDismissedForSession)
@@ -318,6 +335,32 @@ class MainActivity : ComponentActivity() {
         }
         beginInteractiveSignIn("google", trigger)
         googleSignInLauncher.launch(client.signInIntent)
+    }
+
+    private fun startOAuthProviderSignIn(providerId: String, trigger: String) {
+        beginInteractiveSignIn(providerId, trigger)
+        val providerBuilder = OAuthProvider.newBuilder(providerId).apply {
+            when (providerId.lowercase()) {
+                "github.com" -> setScopes(listOf("read:user", "user:email"))
+                "twitter.com" -> setScopes(listOf("tweet.read", "users.read"))
+                "yahoo.com" -> setScopes(listOf("profile", "email"))
+                "microsoft.com" -> setScopes(listOf("user.read"))
+            }
+        }
+        val provider = providerBuilder.build()
+        val currentUser = firebaseAuth.currentUser
+
+        val task = if (currentUser?.isAnonymous == true) {
+            currentUser.startActivityForLinkWithProvider(this, provider)
+        } else {
+            firebaseAuth.startActivityForSignInWithProvider(this, provider)
+        }
+
+        task.addOnSuccessListener { authResult ->
+            completeInteractiveSignIn(providerId, authResult.user)
+        }.addOnFailureListener { error ->
+            handleSignInFailure(providerId, error, "")
+        }
     }
 
     private fun resolveGoogleSignInClient(): GoogleSignInClient? {
@@ -783,6 +826,14 @@ class MainActivity : ComponentActivity() {
                 val provider = payload.optString("provider").trim().lowercase()
                 if (provider == "google" && !authBusy) {
                     startGoogleSignInFlow(trigger = "web_request")
+                } else if ((provider == "github" || provider == "github.com") && !authBusy) {
+                    startOAuthProviderSignIn(providerId = "github.com", trigger = "web_request_github")
+                } else if ((provider == "twitter" || provider == "x" || provider == "twitter.com") && !authBusy) {
+                    startOAuthProviderSignIn(providerId = "twitter.com", trigger = "web_request_twitter")
+                } else if ((provider == "yahoo" || provider == "yahoo.com") && !authBusy) {
+                    startOAuthProviderSignIn(providerId = "yahoo.com", trigger = "web_request_yahoo")
+                } else if ((provider == "microsoft" || provider == "microsoft.com") && !authBusy) {
+                    startOAuthProviderSignIn(providerId = "microsoft.com", trigger = "web_request_microsoft")
                 } else if (provider == "email") {
                     openEmailDialog(EmailDialogMode.SIGN_IN)
                 }
@@ -819,7 +870,10 @@ class MainActivity : ComponentActivity() {
             "np_${System.currentTimeMillis()}"
         }
         val orderId = payload.optString("orderId").trim()
-        val productId = payload.optString("productId").trim().ifBlank { "quantura_pro_monthly" }
+        val requestedProductId = payload.optString("productId").trim()
+        val productId = PlayBillingIapService.normalizeRequestedProductId(
+            requestedProductId.ifBlank { PlayBillingIapService.DEFAULT_PRODUCT_ID }
+        )
 
         lifecycleScope.launch {
             try {
@@ -886,30 +940,46 @@ class MainActivity : ComponentActivity() {
             "nsm_${System.currentTimeMillis()}"
         }
         val orderId = payload.optString("orderId").trim()
-        val playUri = Uri.parse("https://play.google.com/store/account/subscriptions")
-
-        val opened = runCatching {
-            startActivity(
-                Intent(Intent.ACTION_VIEW, playUri).apply {
-                    setPackage("com.android.vending")
-                }
-            )
-            true
-        }.getOrElse {
-            runCatching {
-                startActivity(Intent(Intent.ACTION_VIEW, playUri))
-                true
+        lifecycleScope.launch {
+            val restored = runCatching {
+                playBillingIapService.restorePurchases()
             }.getOrDefault(false)
-        }
+            if (restored) {
+                emitNativePurchaseResult(
+                    requestId = requestId,
+                    orderId = orderId,
+                    productId = "",
+                    ok = true,
+                    status = "restored",
+                    message = "Purchases restored from Google Play."
+                )
+                return@launch
+            }
 
-        emitNativePurchaseResult(
-            requestId = requestId,
-            orderId = orderId,
-            productId = "",
-            ok = opened,
-            status = if (opened) "subscriptions_opened" else "failed",
-            message = if (opened) "" else "Unable to open Google Play subscriptions."
-        )
+            val playUri = Uri.parse("https://play.google.com/store/account/subscriptions")
+            val opened = runCatching {
+                startActivity(
+                    Intent(Intent.ACTION_VIEW, playUri).apply {
+                        setPackage("com.android.vending")
+                    }
+                )
+                true
+            }.getOrElse {
+                runCatching {
+                    startActivity(Intent(Intent.ACTION_VIEW, playUri))
+                    true
+                }.getOrDefault(false)
+            }
+
+            emitNativePurchaseResult(
+                requestId = requestId,
+                orderId = orderId,
+                productId = "",
+                ok = opened,
+                status = if (opened) "subscriptions_opened" else "failed",
+                message = if (opened) "" else "Unable to open Google Play subscriptions."
+            )
+        }
     }
 
     private fun emitNativePurchaseResult(
@@ -965,9 +1035,88 @@ class MainActivity : ComponentActivity() {
             task.result?.let { token ->
                 QuanturaFcmTokenHolder.setToken(this, token)
                 emitNativeFcmToken(token)
+                syncNotificationSession(forcePing = false)
             }
         })
     }
+
+    private fun refreshBannerAdVisibility() {
+        runOnUiThread {
+            bannerAdViewRef?.refreshAdVisibility()
+        }
+    }
+
+    private fun syncNotificationSession(forcePing: Boolean) {
+        val user = firebaseAuth.currentUser ?: return
+        val now = System.currentTimeMillis()
+        if (!forcePing && now - lastNotificationSessionPingAtMs < 45_000L) {
+            return
+        }
+
+        lifecycleScope.launch {
+            try {
+                val idToken = user.awaitIdToken(false)
+                postApiJson(
+                    path = "/api/notifications/session/ping",
+                    idToken = idToken,
+                    payload = JSONObject().apply {
+                        put("isAnonymous", user.isAnonymous)
+                    }
+                )
+                lastNotificationSessionPingAtMs = System.currentTimeMillis()
+
+                val fcmToken = QuanturaFcmTokenHolder.getToken(this@MainActivity)?.trim().orEmpty()
+                if (fcmToken.isNotBlank()) {
+                    val tokenKey = "${user.uid}|$fcmToken"
+                    if (forcePing || tokenKey != lastRegisteredNotificationTokenKey) {
+                        postApiJson(
+                            path = "/api/notifications/register-token",
+                            idToken = idToken,
+                            payload = JSONObject().apply {
+                                put("token", fcmToken)
+                                put("platform", "android")
+                            }
+                        )
+                        lastRegisteredNotificationTokenKey = tokenKey
+                    }
+                }
+            } catch (error: Exception) {
+                Log.w("MainActivity", "[Notify][Android] Session/token sync skipped: ${error.message}")
+            }
+        }
+    }
+
+    private suspend fun postApiJson(path: String, idToken: String, payload: JSONObject): JSONObject =
+        withContext(Dispatchers.IO) {
+            val origin = resolveTrustedOrigin()
+            val endpoint = if (path.startsWith("/")) "$origin$path" else "$origin/$path"
+            val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = 30_000
+                readTimeout = 30_000
+                doOutput = true
+                setRequestProperty("Content-Type", "application/json")
+                setRequestProperty("Authorization", "Bearer $idToken")
+            }
+            try {
+                connection.outputStream.use { output ->
+                    output.write(payload.toString().toByteArray(Charsets.UTF_8))
+                }
+                val status = connection.responseCode
+                val stream = if (status in 200..299) connection.inputStream else connection.errorStream
+                val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+                val parsed = if (body.isNotBlank()) runCatching { JSONObject(body) }.getOrNull() else null
+                if (status !in 200..299) {
+                    val detail =
+                        parsed?.optString("error")?.ifBlank { parsed.optString("message") }?.ifBlank { "Request failed" }
+                            ?: "Request failed"
+                    throw IllegalStateException("$detail ($status)")
+                }
+                parsed ?: JSONObject()
+            } finally {
+                connection.disconnect()
+            }
+        }
 
     override fun onPause() {
         webViewRef?.onPause()
@@ -981,6 +1130,9 @@ class MainActivity : ComponentActivity() {
         webViewRef?.onResume()
         webViewRef?.resumeTimers()
         appContainer.adManager.onResume(this)
+        InactivityNotificationScheduler.reschedule(this)
+        syncNotificationSession(forcePing = true)
+        refreshBannerAdVisibility()
     }
 
     override fun onDestroy() {
@@ -1121,6 +1273,10 @@ private fun NativeAuthGate(
     isBusy: Boolean,
     errorText: String,
     onGoogle: () -> Unit,
+    onGithub: () -> Unit,
+    onTwitter: () -> Unit,
+    onYahoo: () -> Unit,
+    onMicrosoft: () -> Unit,
     onEmail: () -> Unit,
     onNotNow: () -> Unit,
 ) {
@@ -1150,7 +1306,7 @@ private fun NativeAuthGate(
                 fontWeight = FontWeight.Bold,
             )
             Text(
-                text = "Sync forecasts, save screeners, and unlock personalized alerts.",
+                text = "Sync forecasts and unlock personalized alerts.",
                 color = Color.White.copy(alpha = 0.86f),
                 textAlign = TextAlign.Center,
                 style = MaterialTheme.typography.bodyMedium,
@@ -1170,6 +1326,48 @@ private fun NativeAuthGate(
                 ),
             ) {
                 Text("Continue with Google", fontWeight = FontWeight.SemiBold)
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(
+                    onClick = onGithub,
+                    enabled = !isBusy,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                ) {
+                    Text("GitHub", fontWeight = FontWeight.SemiBold)
+                }
+                OutlinedButton(
+                    onClick = onTwitter,
+                    enabled = !isBusy,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                ) {
+                    Text("Twitter/X", fontWeight = FontWeight.SemiBold)
+                }
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(
+                    onClick = onYahoo,
+                    enabled = !isBusy,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                ) {
+                    Text("Yahoo", fontWeight = FontWeight.SemiBold)
+                }
+                OutlinedButton(
+                    onClick = onMicrosoft,
+                    enabled = !isBusy,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                ) {
+                    Text("Microsoft", fontWeight = FontWeight.SemiBold)
+                }
             }
 
             OutlinedButton(

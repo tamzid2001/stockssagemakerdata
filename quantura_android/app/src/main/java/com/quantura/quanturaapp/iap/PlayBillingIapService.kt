@@ -31,7 +31,29 @@ class PlayBillingIapService(
 
     companion object {
         private const val ENTITLEMENT_QUANTURA_PRO = "quantura_pro"
-        private val PRODUCT_IDS = listOf("quantura_pro_monthly")
+        const val DEFAULT_PRODUCT_ID = "quanturapro"
+        private val PRODUCT_IDS = listOf(
+            "goplan",
+            "premium",
+            "quanturapro",
+            "quanturabusiness",
+            "goplanyearly",
+            "annualplusplan",
+            "annualbusinessplan",
+        )
+        private val IOS_TO_ANDROID_ALIASES = mapOf(
+            "pro" to "quanturapro",
+            "businessplan" to "quanturabusiness",
+            "annualgoplan" to "goplanyearly",
+        )
+
+        fun normalizeRequestedProductId(rawProductId: String): String {
+            val trimmed = rawProductId.trim()
+            if (trimmed.isEmpty()) return DEFAULT_PRODUCT_ID
+            if (PRODUCT_IDS.contains(trimmed)) return trimmed
+            val alias = IOS_TO_ANDROID_ALIASES[trimmed.lowercase()]
+            return alias ?: DEFAULT_PRODUCT_ID
+        }
     }
 
     @Volatile
@@ -93,8 +115,9 @@ class PlayBillingIapService(
 
     override suspend fun purchase(activity: Activity, productId: String): IapService.PurchaseResult =
         withContext(Dispatchers.Main) {
-            val details = queryProductDetails(listOf(productId)).firstOrNull()
-                ?: return@withContext IapService.PurchaseResult.Error("Product $productId not found.")
+            val normalizedProductId = normalizeRequestedProductId(productId)
+            val details = queryProductDetails(listOf(normalizedProductId)).firstOrNull()
+                ?: return@withContext IapService.PurchaseResult.Error("Product $normalizedProductId not found.")
 
             val offerToken = details.subscriptionOfferDetails?.firstOrNull()?.offerToken
             val productDetailsParams = BillingFlowParams.ProductDetailsParams.newBuilder()
@@ -112,8 +135,8 @@ class PlayBillingIapService(
                 ?: return@withContext IapService.PurchaseResult.Error("Billing client is not initialized.")
 
             when (result.responseCode) {
-                BillingClient.BillingResponseCode.OK -> IapService.PurchaseResult.Success(productId)
-                BillingClient.BillingResponseCode.USER_CANCELED -> IapService.PurchaseResult.Cancelled(productId)
+                BillingClient.BillingResponseCode.OK -> IapService.PurchaseResult.Success(normalizedProductId)
+                BillingClient.BillingResponseCode.USER_CANCELED -> IapService.PurchaseResult.Cancelled(normalizedProductId)
                 else -> IapService.PurchaseResult.Error(result.debugMessage.ifBlank { "Unable to start purchase flow." })
             }
         }
