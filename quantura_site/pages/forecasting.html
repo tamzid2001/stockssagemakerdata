@@ -33,7 +33,7 @@
   
     <script>
       window.__QUANTURA_RC_TEMPLATE_ID__ = "firebase-server";
-      window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ = {"status":200,"eTag":"etag-quantura-e2e3d-firebase-server-fetch--1213937490","config":{"welcome_message":"","watchlist_enabled":"true","forecast_prophet_enabled":"true","forecast_timemixer_enabled":"true","push_notifications_enabled":"true","webpush_vapid_key":"","stripe_checkout_enabled":"true","stripe_public_key":"","holiday_promo":"false","backtesting_enabled":"true","backtesting_free_daily_limit":"1","backtesting_pro_daily_limit":"25"}};
+      window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ = {"status":200,"eTag":"etag-quantura-e2e3d-firebase-server-fetch--1213937490","config":{"welcome_message":"","watchlist_enabled":"true","forecast_prophet_enabled":"true","forecast_timemixer_enabled":"true","push_notifications_enabled":"true","webpush_vapid_key":"","stripe_checkout_enabled":"true","stripe_public_key":"","holiday_promo":"false","backtesting_enabled":"false","backtesting_free_daily_limit":"0","backtesting_pro_daily_limit":"0"}};
     </script>
   
 </head>
@@ -86,10 +86,11 @@
 	            <a class="sidebar-link" href="/indicators" data-panel-target="indicators"><i class="iconoir-sigma-function" aria-hidden="true"></i><span>Indicators</span></a>
               <a class="sidebar-link" href="/trending" data-panel-target="trending"><i class="iconoir-fire-flame" aria-hidden="true"></i><span>Trending</span></a>
 	            <a class="sidebar-link" href="/news" data-panel-target="news"><i class="iconoir-journal-page" aria-hidden="true"></i><span>News and data</span></a>
-              <a class="sidebar-link" href="/events-calendar" data-panel-target="events-calendar"><i class="iconoir-calendar" aria-hidden="true"></i><span>Corporate events</span></a>
+              <a class="sidebar-link" href="/events-calendar" data-panel-target="events-calendar"><i class="iconoir-calendar" aria-hidden="true"></i><span>Earnings calendar</span></a>
               <a class="sidebar-link" href="/market-headlines" data-panel-target="market-headlines"><i class="iconoir-globe" aria-hidden="true"></i><span>Market headlines</span></a>
               <a class="sidebar-link" href="/model-council" data-panel-target="ticker-query"><i class="iconoir-brain" aria-hidden="true"></i><span>Model Council</span></a>
 	            <a class="sidebar-link" href="/options" data-panel-target="options"><i class="iconoir-numbered-list-left" aria-hidden="true"></i><span>Options</span></a>
+              <a class="sidebar-link" href="/tools/fx" data-panel-target="fx"><i class="iconoir-coins-swap" aria-hidden="true"></i><span>Currency conversion</span></a>
 	            <a class="sidebar-link" href="/saved-forecasts" data-panel-target="saved"><i class="iconoir-bookmark" aria-hidden="true"></i><span>Saved forecasts</span></a>
 	            <a class="sidebar-link" href="/studio" data-panel-target="learn"><i class="iconoir-info-circle" aria-hidden="true"></i><span>Learn more</span></a>
 	            <a class="sidebar-link" href="/screener"><i class="iconoir-search" aria-hidden="true"></i><span>Screener</span></a>
@@ -103,8 +104,8 @@
             <div class="container">
 	              <div class="studio-layout" data-panels data-panel-router="terminal">
                 <div class="studio-primary">
-                  <div class="ticker-dock card">
-                    <form id="terminal-form" class="ticker-dock-form">
+                  <div class="terminal-dock card">
+                    <form id="terminal-form" class="terminal-dock-form">
                       <div class="field">
                         <label class="label" for="terminal-ticker">Ticker</label>
                         <input id="terminal-ticker" placeholder="AAPL" required />
@@ -243,7 +244,7 @@
                               Quantura stores each run so you can compare results, review confidence structure, and export files for downstream analysis.
                             </p>
                             <p>
-                              After you generate a run, use <strong>Load saved forecast</strong> (or the <strong>Saved forecasts</strong> panel) to re-plot it later and export CSV for backtests.
+                              After you generate a run, use <strong>Load saved forecast</strong> (or the <strong>Saved forecasts</strong> panel) to re-plot it later and export CSV for analysis.
                             </p>
                           </div>
 	                      </details>
@@ -291,7 +292,7 @@
                   <section class="panel hidden" data-panel="indicators">
                     <div class="panel-header">
                       <h2>Indicators</h2>
-                      <p class="small">Toggle indicator stacks, then run and manage backtests using the same active ticker and timeframe.</p>
+                      <p class="small">Toggle indicator stacks, compare signals across intervals, and keep everything aligned to the active ticker context.</p>
                     </div>
                     <form id="technicals-form" class="card">
                       <div class="form-grid">
@@ -409,7 +410,7 @@
                       <div class="card">
                         <h3>Export guidance</h3>
                         <p class="small">
-                          Use daily exports for longer-horizon backtests and hourly exports to inspect short-term regime shifts.
+                          Use daily exports for longer-horizon strategy analysis and hourly exports to inspect short-term regime shifts.
                           Quantura keeps your terminal context consistent so you can pull data without re-entering symbols.
                         </p>
                         <details class="learn-more">
@@ -432,29 +433,21 @@
 
                   <section class="panel hidden" data-panel="events-calendar">
                     <div class="panel-header">
-                      <h2>Corporate events calendar</h2>
-                      <p class="small">Massive TMX for US symbols and Yahoo Finance fallback for non-US coverage.</p>
+                      <h2>Earnings calendar</h2>
+                      <p class="small">Weekly-cached FMP earnings pulled by backend and rendered from Firestore.</p>
                     </div>
                     <form id="events-calendar-form" class="card">
                       <div class="form-grid">
                         <div class="field">
-                          <label class="label" for="events-calendar-tickers">Tickers</label>
-                          <input id="events-calendar-tickers" name="tickers" placeholder="AAPL, MSFT, NVDA" />
-                          <div class="small muted">Comma-separated symbols. Defaults to active ticker.</div>
+                          <label class="label" for="events-calendar-symbol">Ticker</label>
+                          <input id="events-calendar-symbol" name="symbol" placeholder="AAPL" />
+                          <div class="small muted">Defaults to your active ticker if blank.</div>
                         </div>
                         <div class="field">
-                          <label class="label" for="events-calendar-country">Country</label>
-                          <select id="events-calendar-country" name="country">
-                            <option value="US">United States</option>
-                            <option value="CA">Canada</option>
-                            <option value="GB">United Kingdom</option>
-                            <option value="DE">Germany</option>
-                            <option value="FR">France</option>
-                            <option value="JP">Japan</option>
-                            <option value="CN">China</option>
-                            <option value="IN">India</option>
-                            <option value="AU">Australia</option>
-                            <option value="BR">Brazil</option>
+                          <label class="label" for="events-calendar-window">Window</label>
+                          <select id="events-calendar-window" name="window">
+                            <option value="month">Next month</option>
+                            <option value="week">Next week</option>
                           </select>
                         </div>
                         <div class="field">
@@ -465,17 +458,13 @@
                           <label class="label" for="events-calendar-end">End</label>
                           <input id="events-calendar-end" name="endDate" type="date" />
                         </div>
-                        <div class="field">
-                          <label class="label" for="events-calendar-limit">Rows</label>
-                          <input id="events-calendar-limit" name="limit" type="number" min="10" max="500" value="120" />
-                        </div>
                       </div>
-                      <button class="cta" type="submit" data-analytics="events_calendar_load"><i class="iconoir-calendar" aria-hidden="true"></i><span>Load corporate events</span></button>
+                      <button class="cta" type="submit" data-analytics="events_calendar_load"><i class="iconoir-calendar" aria-hidden="true"></i><span>Load earnings calendar</span></button>
                       <p class="small muted" id="events-calendar-status"></p>
                     </form>
                     <div class="results-panel">
-                      <h3>Upcoming events</h3>
-                      <div id="events-calendar-output" class="panel-output small">Load events to see earnings, dividends, splits, and other corporate actions.</div>
+                      <h3>Upcoming earnings</h3>
+                      <div id="events-calendar-output" class="panel-output small">Load earnings to see EPS and revenue deltas with last-updated metadata.</div>
                     </div>
                   </section>
 
@@ -1185,118 +1174,6 @@
                         </p>
                       </div>
                     </details>
-                  </section>
-
-                  <section class="panel hidden" data-panel="indicators" data-backtesting-module>
-                    <div class="panel-header">
-                      <h2>Backtest</h2>
-                      <p class="small">Backtest strategies on the ticker in your chart. Each run is saved so you can reload it later.</p>
-                    </div>
-
-                    <form id="backtest-form" class="card">
-                      <div class="form-grid">
-                        <div class="field">
-                          <label class="label" for="backtest-strategy">Strategy</label>
-                          <select id="backtest-strategy" name="strategy">
-                            <option value="sma_cross">Moving average crossover</option>
-                            <option value="rsi_reversion">RSI mean reversion</option>
-                          </select>
-                          <div class="small muted">Use the chart for context; the backtest runs against the same ticker/timeframe.</div>
-                        </div>
-                        <div class="field">
-                          <label class="label" for="backtest-lookback">Lookback (days)</label>
-                          <input id="backtest-lookback" name="lookback" type="number" min="30" max="5000" value="730" />
-                          <div class="small muted">Controls how much history is used for the run.</div>
-                        </div>
-                        <div class="field">
-                          <label class="label" for="backtest-cash">Starting cash (USD)</label>
-                          <input id="backtest-cash" name="cash" type="number" min="1000" max="10000000" value="10000" />
-                        </div>
-                        <div class="field">
-                          <label class="label" for="backtest-commission">Commission (decimal)</label>
-                          <input id="backtest-commission" name="commission" type="number" min="0" max="0.05" step="0.0001" value="0.0005" />
-                          <div class="small muted">Example: 0.001 = 0.1% per trade.</div>
-                        </div>
-                      </div>
-
-	                      <div class="form-grid" style="margin-top: 10px;">
-	                        <div class="field" data-backtest-strategy="sma_cross">
-	                          <label class="label" for="backtest-fast">Fast SMA window</label>
-	                          <input id="backtest-fast" name="fast" type="number" min="2" max="200" value="20" />
-	                        </div>
-                        <div class="field" data-backtest-strategy="sma_cross">
-                          <label class="label" for="backtest-slow">Slow SMA window</label>
-                          <input id="backtest-slow" name="slow" type="number" min="5" max="400" value="50" />
-                        </div>
-                        <div class="field hidden" data-backtest-strategy="rsi_reversion">
-                          <label class="label" for="backtest-rsi-period">RSI period</label>
-                          <input id="backtest-rsi-period" name="rsiPeriod" type="number" min="2" max="60" value="14" />
-                        </div>
-                        <div class="field hidden" data-backtest-strategy="rsi_reversion">
-                          <label class="label" for="backtest-rsi-oversold">Oversold threshold</label>
-                          <input id="backtest-rsi-oversold" name="oversold" type="number" min="1" max="49" value="30" />
-                        </div>
-	                        <div class="field hidden" data-backtest-strategy="rsi_reversion">
-	                          <label class="label" for="backtest-rsi-exit">Exit above</label>
-	                          <input id="backtest-rsi-exit" name="exitAbove" type="number" min="50" max="95" value="55" />
-	                        </div>
-	                      </div>
-	                      <div class="form-grid" style="margin-top: 10px;">
-	                        <div class="field">
-	                          <label class="label" for="backtest-agent-lookback">Agent indicator lookback (days)</label>
-	                          <input id="backtest-agent-lookback" name="agentLookback" type="number" min="20" max="730" value="90" />
-	                          <div class="small muted">Used for GPT-5 technical suggestion only.</div>
-	                        </div>
-	                      </div>
-
-	                      <div class="hero-actions">
-	                        <button class="cta" type="submit" data-analytics="backtest_submit">Run backtest</button>
-	                        <button class="cta secondary" id="backtest-agent-button" type="button" data-analytics="backtest_agent_submit"><i class="iconoir-brain" aria-hidden="true"></i><span>OpenAI technical suggestion</span></button>
-	                      </div>
-	                      <p class="small muted" id="backtest-agent-status"></p>
-	                      <details class="learn-more">
-	                        <summary>Learn more</summary>
-	                        <div class="small">
-                          <p>
-                            Backtests are a fast way to validate whether a rule has any edge on the selected ticker. Use them for exploration, not certainty.
-                            Quantura saves every run with parameters and an equity curve image, and also generates runnable Python source code.
-                          </p>
-                          <p>
-                            Usage is tiered by plan. If you hit a daily limit, visit Pricing to upgrade and unlock higher throughput.
-                          </p>
-                        </div>
-                      </details>
-                    </form>
-
-	                    <div class="results-panel">
-	                      <h3>Backtest output</h3>
-	                      <div id="backtest-output" class="panel-output small">Run a backtest to see metrics and the equity curve.</div>
-	                    </div>
-	                    <div class="results-panel">
-	                      <h3>OpenAI technical suggestion</h3>
-	                      <div id="backtest-agent-output" class="panel-output small">Run the OpenAI technical suggestion to get setup ideas from recent indicator behavior.</div>
-	                    </div>
-
-	                    <div class="card">
-                      <h3>Saved backtests</h3>
-                      <div class="form-grid">
-                        <div class="field">
-                          <label class="label" for="backtest-load-select">Recent backtests</label>
-                          <select id="backtest-load-select">
-                            <option value="">Select a backtest</option>
-                          </select>
-                        </div>
-                        <div class="field">
-                          <label class="label" for="backtest-load-id">Backtest ID</label>
-                          <input id="backtest-load-id" placeholder="Paste a backtest ID" />
-                        </div>
-                      </div>
-                      <div class="hero-actions" style="margin-top: 12px;">
-                        <button class="cta secondary" id="backtest-load-button" type="button" data-analytics="backtest_load_saved">Load backtest</button>
-                      </div>
-                      <p class="small muted" id="backtest-load-status"></p>
-                      <div id="saved-backtests-list" class="order-list panel-output"></div>
-                    </div>
                   </section>
 
                   <section class="panel hidden" data-panel="learn">
