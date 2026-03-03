@@ -318,25 +318,75 @@
       weekly_limit: 3,
       daily_limit: 3,
       volatility_alerts: false,
+      workspace_limit: 0,
+      ad_free: false,
     },
-    pro: {
-      allowed_models: ["gpt-5-mini", "gpt-5", "gpt-5.1"],
+    go: {
+      allowed_models: ["gpt-5-nano", "gpt-5-mini"],
+      weekly_limit: 10,
+      daily_limit: 10,
+      volatility_alerts: true,
+      workspace_limit: 1,
+      ad_free: true,
+    },
+    plus: {
+      allowed_models: ["gpt-5-mini", "gpt-5"],
       weekly_limit: 25,
       daily_limit: 25,
       volatility_alerts: true,
+      workspace_limit: 3,
+      ad_free: true,
+    },
+    pro: {
+      allowed_models: ["gpt-5-mini", "gpt-5", "gpt-5.1"],
+      weekly_limit: 60,
+      daily_limit: 60,
+      volatility_alerts: true,
+      workspace_limit: 8,
+      ad_free: true,
+    },
+    business: {
+      allowed_models: ["gpt-5-nano", "gpt-5-mini", "gpt-5", "gpt-5.1", "gpt-5.2", "amazon.nova-lite-v1:0", "amazon.nova-pro-v1:0"],
+      weekly_limit: 150,
+      daily_limit: 150,
+      volatility_alerts: true,
+      workspace_limit: 30,
+      ad_free: true,
     },
     desk: {
       allowed_models: ["gpt-5-nano", "gpt-5-mini", "gpt-5", "gpt-5.1", "gpt-5.2"],
-      weekly_limit: 75,
-      daily_limit: 75,
+      weekly_limit: 150,
+      daily_limit: 150,
       volatility_alerts: true,
+      workspace_limit: 30,
+      ad_free: true,
     },
   };
   const DEFAULT_NATIVE_IAP_PRODUCT_IDS = Object.freeze({
-    pro: "quantura_pro_monthly",
-    desk: "quantura_pro_monthly",
-    forecast: "quantura_pro_monthly",
-    default: "quantura_pro_monthly",
+    ios: Object.freeze({
+      go: "goplan",
+      plus: "premium",
+      pro: "pro",
+      business: "businessplan",
+      desk: "businessplan",
+      forecast: "goplan",
+      annual_go: "annualgoplan",
+      annual_plus: "annualplusplan",
+      annual_business: "annualbusinessplan",
+      default: "pro",
+    }),
+    android: Object.freeze({
+      go: "goplan",
+      plus: "premium",
+      pro: "quanturapro",
+      business: "quanturabusiness",
+      desk: "quanturabusiness",
+      forecast: "goplan",
+      annual_go: "goplanyearly",
+      annual_plus: "annualplusplan",
+      annual_business: "annualbusinessplan",
+      default: "quanturapro",
+    }),
   });
   const MODEL_PROVIDER_LABEL = {
     openai: "OpenAI",
@@ -409,7 +459,7 @@
       sidebar_indicators: "Indicators",
       sidebar_trending: "Trending",
       sidebar_news_data: "News and data",
-      sidebar_corporate_events: "Corporate events",
+      sidebar_corporate_events: "Earnings calendar",
       sidebar_market_headlines: "Market headlines",
       sidebar_ask_gpt5: "Model Council",
       sidebar_options: "Options",
@@ -472,7 +522,7 @@
       sidebar_indicators: "Indicadores",
       sidebar_trending: "Tendencias",
       sidebar_news_data: "Noticias y datos",
-      sidebar_corporate_events: "Eventos corporativos",
+      sidebar_corporate_events: "Calendario de resultados",
       sidebar_market_headlines: "Titulares del mercado",
       sidebar_ask_gpt5: "Model Council",
       sidebar_options: "Opciones",
@@ -535,7 +585,7 @@
       sidebar_indicators: "Indicateurs",
       sidebar_trending: "Tendances",
       sidebar_news_data: "Actualites et donnees",
-      sidebar_corporate_events: "Evenements d'entreprise",
+      sidebar_corporate_events: "Calendrier des resultats",
       sidebar_market_headlines: "Titres du marche",
       sidebar_ask_gpt5: "Model Council",
       sidebar_options: "Options",
@@ -598,7 +648,7 @@
       sidebar_indicators: "Indikatoren",
       sidebar_trending: "Trending",
       sidebar_news_data: "News und Daten",
-      sidebar_corporate_events: "Unternehmensereignisse",
+      sidebar_corporate_events: "Ergebnis-Kalender",
       sidebar_market_headlines: "Markt-Schlagzeilen",
       sidebar_ask_gpt5: "Model Council",
       sidebar_options: "Optionen",
@@ -661,7 +711,7 @@
       sidebar_indicators: "المؤشرات",
       sidebar_trending: "الترند",
       sidebar_news_data: "الاخبار والبيانات",
-      sidebar_corporate_events: "احداث الشركات",
+      sidebar_corporate_events: "تقويم الأرباح",
       sidebar_market_headlines: "عناوين السوق",
       sidebar_ask_gpt5: "Model Council",
       sidebar_options: "الخيارات",
@@ -724,7 +774,7 @@
       sidebar_indicators: "ইন্ডিকেটর",
       sidebar_trending: "ট্রেন্ডিং",
       sidebar_news_data: "খবর ও ডেটা",
-      sidebar_corporate_events: "করপোরেট ইভেন্ট",
+      sidebar_corporate_events: "আর্নিংস ক্যালেন্ডার",
       sidebar_market_headlines: "মার্কেট হেডলাইন",
       sidebar_ask_gpt5: "Model Council",
       sidebar_options: "অপশন",
@@ -1275,6 +1325,8 @@
     facebookSignin: document.getElementById("facebook-signin"),
     githubSignin: document.getElementById("github-signin"),
     twitterSignin: document.getElementById("twitter-signin"),
+    microsoftSignin: document.getElementById("microsoft-signin"),
+    yahooSignin: document.getElementById("yahoo-signin"),
     anonymousSignin: document.getElementById("anonymous-signin"),
     languageSelect: document.getElementById("language-select"),
     userEmail: document.getElementById("user-email"),
@@ -1338,11 +1390,10 @@
     newsOutput: document.getElementById("news-output"),
     xTrendingOutput: document.getElementById("x-trending-output"),
     eventsCalendarForm: document.getElementById("events-calendar-form"),
-    eventsCalendarTickers: document.getElementById("events-calendar-tickers"),
-    eventsCalendarCountry: document.getElementById("events-calendar-country"),
+    eventsCalendarSymbol: document.getElementById("events-calendar-symbol"),
+    eventsCalendarWindow: document.getElementById("events-calendar-window"),
     eventsCalendarStart: document.getElementById("events-calendar-start"),
     eventsCalendarEnd: document.getElementById("events-calendar-end"),
-    eventsCalendarLimit: document.getElementById("events-calendar-limit"),
     eventsCalendarStatus: document.getElementById("events-calendar-status"),
     eventsCalendarOutput: document.getElementById("events-calendar-output"),
     marketHeadlinesForm: document.getElementById("market-headlines-form"),
@@ -1446,6 +1497,10 @@
     notificationsSendTest: document.getElementById("notifications-send-test"),
     notificationsStatus: document.getElementById("notifications-status"),
     notificationsToken: document.getElementById("notifications-token"),
+    notificationsItems: document.getElementById("notifications-items"),
+    notificationsUnreadCount: document.getElementById("notifications-unread-count"),
+    notificationsMarkAll: document.getElementById("notifications-mark-all"),
+    notificationFilterButtons: Array.from(document.querySelectorAll("[data-notification-filter]")),
     notificationsLog: document.getElementById("notifications-log"),
     notificationsClear: document.getElementById("notifications-clear"),
     notificationsPrivacyContainer: document.getElementById("notifications-privacy-controls"),
@@ -1628,6 +1683,8 @@
       unsubscribeAIAgents: null,
       unsubscribeAIFollows: null,
       unsubscribeAILikes: null,
+      collaboratorCount: 0,
+      pendingCollabInviteCount: 0,
 	    screenerUrlRunLoaded: false,
       uploadUrlLoaded: false,
       backtestUrlLoaded: false,
@@ -1716,6 +1773,13 @@
         return [];
       }
     })(),
+    notificationFeed: {
+      items: [],
+      unreadCount: 0,
+      filter: "all",
+      unreadOnly: false,
+      loading: false,
+    },
     sharedWorkspaces: [],
     unsubscribeSharedWorkspaces: null,
   };
@@ -1765,6 +1829,34 @@
     if (isAdminUser()) return true;
     showToast(String(message || "Admin access required."), "warn");
     return false;
+  };
+
+  const shouldSkipNativeRewardAds = () => {
+    if (!isNativeApp()) return true;
+    if (!state.authResolved) return true;
+    if (!hasFullAccount()) return true;
+    return false;
+  };
+
+  const maybeShowNativeRewardGate = async ({
+    reason = "action",
+    title = "Watch a short ad first?",
+    message = "This action can unlock additional output. Continue to show a rewarded ad.",
+  } = {}) => {
+    if (shouldSkipNativeRewardAds()) return true;
+    const confirmed = await openConfirmModal({
+      title,
+      message,
+      confirmLabel: "Watch ad",
+      cancelLabel: "Skip",
+    });
+    if (!confirmed) return false;
+    sendNativeBridgeMessage({
+      action: "showRewardedInterstitial",
+      reason,
+      ts: Date.now(),
+    });
+    return true;
   };
 
 	  const showToast = (message, variant = "default") => {
@@ -1828,7 +1920,6 @@
 	          learn: "/studio",
             },
             pathAliases: {
-              "/backtesting": "indicators",
               "/ticker-intelligence": "ticker",
               "/ticker-query": "ticker-query",
               "/model-council": "ticker-query",
@@ -1890,7 +1981,6 @@
 		      try {
 		        const params = new URLSearchParams(window.location.search);
 		        const panel = String(params.get("panel") || "").trim();
-		        if (panel === "backtesting") return "indicators";
 		        if (panel === "ticker-intelligence") return "ticker";
 		        if (panel) return panel;
 		      } catch (error) {
@@ -1903,10 +1993,17 @@
 		    };
 
 		    buttons.forEach((btn) => {
-		      btn.addEventListener("click", (event) => {
+		      btn.addEventListener("click", async (event) => {
 		        event.preventDefault?.();
             triggerSubtleHaptic();
-		        setActive(btn.dataset.panelTarget);
+            const targetPanel = String(btn.dataset.panelTarget || "").trim();
+            const proceed = await maybeShowNativeRewardGate({
+              reason: "nav",
+              title: "Watch an ad before navigating?",
+              message: "Navigation inside the native app can trigger a rewarded interstitial.",
+            });
+            if (!proceed) return;
+		        setActive(targetPanel);
 		      });
 		    });
 
@@ -2086,6 +2183,45 @@
     window.addEventListener("resize", syncVisibility);
   };
 
+  const bindNativeRewardedNavigationAds = () => {
+    if (!isNativeApp()) return;
+    if (document.body.dataset.nativeNavRewardBound === "1") return;
+    document.body.dataset.nativeNavRewardBound = "1";
+
+    document.addEventListener("click", async (event) => {
+      const link = event.target.closest("a[href]");
+      if (!link) return;
+      if (link.dataset.panelTarget) return;
+      if (link.dataset.skipRewardGate === "1") return;
+      if (event.defaultPrevented) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const target = String(link.getAttribute("target") || "").trim().toLowerCase();
+      if (target === "_blank") return;
+
+      const href = String(link.getAttribute("href") || "").trim();
+      if (!href || href.startsWith("#") || href.startsWith("mailto:") || href.startsWith("tel:")) return;
+      if (/^https?:\/\//i.test(href)) return;
+      if (!href.startsWith("/")) return;
+
+      const proceed = await maybeShowNativeRewardGate({
+        reason: "nav",
+        title: "Watch an ad before opening this section?",
+        message: "Navigation inside the native app can trigger a rewarded interstitial.",
+      });
+      if (!proceed) {
+        event.preventDefault();
+        return;
+      }
+
+      sendNativeBridgeMessage({
+        action: "showRewardedInterstitial",
+        reason: "nav",
+        href,
+        ts: Date.now(),
+      });
+    });
+  };
+
   const bindMobileSidebarDrawer = () => {
     const sidebar = document.querySelector(".app-sidebar");
     const sidebarNav = sidebar?.querySelector(".sidebar-nav");
@@ -2188,7 +2324,7 @@
     const dockTop = Math.round(headerHeight + gutter);
     document.documentElement.style.setProperty("--dock-top", `${dockTop}px`);
 
-    const dock = document.querySelector(".ticker-dock");
+    const dock = document.querySelector(".terminal-dock, .ticker-dock");
     const dockHeight = dock ? dock.getBoundingClientRect().height : 0;
     if (dockHeight) {
       const chartTop = Math.round(dockTop + dockHeight + gutter);
@@ -2402,9 +2538,9 @@
               native_iap_product_ids: JSON.stringify(DEFAULT_NATIVE_IAP_PRODUCT_IDS),
               ads_use_real_ios: true,
               ads_use_real_android: true,
-              backtesting_enabled: true,
-              backtesting_free_daily_limit: "1",
-              backtesting_pro_daily_limit: "25",
+              backtesting_enabled: false,
+              backtesting_free_daily_limit: "0",
+              backtesting_pro_daily_limit: "0",
 	          };
 	      return rc;
 	    } catch (error) {
@@ -2499,9 +2635,9 @@
             native_iap_product_ids: JSON.stringify(DEFAULT_NATIVE_IAP_PRODUCT_IDS),
             ads_use_real_ios: true,
             ads_use_real_android: true,
-            backtesting_enabled: true,
-            backtesting_free_daily_limit: "1",
-            backtesting_pro_daily_limit: "25",
+            backtesting_enabled: false,
+            backtesting_free_daily_limit: "0",
+            backtesting_pro_daily_limit: "0",
           };
 
           const wrap = {
@@ -2602,9 +2738,9 @@
           nativeIapProductIds: getJson("native_iap_product_ids", DEFAULT_NATIVE_IAP_PRODUCT_IDS),
           adsUseRealIOS: getBool("ads_use_real_ios", true),
           adsUseRealAndroid: getBool("ads_use_real_android", true),
-          backtestingEnabled: getBool("backtesting_enabled", true),
-          backtestingFreeDailyLimit: getInt("backtesting_free_daily_limit", 1),
-          backtestingProDailyLimit: getInt("backtesting_pro_daily_limit", 25),
+          backtestingEnabled: getBool("backtesting_enabled", false),
+          backtestingFreeDailyLimit: getInt("backtesting_free_daily_limit", 0),
+          backtestingProDailyLimit: getInt("backtesting_pro_daily_limit", 0),
 		    };
 		  };
 
@@ -3592,8 +3728,8 @@
         ui.billingPortalLink,
         accountAuthed
           ? nativeBilling
-            ? "Manage subscriptions"
-            : (pack.open_billing_portal || fallback.open_billing_portal || "Open Stripe billing portal")
+            ? nativeBillingPortalLabel()
+            : (pack.open_billing_portal || fallback.open_billing_portal || "Open billing portal")
           : (pack.signin_manage_billing || fallback.signin_manage_billing || "Sign in to manage billing")
       );
     }
@@ -3633,7 +3769,6 @@
   const setCountryControls = (countryCode) => {
     const code = normalizeCountryCode(countryCode);
     state.preferredCountry = code;
-    if (ui.eventsCalendarCountry && ui.eventsCalendarCountry.value !== code) ui.eventsCalendarCountry.value = code;
     if (ui.marketHeadlinesCountry && ui.marketHeadlinesCountry.value !== code) ui.marketHeadlinesCountry.value = code;
   };
 
@@ -4546,6 +4681,95 @@
     });
   };
 
+  const SUBSCRIPTION_TIER_RANK = Object.freeze({
+    free: 0,
+    go: 1,
+    plus: 2,
+    pro: 3,
+    business: 4,
+    desk: 4,
+  });
+
+  const normalizeSubscriptionTier = (value) => {
+    const raw = String(value || "").trim().toLowerCase();
+    if (!raw) return "free";
+    if (raw === "desk") return "business";
+    if (raw in SUBSCRIPTION_TIER_RANK) return raw;
+    return "free";
+  };
+
+  const subscriptionTierFromOrder = (order = {}) => {
+    const parts = [];
+    parts.push(String(order?.subscriptionTier || order?.tier || order?.plan || "").trim().toLowerCase());
+    parts.push(String(order?.productId || order?.sku || "").trim().toLowerCase());
+    parts.push(String(order?.product || "").trim().toLowerCase());
+    const meta = order?.meta && typeof order.meta === "object" ? order.meta : {};
+    parts.push(String(meta?.subscriptionTier || meta?.tier || meta?.plan || "").trim().toLowerCase());
+    parts.push(String(meta?.productId || meta?.sku || "").trim().toLowerCase());
+    const bag = parts.filter(Boolean).join(" ");
+
+    if (
+      bag.includes("annualbusinessplan") ||
+      bag.includes("businessplan") ||
+      bag.includes("quanturabusiness") ||
+      bag.includes("quantura business") ||
+      bag.includes("business")
+    ) {
+      return "business";
+    }
+    if (bag.includes("quanturapro") || bag.includes(" pro")) return "pro";
+    if (bag.includes("annualplusplan") || bag.includes("premium") || bag.includes("plus")) return "plus";
+    if (bag.includes("goplanyearly") || bag.includes("annualgoplan") || bag.includes("goplan") || bag.includes(" go")) return "go";
+    return "free";
+  };
+
+  const deriveSubscriptionTierFromOrders = (orders = []) => {
+    let bestTier = "free";
+    let bestRank = SUBSCRIPTION_TIER_RANK.free;
+    orders.forEach((order) => {
+      const tier = subscriptionTierFromOrder(order);
+      const rank = Number(SUBSCRIPTION_TIER_RANK[tier] ?? 0);
+      if (rank > bestRank) {
+        bestTier = tier;
+        bestRank = rank;
+      }
+    });
+    return normalizeSubscriptionTier(bestTier);
+  };
+
+  const hasAdFreeEntitlement = () =>
+    hasFullAccount() && normalizeSubscriptionTier(state.userSubscriptionTier) !== "free";
+
+  const applyAdFreeExperience = () => {
+    const adFree = hasAdFreeEntitlement();
+    document.body.classList.toggle("ad-free-user", adFree);
+    if (!adFree) return;
+    const selectors = [
+      '[data-ad-slot]',
+      '.ad-slot',
+      '.ad-banner',
+      '#ad-banner',
+      '#ad-container',
+      '.promo-banner-ad',
+    ];
+    selectors.forEach((selector) => {
+      document.querySelectorAll(selector).forEach((node) => {
+        node.classList.add("hidden");
+        node.setAttribute("aria-hidden", "true");
+      });
+    });
+  };
+
+  const getWorkspaceSeatLimitForTier = () => {
+    const tier = normalizeSubscriptionTier(state.userSubscriptionTier);
+    const config =
+      state.remoteFlags?.aiUsageTiers?.[tier] && typeof state.remoteFlags.aiUsageTiers[tier] === "object"
+        ? state.remoteFlags.aiUsageTiers[tier]
+        : AI_USAGE_TIER_DEFAULTS[tier] || AI_USAGE_TIER_DEFAULTS.free;
+    const raw = Number(config.workspace_limit ?? config.workspaceLimit ?? 0);
+    return Number.isFinite(raw) ? Math.max(0, Math.floor(raw)) : 0;
+  };
+
   const setPurchaseState = (user) => {
     const accountAuthed = hasFullAccount(user);
     ui.purchasePanels.forEach((panel) => {
@@ -4557,8 +4781,8 @@
 
       if (accountAuthed) {
         button.disabled = false;
-        button.textContent = button.dataset.labelAuth || "Request Deep Forecast";
-        note.textContent = "Orders appear in your dashboard instantly.";
+        button.textContent = button.dataset.labelAuth || "Choose plan";
+        note.textContent = "Subscriptions activate in your dashboard after payment confirmation.";
       } else {
         button.disabled = true;
         button.textContent = button.dataset.labelGuest || "Sign in to purchase";
@@ -4610,8 +4834,8 @@
       const nativeBilling = isNativeIosStoreKitCheckoutOnly() || isNativeAndroidPlayBillingCheckout();
       ui.billingPortalLink.textContent = accountAuthed
         ? nativeBilling
-          ? "Manage subscriptions"
-          : "Open Stripe billing portal"
+          ? nativeBillingPortalLabel()
+          : "Open billing portal"
         : "Sign in to manage billing";
       ui.billingPortalLink.setAttribute("href", accountAuthed ? "#" : "/account");
       ui.billingPortalLink.setAttribute("target", "_self");
@@ -4646,6 +4870,7 @@
     }
 
     setPurchaseState(user);
+    applyAdFreeExperience();
     setAdminOnlyFeaturePanels(user);
     applyUiTranslations(state.preferredLanguage || "en");
   };
@@ -4953,7 +5178,14 @@
     `;
   };
 
-  const renderResearchMacroSeries = (container, payload, fallbackLabel) => {
+  const MASSIVE_SERIES_FREQUENCY = Object.freeze({
+    economy_treasury_yields: "Updated daily",
+    economy_inflation: "Updated monthly",
+    economy_inflation_expectations: "Updated weekly",
+    economy_labor_market: "Updated weekly",
+  });
+
+  const renderResearchMacroSeries = (container, payload, fallbackLabel, frequencyLabel = "") => {
     if (!container) return;
     const rows = Array.isArray(payload?.rows) ? payload.rows : [];
     if (!rows.length) {
@@ -4974,7 +5206,15 @@
         return `<div class="small"><strong>${date}</strong> · ${escapeHtml(pretty)}</div>`;
       })
       .join("");
-    container.innerHTML = `${sparkline}${listMarkup}`;
+    const generatedAtRaw = String(payload?.generatedAt || payload?.updatedAt || "").trim();
+    const generatedAt = generatedAtRaw && Number.isFinite(Date.parse(generatedAtRaw))
+      ? new Date(generatedAtRaw).toLocaleString()
+      : "";
+    container.innerHTML = `
+      ${frequencyLabel ? `<div class="small muted" style="margin-bottom:6px;">${escapeHtml(frequencyLabel)}${generatedAt ? ` · ${escapeHtml(generatedAt)}` : ""}</div>` : ""}
+      ${sparkline}
+      ${listMarkup}
+    `;
   };
 
   const renderResearchIpoTable = (payload) => {
@@ -5049,7 +5289,12 @@
           }
           try {
             const payload = await fetchMassiveApi(item.path, { limit: 120 });
-            renderResearchMacroSeries(item.node, payload, item.label);
+            renderResearchMacroSeries(
+              item.node,
+              payload,
+              item.label,
+              MASSIVE_SERIES_FREQUENCY[item.key] || "Updated periodically"
+            );
             logEvent("research_macro_series_loaded", {
               series_key: item.key,
               rows: Number(payload?.count || payload?.rows?.length || 0),
@@ -5177,7 +5422,7 @@
     if (!container) return;
     container.innerHTML = "";
     if (!orders.length) {
-      const emptyMessage = String(opts.emptyMessage || "No orders yet. Your Deep Forecast request will appear here.");
+      const emptyMessage = String(opts.emptyMessage || "No subscription orders yet.");
       container.innerHTML = `<p class="small">${escapeHtml(emptyMessage)}</p>`;
       return;
     }
@@ -5217,7 +5462,7 @@
       card.innerHTML = `
         <div class="order-header">
           <div>
-            <div class="order-title">${order.product || "Deep Forecast"}</div>
+            <div class="order-title">${order.product || "Quantura Subscription"}</div>
             <div class="small">Order ID: ${order.id}</div>
           </div>
           ${renderOrderStatusBadge(status)}
@@ -5360,6 +5605,7 @@
 
   const renderCollabInvites = (invites) => {
     if (!ui.collabInvitesList) return;
+    state.pendingCollabInviteCount = Array.isArray(invites) ? invites.length : 0;
     ui.collabInvitesList.innerHTML = "";
     if (!Array.isArray(invites) || invites.length === 0) {
       ui.collabInvitesList.textContent = "No invites right now.";
@@ -5393,6 +5639,7 @@
 
   const renderCollaborators = (collaborators) => {
     if (!ui.collabCollaboratorsList) return;
+    state.collaboratorCount = Array.isArray(collaborators) ? collaborators.length : 0;
     ui.collabCollaboratorsList.innerHTML = "";
     if (!Array.isArray(collaborators) || collaborators.length === 0) {
       ui.collabCollaboratorsList.textContent = "No collaborators yet.";
@@ -5454,19 +5701,12 @@
           const orders = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
           const paidOrders = orders.filter((order) => {
             const status = String(order?.paymentStatus || "").trim().toLowerCase();
-            return status === "paid" || status === "succeeded";
+            return status === "paid" || status === "succeeded" || status === "active" || status === "complete";
           });
-          state.userHasPaidPlan = paidOrders.length > 0;
-          state.userSubscriptionTier = paidOrders.some((order) =>
-            String(order?.product || "").toLowerCase().includes("desk")
-          )
-            ? "desk"
-            : paidOrders.some((order) => String(order?.product || "").toLowerCase().includes("pro"))
-            ? "pro"
-            : state.userHasPaidPlan
-            ? "pro"
-            : "free";
+          state.userSubscriptionTier = deriveSubscriptionTierFromOrders(paidOrders);
+          state.userHasPaidPlan = normalizeSubscriptionTier(state.userSubscriptionTier) !== "free";
           renderOrderList(orders, ui.userOrders);
+          applyAdFreeExperience();
           refreshScreenerModelUi();
           refreshScreenerCreditsUi();
         },
@@ -6483,6 +6723,12 @@
     const stripeConnectAccountId = String(
       existingProfile.stripeConnectAccountId || existing?.stripeConnectAccountId || ""
     ).trim();
+    const autopublishDefaults = {
+      autoPublishForecasts: existing?.autoPublishForecasts !== undefined ? Boolean(existing.autoPublishForecasts) : true,
+      autoPublishIndicators: existing?.autoPublishIndicators !== undefined ? Boolean(existing.autoPublishIndicators) : true,
+      autoPublishModelCouncilConvos:
+        existing?.autoPublishModelCouncilConvos !== undefined ? Boolean(existing.autoPublishModelCouncilConvos) : true,
+    };
 
     await userRef.set(
       {
@@ -6502,6 +6748,7 @@
           publicEmailOptIn,
           stripeConnectAccountId,
         },
+        ...autopublishDefaults,
         metadata: buildMeta(),
       },
       { merge: true }
@@ -6726,16 +6973,29 @@
   };
 
   const normalizeHeaderBranding = () => {
+    const brandIcon = "/assets/logo.png";
     document.querySelectorAll(".header .logo").forEach((logo) => {
       if (!(logo instanceof HTMLElement)) return;
-      if (logo.querySelector("img.logo-img")) return;
+      const existing = logo.querySelector("img.logo-img");
+      if (existing instanceof HTMLImageElement) {
+        if (existing.getAttribute("src") !== brandIcon) existing.setAttribute("src", brandIcon);
+        return;
+      }
       const iconImg = document.createElement("img");
       iconImg.className = "logo-img";
-      iconImg.src = "/assets/quantura-icon.svg";
+      iconImg.src = brandIcon;
       iconImg.alt = "";
       iconImg.setAttribute("aria-hidden", "true");
       logo.prepend(iconImg);
     });
+    let favicon = document.querySelector('link[rel="icon"]');
+    if (!(favicon instanceof HTMLLinkElement)) {
+      favicon = document.createElement("link");
+      favicon.setAttribute("rel", "icon");
+      document.head.appendChild(favicon);
+    }
+    favicon.setAttribute("type", "image/png");
+    favicon.setAttribute("href", brandIcon);
   };
 
     const ensureSidebarCollapseToggle = () => {
@@ -6900,6 +7160,181 @@
         `;
       })
       .join("");
+  };
+
+  const notificationCategoryLabel = (category) => {
+    const key = String(category || "").trim().toLowerCase();
+    switch (key) {
+      case "watchlist":
+        return "Watchlist";
+      case "explore":
+        return "Explore Feed";
+      case "ipo":
+        return "IPO";
+      case "earnings":
+        return "Earnings";
+      case "daily":
+        return "Daily";
+      case "weekly":
+        return "Weekly";
+      case "inactive":
+        return "Inactive";
+      default:
+        return "General";
+    }
+  };
+
+  const renderNotificationFeed = () => {
+    if (!ui.notificationsItems) return;
+    const feed = state.notificationFeed || {};
+    const entries = Array.isArray(feed.items) ? feed.items : [];
+    if (ui.notificationsUnreadCount) {
+      const unread = Math.max(0, Number(feed.unreadCount || entries.filter((item) => !item?.read).length) || 0);
+      ui.notificationsUnreadCount.textContent = `Unread ${unread}`;
+    }
+
+    if (Array.isArray(ui.notificationFilterButtons)) {
+      ui.notificationFilterButtons.forEach((button) => {
+        const filter = String(button?.dataset?.notificationFilter || "").trim().toLowerCase();
+        const active = filter && (feed.unreadOnly ? filter === "unread" : filter === (feed.filter || "all"));
+        button.classList.toggle("active", Boolean(active));
+      });
+    }
+
+    if (feed.loading) {
+      ui.notificationsItems.innerHTML = `<div class="small muted">Loading notifications...</div>`;
+      return;
+    }
+    if (!entries.length) {
+      ui.notificationsItems.innerHTML = `<div class="small muted">No notifications in this view.</div>`;
+      return;
+    }
+
+    ui.notificationsItems.innerHTML = entries
+      .map((entry) => {
+        const id = escapeHtml(String(entry?.id || ""));
+        const title = escapeHtml(String(entry?.title || "Quantura update"));
+        const body = escapeHtml(String(entry?.body || ""));
+        const category = escapeHtml(notificationCategoryLabel(entry?.category));
+        const deepLink = String(entry?.deepLink || "").trim();
+        const link = deepLink.startsWith("http") ? deepLink : deepLink ? `/${deepLink.replace(/^\/+/, "")}` : "/notifications";
+        const createdAt = new Date(Number(entry?.createdAtMs || Date.now()) || Date.now()).toLocaleString();
+        const isRead = Boolean(entry?.read);
+        return `
+          <article class="notification-log-item ${isRead ? "is-read" : "is-unread"}" data-notification-item="${id}">
+            <div class="notification-log-head">
+              <strong>${title}</strong>
+              <span class="small muted">${escapeHtml(createdAt)}</span>
+            </div>
+            <div class="small muted" style="margin-bottom:6px;">Category: ${category}</div>
+            <p class="small">${body || "No message body provided."}</p>
+            <div class="hero-actions" style="margin-top:8px;">
+              <a class="cta secondary small" href="${escapeHtml(link)}">${icon("open-in-window")}<span>Open</span></a>
+              ${
+                isRead
+                  ? ""
+                  : `<button class="cta secondary small" type="button" data-action="notification-mark-read" data-id="${id}">
+                      ${icon("check")}<span>Mark read</span>
+                    </button>`
+              }
+            </div>
+          </article>
+        `;
+      })
+      .join("");
+  };
+
+  const loadNotificationFeed = async ({ filter = "all", unreadOnly = false, includeHidden = false, silent = false } = {}) => {
+    if (!ui.notificationsItems) return;
+    if (!hasFullAccount()) {
+      state.notificationFeed.items = [];
+      state.notificationFeed.unreadCount = 0;
+      state.notificationFeed.filter = "all";
+      state.notificationFeed.unreadOnly = false;
+      state.notificationFeed.loading = false;
+      renderNotificationFeed();
+      return;
+    }
+    state.notificationFeed.filter = String(filter || "all").trim().toLowerCase() || "all";
+    state.notificationFeed.unreadOnly = Boolean(unreadOnly);
+    state.notificationFeed.loading = true;
+    renderNotificationFeed();
+    try {
+      const headers = await buildApiAuthHeaders({ includeJson: false });
+      const params = new URLSearchParams();
+      if (state.notificationFeed.filter && state.notificationFeed.filter !== "all" && state.notificationFeed.filter !== "unread") {
+        params.set("category", state.notificationFeed.filter);
+      }
+      if (state.notificationFeed.unreadOnly || state.notificationFeed.filter === "unread") {
+        params.set("unread", "true");
+      }
+      if (includeHidden) params.set("includeHidden", "true");
+      params.set("limit", "80");
+      const response = await fetch(`/api/notifications/items?${params.toString()}`, {
+        method: "GET",
+        headers,
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(String(payload?.error || "Unable to load notifications."));
+      }
+      state.notificationFeed.items = Array.isArray(payload?.items) ? payload.items : [];
+      state.notificationFeed.unreadCount =
+        Number(payload?.unreadCount || state.notificationFeed.items.filter((item) => !item?.read).length) || 0;
+      state.notificationFeed.loading = false;
+      renderNotificationFeed();
+    } catch (error) {
+      state.notificationFeed.loading = false;
+      renderNotificationFeed();
+      if (!silent) {
+        const message = extractErrorMessage(error, "Unable to load notifications.");
+        setNotificationStatus(message);
+        showToast(message, "warn");
+      }
+    }
+  };
+
+  const markNotificationItemRead = async (itemId) => {
+    const id = String(itemId || "").trim();
+    if (!id) return;
+    if (!hasFullAccount()) return;
+    try {
+      const headers = await buildApiAuthHeaders({ includeJson: true });
+      const response = await fetch(`/api/notifications/items/${encodeURIComponent(id)}/read`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ read: true }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(String(payload?.error || "Unable to update notification."));
+      state.notificationFeed.items = (state.notificationFeed.items || []).map((item) =>
+        String(item?.id || "") === id ? { ...item, read: true } : item
+      );
+      state.notificationFeed.unreadCount = Math.max(0, Number(state.notificationFeed.unreadCount || 0) - 1);
+      renderNotificationFeed();
+    } catch (error) {
+      showToast(extractErrorMessage(error, "Unable to mark notification as read."), "warn");
+    }
+  };
+
+  const markAllNotificationsRead = async () => {
+    if (!hasFullAccount()) return;
+    try {
+      const headers = await buildApiAuthHeaders({ includeJson: true });
+      const response = await fetch("/api/notifications/items/read-all", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ includeHidden: false }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(String(payload?.error || "Unable to mark all as read."));
+      state.notificationFeed.items = (state.notificationFeed.items || []).map((item) => ({ ...item, read: true }));
+      state.notificationFeed.unreadCount = 0;
+      renderNotificationFeed();
+      showToast("All notifications marked as read.");
+    } catch (error) {
+      showToast(extractErrorMessage(error, "Unable to mark all notifications as read."), "warn");
+    }
   };
 
   const persistNotificationLog = () => {
@@ -7501,7 +7936,7 @@
     "news-ticker",
     "intel-ticker",
     "options-ticker",
-    "events-calendar-tickers",
+    "events-calendar-symbol",
     "ticker-query-ticker",
     "watchlist-ticker",
     "alert-ticker",
@@ -7626,7 +8061,7 @@
   const bindTickerInputSync = () => {
     const seen = new Set();
     TICKER_SYNC_INPUT_IDS.forEach((id) => {
-      if (id === "events-calendar-tickers") return;
+      if (id === "events-calendar-symbol") return;
       const el = document.getElementById(id);
       if (!el || seen.has(el)) return;
       seen.add(el);
@@ -8863,111 +9298,133 @@
       .filter(Boolean)
       .slice(0, 30);
 
-  const renderCorporateEventsCalendar = (payload) => {
+  const renderEarningsCalendar = (payload) => {
     if (!ui.eventsCalendarOutput) return;
-    const events = Array.isArray(payload?.events) ? payload.events : [];
-    const source = String(payload?.source || "unknown").trim();
-    const warnings = Array.isArray(payload?.warnings) ? payload.warnings.filter(Boolean) : [];
-    if (!events.length) {
-      ui.eventsCalendarOutput.innerHTML = `
-        <div class="small muted">No events returned for this window.</div>
-        ${warnings.length ? `<div class="small muted" style="margin-top:8px;">${escapeHtml(warnings.join(" "))}</div>` : ""}
-      `;
+    const items = Array.isArray(payload?.items) ? payload.items : [];
+    const symbol = normalizeTicker(payload?.symbol || "");
+    const lastUpdated = String(payload?.lastUpdated || "").trim();
+    const lastFetched = Number(payload?.lastFetchedAtMs || 0);
+    const windowKey = String(ui.eventsCalendarWindow?.value || "month").trim().toLowerCase();
+
+    const now = Date.now();
+    const windowMs = windowKey === "week" ? 7 * 24 * 60 * 60 * 1000 : 31 * 24 * 60 * 60 * 1000;
+    const cutoff = now - 24 * 60 * 60 * 1000;
+    const upper = now + windowMs;
+    const filtered = items.filter((row) => {
+      const t = Date.parse(String(row?.date || ""));
+      return Number.isFinite(t) ? t >= cutoff && t <= upper : false;
+    });
+
+    if (!filtered.length) {
+      ui.eventsCalendarOutput.innerHTML = `<div class="small muted">No earnings events found for the selected window.</div>`;
       return;
     }
+
+    const cardHtml = filtered
+      .map((row) => {
+        const date = escapeHtml(String(row?.date || "—"));
+        const epsActual = Number(row?.epsActual);
+        const epsEstimated = Number(row?.epsEstimated);
+        const revenueActual = Number(row?.revenueActual);
+        const revenueEstimated = Number(row?.revenueEstimated);
+        const epsDelta = Number.isFinite(epsActual) && Number.isFinite(epsEstimated) ? epsActual - epsEstimated : NaN;
+        const revenueDelta =
+          Number.isFinite(revenueActual) && Number.isFinite(revenueEstimated) ? revenueActual - revenueEstimated : NaN;
+        const epsDeltaLabel = Number.isFinite(epsDelta) ? `${epsDelta >= 0 ? "+" : ""}${epsDelta.toFixed(2)}` : "—";
+        const revenueDeltaLabel = Number.isFinite(revenueDelta)
+          ? `${revenueDelta >= 0 ? "+" : ""}${formatCompactNumber(revenueDelta)}`
+          : "—";
+        return `
+          <article class="news-card">
+            <div class="news-title">${escapeHtml(symbol || String(row?.symbol || "Ticker"))} · ${date}</div>
+            <div class="small">EPS: ${Number.isFinite(epsActual) ? epsActual.toFixed(2) : "—"} vs ${Number.isFinite(epsEstimated) ? epsEstimated.toFixed(2) : "—"} <span class="muted">(delta ${escapeHtml(epsDeltaLabel)})</span></div>
+            <div class="small">Revenue: ${Number.isFinite(revenueActual) ? formatCompactNumber(revenueActual) : "—"} vs ${Number.isFinite(revenueEstimated) ? formatCompactNumber(revenueEstimated) : "—"} <span class="muted">(delta ${escapeHtml(revenueDeltaLabel)})</span></div>
+          </article>
+        `;
+      })
+      .join("");
+
     ui.eventsCalendarOutput.innerHTML = `
-      <div class="small muted" style="margin-bottom:10px;">Source: ${escapeHtml(source)} · Events: ${events.length}</div>
-      ${
-        warnings.length
-          ? `<div class="small muted" style="margin-bottom:10px;">${escapeHtml(warnings.join(" "))}</div>`
-          : ""
-      }
-      <div class="table-wrap">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Ticker</th>
-              <th>Event</th>
-              <th>Type</th>
-              <th>Status</th>
-              <th>Source</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${events
-              .map((row) => {
-                const rowDate = escapeHtml(String(row?.date || "—"));
-                const rowTicker = escapeHtml(normalizeTicker(row?.ticker || "") || "—");
-                const rowName = escapeHtml(String(row?.name || row?.companyName || "Corporate event"));
-                const rowType = escapeHtml(String(row?.type || "—"));
-                const rowStatus = escapeHtml(String(row?.status || "scheduled"));
-                const rowSource = escapeHtml(String(row?.source || source || "—"));
-                return `
-                  <tr>
-                    <td>${rowDate}</td>
-                    <td>${rowTicker}</td>
-                    <td>${rowName}</td>
-                    <td>${rowType}</td>
-                    <td>${rowStatus}</td>
-                    <td>${rowSource}</td>
-                  </tr>
-                `;
-              })
-              .join("")}
-          </tbody>
-        </table>
+      <div class="small muted" style="margin-bottom:10px;">
+        ${escapeHtml(symbol || "Ticker")} · ${filtered.length} event${filtered.length === 1 ? "" : "s"} ·
+        ${lastFetched ? `Last fetched ${escapeHtml(new Date(lastFetched).toLocaleString())}` : "Last fetched —"}
+        ${lastUpdated ? ` · Last updated ${escapeHtml(lastUpdated)}` : ""}
       </div>
+      <div class="news-stream">${cardHtml}</div>
     `;
   };
 
-  const loadCorporateEventsCalendar = async (functions, { force = false, notify = false } = {}) => {
-    if (!functions || !ui.eventsCalendarOutput) return;
-
+  const loadEarningsCalendar = async ({ force = false, notify = false } = {}) => {
+    if (!ui.eventsCalendarOutput) return;
     const tickerSeed = normalizeTicker(state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "");
-    const inputTickers = normalizeTickerListInput(ui.eventsCalendarTickers?.value || "");
-    const tickers = inputTickers.length ? inputTickers : tickerSeed ? [tickerSeed] : [];
-    const country = normalizeCountryCode(ui.eventsCalendarCountry?.value || state.preferredCountry || "US");
+    const symbol = normalizeTicker(ui.eventsCalendarSymbol?.value || tickerSeed || "");
+    if (!symbol) {
+      if (notify) showToast("Enter a ticker for earnings calendar.", "warn");
+      return;
+    }
+
     const startDate = String(ui.eventsCalendarStart?.value || "").trim();
     const endDate = String(ui.eventsCalendarEnd?.value || "").trim();
-    const limitRaw = Number(ui.eventsCalendarLimit?.value || 120);
-    const limit = Number.isFinite(limitRaw) ? Math.max(10, Math.min(500, limitRaw)) : 120;
-    const requestKey = JSON.stringify({ tickers, country, startDate, endDate, limit });
+    const requestKey = JSON.stringify({ symbol, startDate, endDate, window: String(ui.eventsCalendarWindow?.value || "month") });
     if (!force && ui.eventsCalendarOutput.dataset.requestKey === requestKey) return;
     ui.eventsCalendarOutput.dataset.requestKey = requestKey;
 
     try {
-      if (ui.eventsCalendarStatus) ui.eventsCalendarStatus.textContent = "Loading calendar...";
-      setOutputLoading(ui.eventsCalendarOutput, "Loading corporate events...");
-      const getEvents = functions.httpsCallable("get_corporate_events_calendar");
-      const result = await getEvents({
-        tickers,
-        ticker: tickers[0] || "",
-        country,
-        startDate,
-        endDate,
-        limit,
-        meta: buildMeta(),
+      if (ui.eventsCalendarStatus) ui.eventsCalendarStatus.textContent = "Refreshing earnings cache...";
+      setOutputLoading(ui.eventsCalendarOutput, "Loading earnings calendar...");
+      const headers = await buildApiAuthHeaders({ includeJson: true });
+      const refreshResp = await fetch("/api/earnings/refresh", {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: JSON.stringify({
+          symbol,
+          start: startDate,
+          end: endDate,
+        }),
       });
-      setOutputReady(ui.eventsCalendarOutput);
-      renderCorporateEventsCalendar(result.data || {});
-      if (ui.eventsCalendarStatus) {
-        const source = String(result.data?.source || "unknown");
-        const fallback = Boolean(result.data?.fallbackUsed);
-        ui.eventsCalendarStatus.textContent = fallback
-          ? `Loaded from ${source} (fallback mode).`
-          : `Loaded from ${source}.`;
+      const refreshPayload = await refreshResp.json().catch(() => ({}));
+      if (!refreshResp.ok) {
+        throw new Error(String(refreshPayload?.error || "Unable to refresh earnings cache.").trim());
       }
-      logEvent("corporate_events_loaded", {
-        country,
-        tickers_count: tickers.length,
-        source: String(result.data?.source || ""),
+
+      let payloadFromFirestore = null;
+      try {
+        const db = state.clients?.db;
+        if (db) {
+          const snap = await db.collection("earningsCalendar").doc(symbol).get();
+          if (snap.exists) {
+            const data = snap.data() || {};
+            payloadFromFirestore = {
+              symbol,
+              lastUpdated: String(data?.lastUpdated || refreshPayload?.lastUpdated || ""),
+              items: Array.isArray(data?.items) ? data.items : [],
+              lastFetchedAtMs: Number(data?.lastFetchedAt?.toMillis?.() || 0),
+            };
+          }
+        }
+      } catch (error) {
+        payloadFromFirestore = null;
+      }
+
+      if (!payloadFromFirestore) {
+        throw new Error("Earnings cache was refreshed but Firestore read is unavailable.");
+      }
+      const renderPayload = payloadFromFirestore;
+      setOutputReady(ui.eventsCalendarOutput);
+      renderEarningsCalendar(renderPayload);
+      if (ui.eventsCalendarStatus) {
+        ui.eventsCalendarStatus.textContent = `Earnings calendar updated for ${symbol}.`;
+      }
+      logEvent("earnings_calendar_loaded", {
+        ticker: symbol,
+        rows: Array.isArray(renderPayload.items) ? renderPayload.items.length : 0,
       });
     } catch (error) {
       setOutputReady(ui.eventsCalendarOutput);
-      ui.eventsCalendarOutput.innerHTML = `<div class="small muted">Unable to load corporate events right now.</div>`;
-      if (ui.eventsCalendarStatus) ui.eventsCalendarStatus.textContent = "Unable to load corporate events.";
-      if (notify) showToast(error.message || "Unable to load corporate events.", "warn");
+      ui.eventsCalendarOutput.innerHTML = `<div class="small muted">Unable to load earnings calendar right now.</div>`;
+      if (ui.eventsCalendarStatus) ui.eventsCalendarStatus.textContent = "Unable to load earnings calendar.";
+      if (notify) showToast(error.message || "Unable to load earnings calendar.", "warn");
     }
   };
 
@@ -9256,7 +9713,7 @@
       <div class="model-council-actions">
         <button class="task-chip${feedbackState === "like" ? " active" : ""}" type="button" data-action="model-council-like" data-response-id="${escapeHtml(responseId)}">Like</button>
         <button class="task-chip${feedbackState === "dislike" ? " active" : ""}" type="button" data-action="model-council-dislike" data-response-id="${escapeHtml(responseId)}">Dislike</button>
-        <button class="task-chip" type="button" data-action="model-council-share" data-response-id="${escapeHtml(responseId)}">${icon("share-ios")}<span>Share link</span></button>
+        <button class="task-chip" type="button" data-action="model-council-share" data-response-id="${escapeHtml(responseId)}" ${responseId ? "" : "disabled"}>${icon("share-ios")}<span>Share link</span></button>
       </div>
       ${shareUrl ? `<div class="small muted">Shared: <a href="${escapeHtml(shareUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(shareUrl)}</a></div>` : ""}
       <p class="small muted solve-now-disclaimer">${escapeHtml(MODEL_COUNCIL_OUTPUT_DISCLAIMER)}</p>
@@ -9534,71 +9991,201 @@
       `Latency: ${latencyLabel} · Tokens: ${formatTokenStat(promptTokens + completionTokens)} · Cached: ${formatTokenStat(cachedTokens)}${cacheHint}`;
   };
 
-  const streamTickerQueryInsight = async ({ ticker, prompt, language, model, provider, modules = [], technicalContext = null } = {}) => {
+  const fetchTickerQueryModuleData = async ({ ticker, modules = [] } = {}) => {
+    const symbol = normalizeTicker(ticker || "");
+    if (!symbol) return { moduleData: {}, moduleContext: {} };
     const headers = await buildApiAuthHeaders({ includeJson: true });
-    const response = await fetch("/api/model-council/query", {
+    const response = await fetch("/api/ticker/modules", {
       method: "POST",
       headers,
       credentials: "same-origin",
       body: JSON.stringify({
-        ticker,
-        question: prompt,
-        language,
-        model,
-        provider,
+        ticker: symbol,
         modules,
-        technicalContext: technicalContext && typeof technicalContext === "object" ? technicalContext : undefined,
-        messages: [{ role: "user", content: prompt }],
-        meta: buildMeta(),
       }),
     });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const message = String(payload?.error || "Unable to complete Model Council request right now.").trim();
+    if (!response.ok) return { moduleData: {}, moduleContext: {} };
+    return {
+      moduleData: payload?.moduleData && typeof payload.moduleData === "object" ? payload.moduleData : {},
+      moduleContext: payload?.moduleContext && typeof payload.moduleContext === "object" ? payload.moduleContext : {},
+    };
+  };
+
+  const buildModelCouncilSystemMessage = ({ ticker, language, moduleContext, technicalContext } = {}) => {
+    const context = {
+      ticker: normalizeTicker(ticker || ""),
+      language: normalizeLanguageCode(language || "en"),
+      moduleContext: moduleContext && typeof moduleContext === "object" ? moduleContext : {},
+      technicalContext: technicalContext && typeof technicalContext === "object" ? technicalContext : {},
+    };
+    return [
+      "You are Quantura Model Council, a multi-model equity research copilot.",
+      "Use the provided structured ticker context and cite uncertainty clearly.",
+      "Return a concise, structured response with thesis, risks, and next steps.",
+      `Structured context JSON:\n${JSON.stringify(context)}`,
+    ].join("\n\n");
+  };
+
+  const streamTickerQueryInsight = async ({ ticker, prompt, language, model, provider, modules = [], technicalContext = null } = {}) => {
+    const headers = await buildApiAuthHeaders({ includeJson: true });
+
+    // Primary path keeps response persistence + share/feedback IDs.
+    try {
+      const response = await fetch("/api/model-council/query", {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: JSON.stringify({
+          ticker,
+          question: prompt,
+          language,
+          model,
+          provider,
+          modules,
+          technicalContext: technicalContext && typeof technicalContext === "object" ? technicalContext : undefined,
+          messages: [{ role: "user", content: prompt }],
+          meta: buildMeta(),
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (response.ok) {
+        return {
+          answer: String(payload?.answer || "").trim(),
+          model: normalizeAiModelId(payload?.model || model) || model,
+          provider: normalizeModelCouncilProviderId(payload?.provider || provider || "openai"),
+          usage: payload?.usage && typeof payload.usage === "object" ? payload.usage : {},
+          latencyMs: Number.isFinite(Number(payload?.latencyMs)) ? Number(payload.latencyMs) : null,
+          context: payload?.context && typeof payload.context === "object" ? payload.context : {},
+          moduleData: payload?.moduleData && typeof payload.moduleData === "object" ? payload.moduleData : {},
+          selectedModules: Array.isArray(payload?.selectedModules) ? payload.selectedModules : modules,
+          responseId: String(payload?.responseId || "").trim(),
+          citations: Array.isArray(payload?.citations) ? payload.citations : [],
+        };
+      }
+    } catch (error) {
+      // Fall through to /api/llm/run fallback.
+    }
+
+    // Fallback path guarantees selected provider/model produces output.
+    const { moduleData, moduleContext } = await fetchTickerQueryModuleData({ ticker, modules });
+    const systemPrompt = buildModelCouncilSystemMessage({
+      ticker,
+      language,
+      moduleContext,
+      technicalContext,
+    });
+    const fallbackResponse = await fetch("/api/llm/run", {
+      method: "POST",
+      headers,
+      credentials: "same-origin",
+      body: JSON.stringify({
+        provider,
+        model,
+        fallbackProviders: ["openai", "gemini", "mistral", "perplexity", "other"],
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: String(prompt || "").trim() },
+        ],
+        params: {
+          temperature: 0.2,
+          maxTokens: 900,
+          webSearch: true,
+          stream: true,
+          background: true,
+        },
+      }),
+    });
+    const payload = await fallbackResponse.json().catch(() => ({}));
+    if (!fallbackResponse.ok) {
+      const message = String(payload?.error || payload?.message || "Unable to complete Model Council request right now.").trim();
       const err = new Error(message);
       err.retryProvider = String(payload?.retryProvider || "").trim();
       err.retryModel = String(payload?.retryModel || "").trim();
       throw err;
     }
     return {
-      answer: String(payload?.answer || "").trim(),
+      answer: String(payload?.text || "").trim(),
       model: normalizeAiModelId(payload?.model || model) || model,
       provider: normalizeModelCouncilProviderId(payload?.provider || provider || "openai"),
       usage: payload?.usage && typeof payload.usage === "object" ? payload.usage : {},
       latencyMs: Number.isFinite(Number(payload?.latencyMs)) ? Number(payload.latencyMs) : null,
-      context: payload?.context && typeof payload.context === "object" ? payload.context : {},
-      moduleData: payload?.moduleData && typeof payload.moduleData === "object" ? payload.moduleData : {},
-      selectedModules: Array.isArray(payload?.selectedModules) ? payload.selectedModules : modules,
-      responseId: String(payload?.responseId || "").trim(),
+      context: {
+        moduleContext,
+      },
+      moduleData,
+      selectedModules: modules,
+      responseId: "",
       citations: Array.isArray(payload?.citations) ? payload.citations : [],
     };
   };
 
   const improveTickerQueryPrompt = async ({ ticker, question, language, modules, model, provider } = {}) => {
     const headers = await buildApiAuthHeaders({ includeJson: true });
-    const response = await fetch("/api/model-council/improve-prompt", {
+    try {
+      const response = await fetch("/api/model-council/improve-prompt", {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: JSON.stringify({
+          ticker,
+          question,
+          language,
+          modules,
+          model,
+          provider,
+          meta: buildMeta(),
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (response.ok) {
+        return {
+          improvedPrompt: String(payload?.improvedPrompt || question || "").trim() || String(question || "").trim(),
+          model: String(payload?.model || "").trim(),
+          provider: String(payload?.provider || "").trim(),
+        };
+      }
+    } catch (error) {
+      // Fallback to /api/llm/run below.
+    }
+
+    const rewriteResponse = await fetch("/api/llm/run", {
       method: "POST",
       headers,
       credentials: "same-origin",
       body: JSON.stringify({
-        ticker,
-        question,
-        language,
-        modules,
-        model,
-        provider,
-        meta: buildMeta(),
+        provider: "openai",
+        model: "gpt-5-mini",
+        fallbackProviders: ["openai", "gemini", "mistral", "perplexity", "other"],
+        messages: [
+          {
+            role: "system",
+            content:
+              "Rewrite the user prompt for clarity and specificity for financial analysis. Return plain text only. Preserve intent.",
+          },
+          {
+            role: "user",
+            content: `Ticker: ${normalizeTicker(ticker || "")}\nLanguage: ${normalizeLanguageCode(language || "en")}\nModules: ${Array.isArray(modules) ? modules.join(", ") : ""}\nPrompt:\n${String(question || "").trim()}`,
+          },
+        ],
+        params: {
+          temperature: 0.1,
+          maxTokens: 420,
+          webSearch: false,
+          stream: false,
+          background: false,
+        },
       }),
     });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
+    const payload = await rewriteResponse.json().catch(() => ({}));
+    if (!rewriteResponse.ok) {
       const message = String(payload?.error || "Unable to improve prompt right now.").trim();
       throw new Error(message);
     }
     return {
-      improvedPrompt: String(payload?.improvedPrompt || question || "").trim() || String(question || "").trim(),
-      model: String(payload?.model || "").trim(),
-      provider: String(payload?.provider || "").trim(),
+      improvedPrompt: String(payload?.text || question || "").trim() || String(question || "").trim(),
+      model: String(payload?.model || "gpt-5-mini").trim(),
+      provider: String(payload?.provider || "openai").trim(),
     };
   };
 
@@ -9723,6 +10310,12 @@
       showToast("Enter a question for Model Council.", "warn");
       return;
     }
+    const rewardApproved = await maybeShowNativeRewardGate({
+      reason: "model_council",
+      title: "Watch a rewarded ad to unlock Model Council output?",
+      message: "Running Model Council in the native app can require a rewarded video before generating output.",
+    });
+    if (!rewardApproved) return;
 
     const improveEnabled = Boolean(ui.tickerQueryImproveToggle?.checked);
     if (improveEnabled && !skipImprove) {
@@ -11361,9 +11954,10 @@
 
   const getCurrentAiTierKey = () => {
     if (!hasFullAccount()) return "free";
-    if (isAdminUser()) return "desk";
+    if (isAdminUser()) return "business";
     if (!state.userHasPaidPlan) return "free";
-    return state.userSubscriptionTier || "pro";
+    const tier = normalizeSubscriptionTier(state.userSubscriptionTier);
+    return tier === "free" ? "go" : tier;
   };
 
   const getCurrentAiTierConfig = () => {
@@ -11378,21 +11972,26 @@
     const tiers = state.remoteFlags.aiUsageTiers && typeof state.remoteFlags.aiUsageTiers === "object"
       ? state.remoteFlags.aiUsageTiers
       : AI_USAGE_TIER_DEFAULTS;
+    const normalizedKey = key === "desk" ? "business" : key;
     const config =
-      tiers[key] && typeof tiers[key] === "object"
+      tiers[normalizedKey] && typeof tiers[normalizedKey] === "object"
+        ? tiers[normalizedKey]
+        : tiers[key] && typeof tiers[key] === "object"
         ? tiers[key]
-        : AI_USAGE_TIER_DEFAULTS[key] || AI_USAGE_TIER_DEFAULTS.free;
+        : AI_USAGE_TIER_DEFAULTS[normalizedKey] || AI_USAGE_TIER_DEFAULTS[key] || AI_USAGE_TIER_DEFAULTS.free;
     const rawAllowed = Array.isArray(config.allowed_models) ? config.allowed_models : [];
     const allowedModels = rawAllowed
       .map((x) => normalizeAiModelId(String(x).trim()))
       .filter((modelId) => modelId && (modelId.startsWith("gpt-5") || modelId.startsWith("amazon.nova")))
       .filter((modelId) => !globalSet.size || globalSet.has(modelId));
-    const fallbackAllowed = (AI_USAGE_TIER_DEFAULTS[key]?.allowed_models || AI_USAGE_TIER_DEFAULTS.free.allowed_models)
+    const fallbackAllowed = (AI_USAGE_TIER_DEFAULTS[normalizedKey]?.allowed_models || AI_USAGE_TIER_DEFAULTS[key]?.allowed_models || AI_USAGE_TIER_DEFAULTS.free.allowed_models)
       .map((x) => normalizeAiModelId(String(x).trim()))
       .filter((modelId) => modelId && (modelId.startsWith("gpt-5") || modelId.startsWith("amazon.nova")))
       .filter((modelId) => !globalSet.size || globalSet.has(modelId));
-    const weeklyLimitRaw = Number(config.weekly_limit ?? config.daily_limit ?? AI_USAGE_TIER_DEFAULTS[key]?.weekly_limit ?? 3);
+    const weeklyLimitRaw = Number(config.weekly_limit ?? config.daily_limit ?? AI_USAGE_TIER_DEFAULTS[normalizedKey]?.weekly_limit ?? AI_USAGE_TIER_DEFAULTS[key]?.weekly_limit ?? 3);
     const weeklyLimit = Number.isFinite(weeklyLimitRaw) ? Math.max(1, weeklyLimitRaw) : 3;
+    const workspaceLimitRaw = Number(config.workspace_limit ?? config.workspaceLimit ?? AI_USAGE_TIER_DEFAULTS[normalizedKey]?.workspace_limit ?? 0);
+    const workspaceLimit = Number.isFinite(workspaceLimitRaw) ? Math.max(0, Math.floor(workspaceLimitRaw)) : 0;
     const finalAllowed = allowedModels.length
       ? allowedModels
       : fallbackAllowed.length
@@ -11406,6 +12005,8 @@
       weeklyLimit,
       dailyLimit: weeklyLimit, // Legacy alias for older UI helpers.
       volatilityAlerts: Boolean(config.volatility_alerts),
+      adFree: Boolean(config.ad_free ?? normalizedKey !== "free"),
+      workspaceLimit,
     };
   };
 
@@ -11880,9 +12481,20 @@
     syncScreenerProviderAccent();
 
     if (ui.screenerModelMeta) {
-      const tierLabel = tier.key === "desk" ? "Desk" : tier.key === "pro" ? "Pro" : "Free";
+      const tierLabelMap = {
+        free: "Free",
+        go: "Go",
+        plus: "Plus",
+        pro: "Pro",
+        business: "Business",
+        desk: "Business",
+      };
+      const tierLabel = tierLabelMap[tier.key] || "Free";
       const hasNova = tier.allowedModels.some((modelId) => String(modelId).startsWith("amazon.nova"));
-      ui.screenerModelMeta.textContent = `${tierLabel} tier · ${tier.weeklyLimit} weekly credits · ${
+      ui.screenerModelMeta.textContent = `${tierLabel} tier · ${tier.weeklyLimit} weekly credits · ${Math.max(
+        0,
+        Number(tier.workspaceLimit || 0)
+      )} collaborator seat${Number(tier.workspaceLimit || 0) === 1 ? "" : "s"} · ${
         hasNova ? "GPT-5 + Nova personalities" : "GPT-5 personalities"
       }`;
     }
@@ -13513,17 +14125,52 @@
     getNativePlatform() === "android" &&
     Boolean(state.remoteFlags?.nativeAndroidPlayBillingEnabled ?? true);
 
+  const nativeBillingPortalLabel = () =>
+    getNativePlatform() === "ios" ? "Restore purchases" : "Manage subscriptions";
+
+  const resolveNativeIapPlanKey = (panel) => {
+    const explicit = String(panel?.dataset?.iapPlan || "").trim().toLowerCase();
+    if (explicit) return explicit;
+    const product = String(panel?.dataset?.product || "").trim().toLowerCase();
+    if (product.includes("annual") && product.includes("business")) return "annual_business";
+    if (product.includes("annual") && product.includes("plus")) return "annual_plus";
+    if (product.includes("annual") && product.includes("go")) return "annual_go";
+    if (product.includes("desk")) return "desk";
+    if (product.includes("business")) return "business";
+    if (product.includes("plus") || product.includes("premium")) return "plus";
+    if (product.includes("go")) return "go";
+    if (product.includes("forecast")) return "forecast";
+    if (product.includes("pro")) return "pro";
+    return "default";
+  };
+
+  const nativeIapMapForPlatform = (platform, configuredRaw) => {
+    const targetPlatform = platform === "ios" ? "ios" : "android";
+    const fallback =
+      DEFAULT_NATIVE_IAP_PRODUCT_IDS[targetPlatform] || DEFAULT_NATIVE_IAP_PRODUCT_IDS.android;
+    const configured =
+      configuredRaw && typeof configuredRaw === "object" ? configuredRaw : {};
+    const scoped =
+      configured[targetPlatform] && typeof configured[targetPlatform] === "object"
+        ? configured[targetPlatform]
+        : configured;
+    return { ...fallback, ...scoped };
+  };
+
   const resolveNativeIapProductId = (panel) => {
     const fromPanel = String(panel?.dataset?.iapProductId || "").trim();
     if (fromPanel) return fromPanel;
 
-    const configured = state.remoteFlags?.nativeIapProductIds;
-    const map = configured && typeof configured === "object" ? configured : DEFAULT_NATIVE_IAP_PRODUCT_IDS;
-    const product = String(panel?.dataset?.product || "").trim().toLowerCase();
-    if (product.includes("desk")) return String(map.desk || map.pro || map.default || DEFAULT_NATIVE_IAP_PRODUCT_IDS.default).trim();
-    if (product.includes("forecast")) return String(map.forecast || map.pro || map.default || DEFAULT_NATIVE_IAP_PRODUCT_IDS.default).trim();
-    if (product.includes("pro")) return String(map.pro || map.default || DEFAULT_NATIVE_IAP_PRODUCT_IDS.default).trim();
-    return String(map.default || map.pro || DEFAULT_NATIVE_IAP_PRODUCT_IDS.default).trim();
+    const platform = getNativePlatform() === "ios" ? "ios" : "android";
+    const map = nativeIapMapForPlatform(platform, state.remoteFlags?.nativeIapProductIds);
+    const plan = resolveNativeIapPlanKey(panel);
+    const productId = String(
+      map[plan] ||
+        map.default ||
+        DEFAULT_NATIVE_IAP_PRODUCT_IDS[platform]?.default ||
+        DEFAULT_NATIVE_IAP_PRODUCT_IDS.android.default
+    ).trim();
+    return productId;
   };
 
   const requestNativeInAppPurchase = (panel, opts = {}) => {
@@ -13571,6 +14218,26 @@
     return sent;
   };
 
+  const confirmNativePurchaseOnBackend = async ({ orderId, productId, status }) => {
+    if (!orderId || !hasFullAccount()) return;
+    const functions = state.clients?.functions;
+    if (!functions) return;
+    try {
+      const confirm = functions.httpsCallable("confirm_native_iap_purchase");
+      await confirm({
+        orderId,
+        productId: String(productId || "").trim(),
+        status: String(status || "").trim().toLowerCase(),
+        platform: String(getNativePlatform() || "").trim().toLowerCase(),
+        tier: subscriptionTierFromOrder({ productId }),
+        meta: buildMeta(),
+      });
+    } catch (error) {
+      const message = extractErrorMessage(error, "Unable to finalize native purchase sync.");
+      showToast(message, "warn");
+    }
+  };
+
   const applyNativePurchaseResult = (detail) => {
     const payload = detail && typeof detail === "object" ? detail : {};
     const orderId = String(payload.orderId || "").trim();
@@ -13592,7 +14259,25 @@
       status: status || (ok ? "success" : "failed"),
     });
 
-    if (status === "purchased" || (ok && status !== "pending")) {
+    if (status === "restored") {
+      if (note) note.textContent = message || "Purchases restored.";
+      stripe?.classList.add("hidden");
+      showToast(message || "Purchases restored.");
+      return;
+    }
+
+    if (status === "subscriptions_opened") {
+      const platform = getNativePlatform();
+      const openedMessage =
+        platform === "ios"
+          ? "Opened App Store subscriptions."
+          : "Opened Google Play subscriptions.";
+      if (note) note.textContent = message || openedMessage;
+      showToast(message || openedMessage);
+      return;
+    }
+
+    if (status === "purchased" || (ok && (!status || status === "success"))) {
       if (success) {
         success.textContent = orderId
           ? `In-app purchase completed for order ${orderId}.`
@@ -13602,6 +14287,9 @@
       if (note) note.textContent = "Purchase completed in native checkout.";
       stripe?.classList.add("hidden");
       showToast("In-app purchase completed.");
+      if (orderId) {
+        confirmNativePurchaseOnBackend({ orderId, productId, status: "purchased" });
+      }
       if (orderId) {
         logEvent("purchase", {
           transaction_id: orderId,
@@ -13661,13 +14349,24 @@
     };
 
     try {
+      const productId = resolveNativeIapProductId(panel);
+      const subscriptionTier = resolveNativeIapPlanKey(panel);
+      const nativeBillingProvider = isNativeIosStoreKitCheckoutOnly() || isNativeAndroidPlayBillingCheckout();
       logEvent("begin_checkout", { currency: panel.dataset.currency || "USD", value: Number(panel.dataset.price || 349) });
       const createOrder = functions.httpsCallable("create_order");
       const result = await createOrder({
-        product: panel.dataset.product || "Deep Forecast",
+        product: panel.dataset.product || "Quantura Subscription",
+        productId,
+        tier: subscriptionTier,
+        paymentProvider: nativeBillingProvider ? "native_iap" : "stripe",
         price: Number(panel.dataset.price || 349),
         currency: panel.dataset.currency || "USD",
-        meta,
+        meta: {
+          ...meta,
+          subscriptionTier,
+          productId,
+          purchaseRuntime: nativeBillingProvider ? (getNativePlatform() || "native") : "web",
+        },
       });
       const orderId = result.data?.orderId;
       if (orderId) {
@@ -13711,7 +14410,7 @@
       showToast(error.message || "Unable to create order.", "warn");
     } finally {
       button.disabled = false;
-      button.textContent = button.dataset.labelAuth || "Request Deep Forecast";
+      button.textContent = button.dataset.labelAuth || "Choose plan";
     }
   };
 
@@ -13811,8 +14510,8 @@
       if (sent) {
         showToast(
           getNativePlatform() === "ios"
-            ? "Opening App Store subscriptions..."
-            : "Opening Google Play subscriptions..."
+            ? "Restoring App Store purchases..."
+            : "Restoring Google Play purchases..."
         );
       } else {
         showToast("Subscription management is only available in native app settings.", "warn");
@@ -13824,7 +14523,7 @@
     if (ui.billingPortalLink.dataset.loading === "1") return;
     ui.billingPortalLink.dataset.loading = "1";
 
-    const originalText = ui.billingPortalLink.textContent || "Open Stripe billing portal";
+    const originalText = ui.billingPortalLink.textContent || "Open billing portal";
     ui.billingPortalLink.textContent = "Opening billing portal...";
     ui.billingPortalLink.setAttribute("aria-disabled", "true");
 
@@ -13990,7 +14689,7 @@
         if (next === "events-calendar") {
           const first = !state.panelAutoloaded.eventsCalendar;
           state.panelAutoloaded.eventsCalendar = true;
-          loadCorporateEventsCalendar(functions, { force: first, notify: false });
+          loadEarningsCalendar({ force: first, notify: false });
         }
 
         if (next === "market-headlines") {
@@ -14020,6 +14719,14 @@
           state.panelAutoloaded.options = true;
           autoloadOptionsChain(functions, { force: first });
         }
+
+        if (next === "notifications") {
+          loadNotificationFeed({
+            filter: state.notificationFeed?.filter || "all",
+            unreadOnly: Boolean(state.notificationFeed?.unreadOnly),
+            silent: true,
+          }).catch(() => {});
+        }
       };
 
       ensureThemeToggle();
@@ -14033,9 +14740,11 @@
       bindMobileNav();
       bindMobileSidebarDrawer();
       bindMobileBottomNav();
+      bindNativeRewardedNavigationAds();
       initializeLanguageControls().catch(() => {});
       captureShareFromUrl();
       renderNotificationLog();
+      renderNotificationFeed();
       ensureNotificationPrivacyControls();
       syncNotificationPrivacyControls();
       recordPromoSessionUsage();
@@ -15316,6 +16025,17 @@
 	        showToast("Sign in to invite collaborators.", "warn");
 	        return;
 	      }
+	      const seatLimit = getWorkspaceSeatLimitForTier();
+	      const activeCount = Math.max(0, Number(state.collaboratorCount || 0));
+	      const pendingCount = Math.max(0, Number(state.pendingCollabInviteCount || 0));
+	      if (seatLimit <= 0) {
+	        showToast("Your current plan does not include shared workspace seats. Upgrade to invite collaborators.", "warn");
+	        return;
+	      }
+	      if (activeCount + pendingCount >= seatLimit) {
+	        showToast(`Workspace seat limit reached (${seatLimit}). Upgrade your plan for more collaborators.`, "warn");
+	        return;
+	      }
 	      const email = String(ui.collabInviteEmail?.value || "").trim();
 	      const role = String(ui.collabInviteRole?.value || "viewer");
 	      if (!email) {
@@ -15792,6 +16512,8 @@
       if (id === "facebook.com" || id === "facebook") return "Facebook";
       if (id === "github.com" || id === "github") return "GitHub";
       if (id === "twitter.com" || id === "twitter") return "X";
+      if (id === "yahoo.com" || id === "yahoo") return "Yahoo";
+      if (id === "microsoft.com" || id === "microsoft") return "Microsoft";
       if (id === "password" || id === "emailpassword") return "Email and password";
       return id || "another provider";
     };
@@ -15813,6 +16535,17 @@
       }
       if (id === "twitter.com" || id === "twitter") {
         return new firebase.auth.TwitterAuthProvider();
+      }
+      if (id === "yahoo.com" || id === "yahoo") {
+        const provider = new firebase.auth.OAuthProvider("yahoo.com");
+        provider.addScope("profile");
+        provider.addScope("email");
+        return provider;
+      }
+      if (id === "microsoft.com" || id === "microsoft") {
+        const provider = new firebase.auth.OAuthProvider("microsoft.com");
+        provider.addScope("user.read");
+        return provider;
       }
       return null;
     };
@@ -16143,7 +16876,15 @@
       state.authInFlight = true;
       const runtime = resolveRuntimeLabel();
       const normalizedMethod = String(method || "").trim().toLowerCase();
-      const supportsNativeBridge = normalizedMethod === "google" || normalizedMethod === "apple";
+      const supportsNativeBridge = new Set([
+        "google",
+        "apple",
+        "github",
+        "twitter",
+        "x",
+        "yahoo",
+        "microsoft",
+      ]).has(normalizedMethod);
       try {
         await persistenceReady;
         if (isNativeApp() && supportsNativeBridge) {
@@ -16209,6 +16950,19 @@
     ui.twitterSignin?.addEventListener("click", async () => {
       const provider = new firebase.auth.TwitterAuthProvider();
       await signInWithProvider(provider, "Signed in with X.", "twitter");
+    });
+
+    ui.microsoftSignin?.addEventListener("click", async () => {
+      const provider = new firebase.auth.OAuthProvider("microsoft.com");
+      provider.addScope("user.read");
+      await signInWithProvider(provider, "Signed in with Microsoft.", "microsoft");
+    });
+
+    ui.yahooSignin?.addEventListener("click", async () => {
+      const provider = new firebase.auth.OAuthProvider("yahoo.com");
+      provider.addScope("profile");
+      provider.addScope("email");
+      await signInWithProvider(provider, "Signed in with Yahoo.", "yahoo");
     });
 
 		    ui.purchasePanels.forEach((panel) => {
@@ -16390,6 +17144,12 @@
 		    ui.forecastForm?.addEventListener("submit", async (event) => {
 		      event.preventDefault();
 		      if (!requireFullAccount("Sign in to run a forecast.", { redirect: true })) return;
+          const rewardApproved = await maybeShowNativeRewardGate({
+            reason: "forecast",
+            title: "Watch a rewarded ad to unlock forecast output?",
+            message: "Forecast generation in native can require a rewarded video before running.",
+          });
+          if (!rewardApproved) return;
 		      const formData = new FormData(ui.forecastForm);
 		      let quantiles = [];
 		      try {
@@ -16571,6 +17331,12 @@
     ui.downloadForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
       if (!requireFullAccount("Sign in to download price history.", { redirect: true })) return;
+      const rewardApproved = await maybeShowNativeRewardGate({
+        reason: "history_download",
+        title: "Watch a rewarded ad to unlock download output?",
+        message: "Historical download in native can require a rewarded video before exporting CSV.",
+      });
+      if (!rewardApproved) return;
       const formData = new FormData(ui.downloadForm);
       const ticker =
         normalizeTicker(formData.get("ticker")) || state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "";
@@ -16636,12 +17402,18 @@
       if (!ui.eventsCalendarStart.value) ui.eventsCalendarStart.value = today.toISOString().slice(0, 10);
       if (!ui.eventsCalendarEnd.value) ui.eventsCalendarEnd.value = end.toISOString().slice(0, 10);
     }
-    if (ui.eventsCalendarCountry && !ui.eventsCalendarCountry.value) {
-      ui.eventsCalendarCountry.value = state.preferredCountry || "US";
+    if (ui.eventsCalendarSymbol && !String(ui.eventsCalendarSymbol.value || "").trim()) {
+      ui.eventsCalendarSymbol.value = normalizeTicker(state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "");
+    }
+    if (ui.eventsCalendarWindow && !String(ui.eventsCalendarWindow.value || "").trim()) {
+      ui.eventsCalendarWindow.value = "month";
     }
     ui.eventsCalendarForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
-      await loadCorporateEventsCalendar(functions, { force: true, notify: true });
+      await loadEarningsCalendar({ force: true, notify: true });
+    });
+    ui.eventsCalendarWindow?.addEventListener("change", async () => {
+      await loadEarningsCalendar({ force: false, notify: false });
     });
 
     if (ui.marketHeadlinesCountry && !ui.marketHeadlinesCountry.value) {
@@ -17276,7 +18048,7 @@
         const question = [
           `Generate one backtestable setup idea for ${ticker} using the supplied technical indicator context on ${interval} data.`,
           "Output should include: bias, entry trigger, invalidation/exit, and position-risk constraints.",
-          "Reference conflicting signals and keep the plan practical for research/backtesting only.",
+          "Reference conflicting signals and keep the plan practical for research workflows only.",
         ].join(" ");
 
         if (ui.backtestAgentStatus) ui.backtestAgentStatus.textContent = "Querying GPT-5...";
@@ -17464,6 +18236,7 @@
           source: "system",
           at: new Date().toISOString(),
         });
+        await loadNotificationFeed({ filter: state.notificationFeed?.filter || "all", unreadOnly: Boolean(state.notificationFeed?.unreadOnly), silent: true });
         logEvent("notifications_enabled", { channel: isNativeApp() ? "native" : "webpush" });
         showToast("Notifications enabled.");
       } catch (error) {
@@ -17497,6 +18270,7 @@
           source: "system",
           at: new Date().toISOString(),
         });
+        await loadNotificationFeed({ filter: state.notificationFeed?.filter || "all", unreadOnly: Boolean(state.notificationFeed?.unreadOnly), silent: true });
         logEvent("notifications_token_refreshed", { channel: isNativeApp() ? "native" : "webpush" });
       } catch (error) {
 	        setNotificationStatus(error.message || "Unable to refresh notification token.");
@@ -17512,21 +18286,47 @@
 	      }
 	      try {
 	        setNotificationStatus("Sending test notification...");
-	        const sendTestNotification = functions.httpsCallable("send_test_notification");
           const cachedToken = String(safeLocalStorageGet(FCM_TOKEN_CACHE_KEY) || "").trim();
-	        const result = await sendTestNotification({
-	          title: "Quantura test",
-          body: "Web push is active for your dashboard.",
-          data: {
-            source: "dashboard_test",
-            timestamp: new Date().toISOString(),
-          },
-          token: cachedToken,
-          meta: buildMeta(),
-        });
-        const sent = result.data?.successCount ?? 0;
-        const attempted = result.data?.attemptedTokenCount ?? sent;
-        const usedFallback = Boolean(result.data?.usedFallbackToken);
+          let sent = 0;
+          let attempted = 0;
+          let usedFallback = false;
+
+          try {
+            const headers = await buildApiAuthHeaders({ includeJson: true });
+            const response = await fetch("/api/notify/sendTest", {
+              method: "POST",
+              headers,
+              body: JSON.stringify({
+                title: "Quantura test",
+                body: "Web push is active for your dashboard.",
+                data: {
+                  source: "dashboard_test",
+                  timestamp: new Date().toISOString(),
+                },
+                token: cachedToken,
+                meta: buildMeta(),
+              }),
+            });
+            const apiPayload = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(String(apiPayload?.error || "Unable to send test notification."));
+            sent = Number(apiPayload?.successCount || apiPayload?.delivered || 0) || 0;
+            attempted = Number(apiPayload?.attemptedTokenCount || apiPayload?.attempted || sent) || sent;
+          } catch (apiError) {
+            const sendTestNotification = functions.httpsCallable("send_test_notification");
+            const result = await sendTestNotification({
+              title: "Quantura test",
+              body: "Web push is active for your dashboard.",
+              data: {
+                source: "dashboard_test",
+                timestamp: new Date().toISOString(),
+              },
+              token: cachedToken,
+              meta: buildMeta(),
+            });
+            sent = Number(result.data?.successCount ?? 0) || 0;
+            attempted = Number(result.data?.attemptedTokenCount ?? sent) || sent;
+            usedFallback = Boolean(result.data?.usedFallbackToken);
+          }
         const statusSuffix = usedFallback ? " (used local token fallback)" : "";
         setNotificationStatus(`Test sent. Delivered to ${sent} of ${attempted} token(s)${statusSuffix}.`);
         await appendNotificationLogPersonalized({
@@ -17535,6 +18335,7 @@
           source: "system",
           at: new Date().toISOString(),
         });
+        await loadNotificationFeed({ filter: state.notificationFeed?.filter || "all", unreadOnly: Boolean(state.notificationFeed?.unreadOnly), silent: true });
         logEvent("notifications_test_sent", { delivered: sent });
         showToast("Test notification sent.");
       } catch (error) {
@@ -17549,6 +18350,30 @@
       renderNotificationLog();
       setNotificationStatus("Notification log cleared.");
       showToast("Notification log cleared.");
+    });
+
+    ui.notificationsMarkAll?.addEventListener("click", async () => {
+      if (!requireFullAccount("Sign in first.", { redirect: true })) return;
+      await markAllNotificationsRead();
+    });
+
+    if (Array.isArray(ui.notificationFilterButtons)) {
+      ui.notificationFilterButtons.forEach((button) => {
+        button.addEventListener("click", async () => {
+          const filter = String(button?.dataset?.notificationFilter || "all").trim().toLowerCase() || "all";
+          const unreadOnly = filter === "unread";
+          await loadNotificationFeed({ filter: unreadOnly ? "all" : filter, unreadOnly, silent: true });
+        });
+      });
+    }
+
+    document.addEventListener("click", async (event) => {
+      const trigger = event.target.closest('[data-action="notification-mark-read"]');
+      if (!trigger) return;
+      event.preventDefault();
+      const itemId = String(trigger.dataset.id || "").trim();
+      if (!itemId) return;
+      await markNotificationItemRead(itemId);
     });
 
     ui.notificationsLocationOptIn?.addEventListener("change", async () => {
@@ -17726,6 +18551,9 @@
             state.userSubscriptionTier = "free";
             state.aiUsageToday = 0;
             state.aiUsageTierKey = "free";
+            state.collaboratorCount = 0;
+            state.pendingCollabInviteCount = 0;
+            applyAdFreeExperience();
 		        renderOrderList([], ui.userOrders);
             renderRequestList([], ui.userForecasts, "No forecast requests yet.");
             renderRequestList([], ui.autopilotOutput, "No autopilot requests yet.");
@@ -17754,6 +18582,11 @@
           setNotificationTokenPreview("");
           setNotificationControlsEnabled(false);
         }
+            state.notificationFeed.items = [];
+            state.notificationFeed.unreadCount = 0;
+            state.notificationFeed.filter = "all";
+            state.notificationFeed.unreadOnly = false;
+            renderNotificationFeed();
             syncNotificationPrivacyControls();
 			        if (state.unsubscribeOrders) state.unsubscribeOrders();
 			        if (state.unsubscribeAdmin) state.unsubscribeAdmin();
@@ -17909,6 +18742,11 @@
 	          setNotificationControlsEnabled(false);
             setNotificationStatus("Push notifications are not supported on this device.");
 	        }
+          await loadNotificationFeed({
+            filter: state.notificationFeed?.filter || "all",
+            unreadOnly: Boolean(state.notificationFeed?.unreadOnly),
+            silent: true,
+          });
 	      }
         await loadNotificationPrivacySettings().catch(() => {
           syncNotificationPrivacyControls();

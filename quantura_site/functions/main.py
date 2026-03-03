@@ -192,6 +192,22 @@ RISK_FREE_RATE = float(os.environ.get("RISK_FREE_RATE", "0.045") or 0.045)
 TRENDING_URL = "https://query1.finance.yahoo.com/v1/finance/trending/US"
 YAHOO_SEARCH_URL = "https://query2.finance.yahoo.com/v1/finance/search"
 DEFAULT_FORECAST_PRICE = 349
+DEFAULT_SUBSCRIPTION_PRICE = 39
+SUBSCRIPTION_TIER_RANK: dict[str, int] = {
+    "free": 0,
+    "go": 1,
+    "plus": 2,
+    "pro": 3,
+    "business": 4,
+    "desk": 4,
+}
+WORKSPACE_SEAT_LIMITS: dict[str, int] = {
+    "free": 0,
+    "go": 1,
+    "plus": 3,
+    "pro": 8,
+    "business": 30,
+}
 OPENAI_API_KEY = secrets_loader.get_secret("OPENAI_API_KEY")
 AMAZON_NOVA_API_KEY = secrets_loader.get_secret("AMAZON_NOVA_API_KEY")
 GEMINI_API_KEY = secrets_loader.get_secret("GEMINI_API_KEY")
@@ -396,18 +412,48 @@ DEFAULT_REMOTE_CONFIG: dict[str, str] = {
                 "weekly_limit": 3,
                 "daily_limit": 3,
                 "volatility_alerts": False,
+                "workspace_limit": 0,
+                "ad_free": False,
             },
-            "pro": {
-                "allowed_models": ["gpt-5-mini", "gpt-5", "gpt-5.1"],
+            "go": {
+                "allowed_models": ["gpt-5-nano", "gpt-5-mini"],
+                "weekly_limit": 10,
+                "daily_limit": 10,
+                "volatility_alerts": True,
+                "workspace_limit": 1,
+                "ad_free": True,
+            },
+            "plus": {
+                "allowed_models": ["gpt-5-mini", "gpt-5"],
                 "weekly_limit": 25,
                 "daily_limit": 25,
                 "volatility_alerts": True,
+                "workspace_limit": 3,
+                "ad_free": True,
             },
-            "desk": {
-                "allowed_models": ["gpt-5-nano", "gpt-5-mini", "gpt-5", "gpt-5.1", "gpt-5.2"],
-                "weekly_limit": 75,
-                "daily_limit": 75,
+            "pro": {
+                "allowed_models": ["gpt-5-mini", "gpt-5", "gpt-5.1"],
+                "weekly_limit": 60,
+                "daily_limit": 60,
                 "volatility_alerts": True,
+                "workspace_limit": 8,
+                "ad_free": True,
+            },
+            "business": {
+                "allowed_models": [
+                    "gpt-5-nano",
+                    "gpt-5-mini",
+                    "gpt-5",
+                    "gpt-5.1",
+                    "gpt-5.2",
+                    "amazon.nova-lite-v1:0",
+                    "amazon.nova-pro-v1:0",
+                ],
+                "weekly_limit": 150,
+                "daily_limit": 150,
+                "volatility_alerts": True,
+                "workspace_limit": 30,
+                "ad_free": True,
             },
         }
     ),
@@ -735,18 +781,56 @@ def _get_ai_usage_tiers(context: dict[str, Any] | None = None) -> dict[str, Any]
             "weekly_limit": 3,
             "daily_limit": 3,
             "volatility_alerts": False,
+            "workspace_limit": 0,
+            "ad_free": False,
         },
-        "pro": {
-            "allowed_models": ["gpt-5-mini", "gpt-5", "gpt-5.1"],
+        "go": {
+            "allowed_models": ["gpt-5-nano", "gpt-5-mini"],
+            "weekly_limit": 10,
+            "daily_limit": 10,
+            "volatility_alerts": True,
+            "workspace_limit": 1,
+            "ad_free": True,
+        },
+        "plus": {
+            "allowed_models": ["gpt-5-mini", "gpt-5"],
             "weekly_limit": 25,
             "daily_limit": 25,
             "volatility_alerts": True,
+            "workspace_limit": 3,
+            "ad_free": True,
+        },
+        "pro": {
+            "allowed_models": ["gpt-5-mini", "gpt-5", "gpt-5.1"],
+            "weekly_limit": 60,
+            "daily_limit": 60,
+            "volatility_alerts": True,
+            "workspace_limit": 8,
+            "ad_free": True,
+        },
+        "business": {
+            "allowed_models": [
+                "gpt-5-nano",
+                "gpt-5-mini",
+                "gpt-5",
+                "gpt-5.1",
+                "gpt-5.2",
+                "amazon.nova-lite-v1:0",
+                "amazon.nova-pro-v1:0",
+            ],
+            "weekly_limit": 150,
+            "daily_limit": 150,
+            "volatility_alerts": True,
+            "workspace_limit": 30,
+            "ad_free": True,
         },
         "desk": {
             "allowed_models": ["gpt-5-nano", "gpt-5-mini", "gpt-5", "gpt-5.1", "gpt-5.2"],
-            "weekly_limit": 75,
-            "daily_limit": 75,
+            "weekly_limit": 150,
+            "daily_limit": 150,
             "volatility_alerts": True,
+            "workspace_limit": 30,
+            "ad_free": True,
         },
     }
     parsed = _remote_config_json_param("ai_usage_tiers", fallback, context=context)
@@ -754,7 +838,8 @@ def _get_ai_usage_tiers(context: dict[str, Any] | None = None) -> dict[str, Any]
         return fallback
     global_allowed = _get_llm_allowed_models(context=context)
     global_allowed_set = set(global_allowed)
-    default_limits = {"free": 3, "pro": 25, "desk": 75}
+    default_limits = {"free": 3, "go": 10, "plus": 25, "pro": 60, "business": 150, "desk": 150}
+    default_workspaces = {"free": 0, "go": 1, "plus": 3, "pro": 8, "business": 30, "desk": 30}
     for tier_name, tier_data in parsed.items():
         if not isinstance(tier_data, dict):
             continue
@@ -787,7 +872,8 @@ def _get_ai_usage_tiers(context: dict[str, Any] | None = None) -> dict[str, Any]
                     normalized.append(model_id)
 
         tier_key = str(tier_name).strip().lower()
-        default_limit = default_limits.get(tier_key, 3)
+        normalized_tier_key = "business" if tier_key == "desk" else tier_key
+        default_limit = default_limits.get(normalized_tier_key, 3)
         raw_weekly = tier_data.get("weekly_limit")
         if raw_weekly in (None, ""):
             raw_weekly = tier_data.get("daily_limit")
@@ -797,45 +883,38 @@ def _get_ai_usage_tiers(context: dict[str, Any] | None = None) -> dict[str, Any]
             weekly_limit = default_limit
         if weekly_limit <= 0:
             weekly_limit = default_limit
-        if tier_key == "free":
+        if normalized_tier_key == "free":
             weekly_limit = max(1, min(weekly_limit, 5))
-        elif tier_key == "pro":
-            weekly_limit = max(6, min(weekly_limit, 40))
-        elif tier_key == "desk":
-            weekly_limit = max(20, min(weekly_limit, 200))
+        elif normalized_tier_key == "go":
+            weekly_limit = max(6, min(weekly_limit, 20))
+        elif normalized_tier_key == "plus":
+            weekly_limit = max(15, min(weekly_limit, 45))
+        elif normalized_tier_key == "pro":
+            weekly_limit = max(30, min(weekly_limit, 100))
+        elif normalized_tier_key == "business":
+            weekly_limit = max(80, min(weekly_limit, 300))
 
         tier_data["weekly_limit"] = weekly_limit
         tier_data["daily_limit"] = weekly_limit  # Backward-compatible alias for older clients.
         tier_data["volatility_alerts"] = bool(tier_data.get("volatility_alerts"))
+        workspace_raw = tier_data.get("workspace_limit")
+        try:
+            workspace_limit = int(float(workspace_raw))
+        except Exception:
+            workspace_limit = default_workspaces.get(normalized_tier_key, 0)
+        tier_data["workspace_limit"] = max(0, workspace_limit)
+        tier_data["ad_free"] = bool(tier_data.get("ad_free")) if "ad_free" in tier_data else normalized_tier_key != "free"
         tier_data["allowed_models"] = normalized
+    if "business" not in parsed and isinstance(parsed.get("desk"), dict):
+        parsed["business"] = dict(parsed["desk"])
     return parsed
 
 
 def _resolve_paid_plan_tier(uid: str) -> str:
-    """Infers a paid tier from the user's orders. Returns free/pro/desk."""
-    best_rank = 0
-    try:
-        docs = db.collection("orders").where("userId", "==", uid).limit(50).stream()
-    except Exception:
-        return "free"
-
-    for doc in docs:
-        data = doc.to_dict() or {}
-        status = str(data.get("paymentStatus") or "").strip().lower()
-        if status not in {"paid", "succeeded"}:
-            continue
-        product = str(data.get("product") or "").strip().lower()
-        if "desk" in product or "enterprise" in product:
-            best_rank = max(best_rank, 2)
-        elif "pro" in product or "elite" in product or "forecast" in product:
-            best_rank = max(best_rank, 1)
-        else:
-            best_rank = max(best_rank, 1)
-
-    if best_rank >= 2:
-        return "desk"
-    if best_rank >= 1:
-        return "pro"
+    """Infers a paid tier from orders. Returns free/go/plus/pro/business."""
+    tier = _resolve_user_subscription_tier(uid)
+    if tier in {"free", "go", "plus", "pro", "business"}:
+        return tier
     return "free"
 
 
@@ -848,24 +927,40 @@ def _resolve_ai_tier(
     global_allowed_set = set(global_allowed)
     tiers = _get_ai_usage_tiers(context=context)
     if token.get("email") == ADMIN_EMAIL:
-        tier_key = "desk"
+        tier_key = "business"
     else:
         tier_key = _resolve_paid_plan_tier(uid)
-        if tier_key not in {"free", "pro", "desk"}:
+        if tier_key not in {"free", "go", "plus", "pro", "business"}:
             tier_key = "free"
     tier = tiers.get(tier_key) if isinstance(tiers.get(tier_key), dict) else {}
+    if not tier and tier_key == "business" and isinstance(tiers.get("desk"), dict):
+        tier = dict(tiers.get("desk") or {})
     if not tier:
-        fallback_limit = 3 if tier_key == "free" else 25 if tier_key == "pro" else 75
+        fallback_limits = {"free": 3, "go": 10, "plus": 25, "pro": 60, "business": 150}
+        fallback_limit = fallback_limits.get(tier_key, 3)
         fallback_models = {
             "free": ["gpt-5-nano", "gpt-5-mini"],
+            "go": ["gpt-5-nano", "gpt-5-mini"],
+            "plus": ["gpt-5-mini", "gpt-5"],
             "pro": ["gpt-5-mini", "gpt-5", "gpt-5.1"],
-            "desk": ["gpt-5-nano", "gpt-5-mini", "gpt-5", "gpt-5.1", "gpt-5.2"],
+            "business": [
+                "gpt-5-nano",
+                "gpt-5-mini",
+                "gpt-5",
+                "gpt-5.1",
+                "gpt-5.2",
+                "amazon.nova-lite-v1:0",
+                "amazon.nova-pro-v1:0",
+            ],
         }
+        fallback_workspaces = {"free": 0, "go": 1, "plus": 3, "pro": 8, "business": 30}
         tier = {
             "allowed_models": fallback_models.get(tier_key, fallback_models["free"]),
             "weekly_limit": fallback_limit,
             "daily_limit": fallback_limit,
             "volatility_alerts": tier_key != "free",
+            "workspace_limit": fallback_workspaces.get(tier_key, 0),
+            "ad_free": tier_key != "free",
         }
     tier_allowed_raw = tier.get("allowed_models") if isinstance(tier, dict) else []
     tier_allowed: list[str] = []
@@ -883,6 +978,11 @@ def _resolve_ai_tier(
     if not tier_allowed:
         tier_allowed = list(DEFAULT_LLM_ALLOWED_MODELS)
     tier["allowed_models"] = tier_allowed
+    tier["ad_free"] = bool(tier.get("ad_free")) if "ad_free" in tier else tier_key != "free"
+    try:
+        tier["workspace_limit"] = max(0, int(float(tier.get("workspace_limit", 0))))
+    except Exception:
+        tier["workspace_limit"] = 0
     return tier_key, tier
 
 
@@ -6380,16 +6480,76 @@ def _generate_and_store_forecast_report_assets(
     }
 
 
+def _normalize_subscription_tier(value: Any) -> str:
+    raw = str(value or "").strip().lower()
+    if not raw:
+        return "free"
+    if raw == "desk":
+        return "business"
+    if raw in {"free", "go", "plus", "pro", "business"}:
+        return raw
+    return "free"
+
+
+def _subscription_tier_from_order(order_data: dict[str, Any]) -> str:
+    meta = order_data.get("meta") if isinstance(order_data.get("meta"), dict) else {}
+    bag_parts = [
+        str(order_data.get("subscriptionTier") or "").strip().lower(),
+        str(order_data.get("tier") or "").strip().lower(),
+        str(order_data.get("plan") or "").strip().lower(),
+        str(order_data.get("productId") or "").strip().lower(),
+        str(order_data.get("product") or "").strip().lower(),
+        str(meta.get("subscriptionTier") or "").strip().lower(),
+        str(meta.get("tier") or "").strip().lower(),
+        str(meta.get("plan") or "").strip().lower(),
+        str(meta.get("productId") or "").strip().lower(),
+    ]
+    bag = " ".join(part for part in bag_parts if part)
+
+    if any(token in bag for token in ("annualbusinessplan", "businessplan", "quanturabusiness", "quantura business", "business")):
+        return "business"
+    if "quanturapro" in bag or " pro" in f" {bag}":
+        return "pro"
+    if any(token in bag for token in ("annualplusplan", "premium", "plus")):
+        return "plus"
+    if any(token in bag for token in ("goplanyearly", "annualgoplan", "goplan", " go")):
+        return "go"
+    return _normalize_subscription_tier(order_data.get("subscriptionTier"))
+
+
+def _resolve_user_subscription_tier(uid: str) -> str:
+    best_tier = "free"
+    best_rank = SUBSCRIPTION_TIER_RANK["free"]
+    try:
+        docs = db.collection("orders").where("userId", "==", uid).limit(250).stream()
+        for snap in docs:
+            data = snap.to_dict() or {}
+            payment_status = str(data.get("paymentStatus") or "").strip().lower()
+            if payment_status not in {"paid", "succeeded", "active", "complete", "completed"}:
+                continue
+            tier = _subscription_tier_from_order(data)
+            rank = SUBSCRIPTION_TIER_RANK.get(tier, 0)
+            if rank > best_rank:
+                best_tier = tier
+                best_rank = rank
+    except Exception:
+        return "free"
+    return _normalize_subscription_tier(best_tier)
+
+
 @https_fn.on_call()
 def create_order(req: https_fn.CallableRequest) -> dict[str, Any]:
     token = _require_auth(req)
     data = req.data or {}
 
-    product = str(data.get("product") or "Deep Forecast")
+    product = str(data.get("product") or "Quantura Subscription")
+    product_id = str(data.get("productId") or "").strip()
+    subscription_tier = _normalize_subscription_tier(data.get("tier"))
+    payment_provider = str(data.get("paymentProvider") or "stripe").strip().lower() or "stripe"
     currency = str(data.get("currency") or "USD")
     price = data.get("price")
     if not isinstance(price, (int, float)):
-        price = DEFAULT_FORECAST_PRICE
+        price = DEFAULT_SUBSCRIPTION_PRICE
     meta = data.get("meta") or {}
     if not isinstance(meta, dict):
         meta = {}
@@ -6398,14 +6558,17 @@ def create_order(req: https_fn.CallableRequest) -> dict[str, Any]:
         "userId": req.auth.uid,
         "userEmail": token.get("email"),
         "product": product,
+        "productId": product_id,
+        "subscriptionTier": subscription_tier,
         "price": price,
         "currency": currency,
         "status": "pending",
-        "paymentProvider": "stripe",
+        "paymentProvider": payment_provider,
         "paymentStatus": "unpaid",
         "stripeCheckoutSessionId": "",
         "stripePaymentIntentId": "",
         "stripeSubscriptionId": "",
+        "nativePlatform": str(data.get("platform") or meta.get("purchaseRuntime") or "").strip().lower(),
         "fulfillmentNotes": "",
         "meta": meta,
         "createdAt": firestore.SERVER_TIMESTAMP,
@@ -6451,15 +6614,14 @@ def create_stripe_checkout_session(req: https_fn.CallableRequest) -> dict[str, A
     if payment_status in {"paid", "succeeded"}:
         return {"orderId": order_id, "status": "paid"}
 
-    product = str(order.get("product") or "Deep Forecast").strip() or "Deep Forecast"
+    product = str(order.get("product") or "Quantura Subscription").strip() or "Quantura Subscription"
     currency = str(order.get("currency") or "USD").strip().lower() or "usd"
     price = _safe_float(order.get("price"))
     if price is None:
-        price = float(DEFAULT_FORECAST_PRICE)
+        price = float(DEFAULT_SUBSCRIPTION_PRICE)
     amount_cents = max(50, int(round(float(price) * 100)))
 
-    normalized_name = product.lower()
-    mode = "payment" if "forecast" in normalized_name else "subscription"
+    mode = "subscription"
     recurring = {"interval": "month"} if mode == "subscription" else None
 
     price_data: dict[str, Any] = {
@@ -6641,6 +6803,64 @@ def confirm_stripe_checkout(req: https_fn.CallableRequest) -> dict[str, Any]:
         "currency": order.get("currency") or "USD",
         "price": order.get("price") or 0,
     }
+
+
+@https_fn.on_call()
+def confirm_native_iap_purchase(req: https_fn.CallableRequest) -> dict[str, Any]:
+    token = _require_auth(req)
+    data = req.data or {}
+
+    order_id = str(data.get("orderId") or "").strip()
+    if not order_id:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Order ID is required.")
+
+    product_id = str(data.get("productId") or "").strip().lower()
+    platform = str(data.get("platform") or "").strip().lower()
+    status = str(data.get("status") or "").strip().lower()
+    tier = _normalize_subscription_tier(data.get("tier"))
+    if status and status not in {"purchased", "success", "paid", "active"}:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.FAILED_PRECONDITION, "Purchase status is not paid.")
+
+    order_ref = db.collection("orders").document(order_id)
+    snapshot = order_ref.get()
+    if not snapshot.exists:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "Order not found.")
+
+    order = snapshot.to_dict() or {}
+    owner_id = str(order.get("userId") or "")
+    if token.get("email") != ADMIN_EMAIL and owner_id != req.auth.uid:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.PERMISSION_DENIED, "Order access denied.")
+
+    update_payload: dict[str, Any] = {
+        "paymentProvider": "native_iap",
+        "paymentStatus": "paid",
+        "paidAt": firestore.SERVER_TIMESTAMP,
+        "updatedAt": firestore.SERVER_TIMESTAMP,
+    }
+    if product_id:
+        update_payload["productId"] = product_id
+    if tier != "free":
+        update_payload["subscriptionTier"] = tier
+    if platform:
+        update_payload["nativePlatform"] = platform
+
+    meta = order.get("meta") if isinstance(order.get("meta"), dict) else {}
+    meta_update = dict(meta)
+    meta_update["nativePurchaseConfirmed"] = True
+    meta_update["nativePurchaseStatus"] = status or "purchased"
+    if platform:
+        meta_update["nativePurchasePlatform"] = platform
+    update_payload["meta"] = meta_update
+
+    order_ref.set(update_payload, merge=True)
+    _audit_event(
+        req.auth.uid,
+        token.get("email"),
+        "native_iap_purchase_confirmed",
+        {"orderId": order_id, "productId": product_id, "platform": platform, "tier": tier},
+    )
+
+    return {"orderId": order_id, "paid": True, "paymentStatus": "paid", "tier": tier}
 
 
 @https_fn.on_call()
@@ -8448,7 +8668,7 @@ def update_order_status(req: https_fn.CallableRequest) -> dict[str, Any]:
     order_user_id = order_data.get("userId")
     order_user_email = order_data.get("userEmail")
     if isinstance(order_user_id, str) and order_user_id:
-        product = str(order_data.get("product") or "Deep Forecast")
+        product = str(order_data.get("product") or "Quantura Subscription")
         human_status = status.replace("_", " ").title()
         _notify_user(
             order_user_id,
@@ -8510,6 +8730,30 @@ def create_collab_invite(req: https_fn.CallableRequest) -> dict[str, Any]:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Role must be viewer or editor.")
 
     from_email = _normalize_email(token.get("email"))
+    subscription_tier = _resolve_user_subscription_tier(req.auth.uid)
+    seat_limit = int(WORKSPACE_SEAT_LIMITS.get(subscription_tier, 0))
+    if seat_limit <= 0:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "Your current plan does not include collaborator seats. Upgrade to invite collaborators.",
+        )
+
+    collaborator_docs = db.collection("users").document(req.auth.uid).collection("collaborators").limit(500).stream()
+    collaborator_count = sum(1 for _ in collaborator_docs)
+    pending_invite_docs = (
+        db.collection("collab_invites")
+        .where("workspaceUserId", "==", req.auth.uid)
+        .where("status", "==", "pending")
+        .limit(500)
+        .stream()
+    )
+    pending_invite_count = sum(1 for _ in pending_invite_docs)
+    if collaborator_count + pending_invite_count >= seat_limit:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            f"Workspace seat limit reached ({seat_limit}) for your {subscription_tier.title()} tier.",
+        )
+
     invite_doc = {
         "fromUserId": req.auth.uid,
         "fromEmail": from_email,
@@ -8530,7 +8774,7 @@ def create_collab_invite(req: https_fn.CallableRequest) -> dict[str, Any]:
         req.auth.uid,
         token.get("email"),
         "collab_invite_created",
-        {"inviteId": doc_ref.id, "toEmail": to_email_norm, "role": role},
+        {"inviteId": doc_ref.id, "toEmail": to_email_norm, "role": role, "tier": subscription_tier},
     )
     return {"inviteId": doc_ref.id, "status": "pending"}
 
@@ -12595,7 +12839,8 @@ def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
     allowed_models_raw = tier.get("allowed_models") if isinstance(tier, dict) else []
     allowed_models = [_normalize_ai_model_id(item) for item in (allowed_models_raw or []) if str(item).strip()]
     allowed_models = list(dict.fromkeys([item for item in allowed_models if item]))
-    default_weekly = 3 if tier_key == "free" else 25 if tier_key == "pro" else 75
+    tier_weekly_defaults = {"free": 3, "go": 10, "plus": 25, "pro": 60, "business": 150}
+    default_weekly = int(tier_weekly_defaults.get(tier_key, 3))
     weekly_limit = int(tier.get("weekly_limit") or tier.get("daily_limit") or default_weekly)
     weekly_limit = max(1, weekly_limit)
 

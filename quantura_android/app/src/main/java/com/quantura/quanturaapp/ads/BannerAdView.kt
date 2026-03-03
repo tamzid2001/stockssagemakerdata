@@ -33,7 +33,7 @@ class BannerAdView @JvmOverloads constructor(
         remoteConfigManager = manager
         if (!manager.isFeatureEnabled("ads_enabled")) {
             Log.d(tag, "Banner hidden because ads feature flag is disabled.")
-            visibility = GONE
+            hideAd()
             return
         }
         val adUnitId = manager.getAdUnitIds().adaptiveBanner
@@ -66,6 +66,26 @@ class BannerAdView @JvmOverloads constructor(
         Log.d(tag, "Loading banner unit=$adUnitId")
         adView?.loadAd(AdRequest.Builder().build())
         visibility = VISIBLE
+    }
+
+    fun refreshAdVisibility() {
+        val manager = remoteConfigManager ?: return
+        if (!manager.isFeatureEnabled("ads_enabled")) {
+            hideAd()
+            return
+        }
+        if (adView == null) {
+            loadAd(manager)
+        } else {
+            visibility = VISIBLE
+        }
+    }
+
+    fun hideAd() {
+        removeAllViews()
+        adView?.destroy()
+        adView = null
+        visibility = GONE
     }
 
     override fun onDetachedFromWindow() {
