@@ -959,14 +959,39 @@ async function invokeOpenAiLlm(payload: {
 }
 
 function extractResponsesOutputText(payload: Record<string, unknown>): string {
-  const direct = sanitizeText((payload as any)?.output_text, 24000);
+  const rawDirect = (payload as any)?.output_text;
+  const directParts: string[] = [];
+  if (typeof rawDirect === "string" || typeof rawDirect === "number" || typeof rawDirect === "boolean") {
+    const text = sanitizeText(rawDirect, 24000);
+    if (text) directParts.push(text);
+  } else if (Array.isArray(rawDirect)) {
+    rawDirect.forEach((part) => {
+      const text = sanitizeText(
+        (part as any)?.text ?? (part as any)?.value ?? (part as any)?.output_text ?? part,
+        24000
+      );
+      if (text) directParts.push(text);
+    });
+  } else if (rawDirect && typeof rawDirect === "object") {
+    const text = sanitizeText((rawDirect as any).text ?? (rawDirect as any).value ?? "", 24000);
+    if (text) directParts.push(text);
+  }
+  const direct = sanitizeText(directParts.join("\n").trim(), 24000);
   if (direct) return direct;
   const output = Array.isArray((payload as any)?.output) ? ((payload as any).output as any[]) : [];
   const chunks: string[] = [];
   output.forEach((item) => {
     const content = Array.isArray(item?.content) ? item.content : [];
     content.forEach((part: any) => {
-      const text = sanitizeText(part?.text || part?.output_text || part?.value, 24000);
+      const text = sanitizeText(
+        part?.text?.value ??
+          part?.text ??
+          part?.output_text?.value ??
+          part?.output_text ??
+          part?.value?.text ??
+          part?.value,
+        24000
+      );
       if (text) chunks.push(text);
     });
   });
