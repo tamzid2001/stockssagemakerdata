@@ -48,12 +48,13 @@ export PUBLIC_ORIGIN=https://quantura.studio
 export PLAY_INTEGRITY_ANDROID_PACKAGE=com.quantura.quanturaapp
 export REQUIRE_PLAY_INTEGRITY=false
 export LOCAL_FUNCTIONS_BUILD=false
-export CLOUDSDK_PYTHON=/usr/bin/python3
+export CLOUDSDK_PYTHON=/opt/homebrew/bin/python3.13
+export GCLOUD_BIN=/opt/homebrew/bin/gcloud
 ```
 
 By default `LOCAL_FUNCTIONS_BUILD=false` to avoid local Node-version/tooling drift; Cloud Build compiles functions during `gcloud functions deploy`. Set `LOCAL_FUNCTIONS_BUILD=true` only if you want a local pre-deploy compile step.
 
-`deploy.sh` also defaults `CLOUDSDK_PYTHON` to `/usr/bin/python3` when unset, because some Homebrew Python runtimes can stall with this Cloud SDK install.
+`deploy.sh` auto-selects a supported Python interpreter (`3.10` to `3.14`) and prefers Homebrew `gcloud` when available.
 
 ## Secrets
 

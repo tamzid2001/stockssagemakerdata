@@ -524,7 +524,7 @@ i[class*=" iconoir-"]::before {
 }
 
 .section {
-  padding: 70px 0;
+  padding: 54px 0;
 }
 
 .section-title {
@@ -3246,13 +3246,15 @@ textarea {
   z-index: 1;
 }
 
-.ticker-dock {
+.ticker-dock,
+.terminal-dock {
   position: relative;
   top: 0;
   z-index: 2;
 }
 
-.ticker-dock-form {
+.ticker-dock-form,
+.terminal-dock-form {
   display: grid;
   grid-template-columns: 1fr 1fr auto;
   gap: 14px;
@@ -3986,12 +3988,14 @@ textarea {
   }
 
   .studio-chart,
-  .ticker-dock {
+  .ticker-dock,
+  .terminal-dock {
     position: relative;
     top: 0;
   }
 
-  .ticker-dock-form {
+  .ticker-dock-form,
+  .terminal-dock-form {
     grid-template-columns: 1fr;
   }
 
@@ -4395,6 +4399,14 @@ select {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
+@media (max-width: 768px) {
+  select {
+    padding: 10px 12px;
+    min-height: 44px;
+    font-size: 0.95rem;
+  }
+}
+
 /* Ticker Intelligence institutional view */
 .ticker-intelligence-panel {
   width: 100%;
@@ -4666,7 +4678,7 @@ form[data-provider-accent="amazon_nova"] #screener-generate-button {
 }
 
 .research-shell {
-  padding-top: 56px;
+  padding-top: 28px;
 }
 
 .research-intro {
@@ -4816,6 +4828,38 @@ form[data-provider-accent="amazon_nova"] #screener-generate-button {
   color: #1d4ed8;
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+[data-theme="dark"] .research-page {
+  background: #0a1020;
+  color: rgba(233, 237, 247, 0.95);
+}
+
+[data-theme="dark"] .research-page .card,
+[data-theme="dark"] .research-note-card,
+[data-theme="dark"] .research-note-page,
+[data-theme="dark"] .research-pillar {
+  background: rgba(17, 24, 39, 0.72);
+  border-color: rgba(148, 163, 184, 0.24);
+}
+
+[data-theme="dark"] .research-note-card p,
+[data-theme="dark"] .research-note-page p,
+[data-theme="dark"] .research-bullet-list {
+  color: rgba(203, 213, 225, 0.92);
+}
+
+[data-theme="dark"] .research-note-tag {
+  color: #bfdbfe;
+  border-color: rgba(96, 165, 250, 0.45);
+  background: rgba(30, 64, 175, 0.28);
+}
+
+[data-theme="dark"] .research-code,
+[data-theme="dark"] .research-diagram {
+  background: rgba(15, 23, 42, 0.88);
+  border-color: rgba(148, 163, 184, 0.28);
+  color: rgba(226, 232, 240, 0.95);
 }
 
 .research-blueprint {

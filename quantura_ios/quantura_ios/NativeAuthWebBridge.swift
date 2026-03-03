@@ -139,26 +139,59 @@ final class NativeAuthWebBridge {
         }
 
         let baseURL = preferredWebOrigin()
-        let endpoint = URL(string: "/api/auth/exchange", relativeTo: baseURL) ?? baseURL.appendingPathComponent("api/auth/exchange")
+        let bundleId = Bundle.main.bundleIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let mobilePayload: [String: Any] = [
+            "platform": "ios",
+            "bundleId": bundleId,
+        ]
+
+        do {
+            return try await postAuthExchange(
+                path: "/api/mobile/auth/exchange",
+                baseURL: baseURL,
+                idToken: token,
+                payload: mobilePayload
+            )
+        } catch let error as NativeAuthExchangeHttpError {
+            if ![400, 401, 403, 404, 405, 422, 501].contains(error.status) {
+                throw NativeAuthBridgeError.exchangeFailed(detail: error.detail)
+            }
+            print("[AuthBridge][iOS] Mobile exchange unavailable; falling back to legacy endpoint.")
+            return try await postAuthExchange(
+                path: "/api/auth/exchange",
+                baseURL: baseURL,
+                idToken: token,
+                payload: [:]
+            )
+        }
+    }
+
+    private func postAuthExchange(
+        path: String,
+        baseURL: URL,
+        idToken: String,
+        payload: [String: Any]
+    ) async throws -> String {
+        let endpoint = URL(string: path, relativeTo: baseURL) ?? baseURL.appendingPathComponent(path.trimmingCharacters(in: CharacterSet(charactersIn: "/")))
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.timeoutInterval = 30
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.httpBody = Data("{}".utf8)
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw NativeAuthBridgeError.httpFailed(status: -1)
         }
 
-        let payload = (try? JSONSerialization.jsonObject(with: data, options: [])) as? [String: Any]
+        let parsed = (try? JSONSerialization.jsonObject(with: data, options: [])) as? [String: Any]
         guard (200...299).contains(httpResponse.statusCode) else {
-            let detail = String(describing: payload?["error"] ?? payload?["message"] ?? "auth exchange failed")
-            throw NativeAuthBridgeError.exchangeFailed(detail: detail)
+            let detail = String(describing: parsed?["error"] ?? parsed?["message"] ?? "auth exchange failed")
+            throw NativeAuthExchangeHttpError(status: httpResponse.statusCode, detail: detail)
         }
 
-        let customToken = String(describing: payload?["customToken"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let customToken = String(describing: parsed?["customToken"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !customToken.isEmpty else {
             throw NativeAuthBridgeError.exchangeFailed(detail: "Server did not return customToken.")
         }
@@ -178,6 +211,11 @@ final class NativeAuthWebBridge {
         if trustedHosts.contains(host) { return true }
         return host.hasSuffix(".quantura.studio")
     }
+}
+
+private struct NativeAuthExchangeHttpError: Error {
+    let status: Int
+    let detail: String
 }
 
 enum NativeAuthBridgeError: LocalizedError {

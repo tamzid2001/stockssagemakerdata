@@ -32,6 +32,33 @@ import GoogleMobileAds
 
 private let quanturaURL = URL(string: "https://quantura.studio/")!
 
+private enum NativeIapCatalog {
+    static let defaultProductId = "pro"
+    static let iosProductIds: [String] = [
+        "goplan",
+        "premium",
+        "pro",
+        "businessplan",
+        "annualgoplan",
+        "annualplusplan",
+        "annualbusinessplan",
+    ]
+    private static let aliases: [String: String] = [
+        "quanturapro": "pro",
+        "quanturabusiness": "businessplan",
+        "goplanyearly": "annualgoplan",
+    ]
+
+    static func normalize(_ rawValue: String) -> String {
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return defaultProductId }
+        if iosProductIds.contains(trimmed) { return trimmed }
+        let lowered = trimmed.lowercased()
+        if let mapped = aliases[lowered] { return mapped }
+        return defaultProductId
+    }
+}
+
 final class AdImpressionReporter {
     static let shared = AdImpressionReporter()
 
@@ -638,7 +665,6 @@ struct QuanturaWebView: UIViewRepresentable {
         private weak var authGateViewModel: AuthGateViewModel?
         private var tokenObserver: NSObjectProtocol?
         private var deepLinkObserver: NSObjectProtocol?
-        private var lastNavigationInterstitialAt: Date = .distantPast
         private let trustedHosts: Set<String> = [
             "quantura.studio",
             "www.quantura.studio",
@@ -740,16 +766,6 @@ struct QuanturaWebView: UIViewRepresentable {
                 }
             }
 
-            if navigationAction.targetFrame?.isMainFrame == true,
-               let destination = navigationAction.request.url?.absoluteString,
-               !destination.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                let now = Date()
-                if now.timeIntervalSince(lastNavigationInterstitialAt) > 3 {
-                    lastNavigationInterstitialAt = now
-                    print("[Ads][iOS] Navigation trigger interstitial url=\(destination)")
-                    adManager.showInterstitial(from: Self.topViewController())
-                }
-            }
             decisionHandler(.allow)
         }
 
@@ -778,16 +794,23 @@ struct QuanturaWebView: UIViewRepresentable {
             DispatchQueue.main.async {
                 switch action {
                 case "showInterstitialAd":
+                    guard self.authGateViewModel?.isGateVisible != true else { return }
                     self.adManager.showInterstitial(from: Self.topViewController())
                 case "showRewardedAd":
+                    guard self.authGateViewModel?.isGateVisible != true else { return }
+                    self.adManager.showRewarded(from: Self.topViewController())
+                case "showRewardedInterstitial":
+                    guard self.authGateViewModel?.isGateVisible != true else { return }
                     self.adManager.showRewarded(from: Self.topViewController())
                 case "openNewsLink":
                     guard let urlText = payload["url"] as? String, let url = URL(string: urlText) else { return }
+                    guard self.authGateViewModel?.isGateVisible != true else { return }
                     self.adManager.showInterstitial(from: Self.topViewController())
                     UIApplication.shared.open(url)
                 case "handleButtonClick":
                     let buttonID = String(describing: payload["buttonId"] ?? "")
                     print("[Ads][iOS] Button trigger rewarded buttonId=\(buttonID)")
+                    guard self.authGateViewModel?.isGateVisible != true else { return }
                     self.adManager.showRewarded(from: Self.topViewController())
                 case "share":
                     self.openNativeShare(payload: payload)
@@ -858,19 +881,9 @@ struct QuanturaWebView: UIViewRepresentable {
         private func handleNativeStoreKitPurchase(payload: [String: Any]) {
             let requestId = String(describing: payload["requestId"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             let orderId = String(describing: payload["orderId"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            let productId = String(describing: payload["productId"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let requestedProductId = String(describing: payload["productId"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let productId = NativeIapCatalog.normalize(requestedProductId)
             guard !requestId.isEmpty else { return }
-            guard !productId.isEmpty else {
-                dispatchNativePurchaseResult(
-                    requestId: requestId,
-                    orderId: orderId,
-                    productId: "",
-                    ok: false,
-                    status: "failed",
-                    message: "Missing App Store product identifier."
-                )
-                return
-            }
 
 #if canImport(StoreKit)
             guard #available(iOS 15.0, *) else {
@@ -980,23 +993,14 @@ struct QuanturaWebView: UIViewRepresentable {
             if #available(iOS 15.0, *) {
                 Task { @MainActor in
                     do {
-                        if let scene = UIApplication.shared.connectedScenes
-                            .compactMap({ $0 as? UIWindowScene })
-                            .first(where: { $0.activationState == .foregroundActive }) {
-                            try await AppStore.showManageSubscriptions(in: scene)
-                            dispatchNativePurchaseResult(
-                                requestId: requestId,
-                                orderId: "",
-                                productId: "",
-                                ok: true,
-                                status: "subscriptions_opened"
-                            )
-                            return
-                        }
-                        throw NSError(
-                            domain: "QuanturaStoreKit",
-                            code: -1001,
-                            userInfo: [NSLocalizedDescriptionKey: "No active scene available."]
+                        try await AppStore.sync()
+                        dispatchNativePurchaseResult(
+                            requestId: requestId,
+                            orderId: "",
+                            productId: "",
+                            ok: true,
+                            status: "restored",
+                            message: "Purchases restored from the App Store."
                         )
                     } catch {
                         dispatchNativePurchaseResult(
@@ -1071,6 +1075,14 @@ struct QuanturaWebView: UIViewRepresentable {
                 handleNativeGoogleSignIn(requestId: requestId)
             case "apple":
                 handleNativeAppleSignIn(requestId: requestId)
+            case "github", "github.com":
+                handleNativeOAuthSignIn(requestId: requestId, providerId: "github.com", providerLabel: "github")
+            case "twitter", "x", "twitter.com":
+                handleNativeOAuthSignIn(requestId: requestId, providerId: "twitter.com", providerLabel: "twitter")
+            case "yahoo", "yahoo.com":
+                handleNativeOAuthSignIn(requestId: requestId, providerId: "yahoo.com", providerLabel: "yahoo")
+            case "microsoft", "microsoft.com":
+                handleNativeOAuthSignIn(requestId: requestId, providerId: "microsoft.com", providerLabel: "microsoft")
             default:
                 dispatchNativeAuthResult(
                     requestId: requestId,
@@ -1169,6 +1181,78 @@ struct QuanturaWebView: UIViewRepresentable {
                 provider: "google",
                 ok: false,
                 error: "Google/Firebase Auth SDK is unavailable in this build."
+            )
+        }
+#endif
+
+#if canImport(FirebaseAuth)
+        private func handleNativeOAuthSignIn(requestId: String, providerId: String, providerLabel: String) {
+            guard FirebaseApp.app() != nil else {
+                dispatchNativeAuthResult(
+                    requestId: requestId,
+                    provider: providerLabel,
+                    ok: false,
+                    error: "Firebase is not configured in this build."
+                )
+                return
+            }
+
+            let provider = OAuthProvider(providerID: providerId)
+            if providerId == "github.com" {
+                provider.scopes = ["read:user", "user:email"]
+            } else if providerId == "twitter.com" {
+                provider.scopes = ["tweet.read", "users.read"]
+            } else if providerId == "yahoo.com" {
+                provider.scopes = ["profile", "email"]
+            } else if providerId == "microsoft.com" {
+                provider.scopes = ["user.read"]
+            }
+
+            if let currentUser = Auth.auth().currentUser, currentUser.isAnonymous {
+                currentUser.link(with: provider, uiDelegate: nil) { authResult, authError in
+                    if let authError {
+                        self.dispatchNativeAuthResult(
+                            requestId: requestId,
+                            provider: providerLabel,
+                            ok: false,
+                            error: authError.localizedDescription
+                        )
+                        return
+                    }
+                    self.completeNativeAuthFromFirebase(
+                        requestId: requestId,
+                        provider: providerLabel,
+                        user: authResult?.user
+                    )
+                }
+                return
+            }
+
+            Auth.auth().signIn(with: provider, uiDelegate: nil) { authResult, authError in
+                if let authError {
+                    self.dispatchNativeAuthResult(
+                        requestId: requestId,
+                        provider: providerLabel,
+                        ok: false,
+                        error: authError.localizedDescription
+                    )
+                    return
+                }
+                self.completeNativeAuthFromFirebase(
+                    requestId: requestId,
+                    provider: providerLabel,
+                    user: authResult?.user
+                )
+            }
+        }
+#else
+        private func handleNativeOAuthSignIn(requestId: String, providerId: String, providerLabel: String) {
+            _ = providerId
+            dispatchNativeAuthResult(
+                requestId: requestId,
+                provider: providerLabel,
+                ok: false,
+                error: "OAuth provider sign-in is unavailable in this build."
             )
         }
 #endif
@@ -1447,11 +1531,18 @@ extension QuanturaWebView.Coordinator: ASAuthorizationControllerDelegate, ASAuth
         let requestId = pendingAppleAuthContext?.requestId ?? ""
         pendingAppleAuthContext = nil
         guard !requestId.isEmpty else { return }
+        let nsError = error as NSError
+        let message: String
+        if nsError.domain == ASAuthorizationError.errorDomain, nsError.code == ASAuthorizationError.unknown.rawValue {
+            message = "Sign in with Apple failed (AuthorizationError 1000). Verify Apple Sign-In capability, bundle ID configuration, and try again."
+        } else {
+            message = error.localizedDescription
+        }
         dispatchNativeAuthResult(
             requestId: requestId,
             provider: "apple",
             ok: false,
-            error: error.localizedDescription
+            error: message
         )
     }
 
@@ -1493,6 +1584,7 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var lifecycleController = WebViewLifecycleController()
     @StateObject private var authGateViewModel = AuthGateViewModel()
+    @State private var bannerAdsVisible: Bool = true
 #if canImport(StoreKit)
     @StateObject private var storeKitManager = StoreKitIapManager()
 #endif
@@ -1516,24 +1608,31 @@ struct ContentView: View {
         }
 #if canImport(GoogleMobileAds) && canImport(UIKit)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            AdaptiveBannerContainer(adUnitID: container.remoteConfigManager.adUnitIDs().adaptiveBanner)
-                .frame(height: 60)
-                .background(.ultraThinMaterial)
+            if bannerAdsVisible {
+                AdaptiveBannerContainer(adUnitID: container.remoteConfigManager.adUnitIDs().adaptiveBanner)
+                    .frame(height: 60)
+                    .background(.ultraThinMaterial)
+            }
         }
 #endif
         .onAppear {
             authGateViewModel.start()
             container.appOpenAdManager.setPresentationBlockedByAuthGate(authGateViewModel.isGateVisible)
+            bannerAdsVisible = container.remoteConfigManager.featureFlag("ads_enabled", default: true)
             container.adManager.primeAds()
             container.appOpenAdManager.preloadAdIfNeeded()
             container.remoteConfigManager.fetchAndActivate { _ in
+                let enabled = container.remoteConfigManager.featureFlag("ads_enabled", default: true)
+                DispatchQueue.main.async {
+                    bannerAdsVisible = enabled
+                }
                 container.adManager.primeAds()
                 container.appOpenAdManager.preloadAdIfNeeded()
             }
 #if canImport(StoreKit)
             if #available(iOS 15.0, *) {
                 Task {
-                    await storeKitManager.fetchProducts(["quantura_pro_monthly"])
+                    await storeKitManager.fetchProducts(NativeIapCatalog.iosProductIds)
                 }
             }
 #endif

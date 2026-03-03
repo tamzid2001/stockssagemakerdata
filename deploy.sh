@@ -18,11 +18,73 @@ PUBLIC_ORIGIN="${PUBLIC_ORIGIN:-https://quantura.studio}"
 PLAY_INTEGRITY_ANDROID_PACKAGE="${PLAY_INTEGRITY_ANDROID_PACKAGE:-com.quantura.quanturaapp}"
 REQUIRE_PLAY_INTEGRITY="${REQUIRE_PLAY_INTEGRITY:-false}"
 LOCAL_FUNCTIONS_BUILD="${LOCAL_FUNCTIONS_BUILD:-false}"
+GCLOUD_BIN="${GCLOUD_BIN:-}"
 
-# Homebrew Python 3.11+ can hang with this local Cloud SDK install.
-# Default to macOS system Python unless caller overrides CLOUDSDK_PYTHON explicitly.
-if [[ -z "${CLOUDSDK_PYTHON:-}" && -x "/usr/bin/python3" ]]; then
-  export CLOUDSDK_PYTHON="/usr/bin/python3"
+# Prefer Homebrew gcloud on macOS if present, then fallback to PATH.
+if [[ -z "${GCLOUD_BIN}" ]]; then
+  if [[ -x "/opt/homebrew/bin/gcloud" ]]; then
+    GCLOUD_BIN="/opt/homebrew/bin/gcloud"
+  elif [[ -x "/usr/local/bin/gcloud" ]]; then
+    GCLOUD_BIN="/usr/local/bin/gcloud"
+  else
+    GCLOUD_BIN="$(command -v gcloud || true)"
+  fi
+fi
+
+if [[ -z "${GCLOUD_BIN}" ]]; then
+  echo "gcloud CLI not found. Install Google Cloud CLI and retry."
+  exit 1
+fi
+
+resolve_cloudsdk_python() {
+  local candidate=""
+  local major=""
+  local minor=""
+  local version=""
+
+  # Prefer newest supported versions first.
+  for candidate in \
+    "${CLOUDSDK_PYTHON:-}" \
+    "$(command -v python3.14 2>/dev/null || true)" \
+    "$(command -v python3.13 2>/dev/null || true)" \
+    "$(command -v python3.12 2>/dev/null || true)" \
+    "$(command -v python3.11 2>/dev/null || true)" \
+    "$(command -v python3.10 2>/dev/null || true)" \
+    "/opt/homebrew/bin/python3.14" \
+    "/opt/homebrew/bin/python3.13" \
+    "/opt/homebrew/bin/python3.12" \
+    "/opt/homebrew/bin/python3.11" \
+    "/opt/homebrew/bin/python3.10" \
+    "/usr/local/bin/python3.14" \
+    "/usr/local/bin/python3.13" \
+    "/usr/local/bin/python3.12" \
+    "/usr/local/bin/python3.11" \
+    "/usr/local/bin/python3.10" \
+    "$(command -v python3 2>/dev/null || true)" \
+    ; do
+    [[ -n "${candidate}" ]] || continue
+    [[ -x "${candidate}" ]] || continue
+    version="$("${candidate}" -c 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")' 2>/dev/null || true)"
+    major="${version%%.*}"
+    minor="${version#*.}"
+    if [[ "${major}" == "3" && "${minor}" =~ ^[0-9]+$ && "${minor}" -ge 10 && "${minor}" -le 14 ]]; then
+      echo "${candidate}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+if [[ -z "${CLOUDSDK_PYTHON:-}" ]]; then
+  if CLOUDSDK_PYTHON="$(resolve_cloudsdk_python)"; then
+    export CLOUDSDK_PYTHON
+  fi
+fi
+
+if [[ -n "${CLOUDSDK_PYTHON:-}" ]]; then
+  echo "==> Using CLOUDSDK_PYTHON=${CLOUDSDK_PYTHON} ($("${CLOUDSDK_PYTHON}" --version 2>/dev/null || true))"
+else
+  echo "==> CLOUDSDK_PYTHON not explicitly set; gcloud default interpreter will be used."
 fi
 
 if [[ -z "${PROJECT_ID}" || "${PROJECT_ID}" == "(unset)" ]]; then
@@ -46,7 +108,7 @@ else
 fi
 
 echo "==> Deploying quanturaExploreApi (Gen2)"
-gcloud functions deploy quanturaExploreApi \
+"${GCLOUD_BIN}" functions deploy quanturaExploreApi \
   --quiet \
   --project="${PROJECT_ID}" \
   --gen2 \
@@ -60,7 +122,7 @@ gcloud functions deploy quanturaExploreApi \
   ${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"}
 
 echo "==> Deploying Firestore trigger: onForecastCreated"
-gcloud functions deploy onForecastCreated \
+"${GCLOUD_BIN}" functions deploy onForecastCreated \
   --quiet \
   --project="${PROJECT_ID}" \
   --gen2 \
@@ -75,7 +137,7 @@ gcloud functions deploy onForecastCreated \
   ${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"}
 
 echo "==> Deploying Firestore trigger: onBacktestCreated"
-gcloud functions deploy onBacktestCreated \
+"${GCLOUD_BIN}" functions deploy onBacktestCreated \
   --quiet \
   --project="${PROJECT_ID}" \
   --gen2 \
@@ -90,7 +152,7 @@ gcloud functions deploy onBacktestCreated \
   ${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"}
 
 echo "==> Deploying Firestore trigger: onScreenerRunCreated"
-gcloud functions deploy onScreenerRunCreated \
+"${GCLOUD_BIN}" functions deploy onScreenerRunCreated \
   --quiet \
   --project="${PROJECT_ID}" \
   --gen2 \
@@ -105,7 +167,7 @@ gcloud functions deploy onScreenerRunCreated \
   ${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"}
 
 echo "==> Deploying Firestore trigger: onAgentRunCreated"
-gcloud functions deploy onAgentRunCreated \
+"${GCLOUD_BIN}" functions deploy onAgentRunCreated \
   --quiet \
   --project="${PROJECT_ID}" \
   --gen2 \

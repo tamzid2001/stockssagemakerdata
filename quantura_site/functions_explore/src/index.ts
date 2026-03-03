@@ -67,6 +67,8 @@ const OPENAI_API_KEY = asString(process.env.OPENAI_API_KEY).trim();
 const GEMINI_API_KEY = asString(process.env.GEMINI_API_KEY).trim();
 const MISTRAL_API_KEY = asString(process.env.MISTRAL_API_KEY).trim();
 const PERPLEXITY_API_KEY = asString(process.env.PERPLEXITY_API_KEY).trim();
+const MODEL_COUNCIL_OTHER_API_KEY = asString(process.env.MODEL_COUNCIL_OTHER_API_KEY).trim();
+const MODEL_COUNCIL_OTHER_BASE_URL = asString(process.env.MODEL_COUNCIL_OTHER_BASE_URL).trim().replace(/\/$/, "");
 const NOTIFICATION_REWRITE_MODEL = asString(process.env.NOTIFICATION_REWRITE_MODEL, "gpt-4o-mini").trim();
 const FMP_API_KEY = asString(process.env.FMP_API_KEY).trim();
 const PLAY_INTEGRITY_ANDROID_PACKAGE = asString(process.env.PLAY_INTEGRITY_ANDROID_PACKAGE).trim();
@@ -104,12 +106,40 @@ type SystemFolderConfig = {
   flag: "liked" | "reposted" | "saved" | "shared";
 };
 
+type NotificationCategory = "watchlist" | "explore" | "earnings" | "ipo" | "daily" | "weekly" | "inactive";
+
+type NotificationPrefs = {
+  global: boolean;
+  following: boolean;
+  tickers: boolean;
+  watchlist: boolean;
+  explore: boolean;
+  earnings: boolean;
+  ipos: boolean;
+  daily: boolean;
+  weekly: boolean;
+  inactiveHidden: boolean;
+};
+
 const SYSTEM_FOLDERS: SystemFolderConfig[] = [
   { id: "liked-posts", displayName: "Liked posts", flag: "liked" },
   { id: "reposted-posts", displayName: "Reposted posts", flag: "reposted" },
   { id: "saved-posts", displayName: "Saved posts", flag: "saved" },
   { id: "shared-posts", displayName: "Shared posts", flag: "shared" },
 ];
+
+const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
+  global: true,
+  following: true,
+  tickers: true,
+  watchlist: true,
+  explore: true,
+  earnings: true,
+  ipos: true,
+  daily: true,
+  weekly: true,
+  inactiveHidden: true,
+};
 
 const ROUTES = express.Router();
 const PLAY_INTEGRITY_AUTH = new GoogleAuth({
@@ -354,6 +384,77 @@ function normalizeShareId(value: unknown): string {
   return /^[A-Za-z0-9_-]{8,220}$/.test(raw) ? raw : "";
 }
 
+function normalizeNotificationCategory(value: unknown): NotificationCategory {
+  const raw = sanitizeText(value, 40).toLowerCase();
+  if (raw === "watchlist") return "watchlist";
+  if (raw === "explore") return "explore";
+  if (raw === "earnings") return "earnings";
+  if (raw === "ipo" || raw === "ipos") return "ipo";
+  if (raw === "daily") return "daily";
+  if (raw === "weekly") return "weekly";
+  if (raw === "inactive" || raw === "inactive_user") return "inactive";
+  return "explore";
+}
+
+function normalizeNotificationDeepLink(value: unknown): string {
+  const raw = sanitizeText(value, 500);
+  if (!raw) return "/notifications";
+  if (/^https?:\/\//i.test(raw)) return raw;
+  const prefixed = raw.startsWith("/") ? raw : `/${raw}`;
+  return prefixed.slice(0, 500);
+}
+
+function absoluteNotificationLink(deepLink: string): string {
+  if (/^https?:\/\//i.test(deepLink)) return deepLink;
+  const path = deepLink.startsWith("/") ? deepLink : `/${deepLink}`;
+  return `${PUBLIC_ORIGIN}${path}`;
+}
+
+function normalizeNotificationPrefs(
+  input: Record<string, unknown>,
+  existing: Record<string, unknown> = {}
+): NotificationPrefs {
+  const merged = {
+    ...DEFAULT_NOTIFICATION_PREFS,
+    ...existing,
+  } as Record<string, unknown>;
+  const resolved = { ...merged, ...input } as Record<string, unknown>;
+  return {
+    global: asBoolean(resolved.global, DEFAULT_NOTIFICATION_PREFS.global),
+    following: asBoolean(resolved.following, DEFAULT_NOTIFICATION_PREFS.following),
+    tickers: asBoolean(resolved.tickers, DEFAULT_NOTIFICATION_PREFS.tickers),
+    watchlist: asBoolean(resolved.watchlist, DEFAULT_NOTIFICATION_PREFS.watchlist),
+    explore: asBoolean(resolved.explore, DEFAULT_NOTIFICATION_PREFS.explore),
+    earnings: asBoolean(resolved.earnings, DEFAULT_NOTIFICATION_PREFS.earnings),
+    ipos: asBoolean(resolved.ipos, DEFAULT_NOTIFICATION_PREFS.ipos),
+    daily: asBoolean(resolved.daily, DEFAULT_NOTIFICATION_PREFS.daily),
+    weekly: asBoolean(resolved.weekly, DEFAULT_NOTIFICATION_PREFS.weekly),
+    inactiveHidden: asBoolean(resolved.inactiveHidden, DEFAULT_NOTIFICATION_PREFS.inactiveHidden),
+  };
+}
+
+function isNotificationCategoryEnabled(prefs: NotificationPrefs, category: NotificationCategory): boolean {
+  if (category === "watchlist") return prefs.watchlist && prefs.tickers;
+  if (category === "explore") return prefs.explore && prefs.following;
+  if (category === "earnings") return prefs.earnings;
+  if (category === "ipo") return prefs.ipos;
+  if (category === "daily") return prefs.daily;
+  if (category === "weekly") return prefs.weekly;
+  if (category === "inactive") return prefs.daily || prefs.weekly;
+  return true;
+}
+
+function notificationCategoryLabel(category: NotificationCategory): string {
+  if (category === "watchlist") return "Watchlist";
+  if (category === "explore") return "Explore Feed";
+  if (category === "earnings") return "Earnings";
+  if (category === "ipo") return "IPO";
+  if (category === "daily") return "Daily";
+  if (category === "weekly") return "Weekly";
+  if (category === "inactive") return "Inactive user";
+  return "Notification";
+}
+
 function buildFolderItemDocId(itemType: SavedItemType, sourceId: string): string {
   const cleanSource = normalizeSourceId(sourceId).replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 180);
   return `${itemType}__${cleanSource || "item"}`;
@@ -583,7 +684,7 @@ function buildTargetUrl(postType: PostType, sourceDocId: string): string {
     case "forecast":
       return `/forecasting?forecastId=${encodeURIComponent(sourceDocId)}`;
     case "backtest":
-      return `/backtesting?backtestId=${encodeURIComponent(sourceDocId)}`;
+      return `/indicators?runId=${encodeURIComponent(sourceDocId)}`;
     case "screener":
       return `/screener?runId=${encodeURIComponent(sourceDocId)}`;
     case "agent":
@@ -602,7 +703,7 @@ function buildTitle(postType: PostType, payload: Record<string, unknown>, ticker
       return `${ticker} forecast update`;
     case "backtest": {
       const strategy = sanitizeText(payload.strategy || "strategy", 40);
-      return `${ticker} backtest (${strategy})`;
+      return `${ticker} strategy run (${strategy})`;
     }
     case "screener":
       return `${ticker} screener run`;
@@ -780,9 +881,13 @@ function normalizeLlmMessages(raw: unknown): Array<{ role: "system" | "user" | "
     .slice(0, 40);
 }
 
-function normalizeProvider(raw: unknown): "openai" | "gemini" | "mistral" | "perplexity" {
+type LlmProviderId = "openai" | "gemini" | "mistral" | "perplexity" | "other";
+
+function normalizeProvider(raw: unknown): LlmProviderId {
   const value = asString(raw).trim().toLowerCase();
-  if (value === "gemini" || value === "mistral" || value === "perplexity" || value === "openai") return value;
+  if (value === "gemini" || value === "mistral" || value === "perplexity" || value === "openai" || value === "other") {
+    return value;
+  }
   return "openai";
 }
 
@@ -810,11 +915,14 @@ async function invokeOpenAiLlm(payload: {
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
   temperature: number;
   maxTokens: number;
+  allowWebSearch: boolean;
+  stream: boolean;
+  background: boolean;
 }): Promise<{ text: string; usage: Record<string, unknown> }> {
   if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is not configured.");
   const { signal, clear } = llmTimeoutSignal();
   try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       signal,
       headers: {
@@ -823,21 +931,108 @@ async function invokeOpenAiLlm(payload: {
       },
       body: JSON.stringify({
         model: payload.model,
-        messages: payload.messages,
-        temperature: payload.temperature,
-        max_tokens: payload.maxTokens,
+        input: payload.messages.map((item) => ({
+          role: item.role,
+          content: [{ type: "input_text", text: item.content }],
+        })),
+        max_output_tokens: payload.maxTokens,
+        stream: Boolean(payload.stream),
+        background: Boolean(payload.background),
+        tools: payload.allowWebSearch ? [{ type: "web_search_preview" }] : [],
+        metadata: {
+          quantura_workflow: "model_council",
+          quantura_prompt_caching: "enabled",
+        },
       }),
     });
     const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
     if (!response.ok) {
-      throw new Error(`OpenAI request failed (${response.status}).`);
+      const detail = sanitizeText((body as any)?.error?.message || "", 180);
+      throw new Error(detail || `OpenAI request failed (${response.status}).`);
     }
-    const text = sanitizeText((((body.choices as any)?.[0] || {}).message || {}).content, 20000);
+    const text = sanitizeText(extractResponsesOutputText(body), 20000);
     if (!text) throw new Error("OpenAI returned an empty response.");
-    return { text, usage: ((body.usage as any) || {}) as Record<string, unknown> };
+    return { text, usage: extractResponsesUsage(body) };
   } finally {
     clear();
   }
+}
+
+function extractResponsesOutputText(payload: Record<string, unknown>): string {
+  const rawDirect = (payload as any)?.output_text;
+  const directParts: string[] = [];
+  if (typeof rawDirect === "string" || typeof rawDirect === "number" || typeof rawDirect === "boolean") {
+    const text = sanitizeText(rawDirect, 24000);
+    if (text) directParts.push(text);
+  } else if (Array.isArray(rawDirect)) {
+    rawDirect.forEach((part) => {
+      const text = sanitizeText(
+        (part as any)?.text ?? (part as any)?.value ?? (part as any)?.output_text ?? part,
+        24000
+      );
+      if (text) directParts.push(text);
+    });
+  } else if (rawDirect && typeof rawDirect === "object") {
+    const text = sanitizeText((rawDirect as any).text ?? (rawDirect as any).value ?? "", 24000);
+    if (text) directParts.push(text);
+  }
+  const direct = sanitizeText(directParts.join("\n").trim(), 24000);
+  if (direct) return direct;
+  const output = Array.isArray((payload as any)?.output) ? ((payload as any).output as any[]) : [];
+  const chunks: string[] = [];
+  output.forEach((item) => {
+    const content = Array.isArray(item?.content) ? item.content : [];
+    content.forEach((part: any) => {
+      const text = sanitizeText(
+        part?.text?.value ??
+          part?.text ??
+          part?.output_text?.value ??
+          part?.output_text ??
+          part?.value?.text ??
+          part?.value,
+        24000
+      );
+      if (text) chunks.push(text);
+    });
+  });
+  return sanitizeText(chunks.join("\n").trim(), 24000);
+}
+
+function extractResponsesUsage(payload: Record<string, unknown>): Record<string, unknown> {
+  const usage = ((payload as any)?.usage || {}) as Record<string, unknown>;
+  const inputTokens = asFinite((usage as any).input_tokens, 0);
+  const outputTokens = asFinite((usage as any).output_tokens, 0);
+  const totalTokens = asFinite((usage as any).total_tokens, inputTokens + outputTokens);
+  const cachedTokens = asFinite(((usage as any).input_tokens_details || {}).cached_tokens, 0);
+  return {
+    prompt_tokens: Math.max(0, Math.floor(inputTokens)),
+    completion_tokens: Math.max(0, Math.floor(outputTokens)),
+    total_tokens: Math.max(0, Math.floor(totalTokens)),
+    cached_tokens: Math.max(0, Math.floor(cachedTokens)),
+  };
+}
+
+function extractResponsesCitations(payload: Record<string, unknown>): Array<Record<string, unknown>> {
+  const output = Array.isArray((payload as any)?.output) ? ((payload as any).output as any[]) : [];
+  const seen = new Set<string>();
+  const citations: Array<Record<string, unknown>> = [];
+  output.forEach((item) => {
+    const content = Array.isArray(item?.content) ? item.content : [];
+    content.forEach((part: any) => {
+      const annotations = Array.isArray(part?.annotations) ? part.annotations : [];
+      annotations.forEach((annotation: any) => {
+        const url = sanitizeText(annotation?.url || annotation?.source || "", 500);
+        const title = sanitizeText(annotation?.title || annotation?.text || url, 300);
+        if (!url || seen.has(url)) return;
+        seen.add(url);
+        citations.push({
+          url,
+          title: title || url,
+        });
+      });
+    });
+  });
+  return citations.slice(0, 16);
 }
 
 async function invokeGeminiLlm(payload: {
@@ -948,12 +1143,63 @@ async function invokePerplexityLlm(payload: {
   }
 }
 
+async function invokeOtherLlm(payload: {
+  model: string;
+  messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
+  temperature: number;
+  maxTokens: number;
+  allowWebSearch: boolean;
+  stream: boolean;
+  background: boolean;
+}): Promise<{ text: string; usage: Record<string, unknown>; citations: unknown[] }> {
+  if (!MODEL_COUNCIL_OTHER_API_KEY) throw new Error("MODEL_COUNCIL_OTHER_API_KEY is not configured.");
+  if (!MODEL_COUNCIL_OTHER_BASE_URL) throw new Error("MODEL_COUNCIL_OTHER_BASE_URL is not configured.");
+  const { signal, clear } = llmTimeoutSignal();
+  try {
+    const response = await fetch(`${MODEL_COUNCIL_OTHER_BASE_URL}/v1/responses`, {
+      method: "POST",
+      signal,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${MODEL_COUNCIL_OTHER_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: payload.model,
+        input: payload.messages.map((item) => ({
+          role: item.role,
+          content: [{ type: "input_text", text: item.content }],
+        })),
+        max_output_tokens: payload.maxTokens,
+        stream: Boolean(payload.stream),
+        background: Boolean(payload.background),
+        tools: payload.allowWebSearch ? [{ type: "web_search_preview" }] : [],
+      }),
+    });
+    const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!response.ok) {
+      const detail = sanitizeText((body as any)?.error?.message || "", 180);
+      throw new Error(detail || `Other provider request failed (${response.status}).`);
+    }
+    const text = sanitizeText(extractResponsesOutputText(body), 20000);
+    if (!text) throw new Error("Other provider returned an empty response.");
+    return {
+      text,
+      usage: extractResponsesUsage(body),
+      citations: extractResponsesCitations(body),
+    };
+  } finally {
+    clear();
+  }
+}
+
 async function invokeLlmWithFallback(rawPayload: Record<string, unknown>): Promise<{
   provider: string;
   model: string;
   text: string;
+  latencyMs: number;
   usage: Record<string, unknown>;
   citations?: unknown[];
+  attempted: string[];
 }> {
   const provider = normalizeProvider(rawPayload.provider);
   const fallbackProviders = Array.isArray(rawPayload.fallbackProviders)
@@ -966,21 +1212,54 @@ async function invokeLlmWithFallback(rawPayload: Record<string, unknown>): Promi
   const params = (rawPayload.params || {}) as Record<string, unknown>;
   const temperature = Math.max(0, Math.min(2, asFinite(params.temperature, 0.2)));
   const maxTokens = Math.max(64, Math.min(4000, Math.floor(asFinite(params.maxTokens, 600))));
+  const allowWebSearch = asBoolean(params.webSearch ?? params.allowWebSearch ?? rawPayload.webSearch, true);
+  const stream = asBoolean(params.stream ?? rawPayload.stream, false);
+  const background = asBoolean(params.background ?? rawPayload.background, true);
 
   const errors: string[] = [];
+  const startedAt = Date.now();
   for (const currentProvider of providers) {
     try {
       if (currentProvider === "openai") {
-        const result = await invokeOpenAiLlm({ model, messages, temperature, maxTokens });
-        return { provider: currentProvider, model, text: result.text, usage: result.usage };
+        const result = await invokeOpenAiLlm({
+          model,
+          messages,
+          temperature,
+          maxTokens,
+          allowWebSearch,
+          stream,
+          background,
+        });
+        return {
+          provider: currentProvider,
+          model,
+          text: result.text,
+          latencyMs: Date.now() - startedAt,
+          usage: result.usage,
+          attempted: [...errors],
+        };
       }
       if (currentProvider === "gemini") {
         const result = await invokeGeminiLlm({ model, messages, temperature, maxTokens });
-        return { provider: currentProvider, model, text: result.text, usage: result.usage };
+        return {
+          provider: currentProvider,
+          model,
+          text: result.text,
+          latencyMs: Date.now() - startedAt,
+          usage: result.usage,
+          attempted: [...errors],
+        };
       }
       if (currentProvider === "mistral") {
         const result = await invokeMistralLlm({ model, messages, temperature, maxTokens });
-        return { provider: currentProvider, model, text: result.text, usage: result.usage };
+        return {
+          provider: currentProvider,
+          model,
+          text: result.text,
+          latencyMs: Date.now() - startedAt,
+          usage: result.usage,
+          attempted: [...errors],
+        };
       }
       if (currentProvider === "perplexity") {
         const result = await invokePerplexityLlm({ model, messages, temperature, maxTokens });
@@ -988,8 +1267,30 @@ async function invokeLlmWithFallback(rawPayload: Record<string, unknown>): Promi
           provider: currentProvider,
           model,
           text: result.text,
+          latencyMs: Date.now() - startedAt,
           usage: result.usage,
           citations: result.citations,
+          attempted: [...errors],
+        };
+      }
+      if (currentProvider === "other") {
+        const result = await invokeOtherLlm({
+          model,
+          messages,
+          temperature,
+          maxTokens,
+          allowWebSearch,
+          stream,
+          background,
+        });
+        return {
+          provider: currentProvider,
+          model,
+          text: result.text,
+          latencyMs: Date.now() - startedAt,
+          usage: result.usage,
+          citations: result.citations,
+          attempted: [...errors],
         };
       }
     } catch (error: any) {
@@ -1271,10 +1572,10 @@ async function syncTopicsForUser(uid: string): Promise<void> {
 
   if (tokenSnap.empty) return;
 
-  const prefs = ((userSnap.data() || {}) as any).notificationPrefs || {};
-  const enableGlobal = asBoolean(prefs.global, true);
-  const enableFollowing = asBoolean(prefs.following, true);
-  const enableTickers = asBoolean(prefs.tickers, true);
+  const prefs = normalizeNotificationPrefs({}, (((userSnap.data() || {}) as any).notificationPrefs || {}) as Record<string, unknown>);
+  const enableGlobal = prefs.global;
+  const enableFollowing = prefs.following;
+  const enableTickers = prefs.tickers;
 
   const desiredTopics = new Set<string>();
   if (enableGlobal) desiredTopics.add("explore-global");
@@ -1322,6 +1623,189 @@ async function syncTopicsForUser(uid: string): Promise<void> {
       { merge: true }
     );
   }
+}
+
+async function writeNotificationHistoryItem(params: {
+  uid: string;
+  category: NotificationCategory;
+  title: string;
+  body: string;
+  deepLink: string;
+  hidden?: boolean;
+  nextSteps?: string[];
+  metadata?: Record<string, unknown>;
+}): Promise<string> {
+  const ref = db.collection("notifications").doc(params.uid).collection("items").doc();
+  await ref.set(
+    {
+      category: params.category,
+      title: sanitizeText(params.title, 160) || `${notificationCategoryLabel(params.category)} update`,
+      body: sanitizeText(params.body, 400),
+      deepLink: normalizeNotificationDeepLink(params.deepLink),
+      hidden: Boolean(params.hidden),
+      read: false,
+      nextSteps: Array.isArray(params.nextSteps)
+        ? params.nextSteps.map((item) => sanitizeText(item, 120)).filter(Boolean).slice(0, 4)
+        : [],
+      metadata: params.metadata && typeof params.metadata === "object" ? params.metadata : {},
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+  return ref.id;
+}
+
+async function sendPushToUserTokens(params: {
+  uid: string;
+  category: NotificationCategory;
+  title: string;
+  body: string;
+  deepLink: string;
+  hidden?: boolean;
+  nextSteps?: string[];
+  metadata?: Record<string, unknown>;
+  force?: boolean;
+}): Promise<{ uid: string; delivered: number; attempted: number; skipped: boolean; reason: string; historyId: string }> {
+  const uid = sanitizeText(params.uid, 220);
+  if (!uid) {
+    return { uid: "", delivered: 0, attempted: 0, skipped: true, reason: "invalid_uid", historyId: "" };
+  }
+
+  const userRef = db.collection("users").doc(uid);
+  const [userSnap, tokenSnap] = await Promise.all([userRef.get(), userRef.collection("fcmTokens").limit(250).get()]);
+  const userData = (userSnap.data() || {}) as Record<string, unknown>;
+  const prefs = normalizeNotificationPrefs({}, (userData.notificationPrefs || {}) as Record<string, unknown>);
+  const category = normalizeNotificationCategory(params.category);
+  if (!params.force && !isNotificationCategoryEnabled(prefs, category)) {
+    return { uid, delivered: 0, attempted: 0, skipped: true, reason: "pref_disabled", historyId: "" };
+  }
+
+  const deepLink = normalizeNotificationDeepLink(params.deepLink);
+  const absoluteLink = absoluteNotificationLink(deepLink);
+  const path = deepLink.startsWith("/") ? deepLink : (() => {
+    try {
+      const parsed = new URL(deepLink);
+      return `${parsed.pathname || "/"}${parsed.search || ""}${parsed.hash || ""}`;
+    } catch {
+      return "/notifications";
+    }
+  })();
+
+  const historyId = await writeNotificationHistoryItem({
+    uid,
+    category,
+    title: params.title,
+    body: params.body,
+    deepLink,
+    hidden: params.hidden ?? (category === "inactive"),
+    nextSteps: params.nextSteps,
+    metadata: params.metadata,
+  });
+
+  const tokens = tokenSnap.docs.map((doc) => sanitizeText(doc.id, 4096)).filter(Boolean);
+  if (!tokens.length) {
+    return { uid, delivered: 0, attempted: 0, skipped: true, reason: "no_tokens", historyId };
+  }
+
+  const message = {
+    tokens,
+    notification: {
+      title: sanitizeText(params.title, 160) || `${notificationCategoryLabel(category)} update`,
+      body: sanitizeText(params.body, 300) || "You have a new Quantura update.",
+    },
+    data: {
+      category,
+      path,
+      deepLink,
+      url: absoluteLink,
+      historyId,
+    },
+    webpush: {
+      fcmOptions: {
+        link: absoluteLink,
+      },
+    },
+    android: {
+      notification: {
+        channelId: "quantura_push",
+      },
+    },
+    apns: {
+      payload: {
+        aps: {
+          sound: "default",
+        },
+      },
+    },
+  };
+
+  const result = await messaging.sendEachForMulticast(message);
+  const invalidCodes = new Set([
+    "messaging/registration-token-not-registered",
+    "messaging/invalid-registration-token",
+    "messaging/invalid-argument",
+  ]);
+
+  await Promise.all(
+    result.responses.map((response, index) => {
+      if (response.success) return Promise.resolve();
+      const code = sanitizeText((response.error as any)?.code, 80);
+      if (!invalidCodes.has(code)) return Promise.resolve();
+      const token = tokens[index];
+      if (!token) return Promise.resolve();
+      return userRef.collection("fcmTokens").doc(token).delete().catch(() => undefined);
+    })
+  );
+
+  return {
+    uid,
+    delivered: result.successCount,
+    attempted: tokens.length,
+    skipped: false,
+    reason: "",
+    historyId,
+  };
+}
+
+async function collectUsersByFollowedAuthor(authorUid: string): Promise<Set<string>> {
+  const clean = sanitizeText(authorUid, 220);
+  const out = new Set<string>();
+  if (!clean) return out;
+  const followsSnap = await db
+    .collectionGroup("follows")
+    .where(admin.firestore.FieldPath.documentId(), "==", clean)
+    .limit(600)
+    .get();
+  followsSnap.docs.forEach((doc) => {
+    const uid = doc.ref.parent.parent?.id || "";
+    if (uid) out.add(uid);
+  });
+  return out;
+}
+
+async function collectUsersByWatchTickers(tickers: string[]): Promise<Set<string>> {
+  const cleanTickers = Array.from(new Set((Array.isArray(tickers) ? tickers : []).map((item) => normalizeTicker(item)).filter(Boolean)))
+    .slice(0, 6);
+  const out = new Set<string>();
+  for (const ticker of cleanTickers) {
+    const watchSnap = await db
+      .collectionGroup("watchTickers")
+      .where(admin.firestore.FieldPath.documentId(), "==", ticker)
+      .limit(800)
+      .get();
+    watchSnap.docs.forEach((doc) => {
+      const uid = doc.ref.parent.parent?.id || "";
+      if (uid) out.add(uid);
+    });
+  }
+  return out;
+}
+
+async function collectUsersForIpoNotifications(limit = 1200): Promise<Set<string>> {
+  const out = new Set<string>();
+  const snap = await db.collection("users").limit(Math.max(1, Math.min(limit, 2000))).get();
+  snap.docs.forEach((doc) => out.add(doc.id));
+  return out;
 }
 
 async function deleteCollectionDocs(query: admin.firestore.Query, batchSize = 200): Promise<void> {
@@ -1379,7 +1863,9 @@ async function buildProfilePayload(
     asBoolean(profile.premium, false)
     || asBoolean(userData.premium, false)
     || asBoolean(profile.verified, false)
-    || ["pro", "desk", "premium"].includes(asString(profile.plan || userData.plan || userData.subscriptionTier).trim().toLowerCase());
+    || ["go", "plus", "pro", "business", "desk", "premium"].includes(
+      asString(profile.plan || userData.plan || userData.subscriptionTier).trim().toLowerCase()
+    );
   const premium = explicitPremium ? true : await inferPremiumUser(userDocId);
   const verified = isAdmin || premium || asBoolean(profile.verified, false);
   const publicEmailOptIn = asBoolean(profile.publicEmailOptIn, false);
@@ -1570,21 +2056,40 @@ ROUTES.get("/health", (_req, res) => {
 });
 
 ROUTES.post("/llm/run", async (req, res) => {
+  const startedAt = Date.now();
+  const requestPayload = asPlainObject(req.body);
+  const requestedProvider = normalizeProvider(requestPayload.provider || "openai");
+  const fallbackProviders = Array.isArray(requestPayload.fallbackProviders)
+    ? requestPayload.fallbackProviders.map((item) => normalizeProvider(item))
+    : [];
+  const providerChain = Array.from(new Set([requestedProvider, ...fallbackProviders]));
+  const retryProvider = providerChain.find((item) => item !== requestedProvider) || "openai";
+  const requestedModel = sanitizeText(requestPayload.model, 120) || DEFAULT_LLM_MODEL;
   try {
-    const payload = asPlainObject(req.body);
-    const result = await invokeLlmWithFallback(payload);
+    const result = await invokeLlmWithFallback(requestPayload);
     res.status(200).json({
-      ok: true,
-      provider: result.provider,
+      text: result.text,
       model: result.model,
-      output: result.text,
+      provider: result.provider,
+      latencyMs: Number.isFinite(result.latencyMs) ? result.latencyMs : Date.now() - startedAt,
       usage: result.usage,
       citations: result.citations || [],
+      attempted: result.attempted || [],
       disclaimer: "LLMs can sometimes make mistakes.",
     });
   } catch (error: any) {
     const message = sanitizeText(error?.message || error, 220) || "llm_run_failed";
-    res.status(400).json({ error: "llm_run_failed", message });
+    res.status(502).json({
+      text: "",
+      model: requestedModel,
+      provider: requestedProvider,
+      latencyMs: Date.now() - startedAt,
+      usage: {},
+      citations: [],
+      error: message,
+      retryProvider,
+      retryModel: requestedModel,
+    });
   }
 });
 
@@ -1911,84 +2416,106 @@ ROUTES.post("/notify/sendTest", async (req, res) => {
 
 ROUTES.post("/earnings/refresh", async (req, res) => {
   try {
-    const user = await verifyRequestUser(req, true);
-    if (!user) {
-      res.status(401).json({ error: "unauthenticated" });
-      return;
-    }
-    if (!user.email || user.email.toLowerCase() !== ADMIN_EMAIL) {
-      res.status(403).json({ error: "forbidden" });
-      return;
-    }
     if (!FMP_API_KEY) {
       res.status(503).json({ error: "missing_fmp_api_key" });
       return;
     }
 
     const body = asPlainObject(req.body);
-    const from = sanitizeText(body.from, 20) || new Date().toISOString().slice(0, 10);
-    const to = sanitizeText(body.to, 20) || new Date(Date.now() + 21 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const limit = Math.max(10, Math.min(500, Math.floor(asFinite(body.limit, 200))));
-
-    const endpoint = `https://financialmodelingprep.com/api/v3/earning_calendar?from=${encodeURIComponent(
-      from
-    )}&to=${encodeURIComponent(to)}&apikey=${encodeURIComponent(FMP_API_KEY)}`;
-    const response = await fetch(endpoint, { method: "GET" });
-    if (!response.ok) {
-      res.status(502).json({ error: "fmp_fetch_failed", status: response.status });
+    const symbol = normalizeTicker(body.symbol || body.ticker);
+    if (!symbol) {
+      res.status(400).json({ error: "symbol_required" });
       return;
     }
-    const rows = (await response.json().catch(() => [])) as Array<Record<string, unknown>>;
-    const records = Array.isArray(rows) ? rows.slice(0, limit) : [];
+    const start = sanitizeText(body.start || body.from, 20) || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const end = sanitizeText(body.end || body.to, 20) || new Date(Date.now() + 120 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-    const batch = db.batch();
-    records.forEach((row) => {
-      const symbol = normalizeTicker(row.symbol || row.ticker);
-      const date = sanitizeText(row.date, 20);
-      if (!symbol || !date) return;
-      const docId = `${symbol}_${date}`;
-      const ref = db.collection("earnings_calendar_cache").doc(docId);
-      batch.set(
-        ref,
-        {
-          symbol,
-          date,
-          eps: asFinite(row.eps, NaN),
-          epsEstimated: asFinite(row.epsEstimated, NaN),
-          revenue: asFinite(row.revenue, NaN),
-          revenueEstimated: asFinite(row.revenueEstimated, NaN),
-          fiscalDateEnding: sanitizeText(row.fiscalDateEnding, 20),
-          time: sanitizeText(row.time, 40),
-          source: "fmp",
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          payload: row,
-        },
-        { merge: true }
-      );
-    });
-    await batch.commit();
+    const docRef = db.collection("earningsCalendar").doc(symbol);
+    const existingSnap = await docRef.get();
+    const existing = (existingSnap.data() || {}) as Record<string, unknown>;
+    const lastFetchedAtMs = getTimestampMs(existing.lastFetchedAt);
+    const hasRecentCache = Array.isArray(existing.items) && existing.items.length > 0 && Date.now() - lastFetchedAtMs < 7 * 24 * 60 * 60 * 1000;
+    if (hasRecentCache) {
+      res.status(200).json({
+        ok: true,
+        symbol,
+        cached: true,
+        lastFetchedAtMs,
+        items: existing.items,
+        lastUpdated: sanitizeText(existing.lastUpdated, 30),
+      });
+      return;
+    }
 
-    await db.collection("earnings_refresh_runs").add({
-      from,
-      to,
-      fetchedCount: records.length,
-      triggeredBy: user.uid,
-      triggeredByEmail: sanitizeText(user.email, 200),
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
+    const candidateUrls = [
+      `https://financialmodelingprep.com/stable/earnings-calendar?symbol=${encodeURIComponent(symbol)}&from=${encodeURIComponent(start)}&to=${encodeURIComponent(end)}&apikey=${encodeURIComponent(FMP_API_KEY)}`,
+      `https://financialmodelingprep.com/api/v3/earning_calendar?from=${encodeURIComponent(start)}&to=${encodeURIComponent(end)}&apikey=${encodeURIComponent(FMP_API_KEY)}`,
+    ];
+
+    let records: Array<Record<string, unknown>> = [];
+    let fetchedFrom = "";
+    for (const endpoint of candidateUrls) {
+      const response = await fetch(endpoint, { method: "GET" });
+      if (!response.ok) continue;
+      const rows = (await response.json().catch(() => [])) as Array<Record<string, unknown>>;
+      const filtered = (Array.isArray(rows) ? rows : []).filter((row) => normalizeTicker(row.symbol || row.ticker) === symbol);
+      if (filtered.length) {
+        records = filtered;
+        fetchedFrom = endpoint.includes("/stable/") ? "stable" : "v3";
+        break;
+      }
+    }
+
+    if (!records.length) {
+      res.status(502).json({ error: "fmp_fetch_failed", symbol, start, end });
+      return;
+    }
+
+    const items = records
+      .map((row) => ({
+        symbol,
+        date: sanitizeText(row.date, 20),
+        epsActual: Number.isFinite(Number((row as any).epsActual)) ? Number((row as any).epsActual) : null,
+        epsEstimated: Number.isFinite(Number((row as any).epsEstimated)) ? Number((row as any).epsEstimated) : null,
+        revenueActual: Number.isFinite(Number((row as any).revenueActual)) ? Number((row as any).revenueActual) : null,
+        revenueEstimated: Number.isFinite(Number((row as any).revenueEstimated)) ? Number((row as any).revenueEstimated) : null,
+        lastUpdated: sanitizeText((row as any).lastUpdated, 20),
+      }))
+      .filter((row) => row.date)
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(0, 160);
+
+    const lastUpdated = items
+      .map((item) => item.lastUpdated)
+      .filter(Boolean)
+      .sort()
+      .pop() || "";
+
+    await docRef.set(
+      {
+        symbol,
+        start,
+        end,
+        source: "fmp",
+        sourceVariant: fetchedFrom,
+        lastUpdated,
+        lastFetchedAt: admin.firestore.FieldValue.serverTimestamp(),
+        items,
+      },
+      { merge: true }
+    );
 
     res.status(200).json({
       ok: true,
-      from,
-      to,
-      fetchedCount: records.length,
+      symbol,
+      start,
+      end,
+      cached: false,
+      fetchedCount: items.length,
+      lastUpdated,
+      items,
     });
   } catch (error: any) {
-    const code = String(error?.message || "");
-    if (code === "unauthenticated" || code === "invalid_token") {
-      res.status(401).json({ error: code });
-      return;
-    }
     console.error("[Earnings] refresh failed", error);
     res.status(500).json({ error: "earnings_refresh_failed" });
   }
@@ -2991,15 +3518,22 @@ ROUTES.get("/me/notification-settings", async (req, res) => {
     ]);
 
     const userData = (userSnap.data() || {}) as Record<string, unknown>;
-    const prefs = (userData.notificationPrefs || {}) as Record<string, unknown>;
+    const prefs = normalizeNotificationPrefs({}, (userData.notificationPrefs || {}) as Record<string, unknown>);
     const privacyRaw = (userData.notificationPrivacy || {}) as Record<string, unknown>;
     const coarseLocation = normalizeCoarseLocation(privacyRaw.coarseLocation);
 
     res.status(200).json({
       notificationPrefs: {
-        global: asBoolean(prefs.global, true),
-        following: asBoolean(prefs.following, true),
-        tickers: asBoolean(prefs.tickers, true),
+        global: prefs.global,
+        following: prefs.following,
+        tickers: prefs.tickers,
+        watchlist: prefs.watchlist,
+        explore: prefs.explore,
+        earnings: prefs.earnings,
+        ipos: prefs.ipos,
+        daily: prefs.daily,
+        weekly: prefs.weekly,
+        inactiveHidden: prefs.inactiveHidden,
       },
       notificationPrivacy: {
         locationConsent: asBoolean(privacyRaw.locationConsent, false),
@@ -3097,13 +3631,8 @@ ROUTES.post("/notifications/preferences", async (req, res) => {
     const userRef = db.collection("users").doc(user.uid);
     const userSnap = await userRef.get();
     const userData = (userSnap.data() || {}) as Record<string, unknown>;
-    const existingPrefs = (userData.notificationPrefs || {}) as Record<string, unknown>;
-    const notificationPrefs = {
-      global: typeof input.global === "boolean" ? asBoolean(input.global, true) : asBoolean(existingPrefs.global, true),
-      following:
-        typeof input.following === "boolean" ? asBoolean(input.following, true) : asBoolean(existingPrefs.following, true),
-      tickers: typeof input.tickers === "boolean" ? asBoolean(input.tickers, true) : asBoolean(existingPrefs.tickers, true),
-    };
+    const existingPrefs = normalizeNotificationPrefs({}, (userData.notificationPrefs || {}) as Record<string, unknown>);
+    const notificationPrefs = normalizeNotificationPrefs(input, existingPrefs as unknown as Record<string, unknown>);
 
     const existingPrivacy = (userData.notificationPrivacy || {}) as Record<string, unknown>;
     const locationConsent =
@@ -3230,6 +3759,382 @@ ROUTES.post("/notifications/sync-topics", async (req, res) => {
 ROUTES.get("/notifications/config", (_req, res) => {
   const vapidPublicKey = sanitizeText(process.env.FCM_WEB_VAPID_KEY || "", 4096);
   res.status(200).json({ vapidPublicKey });
+});
+
+ROUTES.post("/notifications/session/ping", async (req, res) => {
+  try {
+    const user = await verifyRequestUser(req, true);
+    if (!user) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const input = asPlainObject(req.body);
+    const isAnonymous =
+      typeof input.isAnonymous === "boolean"
+        ? asBoolean(input.isAnonymous, false)
+        : sanitizeText(user.firebase?.sign_in_provider, 40) === "anonymous";
+    const userRef = db.collection("users").doc(user.uid);
+    const userSnap = await userRef.get();
+    const userData = (userSnap.data() || {}) as Record<string, unknown>;
+    const existingPrefs = normalizeNotificationPrefs({}, (userData.notificationPrefs || {}) as Record<string, unknown>);
+    const rawPrefs =
+      input.notificationPrefs && typeof input.notificationPrefs === "object"
+        ? (input.notificationPrefs as Record<string, unknown>)
+        : {};
+    const notificationPrefs = normalizeNotificationPrefs(rawPrefs, existingPrefs as unknown as Record<string, unknown>);
+
+    await userRef.set(
+      {
+        isAnonymous,
+        lastActiveAt: admin.firestore.FieldValue.serverTimestamp(),
+        notificationPrefs,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    res.status(200).json({
+      ok: true,
+      uid: user.uid,
+      isAnonymous,
+      notificationPrefs,
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Notify] session ping failed", error);
+    res.status(500).json({ error: "notification_session_ping_failed" });
+  }
+});
+
+ROUTES.get("/notifications/items", async (req, res) => {
+  try {
+    const user = await verifyRequestUser(req, true);
+    if (!user) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const requestedCategory = sanitizeText((req.query as Record<string, unknown>).category, 40).toLowerCase();
+    const categoryFilter = requestedCategory && requestedCategory !== "all" ? normalizeNotificationCategory(requestedCategory) : null;
+    const unreadOnly = asBoolean((req.query as Record<string, unknown>).unread, false);
+    const includeHidden = asBoolean((req.query as Record<string, unknown>).includeHidden, false);
+    const limitValue = Math.max(1, Math.min(120, Math.floor(asFinite((req.query as Record<string, unknown>).limit, 40))));
+    const fetchLimit = Math.max(limitValue * 3, 120);
+
+    let query: admin.firestore.Query = db
+      .collection("notifications")
+      .doc(user.uid)
+      .collection("items")
+      .orderBy("createdAt", "desc")
+      .limit(fetchLimit);
+    const snap = await query.get();
+    const items = snap.docs
+      .map((doc) => {
+        const data = (doc.data() || {}) as Record<string, unknown>;
+        const category = normalizeNotificationCategory(data.category);
+        const hidden = asBoolean(data.hidden, false);
+        return {
+          id: doc.id,
+          category,
+          title: sanitizeText(data.title, 160) || `${notificationCategoryLabel(category)} update`,
+          body: sanitizeText(data.body, 400),
+          deepLink: normalizeNotificationDeepLink(data.deepLink),
+          hidden,
+          read: asBoolean(data.read, false),
+          nextSteps: Array.isArray(data.nextSteps)
+            ? data.nextSteps.map((item) => sanitizeText(item, 120)).filter(Boolean).slice(0, 4)
+            : [],
+          createdAtMs: getTimestampMs(data.createdAt),
+        };
+      })
+      .filter((item) => (unreadOnly ? !item.read : true))
+      .filter((item) => (includeHidden ? true : !item.hidden))
+      .filter((item) => (categoryFilter ? item.category === categoryFilter : true));
+
+    const unreadCount = items.filter((item) => !item.read).length;
+    res.status(200).json({
+      ok: true,
+      unreadCount,
+      count: items.length,
+      items: items.slice(0, limitValue),
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Notify] list items failed", error);
+    res.status(500).json({ error: "notification_items_failed" });
+  }
+});
+
+ROUTES.post("/notifications/items/:itemId/read", async (req, res) => {
+  try {
+    const user = await verifyRequestUser(req, true);
+    if (!user) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const itemId = sanitizeText(req.params.itemId, 220).replace(/[^A-Za-z0-9._-]/g, "");
+    if (!itemId) {
+      res.status(400).json({ error: "invalid_item_id" });
+      return;
+    }
+    const readValue = typeof (req.body || {}).read === "boolean" ? asBoolean((req.body || {}).read, true) : true;
+    const itemRef = db.collection("notifications").doc(user.uid).collection("items").doc(itemId);
+    const itemSnap = await itemRef.get();
+    if (!itemSnap.exists) {
+      res.status(404).json({ error: "notification_item_not_found" });
+      return;
+    }
+    await itemRef.set(
+      {
+        read: readValue,
+        readAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    res.status(200).json({ ok: true, id: itemId, read: readValue });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Notify] mark item read failed", error);
+    res.status(500).json({ error: "notification_item_update_failed" });
+  }
+});
+
+ROUTES.post("/notifications/items/read-all", async (req, res) => {
+  try {
+    const user = await verifyRequestUser(req, true);
+    if (!user) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const includeHidden = asBoolean((req.body || {}).includeHidden, false);
+    let updated = 0;
+    while (true) {
+      const query: admin.firestore.Query = db
+        .collection("notifications")
+        .doc(user.uid)
+        .collection("items")
+        .where("read", "==", false)
+        .limit(200);
+      const snap = await query.get();
+      if (snap.empty) break;
+      const batch = db.batch();
+      snap.docs.forEach((doc) => {
+        const hidden = asBoolean((doc.data() || {}).hidden, false);
+        if (!includeHidden && hidden) return;
+        batch.set(
+          doc.ref,
+          {
+            read: true,
+            readAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+        updated += 1;
+      });
+      await batch.commit();
+      if (snap.size < 200) break;
+    }
+    res.status(200).json({ ok: true, updated });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Notify] mark all read failed", error);
+    res.status(500).json({ error: "notification_read_all_failed" });
+  }
+});
+
+ROUTES.post("/notify/event", async (req, res) => {
+  try {
+    const actor = await verifyRequestUser(req, true);
+    if (!actor) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const body = asPlainObject(req.body);
+    const category = normalizeNotificationCategory(body.category);
+    const title = sanitizeText(body.title, 160) || `${notificationCategoryLabel(category)} update`;
+    const message = sanitizeText(body.body || body.message, 320) || "You have a new Quantura update.";
+    const deepLink = normalizeNotificationDeepLink(body.deepLink || body.path || "/notifications");
+    const nextSteps = Array.isArray(body.nextSteps) ? body.nextSteps.map((item) => sanitizeText(item, 120)).filter(Boolean) : [];
+    const metadata = body.metadata && typeof body.metadata === "object" ? (body.metadata as Record<string, unknown>) : {};
+    const force = asBoolean(body.force, false);
+    const hidden = typeof body.hidden === "boolean" ? asBoolean(body.hidden, false) : category === "inactive";
+
+    const explicitUserIds = Array.isArray(body.userIds)
+      ? body.userIds.map((item) => sanitizeText(item, 220)).filter(Boolean)
+      : [];
+    const targetUsers = new Set<string>(explicitUserIds);
+
+    const inputTickers = Array.isArray(body.tickers)
+      ? body.tickers.map((item) => normalizeTicker(item)).filter(Boolean)
+      : [normalizeTicker(body.ticker)].filter(Boolean);
+    if (!targetUsers.size) {
+      if (category === "watchlist" || category === "earnings") {
+        const byTicker = await collectUsersByWatchTickers(inputTickers);
+        byTicker.forEach((uid) => targetUsers.add(uid));
+      } else if (category === "explore") {
+        const authorUid = sanitizeText(body.authorUid || body.userId, 220);
+        const byFollow = await collectUsersByFollowedAuthor(authorUid);
+        byFollow.forEach((uid) => targetUsers.add(uid));
+      } else if (category === "ipo") {
+        const allUsers = await collectUsersForIpoNotifications();
+        allUsers.forEach((uid) => targetUsers.add(uid));
+      } else {
+        targetUsers.add(actor.uid);
+      }
+    }
+
+    const excludeUid = sanitizeText(body.excludeUid, 220);
+    if (excludeUid) targetUsers.delete(excludeUid);
+
+    if (!targetUsers.size) {
+      res.status(404).json({ error: "no_target_users" });
+      return;
+    }
+
+    const deliverResults = await Promise.all(
+      Array.from(targetUsers)
+        .slice(0, 2000)
+        .map((uid) =>
+          sendPushToUserTokens({
+            uid,
+            category,
+            title,
+            body: message,
+            deepLink,
+            hidden,
+            nextSteps,
+            metadata: {
+              ...metadata,
+              actorUid: actor.uid,
+              tickers: inputTickers,
+            },
+            force,
+          })
+        )
+    );
+
+    const deliveredUsers = deliverResults.filter((row) => row.delivered > 0).length;
+    const attemptedTokens = deliverResults.reduce((sum, row) => sum + row.attempted, 0);
+    const deliveredTokens = deliverResults.reduce((sum, row) => sum + row.delivered, 0);
+    res.status(200).json({
+      ok: true,
+      category,
+      targetUsers: targetUsers.size,
+      deliveredUsers,
+      attemptedTokens,
+      deliveredTokens,
+      skippedUsers: deliverResults.filter((row) => row.skipped).length,
+      results: deliverResults.slice(0, 60),
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Notify] event send failed", error);
+    res.status(500).json({ error: "notify_event_failed" });
+  }
+});
+
+ROUTES.post("/notify/watchlist", async (req, res) => {
+  try {
+    const actor = await verifyRequestUser(req, true);
+    if (!actor) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const body = asPlainObject(req.body);
+    const title = sanitizeText(body.title, 160) || "Watchlist update";
+    const message = sanitizeText(body.body || body.message, 320) || "A watchlist update is available.";
+    const deepLink = normalizeNotificationDeepLink(body.deepLink || body.path || "/watchlist");
+    const nextSteps = Array.isArray(body.nextSteps) ? body.nextSteps.map((item) => sanitizeText(item, 120)).filter(Boolean) : [];
+    const metadata = body.metadata && typeof body.metadata === "object" ? (body.metadata as Record<string, unknown>) : {};
+    const force = asBoolean(body.force, false);
+    const hidden = asBoolean(body.hidden, false);
+
+    const explicitUserIds = Array.isArray(body.userIds)
+      ? body.userIds.map((item) => sanitizeText(item, 220)).filter(Boolean)
+      : [];
+    const targetUsers = new Set<string>(explicitUserIds);
+
+    const inputTickers = Array.isArray(body.tickers)
+      ? body.tickers.map((item) => normalizeTicker(item)).filter(Boolean)
+      : [normalizeTicker(body.ticker)].filter(Boolean);
+
+    if (!targetUsers.size) {
+      const byTicker = await collectUsersByWatchTickers(inputTickers);
+      byTicker.forEach((uid) => targetUsers.add(uid));
+    }
+
+    const excludeUid = sanitizeText(body.excludeUid, 220);
+    if (excludeUid) targetUsers.delete(excludeUid);
+
+    if (!targetUsers.size) {
+      res.status(404).json({ error: "no_target_users" });
+      return;
+    }
+
+    const deliverResults = await Promise.all(
+      Array.from(targetUsers)
+        .slice(0, 2000)
+        .map((uid) =>
+          sendPushToUserTokens({
+            uid,
+            category: "watchlist",
+            title,
+            body: message,
+            deepLink,
+            hidden,
+            nextSteps,
+            metadata: {
+              ...metadata,
+              actorUid: actor.uid,
+              tickers: inputTickers,
+            },
+            force,
+          })
+        )
+    );
+
+    const deliveredUsers = deliverResults.filter((row) => row.delivered > 0).length;
+    const attemptedTokens = deliverResults.reduce((sum, row) => sum + row.attempted, 0);
+    const deliveredTokens = deliverResults.reduce((sum, row) => sum + row.delivered, 0);
+
+    res.status(200).json({
+      ok: true,
+      category: "watchlist",
+      targetUsers: targetUsers.size,
+      deliveredUsers,
+      attemptedTokens,
+      deliveredTokens,
+      skippedUsers: deliverResults.filter((row) => row.skipped).length,
+      results: deliverResults.slice(0, 60),
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Notify] watchlist send failed", error);
+    res.status(500).json({ error: "notify_watchlist_failed" });
+  }
 });
 
 ROUTES.get(["/promo/status", "/explore/promo/status"], (_req, res) => {

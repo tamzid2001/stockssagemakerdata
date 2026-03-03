@@ -33,7 +33,7 @@ struct AuthGateView: View {
                         .font(.system(size: 30, weight: .bold, design: .rounded))
                         .foregroundStyle(.white)
 
-                    Text("Sync forecasts, save screeners, and unlock personalized market alerts.")
+                    Text("Sync forecasts and unlock personalized alerts.")
                         .font(.system(size: 15, weight: .medium))
                         .multilineTextAlignment(.center)
                         .foregroundStyle(.white.opacity(0.84))
@@ -59,6 +59,70 @@ struct AuthGateView: View {
                     .tint(Color.white)
                     .foregroundStyle(Color.black)
                     .disabled(viewModel.isBusy)
+
+                    HStack(spacing: 8) {
+                        Button {
+                            viewModel.signInWithGitHub()
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "chevron.left.forwardslash.chevron.right")
+                                Text("GitHub")
+                                    .fontWeight(.semibold)
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.white)
+                        .foregroundStyle(.white)
+                        .disabled(viewModel.isBusy)
+
+                        Button {
+                            viewModel.signInWithTwitter()
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "at")
+                                Text("Twitter/X")
+                                    .fontWeight(.semibold)
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.white)
+                        .foregroundStyle(.white)
+                        .disabled(viewModel.isBusy)
+                    }
+
+                    HStack(spacing: 8) {
+                        Button {
+                            viewModel.signInWithYahoo()
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "y.circle")
+                                Text("Yahoo")
+                                    .fontWeight(.semibold)
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.white)
+                        .foregroundStyle(.white)
+                        .disabled(viewModel.isBusy)
+
+                        Button {
+                            viewModel.signInWithMicrosoft()
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "square.grid.2x2")
+                                Text("Microsoft")
+                                    .fontWeight(.semibold)
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.white)
+                        .foregroundStyle(.white)
+                        .disabled(viewModel.isBusy)
+                    }
 
 #if canImport(AuthenticationServices)
                     SignInWithAppleButton(.signIn) { _ in

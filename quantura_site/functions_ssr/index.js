@@ -111,7 +111,6 @@ const resolveTemplate = (pathname) => {
     "/ticker-query",
     "/options",
     "/saved-forecasts",
-    "/backtesting",
     "/studio",
     "/forecast",
     "/terminal",
@@ -218,9 +217,9 @@ const getServerTemplate = async () => {
       ads_use_real_ios: "true",
       ads_use_real_android: "true",
       holiday_promo: "false",
-      backtesting_enabled: "true",
-      backtesting_free_daily_limit: "1",
-      backtesting_pro_daily_limit: "25",
+      backtesting_enabled: "false",
+      backtesting_free_daily_limit: "0",
+      backtesting_pro_daily_limit: "0",
     },
   });
   try {

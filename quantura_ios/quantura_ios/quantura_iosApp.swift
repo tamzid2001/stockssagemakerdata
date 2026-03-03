@@ -1,3 +1,4 @@
+import Foundation
 import FirebaseCore
 #if canImport(FirebaseAuth)
 import FirebaseAuth
@@ -59,6 +60,198 @@ final class NativeBridgeState {
         pendingDeepLink = ""
     }
 }
+
+#if canImport(FirebaseAuth)
+private extension FirebaseAuth.User {
+    func idTokenAsync(forceRefresh: Bool) async throws -> String {
+        try await withCheckedThrowingContinuation { continuation in
+            getIDTokenForcingRefresh(forceRefresh) { token, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                let clean = token?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                if clean.isEmpty {
+                    continuation.resume(
+                        throwing: NSError(
+                            domain: "NativeNotificationSyncService",
+                            code: -1,
+                            userInfo: [NSLocalizedDescriptionKey: "Firebase ID token is empty."]
+                        )
+                    )
+                    return
+                }
+                continuation.resume(returning: clean)
+            }
+        }
+    }
+}
+#endif
+
+#if canImport(UserNotifications)
+enum InactivityLocalNotificationScheduler {
+    static let dailyIdentifier = "quantura.inactive.daily"
+    static let weeklyIdentifier = "quantura.inactive.weekly"
+
+    static func reschedule() {
+        let center = UNUserNotificationCenter.current()
+        center.getNotificationSettings { settings in
+            let allowed = settings.authorizationStatus == .authorized
+                || settings.authorizationStatus == .provisional
+                || settings.authorizationStatus == .ephemeral
+            guard allowed else { return }
+
+            center.removePendingNotificationRequests(withIdentifiers: [dailyIdentifier, weeklyIdentifier])
+
+            let daily = UNMutableNotificationContent()
+            daily.title = "Come back to Quantura"
+            daily.body = "Your watchlist and forecasts may have moved. Re-open Quantura for a quick check."
+            daily.sound = .default
+            daily.userInfo = ["url": "/forecasting?source=inactive_daily"]
+
+            let weekly = UNMutableNotificationContent()
+            weekly.title = "Weekly Quantura recap"
+            weekly.body = "Review this week’s market updates and model outputs."
+            weekly.sound = .default
+            weekly.userInfo = ["url": "/explore?source=inactive_weekly"]
+
+            let dailyRequest = UNNotificationRequest(
+                identifier: dailyIdentifier,
+                content: daily,
+                trigger: UNTimeIntervalNotificationTrigger(timeInterval: 24 * 60 * 60, repeats: false)
+            )
+            let weeklyRequest = UNNotificationRequest(
+                identifier: weeklyIdentifier,
+                content: weekly,
+                trigger: UNTimeIntervalNotificationTrigger(timeInterval: 7 * 24 * 60 * 60, repeats: false)
+            )
+
+            center.add(dailyRequest) { error in
+                if let error {
+                    print("[Notify][iOS] Daily inactivity schedule failed: \(error.localizedDescription)")
+                }
+            }
+            center.add(weeklyRequest) { error in
+                if let error {
+                    print("[Notify][iOS] Weekly inactivity schedule failed: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+}
+#endif
+
+#if canImport(FirebaseAuth)
+@MainActor
+final class NativeNotificationSyncService {
+    static let shared = NativeNotificationSyncService()
+
+    private let baseURL = URL(string: "https://quantura.studio")!
+    private var authHandle: AuthStateDidChangeListenerHandle?
+    private var currentFcmToken: String = ""
+    private var lastSessionPingAt: Date = .distantPast
+    private var lastRegisteredTokenKey: String = ""
+
+    private init() {}
+
+    func start() {
+        guard FirebaseApp.app() != nil else { return }
+        guard authHandle == nil else { return }
+        authHandle = Auth.auth().addStateDidChangeListener { [weak self] _, user in
+            guard let self else { return }
+            Task { @MainActor in
+                await self.syncSessionAndToken(user: user, forcePing: true, reason: "auth_state")
+            }
+        }
+        Task { @MainActor in
+            await syncSessionAndToken(user: Auth.auth().currentUser, forcePing: true, reason: "startup")
+        }
+    }
+
+    func markSessionActive() {
+        Task { @MainActor in
+            await syncSessionAndToken(user: Auth.auth().currentUser, forcePing: true, reason: "app_active")
+        }
+    }
+
+    func updateFcmToken(_ token: String) {
+        let clean = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else { return }
+        currentFcmToken = clean
+        Task { @MainActor in
+            await syncSessionAndToken(user: Auth.auth().currentUser, forcePing: false, reason: "token_refresh")
+        }
+    }
+
+    private func shouldPingSession() -> Bool {
+        Date().timeIntervalSince(lastSessionPingAt) > 45
+    }
+
+    private func syncSessionAndToken(user: FirebaseAuth.User?, forcePing: Bool, reason: String) async {
+        guard let user else { return }
+        do {
+            let idToken = try await user.idTokenAsync(forceRefresh: false)
+            if forcePing || shouldPingSession() {
+                _ = try await postJSON(
+                    path: "/api/notifications/session/ping",
+                    idToken: idToken,
+                    payload: [
+                        "isAnonymous": user.isAnonymous,
+                    ]
+                )
+                lastSessionPingAt = Date()
+            }
+
+            let token = currentFcmToken.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !token.isEmpty {
+                let key = "\(user.uid)|\(token)"
+                if forcePing || key != lastRegisteredTokenKey {
+                    _ = try await postJSON(
+                        path: "/api/notifications/register-token",
+                        idToken: idToken,
+                        payload: [
+                            "token": token,
+                            "platform": "ios",
+                        ]
+                    )
+                    lastRegisteredTokenKey = key
+                }
+            }
+        } catch {
+            print("[Notify][iOS] Session/token sync skipped reason=\(reason): \(error.localizedDescription)")
+        }
+    }
+
+    private func postJSON(path: String, idToken: String, payload: [String: Any]) async throws -> [String: Any] {
+        let endpoint = URL(string: path, relativeTo: baseURL) ?? baseURL.appendingPathComponent(path)
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 30
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw NSError(
+                domain: "NativeNotificationSyncService",
+                code: -2,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid notification sync response."]
+            )
+        }
+        let parsed = (try? JSONSerialization.jsonObject(with: data, options: [])) as? [String: Any] ?? [:]
+        guard (200...299).contains(httpResponse.statusCode) else {
+            let detail = String(describing: parsed["error"] ?? parsed["message"] ?? "request_failed")
+            throw NSError(
+                domain: "NativeNotificationSyncService",
+                code: httpResponse.statusCode,
+                userInfo: [NSLocalizedDescriptionKey: detail]
+            )
+        }
+        return parsed
+    }
+}
+#endif
 
 #if canImport(FirebaseAuth) && canImport(FirebaseFirestore) && canImport(UserNotifications)
 final class NativePersonalizedNotificationManager {
@@ -246,15 +439,25 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         if firebaseReady {
             UNUserNotificationCenter.current().delegate = self
             Messaging.messaging().delegate = self
+            Messaging.messaging().token { token, _ in
+                guard let token else { return }
+                NativeBridgeState.shared.updatePushToken(token)
+#if canImport(FirebaseAuth)
+                NativeNotificationSyncService.shared.updateFcmToken(token)
+#endif
+            }
             UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, _ in
                 if granted {
                     DispatchQueue.main.async {
                         application.registerForRemoteNotifications()
                     }
+#if canImport(UserNotifications)
+                    InactivityLocalNotificationScheduler.reschedule()
+#endif
                 }
             }
             if let remotePayload = launchOptions?[.remoteNotification] as? [AnyHashable: Any],
-               let target = remotePayload["url"] as? String {
+               let target = (remotePayload["url"] as? String) ?? (remotePayload["path"] as? String) {
                 NativeBridgeState.shared.updateDeepLink(target)
             }
         }
@@ -262,6 +465,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
 #if canImport(FirebaseAuth)
         if firebaseReady {
             NativeAuthSessionManager.shared.startIfNeeded()
+            NativeNotificationSyncService.shared.start()
         }
 #endif
 #if canImport(FirebaseAuth) && canImport(FirebaseFirestore) && canImport(UserNotifications)
@@ -275,6 +479,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     func applicationDidBecomeActive(_ application: UIApplication) {
         _ = application
         requestTrackingPermissionIfNeeded()
+#if canImport(FirebaseAuth)
+        NativeNotificationSyncService.shared.markSessionActive()
+#endif
+#if canImport(UserNotifications)
+        InactivityLocalNotificationScheduler.reschedule()
+#endif
     }
 
 #if canImport(GoogleSignIn)
@@ -322,6 +532,9 @@ extension AppDelegate: UNUserNotificationCenterDelegate, MessagingDelegate {
     func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
         guard let fcmToken else { return }
         NativeBridgeState.shared.updatePushToken(fcmToken)
+#if canImport(FirebaseAuth)
+        NativeNotificationSyncService.shared.updateFcmToken(fcmToken)
+#endif
     }
 
     func userNotificationCenter(
@@ -338,7 +551,7 @@ extension AppDelegate: UNUserNotificationCenterDelegate, MessagingDelegate {
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let info = response.notification.request.content.userInfo
-        if let target = info["url"] as? String {
+        if let target = (info["url"] as? String) ?? (info["path"] as? String) {
             NativeBridgeState.shared.updateDeepLink(target)
         }
         completionHandler()

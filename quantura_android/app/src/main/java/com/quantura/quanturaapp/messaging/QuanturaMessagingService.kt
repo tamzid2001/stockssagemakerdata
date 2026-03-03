@@ -24,7 +24,7 @@ class QuanturaMessagingService : FirebaseMessagingService() {
         val data = message.data
         val title = notification?.title ?: data["title"] ?: "Quantura"
         val body = notification?.body ?: data["body"] ?: "You have a new update."
-        val url = data["url"] ?: "/dashboard"
+        val url = data["url"] ?: data["path"] ?: "/dashboard"
         showNotification(title, body, url)
     }
 
@@ -32,7 +32,7 @@ class QuanturaMessagingService : FirebaseMessagingService() {
         val channelId = "quantura_push"
         createChannel(channelId)
 
-        val baseUrl = "https://quantura-e2e3d.web.app"
+        val baseUrl = "https://quantura.studio"
         val targetUrl = if (deepLinkPath.startsWith("http")) deepLinkPath else "$baseUrl${if (deepLinkPath.startsWith("/")) deepLinkPath else "/$deepLinkPath"}"
 
         val intent = Intent(this, MainActivity::class.java).apply {
