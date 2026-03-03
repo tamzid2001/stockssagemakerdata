@@ -665,7 +665,6 @@ struct QuanturaWebView: UIViewRepresentable {
         private weak var authGateViewModel: AuthGateViewModel?
         private var tokenObserver: NSObjectProtocol?
         private var deepLinkObserver: NSObjectProtocol?
-        private var lastNavigationInterstitialAt: Date = .distantPast
         private let trustedHosts: Set<String> = [
             "quantura.studio",
             "www.quantura.studio",
@@ -767,16 +766,6 @@ struct QuanturaWebView: UIViewRepresentable {
                 }
             }
 
-            if navigationAction.targetFrame?.isMainFrame == true,
-               let destination = navigationAction.request.url?.absoluteString,
-               !destination.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                let now = Date()
-                if now.timeIntervalSince(lastNavigationInterstitialAt) > 3 {
-                    lastNavigationInterstitialAt = now
-                    print("[Ads][iOS] Navigation trigger interstitial url=\(destination)")
-                    adManager.showInterstitial(from: Self.topViewController())
-                }
-            }
             decisionHandler(.allow)
         }
 
@@ -805,16 +794,23 @@ struct QuanturaWebView: UIViewRepresentable {
             DispatchQueue.main.async {
                 switch action {
                 case "showInterstitialAd":
+                    guard self.authGateViewModel?.isGateVisible != true else { return }
                     self.adManager.showInterstitial(from: Self.topViewController())
                 case "showRewardedAd":
+                    guard self.authGateViewModel?.isGateVisible != true else { return }
+                    self.adManager.showRewarded(from: Self.topViewController())
+                case "showRewardedInterstitial":
+                    guard self.authGateViewModel?.isGateVisible != true else { return }
                     self.adManager.showRewarded(from: Self.topViewController())
                 case "openNewsLink":
                     guard let urlText = payload["url"] as? String, let url = URL(string: urlText) else { return }
+                    guard self.authGateViewModel?.isGateVisible != true else { return }
                     self.adManager.showInterstitial(from: Self.topViewController())
                     UIApplication.shared.open(url)
                 case "handleButtonClick":
                     let buttonID = String(describing: payload["buttonId"] ?? "")
                     print("[Ads][iOS] Button trigger rewarded buttonId=\(buttonID)")
+                    guard self.authGateViewModel?.isGateVisible != true else { return }
                     self.adManager.showRewarded(from: Self.topViewController())
                 case "share":
                     self.openNativeShare(payload: payload)

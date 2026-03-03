@@ -18,6 +18,7 @@ class QuanturaJavascriptBridge(
     private val activity: ComponentActivity,
     private val adManager: AdManager,
     private val onNativeAuthMessage: (type: String, payload: JSONObject) -> Unit,
+    private val isAuthGateVisible: () -> Boolean = { false },
 ) {
     private val tag = "QuanturaJsBridge"
 
@@ -34,8 +35,9 @@ class QuanturaJavascriptBridge(
                 return@runOnUiThread
             }
             when (action) {
-                "showInterstitialAd" -> adManager.showInterstitial(activity)
-                "showRewardedAd" -> adManager.showRewarded(activity)
+                "showInterstitialAd" -> showInterstitialIfAllowed()
+                "showRewardedAd" -> showRewardedIfAllowed()
+                "showRewardedInterstitial" -> showRewardedIfAllowed()
                 "openNewsLink" -> openNewsLink(payload.optString("url"))
                 "handleButtonClick" -> handleButtonClick(payload.optString("buttonId"))
                 "share" -> openNativeShare(payload.optString("url"), payload.optString("title"), payload.optString("text"))
@@ -65,7 +67,7 @@ class QuanturaJavascriptBridge(
         val normalized = url.trim()
         if (!normalized.startsWith("http")) return
         Log.d(tag, "News link trigger interstitial url=$normalized")
-        adManager.showInterstitial(activity)
+        showInterstitialIfAllowed()
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(normalized))
         if (intent.resolveActivity(activity.packageManager) != null) {
             activity.startActivity(intent)
@@ -74,11 +76,27 @@ class QuanturaJavascriptBridge(
 
     private fun handleButtonClick(buttonId: String) {
         Log.d(tag, "Button trigger rewarded buttonId=${buttonId.trim()}")
-        adManager.showRewarded(activity)
+        showRewardedIfAllowed()
         FirebaseAnalytics.getInstance(activity).logEvent(
             "native_bridge_button_click",
             bundleOf("button_id" to buttonId)
         )
+    }
+
+    private fun showInterstitialIfAllowed() {
+        if (isAuthGateVisible()) {
+            Log.d(tag, "Interstitial skipped; auth gate visible.")
+            return
+        }
+        adManager.showInterstitial(activity)
+    }
+
+    private fun showRewardedIfAllowed() {
+        if (isAuthGateVisible()) {
+            Log.d(tag, "Rewarded skipped; auth gate visible.")
+            return
+        }
+        adManager.showRewarded(activity)
     }
 
     private fun openNativeShare(url: String, title: String, text: String) {

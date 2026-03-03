@@ -1249,6 +1249,7 @@ private fun QuanturaWebViewScreen(
                     activity = activity,
                     adManager = adManager,
                     onNativeAuthMessage = onNativeAuthMessage,
+                    isAuthGateVisible = { authGateVisible },
                 )
                 addJavascriptInterface(bridge, "QuanturaBridge")
                 addJavascriptInterface(bridge, "quanturaAuth")

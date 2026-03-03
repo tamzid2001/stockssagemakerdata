@@ -459,7 +459,7 @@
       sidebar_indicators: "Indicators",
       sidebar_trending: "Trending",
       sidebar_news_data: "News and data",
-      sidebar_corporate_events: "Corporate events",
+      sidebar_corporate_events: "Earnings calendar",
       sidebar_market_headlines: "Market headlines",
       sidebar_ask_gpt5: "Model Council",
       sidebar_options: "Options",
@@ -522,7 +522,7 @@
       sidebar_indicators: "Indicadores",
       sidebar_trending: "Tendencias",
       sidebar_news_data: "Noticias y datos",
-      sidebar_corporate_events: "Eventos corporativos",
+      sidebar_corporate_events: "Calendario de resultados",
       sidebar_market_headlines: "Titulares del mercado",
       sidebar_ask_gpt5: "Model Council",
       sidebar_options: "Opciones",
@@ -585,7 +585,7 @@
       sidebar_indicators: "Indicateurs",
       sidebar_trending: "Tendances",
       sidebar_news_data: "Actualites et donnees",
-      sidebar_corporate_events: "Evenements d'entreprise",
+      sidebar_corporate_events: "Calendrier des resultats",
       sidebar_market_headlines: "Titres du marche",
       sidebar_ask_gpt5: "Model Council",
       sidebar_options: "Options",
@@ -648,7 +648,7 @@
       sidebar_indicators: "Indikatoren",
       sidebar_trending: "Trending",
       sidebar_news_data: "News und Daten",
-      sidebar_corporate_events: "Unternehmensereignisse",
+      sidebar_corporate_events: "Ergebnis-Kalender",
       sidebar_market_headlines: "Markt-Schlagzeilen",
       sidebar_ask_gpt5: "Model Council",
       sidebar_options: "Optionen",
@@ -711,7 +711,7 @@
       sidebar_indicators: "المؤشرات",
       sidebar_trending: "الترند",
       sidebar_news_data: "الاخبار والبيانات",
-      sidebar_corporate_events: "احداث الشركات",
+      sidebar_corporate_events: "تقويم الأرباح",
       sidebar_market_headlines: "عناوين السوق",
       sidebar_ask_gpt5: "Model Council",
       sidebar_options: "الخيارات",
@@ -774,7 +774,7 @@
       sidebar_indicators: "ইন্ডিকেটর",
       sidebar_trending: "ট্রেন্ডিং",
       sidebar_news_data: "খবর ও ডেটা",
-      sidebar_corporate_events: "করপোরেট ইভেন্ট",
+      sidebar_corporate_events: "আর্নিংস ক্যালেন্ডার",
       sidebar_market_headlines: "মার্কেট হেডলাইন",
       sidebar_ask_gpt5: "Model Council",
       sidebar_options: "অপশন",
@@ -1390,11 +1390,10 @@
     newsOutput: document.getElementById("news-output"),
     xTrendingOutput: document.getElementById("x-trending-output"),
     eventsCalendarForm: document.getElementById("events-calendar-form"),
-    eventsCalendarTickers: document.getElementById("events-calendar-tickers"),
-    eventsCalendarCountry: document.getElementById("events-calendar-country"),
+    eventsCalendarSymbol: document.getElementById("events-calendar-symbol"),
+    eventsCalendarWindow: document.getElementById("events-calendar-window"),
     eventsCalendarStart: document.getElementById("events-calendar-start"),
     eventsCalendarEnd: document.getElementById("events-calendar-end"),
-    eventsCalendarLimit: document.getElementById("events-calendar-limit"),
     eventsCalendarStatus: document.getElementById("events-calendar-status"),
     eventsCalendarOutput: document.getElementById("events-calendar-output"),
     marketHeadlinesForm: document.getElementById("market-headlines-form"),
@@ -1832,6 +1831,34 @@
     return false;
   };
 
+  const shouldSkipNativeRewardAds = () => {
+    if (!isNativeApp()) return true;
+    if (!state.authResolved) return true;
+    if (!hasFullAccount()) return true;
+    return false;
+  };
+
+  const maybeShowNativeRewardGate = async ({
+    reason = "action",
+    title = "Watch a short ad first?",
+    message = "This action can unlock additional output. Continue to show a rewarded ad.",
+  } = {}) => {
+    if (shouldSkipNativeRewardAds()) return true;
+    const confirmed = await openConfirmModal({
+      title,
+      message,
+      confirmLabel: "Watch ad",
+      cancelLabel: "Skip",
+    });
+    if (!confirmed) return false;
+    sendNativeBridgeMessage({
+      action: "showRewardedInterstitial",
+      reason,
+      ts: Date.now(),
+    });
+    return true;
+  };
+
 	  const showToast = (message, variant = "default") => {
 	    if (!ui.toast) return;
 	    ui.toast.textContent = message;
@@ -1893,7 +1920,6 @@
 	          learn: "/studio",
             },
             pathAliases: {
-              "/backtesting": "indicators",
               "/ticker-intelligence": "ticker",
               "/ticker-query": "ticker-query",
               "/model-council": "ticker-query",
@@ -1955,7 +1981,6 @@
 		      try {
 		        const params = new URLSearchParams(window.location.search);
 		        const panel = String(params.get("panel") || "").trim();
-		        if (panel === "backtesting") return "indicators";
 		        if (panel === "ticker-intelligence") return "ticker";
 		        if (panel) return panel;
 		      } catch (error) {
@@ -1968,10 +1993,17 @@
 		    };
 
 		    buttons.forEach((btn) => {
-		      btn.addEventListener("click", (event) => {
+		      btn.addEventListener("click", async (event) => {
 		        event.preventDefault?.();
             triggerSubtleHaptic();
-		        setActive(btn.dataset.panelTarget);
+            const targetPanel = String(btn.dataset.panelTarget || "").trim();
+            const proceed = await maybeShowNativeRewardGate({
+              reason: "nav",
+              title: "Watch an ad before navigating?",
+              message: "Navigation inside the native app can trigger a rewarded interstitial.",
+            });
+            if (!proceed) return;
+		        setActive(targetPanel);
 		      });
 		    });
 
@@ -2151,6 +2183,45 @@
     window.addEventListener("resize", syncVisibility);
   };
 
+  const bindNativeRewardedNavigationAds = () => {
+    if (!isNativeApp()) return;
+    if (document.body.dataset.nativeNavRewardBound === "1") return;
+    document.body.dataset.nativeNavRewardBound = "1";
+
+    document.addEventListener("click", async (event) => {
+      const link = event.target.closest("a[href]");
+      if (!link) return;
+      if (link.dataset.panelTarget) return;
+      if (link.dataset.skipRewardGate === "1") return;
+      if (event.defaultPrevented) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const target = String(link.getAttribute("target") || "").trim().toLowerCase();
+      if (target === "_blank") return;
+
+      const href = String(link.getAttribute("href") || "").trim();
+      if (!href || href.startsWith("#") || href.startsWith("mailto:") || href.startsWith("tel:")) return;
+      if (/^https?:\/\//i.test(href)) return;
+      if (!href.startsWith("/")) return;
+
+      const proceed = await maybeShowNativeRewardGate({
+        reason: "nav",
+        title: "Watch an ad before opening this section?",
+        message: "Navigation inside the native app can trigger a rewarded interstitial.",
+      });
+      if (!proceed) {
+        event.preventDefault();
+        return;
+      }
+
+      sendNativeBridgeMessage({
+        action: "showRewardedInterstitial",
+        reason: "nav",
+        href,
+        ts: Date.now(),
+      });
+    });
+  };
+
   const bindMobileSidebarDrawer = () => {
     const sidebar = document.querySelector(".app-sidebar");
     const sidebarNav = sidebar?.querySelector(".sidebar-nav");
@@ -2253,7 +2324,7 @@
     const dockTop = Math.round(headerHeight + gutter);
     document.documentElement.style.setProperty("--dock-top", `${dockTop}px`);
 
-    const dock = document.querySelector(".ticker-dock");
+    const dock = document.querySelector(".terminal-dock, .ticker-dock");
     const dockHeight = dock ? dock.getBoundingClientRect().height : 0;
     if (dockHeight) {
       const chartTop = Math.round(dockTop + dockHeight + gutter);
@@ -2467,9 +2538,9 @@
               native_iap_product_ids: JSON.stringify(DEFAULT_NATIVE_IAP_PRODUCT_IDS),
               ads_use_real_ios: true,
               ads_use_real_android: true,
-              backtesting_enabled: true,
-              backtesting_free_daily_limit: "1",
-              backtesting_pro_daily_limit: "25",
+              backtesting_enabled: false,
+              backtesting_free_daily_limit: "0",
+              backtesting_pro_daily_limit: "0",
 	          };
 	      return rc;
 	    } catch (error) {
@@ -2564,9 +2635,9 @@
             native_iap_product_ids: JSON.stringify(DEFAULT_NATIVE_IAP_PRODUCT_IDS),
             ads_use_real_ios: true,
             ads_use_real_android: true,
-            backtesting_enabled: true,
-            backtesting_free_daily_limit: "1",
-            backtesting_pro_daily_limit: "25",
+            backtesting_enabled: false,
+            backtesting_free_daily_limit: "0",
+            backtesting_pro_daily_limit: "0",
           };
 
           const wrap = {
@@ -2667,9 +2738,9 @@
           nativeIapProductIds: getJson("native_iap_product_ids", DEFAULT_NATIVE_IAP_PRODUCT_IDS),
           adsUseRealIOS: getBool("ads_use_real_ios", true),
           adsUseRealAndroid: getBool("ads_use_real_android", true),
-          backtestingEnabled: getBool("backtesting_enabled", true),
-          backtestingFreeDailyLimit: getInt("backtesting_free_daily_limit", 1),
-          backtestingProDailyLimit: getInt("backtesting_pro_daily_limit", 25),
+          backtestingEnabled: getBool("backtesting_enabled", false),
+          backtestingFreeDailyLimit: getInt("backtesting_free_daily_limit", 0),
+          backtestingProDailyLimit: getInt("backtesting_pro_daily_limit", 0),
 		    };
 		  };
 
@@ -3698,7 +3769,6 @@
   const setCountryControls = (countryCode) => {
     const code = normalizeCountryCode(countryCode);
     state.preferredCountry = code;
-    if (ui.eventsCalendarCountry && ui.eventsCalendarCountry.value !== code) ui.eventsCalendarCountry.value = code;
     if (ui.marketHeadlinesCountry && ui.marketHeadlinesCountry.value !== code) ui.marketHeadlinesCountry.value = code;
   };
 
@@ -5108,7 +5178,14 @@
     `;
   };
 
-  const renderResearchMacroSeries = (container, payload, fallbackLabel) => {
+  const MASSIVE_SERIES_FREQUENCY = Object.freeze({
+    economy_treasury_yields: "Updated daily",
+    economy_inflation: "Updated monthly",
+    economy_inflation_expectations: "Updated weekly",
+    economy_labor_market: "Updated weekly",
+  });
+
+  const renderResearchMacroSeries = (container, payload, fallbackLabel, frequencyLabel = "") => {
     if (!container) return;
     const rows = Array.isArray(payload?.rows) ? payload.rows : [];
     if (!rows.length) {
@@ -5129,7 +5206,15 @@
         return `<div class="small"><strong>${date}</strong> · ${escapeHtml(pretty)}</div>`;
       })
       .join("");
-    container.innerHTML = `${sparkline}${listMarkup}`;
+    const generatedAtRaw = String(payload?.generatedAt || payload?.updatedAt || "").trim();
+    const generatedAt = generatedAtRaw && Number.isFinite(Date.parse(generatedAtRaw))
+      ? new Date(generatedAtRaw).toLocaleString()
+      : "";
+    container.innerHTML = `
+      ${frequencyLabel ? `<div class="small muted" style="margin-bottom:6px;">${escapeHtml(frequencyLabel)}${generatedAt ? ` · ${escapeHtml(generatedAt)}` : ""}</div>` : ""}
+      ${sparkline}
+      ${listMarkup}
+    `;
   };
 
   const renderResearchIpoTable = (payload) => {
@@ -5204,7 +5289,12 @@
           }
           try {
             const payload = await fetchMassiveApi(item.path, { limit: 120 });
-            renderResearchMacroSeries(item.node, payload, item.label);
+            renderResearchMacroSeries(
+              item.node,
+              payload,
+              item.label,
+              MASSIVE_SERIES_FREQUENCY[item.key] || "Updated periodically"
+            );
             logEvent("research_macro_series_loaded", {
               series_key: item.key,
               rows: Number(payload?.count || payload?.rows?.length || 0),
@@ -6633,6 +6723,12 @@
     const stripeConnectAccountId = String(
       existingProfile.stripeConnectAccountId || existing?.stripeConnectAccountId || ""
     ).trim();
+    const autopublishDefaults = {
+      autoPublishForecasts: existing?.autoPublishForecasts !== undefined ? Boolean(existing.autoPublishForecasts) : true,
+      autoPublishIndicators: existing?.autoPublishIndicators !== undefined ? Boolean(existing.autoPublishIndicators) : true,
+      autoPublishModelCouncilConvos:
+        existing?.autoPublishModelCouncilConvos !== undefined ? Boolean(existing.autoPublishModelCouncilConvos) : true,
+    };
 
     await userRef.set(
       {
@@ -6652,6 +6748,7 @@
           publicEmailOptIn,
           stripeConnectAccountId,
         },
+        ...autopublishDefaults,
         metadata: buildMeta(),
       },
       { merge: true }
@@ -7839,7 +7936,7 @@
     "news-ticker",
     "intel-ticker",
     "options-ticker",
-    "events-calendar-tickers",
+    "events-calendar-symbol",
     "ticker-query-ticker",
     "watchlist-ticker",
     "alert-ticker",
@@ -7964,7 +8061,7 @@
   const bindTickerInputSync = () => {
     const seen = new Set();
     TICKER_SYNC_INPUT_IDS.forEach((id) => {
-      if (id === "events-calendar-tickers") return;
+      if (id === "events-calendar-symbol") return;
       const el = document.getElementById(id);
       if (!el || seen.has(el)) return;
       seen.add(el);
@@ -9201,111 +9298,133 @@
       .filter(Boolean)
       .slice(0, 30);
 
-  const renderCorporateEventsCalendar = (payload) => {
+  const renderEarningsCalendar = (payload) => {
     if (!ui.eventsCalendarOutput) return;
-    const events = Array.isArray(payload?.events) ? payload.events : [];
-    const source = String(payload?.source || "unknown").trim();
-    const warnings = Array.isArray(payload?.warnings) ? payload.warnings.filter(Boolean) : [];
-    if (!events.length) {
-      ui.eventsCalendarOutput.innerHTML = `
-        <div class="small muted">No events returned for this window.</div>
-        ${warnings.length ? `<div class="small muted" style="margin-top:8px;">${escapeHtml(warnings.join(" "))}</div>` : ""}
-      `;
+    const items = Array.isArray(payload?.items) ? payload.items : [];
+    const symbol = normalizeTicker(payload?.symbol || "");
+    const lastUpdated = String(payload?.lastUpdated || "").trim();
+    const lastFetched = Number(payload?.lastFetchedAtMs || 0);
+    const windowKey = String(ui.eventsCalendarWindow?.value || "month").trim().toLowerCase();
+
+    const now = Date.now();
+    const windowMs = windowKey === "week" ? 7 * 24 * 60 * 60 * 1000 : 31 * 24 * 60 * 60 * 1000;
+    const cutoff = now - 24 * 60 * 60 * 1000;
+    const upper = now + windowMs;
+    const filtered = items.filter((row) => {
+      const t = Date.parse(String(row?.date || ""));
+      return Number.isFinite(t) ? t >= cutoff && t <= upper : false;
+    });
+
+    if (!filtered.length) {
+      ui.eventsCalendarOutput.innerHTML = `<div class="small muted">No earnings events found for the selected window.</div>`;
       return;
     }
+
+    const cardHtml = filtered
+      .map((row) => {
+        const date = escapeHtml(String(row?.date || "—"));
+        const epsActual = Number(row?.epsActual);
+        const epsEstimated = Number(row?.epsEstimated);
+        const revenueActual = Number(row?.revenueActual);
+        const revenueEstimated = Number(row?.revenueEstimated);
+        const epsDelta = Number.isFinite(epsActual) && Number.isFinite(epsEstimated) ? epsActual - epsEstimated : NaN;
+        const revenueDelta =
+          Number.isFinite(revenueActual) && Number.isFinite(revenueEstimated) ? revenueActual - revenueEstimated : NaN;
+        const epsDeltaLabel = Number.isFinite(epsDelta) ? `${epsDelta >= 0 ? "+" : ""}${epsDelta.toFixed(2)}` : "—";
+        const revenueDeltaLabel = Number.isFinite(revenueDelta)
+          ? `${revenueDelta >= 0 ? "+" : ""}${formatCompactNumber(revenueDelta)}`
+          : "—";
+        return `
+          <article class="news-card">
+            <div class="news-title">${escapeHtml(symbol || String(row?.symbol || "Ticker"))} · ${date}</div>
+            <div class="small">EPS: ${Number.isFinite(epsActual) ? epsActual.toFixed(2) : "—"} vs ${Number.isFinite(epsEstimated) ? epsEstimated.toFixed(2) : "—"} <span class="muted">(delta ${escapeHtml(epsDeltaLabel)})</span></div>
+            <div class="small">Revenue: ${Number.isFinite(revenueActual) ? formatCompactNumber(revenueActual) : "—"} vs ${Number.isFinite(revenueEstimated) ? formatCompactNumber(revenueEstimated) : "—"} <span class="muted">(delta ${escapeHtml(revenueDeltaLabel)})</span></div>
+          </article>
+        `;
+      })
+      .join("");
+
     ui.eventsCalendarOutput.innerHTML = `
-      <div class="small muted" style="margin-bottom:10px;">Source: ${escapeHtml(source)} · Events: ${events.length}</div>
-      ${
-        warnings.length
-          ? `<div class="small muted" style="margin-bottom:10px;">${escapeHtml(warnings.join(" "))}</div>`
-          : ""
-      }
-      <div class="table-wrap">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Ticker</th>
-              <th>Event</th>
-              <th>Type</th>
-              <th>Status</th>
-              <th>Source</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${events
-              .map((row) => {
-                const rowDate = escapeHtml(String(row?.date || "—"));
-                const rowTicker = escapeHtml(normalizeTicker(row?.ticker || "") || "—");
-                const rowName = escapeHtml(String(row?.name || row?.companyName || "Corporate event"));
-                const rowType = escapeHtml(String(row?.type || "—"));
-                const rowStatus = escapeHtml(String(row?.status || "scheduled"));
-                const rowSource = escapeHtml(String(row?.source || source || "—"));
-                return `
-                  <tr>
-                    <td>${rowDate}</td>
-                    <td>${rowTicker}</td>
-                    <td>${rowName}</td>
-                    <td>${rowType}</td>
-                    <td>${rowStatus}</td>
-                    <td>${rowSource}</td>
-                  </tr>
-                `;
-              })
-              .join("")}
-          </tbody>
-        </table>
+      <div class="small muted" style="margin-bottom:10px;">
+        ${escapeHtml(symbol || "Ticker")} · ${filtered.length} event${filtered.length === 1 ? "" : "s"} ·
+        ${lastFetched ? `Last fetched ${escapeHtml(new Date(lastFetched).toLocaleString())}` : "Last fetched —"}
+        ${lastUpdated ? ` · Last updated ${escapeHtml(lastUpdated)}` : ""}
       </div>
+      <div class="news-stream">${cardHtml}</div>
     `;
   };
 
-  const loadCorporateEventsCalendar = async (functions, { force = false, notify = false } = {}) => {
-    if (!functions || !ui.eventsCalendarOutput) return;
-
+  const loadEarningsCalendar = async ({ force = false, notify = false } = {}) => {
+    if (!ui.eventsCalendarOutput) return;
     const tickerSeed = normalizeTicker(state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "");
-    const inputTickers = normalizeTickerListInput(ui.eventsCalendarTickers?.value || "");
-    const tickers = inputTickers.length ? inputTickers : tickerSeed ? [tickerSeed] : [];
-    const country = normalizeCountryCode(ui.eventsCalendarCountry?.value || state.preferredCountry || "US");
+    const symbol = normalizeTicker(ui.eventsCalendarSymbol?.value || tickerSeed || "");
+    if (!symbol) {
+      if (notify) showToast("Enter a ticker for earnings calendar.", "warn");
+      return;
+    }
+
     const startDate = String(ui.eventsCalendarStart?.value || "").trim();
     const endDate = String(ui.eventsCalendarEnd?.value || "").trim();
-    const limitRaw = Number(ui.eventsCalendarLimit?.value || 120);
-    const limit = Number.isFinite(limitRaw) ? Math.max(10, Math.min(500, limitRaw)) : 120;
-    const requestKey = JSON.stringify({ tickers, country, startDate, endDate, limit });
+    const requestKey = JSON.stringify({ symbol, startDate, endDate, window: String(ui.eventsCalendarWindow?.value || "month") });
     if (!force && ui.eventsCalendarOutput.dataset.requestKey === requestKey) return;
     ui.eventsCalendarOutput.dataset.requestKey = requestKey;
 
     try {
-      if (ui.eventsCalendarStatus) ui.eventsCalendarStatus.textContent = "Loading calendar...";
-      setOutputLoading(ui.eventsCalendarOutput, "Loading corporate events...");
-      const getEvents = functions.httpsCallable("get_corporate_events_calendar");
-      const result = await getEvents({
-        tickers,
-        ticker: tickers[0] || "",
-        country,
-        startDate,
-        endDate,
-        limit,
-        meta: buildMeta(),
+      if (ui.eventsCalendarStatus) ui.eventsCalendarStatus.textContent = "Refreshing earnings cache...";
+      setOutputLoading(ui.eventsCalendarOutput, "Loading earnings calendar...");
+      const headers = await buildApiAuthHeaders({ includeJson: true });
+      const refreshResp = await fetch("/api/earnings/refresh", {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: JSON.stringify({
+          symbol,
+          start: startDate,
+          end: endDate,
+        }),
       });
-      setOutputReady(ui.eventsCalendarOutput);
-      renderCorporateEventsCalendar(result.data || {});
-      if (ui.eventsCalendarStatus) {
-        const source = String(result.data?.source || "unknown");
-        const fallback = Boolean(result.data?.fallbackUsed);
-        ui.eventsCalendarStatus.textContent = fallback
-          ? `Loaded from ${source} (fallback mode).`
-          : `Loaded from ${source}.`;
+      const refreshPayload = await refreshResp.json().catch(() => ({}));
+      if (!refreshResp.ok) {
+        throw new Error(String(refreshPayload?.error || "Unable to refresh earnings cache.").trim());
       }
-      logEvent("corporate_events_loaded", {
-        country,
-        tickers_count: tickers.length,
-        source: String(result.data?.source || ""),
+
+      let payloadFromFirestore = null;
+      try {
+        const db = state.clients?.db;
+        if (db) {
+          const snap = await db.collection("earningsCalendar").doc(symbol).get();
+          if (snap.exists) {
+            const data = snap.data() || {};
+            payloadFromFirestore = {
+              symbol,
+              lastUpdated: String(data?.lastUpdated || refreshPayload?.lastUpdated || ""),
+              items: Array.isArray(data?.items) ? data.items : [],
+              lastFetchedAtMs: Number(data?.lastFetchedAt?.toMillis?.() || 0),
+            };
+          }
+        }
+      } catch (error) {
+        payloadFromFirestore = null;
+      }
+
+      if (!payloadFromFirestore) {
+        throw new Error("Earnings cache was refreshed but Firestore read is unavailable.");
+      }
+      const renderPayload = payloadFromFirestore;
+      setOutputReady(ui.eventsCalendarOutput);
+      renderEarningsCalendar(renderPayload);
+      if (ui.eventsCalendarStatus) {
+        ui.eventsCalendarStatus.textContent = `Earnings calendar updated for ${symbol}.`;
+      }
+      logEvent("earnings_calendar_loaded", {
+        ticker: symbol,
+        rows: Array.isArray(renderPayload.items) ? renderPayload.items.length : 0,
       });
     } catch (error) {
       setOutputReady(ui.eventsCalendarOutput);
-      ui.eventsCalendarOutput.innerHTML = `<div class="small muted">Unable to load corporate events right now.</div>`;
-      if (ui.eventsCalendarStatus) ui.eventsCalendarStatus.textContent = "Unable to load corporate events.";
-      if (notify) showToast(error.message || "Unable to load corporate events.", "warn");
+      ui.eventsCalendarOutput.innerHTML = `<div class="small muted">Unable to load earnings calendar right now.</div>`;
+      if (ui.eventsCalendarStatus) ui.eventsCalendarStatus.textContent = "Unable to load earnings calendar.";
+      if (notify) showToast(error.message || "Unable to load earnings calendar.", "warn");
     }
   };
 
@@ -9594,7 +9713,7 @@
       <div class="model-council-actions">
         <button class="task-chip${feedbackState === "like" ? " active" : ""}" type="button" data-action="model-council-like" data-response-id="${escapeHtml(responseId)}">Like</button>
         <button class="task-chip${feedbackState === "dislike" ? " active" : ""}" type="button" data-action="model-council-dislike" data-response-id="${escapeHtml(responseId)}">Dislike</button>
-        <button class="task-chip" type="button" data-action="model-council-share" data-response-id="${escapeHtml(responseId)}">${icon("share-ios")}<span>Share link</span></button>
+        <button class="task-chip" type="button" data-action="model-council-share" data-response-id="${escapeHtml(responseId)}" ${responseId ? "" : "disabled"}>${icon("share-ios")}<span>Share link</span></button>
       </div>
       ${shareUrl ? `<div class="small muted">Shared: <a href="${escapeHtml(shareUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(shareUrl)}</a></div>` : ""}
       <p class="small muted solve-now-disclaimer">${escapeHtml(MODEL_COUNCIL_OUTPUT_DISCLAIMER)}</p>
@@ -9872,71 +9991,201 @@
       `Latency: ${latencyLabel} · Tokens: ${formatTokenStat(promptTokens + completionTokens)} · Cached: ${formatTokenStat(cachedTokens)}${cacheHint}`;
   };
 
-  const streamTickerQueryInsight = async ({ ticker, prompt, language, model, provider, modules = [], technicalContext = null } = {}) => {
+  const fetchTickerQueryModuleData = async ({ ticker, modules = [] } = {}) => {
+    const symbol = normalizeTicker(ticker || "");
+    if (!symbol) return { moduleData: {}, moduleContext: {} };
     const headers = await buildApiAuthHeaders({ includeJson: true });
-    const response = await fetch("/api/model-council/query", {
+    const response = await fetch("/api/ticker/modules", {
       method: "POST",
       headers,
       credentials: "same-origin",
       body: JSON.stringify({
-        ticker,
-        question: prompt,
-        language,
-        model,
-        provider,
+        ticker: symbol,
         modules,
-        technicalContext: technicalContext && typeof technicalContext === "object" ? technicalContext : undefined,
-        messages: [{ role: "user", content: prompt }],
-        meta: buildMeta(),
       }),
     });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const message = String(payload?.error || "Unable to complete Model Council request right now.").trim();
+    if (!response.ok) return { moduleData: {}, moduleContext: {} };
+    return {
+      moduleData: payload?.moduleData && typeof payload.moduleData === "object" ? payload.moduleData : {},
+      moduleContext: payload?.moduleContext && typeof payload.moduleContext === "object" ? payload.moduleContext : {},
+    };
+  };
+
+  const buildModelCouncilSystemMessage = ({ ticker, language, moduleContext, technicalContext } = {}) => {
+    const context = {
+      ticker: normalizeTicker(ticker || ""),
+      language: normalizeLanguageCode(language || "en"),
+      moduleContext: moduleContext && typeof moduleContext === "object" ? moduleContext : {},
+      technicalContext: technicalContext && typeof technicalContext === "object" ? technicalContext : {},
+    };
+    return [
+      "You are Quantura Model Council, a multi-model equity research copilot.",
+      "Use the provided structured ticker context and cite uncertainty clearly.",
+      "Return a concise, structured response with thesis, risks, and next steps.",
+      `Structured context JSON:\n${JSON.stringify(context)}`,
+    ].join("\n\n");
+  };
+
+  const streamTickerQueryInsight = async ({ ticker, prompt, language, model, provider, modules = [], technicalContext = null } = {}) => {
+    const headers = await buildApiAuthHeaders({ includeJson: true });
+
+    // Primary path keeps response persistence + share/feedback IDs.
+    try {
+      const response = await fetch("/api/model-council/query", {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: JSON.stringify({
+          ticker,
+          question: prompt,
+          language,
+          model,
+          provider,
+          modules,
+          technicalContext: technicalContext && typeof technicalContext === "object" ? technicalContext : undefined,
+          messages: [{ role: "user", content: prompt }],
+          meta: buildMeta(),
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (response.ok) {
+        return {
+          answer: String(payload?.answer || "").trim(),
+          model: normalizeAiModelId(payload?.model || model) || model,
+          provider: normalizeModelCouncilProviderId(payload?.provider || provider || "openai"),
+          usage: payload?.usage && typeof payload.usage === "object" ? payload.usage : {},
+          latencyMs: Number.isFinite(Number(payload?.latencyMs)) ? Number(payload.latencyMs) : null,
+          context: payload?.context && typeof payload.context === "object" ? payload.context : {},
+          moduleData: payload?.moduleData && typeof payload.moduleData === "object" ? payload.moduleData : {},
+          selectedModules: Array.isArray(payload?.selectedModules) ? payload.selectedModules : modules,
+          responseId: String(payload?.responseId || "").trim(),
+          citations: Array.isArray(payload?.citations) ? payload.citations : [],
+        };
+      }
+    } catch (error) {
+      // Fall through to /api/llm/run fallback.
+    }
+
+    // Fallback path guarantees selected provider/model produces output.
+    const { moduleData, moduleContext } = await fetchTickerQueryModuleData({ ticker, modules });
+    const systemPrompt = buildModelCouncilSystemMessage({
+      ticker,
+      language,
+      moduleContext,
+      technicalContext,
+    });
+    const fallbackResponse = await fetch("/api/llm/run", {
+      method: "POST",
+      headers,
+      credentials: "same-origin",
+      body: JSON.stringify({
+        provider,
+        model,
+        fallbackProviders: ["openai", "gemini", "mistral", "perplexity", "other"],
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: String(prompt || "").trim() },
+        ],
+        params: {
+          temperature: 0.2,
+          maxTokens: 900,
+          webSearch: true,
+          stream: true,
+          background: true,
+        },
+      }),
+    });
+    const payload = await fallbackResponse.json().catch(() => ({}));
+    if (!fallbackResponse.ok) {
+      const message = String(payload?.error || payload?.message || "Unable to complete Model Council request right now.").trim();
       const err = new Error(message);
       err.retryProvider = String(payload?.retryProvider || "").trim();
       err.retryModel = String(payload?.retryModel || "").trim();
       throw err;
     }
     return {
-      answer: String(payload?.answer || "").trim(),
+      answer: String(payload?.text || "").trim(),
       model: normalizeAiModelId(payload?.model || model) || model,
       provider: normalizeModelCouncilProviderId(payload?.provider || provider || "openai"),
       usage: payload?.usage && typeof payload.usage === "object" ? payload.usage : {},
       latencyMs: Number.isFinite(Number(payload?.latencyMs)) ? Number(payload.latencyMs) : null,
-      context: payload?.context && typeof payload.context === "object" ? payload.context : {},
-      moduleData: payload?.moduleData && typeof payload.moduleData === "object" ? payload.moduleData : {},
-      selectedModules: Array.isArray(payload?.selectedModules) ? payload.selectedModules : modules,
-      responseId: String(payload?.responseId || "").trim(),
+      context: {
+        moduleContext,
+      },
+      moduleData,
+      selectedModules: modules,
+      responseId: "",
       citations: Array.isArray(payload?.citations) ? payload.citations : [],
     };
   };
 
   const improveTickerQueryPrompt = async ({ ticker, question, language, modules, model, provider } = {}) => {
     const headers = await buildApiAuthHeaders({ includeJson: true });
-    const response = await fetch("/api/model-council/improve-prompt", {
+    try {
+      const response = await fetch("/api/model-council/improve-prompt", {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: JSON.stringify({
+          ticker,
+          question,
+          language,
+          modules,
+          model,
+          provider,
+          meta: buildMeta(),
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (response.ok) {
+        return {
+          improvedPrompt: String(payload?.improvedPrompt || question || "").trim() || String(question || "").trim(),
+          model: String(payload?.model || "").trim(),
+          provider: String(payload?.provider || "").trim(),
+        };
+      }
+    } catch (error) {
+      // Fallback to /api/llm/run below.
+    }
+
+    const rewriteResponse = await fetch("/api/llm/run", {
       method: "POST",
       headers,
       credentials: "same-origin",
       body: JSON.stringify({
-        ticker,
-        question,
-        language,
-        modules,
-        model,
-        provider,
-        meta: buildMeta(),
+        provider: "openai",
+        model: "gpt-5-mini",
+        fallbackProviders: ["openai", "gemini", "mistral", "perplexity", "other"],
+        messages: [
+          {
+            role: "system",
+            content:
+              "Rewrite the user prompt for clarity and specificity for financial analysis. Return plain text only. Preserve intent.",
+          },
+          {
+            role: "user",
+            content: `Ticker: ${normalizeTicker(ticker || "")}\nLanguage: ${normalizeLanguageCode(language || "en")}\nModules: ${Array.isArray(modules) ? modules.join(", ") : ""}\nPrompt:\n${String(question || "").trim()}`,
+          },
+        ],
+        params: {
+          temperature: 0.1,
+          maxTokens: 420,
+          webSearch: false,
+          stream: false,
+          background: false,
+        },
       }),
     });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
+    const payload = await rewriteResponse.json().catch(() => ({}));
+    if (!rewriteResponse.ok) {
       const message = String(payload?.error || "Unable to improve prompt right now.").trim();
       throw new Error(message);
     }
     return {
-      improvedPrompt: String(payload?.improvedPrompt || question || "").trim() || String(question || "").trim(),
-      model: String(payload?.model || "").trim(),
-      provider: String(payload?.provider || "").trim(),
+      improvedPrompt: String(payload?.text || question || "").trim() || String(question || "").trim(),
+      model: String(payload?.model || "gpt-5-mini").trim(),
+      provider: String(payload?.provider || "openai").trim(),
     };
   };
 
@@ -10061,6 +10310,12 @@
       showToast("Enter a question for Model Council.", "warn");
       return;
     }
+    const rewardApproved = await maybeShowNativeRewardGate({
+      reason: "model_council",
+      title: "Watch a rewarded ad to unlock Model Council output?",
+      message: "Running Model Council in the native app can require a rewarded video before generating output.",
+    });
+    if (!rewardApproved) return;
 
     const improveEnabled = Boolean(ui.tickerQueryImproveToggle?.checked);
     if (improveEnabled && !skipImprove) {
@@ -14434,7 +14689,7 @@
         if (next === "events-calendar") {
           const first = !state.panelAutoloaded.eventsCalendar;
           state.panelAutoloaded.eventsCalendar = true;
-          loadCorporateEventsCalendar(functions, { force: first, notify: false });
+          loadEarningsCalendar({ force: first, notify: false });
         }
 
         if (next === "market-headlines") {
@@ -14485,6 +14740,7 @@
       bindMobileNav();
       bindMobileSidebarDrawer();
       bindMobileBottomNav();
+      bindNativeRewardedNavigationAds();
       initializeLanguageControls().catch(() => {});
       captureShareFromUrl();
       renderNotificationLog();
@@ -16888,6 +17144,12 @@
 		    ui.forecastForm?.addEventListener("submit", async (event) => {
 		      event.preventDefault();
 		      if (!requireFullAccount("Sign in to run a forecast.", { redirect: true })) return;
+          const rewardApproved = await maybeShowNativeRewardGate({
+            reason: "forecast",
+            title: "Watch a rewarded ad to unlock forecast output?",
+            message: "Forecast generation in native can require a rewarded video before running.",
+          });
+          if (!rewardApproved) return;
 		      const formData = new FormData(ui.forecastForm);
 		      let quantiles = [];
 		      try {
@@ -17069,6 +17331,12 @@
     ui.downloadForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
       if (!requireFullAccount("Sign in to download price history.", { redirect: true })) return;
+      const rewardApproved = await maybeShowNativeRewardGate({
+        reason: "history_download",
+        title: "Watch a rewarded ad to unlock download output?",
+        message: "Historical download in native can require a rewarded video before exporting CSV.",
+      });
+      if (!rewardApproved) return;
       const formData = new FormData(ui.downloadForm);
       const ticker =
         normalizeTicker(formData.get("ticker")) || state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "";
@@ -17134,12 +17402,18 @@
       if (!ui.eventsCalendarStart.value) ui.eventsCalendarStart.value = today.toISOString().slice(0, 10);
       if (!ui.eventsCalendarEnd.value) ui.eventsCalendarEnd.value = end.toISOString().slice(0, 10);
     }
-    if (ui.eventsCalendarCountry && !ui.eventsCalendarCountry.value) {
-      ui.eventsCalendarCountry.value = state.preferredCountry || "US";
+    if (ui.eventsCalendarSymbol && !String(ui.eventsCalendarSymbol.value || "").trim()) {
+      ui.eventsCalendarSymbol.value = normalizeTicker(state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "");
+    }
+    if (ui.eventsCalendarWindow && !String(ui.eventsCalendarWindow.value || "").trim()) {
+      ui.eventsCalendarWindow.value = "month";
     }
     ui.eventsCalendarForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
-      await loadCorporateEventsCalendar(functions, { force: true, notify: true });
+      await loadEarningsCalendar({ force: true, notify: true });
+    });
+    ui.eventsCalendarWindow?.addEventListener("change", async () => {
+      await loadEarningsCalendar({ force: false, notify: false });
     });
 
     if (ui.marketHeadlinesCountry && !ui.marketHeadlinesCountry.value) {
@@ -17774,7 +18048,7 @@
         const question = [
           `Generate one backtestable setup idea for ${ticker} using the supplied technical indicator context on ${interval} data.`,
           "Output should include: bias, entry trigger, invalidation/exit, and position-risk constraints.",
-          "Reference conflicting signals and keep the plan practical for research/backtesting only.",
+          "Reference conflicting signals and keep the plan practical for research workflows only.",
         ].join(" ");
 
         if (ui.backtestAgentStatus) ui.backtestAgentStatus.textContent = "Querying GPT-5...";
