@@ -104,12 +104,40 @@ type SystemFolderConfig = {
   flag: "liked" | "reposted" | "saved" | "shared";
 };
 
+type NotificationCategory = "watchlist" | "explore" | "earnings" | "ipo" | "daily" | "weekly" | "inactive";
+
+type NotificationPrefs = {
+  global: boolean;
+  following: boolean;
+  tickers: boolean;
+  watchlist: boolean;
+  explore: boolean;
+  earnings: boolean;
+  ipos: boolean;
+  daily: boolean;
+  weekly: boolean;
+  inactiveHidden: boolean;
+};
+
 const SYSTEM_FOLDERS: SystemFolderConfig[] = [
   { id: "liked-posts", displayName: "Liked posts", flag: "liked" },
   { id: "reposted-posts", displayName: "Reposted posts", flag: "reposted" },
   { id: "saved-posts", displayName: "Saved posts", flag: "saved" },
   { id: "shared-posts", displayName: "Shared posts", flag: "shared" },
 ];
+
+const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
+  global: true,
+  following: true,
+  tickers: true,
+  watchlist: true,
+  explore: true,
+  earnings: true,
+  ipos: true,
+  daily: true,
+  weekly: true,
+  inactiveHidden: true,
+};
 
 const ROUTES = express.Router();
 const PLAY_INTEGRITY_AUTH = new GoogleAuth({
@@ -352,6 +380,77 @@ function normalizeShareId(value: unknown): string {
   const raw = asString(value).trim();
   if (!raw) return "";
   return /^[A-Za-z0-9_-]{8,220}$/.test(raw) ? raw : "";
+}
+
+function normalizeNotificationCategory(value: unknown): NotificationCategory {
+  const raw = sanitizeText(value, 40).toLowerCase();
+  if (raw === "watchlist") return "watchlist";
+  if (raw === "explore") return "explore";
+  if (raw === "earnings") return "earnings";
+  if (raw === "ipo" || raw === "ipos") return "ipo";
+  if (raw === "daily") return "daily";
+  if (raw === "weekly") return "weekly";
+  if (raw === "inactive" || raw === "inactive_user") return "inactive";
+  return "explore";
+}
+
+function normalizeNotificationDeepLink(value: unknown): string {
+  const raw = sanitizeText(value, 500);
+  if (!raw) return "/notifications";
+  if (/^https?:\/\//i.test(raw)) return raw;
+  const prefixed = raw.startsWith("/") ? raw : `/${raw}`;
+  return prefixed.slice(0, 500);
+}
+
+function absoluteNotificationLink(deepLink: string): string {
+  if (/^https?:\/\//i.test(deepLink)) return deepLink;
+  const path = deepLink.startsWith("/") ? deepLink : `/${deepLink}`;
+  return `${PUBLIC_ORIGIN}${path}`;
+}
+
+function normalizeNotificationPrefs(
+  input: Record<string, unknown>,
+  existing: Record<string, unknown> = {}
+): NotificationPrefs {
+  const merged = {
+    ...DEFAULT_NOTIFICATION_PREFS,
+    ...existing,
+  } as Record<string, unknown>;
+  const resolved = { ...merged, ...input } as Record<string, unknown>;
+  return {
+    global: asBoolean(resolved.global, DEFAULT_NOTIFICATION_PREFS.global),
+    following: asBoolean(resolved.following, DEFAULT_NOTIFICATION_PREFS.following),
+    tickers: asBoolean(resolved.tickers, DEFAULT_NOTIFICATION_PREFS.tickers),
+    watchlist: asBoolean(resolved.watchlist, DEFAULT_NOTIFICATION_PREFS.watchlist),
+    explore: asBoolean(resolved.explore, DEFAULT_NOTIFICATION_PREFS.explore),
+    earnings: asBoolean(resolved.earnings, DEFAULT_NOTIFICATION_PREFS.earnings),
+    ipos: asBoolean(resolved.ipos, DEFAULT_NOTIFICATION_PREFS.ipos),
+    daily: asBoolean(resolved.daily, DEFAULT_NOTIFICATION_PREFS.daily),
+    weekly: asBoolean(resolved.weekly, DEFAULT_NOTIFICATION_PREFS.weekly),
+    inactiveHidden: asBoolean(resolved.inactiveHidden, DEFAULT_NOTIFICATION_PREFS.inactiveHidden),
+  };
+}
+
+function isNotificationCategoryEnabled(prefs: NotificationPrefs, category: NotificationCategory): boolean {
+  if (category === "watchlist") return prefs.watchlist && prefs.tickers;
+  if (category === "explore") return prefs.explore && prefs.following;
+  if (category === "earnings") return prefs.earnings;
+  if (category === "ipo") return prefs.ipos;
+  if (category === "daily") return prefs.daily;
+  if (category === "weekly") return prefs.weekly;
+  if (category === "inactive") return prefs.daily || prefs.weekly;
+  return true;
+}
+
+function notificationCategoryLabel(category: NotificationCategory): string {
+  if (category === "watchlist") return "Watchlist";
+  if (category === "explore") return "Explore Feed";
+  if (category === "earnings") return "Earnings";
+  if (category === "ipo") return "IPO";
+  if (category === "daily") return "Daily";
+  if (category === "weekly") return "Weekly";
+  if (category === "inactive") return "Inactive user";
+  return "Notification";
 }
 
 function buildFolderItemDocId(itemType: SavedItemType, sourceId: string): string {
@@ -1271,10 +1370,10 @@ async function syncTopicsForUser(uid: string): Promise<void> {
 
   if (tokenSnap.empty) return;
 
-  const prefs = ((userSnap.data() || {}) as any).notificationPrefs || {};
-  const enableGlobal = asBoolean(prefs.global, true);
-  const enableFollowing = asBoolean(prefs.following, true);
-  const enableTickers = asBoolean(prefs.tickers, true);
+  const prefs = normalizeNotificationPrefs({}, (((userSnap.data() || {}) as any).notificationPrefs || {}) as Record<string, unknown>);
+  const enableGlobal = prefs.global;
+  const enableFollowing = prefs.following;
+  const enableTickers = prefs.tickers;
 
   const desiredTopics = new Set<string>();
   if (enableGlobal) desiredTopics.add("explore-global");
@@ -1322,6 +1421,189 @@ async function syncTopicsForUser(uid: string): Promise<void> {
       { merge: true }
     );
   }
+}
+
+async function writeNotificationHistoryItem(params: {
+  uid: string;
+  category: NotificationCategory;
+  title: string;
+  body: string;
+  deepLink: string;
+  hidden?: boolean;
+  nextSteps?: string[];
+  metadata?: Record<string, unknown>;
+}): Promise<string> {
+  const ref = db.collection("notifications").doc(params.uid).collection("items").doc();
+  await ref.set(
+    {
+      category: params.category,
+      title: sanitizeText(params.title, 160) || `${notificationCategoryLabel(params.category)} update`,
+      body: sanitizeText(params.body, 400),
+      deepLink: normalizeNotificationDeepLink(params.deepLink),
+      hidden: Boolean(params.hidden),
+      read: false,
+      nextSteps: Array.isArray(params.nextSteps)
+        ? params.nextSteps.map((item) => sanitizeText(item, 120)).filter(Boolean).slice(0, 4)
+        : [],
+      metadata: params.metadata && typeof params.metadata === "object" ? params.metadata : {},
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+  return ref.id;
+}
+
+async function sendPushToUserTokens(params: {
+  uid: string;
+  category: NotificationCategory;
+  title: string;
+  body: string;
+  deepLink: string;
+  hidden?: boolean;
+  nextSteps?: string[];
+  metadata?: Record<string, unknown>;
+  force?: boolean;
+}): Promise<{ uid: string; delivered: number; attempted: number; skipped: boolean; reason: string; historyId: string }> {
+  const uid = sanitizeText(params.uid, 220);
+  if (!uid) {
+    return { uid: "", delivered: 0, attempted: 0, skipped: true, reason: "invalid_uid", historyId: "" };
+  }
+
+  const userRef = db.collection("users").doc(uid);
+  const [userSnap, tokenSnap] = await Promise.all([userRef.get(), userRef.collection("fcmTokens").limit(250).get()]);
+  const userData = (userSnap.data() || {}) as Record<string, unknown>;
+  const prefs = normalizeNotificationPrefs({}, (userData.notificationPrefs || {}) as Record<string, unknown>);
+  const category = normalizeNotificationCategory(params.category);
+  if (!params.force && !isNotificationCategoryEnabled(prefs, category)) {
+    return { uid, delivered: 0, attempted: 0, skipped: true, reason: "pref_disabled", historyId: "" };
+  }
+
+  const deepLink = normalizeNotificationDeepLink(params.deepLink);
+  const absoluteLink = absoluteNotificationLink(deepLink);
+  const path = deepLink.startsWith("/") ? deepLink : (() => {
+    try {
+      const parsed = new URL(deepLink);
+      return `${parsed.pathname || "/"}${parsed.search || ""}${parsed.hash || ""}`;
+    } catch {
+      return "/notifications";
+    }
+  })();
+
+  const historyId = await writeNotificationHistoryItem({
+    uid,
+    category,
+    title: params.title,
+    body: params.body,
+    deepLink,
+    hidden: params.hidden ?? (category === "inactive"),
+    nextSteps: params.nextSteps,
+    metadata: params.metadata,
+  });
+
+  const tokens = tokenSnap.docs.map((doc) => sanitizeText(doc.id, 4096)).filter(Boolean);
+  if (!tokens.length) {
+    return { uid, delivered: 0, attempted: 0, skipped: true, reason: "no_tokens", historyId };
+  }
+
+  const message = {
+    tokens,
+    notification: {
+      title: sanitizeText(params.title, 160) || `${notificationCategoryLabel(category)} update`,
+      body: sanitizeText(params.body, 300) || "You have a new Quantura update.",
+    },
+    data: {
+      category,
+      path,
+      deepLink,
+      url: absoluteLink,
+      historyId,
+    },
+    webpush: {
+      fcmOptions: {
+        link: absoluteLink,
+      },
+    },
+    android: {
+      notification: {
+        channelId: "quantura_push",
+      },
+    },
+    apns: {
+      payload: {
+        aps: {
+          sound: "default",
+        },
+      },
+    },
+  };
+
+  const result = await messaging.sendEachForMulticast(message);
+  const invalidCodes = new Set([
+    "messaging/registration-token-not-registered",
+    "messaging/invalid-registration-token",
+    "messaging/invalid-argument",
+  ]);
+
+  await Promise.all(
+    result.responses.map((response, index) => {
+      if (response.success) return Promise.resolve();
+      const code = sanitizeText((response.error as any)?.code, 80);
+      if (!invalidCodes.has(code)) return Promise.resolve();
+      const token = tokens[index];
+      if (!token) return Promise.resolve();
+      return userRef.collection("fcmTokens").doc(token).delete().catch(() => undefined);
+    })
+  );
+
+  return {
+    uid,
+    delivered: result.successCount,
+    attempted: tokens.length,
+    skipped: false,
+    reason: "",
+    historyId,
+  };
+}
+
+async function collectUsersByFollowedAuthor(authorUid: string): Promise<Set<string>> {
+  const clean = sanitizeText(authorUid, 220);
+  const out = new Set<string>();
+  if (!clean) return out;
+  const followsSnap = await db
+    .collectionGroup("follows")
+    .where(admin.firestore.FieldPath.documentId(), "==", clean)
+    .limit(600)
+    .get();
+  followsSnap.docs.forEach((doc) => {
+    const uid = doc.ref.parent.parent?.id || "";
+    if (uid) out.add(uid);
+  });
+  return out;
+}
+
+async function collectUsersByWatchTickers(tickers: string[]): Promise<Set<string>> {
+  const cleanTickers = Array.from(new Set((Array.isArray(tickers) ? tickers : []).map((item) => normalizeTicker(item)).filter(Boolean)))
+    .slice(0, 6);
+  const out = new Set<string>();
+  for (const ticker of cleanTickers) {
+    const watchSnap = await db
+      .collectionGroup("watchTickers")
+      .where(admin.firestore.FieldPath.documentId(), "==", ticker)
+      .limit(800)
+      .get();
+    watchSnap.docs.forEach((doc) => {
+      const uid = doc.ref.parent.parent?.id || "";
+      if (uid) out.add(uid);
+    });
+  }
+  return out;
+}
+
+async function collectUsersForIpoNotifications(limit = 1200): Promise<Set<string>> {
+  const out = new Set<string>();
+  const snap = await db.collection("users").limit(Math.max(1, Math.min(limit, 2000))).get();
+  snap.docs.forEach((doc) => out.add(doc.id));
+  return out;
 }
 
 async function deleteCollectionDocs(query: admin.firestore.Query, batchSize = 200): Promise<void> {
@@ -1379,7 +1661,9 @@ async function buildProfilePayload(
     asBoolean(profile.premium, false)
     || asBoolean(userData.premium, false)
     || asBoolean(profile.verified, false)
-    || ["pro", "desk", "premium"].includes(asString(profile.plan || userData.plan || userData.subscriptionTier).trim().toLowerCase());
+    || ["go", "plus", "pro", "business", "desk", "premium"].includes(
+      asString(profile.plan || userData.plan || userData.subscriptionTier).trim().toLowerCase()
+    );
   const premium = explicitPremium ? true : await inferPremiumUser(userDocId);
   const verified = isAdmin || premium || asBoolean(profile.verified, false);
   const publicEmailOptIn = asBoolean(profile.publicEmailOptIn, false);
@@ -2991,15 +3275,22 @@ ROUTES.get("/me/notification-settings", async (req, res) => {
     ]);
 
     const userData = (userSnap.data() || {}) as Record<string, unknown>;
-    const prefs = (userData.notificationPrefs || {}) as Record<string, unknown>;
+    const prefs = normalizeNotificationPrefs({}, (userData.notificationPrefs || {}) as Record<string, unknown>);
     const privacyRaw = (userData.notificationPrivacy || {}) as Record<string, unknown>;
     const coarseLocation = normalizeCoarseLocation(privacyRaw.coarseLocation);
 
     res.status(200).json({
       notificationPrefs: {
-        global: asBoolean(prefs.global, true),
-        following: asBoolean(prefs.following, true),
-        tickers: asBoolean(prefs.tickers, true),
+        global: prefs.global,
+        following: prefs.following,
+        tickers: prefs.tickers,
+        watchlist: prefs.watchlist,
+        explore: prefs.explore,
+        earnings: prefs.earnings,
+        ipos: prefs.ipos,
+        daily: prefs.daily,
+        weekly: prefs.weekly,
+        inactiveHidden: prefs.inactiveHidden,
       },
       notificationPrivacy: {
         locationConsent: asBoolean(privacyRaw.locationConsent, false),
@@ -3097,13 +3388,8 @@ ROUTES.post("/notifications/preferences", async (req, res) => {
     const userRef = db.collection("users").doc(user.uid);
     const userSnap = await userRef.get();
     const userData = (userSnap.data() || {}) as Record<string, unknown>;
-    const existingPrefs = (userData.notificationPrefs || {}) as Record<string, unknown>;
-    const notificationPrefs = {
-      global: typeof input.global === "boolean" ? asBoolean(input.global, true) : asBoolean(existingPrefs.global, true),
-      following:
-        typeof input.following === "boolean" ? asBoolean(input.following, true) : asBoolean(existingPrefs.following, true),
-      tickers: typeof input.tickers === "boolean" ? asBoolean(input.tickers, true) : asBoolean(existingPrefs.tickers, true),
-    };
+    const existingPrefs = normalizeNotificationPrefs({}, (userData.notificationPrefs || {}) as Record<string, unknown>);
+    const notificationPrefs = normalizeNotificationPrefs(input, existingPrefs as unknown as Record<string, unknown>);
 
     const existingPrivacy = (userData.notificationPrivacy || {}) as Record<string, unknown>;
     const locationConsent =
@@ -3230,6 +3516,382 @@ ROUTES.post("/notifications/sync-topics", async (req, res) => {
 ROUTES.get("/notifications/config", (_req, res) => {
   const vapidPublicKey = sanitizeText(process.env.FCM_WEB_VAPID_KEY || "", 4096);
   res.status(200).json({ vapidPublicKey });
+});
+
+ROUTES.post("/notifications/session/ping", async (req, res) => {
+  try {
+    const user = await verifyRequestUser(req, true);
+    if (!user) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const input = asPlainObject(req.body);
+    const isAnonymous =
+      typeof input.isAnonymous === "boolean"
+        ? asBoolean(input.isAnonymous, false)
+        : sanitizeText(user.firebase?.sign_in_provider, 40) === "anonymous";
+    const userRef = db.collection("users").doc(user.uid);
+    const userSnap = await userRef.get();
+    const userData = (userSnap.data() || {}) as Record<string, unknown>;
+    const existingPrefs = normalizeNotificationPrefs({}, (userData.notificationPrefs || {}) as Record<string, unknown>);
+    const rawPrefs =
+      input.notificationPrefs && typeof input.notificationPrefs === "object"
+        ? (input.notificationPrefs as Record<string, unknown>)
+        : {};
+    const notificationPrefs = normalizeNotificationPrefs(rawPrefs, existingPrefs as unknown as Record<string, unknown>);
+
+    await userRef.set(
+      {
+        isAnonymous,
+        lastActiveAt: admin.firestore.FieldValue.serverTimestamp(),
+        notificationPrefs,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    res.status(200).json({
+      ok: true,
+      uid: user.uid,
+      isAnonymous,
+      notificationPrefs,
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Notify] session ping failed", error);
+    res.status(500).json({ error: "notification_session_ping_failed" });
+  }
+});
+
+ROUTES.get("/notifications/items", async (req, res) => {
+  try {
+    const user = await verifyRequestUser(req, true);
+    if (!user) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const requestedCategory = sanitizeText((req.query as Record<string, unknown>).category, 40).toLowerCase();
+    const categoryFilter = requestedCategory && requestedCategory !== "all" ? normalizeNotificationCategory(requestedCategory) : null;
+    const unreadOnly = asBoolean((req.query as Record<string, unknown>).unread, false);
+    const includeHidden = asBoolean((req.query as Record<string, unknown>).includeHidden, false);
+    const limitValue = Math.max(1, Math.min(120, Math.floor(asFinite((req.query as Record<string, unknown>).limit, 40))));
+    const fetchLimit = Math.max(limitValue * 3, 120);
+
+    let query: admin.firestore.Query = db
+      .collection("notifications")
+      .doc(user.uid)
+      .collection("items")
+      .orderBy("createdAt", "desc")
+      .limit(fetchLimit);
+    const snap = await query.get();
+    const items = snap.docs
+      .map((doc) => {
+        const data = (doc.data() || {}) as Record<string, unknown>;
+        const category = normalizeNotificationCategory(data.category);
+        const hidden = asBoolean(data.hidden, false);
+        return {
+          id: doc.id,
+          category,
+          title: sanitizeText(data.title, 160) || `${notificationCategoryLabel(category)} update`,
+          body: sanitizeText(data.body, 400),
+          deepLink: normalizeNotificationDeepLink(data.deepLink),
+          hidden,
+          read: asBoolean(data.read, false),
+          nextSteps: Array.isArray(data.nextSteps)
+            ? data.nextSteps.map((item) => sanitizeText(item, 120)).filter(Boolean).slice(0, 4)
+            : [],
+          createdAtMs: getTimestampMs(data.createdAt),
+        };
+      })
+      .filter((item) => (unreadOnly ? !item.read : true))
+      .filter((item) => (includeHidden ? true : !item.hidden))
+      .filter((item) => (categoryFilter ? item.category === categoryFilter : true));
+
+    const unreadCount = items.filter((item) => !item.read).length;
+    res.status(200).json({
+      ok: true,
+      unreadCount,
+      count: items.length,
+      items: items.slice(0, limitValue),
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Notify] list items failed", error);
+    res.status(500).json({ error: "notification_items_failed" });
+  }
+});
+
+ROUTES.post("/notifications/items/:itemId/read", async (req, res) => {
+  try {
+    const user = await verifyRequestUser(req, true);
+    if (!user) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const itemId = sanitizeText(req.params.itemId, 220).replace(/[^A-Za-z0-9._-]/g, "");
+    if (!itemId) {
+      res.status(400).json({ error: "invalid_item_id" });
+      return;
+    }
+    const readValue = typeof (req.body || {}).read === "boolean" ? asBoolean((req.body || {}).read, true) : true;
+    const itemRef = db.collection("notifications").doc(user.uid).collection("items").doc(itemId);
+    const itemSnap = await itemRef.get();
+    if (!itemSnap.exists) {
+      res.status(404).json({ error: "notification_item_not_found" });
+      return;
+    }
+    await itemRef.set(
+      {
+        read: readValue,
+        readAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    res.status(200).json({ ok: true, id: itemId, read: readValue });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Notify] mark item read failed", error);
+    res.status(500).json({ error: "notification_item_update_failed" });
+  }
+});
+
+ROUTES.post("/notifications/items/read-all", async (req, res) => {
+  try {
+    const user = await verifyRequestUser(req, true);
+    if (!user) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const includeHidden = asBoolean((req.body || {}).includeHidden, false);
+    let updated = 0;
+    while (true) {
+      const query: admin.firestore.Query = db
+        .collection("notifications")
+        .doc(user.uid)
+        .collection("items")
+        .where("read", "==", false)
+        .limit(200);
+      const snap = await query.get();
+      if (snap.empty) break;
+      const batch = db.batch();
+      snap.docs.forEach((doc) => {
+        const hidden = asBoolean((doc.data() || {}).hidden, false);
+        if (!includeHidden && hidden) return;
+        batch.set(
+          doc.ref,
+          {
+            read: true,
+            readAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+        updated += 1;
+      });
+      await batch.commit();
+      if (snap.size < 200) break;
+    }
+    res.status(200).json({ ok: true, updated });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Notify] mark all read failed", error);
+    res.status(500).json({ error: "notification_read_all_failed" });
+  }
+});
+
+ROUTES.post("/notify/event", async (req, res) => {
+  try {
+    const actor = await verifyRequestUser(req, true);
+    if (!actor) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const body = asPlainObject(req.body);
+    const category = normalizeNotificationCategory(body.category);
+    const title = sanitizeText(body.title, 160) || `${notificationCategoryLabel(category)} update`;
+    const message = sanitizeText(body.body || body.message, 320) || "You have a new Quantura update.";
+    const deepLink = normalizeNotificationDeepLink(body.deepLink || body.path || "/notifications");
+    const nextSteps = Array.isArray(body.nextSteps) ? body.nextSteps.map((item) => sanitizeText(item, 120)).filter(Boolean) : [];
+    const metadata = body.metadata && typeof body.metadata === "object" ? (body.metadata as Record<string, unknown>) : {};
+    const force = asBoolean(body.force, false);
+    const hidden = typeof body.hidden === "boolean" ? asBoolean(body.hidden, false) : category === "inactive";
+
+    const explicitUserIds = Array.isArray(body.userIds)
+      ? body.userIds.map((item) => sanitizeText(item, 220)).filter(Boolean)
+      : [];
+    const targetUsers = new Set<string>(explicitUserIds);
+
+    const inputTickers = Array.isArray(body.tickers)
+      ? body.tickers.map((item) => normalizeTicker(item)).filter(Boolean)
+      : [normalizeTicker(body.ticker)].filter(Boolean);
+    if (!targetUsers.size) {
+      if (category === "watchlist" || category === "earnings") {
+        const byTicker = await collectUsersByWatchTickers(inputTickers);
+        byTicker.forEach((uid) => targetUsers.add(uid));
+      } else if (category === "explore") {
+        const authorUid = sanitizeText(body.authorUid || body.userId, 220);
+        const byFollow = await collectUsersByFollowedAuthor(authorUid);
+        byFollow.forEach((uid) => targetUsers.add(uid));
+      } else if (category === "ipo") {
+        const allUsers = await collectUsersForIpoNotifications();
+        allUsers.forEach((uid) => targetUsers.add(uid));
+      } else {
+        targetUsers.add(actor.uid);
+      }
+    }
+
+    const excludeUid = sanitizeText(body.excludeUid, 220);
+    if (excludeUid) targetUsers.delete(excludeUid);
+
+    if (!targetUsers.size) {
+      res.status(404).json({ error: "no_target_users" });
+      return;
+    }
+
+    const deliverResults = await Promise.all(
+      Array.from(targetUsers)
+        .slice(0, 2000)
+        .map((uid) =>
+          sendPushToUserTokens({
+            uid,
+            category,
+            title,
+            body: message,
+            deepLink,
+            hidden,
+            nextSteps,
+            metadata: {
+              ...metadata,
+              actorUid: actor.uid,
+              tickers: inputTickers,
+            },
+            force,
+          })
+        )
+    );
+
+    const deliveredUsers = deliverResults.filter((row) => row.delivered > 0).length;
+    const attemptedTokens = deliverResults.reduce((sum, row) => sum + row.attempted, 0);
+    const deliveredTokens = deliverResults.reduce((sum, row) => sum + row.delivered, 0);
+    res.status(200).json({
+      ok: true,
+      category,
+      targetUsers: targetUsers.size,
+      deliveredUsers,
+      attemptedTokens,
+      deliveredTokens,
+      skippedUsers: deliverResults.filter((row) => row.skipped).length,
+      results: deliverResults.slice(0, 60),
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Notify] event send failed", error);
+    res.status(500).json({ error: "notify_event_failed" });
+  }
+});
+
+ROUTES.post("/notify/watchlist", async (req, res) => {
+  try {
+    const actor = await verifyRequestUser(req, true);
+    if (!actor) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const body = asPlainObject(req.body);
+    const title = sanitizeText(body.title, 160) || "Watchlist update";
+    const message = sanitizeText(body.body || body.message, 320) || "A watchlist update is available.";
+    const deepLink = normalizeNotificationDeepLink(body.deepLink || body.path || "/watchlist");
+    const nextSteps = Array.isArray(body.nextSteps) ? body.nextSteps.map((item) => sanitizeText(item, 120)).filter(Boolean) : [];
+    const metadata = body.metadata && typeof body.metadata === "object" ? (body.metadata as Record<string, unknown>) : {};
+    const force = asBoolean(body.force, false);
+    const hidden = asBoolean(body.hidden, false);
+
+    const explicitUserIds = Array.isArray(body.userIds)
+      ? body.userIds.map((item) => sanitizeText(item, 220)).filter(Boolean)
+      : [];
+    const targetUsers = new Set<string>(explicitUserIds);
+
+    const inputTickers = Array.isArray(body.tickers)
+      ? body.tickers.map((item) => normalizeTicker(item)).filter(Boolean)
+      : [normalizeTicker(body.ticker)].filter(Boolean);
+
+    if (!targetUsers.size) {
+      const byTicker = await collectUsersByWatchTickers(inputTickers);
+      byTicker.forEach((uid) => targetUsers.add(uid));
+    }
+
+    const excludeUid = sanitizeText(body.excludeUid, 220);
+    if (excludeUid) targetUsers.delete(excludeUid);
+
+    if (!targetUsers.size) {
+      res.status(404).json({ error: "no_target_users" });
+      return;
+    }
+
+    const deliverResults = await Promise.all(
+      Array.from(targetUsers)
+        .slice(0, 2000)
+        .map((uid) =>
+          sendPushToUserTokens({
+            uid,
+            category: "watchlist",
+            title,
+            body: message,
+            deepLink,
+            hidden,
+            nextSteps,
+            metadata: {
+              ...metadata,
+              actorUid: actor.uid,
+              tickers: inputTickers,
+            },
+            force,
+          })
+        )
+    );
+
+    const deliveredUsers = deliverResults.filter((row) => row.delivered > 0).length;
+    const attemptedTokens = deliverResults.reduce((sum, row) => sum + row.attempted, 0);
+    const deliveredTokens = deliverResults.reduce((sum, row) => sum + row.delivered, 0);
+
+    res.status(200).json({
+      ok: true,
+      category: "watchlist",
+      targetUsers: targetUsers.size,
+      deliveredUsers,
+      attemptedTokens,
+      deliveredTokens,
+      skippedUsers: deliverResults.filter((row) => row.skipped).length,
+      results: deliverResults.slice(0, 60),
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Notify] watchlist send failed", error);
+    res.status(500).json({ error: "notify_watchlist_failed" });
+  }
 });
 
 ROUTES.get(["/promo/status", "/explore/promo/status"], (_req, res) => {

@@ -243,6 +243,68 @@ final class AuthGateViewModel: ObservableObject {
 #endif
     }
 
+    func signInWithGitHub() {
+        signInWithOAuthProvider(providerId: "github.com", providerLabel: "github")
+    }
+
+    func signInWithTwitter() {
+        signInWithOAuthProvider(providerId: "twitter.com", providerLabel: "twitter")
+    }
+
+    func signInWithYahoo() {
+        signInWithOAuthProvider(providerId: "yahoo.com", providerLabel: "yahoo")
+    }
+
+    func signInWithMicrosoft() {
+        signInWithOAuthProvider(providerId: "microsoft.com", providerLabel: "microsoft")
+    }
+
+    func signInWithOAuthProvider(providerId: String, providerLabel: String) {
+#if canImport(FirebaseAuth)
+        beginInteractiveSignIn(provider: providerLabel)
+        let provider = OAuthProvider(providerID: providerId)
+        if providerId == "github.com" {
+            provider.scopes = ["read:user", "user:email"]
+        } else if providerId == "twitter.com" {
+            provider.scopes = ["tweet.read", "users.read"]
+        } else if providerId == "yahoo.com" {
+            provider.scopes = ["profile", "email"]
+        } else if providerId == "microsoft.com" {
+            provider.scopes = ["user.read"]
+        }
+
+        let auth = Auth.auth()
+        if let currentUser = auth.currentUser, currentUser.isAnonymous {
+            currentUser.link(with: provider, uiDelegate: nil) { [weak self] result, error in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    if let error {
+                        await self.handleSignInError(error, provider: providerId, emailHint: "")
+                        return
+                    }
+                    self.finishSuccess(user: result?.user)
+                }
+            }
+            return
+        }
+
+        auth.signIn(with: provider, uiDelegate: nil) { [weak self] result, error in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if let error {
+                    await self.handleSignInError(error, provider: providerId, emailHint: "")
+                    return
+                }
+                self.finishSuccess(user: result?.user)
+            }
+        }
+#else
+        _ = providerId
+        _ = providerLabel
+        errorText = "OAuth provider sign-in is unavailable in this build."
+#endif
+    }
+
     func signInWithApple(presenterAnchor: ASPresentationAnchor) {
 #if canImport(FirebaseAuth) && canImport(AuthenticationServices) && canImport(CryptoKit)
         beginInteractiveSignIn(provider: "apple")
@@ -267,7 +329,14 @@ final class AuthGateViewModel: ObservableObject {
                         }
                     )
                 case .failure(let error):
-                    self.finishError(error.localizedDescription)
+                    let nsError = error as NSError
+                    let message: String
+                    if nsError.domain == ASAuthorizationError.errorDomain, nsError.code == ASAuthorizationError.unknown.rawValue {
+                        message = "Sign in with Apple failed (AuthorizationError 1000). Verify Apple capability setup and try again."
+                    } else {
+                        message = error.localizedDescription
+                    }
+                    self.finishError(message)
                 }
             }
         }

@@ -318,25 +318,75 @@
       weekly_limit: 3,
       daily_limit: 3,
       volatility_alerts: false,
+      workspace_limit: 0,
+      ad_free: false,
     },
-    pro: {
-      allowed_models: ["gpt-5-mini", "gpt-5", "gpt-5.1"],
+    go: {
+      allowed_models: ["gpt-5-nano", "gpt-5-mini"],
+      weekly_limit: 10,
+      daily_limit: 10,
+      volatility_alerts: true,
+      workspace_limit: 1,
+      ad_free: true,
+    },
+    plus: {
+      allowed_models: ["gpt-5-mini", "gpt-5"],
       weekly_limit: 25,
       daily_limit: 25,
       volatility_alerts: true,
+      workspace_limit: 3,
+      ad_free: true,
+    },
+    pro: {
+      allowed_models: ["gpt-5-mini", "gpt-5", "gpt-5.1"],
+      weekly_limit: 60,
+      daily_limit: 60,
+      volatility_alerts: true,
+      workspace_limit: 8,
+      ad_free: true,
+    },
+    business: {
+      allowed_models: ["gpt-5-nano", "gpt-5-mini", "gpt-5", "gpt-5.1", "gpt-5.2", "amazon.nova-lite-v1:0", "amazon.nova-pro-v1:0"],
+      weekly_limit: 150,
+      daily_limit: 150,
+      volatility_alerts: true,
+      workspace_limit: 30,
+      ad_free: true,
     },
     desk: {
       allowed_models: ["gpt-5-nano", "gpt-5-mini", "gpt-5", "gpt-5.1", "gpt-5.2"],
-      weekly_limit: 75,
-      daily_limit: 75,
+      weekly_limit: 150,
+      daily_limit: 150,
       volatility_alerts: true,
+      workspace_limit: 30,
+      ad_free: true,
     },
   };
   const DEFAULT_NATIVE_IAP_PRODUCT_IDS = Object.freeze({
-    pro: "quantura_pro_monthly",
-    desk: "quantura_pro_monthly",
-    forecast: "quantura_pro_monthly",
-    default: "quantura_pro_monthly",
+    ios: Object.freeze({
+      go: "goplan",
+      plus: "premium",
+      pro: "pro",
+      business: "businessplan",
+      desk: "businessplan",
+      forecast: "goplan",
+      annual_go: "annualgoplan",
+      annual_plus: "annualplusplan",
+      annual_business: "annualbusinessplan",
+      default: "pro",
+    }),
+    android: Object.freeze({
+      go: "goplan",
+      plus: "premium",
+      pro: "quanturapro",
+      business: "quanturabusiness",
+      desk: "quanturabusiness",
+      forecast: "goplan",
+      annual_go: "goplanyearly",
+      annual_plus: "annualplusplan",
+      annual_business: "annualbusinessplan",
+      default: "quanturapro",
+    }),
   });
   const MODEL_PROVIDER_LABEL = {
     openai: "OpenAI",
@@ -1275,6 +1325,8 @@
     facebookSignin: document.getElementById("facebook-signin"),
     githubSignin: document.getElementById("github-signin"),
     twitterSignin: document.getElementById("twitter-signin"),
+    microsoftSignin: document.getElementById("microsoft-signin"),
+    yahooSignin: document.getElementById("yahoo-signin"),
     anonymousSignin: document.getElementById("anonymous-signin"),
     languageSelect: document.getElementById("language-select"),
     userEmail: document.getElementById("user-email"),
@@ -1446,6 +1498,10 @@
     notificationsSendTest: document.getElementById("notifications-send-test"),
     notificationsStatus: document.getElementById("notifications-status"),
     notificationsToken: document.getElementById("notifications-token"),
+    notificationsItems: document.getElementById("notifications-items"),
+    notificationsUnreadCount: document.getElementById("notifications-unread-count"),
+    notificationsMarkAll: document.getElementById("notifications-mark-all"),
+    notificationFilterButtons: Array.from(document.querySelectorAll("[data-notification-filter]")),
     notificationsLog: document.getElementById("notifications-log"),
     notificationsClear: document.getElementById("notifications-clear"),
     notificationsPrivacyContainer: document.getElementById("notifications-privacy-controls"),
@@ -1628,6 +1684,8 @@
       unsubscribeAIAgents: null,
       unsubscribeAIFollows: null,
       unsubscribeAILikes: null,
+      collaboratorCount: 0,
+      pendingCollabInviteCount: 0,
 	    screenerUrlRunLoaded: false,
       uploadUrlLoaded: false,
       backtestUrlLoaded: false,
@@ -1716,6 +1774,13 @@
         return [];
       }
     })(),
+    notificationFeed: {
+      items: [],
+      unreadCount: 0,
+      filter: "all",
+      unreadOnly: false,
+      loading: false,
+    },
     sharedWorkspaces: [],
     unsubscribeSharedWorkspaces: null,
   };
@@ -3592,8 +3657,8 @@
         ui.billingPortalLink,
         accountAuthed
           ? nativeBilling
-            ? "Manage subscriptions"
-            : (pack.open_billing_portal || fallback.open_billing_portal || "Open Stripe billing portal")
+            ? nativeBillingPortalLabel()
+            : (pack.open_billing_portal || fallback.open_billing_portal || "Open billing portal")
           : (pack.signin_manage_billing || fallback.signin_manage_billing || "Sign in to manage billing")
       );
     }
@@ -4546,6 +4611,95 @@
     });
   };
 
+  const SUBSCRIPTION_TIER_RANK = Object.freeze({
+    free: 0,
+    go: 1,
+    plus: 2,
+    pro: 3,
+    business: 4,
+    desk: 4,
+  });
+
+  const normalizeSubscriptionTier = (value) => {
+    const raw = String(value || "").trim().toLowerCase();
+    if (!raw) return "free";
+    if (raw === "desk") return "business";
+    if (raw in SUBSCRIPTION_TIER_RANK) return raw;
+    return "free";
+  };
+
+  const subscriptionTierFromOrder = (order = {}) => {
+    const parts = [];
+    parts.push(String(order?.subscriptionTier || order?.tier || order?.plan || "").trim().toLowerCase());
+    parts.push(String(order?.productId || order?.sku || "").trim().toLowerCase());
+    parts.push(String(order?.product || "").trim().toLowerCase());
+    const meta = order?.meta && typeof order.meta === "object" ? order.meta : {};
+    parts.push(String(meta?.subscriptionTier || meta?.tier || meta?.plan || "").trim().toLowerCase());
+    parts.push(String(meta?.productId || meta?.sku || "").trim().toLowerCase());
+    const bag = parts.filter(Boolean).join(" ");
+
+    if (
+      bag.includes("annualbusinessplan") ||
+      bag.includes("businessplan") ||
+      bag.includes("quanturabusiness") ||
+      bag.includes("quantura business") ||
+      bag.includes("business")
+    ) {
+      return "business";
+    }
+    if (bag.includes("quanturapro") || bag.includes(" pro")) return "pro";
+    if (bag.includes("annualplusplan") || bag.includes("premium") || bag.includes("plus")) return "plus";
+    if (bag.includes("goplanyearly") || bag.includes("annualgoplan") || bag.includes("goplan") || bag.includes(" go")) return "go";
+    return "free";
+  };
+
+  const deriveSubscriptionTierFromOrders = (orders = []) => {
+    let bestTier = "free";
+    let bestRank = SUBSCRIPTION_TIER_RANK.free;
+    orders.forEach((order) => {
+      const tier = subscriptionTierFromOrder(order);
+      const rank = Number(SUBSCRIPTION_TIER_RANK[tier] ?? 0);
+      if (rank > bestRank) {
+        bestTier = tier;
+        bestRank = rank;
+      }
+    });
+    return normalizeSubscriptionTier(bestTier);
+  };
+
+  const hasAdFreeEntitlement = () =>
+    hasFullAccount() && normalizeSubscriptionTier(state.userSubscriptionTier) !== "free";
+
+  const applyAdFreeExperience = () => {
+    const adFree = hasAdFreeEntitlement();
+    document.body.classList.toggle("ad-free-user", adFree);
+    if (!adFree) return;
+    const selectors = [
+      '[data-ad-slot]',
+      '.ad-slot',
+      '.ad-banner',
+      '#ad-banner',
+      '#ad-container',
+      '.promo-banner-ad',
+    ];
+    selectors.forEach((selector) => {
+      document.querySelectorAll(selector).forEach((node) => {
+        node.classList.add("hidden");
+        node.setAttribute("aria-hidden", "true");
+      });
+    });
+  };
+
+  const getWorkspaceSeatLimitForTier = () => {
+    const tier = normalizeSubscriptionTier(state.userSubscriptionTier);
+    const config =
+      state.remoteFlags?.aiUsageTiers?.[tier] && typeof state.remoteFlags.aiUsageTiers[tier] === "object"
+        ? state.remoteFlags.aiUsageTiers[tier]
+        : AI_USAGE_TIER_DEFAULTS[tier] || AI_USAGE_TIER_DEFAULTS.free;
+    const raw = Number(config.workspace_limit ?? config.workspaceLimit ?? 0);
+    return Number.isFinite(raw) ? Math.max(0, Math.floor(raw)) : 0;
+  };
+
   const setPurchaseState = (user) => {
     const accountAuthed = hasFullAccount(user);
     ui.purchasePanels.forEach((panel) => {
@@ -4557,8 +4711,8 @@
 
       if (accountAuthed) {
         button.disabled = false;
-        button.textContent = button.dataset.labelAuth || "Request Deep Forecast";
-        note.textContent = "Orders appear in your dashboard instantly.";
+        button.textContent = button.dataset.labelAuth || "Choose plan";
+        note.textContent = "Subscriptions activate in your dashboard after payment confirmation.";
       } else {
         button.disabled = true;
         button.textContent = button.dataset.labelGuest || "Sign in to purchase";
@@ -4610,8 +4764,8 @@
       const nativeBilling = isNativeIosStoreKitCheckoutOnly() || isNativeAndroidPlayBillingCheckout();
       ui.billingPortalLink.textContent = accountAuthed
         ? nativeBilling
-          ? "Manage subscriptions"
-          : "Open Stripe billing portal"
+          ? nativeBillingPortalLabel()
+          : "Open billing portal"
         : "Sign in to manage billing";
       ui.billingPortalLink.setAttribute("href", accountAuthed ? "#" : "/account");
       ui.billingPortalLink.setAttribute("target", "_self");
@@ -4646,6 +4800,7 @@
     }
 
     setPurchaseState(user);
+    applyAdFreeExperience();
     setAdminOnlyFeaturePanels(user);
     applyUiTranslations(state.preferredLanguage || "en");
   };
@@ -5177,7 +5332,7 @@
     if (!container) return;
     container.innerHTML = "";
     if (!orders.length) {
-      const emptyMessage = String(opts.emptyMessage || "No orders yet. Your Deep Forecast request will appear here.");
+      const emptyMessage = String(opts.emptyMessage || "No subscription orders yet.");
       container.innerHTML = `<p class="small">${escapeHtml(emptyMessage)}</p>`;
       return;
     }
@@ -5217,7 +5372,7 @@
       card.innerHTML = `
         <div class="order-header">
           <div>
-            <div class="order-title">${order.product || "Deep Forecast"}</div>
+            <div class="order-title">${order.product || "Quantura Subscription"}</div>
             <div class="small">Order ID: ${order.id}</div>
           </div>
           ${renderOrderStatusBadge(status)}
@@ -5360,6 +5515,7 @@
 
   const renderCollabInvites = (invites) => {
     if (!ui.collabInvitesList) return;
+    state.pendingCollabInviteCount = Array.isArray(invites) ? invites.length : 0;
     ui.collabInvitesList.innerHTML = "";
     if (!Array.isArray(invites) || invites.length === 0) {
       ui.collabInvitesList.textContent = "No invites right now.";
@@ -5393,6 +5549,7 @@
 
   const renderCollaborators = (collaborators) => {
     if (!ui.collabCollaboratorsList) return;
+    state.collaboratorCount = Array.isArray(collaborators) ? collaborators.length : 0;
     ui.collabCollaboratorsList.innerHTML = "";
     if (!Array.isArray(collaborators) || collaborators.length === 0) {
       ui.collabCollaboratorsList.textContent = "No collaborators yet.";
@@ -5454,19 +5611,12 @@
           const orders = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
           const paidOrders = orders.filter((order) => {
             const status = String(order?.paymentStatus || "").trim().toLowerCase();
-            return status === "paid" || status === "succeeded";
+            return status === "paid" || status === "succeeded" || status === "active" || status === "complete";
           });
-          state.userHasPaidPlan = paidOrders.length > 0;
-          state.userSubscriptionTier = paidOrders.some((order) =>
-            String(order?.product || "").toLowerCase().includes("desk")
-          )
-            ? "desk"
-            : paidOrders.some((order) => String(order?.product || "").toLowerCase().includes("pro"))
-            ? "pro"
-            : state.userHasPaidPlan
-            ? "pro"
-            : "free";
+          state.userSubscriptionTier = deriveSubscriptionTierFromOrders(paidOrders);
+          state.userHasPaidPlan = normalizeSubscriptionTier(state.userSubscriptionTier) !== "free";
           renderOrderList(orders, ui.userOrders);
+          applyAdFreeExperience();
           refreshScreenerModelUi();
           refreshScreenerCreditsUi();
         },
@@ -6726,16 +6876,29 @@
   };
 
   const normalizeHeaderBranding = () => {
+    const brandIcon = "/assets/logo.png";
     document.querySelectorAll(".header .logo").forEach((logo) => {
       if (!(logo instanceof HTMLElement)) return;
-      if (logo.querySelector("img.logo-img")) return;
+      const existing = logo.querySelector("img.logo-img");
+      if (existing instanceof HTMLImageElement) {
+        if (existing.getAttribute("src") !== brandIcon) existing.setAttribute("src", brandIcon);
+        return;
+      }
       const iconImg = document.createElement("img");
       iconImg.className = "logo-img";
-      iconImg.src = "/assets/quantura-icon.svg";
+      iconImg.src = brandIcon;
       iconImg.alt = "";
       iconImg.setAttribute("aria-hidden", "true");
       logo.prepend(iconImg);
     });
+    let favicon = document.querySelector('link[rel="icon"]');
+    if (!(favicon instanceof HTMLLinkElement)) {
+      favicon = document.createElement("link");
+      favicon.setAttribute("rel", "icon");
+      document.head.appendChild(favicon);
+    }
+    favicon.setAttribute("type", "image/png");
+    favicon.setAttribute("href", brandIcon);
   };
 
     const ensureSidebarCollapseToggle = () => {
@@ -6900,6 +7063,181 @@
         `;
       })
       .join("");
+  };
+
+  const notificationCategoryLabel = (category) => {
+    const key = String(category || "").trim().toLowerCase();
+    switch (key) {
+      case "watchlist":
+        return "Watchlist";
+      case "explore":
+        return "Explore Feed";
+      case "ipo":
+        return "IPO";
+      case "earnings":
+        return "Earnings";
+      case "daily":
+        return "Daily";
+      case "weekly":
+        return "Weekly";
+      case "inactive":
+        return "Inactive";
+      default:
+        return "General";
+    }
+  };
+
+  const renderNotificationFeed = () => {
+    if (!ui.notificationsItems) return;
+    const feed = state.notificationFeed || {};
+    const entries = Array.isArray(feed.items) ? feed.items : [];
+    if (ui.notificationsUnreadCount) {
+      const unread = Math.max(0, Number(feed.unreadCount || entries.filter((item) => !item?.read).length) || 0);
+      ui.notificationsUnreadCount.textContent = `Unread ${unread}`;
+    }
+
+    if (Array.isArray(ui.notificationFilterButtons)) {
+      ui.notificationFilterButtons.forEach((button) => {
+        const filter = String(button?.dataset?.notificationFilter || "").trim().toLowerCase();
+        const active = filter && (feed.unreadOnly ? filter === "unread" : filter === (feed.filter || "all"));
+        button.classList.toggle("active", Boolean(active));
+      });
+    }
+
+    if (feed.loading) {
+      ui.notificationsItems.innerHTML = `<div class="small muted">Loading notifications...</div>`;
+      return;
+    }
+    if (!entries.length) {
+      ui.notificationsItems.innerHTML = `<div class="small muted">No notifications in this view.</div>`;
+      return;
+    }
+
+    ui.notificationsItems.innerHTML = entries
+      .map((entry) => {
+        const id = escapeHtml(String(entry?.id || ""));
+        const title = escapeHtml(String(entry?.title || "Quantura update"));
+        const body = escapeHtml(String(entry?.body || ""));
+        const category = escapeHtml(notificationCategoryLabel(entry?.category));
+        const deepLink = String(entry?.deepLink || "").trim();
+        const link = deepLink.startsWith("http") ? deepLink : deepLink ? `/${deepLink.replace(/^\/+/, "")}` : "/notifications";
+        const createdAt = new Date(Number(entry?.createdAtMs || Date.now()) || Date.now()).toLocaleString();
+        const isRead = Boolean(entry?.read);
+        return `
+          <article class="notification-log-item ${isRead ? "is-read" : "is-unread"}" data-notification-item="${id}">
+            <div class="notification-log-head">
+              <strong>${title}</strong>
+              <span class="small muted">${escapeHtml(createdAt)}</span>
+            </div>
+            <div class="small muted" style="margin-bottom:6px;">Category: ${category}</div>
+            <p class="small">${body || "No message body provided."}</p>
+            <div class="hero-actions" style="margin-top:8px;">
+              <a class="cta secondary small" href="${escapeHtml(link)}">${icon("open-in-window")}<span>Open</span></a>
+              ${
+                isRead
+                  ? ""
+                  : `<button class="cta secondary small" type="button" data-action="notification-mark-read" data-id="${id}">
+                      ${icon("check")}<span>Mark read</span>
+                    </button>`
+              }
+            </div>
+          </article>
+        `;
+      })
+      .join("");
+  };
+
+  const loadNotificationFeed = async ({ filter = "all", unreadOnly = false, includeHidden = false, silent = false } = {}) => {
+    if (!ui.notificationsItems) return;
+    if (!hasFullAccount()) {
+      state.notificationFeed.items = [];
+      state.notificationFeed.unreadCount = 0;
+      state.notificationFeed.filter = "all";
+      state.notificationFeed.unreadOnly = false;
+      state.notificationFeed.loading = false;
+      renderNotificationFeed();
+      return;
+    }
+    state.notificationFeed.filter = String(filter || "all").trim().toLowerCase() || "all";
+    state.notificationFeed.unreadOnly = Boolean(unreadOnly);
+    state.notificationFeed.loading = true;
+    renderNotificationFeed();
+    try {
+      const headers = await buildApiAuthHeaders({ includeJson: false });
+      const params = new URLSearchParams();
+      if (state.notificationFeed.filter && state.notificationFeed.filter !== "all" && state.notificationFeed.filter !== "unread") {
+        params.set("category", state.notificationFeed.filter);
+      }
+      if (state.notificationFeed.unreadOnly || state.notificationFeed.filter === "unread") {
+        params.set("unread", "true");
+      }
+      if (includeHidden) params.set("includeHidden", "true");
+      params.set("limit", "80");
+      const response = await fetch(`/api/notifications/items?${params.toString()}`, {
+        method: "GET",
+        headers,
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(String(payload?.error || "Unable to load notifications."));
+      }
+      state.notificationFeed.items = Array.isArray(payload?.items) ? payload.items : [];
+      state.notificationFeed.unreadCount =
+        Number(payload?.unreadCount || state.notificationFeed.items.filter((item) => !item?.read).length) || 0;
+      state.notificationFeed.loading = false;
+      renderNotificationFeed();
+    } catch (error) {
+      state.notificationFeed.loading = false;
+      renderNotificationFeed();
+      if (!silent) {
+        const message = extractErrorMessage(error, "Unable to load notifications.");
+        setNotificationStatus(message);
+        showToast(message, "warn");
+      }
+    }
+  };
+
+  const markNotificationItemRead = async (itemId) => {
+    const id = String(itemId || "").trim();
+    if (!id) return;
+    if (!hasFullAccount()) return;
+    try {
+      const headers = await buildApiAuthHeaders({ includeJson: true });
+      const response = await fetch(`/api/notifications/items/${encodeURIComponent(id)}/read`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ read: true }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(String(payload?.error || "Unable to update notification."));
+      state.notificationFeed.items = (state.notificationFeed.items || []).map((item) =>
+        String(item?.id || "") === id ? { ...item, read: true } : item
+      );
+      state.notificationFeed.unreadCount = Math.max(0, Number(state.notificationFeed.unreadCount || 0) - 1);
+      renderNotificationFeed();
+    } catch (error) {
+      showToast(extractErrorMessage(error, "Unable to mark notification as read."), "warn");
+    }
+  };
+
+  const markAllNotificationsRead = async () => {
+    if (!hasFullAccount()) return;
+    try {
+      const headers = await buildApiAuthHeaders({ includeJson: true });
+      const response = await fetch("/api/notifications/items/read-all", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ includeHidden: false }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(String(payload?.error || "Unable to mark all as read."));
+      state.notificationFeed.items = (state.notificationFeed.items || []).map((item) => ({ ...item, read: true }));
+      state.notificationFeed.unreadCount = 0;
+      renderNotificationFeed();
+      showToast("All notifications marked as read.");
+    } catch (error) {
+      showToast(extractErrorMessage(error, "Unable to mark all notifications as read."), "warn");
+    }
   };
 
   const persistNotificationLog = () => {
@@ -11361,9 +11699,10 @@
 
   const getCurrentAiTierKey = () => {
     if (!hasFullAccount()) return "free";
-    if (isAdminUser()) return "desk";
+    if (isAdminUser()) return "business";
     if (!state.userHasPaidPlan) return "free";
-    return state.userSubscriptionTier || "pro";
+    const tier = normalizeSubscriptionTier(state.userSubscriptionTier);
+    return tier === "free" ? "go" : tier;
   };
 
   const getCurrentAiTierConfig = () => {
@@ -11378,21 +11717,26 @@
     const tiers = state.remoteFlags.aiUsageTiers && typeof state.remoteFlags.aiUsageTiers === "object"
       ? state.remoteFlags.aiUsageTiers
       : AI_USAGE_TIER_DEFAULTS;
+    const normalizedKey = key === "desk" ? "business" : key;
     const config =
-      tiers[key] && typeof tiers[key] === "object"
+      tiers[normalizedKey] && typeof tiers[normalizedKey] === "object"
+        ? tiers[normalizedKey]
+        : tiers[key] && typeof tiers[key] === "object"
         ? tiers[key]
-        : AI_USAGE_TIER_DEFAULTS[key] || AI_USAGE_TIER_DEFAULTS.free;
+        : AI_USAGE_TIER_DEFAULTS[normalizedKey] || AI_USAGE_TIER_DEFAULTS[key] || AI_USAGE_TIER_DEFAULTS.free;
     const rawAllowed = Array.isArray(config.allowed_models) ? config.allowed_models : [];
     const allowedModels = rawAllowed
       .map((x) => normalizeAiModelId(String(x).trim()))
       .filter((modelId) => modelId && (modelId.startsWith("gpt-5") || modelId.startsWith("amazon.nova")))
       .filter((modelId) => !globalSet.size || globalSet.has(modelId));
-    const fallbackAllowed = (AI_USAGE_TIER_DEFAULTS[key]?.allowed_models || AI_USAGE_TIER_DEFAULTS.free.allowed_models)
+    const fallbackAllowed = (AI_USAGE_TIER_DEFAULTS[normalizedKey]?.allowed_models || AI_USAGE_TIER_DEFAULTS[key]?.allowed_models || AI_USAGE_TIER_DEFAULTS.free.allowed_models)
       .map((x) => normalizeAiModelId(String(x).trim()))
       .filter((modelId) => modelId && (modelId.startsWith("gpt-5") || modelId.startsWith("amazon.nova")))
       .filter((modelId) => !globalSet.size || globalSet.has(modelId));
-    const weeklyLimitRaw = Number(config.weekly_limit ?? config.daily_limit ?? AI_USAGE_TIER_DEFAULTS[key]?.weekly_limit ?? 3);
+    const weeklyLimitRaw = Number(config.weekly_limit ?? config.daily_limit ?? AI_USAGE_TIER_DEFAULTS[normalizedKey]?.weekly_limit ?? AI_USAGE_TIER_DEFAULTS[key]?.weekly_limit ?? 3);
     const weeklyLimit = Number.isFinite(weeklyLimitRaw) ? Math.max(1, weeklyLimitRaw) : 3;
+    const workspaceLimitRaw = Number(config.workspace_limit ?? config.workspaceLimit ?? AI_USAGE_TIER_DEFAULTS[normalizedKey]?.workspace_limit ?? 0);
+    const workspaceLimit = Number.isFinite(workspaceLimitRaw) ? Math.max(0, Math.floor(workspaceLimitRaw)) : 0;
     const finalAllowed = allowedModels.length
       ? allowedModels
       : fallbackAllowed.length
@@ -11406,6 +11750,8 @@
       weeklyLimit,
       dailyLimit: weeklyLimit, // Legacy alias for older UI helpers.
       volatilityAlerts: Boolean(config.volatility_alerts),
+      adFree: Boolean(config.ad_free ?? normalizedKey !== "free"),
+      workspaceLimit,
     };
   };
 
@@ -11880,9 +12226,20 @@
     syncScreenerProviderAccent();
 
     if (ui.screenerModelMeta) {
-      const tierLabel = tier.key === "desk" ? "Desk" : tier.key === "pro" ? "Pro" : "Free";
+      const tierLabelMap = {
+        free: "Free",
+        go: "Go",
+        plus: "Plus",
+        pro: "Pro",
+        business: "Business",
+        desk: "Business",
+      };
+      const tierLabel = tierLabelMap[tier.key] || "Free";
       const hasNova = tier.allowedModels.some((modelId) => String(modelId).startsWith("amazon.nova"));
-      ui.screenerModelMeta.textContent = `${tierLabel} tier · ${tier.weeklyLimit} weekly credits · ${
+      ui.screenerModelMeta.textContent = `${tierLabel} tier · ${tier.weeklyLimit} weekly credits · ${Math.max(
+        0,
+        Number(tier.workspaceLimit || 0)
+      )} collaborator seat${Number(tier.workspaceLimit || 0) === 1 ? "" : "s"} · ${
         hasNova ? "GPT-5 + Nova personalities" : "GPT-5 personalities"
       }`;
     }
@@ -13513,17 +13870,52 @@
     getNativePlatform() === "android" &&
     Boolean(state.remoteFlags?.nativeAndroidPlayBillingEnabled ?? true);
 
+  const nativeBillingPortalLabel = () =>
+    getNativePlatform() === "ios" ? "Restore purchases" : "Manage subscriptions";
+
+  const resolveNativeIapPlanKey = (panel) => {
+    const explicit = String(panel?.dataset?.iapPlan || "").trim().toLowerCase();
+    if (explicit) return explicit;
+    const product = String(panel?.dataset?.product || "").trim().toLowerCase();
+    if (product.includes("annual") && product.includes("business")) return "annual_business";
+    if (product.includes("annual") && product.includes("plus")) return "annual_plus";
+    if (product.includes("annual") && product.includes("go")) return "annual_go";
+    if (product.includes("desk")) return "desk";
+    if (product.includes("business")) return "business";
+    if (product.includes("plus") || product.includes("premium")) return "plus";
+    if (product.includes("go")) return "go";
+    if (product.includes("forecast")) return "forecast";
+    if (product.includes("pro")) return "pro";
+    return "default";
+  };
+
+  const nativeIapMapForPlatform = (platform, configuredRaw) => {
+    const targetPlatform = platform === "ios" ? "ios" : "android";
+    const fallback =
+      DEFAULT_NATIVE_IAP_PRODUCT_IDS[targetPlatform] || DEFAULT_NATIVE_IAP_PRODUCT_IDS.android;
+    const configured =
+      configuredRaw && typeof configuredRaw === "object" ? configuredRaw : {};
+    const scoped =
+      configured[targetPlatform] && typeof configured[targetPlatform] === "object"
+        ? configured[targetPlatform]
+        : configured;
+    return { ...fallback, ...scoped };
+  };
+
   const resolveNativeIapProductId = (panel) => {
     const fromPanel = String(panel?.dataset?.iapProductId || "").trim();
     if (fromPanel) return fromPanel;
 
-    const configured = state.remoteFlags?.nativeIapProductIds;
-    const map = configured && typeof configured === "object" ? configured : DEFAULT_NATIVE_IAP_PRODUCT_IDS;
-    const product = String(panel?.dataset?.product || "").trim().toLowerCase();
-    if (product.includes("desk")) return String(map.desk || map.pro || map.default || DEFAULT_NATIVE_IAP_PRODUCT_IDS.default).trim();
-    if (product.includes("forecast")) return String(map.forecast || map.pro || map.default || DEFAULT_NATIVE_IAP_PRODUCT_IDS.default).trim();
-    if (product.includes("pro")) return String(map.pro || map.default || DEFAULT_NATIVE_IAP_PRODUCT_IDS.default).trim();
-    return String(map.default || map.pro || DEFAULT_NATIVE_IAP_PRODUCT_IDS.default).trim();
+    const platform = getNativePlatform() === "ios" ? "ios" : "android";
+    const map = nativeIapMapForPlatform(platform, state.remoteFlags?.nativeIapProductIds);
+    const plan = resolveNativeIapPlanKey(panel);
+    const productId = String(
+      map[plan] ||
+        map.default ||
+        DEFAULT_NATIVE_IAP_PRODUCT_IDS[platform]?.default ||
+        DEFAULT_NATIVE_IAP_PRODUCT_IDS.android.default
+    ).trim();
+    return productId;
   };
 
   const requestNativeInAppPurchase = (panel, opts = {}) => {
@@ -13571,6 +13963,26 @@
     return sent;
   };
 
+  const confirmNativePurchaseOnBackend = async ({ orderId, productId, status }) => {
+    if (!orderId || !hasFullAccount()) return;
+    const functions = state.clients?.functions;
+    if (!functions) return;
+    try {
+      const confirm = functions.httpsCallable("confirm_native_iap_purchase");
+      await confirm({
+        orderId,
+        productId: String(productId || "").trim(),
+        status: String(status || "").trim().toLowerCase(),
+        platform: String(getNativePlatform() || "").trim().toLowerCase(),
+        tier: subscriptionTierFromOrder({ productId }),
+        meta: buildMeta(),
+      });
+    } catch (error) {
+      const message = extractErrorMessage(error, "Unable to finalize native purchase sync.");
+      showToast(message, "warn");
+    }
+  };
+
   const applyNativePurchaseResult = (detail) => {
     const payload = detail && typeof detail === "object" ? detail : {};
     const orderId = String(payload.orderId || "").trim();
@@ -13592,7 +14004,25 @@
       status: status || (ok ? "success" : "failed"),
     });
 
-    if (status === "purchased" || (ok && status !== "pending")) {
+    if (status === "restored") {
+      if (note) note.textContent = message || "Purchases restored.";
+      stripe?.classList.add("hidden");
+      showToast(message || "Purchases restored.");
+      return;
+    }
+
+    if (status === "subscriptions_opened") {
+      const platform = getNativePlatform();
+      const openedMessage =
+        platform === "ios"
+          ? "Opened App Store subscriptions."
+          : "Opened Google Play subscriptions.";
+      if (note) note.textContent = message || openedMessage;
+      showToast(message || openedMessage);
+      return;
+    }
+
+    if (status === "purchased" || (ok && (!status || status === "success"))) {
       if (success) {
         success.textContent = orderId
           ? `In-app purchase completed for order ${orderId}.`
@@ -13602,6 +14032,9 @@
       if (note) note.textContent = "Purchase completed in native checkout.";
       stripe?.classList.add("hidden");
       showToast("In-app purchase completed.");
+      if (orderId) {
+        confirmNativePurchaseOnBackend({ orderId, productId, status: "purchased" });
+      }
       if (orderId) {
         logEvent("purchase", {
           transaction_id: orderId,
@@ -13661,13 +14094,24 @@
     };
 
     try {
+      const productId = resolveNativeIapProductId(panel);
+      const subscriptionTier = resolveNativeIapPlanKey(panel);
+      const nativeBillingProvider = isNativeIosStoreKitCheckoutOnly() || isNativeAndroidPlayBillingCheckout();
       logEvent("begin_checkout", { currency: panel.dataset.currency || "USD", value: Number(panel.dataset.price || 349) });
       const createOrder = functions.httpsCallable("create_order");
       const result = await createOrder({
-        product: panel.dataset.product || "Deep Forecast",
+        product: panel.dataset.product || "Quantura Subscription",
+        productId,
+        tier: subscriptionTier,
+        paymentProvider: nativeBillingProvider ? "native_iap" : "stripe",
         price: Number(panel.dataset.price || 349),
         currency: panel.dataset.currency || "USD",
-        meta,
+        meta: {
+          ...meta,
+          subscriptionTier,
+          productId,
+          purchaseRuntime: nativeBillingProvider ? (getNativePlatform() || "native") : "web",
+        },
       });
       const orderId = result.data?.orderId;
       if (orderId) {
@@ -13711,7 +14155,7 @@
       showToast(error.message || "Unable to create order.", "warn");
     } finally {
       button.disabled = false;
-      button.textContent = button.dataset.labelAuth || "Request Deep Forecast";
+      button.textContent = button.dataset.labelAuth || "Choose plan";
     }
   };
 
@@ -13811,8 +14255,8 @@
       if (sent) {
         showToast(
           getNativePlatform() === "ios"
-            ? "Opening App Store subscriptions..."
-            : "Opening Google Play subscriptions..."
+            ? "Restoring App Store purchases..."
+            : "Restoring Google Play purchases..."
         );
       } else {
         showToast("Subscription management is only available in native app settings.", "warn");
@@ -13824,7 +14268,7 @@
     if (ui.billingPortalLink.dataset.loading === "1") return;
     ui.billingPortalLink.dataset.loading = "1";
 
-    const originalText = ui.billingPortalLink.textContent || "Open Stripe billing portal";
+    const originalText = ui.billingPortalLink.textContent || "Open billing portal";
     ui.billingPortalLink.textContent = "Opening billing portal...";
     ui.billingPortalLink.setAttribute("aria-disabled", "true");
 
@@ -14020,6 +14464,14 @@
           state.panelAutoloaded.options = true;
           autoloadOptionsChain(functions, { force: first });
         }
+
+        if (next === "notifications") {
+          loadNotificationFeed({
+            filter: state.notificationFeed?.filter || "all",
+            unreadOnly: Boolean(state.notificationFeed?.unreadOnly),
+            silent: true,
+          }).catch(() => {});
+        }
       };
 
       ensureThemeToggle();
@@ -14036,6 +14488,7 @@
       initializeLanguageControls().catch(() => {});
       captureShareFromUrl();
       renderNotificationLog();
+      renderNotificationFeed();
       ensureNotificationPrivacyControls();
       syncNotificationPrivacyControls();
       recordPromoSessionUsage();
@@ -15316,6 +15769,17 @@
 	        showToast("Sign in to invite collaborators.", "warn");
 	        return;
 	      }
+	      const seatLimit = getWorkspaceSeatLimitForTier();
+	      const activeCount = Math.max(0, Number(state.collaboratorCount || 0));
+	      const pendingCount = Math.max(0, Number(state.pendingCollabInviteCount || 0));
+	      if (seatLimit <= 0) {
+	        showToast("Your current plan does not include shared workspace seats. Upgrade to invite collaborators.", "warn");
+	        return;
+	      }
+	      if (activeCount + pendingCount >= seatLimit) {
+	        showToast(`Workspace seat limit reached (${seatLimit}). Upgrade your plan for more collaborators.`, "warn");
+	        return;
+	      }
 	      const email = String(ui.collabInviteEmail?.value || "").trim();
 	      const role = String(ui.collabInviteRole?.value || "viewer");
 	      if (!email) {
@@ -15792,6 +16256,8 @@
       if (id === "facebook.com" || id === "facebook") return "Facebook";
       if (id === "github.com" || id === "github") return "GitHub";
       if (id === "twitter.com" || id === "twitter") return "X";
+      if (id === "yahoo.com" || id === "yahoo") return "Yahoo";
+      if (id === "microsoft.com" || id === "microsoft") return "Microsoft";
       if (id === "password" || id === "emailpassword") return "Email and password";
       return id || "another provider";
     };
@@ -15813,6 +16279,17 @@
       }
       if (id === "twitter.com" || id === "twitter") {
         return new firebase.auth.TwitterAuthProvider();
+      }
+      if (id === "yahoo.com" || id === "yahoo") {
+        const provider = new firebase.auth.OAuthProvider("yahoo.com");
+        provider.addScope("profile");
+        provider.addScope("email");
+        return provider;
+      }
+      if (id === "microsoft.com" || id === "microsoft") {
+        const provider = new firebase.auth.OAuthProvider("microsoft.com");
+        provider.addScope("user.read");
+        return provider;
       }
       return null;
     };
@@ -16143,7 +16620,15 @@
       state.authInFlight = true;
       const runtime = resolveRuntimeLabel();
       const normalizedMethod = String(method || "").trim().toLowerCase();
-      const supportsNativeBridge = normalizedMethod === "google" || normalizedMethod === "apple";
+      const supportsNativeBridge = new Set([
+        "google",
+        "apple",
+        "github",
+        "twitter",
+        "x",
+        "yahoo",
+        "microsoft",
+      ]).has(normalizedMethod);
       try {
         await persistenceReady;
         if (isNativeApp() && supportsNativeBridge) {
@@ -16209,6 +16694,19 @@
     ui.twitterSignin?.addEventListener("click", async () => {
       const provider = new firebase.auth.TwitterAuthProvider();
       await signInWithProvider(provider, "Signed in with X.", "twitter");
+    });
+
+    ui.microsoftSignin?.addEventListener("click", async () => {
+      const provider = new firebase.auth.OAuthProvider("microsoft.com");
+      provider.addScope("user.read");
+      await signInWithProvider(provider, "Signed in with Microsoft.", "microsoft");
+    });
+
+    ui.yahooSignin?.addEventListener("click", async () => {
+      const provider = new firebase.auth.OAuthProvider("yahoo.com");
+      provider.addScope("profile");
+      provider.addScope("email");
+      await signInWithProvider(provider, "Signed in with Yahoo.", "yahoo");
     });
 
 		    ui.purchasePanels.forEach((panel) => {
@@ -17464,6 +17962,7 @@
           source: "system",
           at: new Date().toISOString(),
         });
+        await loadNotificationFeed({ filter: state.notificationFeed?.filter || "all", unreadOnly: Boolean(state.notificationFeed?.unreadOnly), silent: true });
         logEvent("notifications_enabled", { channel: isNativeApp() ? "native" : "webpush" });
         showToast("Notifications enabled.");
       } catch (error) {
@@ -17497,6 +17996,7 @@
           source: "system",
           at: new Date().toISOString(),
         });
+        await loadNotificationFeed({ filter: state.notificationFeed?.filter || "all", unreadOnly: Boolean(state.notificationFeed?.unreadOnly), silent: true });
         logEvent("notifications_token_refreshed", { channel: isNativeApp() ? "native" : "webpush" });
       } catch (error) {
 	        setNotificationStatus(error.message || "Unable to refresh notification token.");
@@ -17512,21 +18012,47 @@
 	      }
 	      try {
 	        setNotificationStatus("Sending test notification...");
-	        const sendTestNotification = functions.httpsCallable("send_test_notification");
           const cachedToken = String(safeLocalStorageGet(FCM_TOKEN_CACHE_KEY) || "").trim();
-	        const result = await sendTestNotification({
-	          title: "Quantura test",
-          body: "Web push is active for your dashboard.",
-          data: {
-            source: "dashboard_test",
-            timestamp: new Date().toISOString(),
-          },
-          token: cachedToken,
-          meta: buildMeta(),
-        });
-        const sent = result.data?.successCount ?? 0;
-        const attempted = result.data?.attemptedTokenCount ?? sent;
-        const usedFallback = Boolean(result.data?.usedFallbackToken);
+          let sent = 0;
+          let attempted = 0;
+          let usedFallback = false;
+
+          try {
+            const headers = await buildApiAuthHeaders({ includeJson: true });
+            const response = await fetch("/api/notify/sendTest", {
+              method: "POST",
+              headers,
+              body: JSON.stringify({
+                title: "Quantura test",
+                body: "Web push is active for your dashboard.",
+                data: {
+                  source: "dashboard_test",
+                  timestamp: new Date().toISOString(),
+                },
+                token: cachedToken,
+                meta: buildMeta(),
+              }),
+            });
+            const apiPayload = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(String(apiPayload?.error || "Unable to send test notification."));
+            sent = Number(apiPayload?.successCount || apiPayload?.delivered || 0) || 0;
+            attempted = Number(apiPayload?.attemptedTokenCount || apiPayload?.attempted || sent) || sent;
+          } catch (apiError) {
+            const sendTestNotification = functions.httpsCallable("send_test_notification");
+            const result = await sendTestNotification({
+              title: "Quantura test",
+              body: "Web push is active for your dashboard.",
+              data: {
+                source: "dashboard_test",
+                timestamp: new Date().toISOString(),
+              },
+              token: cachedToken,
+              meta: buildMeta(),
+            });
+            sent = Number(result.data?.successCount ?? 0) || 0;
+            attempted = Number(result.data?.attemptedTokenCount ?? sent) || sent;
+            usedFallback = Boolean(result.data?.usedFallbackToken);
+          }
         const statusSuffix = usedFallback ? " (used local token fallback)" : "";
         setNotificationStatus(`Test sent. Delivered to ${sent} of ${attempted} token(s)${statusSuffix}.`);
         await appendNotificationLogPersonalized({
@@ -17535,6 +18061,7 @@
           source: "system",
           at: new Date().toISOString(),
         });
+        await loadNotificationFeed({ filter: state.notificationFeed?.filter || "all", unreadOnly: Boolean(state.notificationFeed?.unreadOnly), silent: true });
         logEvent("notifications_test_sent", { delivered: sent });
         showToast("Test notification sent.");
       } catch (error) {
@@ -17549,6 +18076,30 @@
       renderNotificationLog();
       setNotificationStatus("Notification log cleared.");
       showToast("Notification log cleared.");
+    });
+
+    ui.notificationsMarkAll?.addEventListener("click", async () => {
+      if (!requireFullAccount("Sign in first.", { redirect: true })) return;
+      await markAllNotificationsRead();
+    });
+
+    if (Array.isArray(ui.notificationFilterButtons)) {
+      ui.notificationFilterButtons.forEach((button) => {
+        button.addEventListener("click", async () => {
+          const filter = String(button?.dataset?.notificationFilter || "all").trim().toLowerCase() || "all";
+          const unreadOnly = filter === "unread";
+          await loadNotificationFeed({ filter: unreadOnly ? "all" : filter, unreadOnly, silent: true });
+        });
+      });
+    }
+
+    document.addEventListener("click", async (event) => {
+      const trigger = event.target.closest('[data-action="notification-mark-read"]');
+      if (!trigger) return;
+      event.preventDefault();
+      const itemId = String(trigger.dataset.id || "").trim();
+      if (!itemId) return;
+      await markNotificationItemRead(itemId);
     });
 
     ui.notificationsLocationOptIn?.addEventListener("change", async () => {
@@ -17726,6 +18277,9 @@
             state.userSubscriptionTier = "free";
             state.aiUsageToday = 0;
             state.aiUsageTierKey = "free";
+            state.collaboratorCount = 0;
+            state.pendingCollabInviteCount = 0;
+            applyAdFreeExperience();
 		        renderOrderList([], ui.userOrders);
             renderRequestList([], ui.userForecasts, "No forecast requests yet.");
             renderRequestList([], ui.autopilotOutput, "No autopilot requests yet.");
@@ -17754,6 +18308,11 @@
           setNotificationTokenPreview("");
           setNotificationControlsEnabled(false);
         }
+            state.notificationFeed.items = [];
+            state.notificationFeed.unreadCount = 0;
+            state.notificationFeed.filter = "all";
+            state.notificationFeed.unreadOnly = false;
+            renderNotificationFeed();
             syncNotificationPrivacyControls();
 			        if (state.unsubscribeOrders) state.unsubscribeOrders();
 			        if (state.unsubscribeAdmin) state.unsubscribeAdmin();
@@ -17909,6 +18468,11 @@
 	          setNotificationControlsEnabled(false);
             setNotificationStatus("Push notifications are not supported on this device.");
 	        }
+          await loadNotificationFeed({
+            filter: state.notificationFeed?.filter || "all",
+            unreadOnly: Boolean(state.notificationFeed?.unreadOnly),
+            silent: true,
+          });
 	      }
         await loadNotificationPrivacySettings().catch(() => {
           syncNotificationPrivacyControls();
