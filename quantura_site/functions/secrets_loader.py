@@ -38,7 +38,6 @@ DEFAULT_SECRET_BINDING_KEYS: Final[tuple[str, ...]] = (
     "FCM_WEB_VAPID_KEY",
     "STRIPE_SECRET_KEY",
     "STRIPE_WEBHOOK_SECRET",
-    "MASSIVE_API_KEY",
     "UNSPLASH_ACCESS_KEY",
     "TWITTER_BEARER_TOKEN",
 )
@@ -74,8 +73,6 @@ _SECRET_SPECS: dict[str, SecretSpec] = {
         usage="Stripe server API",
     ),
     "STRIPE_WEBHOOK_SECRET": SecretSpec("STRIPE_WEBHOOK_SECRET", usage="Stripe webhook verification"),
-    "MASSIVE_API_KEY": SecretSpec("MASSIVE_API_KEY", usage="Massive market data"),
-    "MASSIVE_BASE_URL": SecretSpec("MASSIVE_BASE_URL", usage="Massive API base URL override"),
     "UNSPLASH_ACCESS_KEY": SecretSpec(
         "UNSPLASH_ACCESS_KEY",
         aliases=("UNSPLASH_APPLICATION_ID",),
