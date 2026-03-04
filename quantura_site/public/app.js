@@ -4693,7 +4693,10 @@
   const applyAdFreeExperience = () => {
     const adFree = hasAdFreeEntitlement();
     document.body.classList.toggle("ad-free-user", adFree);
-    if (!adFree) return;
+    if (!adFree) {
+      scheduleNativeInlineAdsRefresh();
+      return;
+    }
     const selectors = [
       '[data-ad-slot]',
       '.ad-slot',
@@ -4701,6 +4704,7 @@
       '#ad-banner',
       '#ad-container',
       '.promo-banner-ad',
+      '.native-inline-ad-slot',
     ];
     selectors.forEach((selector) => {
       document.querySelectorAll(selector).forEach((node) => {
@@ -4708,6 +4712,336 @@
         node.setAttribute("aria-hidden", "true");
       });
     });
+    scheduleNativeInlineAdsRefresh();
+  };
+
+  const nativeInlineAdState = {
+    listenerBound: false,
+    sequence: 0,
+    pendingBySlot: new Map(),
+    impressionObserver: null,
+    seenImpressions: new Set(),
+    observedContainers: new WeakSet(),
+    observerMap: new Map(),
+    refreshTimer: 0,
+  };
+
+  const getNativeInlineAdRules = () => {
+    const defaults = { feedStart: 6, feedInterval: 8, pageMidpoint: 0.55 };
+    const raw = window.__QUANTURA_NATIVE_AD_RULES__ && typeof window.__QUANTURA_NATIVE_AD_RULES__ === "object"
+      ? window.__QUANTURA_NATIVE_AD_RULES__
+      : {};
+    const feedStart = Number(raw.feedStart);
+    const feedInterval = Number(raw.feedInterval);
+    const pageMidpoint = Number(raw.pageMidpoint);
+    return {
+      feedStart: Number.isFinite(feedStart) ? Math.max(3, Math.min(20, Math.floor(feedStart))) : defaults.feedStart,
+      feedInterval: Number.isFinite(feedInterval) ? Math.max(3, Math.min(20, Math.floor(feedInterval))) : defaults.feedInterval,
+      pageMidpoint: Number.isFinite(pageMidpoint) ? Math.max(0.2, Math.min(0.9, pageMidpoint)) : defaults.pageMidpoint,
+    };
+  };
+
+  const isNativeInlineAdEligible = () => {
+    if (!isNativeApp()) return false;
+    if (hasAdFreeEntitlement()) return false;
+    if (state.authGateVisible) return false;
+    const pathname = String(window.location.pathname || "").trim().toLowerCase();
+    if (pathname === "/account" || pathname === "/pricing") return false;
+    return true;
+  };
+
+  const ensureNativeInlineAdListener = () => {
+    if (nativeInlineAdState.listenerBound) return;
+    nativeInlineAdState.listenerBound = true;
+    window.addEventListener("quantura:native-feed-ad", (event) => {
+      const detail = event?.detail && typeof event.detail === "object" ? event.detail : {};
+      const slotId = String(detail.slotId || "").trim();
+      if (!slotId) return;
+      const pending = nativeInlineAdState.pendingBySlot.get(slotId);
+      if (!pending) return;
+      nativeInlineAdState.pendingBySlot.delete(slotId);
+      if (detail.ok === false) {
+        pending.reject(new Error(String(detail.error || "Native ad failed.")));
+        return;
+      }
+      pending.resolve(detail);
+    });
+  };
+
+  const reportNativeInlineAdBridgeEvent = (action, payload = {}) => {
+    if (!isNativeApp()) return false;
+    return sendNativeBridgeMessage({
+      action,
+      slotId: String(payload.slotId || "").trim(),
+      placement: String(payload.placement || "").trim(),
+      adUnitId: String(payload.adUnitId || "").trim(),
+    });
+  };
+
+  const requestNativeInlineAd = ({ slotId, placement, variant = "nativeAdvanced", timeoutMs = 12000 } = {}) =>
+    new Promise((resolve, reject) => {
+      if (!isNativeInlineAdEligible()) {
+        reject(new Error("native_ads_ineligible"));
+        return;
+      }
+      ensureNativeInlineAdListener();
+      const resolvedSlotId = String(slotId || "").trim();
+      if (!resolvedSlotId) {
+        reject(new Error("slot_id_missing"));
+        return;
+      }
+      const timeoutHandle = window.setTimeout(() => {
+        nativeInlineAdState.pendingBySlot.delete(resolvedSlotId);
+        reject(new Error("native_ad_timeout"));
+      }, Math.max(2000, Number(timeoutMs) || 12000));
+      nativeInlineAdState.pendingBySlot.set(resolvedSlotId, {
+        resolve: (detail) => {
+          clearTimeout(timeoutHandle);
+          resolve(detail);
+        },
+        reject: (error) => {
+          clearTimeout(timeoutHandle);
+          reject(error);
+        },
+      });
+      const sent = sendNativeBridgeMessage({
+        action: "requestNativeFeedAd",
+        slotId: resolvedSlotId,
+        placement: String(placement || "inline").trim(),
+        variant: String(variant || "nativeAdvanced").trim(),
+      });
+      if (!sent) {
+        clearTimeout(timeoutHandle);
+        nativeInlineAdState.pendingBySlot.delete(resolvedSlotId);
+        reject(new Error("native_bridge_unavailable"));
+      }
+    });
+
+  const toNativeInlineAdImage = (value) => {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    if (/^data:image\//i.test(raw)) return raw;
+    if (/^https?:\/\//i.test(raw)) return raw;
+    return `data:image/png;base64,${raw}`;
+  };
+
+  const ensureNativeInlineAdImpressionObserver = () => {
+    if (nativeInlineAdState.impressionObserver || typeof IntersectionObserver !== "function") return;
+    nativeInlineAdState.impressionObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting || entry.intersectionRatio < 0.45) return;
+          const target = entry.target;
+          const slotId = String(target.dataset.nativeInlineAdSlot || "").trim();
+          if (!slotId || nativeInlineAdState.seenImpressions.has(slotId)) return;
+          nativeInlineAdState.seenImpressions.add(slotId);
+          const placement = String(target.dataset.placement || "inline").trim();
+          const adUnitId = String(target.dataset.adUnitId || "").trim();
+          logEvent("ad_impression", { slot_id: slotId, placement, ad_unit_id: adUnitId, runtime: resolveRuntimeLabel() });
+          reportNativeInlineAdBridgeEvent("nativeFeedAdImpression", { slotId, placement, adUnitId });
+        });
+      },
+      { threshold: [0.45] }
+    );
+  };
+
+  const buildNativeInlineAdSlot = (slotId, placement) => {
+    const node = document.createElement("article");
+    node.className = "native-inline-ad-slot native-inline-ad-loading";
+    node.dataset.nativeInlineAdSlot = slotId;
+    node.dataset.placement = placement;
+    node.dataset.adSlot = "native-inline";
+    node.setAttribute("aria-live", "polite");
+    node.innerHTML = `
+      <div class="native-inline-ad-skeleton">
+        <div class="skeleton-line w50"></div>
+        <div class="skeleton-line w85"></div>
+        <div class="skeleton-line w70"></div>
+        <div class="native-inline-ad-media"></div>
+      </div>
+    `;
+    return node;
+  };
+
+  const hydrateNativeInlineAdSlot = (slotNode, detail = {}) => {
+    const ad = detail?.ad && typeof detail.ad === "object" ? detail.ad : detail;
+    const slotId = String(detail.slotId || slotNode.dataset.nativeInlineAdSlot || "").trim();
+    const placement = String(detail.placement || slotNode.dataset.placement || "inline").trim();
+    const adUnitId = String(detail.adUnitId || ad?.adUnitId || "").trim();
+    const headline = String(ad?.headline || "Sponsored insight").trim();
+    const body = String(ad?.body || "This section is sponsored.").trim();
+    const cta = String(ad?.callToAction || "Learn more").trim();
+    const advertiser = String(ad?.advertiser || ad?.store || "Sponsored").trim();
+    const iconUrl = toNativeInlineAdImage(ad?.iconDataUrl || ad?.iconUrl || "");
+    const mediaUrl = toNativeInlineAdImage(ad?.mediaDataUrl || ad?.mediaUrl || "");
+    const destinationUrl = /^https?:\/\//i.test(String(ad?.destinationUrl || "").trim()) ? String(ad.destinationUrl).trim() : "";
+
+    slotNode.classList.remove("native-inline-ad-loading");
+    slotNode.classList.add("native-inline-ad-ready");
+    slotNode.dataset.adUnitId = adUnitId;
+    slotNode.innerHTML = `
+      <div class="native-inline-ad-inner">
+        <div class="native-inline-ad-top">
+          <span class="native-inline-ad-badge">Ad</span>
+          <span class="native-inline-ad-choices">AdChoices</span>
+        </div>
+        <div class="native-inline-ad-main">
+          <div class="native-inline-ad-copy">
+            <h4 class="native-inline-ad-title">${escapeHtml(headline)}</h4>
+            <p class="native-inline-ad-body">${escapeHtml(body)}</p>
+            <div class="native-inline-ad-meta">${escapeHtml(advertiser)}</div>
+          </div>
+          ${
+            iconUrl
+              ? `<img class="native-inline-ad-icon" src="${escapeHtml(iconUrl)}" alt="" loading="lazy" />`
+              : `<div class="native-inline-ad-icon native-inline-ad-icon-fallback">Q</div>`
+          }
+        </div>
+        ${
+          mediaUrl
+            ? `<img class="native-inline-ad-media" src="${escapeHtml(mediaUrl)}" alt="" loading="lazy" />`
+            : `<div class="native-inline-ad-media native-inline-ad-media-fallback" aria-hidden="true"></div>`
+        }
+        <button type="button" class="task-chip native-inline-ad-cta" data-native-inline-ad-click="1">${escapeHtml(cta)}</button>
+      </div>
+    `;
+
+    slotNode.addEventListener("click", (event) => {
+      if (!event.target.closest("[data-native-inline-ad-click='1']")) return;
+      logEvent("ad_click", { slot_id: slotId, placement, ad_unit_id: adUnitId, runtime: resolveRuntimeLabel() });
+      reportNativeInlineAdBridgeEvent("nativeFeedAdClick", { slotId, placement, adUnitId });
+      if (destinationUrl) {
+        window.open(destinationUrl, "_blank", "noopener,noreferrer");
+      }
+    });
+    ensureNativeInlineAdImpressionObserver();
+    nativeInlineAdState.impressionObserver?.observe(slotNode);
+  };
+
+  const loadNativeInlineAdSlot = async (slotNode) => {
+    if (!slotNode || !isNativeInlineAdEligible()) {
+      slotNode?.remove();
+      return;
+    }
+    const slotId = String(slotNode.dataset.nativeInlineAdSlot || "").trim();
+    const placement = String(slotNode.dataset.placement || "inline").trim();
+    logEvent("ad_request", { slot_id: slotId, placement, runtime: resolveRuntimeLabel() });
+    try {
+      const detail = await requestNativeInlineAd({ slotId, placement, variant: "nativeAdvanced" });
+      hydrateNativeInlineAdSlot(slotNode, detail || {});
+      const adUnitId = String(detail?.adUnitId || detail?.ad?.adUnitId || "").trim();
+      logEvent("ad_loaded", { slot_id: slotId, placement, ad_unit_id: adUnitId, runtime: resolveRuntimeLabel() });
+    } catch (error) {
+      logEvent("ad_failed", {
+        slot_id: slotId,
+        placement,
+        reason: String(error?.message || "load_failed").slice(0, 120),
+        runtime: resolveRuntimeLabel(),
+      });
+      slotNode.remove();
+    }
+  };
+
+  const collectNativeInlineAdTargets = () => {
+    const ids = [
+      "trending-list",
+      "intel-output",
+      "news-output",
+      "x-trending-output",
+      "events-calendar-output",
+      "market-headlines-output",
+      "market-social-output",
+      "massive-economy-yields",
+      "massive-economy-inflation",
+      "massive-economy-inflation-expectations",
+      "massive-economy-labor",
+      "massive-ipo-output",
+      "ticker-output",
+      "ticker-predictions-output",
+      "screener-output",
+      "watchlist-list",
+      "alerts-list",
+      "notifications-items",
+      "saved-forecasts-list",
+      "user-orders",
+      "user-forecasts",
+      "options-output",
+      "predictions-output",
+      "autopilot-output",
+      "productivity-board",
+      "collab-collaborators-list",
+      "collab-invites-list",
+    ];
+    const set = new Set();
+    ids.forEach((id) => {
+      const node = document.getElementById(id);
+      if (node) set.add(node);
+    });
+    document.querySelectorAll(".panel-output, .order-list, .news-stream").forEach((node) => {
+      if (node?.id === "profile-status" || node?.id === "auth-email-message") return;
+      set.add(node);
+    });
+    return Array.from(set);
+  };
+
+  const maybeInjectNativeInlineAd = (container) => {
+    if (!container) return;
+    if (!isNativeInlineAdEligible()) {
+      container.querySelectorAll("[data-native-inline-ad-slot]").forEach((node) => node.remove());
+      return;
+    }
+    if (container.closest("form, .auth-card, .checkout-shell, .purchase-panel")) return;
+    if (container.querySelector("[data-native-inline-ad-slot]")) return;
+    if (container.classList.contains("hidden")) return;
+    if (String(container.dataset.loading || "") === "true") return;
+
+    const children = Array.from(container.children).filter((child) => !child.matches("[data-native-inline-ad-slot]"));
+    const textLength = String(container.textContent || "").trim().length;
+    if (children.length < 2 && textLength < 240) return;
+
+    nativeInlineAdState.sequence += 1;
+    const slotId = `inline-${Date.now()}-${nativeInlineAdState.sequence}`;
+    const placement = container.id ? `section_${container.id}` : "section_panel";
+    const slotNode = buildNativeInlineAdSlot(slotId, placement);
+    const rules = getNativeInlineAdRules();
+    const index = Math.max(0, Math.min(children.length - 1, Math.floor(children.length * rules.pageMidpoint)));
+    const anchor = children[index] || null;
+    if (anchor && anchor.parentElement === container && anchor.nextSibling) {
+      container.insertBefore(slotNode, anchor.nextSibling);
+    } else if (anchor && anchor.parentElement === container) {
+      container.appendChild(slotNode);
+    } else {
+      container.appendChild(slotNode);
+    }
+    loadNativeInlineAdSlot(slotNode).catch(() => undefined);
+  };
+
+  const observeNativeInlineAdContainer = (container) => {
+    if (!container || nativeInlineAdState.observedContainers.has(container)) return;
+    nativeInlineAdState.observedContainers.add(container);
+    const observer = new MutationObserver(() => {
+      if (nativeInlineAdState.refreshTimer) {
+        clearTimeout(nativeInlineAdState.refreshTimer);
+      }
+      nativeInlineAdState.refreshTimer = window.setTimeout(() => {
+        maybeInjectNativeInlineAd(container);
+      }, 180);
+    });
+    observer.observe(container, { childList: true, subtree: false });
+    nativeInlineAdState.observerMap.set(container, observer);
+  };
+
+  const refreshNativeInlineAds = () => {
+    const targets = collectNativeInlineAdTargets();
+    targets.forEach((container) => {
+      observeNativeInlineAdContainer(container);
+      maybeInjectNativeInlineAd(container);
+    });
+  };
+
+  const scheduleNativeInlineAdsRefresh = () => {
+    if (nativeInlineAdState.refreshTimer) clearTimeout(nativeInlineAdState.refreshTimer);
+    nativeInlineAdState.refreshTimer = window.setTimeout(refreshNativeInlineAds, 200);
   };
 
   const getWorkspaceSeatLimitForTier = () => {
@@ -14426,6 +14760,8 @@
             silent: true,
           }).catch(() => {});
         }
+
+        scheduleNativeInlineAdsRefresh();
       };
 
       ensureThemeToggle();
@@ -14442,6 +14778,8 @@
       bindMobileSidebarDrawer();
       bindMobileBottomNav();
       bindNativeRewardedNavigationAds();
+      scheduleNativeInlineAdsRefresh();
+      window.setInterval(scheduleNativeInlineAdsRefresh, 3500);
       initializeLanguageControls().catch(() => {});
       captureShareFromUrl();
       renderNotificationLog();
