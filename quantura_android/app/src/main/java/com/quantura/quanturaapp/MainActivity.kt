@@ -71,6 +71,7 @@ import com.google.firebase.messaging.FirebaseMessaging
 import com.quantura.quanturaapp.ads.AdManager
 import com.quantura.quanturaapp.ads.BannerAdView
 import com.quantura.quanturaapp.auth.PlayIntegrityClient
+import com.quantura.quanturaapp.config.RemoteConfigManager
 import com.quantura.quanturaapp.iap.PlayBillingIapService
 import com.quantura.quanturaapp.messaging.InactivityNotificationScheduler
 import com.quantura.quanturaapp.messaging.NativePersonalizedNotificationManager
@@ -159,6 +160,8 @@ class MainActivity : ComponentActivity() {
                                 activity = this@MainActivity,
                                 startUrl = startUrl,
                                 adManager = appContainer.adManager,
+                                remoteConfigManager = appContainer.remoteConfigManager,
+                                isAuthGateVisible = { authGateVisible },
                                 onNativeAuthMessage = { type, payload ->
                                     handleNativeAuthMessage(type, payload)
                                 },
@@ -1169,6 +1172,8 @@ private fun QuanturaWebViewScreen(
     activity: ComponentActivity,
     startUrl: String,
     adManager: AdManager,
+    remoteConfigManager: RemoteConfigManager,
+    isAuthGateVisible: () -> Boolean,
     onNativeAuthMessage: (type: String, payload: JSONObject) -> Unit,
     onReady: (WebView) -> Unit,
 ) {
@@ -1220,12 +1225,16 @@ private fun QuanturaWebViewScreen(
                         if (!isTrustedUri(Uri.parse(url ?: ""))) {
                             return
                         }
+                        val feedStart = remoteConfigManager.nativeFeedAdStart()
+                        val feedInterval = remoteConfigManager.nativeFeedAdInterval()
+                        val pageMidpoint = remoteConfigManager.nativePageAdMidpoint()
                         val token = QuanturaFcmTokenHolder.getToken(context)
                         evaluateJavascript(
                             """
                             window.__QUANTURA_NATIVE_APP__=true;
                             window.__QUANTURA_NATIVE_PLATFORM__='android';
                             window.__QUANTURA_NATIVE_AUTH_BRIDGE__=true;
+                            window.__QUANTURA_NATIVE_AD_RULES__={feedStart:${feedStart},feedInterval:${feedInterval},pageMidpoint:${pageMidpoint}};
                             try {
                               localStorage.setItem('quantura_cookie_consent', 'accepted');
                               var banner=document.getElementById('cookie-banner');
@@ -1249,7 +1258,14 @@ private fun QuanturaWebViewScreen(
                     activity = activity,
                     adManager = adManager,
                     onNativeAuthMessage = onNativeAuthMessage,
-                    isAuthGateVisible = { authGateVisible },
+                    isAuthGateVisible = isAuthGateVisible,
+                    onBridgeEvent = { eventName, payload ->
+                        val safeEventName = eventName.replace("'", "\\'")
+                        evaluateJavascript(
+                            "window.dispatchEvent(new CustomEvent('$safeEventName',{detail:${payload}}));",
+                            null
+                        )
+                    },
                 )
                 addJavascriptInterface(bridge, "QuanturaBridge")
                 addJavascriptInterface(bridge, "quanturaAuth")

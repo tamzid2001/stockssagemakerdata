@@ -19,6 +19,7 @@ class QuanturaJavascriptBridge(
     private val adManager: AdManager,
     private val onNativeAuthMessage: (type: String, payload: JSONObject) -> Unit,
     private val isAuthGateVisible: () -> Boolean = { false },
+    private val onBridgeEvent: (eventName: String, payload: JSONObject) -> Unit = { _, _ -> },
 ) {
     private val tag = "QuanturaJsBridge"
 
@@ -48,6 +49,9 @@ class QuanturaJavascriptBridge(
                 "authSignOut" -> onNativeAuthMessage("SIGN_OUT", JSONObject())
                 "startNativePurchase" -> onNativeAuthMessage("NATIVE_PURCHASE", payload)
                 "openNativeSubscriptionManager" -> onNativeAuthMessage("OPEN_NATIVE_SUBSCRIPTIONS", payload)
+                "requestNativeFeedAd" -> handleNativeFeedAdRequest(payload)
+                "nativeFeedAdImpression" -> reportNativeFeedAdImpression(payload)
+                "nativeFeedAdClick" -> reportNativeFeedAdClick(payload)
             }
         }
     }
@@ -114,5 +118,57 @@ class QuanturaJavascriptBridge(
         if (chooser.resolveActivity(activity.packageManager) != null) {
             activity.startActivity(chooser)
         }
+    }
+
+    private fun handleNativeFeedAdRequest(payload: JSONObject) {
+        val slotId = payload.optString("slotId").trim()
+        val placement = payload.optString("placement").trim().ifEmpty { "feed" }
+        val variant = payload.optString("variant").trim().ifEmpty { "nativeAdvanced" }
+        if (slotId.isEmpty()) {
+            onBridgeEvent(
+                "quantura:native-feed-ad",
+                JSONObject().put("ok", false).put("slotId", "").put("placement", placement).put("error", "slot_id_missing")
+            )
+            return
+        }
+        if (isAuthGateVisible()) {
+            onBridgeEvent(
+                "quantura:native-feed-ad",
+                JSONObject().put("ok", false).put("slotId", slotId).put("placement", placement).put("error", "auth_gate_visible")
+            )
+            return
+        }
+        adManager.requestNativeFeedAd(
+            activity = activity,
+            slotId = slotId,
+            placement = placement,
+            variant = variant
+        ) { result ->
+            onBridgeEvent("quantura:native-feed-ad", result)
+        }
+    }
+
+    private fun reportNativeFeedAdImpression(payload: JSONObject) {
+        val slotId = payload.optString("slotId").trim()
+        val placement = payload.optString("placement").trim().ifEmpty { "feed" }
+        val adUnitId = payload.optString("adUnitId").trim()
+        adManager.reportNativeFeedAdImpression(
+            context = activity,
+            slotId = slotId,
+            placement = placement,
+            adUnitId = adUnitId
+        )
+    }
+
+    private fun reportNativeFeedAdClick(payload: JSONObject) {
+        val slotId = payload.optString("slotId").trim()
+        val placement = payload.optString("placement").trim().ifEmpty { "feed" }
+        val adUnitId = payload.optString("adUnitId").trim()
+        adManager.reportNativeFeedAdClick(
+            context = activity,
+            slotId = slotId,
+            placement = placement,
+            adUnitId = adUnitId
+        )
     }
 }
