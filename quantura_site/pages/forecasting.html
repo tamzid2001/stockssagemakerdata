@@ -246,6 +246,38 @@
                       <h3>Forecast output</h3>
                       <div id="forecast-output" class="panel-output small">Run a forecast to see model summary and preview rows.</div>
                     </div>
+                    <div class="card" data-my-requests-panel data-default-type="forecast">
+                      <div class="card-head">
+                        <h3>My Requests</h3>
+                        <button class="cta secondary small" type="button" data-action="my-requests-refresh">Refresh</button>
+                      </div>
+                      <div class="form-grid">
+                        <div class="field">
+                          <label class="label">Search</label>
+                          <input type="search" data-my-requests-search placeholder="Title, ticker, date" />
+                        </div>
+                        <div class="field">
+                          <label class="label">Type</label>
+                          <select data-my-requests-type>
+                            <option value="">All</option>
+                            <option value="forecast">Forecasting</option>
+                            <option value="screener">Screeners</option>
+                            <option value="indicator">Indicators</option>
+                            <option value="modelCouncil">Model Council</option>
+                          </select>
+                        </div>
+                        <div class="field">
+                          <label class="label">Published</label>
+                          <select data-my-requests-published>
+                            <option value="all">All</option>
+                            <option value="published">Published</option>
+                            <option value="unpublished">Unpublished</option>
+                          </select>
+                        </div>
+                      </div>
+                      <p class="small muted" data-my-requests-status>Sign in to load your requests.</p>
+                      <div class="order-list panel-output" data-my-requests-list></div>
+                    </div>
                   </section>
 
                   <section class="panel hidden" data-panel="ticker">
@@ -316,12 +348,44 @@
                         </p>
                       </details>
                     </form>
-	                    <div class="results-panel">
-	                      <h3>Indicator output</h3>
-	                      <div id="technicals-output" class="panel-output small">Select indicators to see the latest values.</div>
-	                      <div id="indicator-chart" class="chart" style="margin-top: 16px;"></div>
-	                    </div>
-	                  </section>
+                    <div class="results-panel">
+                      <h3>Indicator output</h3>
+                      <div id="technicals-output" class="panel-output small">Select indicators to see the latest values.</div>
+                      <div id="indicator-chart" class="chart" style="margin-top: 16px;"></div>
+                    </div>
+                    <div class="card" data-my-requests-panel data-default-type="indicator">
+                      <div class="card-head">
+                        <h3>My Requests</h3>
+                        <button class="cta secondary small" type="button" data-action="my-requests-refresh">Refresh</button>
+                      </div>
+                      <div class="form-grid">
+                        <div class="field">
+                          <label class="label">Search</label>
+                          <input type="search" data-my-requests-search placeholder="Title, ticker, date" />
+                        </div>
+                        <div class="field">
+                          <label class="label">Type</label>
+                          <select data-my-requests-type>
+                            <option value="">All</option>
+                            <option value="forecast">Forecasting</option>
+                            <option value="screener">Screeners</option>
+                            <option value="indicator">Indicators</option>
+                            <option value="modelCouncil">Model Council</option>
+                          </select>
+                        </div>
+                        <div class="field">
+                          <label class="label">Published</label>
+                          <select data-my-requests-published>
+                            <option value="all">All</option>
+                            <option value="published">Published</option>
+                            <option value="unpublished">Unpublished</option>
+                          </select>
+                        </div>
+                      </div>
+                      <p class="small muted" data-my-requests-status>Sign in to load your requests.</p>
+                      <div class="order-list panel-output" data-my-requests-list></div>
+                    </div>
+                  </section>
 
                   <section class="panel hidden" data-panel="trending">
                     <div class="panel-header">
@@ -625,6 +689,38 @@
                       <h3>Model Council output</h3>
                       <div id="ticker-query-output" class="panel-output small">Ask a question to generate a Model Council response with evidence and risk caveats.</div>
                       <div id="ticker-query-modules-output" class="panel-output small hidden" style="margin-top:10px;">Selected yfinance modules will render here.</div>
+                    </div>
+                    <div class="card" data-my-requests-panel data-default-type="modelCouncil">
+                      <div class="card-head">
+                        <h3>My Requests</h3>
+                        <button class="cta secondary small" type="button" data-action="my-requests-refresh">Refresh</button>
+                      </div>
+                      <div class="form-grid">
+                        <div class="field">
+                          <label class="label">Search</label>
+                          <input type="search" data-my-requests-search placeholder="Title, ticker, date" />
+                        </div>
+                        <div class="field">
+                          <label class="label">Type</label>
+                          <select data-my-requests-type>
+                            <option value="">All</option>
+                            <option value="forecast">Forecasting</option>
+                            <option value="screener">Screeners</option>
+                            <option value="indicator">Indicators</option>
+                            <option value="modelCouncil">Model Council</option>
+                          </select>
+                        </div>
+                        <div class="field">
+                          <label class="label">Published</label>
+                          <select data-my-requests-published>
+                            <option value="all">All</option>
+                            <option value="published">Published</option>
+                            <option value="unpublished">Unpublished</option>
+                          </select>
+                        </div>
+                      </div>
+                      <p class="small muted" data-my-requests-status>Sign in to load your requests.</p>
+                      <div class="order-list panel-output" data-my-requests-list></div>
                     </div>
                   </section>
 
@@ -1099,22 +1195,39 @@
 	                      <h3>Portfolio output</h3>
 	                      <div id="screener-output" class="panel-output small">Generate a portfolio to see ranked candidates and AI Agent performance.</div>
 	                    </div>
-                      <div class="card">
-                        <h3>Load saved portfolio run</h3>
+                      <div class="card" data-my-requests-panel data-default-type="screener">
+                        <div class="card-head">
+                          <h3>My Requests</h3>
+                          <button class="cta secondary small" type="button" data-action="my-requests-refresh">Refresh</button>
+                        </div>
                         <div class="form-grid">
                           <div class="field">
-                            <label class="label" for="screener-load-select">Recent runs</label>
-                            <select id="screener-load-select">
-                              <option value="">Select a run</option>
+                            <label class="label">Search</label>
+                            <input type="search" data-my-requests-search placeholder="Title, ticker, date" />
+                          </div>
+                          <div class="field">
+                            <label class="label">Type</label>
+                            <select data-my-requests-type>
+                              <option value="">All</option>
+                              <option value="forecast">Forecasting</option>
+                              <option value="screener">Screeners</option>
+                              <option value="indicator">Indicators</option>
+                              <option value="modelCouncil">Model Council</option>
+                            </select>
+                          </div>
+                          <div class="field">
+                            <label class="label">Published</label>
+                            <select data-my-requests-published>
+                              <option value="all">All</option>
+                              <option value="published">Published</option>
+                              <option value="unpublished">Unpublished</option>
                             </select>
                           </div>
                         </div>
-                        <div class="hero-actions" style="margin-top: 12px;">
-                          <button class="cta secondary" id="screener-load-button" type="button" data-analytics="screener_load_saved">Load portfolio</button>
-                        </div>
-                        <p class="small muted" id="screener-load-status"></p>
+                        <p class="small muted" data-my-requests-status>Sign in to load your requests.</p>
+                        <div class="order-list panel-output" data-my-requests-list></div>
                       </div>
-	                  </section>
+                  </section>
 
 	                  <section class="panel hidden" data-panel="watchlist">
 	                    <div class="panel-header">

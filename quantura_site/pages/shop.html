@@ -26,10 +26,11 @@
     <script defer src="/__/firebase/12.9.0/firebase-functions-compat.js"></script>
     <script defer src="/__/firebase/12.9.0/firebase-storage-compat.js"></script>
     <script defer src="/__/firebase/12.9.0/firebase-remote-config-compat.js"></script>
-    <script defer src="/__/firebase/12.9.0/firebase-analytics-compat.js"></script>
-    <script defer src="/__/firebase/init.js?useEmulator=false"></script>
-    <script defer src="/app.js"></script>
-    <script defer src="/shop.js"></script>
+	    <script defer src="/__/firebase/12.9.0/firebase-analytics-compat.js"></script>
+	    <script defer src="/__/firebase/init.js?useEmulator=false"></script>
+	    <script defer src="/app.js"></script>
+    <script defer src="/marketing-carousel.js"></script>
+	    <script defer src="/shop.js"></script>
   </head>
   <body>
     <header class="header">
@@ -54,18 +55,19 @@
     </header>
 
     <main>
-      <section class="page-hero">
-        <div class="container content-grid" style="max-width: 1160px;">
-          <div>
-            <div class="eyebrow">Shop</div>
-            <h1>Get the plan that matches your workflow.</h1>
-            <p>
-              Purchase subscriptions and digital products with checkout that respects web and native platform policy.
-            </p>
-          </div>
-          <aside class="card">
-            <h3>Checkout behavior</h3>
-            <div class="feature-list">
+	      <section class="page-hero">
+	        <div class="container content-grid" style="max-width: 1160px;">
+	          <div>
+	            <div class="eyebrow">Shop</div>
+	            <h1>Institutional workflow, simplified checkout.</h1>
+	            <p>
+	              From signal to scenario to decision-ready output starts with the right tier.
+                Choose platform-aware checkout that respects web and native policy boundaries.
+	            </p>
+	          </div>
+	          <aside class="card">
+	            <h3>Checkout behavior</h3>
+	            <div class="feature-list">
               <div class="feature"><span></span>Web checkout routes through Stripe.</div>
               <div class="feature"><span></span>Native iOS routes through StoreKit.</div>
               <div class="feature"><span></span>Native Android routes through Google Play Billing.</div>
@@ -74,24 +76,118 @@
         </div>
       </section>
 
-      <section class="section" id="shop-root">
-        <div class="container" style="max-width: 1160px;">
-          <div class="section-title">
-            <h1>Quantura Shop</h1>
-            <p class="small">Platform-aware checkout: web products use Stripe extension flow, native digital goods route to IAP hooks.</p>
-          </div>
+	      <section class="section" id="shop-root">
+	        <div class="container" style="max-width: 1160px;">
+	          <div class="section-title">
+	            <h1>Quantura Shop</h1>
+	            <p class="small">Research loop compression: charts + narrative + alerts, unlocked by the plan that fits your operating cadence.</p>
+	          </div>
 
           <div class="card" style="margin-bottom: 14px;">
             <div class="profile-item"><span class="label">Runtime</span><span id="shop-platform" class="value">Detecting...</span></div>
             <p id="shop-status" class="small muted" style="margin-top: 8px;">Loading products...</p>
           </div>
 
-          <div id="shop-products" class="content-grid">
-            <div class="card"><div class="small muted">No products loaded yet.</div></div>
+	          <div id="shop-products" class="content-grid">
+	            <div class="card"><div class="small muted">No products loaded yet.</div></div>
+	          </div>
+	        </div>
+	      </section>
+
+      <section class="section section-compact">
+        <div class="container" style="max-width: 1160px;">
+          <div class="section-title">
+            <h2>Use cases and references</h2>
+            <p class="small">Public examples of institutional tooling and modern market research stacks.</p>
+          </div>
+          <div class="use-case-grid">
+            <a class="use-case-card" href="https://marquee.gs.com/welcome/campaigns/marketview" target="_blank" rel="noopener noreferrer">
+              <div class="use-case-media use-case-media-goldman">
+                <img src="https://cdn.simpleicons.org/goldmansachs/ffffff" alt="Goldman Sachs logo" loading="lazy" />
+              </div>
+              <div class="use-case-body">
+                <h3>Goldman Marquee MarketView</h3>
+                <p class="small">Visual market intelligence workflow references.</p>
+                <span class="use-case-link">Open reference</span>
+              </div>
+            </a>
+            <a class="use-case-card" href="https://openai.com/customer-stories/morgan-stanley/" target="_blank" rel="noopener noreferrer">
+              <div class="use-case-media use-case-media-openai">
+                <img src="https://cdn.simpleicons.org/openai/ffffff" alt="OpenAI logo" loading="lazy" />
+              </div>
+              <div class="use-case-body">
+                <h3>OpenAI x Morgan Stanley</h3>
+                <p class="small">Enterprise AI advisory enablement case study.</p>
+                <span class="use-case-link">Open reference</span>
+              </div>
+            </a>
+            <a class="use-case-card" href="https://aws.amazon.com/financial-services/capital-markets/" target="_blank" rel="noopener noreferrer">
+              <div class="use-case-media use-case-media-aws">
+                <img src="https://cdn.simpleicons.org/amazonaws/ffffff" alt="AWS logo" loading="lazy" />
+              </div>
+              <div class="use-case-body">
+                <h3>AWS Capital Markets</h3>
+                <p class="small">Capital-markets cloud transformation reference architecture.</p>
+                <span class="use-case-link">Open reference</span>
+              </div>
+            </a>
+            <a class="use-case-card" href="https://docs.perplexity.ai/docs/sonar/quickstart" target="_blank" rel="noopener noreferrer">
+              <div class="use-case-media use-case-media-perplexity">
+                <img src="https://cdn.simpleicons.org/perplexity/ffffff" alt="Perplexity logo" loading="lazy" />
+              </div>
+              <div class="use-case-body">
+                <h3>Perplexity Sonar API</h3>
+                <p class="small">Web-grounded retrieval quickstart for LLM workflows.</p>
+                <span class="use-case-link">Open reference</span>
+              </div>
+            </a>
           </div>
         </div>
       </section>
-    </main>
+
+      <section class="section">
+        <div class="container" style="max-width: 1160px;">
+          <div class="section-title">
+            <h2>Quoted from public sources</h2>
+            <p class="small">Short excerpts with direct attribution links.</p>
+          </div>
+          <div class="quote-carousel card" data-quote-carousel data-quote-interval="8000">
+            <div class="quote-carousel-controls">
+              <label class="small quote-autoplay-label">
+                <input type="checkbox" data-quote-autoplay checked />
+                Auto-rotate
+              </label>
+              <div class="quote-nav-buttons">
+                <button class="cta secondary small" type="button" data-quote-prev>Prev</button>
+                <button class="cta secondary small" type="button" data-quote-next>Next</button>
+              </div>
+            </div>
+            <div class="quote-carousel-track">
+              <!-- source: https://marquee.gs.com/welcome/campaigns/marketview -->
+              <figure class="quote-slide" data-quote-slide>
+                <blockquote>"An award-winning ecosystem of visual insights answering important questions in global markets."</blockquote>
+                <figcaption>Goldman Sachs Marquee MarketView <a href="https://marquee.gs.com/welcome/campaigns/marketview" target="_blank" rel="noopener noreferrer">Source</a></figcaption>
+              </figure>
+              <!-- source: https://openai.com/customer-stories/morgan-stanley/ -->
+              <figure class="quote-slide" data-quote-slide>
+                <blockquote>"This technology makes you as smart as the smartest person in the organization."</blockquote>
+                <figcaption>Jeff McMillan, Morgan Stanley <a href="https://openai.com/customer-stories/morgan-stanley/" target="_blank" rel="noopener noreferrer">Source</a></figcaption>
+              </figure>
+              <!-- source: https://aws.amazon.com/financial-services/capital-markets/ -->
+              <figure class="quote-slide" data-quote-slide>
+                <blockquote>"Reimagine capital markets for today and tomorrow."</blockquote>
+                <figcaption>AWS Capital Markets <a href="https://aws.amazon.com/financial-services/capital-markets/" target="_blank" rel="noopener noreferrer">Source</a></figcaption>
+              </figure>
+              <!-- source: https://docs.perplexity.ai/docs/sonar/quickstart -->
+              <figure class="quote-slide" data-quote-slide>
+                <blockquote>"Get started with Perplexity's Sonar API for web-grounded AI responses."</blockquote>
+                <figcaption>Perplexity Sonar Quickstart <a href="https://docs.perplexity.ai/docs/sonar/quickstart" target="_blank" rel="noopener noreferrer">Source</a></figcaption>
+              </figure>
+            </div>
+          </div>
+        </div>
+      </section>
+	    </main>
 
     <footer class="footer">
       <div class="container footer-grid">

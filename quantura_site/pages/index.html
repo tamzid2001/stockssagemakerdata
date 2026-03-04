@@ -34,6 +34,7 @@
 	    <script defer src="/__/firebase/12.9.0/firebase-analytics-compat.js"></script>
 	    <script defer src="/__/firebase/init.js?useEmulator=false"></script>
 	    <script defer src="/app.js"></script>
+    <script defer src="/marketing-carousel.js"></script>
 
     <script type="application/ld+json">
       {
@@ -145,23 +146,23 @@
     </header>
 
     <main>
-      <section class="hero">
-        <div class="container hero-grid">
-          <div class="fade-in">
-            <span class="badge">Weekly investing newsletter</span>
-            <h1>Quantura delivers institutional-grade market intelligence before consensus reprices the narrative.</h1>
-            <p>
-              Quantura blends macro signals, technical momentum, and forward-looking demand data into
-              decision-ready research. Get the weekly briefing, then upgrade to a paid plan with higher limits when conviction matters.
-            </p>
-            <div class="hero-actions">
-              <a class="cta" href="/pricing" data-analytics="hero_cta_primary"><i class="iconoir-page" aria-hidden="true"></i><span>View plans</span></a>
-              <a class="cta secondary" href="/forecasting" data-analytics="hero_cta_secondary"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Explore forecasting</span></a>
-            </div>
-            <div class="small" style="margin-top: 20px;">
-              Trusted by private investors, family offices, and product-led founders.
-            </div>
-          </div>
+	      <section class="hero">
+	        <div class="container hero-grid">
+	          <div class="fade-in">
+	            <span class="badge">Weekly investing newsletter</span>
+	            <h1>Institutional workflow, simplified.</h1>
+	            <p>
+	              From signal to scenario to decision-ready output, Quantura blends macro signals, technical momentum, and forward-looking
+	              demand context into one operating surface.
+	            </p>
+	            <div class="hero-actions">
+	              <a class="cta" href="/pricing" data-analytics="hero_cta_primary"><i class="iconoir-page" aria-hidden="true"></i><span>View plans</span></a>
+	              <a class="cta secondary" href="/forecasting" data-analytics="hero_cta_secondary"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Explore forecasting</span></a>
+	            </div>
+	            <div class="small" style="margin-top: 20px;">
+	              Research loop compression: charts + narrative + alerts.
+	            </div>
+	          </div>
           <div class="hero-card fade-in delay-1">
             <h3>Weekly market visual briefing</h3>
             <p class="small" style="margin-bottom: 12px;">One live finance image updates from Unsplash to keep the landing narrative current.</p>
@@ -192,14 +193,88 @@
             </div>
           </div>
         </div>
-      </section>
+	      </section>
 
       <section class="section section-compact">
         <div class="container">
           <div class="section-title">
-            <h2>Platform and data ecosystem</h2>
-            <p class="small">Brands and tools often used alongside Quantura workflows.</p>
+            <h2>From signal &rarr; scenario &rarr; decision-ready output</h2>
+            <p class="small">A single research loop for discovery, framing, and execution handoff.</p>
           </div>
+          <div class="insight-grid">
+            <article class="card">
+              <h3>Signal intake</h3>
+              <p>Screen candidates, pull context-rich headlines, and pin catalysts without losing ticker continuity.</p>
+            </article>
+            <article class="card">
+              <h3>Scenario framing</h3>
+              <p>Compare forecast ranges, technical structure, and options context before sizing conviction.</p>
+            </article>
+            <article class="card">
+              <h3>Decision package</h3>
+              <p>Save assumptions, share links, and keep an audit-ready trail your team can reload quickly.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container">
+          <div class="section-title">
+            <h2>Use Cases in Public Markets</h2>
+            <p class="small">Reference implementations and platform examples from established institutions and vendors.</p>
+          </div>
+          <div class="use-case-grid">
+            <a class="use-case-card" href="https://marquee.gs.com/welcome/campaigns/marketview" target="_blank" rel="noopener noreferrer" data-analytics="use_case_marquee">
+              <div class="use-case-media use-case-media-goldman">
+                <img src="https://cdn.simpleicons.org/goldmansachs/ffffff" alt="Goldman Sachs logo" loading="lazy" />
+              </div>
+              <div class="use-case-body">
+                <h3>Goldman Marquee MarketView</h3>
+                <p class="small">Visual market intelligence and institutional workflow tooling for global desks.</p>
+                <span class="use-case-link">Open use case</span>
+              </div>
+            </a>
+            <a class="use-case-card" href="https://openai.com/customer-stories/morgan-stanley/" target="_blank" rel="noopener noreferrer" data-analytics="use_case_morgan_stanley">
+              <div class="use-case-media use-case-media-openai">
+                <img src="https://cdn.simpleicons.org/openai/ffffff" alt="OpenAI logo" loading="lazy" />
+              </div>
+              <div class="use-case-body">
+                <h3>OpenAI x Morgan Stanley</h3>
+                <p class="small">Advisor enablement story showing knowledge access at enterprise scale.</p>
+                <span class="use-case-link">Open use case</span>
+              </div>
+            </a>
+            <a class="use-case-card" href="https://aws.amazon.com/financial-services/capital-markets/" target="_blank" rel="noopener noreferrer" data-analytics="use_case_aws_capital_markets">
+              <div class="use-case-media use-case-media-aws">
+                <img src="https://cdn.simpleicons.org/amazonaws/ffffff" alt="AWS logo" loading="lazy" />
+              </div>
+              <div class="use-case-body">
+                <h3>AWS Capital Markets</h3>
+                <p class="small">Cloud patterns for front-office modernization, data platforms, and resilient market infrastructure.</p>
+                <span class="use-case-link">Open use case</span>
+              </div>
+            </a>
+            <a class="use-case-card" href="https://docs.perplexity.ai/docs/sonar/quickstart" target="_blank" rel="noopener noreferrer" data-analytics="use_case_perplexity_sonar">
+              <div class="use-case-media use-case-media-perplexity">
+                <img src="https://cdn.simpleicons.org/perplexity/ffffff" alt="Perplexity logo" loading="lazy" />
+              </div>
+              <div class="use-case-body">
+                <h3>Perplexity Sonar API</h3>
+                <p class="small">Web-grounded LLM integration quickstart for research-grade retrieval and synthesis.</p>
+                <span class="use-case-link">Open use case</span>
+              </div>
+            </a>
+          </div>
+        </div>
+      </section>
+
+	      <section class="section section-compact">
+	        <div class="container">
+	          <div class="section-title">
+	            <h2>Trusted workflows</h2>
+	            <p class="small">Brands and tools commonly used in adjacent research and execution stacks.</p>
+	          </div>
           <div class="brand-rail" aria-label="Horizontal brand logo strip">
             <div class="brand-track">
               <span class="brand-pill"><img src="/assets/logo-openai.svg" alt="OpenAI logo" loading="lazy" /><span>OpenAI</span></span>
@@ -358,20 +433,20 @@
         </div>
       </section>
 
-      <section class="section">
-        <div class="container content-grid">
-          <div>
+	      <section class="section">
+	        <div class="container content-grid">
+	          <div>
             <h2>Why serious investors choose Quantura</h2>
             <p>
               The Quantura process fuses data, market structure, and operator instincts. We maintain a
               deep watchlist, re-rank weekly, and reserve intensive modeling for the highest conviction
               opportunities.
             </p>
-            <div class="testimonial">
-              “Quantura is the first research partner to give us demand-level clarity without the fluff.”
-              <div class="small">— Growth equity partner</div>
-            </div>
-          </div>
+	            <div class="testimonial">
+	              “Quantura is the first research partner to give us demand-level clarity without the fluff.”
+	              <div class="small">— Growth equity partner</div>
+	            </div>
+	          </div>
           <div class="card">
             <h3>What you get</h3>
             <div class="feature-list">
@@ -379,6 +454,61 @@
               <div class="feature"><span></span>Pro model outputs + interpretation call</div>
               <div class="feature"><span></span>Scenario ranges + implied probability bands</div>
               <div class="feature"><span></span>Optional technical indicator stack</div>
+            </div>
+          </div>
+	        </div>
+	      </section>
+
+      <section class="section">
+        <div class="container">
+          <div class="section-title">
+            <h2>Quoted from public sources</h2>
+            <p class="small">Short excerpts, attributed and linked.</p>
+          </div>
+          <div class="quote-carousel card" data-quote-carousel data-quote-interval="7000">
+            <div class="quote-carousel-controls">
+              <label class="small quote-autoplay-label">
+                <input type="checkbox" data-quote-autoplay checked />
+                Auto-rotate
+              </label>
+              <div class="quote-nav-buttons">
+                <button class="cta secondary small" type="button" data-quote-prev aria-label="Previous quote">Prev</button>
+                <button class="cta secondary small" type="button" data-quote-next aria-label="Next quote">Next</button>
+              </div>
+            </div>
+            <div class="quote-carousel-track">
+              <!-- source: https://marquee.gs.com/welcome/campaigns/marketview -->
+              <figure class="quote-slide" data-quote-slide>
+                <blockquote>"An award-winning ecosystem of visual insights answering important questions in global markets."</blockquote>
+                <figcaption>
+                  Goldman Sachs Marquee MarketView
+                  <a href="https://marquee.gs.com/welcome/campaigns/marketview" target="_blank" rel="noopener noreferrer">Source</a>
+                </figcaption>
+              </figure>
+              <!-- source: https://openai.com/customer-stories/morgan-stanley/ -->
+              <figure class="quote-slide" data-quote-slide>
+                <blockquote>"This technology makes you as smart as the smartest person in the organization."</blockquote>
+                <figcaption>
+                  Jeff McMillan, Morgan Stanley
+                  <a href="https://openai.com/customer-stories/morgan-stanley/" target="_blank" rel="noopener noreferrer">Source</a>
+                </figcaption>
+              </figure>
+              <!-- source: https://aws.amazon.com/financial-services/capital-markets/ -->
+              <figure class="quote-slide" data-quote-slide>
+                <blockquote>"Reimagine capital markets for today and tomorrow."</blockquote>
+                <figcaption>
+                  AWS Capital Markets
+                  <a href="https://aws.amazon.com/financial-services/capital-markets/" target="_blank" rel="noopener noreferrer">Source</a>
+                </figcaption>
+              </figure>
+              <!-- source: https://docs.perplexity.ai/docs/sonar/quickstart -->
+              <figure class="quote-slide" data-quote-slide>
+                <blockquote>"Get started with Perplexity's Sonar API for web-grounded AI responses."</blockquote>
+                <figcaption>
+                  Perplexity Sonar Quickstart
+                  <a href="https://docs.perplexity.ai/docs/sonar/quickstart" target="_blank" rel="noopener noreferrer">Source</a>
+                </figcaption>
+              </figure>
             </div>
           </div>
         </div>
