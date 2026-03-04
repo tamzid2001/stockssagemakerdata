@@ -78,32 +78,20 @@
       <section class="section">
         <div class="container">
           <div class="section-title">
-            <h2>Upcoming</h2>
-            <p class="small muted">These cards are ready to be fed from Firestore/Eventarc later.</p>
+            <h2>Book an events session</h2>
+            <p class="small muted">Pick a slot directly in the live calendar below.</p>
           </div>
-          <div class="content-grid">
-            <article class="card">
-              <div class="badge-chip">Webinar</div>
-              <h3 style="margin-top: 12px;">Macro Pulse: CPI + Rates Setup</h3>
-              <p class="small muted">March 2026 · Live stream</p>
-              <p>Scenario planning for inflation surprises, treasury volatility, and sector rotation.</p>
-              <a class="cta secondary" href="/contact" data-analytics="events_register_macro"><i class="iconoir-send" aria-hidden="true"></i><span>Request invite</span></a>
-            </article>
-            <article class="card">
-              <div class="badge-chip">Workshop</div>
-              <h3 style="margin-top: 12px;">Forecast + Strategy Workbench</h3>
-              <p class="small muted">April 2026 · Interactive</p>
-              <p>Hands-on build session for forecast runs, indicators, and risk-aware review workflows.</p>
-              <a class="cta secondary" href="/contact" data-analytics="events_register_workshop"><i class="iconoir-send" aria-hidden="true"></i><span>Join waitlist</span></a>
-            </article>
-            <article class="card">
-              <div class="badge-chip">Product</div>
-              <h3 style="margin-top: 12px;">Quantura Release Notes Live</h3>
-              <p class="small muted">Monthly · Recorded + live Q&A</p>
-              <p>Roadmap, shipped features, and migration notes for teams using Quantura in production.</p>
-              <a class="cta secondary" href="/blog" data-analytics="events_release_notes"><i class="iconoir-page" aria-hidden="true"></i><span>Read updates</span></a>
-            </article>
-          </div>
+          <!-- Calendly inline widget begin -->
+          <div class="calendly-inline-widget" data-url="https://calendly.com/tamzidullah/speak-to-quantura?hide_gdpr_banner=1" style="min-width:320px;height:700px;"></div>
+          <script type="text/javascript" src="https://assets.calendly.com/assets/external/widget.js" async></script>
+          <!-- Calendly inline widget end -->
+          <style>
+            @media (max-width: 768px) {
+              .calendly-inline-widget {
+                height: 760px !important;
+              }
+            }
+          </style>
         </div>
       </section>
     </main>
