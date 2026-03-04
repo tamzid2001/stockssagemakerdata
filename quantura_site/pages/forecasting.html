@@ -33,7 +33,7 @@
   
     <script>
       window.__QUANTURA_RC_TEMPLATE_ID__ = "firebase-server";
-      window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ = {"status":200,"eTag":"etag-quantura-e2e3d-firebase-server-fetch--1213937490","config":{"welcome_message":"","watchlist_enabled":"true","forecast_prophet_enabled":"true","forecast_timemixer_enabled":"true","push_notifications_enabled":"true","webpush_vapid_key":"","stripe_checkout_enabled":"true","stripe_public_key":"","holiday_promo":"false","backtesting_enabled":"false","backtesting_free_daily_limit":"0","backtesting_pro_daily_limit":"0"}};
+      window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ = {"status":200,"eTag":"etag-quantura-e2e3d-firebase-server-fetch--1213937490","config":{"welcome_message":"","watchlist_enabled":"true","forecast_prophet_enabled":"true","forecast_timemixer_enabled":"true","push_notifications_enabled":"true","webpush_vapid_key":"","stripe_checkout_enabled":"true","stripe_public_key":"","holiday_promo":"false"}};
     </script>
   
 </head>
@@ -69,7 +69,6 @@
             </select>
           </div>
           <span id="header-user-status" class="pill">Logged Out</span>
-          <a class="cta secondary solve-now-cta" id="header-solve-now" href="/model-council" data-analytics="nav_solve_now" aria-label="Solve now. Powered by AI" title="Powered by AI"><i class="iconoir-brain" aria-hidden="true"></i><span>Solve now</span></a>
           <a class="cta secondary icon-only" id="header-notifications" href="/account" data-analytics="nav_notifications" aria-label="Sign in to manage notifications" title="Notifications"><i class="iconoir-bell-notification" aria-hidden="true"></i></a>
           <button class="cta secondary icon-only" id="header-auth" type="button" aria-label="Sign in" title="Sign in"><i class="iconoir-log-in" aria-hidden="true"></i></button>
           <a class="cta" href="/pricing"><i class="iconoir-page" aria-hidden="true"></i><span>View plans</span></a>
@@ -88,11 +87,11 @@
 	            <a class="sidebar-link" href="/news" data-panel-target="news"><i class="iconoir-journal-page" aria-hidden="true"></i><span>News and data</span></a>
               <a class="sidebar-link" href="/events-calendar" data-panel-target="events-calendar"><i class="iconoir-calendar" aria-hidden="true"></i><span>Earnings calendar</span></a>
               <a class="sidebar-link" href="/market-headlines" data-panel-target="market-headlines"><i class="iconoir-globe" aria-hidden="true"></i><span>Market headlines</span></a>
+              <a class="sidebar-link" href="/forecasting" data-panel-target="macro"><i class="iconoir-database" aria-hidden="true"></i><span>Macro and IPO</span></a>
               <a class="sidebar-link" href="/model-council" data-panel-target="ticker-query"><i class="iconoir-brain" aria-hidden="true"></i><span>Model Council</span></a>
-	            <a class="sidebar-link" href="/options" data-panel-target="options"><i class="iconoir-numbered-list-left" aria-hidden="true"></i><span>Options</span></a>
+              <a class="sidebar-link" href="/options" data-panel-target="options"><i class="iconoir-numbered-list-left" aria-hidden="true"></i><span>Options</span></a>
               <a class="sidebar-link" href="/tools/fx" data-panel-target="fx"><i class="iconoir-coins-swap" aria-hidden="true"></i><span>Currency conversion</span></a>
-	            <a class="sidebar-link" href="/saved-forecasts" data-panel-target="saved"><i class="iconoir-bookmark" aria-hidden="true"></i><span>Saved forecasts</span></a>
-	            <a class="sidebar-link" href="/studio" data-panel-target="learn"><i class="iconoir-info-circle" aria-hidden="true"></i><span>Learn more</span></a>
+              <a class="sidebar-link" href="/studio" data-panel-target="learn"><i class="iconoir-info-circle" aria-hidden="true"></i><span>Learn more</span></a>
 	            <a class="sidebar-link" href="/screener"><i class="iconoir-search" aria-hidden="true"></i><span>Screener</span></a>
               <a class="sidebar-link" href="/explore"><i class="iconoir-binocular" aria-hidden="true"></i><span>Explore</span></a>
 	            <a class="sidebar-link" href="/watchlist"><i class="iconoir-bell-notification" aria-hidden="true"></i><span>Watchlist and alerts</span></a>
@@ -103,9 +102,9 @@
           <section class="section studio-section" id="terminal">
             <div class="container">
 	              <div class="studio-layout" data-panels data-panel-router="terminal">
-                <div class="studio-primary">
-                  <div class="terminal-dock card">
-                    <form id="terminal-form" class="terminal-dock-form">
+                <div class="studio-main">
+                  <div class="terminal-context card">
+                    <form id="terminal-form" class="terminal-context-form">
                       <div class="field">
                         <label class="label" for="terminal-ticker">Ticker</label>
                         <input id="terminal-ticker" placeholder="AAPL" required />
@@ -120,9 +119,6 @@
                       <button class="cta" type="submit" data-analytics="terminal_load"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Load chart</span></button>
                       <p class="small" id="terminal-status"></p>
                     </form>
-                    <div class="small ticker-hint">
-                      Tip: pick a panel on the left, then click any ticker in results to update the chart immediately.
-                    </div>
                     <div id="ticker-history" class="ticker-history" aria-live="polite"></div>
                   </div>
 
@@ -244,7 +240,7 @@
                               Quantura stores each run so you can compare results, review confidence structure, and export files for downstream analysis.
                             </p>
                             <p>
-                              After you generate a run, use <strong>Load saved forecast</strong> (or the <strong>Saved forecasts</strong> panel) to re-plot it later and export CSV for analysis.
+                            After you generate a run, use <strong>Load saved forecast</strong> to re-plot it later and export CSV for analysis.
                             </p>
                           </div>
 	                      </details>
@@ -507,6 +503,65 @@
                         <h3>Social feed</h3>
                         <div id="market-social-output" class="panel-output small">Social posts from X, Reddit, Facebook, and Instagram will appear here.</div>
                       </div>
+                    </div>
+                  </section>
+
+                  <section class="panel hidden" data-panel="macro">
+                    <div class="panel-header">
+                      <h2>Macro and IPO Monitor</h2>
+                      <p class="small">Massive economy endpoints plus IPO discovery, directly in Terminal.</p>
+                    </div>
+                    <div class="card" style="margin-bottom:16px;">
+                      <h3>US Economy</h3>
+                      <p class="small muted" id="massive-economy-status">Loading macro context...</p>
+                    </div>
+                    <div class="content-grid">
+                      <article class="card">
+                        <h3>Treasury yields <span class="small muted">(Updated daily)</span></h3>
+                        <div id="massive-economy-yields" class="panel-output small">Yield curve data will appear here.</div>
+                      </article>
+                      <article class="card">
+                        <h3>Inflation <span class="small muted">(Updated monthly)</span></h3>
+                        <div id="massive-economy-inflation" class="panel-output small">Inflation series will appear here.</div>
+                      </article>
+                      <article class="card">
+                        <h3>Inflation expectations <span class="small muted">(Updated monthly)</span></h3>
+                        <div id="massive-economy-inflation-expectations" class="panel-output small">Expectation series will appear here.</div>
+                      </article>
+                      <article class="card">
+                        <h3>Labor market <span class="small muted">(Updated monthly)</span></h3>
+                        <div id="massive-economy-labor" class="panel-output small">Labor market series will appear here.</div>
+                      </article>
+                    </div>
+                    <div class="card" style="margin-top:16px;">
+                      <div class="panel-header" style="padding:0 0 10px;">
+                        <h3>IPO Calendar</h3>
+                        <p class="small muted" id="massive-ipo-status-text">Set filters and load upcoming or recent IPOs.</p>
+                      </div>
+                      <form id="massive-ipo-form" style="margin-bottom:14px;">
+                        <div class="form-grid">
+                          <div class="field">
+                            <label class="label" for="massive-ipo-start">Start date</label>
+                            <input id="massive-ipo-start" type="date" />
+                          </div>
+                          <div class="field">
+                            <label class="label" for="massive-ipo-end">End date</label>
+                            <input id="massive-ipo-end" type="date" />
+                          </div>
+                          <div class="field">
+                            <label class="label" for="massive-ipo-status">Status</label>
+                            <select id="massive-ipo-status">
+                              <option value="">All</option>
+                              <option value="scheduled">Scheduled</option>
+                              <option value="priced">Priced</option>
+                              <option value="listed">Listed</option>
+                              <option value="withdrawn">Withdrawn</option>
+                            </select>
+                          </div>
+                        </div>
+                        <button class="cta secondary" type="submit"><i class="iconoir-search" aria-hidden="true"></i><span>Load IPOs</span></button>
+                      </form>
+                      <div id="massive-ipo-output" class="panel-output small">IPO rows will appear here when available.</div>
                     </div>
                   </section>
 
@@ -1156,25 +1211,6 @@
 	                      </div>
 	                    </div>
 	                  </section>
-
-                  <section class="panel hidden" data-panel="saved">
-	                    <div class="panel-header">
-	                      <h2>Saved forecasts</h2>
-	                      <p class="small">Plot any saved run onto the chart without leaving this page.</p>
-                    </div>
-                    <div id="saved-forecasts-list" class="order-list panel-output"></div>
-                    <details class="learn-more">
-                      <summary>Learn more</summary>
-                      <div class="small">
-                        <p>
-                          Saved forecasts are linked to your active workspace. Use <strong>Plot on chart</strong> to overlay quantile bands, or <strong>Download CSV</strong> to export the full run.
-                        </p>
-                        <p>
-                          If you are working with collaborators, pick the correct workspace in the Dashboard so you are viewing the same saved runs and history.
-                        </p>
-                      </div>
-                    </details>
-                  </section>
 
                   <section class="panel hidden" data-panel="learn">
                     <div class="panel-header">

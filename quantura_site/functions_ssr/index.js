@@ -217,9 +217,6 @@ const getServerTemplate = async () => {
       ads_use_real_ios: "true",
       ads_use_real_android: "true",
       holiday_promo: "false",
-      backtesting_enabled: "false",
-      backtesting_free_daily_limit: "0",
-      backtesting_pro_daily_limit: "0",
     },
   });
   try {

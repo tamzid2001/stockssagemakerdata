@@ -462,9 +462,6 @@ DEFAULT_REMOTE_CONFIG: dict[str, str] = {
     "stripe_checkout_enabled": "true",
     "stripe_public_key": "",
     "holiday_promo": "false",
-    "backtesting_enabled": "true",
-    "backtesting_free_daily_limit": "1",
-    "backtesting_pro_daily_limit": "25",
 }
 
 
@@ -1157,6 +1154,35 @@ def _frame_preview_rows(frame: Any, *, max_rows: int = 16, max_cols: int = 8) ->
     }
 
 
+def _extract_logo_url(info: Any) -> str:
+    if not isinstance(info, dict):
+        return ""
+    for key in ("logo_url", "logoUrl"):
+        raw = str(info.get(key) or "").strip()
+        if raw.startswith("http://") or raw.startswith("https://"):
+            return raw[:1000]
+    return ""
+
+
+def _persist_ticker_logo_profile(symbol: str, logo_url: str) -> None:
+    clean_symbol = _normalize_symbol_token(symbol)
+    clean_logo = str(logo_url or "").strip()
+    if not clean_symbol or not clean_logo:
+        return
+    try:
+        db.collection("tickerProfiles").document(clean_symbol).set(
+            {
+                "symbol": clean_symbol,
+                "logoUrl": clean_logo,
+                "updatedAt": firestore.SERVER_TIMESTAMP,
+            },
+            merge=True,
+        )
+    except Exception:
+        # Best-effort persistence. Do not fail API responses when this write fails.
+        pass
+
+
 def _fetch_model_council_ticker_modules(
     *,
     ticker: str,
@@ -1179,6 +1205,11 @@ def _fetch_model_council_ticker_modules(
             info_cache = raw if isinstance(raw, dict) else {}
         except Exception:
             info_cache = {}
+        logo_url = _extract_logo_url(info_cache)
+        if logo_url:
+            info_cache["logo_url"] = logo_url
+            info_cache["logoUrl"] = logo_url
+            _persist_ticker_logo_profile(ticker, logo_url)
         return info_cache
 
     if "info" in selected_modules:
@@ -1186,6 +1217,7 @@ def _fetch_model_council_ticker_modules(
         info_fields = [
             "longName",
             "shortName",
+            "logo_url",
             "sector",
             "industry",
             "country",
@@ -1209,6 +1241,10 @@ def _fetch_model_council_ticker_modules(
             if value in (None, ""):
                 continue
             info_payload[key] = _serialize_for_firestore(value)
+        logo_url = _extract_logo_url(info)
+        if logo_url:
+            info_payload["logo_url"] = logo_url
+            info_payload["logoUrl"] = logo_url
         module_data["info"] = info_payload
         module_context["info"] = info_payload
 
@@ -1398,6 +1434,7 @@ def _build_model_council_context_payload(
     headlines = module_context.get("news") if isinstance(module_context.get("news"), list) else []
     return {
         "ticker": ticker,
+        "logoUrl": str(info_context.get("logoUrl") or info_context.get("logo_url") or "").strip(),
         "country": str(info_context.get("country") or "").strip(),
         "exchange": str(info_context.get("fullExchangeName") or info_context.get("exchange") or "").strip(),
         "sector": str(info_context.get("sector") or "").strip(),
@@ -7672,9 +7709,23 @@ def api_ticker_modules(req: https_fn.Request) -> https_fn.Response:
     except Exception:
         return _json_http_response({"error": "Unable to load ticker modules right now."}, status=502)
 
+    info_payload = module_data.get("info") if isinstance(module_data.get("info"), dict) else {}
+    logo_url = _extract_logo_url(info_payload)
+    if not logo_url:
+        try:
+            profile_snap = db.collection("tickerProfiles").document(ticker).get()
+            if profile_snap.exists:
+                profile_data = profile_snap.to_dict() or {}
+                logo_url = str(profile_data.get("logoUrl") or profile_data.get("logo_url") or "").strip()
+        except Exception:
+            logo_url = ""
+    if logo_url:
+        _persist_ticker_logo_profile(ticker, logo_url)
+
     return _json_http_response(
         {
             "ticker": ticker,
+            "logoUrl": logo_url,
             "selectedModules": selected_modules,
             "moduleData": _serialize_for_firestore(module_data),
             "moduleContext": _serialize_for_firestore(module_context),
@@ -8074,10 +8125,6 @@ def _massive_economy_route(
     if method_error is not None:
         return method_error
 
-    _, guard_error = _massive_capability_guard(capability_key)
-    if guard_error is not None:
-        return guard_error
-
     try:
         start = _parse_query_date(req.args.get("start"), field="start")
         end = _parse_query_date(req.args.get("end"), field="end")
@@ -8113,10 +8160,17 @@ def _massive_economy_route(
     if not isinstance(rows_raw, list):
         rows_raw = payload.get("data") if isinstance(payload.get("data"), list) else []
     rows = _normalize_massive_timeseries(rows_raw)
+    frequency_map = {
+        "economy_treasury_yields": "Updated daily",
+        "economy_inflation": "Updated monthly",
+        "economy_inflation_expectations": "Updated monthly",
+        "economy_labor_market": "Updated monthly",
+    }
     return _json_http_response(
         {
             "source": "massive",
             "capability": capability_key,
+            "updateFrequency": frequency_map.get(capability_key, "Updated periodically"),
             "series": series,
             "start": start,
             "end": end,
@@ -8168,10 +8222,6 @@ def api_massive_stocks_ipos(req: https_fn.Request) -> https_fn.Response:
     if method_error is not None:
         return method_error
 
-    _, guard_error = _massive_capability_guard("stocks_ipos")
-    if guard_error is not None:
-        return guard_error
-
     try:
         start = _parse_query_date(req.args.get("start"), field="start")
         end = _parse_query_date(req.args.get("end"), field="end")
@@ -8211,6 +8261,7 @@ def api_massive_stocks_ipos(req: https_fn.Request) -> https_fn.Response:
         {
             "source": "massive",
             "capability": "stocks_ipos",
+            "updateFrequency": "Updated daily",
             "start": start,
             "end": end,
             "status": status_filter,
@@ -13265,6 +13316,13 @@ def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
         market_cap_cache[symbol] = cap
         return cap
 
+    def _logo_url_for_symbol(symbol: str) -> str:
+        info = _info_for_symbol(symbol)
+        logo_url = _extract_logo_url(info)
+        if logo_url:
+            _persist_ticker_logo_profile(symbol, logo_url)
+        return logo_url
+
     def _compute_rsi(close_series: Any, period: int = 14) -> float | None:
         try:
             series = pd.Series(close_series, dtype="float64").dropna()
@@ -13880,6 +13938,7 @@ def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
             results.append(
                 {
                     "symbol": symbol,
+                    "logoUrl": _logo_url_for_symbol(symbol),
                     "lastClose": round(last_close, 4),
                     "return1m": None if ret_1m is None else round(ret_1m * 100.0, 2),
                     "return3m": None if ret_3m is None else round(ret_3m * 100.0, 2),
@@ -13916,6 +13975,7 @@ def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
             results.append(
                 {
                     "symbol": symbol,
+                    "logoUrl": _logo_url_for_symbol(symbol),
                     "lastClose": None if last_close is None else round(last_close, 4),
                     "return1m": None,
                     "return3m": None,
@@ -13933,6 +13993,8 @@ def run_quick_screener(req: https_fn.CallableRequest) -> dict[str, Any]:
             cap = _market_cap_for_symbol(symbol) if symbol else None
             item["marketCap"] = None if cap is None else int(round(cap))
             item["marketCapLabel"] = _fmt_market_cap(cap)
+            if symbol and not str(item.get("logoUrl") or "").strip():
+                item["logoUrl"] = _logo_url_for_symbol(symbol)
 
     run_title = str(data.get("title") or "").strip()
     if not run_title:
