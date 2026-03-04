@@ -83,6 +83,9 @@ const PROMO_CODE = asString(process.env.PROMO_CODE, "QUANTURA50").trim().toUpper
 const PROMO_DISCOUNT_PERCENT = Math.max(1, Math.min(95, asFinite(process.env.PROMO_DISCOUNT_PERCENT, 50)));
 const PROMO_ACTIVE = asBoolean(process.env.PROMO_ACTIVE, true);
 const PROMO_DURATION_DAYS = Math.max(1, Math.min(120, Math.floor(asFinite(process.env.PROMO_DURATION_DAYS, 30))));
+const GAMMA_API_BASE = "https://gamma-api.polymarket.com";
+const POLYMARKET_CACHE_TTL_MS = 10 * 60 * 1000;
+const POLYMARKET_CACHE_MAX_ENTRIES = 160;
 const PROMO_START_MS = (() => {
   const raw = asString(process.env.PROMO_START_AT).trim();
   if (!raw) return Date.now() - 24 * 60 * 60 * 1000;
@@ -99,6 +102,8 @@ const PROMO_END_MS = (() => {
 })();
 
 type SavedItemType = "forecast" | "screener" | "model_council" | "post";
+type MyRequestType = "forecast" | "screener" | "indicator" | "modelCouncil";
+type MyRequestShareVisibility = "private" | "unlisted" | "public";
 
 type SystemFolderConfig = {
   id: string;
@@ -121,6 +126,49 @@ type NotificationPrefs = {
   inactiveHidden: boolean;
 };
 
+type PolymarketTopOutcome = {
+  label: string;
+  prob: number;
+};
+
+type PolymarketMarketRecord = {
+  id: string;
+  question: string;
+  slug?: string;
+  endDate?: string;
+  category?: string;
+  image?: string;
+  icon?: string;
+  volumeUsd?: number;
+  liquidityUsd?: number;
+  outcomes: string[];
+  outcomePrices: number[];
+  isBinary: boolean;
+  yesProb?: number;
+  topOutcomes: PolymarketTopOutcome[];
+  closed: boolean;
+  active: boolean;
+};
+
+type PolymarketEventRecord = {
+  id: string;
+  title: string;
+  slug?: string;
+  ticker?: string;
+  markets: PolymarketMarketRecord[];
+};
+
+type PolymarketSearchResponse = {
+  query: string;
+  fetchedAt: string;
+  events: PolymarketEventRecord[];
+};
+
+type PolymarketCacheEntry = {
+  expiresAtMs: number;
+  value: PolymarketSearchResponse;
+};
+
 const SYSTEM_FOLDERS: SystemFolderConfig[] = [
   { id: "liked-posts", displayName: "Liked posts", flag: "liked" },
   { id: "reposted-posts", displayName: "Reposted posts", flag: "reposted" },
@@ -141,7 +189,17 @@ const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   inactiveHidden: true,
 };
 
+const MY_REQUEST_TYPE_SET = new Set<MyRequestType>(["forecast", "screener", "indicator", "modelCouncil"]);
+const MY_REQUEST_SHARE_VISIBILITY_SET = new Set<MyRequestShareVisibility>(["private", "unlisted", "public"]);
+const MY_REQUEST_TYPE_LABEL: Record<MyRequestType, string> = {
+  forecast: "Forecast",
+  screener: "Screener",
+  indicator: "Indicator",
+  modelCouncil: "Model Council",
+};
+
 const ROUTES = express.Router();
+const polymarketCache = new Map<string, PolymarketCacheEntry>();
 const PLAY_INTEGRITY_AUTH = new GoogleAuth({
   scopes: ["https://www.googleapis.com/auth/playintegrity"],
 });
@@ -473,6 +531,521 @@ function getTimestampMs(value: unknown): number {
 
 function timestampFromMs(ms: number): admin.firestore.Timestamp {
   return admin.firestore.Timestamp.fromMillis(ms);
+}
+
+function normalizeMyRequestType(value: unknown): MyRequestType | "" {
+  const raw = sanitizeText(value, 40).trim();
+  if (!raw) return "";
+  const lower = raw.toLowerCase();
+  if (lower === "forecast" || lower === "screener" || lower === "indicator") return lower;
+  if (lower === "modelcouncil" || lower === "model_council" || lower === "model-council") return "modelCouncil";
+  return "";
+}
+
+function normalizeMyRequestVisibility(value: unknown, fallback: MyRequestShareVisibility = "private"): MyRequestShareVisibility {
+  const raw = sanitizeText(value, 20).toLowerCase();
+  if (raw === "public" || raw === "unlisted" || raw === "private") return raw;
+  return fallback;
+}
+
+function normalizeMyRequestId(value: unknown): string {
+  const raw = sanitizeText(value, 220);
+  if (!raw) return "";
+  return raw.replace(/[^A-Za-z0-9._:\-]/g, "_").slice(0, 220);
+}
+
+function buildMyRequestDocId(type: MyRequestType, sourceId: string): string {
+  const cleanType = normalizeMyRequestType(type) || "forecast";
+  const cleanSourceId = normalizeSourceId(sourceId).replace(/[^A-Za-z0-9._:\-]/g, "_").slice(0, 180);
+  return `${cleanType}__${cleanSourceId || "item"}`;
+}
+
+function defaultMyRequestTitle(type: MyRequestType, payload: Record<string, unknown> = {}): string {
+  const ticker = normalizeTicker(payload.ticker);
+  if (type === "forecast") {
+    return sanitizeText(payload.title, 160) || `${ticker || "Ticker"} forecast`;
+  }
+  if (type === "screener") {
+    return sanitizeText(payload.title, 160) || "Screener run";
+  }
+  if (type === "indicator") {
+    return sanitizeText(payload.title, 160) || `${ticker || "Ticker"} indicators`;
+  }
+  return sanitizeText(payload.title, 160) || `${ticker || "Ticker"} Model Council`;
+}
+
+function ensureMyRequestShareSlug(seed = ""): string {
+  const existing = normalizeShareId(seed);
+  if (existing) return existing;
+  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+  let out = "";
+  for (let i = 0; i < 16; i += 1) {
+    out += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return out;
+}
+
+async function ensureUniqueMyRequestShareSlug(ownerUid: string, requestId: string, seed = ""): Promise<string> {
+  const preferred = ensureMyRequestShareSlug(seed);
+  const preferredRef = db.collection("request_shares").doc(preferred);
+  const preferredSnap = await preferredRef.get();
+  if (!preferredSnap.exists) return preferred;
+  const preferredData = (preferredSnap.data() || {}) as Record<string, unknown>;
+  if (asString(preferredData.ownerUid) === ownerUid && asString(preferredData.requestId) === requestId) return preferred;
+
+  for (let i = 0; i < 12; i += 1) {
+    const candidate = ensureMyRequestShareSlug();
+    const candidateRef = db.collection("request_shares").doc(candidate);
+    const candidateSnap = await candidateRef.get();
+    if (!candidateSnap.exists) return candidate;
+    const candidateData = (candidateSnap.data() || {}) as Record<string, unknown>;
+    if (asString(candidateData.ownerUid) === ownerUid && asString(candidateData.requestId) === requestId) return candidate;
+  }
+  return ensureMyRequestShareSlug(`${ownerUid.slice(0, 6)}${requestId.slice(0, 6)}${Date.now()}`);
+}
+
+function normalizeMyRequestShareObject(input: unknown): { visibility: MyRequestShareVisibility; slug: string; createdAt: unknown } {
+  const raw = asPlainObject(input);
+  return {
+    visibility: normalizeMyRequestVisibility(raw.visibility, "private"),
+    slug: normalizeShareId(raw.slug),
+    createdAt: raw.createdAt || null,
+  };
+}
+
+function trimOutputsMeta(input: unknown): Record<string, unknown> {
+  const raw = asPlainObject(input);
+  const out: Record<string, unknown> = {};
+  Object.entries(raw)
+    .slice(0, 18)
+    .forEach(([key, value]) => {
+      const cleanKey = sanitizeText(key, 60);
+      if (!cleanKey) return;
+      if (typeof value === "string") {
+        out[cleanKey] = sanitizeText(value, 2400);
+        return;
+      }
+      if (typeof value === "number" || typeof value === "boolean") {
+        out[cleanKey] = value;
+        return;
+      }
+      if (Array.isArray(value)) {
+        out[cleanKey] = value
+          .slice(0, 24)
+          .map((item) => sanitizeText(item, 120))
+          .filter(Boolean);
+        return;
+      }
+      if (value && typeof value === "object") {
+        const childOut: Record<string, unknown> = {};
+        Object.entries(value as Record<string, unknown>)
+          .slice(0, 12)
+          .forEach(([childKey, childValue]) => {
+            const cleanChildKey = sanitizeText(childKey, 40);
+            if (!cleanChildKey) return;
+            if (typeof childValue === "number" || typeof childValue === "boolean") {
+              childOut[cleanChildKey] = childValue;
+              return;
+            }
+            if (typeof childValue === "string") {
+              childOut[cleanChildKey] = sanitizeText(childValue, 220);
+            }
+          });
+        if (Object.keys(childOut).length) out[cleanKey] = childOut;
+      }
+    });
+  return out;
+}
+
+function normalizeMyRequestInput(input: unknown): Record<string, unknown> {
+  const raw = asPlainObject(input);
+  const out: Record<string, unknown> = {};
+  Object.entries(raw)
+    .slice(0, 30)
+    .forEach(([key, value]) => {
+      const cleanKey = sanitizeText(key, 60);
+      if (!cleanKey) return;
+      if (typeof value === "string") {
+        out[cleanKey] = sanitizeText(value, 4000);
+        return;
+      }
+      if (typeof value === "number" || typeof value === "boolean") {
+        out[cleanKey] = value;
+        return;
+      }
+      if (Array.isArray(value)) {
+        out[cleanKey] = value
+          .slice(0, 40)
+          .map((item) => (typeof item === "number" ? item : sanitizeText(item, 120)))
+          .filter((item) => (typeof item === "number" ? Number.isFinite(item) : Boolean(item)));
+        return;
+      }
+      if (value && typeof value === "object") {
+        out[cleanKey] = trimOutputsMeta(value);
+      }
+    });
+  return out;
+}
+
+function firstTickerFromRequest(input: Record<string, unknown>, sourceRef: Record<string, unknown>, outputsMeta: Record<string, unknown>): string {
+  const direct = normalizeTicker(input.ticker || outputsMeta.ticker);
+  if (direct) return direct;
+  const topSymbols = Array.isArray(outputsMeta.topSymbols) ? outputsMeta.topSymbols : [];
+  const first = normalizeTicker(topSymbols[0]);
+  if (first) return first;
+  return normalizeTicker(sourceRef.ticker);
+}
+
+function buildMyRequestSearchText(
+  title: string,
+  type: MyRequestType,
+  ticker: string,
+  input: Record<string, unknown>,
+  outputsMeta: Record<string, unknown>
+): string {
+  const parts = [
+    title,
+    type,
+    ticker,
+    asString(input.question),
+    asString(input.notes),
+    asString(input.universe),
+    asString(outputsMeta.summary),
+  ]
+    .join(" ")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+  return parts.slice(0, 2400);
+}
+
+function myRequestShareUrl(slug: string): string {
+  const cleanSlug = normalizeShareId(slug);
+  if (!cleanSlug) return "";
+  return `${PUBLIC_ORIGIN}/forecasting?requestShare=${encodeURIComponent(cleanSlug)}`;
+}
+
+function toMyRequestResponse(
+  docId: string,
+  data: Record<string, unknown>,
+  opts: { includePayload?: boolean } = {}
+): Record<string, unknown> {
+  const includePayload = Boolean(opts.includePayload);
+  const type = normalizeMyRequestType(data.type) || "forecast";
+  const title = sanitizeText(data.title, 180) || defaultMyRequestTitle(type, data);
+  const input = normalizeMyRequestInput(data.input);
+  const outputsMeta = trimOutputsMeta(data.outputsMeta);
+  const sourceRef = asPlainObject(data.sourceRef);
+  const ticker = firstTickerFromRequest(input, sourceRef, outputsMeta);
+  const createdAtMs = getTimestampMs(data.createdAt);
+  const updatedAtMs = getTimestampMs(data.updatedAt || data.createdAt);
+  const share = normalizeMyRequestShareObject(data.share);
+  const visibility = normalizeMyRequestVisibility(data.visibility, share.visibility);
+  const published = asBoolean(data.published, false);
+  const deleted = asBoolean(data.deleted, false);
+  const shareUrl =
+    share.slug && share.visibility !== "private"
+      ? myRequestShareUrl(share.slug)
+      : "";
+
+  const response: Record<string, unknown> = {
+    id: docId,
+    type,
+    typeLabel: MY_REQUEST_TYPE_LABEL[type],
+    title,
+    ticker,
+    ownerUid: asString(data.ownerUid),
+    published,
+    publishedAtMs: data.publishedAt ? getTimestampMs(data.publishedAt) : null,
+    explorePostId: asString(data.explorePostId),
+    deleted,
+    createdAtMs,
+    updatedAtMs,
+    createdAt: new Date(createdAtMs).toISOString(),
+    updatedAt: new Date(updatedAtMs).toISOString(),
+    sourceRef: {
+      collection: sanitizeText(sourceRef.collection, 80),
+      id: sanitizeText(sourceRef.id, 220),
+    },
+    share: {
+      visibility,
+      slug: share.slug,
+      shareUrl,
+    },
+  };
+
+  if (includePayload) {
+    response.input = input;
+    response.outputsMeta = outputsMeta;
+  } else {
+    response.outputsMeta = trimOutputsMeta({
+      summary: outputsMeta.summary,
+      resultsCount: outputsMeta.resultsCount,
+      forecastRowsCount: outputsMeta.forecastRowsCount,
+      provider: outputsMeta.provider,
+      model: outputsMeta.model,
+      topSymbols: outputsMeta.topSymbols,
+    });
+  }
+
+  return response;
+}
+
+function normalizeMyRequestPublishedFilter(input: unknown): "all" | "published" | "unpublished" {
+  const raw = sanitizeText(input, 20).toLowerCase();
+  if (raw === "published") return "published";
+  if (raw === "unpublished" || raw === "draft") return "unpublished";
+  return "all";
+}
+
+function extractScreenerTopSymbols(resultsRaw: unknown): string[] {
+  const results = Array.isArray(resultsRaw) ? resultsRaw : [];
+  const out: string[] = [];
+  results.slice(0, 24).forEach((row) => {
+    const symbol = normalizeTicker((row as Record<string, unknown>)?.symbol);
+    if (!symbol || out.includes(symbol)) return;
+    out.push(symbol);
+  });
+  return out.slice(0, 12);
+}
+
+function trimModelCouncilAnswer(answerRaw: unknown): string {
+  const answer = sanitizeText(answerRaw, 2600);
+  if (answer.length <= 700) return answer;
+  return `${answer.slice(0, 697)}...`;
+}
+
+async function syncLegacyRequestsForUser(uid: string): Promise<void> {
+  const cleanUid = sanitizeText(uid, 220);
+  if (!cleanUid) return;
+
+  const requestsRef = db.collection("users").doc(cleanUid).collection("requests");
+  const [existingSnap, forecastSnap, screenerSnap, councilSnap] = await Promise.all([
+    requestsRef.limit(240).get(),
+    db.collection("forecast_requests").where("userId", "==", cleanUid).limit(120).get(),
+    db.collection("screener_runs").where("userId", "==", cleanUid).limit(120).get(),
+    db.collection(MODEL_COUNCIL_RESPONSE_COLLECTION).where("userId", "==", cleanUid).limit(120).get(),
+  ]);
+
+  const existingMap = new Map<string, Record<string, unknown>>();
+  existingSnap.docs.forEach((doc) => {
+    existingMap.set(doc.id, (doc.data() || {}) as Record<string, unknown>);
+  });
+
+  const postIds = [
+    ...forecastSnap.docs.map((doc) => `forecast_${doc.id}`),
+    ...screenerSnap.docs.map((doc) => `screener_${doc.id}`),
+  ];
+  const postMap = new Map<string, Record<string, unknown>>();
+  if (postIds.length) {
+    const postDocs = await db.getAll(...postIds.map((postId) => db.collection("posts").doc(postId)));
+    postDocs.forEach((doc) => {
+      if (!doc.exists) return;
+      postMap.set(doc.id, (doc.data() || {}) as Record<string, unknown>);
+    });
+  }
+
+  const writes: Array<Promise<unknown>> = [];
+  const queueSync = (
+    requestId: string,
+    seed: {
+      type: MyRequestType;
+      title: string;
+      input: Record<string, unknown>;
+      outputsMeta: Record<string, unknown>;
+      sourceRef: Record<string, unknown>;
+      published: boolean;
+      publishedAt: unknown;
+      explorePostId: string;
+      createdAt: unknown;
+      updatedAt: unknown;
+    }
+  ) => {
+    const existing = existingMap.get(requestId) || {};
+    const existingShare = normalizeMyRequestShareObject(existing.share);
+    const existingTitleEdited = asBoolean(existing.titleEdited, false);
+    const existingTitle = sanitizeText(existing.title, 180);
+    const nextTitle = existingTitleEdited && existingTitle ? existingTitle : sanitizeText(seed.title, 180) || defaultMyRequestTitle(seed.type, seed.input);
+    const existingPublished = asBoolean(existing.published, false);
+    const nextPublished = existingPublished || seed.published;
+    const ticker = firstTickerFromRequest(seed.input, seed.sourceRef, seed.outputsMeta);
+    const nextInput = normalizeMyRequestInput(seed.input);
+    const nextOutputsMeta = trimOutputsMeta({
+      ...seed.outputsMeta,
+      ticker,
+    });
+    const nextShare = {
+      visibility: normalizeMyRequestVisibility(existingShare.visibility, "private"),
+      slug: normalizeShareId(existingShare.slug),
+      createdAt: existingShare.createdAt || null,
+    };
+    const nextCreatedAt = existing.createdAt || seed.createdAt || admin.firestore.FieldValue.serverTimestamp();
+    const seedUpdatedMs = getTimestampMs(seed.updatedAt || seed.createdAt);
+    const existingUpdatedMs = getTimestampMs(existing.updatedAt || existing.createdAt);
+    const nextUpdatedAt = existingUpdatedMs > seedUpdatedMs ? existing.updatedAt || existing.createdAt : timestampFromMs(seedUpdatedMs);
+
+    const payload: Record<string, unknown> = {
+      type: seed.type,
+      ownerUid: cleanUid,
+      title: nextTitle,
+      titleEdited: existingTitleEdited,
+      input: nextInput,
+      outputsMeta: nextOutputsMeta,
+      sourceRef: {
+        collection: sanitizeText(seed.sourceRef.collection, 80),
+        id: sanitizeText(seed.sourceRef.id, 220),
+      },
+      searchText: buildMyRequestSearchText(nextTitle, seed.type, ticker, nextInput, nextOutputsMeta),
+      published: nextPublished,
+      publishedAt:
+        nextPublished
+          ? existing.publishedAt || seed.publishedAt || seed.createdAt || admin.firestore.FieldValue.serverTimestamp()
+          : null,
+      explorePostId: nextPublished ? sanitizeText(existing.explorePostId || seed.explorePostId, 220) : "",
+      deleted: asBoolean(existing.deleted, false),
+      share: nextShare,
+      createdAt: nextCreatedAt,
+      updatedAt: nextUpdatedAt || admin.firestore.FieldValue.serverTimestamp(),
+      visibility: normalizeMyRequestVisibility(existing.visibility, nextShare.visibility),
+    };
+
+    writes.push(requestsRef.doc(requestId).set(payload, { merge: true }));
+  };
+
+  forecastSnap.docs.forEach((doc) => {
+    const data = (doc.data() || {}) as Record<string, unknown>;
+    const ticker = normalizeTicker(data.ticker);
+    const postId = `forecast_${doc.id}`;
+    const postData = postMap.get(postId) || {};
+    const postVisibility = sanitizeText(postData.visibility, 20).toLowerCase();
+    const published = postVisibility === "public";
+    const metricsRaw = asPlainObject(data.metrics);
+    const metrics: Record<string, unknown> = {};
+    ["lastClose", "medianEnd", "mae", "rmse", "mape", "coverage10_90", "historyPoints", "drift", "volatility"].forEach((key) => {
+      const value = metricsRaw[key];
+      if (value === null || value === undefined || value === "") return;
+      if (typeof value === "number" && Number.isFinite(value)) {
+        metrics[key] = value;
+        return;
+      }
+      if (typeof value === "string") metrics[key] = sanitizeText(value, 80);
+    });
+    const requestId = buildMyRequestDocId("forecast", doc.id);
+    queueSync(requestId, {
+      type: "forecast",
+      title: sanitizeText(data.title, 160) || `${ticker || "Ticker"} forecast`,
+      input: {
+        ticker,
+        interval: sanitizeText(data.interval, 20),
+        horizon: asFinite(data.horizon, 0) || null,
+        service: sanitizeText(data.service, 40),
+        quantiles: Array.isArray(data.quantiles) ? data.quantiles.slice(0, 12) : [],
+      },
+      outputsMeta: {
+        summary: sanitizeText(data.serviceMessage || data.notes || "", 320),
+        serviceMessage: sanitizeText(data.serviceMessage, 320),
+        service: sanitizeText(data.service, 40),
+        interval: sanitizeText(data.interval, 20),
+        forecastRowsCount: Array.isArray(data.forecastRows) ? data.forecastRows.length : asFinite(data.forecastRowsCount, 0),
+        metrics,
+      },
+      sourceRef: {
+        collection: "forecast_requests",
+        id: doc.id,
+      },
+      published,
+      publishedAt: published ? postData.createdAt || data.createdAt : null,
+      explorePostId: published ? postId : "",
+      createdAt: data.createdAt || admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: data.updatedAt || data.createdAt || admin.firestore.FieldValue.serverTimestamp(),
+    });
+  });
+
+  screenerSnap.docs.forEach((doc) => {
+    const data = (doc.data() || {}) as Record<string, unknown>;
+    const topSymbols = extractScreenerTopSymbols(data.results);
+    const postId = `screener_${doc.id}`;
+    const postData = postMap.get(postId) || {};
+    const postVisibility = sanitizeText(postData.visibility, 20).toLowerCase();
+    const published = postVisibility === "public";
+    const requestId = buildMyRequestDocId("screener", doc.id);
+    queueSync(requestId, {
+      type: "screener",
+      title: sanitizeText(data.title, 160) || "Screener run",
+      input: {
+        universe: sanitizeText(data.universe, 40),
+        market: sanitizeText(data.market, 20),
+        maxNames: asFinite(data.maxNames, 0) || null,
+        notes: sanitizeText(data.notes, 1200),
+        model: sanitizeText(data.modelUsed || data.model, 80),
+        filters: trimOutputsMeta(data.filters),
+      },
+      outputsMeta: {
+        summary: sanitizeText(data.notes, 320),
+        resultsCount: Array.isArray(data.results) ? data.results.length : asFinite(data.resultsFound, 0),
+        topSymbols,
+        modelUsed: sanitizeText(data.modelUsed || data.model, 80),
+      },
+      sourceRef: {
+        collection: "screener_runs",
+        id: doc.id,
+      },
+      published,
+      publishedAt: published ? postData.createdAt || data.createdAt : null,
+      explorePostId: published ? postId : "",
+      createdAt: data.createdAt || admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: data.updatedAt || data.createdAt || admin.firestore.FieldValue.serverTimestamp(),
+    });
+  });
+
+  councilSnap.docs.forEach((doc) => {
+    const data = (doc.data() || {}) as Record<string, unknown>;
+    const ticker = normalizeTicker(data.ticker);
+    const requestId = buildMyRequestDocId("modelCouncil", doc.id);
+    queueSync(requestId, {
+      type: "modelCouncil",
+      title: sanitizeText(data.title, 160) || `${ticker || "Ticker"} Model Council`,
+      input: {
+        ticker,
+        question: sanitizeText(data.question, 4000),
+        provider: sanitizeText(data.provider, 80),
+        model: sanitizeText(data.model, 120),
+        language: sanitizeText(data.language, 20),
+        modules: Array.isArray(data.selectedModules) ? data.selectedModules.slice(0, 24) : [],
+      },
+      outputsMeta: {
+        summary: trimModelCouncilAnswer(data.answer),
+        answer: trimModelCouncilAnswer(data.answer),
+        provider: sanitizeText(data.provider, 80),
+        model: sanitizeText(data.model, 120),
+        citationsCount: Array.isArray(data.citations) ? data.citations.length : 0,
+      },
+      sourceRef: {
+        collection: MODEL_COUNCIL_RESPONSE_COLLECTION,
+        id: doc.id,
+      },
+      published: false,
+      publishedAt: null,
+      explorePostId: "",
+      createdAt: data.createdAt || admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: data.updatedAt || data.createdAt || admin.firestore.FieldValue.serverTimestamp(),
+    });
+  });
+
+  if (writes.length) {
+    await Promise.all(writes);
+  }
+}
+
+async function readMyRequestForOwner(uid: string, requestId: string): Promise<{ id: string; data: Record<string, unknown> } | null> {
+  const cleanUid = sanitizeText(uid, 220);
+  const cleanRequestId = normalizeMyRequestId(requestId);
+  if (!cleanUid || !cleanRequestId) return null;
+  const snap = await db.collection("users").doc(cleanUid).collection("requests").doc(cleanRequestId).get();
+  if (!snap.exists) return null;
+  const data = (snap.data() || {}) as Record<string, unknown>;
+  if (asString(data.ownerUid) && asString(data.ownerUid) !== cleanUid) return null;
+  return { id: snap.id, data };
 }
 
 function computeDecay(recencyHours: number): number {
@@ -850,6 +1423,216 @@ function asPlainObject(value: unknown): Record<string, unknown> {
     return value as Record<string, unknown>;
   }
   return {};
+}
+
+function normalizePolymarketSort(value: unknown): "relevance" | "volume" {
+  return sanitizeText(value, 24).toLowerCase() === "volume" ? "volume" : "relevance";
+}
+
+function parseGammaArray(raw: unknown): unknown[] {
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw !== "string") return [];
+  const text = raw.trim();
+  if (!text) return [];
+  try {
+    const parsed = JSON.parse(text);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function clampProbability(value: unknown): number | null {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return null;
+  if (num < 0) return 0;
+  if (num > 1) return 1;
+  return num;
+}
+
+function parseUsdNumber(raw: unknown): number | undefined {
+  const num = Number(raw);
+  if (!Number.isFinite(num)) return undefined;
+  return Math.max(0, num);
+}
+
+function parsePolymarketOutcomes(raw: unknown): string[] {
+  return parseGammaArray(raw)
+    .map((value) => sanitizeText(value, 120))
+    .filter(Boolean)
+    .slice(0, 16);
+}
+
+function parsePolymarketOutcomePrices(raw: unknown): number[] {
+  return parseGammaArray(raw)
+    .map((value) => clampProbability(value))
+    .filter((value): value is number => typeof value === "number")
+    .slice(0, 16);
+}
+
+function polymarketUrlFromSlug(slug: unknown): string {
+  const clean = sanitizeText(slug, 240).replace(/^\/+|\/+$/g, "");
+  if (!clean) return "";
+  return `https://polymarket.com/event/${encodeURIComponent(clean)}`;
+}
+
+function normalizePolymarketMarket(raw: unknown, event: Record<string, unknown>): PolymarketMarketRecord | null {
+  const market = asPlainObject(raw);
+  const id = sanitizeText(market.id || market.marketId || market.conditionId || market.market_id, 120);
+  const question = sanitizeText(market.question || market.title, 320);
+  if (!id || !question) return null;
+
+  const parsedOutcomes = parsePolymarketOutcomes(market.outcomes);
+  const parsedPrices = parsePolymarketOutcomePrices(market.outcomePrices);
+  const alignedLength = Math.min(parsedOutcomes.length, parsedPrices.length);
+  const outcomes = alignedLength > 0 ? parsedOutcomes.slice(0, alignedLength) : [];
+  const outcomePrices = alignedLength > 0 ? parsedPrices.slice(0, alignedLength) : [];
+
+  const topOutcomes = outcomes
+    .map((label, index) => ({ label, prob: outcomePrices[index] }))
+    .filter((entry) => typeof entry.label === "string" && Number.isFinite(entry.prob))
+    .sort((a, b) => b.prob - a.prob)
+    .slice(0, 6);
+
+  let closed = asBoolean(market.closed, false);
+  const status = sanitizeText(market.status, 40).toLowerCase();
+  if (status === "closed" || status === "resolved" || status === "ended") closed = true;
+  const active = asBoolean(market.active, !closed);
+
+  let yesProb: number | undefined = undefined;
+  if (outcomes.length === 2) {
+    const yesIndex = outcomes.findIndex((label) => /^yes$/i.test(label));
+    if (yesIndex >= 0 && Number.isFinite(outcomePrices[yesIndex])) {
+      yesProb = outcomePrices[yesIndex];
+    }
+  }
+
+  return {
+    id,
+    question,
+    slug: sanitizeText(market.slug, 220) || undefined,
+    endDate: sanitizeText(market.endDate || market.end_date, 40) || undefined,
+    category: sanitizeText(market.category || event.category, 80) || undefined,
+    image: sanitizeText(market.image, 600) || undefined,
+    icon: sanitizeText(market.icon, 600) || undefined,
+    volumeUsd: parseUsdNumber(market.volume),
+    liquidityUsd: parseUsdNumber(market.liquidity),
+    outcomes,
+    outcomePrices,
+    isBinary: outcomes.length === 2,
+    yesProb,
+    topOutcomes,
+    closed,
+    active,
+  };
+}
+
+function normalizePolymarketResponse(
+  rawPayload: unknown,
+  opts: { query: string; sort: "relevance" | "volume"; includeClosed: boolean }
+): PolymarketSearchResponse {
+  const root = asPlainObject(rawPayload);
+  const rawEvents = Array.isArray(root.events) ? root.events : Array.isArray(rawPayload) ? (rawPayload as unknown[]) : [];
+  const events: PolymarketEventRecord[] = [];
+
+  rawEvents.forEach((rawEvent, index) => {
+    const event = asPlainObject(rawEvent);
+    const eventId = sanitizeText(event.id || event.eventId, 120) || `${opts.query || "event"}_${index + 1}`;
+    const eventTitle = sanitizeText(event.title || event.name || event.question, 240) || "Prediction markets";
+    const eventSlug = sanitizeText(event.slug, 220) || undefined;
+    const eventTicker = sanitizeText(event.ticker, 24).toUpperCase() || undefined;
+    const marketRows = Array.isArray(event.markets) ? event.markets : [];
+    const markets = marketRows
+      .map((rawMarket) => normalizePolymarketMarket(rawMarket, event))
+      .filter((market): market is PolymarketMarketRecord => Boolean(market))
+      .filter((market) => (opts.includeClosed ? true : !market.closed && market.active !== false));
+
+    if (opts.sort === "volume") {
+      markets.sort((a, b) => {
+        const volumeDelta = (b.volumeUsd || 0) - (a.volumeUsd || 0);
+        if (volumeDelta !== 0) return volumeDelta;
+        return (b.liquidityUsd || 0) - (a.liquidityUsd || 0);
+      });
+    }
+
+    if (!markets.length) return;
+    events.push({
+      id: eventId,
+      title: eventTitle,
+      slug: eventSlug,
+      ticker: eventTicker,
+      markets,
+    });
+  });
+
+  return {
+    query: sanitizeText(opts.query, 120),
+    fetchedAt: new Date().toISOString(),
+    events,
+  };
+}
+
+function prunePolymarketCache(nowMs = Date.now()): void {
+  for (const [key, entry] of polymarketCache.entries()) {
+    if (entry.expiresAtMs <= nowMs) polymarketCache.delete(key);
+  }
+  while (polymarketCache.size > POLYMARKET_CACHE_MAX_ENTRIES) {
+    const oldestKey = polymarketCache.keys().next().value as string | undefined;
+    if (!oldestKey) break;
+    polymarketCache.delete(oldestKey);
+  }
+}
+
+function getPolymarketCache(cacheKey: string): PolymarketSearchResponse | null {
+  const entry = polymarketCache.get(cacheKey);
+  if (!entry) return null;
+  if (entry.expiresAtMs <= Date.now()) {
+    polymarketCache.delete(cacheKey);
+    return null;
+  }
+  polymarketCache.delete(cacheKey);
+  polymarketCache.set(cacheKey, entry);
+  return entry.value;
+}
+
+function setPolymarketCache(cacheKey: string, value: PolymarketSearchResponse): void {
+  prunePolymarketCache();
+  polymarketCache.set(cacheKey, {
+    expiresAtMs: Date.now() + POLYMARKET_CACHE_TTL_MS,
+    value,
+  });
+  prunePolymarketCache();
+}
+
+async function fetchGammaJson(path: string, params: Record<string, string | number | boolean>): Promise<unknown> {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === null || value === undefined) return;
+    const serialized = String(value).trim();
+    if (!serialized) return;
+    query.set(key, serialized);
+  });
+  const url = `${GAMMA_API_BASE}${path}${query.toString() ? `?${query.toString()}` : ""}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12000);
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      signal: controller.signal,
+      headers: {
+        Accept: "application/json",
+        "User-Agent": "QuanturaPolymarket/1.0",
+      },
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const detail = sanitizeText((payload as any)?.error || (payload as any)?.message || "", 180);
+      throw new Error(detail || `Gamma request failed (${response.status})`);
+    }
+    return payload;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function summarizeWebhookPayload(req: Request): Record<string, unknown> {
@@ -2514,6 +3297,80 @@ ROUTES.post("/earnings/refresh", async (req, res) => {
   } catch (error: any) {
     console.error("[Earnings] refresh failed", error);
     res.status(500).json({ error: "earnings_refresh_failed" });
+  }
+});
+
+ROUTES.post("/polymarket/search", async (req, res) => {
+  try {
+    const body = asPlainObject(req.body);
+    const query = sanitizeText(body.q, 120);
+    if (!query) {
+      res.status(400).json({ error: "query_required" });
+      return;
+    }
+    const limitPerType = Math.max(1, Math.min(60, Math.floor(asFinite(body.limitPerType, 20))));
+    const includeClosed = asBoolean(body.includeClosed, false);
+    const sort = normalizePolymarketSort(body.sort);
+    const cacheKey = `search::${query.toLowerCase()}::${limitPerType}::${includeClosed ? 1 : 0}::${sort}`;
+    const cached = getPolymarketCache(cacheKey);
+    if (cached) {
+      res.status(200).json(cached);
+      return;
+    }
+
+    const payload = await fetchGammaJson("/public-search", {
+      q: query,
+      limit_per_type: limitPerType,
+      keep_closed_markets: includeClosed ? 1 : 0,
+    });
+    const normalized = normalizePolymarketResponse(payload, {
+      query,
+      sort,
+      includeClosed,
+    });
+    setPolymarketCache(cacheKey, normalized);
+    res.status(200).json(normalized);
+  } catch (error: any) {
+    console.error("[Polymarket] search failed", error);
+    res.status(502).json({
+      error: "polymarket_search_failed",
+      detail: sanitizeText(error?.message, 180) || "Unable to fetch Polymarket markets.",
+    });
+  }
+});
+
+ROUTES.post("/polymarket/active", async (req, res) => {
+  try {
+    const body = asPlainObject(req.body);
+    const limit = Math.max(1, Math.min(60, Math.floor(asFinite(body.limit, 24))));
+    const offset = Math.max(0, Math.min(2000, Math.floor(asFinite(body.offset, 0))));
+    const sort = normalizePolymarketSort(body.sort || "volume");
+    const cacheKey = `active::${limit}::${offset}::${sort}`;
+    const cached = getPolymarketCache(cacheKey);
+    if (cached) {
+      res.status(200).json(cached);
+      return;
+    }
+
+    const payload = await fetchGammaJson("/events", {
+      active: true,
+      closed: false,
+      limit,
+      offset,
+    });
+    const normalized = normalizePolymarketResponse(payload, {
+      query: "top-active",
+      sort,
+      includeClosed: false,
+    });
+    setPolymarketCache(cacheKey, normalized);
+    res.status(200).json(normalized);
+  } catch (error: any) {
+    console.error("[Polymarket] active failed", error);
+    res.status(502).json({
+      error: "polymarket_active_failed",
+      detail: sanitizeText(error?.message, 180) || "Unable to fetch active markets.",
+    });
   }
 });
 
@@ -4242,6 +5099,623 @@ ROUTES.post("/watch-tickers/:ticker", async (req, res) => {
     }
     console.error("[Explore] watch ticker failed", error);
     res.status(500).json({ error: "watch_ticker_failed" });
+  }
+});
+
+ROUTES.get("/my-requests/shared/:slug", async (req, res) => {
+  try {
+    const slug = normalizeShareId(req.params.slug);
+    if (!slug) {
+      res.status(400).json({ error: "invalid_share_slug" });
+      return;
+    }
+
+    const viewer = await verifyRequestUser(req, false).catch(() => null);
+    const shareSnap = await db.collection("request_shares").doc(slug).get();
+    if (!shareSnap.exists) {
+      res.status(404).json({ error: "share_not_found" });
+      return;
+    }
+    const shareData = (shareSnap.data() || {}) as Record<string, unknown>;
+    const visibility = normalizeMyRequestVisibility(shareData.visibility, "private");
+    const ownerUid = sanitizeText(shareData.ownerUid, 220);
+    const requestId = normalizeMyRequestId(shareData.requestId);
+    if (!ownerUid || !requestId) {
+      res.status(404).json({ error: "share_invalid" });
+      return;
+    }
+    const canRead =
+      visibility === "public" ||
+      visibility === "unlisted" ||
+      (viewer?.uid && viewer.uid === ownerUid);
+    if (!canRead) {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
+
+    const requestSnap = await db.collection("users").doc(ownerUid).collection("requests").doc(requestId).get();
+    if (!requestSnap.exists) {
+      res.status(404).json({ error: "request_not_found" });
+      return;
+    }
+    const data = (requestSnap.data() || {}) as Record<string, unknown>;
+    if (asBoolean(data.deleted, false)) {
+      res.status(404).json({ error: "request_not_found" });
+      return;
+    }
+    const responseItem = toMyRequestResponse(requestSnap.id, data, { includePayload: true });
+    res.status(200).json({
+      request: responseItem,
+      readOnly: !(viewer?.uid && viewer.uid === ownerUid),
+      share: {
+        slug,
+        visibility,
+        shareUrl: myRequestShareUrl(slug),
+      },
+    });
+  } catch (error) {
+    console.error("[Explore] read shared request failed", error);
+    res.status(500).json({ error: "request_share_lookup_failed" });
+  }
+});
+
+ROUTES.get("/my-requests", async (req, res) => {
+  try {
+    const viewer = await verifyRequestUser(req, true);
+    if (!viewer) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+
+    await syncLegacyRequestsForUser(viewer.uid);
+
+    const typeFilter = normalizeMyRequestType(req.query.type);
+    const publishedFilter = normalizeMyRequestPublishedFilter(req.query.published);
+    const queryText = sanitizeText(req.query.q, 140).toLowerCase();
+    const limit = parseLimit(req.query.limit);
+
+    const snap = await db
+      .collection("users")
+      .doc(viewer.uid)
+      .collection("requests")
+      .orderBy("updatedAt", "desc")
+      .limit(Math.max(limit * 4, 140))
+      .get();
+
+    const rows = snap.docs
+      .map((doc) => toMyRequestResponse(doc.id, (doc.data() || {}) as Record<string, unknown>, { includePayload: true }))
+      .filter((item) => !asBoolean(item.deleted, false))
+      .filter((item) => {
+        const itemType = normalizeMyRequestType(item.type);
+        if (typeFilter && itemType !== typeFilter) return false;
+        if (publishedFilter === "published" && !asBoolean(item.published, false)) return false;
+        if (publishedFilter === "unpublished" && asBoolean(item.published, false)) return false;
+        if (!queryText) return true;
+        const haystack = [
+          asString(item.title),
+          asString(item.ticker),
+          asString(item.typeLabel),
+          asString((item.outputsMeta as Record<string, unknown>)?.summary || ""),
+          asString((item.input as Record<string, unknown>)?.question || ""),
+          asString((item.input as Record<string, unknown>)?.notes || ""),
+          asString(item.createdAt),
+        ]
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(queryText);
+      })
+      .slice(0, limit);
+
+    res.status(200).json({
+      items: rows,
+      count: rows.length,
+      type: typeFilter || "all",
+      published: publishedFilter,
+      q: queryText,
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Explore] list my requests failed", error);
+    res.status(500).json({ error: "my_requests_list_failed" });
+  }
+});
+
+ROUTES.post("/my-requests", async (req, res) => {
+  try {
+    const viewer = await verifyRequestUser(req, true);
+    if (!viewer) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const body = asPlainObject(req.body);
+    const type = normalizeMyRequestType(body.type);
+    if (!type || !MY_REQUEST_TYPE_SET.has(type)) {
+      res.status(400).json({ error: "invalid_request_type" });
+      return;
+    }
+
+    const sourceRefRaw = asPlainObject(body.sourceRef);
+    const sourceCollection = sanitizeText(sourceRefRaw.collection, 80);
+    const sourceId = sanitizeText(sourceRefRaw.id, 220);
+    const requestIdFromBody = normalizeMyRequestId(body.requestId);
+    const requestId = requestIdFromBody || (sourceCollection && sourceId ? buildMyRequestDocId(type, sourceId) : `req_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`);
+    const requestRef = db.collection("users").doc(viewer.uid).collection("requests").doc(requestId);
+    const existingSnap = await requestRef.get();
+    const existing = (existingSnap.data() || {}) as Record<string, unknown>;
+
+    const input = normalizeMyRequestInput(body.input);
+    const outputsMeta = trimOutputsMeta(body.outputsMeta);
+    const titleEdited = asBoolean(existing.titleEdited, false);
+    const title = titleEdited
+      ? sanitizeText(existing.title, 180) || defaultMyRequestTitle(type, input)
+      : sanitizeText(body.title, 180) || sanitizeText(existing.title, 180) || defaultMyRequestTitle(type, input);
+    const shareExisting = normalizeMyRequestShareObject(existing.share);
+    const shareRequested = normalizeMyRequestShareObject(body.share);
+    const share: Record<string, unknown> = {
+      visibility: normalizeMyRequestVisibility(shareRequested.visibility, shareExisting.visibility),
+      slug: normalizeShareId(shareRequested.slug || shareExisting.slug),
+      createdAt: shareExisting.createdAt || shareRequested.createdAt || null,
+    };
+    const ticker = firstTickerFromRequest(input, { collection: sourceCollection, id: sourceId }, outputsMeta);
+
+    const payload: Record<string, unknown> = {
+      type,
+      ownerUid: viewer.uid,
+      title,
+      titleEdited,
+      input,
+      outputsMeta,
+      sourceRef: {
+        collection: sourceCollection,
+        id: sourceId,
+      },
+      searchText: buildMyRequestSearchText(title, type, ticker, input, outputsMeta),
+      published: asBoolean(body.published, asBoolean(existing.published, false)),
+      publishedAt: existing.publishedAt || null,
+      explorePostId: sanitizeText(body.explorePostId || existing.explorePostId, 220),
+      deleted: false,
+      share,
+      visibility: normalizeMyRequestVisibility(body.visibility, normalizeMyRequestVisibility(existing.visibility, share.visibility as MyRequestShareVisibility)),
+      createdAt: existing.createdAt || admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    await requestRef.set(payload, { merge: true });
+    const refreshed = await requestRef.get();
+    res.status(200).json({
+      ok: true,
+      request: toMyRequestResponse(refreshed.id, (refreshed.data() || {}) as Record<string, unknown>, { includePayload: true }),
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Explore] upsert my request failed", error);
+    res.status(500).json({ error: "my_request_upsert_failed" });
+  }
+});
+
+ROUTES.get("/my-requests/:requestId", async (req, res) => {
+  try {
+    const viewer = await verifyRequestUser(req, true);
+    if (!viewer) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const requestId = normalizeMyRequestId(req.params.requestId);
+    if (!requestId) {
+      res.status(400).json({ error: "invalid_request_id" });
+      return;
+    }
+    const item = await readMyRequestForOwner(viewer.uid, requestId);
+    if (!item || asBoolean(item.data.deleted, false)) {
+      res.status(404).json({ error: "request_not_found" });
+      return;
+    }
+    res.status(200).json({
+      request: toMyRequestResponse(item.id, item.data, { includePayload: true }),
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Explore] read my request failed", error);
+    res.status(500).json({ error: "my_request_read_failed" });
+  }
+});
+
+ROUTES.patch("/my-requests/:requestId", async (req, res) => {
+  try {
+    const viewer = await verifyRequestUser(req, true);
+    if (!viewer) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const requestId = normalizeMyRequestId(req.params.requestId);
+    if (!requestId) {
+      res.status(400).json({ error: "invalid_request_id" });
+      return;
+    }
+    const body = asPlainObject(req.body);
+    const title = sanitizeText(body.title, 180);
+    if (!title) {
+      res.status(400).json({ error: "invalid_title" });
+      return;
+    }
+
+    const requestRef = db.collection("users").doc(viewer.uid).collection("requests").doc(requestId);
+    const snap = await requestRef.get();
+    if (!snap.exists) {
+      res.status(404).json({ error: "request_not_found" });
+      return;
+    }
+    const existing = (snap.data() || {}) as Record<string, unknown>;
+    if (asBoolean(existing.deleted, false)) {
+      res.status(404).json({ error: "request_not_found" });
+      return;
+    }
+
+    await requestRef.set(
+      {
+        title,
+        titleEdited: true,
+        searchText: buildMyRequestSearchText(
+          title,
+          normalizeMyRequestType(existing.type) || "forecast",
+          normalizeTicker((existing.input as Record<string, unknown>)?.ticker),
+          normalizeMyRequestInput(existing.input),
+          trimOutputsMeta(existing.outputsMeta)
+        ),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    const share = normalizeMyRequestShareObject(existing.share);
+    if (share.slug && share.visibility !== "private") {
+      await db
+        .collection("request_shares")
+        .doc(share.slug)
+        .set(
+          {
+            title,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+    }
+
+    const refreshed = await requestRef.get();
+    res.status(200).json({
+      ok: true,
+      request: toMyRequestResponse(refreshed.id, (refreshed.data() || {}) as Record<string, unknown>, { includePayload: true }),
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Explore] rename my request failed", error);
+    res.status(500).json({ error: "my_request_rename_failed" });
+  }
+});
+
+ROUTES.post("/my-requests/:requestId/share", async (req, res) => {
+  try {
+    const viewer = await verifyRequestUser(req, true);
+    if (!viewer) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const requestId = normalizeMyRequestId(req.params.requestId);
+    if (!requestId) {
+      res.status(400).json({ error: "invalid_request_id" });
+      return;
+    }
+
+    const requestRef = db.collection("users").doc(viewer.uid).collection("requests").doc(requestId);
+    const snap = await requestRef.get();
+    if (!snap.exists) {
+      res.status(404).json({ error: "request_not_found" });
+      return;
+    }
+    const existing = (snap.data() || {}) as Record<string, unknown>;
+    if (asBoolean(existing.deleted, false)) {
+      res.status(404).json({ error: "request_not_found" });
+      return;
+    }
+
+    const body = asPlainObject(req.body);
+    const visibility = normalizeMyRequestVisibility(body.visibility, "unlisted");
+    const shareExisting = normalizeMyRequestShareObject(existing.share);
+
+    if (visibility === "private") {
+      await requestRef.set(
+        {
+          share: {
+            visibility: "private",
+            slug: shareExisting.slug || "",
+            createdAt: shareExisting.createdAt || null,
+          },
+          visibility: "private",
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      if (shareExisting.slug) {
+        await db.collection("request_shares").doc(shareExisting.slug).delete().catch(() => undefined);
+      }
+      const refreshed = await requestRef.get();
+      res.status(200).json({
+        ok: true,
+        share: {
+          visibility: "private",
+          slug: shareExisting.slug || "",
+          shareUrl: "",
+        },
+        request: toMyRequestResponse(refreshed.id, (refreshed.data() || {}) as Record<string, unknown>, { includePayload: true }),
+      });
+      return;
+    }
+
+    const slug = await ensureUniqueMyRequestShareSlug(viewer.uid, requestId, shareExisting.slug);
+    const sharePayload = {
+      visibility,
+      slug,
+      createdAt: shareExisting.createdAt || admin.firestore.FieldValue.serverTimestamp(),
+    };
+    const type = normalizeMyRequestType(existing.type) || "forecast";
+    const title = sanitizeText(existing.title, 180) || defaultMyRequestTitle(type, normalizeMyRequestInput(existing.input));
+    const ticker = firstTickerFromRequest(
+      normalizeMyRequestInput(existing.input),
+      asPlainObject(existing.sourceRef),
+      trimOutputsMeta(existing.outputsMeta)
+    );
+
+    await Promise.all([
+      requestRef.set(
+        {
+          share: sharePayload,
+          visibility,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      ),
+      db
+        .collection("request_shares")
+        .doc(slug)
+        .set(
+          {
+            slug,
+            ownerUid: viewer.uid,
+            requestId,
+            type,
+            title,
+            ticker,
+            visibility,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        ),
+    ]);
+
+    const shareUrl = myRequestShareUrl(slug);
+    const refreshed = await requestRef.get();
+    res.status(200).json({
+      ok: true,
+      share: {
+        visibility,
+        slug,
+        shareUrl,
+      },
+      request: toMyRequestResponse(refreshed.id, (refreshed.data() || {}) as Record<string, unknown>, { includePayload: true }),
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Explore] share my request failed", error);
+    res.status(500).json({ error: "my_request_share_failed" });
+  }
+});
+
+ROUTES.post("/my-requests/:requestId/unpublish", async (req, res) => {
+  try {
+    const viewer = await verifyRequestUser(req, true);
+    if (!viewer) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const requestId = normalizeMyRequestId(req.params.requestId);
+    if (!requestId) {
+      res.status(400).json({ error: "invalid_request_id" });
+      return;
+    }
+    const requestRef = db.collection("users").doc(viewer.uid).collection("requests").doc(requestId);
+    const snap = await requestRef.get();
+    if (!snap.exists) {
+      res.status(404).json({ error: "request_not_found" });
+      return;
+    }
+    const existing = (snap.data() || {}) as Record<string, unknown>;
+    if (asBoolean(existing.deleted, false)) {
+      res.status(404).json({ error: "request_not_found" });
+      return;
+    }
+
+    const sourceRef = asPlainObject(existing.sourceRef);
+    const sourceCollection = sanitizeText(sourceRef.collection, 80);
+    const sourceId = sanitizeText(sourceRef.id, 220);
+    const type = normalizeMyRequestType(existing.type) || "forecast";
+    const candidatePostIds = [
+      sanitizeText(existing.explorePostId, 220),
+      type === "forecast" && sourceCollection === "forecast_requests" ? `forecast_${sourceId}` : "",
+      type === "screener" && sourceCollection === "screener_runs" ? `screener_${sourceId}` : "",
+    ]
+      .map((item) => sanitizeText(item, 220))
+      .filter(Boolean);
+
+    await Promise.all(
+      candidatePostIds.map((postId) =>
+        db
+          .collection("posts")
+          .doc(postId)
+          .set(
+            {
+              visibility: "hidden",
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            },
+            { merge: true }
+          )
+          .catch(() => undefined)
+      )
+    );
+
+    await requestRef.set(
+      {
+        published: false,
+        publishedAt: null,
+        explorePostId: "",
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    const refreshed = await requestRef.get();
+    res.status(200).json({
+      ok: true,
+      request: toMyRequestResponse(refreshed.id, (refreshed.data() || {}) as Record<string, unknown>, { includePayload: true }),
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Explore] unpublish my request failed", error);
+    res.status(500).json({ error: "my_request_unpublish_failed" });
+  }
+});
+
+ROUTES.post("/my-requests/:requestId/duplicate", async (req, res) => {
+  try {
+    const viewer = await verifyRequestUser(req, true);
+    if (!viewer) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const requestId = normalizeMyRequestId(req.params.requestId);
+    if (!requestId) {
+      res.status(400).json({ error: "invalid_request_id" });
+      return;
+    }
+    const source = await readMyRequestForOwner(viewer.uid, requestId);
+    if (!source || asBoolean(source.data.deleted, false)) {
+      res.status(404).json({ error: "request_not_found" });
+      return;
+    }
+    const type = normalizeMyRequestType(source.data.type) || "forecast";
+    const cloneId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    const cloneTitle = sanitizeText(source.data.title, 160) || defaultMyRequestTitle(type, normalizeMyRequestInput(source.data.input));
+
+    await db
+      .collection("users")
+      .doc(viewer.uid)
+      .collection("requests")
+      .doc(cloneId)
+      .set(
+        {
+          ...source.data,
+          ownerUid: viewer.uid,
+          title: `${cloneTitle} (Copy)`,
+          titleEdited: true,
+          published: false,
+          publishedAt: null,
+          explorePostId: "",
+          share: {
+            visibility: "private",
+            slug: "",
+            createdAt: null,
+          },
+          visibility: "private",
+          deleted: false,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: false }
+      );
+
+    const cloneSnap = await db.collection("users").doc(viewer.uid).collection("requests").doc(cloneId).get();
+    res.status(200).json({
+      ok: true,
+      request: toMyRequestResponse(cloneSnap.id, (cloneSnap.data() || {}) as Record<string, unknown>, { includePayload: true }),
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Explore] duplicate my request failed", error);
+    res.status(500).json({ error: "my_request_duplicate_failed" });
+  }
+});
+
+ROUTES.delete("/my-requests/:requestId", async (req, res) => {
+  try {
+    const viewer = await verifyRequestUser(req, true);
+    if (!viewer) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const requestId = normalizeMyRequestId(req.params.requestId);
+    if (!requestId) {
+      res.status(400).json({ error: "invalid_request_id" });
+      return;
+    }
+    const requestRef = db.collection("users").doc(viewer.uid).collection("requests").doc(requestId);
+    const snap = await requestRef.get();
+    if (!snap.exists) {
+      res.status(404).json({ error: "request_not_found" });
+      return;
+    }
+    const existing = (snap.data() || {}) as Record<string, unknown>;
+    const share = normalizeMyRequestShareObject(existing.share);
+
+    await requestRef.set(
+      {
+        deleted: true,
+        published: false,
+        publishedAt: null,
+        explorePostId: "",
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    if (share.slug) {
+      await db.collection("request_shares").doc(share.slug).delete().catch(() => undefined);
+    }
+    res.status(200).json({ ok: true, deleted: true, requestId });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Explore] delete my request failed", error);
+    res.status(500).json({ error: "my_request_delete_failed" });
   }
 });
 

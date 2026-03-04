@@ -26,6 +26,10 @@
   const TICKER_QUERY_MODULES_KEY = "quantura_ticker_query_modules_v1";
   const TICKER_QUERY_IMPROVE_TOGGLE_KEY = "quantura_ticker_query_improve_toggle_v1";
   const TICKER_HISTORY_KEY_PREFIX = "quantura_ticker_history_v1";
+  const FORECAST_CACHE_DB_NAME = "quantura_forecast_cache_v1";
+  const FORECAST_CACHE_STORE_NAME = "forecast_series";
+  const FORECAST_CACHE_INDEX_KEY = "quantura_forecast_cache_index_v1";
+  const FORECAST_CACHE_LOCAL_PREFIX = "quantura_forecast_cache_entry_v1::";
   const TICKER_HISTORY_LIMIT = 14;
   const TRADINGVIEW_LOAD_TIMEOUT_MS = 9000;
   const AI_LEADERBOARD_DEFAULT_HORIZON = "1y";
@@ -47,6 +51,17 @@
     "Purchase",
   ]);
   const MODEL_COUNCIL_OUTPUT_DISCLAIMER = "LLMs can sometimes make mistakes.";
+  const POLYMARKET_CLIENT_CACHE_TTL_MS = 10 * 60 * 1000;
+  const POLYMARKET_CLIENT_CACHE_MAX_ENTRIES = 80;
+  const POLYMARKET_DEFAULT_MARKET_LIMIT = 12;
+  const POLYMARKET_SEARCH_DEBOUNCE_MS = 400;
+  const MY_REQUEST_TYPES = new Set(["forecast", "screener", "indicator", "modelCouncil"]);
+  const MY_REQUEST_TYPE_LABELS = {
+    forecast: "Forecasting",
+    screener: "Screeners",
+    indicator: "Indicators",
+    modelCouncil: "Model Council",
+  };
   const getNativePlatform = () => {
     try {
       const explicit = String(window.__QUANTURA_NATIVE_PLATFORM__ || "").trim().toLowerCase();
@@ -1429,6 +1444,7 @@
 	    screenerLoadSelect: document.getElementById("screener-load-select"),
 	    screenerLoadButton: document.getElementById("screener-load-button"),
 	    screenerLoadStatus: document.getElementById("screener-load-status"),
+    myRequestsPanels: Array.from(document.querySelectorAll("[data-my-requests-panel]")),
 	    watchlistForm: document.getElementById("watchlist-form"),
 	    watchlistTicker: document.getElementById("watchlist-ticker"),
 	    watchlistNotes: document.getElementById("watchlist-notes"),
@@ -1519,6 +1535,11 @@
     ui.anonymousSignin.setAttribute("aria-hidden", "true");
   }
 
+  const polymarketClientCache = new Map();
+  let polymarketSearchDebounceTimer = 0;
+  let polymarketInFlightController = null;
+  let polymarketInFlightNonce = 0;
+
 	  const state = {
 	    user: null,
     userHasPaidPlan: false,
@@ -1573,12 +1594,19 @@
 	      rows: [],
       forecastId: "",
       forecastDoc: null,
-      indicatorOverlays: [],
-      forecastTablePage: 0,
+	      indicatorOverlays: [],
+	      forecastTablePage: 0,
+      forecastAiSummary: null,
+      forecastCacheMeta: null,
       newsTicker: "",
       xTicker: "",
       intelTicker: "",
       predictionsTicker: "",
+      predictionsMode: "ticker",
+      predictionsQuery: "",
+      predictionsIncludeClosed: false,
+      predictionsExpanded: false,
+      predictionsRequestKey: "",
       optionsTicker: "",
       predictionsData: null,
       tickerHistory: [],
@@ -1745,6 +1773,11 @@
       unreadOnly: false,
       loading: false,
     },
+    myRequests: [],
+    myRequestsById: {},
+    myRequestsLoading: false,
+    myRequestsLoadedAt: 0,
+    myRequestsPanelState: {},
     sharedWorkspaces: [],
     unsubscribeSharedWorkspaces: null,
   };
@@ -3559,6 +3592,262 @@
     }
   }
 
+  let forecastCacheDbPromise = null;
+
+  const computeFastHash = (input) => {
+    const text = String(input || "");
+    let hash = 2166136261;
+    for (let i = 0; i < text.length; i += 1) {
+      hash ^= text.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(16).padStart(8, "0");
+  };
+
+  const buildForecastParamsHash = ({ ticker, interval, horizon, service, quantiles, start } = {}) => {
+    const sortedQuantiles = Array.isArray(quantiles)
+      ? quantiles
+          .map((value) => Number(value))
+          .filter((value) => Number.isFinite(value) && value > 0 && value < 1)
+          .sort((a, b) => a - b)
+      : [];
+    const payload = JSON.stringify({
+      ticker: String(ticker || "").trim().toUpperCase(),
+      interval: String(interval || "1d").trim().toLowerCase(),
+      horizon: Number.isFinite(Number(horizon)) ? Number(horizon) : 0,
+      service: String(service || "prophet").trim().toLowerCase(),
+      quantiles: sortedQuantiles,
+      start: String(start || "").trim(),
+    });
+    return computeFastHash(payload);
+  };
+
+  const buildForecastCacheOwnerId = () => {
+    const uid = String(state?.user?.uid || "").trim();
+    if (uid) return uid;
+    return "anon";
+  };
+
+  const buildForecastCacheKey = ({ ownerId, ticker, paramsHash } = {}) => {
+    const cleanOwner = String(ownerId || "anon").trim() || "anon";
+    const cleanTicker = String(normalizeTicker(ticker || "") || "TICKER").trim() || "TICKER";
+    const cleanHash = String(paramsHash || "").trim() || computeFastHash(`${cleanOwner}:${cleanTicker}:${Date.now()}`);
+    return `${cleanOwner}::${cleanTicker}::${cleanHash}`;
+  };
+
+  const readForecastCacheIndex = () => {
+    const raw = safeLocalStorageGet(FORECAST_CACHE_INDEX_KEY);
+    if (!raw) return {};
+    try {
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") return {};
+      return parsed;
+    } catch (error) {
+      return {};
+    }
+  };
+
+  const writeForecastCacheIndex = (index) => {
+    try {
+      safeLocalStorageSet(FORECAST_CACHE_INDEX_KEY, JSON.stringify(index || {}));
+    } catch (error) {
+      // Ignore cache index persistence failures.
+    }
+  };
+
+  const setForecastCacheKeyForRequest = (requestId, cacheKey) => {
+    const reqId = String(requestId || "").trim();
+    const key = String(cacheKey || "").trim();
+    if (!reqId || !key) return;
+    const index = readForecastCacheIndex();
+    index[reqId] = { cacheKey: key, updatedAtMs: Date.now() };
+    const keys = Object.keys(index);
+    if (keys.length > 220) {
+      keys
+        .sort((a, b) => Number(index[a]?.updatedAtMs || 0) - Number(index[b]?.updatedAtMs || 0))
+        .slice(0, keys.length - 220)
+        .forEach((entryKey) => {
+          delete index[entryKey];
+        });
+    }
+    writeForecastCacheIndex(index);
+  };
+
+  const getForecastCacheKeyForRequest = (requestId) => {
+    const reqId = String(requestId || "").trim();
+    if (!reqId) return "";
+    const index = readForecastCacheIndex();
+    return String(index?.[reqId]?.cacheKey || "").trim();
+  };
+
+  const normalizeForecastSeriesRows = (rows) => {
+    if (!Array.isArray(rows)) return [];
+    return rows
+      .map((rawRow) => {
+        if (!rawRow || typeof rawRow !== "object") return null;
+        const row = rawRow;
+        const rawDs = String(row.ds || row.date || row.datetime || "").trim();
+        if (!rawDs) return null;
+        const normalized = { ds: rawDs };
+        Object.entries(row).forEach(([key, value]) => {
+          if (!/^q\d{1,3}$/.test(String(key || ""))) return;
+          const numeric = Number(value);
+          if (!Number.isFinite(numeric)) return;
+          normalized[key] = Number(numeric.toFixed(6));
+        });
+        if (Object.keys(normalized).length <= 1) return null;
+        return normalized;
+      })
+      .filter(Boolean);
+  };
+
+  const openForecastCacheDb = () => {
+    if (forecastCacheDbPromise) return forecastCacheDbPromise;
+    if (typeof window === "undefined" || !window.indexedDB) {
+      forecastCacheDbPromise = Promise.resolve(null);
+      return forecastCacheDbPromise;
+    }
+    forecastCacheDbPromise = new Promise((resolve) => {
+      try {
+        const request = window.indexedDB.open(FORECAST_CACHE_DB_NAME, 1);
+        request.onupgradeneeded = () => {
+          const dbInstance = request.result;
+          if (!dbInstance.objectStoreNames.contains(FORECAST_CACHE_STORE_NAME)) {
+            dbInstance.createObjectStore(FORECAST_CACHE_STORE_NAME, { keyPath: "id" });
+          }
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => resolve(null);
+      } catch (error) {
+        resolve(null);
+      }
+    });
+    return forecastCacheDbPromise;
+  };
+
+  const withForecastCacheStore = async (mode, callback) => {
+    const dbInstance = await openForecastCacheDb();
+    if (!dbInstance) return null;
+    return new Promise((resolve) => {
+      try {
+        const tx = dbInstance.transaction(FORECAST_CACHE_STORE_NAME, mode);
+        const store = tx.objectStore(FORECAST_CACHE_STORE_NAME);
+        const request = callback(store);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => resolve(null);
+      } catch (error) {
+        resolve(null);
+      }
+    });
+  };
+
+  const putForecastCacheEntry = async (entry) => {
+    const payload = entry && typeof entry === "object" ? { ...entry } : null;
+    const id = String(payload?.id || "").trim();
+    if (!payload || !id) return false;
+    payload.id = id;
+    payload.updatedAtMs = Number(payload.updatedAtMs || Date.now()) || Date.now();
+    payload.createdAtMs = Number(payload.createdAtMs || payload.updatedAtMs) || payload.updatedAtMs;
+    let persisted = false;
+    const dbResult = await withForecastCacheStore("readwrite", (store) => store.put(payload));
+    if (dbResult) persisted = true;
+    if (!persisted) {
+      safeLocalStorageSet(`${FORECAST_CACHE_LOCAL_PREFIX}${id}`, JSON.stringify(payload));
+      persisted = true;
+    }
+    return persisted;
+  };
+
+  const getForecastCacheEntryByKey = async (cacheKey) => {
+    const id = String(cacheKey || "").trim();
+    if (!id) return null;
+    const dbValue = await withForecastCacheStore("readonly", (store) => store.get(id));
+    if (dbValue && typeof dbValue === "object") return dbValue;
+    const raw = safeLocalStorageGet(`${FORECAST_CACHE_LOCAL_PREFIX}${id}`);
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" ? parsed : null;
+    } catch (error) {
+      return null;
+    }
+  };
+
+  const saveForecastSeriesToClientCache = async ({
+    requestId = "",
+    ticker = "",
+    interval = "1d",
+    horizon = 0,
+    service = "prophet",
+    quantiles = [],
+    start = "",
+    forecastRows = [],
+    historicalRows = [],
+    chartConfig = {},
+    metrics = {},
+  } = {}) => {
+    const normalizedRows = normalizeForecastSeriesRows(forecastRows);
+    if (!normalizedRows.length) return null;
+    const ownerId = buildForecastCacheOwnerId();
+    const paramsHash = buildForecastParamsHash({ ticker, interval, horizon, service, quantiles, start });
+    const cacheKey = buildForecastCacheKey({
+      ownerId,
+      ticker,
+      paramsHash,
+    });
+    const entry = {
+      id: cacheKey,
+      requestId: String(requestId || "").trim(),
+      ownerId,
+      ticker: String(normalizeTicker(ticker || "") || "").trim(),
+      interval: String(interval || "1d").trim().toLowerCase(),
+      horizon: Number(horizon) || normalizedRows.length,
+      service: String(service || "prophet").trim().toLowerCase(),
+      quantiles: Array.isArray(quantiles) ? quantiles : [],
+      start: String(start || "").trim(),
+      paramsHash,
+      forecastRows: normalizedRows,
+      historicalRows: Array.isArray(historicalRows) ? historicalRows.slice(-1200) : [],
+      chartConfig: chartConfig && typeof chartConfig === "object" ? chartConfig : {},
+      metrics: metrics && typeof metrics === "object" ? metrics : {},
+      createdAtMs: Date.now(),
+      updatedAtMs: Date.now(),
+    };
+    await putForecastCacheEntry(entry);
+    if (entry.requestId) setForecastCacheKeyForRequest(entry.requestId, cacheKey);
+    return {
+      cacheKey,
+      paramsHash,
+      rowCount: normalizedRows.length,
+    };
+  };
+
+  const loadForecastSeriesFromClientCache = async ({
+    requestId = "",
+    ticker = "",
+    interval = "1d",
+    horizon = 0,
+    service = "prophet",
+    quantiles = [],
+    start = "",
+  } = {}) => {
+    const directCacheKey = getForecastCacheKeyForRequest(requestId);
+    if (directCacheKey) {
+      const byRequest = await getForecastCacheEntryByKey(directCacheKey);
+      if (byRequest) return byRequest;
+    }
+    const paramsHash = buildForecastParamsHash({ ticker, interval, horizon, service, quantiles, start });
+    const ownerId = buildForecastCacheOwnerId();
+    const derivedCacheKey = buildForecastCacheKey({ ownerId, ticker, paramsHash });
+    const byParams = await getForecastCacheEntryByKey(derivedCacheKey);
+    if (byParams) {
+      const reqId = String(requestId || byParams.requestId || "").trim();
+      if (reqId) setForecastCacheKeyForRequest(reqId, derivedCacheKey);
+      return byParams;
+    }
+    return null;
+  };
+
   const i18nTextDefaults = new WeakMap();
   const i18nAttrDefaults = new WeakMap();
 
@@ -4051,6 +4340,9 @@
 	            startWorkspaceTasks(db, resolved);
 	            startWatchlist(db, resolved);
 	            startPriceAlerts(db, resolved);
+              fetchMyRequestsList({ force: true }).then(() => {
+                renderMyRequestsPanels();
+              });
 	          }
 	        },
 	        () => {
@@ -8511,20 +8803,31 @@
     });
   };
 
+  const formatPredictionCountdown = (value) => {
+    const text = String(value || "").trim();
+    if (!text) return "No end date";
+    const target = new Date(text);
+    if (Number.isNaN(target.getTime())) return "No end date";
+    const deltaMs = target.getTime() - Date.now();
+    if (deltaMs <= 0) return "Ended";
+    const totalHours = Math.ceil(deltaMs / (60 * 60 * 1000));
+    if (totalHours >= 48) return `Ends in ${Math.ceil(totalHours / 24)}d`;
+    if (totalHours >= 1) return `Ends in ${totalHours}h`;
+    const minutes = Math.max(1, Math.ceil(deltaMs / (60 * 1000)));
+    return `Ends in ${minutes}m`;
+  };
+
   const parsePredictionArray = (raw) => {
     if (Array.isArray(raw)) return raw;
-    if (raw === null || raw === undefined) return [];
-    if (typeof raw === "string") {
-      const text = raw.trim();
-      if (!text) return [];
-      try {
-        const parsed = JSON.parse(text);
-        if (Array.isArray(parsed)) return parsed;
-      } catch (error) {
-        if (text.includes(",")) return text.split(",").map((part) => part.trim()).filter(Boolean);
-      }
+    if (typeof raw !== "string") return [];
+    const text = raw.trim();
+    if (!text) return [];
+    try {
+      const parsed = JSON.parse(text);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      return [];
     }
-    return [];
   };
 
   const clampPredictionPrice = (value) => {
@@ -8538,377 +8841,601 @@
   const formatPredictionPercent = (value) => {
     const num = clampPredictionPrice(value);
     if (num === null) return "—";
-    return `${(num * 100).toFixed(1)}%`;
+    return `${Math.round(num * 100)}%`;
   };
 
-  const formatPredictionSpread = (value) => {
-    const num = Number(value);
-    if (!Number.isFinite(num)) return "—";
-    return `${(num * 100).toFixed(2)} pts`;
+  const predictionMarketUrl = (market, event = null) => {
+    const direct = String(market?.marketUrl || "").trim();
+    if (direct) return direct;
+    const marketSlug = String(market?.slug || "").trim().replace(/^\/+|\/+$/g, "");
+    if (marketSlug) return `https://polymarket.com/event/${encodeURIComponent(marketSlug)}`;
+    const eventSlug = String(event?.slug || market?.eventSlug || "").trim().replace(/^\/+|\/+$/g, "");
+    return eventSlug ? `https://polymarket.com/event/${encodeURIComponent(eventSlug)}` : "";
   };
 
   const normalizePredictionMarket = (rawMarket) => {
     const market = rawMarket && typeof rawMarket === "object" ? rawMarket : {};
-    const outcomes = parsePredictionArray(market.outcomes).map((item) => String(item || "").trim()).filter(Boolean);
-    const outcomePrices = parsePredictionArray(market.outcomePrices)
+    const parsedOutcomes = parsePredictionArray(market.outcomes)
+      .map((item) => String(item || "").trim())
+      .filter(Boolean)
+      .slice(0, 16);
+    const parsedOutcomePrices = parsePredictionArray(market.outcomePrices)
       .map((item) => clampPredictionPrice(item))
-      .filter((item) => item !== null);
-    const tokenIds = parsePredictionArray(market.clobTokenIds).map((item) => String(item || "").trim()).filter(Boolean);
+      .filter((item) => item !== null)
+      .slice(0, 16);
+    const alignedLength = Math.min(parsedOutcomes.length, parsedOutcomePrices.length);
+    const outcomes = alignedLength > 0 ? parsedOutcomes.slice(0, alignedLength) : [];
+    const outcomePrices = alignedLength > 0 ? parsedOutcomePrices.slice(0, alignedLength) : [];
+
+    const status = String(market.status || "").trim().toLowerCase();
+    const closed = Boolean(market.closed) || status === "closed" || status === "resolved" || status === "ended";
+    const active = typeof market.active === "boolean" ? market.active : !closed;
+    const volumeUsdRaw = Number(market.volumeUsd ?? market.volume ?? 0);
+    const liquidityUsdRaw = Number(market.liquidityUsd ?? market.liquidity ?? 0);
+    const volumeUsd = Number.isFinite(volumeUsdRaw) ? Math.max(0, volumeUsdRaw) : 0;
+    const liquidityUsd = Number.isFinite(liquidityUsdRaw) ? Math.max(0, liquidityUsdRaw) : 0;
+    const topOutcomes = outcomes
+      .map((label, index) => ({ label, prob: outcomePrices[index] }))
+      .filter((entry) => typeof entry.label === "string" && Number.isFinite(entry.prob))
+      .sort((a, b) => b.prob - a.prob)
+      .slice(0, 6);
+    const yesIndex = outcomes.findIndex((label) => /^yes$/i.test(label));
+    const yesProb = yesIndex >= 0 ? outcomePrices[yesIndex] : null;
+
     return {
-      ...market,
+      id: String(market.id || market.marketId || market.conditionId || market.market_id || "").trim(),
+      question: String(market.question || market.title || "").trim(),
+      slug: String(market.slug || "").trim(),
+      endDate: String(market.endDate || market.end_date || "").trim(),
+      category: String(market.category || "").trim(),
+      image: String(market.image || "").trim(),
+      icon: String(market.icon || "").trim(),
+      volumeUsd,
+      liquidityUsd,
       outcomes,
       outcomePrices,
-      clobTokenIds: tokenIds,
-      volume24hr: Number(market.volume24hr || 0) || 0,
-      volume: Number(market.volume || 0) || 0,
-      enableOrderBook: Boolean(market.enableOrderBook),
+      isBinary: outcomes.length === 2,
+      yesProb,
+      topOutcomes,
+      closed,
+      active,
     };
   };
 
-  const deriveYesNoProbabilities = (market) => {
-    const normalized = normalizePredictionMarket(market);
-    const outcomes = normalized.outcomes;
-    const prices = normalized.outcomePrices;
-    if (!outcomes.length || !prices.length) {
-      return { yes: null, no: null };
-    }
-    let yesIndex = outcomes.findIndex((outcome) => /^yes$/i.test(outcome));
-    let noIndex = outcomes.findIndex((outcome) => /^no$/i.test(outcome));
-    if (yesIndex < 0 && prices.length >= 1) yesIndex = 0;
-    if (noIndex < 0 && prices.length >= 2) noIndex = 1;
+  const normalizePredictionEvent = (rawEvent, index = 0) => {
+    const event = rawEvent && typeof rawEvent === "object" ? rawEvent : {};
+    const markets = (Array.isArray(event.markets) ? event.markets : [])
+      .map((item) => normalizePredictionMarket(item))
+      .filter((item) => item.id && item.question);
+    markets.sort((a, b) => {
+      const volumeDelta = Number(b.volumeUsd || 0) - Number(a.volumeUsd || 0);
+      if (volumeDelta !== 0) return volumeDelta;
+      return Number(b.liquidityUsd || 0) - Number(a.liquidityUsd || 0);
+    });
+    if (!markets.length) return null;
     return {
-      yes: yesIndex >= 0 ? clampPredictionPrice(prices[yesIndex]) : null,
-      no: noIndex >= 0 ? clampPredictionPrice(prices[noIndex]) : null,
+      id: String(event.id || event.eventId || `event-${index + 1}`).trim(),
+      title: String(event.title || event.name || event.question || "Prediction markets").trim(),
+      slug: String(event.slug || "").trim(),
+      ticker: String(event.ticker || "").trim(),
+      markets,
     };
   };
 
-  const categorizePredictionMarkets = (markets) => {
-    const categories = {
-      "Price Targets / Ranges": [],
-      "Up/Down / Directional": [],
-      "Earnings / Events / Catalysts": [],
-      "Macro / Regulatory / IPO related": [],
-      Other: [],
+  const normalizePredictionsPayload = (rawPayload, fallbackQuery = "") => {
+    const payload = rawPayload && typeof rawPayload === "object" ? rawPayload : {};
+    const eventsRaw = Array.isArray(payload.events) ? payload.events : Array.isArray(rawPayload) ? rawPayload : [];
+    const events = eventsRaw
+      .map((event, index) => normalizePredictionEvent(event, index))
+      .filter((event) => Boolean(event));
+    return {
+      query: String(payload.query || fallbackQuery || "").trim(),
+      fetchedAt: String(payload.fetchedAt || new Date().toISOString()),
+      events,
     };
-
-    const priceTargetsRegex = /(close|above|below|at \$|\$[0-9]+)/i;
-    const upDownRegex = /(up or down|up\/down|green|red|higher|lower)/i;
-    const earningsRegex = /(earnings|guidance|revenue|eps)/i;
-    const macroRegex = /(ipo|sec|doj|ftc|rate|inflation|treasury|labor)/i;
-
-    const sorted = [...markets].sort((a, b) => {
-      const a24 = Number(a?.volume24hr || 0) || 0;
-      const b24 = Number(b?.volume24hr || 0) || 0;
-      if (b24 !== a24) return b24 - a24;
-      const aTot = Number(a?.volume || 0) || 0;
-      const bTot = Number(b?.volume || 0) || 0;
-      return bTot - aTot;
-    });
-
-    sorted.forEach((market) => {
-      const question = String(market?.question || "").trim();
-      if (priceTargetsRegex.test(question)) {
-        categories["Price Targets / Ranges"].push(market);
-      } else if (upDownRegex.test(question)) {
-        categories["Up/Down / Directional"].push(market);
-      } else if (earningsRegex.test(question)) {
-        categories["Earnings / Events / Catalysts"].push(market);
-      } else if (macroRegex.test(question)) {
-        categories["Macro / Regulatory / IPO related"].push(market);
-      } else {
-        categories.Other.push(market);
-      }
-    });
-
-    return categories;
   };
 
-  const predictionMarketUrl = (market) => {
-    const direct = String(market?.marketUrl || "").trim();
-    if (direct) return direct;
-    const eventUrl = String(market?.eventUrl || "").trim();
-    if (eventUrl) return eventUrl;
-    const slug = String(market?.slug || market?.eventSlug || "").trim().replace(/^\/+|\/+$/g, "");
-    return slug ? `https://polymarket.com/event/${slug}` : "";
+  const getPredictionsPanelState = (ticker = "") => {
+    const activeSymbol = normalizeTicker(ticker || state.tickerContext.predictionsTicker || state.tickerContext.ticker || "");
+    const mode = state.tickerContext.predictionsMode === "topActive" ? "topActive" : "ticker";
+    const rawQuery = String(state.tickerContext.predictionsQuery || "").trim().slice(0, 80);
+    const query = mode === "ticker" ? rawQuery || activeSymbol : "";
+    return {
+      ticker: activeSymbol,
+      mode,
+      query,
+      includeClosed: Boolean(state.tickerContext.predictionsIncludeClosed),
+      expanded: Boolean(state.tickerContext.predictionsExpanded),
+    };
   };
 
-  const sparklineSvg = (historyPoints, color = "rgba(29, 78, 216, 0.85)") => {
-    const points = (Array.isArray(historyPoints) ? historyPoints : [])
-      .map((item) => ({ t: Number(item?.t), p: Number(item?.p) }))
-      .filter((item) => Number.isFinite(item.t) && Number.isFinite(item.p));
-    if (points.length < 2) return "";
-    const width = 160;
-    const height = 44;
-    const minPrice = Math.min(...points.map((item) => item.p));
-    const maxPrice = Math.max(...points.map((item) => item.p));
-    const span = maxPrice - minPrice || 0.0001;
-    const xStep = width / Math.max(1, points.length - 1);
-    const path = points
-      .map((point, idx) => {
-        const x = Math.round(idx * xStep * 100) / 100;
-        const y = Math.round((height - ((point.p - minPrice) / span) * (height - 4) - 2) * 100) / 100;
-        return `${x},${y}`;
-      })
-      .join(" ");
+  const buildPredictionsCacheKey = ({ mode, query, includeClosed }) => {
+    if (mode === "topActive") return "top-active::limit-36::offset-0";
+    return `ticker::${String(query || "").trim().toLowerCase()}::${includeClosed ? "closed" : "open"}`;
+  };
+
+  const getPredictionsCache = (cacheKey) => {
+    if (!cacheKey || !polymarketClientCache.has(cacheKey)) return null;
+    const record = polymarketClientCache.get(cacheKey);
+    const expiresAtMs = Number(record?.expiresAtMs || 0);
+    if (!Number.isFinite(expiresAtMs) || expiresAtMs <= Date.now()) {
+      polymarketClientCache.delete(cacheKey);
+      return null;
+    }
+    polymarketClientCache.delete(cacheKey);
+    polymarketClientCache.set(cacheKey, record);
+    return record.payload || null;
+  };
+
+  const setPredictionsCache = (cacheKey, payload) => {
+    if (!cacheKey || !payload) return;
+    polymarketClientCache.set(cacheKey, {
+      expiresAtMs: Date.now() + POLYMARKET_CLIENT_CACHE_TTL_MS,
+      payload,
+    });
+    while (polymarketClientCache.size > POLYMARKET_CLIENT_CACHE_MAX_ENTRIES) {
+      const oldestKey = polymarketClientCache.keys().next().value;
+      if (!oldestKey) break;
+      polymarketClientCache.delete(oldestKey);
+    }
+  };
+
+  const buildVisiblePredictionGroups = (events, { includeClosed = false, expanded = false } = {}) => {
+    const groups = [];
+    let totalMarkets = 0;
+    events.forEach((event) => {
+      const markets = (Array.isArray(event?.markets) ? event.markets : [])
+        .filter((market) => {
+          if (!includeClosed && (market.closed || market.active === false)) return false;
+          return true;
+        })
+        .sort((a, b) => {
+          const volumeDelta = Number(b.volumeUsd || 0) - Number(a.volumeUsd || 0);
+          if (volumeDelta !== 0) return volumeDelta;
+          return Number(b.liquidityUsd || 0) - Number(a.liquidityUsd || 0);
+        });
+      if (!markets.length) return;
+      totalMarkets += markets.length;
+      groups.push({ ...event, markets });
+    });
+
+    const limit = expanded ? Number.POSITIVE_INFINITY : POLYMARKET_DEFAULT_MARKET_LIMIT;
+    let remaining = limit;
+    let shownMarkets = 0;
+    const visibleGroups = [];
+    groups.forEach((event) => {
+      if (remaining <= 0) return;
+      const slice = event.markets.slice(0, remaining);
+      if (!slice.length) return;
+      shownMarkets += slice.length;
+      remaining -= slice.length;
+      visibleGroups.push({ ...event, markets: slice });
+    });
+
+    return { groups: visibleGroups, shownMarkets, totalMarkets };
+  };
+
+  const renderPredictionOutcomePill = (label, prob, variant = "neutral") => {
+    const cleanLabel = String(label || "").trim();
+    const cleanProb = clampPredictionPrice(prob);
+    if (!cleanLabel || cleanProb === null) return "";
+    const percent = Math.max(0, Math.min(100, Math.round(cleanProb * 100)));
     return `
-      <svg class="predictions-sparkline" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true">
-        <polyline points="${path}" fill="none" stroke="${color}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></polyline>
-      </svg>
+      <button class="prediction-outcome-pill ${variant}" type="button" aria-disabled="true" tabindex="-1" aria-label="${escapeHtml(
+        `${cleanLabel} ${percent}%`
+      )}">
+        <span class="prediction-outcome-pill-fill" style="width:${percent}%"></span>
+        <span class="prediction-outcome-pill-text">${escapeHtml(cleanLabel)} ${percent}%</span>
+      </button>
     `;
   };
 
-  const renderOrderbookWidget = (market, orderbook) => {
-    if (!market?.enableOrderBook) {
-      return `<div class="small muted">Orderbook unavailable for this market.</div>`;
-    }
-    const tokenId = Array.isArray(market.clobTokenIds) && market.clobTokenIds.length ? String(market.clobTokenIds[0]) : "";
-    if (!tokenId || !orderbook || typeof orderbook !== "object") {
-      return `<div class="small muted">Orderbook unavailable for this market.</div>`;
-    }
-
-    const bestBid = clampPredictionPrice(orderbook.bestBid);
-    const bestAsk = clampPredictionPrice(orderbook.bestAsk);
-    const midpoint = clampPredictionPrice(orderbook.midpoint);
-    const spread = Number(orderbook.spread);
-    const bids = Array.isArray(orderbook.bids) ? orderbook.bids.slice(0, 5) : [];
-    const asks = Array.isArray(orderbook.asks) ? orderbook.asks.slice(0, 5) : [];
-    const history1d = Array.isArray(orderbook.history?.["1d"]) ? orderbook.history["1d"] : [];
-    const history1w = Array.isArray(orderbook.history?.["1w"]) ? orderbook.history["1w"] : [];
-
-    const levels = Math.max(bids.length, asks.length, 1);
-    const rows = [];
-    for (let idx = 0; idx < levels; idx += 1) {
-      const bid = bids[idx] || {};
-      const ask = asks[idx] || {};
-      rows.push(`
-        <tr>
-          <td>${formatPredictionPercent(bid.price)}</td>
-          <td>${toFiniteOrNull(bid.size) === null ? "—" : escapeHtml(formatCompactNumber(bid.size))}</td>
-          <td>${formatPredictionPercent(ask.price)}</td>
-          <td>${toFiniteOrNull(ask.size) === null ? "—" : escapeHtml(formatCompactNumber(ask.size))}</td>
-        </tr>
-      `);
-    }
-
+  const renderPredictionMarketCard = (event, market) => {
+    const category = String(market.category || event?.ticker || "Market").trim();
+    const volumeText = Number(market.volumeUsd || 0) > 0 ? `$${formatCompactNumber(market.volumeUsd)}` : "—";
+    const marketUrl = predictionMarketUrl(market, event);
+    const binaryRows = (() => {
+      if (!market.isBinary || !Array.isArray(market.outcomes) || !Array.isArray(market.outcomePrices)) return [];
+      let yesIndex = market.outcomes.findIndex((label) => /^yes$/i.test(label));
+      let noIndex = market.outcomes.findIndex((label) => /^no$/i.test(label));
+      if (yesIndex < 0) yesIndex = 0;
+      if (noIndex < 0) noIndex = yesIndex === 0 ? 1 : 0;
+      return [yesIndex, noIndex]
+        .filter((index) => index >= 0 && index < market.outcomes.length && index < market.outcomePrices.length)
+        .map((index) => ({ label: market.outcomes[index], prob: market.outcomePrices[index] }));
+    })();
+    const pillsHtml = binaryRows.length
+      ? binaryRows
+          .map((item) => renderPredictionOutcomePill(item.label, item.prob, /^yes$/i.test(item.label) ? "yes" : "no"))
+          .join("")
+      : Array.isArray(market.topOutcomes) && market.topOutcomes.length
+      ? market.topOutcomes
+          .slice(0, 3)
+          .map((item) => renderPredictionOutcomePill(item.label, item.prob))
+          .join("")
+      : "";
     return `
-      <div class="predictions-orderbook">
-        <div class="predictions-orderbook-head small">
-          <span>Bid ${formatPredictionPercent(bestBid)}</span>
-          <span>Ask ${formatPredictionPercent(bestAsk)}</span>
-          <span>Mid ${formatPredictionPercent(midpoint)}</span>
-          <span>Spread ${formatPredictionSpread(spread)}</span>
+      <article class="prediction-market-card">
+        <div class="prediction-market-card-top small">
+          <span class="prediction-chip">${escapeHtml(category)}</span>
+          <span>${escapeHtml(volumeText)}</span>
+          <span>${escapeHtml(formatPredictionCountdown(market.endDate))}</span>
         </div>
-        <div class="table-wrap">
-          <table class="data-table predictions-orderbook-table">
-            <thead>
-              <tr><th>Bid</th><th>Size</th><th>Ask</th><th>Size</th></tr>
-            </thead>
-            <tbody>${rows.join("")}</tbody>
-          </table>
+        <h4 class="prediction-market-title">${escapeHtml(String(market.question || "Untitled market"))}</h4>
+        <div class="prediction-pill-row">
+          ${
+            pillsHtml ||
+            `<span class="prediction-no-price-badge small" aria-label="No price data for this market">No price data</span>`
+          }
         </div>
-        <div class="predictions-history-grid">
-          <div class="predictions-history-card">
-            <div class="small muted">Price history (1D)</div>
-            ${sparklineSvg(history1d)}
-          </div>
-          <div class="predictions-history-card">
-            <div class="small muted">Price history (1W)</div>
-            ${sparklineSvg(history1w, "rgba(58, 181, 162, 0.88)")}
-          </div>
+        <div class="prediction-market-footer">
+          ${
+            marketUrl
+              ? `<a class="news-link" href="${escapeHtml(marketUrl)}" target="_blank" rel="noreferrer" data-analytics="polymarket_market_open" data-label="${escapeHtml(String(market.question || "polymarket_market"))}" aria-label="${escapeHtml(
+                  `View ${String(market.question || "market")} on Polymarket`
+                )}">View on Polymarket</a>`
+              : `<span class="small muted">Market link unavailable</span>`
+          }
+          <span class="small muted prediction-warning" aria-label="Markets can be wrong">Markets can be wrong</span>
         </div>
-      </div>
+      </article>
     `;
   };
 
-  const renderPredictionsOutput = (payload, ticker) => {
+  const buildPredictionsSkeleton = () =>
+    new Array(6)
+      .fill(0)
+      .map(
+        () => `
+      <article class="prediction-market-card prediction-skeleton-card" aria-hidden="true">
+        <div class="prediction-skeleton-line short"></div>
+        <div class="prediction-skeleton-line"></div>
+        <div class="prediction-skeleton-line medium"></div>
+        <div class="prediction-skeleton-line"></div>
+      </article>
+    `
+      )
+      .join("");
+
+  const renderPredictionsOutput = ({ payload = null, ticker = "", loading = false, error = "" } = {}) => {
     if (!ui.tickerPredictionsOutput) return;
-    const cleanTicker = normalizeTicker(ticker || payload?.ticker || state.tickerContext.ticker || "");
-    const markets = Array.isArray(payload?.markets) ? payload.markets.map(normalizePredictionMarket) : [];
-    const orderbooks = payload?.orderbooks && typeof payload.orderbooks === "object" ? payload.orderbooks : {};
-
-    if (!cleanTicker || !markets.length) {
-      ui.tickerPredictionsOutput.innerHTML = `<div class="small muted">No Polymarket markets found for ${escapeHtml(cleanTicker || "this ticker")}.</div>`;
-      return;
-    }
-
-    const ranked = [...markets].sort((a, b) => {
-      const b24 = Number(b.volume24hr || 0) || 0;
-      const a24 = Number(a.volume24hr || 0) || 0;
-      if (b24 !== a24) return b24 - a24;
-      return (Number(b.volume || 0) || 0) - (Number(a.volume || 0) || 0);
+    const panel = getPredictionsPanelState(ticker);
+    const normalized = normalizePredictionsPayload(payload || state.tickerContext.predictionsData || {}, panel.query || panel.ticker);
+    const { groups, shownMarkets, totalMarkets } = buildVisiblePredictionGroups(normalized.events, {
+      includeClosed: panel.includeClosed,
+      expanded: panel.expanded,
     });
+    const includeClosedToggle = panel.mode === "ticker";
 
-    const quick = ranked.slice(0, 3).map((market) => {
-      const probs = deriveYesNoProbabilities(market);
-      const tokenId = Array.isArray(market.clobTokenIds) && market.clobTokenIds.length ? String(market.clobTokenIds[0]) : "";
-      const book = tokenId ? orderbooks[tokenId] : null;
-      const midpoint = clampPredictionPrice(book?.midpoint);
-      const spread = Number(book?.spread);
-      return `
-        <article class="prediction-snapshot-card">
-          <div class="small muted">${escapeHtml(String(market.eventTitle || "Prediction market"))}</div>
-          <div class="prediction-question">${escapeHtml(String(market.question || "Untitled market"))}</div>
-          <div class="prediction-meta-row">
-            <span>Midpoint</span><span>${formatPredictionPercent(midpoint !== null ? midpoint : probs.yes)}</span>
-          </div>
-          <div class="prediction-meta-row">
-            <span>Bid / Ask</span><span>${formatPredictionPercent(book?.bestBid)} / ${formatPredictionPercent(book?.bestAsk)}</span>
-          </div>
-          <div class="prediction-meta-row">
-            <span>Spread</span><span>${formatPredictionSpread(spread)}</span>
-          </div>
-          <div class="prediction-meta-row">
-            <span>24h / Total Vol</span><span>${escapeHtml(formatCompactNumber(market.volume24hr))} / ${escapeHtml(formatCompactNumber(market.volume))}</span>
-          </div>
-          <div class="prediction-meta-row">
-            <span>End Date</span><span>${escapeHtml(formatPredictionDate(market.endDate))}</span>
-          </div>
-          <div class="prediction-meta-row">
-            <span>Yes / No</span><span>${formatPredictionPercent(probs.yes)} / ${formatPredictionPercent(probs.no)}</span>
+    const resultBody = (() => {
+      if (loading) {
+        return `<div class="prediction-card-grid">${buildPredictionsSkeleton()}</div>`;
+      }
+      if (groups.length) {
+        return `
+          <div class="predictions-events">
+            ${groups
+              .map(
+                (event) => `
+              <section class="prediction-event-group">
+                <div class="prediction-event-head">
+                  <div>
+                    <h3 class="prediction-event-title">${escapeHtml(String(event.title || "Prediction markets"))}</h3>
+                    <span class="small muted">Prediction markets</span>
+                  </div>
+                  ${
+                    event.slug
+                      ? `<a class="news-link" href="https://polymarket.com/event/${encodeURIComponent(
+                          String(event.slug)
+                        )}" target="_blank" rel="noreferrer">Event</a>`
+                      : ""
+                  }
+                </div>
+                <div class="prediction-card-grid">
+                  ${event.markets.map((market) => renderPredictionMarketCard(event, market)).join("")}
+                </div>
+              </section>
+            `
+              )
+              .join("")}
           </div>
           ${
-            predictionMarketUrl(market)
-              ? `<a class="news-link" href="${escapeHtml(predictionMarketUrl(market))}" target="_blank" rel="noreferrer" data-analytics="polymarket_market_open" data-label="${escapeHtml(String(market.question || "polymarket_market"))}">View on Polymarket</a>`
+            totalMarkets > shownMarkets
+              ? `<div class="predictions-show-more-row"><button class="cta secondary small" type="button" data-action="predictions-show-more">${
+                  panel.expanded ? "Show less" : `Show more (${totalMarkets - shownMarkets})`
+                }</button></div>`
               : ""
           }
-        </article>
-      `;
-    });
-
-    const categories = categorizePredictionMarkets(markets);
-    const categoryHtml = Object.entries(categories)
-      .map(([name, items]) => {
-        if (!Array.isArray(items) || !items.length) return "";
-        const cards = items
-          .map((market) => {
-            const probs = deriveYesNoProbabilities(market);
-            const marketUrl = predictionMarketUrl(market);
-            const tokenId = Array.isArray(market.clobTokenIds) && market.clobTokenIds.length ? String(market.clobTokenIds[0]) : "";
-            const orderbook = tokenId ? orderbooks[tokenId] : null;
-            const tags = Array.isArray(market.tags) ? market.tags.slice(0, 4).map((tag) => String(tag || "").trim()).filter(Boolean) : [];
-            const tagsHtml = tags.length
-              ? `<div class="prediction-tags">${tags.map((tag) => `<span class="status">${escapeHtml(tag)}</span>`).join("")}</div>`
-              : "";
-            return `
-              <article class="prediction-market-card">
-                <div class="prediction-question">${escapeHtml(String(market.question || "Untitled market"))}</div>
-                <div class="prediction-grid">
-                  <div class="prediction-meta-row"><span>Yes</span><span>${formatPredictionPercent(probs.yes)}</span></div>
-                  <div class="prediction-meta-row"><span>No</span><span>${formatPredictionPercent(probs.no)}</span></div>
-                  <div class="prediction-meta-row"><span>24h Volume</span><span>${escapeHtml(formatCompactNumber(market.volume24hr))}</span></div>
-                  <div class="prediction-meta-row"><span>Total Volume</span><span>${escapeHtml(formatCompactNumber(market.volume))}</span></div>
-                  <div class="prediction-meta-row"><span>End Date</span><span>${escapeHtml(formatPredictionDate(market.endDate))}</span></div>
-                </div>
-                ${tagsHtml}
-                ${
-                  marketUrl
-                    ? `<a class="news-link" href="${escapeHtml(marketUrl)}" target="_blank" rel="noreferrer" data-analytics="polymarket_market_open" data-label="${escapeHtml(String(market.question || "polymarket_market"))}">View on Polymarket</a>`
-                    : ""
-                }
-                ${renderOrderbookWidget(market, orderbook)}
-              </article>
-            `;
-          })
-          .join("");
-        return `
-          <details class="prediction-accordion" open>
-            <summary>${escapeHtml(name)} <span class="small muted">(${items.length})</span></summary>
-            <div class="prediction-category-list">${cards}</div>
-          </details>
         `;
-      })
-      .join("");
+      }
+      if (error) {
+        return `<div class="small muted">Polymarket predictions are temporarily unavailable${panel.ticker ? ` for ${escapeHtml(panel.ticker)}` : ""}.</div>`;
+      }
+      if (panel.mode === "ticker" && !panel.query) {
+        return `<div class="small muted">Enter a ticker or keyword to search prediction markets.</div>`;
+      }
+      return `<div class="small muted">No active prediction markets found for ${escapeHtml(panel.query || panel.ticker || "this search")}.</div>`;
+    })();
 
     ui.tickerPredictionsOutput.innerHTML = `
       <div class="predictions-shell">
-        <div class="predictions-section">
-          <div class="small"><strong>Quick Snapshot</strong></div>
-          <div class="prediction-snapshot-grid">${quick.join("")}</div>
+        <div class="predictions-toolbar">
+          <div class="predictions-tabs" role="tablist" aria-label="Predictions source">
+            <button class="task-chip ${panel.mode === "ticker" ? "active" : ""}" type="button" role="tab" aria-selected="${
+      panel.mode === "ticker" ? "true" : "false"
+    }" data-action="predictions-tab" data-mode="ticker">For this ticker</button>
+            <button class="task-chip ${panel.mode === "topActive" ? "active" : ""}" type="button" role="tab" aria-selected="${
+      panel.mode === "topActive" ? "true" : "false"
+    }" data-action="predictions-tab" data-mode="topActive">Top Active</button>
+          </div>
+          <div class="predictions-search-row">
+            <input
+              type="search"
+              class="input"
+              data-action="predictions-query"
+              aria-label="Search prediction markets"
+              placeholder="Search ticker or keyword"
+              value="${escapeHtml(panel.mode === "ticker" ? panel.query : panel.ticker || "")}"
+            />
+            <button class="cta secondary small" type="button" data-action="predictions-search-now">Search</button>
+            <label class="predictions-include-closed ${includeClosedToggle ? "" : "hidden"}">
+              <input type="checkbox" data-action="predictions-include-closed" ${panel.includeClosed ? "checked" : ""} />
+              <span>Include closed</span>
+            </label>
+          </div>
+          <div class="predictions-meta small">
+            <span>${loading ? "Loading markets..." : `${shownMarkets} of ${totalMarkets} markets`}</span>
+            <span>${normalized.fetchedAt ? `Updated ${escapeHtml(formatPredictionDate(normalized.fetchedAt))}` : ""}</span>
+          </div>
         </div>
-        <div class="predictions-section">
-          ${categoryHtml || `<div class="small muted">No categorized markets were found for ${escapeHtml(cleanTicker)}.</div>`}
-        </div>
+        ${resultBody}
       </div>
     `;
   };
 
-  const loadTickerPredictions = async (ticker, { notify = false, force = false } = {}) => {
-    if (!ui.tickerPredictionsOutput) return;
-    const symbol = normalizeTicker(ticker);
-    if (!symbol) {
-      ui.tickerPredictionsOutput.innerHTML = `<div class="small muted">No Polymarket markets found for this ticker.</div>`;
-      return;
+  const fetchTickerPredictionsPayload = async ({ mode, query, includeClosed, signal }) => {
+    if (mode === "topActive") {
+      const response = await fetch("/api/polymarket/active", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ limit: 36, offset: 0, sort: "volume" }),
+        signal,
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(String(payload?.detail || payload?.error || "Unable to load active prediction markets."));
+      }
+      return normalizePredictionsPayload(payload, "top-active");
     }
-    if (!force && state.tickerContext.predictionsTicker === symbol && state.tickerContext.predictionsData) {
-      renderPredictionsOutput(state.tickerContext.predictionsData, symbol);
+
+    const term = String(query || "").trim();
+    if (!term) {
+      return normalizePredictionsPayload({ query: "", events: [] }, "");
+    }
+
+    const callSearch = async (q) => {
+      const response = await fetch("/api/polymarket/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          q,
+          limitPerType: 24,
+          includeClosed: Boolean(includeClosed),
+          sort: "volume",
+        }),
+        signal,
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(String(payload?.detail || payload?.error || "Unable to load prediction markets."));
+      }
+      return normalizePredictionsPayload(payload, q);
+    };
+
+    const primary = await callSearch(term);
+    const total = primary.events.reduce((sum, event) => sum + (Array.isArray(event.markets) ? event.markets.length : 0), 0);
+    if (total > 0) return primary;
+
+    if (/^[A-Z0-9.\-]{1,12}$/i.test(term)) {
+      const fallback = await callSearch(`${term} stock`);
+      const fallbackTotal = fallback.events.reduce(
+        (sum, event) => sum + (Array.isArray(event.markets) ? event.markets.length : 0),
+        0
+      );
+      if (fallbackTotal > 0) return fallback;
+    }
+    return primary;
+  };
+
+  const loadTickerPredictions = async (
+    ticker,
+    { notify = false, force = false, mode = null, query = null, includeClosed = null } = {}
+  ) => {
+    if (!ui.tickerPredictionsOutput) return;
+    const symbol = normalizeTicker(ticker || state.tickerContext.ticker || state.tickerContext.intelTicker || "");
+    const previousTicker = normalizeTicker(state.tickerContext.predictionsTicker || "");
+    state.tickerContext.predictionsTicker = symbol;
+    if (mode === "ticker" || mode === "topActive") {
+      state.tickerContext.predictionsMode = mode;
+    }
+    if (typeof includeClosed === "boolean") {
+      state.tickerContext.predictionsIncludeClosed = includeClosed;
+    }
+    if (typeof query === "string") {
+      state.tickerContext.predictionsQuery = query.trim().slice(0, 80);
+    } else if (state.tickerContext.predictionsMode !== "topActive") {
+      const currentQuery = String(state.tickerContext.predictionsQuery || "").trim();
+      if (symbol && symbol !== previousTicker) {
+        state.tickerContext.predictionsQuery = symbol;
+      } else if (!currentQuery || currentQuery.toUpperCase() === previousTicker) {
+        state.tickerContext.predictionsQuery = symbol;
+      }
+    }
+
+    const panel = getPredictionsPanelState(symbol);
+    const requestKey = buildPredictionsCacheKey(panel);
+
+    if (!force && requestKey && state.tickerContext.predictionsRequestKey === requestKey && state.tickerContext.predictionsData) {
+      renderPredictionsOutput({ payload: state.tickerContext.predictionsData, ticker: symbol });
       return;
     }
 
-    state.tickerContext.predictionsTicker = symbol;
-    setOutputLoading(ui.tickerPredictionsOutput, "Loading prediction markets...");
-    logEvent("polymarket_load_started", { ticker: symbol, force: Boolean(force) });
+    const cached = !force ? getPredictionsCache(requestKey) : null;
+    if (cached) {
+      state.tickerContext.predictionsData = cached;
+      state.tickerContext.predictionsRequestKey = requestKey;
+      renderPredictionsOutput({ payload: cached, ticker: symbol });
+      return;
+    }
+
+    if (panel.mode === "ticker" && !panel.query) {
+      state.tickerContext.predictionsData = normalizePredictionsPayload({ query: "", events: [] }, "");
+      state.tickerContext.predictionsRequestKey = requestKey;
+      renderPredictionsOutput({ payload: state.tickerContext.predictionsData, ticker: symbol });
+      return;
+    }
+
+    renderPredictionsOutput({
+      payload: state.tickerContext.predictionsData,
+      ticker: symbol,
+      loading: true,
+    });
+    logEvent("polymarket_load_started", {
+      ticker: panel.ticker || panel.query || "",
+      mode: panel.mode,
+      force: Boolean(force),
+    });
+
+    if (polymarketInFlightController) {
+      try {
+        polymarketInFlightController.abort();
+      } catch (error) {
+        // Best effort.
+      }
+      polymarketInFlightController = null;
+    }
+
+    const requestNonce = (polymarketInFlightNonce += 1);
+    const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+    polymarketInFlightController = controller;
 
     try {
-      const searchResp = await fetch(`/api/predictions/search?ticker=${encodeURIComponent(symbol)}`, {
-        method: "GET",
-        headers: { Accept: "application/json" },
+      const payload = await fetchTickerPredictionsPayload({
+        mode: panel.mode,
+        query: panel.query,
+        includeClosed: panel.includeClosed,
+        signal: controller?.signal,
       });
-      const searchPayload = await searchResp.json().catch(() => ({}));
-      if (!searchResp.ok) {
-        throw new Error(String(searchPayload?.detail || searchPayload?.error || "Unable to load predictions."));
-      }
-
-      const markets = Array.isArray(searchPayload?.markets) ? searchPayload.markets.map(normalizePredictionMarket) : [];
-      const tokenIds = [];
-      const seen = new Set();
-      markets.forEach((market) => {
-        const ids = Array.isArray(market?.clobTokenIds) ? market.clobTokenIds : [];
-        ids.forEach((id) => {
-          const clean = String(id || "").trim();
-          if (!clean || seen.has(clean)) return;
-          seen.add(clean);
-          tokenIds.push(clean);
-        });
-      });
-
-      let orderbooks = {};
-      if (tokenIds.length) {
-        const orderResp = await fetch("/api/predictions/orderbook", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Accept: "application/json" },
-          body: JSON.stringify({ tokenIds, maxLevels: 5 }),
-        });
-        const orderPayload = await orderResp.json().catch(() => ({}));
-        if (orderResp.ok && orderPayload?.orderbooks && typeof orderPayload.orderbooks === "object") {
-          orderbooks = orderPayload.orderbooks;
-        }
-      }
-
-      const normalized = {
-        ticker: symbol,
-        events: Array.isArray(searchPayload?.events) ? searchPayload.events : [],
-        markets,
-        orderbooks,
-      };
-      state.tickerContext.predictionsData = normalized;
-      setOutputReady(ui.tickerPredictionsOutput);
-      renderPredictionsOutput(normalized, symbol);
-      logEvent("predictions_loaded", { ticker: symbol, markets: markets.length, token_ids: tokenIds.length });
-      logEvent("polymarket_orderbooks_loaded", {
-        ticker: symbol,
-        orderbooks: Object.keys(orderbooks || {}).length,
+      if (requestNonce !== polymarketInFlightNonce) return;
+      state.tickerContext.predictionsData = payload;
+      state.tickerContext.predictionsRequestKey = requestKey;
+      setPredictionsCache(requestKey, payload);
+      renderPredictionsOutput({ payload, ticker: symbol });
+      const marketCount = payload.events.reduce((sum, event) => sum + (Array.isArray(event.markets) ? event.markets.length : 0), 0);
+      logEvent("predictions_loaded", {
+        ticker: panel.ticker || panel.query || "",
+        mode: panel.mode,
+        markets: marketCount,
       });
     } catch (error) {
-      setOutputReady(ui.tickerPredictionsOutput);
-      ui.tickerPredictionsOutput.innerHTML = `
-        <div class="small muted">Polymarket predictions are temporarily unavailable for ${escapeHtml(symbol)}.</div>
-      `;
-      logEvent("polymarket_load_error", {
+      const aborted = controller?.signal?.aborted;
+      if (aborted) return;
+      renderPredictionsOutput({
+        payload: state.tickerContext.predictionsData,
         ticker: symbol,
+        error: String(error?.message || "Unable to load predictions."),
+      });
+      logEvent("polymarket_load_error", {
+        ticker: panel.ticker || panel.query || "",
+        mode: panel.mode,
         message: String(error?.message || "load_failed").slice(0, 120),
       });
       if (notify) showToast(error.message || "Unable to load predictions.", "warn");
+    } finally {
+      if (requestNonce === polymarketInFlightNonce) {
+        polymarketInFlightController = null;
+      }
     }
+  };
+
+  const bindPredictionsPanelInteractions = () => {
+    if (!ui.tickerPredictionsOutput || ui.tickerPredictionsOutput.dataset.boundPredictions === "1") return;
+    ui.tickerPredictionsOutput.dataset.boundPredictions = "1";
+
+    ui.tickerPredictionsOutput.addEventListener("click", (event) => {
+      const tabButton = event.target.closest("[data-action='predictions-tab']");
+      if (tabButton) {
+        event.preventDefault();
+        triggerSubtleHaptic();
+        const nextMode = String(tabButton.dataset.mode || "ticker");
+        state.tickerContext.predictionsExpanded = false;
+        const activeTicker = normalizeTicker(state.tickerContext.ticker || state.tickerContext.intelTicker || "");
+        if (nextMode === "ticker" && !String(state.tickerContext.predictionsQuery || "").trim()) {
+          state.tickerContext.predictionsQuery = activeTicker;
+        }
+        loadTickerPredictions(activeTicker, { mode: nextMode, force: true, notify: false }).catch(() => {});
+        return;
+      }
+
+      const showMore = event.target.closest("[data-action='predictions-show-more']");
+      if (showMore) {
+        event.preventDefault();
+        state.tickerContext.predictionsExpanded = !state.tickerContext.predictionsExpanded;
+        const activeTicker = normalizeTicker(state.tickerContext.ticker || state.tickerContext.intelTicker || "");
+        renderPredictionsOutput({ payload: state.tickerContext.predictionsData, ticker: activeTicker });
+        return;
+      }
+
+      const searchNow = event.target.closest("[data-action='predictions-search-now']");
+      if (searchNow) {
+        event.preventDefault();
+        state.tickerContext.predictionsMode = "ticker";
+        state.tickerContext.predictionsExpanded = false;
+        const queryInput = ui.tickerPredictionsOutput.querySelector("[data-action='predictions-query']");
+        const queryValue = String(queryInput?.value || "").trim().slice(0, 80);
+        state.tickerContext.predictionsQuery = queryValue;
+        const activeTicker = normalizeTicker(state.tickerContext.ticker || state.tickerContext.intelTicker || "");
+        loadTickerPredictions(activeTicker, {
+          mode: "ticker",
+          query: queryValue,
+          force: true,
+          notify: true,
+        }).catch(() => {});
+      }
+    });
+
+    ui.tickerPredictionsOutput.addEventListener("input", (event) => {
+      const input = event.target.closest("[data-action='predictions-query']");
+      if (!input) return;
+      const queryValue = String(input.value || "").trim().slice(0, 80);
+      state.tickerContext.predictionsMode = "ticker";
+      state.tickerContext.predictionsQuery = queryValue;
+      state.tickerContext.predictionsExpanded = false;
+      if (polymarketSearchDebounceTimer) window.clearTimeout(polymarketSearchDebounceTimer);
+      polymarketSearchDebounceTimer = window.setTimeout(() => {
+        const activeTicker = normalizeTicker(state.tickerContext.ticker || state.tickerContext.intelTicker || "");
+        loadTickerPredictions(activeTicker, {
+          mode: "ticker",
+          query: queryValue,
+          force: true,
+          notify: false,
+        }).catch(() => {});
+      }, POLYMARKET_SEARCH_DEBOUNCE_MS);
+    });
+
+    ui.tickerPredictionsOutput.addEventListener("change", (event) => {
+      const toggle = event.target.closest("[data-action='predictions-include-closed']");
+      if (!toggle) return;
+      const checked = Boolean(toggle.checked);
+      state.tickerContext.predictionsIncludeClosed = checked;
+      state.tickerContext.predictionsExpanded = false;
+      const activeTicker = normalizeTicker(state.tickerContext.ticker || state.tickerContext.intelTicker || "");
+      loadTickerPredictions(activeTicker, {
+        includeClosed: checked,
+        force: true,
+        notify: false,
+      }).catch(() => {});
+    });
   };
 
   const setTickerIntelTab = (tab, { ensureLoaded = true } = {}) => {
@@ -8941,11 +9468,14 @@
       if (activeTicker) {
         logEvent("polymarket_tab_opened", { ticker: activeTicker });
         loadTickerPredictions(activeTicker, { notify: false }).catch(() => {});
+      } else {
+        renderPredictionsOutput({ payload: state.tickerContext.predictionsData, ticker: "" });
       }
     }
   };
 
   const bindTickerIntelTabs = () => {
+    bindPredictionsPanelInteractions();
     if (!ui.tickerIntelTabs.length) return;
     ui.tickerIntelTabs.forEach((button) => {
       if (button.dataset.bound === "1") return;
@@ -8967,7 +9497,11 @@
         ui.tickerIntelligenceOutput.innerHTML = `<div class="small muted">Load a ticker to generate institutional intelligence.</div>`;
       }
       if (ui.tickerPredictionsOutput) {
-        ui.tickerPredictionsOutput.innerHTML = `<div class="small muted">Load a ticker to view related Polymarket markets.</div>`;
+        state.tickerContext.predictionsTicker = "";
+        state.tickerContext.predictionsQuery = "";
+        state.tickerContext.predictionsData = normalizePredictionsPayload({ query: "", events: [] }, "");
+        state.tickerContext.predictionsRequestKey = "";
+        renderPredictionsOutput({ payload: state.tickerContext.predictionsData, ticker: "" });
       }
       return;
     }
@@ -8997,8 +9531,11 @@
         ui.tickerIntelligenceOutput.innerHTML = `<div class="small muted">Unable to load institutional intelligence right now.</div>`;
       }
       if (ui.tickerPredictionsOutput && state.intelActiveTab === "predictions") {
-        setOutputReady(ui.tickerPredictionsOutput);
-        ui.tickerPredictionsOutput.innerHTML = `<div class="small muted">Polymarket predictions are temporarily unavailable for ${escapeHtml(symbol)}.</div>`;
+        renderPredictionsOutput({
+          payload: state.tickerContext.predictionsData,
+          ticker: symbol,
+          error: "Unable to load predictions.",
+        });
       }
       if (notify) showToast(error.message || "Unable to load ticker intelligence.", "warn");
     }
@@ -9866,6 +10403,444 @@
     return headers;
   };
 
+  const normalizeMyRequestType = (value) => {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    const lowered = raw.toLowerCase();
+    if (lowered === "forecast" || lowered === "screener" || lowered === "indicator") return lowered;
+    if (lowered === "modelcouncil" || lowered === "model_council" || lowered === "model-council") return "modelCouncil";
+    return "";
+  };
+
+  const normalizeMyRequestVisibility = (value, fallback = "private") => {
+    const raw = String(value || "").trim().toLowerCase();
+    if (raw === "public" || raw === "unlisted" || raw === "private") return raw;
+    return fallback;
+  };
+
+  const normalizeMyRequestPublishedFilter = (value) => {
+    const raw = String(value || "").trim().toLowerCase();
+    if (raw === "published") return "published";
+    if (raw === "unpublished" || raw === "draft") return "unpublished";
+    return "all";
+  };
+
+  const getMyRequestPanelStateKey = (panel, idx) => {
+    const explicit = String(panel?.dataset?.myRequestsPanelKey || "").trim();
+    if (explicit) return explicit;
+    const panelName = String(panel?.closest?.("[data-panel]")?.dataset?.panel || "").trim() || `panel_${idx}`;
+    panel.dataset.myRequestsPanelKey = panelName;
+    return panelName;
+  };
+
+  const readMyRequestPanelState = (panel, idx = 0) => {
+    const key = getMyRequestPanelStateKey(panel, idx);
+    const current = state.myRequestsPanelState[key] || {};
+    const defaultType = normalizeMyRequestType(panel?.dataset?.defaultType || "");
+    const controls = {
+      search: panel?.querySelector?.("[data-my-requests-search]"),
+      type: panel?.querySelector?.("[data-my-requests-type]"),
+      published: panel?.querySelector?.("[data-my-requests-published]"),
+      status: panel?.querySelector?.("[data-my-requests-status]"),
+      list: panel?.querySelector?.("[data-my-requests-list]"),
+    };
+    const next = {
+      search: String(current.search || controls.search?.value || "").trim(),
+      type: normalizeMyRequestType(current.type || controls.type?.value || "") || defaultType || "",
+      published: normalizeMyRequestPublishedFilter(current.published || controls.published?.value || "all"),
+    };
+    state.myRequestsPanelState[key] = next;
+    return { key, controls, filters: next };
+  };
+
+  const sortMyRequestsInState = () => {
+    state.myRequests = (Array.isArray(state.myRequests) ? state.myRequests : [])
+      .slice()
+      .sort((a, b) => {
+        const aMs = Number(a?.updatedAtMs || a?.createdAtMs || 0);
+        const bMs = Number(b?.updatedAtMs || b?.createdAtMs || 0);
+        return bMs - aMs;
+      });
+    const byId = {};
+    state.myRequests.forEach((item) => {
+      const id = String(item?.id || "").trim();
+      if (!id) return;
+      byId[id] = item;
+    });
+    state.myRequestsById = byId;
+  };
+
+  const upsertMyRequestInState = (request) => {
+    const id = String(request?.id || "").trim();
+    if (!id) return;
+    const index = state.myRequests.findIndex((item) => String(item?.id || "").trim() === id);
+    if (index >= 0) {
+      state.myRequests[index] = { ...state.myRequests[index], ...request };
+    } else {
+      state.myRequests.push(request);
+    }
+    sortMyRequestsInState();
+  };
+
+  const removeMyRequestFromState = (requestId) => {
+    const id = String(requestId || "").trim();
+    if (!id) return;
+    state.myRequests = state.myRequests.filter((item) => String(item?.id || "").trim() !== id);
+    delete state.myRequestsById[id];
+  };
+
+  const fetchMyRequestsList = async ({ force = false, notify = false } = {}) => {
+    if (!hasFullAccount()) {
+      state.myRequests = [];
+      state.myRequestsById = {};
+      state.myRequestsLoadedAt = 0;
+      return [];
+    }
+    if (state.myRequestsLoading) return state.myRequests;
+    if (!force && state.myRequests.length && Date.now() - Number(state.myRequestsLoadedAt || 0) < 15000) {
+      return state.myRequests;
+    }
+
+    state.myRequestsLoading = true;
+    try {
+      const headers = await buildApiAuthHeaders();
+      const response = await fetch("/api/my-requests?limit=160", {
+        method: "GET",
+        headers,
+        credentials: "same-origin",
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(String(payload?.error || "Unable to load requests.").trim());
+      state.myRequests = Array.isArray(payload?.items) ? payload.items : [];
+      sortMyRequestsInState();
+      state.myRequestsLoadedAt = Date.now();
+      return state.myRequests;
+    } catch (error) {
+      if (notify) showToast(error.message || "Unable to load requests.", "warn");
+      return state.myRequests;
+    } finally {
+      state.myRequestsLoading = false;
+    }
+  };
+
+  const getMyRequestById = (requestId) => {
+    const id = String(requestId || "").trim();
+    if (!id) return null;
+    return state.myRequestsById[id] || state.myRequests.find((item) => String(item?.id || "").trim() === id) || null;
+  };
+
+  const fetchMyRequestById = async (requestId) => {
+    const id = String(requestId || "").trim();
+    if (!id) return null;
+    const cached = getMyRequestById(id);
+    if (cached?.input && cached?.outputsMeta) return cached;
+    const headers = await buildApiAuthHeaders();
+    const response = await fetch(`/api/my-requests/${encodeURIComponent(id)}`, {
+      method: "GET",
+      headers,
+      credentials: "same-origin",
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(String(payload?.error || "Unable to load request.").trim());
+    const request = payload?.request && typeof payload.request === "object" ? payload.request : null;
+    if (request) {
+      upsertMyRequestInState(request);
+    }
+    return request;
+  };
+
+  const renderMyRequestCards = (items = []) => {
+    if (!Array.isArray(items) || !items.length) return `<div class="small muted">No requests matched this filter.</div>`;
+    return items
+      .map((item) => {
+        const id = escapeHtml(String(item?.id || ""));
+        const type = normalizeMyRequestType(item?.type) || "forecast";
+        const typeLabel = escapeHtml(String(item?.typeLabel || MY_REQUEST_TYPE_LABELS[type] || type));
+        const title = escapeHtml(String(item?.title || "Request"));
+        const ticker = escapeHtml(String(item?.ticker || "—"));
+        const createdAt = escapeHtml(formatTimestamp(item?.createdAt || item?.createdAtMs));
+        const updatedAt = escapeHtml(formatTimestamp(item?.updatedAt || item?.updatedAtMs));
+        const published = Boolean(item?.published);
+        const share = item?.share && typeof item.share === "object" ? item.share : {};
+        const shareVisibility = escapeHtml(String(share?.visibility || "private").toLowerCase());
+        const summary = escapeHtml(String((item?.outputsMeta || {})?.summary || ""));
+        return `
+          <div class="order-card" data-request-id="${id}">
+            <div class="order-header">
+              <div>
+                <div class="order-title">${title}</div>
+                <div class="small">ID: ${id}</div>
+              </div>
+              <span class="status ${published ? "fulfilled" : "pending"}">${published ? "published" : "unpublished"}</span>
+            </div>
+            <div class="order-meta">
+              <div><strong>Type</strong> ${typeLabel}</div>
+              <div><strong>Ticker</strong> ${ticker}</div>
+              <div><strong>Created</strong> ${createdAt}</div>
+              <div><strong>Updated</strong> ${updatedAt}</div>
+              <div><strong>Share</strong> ${shareVisibility}</div>
+              ${summary ? `<div><strong>Summary</strong> ${summary}</div>` : ""}
+            </div>
+            <div class="order-actions" style="display:flex;gap:10px;flex-wrap:wrap;">
+              <button class="cta secondary small" type="button" data-action="my-request-load" data-request-id="${id}">${icon("play")}<span>Load</span></button>
+              <button class="cta secondary small" type="button" data-action="my-request-share" data-request-id="${id}">${icon("share-ios")}<span>Share</span></button>
+              <button class="cta secondary small" type="button" data-action="my-request-rename" data-request-id="${id}">${icon("edit-pencil")}<span>Rename</span></button>
+              <button class="cta secondary small" type="button" data-action="my-request-duplicate" data-request-id="${id}">${icon("copy")}<span>Duplicate</span></button>
+              ${published ? `<button class="cta secondary small" type="button" data-action="my-request-unpublish" data-request-id="${id}">${icon("eye-off")}<span>Unpublish</span></button>` : ""}
+              <button class="cta secondary small danger" type="button" data-action="my-request-delete" data-request-id="${id}">${icon("trash")}<span>Delete</span></button>
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+  };
+
+  const renderMyRequestsPanels = () => {
+    const panels = Array.isArray(ui.myRequestsPanels) ? ui.myRequestsPanels : [];
+    panels.forEach((panel, idx) => {
+      const { controls, filters } = readMyRequestPanelState(panel, idx);
+      if (!controls?.list || !controls?.status) return;
+
+      const searchText = String(filters.search || "").trim().toLowerCase();
+      const typeFilter = normalizeMyRequestType(filters.type);
+      const publishedFilter = normalizeMyRequestPublishedFilter(filters.published);
+      const sourceRows = Array.isArray(state.myRequests) ? state.myRequests : [];
+      const rows = sourceRows.filter((item) => {
+        if (Boolean(item?.deleted)) return false;
+        const itemType = normalizeMyRequestType(item?.type);
+        if (typeFilter && itemType !== typeFilter) return false;
+        if (publishedFilter === "published" && !Boolean(item?.published)) return false;
+        if (publishedFilter === "unpublished" && Boolean(item?.published)) return false;
+        if (!searchText) return true;
+        const haystack = [
+          String(item?.title || ""),
+          String(item?.ticker || ""),
+          String(item?.typeLabel || ""),
+          String((item?.outputsMeta || {})?.summary || ""),
+          String((item?.input || {})?.question || ""),
+          String(item?.createdAt || ""),
+        ]
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(searchText);
+      });
+
+      if (!hasFullAccount()) {
+        controls.status.textContent = "Sign in to manage requests.";
+        controls.list.innerHTML = `<div class="small muted">Sign in to load your requests.</div>`;
+        return;
+      }
+      if (state.myRequestsLoading) {
+        controls.status.textContent = "Loading requests...";
+        controls.list.innerHTML = `<div class="small muted">${skeletonHtml(3)}</div>`;
+        return;
+      }
+      controls.status.textContent = rows.length
+        ? `${rows.length} request${rows.length === 1 ? "" : "s"}`
+        : "No requests matched this filter.";
+      controls.list.innerHTML = renderMyRequestCards(rows.slice(0, 60));
+    });
+  };
+
+  const bindMyRequestsPanels = () => {
+    const panels = Array.isArray(ui.myRequestsPanels) ? ui.myRequestsPanels : [];
+    panels.forEach((panel, idx) => {
+      if (!panel || panel.dataset.bound === "1") return;
+      panel.dataset.bound = "1";
+      const { controls, key, filters } = readMyRequestPanelState(panel, idx);
+      if (controls?.type) controls.type.value = filters.type || "";
+      if (controls?.published) controls.published.value = filters.published || "all";
+      if (controls?.search) controls.search.value = filters.search || "";
+
+      controls?.search?.addEventListener("input", () => {
+        state.myRequestsPanelState[key] = {
+          ...state.myRequestsPanelState[key],
+          search: String(controls.search.value || "").trim(),
+        };
+        renderMyRequestsPanels();
+      });
+      controls?.type?.addEventListener("change", () => {
+        state.myRequestsPanelState[key] = {
+          ...state.myRequestsPanelState[key],
+          type: normalizeMyRequestType(controls.type.value || "") || "",
+        };
+        renderMyRequestsPanels();
+      });
+      controls?.published?.addEventListener("change", () => {
+        state.myRequestsPanelState[key] = {
+          ...state.myRequestsPanelState[key],
+          published: normalizeMyRequestPublishedFilter(controls.published.value || "all"),
+        };
+        renderMyRequestsPanels();
+      });
+      panel.querySelector('[data-action="my-requests-refresh"]')?.addEventListener("click", async () => {
+        await fetchMyRequestsList({ force: true, notify: true });
+        renderMyRequestsPanels();
+      });
+    });
+  };
+
+  const upsertMyRequest = async (payload = {}) => {
+    if (!hasFullAccount()) return null;
+    const type = normalizeMyRequestType(payload.type);
+    if (!type || !MY_REQUEST_TYPES.has(type)) return null;
+    const headers = await buildApiAuthHeaders({ includeJson: true });
+    const response = await fetch("/api/my-requests", {
+      method: "POST",
+      headers,
+      credentials: "same-origin",
+      body: JSON.stringify({
+        type,
+        requestId: String(payload.requestId || "").trim(),
+        title: String(payload.title || "").trim(),
+        input: payload.input && typeof payload.input === "object" ? payload.input : {},
+        outputsMeta: payload.outputsMeta && typeof payload.outputsMeta === "object" ? payload.outputsMeta : {},
+        sourceRef: payload.sourceRef && typeof payload.sourceRef === "object" ? payload.sourceRef : {},
+        published: Boolean(payload.published),
+      }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(String(body?.error || "Unable to save request.").trim());
+    const request = body?.request && typeof body.request === "object" ? body.request : null;
+    if (request) {
+      upsertMyRequestInState(request);
+      renderMyRequestsPanels();
+    }
+    return request;
+  };
+
+  const updateMyRequest = async (requestId, payload = {}, { method = "PATCH", path = "" } = {}) => {
+    const id = String(requestId || "").trim();
+    if (!id) throw new Error("Request ID is required.");
+    const headers = await buildApiAuthHeaders({ includeJson: true });
+    const target = path || `/api/my-requests/${encodeURIComponent(id)}`;
+    const response = await fetch(target, {
+      method,
+      headers,
+      credentials: "same-origin",
+      body: method === "GET" || method === "DELETE" ? undefined : JSON.stringify(payload),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(String(body?.error || "Request update failed.").trim());
+    const request = body?.request && typeof body.request === "object" ? body.request : null;
+    if (request) {
+      upsertMyRequestInState(request);
+    } else if (method === "DELETE" || body?.deleted) {
+      removeMyRequestFromState(id);
+    }
+    renderMyRequestsPanels();
+    return body;
+  };
+
+  const openMyRequestShareModal = ({ request, onSaved } = {}) =>
+    new Promise((resolve) => {
+      const item = request && typeof request === "object" ? request : null;
+      if (!item) {
+        resolve(null);
+        return;
+      }
+      const requestId = String(item.id || "").trim();
+      if (!requestId) {
+        resolve(null);
+        return;
+      }
+
+      const modal = ensureActionModal();
+      const card = modal.querySelector(".modal-card");
+      if (!card) {
+        resolve(null);
+        return;
+      }
+
+      const currentShare = item.share && typeof item.share === "object" ? item.share : {};
+      const currentVisibility = normalizeMyRequestVisibility(currentShare.visibility, "private");
+      card.innerHTML = `
+        <h3>Share request</h3>
+        <p class="small">Choose visibility and copy a read-only link.</p>
+        <label class="label" for="my-request-share-visibility">Visibility</label>
+        <select id="my-request-share-visibility" class="modal-input">
+          <option value="private"${currentVisibility === "private" ? " selected" : ""}>Private</option>
+          <option value="unlisted"${currentVisibility === "unlisted" ? " selected" : ""}>Unlisted</option>
+          <option value="public"${currentVisibility === "public" ? " selected" : ""}>Public</option>
+        </select>
+        <div class="modal-actions" style="margin-top:14px;">
+          <button class="cta secondary" type="button" data-action="cancel">Close</button>
+          <button class="cta" type="button" data-action="confirm">Save visibility</button>
+          <button class="cta secondary" type="button" data-action="copy" disabled>Copy link</button>
+        </div>
+        <p class="small muted" style="margin-top:10px;" data-role="status"></p>
+      `;
+
+      const visibilityInput = card.querySelector("#my-request-share-visibility");
+      const copyBtn = card.querySelector('[data-action="copy"]');
+      const confirmBtn = card.querySelector('[data-action="confirm"]');
+      const status = card.querySelector('[data-role="status"]');
+      let latestShareUrl = String(currentShare.shareUrl || "").trim();
+      if (latestShareUrl) copyBtn.disabled = false;
+      if (status) status.textContent = latestShareUrl ? latestShareUrl : "";
+
+      const cleanup = (result = null) => {
+        modal.classList.add("hidden");
+        modal.removeEventListener("click", onClick);
+        window.removeEventListener("keydown", onKeyDown, true);
+        resolve(result);
+      };
+
+      const onClick = async (event) => {
+        const action = event.target?.dataset?.action;
+        if (!action) return;
+        if (action === "close" || action === "cancel") {
+          cleanup(null);
+          return;
+        }
+        if (action === "copy") {
+          if (!latestShareUrl) return;
+          try {
+            await performShare({
+              url: latestShareUrl,
+              title: "Quantura request",
+              text: "Shared request from Quantura",
+            });
+            showToast("Share link copied.");
+          } catch (error) {
+            showToast(error.message || "Unable to copy link.", "warn");
+          }
+          return;
+        }
+        if (action !== "confirm") return;
+        const visibility = normalizeMyRequestVisibility(visibilityInput?.value || "private", "private");
+        confirmBtn.disabled = true;
+        if (copyBtn) copyBtn.disabled = true;
+        if (status) status.textContent = "Saving...";
+        try {
+          const body = await updateMyRequest(requestId, { visibility }, { method: "POST", path: `/api/my-requests/${encodeURIComponent(requestId)}/share` });
+          latestShareUrl = String(body?.share?.shareUrl || "").trim();
+          if (status) status.textContent = latestShareUrl || "Share disabled for private visibility.";
+          if (copyBtn) copyBtn.disabled = !latestShareUrl;
+          const refreshed = body?.request && typeof body.request === "object" ? body.request : null;
+          if (refreshed && typeof onSaved === "function") onSaved(refreshed);
+          if (visibility === "private") {
+            showToast("Request set to private.");
+          } else {
+            showToast("Share link ready.");
+          }
+        } catch (error) {
+          if (status) status.textContent = error.message || "Unable to update share settings.";
+          showToast(error.message || "Unable to update share settings.", "warn");
+        } finally {
+          confirmBtn.disabled = false;
+        }
+      };
+
+      const onKeyDown = (event) => {
+        if (event.key === "Escape") cleanup(null);
+      };
+
+      modal.addEventListener("click", onClick);
+      window.addEventListener("keydown", onKeyDown, true);
+      modal.classList.remove("hidden");
+    });
+
   const applyTickerQueryModelSelection = (modelId, providerId = "") => {
     const normalizedModel = normalizeAiModelId(modelId || "") || "gpt-5-mini";
     const normalizedProvider = normalizeModelCouncilProviderId(providerId || modelCouncilProviderFromModel(normalizedModel) || "openai");
@@ -10472,20 +11447,45 @@
       if (ui.tickerQueryImprovePreviewWrap && skipImprove) {
         ui.tickerQueryImprovePreviewWrap.classList.add("hidden");
       }
-      logEvent("model_council_completed", {
-        ticker: symbol,
-        language,
-        provider: responsePayload.provider || selectedProvider,
-        model: responsePayload.model || selectedModel,
-        modules_count: (responsePayload.selectedModules || selectedModules || []).length,
-        prompt_tokens: Number(usage?.prompt_tokens || 0),
-        completion_tokens: Number(usage?.completion_tokens || 0),
-        cached_tokens: Number(usage?.cached_tokens || 0),
-      });
-    } catch (error) {
-      setOutputReady(ui.tickerQueryOutput);
-      renderTickerQueryErrorState({
-        message: error.message || "Unable to run Model Council right now.",
+	      logEvent("model_council_completed", {
+	        ticker: symbol,
+	        language,
+	        provider: responsePayload.provider || selectedProvider,
+	        model: responsePayload.model || selectedModel,
+	        modules_count: (responsePayload.selectedModules || selectedModules || []).length,
+	        prompt_tokens: Number(usage?.prompt_tokens || 0),
+	        completion_tokens: Number(usage?.completion_tokens || 0),
+	        cached_tokens: Number(usage?.cached_tokens || 0),
+	      });
+	      upsertMyRequest({
+	        type: "modelCouncil",
+	        title: `${symbol} Model Council`,
+	        input: {
+	          ticker: symbol,
+	          question: finalPrompt,
+	          language,
+	          provider: responsePayload.provider || selectedProvider,
+	          model: responsePayload.model || selectedModel,
+	          modules: Array.isArray(responsePayload.selectedModules)
+	            ? responsePayload.selectedModules
+	            : selectedModules,
+	        },
+	        outputsMeta: {
+	          summary: String(responsePayload.answer || "").trim().slice(0, 480),
+	          answer: String(responsePayload.answer || "").trim().slice(0, 4000),
+	          provider: responsePayload.provider || selectedProvider,
+	          model: responsePayload.model || selectedModel,
+	          latencyMs,
+	        },
+	        sourceRef: {
+	          collection: "model_council_responses",
+	          id: String(responsePayload.responseId || "").trim(),
+	        },
+	      }).catch(() => {});
+	    } catch (error) {
+	      setOutputReady(ui.tickerQueryOutput);
+	      renderTickerQueryErrorState({
+	        message: error.message || "Unable to run Model Council right now.",
         retryProvider: error.retryProvider || "",
         retryModel: error.retryModel || "",
       });
@@ -13074,6 +14074,58 @@
     return null;
   };
 
+  const toIsoTimestamp = (date, interval = "1d") => {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
+    if (String(interval || "1d").toLowerCase() === "1h") {
+      return date.toISOString();
+    }
+    return date.toISOString().slice(0, 10);
+  };
+
+  const buildForwardForecastDates = ({ lastDate, horizon = 0, interval = "1d" } = {}) => {
+    const total = Math.max(0, Number(horizon) || 0);
+    const out = [];
+    if (!(lastDate instanceof Date) || Number.isNaN(lastDate.getTime()) || total <= 0) return out;
+    let cursor = new Date(lastDate.getTime());
+    const hourly = String(interval || "1d").toLowerCase() === "1h";
+    while (out.length < total) {
+      if (hourly) {
+        cursor = new Date(cursor.getTime() + 60 * 60 * 1000);
+        out.push(toIsoTimestamp(cursor, interval));
+        continue;
+      }
+      cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
+      const weekday = cursor.getUTCDay();
+      if (weekday === 0 || weekday === 6) continue;
+      out.push(toIsoTimestamp(cursor, interval));
+    }
+    return out;
+  };
+
+  const alignForecastRowsWithHistory = ({ forecastRows = [], historyRows = [], interval = "1d", horizon = 0 } = {}) => {
+    const normalized = normalizeForecastSeriesRows(forecastRows);
+    if (!normalized.length) return [];
+    const quantileKeys = Object.keys(normalized[0] || {}).filter((key) => /^q\d{1,3}$/.test(key));
+    if (!quantileKeys.length) return normalized;
+    const providedDates = normalized.map((row) => String(row.ds || "").trim()).filter(Boolean);
+    if (providedDates.length === normalized.length) {
+      return normalized;
+    }
+    const historyList = Array.isArray(historyRows) ? historyRows : [];
+    const lastHistoryDate = extractDateFromHistoryRow(historyList[historyList.length - 1] || null);
+    if (!lastHistoryDate) return normalized;
+    const generatedDates = buildForwardForecastDates({
+      lastDate: lastHistoryDate,
+      horizon: Math.max(Number(horizon) || 0, normalized.length),
+      interval,
+    });
+    if (!generatedDates.length) return normalized;
+    return normalized.map((row, idx) => ({
+      ...row,
+      ds: generatedDates[idx] || row.ds,
+    }));
+  };
+
   const summarizeTickerRationale = ({ projectedRoi, q4Seasonality }) => {
     if (projectedRoi > 0 && q4Seasonality) {
       return "Quantura Horizon detects strong upward trend with recurring Q4 seasonal strength.";
@@ -13123,13 +14175,8 @@
       start,
       meta: buildMeta(),
     });
-    const requestId = String(forecastResult.data?.requestId || "").trim();
-    if (!requestId) return null;
-
-    const forecastSnap = await db.collection("forecast_requests").doc(requestId).get();
-    if (!forecastSnap.exists) return null;
-    const forecastDoc = forecastSnap.data() || {};
-    const forecastRows = Array.isArray(forecastDoc.forecastRows) ? forecastDoc.forecastRows : [];
+    const forecastData = forecastResult.data && typeof forecastResult.data === "object" ? forecastResult.data : {};
+    const forecastRows = normalizeForecastSeriesRows(forecastData.forecastSeries || forecastData.forecastRows || []);
     if (!forecastRows.length) return null;
 
     const lastRow = forecastRows[forecastRows.length - 1] || {};
@@ -13690,12 +14737,288 @@
     return Array.from(set).sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
   };
 
+  const extractForecastKeyLevels = (rows = []) => {
+    const normalizedRows = normalizeForecastSeriesRows(rows);
+    if (!normalizedRows.length) {
+      return { support: null, median: null, resistance: null, bandWidth: null, bandWidthPct: null };
+    }
+    const quantileKeys = extractQuantileKeys(normalizedRows);
+    if (!quantileKeys.length) {
+      return { support: null, median: null, resistance: null, bandWidth: null, bandWidthPct: null };
+    }
+    const last = normalizedRows[normalizedRows.length - 1] || {};
+    const supportKey = quantileKeys[0];
+    const resistanceKey = quantileKeys[quantileKeys.length - 1];
+    const medianKey =
+      quantileKeys.find((key) => key === "q50") ||
+      quantileKeys
+        .slice()
+        .sort((a, b) => Math.abs(Number(a.slice(1)) - 50) - Math.abs(Number(b.slice(1)) - 50))[0];
+    const support = Number(last[supportKey]);
+    const median = Number(last[medianKey]);
+    const resistance = Number(last[resistanceKey]);
+    const bandWidth = Number.isFinite(resistance) && Number.isFinite(support) ? resistance - support : null;
+    const bandWidthPct =
+      Number.isFinite(bandWidth) && Number.isFinite(median) && median > 0 ? (bandWidth / median) * 100 : null;
+    return {
+      support: Number.isFinite(support) ? support : null,
+      median: Number.isFinite(median) ? median : null,
+      resistance: Number.isFinite(resistance) ? resistance : null,
+      bandWidth: Number.isFinite(bandWidth) ? bandWidth : null,
+      bandWidthPct: Number.isFinite(bandWidthPct) ? bandWidthPct : null,
+    };
+  };
+
+  const buildForecastAutoSummaryContext = (forecastDoc = {}) => {
+    const rows = normalizeForecastSeriesRows(forecastDoc.forecastRows || []);
+    const metrics = forecastDoc.metrics && typeof forecastDoc.metrics === "object" ? forecastDoc.metrics : {};
+    const keyLevels = extractForecastKeyLevels(rows);
+    const recentClose = Number(metrics.lastClose);
+    const finalMedian = Number(keyLevels.median);
+    const delta = Number.isFinite(recentClose) && Number.isFinite(finalMedian) ? finalMedian - recentClose : null;
+    const deltaPct =
+      Number.isFinite(delta) && Number.isFinite(recentClose) && recentClose > 0 ? (delta / recentClose) * 100 : null;
+    return {
+      ticker: normalizeTicker(forecastDoc.ticker || state.tickerContext.ticker || ""),
+      interval: String(forecastDoc.interval || state.tickerContext.interval || "1d"),
+      horizon: Number(forecastDoc.horizon || metrics.horizon || rows.length || 0) || rows.length || 0,
+      service: String(forecastDoc.service || "prophet"),
+      quantiles: Array.isArray(forecastDoc.quantiles) ? forecastDoc.quantiles : [],
+      rowCount: rows.length,
+      recentClose: Number.isFinite(recentClose) ? recentClose : null,
+      finalMedian: Number.isFinite(finalMedian) ? finalMedian : null,
+      support: keyLevels.support,
+      resistance: keyLevels.resistance,
+      bandWidth: keyLevels.bandWidth,
+      bandWidthPct: keyLevels.bandWidthPct,
+      medianDelta: Number.isFinite(delta) ? delta : null,
+      medianDeltaPct: Number.isFinite(deltaPct) ? deltaPct : null,
+      mae: Number.isFinite(Number(metrics.mae)) ? Number(metrics.mae) : null,
+      coverage10_90: Number.isFinite(Number(metrics.coverage10_90)) ? Number(metrics.coverage10_90) : null,
+      volatility: Number.isFinite(Number(metrics.volatility)) ? Number(metrics.volatility) : null,
+      drift: Number.isFinite(Number(metrics.drift)) ? Number(metrics.drift) : null,
+    };
+  };
+
+  const syncForecastAiSummaryToMyRequest = async ({ requestId = "", summary = null } = {}) => {
+    if (!hasFullAccount()) return;
+    const reqId = String(requestId || "").trim();
+    if (!reqId) return;
+    const myRequestId = `forecast__${reqId}`;
+    const existing = getMyRequestById(myRequestId);
+    if (!existing) return;
+    const outputsMeta = existing.outputsMeta && typeof existing.outputsMeta === "object" ? existing.outputsMeta : {};
+    const nextOutputsMeta = {
+      ...outputsMeta,
+      aiSummary: String(summary?.text || "").trim().slice(0, 1600),
+      aiProvider: String(summary?.provider || "").trim(),
+      aiModel: String(summary?.model || "").trim(),
+      aiLatencyMs: Number(summary?.latencyMs || 0) || 0,
+      aiGeneratedAt: Date.now(),
+    };
+    await upsertMyRequest({
+      type: "forecast",
+      requestId: myRequestId,
+      title: String(existing.title || ""),
+      input: existing.input && typeof existing.input === "object" ? existing.input : {},
+      outputsMeta: nextOutputsMeta,
+      sourceRef: existing.sourceRef && typeof existing.sourceRef === "object" ? existing.sourceRef : { collection: "forecast_requests", id: reqId },
+      published: Boolean(existing.published),
+    }).catch(() => {});
+  };
+
+  const runForecastAutoSummary = async ({ forecastDoc = null, requestId = "", notify = false } = {}) => {
+    const doc = forecastDoc && typeof forecastDoc === "object" ? forecastDoc : null;
+    const targetId = String(requestId || doc?.id || state.tickerContext.forecastId || "").trim();
+    if (!doc || !targetId) return null;
+    const rows = normalizeForecastSeriesRows(doc.forecastRows || []);
+    if (!rows.length) return null;
+
+    const requestToken = `forecast_ai_${targetId}_${Date.now()}`;
+    state.tickerContext.forecastAiSummary = {
+      requestId: targetId,
+      loading: true,
+      text: "",
+      provider: normalizeModelCouncilProviderId(state.tickerContext.tickerQueryProvider || "openai"),
+      model: normalizeAiModelId(state.tickerContext.tickerQueryModel || "gpt-5-mini") || "gpt-5-mini",
+      latencyMs: null,
+      usage: {},
+      responseId: "",
+      shareUrl: "",
+      feedback: "",
+      error: "",
+      requestToken,
+    };
+    if (state.tickerContext.forecastDoc && String(state.tickerContext.forecastDoc.id || "") === targetId) {
+      renderForecastDetails(state.tickerContext.forecastDoc);
+    }
+
+    const context = buildForecastAutoSummaryContext(doc);
+    const provider = normalizeModelCouncilProviderId(state.tickerContext.tickerQueryProvider || "openai");
+    const model = normalizeAiModelId(state.tickerContext.tickerQueryModel || "gpt-5-mini") || "gpt-5-mini";
+    const startedAt = Date.now();
+    try {
+      const headers = await buildApiAuthHeaders({ includeJson: true });
+      const response = await fetch("/api/llm/run", {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: JSON.stringify({
+          provider,
+          model,
+          fallbackProviders: ["openai", "gemini", "mistral", "perplexity", "other"],
+          messages: [
+            {
+              role: "system",
+              content:
+                "You are Quantura Model Council. Write a concise analyst narrative with sections: Thesis, Risk frame, Key levels, Next steps. Mention uncertainty clearly.",
+            },
+            {
+              role: "user",
+              content: `Forecast context (JSON):\n${JSON.stringify(context)}\n\nWrite a practical summary in under 180 words.`,
+            },
+          ],
+          params: {
+            temperature: 0.2,
+            maxTokens: 360,
+            webSearch: false,
+            stream: false,
+            background: false,
+          },
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(String(payload?.error || payload?.message || "Unable to generate AI forecast summary right now.").trim());
+      }
+      const nextSummary = {
+        requestId: targetId,
+        loading: false,
+        text: String(payload?.text || "").trim() || "No summary returned.",
+        provider: normalizeModelCouncilProviderId(payload?.provider || provider),
+        model: normalizeAiModelId(payload?.model || model) || model,
+        latencyMs: Number.isFinite(Number(payload?.latencyMs)) ? Number(payload.latencyMs) : Date.now() - startedAt,
+        usage: payload?.usage && typeof payload.usage === "object" ? payload.usage : {},
+        responseId: String(payload?.responseId || "").trim(),
+        shareUrl: "",
+        feedback: "",
+        error: "",
+        requestToken,
+      };
+      if (String(state.tickerContext.forecastAiSummary?.requestToken || "") !== requestToken) {
+        return nextSummary;
+      }
+      state.tickerContext.forecastAiSummary = nextSummary;
+      if (state.tickerContext.forecastDoc && String(state.tickerContext.forecastDoc.id || "") === targetId) {
+        renderForecastDetails(state.tickerContext.forecastDoc);
+      }
+      syncForecastAiSummaryToMyRequest({ requestId: targetId, summary: nextSummary }).catch(() => {});
+      return nextSummary;
+    } catch (error) {
+      const message = String(error?.message || "Unable to generate AI forecast summary right now.").trim();
+      if (String(state.tickerContext.forecastAiSummary?.requestToken || "") === requestToken) {
+        state.tickerContext.forecastAiSummary = {
+          requestId: targetId,
+          loading: false,
+          text: "",
+          provider,
+          model,
+          latencyMs: null,
+          usage: {},
+          responseId: "",
+          shareUrl: "",
+          feedback: "",
+          error: message,
+          requestToken,
+        };
+        if (state.tickerContext.forecastDoc && String(state.tickerContext.forecastDoc.id || "") === targetId) {
+          renderForecastDetails(state.tickerContext.forecastDoc);
+        }
+      }
+      if (notify) showToast(message, "warn");
+      return null;
+    }
+  };
+
+  const renderForecastAiSummaryMarkup = (forecastDoc) => {
+    const forecastId = String(forecastDoc?.id || state.tickerContext.forecastId || "").trim();
+    const summary = state.tickerContext.forecastAiSummary && typeof state.tickerContext.forecastAiSummary === "object"
+      ? state.tickerContext.forecastAiSummary
+      : null;
+    const isCurrent = summary && String(summary.requestId || "").trim() === forecastId;
+    const model = String(isCurrent ? summary?.model || "" : "").trim();
+    const provider = String(isCurrent ? summary?.provider || "" : "").trim();
+    const latencyMs = Number(isCurrent ? summary?.latencyMs : NaN);
+    const responseId = String(isCurrent ? summary?.responseId || "" : "").trim();
+    const shareUrl = String(isCurrent ? summary?.shareUrl || "" : "").trim();
+    const feedback = String(isCurrent ? summary?.feedback || "" : "").trim().toLowerCase();
+    const loading = Boolean(isCurrent && summary?.loading);
+    const error = String(isCurrent ? summary?.error || "" : "").trim();
+    const answer = String(isCurrent ? summary?.text || "" : "").trim();
+    const disabled = !forecastId;
+    const statusLine = loading
+      ? "Generating automatic Model Council summary..."
+      : error
+        ? error
+        : answer
+          ? `${model || "Model"}${provider ? ` · ${provider}` : ""}${
+              Number.isFinite(latencyMs) && latencyMs >= 0 ? ` · ${Math.round(latencyMs)}ms` : ""
+            }`
+          : "Run a forecast to generate an automatic AI narrative.";
+    return `
+      <div class="results-panel forecast-ai-summary-panel">
+        <h3>Automatic AI summary</h3>
+        <div class="small muted">${escapeHtml(statusLine)}</div>
+        <div class="panel-output small" style="margin-top:8px;">
+          ${
+            loading
+              ? skeletonHtml(2)
+              : error
+                ? `<div class="small muted">${escapeHtml(error)}</div>`
+                : answer
+                  ? `<div>${escapeHtml(answer).replace(/\n/g, "<br>")}</div>`
+                  : `<div class="small muted">No AI narrative generated yet.</div>`
+          }
+        </div>
+        <div class="task-chip-row" style="margin-top:10px;">
+          <button class="task-chip${feedback === "like" ? " active" : ""}" type="button" data-action="forecast-ai-like" data-forecast-id="${escapeHtml(
+            forecastId
+          )}" ${disabled ? "disabled" : ""}>Like</button>
+          <button class="task-chip${feedback === "dislike" ? " active" : ""}" type="button" data-action="forecast-ai-dislike" data-forecast-id="${escapeHtml(
+            forecastId
+          )}" ${disabled ? "disabled" : ""}>Dislike</button>
+          <button class="task-chip" type="button" data-action="forecast-ai-share" data-forecast-id="${escapeHtml(
+            forecastId
+          )}" data-response-id="${escapeHtml(responseId)}" ${disabled || (!answer && !shareUrl) ? "disabled" : ""}>${icon("share-ios")}<span>Share link</span></button>
+        </div>
+        ${
+          shareUrl
+            ? `<div class="small muted" style="margin-top:8px;">Shared: <a href="${escapeHtml(shareUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(
+                shareUrl
+              )}</a></div>`
+            : ""
+        }
+        <p class="small muted solve-now-disclaimer">${escapeHtml(MODEL_COUNCIL_OUTPUT_DISCLAIMER)}</p>
+      </div>
+    `;
+  };
+
   const renderForecastDetails = (forecastDoc) => {
     if (!ui.forecastOutput || !forecastDoc) return;
     const rows = Array.isArray(forecastDoc.forecastRows) ? forecastDoc.forecastRows : [];
     if (!rows.length) {
       setOutputReady(ui.forecastOutput);
-      ui.forecastOutput.innerHTML = `<div class="small muted">No forecast rows were stored for this run.</div>`;
+      const source = String(forecastDoc.chartSeriesSource || "").trim();
+      const message =
+        source === "missing"
+          ? "No local fan-chart series found for this run on this device. Re-run the forecast to regenerate chart data."
+          : source === "preview_only"
+            ? "Only preview rows are available on this device. Full fan-chart series was kept client-side on the originating device."
+            : "No forecast rows are available for this run.";
+      ui.forecastOutput.innerHTML = `
+        <div class="small muted">${escapeHtml(message)}</div>
+        ${renderForecastAiSummaryMarkup(forecastDoc)}
+      `;
       return;
     }
 
@@ -13861,9 +15184,10 @@
         <details class="learn-more">
           <summary>Learn more</summary>
           <p class="small">
-            Forecasts are saved to your account so you can re-plot them later. Use Indicators to overlay trend signals, then switch to News and Options for context.
+            Fan-chart series are stored client-side on this device for fast rendering. Firestore stores only request metadata and compact summaries.
           </p>
         </details>
+        ${renderForecastAiSummaryMarkup(forecastDoc)}
       </div>
     `;
   };
@@ -13879,17 +15203,64 @@
   const loadForecastDoc = async (db, forecastId) => {
     const snap = await db.collection("forecast_requests").doc(forecastId).get();
     if (!snap.exists) throw new Error("Forecast not found.");
-    return { id: snap.id, ...snap.data() };
+    const doc = { id: snap.id, ...(snap.data() || {}) };
+    const fromCache = await loadForecastSeriesFromClientCache({
+      requestId: snap.id,
+      ticker: doc.ticker,
+      interval: doc.interval,
+      horizon: doc.horizon,
+      service: doc.service,
+      quantiles: doc.quantiles,
+      start: doc.start,
+    });
+    const cachedRows = normalizeForecastSeriesRows(fromCache?.forecastRows || []);
+    if (cachedRows.length) {
+      doc.forecastRows = cachedRows;
+      doc.chartSeriesSource = "client_cache";
+      doc.chartCacheKey = String(fromCache?.id || "").trim();
+      return doc;
+    }
+
+    const legacyRows = normalizeForecastSeriesRows(doc.forecastRows || []);
+    if (legacyRows.length) {
+      doc.forecastRows = legacyRows;
+      doc.chartSeriesSource = "firestore_legacy";
+      saveForecastSeriesToClientCache({
+        requestId: snap.id,
+        ticker: doc.ticker,
+        interval: doc.interval,
+        horizon: doc.horizon,
+        service: doc.service,
+        quantiles: doc.quantiles,
+        start: doc.start,
+        forecastRows: legacyRows,
+        metrics: doc.metrics,
+      }).catch(() => {});
+      return doc;
+    }
+
+    const previewRows = normalizeForecastSeriesRows(doc.forecastPreview || []);
+    doc.forecastRows = previewRows;
+    doc.chartSeriesSource = previewRows.length ? "preview_only" : "missing";
+    return doc;
   };
 
-  const plotForecastById = async (db, functions, forecastId) => {
+  const plotForecastById = async (db, functions, forecastId, { preloadedDoc = null } = {}) => {
     if (!forecastId) return;
-    const doc = await loadForecastDoc(db, forecastId);
+    const doc =
+      preloadedDoc && typeof preloadedDoc === "object"
+        ? { ...preloadedDoc, id: String(preloadedDoc.id || forecastId).trim() }
+        : await loadForecastDoc(db, forecastId);
     const ticker = normalizeTicker(doc.ticker);
     const interval = doc.interval || state.tickerContext.interval || "1d";
     state.tickerContext.forecastId = forecastId;
     state.tickerContext.forecastDoc = doc;
     state.tickerContext.forecastTablePage = 0;
+    state.tickerContext.forecastCacheMeta = {
+      source: String(doc.chartSeriesSource || ""),
+      cacheKey: String(doc.chartCacheKey || ""),
+      forecastId,
+    };
     syncTickerInputs(ticker, { source: "forecast_load" });
 
     if (!ticker) throw new Error("Forecast ticker is missing.");
@@ -13903,9 +15274,185 @@
     const forecastOverlays = buildForecastOverlays(doc.forecastRows || []);
     const overlays = [...forecastOverlays, ...(state.tickerContext.indicatorOverlays || [])];
     await renderTickerChart(state.tickerContext.rows, ticker, interval, overlays);
-    setTerminalStatus(`Plotted forecast ${forecastId}.`);
+    if (String(doc.chartSeriesSource || "") === "missing") {
+      setTerminalStatus("Forecast metadata loaded. Re-run on this device to regenerate fan chart data.");
+    } else if (String(doc.chartSeriesSource || "") === "preview_only") {
+      setTerminalStatus("Forecast preview loaded. Full fan chart data is stored on the originating device.");
+    } else {
+      setTerminalStatus(`Plotted forecast ${forecastId}.`);
+    }
     renderForecastDetails(doc);
     return doc;
+  };
+
+  const mapMyRequestTypeToPanel = (type) => {
+    const normalized = normalizeMyRequestType(type);
+    if (normalized === "screener") return "screener";
+    if (normalized === "indicator") return "indicators";
+    if (normalized === "modelCouncil") return "ticker-query";
+    return "forecast";
+  };
+
+  const loadMyRequestIntoUi = async ({ requestId = "", request = null, db, functions, notify = true } = {}) => {
+    if (!hasFullAccount()) {
+      throw new Error("Sign in to load saved requests.");
+    }
+    const id = String(requestId || request?.id || "").trim();
+    if (!id) throw new Error("Request ID is required.");
+    const item = request && typeof request === "object" ? request : await fetchMyRequestById(id);
+    if (!item) throw new Error("Request not found.");
+
+    const type = normalizeMyRequestType(item.type) || "forecast";
+    const panelId = mapMyRequestTypeToPanel(type);
+    if (typeof window.__quanturaSetPanel === "function") {
+      window.__quanturaSetPanel(panelId, { pushPath: false });
+    }
+
+    const sourceRef = item.sourceRef && typeof item.sourceRef === "object" ? item.sourceRef : {};
+    const sourceId = String(sourceRef.id || "").trim();
+    const input = item.input && typeof item.input === "object" ? item.input : {};
+    const outputsMeta = item.outputsMeta && typeof item.outputsMeta === "object" ? item.outputsMeta : {};
+    const ticker = normalizeTicker(input.ticker || item.ticker || "");
+    if (ticker) syncTickerInputs(ticker, { source: "my_request_load" });
+
+    if (type === "forecast") {
+      const forecastId = sourceId || String(id.split("__").slice(1).join("__") || "").trim();
+      if (!forecastId) throw new Error("Forecast source is missing.");
+      await plotForecastById(db, functions, forecastId);
+      if (notify) showToast("Forecast request loaded.");
+      return item;
+    }
+
+    if (type === "screener") {
+      const runId = sourceId || String(id.split("__").slice(1).join("__") || "").trim();
+      if (!runId) throw new Error("Screener source is missing.");
+      await loadScreenerRunById(db, runId);
+      if (notify) showToast("Screener request loaded.");
+      return item;
+    }
+
+    if (type === "indicator") {
+      const tickerInput = document.getElementById("technicals-ticker");
+      const intervalInput = document.getElementById("technicals-interval");
+      const lookbackInput = document.getElementById("technicals-lookback");
+      if (tickerInput && ticker) tickerInput.value = ticker;
+      if (intervalInput && input.interval) intervalInput.value = String(input.interval);
+      if (lookbackInput && Number(input.lookback)) lookbackInput.value = String(Math.max(1, Number(input.lookback)));
+      const indicators = Array.isArray(input.indicators) ? input.indicators.map((entry) => String(entry || "").trim().toUpperCase()) : [];
+      if (indicators.length) {
+        document.querySelectorAll('#technicals-form input[name="indicators"]').forEach((checkbox) => {
+          const value = String(checkbox.value || "").trim().toUpperCase();
+          checkbox.checked = indicators.includes(value);
+        });
+      }
+      if (ui.technicalsOutput) {
+        setOutputReady(ui.technicalsOutput);
+        const summary = String(outputsMeta.summary || "").trim();
+        ui.technicalsOutput.innerHTML = `<div class="small muted">${
+          summary ? escapeHtml(summary) : "Indicator inputs restored. Run indicators to refresh values."
+        }</div>`;
+      }
+      if (notify) showToast("Indicator request loaded.");
+      return item;
+    }
+
+    if (type === "modelCouncil") {
+      const provider = String(input.provider || outputsMeta.provider || "").trim().toLowerCase();
+      const model = normalizeAiModelId(input.model || outputsMeta.model || "");
+      if (ui.tickerQueryTicker && ticker) ui.tickerQueryTicker.value = ticker;
+      if (ui.tickerQueryQuestion) ui.tickerQueryQuestion.value = String(input.question || "");
+      if (ui.tickerQueryLanguage && input.language) ui.tickerQueryLanguage.value = String(input.language);
+      if (provider) {
+        state.tickerContext.tickerQueryProvider = provider;
+        if (ui.tickerQueryProvider) ui.tickerQueryProvider.value = provider;
+      }
+      if (model) {
+        state.tickerContext.tickerQueryModel = model;
+        if (ui.tickerQueryModel) ui.tickerQueryModel.value = model;
+      }
+      if (Array.isArray(input.modules) && input.modules.length) {
+        setTickerQueryModulesSelection(input.modules, { persist: true });
+      }
+      applyTickerQueryModelSelection(model || state.tickerContext.tickerQueryModel || "gpt-5-mini", provider || state.tickerContext.tickerQueryProvider || "openai");
+      const answer = String(outputsMeta.answer || outputsMeta.summary || "").trim();
+      if (answer) {
+        const responseId = sourceId || String(item.id || "").trim();
+        state.tickerContext.tickerQueryLastResponseId = responseId;
+        const responsePayload = {
+          answer,
+          model: model || state.tickerContext.tickerQueryModel || "",
+          provider: provider || state.tickerContext.tickerQueryProvider || "",
+          usage: {},
+          context: {},
+          moduleData: {},
+          selectedModules: Array.isArray(input.modules) ? input.modules : [],
+          responseId,
+          citations: [],
+        };
+        state.tickerContext.tickerQueryLastResponse = responsePayload;
+        renderTickerQueryResult(responsePayload);
+      }
+      if (notify) showToast("Model Council request loaded.");
+      return item;
+    }
+
+    return item;
+  };
+
+  const loadSharedMyRequestFromUrl = async ({ setPanel = true } = {}) => {
+    const shareSlug = String(getQueryParam("requestShare") || "").trim();
+    if (!shareSlug) return false;
+    try {
+      const headers = await buildApiAuthHeaders();
+      const response = await fetch(`/api/my-requests/shared/${encodeURIComponent(shareSlug)}`, {
+        method: "GET",
+        headers,
+        credentials: "same-origin",
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(String(payload?.error || "Shared request unavailable.").trim());
+      }
+      const request = payload?.request && typeof payload.request === "object" ? payload.request : null;
+      if (!request) throw new Error("Shared request unavailable.");
+      const type = normalizeMyRequestType(request.type) || "forecast";
+      const panelId = mapMyRequestTypeToPanel(type);
+      if (setPanel && typeof window.__quanturaSetPanel === "function") {
+        window.__quanturaSetPanel(panelId, { pushPath: false });
+      }
+      if (type === "modelCouncil" && ui.tickerQueryOutput) {
+        const outputsMeta = request.outputsMeta && typeof request.outputsMeta === "object" ? request.outputsMeta : {};
+        const answer = String(outputsMeta.answer || outputsMeta.summary || "").trim();
+        renderTickerQueryResult({
+          answer,
+          model: String(outputsMeta.model || request.input?.model || ""),
+          provider: String(outputsMeta.provider || request.input?.provider || ""),
+          context: {},
+          moduleData: {},
+          selectedModules: Array.isArray(request.input?.modules) ? request.input.modules : [],
+          responseId: String(request.sourceRef?.id || request.id || ""),
+          citations: [],
+          shareUrl: String(payload?.share?.shareUrl || ""),
+        });
+      } else if (type === "forecast" && ui.forecastOutput) {
+        setOutputReady(ui.forecastOutput);
+        const summary = String(request.outputsMeta?.summary || "Shared forecast request loaded.");
+        ui.forecastOutput.innerHTML = `<div class="small muted">${escapeHtml(summary)}</div>`;
+      } else if (type === "screener" && ui.screenerOutput) {
+        setOutputReady(ui.screenerOutput);
+        const summary = String(request.outputsMeta?.summary || "Shared screener request loaded.");
+        ui.screenerOutput.innerHTML = `<div class="small muted">${escapeHtml(summary)}</div>`;
+      } else if (type === "indicator" && ui.technicalsOutput) {
+        setOutputReady(ui.technicalsOutput);
+        const summary = String(request.outputsMeta?.summary || "Shared indicator request loaded.");
+        ui.technicalsOutput.innerHTML = `<div class="small muted">${escapeHtml(summary)}</div>`;
+      }
+      showToast("Viewing shared request.");
+      return true;
+    } catch (error) {
+      showToast(error.message || "Unable to load shared request.", "warn");
+      return false;
+    }
   };
 
   const ensureMessagingServiceWorker = async () => {
@@ -15108,9 +16655,12 @@
           try {
             dlButton.disabled = true;
             setTerminalStatus("Preparing download...");
-            const doc = await loadForecastDoc(db, forecastId);
-            const rows = Array.isArray(doc.forecastRows) ? doc.forecastRows : [];
-            if (!rows.length) throw new Error("No forecast rows stored for this run.");
+	            const doc = await loadForecastDoc(db, forecastId);
+	            const rows = Array.isArray(doc.forecastRows) ? doc.forecastRows : [];
+	            if (!rows.length) throw new Error("No forecast rows stored for this run.");
+              if (String(doc.chartSeriesSource || "") === "preview_only") {
+                showToast("Only preview rows are available on this device. Downloading preview CSV.", "warn");
+              }
 
             const quantKeys = Object.keys(rows[0] || {})
               .filter((key) => /^q\d\d$/.test(key))
@@ -15181,6 +16731,126 @@
             showToast(error.message || "Unable to download screener run.", "warn");
           } finally {
             dlButton.disabled = false;
+          }
+        });
+
+        document.addEventListener("click", async (event) => {
+          const actionTarget = event.target.closest('[data-action^="my-request-"]');
+          if (!actionTarget) return;
+          const action = String(actionTarget.dataset.action || "").trim();
+          if (!action || action === "my-requests-refresh") return;
+          const requestId = String(actionTarget.dataset.requestId || "").trim();
+          if (!requestId) return;
+          event.preventDefault();
+
+          if (!requireFullAccount("Sign in to manage saved requests.", { redirect: true })) return;
+
+          const button = actionTarget.closest("button") || actionTarget;
+          const previousDisabled = Boolean(button.disabled);
+          button.disabled = true;
+          try {
+            let request = getMyRequestById(requestId);
+            if (!request && action !== "my-request-delete") {
+              request = await fetchMyRequestById(requestId);
+            }
+
+            if (action === "my-request-load") {
+              await loadMyRequestIntoUi({ requestId, request, db, functions, notify: true });
+              logEvent("my_request_loaded", {
+                request_id: requestId,
+                type: normalizeMyRequestType(request?.type || ""),
+              });
+              return;
+            }
+
+            if (action === "my-request-share") {
+              if (!request) throw new Error("Request not found.");
+              await openMyRequestShareModal({
+                request,
+                onSaved: (saved) => {
+                  if (saved && typeof saved === "object") {
+                    upsertMyRequestInState(saved);
+                    renderMyRequestsPanels();
+                  }
+                },
+              });
+              logEvent("my_request_share_opened", {
+                request_id: requestId,
+                type: normalizeMyRequestType(request?.type || ""),
+              });
+              return;
+            }
+
+            if (action === "my-request-rename") {
+              if (!request) throw new Error("Request not found.");
+              const nextTitle = await openPromptModal({
+                title: "Rename request",
+                message: "Use a short title so you can find this request quickly later.",
+                label: "Title",
+                placeholder: "Request title",
+                initialValue: String(request.title || ""),
+                confirmLabel: "Save",
+              });
+              if (!nextTitle) return;
+              await updateMyRequest(requestId, { title: nextTitle }, { method: "PATCH" });
+              showToast("Request renamed.");
+              logEvent("my_request_renamed", {
+                request_id: requestId,
+                type: normalizeMyRequestType(request?.type || ""),
+              });
+              return;
+            }
+
+            if (action === "my-request-duplicate") {
+              const body = await updateMyRequest(
+                requestId,
+                {},
+                { method: "POST", path: `/api/my-requests/${encodeURIComponent(requestId)}/duplicate` }
+              );
+              const duplicatedId = String(body?.request?.id || "").trim();
+              showToast(duplicatedId ? `Request duplicated (${duplicatedId.slice(0, 12)}...).` : "Request duplicated.");
+              logEvent("my_request_duplicated", {
+                request_id: requestId,
+                duplicated_request_id: duplicatedId,
+                type: normalizeMyRequestType(request?.type || body?.request?.type || ""),
+              });
+              return;
+            }
+
+            if (action === "my-request-unpublish") {
+              await updateMyRequest(
+                requestId,
+                {},
+                { method: "POST", path: `/api/my-requests/${encodeURIComponent(requestId)}/unpublish` }
+              );
+              showToast("Request unpublished from Explore.");
+              logEvent("my_request_unpublished", {
+                request_id: requestId,
+                type: normalizeMyRequestType(request?.type || ""),
+              });
+              return;
+            }
+
+            if (action === "my-request-delete") {
+              const confirmed = await openConfirmModal({
+                title: "Delete request?",
+                message: "This removes the request from your list and unpublishes it from Explore.",
+                confirmLabel: "Delete",
+                danger: true,
+              });
+              if (!confirmed) return;
+              await updateMyRequest(
+                requestId,
+                {},
+                { method: "DELETE", path: `/api/my-requests/${encodeURIComponent(requestId)}` }
+              );
+              showToast("Request deleted.");
+              logEvent("my_request_deleted", { request_id: requestId, type: normalizeMyRequestType(request?.type || "") });
+            }
+          } catch (error) {
+            showToast(error.message || "Unable to update request.", "warn");
+          } finally {
+            button.disabled = previousDisabled;
           }
         });
 
@@ -15843,14 +17513,17 @@
 		      }
 
 		      const csvBtn = event.target.closest('[data-action="forecast-csv"]');
-		      if (csvBtn) {
+			      if (csvBtn) {
 		        event.preventDefault();
 		        const doc = state.tickerContext.forecastDoc;
 		        if (!doc || !Array.isArray(doc.forecastRows) || !doc.forecastRows.length) {
 		          showToast("No forecast rows available to export.", "warn");
 		          return;
 		        }
-		        const rows = doc.forecastRows;
+			        const rows = doc.forecastRows;
+              if (String(doc.chartSeriesSource || "") === "preview_only") {
+                showToast("Only preview rows are available on this device. Downloading preview CSV.", "warn");
+              }
 		        const quantKeys = extractQuantileKeys(rows);
 		        const headers = ["ds", ...quantKeys];
 		        const csv = buildCsv(rows, headers);
@@ -15896,8 +17569,11 @@
         } catch (error) {
           // Ignore persistence failures.
         }
-        showToast("Using session-only sign-in in this browser.", "warn");
-      });
+	        showToast("Using session-only sign-in in this browser.", "warn");
+	      });
+
+        bindMyRequestsPanels();
+        renderMyRequestsPanels();
 
 			    ui.headerAuth?.addEventListener("click", () => {
 			      window.location.href = hasFullAccount() ? "/dashboard" : "/account";
@@ -15919,12 +17595,16 @@
 		      setActiveWorkspaceId(next);
 		      logEvent("workspace_switched", { workspace_id: next });
 		      startUserForecasts(db, next);
+          startScreenerRuns(db, next);
 		      startWorkspaceTasks(db, next);
 		      startWatchlist(db, next);
 		      startPriceAlerts(db, next);
           startAIAgents(db, next);
           startVolatilityMonitor(db, functions, next);
           seedDefaultAIAgents(db, next).catch(() => {});
+          fetchMyRequestsList({ force: true }).then(() => {
+            renderMyRequestsPanels();
+          });
 		      showToast("Workspace updated.");
 		    });
 
@@ -16912,11 +18592,13 @@
           showToast("Enter a ticker.", "warn");
           return;
         }
-        syncTickerInputs(ticker, { source: "terminal_submit", emitAnalytics: true });
-        state.tickerContext.interval = interval;
-        state.tickerContext.forecastDoc = null;
-        state.tickerContext.forecastId = "";
-        setTerminalStatus("Loading price history...");
+	        syncTickerInputs(ticker, { source: "terminal_submit", emitAnalytics: true });
+	        state.tickerContext.interval = interval;
+	        state.tickerContext.forecastDoc = null;
+	        state.tickerContext.forecastId = "";
+        state.tickerContext.forecastAiSummary = null;
+        state.tickerContext.forecastCacheMeta = null;
+	        setTerminalStatus("Loading price history...");
         try {
           const rows = await loadTickerHistory(functions, ticker, interval);
           state.tickerContext.rows = rows;
@@ -17110,36 +18792,137 @@
             return computeHistoryStart(desiredInterval);
           })();
 
-		      try {
-		        setOutputLoading(ui.forecastOutput, "Generating forecast...");
-		        const runForecast = functions.httpsCallable("run_timeseries_forecast");
-		        const result = await runForecast(payload);
-		        const data = result.data || {};
-		        const requestId = String(data.requestId || "").trim();
-		        if (!requestId) {
-		          throw new Error("Forecast run did not return a request ID.");
-		        }
+			      try {
+			        setOutputLoading(ui.forecastOutput, "Generating forecast...");
+              state.tickerContext.forecastAiSummary = {
+                requestId: "",
+                loading: false,
+                text: "",
+                provider: "",
+                model: "",
+                latencyMs: null,
+                usage: {},
+                responseId: "",
+                shareUrl: "",
+                feedback: "",
+                error: "",
+              };
+			        const runForecast = functions.httpsCallable("run_timeseries_forecast");
+			        const result = await runForecast(payload);
+			        const data = result.data || {};
+			        const requestId = String(data.requestId || "").trim();
+			        if (!requestId) {
+			          throw new Error("Forecast run did not return a request ID.");
+			        }
+              const responseRows = normalizeForecastSeriesRows(data.forecastSeries || data.forecastRows || []);
+              const historyRows =
+                Array.isArray(state.tickerContext.rows) &&
+                state.tickerContext.rows.length &&
+                normalizeTicker(state.tickerContext.ticker || "") === ticker &&
+                String(state.tickerContext.interval || "1d") === String(payload.interval || "1d")
+                  ? state.tickerContext.rows
+                  : await loadTickerHistory(functions, ticker, String(payload.interval || "1d"));
+              const alignedRows = alignForecastRowsWithHistory({
+                forecastRows: responseRows,
+                historyRows,
+                interval: String(payload.interval || "1d"),
+                horizon: Number(payload.horizon || 0) || responseRows.length,
+              });
+              const cacheMeta = await saveForecastSeriesToClientCache({
+                requestId,
+                ticker,
+                interval: String(payload.interval || "1d"),
+                horizon: Number(payload.horizon || 0),
+                service: String(payload.service || "prophet"),
+                quantiles: Array.isArray(payload.quantiles) ? payload.quantiles : [],
+                start: String(payload.start || ""),
+                forecastRows: alignedRows,
+                historicalRows: historyRows,
+                chartConfig: {
+                  quantileKeys: extractQuantileKeys(alignedRows),
+                  interval: String(payload.interval || "1d"),
+                },
+                metrics: data.metrics && typeof data.metrics === "object" ? data.metrics : {},
+              });
+              state.tickerContext.forecastCacheMeta = cacheMeta;
+              const localKeyLevels = extractForecastKeyLevels(alignedRows);
 
-		        logEvent("forecast_request", { ticker: payload.ticker, interval: payload.interval, service: payload.service });
-		        showToast("Forecast saved.");
-            recordPromoForecastUsage();
+              const forecastDocLocal = {
+                id: requestId,
+                ticker,
+                interval: String(payload.interval || "1d"),
+                horizon: Number(payload.horizon || 0) || alignedRows.length,
+                start: String(payload.start || ""),
+                quantiles: Array.isArray(payload.quantiles) ? payload.quantiles : [],
+                service: String(payload.service || "prophet"),
+                engine: String(data.engine || ""),
+                status: String(data.status || "completed"),
+                serviceMessage: String(data.serviceMessage || "").trim(),
+                metrics:
+                  data.metrics && typeof data.metrics === "object"
+                    ? data.metrics
+                    : {
+                        lastClose: data.lastClose,
+                        mae: data.mae,
+                        coverage10_90: data.coverage10_90,
+                        medianEnd: localKeyLevels.median,
+                      },
+                forecastPreview: Array.isArray(data.forecastPreview) ? data.forecastPreview : alignedRows.slice(0, 12),
+                forecastRows: alignedRows,
+                forecastQuantilesEnd: data.forecastQuantilesEnd && typeof data.forecastQuantilesEnd === "object" ? data.forecastQuantilesEnd : {},
+                tradeRationale: String(data.tradeRationale || "").trim(),
+                chartSeriesSource: "client_cache",
+                chartCacheKey: String(cacheMeta?.cacheKey || "").trim(),
+              };
 
-		        try {
-		          if (ui.tickerChart) {
-		            setTerminalStatus("Loading forecast for chart...");
-		            await plotForecastById(db, functions, requestId);
-		            document.getElementById("terminal")?.scrollIntoView({ behavior: "smooth" });
-		          } else {
-		            const doc = await loadForecastDoc(db, requestId);
-		            state.tickerContext.forecastDoc = doc;
-		            state.tickerContext.forecastId = requestId;
-		            state.tickerContext.forecastTablePage = 0;
-		            renderForecastDetails(doc);
-		          }
-		        } catch (plotError) {
-		          setOutputReady(ui.forecastOutput);
-		          if (ui.forecastOutput) {
-		            ui.forecastOutput.innerHTML = `
+				        logEvent("forecast_request", { ticker: payload.ticker, interval: payload.interval, service: payload.service });
+				        showToast("Forecast saved.");
+	            recordPromoForecastUsage();
+	            upsertMyRequest({
+              type: "forecast",
+              requestId: `forecast__${requestId}`,
+              title: `${normalizeTicker(payload.ticker || "") || "Ticker"} forecast`,
+              input: {
+                ticker: normalizeTicker(payload.ticker || ""),
+                interval: String(payload.interval || "1d"),
+                horizon: Number(payload.horizon || 0) || null,
+                service: String(payload.service || ""),
+                quantiles: Array.isArray(payload.quantiles) ? payload.quantiles : [],
+              },
+	              outputsMeta: {
+	                summary: String(data?.serviceMessage || "").trim(),
+	                service: String(payload.service || ""),
+	                interval: String(payload.interval || ""),
+                  chartStorage: "client_only",
+                  chartCacheKey: String(cacheMeta?.cacheKey || "").trim(),
+                  chartParamsHash: String(cacheMeta?.paramsHash || "").trim(),
+                  chartRows: Number(cacheMeta?.rowCount || 0) || 0,
+	              },
+	              sourceRef: {
+	                collection: "forecast_requests",
+	                id: requestId,
+	              },
+	            }).catch(() => {});
+
+				        try {
+			          if (ui.tickerChart) {
+			            setTerminalStatus("Loading forecast for chart...");
+			            await plotForecastById(db, functions, requestId, { preloadedDoc: forecastDocLocal });
+			            document.getElementById("terminal")?.scrollIntoView({ behavior: "smooth" });
+			          } else {
+			            state.tickerContext.forecastDoc = forecastDocLocal;
+			            state.tickerContext.forecastId = requestId;
+			            state.tickerContext.forecastTablePage = 0;
+                  state.tickerContext.rows = Array.isArray(historyRows) ? historyRows : [];
+                  state.tickerContext.interval = String(payload.interval || "1d");
+			            renderForecastDetails(forecastDocLocal);
+			          }
+                runForecastAutoSummary({ forecastDoc: forecastDocLocal, requestId, notify: false }).catch(() => {});
+				        } catch (plotError) {
+                runForecastAutoSummary({ forecastDoc: forecastDocLocal, requestId, notify: false }).catch(() => {});
+			          setOutputReady(ui.forecastOutput);
+			          if (ui.forecastOutput) {
+			            ui.forecastOutput.innerHTML = `
 		              <div class="small"><strong>Forecast ID:</strong> ${escapeHtml(requestId)}</div>
 		              <div class="small"><strong>Service:</strong> ${escapeHtml(labelForecastService(payload.service))}</div>
 		              <div class="small muted" style="margin-top:10px;">${escapeHtml(plotError.message || "Forecast saved, but could not be loaded yet.")}</div>
@@ -17151,7 +18934,7 @@
 	      }
 	    });
 
-        ui.forecastLoadButton?.addEventListener("click", async () => {
+	        ui.forecastLoadButton?.addEventListener("click", async () => {
           if (!requireFullAccount("Sign in to load saved runs.", { redirect: true })) return;
           const forecastId = String(ui.forecastLoadSelect?.value || "").trim();
           if (!forecastId) {
@@ -17169,10 +18952,101 @@
           } catch (error) {
             if (ui.forecastLoadStatus) ui.forecastLoadStatus.textContent = error.message || "Unable to load forecast.";
             showToast(error.message || "Unable to load forecast.", "warn");
-          }
-        });
+	          }
+	        });
 
-	    ui.technicalsForm?.addEventListener("submit", async (event) => {
+        if (ui.forecastOutput && ui.forecastOutput.dataset.bound !== "1") {
+          ui.forecastOutput.addEventListener("click", async (event) => {
+            const likeBtn = event.target.closest('[data-action="forecast-ai-like"]');
+            if (likeBtn) {
+              event.preventDefault();
+              const forecastId = String(likeBtn.dataset.forecastId || state.tickerContext.forecastId || "").trim();
+              if (!forecastId) return;
+              const summary = state.tickerContext.forecastAiSummary || {};
+              state.tickerContext.forecastAiSummary = { ...summary, requestId: forecastId, feedback: "like" };
+              const responseId = String(summary.responseId || "").trim();
+              if (responseId) {
+                await submitModelCouncilFeedback({ responseId, action: "like" });
+              }
+              if (state.tickerContext.forecastDoc) renderForecastDetails(state.tickerContext.forecastDoc);
+              showToast("Feedback saved.");
+              return;
+            }
+
+            const dislikeBtn = event.target.closest('[data-action="forecast-ai-dislike"]');
+            if (dislikeBtn) {
+              event.preventDefault();
+              const forecastId = String(dislikeBtn.dataset.forecastId || state.tickerContext.forecastId || "").trim();
+              if (!forecastId) return;
+              const summary = state.tickerContext.forecastAiSummary || {};
+              state.tickerContext.forecastAiSummary = { ...summary, requestId: forecastId, feedback: "dislike" };
+              const responseId = String(summary.responseId || "").trim();
+              if (responseId) {
+                await submitModelCouncilFeedback({ responseId, action: "dislike" });
+              }
+              if (state.tickerContext.forecastDoc) renderForecastDetails(state.tickerContext.forecastDoc);
+              showToast("Feedback saved.");
+              return;
+            }
+
+            const shareBtn = event.target.closest('[data-action="forecast-ai-share"]');
+            if (shareBtn) {
+              event.preventDefault();
+              const forecastId = String(shareBtn.dataset.forecastId || state.tickerContext.forecastId || "").trim();
+              if (!forecastId) return;
+              shareBtn.disabled = true;
+              try {
+                const summary = state.tickerContext.forecastAiSummary || {};
+                const responseId = String(shareBtn.dataset.responseId || summary.responseId || "").trim();
+                let shareUrl = String(summary.shareUrl || "").trim();
+                if (!shareUrl && responseId) {
+                  try {
+                    shareUrl = await createModelCouncilShareLink(responseId);
+                    await submitModelCouncilFeedback({ responseId, action: "share" });
+                  } catch (error) {
+                    shareUrl = "";
+                  }
+                }
+                if (!shareUrl && hasFullAccount()) {
+                  const requestDocId = `forecast__${forecastId}`;
+                  try {
+                    const body = await updateMyRequest(
+                      requestDocId,
+                      { visibility: "unlisted" },
+                      { method: "POST", path: `/api/my-requests/${encodeURIComponent(requestDocId)}/share` }
+                    );
+                    shareUrl = String(body?.share?.shareUrl || "").trim();
+                  } catch (error) {
+                    shareUrl = "";
+                  }
+                }
+                if (!shareUrl) {
+                  shareUrl = `${window.location.origin}/forecasting?forecastId=${encodeURIComponent(forecastId)}`;
+                }
+                state.tickerContext.forecastAiSummary = {
+                  ...summary,
+                  requestId: forecastId,
+                  shareUrl,
+                  responseId: responseId || String(summary.responseId || "").trim(),
+                };
+                if (state.tickerContext.forecastDoc) renderForecastDetails(state.tickerContext.forecastDoc);
+                await performShare({
+                  url: shareUrl,
+                  title: "Quantura forecast summary",
+                  text: String(summary.text || "Forecast narrative generated by Model Council.").slice(0, 220),
+                });
+                showToast("Share link copied.");
+              } catch (error) {
+                showToast(error.message || "Unable to share forecast summary.", "warn");
+              } finally {
+                shareBtn.disabled = false;
+              }
+            }
+          });
+          ui.forecastOutput.dataset.bound = "1";
+        }
+
+		    ui.technicalsForm?.addEventListener("submit", async (event) => {
 	      event.preventDefault();
 	      const formData = new FormData(ui.technicalsForm);
 	      const indicators = formData.getAll("indicators");
@@ -17231,11 +19105,35 @@
             ]);
           }
         }
-        logEvent("technicals_request", { ticker: payload.ticker });
-      } catch (error) {
-        showToast(error.message || "Unable to run indicators.", "warn");
-      }
-    });
+	        logEvent("technicals_request", { ticker: payload.ticker });
+        upsertMyRequest({
+          type: "indicator",
+          title: `${normalizeTicker(payload.ticker || "") || "Ticker"} indicators`,
+          input: {
+            ticker: normalizeTicker(payload.ticker || ""),
+            interval: String(payload.interval || "1d"),
+            lookback: Number(payload.lookback || 0) || null,
+            indicators: Array.isArray(indicators) ? indicators.map((entry) => String(entry || "").trim().toUpperCase()) : [],
+          },
+          outputsMeta: {
+            summary:
+              Array.isArray(rows) && rows.length
+                ? rows
+                    .slice(0, 4)
+                    .map((row) => `${row?.name}: ${row?.value}`)
+                    .join(" • ")
+                : "Indicator request saved.",
+            latestCount: Array.isArray(rows) ? rows.length : 0,
+          },
+          sourceRef: {
+            collection: "indicator_requests",
+            id: `ind_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          },
+        }).catch(() => {});
+	      } catch (error) {
+	        showToast(error.message || "Unable to run indicators.", "warn");
+	      }
+	    });
 
     ui.downloadForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -17496,9 +19394,10 @@
       });
       ui.tickerQueryOutput.dataset.bound = "1";
     }
-    loadTickerQueryModels().catch(() => {});
-    loadPublicModelCouncilShare({ setPanel: false }).catch(() => {});
-    syncModelCouncilSeo();
+	    loadTickerQueryModels().catch(() => {});
+	    loadPublicModelCouncilShare({ setPanel: false }).catch(() => {});
+      loadSharedMyRequestFromUrl({ setPanel: false }).catch(() => {});
+	    syncModelCouncilSeo();
 
 	    ui.optionsForm?.addEventListener("submit", async (event) => {
 	      event.preventDefault();
@@ -17737,6 +19636,33 @@
             modelTier: tier.key,
             createdAt: new Date().toISOString(),
           });
+          if (runId) {
+            upsertMyRequest({
+              type: "screener",
+              requestId: `screener__${runId}`,
+              title: runTitle || `${payload.universe || "AI Portfolio"} run`,
+              input: {
+                universe: String(payload.universe || ""),
+                market: String(payload.market || ""),
+                maxNames: Number(payload.maxNames || 0) || null,
+                notes: String(payload.notes || ""),
+                model: String(payload.model || ""),
+                filters: payload.filters && typeof payload.filters === "object" ? payload.filters : {},
+              },
+              outputsMeta: {
+                summary: String(payload.notes || "").trim(),
+                resultsCount: Number.isFinite(resultsFound) ? resultsFound : rows.length,
+                topSymbols: Array.isArray(rows)
+                  ? rows.slice(0, 12).map((row) => normalizeTicker(row?.symbol || "")).filter(Boolean)
+                  : [],
+                modelUsed: String(payload.model || ""),
+              },
+              sourceRef: {
+                collection: "screener_runs",
+                id: runId,
+              },
+            }).catch(() => {});
+          }
           state.aiUsageToday = Number(state.aiUsageToday || 0) + 1;
           refreshScreenerCreditsUi();
           if (runId) {
@@ -18285,7 +20211,7 @@
               }
             }
 
-		      if (!hasFullAccount(user)) {
+			      if (!hasFullAccount(user)) {
 		        state.userHasPaidPlan = false;
             state.userSubscriptionTier = "free";
             state.aiUsageToday = 0;
@@ -18343,9 +20269,18 @@
             state.aiFollowSet = new Set();
             state.aiLikeSet = new Set();
             state.aiDefaultsSeededWorkspaceId = "";
-		        state.sharedWorkspaces = [];
-            state.sharedScreenerView = null;
-		        setActiveWorkspaceId("");
+            state.myRequests = [];
+            state.myRequestsById = {};
+            state.myRequestsLoading = false;
+            state.myRequestsLoadedAt = 0;
+			        state.sharedWorkspaces = [];
+	            state.sharedScreenerView = null;
+            state.tickerContext.forecastDoc = null;
+            state.tickerContext.forecastId = "";
+            state.tickerContext.forecastTablePage = 0;
+            state.tickerContext.forecastAiSummary = null;
+            state.tickerContext.forecastCacheMeta = null;
+			        setActiveWorkspaceId("");
             state.userProfile = {
               username: "",
               socialLinks: cloneDefaultProfileSocialLinks(),
@@ -18363,6 +20298,7 @@
             if (ui.screenerLoadSelect) ui.screenerLoadSelect.innerHTML = `<option value="">Select a run</option>`;
             if (ui.screenerLoadStatus) ui.screenerLoadStatus.textContent = "";
             if (ui.screenerOutput && !ui.screenerOutput.dataset.loading) ui.screenerOutput.textContent = "Sign in to generate an AI Portfolio.";
+            renderMyRequestsPanels();
             refreshScreenerModelUi();
             refreshScreenerCreditsUi();
             state.predictionsContext.uploadId = "";
@@ -18415,6 +20351,8 @@
 		      renderWorkspaceSelect(user);
 		      startUserForecasts(db, activeWorkspaceId);
           startScreenerRuns(db, activeWorkspaceId);
+          await fetchMyRequestsList({ force: true }).catch(() => []);
+          renderMyRequestsPanels();
           loadScreenerUsageToday(db);
           startWorkspaceTasks(db, activeWorkspaceId);
 			      startWatchlist(db, activeWorkspaceId);
