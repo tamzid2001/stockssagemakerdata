@@ -4,7 +4,8 @@ Date: 2026-03-03 (America/New_York)
 Environment:
 - Backend deployed with `gcloud functions deploy` (Gen2)
 - Frontend deployed with `firebase deploy --only hosting`
-- Runtime validation against `https://quantura.studio`
+- Deployed runtime validation: `https://quantura-e2e3d.web.app`
+- Local template preview for page-level HTML updates: `python3 -m http.server` against merged `public + pages`
 
 ## 1) Native ads only on iOS/Android
 Status: PASS (web hidden), native verification ready for device QA
@@ -40,7 +41,7 @@ Checks:
 - UI panels added under Forecasting/Indicators/Model Council/Screener contexts.
 
 Evidence (UI + code path):
-- Forecasting/Screener layouts: `docs/screenshots/deliverables/forecasting-terminal-web.png`, `docs/screenshots/deliverables/screener-my-requests-web.png`
+- Forecasting/Screener layouts with My Requests cards (template preview): `docs/screenshots/deliverables/forecasting-terminal-web.png`, `docs/screenshots/deliverables/screener-my-requests-web.png`
 - Backend handlers: `functions_explore/src/index.ts` (`/my-requests*` routes)
 
 ## 4) Polymarket cards formatting (Gamma-only)
@@ -53,7 +54,7 @@ Checks:
 - New endpoint added: `/api/polymarket/price`.
 
 Evidence:
-- Predictions panel screenshot: `docs/screenshots/deliverables/predictions-panel-web.png`
+- Predictions panel screenshot (deployed runtime): `docs/screenshots/deliverables/predictions-panel-web.png`
 - Rewrites + endpoints in code:
   - `firebase.json`
   - `functions_explore/src/index.ts`
@@ -93,3 +94,16 @@ Checks:
 Evidence:
 - `deploy.sh`
 - `DEPLOY.md`
+
+## 8) Marketing copy + use cases + quote carousel
+Status: PASS
+
+Checks:
+- Homepage/Pricing/Shop copy updated with institutional messaging.
+- Use-case cards added with required external links.
+- Quote carousel script added and wired.
+
+Evidence:
+- Homepage marketing sections: `docs/screenshots/deliverables/home-marketing-web.png`
+- Pricing page updated copy/cards/tables: `docs/screenshots/deliverables/pricing-page-web.png`
+- Carousel script: `public/marketing-carousel.js`
