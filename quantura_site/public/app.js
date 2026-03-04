@@ -1312,6 +1312,93 @@
     }
   };
 
+  const ensureTerminalFxPanelScaffold = () => {
+    const terminalRoot = document.querySelector('[data-panels][data-panel-router="terminal"]');
+    const panelColumn = terminalRoot?.querySelector(".studio-panel");
+    if (!terminalRoot || !panelColumn) return;
+
+    const fxSidebarLink = document.querySelector('[data-panel-target="fx"]');
+    if (fxSidebarLink) {
+      fxSidebarLink.setAttribute("href", "/forecasting?panel=fx");
+    }
+
+    if (panelColumn.querySelector('[data-panel="fx"]')) return;
+
+    const fxPanel = document.createElement("section");
+    fxPanel.className = "panel hidden";
+    fxPanel.dataset.panel = "fx";
+    fxPanel.innerHTML = `
+      <div class="panel-header">
+        <h2>Currency conversion</h2>
+        <p class="small">Convert with live FX rates and keep a quick recent list for repeat checks.</p>
+      </div>
+      <form id="terminal-fx-form" class="card" autocomplete="off">
+        <div class="form-grid">
+          <div class="field">
+            <label class="label" for="terminal-fx-amount">Amount</label>
+            <input id="terminal-fx-amount" name="amount" type="number" min="0" step="0.0001" value="1" required />
+          </div>
+          <div class="field">
+            <label class="label" for="terminal-fx-base">Base currency</label>
+            <select id="terminal-fx-base" name="base" required>
+              <option value="USD">USD</option>
+              <option value="EUR">EUR</option>
+              <option value="GBP">GBP</option>
+              <option value="JPY">JPY</option>
+              <option value="CAD">CAD</option>
+              <option value="AUD">AUD</option>
+              <option value="CHF">CHF</option>
+              <option value="BDT">BDT</option>
+              <option value="INR">INR</option>
+              <option value="BTC">BTC</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="label" for="terminal-fx-quote">Quote currency</label>
+            <select id="terminal-fx-quote" name="quote" required>
+              <option value="EUR">EUR</option>
+              <option value="USD" selected>USD</option>
+              <option value="GBP">GBP</option>
+              <option value="JPY">JPY</option>
+              <option value="CAD">CAD</option>
+              <option value="AUD">AUD</option>
+              <option value="CHF">CHF</option>
+              <option value="BDT">BDT</option>
+              <option value="INR">INR</option>
+              <option value="BTC">BTC</option>
+            </select>
+          </div>
+        </div>
+        <div class="hero-actions" style="margin-top: 12px;">
+          <button type="button" class="cta secondary small" id="terminal-fx-swap">
+            <i class="iconoir-arrows-up-from-line" aria-hidden="true"></i><span>Swap</span>
+          </button>
+          <button type="submit" class="cta small fx-convert-cta" id="terminal-fx-submit">
+            <i class="iconoir-calculator" aria-hidden="true"></i><span>Convert</span>
+          </button>
+        </div>
+        <p id="terminal-fx-status" class="small muted" style="margin-top: 10px;">Ready.</p>
+      </form>
+      <div class="results-panel">
+        <h3>Conversion result</h3>
+        <div id="terminal-fx-result" class="panel-output small">Run a conversion to view rate details.</div>
+      </div>
+      <div class="card">
+        <h3>Recent conversions</h3>
+        <div id="terminal-fx-recent" class="order-list panel-output small">No recent conversions yet.</div>
+      </div>
+    `;
+
+    const screenerPanel = panelColumn.querySelector('[data-panel="screener"]');
+    if (screenerPanel?.parentNode) {
+      screenerPanel.parentNode.insertBefore(fxPanel, screenerPanel);
+    } else {
+      panelColumn.appendChild(fxPanel);
+    }
+  };
+
+  ensureTerminalFxPanelScaffold();
+
 	  const ui = {
     headerAuth: document.getElementById("header-auth"),
     headerSignOut: document.getElementById("header-signout"),
