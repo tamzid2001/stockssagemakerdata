@@ -141,8 +141,11 @@ function resolveProxyRequest(req: Request): ResolveResult {
     .map((item) => (item.startsWith("-") ? `-${sanitizeToken(item.slice(1))}` : sanitizeToken(item)))
     .filter(Boolean);
   const filter = sanitizeRawFilter(req.query.filter);
-  const pageNumber = clampPositiveInt(req.query["page[number]"], 1);
-  const pageSize = clampPageSize(req.query["page[size]"], registryEntry.defaultQuery?.page?.size || 100);
+  const pageQuery = req.query.page && typeof req.query.page === "object" ? (req.query.page as Record<string, unknown>) : {};
+  const pageNumberInput = req.query["page[number]"] ?? pageQuery.number;
+  const pageSizeInput = req.query["page[size]"] ?? pageQuery.size;
+  const pageNumber = clampPositiveInt(pageNumberInput, 1);
+  const pageSize = clampPageSize(pageSizeInput, registryEntry.defaultQuery?.page?.size || 100);
 
   return {
     endpoint,
