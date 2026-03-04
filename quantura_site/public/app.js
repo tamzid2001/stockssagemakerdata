@@ -9139,9 +9139,6 @@
         payloadFromFirestore = null;
       }
 
-      if (!payloadFromFirestore) {
-        throw new Error("Earnings cache was refreshed but Firestore read is unavailable.");
-      }
       const renderPayload =
         payloadFromFirestore ||
         {
@@ -14748,7 +14745,7 @@
 		      }
 
 	      try {
-	        setTerminalStatus("Loading saved forecast...");
+	        setTerminalStatus("Loading saved run...");
 	        await plotForecastById(db, functions, forecastId);
 	        logEvent("forecast_plotted", { forecast_id: forecastId });
           document.querySelector('[data-panel-target="forecast"]')?.click?.();
@@ -14947,8 +14944,8 @@
 	            const forecastId = String(deleteForecast.dataset.forecastId || "").trim();
 	            if (!forecastId) return;
 	            const ok = await openConfirmModal({
-	              title: "Delete saved forecast?",
-	              message: "This removes the saved forecast from your workspace. This cannot be undone.",
+	              title: "Delete saved run?",
+	              message: "This removes the saved run from your workspace. This cannot be undone.",
 	              confirmLabel: "Delete",
 	              danger: true,
 	            });
@@ -16820,12 +16817,12 @@
           if (!requireFullAccount("Sign in to load saved runs.", { redirect: true })) return;
           const forecastId = String(ui.forecastLoadSelect?.value || "").trim();
           if (!forecastId) {
-            showToast("Select a saved forecast.", "warn");
+            showToast("Select a saved run.", "warn");
             return;
           }
           if (ui.forecastLoadStatus) ui.forecastLoadStatus.textContent = "Loading...";
           try {
-            setTerminalStatus("Loading saved forecast...");
+            setTerminalStatus("Loading saved run...");
             await plotForecastById(db, functions, forecastId);
             if (ui.forecastLoadStatus) ui.forecastLoadStatus.textContent = "";
             showToast("Forecast loaded.");
@@ -18153,10 +18150,10 @@
 
 	      if (ui.terminalForm && ui.tickerChart && state.tickerContext.forecastId && !state.tickerContext.forecastDoc) {
 	        try {
-	          setTerminalStatus("Loading saved forecast...");
+	          setTerminalStatus("Loading saved run...");
 	          await plotForecastById(db, functions, state.tickerContext.forecastId);
 	        } catch (error) {
-	          setTerminalStatus(error.message || "Unable to load saved forecast.");
+	          setTerminalStatus(error.message || "Unable to load saved run.");
 	        }
 	      }
 
