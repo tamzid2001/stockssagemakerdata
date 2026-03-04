@@ -164,6 +164,26 @@ type PolymarketSearchResponse = {
   events: PolymarketEventRecord[];
 };
 
+type PolymarketPriceRecord = {
+  eventId: string;
+  eventTitle: string;
+  eventSlug?: string;
+  id: string;
+  question: string;
+  slug?: string;
+  category?: string;
+  endDate?: string;
+  volumeUsd?: number;
+  liquidityUsd?: number;
+  outcomes: string[];
+  outcomePrices: number[];
+  isBinary: boolean;
+  yesProb?: number;
+  topOutcomes: PolymarketTopOutcome[];
+  active: boolean;
+  closed: boolean;
+};
+
 type PolymarketCacheEntry = {
   expiresAtMs: number;
   value: PolymarketSearchResponse;
@@ -1570,6 +1590,55 @@ function normalizePolymarketResponse(
     fetchedAt: new Date().toISOString(),
     events,
   };
+}
+
+function flattenPolymarketMarkets(
+  response: PolymarketSearchResponse,
+  filters: { marketId: string; slug: string; eventId: string }
+): PolymarketPriceRecord[] {
+  const cleanMarketId = sanitizeText(filters.marketId, 120);
+  const cleanSlug = sanitizeText(filters.slug, 220).replace(/^\/+|\/+$/g, "");
+  const cleanEventId = sanitizeText(filters.eventId, 120);
+  const rows: PolymarketPriceRecord[] = [];
+  response.events.forEach((event) => {
+    const eventId = sanitizeText(event.id, 120);
+    const eventTitle = sanitizeText(event.title, 260) || "Prediction markets";
+    const eventSlug = sanitizeText(event.slug, 220) || undefined;
+    event.markets.forEach((market) => {
+      if (cleanEventId && cleanEventId !== eventId) return;
+      const marketId = sanitizeText(market.id, 120);
+      const marketSlug = sanitizeText(market.slug, 220).replace(/^\/+|\/+$/g, "");
+      if (cleanMarketId && marketId !== cleanMarketId) return;
+      if (cleanSlug && cleanSlug !== marketSlug && cleanSlug !== (eventSlug || "")) return;
+      rows.push({
+        eventId,
+        eventTitle,
+        eventSlug,
+        id: marketId,
+        question: sanitizeText(market.question, 320),
+        slug: marketSlug || undefined,
+        category: sanitizeText(market.category, 80) || undefined,
+        endDate: sanitizeText(market.endDate, 40) || undefined,
+        volumeUsd: market.volumeUsd,
+        liquidityUsd: market.liquidityUsd,
+        outcomes: Array.isArray(market.outcomes) ? market.outcomes : [],
+        outcomePrices: Array.isArray(market.outcomePrices) ? market.outcomePrices : [],
+        isBinary: Boolean(market.isBinary),
+        yesProb: typeof market.yesProb === "number" ? market.yesProb : undefined,
+        topOutcomes: Array.isArray(market.topOutcomes) ? market.topOutcomes : [],
+        active: market.active !== false,
+        closed: Boolean(market.closed),
+      });
+    });
+  });
+  rows.sort((a, b) => {
+    const volumeDelta = (b.volumeUsd || 0) - (a.volumeUsd || 0);
+    if (volumeDelta !== 0) return volumeDelta;
+    const liqDelta = (b.liquidityUsd || 0) - (a.liquidityUsd || 0);
+    if (liqDelta !== 0) return liqDelta;
+    return a.question.localeCompare(b.question);
+  });
+  return rows;
 }
 
 function prunePolymarketCache(nowMs = Date.now()): void {
@@ -3370,6 +3439,81 @@ ROUTES.post("/polymarket/active", async (req, res) => {
     res.status(502).json({
       error: "polymarket_active_failed",
       detail: sanitizeText(error?.message, 180) || "Unable to fetch active markets.",
+    });
+  }
+});
+
+ROUTES.post("/polymarket/price", async (req, res) => {
+  try {
+    const body = asPlainObject(req.body);
+    const query = sanitizeText(body.q || body.query, 120);
+    const includeClosed = asBoolean(body.includeClosed, false);
+    const sort = normalizePolymarketSort(body.sort || "volume");
+    const marketId = sanitizeText(body.marketId, 120);
+    const slug = sanitizeText(body.slug, 220);
+    const eventId = sanitizeText(body.eventId, 120);
+    const limit = Math.max(1, Math.min(80, Math.floor(asFinite(body.limit, 20))));
+    const limitPerType = Math.max(1, Math.min(60, Math.floor(asFinite(body.limitPerType, 20))));
+
+    let normalized: PolymarketSearchResponse;
+    if (query) {
+      const cacheKey = `price::search::${query.toLowerCase()}::${includeClosed ? 1 : 0}::${sort}::${limitPerType}`;
+      const cached = getPolymarketCache(cacheKey);
+      if (cached) {
+        normalized = cached;
+      } else {
+        const payload = await fetchGammaJson("/public-search", {
+          q: query,
+          limit_per_type: limitPerType,
+          keep_closed_markets: includeClosed ? 1 : 0,
+        });
+        normalized = normalizePolymarketResponse(payload, {
+          query,
+          sort,
+          includeClosed,
+        });
+        setPolymarketCache(cacheKey, normalized);
+      }
+    } else {
+      const offset = Math.max(0, Math.min(2000, Math.floor(asFinite(body.offset, 0))));
+      const activeLimit = Math.max(limit, 24);
+      const cacheKey = `price::active::${activeLimit}::${offset}::${sort}`;
+      const cached = getPolymarketCache(cacheKey);
+      if (cached) {
+        normalized = cached;
+      } else {
+        const payload = await fetchGammaJson("/events", {
+          active: true,
+          closed: false,
+          limit: activeLimit,
+          offset,
+        });
+        normalized = normalizePolymarketResponse(payload, {
+          query: "top-active",
+          sort,
+          includeClosed: false,
+        });
+        setPolymarketCache(cacheKey, normalized);
+      }
+    }
+
+    const markets = flattenPolymarketMarkets(normalized, {
+      marketId,
+      slug,
+      eventId,
+    }).slice(0, limit);
+
+    res.status(200).json({
+      query: normalized.query || query,
+      fetchedAt: normalized.fetchedAt,
+      count: markets.length,
+      markets,
+    });
+  } catch (error: any) {
+    console.error("[Polymarket] price failed", error);
+    res.status(502).json({
+      error: "polymarket_price_failed",
+      detail: sanitizeText(error?.message, 180) || "Unable to fetch Polymarket implied prices.",
     });
   }
 });

@@ -6056,6 +6056,14 @@ def _forecast_preview_rows(rows: list[dict[str, Any]], max_rows: int = 12) -> li
     return rows[:max_rows]
 
 
+def _forecast_rows_from_doc(forecast_doc: dict[str, Any]) -> list[dict[str, Any]]:
+    rows = forecast_doc.get("forecastRows") if isinstance(forecast_doc.get("forecastRows"), list) else []
+    if rows:
+        return rows
+    preview = forecast_doc.get("forecastPreview") if isinstance(forecast_doc.get("forecastPreview"), list) else []
+    return preview
+
+
 def _forecast_quantile_entries(rows: list[dict[str, Any]]) -> list[tuple[float, str]]:
     if not rows:
         return []
@@ -6144,7 +6152,7 @@ def _generate_forecast_chart_png(forecast_doc: dict[str, Any]) -> bytes:
     import matplotlib.pyplot as plt  # type: ignore
     import pandas as pd  # type: ignore
 
-    rows = forecast_doc.get("forecastRows") if isinstance(forecast_doc.get("forecastRows"), list) else []
+    rows = _forecast_rows_from_doc(forecast_doc)
     if not rows:
         raise ValueError("No forecast rows are available to chart.")
 
@@ -6208,10 +6216,10 @@ def _render_forecast_report_html(
     interval = str(forecast_doc.get("interval") or "1d")
     created = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     metrics = forecast_doc.get("metrics") if isinstance(forecast_doc.get("metrics"), dict) else {}
-    key_levels = _extract_forecast_key_levels(forecast_doc.get("forecastRows") or [])
+    key_levels = _extract_forecast_key_levels(_forecast_rows_from_doc(forecast_doc))
     service = str(forecast_doc.get("service") or "prophet")
     service_label = "Quantura Horizon" if service.lower() == "prophet" else service
-    forecast_rows = forecast_doc.get("forecastRows") if isinstance(forecast_doc.get("forecastRows"), list) else []
+    forecast_rows = _forecast_rows_from_doc(forecast_doc)
 
     quantile_table = ""
     try:
@@ -6402,7 +6410,7 @@ def _generate_forecast_pptx_bytes(
     ticker = str(forecast_doc.get("ticker") or "Ticker")
     created = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     metrics = forecast_doc.get("metrics") if isinstance(forecast_doc.get("metrics"), dict) else {}
-    rows = forecast_doc.get("forecastRows") if isinstance(forecast_doc.get("forecastRows"), list) else []
+    rows = _forecast_rows_from_doc(forecast_doc)
     key_levels = _extract_forecast_key_levels(rows)
 
     prs = Presentation()
@@ -6470,7 +6478,7 @@ def _generate_and_store_forecast_report_assets(
             service=service,
             horizon=int(forecast_doc.get("horizon") or 0),
             metrics=forecast_doc.get("metrics") if isinstance(forecast_doc.get("metrics"), dict) else {},
-            forecast_rows=forecast_doc.get("forecastRows") if isinstance(forecast_doc.get("forecastRows"), list) else [],
+            forecast_rows=_forecast_rows_from_doc(forecast_doc),
         )
 
     chart_b64 = base64.b64encode(chart_png).decode("utf-8")
@@ -9476,7 +9484,8 @@ def _handle_forecast_request(req: https_fn.CallableRequest, forced_service: str 
         "serviceMessage": result.get("serviceMessage"),
         "metrics": _serialize_for_firestore(result.get("metrics") or {}),
         "forecastPreview": _serialize_for_firestore(_forecast_preview_rows(result.get("forecastRows") or [])),
-        "forecastRows": _serialize_for_firestore(result.get("forecastRows") or []),
+        "chartSeriesStorage": "client_only",
+        "hasClientForecastSeries": True,
         "tradeRationale": trade_rationale,
         "meta": data.get("meta") or {},
         "utm": data.get("utm") or {},
@@ -9519,10 +9528,14 @@ def _handle_forecast_request(req: https_fn.CallableRequest, forced_service: str 
         "engine": request_doc["engine"],
         "serviceMessage": request_doc["serviceMessage"],
         "quantiles": quantiles,
+        "metrics": _serialize_for_firestore(metrics),
         "lastClose": metrics.get("lastClose"),
         "mae": metrics.get("mae"),
         "coverage10_90": metrics.get("coverage10_90", "n/a"),
         "forecastPreview": request_doc["forecastPreview"],
+        "forecastSeries": _serialize_for_firestore(forecast_rows_out),
+        # Keep a compatibility alias for older clients while moving long-term storage to client-side only.
+        "forecastRows": _serialize_for_firestore(forecast_rows_out),
         "forecastQuantilesEnd": _serialize_for_firestore(quantile_end),
         "tradeRationale": trade_rationale,
     }

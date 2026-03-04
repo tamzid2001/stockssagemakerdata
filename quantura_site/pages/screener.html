@@ -527,24 +527,41 @@
               </div>
 	              <button class="cta" id="screener-generate-button" type="submit" data-analytics="screener_submit"><i class="iconoir-search" aria-hidden="true"></i><span>Generate AI Portfolio</span></button>
 	            </form>
-              <div class="card">
-                <h3>Load saved portfolio run</h3>
+              <div class="card" data-my-requests-panel data-default-type="screener">
+                <div class="card-head">
+                  <h3>My Requests</h3>
+                  <button class="cta secondary small" type="button" data-action="my-requests-refresh">Refresh</button>
+                </div>
                 <div class="form-grid">
                   <div class="field">
-                    <label class="label" for="screener-load-select">Recent runs</label>
-                    <select id="screener-load-select">
-                      <option value="">Select a run</option>
+                    <label class="label">Search</label>
+                    <input type="search" data-my-requests-search placeholder="Title, ticker, date" />
+                  </div>
+                  <div class="field">
+                    <label class="label">Type</label>
+                    <select data-my-requests-type>
+                      <option value="">All</option>
+                      <option value="forecast">Forecasting</option>
+                      <option value="screener">Screeners</option>
+                      <option value="indicator">Indicators</option>
+                      <option value="modelCouncil">Model Council</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label class="label">Published</label>
+                    <select data-my-requests-published>
+                      <option value="all">All</option>
+                      <option value="published">Published</option>
+                      <option value="unpublished">Unpublished</option>
                     </select>
                   </div>
                 </div>
-                <div class="hero-actions" style="margin-top: 12px;">
-                  <button class="cta secondary" id="screener-load-button" type="button" data-analytics="screener_load_saved"><i class="iconoir-bookmark" aria-hidden="true"></i><span>Load portfolio</span></button>
-                </div>
-                <p class="small muted" id="screener-load-status"></p>
+                <p class="small muted" data-my-requests-status>Sign in to load your requests.</p>
+                <div class="order-list panel-output" data-my-requests-list></div>
                 <details class="learn-more">
                   <summary>Learn more</summary>
                   <p class="small">
-                    Every run is saved so you can revisit candidates, regenerate the AI portfolio, and publish the best runs into Explore.
+                    Requests can be loaded, renamed, shared, unpublished from Explore, or soft-deleted.
                   </p>
                 </details>
               </div>
