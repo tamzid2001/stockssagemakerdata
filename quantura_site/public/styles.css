@@ -4191,8 +4191,13 @@ textarea {
 }
 
 [data-theme="dark"] .mobile-bottom-link.active {
-  background: linear-gradient(135deg, rgba(240, 180, 41, 0.26) 0%, rgba(58, 181, 162, 0.24) 100%);
-  border-color: rgba(240, 180, 41, 0.46);
+  background: linear-gradient(135deg, #1f5dff 0%, #0f3fb8 100%);
+  border-color: rgba(31, 93, 255, 0.72);
+  color: #ffffff;
+}
+
+[data-theme="dark"] .mobile-bottom-link.active i {
+  color: #ffffff;
 }
 
 [data-theme="dark"] .status-select,
@@ -4750,8 +4755,26 @@ body.mobile-sidebar-lock {
 }
 
 .mobile-bottom-link.active {
-  background: linear-gradient(135deg, rgba(240, 180, 41, 0.25) 0%, rgba(58, 181, 162, 0.2) 100%);
-  border-color: rgba(240, 180, 41, 0.5);
+  background: linear-gradient(135deg, #1f5dff 0%, #0f3fb8 100%);
+  border-color: rgba(31, 93, 255, 0.72);
+  color: #ffffff;
+}
+
+.mobile-bottom-link.active i {
+  color: #ffffff;
+}
+
+#fx-submit,
+#fx-submit span,
+#fx-submit i,
+.fx-convert-cta,
+.fx-convert-cta span,
+.fx-convert-cta i {
+  color: #ffffff !important;
+}
+
+.fx-convert-cta {
+  background: linear-gradient(135deg, #142447 0%, #0a1228 100%);
 }
 
 .cookie-banner {

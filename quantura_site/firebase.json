@@ -80,6 +80,7 @@
       { "source": "/api/analytics/ad-impression", "function": "quanturaExploreApi" },
       { "source": "/api/notify/sendTest", "function": "quanturaExploreApi" },
       { "source": "/api/earnings/refresh", "function": "quanturaExploreApi" },
+      { "source": "/api/fx/convert", "function": "quanturaExploreApi" },
       { "source": "/api/polymarket/search", "function": "quanturaExploreApi" },
       { "source": "/api/polymarket/price", "function": "quanturaExploreApi" },
       { "source": "/api/polymarket/active", "function": "quanturaExploreApi" },

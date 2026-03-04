@@ -55,6 +55,8 @@
   const POLYMARKET_CLIENT_CACHE_MAX_ENTRIES = 80;
   const POLYMARKET_DEFAULT_MARKET_LIMIT = 12;
   const POLYMARKET_SEARCH_DEBOUNCE_MS = 400;
+  const TERMINAL_FX_RECENT_KEY = "quantura_terminal_fx_recent_v1";
+  const TERMINAL_FX_RECENT_LIMIT = 8;
   const MY_REQUEST_TYPES = new Set(["forecast", "screener", "indicator", "modelCouncil"]);
   const MY_REQUEST_TYPE_LABELS = {
     forecast: "Forecasting",
@@ -480,6 +482,7 @@
       sidebar_market_headlines: "Market headlines",
       sidebar_ask_gpt5: "Model Council",
       sidebar_options: "Options",
+      sidebar_currency_conversion: "Currency conversion",
       sidebar_learn_more: "Learn more",
       sidebar_screener: "Screener",
       sidebar_watchlist_alerts: "Watchlist and alerts",
@@ -541,6 +544,7 @@
       sidebar_market_headlines: "Titulares del mercado",
       sidebar_ask_gpt5: "Model Council",
       sidebar_options: "Opciones",
+      sidebar_currency_conversion: "Conversion de divisas",
       sidebar_learn_more: "Mas informacion",
       sidebar_screener: "Screener",
       sidebar_watchlist_alerts: "Lista y alertas",
@@ -602,6 +606,7 @@
       sidebar_market_headlines: "Titres du marche",
       sidebar_ask_gpt5: "Model Council",
       sidebar_options: "Options",
+      sidebar_currency_conversion: "Conversion de devises",
       sidebar_learn_more: "En savoir plus",
       sidebar_screener: "Screener",
       sidebar_watchlist_alerts: "Watchlist et alertes",
@@ -663,6 +668,7 @@
       sidebar_market_headlines: "Markt-Schlagzeilen",
       sidebar_ask_gpt5: "Model Council",
       sidebar_options: "Optionen",
+      sidebar_currency_conversion: "Waehrungsumrechnung",
       sidebar_learn_more: "Mehr erfahren",
       sidebar_screener: "Screener",
       sidebar_watchlist_alerts: "Watchlist und Alarme",
@@ -724,6 +730,7 @@
       sidebar_market_headlines: "عناوين السوق",
       sidebar_ask_gpt5: "Model Council",
       sidebar_options: "الخيارات",
+      sidebar_currency_conversion: "تحويل العملات",
       sidebar_learn_more: "اعرف المزيد",
       sidebar_screener: "الفلتر",
       sidebar_watchlist_alerts: "قائمة المراقبة والتنبيهات",
@@ -785,6 +792,7 @@
       sidebar_market_headlines: "মার্কেট হেডলাইন",
       sidebar_ask_gpt5: "Model Council",
       sidebar_options: "অপশন",
+      sidebar_currency_conversion: "কারেন্সি কনভার্সন",
       sidebar_learn_more: "আরও জানুন",
       sidebar_screener: "স্ক্রিনার",
       sidebar_watchlist_alerts: "ওয়াচলিস্ট ও অ্যালার্ট",
@@ -834,6 +842,7 @@
     sidebar_market_headlines: ['[data-panel-target="market-headlines"] span'],
     sidebar_ask_gpt5: ['[data-panel-target="ticker-query"] span'],
     sidebar_options: ['[data-panel-target="options"] span'],
+    sidebar_currency_conversion: ['[data-panel-target="fx"] span'],
     sidebar_learn_more: ['[data-panel-target="learn"] span'],
     sidebar_screener: ['a[href="/screener"] span'],
     sidebar_watchlist_alerts: ['a[href="/watchlist"] span'],
@@ -1393,6 +1402,15 @@
     eventsCalendarEnd: document.getElementById("events-calendar-end"),
     eventsCalendarStatus: document.getElementById("events-calendar-status"),
     eventsCalendarOutput: document.getElementById("events-calendar-output"),
+    terminalFxForm: document.getElementById("terminal-fx-form"),
+    terminalFxAmount: document.getElementById("terminal-fx-amount"),
+    terminalFxBase: document.getElementById("terminal-fx-base"),
+    terminalFxQuote: document.getElementById("terminal-fx-quote"),
+    terminalFxSwap: document.getElementById("terminal-fx-swap"),
+    terminalFxSubmit: document.getElementById("terminal-fx-submit"),
+    terminalFxStatus: document.getElementById("terminal-fx-status"),
+    terminalFxResult: document.getElementById("terminal-fx-result"),
+    terminalFxRecent: document.getElementById("terminal-fx-recent"),
     marketHeadlinesForm: document.getElementById("market-headlines-form"),
     marketHeadlinesCountry: document.getElementById("market-headlines-country"),
     marketHeadlinesLimit: document.getElementById("market-headlines-limit"),
@@ -1914,12 +1932,14 @@
               "market-headlines": "/market-headlines",
               "ticker-query": "/model-council",
 		          options: "/options",
+              fx: "/forecasting",
 		          learn: "/studio",
             },
             pathAliases: {
               "/ticker-intelligence": "ticker",
               "/ticker-query": "ticker-query",
               "/model-council": "ticker-query",
+              "/tools/fx": "fx",
             },
           },
 			      dashboard: {
@@ -2136,7 +2156,7 @@
     });
 
     const preferredByRouter = {
-      terminal: ["forecast", "/explore", "ticker", "indicators", "news"],
+      terminal: ["forecast", "ticker", "indicators", "ticker-query", "fx"],
       dashboard: ["orders", "/explore", "watchlist", "productivity", "uploads"],
     };
     const preferredPanels = preferredByRouter[routerName] || [];
@@ -10401,6 +10421,178 @@
       // Ignore token read failures; endpoint can still decide if auth is required.
     }
     return headers;
+  };
+
+  const normalizeFxCode = (value, fallback = "USD") => {
+    const normalized = String(value || "")
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z]/g, "")
+      .slice(0, 6);
+    if (normalized) return normalized;
+    return String(fallback || "USD")
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z]/g, "")
+      .slice(0, 6);
+  };
+
+  const readTerminalFxRecent = () => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(TERMINAL_FX_RECENT_KEY) || "[]");
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      return [];
+    }
+  };
+
+  const writeTerminalFxRecent = (items) => {
+    try {
+      localStorage.setItem(TERMINAL_FX_RECENT_KEY, JSON.stringify((Array.isArray(items) ? items : []).slice(0, TERMINAL_FX_RECENT_LIMIT)));
+    } catch (error) {
+      // Ignore storage write failures.
+    }
+  };
+
+  const formatFxNumber = (value, maxDigits = 6) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return "-";
+    return new Intl.NumberFormat(undefined, {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: maxDigits,
+    }).format(numeric);
+  };
+
+  const setTerminalFxStatus = (message, isError = false) => {
+    if (!ui.terminalFxStatus) return;
+    ui.terminalFxStatus.textContent = String(message || "");
+    ui.terminalFxStatus.classList.toggle("error", Boolean(isError));
+  };
+
+  const renderTerminalFxResult = (payload) => {
+    if (!ui.terminalFxResult) return;
+    if (!payload || typeof payload !== "object") {
+      ui.terminalFxResult.innerHTML = '<div class="small muted">Run a conversion to view rate details.</div>';
+      return;
+    }
+    ui.terminalFxResult.innerHTML = `
+      <div class="profile-item"><span class="label">Amount in</span><span class="value">${formatFxNumber(payload.amountIn, 6)} ${escapeHtml(payload.base || "")}</span></div>
+      <div class="profile-item"><span class="label">Rate</span><span class="value">${formatFxNumber(payload.rate, 8)}</span></div>
+      <div class="profile-item"><span class="label">Amount out</span><span class="value">${formatFxNumber(payload.amountOut, 6)} ${escapeHtml(payload.quote || "")}</span></div>
+      <div class="profile-item"><span class="label">Symbol</span><span class="value">${escapeHtml(payload.symbolUsed || "-")}</span></div>
+      <div class="profile-item"><span class="label">Updated</span><span class="value">${
+        payload.asOf ? escapeHtml(new Date(payload.asOf).toLocaleString()) : "-"
+      }</span></div>
+      <div class="small muted" style="margin-top: 8px;">Source: ${escapeHtml(payload.source || "yahoo_finance")}</div>
+    `;
+  };
+
+  const renderTerminalFxRecent = () => {
+    if (!ui.terminalFxRecent) return;
+    const items = readTerminalFxRecent();
+    if (!items.length) {
+      ui.terminalFxRecent.innerHTML = '<div class="small muted">No recent conversions yet.</div>';
+      return;
+    }
+    ui.terminalFxRecent.innerHTML = items
+      .map((item, index) => {
+        const label = `${formatFxNumber(item.amountIn, 4)} ${normalizeFxCode(item.base)} -> ${formatFxNumber(
+          item.amountOut,
+          4
+        )} ${normalizeFxCode(item.quote)}`;
+        return `<button type="button" class="task-chip" data-terminal-fx-recent-index="${index}" style="margin: 4px 6px 4px 0;">${escapeHtml(
+          label
+        )}</button>`;
+      })
+      .join("");
+  };
+
+  const pushTerminalFxRecent = (payload) => {
+    const rows = readTerminalFxRecent();
+    const normalizedBase = normalizeFxCode(payload.base || "USD");
+    const normalizedQuote = normalizeFxCode(payload.quote || "USD");
+    const normalizedAmount = Number(payload.amountIn || 0);
+    const deduped = rows.filter((row) => {
+      const rowBase = normalizeFxCode(row.base || "USD");
+      const rowQuote = normalizeFxCode(row.quote || "USD");
+      return !(rowBase === normalizedBase && rowQuote === normalizedQuote && Number(row.amountIn || 0) === normalizedAmount);
+    });
+    deduped.unshift({
+      base: normalizedBase,
+      quote: normalizedQuote,
+      amountIn: normalizedAmount,
+      amountOut: Number(payload.amountOut || 0),
+      rate: Number(payload.rate || 0),
+      asOf: String(payload.asOf || ""),
+      symbolUsed: String(payload.symbolUsed || ""),
+      source: String(payload.source || ""),
+      createdAt: Date.now(),
+    });
+    writeTerminalFxRecent(deduped);
+    renderTerminalFxRecent();
+  };
+
+  const runTerminalFxConvert = async () => {
+    const amount = Number(ui.terminalFxAmount?.value || 0);
+    const base = normalizeFxCode(ui.terminalFxBase?.value || "USD");
+    const quote = normalizeFxCode(ui.terminalFxQuote?.value || "USD");
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setTerminalFxStatus("Enter a valid amount greater than zero.", true);
+      return;
+    }
+    if (!base || !quote) {
+      setTerminalFxStatus("Select base and quote currencies.", true);
+      return;
+    }
+
+    const submitButton = ui.terminalFxSubmit;
+    const submitLabel = submitButton?.querySelector("span");
+    if (submitButton) submitButton.disabled = true;
+    if (submitLabel) submitLabel.textContent = "Converting...";
+    setTerminalFxStatus("Requesting FX quote...");
+
+    try {
+      const headers = await buildApiAuthHeaders({ includeJson: true });
+      const response = await fetch("/api/fx/convert", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          base,
+          quote,
+          amount,
+          meta: buildMeta(),
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const detail = String(payload?.error || payload?.detail || `HTTP ${response.status}`).trim();
+        throw new Error(detail || "fx_convert_failed");
+      }
+
+      const normalized = {
+        base,
+        quote,
+        amountIn: Number(payload?.amountIn || amount),
+        amountOut: Number(payload?.amountOut || 0),
+        rate: Number(payload?.rate || 0),
+        symbolUsed: String(payload?.symbolUsed || ""),
+        source: String(payload?.source || "yahoo_finance"),
+        asOf: String(payload?.asOf || ""),
+      };
+      renderTerminalFxResult(normalized);
+      pushTerminalFxRecent(normalized);
+      setTerminalFxStatus(`Converted ${base}/${quote} using ${normalized.symbolUsed || "Yahoo FX"}.`);
+      logEvent("fx_convert", { base, quote });
+    } catch (error) {
+      const message = extractErrorMessage(error, "Currency conversion failed.");
+      setTerminalFxStatus(message, true);
+      renderTerminalFxResult(null);
+      showToast(message, "warn");
+    } finally {
+      if (submitButton) submitButton.disabled = false;
+      if (submitLabel) submitLabel.textContent = "Convert";
+    }
   };
 
   const normalizeMyRequestType = (value) => {
@@ -19221,6 +19413,32 @@
     });
     ui.eventsCalendarWindow?.addEventListener("change", async () => {
       await loadEarningsCalendar({ force: false, notify: false });
+    });
+
+    if (ui.terminalFxBase && !String(ui.terminalFxBase.value || "").trim()) ui.terminalFxBase.value = "USD";
+    if (ui.terminalFxQuote && !String(ui.terminalFxQuote.value || "").trim()) ui.terminalFxQuote.value = "EUR";
+    if (ui.terminalFxAmount && !String(ui.terminalFxAmount.value || "").trim()) ui.terminalFxAmount.value = "1";
+    renderTerminalFxRecent();
+    ui.terminalFxSwap?.addEventListener("click", () => {
+      const currentBase = normalizeFxCode(ui.terminalFxBase?.value || "USD");
+      const currentQuote = normalizeFxCode(ui.terminalFxQuote?.value || "EUR");
+      if (ui.terminalFxBase) ui.terminalFxBase.value = currentQuote;
+      if (ui.terminalFxQuote) ui.terminalFxQuote.value = currentBase;
+    });
+    ui.terminalFxForm?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      await runTerminalFxConvert();
+    });
+    ui.terminalFxRecent?.addEventListener("click", async (event) => {
+      const button = event.target.closest("[data-terminal-fx-recent-index]");
+      if (!button) return;
+      const idx = Number(button.getAttribute("data-terminal-fx-recent-index"));
+      const record = readTerminalFxRecent()[idx];
+      if (!record) return;
+      if (ui.terminalFxAmount) ui.terminalFxAmount.value = String(record.amountIn || 1);
+      if (ui.terminalFxBase) ui.terminalFxBase.value = normalizeFxCode(record.base || "USD");
+      if (ui.terminalFxQuote) ui.terminalFxQuote.value = normalizeFxCode(record.quote || "EUR");
+      await runTerminalFxConvert();
     });
 
     if (ui.marketHeadlinesCountry && !ui.marketHeadlinesCountry.value) {

@@ -90,7 +90,7 @@
               <a class="sidebar-link" href="/forecasting" data-panel-target="macro"><i class="iconoir-database" aria-hidden="true"></i><span>Macro and IPO</span></a>
               <a class="sidebar-link" href="/model-council" data-panel-target="ticker-query"><i class="iconoir-brain" aria-hidden="true"></i><span>Model Council</span></a>
               <a class="sidebar-link" href="/options" data-panel-target="options"><i class="iconoir-numbered-list-left" aria-hidden="true"></i><span>Options</span></a>
-              <a class="sidebar-link" href="/tools/fx" data-panel-target="fx"><i class="iconoir-coins-swap" aria-hidden="true"></i><span>Currency conversion</span></a>
+              <a class="sidebar-link" href="/forecasting?panel=fx" data-panel-target="fx"><i class="iconoir-coins-swap" aria-hidden="true"></i><span>Currency conversion</span></a>
               <a class="sidebar-link" href="/studio" data-panel-target="learn"><i class="iconoir-info-circle" aria-hidden="true"></i><span>Learn more</span></a>
 	            <a class="sidebar-link" href="/screener"><i class="iconoir-search" aria-hidden="true"></i><span>Screener</span></a>
               <a class="sidebar-link" href="/explore"><i class="iconoir-binocular" aria-hidden="true"></i><span>Explore</span></a>
@@ -755,6 +755,68 @@
                     <div class="results-panel options-chain-panel">
                       <h3>Options chain</h3>
                       <div id="options-output" class="panel-output small">Calls and puts will appear here.</div>
+                    </div>
+                  </section>
+
+                  <section class="panel hidden" data-panel="fx">
+                    <div class="panel-header">
+                      <h2>Currency conversion</h2>
+                      <p class="small">Convert with live FX rates and keep a quick recent list for repeat checks.</p>
+                    </div>
+                    <form id="terminal-fx-form" class="card" autocomplete="off">
+                      <div class="form-grid">
+                        <div class="field">
+                          <label class="label" for="terminal-fx-amount">Amount</label>
+                          <input id="terminal-fx-amount" name="amount" type="number" min="0" step="0.0001" value="1" required />
+                        </div>
+                        <div class="field">
+                          <label class="label" for="terminal-fx-base">Base currency</label>
+                          <select id="terminal-fx-base" name="base" required>
+                            <option value="USD">USD</option>
+                            <option value="EUR">EUR</option>
+                            <option value="GBP">GBP</option>
+                            <option value="JPY">JPY</option>
+                            <option value="CAD">CAD</option>
+                            <option value="AUD">AUD</option>
+                            <option value="CHF">CHF</option>
+                            <option value="BDT">BDT</option>
+                            <option value="INR">INR</option>
+                            <option value="BTC">BTC</option>
+                          </select>
+                        </div>
+                        <div class="field">
+                          <label class="label" for="terminal-fx-quote">Quote currency</label>
+                          <select id="terminal-fx-quote" name="quote" required>
+                            <option value="EUR">EUR</option>
+                            <option value="USD" selected>USD</option>
+                            <option value="GBP">GBP</option>
+                            <option value="JPY">JPY</option>
+                            <option value="CAD">CAD</option>
+                            <option value="AUD">AUD</option>
+                            <option value="CHF">CHF</option>
+                            <option value="BDT">BDT</option>
+                            <option value="INR">INR</option>
+                            <option value="BTC">BTC</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div class="hero-actions" style="margin-top: 12px;">
+                        <button type="button" class="cta secondary small" id="terminal-fx-swap">
+                          <i class="iconoir-arrows-up-from-line" aria-hidden="true"></i><span>Swap</span>
+                        </button>
+                        <button type="submit" class="cta small fx-convert-cta" id="terminal-fx-submit">
+                          <i class="iconoir-calculator" aria-hidden="true"></i><span>Convert</span>
+                        </button>
+                      </div>
+                      <p id="terminal-fx-status" class="small muted" style="margin-top: 10px;">Ready.</p>
+                    </form>
+                    <div class="results-panel">
+                      <h3>Conversion result</h3>
+                      <div id="terminal-fx-result" class="panel-output small">Run a conversion to view rate details.</div>
+                    </div>
+                    <div class="card">
+                      <h3>Recent conversions</h3>
+                      <div id="terminal-fx-recent" class="order-list panel-output small">No recent conversions yet.</div>
                     </div>
                   </section>
 

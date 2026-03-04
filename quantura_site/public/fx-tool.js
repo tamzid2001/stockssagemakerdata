@@ -64,7 +64,10 @@
   const getApiBase = () => {
     const explicit = String(window.__QUANTURA_MARKET_DATA_BASE__ || "").trim();
     const saved = String(localStorage.getItem(STORAGE_BASE_KEY) || "").trim();
-    const fallback = "http://127.0.0.1:8090";
+    const fallback =
+      typeof window !== "undefined" && window.location && window.location.origin
+        ? `${window.location.origin}/api`
+        : "/api";
     return (explicit || saved || fallback).replace(/\/$/, "");
   };
 
@@ -124,23 +127,38 @@
     }
 
     const base = getApiBase();
-    const url = new URL(`${base}/fx/convert`);
-    url.searchParams.set("amount", String(amount));
-    url.searchParams.set("from", from);
-    url.searchParams.set("to", to);
-
     setLoading(true);
     setStatus("Requesting latest FX quote...");
     try {
-      const response = await fetch(url.toString(), {
-        method: "GET",
-        headers: { Accept: "application/json" },
+      const endpoint = `${base}/fx/convert`;
+      let response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          base: from,
+          quote: to,
+          amount,
+        }),
       });
+      let payload = await response.json().catch(() => ({}));
+      if (!response.ok && (response.status === 404 || response.status === 405)) {
+        const url = new URL(endpoint);
+        url.searchParams.set("amount", String(amount));
+        url.searchParams.set("from", from);
+        url.searchParams.set("to", to);
+        response = await fetch(url.toString(), {
+          method: "GET",
+          headers: { Accept: "application/json" },
+        });
+        payload = await response.json().catch(() => ({}));
+      }
 
-      const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        const detail = String(payload?.detail || `HTTP ${response.status}`);
-        throw new Error(detail);
+        const detail = String(payload?.error || payload?.detail || `HTTP ${response.status}`);
+        throw new Error(detail || "Conversion failed.");
       }
 
       renderResult(payload);
