@@ -17,6 +17,7 @@ FUNCTIONS_RUNTIME="${FUNCTIONS_RUNTIME:-nodejs24}"
 PUBLIC_ORIGIN="${PUBLIC_ORIGIN:-https://quantura.studio}"
 PLAY_INTEGRITY_ANDROID_PACKAGE="${PLAY_INTEGRITY_ANDROID_PACKAGE:-com.quantura.quanturaapp}"
 REQUIRE_PLAY_INTEGRITY="${REQUIRE_PLAY_INTEGRITY:-false}"
+FISCALDATA_REFRESH_TOPIC="${FISCALDATA_REFRESH_TOPIC:-fiscaldata-refresh}"
 LOCAL_FUNCTIONS_BUILD="${LOCAL_FUNCTIONS_BUILD:-false}"
 GCLOUD_BIN="${GCLOUD_BIN:-}"
 
@@ -179,6 +180,18 @@ echo "==> Deploying Firestore trigger: onAgentRunCreated"
   --trigger-event-filters=type=google.cloud.firestore.document.v1.created \
   --trigger-event-filters=database='(default)' \
   --trigger-event-filters-path-pattern=document='agent_runs/{runId}' \
+  ${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"}
+
+echo "==> Deploying Pub/Sub trigger: refreshFiscaldataDefaults"
+"${GCLOUD_BIN}" functions deploy refreshFiscaldataDefaults \
+  --quiet \
+  --project="${PROJECT_ID}" \
+  --gen2 \
+  --runtime="${FUNCTIONS_RUNTIME}" \
+  --region="${REGION}" \
+  --source="${FUNCTIONS_SRC}" \
+  --entry-point=refreshFiscaldataDefaults \
+  --trigger-topic="${FISCALDATA_REFRESH_TOPIC}" \
   ${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"}
 
 echo "==> Deploying frontend hosting"

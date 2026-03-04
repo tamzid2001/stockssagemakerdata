@@ -228,14 +228,15 @@
     uploads: "Upload predictions CSV",
     autopilot: "Weekly Brief Autopilot",
   });
-  const MASSIVE_CAPABILITY_LABELS = Object.freeze({
-    economy_treasury_yields: "Economy · Treasury Yields",
-    economy_inflation: "Economy · Inflation",
-    economy_inflation_expectations: "Economy · Inflation Expectations",
-    economy_labor_market: "Economy · Labor Market",
-    stocks_ipos: "Stocks · IPOs",
-    options_all_contracts: "Options · All Contracts",
-  });
+  const FISCALDATA_DEFAULT_PREFERRED_COLUMNS = Object.freeze([
+    "record_date",
+    "country_currency_desc",
+    "security_desc",
+    "exchange_rate",
+    "avg_interest_rate_amt",
+    "close_today_bal",
+    "tot_pub_debt_out_amt",
+  ]);
   const AI_MODEL_CATALOG = [
     {
       id: "gpt-5-nano",
@@ -1398,6 +1399,31 @@
   };
 
   ensureTerminalFxPanelScaffold();
+  const ensureFiscalMacroPanelScaffold = () => {
+    const macroSidebarLink = document.querySelector('[data-panel-target="macro"] span');
+    if (macroSidebarLink) macroSidebarLink.textContent = "Macro Dashboard";
+    const macroPanel = document.querySelector('[data-panel="macro"]');
+    if (!macroPanel) return;
+    if (macroPanel.querySelector("#fiscaldata-macro-groups")) return;
+    macroPanel.innerHTML = `
+      <div class="panel-header">
+        <h2>Macro Dashboard</h2>
+        <p class="small">Registry-driven Fiscal Data cards with schema-aware rendering and pagination.</p>
+      </div>
+      <div class="card" style="margin-bottom:16px;">
+        <h3>U.S. Treasury Fiscal Data</h3>
+        <p class="small muted" id="fiscaldata-macro-status">Loading registry and default macro cards...</p>
+      </div>
+      <div id="fiscaldata-macro-groups" class="content-grid">
+        <div class="card">
+          <div class="small muted">Loading cards...</div>
+        </div>
+      </div>
+      <div id="fiscaldata-macro-details" class="modal hidden"></div>
+    `;
+  };
+
+  ensureFiscalMacroPanelScaffold();
 
 	  const ui = {
     headerAuth: document.getElementById("header-auth"),
@@ -1450,8 +1476,8 @@
     adminOrders: document.getElementById("admin-orders"),
     adminAutopilot: document.getElementById("admin-autopilot"),
     adminFeatureVoteResults: document.getElementById("admin-feature-vote-results"),
-    adminMassiveCapabilitiesStatus: document.getElementById("admin-massive-capabilities-status"),
-    adminMassiveCapabilities: document.getElementById("admin-massive-capabilities"),
+    adminFiscaldataCapabilitiesStatus: document.getElementById("admin-fiscaldata-capabilities-status"),
+    adminFiscaldataCapabilities: document.getElementById("admin-fiscaldata-capabilities"),
     contactForm: document.getElementById("contact-form"),
     navAdmin: document.getElementById("nav-admin"),
     terminalForm: document.getElementById("terminal-form"),
@@ -1504,17 +1530,9 @@
     marketHeadlinesStatus: document.getElementById("market-headlines-status"),
     marketHeadlinesOutput: document.getElementById("market-headlines-output"),
     marketSocialOutput: document.getElementById("market-social-output"),
-    massiveEconomyStatus: document.getElementById("massive-economy-status"),
-    massiveEconomyYields: document.getElementById("massive-economy-yields"),
-    massiveEconomyInflation: document.getElementById("massive-economy-inflation"),
-    massiveEconomyInflationExpectations: document.getElementById("massive-economy-inflation-expectations"),
-    massiveEconomyLabor: document.getElementById("massive-economy-labor"),
-    massiveIpoForm: document.getElementById("massive-ipo-form"),
-    massiveIpoStart: document.getElementById("massive-ipo-start"),
-    massiveIpoEnd: document.getElementById("massive-ipo-end"),
-    massiveIpoStatus: document.getElementById("massive-ipo-status"),
-    massiveIpoStatusText: document.getElementById("massive-ipo-status-text"),
-    massiveIpoOutput: document.getElementById("massive-ipo-output"),
+    macroDashboardStatus: document.getElementById("fiscaldata-macro-status"),
+    macroDashboardGroups: document.getElementById("fiscaldata-macro-groups"),
+    macroDetailsModal: document.getElementById("fiscaldata-macro-details"),
     tickerQueryForm: document.getElementById("ticker-query-form"),
     tickerQueryTicker: document.getElementById("ticker-query-ticker"),
     tickerQueryQuestion: document.getElementById("ticker-query-question"),
@@ -1741,8 +1759,11 @@
     aiAgents: [],
     aiFollowSet: new Set(),
     aiLikeSet: new Set(),
-    massiveCapabilities: null,
-    massiveCapabilitiesLoadedAt: 0,
+    fiscaldataCapabilities: null,
+    fiscaldataCapabilitiesLoadedAt: 0,
+    fiscaldataRegistry: [],
+    fiscaldataRegistryLoadedAt: 0,
+    fiscaldataMacroPages: {},
     aiUsageToday: 0,
     aiUsageDateKey: "",
     aiUsageTierKey: "free",
@@ -5350,11 +5371,7 @@
       "events-calendar-output",
       "market-headlines-output",
       "market-social-output",
-      "massive-economy-yields",
-      "massive-economy-inflation",
-      "massive-economy-inflation-expectations",
-      "massive-economy-labor",
-      "massive-ipo-output",
+      "fiscaldata-macro-groups",
       "ticker-output",
       "ticker-predictions-output",
       "screener-output",
@@ -5720,121 +5737,175 @@
     renderAdminFeatureVoteSummary(result.data || {});
   };
 
-  const renderMassiveCapabilitiesAudit = (payload = null) => {
-    if (!ui.adminMassiveCapabilities) return;
-    const capabilities = payload && typeof payload.capabilities === "object" ? payload.capabilities : {};
-    const entries = Object.entries(capabilities);
-    if (!entries.length) {
-      ui.adminMassiveCapabilities.innerHTML = `<div class="small muted">No capability probe results available yet.</div>`;
-      if (ui.adminMassiveCapabilitiesStatus) {
-        ui.adminMassiveCapabilitiesStatus.textContent = "Capability audit did not return endpoint results.";
+  const renderFiscaldataCapabilitiesAudit = (payload = null) => {
+    if (!ui.adminFiscaldataCapabilities) return;
+    const rows = Array.isArray(payload?.results) ? payload.results : [];
+    if (!rows.length) {
+      ui.adminFiscaldataCapabilities.innerHTML = `<div class="small muted">No Fiscal Data endpoint checks have run yet.</div>`;
+      if (ui.adminFiscaldataCapabilitiesStatus) {
+        ui.adminFiscaldataCapabilitiesStatus.textContent = "Endpoint check returned no rows.";
       }
       return;
     }
 
-    const cards = entries
-      .map(([key, raw]) => {
-        const row = raw && typeof raw === "object" ? raw : {};
-        const status = String(row.status || "ERROR").toUpperCase();
-        const httpStatus = Number(row.httpStatus || 0);
-        const available = status === "AVAILABLE";
-        const label = MASSIVE_CAPABILITY_LABELS[key] || key.replace(/_/g, " ");
-        const statusClass = available ? "completed" : status === "UNAUTHORIZED" ? "pending" : "cancelled";
-        const message = String(row.message || "").trim();
+    ui.adminFiscaldataCapabilities.innerHTML = rows
+      .map((row) => {
+        const status = String(row?.status || "error").toLowerCase();
+        const statusClass = status === "available" ? "completed" : status === "warning" ? "pending" : "cancelled";
+        const detail = String(row?.detail || "").trim();
         return `
           <div class="order-card">
             <div class="order-header">
-              <div class="order-title">${escapeHtml(label)}</div>
-              <span class="status ${statusClass}">${escapeHtml(status)}</span>
+              <div class="order-title">${escapeHtml(String(row?.title || row?.id || "Fiscal endpoint"))}</div>
+              <span class="status ${statusClass}">${escapeHtml(status.toUpperCase())}</span>
             </div>
             <div class="order-meta">
-              <div><strong>HTTP</strong> ${Number.isFinite(httpStatus) && httpStatus > 0 ? httpStatus : "—"}</div>
-              <div><strong>Path</strong> ${escapeHtml(String(row.path || "—"))}</div>
-              <div><strong>Availability</strong> ${available ? "Enabled" : "Unavailable"}</div>
-              <div><strong>Detail</strong> ${escapeHtml(message || "—")}</div>
+              <div><strong>Endpoint</strong> ${escapeHtml(String(row?.endpoint || "—"))}</div>
+              <div><strong>Category</strong> ${escapeHtml(String(row?.category || "—"))}</div>
+              <div><strong>Rows</strong> ${Number.isFinite(Number(row?.count)) ? Number(row?.count) : "—"}</div>
+              <div><strong>Detail</strong> ${escapeHtml(detail || "—")}</div>
             </div>
           </div>
         `;
       })
       .join("");
-    ui.adminMassiveCapabilities.innerHTML = cards;
 
-    if (ui.adminMassiveCapabilitiesStatus) {
+    if (ui.adminFiscaldataCapabilitiesStatus) {
       const generated = payload?.generatedAt ? formatTimestamp(payload.generatedAt) : "—";
       const fromCache = payload?.fromCache ? " (cached)" : "";
-      ui.adminMassiveCapabilitiesStatus.textContent = `Last capability audit: ${generated}${fromCache}.`;
+      ui.adminFiscaldataCapabilitiesStatus.textContent = `Last Fiscal Data endpoint check: ${generated}${fromCache}.`;
     }
   };
 
-  const isMassiveCapabilityAvailable = (key) => {
-    const capabilities = state.massiveCapabilities && typeof state.massiveCapabilities === "object"
-      ? state.massiveCapabilities
-      : {};
-    const row = capabilities[key] && typeof capabilities[key] === "object" ? capabilities[key] : {};
-    return String(row.status || "").toUpperCase() === "AVAILABLE";
-  };
-
-  const loadMassiveCapabilities = async ({ force = false } = {}) => {
+  const loadFiscaldataRegistry = async ({ force = false } = {}) => {
     const now = Date.now();
-    if (!force && state.massiveCapabilities && now - Number(state.massiveCapabilitiesLoadedAt || 0) < 5 * 60 * 1000) {
-      renderMassiveCapabilitiesAudit({
-        generatedAt: new Date(state.massiveCapabilitiesLoadedAt).toISOString(),
-        fromCache: true,
-        capabilities: state.massiveCapabilities,
-      });
-      return state.massiveCapabilities;
+    if (!force && Array.isArray(state.fiscaldataRegistry) && state.fiscaldataRegistry.length && now - Number(state.fiscaldataRegistryLoadedAt || 0) < 5 * 60 * 1000) {
+      return state.fiscaldataRegistry;
     }
-
-    if (ui.adminMassiveCapabilitiesStatus) {
-      ui.adminMassiveCapabilitiesStatus.textContent = "Running capability audit...";
-    }
-
     const headers = await buildApiAuthHeaders();
-    const query = force ? "?force=1" : "";
-    const response = await fetch(`/api/massive/capabilities${query}`, {
+    const response = await fetch("/api/fiscaldata/registry", {
       method: "GET",
       headers,
       credentials: "same-origin",
     });
-    if (!response.ok) {
-      throw new Error("Unable to load Massive capabilities.");
-    }
-    const payload = await response.json();
-    const capabilities = payload && typeof payload.capabilities === "object" ? payload.capabilities : {};
-    state.massiveCapabilities = capabilities;
-    state.massiveCapabilitiesLoadedAt = now;
-    renderMassiveCapabilitiesAudit(payload);
-    return capabilities;
+    if (!response.ok) throw new Error("Unable to load Fiscal Data registry.");
+    const payload = await response.json().catch(() => ({}));
+    const endpoints = Array.isArray(payload?.endpoints) ? payload.endpoints : [];
+    state.fiscaldataRegistry = endpoints;
+    state.fiscaldataRegistryLoadedAt = now;
+    return endpoints;
   };
 
-  const fetchMassiveApi = async (path, params = {}) => {
-    const query = new URLSearchParams();
-    Object.entries(params || {}).forEach(([key, value]) => {
-      if (value === null || value === undefined) return;
-      const text = String(value).trim();
-      if (!text) return;
-      query.set(key, text);
+  const loadFiscaldataCapabilities = async ({ force = false } = {}) => {
+    const now = Date.now();
+    if (!force && state.fiscaldataCapabilities && now - Number(state.fiscaldataCapabilitiesLoadedAt || 0) < 5 * 60 * 1000) {
+      renderFiscaldataCapabilitiesAudit({
+        generatedAt: new Date(state.fiscaldataCapabilitiesLoadedAt).toISOString(),
+        fromCache: true,
+        results: state.fiscaldataCapabilities,
+      });
+      return state.fiscaldataCapabilities;
+    }
+    if (ui.adminFiscaldataCapabilitiesStatus) {
+      ui.adminFiscaldataCapabilitiesStatus.textContent = "Running Fiscal Data endpoint check...";
+    }
+    const endpoints = await loadFiscaldataRegistry({ force });
+    const checks = await Promise.all(
+      endpoints.map(async (entry) => {
+        const endpoint = String(entry?.endpoint || "").trim();
+        const params = new URLSearchParams({
+          endpoint,
+          format: "json",
+          "page[number]": "1",
+          "page[size]": "1",
+        });
+        if (Array.isArray(entry?.defaultQuery?.fields) && entry.defaultQuery.fields.length) {
+          params.set("fields", entry.defaultQuery.fields.join(","));
+        }
+        try {
+          const headers = await buildApiAuthHeaders();
+          const response = await fetch(`/api/fiscaldata?${params.toString()}`, {
+            method: "GET",
+            headers,
+            credentials: "same-origin",
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            return {
+              id: entry?.id,
+              title: entry?.title,
+              category: entry?.category,
+              endpoint,
+              status: "error",
+              detail: String(payload?.detail || payload?.error || `HTTP ${response.status}`),
+              count: 0,
+            };
+          }
+          const count = Number(payload?.meta?.count || payload?.data?.length || 0);
+          return {
+            id: entry?.id,
+            title: entry?.title,
+            category: entry?.category,
+            endpoint,
+            status: "available",
+            detail: String(payload?.links?.self || "OK"),
+            count,
+          };
+        } catch (error) {
+          return {
+            id: entry?.id,
+            title: entry?.title,
+            category: entry?.category,
+            endpoint,
+            status: "error",
+            detail: String(error?.message || "request_failed"),
+            count: 0,
+          };
+        }
+      })
+    );
+
+    state.fiscaldataCapabilities = checks;
+    state.fiscaldataCapabilitiesLoadedAt = now;
+    renderFiscaldataCapabilitiesAudit({
+      generatedAt: new Date(now).toISOString(),
+      fromCache: false,
+      results: checks,
     });
+    return checks;
+  };
+
+  const fetchFiscaldataApi = async ({
+    endpoint,
+    fields = [],
+    filter = "",
+    sort = [],
+    pageNumber = 1,
+    pageSize = 100,
+  }) => {
+    const cleanEndpoint = String(endpoint || "").trim();
+    if (!cleanEndpoint) throw new Error("Fiscal Data endpoint is required.");
+    const params = new URLSearchParams();
+    params.set("endpoint", cleanEndpoint);
+    params.set("format", "json");
+    params.set("page[number]", String(Math.max(1, Number(pageNumber || 1))));
+    params.set("page[size]", String(Math.max(1, Math.min(5000, Number(pageSize || 100)))));
+    if (Array.isArray(fields) && fields.length) params.set("fields", fields.join(","));
+    if (Array.isArray(sort) && sort.length) params.set("sort", sort.join(","));
+    if (String(filter || "").trim()) params.set("filter", String(filter || "").trim());
+
     const headers = await buildApiAuthHeaders();
-    const url = query.toString() ? `${path}?${query.toString()}` : path;
-    const response = await fetch(url, {
+    const response = await fetch(`/api/fiscaldata?${params.toString()}`, {
       method: "GET",
       headers,
       credentials: "same-origin",
     });
+    const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      let message = "Massive endpoint unavailable.";
-      try {
-        const payload = await response.json();
-        if (payload && typeof payload.error === "string" && payload.error.trim()) {
-          message = payload.error.trim();
-        }
-      } catch (error) {
-        // Ignore parse failures.
-      }
-      throw new Error(message);
+      const detail = String(payload?.detail || payload?.error || `HTTP ${response.status}`).trim();
+      throw new Error(detail || "Fiscal Data request failed.");
     }
-    return response.json();
+    return payload;
   };
 
   const buildMiniLineSvg = (values = []) => {
@@ -5861,175 +5932,297 @@
     `;
   };
 
-  const MASSIVE_SERIES_FREQUENCY = Object.freeze({
-    economy_treasury_yields: "Updated daily",
-    economy_inflation: "Updated monthly",
-    economy_inflation_expectations: "Updated monthly",
-    economy_labor_market: "Updated monthly",
-  });
-
-  const renderResearchMacroSeries = (container, payload, fallbackLabel, frequencyLabel = "") => {
-    if (!container) return;
-    const rows = Array.isArray(payload?.rows) ? payload.rows : [];
-    if (!rows.length) {
-      container.innerHTML = `<div class="small muted">No ${escapeHtml(fallbackLabel)} data returned.</div>`;
-      return;
-    }
-    const latest = rows.slice(0, 8);
-    const values = latest
-      .map((row) => Number(row?.value))
-      .filter((value) => Number.isFinite(value))
-      .reverse();
-    const sparkline = buildMiniLineSvg(values);
-    const listMarkup = latest
-      .map((row) => {
-        const date = escapeHtml(String(row?.date || "—"));
-        const value = Number(row?.value);
-        const pretty = Number.isFinite(value) ? value.toFixed(3) : "—";
-        return `<div class="small"><strong>${date}</strong> · ${escapeHtml(pretty)}</div>`;
-      })
-      .join("");
-    const generatedAtRaw = String(payload?.generatedAt || payload?.updatedAt || "").trim();
-    const generatedAt = generatedAtRaw && Number.isFinite(Date.parse(generatedAtRaw))
-      ? new Date(generatedAtRaw).toLocaleString()
-      : "";
-    container.innerHTML = `
-      ${frequencyLabel ? `<div class="small muted" style="margin-bottom:6px;">${escapeHtml(frequencyLabel)}${generatedAt ? ` · ${escapeHtml(generatedAt)}` : ""}</div>` : ""}
-      ${sparkline}
-      ${listMarkup}
-    `;
+  const inferFiscalFieldKind = (field, dataType) => {
+    const fieldName = String(field || "").toLowerCase();
+    const type = String(dataType || "").toLowerCase();
+    if (type.includes("date") || fieldName.endsWith("_date")) return "date";
+    if (type.includes("currency") || fieldName.includes("amount") || fieldName.includes("balance")) return "currency";
+    if (type.includes("percent") || fieldName.includes("percent") || fieldName.includes("rate")) return "percent";
+    if (type.includes("number") || type.includes("integer") || type.includes("float") || type.includes("double")) return "number";
+    return "string";
   };
 
-  const renderResearchIpoTable = (payload) => {
-    if (!ui.massiveIpoOutput) return;
-    const items = Array.isArray(payload?.items) ? payload.items : [];
-    if (!items.length) {
-      ui.massiveIpoOutput.innerHTML = `<div class="small muted">No IPO rows found for the selected filters.</div>`;
-      return;
+  const normalizeFiscalCellValue = (value, kind) => {
+    if (value == null) return null;
+    if (typeof value === "string" && ["", "null", "undefined", "na", "n/a", "-"].includes(value.trim().toLowerCase())) return null;
+    if (kind === "number" || kind === "currency" || kind === "percent") {
+      const parsed = Number(String(value).replace(/,/g, "").trim());
+      return Number.isFinite(parsed) ? parsed : null;
     }
-    const rows = items
-      .slice(0, 120)
+    if (kind === "date") {
+      const parsed = Date.parse(String(value).trim());
+      return Number.isFinite(parsed) ? new Date(parsed).toISOString() : String(value);
+    }
+    return String(value);
+  };
+
+  const formatFiscalCellValue = (value, kind) => {
+    if (value == null || value === "") return "—";
+    if (kind === "date") {
+      const parsed = Date.parse(String(value));
+      return Number.isFinite(parsed) ? new Date(parsed).toLocaleDateString() : String(value);
+    }
+    if (kind === "currency") {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) return "—";
+      return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(numeric);
+    }
+    if (kind === "percent") {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) return "—";
+      return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 3 }).format(numeric)}%`;
+    }
+    if (kind === "number") {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) return "—";
+      return new Intl.NumberFormat(undefined, { maximumFractionDigits: 3 }).format(numeric);
+    }
+    return String(value);
+  };
+
+  const chooseFiscalDisplayColumns = (meta, rows, preferredOrder = []) => {
+    const labels = meta && typeof meta === "object" && meta.labels && typeof meta.labels === "object" ? meta.labels : {};
+    const candidates = Object.keys(labels).length ? Object.keys(labels) : (Array.isArray(rows) && rows[0] ? Object.keys(rows[0]) : []);
+    const order = [];
+    const seen = new Set();
+    [...preferredOrder, ...FISCALDATA_DEFAULT_PREFERRED_COLUMNS].forEach((field) => {
+      if (!candidates.includes(field) || seen.has(field)) return;
+      seen.add(field);
+      order.push(field);
+    });
+    candidates.forEach((field) => {
+      if (seen.has(field)) return;
+      seen.add(field);
+      order.push(field);
+    });
+    return order.slice(0, 8);
+  };
+
+  const renderFiscalMacroTable = (payload, preferredOrder = []) => {
+    const rows = Array.isArray(payload?.data) ? payload.data : [];
+    if (!rows.length) return `<div class="small muted">No rows returned for this query.</div>`;
+    const meta = payload?.meta && typeof payload.meta === "object" ? payload.meta : {};
+    const labels = meta.labels && typeof meta.labels === "object" ? meta.labels : {};
+    const dataTypes = meta.dataTypes && typeof meta.dataTypes === "object" ? meta.dataTypes : {};
+    const columns = chooseFiscalDisplayColumns(meta, rows, preferredOrder);
+    if (!columns.length) return `<div class="small muted">No displayable columns.</div>`;
+
+    const normalized = rows.slice(0, 20).map((row) => {
+      const source = row && typeof row === "object" ? row : {};
+      const next = {};
+      columns.forEach((field) => {
+        const kind = inferFiscalFieldKind(field, dataTypes[field]);
+        next[field] = normalizeFiscalCellValue(source[field], kind);
+      });
+      return next;
+    });
+
+    const seriesValues = normalized
       .map((row) => {
-        const date = escapeHtml(String(row?.date || "—"));
-        const symbol = escapeHtml(String(row?.symbol || "—"));
-        const exchange = escapeHtml(String(row?.exchange || "—"));
-        const status = escapeHtml(String(row?.status || "—"));
-        const name = escapeHtml(String(row?.name || "—"));
-        return `<tr><td>${date}</td><td>${symbol}</td><td>${exchange}</td><td>${status}</td><td>${name}</td></tr>`;
+        const candidateField = columns.find((field) => {
+          const kind = inferFiscalFieldKind(field, dataTypes[field]);
+          return kind === "number" || kind === "currency" || kind === "percent";
+        });
+        if (!candidateField) return null;
+        const numeric = Number(row[candidateField]);
+        return Number.isFinite(numeric) ? numeric : null;
+      })
+      .filter((value) => value != null);
+    const sparkline = seriesValues.length >= 2 ? buildMiniLineSvg(seriesValues.reverse()) : "";
+
+    const head = columns
+      .map((field) => `<th>${escapeHtml(String(labels[field] || field).trim())}</th>`)
+      .join("");
+    const body = normalized
+      .map((row) => {
+        const cells = columns
+          .map((field) => {
+            const kind = inferFiscalFieldKind(field, dataTypes[field]);
+            return `<td>${escapeHtml(formatFiscalCellValue(row[field], kind))}</td>`;
+          })
+          .join("");
+        return `<tr>${cells}</tr>`;
       })
       .join("");
-    ui.massiveIpoOutput.innerHTML = `
-      <div style="overflow:auto;">
+
+    return `
+      ${sparkline}
+      <div style="overflow:auto; margin-top:8px;">
         <table class="insider-table">
-          <thead><tr><th>Date</th><th>Symbol</th><th>Exchange</th><th>Status</th><th>Name</th></tr></thead>
-          <tbody>${rows}</tbody>
+          <thead><tr>${head}</tr></thead>
+          <tbody>${body}</tbody>
         </table>
       </div>
     `;
   };
 
-  const loadResearchMacroWidgets = async () => {
-    if (!ui.massiveEconomyStatus) return;
-    ui.massiveEconomyStatus.textContent = "Loading Massive macro series...";
-    logEvent("research_macro_load_started", { source: "massive" });
-    try {
-      const requests = [
-        {
-          path: "/api/massive/economy/treasury-yields",
-          node: ui.massiveEconomyYields,
-          key: "economy_treasury_yields",
-          label: "treasury yield",
-        },
-        {
-          path: "/api/massive/economy/inflation",
-          node: ui.massiveEconomyInflation,
-          key: "economy_inflation",
-          label: "inflation",
-        },
-        {
-          path: "/api/massive/economy/inflation-expectations",
-          node: ui.massiveEconomyInflationExpectations,
-          key: "economy_inflation_expectations",
-          label: "inflation expectations",
-        },
-        {
-          path: "/api/massive/economy/labor-market",
-          node: ui.massiveEconomyLabor,
-          key: "economy_labor_market",
-          label: "labor market",
-        },
-      ];
+  const buildFiscalCardQueryParams = (entry, pageNumber) => {
+    const defaultQuery = entry?.defaultQuery && typeof entry.defaultQuery === "object" ? entry.defaultQuery : {};
+    const fields = Array.isArray(defaultQuery.fields) ? defaultQuery.fields : [];
+    const sort = Array.isArray(defaultQuery.sort) ? defaultQuery.sort : [];
+    const filter = String(defaultQuery.filter || "").trim();
+    const pageSize = Number(defaultQuery?.page?.size || 100);
+    const nextPageNumber = Math.max(1, Number(pageNumber || defaultQuery?.page?.number || 1));
+    return { fields, sort, filter, pageSize, pageNumber: nextPageNumber };
+  };
 
-      await Promise.all(
-        requests.map(async (item) => {
-          try {
-            const payload = await fetchMassiveApi(item.path, { limit: 120 });
-            renderResearchMacroSeries(
-              item.node,
-              payload,
-              item.label,
-              String(payload?.updateFrequency || MASSIVE_SERIES_FREQUENCY[item.key] || "Updated periodically")
-            );
-            logEvent("research_macro_series_loaded", {
-              series_key: item.key,
-              rows: Number(payload?.count || payload?.rows?.length || 0),
-            });
-          } catch (error) {
-            if (item.node) {
-              item.node.innerHTML = `<div class="small muted">${escapeHtml(extractErrorMessage(error, "Unable to load series."))}</div>`;
-            }
-            logEvent("research_macro_series_error", {
-              series_key: item.key,
-              message: String(error?.message || "load_failed").slice(0, 120),
-            });
-          }
+  const renderFiscalMacroDetailsModal = (entry, cardState) => {
+    const modal = document.getElementById("fiscaldata-macro-details");
+    if (!modal) return;
+    const payload = cardState?.payload || {};
+    const query = cardState?.query || {};
+    const endpoint = String(entry?.endpoint || "");
+    const queryString = new URLSearchParams({
+      endpoint,
+      format: "json",
+      "page[number]": String(query.pageNumber || 1),
+      "page[size]": String(query.pageSize || 100),
+      ...(Array.isArray(query.fields) && query.fields.length ? { fields: query.fields.join(",") } : {}),
+      ...(Array.isArray(query.sort) && query.sort.length ? { sort: query.sort.join(",") } : {}),
+      ...(String(query.filter || "").trim() ? { filter: String(query.filter || "").trim() } : {}),
+    }).toString();
+
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-fiscaldata-close></div>
+      <div class="modal-dialog card" style="max-width: 980px; width: calc(100% - 24px); max-height: calc(100vh - 40px); overflow:auto;">
+        <button class="modal-close" type="button" data-fiscaldata-close aria-label="Close details">×</button>
+        <h3>${escapeHtml(String(entry?.title || "Fiscal Data details"))}</h3>
+        <p class="small muted">Endpoint: <code>${escapeHtml(endpoint)}</code></p>
+        <p class="small muted">Query: <code>${escapeHtml(queryString)}</code></p>
+        <div>${renderFiscalMacroTable(payload, [entry?.ui?.primaryDateField, entry?.ui?.primaryValueField].filter(Boolean))}</div>
+      </div>
+    `;
+    modal.classList.remove("hidden");
+  };
+
+  const renderFiscalMacroDashboard = () => {
+    if (!ui.macroDashboardGroups) return;
+    const entries = Array.isArray(state.fiscaldataRegistry) ? state.fiscaldataRegistry : [];
+    if (!entries.length) {
+      ui.macroDashboardGroups.innerHTML = `<div class="small muted">No macro cards configured.</div>`;
+      return;
+    }
+
+    const grouped = new Map();
+    entries.forEach((entry) => {
+      const category = String(entry?.category || "Other");
+      if (!grouped.has(category)) grouped.set(category, []);
+      grouped.get(category).push(entry);
+    });
+
+    const blocks = Array.from(grouped.entries()).map(([category, cards]) => {
+      const cardMarkup = cards
+        .map((entry) => {
+          const cardState = state.fiscaldataMacroPages?.[entry.id] || {};
+          const payload = cardState.payload || {};
+          const rows = Array.isArray(payload?.data) ? payload.data : [];
+          const meta = payload?.meta && typeof payload.meta === "object" ? payload.meta : {};
+          const count = Number(meta?.count || rows.length || 0);
+          const totalPages = Number(meta?.totalPages || 1);
+          const pageNumber = Number(cardState.pageNumber || 1);
+          const hasNextLink = Boolean(String(payload?.links?.next || "").trim());
+          const canLoadMore = hasNextLink || totalPages > pageNumber;
+          const frequency = String(entry?.updateCadence || "periodic").trim();
+          const table = rows.length
+            ? renderFiscalMacroTable(payload, [entry?.ui?.primaryDateField, entry?.ui?.primaryValueField].filter(Boolean))
+            : `<div class="small muted">${escapeHtml(String(cardState.error || "Loading..."))}</div>`;
+          return `
+            <article class="card" data-fiscaldata-card-id="${escapeHtml(entry.id)}">
+              <div class="order-header">
+                <div class="order-title">${escapeHtml(String(entry?.title || entry?.id || "Macro card"))}</div>
+                <span class="status pending">${escapeHtml(frequency)}</span>
+              </div>
+              <div class="small muted" style="margin-top:6px;">${escapeHtml(String(entry?.endpoint || ""))}</div>
+              <div style="margin-top:10px;">${table}</div>
+              <div class="hero-actions" style="margin-top:12px;">
+                <button class="cta secondary small" type="button" data-fiscaldata-view-details="${escapeHtml(entry.id)}">View details</button>
+                ${
+                  canLoadMore
+                    ? `<button class="cta secondary small" type="button" data-fiscaldata-load-more="${escapeHtml(entry.id)}">Load more</button>`
+                    : ""
+                }
+              </div>
+              <div class="small muted" style="margin-top:8px;">Rows: ${Number.isFinite(count) ? count : rows.length} · Page ${pageNumber}${totalPages > 1 ? ` of ${totalPages}` : ""}</div>
+            </article>
+          `;
         })
-      );
-      ui.massiveEconomyStatus.textContent = "Macro context loaded.";
-      logEvent("research_macro_loaded", { source: "massive" });
+        .join("");
+      return `
+        <section style="margin-bottom:18px;">
+          <h3 style="margin-bottom:10px;">${escapeHtml(String(category))}</h3>
+          <div class="content-grid">${cardMarkup}</div>
+        </section>
+      `;
+    });
+
+    ui.macroDashboardGroups.innerHTML = blocks.join("");
+  };
+
+  const loadFiscalMacroCard = async (entry, { pageNumber = 1, append = false } = {}) => {
+    const query = buildFiscalCardQueryParams(entry, pageNumber);
+    const cardId = String(entry?.id || "").trim();
+    if (!cardId) return;
+    try {
+      const payload = await fetchFiscaldataApi({
+        endpoint: entry.endpoint,
+        fields: query.fields,
+        filter: query.filter,
+        sort: query.sort,
+        pageNumber: query.pageNumber,
+        pageSize: query.pageSize,
+      });
+      const previous = append ? state.fiscaldataMacroPages?.[cardId]?.payload : null;
+      const mergedRows = append
+        ? [...(Array.isArray(previous?.data) ? previous.data : []), ...(Array.isArray(payload?.data) ? payload.data : [])]
+        : (Array.isArray(payload?.data) ? payload.data : []);
+      let nextPageNumber = null;
+      const nextHref = String(payload?.links?.next || "").trim();
+      if (nextHref) {
+        try {
+          const nextUrl = new URL(nextHref, window.location.origin);
+          const parsedPage = Number(nextUrl.searchParams.get("page[number]") || "");
+          if (Number.isFinite(parsedPage) && parsedPage > 0) {
+            nextPageNumber = Math.floor(parsedPage);
+          }
+        } catch (error) {
+          nextPageNumber = null;
+        }
+      }
+      const nextPayload = {
+        ...payload,
+        data: mergedRows,
+      };
+      state.fiscaldataMacroPages[cardId] = {
+        payload: nextPayload,
+        pageNumber: query.pageNumber,
+        nextPageNumber,
+        query,
+        error: "",
+      };
     } catch (error) {
-      ui.massiveEconomyStatus.textContent = extractErrorMessage(error, "Macro context is unavailable.");
-      [ui.massiveEconomyYields, ui.massiveEconomyInflation, ui.massiveEconomyInflationExpectations, ui.massiveEconomyLabor].forEach((node) => {
-        if (!node) return;
-        node.innerHTML = `<div class="small muted">Macro series unavailable right now.</div>`;
-      });
-      logEvent("research_macro_error", {
-        message: String(error?.message || "load_failed").slice(0, 120),
-      });
+      state.fiscaldataMacroPages[cardId] = {
+        ...(state.fiscaldataMacroPages?.[cardId] || {}),
+        error: extractErrorMessage(error, "Unable to load macro card."),
+      };
     }
   };
 
-  const loadResearchIpoCalendar = async ({ force = false } = {}) => {
-    if (!ui.massiveIpoOutput || !ui.massiveIpoStatusText) return;
-    logEvent("research_ipo_load_started", { force: Boolean(force) });
+  const loadFiscalMacroDashboard = async ({ force = false } = {}) => {
+    if (!ui.macroDashboardStatus || !ui.macroDashboardGroups) return;
+    ui.macroDashboardStatus.textContent = "Loading Fiscal Data macro cards...";
+    logEvent("macro_dashboard_load_started", { source: "fiscaldata" });
     try {
-      const start = String(ui.massiveIpoStart?.value || "").trim();
-      const end = String(ui.massiveIpoEnd?.value || "").trim();
-      const status = String(ui.massiveIpoStatus?.value || "").trim().toLowerCase();
-      ui.massiveIpoStatusText.textContent = "Loading IPO calendar...";
-      const payload = await fetchMassiveApi("/api/massive/stocks/ipos", {
-        start,
-        end,
-        status,
-        limit: 250,
-        force: force ? "1" : "",
-      });
-      renderResearchIpoTable(payload);
-      const count = Number(payload?.count || 0);
-      const frequency = String(payload?.updateFrequency || "Updated periodically").trim();
-      ui.massiveIpoStatusText.textContent = count
-        ? `Loaded ${count} IPO row${count === 1 ? "" : "s"} · ${frequency}.`
-        : `No IPO rows for selected filters · ${frequency}.`;
-      logEvent("research_ipo_loaded", {
-        count,
-        status: status || "all",
-        start_date: start,
-        end_date: end,
-      });
+      const entries = await loadFiscaldataRegistry({ force });
+      await Promise.all(entries.map((entry) => loadFiscalMacroCard(entry, { pageNumber: 1, append: false })));
+      renderFiscalMacroDashboard();
+      ui.macroDashboardStatus.textContent = `Loaded ${entries.length} Fiscal Data cards.`;
+      logEvent("macro_dashboard_loaded", { source: "fiscaldata", cards: entries.length });
     } catch (error) {
-      ui.massiveIpoStatusText.textContent = extractErrorMessage(error, "Unable to load IPO calendar.");
-      ui.massiveIpoOutput.innerHTML = `<div class="small muted">${escapeHtml(extractErrorMessage(error, "Unable to load IPO calendar."))}</div>`;
-      logEvent("research_ipo_error", {
+      ui.macroDashboardStatus.textContent = extractErrorMessage(error, "Macro dashboard is unavailable.");
+      ui.macroDashboardGroups.innerHTML = `<div class="small muted">${escapeHtml(
+        extractErrorMessage(error, "Macro dashboard is unavailable.")
+      )}</div>`;
+      logEvent("macro_dashboard_error", {
         message: String(error?.message || "load_failed").slice(0, 120),
       });
     }
@@ -16553,8 +16746,7 @@
         if (next === "macro") {
           const firstMacro = !state.panelAutoloaded.macro;
           state.panelAutoloaded.macro = true;
-          loadResearchMacroWidgets().catch(() => {});
-          loadResearchIpoCalendar({ force: firstMacro }).catch(() => {});
+          loadFiscalMacroDashboard({ force: firstMacro }).catch(() => {});
         }
 
         if (next === "ticker-query") {
@@ -19536,31 +19728,41 @@
       await loadMarketHeadlinesFeed(functions, { force: true, notify: true });
     });
 
-    if (ui.massiveIpoStart && ui.massiveIpoEnd) {
-      const today = new Date();
-      const start = new Date(today);
-      start.setDate(start.getDate() - 30);
-      const end = new Date(today);
-      end.setDate(end.getDate() + 180);
-      if (!ui.massiveIpoStart.value) ui.massiveIpoStart.value = start.toISOString().slice(0, 10);
-      if (!ui.massiveIpoEnd.value) ui.massiveIpoEnd.value = end.toISOString().slice(0, 10);
+    if (ui.macroDashboardStatus) {
+      loadFiscalMacroDashboard({ force: false }).catch((error) => {
+        ui.macroDashboardStatus.textContent = extractErrorMessage(error, "Macro dashboard is unavailable.");
+      });
     }
-    ui.massiveIpoForm?.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      await loadResearchIpoCalendar({ force: true });
+    ui.macroDashboardGroups?.addEventListener("click", async (event) => {
+      const loadMoreButton = event.target.closest("[data-fiscaldata-load-more]");
+      const detailsButton = event.target.closest("[data-fiscaldata-view-details]");
+      if (loadMoreButton) {
+        const cardId = String(loadMoreButton.getAttribute("data-fiscaldata-load-more") || "").trim();
+        const entry = Array.isArray(state.fiscaldataRegistry)
+          ? state.fiscaldataRegistry.find((item) => String(item?.id || "").trim() === cardId)
+          : null;
+        if (!entry) return;
+      const cardState = state.fiscaldataMacroPages?.[cardId] || {};
+      const nextPage = Number(cardState?.nextPageNumber || Number(cardState?.pageNumber || 1) + 1);
+      await loadFiscalMacroCard(entry, { pageNumber: nextPage, append: true });
+      renderFiscalMacroDashboard();
+      return;
+      }
+      if (detailsButton) {
+        const cardId = String(detailsButton.getAttribute("data-fiscaldata-view-details") || "").trim();
+        const entry = Array.isArray(state.fiscaldataRegistry)
+          ? state.fiscaldataRegistry.find((item) => String(item?.id || "").trim() === cardId)
+          : null;
+        if (!entry) return;
+        renderFiscalMacroDetailsModal(entry, state.fiscaldataMacroPages?.[cardId] || {});
+      }
     });
-    if (ui.massiveEconomyStatus) {
-      loadResearchMacroWidgets().catch((error) => {
-        ui.massiveEconomyStatus.textContent = extractErrorMessage(error, "Macro context is unavailable.");
-      });
-    }
-    if (ui.massiveIpoOutput) {
-      loadResearchIpoCalendar({ force: false }).catch((error) => {
-        if (ui.massiveIpoStatusText) {
-          ui.massiveIpoStatusText.textContent = extractErrorMessage(error, "Unable to load IPO calendar.");
-        }
-      });
-    }
+    document.addEventListener("click", (event) => {
+      const closeButton = event.target.closest("[data-fiscaldata-close]");
+      if (!closeButton) return;
+      const modal = document.getElementById("fiscaldata-macro-details");
+      modal?.classList.add("hidden");
+    });
 
     if (ui.tickerQueryLanguage && !ui.tickerQueryLanguage.value) {
       ui.tickerQueryLanguage.value = state.preferredLanguage || "en";
@@ -19832,15 +20034,15 @@
 	              <div class="options-meta">
 	                <div class="small"><strong>Underlying:</strong> ${money(underlyingPrice)}</div>
 	                <div class="small"><strong>Expiration:</strong> ${escapeHtml(selectedExpiration)}</div>
-                  <div class="small"><strong>Source:</strong> ${escapeHtml(source === "massive" ? "Powered by Massive" : "Yahoo Finance")}</div>
+                  <div class="small"><strong>Source:</strong> ${escapeHtml(source === "reference" ? "Reference contract feed" : "Yahoo Finance")}</div>
 	                <div class="small"><strong>RFR:</strong> ${typeof riskFreeRate === "number" ? fmt(riskFreeRate, 3) : "—"} · <strong>T:</strong> ${
 	                  typeof timeToExpiryYears === "number" ? fmt(timeToExpiryYears, 3) : "—"
 	                }y</div>
 	              </div>
                 ${
-                  source === "massive" || referenceOnly || fallbackUsed
+                  source === "reference" || referenceOnly || fallbackUsed
                     ? `<div class="notice" style="margin:10px 0;">${escapeHtml(
-                        notice || "Powered by Massive fallback. Quotes are not enabled on current plan; showing reference-only contracts."
+                        notice || "Reference fallback is active. Quotes are not enabled on current plan; showing reference-only contracts."
                       )}</div>`
                     : ""
                 }
@@ -20744,12 +20946,12 @@
 	        startAdminOrders(db);
 	        startAdminAutopilotQueue(db);
             setFeatureVoteSummaryPolling(functions, true);
-          loadMassiveCapabilities({ force: false }).catch((error) => {
-            if (ui.adminMassiveCapabilitiesStatus) {
-              ui.adminMassiveCapabilitiesStatus.textContent = extractErrorMessage(error, "Unable to load capability audit.");
+          loadFiscaldataCapabilities({ force: false }).catch((error) => {
+            if (ui.adminFiscaldataCapabilitiesStatus) {
+              ui.adminFiscaldataCapabilitiesStatus.textContent = extractErrorMessage(error, "Unable to load endpoint check.");
             }
-            if (ui.adminMassiveCapabilities) {
-              ui.adminMassiveCapabilities.innerHTML = `<div class="small muted">Capability audit unavailable.</div>`;
+            if (ui.adminFiscaldataCapabilities) {
+              ui.adminFiscaldataCapabilities.innerHTML = `<div class="small muted">Endpoint check unavailable.</div>`;
             }
           });
 	      } else {
@@ -20758,8 +20960,8 @@
 	        if (state.unsubscribeAdmin) state.unsubscribeAdmin();
 	        if (state.unsubscribeAdminAutopilot) state.unsubscribeAdminAutopilot();
             setFeatureVoteSummaryPolling(functions, false);
-          if (ui.adminMassiveCapabilitiesStatus) ui.adminMassiveCapabilitiesStatus.textContent = "Admin access required.";
-          if (ui.adminMassiveCapabilities) ui.adminMassiveCapabilities.innerHTML = `<div class="small muted">Admin access required.</div>`;
+          if (ui.adminFiscaldataCapabilitiesStatus) ui.adminFiscaldataCapabilitiesStatus.textContent = "Admin access required.";
+          if (ui.adminFiscaldataCapabilities) ui.adminFiscaldataCapabilities.innerHTML = `<div class="small muted">Admin access required.</div>`;
 	      }
     });
   });

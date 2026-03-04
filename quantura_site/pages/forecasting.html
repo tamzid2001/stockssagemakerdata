@@ -87,7 +87,7 @@
 	            <a class="sidebar-link" href="/news" data-panel-target="news"><i class="iconoir-journal-page" aria-hidden="true"></i><span>News and data</span></a>
               <a class="sidebar-link" href="/events-calendar" data-panel-target="events-calendar"><i class="iconoir-calendar" aria-hidden="true"></i><span>Earnings calendar</span></a>
               <a class="sidebar-link" href="/market-headlines" data-panel-target="market-headlines"><i class="iconoir-globe" aria-hidden="true"></i><span>Market headlines</span></a>
-              <a class="sidebar-link" href="/forecasting" data-panel-target="macro"><i class="iconoir-database" aria-hidden="true"></i><span>Macro and IPO</span></a>
+              <a class="sidebar-link" href="/forecasting" data-panel-target="macro"><i class="iconoir-database" aria-hidden="true"></i><span>Macro Dashboard</span></a>
               <a class="sidebar-link" href="/model-council" data-panel-target="ticker-query"><i class="iconoir-brain" aria-hidden="true"></i><span>Model Council</span></a>
               <a class="sidebar-link" href="/options" data-panel-target="options"><i class="iconoir-numbered-list-left" aria-hidden="true"></i><span>Options</span></a>
               <a class="sidebar-link" href="/forecasting?panel=fx" data-panel-target="fx"><i class="iconoir-coins-swap" aria-hidden="true"></i><span>Currency conversion</span></a>
@@ -554,61 +554,19 @@
 
                   <section class="panel hidden" data-panel="macro">
                     <div class="panel-header">
-                      <h2>Macro and IPO Monitor</h2>
-                      <p class="small">Massive economy endpoints plus IPO discovery, directly in Terminal.</p>
+                      <h2>Macro Dashboard</h2>
+                      <p class="small">Registry-driven Fiscal Data cards with schema-aware rendering and pagination.</p>
                     </div>
                     <div class="card" style="margin-bottom:16px;">
-                      <h3>US Economy</h3>
-                      <p class="small muted" id="massive-economy-status">Loading macro context...</p>
+                      <h3>U.S. Treasury Fiscal Data</h3>
+                      <p class="small muted" id="fiscaldata-macro-status">Loading registry and default macro cards...</p>
                     </div>
-                    <div class="content-grid">
-                      <article class="card">
-                        <h3>Treasury yields <span class="small muted">(Updated daily)</span></h3>
-                        <div id="massive-economy-yields" class="panel-output small">Yield curve data will appear here.</div>
-                      </article>
-                      <article class="card">
-                        <h3>Inflation <span class="small muted">(Updated monthly)</span></h3>
-                        <div id="massive-economy-inflation" class="panel-output small">Inflation series will appear here.</div>
-                      </article>
-                      <article class="card">
-                        <h3>Inflation expectations <span class="small muted">(Updated monthly)</span></h3>
-                        <div id="massive-economy-inflation-expectations" class="panel-output small">Expectation series will appear here.</div>
-                      </article>
-                      <article class="card">
-                        <h3>Labor market <span class="small muted">(Updated monthly)</span></h3>
-                        <div id="massive-economy-labor" class="panel-output small">Labor market series will appear here.</div>
-                      </article>
-                    </div>
-                    <div class="card" style="margin-top:16px;">
-                      <div class="panel-header" style="padding:0 0 10px;">
-                        <h3>IPO Calendar</h3>
-                        <p class="small muted" id="massive-ipo-status-text">Set filters and load upcoming or recent IPOs.</p>
+                    <div id="fiscaldata-macro-groups" class="content-grid">
+                      <div class="card">
+                        <div class="small muted">Loading cards...</div>
                       </div>
-                      <form id="massive-ipo-form" style="margin-bottom:14px;">
-                        <div class="form-grid">
-                          <div class="field">
-                            <label class="label" for="massive-ipo-start">Start date</label>
-                            <input id="massive-ipo-start" type="date" />
-                          </div>
-                          <div class="field">
-                            <label class="label" for="massive-ipo-end">End date</label>
-                            <input id="massive-ipo-end" type="date" />
-                          </div>
-                          <div class="field">
-                            <label class="label" for="massive-ipo-status">Status</label>
-                            <select id="massive-ipo-status">
-                              <option value="">All</option>
-                              <option value="scheduled">Scheduled</option>
-                              <option value="priced">Priced</option>
-                              <option value="listed">Listed</option>
-                              <option value="withdrawn">Withdrawn</option>
-                            </select>
-                          </div>
-                        </div>
-                        <button class="cta secondary" type="submit"><i class="iconoir-search" aria-hidden="true"></i><span>Load IPOs</span></button>
-                      </form>
-                      <div id="massive-ipo-output" class="panel-output small">IPO rows will appear here when available.</div>
                     </div>
+                    <div id="fiscaldata-macro-details" class="modal hidden"></div>
                   </section>
 
                   <section class="panel hidden" data-panel="ticker-query">

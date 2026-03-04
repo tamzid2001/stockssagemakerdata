@@ -2,6 +2,8 @@ import cors from "cors";
 import express, { Request, Response } from "express";
 import admin from "firebase-admin";
 import { GoogleAuth } from "google-auth-library";
+import { registerFiscalDataRoutes } from "./fiscaldataProxy";
+import { runScheduledFiscaldataRefresh } from "./schedules/refreshFiscaldata";
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -237,6 +239,8 @@ const fxRateCache = new Map<string, FxRateCacheEntry>();
 const PLAY_INTEGRITY_AUTH = new GoogleAuth({
   scopes: ["https://www.googleapis.com/auth/playintegrity"],
 });
+
+registerFiscalDataRoutes(ROUTES, { db });
 
 function asString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
@@ -6604,4 +6608,8 @@ export async function onAgentRunCreated(cloudEvent: any): Promise<void> {
 
 export async function onScreenerRunCreated(cloudEvent: any): Promise<void> {
   await handleCreateTrigger("screener", cloudEvent);
+}
+
+export async function refreshFiscaldataDefaults(_cloudEvent: any): Promise<void> {
+  await runScheduledFiscaldataRefresh({ db });
 }
