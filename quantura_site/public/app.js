@@ -372,6 +372,7 @@
       forecast: "goplan",
       annual_go: "annualgoplan",
       annual_plus: "annualplusplan",
+      annual_pro: "pro",
       annual_business: "annualbusinessplan",
       default: "pro",
     }),
@@ -384,6 +385,7 @@
       forecast: "goplan",
       annual_go: "goplanyearly",
       annual_plus: "annualplusplan",
+      annual_pro: "quanturapro",
       annual_business: "annualbusinessplan",
       default: "quanturapro",
     }),
@@ -463,8 +465,6 @@
       sidebar_market_headlines: "Market headlines",
       sidebar_ask_gpt5: "Model Council",
       sidebar_options: "Options",
-      sidebar_saved_forecasts: "Saved forecasts",
-      sidebar_backtesting: "Backtesting",
       sidebar_learn_more: "Learn more",
       sidebar_screener: "Screener",
       sidebar_watchlist_alerts: "Watchlist and alerts",
@@ -526,8 +526,6 @@
       sidebar_market_headlines: "Titulares del mercado",
       sidebar_ask_gpt5: "Model Council",
       sidebar_options: "Opciones",
-      sidebar_saved_forecasts: "Pronosticos guardados",
-      sidebar_backtesting: "Backtesting",
       sidebar_learn_more: "Mas informacion",
       sidebar_screener: "Screener",
       sidebar_watchlist_alerts: "Lista y alertas",
@@ -589,8 +587,6 @@
       sidebar_market_headlines: "Titres du marche",
       sidebar_ask_gpt5: "Model Council",
       sidebar_options: "Options",
-      sidebar_saved_forecasts: "Previsions enregistrees",
-      sidebar_backtesting: "Backtesting",
       sidebar_learn_more: "En savoir plus",
       sidebar_screener: "Screener",
       sidebar_watchlist_alerts: "Watchlist et alertes",
@@ -652,8 +648,6 @@
       sidebar_market_headlines: "Markt-Schlagzeilen",
       sidebar_ask_gpt5: "Model Council",
       sidebar_options: "Optionen",
-      sidebar_saved_forecasts: "Gespeicherte Forecasts",
-      sidebar_backtesting: "Backtesting",
       sidebar_learn_more: "Mehr erfahren",
       sidebar_screener: "Screener",
       sidebar_watchlist_alerts: "Watchlist und Alarme",
@@ -715,8 +709,6 @@
       sidebar_market_headlines: "عناوين السوق",
       sidebar_ask_gpt5: "Model Council",
       sidebar_options: "الخيارات",
-      sidebar_saved_forecasts: "التوقعات المحفوظة",
-      sidebar_backtesting: "اختبار رجعي",
       sidebar_learn_more: "اعرف المزيد",
       sidebar_screener: "الفلتر",
       sidebar_watchlist_alerts: "قائمة المراقبة والتنبيهات",
@@ -778,8 +770,6 @@
       sidebar_market_headlines: "মার্কেট হেডলাইন",
       sidebar_ask_gpt5: "Model Council",
       sidebar_options: "অপশন",
-      sidebar_saved_forecasts: "সংরক্ষিত ফোরকাস্ট",
-      sidebar_backtesting: "ব্যাকটেস্টিং",
       sidebar_learn_more: "আরও জানুন",
       sidebar_screener: "স্ক্রিনার",
       sidebar_watchlist_alerts: "ওয়াচলিস্ট ও অ্যালার্ট",
@@ -829,8 +819,6 @@
     sidebar_market_headlines: ['[data-panel-target="market-headlines"] span'],
     sidebar_ask_gpt5: ['[data-panel-target="ticker-query"] span'],
     sidebar_options: ['[data-panel-target="options"] span'],
-    sidebar_saved_forecasts: ['[data-panel-target="saved"] span'],
-    sidebar_backtesting: ['[data-panel-target="backtesting"] span'],
     sidebar_learn_more: ['[data-panel-target="learn"] span'],
     sidebar_screener: ['a[href="/screener"] span'],
     sidebar_watchlist_alerts: ['a[href="/watchlist"] span'],
@@ -1218,12 +1206,6 @@
       symbols: ["AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL"],
     },
   ];
-  const BACKTEST_SOURCE_OPTIONS = [
-    { key: "python", label: "Python (.py)", ext: "py", mimeType: "text/x-python" },
-    { key: "tradingview", label: "TradingView (.pine)", ext: "pine", mimeType: "text/plain" },
-    { key: "metatrader5", label: "MetaTrader 5 (.mq5)", ext: "mq5", mimeType: "text/plain" },
-    { key: "tradelocker", label: "TradeLocker (JSON)", ext: "json", mimeType: "application/json" },
-  ];
 
   const hydrateUnsplashGallery = async (functionsClient) => {
     const gallery = document.getElementById("unsplash-grid");
@@ -1527,18 +1509,6 @@
     predictionsPlotMeta: document.getElementById("predictions-plot-meta"),
     predictionsAgentButton: document.getElementById("predictions-agent-button"),
     predictionsAgentOutput: document.getElementById("predictions-agent-output"),
-    backtestForm: document.getElementById("backtest-form"),
-    backtestStrategy: document.getElementById("backtest-strategy"),
-    backtestOutput: document.getElementById("backtest-output"),
-    backtestAgentLookback: document.getElementById("backtest-agent-lookback"),
-    backtestAgentButton: document.getElementById("backtest-agent-button"),
-    backtestAgentStatus: document.getElementById("backtest-agent-status"),
-    backtestAgentOutput: document.getElementById("backtest-agent-output"),
-    backtestLoadSelect: document.getElementById("backtest-load-select"),
-    backtestLoadId: document.getElementById("backtest-load-id"),
-    backtestLoadButton: document.getElementById("backtest-load-button"),
-    backtestLoadStatus: document.getElementById("backtest-load-status"),
-    savedBacktestsList: document.getElementById("saved-backtests-list"),
     toast: document.getElementById("toast"),
 	    purchasePanels: Array.from(document.querySelectorAll(".purchase-panel")),
 	  };
@@ -1675,7 +1645,6 @@
 	    unsubscribeForecasts: null,
 	    unsubscribeAutopilot: null,
 	    unsubscribePredictions: null,
-      unsubscribeBacktests: null,
 	    unsubscribeTasks: null,
 	    unsubscribeWatchlist: null,
 	    unsubscribeAlerts: null,
@@ -1687,7 +1656,6 @@
       pendingCollabInviteCount: 0,
 	    screenerUrlRunLoaded: false,
       uploadUrlLoaded: false,
-      backtestUrlLoaded: false,
 	    messagingBound: false,
 	    remoteConfigLoaded: false,
     remoteFlags: {
@@ -1710,9 +1678,6 @@
         nativeIapProductIds: DEFAULT_NATIVE_IAP_PRODUCT_IDS,
         adsUseRealIOS: true,
         adsUseRealAndroid: true,
-        backtestingEnabled: true,
-        backtestingFreeDailyLimit: 1,
-        backtestingProDailyLimit: 25,
 	    },
 	    remoteConfigRefreshTimer: null,
 	    remoteConfigUnsubscribe: null,
@@ -1915,9 +1880,8 @@
               "events-calendar": "/events-calendar",
               "market-headlines": "/market-headlines",
               "ticker-query": "/model-council",
-	          options: "/options",
-	          saved: "/saved-forecasts",
-	          learn: "/studio",
+		          options: "/options",
+		          learn: "/studio",
             },
             pathAliases: {
               "/ticker-intelligence": "ticker",
@@ -2324,7 +2288,7 @@
     const dockTop = Math.round(headerHeight + gutter);
     document.documentElement.style.setProperty("--dock-top", `${dockTop}px`);
 
-    const dock = document.querySelector(".terminal-dock, .ticker-dock");
+    const dock = document.querySelector(".terminal-context");
     const dockHeight = dock ? dock.getBoundingClientRect().height : 0;
     if (dockHeight) {
       const chartTop = Math.round(dockTop + dockHeight + gutter);
@@ -2538,9 +2502,6 @@
               native_iap_product_ids: JSON.stringify(DEFAULT_NATIVE_IAP_PRODUCT_IDS),
               ads_use_real_ios: true,
               ads_use_real_android: true,
-              backtesting_enabled: false,
-              backtesting_free_daily_limit: "0",
-              backtesting_pro_daily_limit: "0",
 	          };
 	      return rc;
 	    } catch (error) {
@@ -2635,9 +2596,6 @@
             native_iap_product_ids: JSON.stringify(DEFAULT_NATIVE_IAP_PRODUCT_IDS),
             ads_use_real_ios: true,
             ads_use_real_android: true,
-            backtesting_enabled: false,
-            backtesting_free_daily_limit: "0",
-            backtesting_pro_daily_limit: "0",
           };
 
           const wrap = {
@@ -2738,9 +2696,6 @@
           nativeIapProductIds: getJson("native_iap_product_ids", DEFAULT_NATIVE_IAP_PRODUCT_IDS),
           adsUseRealIOS: getBool("ads_use_real_ios", true),
           adsUseRealAndroid: getBool("ads_use_real_android", true),
-          backtestingEnabled: getBool("backtesting_enabled", false),
-          backtestingFreeDailyLimit: getInt("backtesting_free_daily_limit", 0),
-          backtestingProDailyLimit: getInt("backtesting_pro_daily_limit", 0),
 		    };
 		  };
 
@@ -2752,11 +2707,6 @@
 	    document.querySelectorAll('[data-panel="watchlist"]').forEach((el) => {
 	      if (!flags.watchlistEnabled) el.classList.add("hidden");
 	    });
-
-      document.querySelectorAll("[data-backtesting-module]").forEach((el) => {
-        el.classList.toggle("hidden", !flags.backtestingEnabled);
-      });
-
       document.querySelectorAll('[data-panel-target="notifications"]').forEach((el) => {
         el.classList.toggle("hidden", !flags.pushEnabled);
       });
@@ -5181,8 +5131,8 @@
   const MASSIVE_SERIES_FREQUENCY = Object.freeze({
     economy_treasury_yields: "Updated daily",
     economy_inflation: "Updated monthly",
-    economy_inflation_expectations: "Updated weekly",
-    economy_labor_market: "Updated weekly",
+    economy_inflation_expectations: "Updated monthly",
+    economy_labor_market: "Updated monthly",
   });
 
   const renderResearchMacroSeries = (container, payload, fallbackLabel, frequencyLabel = "") => {
@@ -5250,50 +5200,42 @@
     ui.massiveEconomyStatus.textContent = "Loading Massive macro series...";
     logEvent("research_macro_load_started", { source: "massive" });
     try {
-      await loadMassiveCapabilities({ force: false });
       const requests = [
         {
-          key: "economy_treasury_yields",
           path: "/api/massive/economy/treasury-yields",
           node: ui.massiveEconomyYields,
+          key: "economy_treasury_yields",
           label: "treasury yield",
         },
         {
-          key: "economy_inflation",
           path: "/api/massive/economy/inflation",
           node: ui.massiveEconomyInflation,
+          key: "economy_inflation",
           label: "inflation",
         },
         {
-          key: "economy_inflation_expectations",
           path: "/api/massive/economy/inflation-expectations",
           node: ui.massiveEconomyInflationExpectations,
+          key: "economy_inflation_expectations",
           label: "inflation expectations",
         },
         {
-          key: "economy_labor_market",
           path: "/api/massive/economy/labor-market",
           node: ui.massiveEconomyLabor,
+          key: "economy_labor_market",
           label: "labor market",
         },
       ];
 
       await Promise.all(
         requests.map(async (item) => {
-          if (!isMassiveCapabilityAvailable(item.key)) {
-            if (item.node) {
-              item.node.innerHTML = `<div class="small muted">Not available on current Massive plan.</div>`;
-            }
-            logEvent("research_macro_capability_blocked", { series_key: item.key });
-            return;
-          }
           try {
             const payload = await fetchMassiveApi(item.path, { limit: 120 });
             renderResearchMacroSeries(
               item.node,
               payload,
               item.label,
-              MASSIVE_SERIES_FREQUENCY[item.key] || "Updated periodically"
+              String(payload?.updateFrequency || MASSIVE_SERIES_FREQUENCY[item.key] || "Updated periodically")
             );
             logEvent("research_macro_series_loaded", {
               series_key: item.key,
@@ -5310,13 +5252,13 @@
           }
         })
       );
-      ui.massiveEconomyStatus.textContent = "Macro context loaded via Massive capability-gated endpoints.";
+      ui.massiveEconomyStatus.textContent = "Macro context loaded.";
       logEvent("research_macro_loaded", { source: "massive" });
     } catch (error) {
       ui.massiveEconomyStatus.textContent = extractErrorMessage(error, "Macro context is unavailable.");
       [ui.massiveEconomyYields, ui.massiveEconomyInflation, ui.massiveEconomyInflationExpectations, ui.massiveEconomyLabor].forEach((node) => {
         if (!node) return;
-        node.innerHTML = `<div class="small muted">Capability audit unavailable.</div>`;
+        node.innerHTML = `<div class="small muted">Macro series unavailable right now.</div>`;
       });
       logEvent("research_macro_error", {
         message: String(error?.message || "load_failed").slice(0, 120),
@@ -5328,14 +5270,6 @@
     if (!ui.massiveIpoOutput || !ui.massiveIpoStatusText) return;
     logEvent("research_ipo_load_started", { force: Boolean(force) });
     try {
-      await loadMassiveCapabilities({ force: false });
-      if (!isMassiveCapabilityAvailable("stocks_ipos")) {
-        ui.massiveIpoStatusText.textContent = "IPO endpoint is not available in the current Massive plan.";
-        ui.massiveIpoOutput.innerHTML = `<div class="small muted">IPO data is currently gated off by plan capability.</div>`;
-        logEvent("research_ipo_capability_blocked", {});
-        return;
-      }
-
       const start = String(ui.massiveIpoStart?.value || "").trim();
       const end = String(ui.massiveIpoEnd?.value || "").trim();
       const status = String(ui.massiveIpoStatus?.value || "").trim().toLowerCase();
@@ -5349,9 +5283,10 @@
       });
       renderResearchIpoTable(payload);
       const count = Number(payload?.count || 0);
+      const frequency = String(payload?.updateFrequency || "Updated periodically").trim();
       ui.massiveIpoStatusText.textContent = count
-        ? `Loaded ${count} IPO row${count === 1 ? "" : "s"}.`
-        : "No IPO rows for selected filters.";
+        ? `Loaded ${count} IPO row${count === 1 ? "" : "s"} · ${frequency}.`
+        : `No IPO rows for selected filters · ${frequency}.`;
       logEvent("research_ipo_loaded", {
         count,
         status: status || "all",
@@ -6277,221 +6212,6 @@
       );
   };
 
-  const syncBacktestStrategyFields = () => {
-    if (!ui.backtestStrategy) return;
-    const selected = String(ui.backtestStrategy.value || "").trim();
-    document.querySelectorAll("[data-backtest-strategy]").forEach((el) => {
-      const key = String(el.dataset.backtestStrategy || "").trim();
-      el.classList.toggle("hidden", key && key !== selected);
-    });
-  };
-
-  const renderBacktestSourceControls = (backtestId, selectedKey = "python") => {
-    const options = BACKTEST_SOURCE_OPTIONS.map(
-      (item) =>
-        `<option value="${item.key}" ${item.key === selectedKey ? "selected" : ""}>${item.label}</option>`
-    ).join("");
-    return `
-      <div class="backtest-source-controls">
-        <label class="label" for="backtest-source-${escapeHtml(backtestId)}">Download source</label>
-        <div class="backtest-source-row">
-          <select id="backtest-source-${escapeHtml(backtestId)}" data-backtest-source-format data-backtest-id="${escapeHtml(backtestId)}">
-            ${options}
-          </select>
-          <button class="cta secondary small" type="button" data-action="download-backtest-source" data-backtest-id="${escapeHtml(
-            backtestId
-          )}">${icon("download")}<span>Download Source</span></button>
-        </div>
-      </div>
-    `;
-  };
-
-  const resolveBacktestSourceExport = (doc, selectedKey) => {
-    const key = String(selectedKey || "python").trim().toLowerCase();
-    const exports = doc?.exportSources && typeof doc.exportSources === "object" ? doc.exportSources : {};
-    const candidate = exports?.[key] && typeof exports[key] === "object" ? exports[key] : null;
-    if (candidate?.content) {
-      return {
-        content: String(candidate.content),
-        filename: String(candidate.filename || ""),
-        mimeType: String(candidate.mimeType || ""),
-      };
-    }
-    if (key === "python") {
-      const fallback = String(doc?.code || "").trim();
-      if (fallback) {
-        return {
-          content: fallback,
-          filename: "",
-          mimeType: "text/x-python",
-        };
-      }
-    }
-    return null;
-  };
-
-  const renderBacktestPicker = (items) => {
-    if (!ui.backtestLoadSelect) return;
-    const list = Array.isArray(items) ? items : [];
-    ui.backtestLoadSelect.innerHTML = `<option value="">Select a backtest</option>`;
-    list.slice(0, 60).forEach((item) => {
-      const opt = document.createElement("option");
-      opt.value = item.id;
-      const createdLabel = item.createdAt ? formatTimestamp(item.createdAt) : "";
-      opt.textContent = `${item.title || item.ticker || "Backtest"}${createdLabel ? ` · ${createdLabel}` : ""}`;
-      ui.backtestLoadSelect.appendChild(opt);
-    });
-  };
-
-  const renderBacktestList = (items) => {
-    if (!ui.savedBacktestsList) return;
-    const list = Array.isArray(items) ? items : [];
-    ui.savedBacktestsList.innerHTML = "";
-    if (!list.length) {
-      ui.savedBacktestsList.innerHTML = `<div class="small muted">No backtests yet.</div>`;
-      return;
-    }
-
-    list.slice(0, 30).forEach((item) => {
-      const card = document.createElement("div");
-      card.className = "order-card";
-      const title = escapeHtml(item.title || item.ticker || "Backtest");
-      const strategy = escapeHtml(item.strategy || "");
-      const interval = escapeHtml(item.interval || "");
-      const created = item.createdAt ? formatTimestamp(item.createdAt) : "";
-      const metrics = item.metrics || {};
-      const returnPct = typeof metrics.ReturnPct === "number" ? `${metrics.ReturnPct.toFixed(2)}%` : "—";
-      const sharpe = typeof metrics.Sharpe === "number" ? metrics.Sharpe.toFixed(2) : "—";
-      const maxDd = typeof metrics.MaxDrawdownPct === "number" ? `${metrics.MaxDrawdownPct.toFixed(2)}%` : "—";
-      const trades = typeof metrics.Trades === "number" ? String(metrics.Trades) : "—";
-
-      card.innerHTML = `
-        <div class="order-header">
-          <div>
-            <div class="order-title">${title}</div>
-            <div class="small">ID: ${escapeHtml(item.id)}</div>
-          </div>
-          <span class="status completed">saved</span>
-        </div>
-        <div class="order-meta">
-          ${created ? `<div><strong>Created</strong> ${escapeHtml(created)}</div>` : ""}
-          ${item.ticker ? `<div><strong>Ticker</strong> ${escapeHtml(item.ticker)}</div>` : ""}
-          ${interval ? `<div><strong>Interval</strong> ${interval}</div>` : ""}
-          ${strategy ? `<div><strong>Strategy</strong> ${strategy}</div>` : ""}
-          <div><strong>Return</strong> ${escapeHtml(returnPct)} · <strong>Sharpe</strong> ${escapeHtml(sharpe)} · <strong>Max DD</strong> ${escapeHtml(
-            maxDd
-          )} · <strong>Trades</strong> ${escapeHtml(trades)}</div>
-        </div>
-        <div class="order-actions" style="display:flex; gap:10px; flex-wrap:wrap;">
-          <button class="cta secondary small" type="button" data-action="plot-backtest" data-backtest-id="${escapeHtml(item.id)}">Load</button>
-          <button class="cta secondary small" type="button" data-action="rename-backtest" data-backtest-id="${escapeHtml(item.id)}">Rename</button>
-          <button class="cta secondary small danger" type="button" data-action="delete-backtest" data-backtest-id="${escapeHtml(item.id)}">Delete</button>
-        </div>
-        ${renderBacktestSourceControls(item.id, "python")}
-      `;
-      ui.savedBacktestsList.appendChild(card);
-    });
-  };
-
-  const renderBacktestDetails = async (doc, { imageUrl }) => {
-    if (!ui.backtestOutput) return;
-    const metrics = doc.metrics || {};
-    const ret = typeof metrics.ReturnPct === "number" ? `${metrics.ReturnPct.toFixed(2)}%` : "—";
-    const sharpe = typeof metrics.Sharpe === "number" ? metrics.Sharpe.toFixed(2) : "—";
-    const maxDd = typeof metrics.MaxDrawdownPct === "number" ? `${metrics.MaxDrawdownPct.toFixed(2)}%` : "—";
-    const trades = typeof metrics.Trades === "number" ? String(metrics.Trades) : "—";
-    const winRate = typeof metrics.WinRatePct === "number" ? `${metrics.WinRatePct.toFixed(1)}%` : "—";
-
-    const title = escapeHtml(doc.title || doc.ticker || "Backtest");
-    const code = String(doc.code || "").trim();
-    const codeMarkup = code
-      ? `
-        <details class="learn-more">
-          <summary>Source code (generated)</summary>
-          <pre class="code-block">${escapeHtml(code)}</pre>
-        </details>
-      `
-      : "";
-
-    ui.backtestOutput.innerHTML = `
-      <div class="card">
-        <div class="card-head">
-          <h3>${title}</h3>
-        </div>
-        <div class="small muted" style="margin-bottom: 12px;">
-          ${escapeHtml(doc.ticker || "")}${doc.interval ? ` · ${escapeHtml(doc.interval)}` : ""}${doc.strategy ? ` · ${escapeHtml(doc.strategy)}` : ""}
-        </div>
-        <div class="metrics metrics-tight">
-          <div class="stat-card"><strong>${escapeHtml(ret)}</strong><span class="small">Return</span></div>
-          <div class="stat-card"><strong>${escapeHtml(sharpe)}</strong><span class="small">Sharpe</span></div>
-          <div class="stat-card"><strong>${escapeHtml(maxDd)}</strong><span class="small">Max drawdown</span></div>
-          <div class="stat-card"><strong>${escapeHtml(trades)}</strong><span class="small">Trades</span></div>
-          <div class="stat-card"><strong>${escapeHtml(winRate)}</strong><span class="small">Win rate</span></div>
-        </div>
-        ${
-          imageUrl
-            ? `<div style="margin-top: 14px;"><img class="backtest-image" src="${escapeHtml(imageUrl)}" alt="Backtest equity curve" loading="lazy" /></div>`
-            : `<div class="small muted" style="margin-top: 14px;">Chart unavailable.</div>`
-        }
-        <div style="margin-top: 14px;">${renderBacktestSourceControls(doc.id, "python")}</div>
-        ${codeMarkup}
-      </div>
-    `;
-  };
-
-  const loadBacktestById = async (db, storage, backtestId) => {
-    if (!db || !backtestId) throw new Error("Backtest ID is required.");
-    if (!ui.backtestOutput) return;
-    const cleanId = String(backtestId || "").trim();
-    if (!cleanId) throw new Error("Backtest ID is required.");
-    setOutputLoading(ui.backtestOutput, "Loading backtest...");
-
-    const snap = await db.collection("backtests").doc(cleanId).get();
-    if (!snap.exists) throw new Error("Backtest not found.");
-    const doc = { id: snap.id, ...(snap.data() || {}) };
-
-    let imageUrl = "";
-    if (storage && doc.imagePath) {
-      try {
-        imageUrl = await storage.ref().child(String(doc.imagePath)).getDownloadURL();
-      } catch (error) {
-        imageUrl = "";
-      }
-    }
-
-    await renderBacktestDetails(doc, { imageUrl });
-    setOutputReady(ui.backtestOutput);
-    logEvent("backtest_loaded", { backtest_id: cleanId });
-  };
-
-  const startBacktests = (db, user) => {
-    if (state.unsubscribeBacktests) state.unsubscribeBacktests();
-    if (!user || !ui.savedBacktestsList || !ui.backtestLoadSelect) return;
-    state.unsubscribeBacktests = db
-      .collection("backtests")
-      .where("userId", "==", user.uid)
-      .orderBy("createdAt", "desc")
-      .limit(60)
-      .onSnapshot(
-        (snapshot) => {
-          const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-          renderBacktestList(items);
-          renderBacktestPicker(items);
-
-          const params = new URLSearchParams(window.location.search);
-          const urlBacktestId = String(params.get("backtestId") || params.get("id") || "").trim();
-          if (urlBacktestId && !state.backtestUrlLoaded) {
-            state.backtestUrlLoaded = true;
-            loadBacktestById(db, state.clients?.storage, urlBacktestId).catch(() => {});
-          }
-        },
-        () => {
-          renderBacktestList([]);
-          renderBacktestPicker([]);
-        }
-      );
-  };
-
   const startAdminOrders = (db) => {
     if (state.unsubscribeAdmin) state.unsubscribeAdmin();
     state.unsubscribeAdmin = db
@@ -6972,6 +6692,20 @@
     });
   };
 
+  const normalizeFooterContactInfo = () => {
+    const roots = Array.from(document.querySelectorAll(".footer .footer-grid > div:first-child"));
+    if (!roots.length) return;
+    roots.forEach((root) => {
+      if (!(root instanceof HTMLElement)) return;
+      if (root.querySelector(".footer-contact-block")) return;
+      const node = document.createElement("p");
+      node.className = "small footer-contact-block";
+      node.innerHTML =
+        '1603 Robertson PL, Bronx, New York 10465<br /><a href="mailto:hello@quantura.studio">hello@quantura.studio</a>';
+      root.appendChild(node);
+    });
+  };
+
   const normalizeHeaderBranding = () => {
     const brandIcon = "/assets/logo.png";
     document.querySelectorAll(".header .logo").forEach((logo) => {
@@ -7083,22 +6817,20 @@
       });
     };
 
-  const ensureHeaderSolveNowCta = () => {
-    const actions = document.querySelector(".header .nav-actions");
-    if (!actions) return;
-    let solveLink = document.getElementById("header-solve-now");
-    if (!solveLink) {
-      solveLink = document.createElement("a");
-      solveLink.id = "header-solve-now";
-      solveLink.className = "cta secondary solve-now-cta";
-      solveLink.href = "/contact#solve-now";
-      solveLink.setAttribute("data-analytics", "nav_solve_now");
-      solveLink.innerHTML = `${icon("brain")}<span>Solve now</span>`;
-      actions.prepend(solveLink);
-    }
-    solveLink.href = "/contact#solve-now";
-    solveLink.setAttribute("title", "Powered by AI");
-    solveLink.setAttribute("aria-label", "Solve now. Powered by AI");
+  const ensureHeaderSolveNowCta = () => {};
+
+  const removeHeaderSolveNowCta = () => {
+    const headerRoots = Array.from(document.querySelectorAll(".header, .top-nav, .nav-actions"));
+    if (!headerRoots.length) return;
+    headerRoots.forEach((root) => {
+      root
+        .querySelectorAll('#header-solve-now, [data-action="open-solve-now"], a[href*="#solve-now"]')
+        .forEach((node) => node.remove());
+      root.querySelectorAll("a, button").forEach((node) => {
+        const text = String(node.textContent || "").trim().toLowerCase();
+        if (text === "solve now") node.remove();
+      });
+    });
   };
 
   const ensureHeaderNotificationsCta = () => {
@@ -9410,7 +9142,14 @@
       if (!payloadFromFirestore) {
         throw new Error("Earnings cache was refreshed but Firestore read is unavailable.");
       }
-      const renderPayload = payloadFromFirestore;
+      const renderPayload =
+        payloadFromFirestore ||
+        {
+          symbol,
+          lastUpdated: String(refreshPayload?.lastUpdated || ""),
+          items: Array.isArray(refreshPayload?.items) ? refreshPayload.items : [],
+          lastFetchedAtMs: Number(refreshPayload?.lastFetchedAtMs || Date.now()) || Date.now(),
+        };
       setOutputReady(ui.eventsCalendarOutput);
       renderEarningsCalendar(renderPayload);
       if (ui.eventsCalendarStatus) {
@@ -9698,6 +9437,8 @@
     const model = escapeHtml(modelRaw);
     const provider = escapeHtml(MODEL_PROVIDER_LABEL[providerRaw] || providerRaw || "OpenAI");
     const context = payload?.context && typeof payload.context === "object" ? payload.context : {};
+    const logoUrlRaw = String(context.logoUrl || context.logo_url || "").trim();
+    const logoUrl = /^https?:\/\//i.test(logoUrlRaw) ? logoUrlRaw : "";
     const sector = escapeHtml(String(context.sector || "").trim());
     const industry = escapeHtml(String(context.industry || "").trim());
     const exchange = escapeHtml(String(context.exchange || "").trim());
@@ -9708,7 +9449,10 @@
     const shareUrl = String(payload?.shareUrl || state.tickerContext.tickerQueryShareUrl || "").trim();
 
     ui.tickerQueryOutput.innerHTML = `
-      <div class="small muted">Provider: ${provider} · Model: ${model}</div>
+      <div class="small muted" style="display:flex; align-items:center; gap:10px;">
+        ${logoUrl ? `<img src="${escapeHtml(logoUrl)}" alt="" loading="lazy" style="width:20px; height:20px; border-radius:50%; object-fit:cover;" />` : ""}
+        <span>Provider: ${provider} · Model: ${model}</span>
+      </div>
       <div class="small" style="margin-top:10px; white-space:pre-wrap;">${answer}</div>
       <div class="model-council-actions">
         <button class="task-chip${feedbackState === "like" ? " active" : ""}" type="button" data-action="model-council-like" data-response-id="${escapeHtml(responseId)}">Like</button>
@@ -10417,142 +10161,6 @@
       if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Unable to complete Model Council request.";
       if (notify) showToast(error.message || "Unable to run Model Council.", "warn");
     }
-  };
-
-  const clampBacktestAgentLookback = (value) => {
-    const parsed = Number(value);
-    if (!Number.isFinite(parsed)) return 90;
-    return Math.max(20, Math.min(730, Math.round(parsed)));
-  };
-
-  const summarizeBacktestTechnicalContext = ({ latestRows, series, lookbackDays, interval } = {}) => {
-    const latest = Array.isArray(latestRows)
-      ? latestRows
-          .map((row) => ({
-            name: String(row?.name || "").trim(),
-            value: Number(row?.value),
-          }))
-          .filter((row) => row.name && Number.isFinite(row.value))
-          .map((row) => ({
-            name: row.name,
-            value: Number(row.value.toFixed(4)),
-          }))
-      : [];
-
-    const latestMap = Object.fromEntries(latest.map((row) => [row.name, row.value]));
-    const pointsPerDay = String(interval || "1d") === "1h" ? 6 : 1;
-    const targetWindow = Math.max(20, Math.min(360, Math.round(Number(lookbackDays || 90) * pointsPerDay)));
-    const seriesItems = Array.isArray(series?.items) ? series.items : [];
-
-    const trend = seriesItems
-      .map((item) => {
-        const name = String(item?.name || "").trim();
-        const numericValues = (Array.isArray(item?.values) ? item.values : [])
-          .map((value) => {
-            const num = Number(value);
-            return Number.isFinite(num) ? num : null;
-          })
-          .filter((value) => value !== null);
-        if (!name || numericValues.length < 2) return null;
-        const windowValues = numericValues.slice(-targetWindow);
-        if (windowValues.length < 2) return null;
-        const start = Number(windowValues[0]);
-        const end = Number(windowValues[windowValues.length - 1]);
-        const delta = end - start;
-        const pctChange = Math.abs(start) > 1e-9 ? (delta / Math.abs(start)) * 100 : null;
-        const magnitude = Math.abs(pctChange ?? delta);
-        const direction =
-          pctChange !== null ? (pctChange > 0.75 ? "up" : pctChange < -0.75 ? "down" : "flat") : delta > 0 ? "up" : delta < 0 ? "down" : "flat";
-        return {
-          name,
-          start: Number(start.toFixed(6)),
-          end: Number(end.toFixed(6)),
-          delta: Number(delta.toFixed(6)),
-          pctChange: pctChange === null ? null : Number(pctChange.toFixed(3)),
-          magnitude: Number(magnitude.toFixed(3)),
-          direction,
-        };
-      })
-      .filter(Boolean)
-      .sort((a, b) => Number(b.magnitude || 0) - Number(a.magnitude || 0))
-      .slice(0, 10);
-
-    const heuristics = [];
-    const rsi = latestMap.RSI;
-    if (Number.isFinite(rsi)) {
-      if (rsi >= 70) heuristics.push(`RSI ${rsi.toFixed(2)} indicates overbought conditions.`);
-      else if (rsi <= 30) heuristics.push(`RSI ${rsi.toFixed(2)} indicates oversold conditions.`);
-      else heuristics.push(`RSI ${rsi.toFixed(2)} is in neutral range.`);
-    }
-    const mfi = latestMap.MFI;
-    if (Number.isFinite(mfi)) {
-      if (mfi >= 80) heuristics.push(`MFI ${mfi.toFixed(2)} suggests strong inflow / overbought pressure.`);
-      else if (mfi <= 20) heuristics.push(`MFI ${mfi.toFixed(2)} suggests outflow / oversold pressure.`);
-    }
-    const adx = latestMap.ADX;
-    if (Number.isFinite(adx)) {
-      if (adx >= 25) heuristics.push(`ADX ${adx.toFixed(2)} indicates trend strength is active.`);
-      else heuristics.push(`ADX ${adx.toFixed(2)} indicates weak or ranging trend.`);
-    }
-    const macd = latestMap.MACD;
-    if (Number.isFinite(macd)) {
-      if (macd > 0) heuristics.push(`MACD is positive (${macd.toFixed(4)}), favoring bullish momentum bias.`);
-      else if (macd < 0) heuristics.push(`MACD is negative (${macd.toFixed(4)}), favoring bearish momentum bias.`);
-      else heuristics.push("MACD is flat near zero.");
-    }
-    const sma = latestMap.SMA;
-    const ema = latestMap.EMA;
-    if (Number.isFinite(sma) && Number.isFinite(ema)) {
-      if (ema > sma) heuristics.push(`EMA (${ema.toFixed(4)}) is above SMA (${sma.toFixed(4)}), showing short-term strength.`);
-      else if (ema < sma) heuristics.push(`EMA (${ema.toFixed(4)}) is below SMA (${sma.toFixed(4)}), showing short-term weakness.`);
-    }
-
-    return {
-      lookbackDays: Number(lookbackDays || 90),
-      interval: String(interval || "1d"),
-      latest,
-      trend,
-      heuristics,
-      generatedAt: new Date().toISOString(),
-    };
-  };
-
-  const renderBacktestAgentResult = (payload, technicalContext) => {
-    if (!ui.backtestAgentOutput) return;
-    const answer = escapeHtml(String(payload?.answer || "").trim() || "No answer returned.");
-    const model = escapeHtml(String(payload?.model || "gpt-5"));
-    const provider = escapeHtml(String(payload?.provider || "openai"));
-    const lookbackDays = Number(technicalContext?.lookbackDays || 0);
-    const interval = escapeHtml(String(technicalContext?.interval || "1d"));
-    const heuristics = Array.isArray(technicalContext?.heuristics) ? technicalContext.heuristics : [];
-    const trend = Array.isArray(technicalContext?.trend) ? technicalContext.trend : [];
-
-    ui.backtestAgentOutput.innerHTML = `
-      <div class="small muted">Provider: ${provider} · Model: ${model} · Window: ${lookbackDays || "n/a"}d (${interval})</div>
-      <div class="small" style="margin-top:10px; white-space:pre-wrap;">${answer}</div>
-      ${
-        heuristics.length
-          ? `<div class="small" style="margin-top:12px;"><strong>Indicator signals</strong></div>
-             <ul class="small" style="margin:6px 0 0 16px;">
-               ${heuristics.slice(0, 6).map((item) => `<li>${escapeHtml(String(item || ""))}</li>`).join("")}
-             </ul>`
-          : ""
-      }
-      ${
-        trend.length
-          ? `<div class="small" style="margin-top:12px;"><strong>Recent trend shifts</strong></div>
-             <ul class="small" style="margin:6px 0 0 16px;">
-               ${trend
-                 .slice(0, 5)
-                 .map((item) => {
-                   const pct = Number.isFinite(Number(item?.pctChange)) ? `${Number(item.pctChange).toFixed(2)}%` : "n/a";
-                   return `<li>${escapeHtml(String(item?.name || "Indicator"))}: ${escapeHtml(pct)} (${escapeHtml(String(item?.direction || "flat"))})</li>`;
-                 })
-                 .join("")}
-             </ul>`
-          : ""
-      }
-    `;
   };
 
   const isPanelVisible = (panelName) => {
@@ -13077,10 +12685,14 @@
           <tbody>
             ${rows
               .map(
-                (row) => `
+                (row) => {
+                  const logoRaw = String(row?.logoUrl || row?.logo_url || "").trim();
+                  const logoUrl = /^https?:\/\//i.test(logoRaw) ? logoRaw : "";
+                  return `
                   <tr>
                     <td>
-                      <button class="link-button" type="button" data-action="pick-ticker" data-ticker="${escapeHtml(row.symbol)}">
+                      <button class="link-button" type="button" data-action="pick-ticker" data-ticker="${escapeHtml(row.symbol)}" style="display:inline-flex; align-items:center; gap:8px;">
+                        ${logoUrl ? `<img src="${escapeHtml(logoUrl)}" alt="" loading="lazy" style="width:16px; height:16px; border-radius:50%; object-fit:cover;" />` : ""}
                         ${escapeHtml(row.symbol)}
                       </button>
                     </td>
@@ -13092,7 +12704,8 @@
                     <td>${row.score ?? "—"}</td>
                     <td>${formatRoiPercent(toFiniteOrNull(row.projectedRoi))}</td>
                   </tr>
-                `
+                `;
+                }
               )
               .join("")}
           </tbody>
@@ -14173,6 +13786,88 @@
     return productId;
   };
 
+  const formatUsdPriceLabel = (amount, cycle) => {
+    const numeric = Number(amount);
+    if (!Number.isFinite(numeric) || numeric <= 0) return cycle === "yearly" ? "$0/yr" : "$0/mo";
+    const decimals = numeric % 1 === 0 ? 0 : 2;
+    return cycle === "yearly" ? `$${numeric.toFixed(decimals)}/yr` : `$${numeric.toFixed(decimals)}/mo`;
+  };
+
+  const applyPricingBillingCycle = (cycle = "monthly") => {
+    const normalizedCycle = cycle === "yearly" ? "yearly" : "monthly";
+    document.querySelectorAll('[data-billing-cycle]').forEach((btn) => {
+      const active = String(btn?.dataset?.billingCycle || "") === normalizedCycle;
+      btn.setAttribute("aria-pressed", active ? "true" : "false");
+      btn.classList.toggle("secondary", !active);
+    });
+
+    ui.purchasePanels.forEach((panel) => {
+      if (!panel?.dataset?.monthlyPrice) return;
+      const monthlyPrice = Number(panel.dataset.monthlyPrice || panel.dataset.price || 0);
+      const yearlyPrice = Number(panel.dataset.yearlyPrice || monthlyPrice * 12 || 0);
+      const nextPrice = normalizedCycle === "yearly" ? yearlyPrice : monthlyPrice;
+      const nextProduct =
+        normalizedCycle === "yearly"
+          ? String(panel.dataset.yearlyProduct || panel.dataset.product || "")
+          : String(panel.dataset.monthlyProduct || panel.dataset.product || "");
+      const nextIapPlan =
+        normalizedCycle === "yearly"
+          ? String(panel.dataset.yearlyIapPlan || panel.dataset.iapPlan || "")
+          : String(panel.dataset.monthlyIapPlan || panel.dataset.iapPlan || "");
+
+      panel.dataset.price = String(nextPrice || 0);
+      panel.dataset.product = nextProduct;
+      panel.dataset.iapPlan = nextIapPlan;
+
+      const card = panel.closest("[data-pricing-plan-card]");
+      const priceNode = card?.querySelector("[data-pricing-price]");
+      if (priceNode) {
+        priceNode.textContent = formatUsdPriceLabel(nextPrice, normalizedCycle);
+      }
+      const copyNode = card?.querySelector("[data-pricing-cycle-copy]");
+      if (copyNode) {
+        const annualList = monthlyPrice * 12;
+        const savings = Math.max(0, annualList - yearlyPrice);
+        if (normalizedCycle === "yearly") {
+          if (savings > 0) {
+            copyNode.innerHTML = `You save <strong>$${savings.toFixed(0)}/yr</strong> vs monthly billing.`;
+          } else {
+            copyNode.innerHTML = "Annual display shown. Native yearly SKU may map to monthly where unavailable.";
+          }
+        } else {
+          if (savings > 0) {
+            copyNode.innerHTML = `Pay yearly to lock in <strong>$${yearlyPrice.toFixed(0)}/yr</strong>.`;
+          } else {
+            copyNode.innerHTML = "Monthly billing shown.";
+          }
+        }
+      }
+    });
+  };
+
+  const initPricingBillingToggle = () => {
+    const wrap = document.getElementById("pricing-billing-toggle");
+    if (!wrap) return;
+    const buttons = Array.from(wrap.querySelectorAll("[data-billing-cycle]"));
+    if (!buttons.length) return;
+
+    const initialCycle = String(safeLocalStorageGet("quantura_pricing_cycle") || "monthly").trim().toLowerCase();
+    applyPricingBillingCycle(initialCycle === "yearly" ? "yearly" : "monthly");
+
+    buttons.forEach((button) => {
+      if (!(button instanceof HTMLElement)) return;
+      if (button.dataset.bound === "1") return;
+      button.dataset.bound = "1";
+      button.addEventListener("click", () => {
+        const cycle = String(button.dataset.billingCycle || "monthly").trim().toLowerCase();
+        const normalized = cycle === "yearly" ? "yearly" : "monthly";
+        safeLocalStorageSet("quantura_pricing_cycle", normalized);
+        applyPricingBillingCycle(normalized);
+        logEvent("pricing_cycle_toggled", { cycle: normalized, page_path: window.location.pathname });
+      });
+    });
+  };
+
   const requestNativeInAppPurchase = (panel, opts = {}) => {
     const requestId = `np_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
     const orderId = String(opts.orderId || panel?.dataset?.orderId || "").trim();
@@ -14698,6 +14393,13 @@
           loadMarketHeadlinesFeed(functions, { force: first, notify: false });
         }
 
+        if (next === "macro") {
+          const firstMacro = !state.panelAutoloaded.macro;
+          state.panelAutoloaded.macro = true;
+          loadResearchMacroWidgets().catch(() => {});
+          loadResearchIpoCalendar({ force: firstMacro }).catch(() => {});
+        }
+
         if (next === "ticker-query") {
           const ticker = getActiveTicker() || normalizeTicker(safeLocalStorageGet(LAST_TICKER_KEY) || "");
           if (ticker && ui.tickerQueryTicker && !String(ui.tickerQueryTicker.value || "").trim()) {
@@ -14733,8 +14435,10 @@
       normalizeHeaderBranding();
       normalizeTopNavigation();
       normalizeFooterSocialLinks();
-      ensureHeaderSolveNowCta();
+      normalizeFooterContactInfo();
+      initPricingBillingToggle();
       bindSolveNowModalTriggers();
+      removeHeaderSolveNowCta();
       ensureHeaderNotificationsCta();
       ensureSidebarCollapseToggle();
       bindMobileNav();
@@ -15030,7 +14734,7 @@
 		      if (!forecastId) return;
 
       if (!hasFullAccount()) {
-        showToast("Sign in to view saved forecasts.", "warn");
+        showToast("Sign in to view saved runs.", "warn");
         return;
       }
 
@@ -15786,136 +15490,6 @@
             }
           }
 
-          const plotBacktest = event.target.closest('[data-action="plot-backtest"]');
-          if (plotBacktest) {
-            event.preventDefault();
-            if (!hasFullAccount()) {
-              showToast("Sign in to load backtests.", "warn");
-              return;
-            }
-            const backtestId = String(plotBacktest.dataset.backtestId || "").trim();
-            if (!backtestId) return;
-            try {
-              await loadBacktestById(db, storage, backtestId);
-              showToast("Backtest loaded.");
-            } catch (error) {
-              showToast(error.message || "Unable to load backtest.", "warn");
-            }
-            return;
-          }
-
-          const downloadBacktestCode =
-            event.target.closest('[data-action="download-backtest-source"]') ||
-            event.target.closest('[data-action="download-backtest-code"]');
-          if (downloadBacktestCode) {
-            event.preventDefault();
-            if (!hasFullAccount()) {
-              showToast("Sign in to download backtest code.", "warn");
-              return;
-            }
-            const backtestId = String(downloadBacktestCode.dataset.backtestId || "").trim();
-            if (!backtestId) return;
-            downloadBacktestCode.disabled = true;
-            try {
-              const snap = await db.collection("backtests").doc(backtestId).get();
-              if (!snap.exists) throw new Error("Backtest not found.");
-              const doc = { id: snap.id, ...(snap.data() || {}) };
-              const sourceSelect = downloadBacktestCode
-                .closest(".backtest-source-controls")
-                ?.querySelector('[data-backtest-source-format]');
-              const sourceKey = String(sourceSelect?.value || "python").trim().toLowerCase();
-              const source = resolveBacktestSourceExport(doc, sourceKey);
-              if (!source || !String(source.content || "").trim()) {
-                throw new Error("No exported source available for the selected format.");
-              }
-              const safeTicker = normalizeTicker(doc.ticker || "backtest") || "backtest";
-              const optionMeta =
-                BACKTEST_SOURCE_OPTIONS.find((item) => item.key === sourceKey) || BACKTEST_SOURCE_OPTIONS[0];
-              const suggestedFilename = source.filename
-                ? String(source.filename)
-                : `${safeTicker}_${backtestId}.${optionMeta.ext}`;
-              triggerDownload(suggestedFilename, source.content, {
-                mimeType: source.mimeType || optionMeta.mimeType,
-              });
-              showToast("Source downloaded.");
-              logEvent("backtest_code_downloaded", { backtest_id: backtestId, source_format: sourceKey });
-            } catch (error) {
-              showToast(error.message || "Unable to download code.", "warn");
-            } finally {
-              downloadBacktestCode.disabled = false;
-            }
-            return;
-          }
-
-          const renameBacktest = event.target.closest('[data-action="rename-backtest"]');
-          if (renameBacktest) {
-            event.preventDefault();
-            if (!hasFullAccount()) {
-              showToast("Sign in to rename backtests.", "warn");
-              return;
-            }
-            const backtestId = String(renameBacktest.dataset.backtestId || "").trim();
-            if (!backtestId) return;
-            let currentTitle = "";
-            try {
-              const snap = await db.collection("backtests").doc(backtestId).get();
-              if (snap.exists) currentTitle = String(snap.data()?.title || "");
-            } catch (error) {
-              currentTitle = "";
-            }
-            const nextTitle = await openPromptModal({
-              title: "Rename backtest",
-              message: "Update the label shown in your saved list.",
-              label: "Title",
-              placeholder: "Backtest",
-              initialValue: currentTitle,
-              confirmLabel: "Rename",
-            });
-            if (!nextTitle) return;
-            renameBacktest.disabled = true;
-            try {
-              const rename = functions.httpsCallable("rename_backtest");
-              await rename({ backtestId, title: nextTitle, meta: buildMeta() });
-              showToast("Backtest renamed.");
-              logEvent("backtest_renamed", { backtest_id: backtestId });
-            } catch (error) {
-              showToast(error.message || "Unable to rename backtest.", "warn");
-            } finally {
-              renameBacktest.disabled = false;
-            }
-            return;
-          }
-
-          const deleteBacktest = event.target.closest('[data-action="delete-backtest"]');
-          if (deleteBacktest) {
-            event.preventDefault();
-            if (!hasFullAccount()) {
-              showToast("Sign in to delete backtests.", "warn");
-              return;
-            }
-            const backtestId = String(deleteBacktest.dataset.backtestId || "").trim();
-            if (!backtestId) return;
-            const ok = await openConfirmModal({
-              title: "Delete backtest?",
-              message: "This deletes the saved backtest and removes its chart from storage. This cannot be undone.",
-              confirmLabel: "Delete",
-              danger: true,
-            });
-            if (!ok) return;
-            deleteBacktest.disabled = true;
-            try {
-              const del = functions.httpsCallable("delete_backtest");
-              await del({ backtestId, meta: buildMeta() });
-              showToast("Backtest deleted.");
-              logEvent("backtest_deleted", { backtest_id: backtestId });
-              if (ui.backtestOutput) ui.backtestOutput.innerHTML = `<div class="small muted">Backtest deleted.</div>`;
-            } catch (error) {
-              showToast(error.message || "Unable to delete backtest.", "warn");
-            } finally {
-              deleteBacktest.disabled = false;
-            }
-            return;
-          }
         });
 
 		    document.addEventListener("click", async (event) => {
@@ -17243,7 +16817,7 @@
 	    });
 
         ui.forecastLoadButton?.addEventListener("click", async () => {
-          if (!requireFullAccount("Sign in to load saved forecasts.", { redirect: true })) return;
+          if (!requireFullAccount("Sign in to load saved runs.", { redirect: true })) return;
           const forecastId = String(ui.forecastLoadSelect?.value || "").trim();
           if (!forecastId) {
             showToast("Select a saved forecast.", "warn");
@@ -17993,176 +17567,6 @@
       }
     });
 
-    ui.backtestStrategy?.addEventListener("change", () => {
-      syncBacktestStrategyFields();
-      logEvent("backtest_strategy_changed", { strategy: String(ui.backtestStrategy?.value || "") });
-    });
-    syncBacktestStrategyFields();
-
-    ui.backtestAgentButton?.addEventListener("click", async () => {
-      if (!functions) {
-        showToast("Functions client is not ready.", "warn");
-        return;
-      }
-      const ticker = normalizeTicker(state.tickerContext.ticker || ui.terminalTicker?.value || "");
-      if (!ticker) {
-        showToast("Load a ticker in the chart before requesting a suggestion.", "warn");
-        return;
-      }
-      const interval = String(ui.terminalInterval?.value || state.tickerContext.interval || "1d");
-      const lookbackDays = clampBacktestAgentLookback(ui.backtestAgentLookback?.value || document.getElementById("backtest-lookback")?.value || 90);
-      if (ui.backtestAgentLookback) ui.backtestAgentLookback.value = String(lookbackDays);
-      syncTickerInputs(ticker);
-
-      const indicatorList = ["RSI", "MACD", "SMA", "EMA", "BBANDS", "ATR", "ADX", "CCI", "MFI", "OBV", "ROC", "STOCH", "WILLR"];
-      const maxPoints = interval === "1h" ? Math.max(120, Math.min(900, lookbackDays * 8)) : Math.max(90, Math.min(900, lookbackDays + 30));
-
-      try {
-        if (ui.backtestAgentStatus) ui.backtestAgentStatus.textContent = "Computing technical snapshot...";
-        setOutputLoading(ui.backtestAgentOutput, "Computing indicator context...");
-
-        const runIndicators = functions.httpsCallable("get_technicals");
-        const technicalResult = await runIndicators({
-          ticker,
-          interval,
-          lookback: lookbackDays,
-          indicators: indicatorList,
-          includeSeries: true,
-          maxPoints,
-          meta: buildMeta(),
-        });
-        const technicalData = technicalResult.data || {};
-        const latestRows = Array.isArray(technicalData.latest) ? technicalData.latest : [];
-        if (!latestRows.length) {
-          throw new Error("No technical indicator values were returned.");
-        }
-        const technicalContext = summarizeBacktestTechnicalContext({
-          latestRows,
-          series: technicalData.series,
-          lookbackDays,
-          interval,
-        });
-
-        const languageRaw = normalizeLanguageCode(ui.tickerQueryLanguage?.value || state.preferredLanguage || "en");
-        const language = languageRaw === "auto" ? state.preferredLanguage || "en" : languageRaw;
-        const question = [
-          `Generate one backtestable setup idea for ${ticker} using the supplied technical indicator context on ${interval} data.`,
-          "Output should include: bias, entry trigger, invalidation/exit, and position-risk constraints.",
-          "Reference conflicting signals and keep the plan practical for research workflows only.",
-        ].join(" ");
-
-        if (ui.backtestAgentStatus) ui.backtestAgentStatus.textContent = "Querying GPT-5...";
-        const queryInsight = functions.httpsCallable("query_ticker_insight");
-        const result = await queryInsight({
-          ticker,
-          question,
-          language,
-          technicalContext,
-          meta: buildMeta(),
-        });
-        const payload = result.data || {};
-        setOutputReady(ui.backtestAgentOutput);
-        renderBacktestAgentResult(payload, technicalContext);
-        if (ui.backtestAgentStatus) ui.backtestAgentStatus.textContent = "Suggestion ready.";
-        logEvent("backtest_agent_suggestion", {
-          ticker,
-          interval,
-          lookback_days: lookbackDays,
-          provider: String(payload.provider || ""),
-          model: String(payload.model || ""),
-        });
-        showToast("OpenAI technical suggestion ready.");
-      } catch (error) {
-        setOutputReady(ui.backtestAgentOutput);
-        if (ui.backtestAgentOutput) {
-          ui.backtestAgentOutput.innerHTML = `<div class="small muted">${escapeHtml(error.message || "Unable to generate technical suggestion.")}</div>`;
-        }
-        if (ui.backtestAgentStatus) ui.backtestAgentStatus.textContent = "Unable to generate suggestion.";
-        showToast(error.message || "Unable to generate technical suggestion.", "warn");
-      }
-    });
-
-    ui.backtestLoadSelect?.addEventListener("change", () => {
-      if (!ui.backtestLoadId || !ui.backtestLoadSelect) return;
-      const value = String(ui.backtestLoadSelect.value || "").trim();
-      if (value) ui.backtestLoadId.value = value;
-    });
-
-    ui.backtestLoadButton?.addEventListener("click", async () => {
-      if (!requireFullAccount("Sign in to load saved backtests.", { redirect: true })) return;
-      const backtestId = String(ui.backtestLoadId?.value || "").trim() || String(ui.backtestLoadSelect?.value || "").trim();
-      if (!backtestId) {
-        showToast("Select a backtest or paste an ID.", "warn");
-        return;
-      }
-      if (ui.backtestLoadStatus) ui.backtestLoadStatus.textContent = "Loading...";
-      try {
-        await loadBacktestById(db, storage, backtestId);
-        if (ui.backtestLoadStatus) ui.backtestLoadStatus.textContent = "";
-        showToast("Backtest loaded.");
-      } catch (error) {
-        if (ui.backtestLoadStatus) ui.backtestLoadStatus.textContent = error.message || "Unable to load backtest.";
-        showToast(error.message || "Unable to load backtest.", "warn");
-      }
-    });
-
-    ui.backtestForm?.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      if (!requireFullAccount("Sign in to run backtests.", { redirect: true })) return;
-      if (!state.remoteFlags.backtestingEnabled) {
-        showToast("Backtesting is temporarily disabled.", "warn");
-        return;
-      }
-      const ticker = normalizeTicker(state.tickerContext.ticker || ui.terminalTicker?.value || "");
-      if (!ticker) {
-        showToast("Load a ticker in the chart before backtesting.", "warn");
-        return;
-      }
-      const interval = String(ui.terminalInterval?.value || state.tickerContext.interval || "1d");
-      const formData = new FormData(ui.backtestForm);
-      const strategy = String(formData.get("strategy") || "sma_cross").trim();
-      const lookbackDays = Number(formData.get("lookback") || 730);
-      const cash = Number(formData.get("cash") || 10000);
-      const commission = Number(formData.get("commission") || 0.0);
-
-      const params = {};
-      if (strategy === "sma_cross") {
-        params.fast = Number(formData.get("fast") || 20);
-        params.slow = Number(formData.get("slow") || 50);
-      } else {
-        params.rsiPeriod = Number(formData.get("rsiPeriod") || 14);
-        params.oversold = Number(formData.get("oversold") || 30);
-        params.exitAbove = Number(formData.get("exitAbove") || 55);
-      }
-      params.slPct = Number(formData.get("slPct") || 0);
-      params.tpPct = Number(formData.get("tpPct") || 0);
-
-      const payload = {
-        ticker,
-        interval,
-        strategy,
-        lookbackDays,
-        cash,
-        commission,
-        params,
-        meta: buildMeta(),
-      };
-
-      try {
-        setOutputLoading(ui.backtestOutput, "Running backtest...");
-        const run = functions.httpsCallable("run_backtest");
-        const result = await run(payload);
-        const backtestId = String(result.data?.backtestId || "").trim();
-        showToast("Backtest saved.");
-        logEvent("backtest_run", { ticker, interval, strategy });
-        if (backtestId) {
-          await loadBacktestById(db, storage, backtestId);
-        }
-      } catch (error) {
-        showToast(error.message || "Unable to run backtest.", "warn");
-      }
-    });
-
     ui.autopilotForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
       if (!requireFullAccount("Sign in to queue autopilot runs.", { redirect: true })) return;
@@ -18558,11 +17962,6 @@
             renderRequestList([], ui.userForecasts, "No forecast requests yet.");
             renderRequestList([], ui.autopilotOutput, "No autopilot requests yet.");
             renderRequestList([], ui.predictionsOutput, "No uploads yet.");
-            if (ui.backtestOutput) ui.backtestOutput.textContent = "Sign in to run backtests.";
-            if (ui.savedBacktestsList) ui.savedBacktestsList.textContent = "Sign in to view backtests.";
-            if (ui.backtestLoadSelect) ui.backtestLoadSelect.innerHTML = `<option value="">Select a backtest</option>`;
-            if (ui.backtestLoadId) ui.backtestLoadId.value = "";
-            if (ui.backtestLoadStatus) ui.backtestLoadStatus.textContent = "";
 		        if (ui.watchlistList) ui.watchlistList.textContent = "Sign in to manage your watchlist.";
 		        if (ui.alertsList) ui.alertsList.textContent = "Sign in to manage your alerts.";
 	        if (ui.alertsStatus) ui.alertsStatus.textContent = "";
@@ -18593,7 +17992,6 @@
 				        if (state.unsubscribeForecasts) state.unsubscribeForecasts();
 				        if (state.unsubscribeAutopilot) state.unsubscribeAutopilot();
 				        if (state.unsubscribePredictions) state.unsubscribePredictions();
-                if (state.unsubscribeBacktests) state.unsubscribeBacktests();
 				        if (state.unsubscribeTasks) state.unsubscribeTasks();
 				        if (state.unsubscribeWatchlist) state.unsubscribeWatchlist();
 				        if (state.unsubscribeAlerts) state.unsubscribeAlerts();
@@ -18692,7 +18090,6 @@
           startVolatilityMonitor(db, functions, activeWorkspaceId);
 	      startAutopilotRequests(db, user);
 	      startPredictionsUploads(db, user);
-        startBacktests(db, user);
 	      refreshCollaboration(functions);
 
         const pendingShare = String(getPendingShareId() || "").trim();

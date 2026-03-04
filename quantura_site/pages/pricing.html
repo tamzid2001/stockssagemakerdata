@@ -81,20 +81,24 @@
         <div class="container">
           <div class="section-title">
             <h2>Choose your plan</h2>
-            <p class="small">Monthly subscriptions include forecasting compute, screener storage, automation quotas, and collaboration controls.</p>
+            <p class="small">Switch monthly vs yearly pricing and launch native checkout with the correct StoreKit or Google Play product IDs.</p>
+          </div>
+          <div class="hero-actions" id="pricing-billing-toggle" style="margin-bottom:18px;">
+            <button class="cta" type="button" data-billing-cycle="monthly" aria-pressed="true">Monthly</button>
+            <button class="cta secondary" type="button" data-billing-cycle="yearly" aria-pressed="false">Yearly (save up to 16.7%)</button>
           </div>
 
           <div class="grid-3">
-            <div class="card">
+            <div class="card" data-pricing-plan-card="starter">
               <span class="badge">Starter</span>
               <h3 style="margin-top: 14px;">Quantura Starter</h3>
               <div class="price">$0</div>
-              <p class="small">For trying the terminal, saving forecasts, and exploring the screener.</p>
+              <p class="small">For trying the terminal, saving runs, and exploring the screener.</p>
               <div class="feature-list" style="margin-top: 16px;">
                 <div class="feature"><span></span><i class="iconoir-candlestick-chart" aria-hidden="true"></i>Forecasting terminal + saved runs</div>
                 <div class="feature"><span></span><i class="iconoir-graph-up" aria-hidden="true"></i>Indicator overlays and market context</div>
                 <div class="feature"><span></span><i class="iconoir-search" aria-hidden="true"></i>Basic screener runs with history</div>
-                <div class="feature"><span></span><i class="iconoir-bookmark" aria-hidden="true"></i>10 saved forecasts and 10 screener archives</div>
+                <div class="feature"><span></span><i class="iconoir-bookmark" aria-hidden="true"></i>10 saved runs and 10 screener archives</div>
                 <div class="feature"><span></span><i class="iconoir-bell-notification" aria-hidden="true"></i>Email notifications + one browser push endpoint</div>
               </div>
               <div class="hero-actions" style="margin-top: 18px;">
@@ -102,18 +106,32 @@
               </div>
             </div>
 
-            <div class="card">
+            <div class="card" data-pricing-plan-card="go">
               <span class="badge" style="background: #e8f4ff; color: #0c4a6e;">Go</span>
               <h3 style="margin-top: 14px;">Quantura Go</h3>
-              <div class="price">$9</div>
-              <p class="small">For focused solo workflows with light automation and ad-free usage.</p>
+              <div class="price" data-pricing-price>$8/mo</div>
+              <p class="small" data-pricing-cycle-copy>Pay yearly to lock in <strong>$80/yr</strong> (save $16).</p>
+              <p class="small">Ad-free research with higher forecast, screener, and Model Council throughput.</p>
               <div class="feature-list" style="margin-top: 16px;">
                 <div class="feature"><span></span><i class="iconoir-shield-check" aria-hidden="true"></i>Ad-free experience after purchase</div>
-                <div class="feature"><span></span><i class="iconoir-graph-up" aria-hidden="true"></i>Higher model-call and screener limits vs Starter</div>
+                <div class="feature"><span></span><i class="iconoir-graph-up" aria-hidden="true"></i>Higher limits for forecasts, screeners, and indicators</div>
                 <div class="feature"><span></span><i class="iconoir-group" aria-hidden="true"></i>1 collaborator seat</div>
-                <div class="feature"><span></span><i class="iconoir-brain" aria-hidden="true"></i>GPT-5 mini model access</div>
+                <div class="feature"><span></span><i class="iconoir-brain" aria-hidden="true"></i>Pro model access: GPT-5 mini</div>
               </div>
-              <div class="purchase-panel" data-product="Quantura Go" data-iap-plan="go" data-price="9" data-currency="USD" data-stripe-url="#">
+              <div
+                class="purchase-panel"
+                data-product="Quantura Go Monthly"
+                data-iap-plan="go"
+                data-price="8"
+                data-currency="USD"
+                data-stripe-url="#"
+                data-monthly-price="8"
+                data-yearly-price="80"
+                data-monthly-product="Quantura Go Monthly"
+                data-yearly-product="Quantura Go Annual"
+                data-monthly-iap-plan="go"
+                data-yearly-iap-plan="annual_go"
+              >
                 <button class="cta" data-action="purchase" data-label-guest="Sign in to continue" data-label-auth="Start Go plan" disabled>
                   Sign in to continue
                 </button>
@@ -123,18 +141,32 @@
               </div>
             </div>
 
-            <div class="card">
+            <div class="card" data-pricing-plan-card="plus">
               <span class="badge" style="background: #e1f4f0; color: #146a5d;">Most popular</span>
               <h3 style="margin-top: 14px;">Quantura Plus</h3>
-              <div class="price">$19</div>
-              <p class="small">For active investors who need faster iteration and broader model access.</p>
+              <div class="price" data-pricing-price>$20/mo</div>
+              <p class="small" data-pricing-cycle-copy>Pay yearly to lock in <strong>$200/yr</strong> (save $40).</p>
+              <p class="small">For active investors who want stronger models, ad-free speed, and higher rate limits.</p>
               <div class="feature-list" style="margin-top: 16px;">
                 <div class="feature"><span></span><i class="iconoir-shield-check" aria-hidden="true"></i>Ad-free experience after purchase</div>
-                <div class="feature"><span></span><i class="iconoir-graph-up" aria-hidden="true"></i>Expanded weekly model-call limits</div>
+                <div class="feature"><span></span><i class="iconoir-graph-up" aria-hidden="true"></i>Expanded limits for forecasts, screeners, and Model Council</div>
                 <div class="feature"><span></span><i class="iconoir-group" aria-hidden="true"></i>3 collaborator seats</div>
-                <div class="feature"><span></span><i class="iconoir-brain" aria-hidden="true"></i>GPT-5 + GPT-5 mini access</div>
+                <div class="feature"><span></span><i class="iconoir-brain" aria-hidden="true"></i>Pro model access: GPT-5 + GPT-5 mini</div>
               </div>
-              <div class="purchase-panel" data-product="Quantura Plus" data-iap-plan="plus" data-price="19" data-currency="USD" data-stripe-url="#">
+              <div
+                class="purchase-panel"
+                data-product="Quantura Plus Monthly"
+                data-iap-plan="plus"
+                data-price="20"
+                data-currency="USD"
+                data-stripe-url="#"
+                data-monthly-price="20"
+                data-yearly-price="200"
+                data-monthly-product="Quantura Plus Monthly"
+                data-yearly-product="Quantura Plus Annual"
+                data-monthly-iap-plan="plus"
+                data-yearly-iap-plan="annual_plus"
+              >
                 <button class="cta" data-action="purchase" data-label-guest="Sign in to continue" data-label-auth="Start Plus plan" disabled>
                   Sign in to continue
                 </button>
@@ -145,18 +177,32 @@
             </div>
           </div>
           <div class="grid-3" style="margin-top: 18px;">
-            <div class="card">
+            <div class="card" data-pricing-plan-card="pro">
               <span class="badge" style="background: #eef2ff; color: #312e81;">Pro</span>
               <h3 style="margin-top: 14px;">Quantura Pro</h3>
-              <div class="price">$39</div>
-              <p class="small">For power users balancing advanced AI output with disciplined workflow control.</p>
+              <div class="price" data-pricing-price>$200/mo</div>
+              <p class="small" data-pricing-cycle-copy>Yearly target: <strong>$2,160/yr</strong> (effective $180/mo).</p>
+              <p class="small">For desks demanding premium model access, top-tier rate limits, and expanded workspace ceilings.</p>
               <div class="feature-list" style="margin-top: 16px;">
                 <div class="feature"><span></span><i class="iconoir-shield-check" aria-hidden="true"></i>Ad-free experience after purchase</div>
-                <div class="feature"><span></span><i class="iconoir-rocket" aria-hidden="true"></i>High weekly model-call and screener throughput</div>
+                <div class="feature"><span></span><i class="iconoir-rocket" aria-hidden="true"></i>High throughput for forecasts, screeners, and model responses</div>
                 <div class="feature"><span></span><i class="iconoir-group" aria-hidden="true"></i>8 collaborator seats</div>
-                <div class="feature"><span></span><i class="iconoir-brain" aria-hidden="true"></i>GPT-5, GPT-5 mini, GPT-5.1 access</div>
+                <div class="feature"><span></span><i class="iconoir-brain" aria-hidden="true"></i>Pro model stack: GPT-5, GPT-5 mini, GPT-5.1</div>
               </div>
-              <div class="purchase-panel" data-product="Quantura Pro" data-iap-plan="pro" data-price="39" data-currency="USD" data-stripe-url="#">
+              <div
+                class="purchase-panel"
+                data-product="Quantura Pro Monthly"
+                data-iap-plan="pro"
+                data-price="200"
+                data-currency="USD"
+                data-stripe-url="#"
+                data-monthly-price="200"
+                data-yearly-price="2160"
+                data-monthly-product="Quantura Pro Monthly"
+                data-yearly-product="Quantura Pro Annual"
+                data-monthly-iap-plan="pro"
+                data-yearly-iap-plan="annual_pro"
+              >
                 <button class="cta" data-action="purchase" data-label-guest="Sign in to continue" data-label-auth="Start Pro plan" disabled>
                   Sign in to continue
                 </button>
@@ -165,18 +211,32 @@
                 <button class="cta secondary hidden" data-action="stripe" type="button">Proceed to payment</button>
               </div>
             </div>
-            <div class="card">
+            <div class="card" data-pricing-plan-card="business">
               <span class="badge" style="background: #fef1cc; color: #6d4c00;">Business</span>
               <h3 style="margin-top: 14px;">Quantura Business</h3>
-              <div class="price">$199</div>
-              <p class="small">For teams that require maximal limits, advanced controls, and broad collaborator access.</p>
+              <div class="price" data-pricing-price>$30/mo</div>
+              <p class="small" data-pricing-cycle-copy>Pay yearly to lock in <strong>$300/yr</strong> (save $60).</p>
+              <p class="small">For teams requiring maximum throughput, strict controls, and broad workspace capacity.</p>
               <div class="feature-list" style="margin-top: 16px;">
                 <div class="feature"><span></span><i class="iconoir-shield-check" aria-hidden="true"></i>Ad-free experience after purchase</div>
                 <div class="feature"><span></span><i class="iconoir-rocket" aria-hidden="true"></i>Highest request throughput and priority execution lane</div>
                 <div class="feature"><span></span><i class="iconoir-group" aria-hidden="true"></i>30 collaborator seats</div>
-                <div class="feature"><span></span><i class="iconoir-brain" aria-hidden="true"></i>Full GPT-5 stack + Nova model access</div>
+                <div class="feature"><span></span><i class="iconoir-brain" aria-hidden="true"></i>Full pro models + expanded workspace limits</div>
               </div>
-              <div class="purchase-panel" data-product="Quantura Business" data-iap-plan="business" data-price="199" data-currency="USD" data-stripe-url="#">
+              <div
+                class="purchase-panel"
+                data-product="Quantura Business Monthly"
+                data-iap-plan="business"
+                data-price="30"
+                data-currency="USD"
+                data-stripe-url="#"
+                data-monthly-price="30"
+                data-yearly-price="300"
+                data-monthly-product="Quantura Business Monthly"
+                data-yearly-product="Quantura Business Annual"
+                data-monthly-iap-plan="business"
+                data-yearly-iap-plan="annual_business"
+              >
                 <button class="cta" data-action="purchase" data-label-guest="Sign in to continue" data-label-auth="Start Business plan" disabled>
                   Sign in to continue
                 </button>
@@ -186,14 +246,14 @@
               </div>
             </div>
             <div class="card">
-              <span class="badge" style="background: #f1f5f9; color: #0f172a;">Annual options</span>
-              <h3 style="margin-top: 14px;">Annual plans</h3>
-              <p class="small">Yearly plans are available in native checkout.</p>
+              <span class="badge" style="background: #f1f5f9; color: #0f172a;">Native billing map</span>
+              <h3 style="margin-top: 14px;">StoreKit + Google Play</h3>
+              <p class="small">Buttons route to native purchase bridges, not web Stripe, for iOS and Android builds.</p>
               <div class="feature-list" style="margin-top: 16px;">
-                <div class="feature"><span></span><i class="iconoir-check" aria-hidden="true"></i>Go Annual: <code>annualgoplan</code> (iOS) / <code>goplanyearly</code> (Android)</div>
-                <div class="feature"><span></span><i class="iconoir-check" aria-hidden="true"></i>Plus Annual: <code>annualplusplan</code></div>
-                <div class="feature"><span></span><i class="iconoir-check" aria-hidden="true"></i>Business Annual: <code>annualbusinessplan</code></div>
-                <div class="feature"><span></span><i class="iconoir-mobile-dev-mode" aria-hidden="true"></i>iOS uses StoreKit, Android uses Google Play Billing</div>
+                <div class="feature"><span></span><i class="iconoir-check" aria-hidden="true"></i>iOS monthly: <code>goplan</code>, <code>premium</code>, <code>pro</code>, <code>businessplan</code></div>
+                <div class="feature"><span></span><i class="iconoir-check" aria-hidden="true"></i>iOS annual: <code>annualgoplan</code>, <code>annualplusplan</code>, <code>annualbusinessplan</code></div>
+                <div class="feature"><span></span><i class="iconoir-check" aria-hidden="true"></i>Android monthly: <code>goplan</code>, <code>premium</code>, <code>quanturapro</code>, <code>quanturabusiness</code></div>
+                <div class="feature"><span></span><i class="iconoir-check" aria-hidden="true"></i>Android annual: <code>goplanyearly</code>, <code>annualplusplan</code>, <code>annualbusinessplan</code></div>
               </div>
             </div>
           </div>

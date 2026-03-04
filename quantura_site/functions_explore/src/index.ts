@@ -2434,7 +2434,7 @@ ROUTES.post("/earnings/refresh", async (req, res) => {
     const existingSnap = await docRef.get();
     const existing = (existingSnap.data() || {}) as Record<string, unknown>;
     const lastFetchedAtMs = getTimestampMs(existing.lastFetchedAt);
-    const hasRecentCache = Array.isArray(existing.items) && existing.items.length > 0 && Date.now() - lastFetchedAtMs < 7 * 24 * 60 * 60 * 1000;
+    const hasRecentCache = Array.isArray(existing.items) && Date.now() - lastFetchedAtMs < 7 * 24 * 60 * 60 * 1000;
     if (hasRecentCache) {
       res.status(200).json({
         ok: true,
@@ -2466,11 +2466,6 @@ ROUTES.post("/earnings/refresh", async (req, res) => {
       }
     }
 
-    if (!records.length) {
-      res.status(502).json({ error: "fmp_fetch_failed", symbol, start, end });
-      return;
-    }
-
     const items = records
       .map((row) => ({
         symbol,
@@ -2497,7 +2492,7 @@ ROUTES.post("/earnings/refresh", async (req, res) => {
         start,
         end,
         source: "fmp",
-        sourceVariant: fetchedFrom,
+        sourceVariant: fetchedFrom || "none",
         lastUpdated,
         lastFetchedAt: admin.firestore.FieldValue.serverTimestamp(),
         items,
@@ -2513,6 +2508,7 @@ ROUTES.post("/earnings/refresh", async (req, res) => {
       cached: false,
       fetchedCount: items.length,
       lastUpdated,
+      lastFetchedAtMs: Date.now(),
       items,
     });
   } catch (error: any) {
