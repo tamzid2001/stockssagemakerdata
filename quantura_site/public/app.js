@@ -9947,12 +9947,123 @@
 
   const normalizeXSocialQuery = (raw) => String(raw || "").trim();
 
+  const normalizeXAuthorHandle = (value) => sanitizeText(String(value || "").replace(/^@+/, ""), 80);
+
+  const readXCount = (...values) => {
+    for (const value of values) {
+      const num = Number(value);
+      if (Number.isFinite(num)) return Math.max(0, Math.floor(num));
+    }
+    return 0;
+  };
+
+  const normalizeXTrendPost = (raw) => {
+    const post = raw && typeof raw === "object" ? raw : {};
+    const author = post.author && typeof post.author === "object" ? post.author : {};
+    const user = post.user && typeof post.user === "object" ? post.user : {};
+    const account = post.account && typeof post.account === "object" ? post.account : {};
+    const metricsRaw =
+      (post.metrics && typeof post.metrics === "object" ? post.metrics : null) ||
+      (post.public_metrics && typeof post.public_metrics === "object" ? post.public_metrics : null) ||
+      (post.engagement && typeof post.engagement === "object" ? post.engagement : null) ||
+      {};
+
+    const authorUsername = normalizeXAuthorHandle(
+      post.authorUsername ||
+        post.author_username ||
+        post.username ||
+        post.screen_name ||
+        post.handle ||
+        author.username ||
+        author.screen_name ||
+        author.handle ||
+        user.username ||
+        user.screen_name ||
+        user.handle ||
+        account.username ||
+        account.screen_name
+    );
+    const authorName =
+      sanitizeText(
+        post.authorName ||
+          post.author_name ||
+          post.authorDisplayName ||
+          post.author_display_name ||
+          post.name ||
+          author.name ||
+          author.display_name ||
+          author.full_name ||
+          user.name ||
+          user.display_name ||
+          account.name,
+        120
+      ) || authorUsername;
+
+    const postId = sanitizeText(post.id || post.id_str || post.tweet_id || post.status_id, 120);
+    const text = sanitizeText(post.text || post.full_text || post.content || post.body || post.title || post.snippet, 8000);
+    const createdAt = post.createdAt || post.created_at || post.publishedAt || post.timestamp || post.date || null;
+    const permalink =
+      sanitizeText(post.permalink || post.url || post.link || post.tweetUrl || post.tweet_url, 500) ||
+      (postId ? `https://x.com/i/web/status/${encodeURIComponent(postId)}` : "");
+
+    const likes = readXCount(
+      metricsRaw.like_count,
+      metricsRaw.favorite_count,
+      metricsRaw.likes,
+      metricsRaw.likeCount,
+      post.like_count,
+      post.favorite_count,
+      post.likes,
+      post.likeCount,
+      post.favoriteCount
+    );
+    const reposts = readXCount(
+      metricsRaw.retweet_count,
+      metricsRaw.repost_count,
+      metricsRaw.reposts,
+      metricsRaw.retweetCount,
+      metricsRaw.repostCount,
+      post.retweet_count,
+      post.repost_count,
+      post.reposts,
+      post.retweetCount,
+      post.repostCount
+    );
+    const replies = readXCount(
+      metricsRaw.reply_count,
+      metricsRaw.replies,
+      metricsRaw.replyCount,
+      post.reply_count,
+      post.replies,
+      post.replyCount
+    );
+
+    return {
+      ...post,
+      id: postId || sanitizeText(post.id, 120),
+      text,
+      createdAt,
+      permalink,
+      authorName,
+      authorUsername,
+      likes,
+      reposts,
+      replies,
+      metrics: {
+        ...metricsRaw,
+        like_count: likes,
+        retweet_count: reposts,
+        reply_count: replies,
+      },
+    };
+  };
+
   const uniqueSocialRows = (rows) => {
     const list = Array.isArray(rows) ? rows : [];
     const seen = new Set();
     const out = [];
     for (const row of list) {
-      const key = String(row?.id || row?.permalink || `${row?.title || ""}_${row?.createdAt || ""}`).trim();
+      const key = String(row?.id || row?.permalink || `${row?.text || row?.title || ""}_${row?.createdAt || ""}`).trim();
       if (!key || seen.has(key)) continue;
       seen.add(key);
       out.push(row);
@@ -10066,9 +10177,16 @@
             const text = escapeHtml(post.text || post.title || "");
             const created = formatEpoch(post.createdAt);
             const metrics = post.metrics && typeof post.metrics === "object" ? post.metrics : {};
-            const likes = Number(metrics.like_count || 0);
-            const reposts = Number(metrics.retweet_count || 0);
-            const replies = Number(metrics.reply_count || 0);
+            const likes = readXCount(post.likes, metrics.like_count, metrics.favorite_count, metrics.likes, metrics.likeCount);
+            const reposts = readXCount(
+              post.reposts,
+              metrics.retweet_count,
+              metrics.repost_count,
+              metrics.reposts,
+              metrics.retweetCount,
+              metrics.repostCount
+            );
+            const replies = readXCount(post.replies, metrics.reply_count, metrics.replies, metrics.replyCount);
             const permalink = post.permalink ? escapeHtml(post.permalink) : "";
             return `
               <article class="x-post-card">
@@ -10181,7 +10299,7 @@
         meta: buildMeta(),
       });
       const payload = result.data || {};
-      const incomingPosts = Array.isArray(payload.posts) ? payload.posts : [];
+      const incomingPosts = (Array.isArray(payload.posts) ? payload.posts : []).map(normalizeXTrendPost).filter(Boolean);
       const incomingStories = Array.isArray(payload.stories) ? payload.stories : [];
 
       const mergedPosts = append ? uniqueSocialRows([...(state.tickerContext.xPosts || []), ...incomingPosts]) : uniqueSocialRows(incomingPosts);
