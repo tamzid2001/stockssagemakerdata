@@ -2198,6 +2198,7 @@
 		        panelToPath: {
 		          forecast: "/forecasting",
               ticker: "/ticker-intelligence",
+              predictions: "/ticker-intelligence?panel=predictions",
 		          indicators: "/indicators",
               trending: "/trending",
 		          news: "/news",
@@ -2249,9 +2250,11 @@
 		      buttons.forEach((btn) => btn.classList.toggle("active", btn.dataset.panelTarget === next));
 		      if (pushPath && router?.panelToPath?.[next]) {
 		        const desired = router.panelToPath[next];
-		        if (desired && window.location.pathname !== desired) {
+            const desiredUrl = desired.includes("?") ? desired : `${desired}${window.location.search}`;
+            const currentUrl = `${window.location.pathname}${window.location.search}`;
+		        if (desiredUrl && currentUrl !== desiredUrl) {
 		          try {
-		            history.pushState({ panel: next }, "", `${desired}${window.location.search}`);
+		            history.pushState({ panel: next }, "", desiredUrl);
 		          } catch (error) {
 		            // Ignore.
 		          }
@@ -2283,6 +2286,8 @@
 		        const panel = String(params.get("panel") || "").trim();
 		        if (panel === "ticker-intelligence") return "ticker";
 		        if (panel) return panel;
+            const intel = String(params.get("intel") || "").trim().toLowerCase();
+            if (intel === "predictions") return "predictions";
 		      } catch (error) {
 		        // Ignore.
 		      }
@@ -2483,6 +2488,8 @@
         "/forecasting",
         "ticker",
         "/ticker-intelligence",
+        "predictions",
+        "/ticker-intelligence?panel=predictions",
         "/ticker-intelligence?intel=predictions",
         "ticker-query",
         "/model-council",
@@ -18072,7 +18079,10 @@
           ui.intelStrip.classList.toggle("hidden", !showTickerChart);
         }
         if (next === "ticker") {
-          setTickerIntelTab(state.intelActiveTab || "intelligence");
+          state.intelActiveTab = "intelligence";
+          if (ui.tickerIntelligenceOutput) {
+            ui.tickerIntelligenceOutput.classList.remove("hidden");
+          }
           const activeTicker = getActiveTicker() || normalizeTicker(safeLocalStorageGet(LAST_TICKER_KEY) || "");
           if (activeTicker) {
             syncTickerInputs(activeTicker, { source: "panel_open_ticker", skipHistory: true });
@@ -18093,6 +18103,20 @@
           }
         } else {
           setTerminalChartEngineVisibility("legacy");
+        }
+
+        if (next === "predictions") {
+          const activeTicker = getActiveTicker() || normalizeTicker(safeLocalStorageGet(LAST_TICKER_KEY) || "");
+          if (activeTicker) {
+            syncTickerInputs(activeTicker, { source: "panel_open_predictions", skipHistory: true });
+          }
+          const firstPredictionsLoad = !state.panelAutoloaded.predictions;
+          state.panelAutoloaded.predictions = true;
+          loadTickerPredictions(activeTicker, {
+            mode: activeTicker ? "ticker" : "topActive",
+            force: firstPredictionsLoad,
+            notify: false,
+          }).catch(() => {});
         }
 
         if (next === "trending") {
