@@ -13,7 +13,6 @@
 
     const prevBtn = root.querySelector("[data-quote-prev]");
     const nextBtn = root.querySelector("[data-quote-next]");
-    const autoplayToggle = root.querySelector("[data-quote-autoplay]");
     const intervalMs = normalizeInterval(root.dataset.quoteInterval);
 
     let activeIndex = 0;
@@ -35,7 +34,7 @@
 
     const startAuto = () => {
       stopAuto();
-      if (!autoplayToggle || !autoplayToggle.checked || slides.length < 2) return;
+      if (slides.length < 2) return;
       timer = window.setInterval(() => {
         activeIndex = (activeIndex + 1) % slides.length;
         apply();
@@ -55,10 +54,6 @@
 
     nextBtn?.addEventListener("click", () => {
       jump(1);
-      startAuto();
-    });
-
-    autoplayToggle?.addEventListener("change", () => {
       startAuto();
     });
 

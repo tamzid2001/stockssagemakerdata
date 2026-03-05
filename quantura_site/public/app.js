@@ -1257,7 +1257,7 @@
             ? `Photo by ${photo.photographer} on Unsplash`
             : "Photo on Unsplash";
           creditLink.textContent = creditText;
-          creditLink.href = photo.photographerLink || photo.link || "https://unsplash.com/?utm_source=quantura&utm_medium=referral";
+          creditLink.href = photo.photographerLink || photo.link || "https://unsplash.com/";
           creditLink.setAttribute("target", "_blank");
           creditLink.setAttribute("rel", "noopener noreferrer");
         }
