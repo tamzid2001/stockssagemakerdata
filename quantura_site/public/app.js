@@ -13,6 +13,7 @@
   const PROMO_FORECAST_COUNT_KEY = "quantura_promo_forecast_count_v1";
   const PROMO_LAST_SESSION_KEY = "quantura_promo_last_session_v1";
   const AUTH_PENDING_CREDENTIAL_KEY = "quantura_auth_pending_credential_v1";
+  const AUTH_POST_SIGNIN_REFRESH_KEY = "quantura_auth_post_signin_refresh_v1";
   const NOTIFICATION_PRIVACY_CACHE_KEY = "quantura_notification_privacy_v1";
   const FCM_LOG_CACHE_KEY = "quantura_fcm_log_v1";
   const CHART_RANGE_CACHE_KEY = "quantura_chart_range_v1";
@@ -1924,6 +1925,8 @@
     myRequestsPanelState: {},
     sharedWorkspaces: [],
     unsubscribeSharedWorkspaces: null,
+    authStateBootstrapped: false,
+    postSignInReloadInFlight: false,
   };
 
   const remoteConfigStore = (() => {
@@ -21119,6 +21122,12 @@
 
 			    persistenceReady.finally(() => {
 			      auth.onAuthStateChanged(async (user) => {
+          const previousUser = state.user;
+          const previousUid = String(previousUser?.uid || "").trim();
+          const previousWasFull = hasFullAccount(previousUser);
+          const isFirstAuthEvent = !state.authStateBootstrapped;
+          state.authStateBootstrapped = true;
+
           if (!user) {
             state.authResolved = true;
             state.user = null;
@@ -21155,6 +21164,21 @@
           }
 			      state.authResolved = true;
 			      state.user = user;
+          const nextUid = String(user?.uid || "").trim();
+          const shouldRefreshAfterSignIn =
+            !isFirstAuthEvent &&
+            hasFullAccount(user) &&
+            (!previousWasFull || previousUid !== nextUid) &&
+            !state.postSignInReloadInFlight;
+          if (shouldRefreshAfterSignIn) {
+            state.postSignInReloadInFlight = true;
+            safeLocalStorageSet(AUTH_POST_SIGNIN_REFRESH_KEY, `${nextUid}:${Date.now()}`);
+            showToast("Signed in. Refreshing workspace...");
+            window.setTimeout(() => {
+              window.location.reload();
+            }, 120);
+            return;
+          }
             await loadEarningsFollowSet({ force: true }).catch(() => {});
             if (isPanelVisible("events-calendar")) {
               renderEarningsCalendar();
