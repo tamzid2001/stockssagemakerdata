@@ -16,6 +16,7 @@
   const AUTH_POST_SIGNIN_REFRESH_KEY = "quantura_auth_post_signin_refresh_v1";
   const NATIVE_IAP_PENDING_EVENTS_KEY = "quantura_native_iap_pending_events_v1";
   const NOTIFICATION_PRIVACY_CACHE_KEY = "quantura_notification_privacy_v1";
+  const NOTIFICATION_PREFS_CACHE_KEY = "quantura_notification_prefs_v1";
   const FCM_LOG_CACHE_KEY = "quantura_fcm_log_v1";
   const CHART_RANGE_CACHE_KEY = "quantura_chart_range_v1";
   const CHART_VIEW_CACHE_KEY = "quantura_chart_view_v1";
@@ -82,6 +83,62 @@
   const POLYMARKET_SEARCH_DEBOUNCE_MS = 400;
   const TERMINAL_FX_RECENT_KEY = "quantura_terminal_fx_recent_v1";
   const TERMINAL_FX_RECENT_LIMIT = 8;
+  const DEFAULT_NOTIFICATION_PREFS = Object.freeze({
+    global: true,
+    following: true,
+    tickers: true,
+    watchlist: true,
+    explore: true,
+    earnings: true,
+    ipos: true,
+    daily: true,
+    weekly: true,
+    inactiveHidden: true,
+  });
+  const NOTIFICATION_PREF_DEFS = Object.freeze([
+    { key: "global", label: "Global notifications", hint: "Master switch for all outbound notifications." },
+    { key: "watchlist", label: "Watchlist alerts", hint: "Price and watchlist-trigger updates." },
+    { key: "explore", label: "Explore feed", hint: "Relevant public posts and activity updates." },
+    { key: "earnings", label: "Earnings calendar", hint: "Company earnings date updates." },
+    { key: "ipos", label: "IPO updates", hint: "New IPO calendar changes." },
+    { key: "daily", label: "Daily reminders", hint: "Daily activity reminders." },
+    { key: "weekly", label: "Weekly recap", hint: "Weekly summary reminders." },
+  ]);
+  const NOTIFICATION_COUNTRY_OPTIONS = Object.freeze([
+    { value: "US", label: "United States" },
+    { value: "CA", label: "Canada" },
+    { value: "GB", label: "United Kingdom" },
+    { value: "DE", label: "Germany" },
+    { value: "FR", label: "France" },
+    { value: "ES", label: "Spain" },
+    { value: "IT", label: "Italy" },
+    { value: "AU", label: "Australia" },
+    { value: "JP", label: "Japan" },
+    { value: "SG", label: "Singapore" },
+    { value: "AE", label: "United Arab Emirates" },
+    { value: "IN", label: "India" },
+    { value: "BR", label: "Brazil" },
+    { value: "MX", label: "Mexico" },
+  ]);
+  const NOTIFICATION_TIMEZONE_OPTIONS = Object.freeze([
+    "America/New_York",
+    "America/Chicago",
+    "America/Denver",
+    "America/Los_Angeles",
+    "America/Toronto",
+    "America/Mexico_City",
+    "America/Sao_Paulo",
+    "Europe/London",
+    "Europe/Berlin",
+    "Europe/Paris",
+    "Europe/Madrid",
+    "Asia/Dubai",
+    "Asia/Kolkata",
+    "Asia/Singapore",
+    "Asia/Tokyo",
+    "Australia/Sydney",
+    "Etc/UTC",
+  ]);
   const MY_REQUEST_TYPES = new Set(["forecast", "screener", "indicator", "modelCouncil"]);
   const MY_REQUEST_TYPE_LABELS = {
     forecast: "Forecasting",
@@ -1683,6 +1740,9 @@
     notificationsLocationOptIn: document.getElementById("notifications-location-optin"),
     notificationsIpOptIn: document.getElementById("notifications-ip-optin"),
     notificationsRequestLocation: document.getElementById("notifications-request-location"),
+    notificationsPrefInputs: Array.from(document.querySelectorAll("[data-notification-pref]")),
+    notificationsCoarseCountry: document.getElementById("notifications-coarse-country"),
+    notificationsTimezone: document.getElementById("notifications-timezone"),
     notificationsPrivacyStatus: document.getElementById("notifications-privacy-status"),
     billingPortalLink: document.getElementById("billing-portal-link"),
     chartRangeButtons: Array.from(document.querySelectorAll("[data-chart-range]")),
@@ -1752,6 +1812,20 @@
         timezone: String(cached?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "").trim().slice(0, 80),
         lastUpdatedMs: Number(cached?.lastUpdatedMs || 0) || 0,
       };
+    })(),
+    notificationPrefs: (() => {
+      let cached = {};
+      try {
+        const raw = localStorage.getItem(NOTIFICATION_PREFS_CACHE_KEY);
+        cached = raw ? JSON.parse(raw) : {};
+      } catch (error) {
+        cached = {};
+      }
+      const next = { ...DEFAULT_NOTIFICATION_PREFS };
+      Object.keys(next).forEach((key) => {
+        if (typeof cached?.[key] === "boolean") next[key] = Boolean(cached[key]);
+      });
+      return next;
     })(),
     cookieConsent: (() => {
       try {
@@ -3174,6 +3248,20 @@
       }
     };
 
+    const persistNotificationPrefsCache = () => {
+      try {
+        localStorage.setItem(
+          NOTIFICATION_PREFS_CACHE_KEY,
+          JSON.stringify({
+            ...DEFAULT_NOTIFICATION_PREFS,
+            ...(state.notificationPrefs && typeof state.notificationPrefs === "object" ? state.notificationPrefs : {}),
+          })
+        );
+      } catch (error) {
+        // Ignore storage issues.
+      }
+    };
+
     const getStoredNumber = (key, fallback = 0) => {
       const raw = String(safeLocalStorageGet(key) || "").trim();
       if (!raw) return fallback;
@@ -3788,7 +3876,56 @@
     ui.notificationsLocationOptIn = document.getElementById("notifications-location-optin");
     ui.notificationsIpOptIn = document.getElementById("notifications-ip-optin");
     ui.notificationsRequestLocation = document.getElementById("notifications-request-location");
+    ui.notificationsPrefInputs = Array.from(document.querySelectorAll("[data-notification-pref]"));
+    ui.notificationsCoarseCountry = document.getElementById("notifications-coarse-country");
+    ui.notificationsTimezone = document.getElementById("notifications-timezone");
     ui.notificationsPrivacyStatus = document.getElementById("notifications-privacy-status");
+  };
+
+  const normalizeNotificationPrefsState = (input = {}, fallback = DEFAULT_NOTIFICATION_PREFS) => {
+    const next = { ...(fallback && typeof fallback === "object" ? fallback : DEFAULT_NOTIFICATION_PREFS) };
+    Object.keys(DEFAULT_NOTIFICATION_PREFS).forEach((key) => {
+      if (typeof input?.[key] === "boolean") next[key] = Boolean(input[key]);
+    });
+    return next;
+  };
+
+  const applyNotificationPrefsFromUi = () => {
+    const nextPrefs = normalizeNotificationPrefsState(state.notificationPrefs, DEFAULT_NOTIFICATION_PREFS);
+    if (Array.isArray(ui.notificationsPrefInputs)) {
+      ui.notificationsPrefInputs.forEach((input) => {
+        const key = String(input?.dataset?.notificationPref || "").trim();
+        if (!(key in DEFAULT_NOTIFICATION_PREFS)) return;
+        nextPrefs[key] = Boolean(input.checked);
+      });
+    }
+    state.notificationPrefs = nextPrefs;
+    if (!state.notificationPrefs.global) {
+      state.notificationPrefs.watchlist = false;
+      state.notificationPrefs.explore = false;
+      state.notificationPrefs.earnings = false;
+      state.notificationPrefs.ipos = false;
+      state.notificationPrefs.daily = false;
+      state.notificationPrefs.weekly = false;
+    }
+    persistNotificationPrefsCache();
+  };
+
+  const buildNotificationCountryOptions = (selected) => {
+    const preferred = normalizeCountryCode(selected || state.notificationPrivacy?.coarseLocation?.countryCode || state.preferredCountry || "US");
+    const merged = new Map();
+    merged.set(preferred, preferred === "US" ? "United States" : preferred);
+    NOTIFICATION_COUNTRY_OPTIONS.forEach((item) => {
+      merged.set(String(item.value || "").toUpperCase(), String(item.label || "").trim());
+    });
+    return Array.from(merged.entries()).map(([value, label]) => ({ value, label }));
+  };
+
+  const buildNotificationTimezoneOptions = (selected) => {
+    const fallbackZone = String(Intl.DateTimeFormat().resolvedOptions().timeZone || "Etc/UTC").trim() || "Etc/UTC";
+    const preferred = String(selected || fallbackZone).trim();
+    const merged = new Set([preferred, ...NOTIFICATION_TIMEZONE_OPTIONS]);
+    return Array.from(merged).filter(Boolean);
   };
 
   const setNotificationPrivacyStatus = (text, isError = false) => {
@@ -3801,6 +3938,7 @@
     refreshNotificationPrivacyRefs();
     if (!ui.notificationsPrivacyContainer) return;
     const privacy = state.notificationPrivacy || {};
+    state.notificationPrefs = normalizeNotificationPrefsState(state.notificationPrefs, DEFAULT_NOTIFICATION_PREFS);
     const locationConsent = Boolean(privacy.locationConsent);
     const ipRegionConsent = Boolean(privacy.ipRegionConsent);
     if (ui.notificationsLocationOptIn) ui.notificationsLocationOptIn.checked = locationConsent;
@@ -3809,12 +3947,45 @@
       ui.notificationsIpOptIn.disabled = !locationConsent;
     }
     if (ui.notificationsRequestLocation) ui.notificationsRequestLocation.disabled = !locationConsent;
+    if (Array.isArray(ui.notificationsPrefInputs)) {
+      ui.notificationsPrefInputs.forEach((input) => {
+        const key = String(input?.dataset?.notificationPref || "").trim();
+        if (!(key in DEFAULT_NOTIFICATION_PREFS)) return;
+        input.checked = Boolean(state.notificationPrefs?.[key]);
+        input.disabled = key !== "global" && !Boolean(state.notificationPrefs?.global);
+      });
+    }
+
+    const selectedCountry = normalizeCountryCode(
+      privacy?.coarseLocation?.countryCode || state.preferredCountry || "US"
+    );
+    if (ui.notificationsCoarseCountry) {
+      const options = buildNotificationCountryOptions(selectedCountry);
+      ui.notificationsCoarseCountry.innerHTML = options
+        .map((item) => `<option value="${escapeHtml(item.value)}">${escapeHtml(item.label)}</option>`)
+        .join("");
+      ui.notificationsCoarseCountry.value = selectedCountry;
+      ui.notificationsCoarseCountry.disabled = !locationConsent;
+    }
+
+    const selectedTimezone = String(privacy.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "Etc/UTC").trim();
+    if (ui.notificationsTimezone) {
+      const zones = buildNotificationTimezoneOptions(selectedTimezone);
+      ui.notificationsTimezone.innerHTML = zones
+        .map((zone) => `<option value="${escapeHtml(zone)}">${escapeHtml(zone)}</option>`)
+        .join("");
+      ui.notificationsTimezone.value = selectedTimezone || zones[0] || "Etc/UTC";
+      ui.notificationsTimezone.disabled = !locationConsent;
+    }
+
     if (!locationConsent) {
       setNotificationPrivacyStatus("Location consent is off. Notification text stays generic.");
       return;
     }
-    const timezone = String(privacy.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "").trim();
-    const country = String(privacy?.coarseLocation?.countryCode || "").trim();
+    const timezone = String(
+      ui.notificationsTimezone?.value || privacy.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || ""
+    ).trim();
+    const country = String(ui.notificationsCoarseCountry?.value || privacy?.coarseLocation?.countryCode || "").trim();
     const region = String(privacy.ipRegion || "").trim();
     const summary = [`Consent on`, country ? `country ${country}` : "", region ? `region ${region}` : "", timezone ? timezone : ""]
       .filter(Boolean)
@@ -3834,13 +4005,39 @@
     wrap.id = "notifications-privacy-controls";
     wrap.className = "notice small";
     wrap.style.marginTop = "12px";
+    const categoryItems = NOTIFICATION_PREF_DEFS.map(
+      (item) => `
+        <label class="notification-pref-item">
+          <span class="notification-pref-copy">
+            <span class="notification-pref-title">${escapeHtml(item.label)}</span>
+            <span class="notification-pref-hint">${escapeHtml(item.hint)}</span>
+          </span>
+          <input type="checkbox" data-notification-pref="${escapeHtml(item.key)}" />
+        </label>
+      `
+    ).join("");
     wrap.innerHTML = `
       <strong>Personalized notifications (optional)</strong>
       <p class="small" style="margin: 6px 0 8px;">
         Location and IP-derived region are sensitive. We only store coarse location, timezone, and region after explicit consent.
       </p>
-      <label class="feature" style="align-items:flex-start;"><span></span><input id="notifications-location-optin" type="checkbox" /> <span>Allow coarse location + timezone for notification context</span></label>
-      <label class="feature" style="align-items:flex-start;"><span></span><input id="notifications-ip-optin" type="checkbox" /> <span>Allow IP-derived region lookup/storage</span></label>
+      <div class="notification-pref-list">
+        ${categoryItems}
+      </div>
+      <div class="notification-consent-grid">
+        <label class="feature" style="align-items:flex-start;"><span></span><input id="notifications-location-optin" type="checkbox" /> <span>Allow coarse location + timezone for notification context</span></label>
+        <label class="feature" style="align-items:flex-start;"><span></span><input id="notifications-ip-optin" type="checkbox" /> <span>Allow IP-derived region lookup/storage</span></label>
+      </div>
+      <div class="notification-privacy-grid">
+        <div class="field">
+          <label class="label" for="notifications-coarse-country">Coarse country</label>
+          <select id="notifications-coarse-country" class="notification-privacy-select"></select>
+        </div>
+        <div class="field">
+          <label class="label" for="notifications-timezone">Timezone</label>
+          <select id="notifications-timezone" class="notification-privacy-select"></select>
+        </div>
+      </div>
       <div class="hero-actions" style="margin-top:8px;">
         <button class="cta secondary small" id="notifications-request-location" type="button">Capture coarse location</button>
       </div>
@@ -3894,13 +4091,31 @@
   const saveNotificationPrivacySettings = async () => {
     const locationConsent = Boolean(ui.notificationsLocationOptIn?.checked);
     const ipRegionConsent = locationConsent && Boolean(ui.notificationsIpOptIn?.checked);
+    applyNotificationPrefsFromUi();
     if (!locationConsent) {
       state.notificationPrivacy.coarseLocation = null;
       state.notificationPrivacy.ipRegion = "";
     }
     state.notificationPrivacy.locationConsent = locationConsent;
     state.notificationPrivacy.ipRegionConsent = ipRegionConsent;
-    state.notificationPrivacy.timezone = locationConsent ? (Intl.DateTimeFormat().resolvedOptions().timeZone || "") : "";
+    const selectedTimezone = String(ui.notificationsTimezone?.value || "").trim();
+    state.notificationPrivacy.timezone = locationConsent
+      ? selectedTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone || ""
+      : "";
+    if (locationConsent) {
+      const selectedCountry = normalizeCountryCode(
+        ui.notificationsCoarseCountry?.value || state.notificationPrivacy?.coarseLocation?.countryCode || state.preferredCountry || "US"
+      );
+      state.notificationPrivacy.coarseLocation = {
+        ...(state.notificationPrivacy?.coarseLocation && typeof state.notificationPrivacy.coarseLocation === "object"
+          ? state.notificationPrivacy.coarseLocation
+          : {}),
+        countryCode: selectedCountry,
+        capturedAt:
+          String(state.notificationPrivacy?.coarseLocation?.capturedAt || "").trim() || new Date().toISOString(),
+      };
+      applyCountryPreference(selectedCountry, { persist: true });
+    }
     state.notificationPrivacy.lastUpdatedMs = Date.now();
     persistNotificationPrivacyCache();
     syncNotificationPrivacyControls();
@@ -3911,6 +4126,16 @@
       method: "POST",
       headers,
       body: JSON.stringify({
+        global: Boolean(state.notificationPrefs.global),
+        following: Boolean(state.notificationPrefs.following),
+        tickers: Boolean(state.notificationPrefs.tickers),
+        watchlist: Boolean(state.notificationPrefs.watchlist),
+        explore: Boolean(state.notificationPrefs.explore),
+        earnings: Boolean(state.notificationPrefs.earnings),
+        ipos: Boolean(state.notificationPrefs.ipos),
+        daily: Boolean(state.notificationPrefs.daily),
+        weekly: Boolean(state.notificationPrefs.weekly),
+        inactiveHidden: Boolean(state.notificationPrefs.inactiveHidden),
         locationConsent,
         ipRegionConsent,
         timezone: state.notificationPrivacy.timezone || "",
@@ -3936,6 +4161,9 @@
     });
     if (!response.ok) return;
     const payload = await response.json().catch(() => ({}));
+    const prefs = payload?.notificationPrefs && typeof payload.notificationPrefs === "object" ? payload.notificationPrefs : {};
+    state.notificationPrefs = normalizeNotificationPrefsState(prefs, state.notificationPrefs);
+    persistNotificationPrefsCache();
     const privacy = payload?.notificationPrivacy && typeof payload.notificationPrivacy === "object" ? payload.notificationPrivacy : {};
     state.notificationPrivacy.locationConsent = Boolean(privacy.locationConsent);
     state.notificationPrivacy.ipRegionConsent = Boolean(privacy.ipRegionConsent);
@@ -22210,6 +22438,50 @@
         });
       } catch (error) {
         setNotificationPrivacyStatus(error.message || "Unable to save IP-region preference.", true);
+      }
+    });
+
+    if (Array.isArray(ui.notificationsPrefInputs)) {
+      ui.notificationsPrefInputs.forEach((input) => {
+        if (input.dataset.bound === "1") return;
+        input.dataset.bound = "1";
+        input.addEventListener("change", async () => {
+          try {
+            await saveNotificationPrivacySettings();
+            const key = String(input?.dataset?.notificationPref || "").trim();
+            setNotificationPrivacyStatus("Notification category preferences saved.");
+            logEvent("notifications_category_pref_updated", {
+              category: key,
+              enabled: Boolean(input.checked),
+            });
+          } catch (error) {
+            setNotificationPrivacyStatus(error.message || "Unable to save category preferences.", true);
+          }
+        });
+      });
+    }
+
+    ui.notificationsCoarseCountry?.addEventListener("change", async () => {
+      try {
+        await saveNotificationPrivacySettings();
+        setNotificationPrivacyStatus("Coarse country updated.");
+        logEvent("notifications_coarse_country_updated", {
+          country: String(ui.notificationsCoarseCountry?.value || "").trim(),
+        });
+      } catch (error) {
+        setNotificationPrivacyStatus(error.message || "Unable to update coarse country.", true);
+      }
+    });
+
+    ui.notificationsTimezone?.addEventListener("change", async () => {
+      try {
+        await saveNotificationPrivacySettings();
+        setNotificationPrivacyStatus("Notification timezone updated.");
+        logEvent("notifications_timezone_updated", {
+          timezone: String(ui.notificationsTimezone?.value || "").trim(),
+        });
+      } catch (error) {
+        setNotificationPrivacyStatus(error.message || "Unable to update timezone.", true);
       }
     });
 
