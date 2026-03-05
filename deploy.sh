@@ -126,6 +126,20 @@ echo "==> Deploying quanturaExploreApi (Gen2)"
   --set-env-vars="PUBLIC_ORIGIN=${PUBLIC_ORIGIN},PLAY_INTEGRITY_ANDROID_PACKAGE=${PLAY_INTEGRITY_ANDROID_PACKAGE},REQUIRE_PLAY_INTEGRITY=${REQUIRE_PLAY_INTEGRITY}" \
   ${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"}
 
+echo "==> Deploying shopApi (Gen2)"
+"${GCLOUD_BIN}" functions deploy shopApi \
+  --quiet \
+  --project="${PROJECT_ID}" \
+  --gen2 \
+  --runtime="${FUNCTIONS_RUNTIME}" \
+  --region="${REGION}" \
+  --source="${FUNCTIONS_SRC}" \
+  --entry-point=shopApi \
+  --trigger-http \
+  --allow-unauthenticated \
+  --set-env-vars="PUBLIC_ORIGIN=${PUBLIC_ORIGIN}" \
+  ${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"}
+
 echo "==> Deploying Firestore trigger: onForecastCreated"
 "${GCLOUD_BIN}" functions deploy onForecastCreated \
   --quiet \
