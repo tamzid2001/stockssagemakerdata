@@ -106,6 +106,8 @@
       { "source": "/api/auth/exchange", "function": "exchange_native_auth" },
       { "source": "/api/auth/exchange-native-id-token", "function": "exchange_native_id_token" },
       { "source": "/api/email/send-newsletter-daily", "function": "send_newsletter_daily_http" },
+      { "source": "/api/email/send-campaign", "function": "send_newsletter_daily_http" },
+      { "source": "/api/email/send-newsletter-weekly", "function": "send_newsletter_daily_http" },
       { "source": "/email/unsubscribe", "function": "email_unsubscribe_http" },
       { "source": "/api/openai/models", "function": "api_openai_models" },
       { "source": "/api/model-council/models", "function": "api_model_council_models" },

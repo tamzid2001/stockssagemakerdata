@@ -17,7 +17,7 @@ From repo root:
 
 `deploy.sh` always runs both stages in order:
 
-1. `gcloud functions deploy` for HTTP APIs (`quanturaExploreApi`, `shopApi`) + Firestore/PubSub trigger functions.
+1. `gcloud functions deploy` for HTTP APIs (`quanturaExploreApi`, `shopApi`, newsletter HTTP handlers) + Firestore/PubSub trigger functions (including weekly newsletter scheduler trigger).
 2. `firebase deploy --only hosting` for frontend.
 
 Deployment is only considered complete after both stages succeed.
@@ -44,9 +44,15 @@ export PROJECT_ID=<PROJECT_ID>
 export REGION=us-central1
 export FIRESTORE_TRIGGER_LOCATION=nam5
 export FUNCTIONS_RUNTIME=nodejs24
+export PYTHON_FUNCTIONS_RUNTIME=python313
 export PUBLIC_ORIGIN=https://quantura.studio
 export PLAY_INTEGRITY_ANDROID_PACKAGE=com.quantura.quanturaapp
 export REQUIRE_PLAY_INTEGRITY=false
+export NEWSLETTER_TOPIC=quantura-newsletter-weekly
+export NEWSLETTER_SCHEDULER_JOB=quantura-newsletter-weekly
+export SCHEDULER_LOCATION=us-central1
+export NEWSLETTER_WEEKLY_CRON="0 9 * * MON"
+export NEWSLETTER_TIMEZONE=America/New_York
 export LOCAL_FUNCTIONS_BUILD=false
 export CLOUDSDK_PYTHON=/opt/homebrew/bin/python3.13
 export GCLOUD_BIN=/opt/homebrew/bin/gcloud
@@ -74,6 +80,16 @@ export GCLOUD_SET_SECRETS="$GCLOUD_SET_SECRETS,STRIPE_SECRET_KEY=projects/<PROJE
 ./deploy.sh
 ```
 
+For newsletter generation and send authorization, also configure these secrets in Secret Manager:
+
+- `OPENAI_API_KEY`
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+- `AWS_REGION`
+- `SES_FROM_EMAIL`
+- `SES_CONFIG_SET` (optional)
+- `NEWSLETTER_ADMIN_KEY` (recommended for manual send endpoint auth)
+
 If any secret was previously committed in git history, rotate it.
 
 ## Smoke checks
@@ -86,4 +102,9 @@ curl -sS -X POST https://quantura.studio/api/analytics/ad-impression \
   -d '{"platform":"android","adPlatform":"admob","adFormat":"rewarded","adUnitId":"test-unit"}'
 
 curl -sS https://quantura.studio/api/shop/catalog
+
+curl -sS -X POST https://quantura.studio/api/email/send-campaign \
+  -H "Content-Type: application/json" \
+  -H "X-Newsletter-Admin-Key: <NEWSLETTER_ADMIN_KEY>" \
+  -d '{"mode":"newsletter","dryRun":true,"campaign":{"title":"Weekly workflow update"}}'
 ```

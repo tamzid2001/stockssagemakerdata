@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SITE_DIR="$ROOT_DIR/quantura_site"
 FUNCTIONS_SRC="$SITE_DIR/functions_explore"
 SSR_FUNCTIONS_SRC="$SITE_DIR/functions_ssr"
+NEWSLETTER_FUNCTIONS_SRC="$SITE_DIR/functions_newsletter"
 
 FIREBASERC_PROJECT="$(
   node -e "try{const fs=require('fs');const p=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));process.stdout.write((p.projects&&p.projects.default)||'');}catch(_e){}" \
@@ -15,10 +16,16 @@ PROJECT_ID="$(echo "${PROJECT_ID}" | tr -d '[:space:]')"
 REGION="${REGION:-us-central1}"
 FIRESTORE_TRIGGER_LOCATION="${FIRESTORE_TRIGGER_LOCATION:-nam5}"
 FUNCTIONS_RUNTIME="${FUNCTIONS_RUNTIME:-nodejs24}"
+PYTHON_FUNCTIONS_RUNTIME="${PYTHON_FUNCTIONS_RUNTIME:-python313}"
 PUBLIC_ORIGIN="${PUBLIC_ORIGIN:-https://quantura.studio}"
 PLAY_INTEGRITY_ANDROID_PACKAGE="${PLAY_INTEGRITY_ANDROID_PACKAGE:-com.quantura.quanturaapp}"
 REQUIRE_PLAY_INTEGRITY="${REQUIRE_PLAY_INTEGRITY:-false}"
 FISCALDATA_REFRESH_TOPIC="${FISCALDATA_REFRESH_TOPIC:-fiscaldata-refresh}"
+NEWSLETTER_TOPIC="${NEWSLETTER_TOPIC:-quantura-newsletter-weekly}"
+NEWSLETTER_SCHEDULER_JOB="${NEWSLETTER_SCHEDULER_JOB:-quantura-newsletter-weekly}"
+SCHEDULER_LOCATION="${SCHEDULER_LOCATION:-us-central1}"
+NEWSLETTER_WEEKLY_CRON="${NEWSLETTER_WEEKLY_CRON:-0 9 * * MON}"
+NEWSLETTER_TIMEZONE="${NEWSLETTER_TIMEZONE:-America/New_York}"
 LOCAL_FUNCTIONS_BUILD="${LOCAL_FUNCTIONS_BUILD:-false}"
 GCLOUD_BIN="${GCLOUD_BIN:-}"
 REMOVE_SECRETS_KEYS="${REMOVE_SECRETS_KEYS:-}"
@@ -215,6 +222,73 @@ echo "==> Deploying Pub/Sub trigger: refreshFiscaldataDefaults"
   --entry-point=refreshFiscaldataDefaults \
   --trigger-topic="${FISCALDATA_REFRESH_TOPIC}" \
   ${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"}
+
+echo "==> Deploying newsletter HTTP function: send_newsletter_daily_http"
+"${GCLOUD_BIN}" functions deploy send_newsletter_daily_http \
+  --quiet \
+  --project="${PROJECT_ID}" \
+  --gen2 \
+  --runtime="${PYTHON_FUNCTIONS_RUNTIME}" \
+  --region="${REGION}" \
+  --source="${NEWSLETTER_FUNCTIONS_SRC}" \
+  --entry-point=send_newsletter_daily_http \
+  --trigger-http \
+  --allow-unauthenticated \
+  --set-env-vars="PUBLIC_SITE_ORIGIN=${PUBLIC_ORIGIN}" \
+  ${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"}
+
+echo "==> Deploying newsletter HTTP function: email_unsubscribe_http"
+"${GCLOUD_BIN}" functions deploy email_unsubscribe_http \
+  --quiet \
+  --project="${PROJECT_ID}" \
+  --gen2 \
+  --runtime="${PYTHON_FUNCTIONS_RUNTIME}" \
+  --region="${REGION}" \
+  --source="${NEWSLETTER_FUNCTIONS_SRC}" \
+  --entry-point=email_unsubscribe_http \
+  --trigger-http \
+  --allow-unauthenticated \
+  --set-env-vars="PUBLIC_SITE_ORIGIN=${PUBLIC_ORIGIN}" \
+  ${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"}
+
+echo "==> Ensuring Pub/Sub topic exists: ${NEWSLETTER_TOPIC}"
+"${GCLOUD_BIN}" pubsub topics create "${NEWSLETTER_TOPIC}" --project="${PROJECT_ID}" >/dev/null 2>&1 || true
+
+echo "==> Deploying newsletter weekly scheduler function: send_newsletter_weekly_scheduler"
+"${GCLOUD_BIN}" functions deploy send_newsletter_weekly_scheduler \
+  --quiet \
+  --project="${PROJECT_ID}" \
+  --gen2 \
+  --runtime="${PYTHON_FUNCTIONS_RUNTIME}" \
+  --region="${REGION}" \
+  --source="${NEWSLETTER_FUNCTIONS_SRC}" \
+  --entry-point=send_newsletter_weekly_scheduler \
+  --trigger-topic="${NEWSLETTER_TOPIC}" \
+  --set-env-vars="PUBLIC_SITE_ORIGIN=${PUBLIC_ORIGIN}" \
+  ${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"}
+
+echo "==> Ensuring Cloud Scheduler weekly newsletter job"
+if "${GCLOUD_BIN}" scheduler jobs describe "${NEWSLETTER_SCHEDULER_JOB}" --location="${SCHEDULER_LOCATION}" --project="${PROJECT_ID}" >/dev/null 2>&1; then
+  if ! "${GCLOUD_BIN}" scheduler jobs update pubsub "${NEWSLETTER_SCHEDULER_JOB}" \
+    --project="${PROJECT_ID}" \
+    --location="${SCHEDULER_LOCATION}" \
+    --schedule="${NEWSLETTER_WEEKLY_CRON}" \
+    --time-zone="${NEWSLETTER_TIMEZONE}" \
+    --topic="${NEWSLETTER_TOPIC}" \
+    --message-body='{"trigger":"weekly_newsletter"}'; then
+    echo "WARNING: Unable to update scheduler job ${NEWSLETTER_SCHEDULER_JOB}. Check Cloud Scheduler permissions/config."
+  fi
+else
+  if ! "${GCLOUD_BIN}" scheduler jobs create pubsub "${NEWSLETTER_SCHEDULER_JOB}" \
+    --project="${PROJECT_ID}" \
+    --location="${SCHEDULER_LOCATION}" \
+    --schedule="${NEWSLETTER_WEEKLY_CRON}" \
+    --time-zone="${NEWSLETTER_TIMEZONE}" \
+    --topic="${NEWSLETTER_TOPIC}" \
+    --message-body='{"trigger":"weekly_newsletter"}'; then
+    echo "WARNING: Unable to create scheduler job ${NEWSLETTER_SCHEDULER_JOB}. Check Cloud Scheduler permissions/config."
+  fi
+fi
 
 echo "==> Deploying ssr (Gen2)"
 "${GCLOUD_BIN}" functions deploy ssr \
