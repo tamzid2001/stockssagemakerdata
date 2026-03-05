@@ -1508,11 +1508,14 @@
     intelOutput: document.getElementById("intel-output"),
     newsOutput: document.getElementById("news-output"),
     xTrendingOutput: document.getElementById("x-trending-output"),
-    eventsCalendarForm: document.getElementById("events-calendar-form"),
-    eventsCalendarSymbol: document.getElementById("events-calendar-symbol"),
-    eventsCalendarWindow: document.getElementById("events-calendar-window"),
-    eventsCalendarStart: document.getElementById("events-calendar-start"),
-    eventsCalendarEnd: document.getElementById("events-calendar-end"),
+    eventsCalendarPreset: document.getElementById("events-calendar-preset"),
+    eventsCalendarPrev: document.getElementById("events-calendar-prev"),
+    eventsCalendarNext: document.getElementById("events-calendar-next"),
+    eventsCalendarRangeLabel: document.getElementById("events-calendar-range-label"),
+    eventsCalendarSearch: document.getElementById("events-calendar-search"),
+    eventsCalendarSearchClear: document.getElementById("events-calendar-search-clear"),
+    eventsCalendarDayStrip: document.getElementById("events-calendar-day-strip"),
+    eventsCalendarSelectedDayTitle: document.getElementById("events-calendar-selected-day-title"),
     eventsCalendarStatus: document.getElementById("events-calendar-status"),
     eventsCalendarOutput: document.getElementById("events-calendar-output"),
     terminalFxForm: document.getElementById("terminal-fx-form"),
@@ -1764,6 +1767,21 @@
     fiscaldataRegistry: [],
     fiscaldataRegistryLoadedAt: 0,
     fiscaldataMacroPages: {},
+    earningsCalendar: {
+      preset: "this-week",
+      rangeStart: "",
+      rangeEnd: "",
+      selectedDate: "",
+      search: "",
+      rows: [],
+      rowsByDate: {},
+      rangeDates: [],
+      requestCache: new Map(),
+      inFlightController: null,
+      pageByDate: {},
+      follows: new Set(),
+      followsUid: "",
+    },
     aiUsageToday: 0,
     aiUsageDateKey: "",
     aiUsageTierKey: "free",
@@ -8594,7 +8612,6 @@
     "news-ticker",
     "intel-ticker",
     "options-ticker",
-    "events-calendar-symbol",
     "ticker-query-ticker",
     "watchlist-ticker",
     "alert-ticker",
@@ -8719,7 +8736,6 @@
   const bindTickerInputSync = () => {
     const seen = new Set();
     TICKER_SYNC_INPUT_IDS.forEach((id) => {
-      if (id === "events-calendar-symbol") return;
       const el = document.getElementById(id);
       if (!el || seen.has(el)) return;
       seen.add(el);
@@ -10201,89 +10217,439 @@
       .filter(Boolean)
       .slice(0, 30);
 
-  const renderEarningsCalendar = (payload) => {
-    if (!ui.eventsCalendarOutput) return;
-    const items = Array.isArray(payload?.items) ? payload.items : [];
-    const symbol = normalizeTicker(payload?.symbol || "");
-    const lastUpdated = String(payload?.lastUpdated || "").trim();
-    const lastFetched = Number(payload?.lastFetchedAtMs || 0);
-    const windowKey = String(ui.eventsCalendarWindow?.value || "month").trim().toLowerCase();
+  const EARNINGS_TIMEZONE = "America/New_York";
+  const EARNINGS_DAY_MS = 24 * 60 * 60 * 1000;
+  const EARNINGS_PAGE_SIZE = 60;
 
-    const now = Date.now();
-    const windowMs = windowKey === "week" ? 7 * 24 * 60 * 60 * 1000 : 31 * 24 * 60 * 60 * 1000;
-    const cutoff = now - 24 * 60 * 60 * 1000;
-    const upper = now + windowMs;
-    const filtered = items.filter((row) => {
-      const t = Date.parse(String(row?.date || ""));
-      return Number.isFinite(t) ? t >= cutoff && t <= upper : false;
+  const toYmdUtc = (date) => {
+    if (!(date instanceof Date) || !Number.isFinite(date.getTime())) return "";
+    const y = date.getUTCFullYear();
+    const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(date.getUTCDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  };
+
+  const parseYmdUtc = (value) => {
+    const text = String(value || "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return null;
+    const parsed = new Date(`${text}T00:00:00Z`);
+    return Number.isFinite(parsed.getTime()) ? parsed : null;
+  };
+
+  const shiftEarningsYmd = (value, days) => {
+    const base = parseYmdUtc(value);
+    if (!base) return "";
+    return toYmdUtc(new Date(base.getTime() + Number(days || 0) * EARNINGS_DAY_MS));
+  };
+
+  const getTimeZoneYmd = (date, timeZone) => {
+    try {
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).formatToParts(date);
+      const year = parts.find((item) => item.type === "year")?.value || "";
+      const month = parts.find((item) => item.type === "month")?.value || "";
+      const day = parts.find((item) => item.type === "day")?.value || "";
+      if (year && month && day) return `${year}-${month}-${day}`;
+    } catch (error) {
+      // Ignore.
+    }
+    return toYmdUtc(date);
+  };
+
+  const getNyTodayYmd = () => getTimeZoneYmd(new Date(), EARNINGS_TIMEZONE);
+
+  const getWeekStartYmd = (value) => {
+    const date = parseYmdUtc(value);
+    if (!date) return "";
+    const day = date.getUTCDay();
+    return toYmdUtc(new Date(date.getTime() - day * EARNINGS_DAY_MS));
+  };
+
+  const buildDateSpan = (from, to) => {
+    const start = parseYmdUtc(from);
+    const end = parseYmdUtc(to);
+    if (!start || !end || start.getTime() > end.getTime()) return [];
+    const out = [];
+    for (let cursor = start.getTime(); cursor <= end.getTime(); cursor += EARNINGS_DAY_MS) {
+      out.push(toYmdUtc(new Date(cursor)));
+    }
+    return out;
+  };
+
+  const formatRangeLabel = (from, to) => {
+    const start = parseYmdUtc(from);
+    const end = parseYmdUtc(to);
+    if (!start || !end) return "—";
+    const fmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: "UTC",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
     });
+    return `${fmt.format(start)} – ${fmt.format(end)}`;
+  };
 
-    if (!filtered.length) {
-      ui.eventsCalendarOutput.innerHTML = `<div class="small muted">No earnings events found for the selected window.</div>`;
+  const formatDayLabel = (value) => {
+    const date = parseYmdUtc(value);
+    if (!date) return { weekday: "—", day: "—" };
+    return {
+      weekday: new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "short" }).format(date),
+      day: new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "short", day: "numeric" }).format(date),
+    };
+  };
+
+  const parseNullableNumber = (value) => {
+    if (value === null || value === undefined) return null;
+    const text = String(value).trim();
+    if (!text || text.toLowerCase() === "null" || text === "—") return null;
+    const num = Number(text.replace(/,/g, ""));
+    return Number.isFinite(num) ? num : null;
+  };
+
+  const normalizeCallTime = (value) => {
+    const text = sanitizeText(value, 60).toUpperCase();
+    if (!text) return "—";
+    if (text.includes("BMO") || text.includes("BEFORE")) return "BMO";
+    if (text.includes("AMC") || text.includes("AFTER")) return "AMC";
+    if (text.includes("TAS") || text.includes("TIME NOT SUPPLIED")) return "TAS";
+    return text;
+  };
+
+  const computeSurprisePct = (epsActual, epsEstimate) => {
+    if (!Number.isFinite(epsActual) || !Number.isFinite(epsEstimate) || Math.abs(epsEstimate) < 1e-9) return null;
+    return ((epsActual - epsEstimate) / Math.abs(epsEstimate)) * 100;
+  };
+
+  const normalizeEarningsRow = (raw) => {
+    const row = raw && typeof raw === "object" ? raw : {};
+    const symbol = normalizeTicker(row.symbol || row.ticker);
+    const dateRaw = sanitizeText(row.date || row.reportDate, 20);
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : "";
+    if (!symbol || !date) return null;
+    const company = sanitizeText(row.name || row.company || row.companyName, 180) || symbol;
+    const epsEstimate = parseNullableNumber(row.epsEstimated ?? row.epsEstimate ?? row.estimate);
+    const epsActual = parseNullableNumber(row.epsActual ?? row.eps);
+    const providedSurprise = parseNullableNumber(row.epsSurprisePercentage ?? row.surprisePercent ?? row.surprise);
+    const surprisePct = Number.isFinite(providedSurprise) ? providedSurprise : computeSurprisePct(epsActual, epsEstimate);
+    return {
+      date,
+      symbol,
+      company,
+      eventName: sanitizeText(row.eventName || row.event || "Earnings", 120) || "Earnings",
+      callTime: normalizeCallTime(row.callTime || row.time || row.hour || row.when),
+      epsEstimate,
+      epsActual,
+      surprisePct: Number.isFinite(surprisePct) ? surprisePct : null,
+      market: sanitizeText(row.market || row.exchange, 80) || null,
+    };
+  };
+
+  const buildRowsByDate = (rows) => {
+    const out = {};
+    (Array.isArray(rows) ? rows : []).forEach((raw) => {
+      const row = normalizeEarningsRow(raw);
+      if (!row) return;
+      if (!out[row.date]) out[row.date] = [];
+      out[row.date].push(row);
+    });
+    Object.keys(out).forEach((date) => {
+      out[date].sort((a, b) => a.symbol.localeCompare(b.symbol));
+    });
+    return out;
+  };
+
+  const getEarningsFollowStorageKey = () => {
+    const uid = String(state.user?.uid || "anon").trim() || "anon";
+    return `quantura:earnings:follows:${uid}`;
+  };
+
+  const readLocalEarningsFollows = () => {
+    try {
+      const raw = String(safeLocalStorageGet(getEarningsFollowStorageKey()) || "").trim();
+      if (!raw) return new Set();
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return new Set();
+      return new Set(parsed.map((item) => normalizeTicker(item)).filter(Boolean));
+    } catch (error) {
+      return new Set();
+    }
+  };
+
+  const writeLocalEarningsFollows = (set) => {
+    const out = Array.from(set || []).map((item) => normalizeTicker(item)).filter(Boolean);
+    safeLocalStorageSet(getEarningsFollowStorageKey(), JSON.stringify(Array.from(new Set(out))));
+  };
+
+  const loadEarningsFollowSet = async ({ force = false } = {}) => {
+    const db = state.clients?.db;
+    const uid = String(state.user?.uid || "").trim();
+    if (!db || !uid) {
+      state.earningsCalendar.follows = readLocalEarningsFollows();
+      state.earningsCalendar.followsUid = uid || "anon";
+      return state.earningsCalendar.follows;
+    }
+    if (!force && state.earningsCalendar.followsUid === uid && state.earningsCalendar.follows instanceof Set) {
+      return state.earningsCalendar.follows;
+    }
+    try {
+      const snap = await db.collection("users").doc(uid).collection("earnings_follows").limit(1200).get();
+      const follows = new Set(
+        snap.docs
+          .map((doc) => normalizeTicker(doc.id || doc.data()?.symbol))
+          .filter(Boolean)
+      );
+      state.earningsCalendar.follows = follows;
+      state.earningsCalendar.followsUid = uid;
+      writeLocalEarningsFollows(follows);
+      return follows;
+    } catch (error) {
+      const fallback = readLocalEarningsFollows();
+      state.earningsCalendar.follows = fallback;
+      state.earningsCalendar.followsUid = uid || "anon";
+      return fallback;
+    }
+  };
+
+  const resolveEarningsRangeFromPreset = (preset) => {
+    const currentPreset = String(preset || "this-week").trim().toLowerCase();
+    const nyToday = getNyTodayYmd();
+    const thisWeekStart = getWeekStartYmd(nyToday);
+    if (currentPreset === "next-week") {
+      const start = shiftEarningsYmd(thisWeekStart, 7);
+      return { start, end: shiftEarningsYmd(start, 6), stepDays: 7 };
+    }
+    if (currentPreset === "last-week") {
+      const start = shiftEarningsYmd(thisWeekStart, -7);
+      return { start, end: shiftEarningsYmd(start, 6), stepDays: 7 };
+    }
+    if (currentPreset === "next-30-days") {
+      return { start: nyToday, end: shiftEarningsYmd(nyToday, 29), stepDays: 30 };
+    }
+    return { start: thisWeekStart, end: shiftEarningsYmd(thisWeekStart, 6), stepDays: 7 };
+  };
+
+  const ensureEarningsRangeState = () => {
+    if (state.earningsCalendar.rangeStart && state.earningsCalendar.rangeEnd) {
+      return {
+        start: state.earningsCalendar.rangeStart,
+        end: state.earningsCalendar.rangeEnd,
+        stepDays: state.earningsCalendar.preset === "next-30-days" ? 30 : 7,
+      };
+    }
+    const initial = resolveEarningsRangeFromPreset(state.earningsCalendar.preset);
+    state.earningsCalendar.rangeStart = initial.start;
+    state.earningsCalendar.rangeEnd = initial.end;
+    return initial;
+  };
+
+  const getFilteredRowsByDate = () => {
+    const query = String(state.earningsCalendar.search || "").trim().toLowerCase();
+    const rowsByDate = state.earningsCalendar.rowsByDate || {};
+    const out = {};
+    (state.earningsCalendar.rangeDates || []).forEach((date) => {
+      const rows = Array.isArray(rowsByDate[date]) ? rowsByDate[date] : [];
+      if (!query) {
+        out[date] = rows;
+        return;
+      }
+      out[date] = rows.filter((row) => {
+        const symbol = String(row?.symbol || "").toLowerCase();
+        const company = String(row?.company || "").toLowerCase();
+        return symbol.includes(query) || company.includes(query);
+      });
+    });
+    return out;
+  };
+
+  const renderEarningsDayStrip = (filteredByDate) => {
+    if (!ui.eventsCalendarDayStrip) return;
+    const dates = Array.isArray(state.earningsCalendar.rangeDates) ? state.earningsCalendar.rangeDates : [];
+    if (!dates.length) {
+      ui.eventsCalendarDayStrip.innerHTML = `<div class="small muted">No days in selected range.</div>`;
+      return;
+    }
+    ui.eventsCalendarDayStrip.innerHTML = dates
+      .map((date) => {
+        const labels = formatDayLabel(date);
+        const count = Array.isArray(filteredByDate?.[date]) ? filteredByDate[date].length : 0;
+        const isActive = String(state.earningsCalendar.selectedDate || "") === date;
+        return `
+          <button class="earnings-day-tile${isActive ? " is-active" : ""}" type="button" role="tab" aria-selected="${
+            isActive ? "true" : "false"
+          }" data-earnings-date="${escapeHtml(date)}">
+            <span class="earnings-day-weekday">${escapeHtml(labels.weekday)}</span>
+            <span class="earnings-day-date">${escapeHtml(labels.day)}</span>
+            <span class="earnings-day-badge">${count} Earnings</span>
+          </button>
+        `;
+      })
+      .join("");
+  };
+
+  const renderEarningsTable = (filteredByDate) => {
+    if (!ui.eventsCalendarOutput) return;
+    const selectedDate = String(state.earningsCalendar.selectedDate || "");
+    const selectedRowsRaw = Array.isArray(filteredByDate?.[selectedDate]) ? filteredByDate[selectedDate] : [];
+    const selectedRows = selectedRowsRaw.slice(0, 500);
+    const page = Math.max(1, Number(state.earningsCalendar.pageByDate?.[selectedDate] || 1));
+    const visibleCount = Math.min(selectedRows.length, page * EARNINGS_PAGE_SIZE);
+    const visibleRows = selectedRows.slice(0, visibleCount);
+
+    if (ui.eventsCalendarSelectedDayTitle) {
+      const label = formatDayLabel(selectedDate);
+      ui.eventsCalendarSelectedDayTitle.textContent = selectedDate
+        ? `Earnings on ${label.day} (${selectedRows.length})`
+        : "Earnings on —";
+    }
+
+    if (!selectedRows.length) {
+      ui.eventsCalendarOutput.innerHTML = `<div class="small muted">No earnings found for the selected day.</div>`;
       return;
     }
 
-    const cardHtml = filtered
+    const follows = state.earningsCalendar.follows instanceof Set ? state.earningsCalendar.follows : new Set();
+    const rowsHtml = visibleRows
       .map((row) => {
-        const date = escapeHtml(String(row?.date || "—"));
-        const epsActual = Number(row?.epsActual);
-        const epsEstimated = Number(row?.epsEstimated);
-        const revenueActual = Number(row?.revenueActual);
-        const revenueEstimated = Number(row?.revenueEstimated);
-        const epsDelta = Number.isFinite(epsActual) && Number.isFinite(epsEstimated) ? epsActual - epsEstimated : NaN;
-        const revenueDelta =
-          Number.isFinite(revenueActual) && Number.isFinite(revenueEstimated) ? revenueActual - revenueEstimated : NaN;
-        const epsDeltaLabel = Number.isFinite(epsDelta) ? `${epsDelta >= 0 ? "+" : ""}${epsDelta.toFixed(2)}` : "—";
-        const revenueDeltaLabel = Number.isFinite(revenueDelta)
-          ? `${revenueDelta >= 0 ? "+" : ""}${formatCompactNumber(revenueDelta)}`
-          : "—";
+        const followed = follows.has(row.symbol);
+        const epsEstimate = Number.isFinite(row.epsEstimate) ? row.epsEstimate.toFixed(2) : "—";
+        const epsActual = Number.isFinite(row.epsActual) ? row.epsActual.toFixed(2) : "—";
+        const surprise = Number.isFinite(row.surprisePct) ? `${row.surprisePct > 0 ? "+" : ""}${row.surprisePct.toFixed(1)}%` : "—";
+        const surpriseClass = Number.isFinite(row.surprisePct)
+          ? row.surprisePct > 0
+            ? "is-positive"
+            : row.surprisePct < 0
+            ? "is-negative"
+            : ""
+          : "";
         return `
-          <article class="news-card">
-            <div class="news-title">${escapeHtml(symbol || String(row?.symbol || "Ticker"))} · ${date}</div>
-            <div class="small">EPS: ${Number.isFinite(epsActual) ? epsActual.toFixed(2) : "—"} vs ${Number.isFinite(epsEstimated) ? epsEstimated.toFixed(2) : "—"} <span class="muted">(delta ${escapeHtml(epsDeltaLabel)})</span></div>
-            <div class="small">Revenue: ${Number.isFinite(revenueActual) ? formatCompactNumber(revenueActual) : "—"} vs ${Number.isFinite(revenueEstimated) ? formatCompactNumber(revenueEstimated) : "—"} <span class="muted">(delta ${escapeHtml(revenueDeltaLabel)})</span></div>
-          </article>
+          <tr>
+            <td data-label="Follow">
+              <button
+                class="earnings-follow-star${followed ? " is-active" : ""}"
+                type="button"
+                data-earnings-follow="${escapeHtml(row.symbol)}"
+                aria-label="${followed ? "Unfollow" : "Follow"} ${escapeHtml(row.symbol)}"
+                title="${followed ? "Unfollow" : "Follow"} ${escapeHtml(row.symbol)}"
+              >
+                ${followed ? "★" : "☆"}
+              </button>
+            </td>
+            <td data-label="Symbol"><strong>${escapeHtml(row.symbol)}</strong></td>
+            <td data-label="Company">${escapeHtml(row.company || "—")}</td>
+            <td data-label="Event">${escapeHtml(row.eventName || "Earnings")}</td>
+            <td data-label="Call Time">${escapeHtml(row.callTime || "—")}</td>
+            <td data-label="EPS Estimate">${escapeHtml(epsEstimate)}</td>
+            <td data-label="Reported EPS">${escapeHtml(epsActual)}</td>
+            <td data-label="Surprise %" class="earnings-surprise ${surpriseClass}">${escapeHtml(surprise)}</td>
+            <td data-label="Market">${escapeHtml(row.market || "—")}</td>
+          </tr>
         `;
       })
       .join("");
 
+    const hasMore = visibleCount < selectedRows.length;
     ui.eventsCalendarOutput.innerHTML = `
-      <div class="small muted" style="margin-bottom:10px;">
-        ${escapeHtml(symbol || "Ticker")} · ${filtered.length} event${filtered.length === 1 ? "" : "s"} ·
-        ${lastFetched ? `Last fetched ${escapeHtml(new Date(lastFetched).toLocaleString())}` : "Last fetched —"}
-        ${lastUpdated ? ` · Last updated ${escapeHtml(lastUpdated)}` : ""}
+      <div class="earnings-table-wrap">
+        <table class="data-table earnings-data-table">
+          <thead>
+            <tr>
+              <th>Follow</th>
+              <th>Symbol</th>
+              <th>Company</th>
+              <th>Event Name</th>
+              <th>Earnings Call Time</th>
+              <th>EPS Estimate</th>
+              <th>Reported EPS</th>
+              <th>Surprise %</th>
+              <th>Market/Exchange</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
       </div>
-      <div class="news-stream">${cardHtml}</div>
+      ${
+        hasMore
+          ? `<div class="earnings-table-footer"><button class="cta secondary small" type="button" data-earnings-load-more="${escapeHtml(
+              selectedDate
+            )}">Load more</button><span class="small muted">${visibleCount} / ${selectedRows.length}</span></div>`
+          : `<div class="small muted earnings-table-footer">${selectedRows.length} row${selectedRows.length === 1 ? "" : "s"}</div>`
+      }
     `;
+  };
+
+  const renderEarningsCalendar = () => {
+    if (!ui.eventsCalendarOutput) return;
+    const rangeStart = state.earningsCalendar.rangeStart;
+    const rangeEnd = state.earningsCalendar.rangeEnd;
+    const rangeDates = buildDateSpan(rangeStart, rangeEnd);
+    state.earningsCalendar.rangeDates = rangeDates;
+    if (ui.eventsCalendarRangeLabel) ui.eventsCalendarRangeLabel.textContent = formatRangeLabel(rangeStart, rangeEnd);
+
+    const filteredByDate = getFilteredRowsByDate();
+    const selectedDateExists = rangeDates.includes(String(state.earningsCalendar.selectedDate || ""));
+    if (!selectedDateExists) {
+      const firstWithRows = rangeDates.find((date) => (filteredByDate[date] || []).length > 0);
+      state.earningsCalendar.selectedDate = firstWithRows || rangeDates[0] || "";
+    }
+    if (!state.earningsCalendar.pageByDate) state.earningsCalendar.pageByDate = {};
+    if (!state.earningsCalendar.pageByDate[state.earningsCalendar.selectedDate]) {
+      state.earningsCalendar.pageByDate[state.earningsCalendar.selectedDate] = 1;
+    }
+
+    renderEarningsDayStrip(filteredByDate);
+    renderEarningsTable(filteredByDate);
   };
 
   const loadEarningsCalendar = async ({ force = false, notify = false } = {}) => {
     if (!ui.eventsCalendarOutput) return;
-    const tickerSeed = normalizeTicker(state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "");
-    const symbol = normalizeTicker(ui.eventsCalendarSymbol?.value || tickerSeed || "");
-    if (!symbol) {
-      if (notify) showToast("Enter a ticker for earnings calendar.", "warn");
+    const range = ensureEarningsRangeState();
+    const start = range.start;
+    const end = range.end;
+    const cacheKey = `${start}_${end}`;
+
+    await loadEarningsFollowSet({ force: false });
+
+    const cached = state.earningsCalendar.requestCache.get(cacheKey);
+    if (!force && cached && Array.isArray(cached.rows)) {
+      state.earningsCalendar.rows = cached.rows;
+      state.earningsCalendar.rowsByDate = buildRowsByDate(cached.rows);
+      state.earningsCalendar.rangeStart = start;
+      state.earningsCalendar.rangeEnd = end;
+      if (ui.eventsCalendarStatus) {
+        ui.eventsCalendarStatus.textContent = `Showing ${cached.rows.length} earnings rows (cached).`;
+      }
+      renderEarningsCalendar();
       return;
     }
 
-    const startDate = String(ui.eventsCalendarStart?.value || "").trim();
-    const endDate = String(ui.eventsCalendarEnd?.value || "").trim();
-    const requestKey = JSON.stringify({ symbol, startDate, endDate, window: String(ui.eventsCalendarWindow?.value || "month") });
-    if (!force && ui.eventsCalendarOutput.dataset.requestKey === requestKey) return;
-    ui.eventsCalendarOutput.dataset.requestKey = requestKey;
+    if (state.earningsCalendar.inFlightController) {
+      try {
+        state.earningsCalendar.inFlightController.abort();
+      } catch (error) {
+        // Ignore.
+      }
+    }
+    const controller = new AbortController();
+    state.earningsCalendar.inFlightController = controller;
 
     try {
-      if (ui.eventsCalendarStatus) ui.eventsCalendarStatus.textContent = "Refreshing earnings cache...";
+      if (ui.eventsCalendarStatus) ui.eventsCalendarStatus.textContent = "Loading earnings range...";
       setOutputLoading(ui.eventsCalendarOutput, "Loading earnings calendar...");
       const headers = await buildApiAuthHeaders({ includeJson: true });
       const refreshResp = await fetch("/api/earnings/refresh", {
         method: "POST",
         headers,
         credentials: "same-origin",
+        signal: controller.signal,
         body: JSON.stringify({
-          symbol,
-          start: startDate,
-          end: endDate,
+          start,
+          end,
         }),
       });
       const refreshPayload = await refreshResp.json().catch(() => ({}));
@@ -10291,47 +10657,97 @@
         throw new Error(String(refreshPayload?.error || "Unable to refresh earnings cache.").trim());
       }
 
-      let payloadFromFirestore = null;
-      try {
-        const db = state.clients?.db;
-        if (db) {
-          const snap = await db.collection("earningsCalendar").doc(symbol).get();
-          if (snap.exists) {
-            const data = snap.data() || {};
-            payloadFromFirestore = {
-              symbol,
-              lastUpdated: String(data?.lastUpdated || refreshPayload?.lastUpdated || ""),
-              items: Array.isArray(data?.items) ? data.items : [],
-              lastFetchedAtMs: Number(data?.lastFetchedAt?.toMillis?.() || 0),
-            };
-          }
-        }
-      } catch (error) {
-        payloadFromFirestore = null;
-      }
+      const normalizedRows = (Array.isArray(refreshPayload?.items) ? refreshPayload.items : [])
+        .map((row) => normalizeEarningsRow(row))
+        .filter(Boolean);
+      state.earningsCalendar.requestCache.set(cacheKey, {
+        rows: normalizedRows,
+        fetchedAtMs: Number(refreshPayload?.lastFetchedAtMs || Date.now()) || Date.now(),
+        lastUpdated: String(refreshPayload?.lastUpdated || "").trim(),
+      });
 
-      const renderPayload =
-        payloadFromFirestore ||
-        {
-          symbol,
-          lastUpdated: String(refreshPayload?.lastUpdated || ""),
-          items: Array.isArray(refreshPayload?.items) ? refreshPayload.items : [],
-          lastFetchedAtMs: Number(refreshPayload?.lastFetchedAtMs || Date.now()) || Date.now(),
-        };
+      state.earningsCalendar.rows = normalizedRows;
+      state.earningsCalendar.rowsByDate = buildRowsByDate(normalizedRows);
+      state.earningsCalendar.rangeStart = start;
+      state.earningsCalendar.rangeEnd = end;
+      state.earningsCalendar.pageByDate = {};
       setOutputReady(ui.eventsCalendarOutput);
-      renderEarningsCalendar(renderPayload);
+      renderEarningsCalendar();
       if (ui.eventsCalendarStatus) {
-        ui.eventsCalendarStatus.textContent = `Earnings calendar updated for ${symbol}.`;
+        ui.eventsCalendarStatus.textContent = `Loaded ${normalizedRows.length} earnings row${normalizedRows.length === 1 ? "" : "s"}.`;
       }
       logEvent("earnings_calendar_loaded", {
-        ticker: symbol,
-        rows: Array.isArray(renderPayload.items) ? renderPayload.items.length : 0,
+        rangeStart: start,
+        rangeEnd: end,
+        rows: normalizedRows.length,
       });
     } catch (error) {
+      const aborted = String(error?.name || "").toLowerCase() === "aborterror";
+      if (aborted) return;
       setOutputReady(ui.eventsCalendarOutput);
       ui.eventsCalendarOutput.innerHTML = `<div class="small muted">Unable to load earnings calendar right now.</div>`;
       if (ui.eventsCalendarStatus) ui.eventsCalendarStatus.textContent = "Unable to load earnings calendar.";
       if (notify) showToast(error.message || "Unable to load earnings calendar.", "warn");
+    } finally {
+      if (state.earningsCalendar.inFlightController === controller) {
+        state.earningsCalendar.inFlightController = null;
+      }
+    }
+  };
+
+  const shiftEarningsCalendarRange = (direction = 1) => {
+    const current = ensureEarningsRangeState();
+    const stepDays = current.stepDays || 7;
+    const delta = Math.max(1, stepDays) * (direction >= 0 ? 1 : -1);
+    state.earningsCalendar.rangeStart = shiftEarningsYmd(current.start, delta);
+    state.earningsCalendar.rangeEnd = shiftEarningsYmd(current.end, delta);
+    state.earningsCalendar.selectedDate = "";
+    state.earningsCalendar.pageByDate = {};
+  };
+
+  const setEarningsCalendarPreset = (presetValue) => {
+    const preset = String(presetValue || "this-week").trim().toLowerCase();
+    const allowed = new Set(["this-week", "next-week", "last-week", "next-30-days"]);
+    state.earningsCalendar.preset = allowed.has(preset) ? preset : "this-week";
+    const range = resolveEarningsRangeFromPreset(state.earningsCalendar.preset);
+    state.earningsCalendar.rangeStart = range.start;
+    state.earningsCalendar.rangeEnd = range.end;
+    state.earningsCalendar.selectedDate = "";
+    state.earningsCalendar.pageByDate = {};
+  };
+
+  const toggleEarningsFollow = async (symbol) => {
+    const clean = normalizeTicker(symbol);
+    if (!clean) return;
+    if (!(state.earningsCalendar.follows instanceof Set)) {
+      state.earningsCalendar.follows = new Set();
+    }
+    const next = new Set(state.earningsCalendar.follows);
+    const willFollow = !next.has(clean);
+    if (willFollow) next.add(clean);
+    else next.delete(clean);
+    state.earningsCalendar.follows = next;
+    writeLocalEarningsFollows(next);
+    renderEarningsCalendar();
+
+    const db = state.clients?.db;
+    const uid = String(state.user?.uid || "").trim();
+    if (!db || !uid) return;
+    const ref = db.collection("users").doc(uid).collection("earnings_follows").doc(clean);
+    try {
+      if (willFollow) {
+        await ref.set(
+          {
+            symbol: clean,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+      } else {
+        await ref.delete();
+      }
+    } catch (error) {
+      // Keep local optimistic state even if network write fails.
     }
   };
 
@@ -19673,25 +20089,58 @@
 		      await loadTrendingTickers(functions, { notify: true, force: true });
 		    });
 
-    if (ui.eventsCalendarStart && ui.eventsCalendarEnd) {
-      const today = new Date();
-      const end = new Date(today);
-      end.setDate(end.getDate() + 90);
-      if (!ui.eventsCalendarStart.value) ui.eventsCalendarStart.value = today.toISOString().slice(0, 10);
-      if (!ui.eventsCalendarEnd.value) ui.eventsCalendarEnd.value = end.toISOString().slice(0, 10);
+    if (ui.eventsCalendarPreset && !String(ui.eventsCalendarPreset.value || "").trim()) {
+      ui.eventsCalendarPreset.value = "this-week";
     }
-    if (ui.eventsCalendarSymbol && !String(ui.eventsCalendarSymbol.value || "").trim()) {
-      ui.eventsCalendarSymbol.value = normalizeTicker(state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "");
-    }
-    if (ui.eventsCalendarWindow && !String(ui.eventsCalendarWindow.value || "").trim()) {
-      ui.eventsCalendarWindow.value = "month";
-    }
-    ui.eventsCalendarForm?.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      await loadEarningsCalendar({ force: true, notify: true });
-    });
-    ui.eventsCalendarWindow?.addEventListener("change", async () => {
+    setEarningsCalendarPreset(ui.eventsCalendarPreset?.value || "this-week");
+    ui.eventsCalendarPreset?.addEventListener("change", async () => {
+      setEarningsCalendarPreset(ui.eventsCalendarPreset?.value || "this-week");
       await loadEarningsCalendar({ force: false, notify: false });
+    });
+    ui.eventsCalendarPrev?.addEventListener("click", async () => {
+      shiftEarningsCalendarRange(-1);
+      await loadEarningsCalendar({ force: false, notify: false });
+    });
+    ui.eventsCalendarNext?.addEventListener("click", async () => {
+      shiftEarningsCalendarRange(1);
+      await loadEarningsCalendar({ force: false, notify: false });
+    });
+    ui.eventsCalendarSearch?.addEventListener("input", () => {
+      state.earningsCalendar.search = String(ui.eventsCalendarSearch?.value || "").trim();
+      state.earningsCalendar.pageByDate = {};
+      renderEarningsCalendar();
+    });
+    ui.eventsCalendarSearchClear?.addEventListener("click", () => {
+      if (ui.eventsCalendarSearch) ui.eventsCalendarSearch.value = "";
+      state.earningsCalendar.search = "";
+      state.earningsCalendar.pageByDate = {};
+      renderEarningsCalendar();
+    });
+    ui.eventsCalendarDayStrip?.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-earnings-date]");
+      if (!button) return;
+      const date = String(button.getAttribute("data-earnings-date") || "").trim();
+      if (!date) return;
+      state.earningsCalendar.selectedDate = date;
+      state.earningsCalendar.pageByDate[date] = 1;
+      renderEarningsCalendar();
+    });
+    ui.eventsCalendarOutput?.addEventListener("click", async (event) => {
+      const followButton = event.target.closest("[data-earnings-follow]");
+      if (followButton) {
+        const symbol = String(followButton.getAttribute("data-earnings-follow") || "").trim();
+        if (!symbol) return;
+        await toggleEarningsFollow(symbol);
+        return;
+      }
+      const loadMoreButton = event.target.closest("[data-earnings-load-more]");
+      if (loadMoreButton) {
+        const date = String(loadMoreButton.getAttribute("data-earnings-load-more") || "").trim();
+        if (!date) return;
+        const current = Math.max(1, Number(state.earningsCalendar.pageByDate?.[date] || 1));
+        state.earningsCalendar.pageByDate[date] = current + 1;
+        renderEarningsCalendar();
+      }
     });
 
     if (ui.terminalFxBase && !String(ui.terminalFxBase.value || "").trim()) ui.terminalFxBase.value = "USD";
@@ -20673,6 +21122,11 @@
           if (!user) {
             state.authResolved = true;
             state.user = null;
+            state.earningsCalendar.followsUid = "anon";
+            state.earningsCalendar.follows = readLocalEarningsFollows();
+            if (isPanelVisible("events-calendar")) {
+              renderEarningsCalendar();
+            }
             state.tickerContext.tickerHistory = readTickerHistory();
             renderTickerHistory();
             setAuthUi(null);
@@ -20701,6 +21155,10 @@
           }
 			      state.authResolved = true;
 			      state.user = user;
+            await loadEarningsFollowSet({ force: true }).catch(() => {});
+            if (isPanelVisible("events-calendar")) {
+              renderEarningsCalendar();
+            }
             await linkPendingCredentialIfPresent({ silent: true }).catch(() => {});
             state.tickerContext.tickerHistory = readTickerHistory();
             renderTickerHistory();

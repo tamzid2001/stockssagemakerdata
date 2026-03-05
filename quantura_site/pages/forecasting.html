@@ -475,38 +475,55 @@
 
                   <section class="panel hidden" data-panel="events-calendar">
                     <div class="panel-header">
-                      <h2>Earnings calendar</h2>
-                      <p class="small">Weekly-cached FMP earnings pulled by backend and rendered from Firestore.</p>
+                      <h2>Earnings Calendar</h2>
+                      <p class="small">Date-based earnings across all tickers for the selected range.</p>
                     </div>
-                    <form id="events-calendar-form" class="card">
-                      <div class="form-grid">
-                        <div class="field">
-                          <label class="label" for="events-calendar-symbol">Ticker</label>
-                          <input id="events-calendar-symbol" name="symbol" placeholder="AAPL" />
-                          <div class="small muted">Defaults to your active ticker if blank.</div>
+                    <div class="card earnings-calendar-shell">
+                      <div class="earnings-calendar-topbar">
+                        <div class="earnings-calendar-range-controls">
+                          <button
+                            class="cta secondary icon-only small"
+                            id="events-calendar-prev"
+                            type="button"
+                            aria-label="Previous range"
+                            title="Previous range"
+                          >
+                            <i class="iconoir-nav-arrow-left" aria-hidden="true"></i>
+                          </button>
+                          <div class="field earnings-calendar-range-field">
+                            <label class="label" for="events-calendar-preset">Range</label>
+                            <select id="events-calendar-preset" name="preset">
+                              <option value="this-week">This Week</option>
+                              <option value="next-week">Next Week</option>
+                              <option value="last-week">Last Week</option>
+                              <option value="next-30-days">Next 30 Days</option>
+                            </select>
+                          </div>
+                          <button
+                            class="cta secondary icon-only small"
+                            id="events-calendar-next"
+                            type="button"
+                            aria-label="Next range"
+                            title="Next range"
+                          >
+                            <i class="iconoir-nav-arrow-right" aria-hidden="true"></i>
+                          </button>
                         </div>
-                        <div class="field">
-                          <label class="label" for="events-calendar-window">Window</label>
-                          <select id="events-calendar-window" name="window">
-                            <option value="month">Next month</option>
-                            <option value="week">Next week</option>
-                          </select>
-                        </div>
-                        <div class="field">
-                          <label class="label" for="events-calendar-start">Start</label>
-                          <input id="events-calendar-start" name="startDate" type="date" />
-                        </div>
-                        <div class="field">
-                          <label class="label" for="events-calendar-end">End</label>
-                          <input id="events-calendar-end" name="endDate" type="date" />
+                        <div class="small muted earnings-calendar-range-label" id="events-calendar-range-label">—</div>
+                        <div class="field earnings-calendar-search-field">
+                          <label class="label" for="events-calendar-search">Search</label>
+                          <div class="earnings-calendar-search-wrap">
+                            <input id="events-calendar-search" type="search" placeholder="Find earnings for symbols or companies" />
+                            <button class="cta secondary small" id="events-calendar-search-clear" type="button">Clear</button>
+                          </div>
                         </div>
                       </div>
-                      <button class="cta" type="submit" data-analytics="events_calendar_load"><i class="iconoir-calendar" aria-hidden="true"></i><span>Load earnings calendar</span></button>
+                      <div id="events-calendar-day-strip" class="earnings-day-strip" role="tablist" aria-label="Earnings by day"></div>
                       <p class="small muted" id="events-calendar-status"></p>
-                    </form>
+                    </div>
                     <div class="results-panel">
-                      <h3>Upcoming earnings</h3>
-                      <div id="events-calendar-output" class="panel-output small">Load earnings to see EPS and revenue deltas with last-updated metadata.</div>
+                      <h3 id="events-calendar-selected-day-title">Earnings on —</h3>
+                      <div id="events-calendar-output" class="panel-output small">Load earnings to see all reporting tickers by day.</div>
                     </div>
                   </section>
 
