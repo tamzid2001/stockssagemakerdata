@@ -103,6 +103,21 @@ if [[ -z "${PROJECT_ID}" || "${PROJECT_ID}" == "(unset)" ]]; then
 fi
 
 EXTRA_FLAGS=()
+
+if [[ -z "${GCLOUD_SET_SECRETS:-}" ]]; then
+  AUTO_SECRET_BINDINGS=()
+  for secret_name in STRIPE_SECRET_KEY STRIPE_PRIVATE_KEY STRIPE_WEBHOOK_SECRET STRIPE_WEBHOOK_SECRET_CONNECT; do
+    if "${GCLOUD_BIN}" secrets describe "${secret_name}" --project="${PROJECT_ID}" >/dev/null 2>&1; then
+      AUTO_SECRET_BINDINGS+=("${secret_name}=projects/${PROJECT_ID}/secrets/${secret_name}:latest")
+    fi
+  done
+  if [[ ${#AUTO_SECRET_BINDINGS[@]} -gt 0 ]]; then
+    GCLOUD_SET_SECRETS="$(IFS=,; echo "${AUTO_SECRET_BINDINGS[*]}")"
+    export GCLOUD_SET_SECRETS
+    echo "==> Auto-discovered Secret Manager bindings for deploy: ${GCLOUD_SET_SECRETS}"
+  fi
+fi
+
 if [[ -n "${GCLOUD_SET_SECRETS:-}" ]]; then
   EXTRA_FLAGS+=(--set-secrets="${GCLOUD_SET_SECRETS}")
 fi

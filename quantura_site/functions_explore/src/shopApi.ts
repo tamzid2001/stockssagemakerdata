@@ -1,5 +1,6 @@
 import express, { Request, Response } from "express";
 import admin from "firebase-admin";
+import { SecretManagerServiceClient } from "@google-cloud/secret-manager";
 import Stripe from "stripe";
 import {
   SHOP_SHIPPING_POLICY,
@@ -17,12 +18,15 @@ if (!admin.apps.length) {
 const db = admin.firestore();
 
 const PUBLIC_ORIGIN = asString(process.env.PUBLIC_ORIGIN, "https://quantura.studio").replace(/\/$/, "");
-
-// Stripe secrets must be injected with env vars or Secret Manager bindings in gcloud deploy.
-const STRIPE_SECRET_KEY = asString(process.env.STRIPE_SECRET_KEY).trim();
-const STRIPE_WEBHOOK_SECRET = asString(process.env.STRIPE_WEBHOOK_SECRET).trim();
-
-const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
+const GCP_PROJECT_ID = resolveProjectId();
+const SHOP_ALLOWED_ORIGINS = parseOriginList(process.env.SHOP_ALLOWED_ORIGINS);
+const SECRET_MANAGER_CLIENT = GCP_PROJECT_ID ? new SecretManagerServiceClient() : null;
+const STRIPE_SECRET_ENV_KEYS = ["STRIPE_SECRET_KEY", "STRIPE_PRIVATE_KEY"];
+const STRIPE_WEBHOOK_ENV_KEYS = ["STRIPE_WEBHOOK_SECRET", "STRIPE_WEBHOOK_SECRET_CONNECT"];
+const STRIPE_SECRET_NAMES = ["STRIPE_SECRET_KEY", "STRIPE_PRIVATE_KEY"];
+const STRIPE_WEBHOOK_SECRET_NAMES = ["STRIPE_WEBHOOK_SECRET", "STRIPE_WEBHOOK_SECRET_CONNECT"];
+let stripeClientPromise: Promise<Stripe | null> | null = null;
+let stripeWebhookSecretPromise: Promise<string> | null = null;
 
 const CHECKOUT_RATE_WINDOW_MS = 10 * 60 * 1000;
 const CHECKOUT_RATE_MAX = 25;
@@ -38,7 +42,10 @@ const app = express();
 app.disable("x-powered-by");
 
 app.post("/api/shop/webhook/stripe", express.raw({ type: "application/json" }), async (req, res) => {
-  if (!stripe || !STRIPE_WEBHOOK_SECRET) {
+  const stripe = await getStripeClient();
+  const stripeWebhookSecret = await getStripeWebhookSecret();
+
+  if (!stripe || !stripeWebhookSecret) {
     res.status(503).json({ error: "stripe_webhook_not_configured" });
     return;
   }
@@ -52,7 +59,7 @@ app.post("/api/shop/webhook/stripe", express.raw({ type: "application/json" }), 
   let event: Stripe.Event;
   try {
     const bodyBuffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || "", "utf8");
-    event = stripe.webhooks.constructEvent(bodyBuffer, signature, STRIPE_WEBHOOK_SECRET);
+    event = stripe.webhooks.constructEvent(bodyBuffer, signature, stripeWebhookSecret);
   } catch (error: any) {
     console.error("[shopApi] Stripe webhook signature verification failed", error?.message || error);
     res.status(400).json({ error: "invalid_signature" });
@@ -62,7 +69,7 @@ app.post("/api/shop/webhook/stripe", express.raw({ type: "application/json" }), 
   try {
     if (event.type === "checkout.session.completed") {
       const session = event.data.object as Stripe.Checkout.Session;
-      await persistCheckoutCompletedOrder(session);
+      await persistCheckoutCompletedOrder(session, stripe);
     }
     res.status(200).json({ received: true });
   } catch (error: any) {
@@ -116,8 +123,12 @@ app.post("/api/shop/checkout", async (req, res) => {
     return;
   }
 
+  const stripe = await getStripeClient();
   if (!stripe) {
-    res.status(503).json({ error: "stripe_not_configured" });
+    res.status(503).json({
+      error: "stripe_not_configured",
+      message: "Stripe secret key is missing. Configure STRIPE_SECRET_KEY or STRIPE_PRIVATE_KEY in Secret Manager.",
+    });
     return;
   }
 
@@ -244,8 +255,12 @@ app.post("/api/shop/portal", async (req, res) => {
     return;
   }
 
+  const stripe = await getStripeClient();
   if (!stripe) {
-    res.status(503).json({ error: "stripe_not_configured" });
+    res.status(503).json({
+      error: "stripe_not_configured",
+      message: "Stripe secret key is missing. Configure STRIPE_SECRET_KEY or STRIPE_PRIVATE_KEY in Secret Manager.",
+    });
     return;
   }
 
@@ -450,8 +465,7 @@ function normalizeReturnUrl(value: unknown): string {
   try {
     const parsed = new URL(raw);
     const origin = parsed.origin.replace(/\/$/, "");
-    const allowedOrigins = new Set<string>([PUBLIC_ORIGIN, "https://quantura.studio", "https://www.quantura.studio"]);
-    if (!allowedOrigins.has(origin)) return fallback;
+    if (!isAllowedOrigin(origin.toLowerCase(), null)) return fallback;
     return parsed.toString();
   } catch {
     return fallback;
@@ -473,16 +487,9 @@ function applyCheckoutCors(req: Request, res: Response): boolean {
   const origin = asString(req.headers.origin).trim();
   if (!origin) return true;
 
-  const normalizedOrigin = origin.replace(/\/$/, "").toLowerCase();
-  const allowedOrigins = new Set<string>([
-    PUBLIC_ORIGIN.toLowerCase(),
-    "https://quantura.studio",
-    "https://www.quantura.studio",
-    "http://localhost:5000",
-    "http://127.0.0.1:5000",
-  ]);
-
-  if (!allowedOrigins.has(normalizedOrigin)) {
+  const normalizedOrigin = normalizeOrigin(origin);
+  const requestHosts = extractRequestHosts(req);
+  if (!isAllowedOrigin(normalizedOrigin, requestHosts)) {
     return false;
   }
 
@@ -493,9 +500,7 @@ function applyCheckoutCors(req: Request, res: Response): boolean {
   return true;
 }
 
-async function persistCheckoutCompletedOrder(session: Stripe.Checkout.Session): Promise<void> {
-  if (!stripe) return;
-
+async function persistCheckoutCompletedOrder(session: Stripe.Checkout.Session, stripe: Stripe): Promise<void> {
   const sessionId = sanitizeToken(session.id, 220);
   if (!sessionId) return;
   const rawSession = session as unknown as Record<string, unknown>;
@@ -566,6 +571,129 @@ async function persistCheckoutCompletedOrder(session: Stripe.Checkout.Session): 
   };
 
   await db.collection("orders").doc(sessionId).set(payload, { merge: true });
+}
+
+function resolveProjectId(): string {
+  return asString(process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT || process.env.PROJECT_ID).trim();
+}
+
+function parseOriginList(raw: unknown): Set<string> {
+  const values = asString(raw)
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map((value) => normalizeOrigin(value));
+  return new Set(values);
+}
+
+function readEnvSecret(keys: string[]): string {
+  for (const key of keys) {
+    const value = asString(process.env[key]).trim();
+    if (value) return value;
+  }
+  return "";
+}
+
+async function readSecretManager(secretName: string): Promise<string> {
+  if (!SECRET_MANAGER_CLIENT || !GCP_PROJECT_ID || !secretName) return "";
+  try {
+    const resource = `projects/${GCP_PROJECT_ID}/secrets/${secretName}/versions/latest`;
+    const [version] = await SECRET_MANAGER_CLIENT.accessSecretVersion({ name: resource });
+    const rawBytes = version.payload?.data;
+    const raw = rawBytes ? Buffer.from(rawBytes).toString("utf8") : "";
+    return raw.trim();
+  } catch (error: any) {
+    const message = asString(error?.message).toLowerCase();
+    if (message.includes("not found") || message.includes("permission")) {
+      return "";
+    }
+    console.warn(`[shopApi] secret lookup failed for ${secretName}:`, error?.message || error);
+    return "";
+  }
+}
+
+async function resolveSecretValue(envKeys: string[], secretNames: string[]): Promise<string> {
+  const fromEnv = readEnvSecret(envKeys);
+  if (fromEnv) return fromEnv;
+
+  for (const secretName of secretNames) {
+    const fromManager = await readSecretManager(secretName);
+    if (fromManager) return fromManager;
+  }
+  return "";
+}
+
+async function getStripeClient(): Promise<Stripe | null> {
+  if (stripeClientPromise) return stripeClientPromise;
+  stripeClientPromise = (async () => {
+    const secret = await resolveSecretValue(STRIPE_SECRET_ENV_KEYS, STRIPE_SECRET_NAMES);
+    if (!secret) return null;
+    return new Stripe(secret);
+  })();
+  return stripeClientPromise;
+}
+
+async function getStripeWebhookSecret(): Promise<string> {
+  if (stripeWebhookSecretPromise) return stripeWebhookSecretPromise;
+  stripeWebhookSecretPromise = resolveSecretValue(STRIPE_WEBHOOK_ENV_KEYS, STRIPE_WEBHOOK_SECRET_NAMES);
+  return stripeWebhookSecretPromise;
+}
+
+function normalizeOrigin(origin: string): string {
+  const trimmed = String(origin || "").trim();
+  if (!trimmed) return "";
+  if (trimmed === "null") return "null";
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.origin.replace(/\/$/, "").toLowerCase();
+  } catch {
+    return trimmed.replace(/\/$/, "").toLowerCase();
+  }
+}
+
+function extractRequestHosts(req: Request): Set<string> {
+  const hosts = new Set<string>();
+  const addHost = (raw: unknown) => {
+    const value = asString(raw).trim();
+    if (!value) return;
+    value
+      .split(",")
+      .map((item) => item.trim().toLowerCase())
+      .filter(Boolean)
+      .forEach((item) => {
+        const host = item.split("/")[0]?.split(":")[0]?.trim();
+        if (host) hosts.add(host);
+      });
+  };
+  addHost(req.headers["x-forwarded-host"]);
+  addHost(req.headers.host);
+  return hosts;
+}
+
+function isAllowedOrigin(normalizedOrigin: string, requestHosts: Set<string> | null): boolean {
+  if (!normalizedOrigin) return false;
+  if (normalizedOrigin === "null") return true;
+
+  const staticAllowlist = new Set<string>([
+    normalizeOrigin(PUBLIC_ORIGIN),
+    "https://quantura.studio",
+    "https://www.quantura.studio",
+    "https://quantura-e2e3d.web.app",
+    "https://quantura-e2e3d.firebaseapp.com",
+    "http://localhost:5000",
+    "http://127.0.0.1:5000",
+    ...SHOP_ALLOWED_ORIGINS,
+  ]);
+  if (staticAllowlist.has(normalizedOrigin)) return true;
+
+  try {
+    const host = new URL(normalizedOrigin).host.toLowerCase();
+    if (requestHosts && requestHosts.has(host)) return true;
+  } catch {
+    return false;
+  }
+
+  return false;
 }
 
 function findSkuByProductName(name: string): string {

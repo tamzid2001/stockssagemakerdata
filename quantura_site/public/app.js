@@ -17922,13 +17922,42 @@
     ui.billingPortalLink.setAttribute("aria-disabled", "true");
 
     try {
-      const createPortal = functions.httpsCallable("create_stripe_billing_portal_session");
       const returnUrl = `${window.location.origin}${window.location.pathname}`;
-      const result = await createPortal({
-        returnUrl,
-        meta: buildMeta(),
-      });
-      const url = String(result.data?.url || "").trim();
+      const email = String(state.user?.email || "").trim().toLowerCase();
+      const customerId = String(state.user?.stripeCustomerId || "").trim();
+
+      let url = "";
+      try {
+        const response = await fetch("/api/shop/portal", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          credentials: "same-origin",
+          body: JSON.stringify({
+            email,
+            customerId,
+            returnUrl,
+          }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (response.ok && payload?.url) {
+          url = String(payload.url || "").trim();
+        }
+      } catch (_error) {}
+
+      if (!url) {
+        const createPortal = functions.httpsCallable("create_stripe_billing_portal_session");
+        const result = await createPortal({
+          returnUrl,
+          email,
+          customerId,
+          meta: buildMeta(),
+        });
+        url = String(result.data?.url || "").trim();
+      }
+
       if (!url) throw new Error("Stripe billing portal URL is missing.");
       logEvent("billing_portal_open", { provider: "stripe" });
       window.location.assign(url);
