@@ -620,9 +620,19 @@
                         <label class="label" for="ticker-query-question">Question</label>
                         <textarea id="ticker-query-question" name="question" placeholder="Example: Is this stock overvalued vs peers, and what are the top near-term risks?"></textarea>
                       </div>
+                      <div class="model-council-prompt-panel">
+                        <div class="model-council-prompt-head">
+                          <div class="small"><strong>Question cards</strong></div>
+                          <button class="cta secondary small" id="ticker-query-prompt-shuffle" type="button">
+                            <i class="iconoir-refresh" aria-hidden="true"></i><span>Shuffle</span>
+                          </button>
+                        </div>
+                        <div id="ticker-query-prompt-cards" class="model-council-prompt-grid"></div>
+                        <div class="small muted">Click a card to auto-fill the question box.</div>
+                      </div>
                       <label class="small muted model-council-improve-toggle">
                         <input id="ticker-query-improve-toggle" type="checkbox" checked />
-                        Improve my prompt before final run
+                        <span class="model-council-toggle-label">Improve my prompt before final run</span>
                       </label>
                       <div id="ticker-query-improve-preview-wrap" class="field hidden">
                         <label class="label" for="ticker-query-improve-preview">Improved prompt preview</label>
@@ -635,9 +645,9 @@
                       <button class="cta" type="submit" data-analytics="model_council_submit"><i class="iconoir-brain" aria-hidden="true"></i><span>Prepare Model Council</span></button>
                       <p class="small muted" id="ticker-query-status"></p>
                       <p class="small muted" id="ticker-query-model-info">Latency: — · Tokens: — · Cached: —</p>
-                      <label id="ticker-query-cache-toggle-wrap" class="small muted hidden" style="display:flex;align-items:center;gap:8px;">
+                      <label id="ticker-query-cache-toggle-wrap" class="small muted model-council-improve-toggle model-council-cache-toggle hidden">
                         <input id="ticker-query-show-cache-stats" type="checkbox" />
-                        Show cache stats (dev)
+                        <span class="model-council-toggle-label">Show cache stats (dev)</span>
                       </label>
                       <div id="ticker-query-cache-stats" class="panel-output small hidden">Cache stats will appear after a response.</div>
                     </form>

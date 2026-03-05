@@ -52,6 +52,29 @@
     "Purchase",
   ]);
   const MODEL_COUNCIL_OUTPUT_DISCLAIMER = "LLMs can sometimes make mistakes.";
+  const MODEL_COUNCIL_PROMPT_VISIBLE_COUNT = 3;
+  const MODEL_COUNCIL_PROMPT_SUGGESTIONS = Object.freeze([
+    "What is the strongest bullish and bearish case for {ticker} over the next 3 months?",
+    "Summarize the top 5 catalysts for {ticker} and rank them by probability and impact.",
+    "Is {ticker} trading rich or cheap versus peers on forward growth and margins?",
+    "Build a base/bull/bear scenario table for {ticker} with key assumptions.",
+    "What are the biggest risks in the latest quarter for {ticker}?",
+    "Compare {ticker} trend strength versus sector ETF and closest competitors.",
+    "Which earnings metrics should I monitor next for {ticker}, and why?",
+    "Create an entry plan for {ticker} with invalidation and risk controls.",
+    "What does the options market imply about {ticker} volatility into the next event?",
+    "Estimate whether recent price action in {ticker} is momentum or mean-reversion likely.",
+    "Give a 7-day watchlist checklist for {ticker} before making a decision.",
+    "What macro variables are most likely to move {ticker} this quarter?",
+    "Should {ticker} be considered a compounder, cyclical trade, or event-driven setup?",
+    "Summarize analyst sentiment changes on {ticker} and what matters most.",
+    "What would invalidate the current thesis on {ticker}?",
+    "Create a decision memo for {ticker}: thesis, evidence, risks, and next steps.",
+    "What are the most important balance sheet signals for {ticker} right now?",
+    "How sensitive is {ticker} to rates, FX, and commodity inputs?",
+    "If I can only track 3 indicators for {ticker}, which ones and why?",
+    "Draft a portfolio sizing suggestion for {ticker} under conservative risk assumptions.",
+  ]);
   const POLYMARKET_CLIENT_CACHE_TTL_MS = 10 * 60 * 1000;
   const POLYMARKET_CLIENT_CACHE_MAX_ENTRIES = 80;
   const POLYMARKET_DEFAULT_MARKET_LIMIT = 12;
@@ -1540,6 +1563,8 @@
     tickerQueryForm: document.getElementById("ticker-query-form"),
     tickerQueryTicker: document.getElementById("ticker-query-ticker"),
     tickerQueryQuestion: document.getElementById("ticker-query-question"),
+    tickerQueryPromptCards: document.getElementById("ticker-query-prompt-cards"),
+    tickerQueryPromptShuffle: document.getElementById("ticker-query-prompt-shuffle"),
     tickerQueryLanguage: document.getElementById("ticker-query-language"),
     tickerQueryProvider: document.getElementById("ticker-query-provider"),
     tickerQueryProviderHint: document.getElementById("ticker-query-provider-hint"),
@@ -1750,6 +1775,8 @@
       tickerQueryPendingProvider: "",
       tickerQueryPendingModel: "",
       tickerQueryFeedback: "",
+      tickerQueryPromptDeck: [],
+      tickerQueryPromptCursor: 0,
     },
     predictionsContext: {
       uploadId: "",
@@ -11100,6 +11127,10 @@
     ui.tickerQueryModulesPicker.querySelectorAll('input[type="checkbox"][data-module-id]').forEach((node) => {
       const token = String(node.dataset.moduleId || "").trim();
       node.checked = selectedSet.has(token);
+      const chip = node.closest(".module-picker-chip");
+      if (chip && typeof chip.classList?.toggle === "function") {
+        chip.classList.toggle("is-selected", node.checked);
+      }
     });
   };
 
@@ -11111,8 +11142,9 @@
     ui.tickerQueryModulesPicker.innerHTML = MODEL_COUNCIL_MODULE_CATALOG.map((module) => {
       const id = String(module.id || "").trim();
       const label = String(module.label || id);
+      const selectedClass = selectedSet.has(id) ? " is-selected" : "";
       return `
-        <label class="module-picker-chip">
+        <label class="module-picker-chip${selectedClass}">
           <input type="checkbox" data-module-id="${escapeHtml(id)}" ${selectedSet.has(id) ? "checked" : ""} />
           <span>${escapeHtml(label)}</span>
         </label>
@@ -11126,6 +11158,62 @@
       });
       ui.tickerQueryModulesPicker.dataset.bound = "1";
     }
+  };
+
+  const createShuffledModelCouncilPromptDeck = () => {
+    const deck = MODEL_COUNCIL_PROMPT_SUGGESTIONS.slice();
+    for (let i = deck.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [deck[i], deck[j]] = [deck[j], deck[i]];
+    }
+    return deck;
+  };
+
+  const materializeModelCouncilPrompt = (template, ticker) => {
+    const symbol = normalizeTicker(ticker || ui.tickerQueryTicker?.value || state.tickerContext.ticker || "") || "AAPL";
+    return String(template || "").replace(/\{ticker\}/gi, symbol);
+  };
+
+  const renderModelCouncilPromptCards = ({ reshuffle = false } = {}) => {
+    if (!ui.tickerQueryPromptCards) return;
+    const total = MODEL_COUNCIL_PROMPT_SUGGESTIONS.length;
+    if (!total) {
+      ui.tickerQueryPromptCards.innerHTML = "";
+      return;
+    }
+    if (
+      reshuffle ||
+      !Array.isArray(state.tickerContext.tickerQueryPromptDeck) ||
+      state.tickerContext.tickerQueryPromptDeck.length !== total
+    ) {
+      state.tickerContext.tickerQueryPromptDeck = createShuffledModelCouncilPromptDeck();
+      state.tickerContext.tickerQueryPromptCursor = 0;
+    }
+
+    const deck = state.tickerContext.tickerQueryPromptDeck;
+    let cursor = Math.max(0, Number(state.tickerContext.tickerQueryPromptCursor || 0));
+    if (cursor + MODEL_COUNCIL_PROMPT_VISIBLE_COUNT > deck.length) {
+      state.tickerContext.tickerQueryPromptDeck = createShuffledModelCouncilPromptDeck();
+      state.tickerContext.tickerQueryPromptCursor = 0;
+      cursor = 0;
+    }
+    const visible = state.tickerContext.tickerQueryPromptDeck.slice(cursor, cursor + MODEL_COUNCIL_PROMPT_VISIBLE_COUNT);
+    ui.tickerQueryPromptCards.innerHTML = visible
+      .map((template) => {
+        const text = materializeModelCouncilPrompt(template, ui.tickerQueryTicker?.value || state.tickerContext.ticker || "");
+        return `
+          <button
+            class="model-council-prompt-card"
+            type="button"
+            data-action="model-council-prompt"
+            data-template="${escapeHtml(String(template || ""))}"
+            title="${escapeHtml(text)}"
+          >
+            ${escapeHtml(text)}
+          </button>
+        `;
+      })
+      .join("");
   };
 
   const renderTickerQueryModulesOutput = (moduleData, selectedModules) => {
@@ -20361,6 +20449,39 @@
       ui.tickerQueryLanguage.value = state.preferredLanguage || "en";
     }
     renderTickerQueryModulePicker();
+    renderModelCouncilPromptCards({ reshuffle: true });
+    if (ui.tickerQueryPromptShuffle && ui.tickerQueryPromptShuffle.dataset.bound !== "1") {
+      ui.tickerQueryPromptShuffle.addEventListener("click", () => {
+        state.tickerContext.tickerQueryPromptDeck = createShuffledModelCouncilPromptDeck();
+        state.tickerContext.tickerQueryPromptCursor = 0;
+        renderModelCouncilPromptCards();
+      });
+      ui.tickerQueryPromptShuffle.dataset.bound = "1";
+    }
+    if (ui.tickerQueryPromptCards && ui.tickerQueryPromptCards.dataset.bound !== "1") {
+      ui.tickerQueryPromptCards.addEventListener("click", (event) => {
+        const card = event.target.closest('[data-action="model-council-prompt"]');
+        if (!card) return;
+        const template = String(card.dataset.template || "").trim();
+        if (!template) return;
+        const prompt = materializeModelCouncilPrompt(template, ui.tickerQueryTicker?.value || state.tickerContext.ticker || "");
+        if (ui.tickerQueryQuestion) {
+          ui.tickerQueryQuestion.value = prompt;
+          ui.tickerQueryQuestion.focus();
+          const len = ui.tickerQueryQuestion.value.length;
+          if (typeof ui.tickerQueryQuestion.setSelectionRange === "function") {
+            ui.tickerQueryQuestion.setSelectionRange(len, len);
+          }
+        }
+      });
+      ui.tickerQueryPromptCards.dataset.bound = "1";
+    }
+    if (ui.tickerQueryTicker && ui.tickerQueryTicker.dataset.promptBound !== "1") {
+      ui.tickerQueryTicker.addEventListener("input", () => {
+        renderModelCouncilPromptCards();
+      });
+      ui.tickerQueryTicker.dataset.promptBound = "1";
+    }
     const improvePref = String(safeLocalStorageGet(TICKER_QUERY_IMPROVE_TOGGLE_KEY) || "1");
     if (ui.tickerQueryImproveToggle) {
       ui.tickerQueryImproveToggle.checked = improvePref !== "0";
