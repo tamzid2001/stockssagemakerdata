@@ -130,6 +130,15 @@
     return "web";
   };
 
+  const applyRuntimeBodyClasses = () => {
+    if (!document?.body) return;
+    const nativePlatform = getNativePlatform();
+    const runtimeLabel = resolveRuntimeLabel();
+    document.body.classList.toggle("native-runtime", runtimeLabel === "native");
+    document.body.classList.toggle("native-platform-ios", nativePlatform === "ios");
+    document.body.classList.toggle("native-platform-android", nativePlatform === "android");
+  };
+
   const triggerSubtleHaptic = () => {
     try {
       if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
@@ -154,6 +163,14 @@
       const iosHandler = window.webkit?.messageHandlers?.QuanturaBridge?.postMessage;
       if (iosHandler) {
         iosHandler(message);
+        return true;
+      }
+    } catch (error) {
+      // Try standard ReactNativeWebView bridge below.
+    }
+    try {
+      if (window.ReactNativeWebView?.postMessage) {
+        window.ReactNativeWebView.postMessage(JSON.stringify(message));
         return true;
       }
     } catch (error) {
@@ -200,6 +217,14 @@
         } else {
           iosLegacyHandler({ action: "authSignIn", provider: String(message.provider || "").trim().toLowerCase() });
         }
+        return true;
+      }
+    } catch (error) {
+      // Try standard ReactNativeWebView bridge below.
+    }
+    try {
+      if (window.ReactNativeWebView?.postMessage) {
+        window.ReactNativeWebView.postMessage(JSON.stringify(message));
         return true;
       }
     } catch (error) {
@@ -1954,7 +1979,9 @@
     unsubscribeSharedWorkspaces: null,
     authStateBootstrapped: false,
     postSignInReloadInFlight: false,
+    rewardIncentiveLimits: {},
   };
+  applyRuntimeBodyClasses();
 
   const remoteConfigStore = (() => {
     const listeners = new Set();
@@ -1980,10 +2007,66 @@
   // React-style hook analogue for this vanilla app: subscribe to Remote Config updates.
   const useRemoteConfig = (listener) => remoteConfigStore.subscribe(listener);
 
+  const hasSessionUser = (user = state.user) => Boolean(user?.uid);
   const isAnonymousUser = (user = state.user) => Boolean(user?.isAnonymous);
   const hasFullAccount = (user = state.user) => Boolean(user && !user.isAnonymous);
   const isAdminUser = (user = state.user) =>
     String(user?.email || "").trim().toLowerCase() === String(ADMIN_EMAIL).trim().toLowerCase();
+  const requestNativeAuthGate = ({ reason = "sign_in_required", message = "Sign in to continue." } = {}) => {
+    if (!isNativeApp()) return false;
+    const branding = {
+      name: "Quantura",
+      logoUrl: `${window.location.origin}/assets/logo.png`,
+      primaryColor: "#0f2a61",
+      accentColor: "#3ab5a2",
+      ctaColor: "#1d5ed8",
+      textColor: "#12182a",
+    };
+    const nativeAuthRequested = sendNativeAuthMessage({
+      type: "REQUEST_SIGN_IN",
+      reason: String(reason || "").trim().slice(0, 80),
+      message: String(message || "").trim().slice(0, 280),
+      branding,
+      sourcePath: window.location.pathname,
+      sourceRuntime: resolveRuntimeLabel(),
+    });
+    sendNativeBridgeMessage({
+      action: "showAuthGate",
+      reason: String(reason || "").trim().slice(0, 80),
+      message: String(message || "").trim().slice(0, 280),
+      branding,
+      sourcePath: window.location.pathname,
+      sourceRuntime: resolveRuntimeLabel(),
+      ts: Date.now(),
+    });
+    return nativeAuthRequested;
+  };
+  const ensureSessionUser = async ({ reason = "session_required", message = "Initializing guest session..." } = {}) => {
+    if (hasSessionUser()) return state.user;
+    const auth = state.clients?.auth;
+    if (!auth) throw new Error("Authentication is not initialized.");
+    const ownsBootstrap = !state.anonymousBootstrapInFlight;
+    if (ownsBootstrap) {
+      state.anonymousBootstrapInFlight = true;
+    }
+    try {
+      await auth.signInAnonymously();
+    } catch (error) {
+      requestNativeAuthGate({ reason, message });
+      throw error;
+    } finally {
+      if (ownsBootstrap) {
+        state.anonymousBootstrapInFlight = false;
+      }
+    }
+    const nextUser = auth.currentUser || state.user;
+    if (nextUser) {
+      state.user = nextUser;
+      return nextUser;
+    }
+    requestNativeAuthGate({ reason, message });
+    throw new Error("Unable to initialize guest session.");
+  };
   const requireFullAccount = (message = "Sign in to continue.", opts = {}) => {
     if (hasFullAccount()) return true;
     const redirect = opts && opts.redirect === true;
@@ -1991,7 +2074,11 @@
       ? "Create an account or sign in to use this feature."
       : String(message || "Sign in to continue.");
     showToast(nextMessage, "warn");
-    if (redirect && window.location.pathname !== "/account") {
+    requestNativeAuthGate({
+      reason: "full_account_required",
+      message: nextMessage,
+    });
+    if (redirect && !isNativeApp() && window.location.pathname !== "/account") {
       window.location.href = "/account";
     }
     return false;
@@ -2006,7 +2093,6 @@
   const shouldSkipNativeRewardAds = () => {
     if (!isNativeApp()) return true;
     if (!state.authResolved) return true;
-    if (!hasFullAccount()) return true;
     return false;
   };
 
@@ -2016,16 +2102,39 @@
     message = "This action can unlock additional output. Continue to show a rewarded ad.",
   } = {}) => {
     if (shouldSkipNativeRewardAds()) return true;
+    const normalizedReason = String(reason || "action").trim() || "action";
+    const declinedAt = Number(state.rewardIncentiveLimits?.[normalizedReason] || 0);
+    if (Number.isFinite(declinedAt) && declinedAt > 0 && Date.now() - declinedAt < 10 * 60 * 1000) {
+      sendNativeBridgeMessage({
+        action: "showInterstitial",
+        reason: `${normalizedReason}_reward_limited`,
+        mode: "fallback",
+        ts: Date.now(),
+      });
+      showToast("Reward incentives are limited after skipping the video ad. Try again shortly or watch the reward ad.", "warn");
+      return false;
+    }
     const confirmed = await openConfirmModal({
       title,
       message,
-      confirmLabel: "Watch ad",
-      cancelLabel: "Skip",
+      confirmLabel: "Watch video ad",
+      cancelLabel: "Skip reward",
     });
-    if (!confirmed) return false;
+    if (!confirmed) {
+      state.rewardIncentiveLimits[normalizedReason] = Date.now();
+      sendNativeBridgeMessage({
+        action: "showInterstitial",
+        reason: `${normalizedReason}_reward_declined`,
+        mode: "fallback",
+        ts: Date.now(),
+      });
+      showToast("Reward skipped. Incentive output is limited for this action.", "warn");
+      return false;
+    }
+    delete state.rewardIncentiveLimits[normalizedReason];
     sendNativeBridgeMessage({
       action: "showRewardedInterstitial",
-      reason,
+      reason: normalizedReason,
       ts: Date.now(),
     });
     return true;
@@ -3526,6 +3635,7 @@
 
   const installNativeAuthBridge = (auth) => {
     if (!isNativeApp() || !auth) return null;
+    applyRuntimeBodyClasses();
     const existingBridge = window.__quanturaAuthBridge && typeof window.__quanturaAuthBridge === "object"
       ? window.__quanturaAuthBridge
       : {};
@@ -3551,6 +3661,7 @@
     bridge.onNativeAuthState = (authState) => {
       const nextState = authState && typeof authState === "object" ? authState : {};
       state.nativeAuthState = nextState;
+      applyRuntimeBodyClasses();
       window.dispatchEvent(new CustomEvent("quantura:native-auth-state-bridge", { detail: nextState }));
       return nextState;
     };
@@ -5317,12 +5428,42 @@
           reject(error);
         },
       });
-      const sent = sendNativeBridgeMessage({
+      let sent = sendNativeBridgeMessage({
         action: "requestNativeFeedAd",
         slotId: resolvedSlotId,
         placement: String(placement || "inline").trim(),
         variant: String(variant || "nativeAdvanced").trim(),
       });
+      if (!sent) {
+        sent =
+          sendNativeBridgeMessage({
+            action: "showNativeAd",
+            slotId: resolvedSlotId,
+            placement: String(placement || "inline").trim(),
+            variant: String(variant || "nativeAdvanced").trim(),
+          }) ||
+          sendNativeBridgeMessage({
+            action: "loadNativeAd",
+            slotId: resolvedSlotId,
+            placement: String(placement || "inline").trim(),
+            variant: String(variant || "nativeAdvanced").trim(),
+          });
+      }
+      if (!sent) {
+        sent =
+          sendNativeAuthMessage({
+            type: "REQUEST_NATIVE_FEED_AD",
+            slotId: resolvedSlotId,
+            placement: String(placement || "inline").trim(),
+            variant: String(variant || "nativeAdvanced").trim(),
+          }) ||
+          sendNativeAuthMessage({
+            type: "SHOW_NATIVE_AD",
+            slotId: resolvedSlotId,
+            placement: String(placement || "inline").trim(),
+            variant: String(variant || "nativeAdvanced").trim(),
+          });
+      }
       if (!sent) {
         clearTimeout(timeoutHandle);
         nativeInlineAdState.pendingBySlot.delete(resolvedSlotId);
@@ -5451,7 +5592,19 @@
         reason: String(error?.message || "load_failed").slice(0, 120),
         runtime: resolveRuntimeLabel(),
       });
-      slotNode.remove();
+      hydrateNativeInlineAdSlot(slotNode, {
+        slotId,
+        placement,
+        adUnitId: "native_fallback",
+        ad: {
+          headline: "Sponsored insight",
+          body: "Ad inventory is loading. You can continue using Quantura while this slot refreshes.",
+          callToAction: "View plans",
+          advertiser: "Quantura",
+          destinationUrl: `${window.location.origin}/pricing`,
+        },
+      });
+      slotNode.dataset.nativeInlineAdFallback = "1";
     }
   };
 
@@ -15852,7 +16005,16 @@
 
   const loadScreenerRunById = async (db, runId) => {
     if (!db || !runId) throw new Error("Run ID is required.");
-    if (!hasFullAccount()) throw new Error("Sign in to load saved runs.");
+    if (!hasSessionUser()) {
+      try {
+        await ensureSessionUser({
+          reason: "screener_load_requires_session",
+          message: "Sign in to sync saved screener runs.",
+        });
+      } catch (error) {
+        throw new Error("Sign in to load saved runs.");
+      }
+    }
 
     const cleanId = String(runId || "").trim();
     if (!cleanId) throw new Error("Run ID is required.");
@@ -15943,7 +16105,7 @@
   };
 
   const syncForecastAiSummaryToMyRequest = async ({ requestId = "", summary = null } = {}) => {
-    if (!hasFullAccount()) return;
+    if (!hasSessionUser()) return;
     const reqId = String(requestId || "").trim();
     if (!reqId) return;
     const myRequestId = `forecast__${reqId}`;
@@ -17756,8 +17918,13 @@
 		      const forecastId = plotButton.dataset.forecastId;
 		      if (!forecastId) return;
 
-      if (!hasFullAccount()) {
-        showToast("Sign in to view saved runs.", "warn");
+      try {
+        await ensureSessionUser({
+          reason: "forecast_plot_requires_session",
+          message: "Sign in to sync saved forecast runs.",
+        });
+      } catch (error) {
+        showToast(error?.message || "Unable to start guest session.", "warn");
         return;
       }
 
@@ -17786,8 +17953,13 @@
           const dlButton = event.target.closest('[data-action="download-forecast"]');
           if (!dlButton) return;
           event.preventDefault();
-          if (!hasFullAccount()) {
-            showToast("Sign in to download forecasts.", "warn");
+          try {
+            await ensureSessionUser({
+              reason: "forecast_download_requires_session",
+              message: "Sign in to sync forecast downloads.",
+            });
+          } catch (error) {
+            showToast(error?.message || "Unable to start guest session.", "warn");
             return;
           }
           const forecastId = String(dlButton.dataset.forecastId || "").trim();
@@ -17848,8 +18020,13 @@
             return;
           }
 
-          if (!hasFullAccount()) {
-            showToast("Sign in to download screener runs.", "warn");
+          try {
+            await ensureSessionUser({
+              reason: "screener_download_requires_session",
+              message: "Sign in to sync screener downloads.",
+            });
+          } catch (error) {
+            showToast(error?.message || "Unable to start guest session.", "warn");
             return;
           }
           const runId = String(dlButton.dataset.runId || "").trim();
@@ -17884,7 +18061,15 @@
           if (!requestId) return;
           event.preventDefault();
 
-          if (!requireFullAccount("Sign in to manage saved requests.", { redirect: true })) return;
+          try {
+            await ensureSessionUser({
+              reason: "my_requests_requires_session",
+              message: "Sign in to sync your saved requests.",
+            });
+          } catch (error) {
+            showToast(error?.message || "Unable to start guest session.", "warn");
+            return;
+          }
 
           const button = actionTarget.closest("button") || actionTarget;
           const previousDisabled = Boolean(button.disabled);
@@ -19875,7 +20060,16 @@
 
 		    ui.forecastForm?.addEventListener("submit", async (event) => {
 		      event.preventDefault();
-		      if (!requireFullAccount("Sign in to run a forecast.", { redirect: true })) return;
+          let sessionUser = null;
+          try {
+            sessionUser = await ensureSessionUser({
+              reason: "forecast_requires_session",
+              message: "Sign in to sync forecast history across devices.",
+            });
+          } catch (error) {
+            showToast(error?.message || "Unable to start guest session.", "warn");
+            return;
+          }
           const rewardApproved = await maybeShowNativeRewardGate({
             reason: "forecast",
             title: "Watch a rewarded ad to unlock forecast output?",
@@ -19907,7 +20101,7 @@
 	        interval: formData.get("interval"),
 	        service: "prophet",
 	        quantiles,
-          workspaceId: state.activeWorkspaceId || state.user.uid,
+          workspaceId: state.activeWorkspaceId || sessionUser?.uid || state.user?.uid || "",
 	        meta: buildMeta(),
 	        utm: getUtm(),
 		      };
@@ -20076,7 +20270,15 @@
 	    });
 
 	        ui.forecastLoadButton?.addEventListener("click", async () => {
-          if (!requireFullAccount("Sign in to load saved runs.", { redirect: true })) return;
+          try {
+            await ensureSessionUser({
+              reason: "forecast_saved_load_requires_session",
+              message: "Sign in to sync saved forecast runs.",
+            });
+          } catch (error) {
+            showToast(error?.message || "Unable to start guest session.", "warn");
+            return;
+          }
           const forecastId = String(ui.forecastLoadSelect?.value || "").trim();
           if (!forecastId) {
             showToast("Select a saved run.", "warn");
@@ -20187,12 +20389,12 @@
           ui.forecastOutput.dataset.bound = "1";
         }
 
-		    ui.technicalsForm?.addEventListener("submit", async (event) => {
+	    ui.technicalsForm?.addEventListener("submit", async (event) => {
 	      event.preventDefault();
 	      const formData = new FormData(ui.technicalsForm);
 	      const indicators = formData.getAll("indicators");
 	      const includeSeries = Boolean(ui.indicatorChart || ui.tickerChart);
-	      const payload = {
+      const payload = {
         ticker: formData.get("ticker"),
         interval: formData.get("interval"),
         lookback: Number(formData.get("lookback")),
@@ -20201,6 +20403,13 @@
         maxPoints: formData.get("interval") === "1h" ? 240 : 260,
         meta: buildMeta(),
 	      };
+
+        const rewardApproved = await maybeShowNativeRewardGate({
+          reason: "indicator_llm",
+          title: "Watch a rewarded ad to unlock indicator AI output?",
+          message: "Indicator calculations and AI narrative can require a rewarded video in native apps.",
+        });
+        if (!rewardApproved) return;
 
 	      try {
           const activeTicker = normalizeTicker(payload.ticker || state.tickerContext.ticker || "");
@@ -20348,7 +20557,15 @@
 
     ui.downloadForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
-      if (!requireFullAccount("Sign in to download price history.", { redirect: true })) return;
+      try {
+        await ensureSessionUser({
+          reason: "history_download_requires_session",
+          message: "Sign in to sync download history.",
+        });
+      } catch (error) {
+        showToast(error?.message || "Unable to start guest session.", "warn");
+        return;
+      }
       const rewardApproved = await maybeShowNativeRewardGate({
         reason: "history_download",
         title: "Watch a rewarded ad to unlock download output?",
@@ -20714,7 +20931,15 @@
 
 	    ui.optionsForm?.addEventListener("submit", async (event) => {
 	      event.preventDefault();
-	      if (!requireFullAccount("Sign in to load options.", { redirect: true })) return;
+        try {
+          await ensureSessionUser({
+            reason: "options_requires_session",
+            message: "Sign in to sync options preferences.",
+          });
+        } catch (error) {
+          showToast(error?.message || "Unable to start guest session.", "warn");
+          return;
+        }
 	      const formData = new FormData(ui.optionsForm);
 	      const ticker = normalizeTicker(formData.get("ticker"));
 	      const cacheKey = ticker ? `${OPTIONS_EXPIRATION_PREFIX}${ticker}` : "";
@@ -20874,7 +21099,6 @@
 
 	    ui.optionsExpiration?.addEventListener("change", () => {
 	      if (!ui.optionsForm) return;
-	      if (!requireFullAccount("Sign in to load options.", { redirect: true })) return;
 	      try {
 	        ui.optionsForm.requestSubmit?.();
 	      } catch (error) {
@@ -20894,7 +21118,16 @@
 
 	    ui.screenerForm?.addEventListener("submit", async (event) => {
 	      event.preventDefault();
-	      if (!requireFullAccount("Sign in to generate an AI Portfolio.", { redirect: true })) return;
+        let sessionUser = null;
+        try {
+          sessionUser = await ensureSessionUser({
+            reason: "screener_requires_session",
+            message: "Sign in to sync screener runs across devices.",
+          });
+        } catch (error) {
+          showToast(error?.message || "Unable to start guest session.", "warn");
+          return;
+        }
 	      const formData = new FormData(ui.screenerForm);
       const requestedNames = Number(formData.get("maxNames"));
       const boundedNames = Number.isFinite(requestedNames) ? Math.max(5, Math.min(25, requestedNames)) : 10;
@@ -20925,7 +21158,7 @@
         filters: collectScreenerFilters(formData),
         model: selectedModel,
         personality: String(selectedMeta.personality || "balanced"),
-        workspaceId: state.activeWorkspaceId || state.user.uid,
+        workspaceId: state.activeWorkspaceId || sessionUser?.uid || state.user?.uid || "",
         meta: buildMeta(),
       };
 
@@ -21005,7 +21238,15 @@
     });
 
     ui.screenerLoadButton?.addEventListener("click", async () => {
-      if (!requireFullAccount("Sign in to load saved screener runs.", { redirect: true })) return;
+      try {
+        await ensureSessionUser({
+          reason: "screener_saved_load_requires_session",
+          message: "Sign in to sync saved screener runs.",
+        });
+      } catch (error) {
+        showToast(error?.message || "Unable to start guest session.", "warn");
+        return;
+      }
       const runId = String(ui.screenerLoadSelect?.value || "").trim();
       if (!runId) {
         showToast("Select a saved run.", "warn");
@@ -21024,7 +21265,15 @@
 
     ui.predictionsForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
-      if (!requireFullAccount("Sign in to upload predictions.", { redirect: true })) return;
+      try {
+        await ensureSessionUser({
+          reason: "predictions_upload_requires_session",
+          message: "Sign in to sync prediction uploads.",
+        });
+      } catch (error) {
+        showToast(error?.message || "Unable to start guest session.", "warn");
+        return;
+      }
       if (!requireAdminAccess("Upload predictions is currently admin-only.")) return;
       if (!storage) {
         showToast("File uploads are not available.", "warn");
@@ -21080,7 +21329,15 @@
     });
 
     ui.predictionsAgentButton?.addEventListener("click", async () => {
-      if (!requireFullAccount("Sign in to run the OpenAI CSV Agent.", { redirect: true })) return;
+      try {
+        await ensureSessionUser({
+          reason: "predictions_agent_requires_session",
+          message: "Sign in to sync prediction agent runs.",
+        });
+      } catch (error) {
+        showToast(error?.message || "Unable to start guest session.", "warn");
+        return;
+      }
       if (!requireAdminAccess("OpenAI CSV Agent is currently admin-only.")) return;
       if (!functions) {
         showToast("Functions client is not ready.", "warn");
@@ -21143,7 +21400,15 @@
 
     ui.autopilotForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
-      if (!requireFullAccount("Sign in to queue autopilot runs.", { redirect: true })) return;
+      try {
+        await ensureSessionUser({
+          reason: "autopilot_requires_session",
+          message: "Sign in to sync autopilot runs.",
+        });
+      } catch (error) {
+        showToast(error?.message || "Unable to start guest session.", "warn");
+        return;
+      }
       if (!requireAdminAccess("Autopilot queue is currently admin-only.")) return;
       const formData = new FormData(ui.autopilotForm);
       const rawTickerInput = String(formData.get("ticker") || "").trim();

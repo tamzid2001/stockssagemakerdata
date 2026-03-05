@@ -3855,39 +3855,71 @@ ROUTES.post("/webhooks/applenotifications", async (req, res) => {
   }
 });
 
-ROUTES.post("/webhooks/admob/reward", async (req, res) => {
+async function handleAdmobRewardWebhook(req: Request, res: Response): Promise<void> {
   try {
-    if (!checkWebhookSecret(req, ADMOB_SSV_WEBHOOK_SECRET)) {
-      res.status(401).json({ error: "invalid_webhook_secret" });
-      return;
-    }
     const query = asPlainObject(req.query);
     const body = asPlainObject(req.body);
+    const secretValid = checkWebhookSecret(req, ADMOB_SSV_WEBHOOK_SECRET);
     const rewardAmount = asFinite(query.reward_amount || body.reward_amount, NaN);
-    const rewardType = sanitizeText(query.reward_type || body.reward_type, 120);
+    const rewardType = sanitizeText(query.reward_type || body.reward_type || query.reward_item || body.reward_item, 120);
     const adUnit = sanitizeText(query.ad_unit || body.ad_unit, 220);
     const userId = sanitizeText(query.user_id || body.user_id, 220);
-    const customData = sanitizeText(query.custom_data || body.custom_data, 1200);
+    const customData = sanitizeText(query.custom_data || body.custom_data, 1600);
 
     await db.collection("webhook_admob_ssv").add({
       ...summarizeWebhookPayload(req),
+      callbackAccepted: secretValid,
+      callbackMethod: sanitizeText(req.method, 12),
+      callbackPath: sanitizeText(req.path, 180),
       rewardAmount: Number.isFinite(rewardAmount) ? rewardAmount : null,
       rewardType,
+      rewardItem: sanitizeText(query.reward_item || body.reward_item, 120),
       adUnit,
       userId,
       customData,
       transactionId: sanitizeText(query.transaction_id || body.transaction_id, 220),
       adNetwork: sanitizeText(query.ad_network || body.ad_network, 120),
-      timestamp: sanitizeText(query.timestamp || body.timestamp, 40),
-      signature: sanitizeText(query.signature || body.signature, 600),
+      timestamp: sanitizeText(query.timestamp || body.timestamp, 60),
+      signature: sanitizeText(query.signature || body.signature, 900),
       keyId: sanitizeText(query.key_id || body.key_id, 120),
+      mediationGroupName: sanitizeText(query.mediation_group_name || body.mediation_group_name, 220),
+      mediationAbTestName: sanitizeText(query.mediation_ab_test_name || body.mediation_ab_test_name, 220),
+      mediationAbTestVariant: sanitizeText(query.mediation_ab_test_variant || body.mediation_ab_test_variant, 120),
+      adSourceId: sanitizeText(query.ad_source_id || body.ad_source_id, 120),
+      adSourceInstanceId: sanitizeText(query.ad_source_instance_id || body.ad_source_instance_id, 180),
+      rawQuery: query,
     });
 
+    // Always ACK 200 to prevent repeated retries from AdMob SSV callback delivery.
     res.status(200).send("ok");
   } catch (error) {
     console.error("[Webhook] admob reward failed", error);
-    res.status(500).json({ error: "webhook_store_failed" });
+    res.status(200).send("ok");
   }
+}
+
+ROUTES.get("/webhooks/admob/reward", async (req, res) => {
+  await handleAdmobRewardWebhook(req, res);
+});
+
+ROUTES.post("/webhooks/admob/reward", async (req, res) => {
+  await handleAdmobRewardWebhook(req, res);
+});
+
+ROUTES.get("/webhook/admob/reward", async (req, res) => {
+  await handleAdmobRewardWebhook(req, res);
+});
+
+ROUTES.post("/webhook/admob/reward", async (req, res) => {
+  await handleAdmobRewardWebhook(req, res);
+});
+
+ROUTES.get("/admob/reward", async (req, res) => {
+  await handleAdmobRewardWebhook(req, res);
+});
+
+ROUTES.post("/admob/reward", async (req, res) => {
+  await handleAdmobRewardWebhook(req, res);
 });
 
 ROUTES.get("/explore/suggestions", async (req, res) => {

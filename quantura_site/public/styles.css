@@ -802,6 +802,30 @@ form {
   border-bottom: 1px solid var(--line);
 }
 
+.auth-brand-banner {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid rgba(29, 94, 216, 0.22);
+  background: linear-gradient(105deg, rgba(15, 42, 97, 0.08), rgba(58, 181, 162, 0.14));
+  border-radius: 16px;
+  padding: 12px 14px;
+  margin-bottom: 18px;
+}
+
+.auth-brand-logo {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  object-fit: cover;
+  border: 1px solid rgba(15, 42, 97, 0.2);
+}
+
+.auth-brand-banner h3 {
+  margin: 2px 0 0;
+}
+
 .auth-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -968,6 +992,21 @@ form {
 .auth-provider-logo--x,
 .auth-provider-logo--guest {
   color: currentColor;
+}
+
+body.native-runtime .auth-section,
+body.native-platform-ios .auth-section,
+body.native-platform-android .auth-section {
+  background: linear-gradient(180deg, rgba(15, 42, 97, 0.08), rgba(58, 181, 162, 0.08));
+  border-top-color: rgba(15, 42, 97, 0.24);
+  border-bottom-color: rgba(15, 42, 97, 0.24);
+}
+
+body.native-runtime .auth-section .card,
+body.native-platform-ios .auth-section .card,
+body.native-platform-android .auth-section .card {
+  border-color: rgba(15, 42, 97, 0.22);
+  background: rgba(255, 255, 255, 0.9);
 }
 
 .label {
