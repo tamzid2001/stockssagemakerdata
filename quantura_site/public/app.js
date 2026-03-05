@@ -2356,13 +2356,11 @@
       toggle.setAttribute("aria-label", "Open navigation menu");
       toggle.setAttribute("aria-expanded", "false");
       toggle.innerHTML = icon("menu-scale");
-      if (logo?.parentNode === nav) {
-        nav.insertBefore(toggle, logo);
-      } else {
-        nav.appendChild(toggle);
-      }
-    } else if (logo?.parentNode === nav && toggle.nextElementSibling !== logo) {
+    }
+    if (logo?.parentNode === nav) {
       nav.insertBefore(toggle, logo);
+    } else {
+      nav.prepend(toggle);
     }
     if (!backdrop) {
       backdrop = document.createElement("button");
@@ -7831,6 +7829,12 @@
   const icon = (name) => `<i class="iconoir-${name}" aria-hidden="true"></i>`;
 
   const toPrettyJson = (value) => `<pre class="small">${escapeHtml(JSON.stringify(value, null, 2))}</pre>`;
+
+  const normalizePath = (rawPath = "/") => {
+    const pathname = String(rawPath || "/").split("?")[0] || "/";
+    if (pathname.length > 1 && pathname.endsWith("/")) return pathname.slice(0, -1);
+    return pathname;
+  };
 
   const FOOTER_SOCIAL_LINKS = [
     {
@@ -22039,18 +22043,6 @@
               return;
             }
 
-				        const gated = new Set([
-				          "/dashboard",
-				          "/watchlist",
-				          "/productivity",
-				          "/collaboration",
-				          "/uploads",
-				          "/autopilot",
-				          "/notifications",
-				        ]);
-			        if (gated.has(window.location.pathname) && window.location.pathname !== "/account") {
-			          window.location.href = "/account";
-			        }
 			        return;
 			      }
 
