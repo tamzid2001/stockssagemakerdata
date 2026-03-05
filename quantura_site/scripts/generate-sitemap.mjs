@@ -10,7 +10,7 @@ const pagesRoot = path.join(siteRoot, "pages");
 const publicRoot = path.join(siteRoot, "public");
 const outputPath = path.join(publicRoot, "sitemap.xml");
 
-const baseUrl = String(process.env.SITE_URL || "https://quantura-e2e3d.web.app").replace(/\/$/, "");
+const baseUrl = String(process.env.SITE_URL || "https://quantura.studio").replace(/\/$/, "");
 
 const EXCLUDE_FILES = new Set([
   "admin.html",

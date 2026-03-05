@@ -64,7 +64,7 @@ type ExploreCursor = {
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 40;
-const PUBLIC_ORIGIN = asString(process.env.PUBLIC_ORIGIN, "https://quantura-e2e3d.web.app").replace(/\/$/, "");
+const PUBLIC_ORIGIN = asString(process.env.PUBLIC_ORIGIN, "https://quantura.studio").replace(/\/$/, "");
 const ADMIN_EMAIL = "tamzid257@gmail.com";
 const MODEL_COUNCIL_RESPONSE_COLLECTION = "model_council_responses";
 const OPENAI_API_KEY = asString(process.env.OPENAI_API_KEY).trim();

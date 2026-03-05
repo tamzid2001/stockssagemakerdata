@@ -448,6 +448,7 @@ function blogPostHtml(meta) {
   const dateObj = new Date(`${dateIso}T00:00:00.000Z`);
   const topicMeta = TOPIC_BY_SLUG.get(topic);
   const body = buildBody(meta);
+  const keywords = Array.from(new Set(["quantura", "blog", topic, ...(tags || [])])).join(", ");
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -455,6 +456,7 @@ function blogPostHtml(meta) {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${title} | Quantura Blog</title>
     <meta name="description" content="${excerpt}" />
+    <meta name="keywords" content="${keywords}" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="${canonical}" />
     <meta property="og:title" content="${title} | Quantura Blog" />
@@ -462,6 +464,13 @@ function blogPostHtml(meta) {
     <meta property="og:type" content="article" />
     <meta property="og:url" content="${canonical}" />
     <meta property="og:image" content="/assets/hero-illustration.svg" />
+    <meta property="og:site_name" content="Quantura" />
+    <meta property="og:locale" content="en_US" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="${title} | Quantura Blog" />
+    <meta name="twitter:description" content="${excerpt}" />
+    <meta name="twitter:image" content="/assets/hero-illustration.svg" />
+    <meta name="twitter:url" content="${canonical}" />
     <meta property="article:published_time" content="${dateIso}" />
     <meta property="article:section" content="${topicMeta?.label || "Research"}" />
     ${tags.map((tag) => `<meta property="article:tag" content="${tag}" />`).join("\n    ")}
@@ -565,6 +574,7 @@ function blogIndexHtml(posts) {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Quantura Blog | Institutional Research Workflows</title>
     <meta name="description" content="Institutional-grade research notes on macro signals, forecasting workflows, and execution playbooks." />
+    <meta name="keywords" content="quantura blog, market research blog, forecasting workflows, model council, institutional investing" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="${SITE_URL}/blog" />
     <meta property="og:title" content="Quantura Blog" />
@@ -572,6 +582,13 @@ function blogIndexHtml(posts) {
     <meta property="og:type" content="website" />
     <meta property="og:url" content="${SITE_URL}/blog" />
     <meta property="og:image" content="/assets/quantura-logo.svg" />
+    <meta property="og:site_name" content="Quantura" />
+    <meta property="og:locale" content="en_US" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Quantura Blog" />
+    <meta name="twitter:description" content="Signal → scenario → decision-ready output with weekly Quantura research notes." />
+    <meta name="twitter:image" content="/assets/quantura-logo.svg" />
+    <meta name="twitter:url" content="${SITE_URL}/blog" />
     <link rel="alternate" type="application/rss+xml" title="Quantura Blog RSS" href="/blog/rss.xml" />
     <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/styles.css" />
@@ -636,6 +653,7 @@ function blogIndexHtml(posts) {
 function topicPageHtml(topicSlug, posts) {
   const topic = TOPIC_BY_SLUG.get(topicSlug);
   const filtered = posts.filter((post) => post.topic === topicSlug).slice(0, 52);
+  const topicKeywords = `quantura, ${topic.slug}, ${topic.label.toLowerCase()}, institutional research, market workflows`;
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -643,6 +661,7 @@ function topicPageHtml(topicSlug, posts) {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${topic.label} | Quantura Blog Topic</title>
     <meta name="description" content="${topic.description}" />
+    <meta name="keywords" content="${topicKeywords}" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="${SITE_URL}/blog/topics/${topic.slug}" />
     <meta property="og:title" content="${topic.label} | Quantura Blog Topic" />
@@ -650,6 +669,13 @@ function topicPageHtml(topicSlug, posts) {
     <meta property="og:type" content="website" />
     <meta property="og:url" content="${SITE_URL}/blog/topics/${topic.slug}" />
     <meta property="og:image" content="/assets/hero-illustration.svg" />
+    <meta property="og:site_name" content="Quantura" />
+    <meta property="og:locale" content="en_US" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="${topic.label} | Quantura Blog Topic" />
+    <meta name="twitter:description" content="${topic.description}" />
+    <meta name="twitter:image" content="/assets/hero-illustration.svg" />
+    <meta name="twitter:url" content="${SITE_URL}/blog/topics/${topic.slug}" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>

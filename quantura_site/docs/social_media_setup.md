@@ -10,7 +10,7 @@ This guide covers:
 Use this identity on every channel:
 - Brand name: `Quantura`
 - Tagline: `Data Analytics + ML/AI for active market decisions`
-- Primary CTA: `https://quantura-e2e3d.web.app`
+- Primary CTA: `https://quantura.studio`
 - Proof points: forecasting bands, indicator overlays, saved workspaces, collaboration.
 
 Profile checklist (all channels):
@@ -76,7 +76,7 @@ Add these in your Functions environment (or `.env` for local emulator):
 - `SOCIAL_CONTENT_MODEL=gpt-5-mini`
 - `SOCIAL_AUTOMATION_TIMEZONE=America/New_York`
 - `SOCIAL_DISPATCH_BATCH_SIZE=30`
-- `SOCIAL_DEFAULT_CTA_URL=https://quantura-e2e3d.web.app`
+- `SOCIAL_DEFAULT_CTA_URL=https://quantura.studio`
 - `SOCIAL_WEBHOOK_X`
 - `SOCIAL_WEBHOOK_LINKEDIN`
 - `SOCIAL_WEBHOOK_FACEBOOK`
@@ -122,7 +122,7 @@ const draftRes = await gen({
   tone: "confident, concise, practical",
   channels: ["x", "linkedin", "youtube", "reddit"],
   postsPerChannel: 2,
-  ctaUrl: "https://quantura-e2e3d.web.app/pricing",
+  ctaUrl: "https://quantura.studio/pricing",
   saveDraft: true
 });
 ```

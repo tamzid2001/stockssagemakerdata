@@ -16163,7 +16163,7 @@
           ownerUsername: "quantura",
           ownerEmail: "system@quantura.ai",
           ownerSocialLinks: {
-            website: "https://quantura-e2e3d.web.app/",
+            website: "https://quantura.studio/",
             x: "",
             linkedin: "",
             github: "",
