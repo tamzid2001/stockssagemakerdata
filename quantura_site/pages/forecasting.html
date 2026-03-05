@@ -90,7 +90,7 @@
 	          <nav class="sidebar-nav" aria-label="Terminal navigation">
 	            <a class="sidebar-link active" href="/forecasting" data-panel-target="forecast"><i class="iconoir-magic-wand" aria-hidden="true"></i><span>Forecast</span></a>
 	            <a class="sidebar-link" href="/ticker-intelligence" data-panel-target="ticker"><i class="iconoir-eye" aria-hidden="true"></i><span>Ticker</span></a>
-              <a class="sidebar-link" href="/ticker-intelligence?intel=predictions"><i class="iconoir-graph-up" aria-hidden="true"></i><span>Predictions</span></a>
+              <a class="sidebar-link" href="/ticker-intelligence?panel=predictions" data-panel-target="predictions"><i class="iconoir-graph-up" aria-hidden="true"></i><span>Predictions</span></a>
 	            <a class="sidebar-link" href="/indicators" data-panel-target="indicators"><i class="iconoir-sigma-function" aria-hidden="true"></i><span>Indicators</span></a>
               <a class="sidebar-link" href="/trending" data-panel-target="trending"><i class="iconoir-fire-flame" aria-hidden="true"></i><span>Trending</span></a>
 	            <a class="sidebar-link" href="/news" data-panel-target="news"><i class="iconoir-journal-page" aria-hidden="true"></i><span>News and data</span></a>
@@ -278,13 +278,19 @@
                     <div class="results-panel ticker-intelligence-panel">
                       <div class="card-head">
                         <h3>Institutional View</h3>
-                        <div class="intel-subtabs" id="ticker-intel-tabs" role="tablist" aria-label="Ticker intelligence tabs">
-                          <button class="task-chip active" id="intel-tab-intelligence" type="button" role="tab" aria-selected="true" data-intel-tab="intelligence">Intelligence</button>
-                          <button class="task-chip" id="intel-tab-predictions" type="button" role="tab" aria-selected="false" data-intel-tab="predictions">Predictions</button>
-                        </div>
                       </div>
-                      <div id="ticker-output" class="panel-output small" data-intel-view="intelligence">Load a ticker to generate the institutional intelligence panel.</div>
-                      <div id="ticker-predictions-output" class="panel-output small hidden" data-intel-view="predictions">Load a ticker to view related Polymarket prediction markets.</div>
+                      <div id="ticker-output" class="panel-output small">Load a ticker to generate the institutional intelligence panel.</div>
+                    </div>
+                  </section>
+
+                  <section class="panel hidden" data-panel="predictions">
+                    <div class="panel-header">
+                      <h2>Predictions</h2>
+                      <p class="small">Polymarket-style prediction cards powered by Gamma API. Search by ticker or browse top active markets.</p>
+                    </div>
+                    <div class="results-panel">
+                      <h3>Prediction Markets</h3>
+                      <div id="ticker-predictions-output" class="panel-output small">Load a ticker to view related Polymarket prediction markets.</div>
                       <p class="small muted" style="margin-top:10px;">Predictions are informational only and not investment advice.</p>
                     </div>
                   </section>
