@@ -10155,8 +10155,46 @@
     setTickerIntelTab(initialTab, { ensureLoaded: false });
   };
 
+  const fetchTickerIntelPayload = async (functions, ticker, { force = false } = {}) => {
+    const symbol = normalizeTicker(ticker);
+    if (!symbol) throw new Error("Ticker is required.");
+    let callableError = null;
+    if (functions?.httpsCallable) {
+      try {
+        const getIntel = functions.httpsCallable("get_ticker_intel");
+        const result = await getIntel({ ticker: symbol, force: Boolean(force), meta: buildMeta() });
+        const payload = result?.data && typeof result.data === "object" ? result.data : {};
+        return payload;
+      } catch (error) {
+        callableError = error;
+      }
+    }
+
+    const headers = await buildApiAuthHeaders({ includeJson: false });
+    const params = new URLSearchParams();
+    params.set("ticker", symbol);
+    if (force) params.set("force", "1");
+    const response = await fetch(`/api/ticker/intel?${params.toString()}`, {
+      method: "GET",
+      headers,
+      credentials: "same-origin",
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      const detail = String(payload?.detail || payload?.error || "").trim();
+      if (callableError?.message && detail) {
+        throw new Error(`${callableError.message} (${detail})`);
+      }
+      if (detail) throw new Error(detail);
+      if (callableError?.message) throw new Error(callableError.message);
+      throw new Error("Unable to load ticker intelligence.");
+    }
+    const payload = await response.json().catch(() => ({}));
+    return payload && typeof payload === "object" ? payload : {};
+  };
+
   const loadTickerIntel = async (functions, ticker, { notify = false, force = false } = {}) => {
-    if (!functions || (!ui.intelOutput && !ui.tickerIntelligenceOutput)) return;
+    if ((!functions && !window.fetch) || (!ui.intelOutput && !ui.tickerIntelligenceOutput)) return;
     const symbol = normalizeTicker(ticker);
     if (!symbol) {
       if (ui.intelOutput) ui.intelOutput.innerHTML = `<div class="small muted">Load a ticker to see company context.</div>`;
@@ -10179,11 +10217,10 @@
       if (ui.intelOutput) setOutputLoading(ui.intelOutput, "Loading company context...");
       if (ui.tickerIntelligenceOutput) setOutputLoading(ui.tickerIntelligenceOutput, "Loading institutional intelligence...");
 
-      const getIntel = functions.httpsCallable("get_ticker_intel");
-      const result = await getIntel({ ticker: symbol, meta: buildMeta() });
+      const intelPayload = await fetchTickerIntelPayload(functions, symbol, { force });
       if (ui.intelOutput) setOutputReady(ui.intelOutput);
       if (ui.tickerIntelligenceOutput) setOutputReady(ui.tickerIntelligenceOutput);
-      renderTickerIntel(result.data || {});
+      renderTickerIntel(intelPayload || {});
       if (state.intelActiveTab === "predictions") {
         loadTickerPredictions(symbol, { notify: false, force }).catch(() => {});
       }
@@ -13018,9 +13055,8 @@
     }
     const pending = (async () => {
       try {
-        const getIntel = functions.httpsCallable("get_ticker_intel");
-        const result = await getIntel({ ticker, meta: buildMeta() });
-        const logoUrl = extractIntelLogoUrl(result?.data || {});
+        const result = await fetchTickerIntelPayload(functions, ticker, { force: false });
+        const logoUrl = extractIntelLogoUrl(result || {});
         trendingLogoCache.set(ticker, logoUrl || "");
         return logoUrl || "";
       } catch (error) {

@@ -90,6 +90,8 @@ const PROMO_DURATION_DAYS = Math.max(1, Math.min(120, Math.floor(asFinite(proces
 const GAMMA_API_BASE = "https://gamma-api.polymarket.com";
 const POLYMARKET_CACHE_TTL_MS = 10 * 60 * 1000;
 const POLYMARKET_CACHE_MAX_ENTRIES = 160;
+const TICKER_INTEL_CACHE_TTL_MS = 10 * 60 * 1000;
+const TICKER_INTEL_CACHE_MAX_ENTRIES = 200;
 const FX_RATE_CACHE_TTL_MS = 60 * 60 * 1000;
 const FX_RATE_CACHE_MAX_ENTRIES = 120;
 const FX_RATE_FETCH_TIMEOUT_MS = 7000;
@@ -206,6 +208,11 @@ type FxRateCacheEntry = {
   };
 };
 
+type TickerIntelCacheEntry = {
+  expiresAtMs: number;
+  value: Record<string, unknown>;
+};
+
 const SYSTEM_FOLDERS: SystemFolderConfig[] = [
   { id: "liked-posts", displayName: "Liked posts", flag: "liked" },
   { id: "reposted-posts", displayName: "Reposted posts", flag: "reposted" },
@@ -237,6 +244,7 @@ const MY_REQUEST_TYPE_LABEL: Record<MyRequestType, string> = {
 
 const ROUTES = express.Router();
 const polymarketCache = new Map<string, PolymarketCacheEntry>();
+const tickerIntelCache = new Map<string, TickerIntelCacheEntry>();
 const fxRateCache = new Map<string, FxRateCacheEntry>();
 const PLAY_INTEGRITY_AUTH = new GoogleAuth({
   scopes: ["https://www.googleapis.com/auth/playintegrity"],
@@ -448,6 +456,93 @@ function normalizeTicker(value: unknown): string {
   const raw = asString(value).trim().toUpperCase();
   if (!raw) return "";
   return raw.replace(/[^A-Z0-9.\-]/g, "").slice(0, 12);
+}
+
+function extractYahooFieldValue(value: unknown): unknown {
+  if (!value || typeof value !== "object") return value;
+  const payload = value as Record<string, unknown>;
+  if (payload.raw !== undefined && payload.raw !== null) return payload.raw;
+  if (payload.fmt !== undefined && payload.fmt !== null) return payload.fmt;
+  if (payload.longFmt !== undefined && payload.longFmt !== null) return payload.longFmt;
+  return value;
+}
+
+function extractYahooNumber(value: unknown): number | null {
+  const raw = extractYahooFieldValue(value);
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function extractYahooText(value: unknown, maxLen = 280): string {
+  return sanitizeText(extractYahooFieldValue(value), maxLen);
+}
+
+function buildLogoUrlFromWebsite(website: unknown): string {
+  const text = sanitizeText(website, 300);
+  if (!text) return "";
+  try {
+    const parsed = new URL(text.startsWith("http") ? text : `https://${text}`);
+    const host = sanitizeText(parsed.hostname, 220).replace(/^www\./i, "");
+    if (!host) return "";
+    return `https://logo.clearbit.com/${host}`;
+  } catch {
+    return "";
+  }
+}
+
+function computeSignalScore(value: number | null, min: number, max: number, invert = false): number | null {
+  if (value === null || !Number.isFinite(value)) return null;
+  if (max <= min) return null;
+  const normalized = Math.max(0, Math.min(1, (value - min) / (max - min)));
+  const score = invert ? 100 - normalized * 100 : normalized * 100;
+  return Math.max(0, Math.min(100, Number(score.toFixed(1))));
+}
+
+function getTickerIntelCache(ticker: string): Record<string, unknown> | null {
+  const key = normalizeTicker(ticker);
+  if (!key) return null;
+  const cached = tickerIntelCache.get(key);
+  if (!cached) return null;
+  if (cached.expiresAtMs <= Date.now()) {
+    tickerIntelCache.delete(key);
+    return null;
+  }
+  return cached.value;
+}
+
+function setTickerIntelCache(ticker: string, value: Record<string, unknown>): void {
+  const key = normalizeTicker(ticker);
+  if (!key) return;
+  tickerIntelCache.set(key, {
+    expiresAtMs: Date.now() + TICKER_INTEL_CACHE_TTL_MS,
+    value,
+  });
+  while (tickerIntelCache.size > TICKER_INTEL_CACHE_MAX_ENTRIES) {
+    const oldestKey = tickerIntelCache.keys().next().value;
+    if (!oldestKey) break;
+    tickerIntelCache.delete(oldestKey);
+  }
+}
+
+async function fetchJsonWithTimeout(url: string, timeoutMs = 7500): Promise<unknown> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      signal: controller.signal,
+      headers: {
+        Accept: "application/json",
+        "User-Agent": "quantura-explore-api/1.0",
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`upstream_http_${response.status}`);
+    }
+    return await response.json().catch(() => ({}));
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function normalizeHandle(value: unknown): string {
@@ -3081,6 +3176,298 @@ function matchesSearchQuery(item: Record<string, unknown>, query: string): boole
 
 ROUTES.get("/health", (_req, res) => {
   res.status(200).json({ ok: true, service: "quantura-explore-api", ts: new Date().toISOString() });
+});
+
+ROUTES.get("/ticker/intel", async (req, res) => {
+  try {
+    const query = asPlainObject(req.query);
+    const ticker = normalizeTicker(query.ticker || query.symbol);
+    const force = asBoolean(query.force, false);
+    if (!ticker) {
+      res.status(400).json({ error: "invalid_ticker" });
+      return;
+    }
+
+    if (!force) {
+      const cached = getTickerIntelCache(ticker);
+      if (cached) {
+        res.status(200).json({
+          ...cached,
+          cached: true,
+        });
+        return;
+      }
+    }
+
+    const modules = [
+      "assetProfile",
+      "summaryDetail",
+      "defaultKeyStatistics",
+      "financialData",
+      "calendarEvents",
+      "recommendationTrend",
+    ].join(",");
+    const summaryUrl = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(
+      ticker
+    )}?modules=${encodeURIComponent(modules)}`;
+    const quoteUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(ticker)}`;
+
+    const [summaryPayloadRaw, quotePayloadRaw] = await Promise.all([
+      fetchJsonWithTimeout(summaryUrl, 8000).catch(() => null),
+      fetchJsonWithTimeout(quoteUrl, 7000).catch(() => null),
+    ]);
+
+    const summaryPayload =
+      summaryPayloadRaw && typeof summaryPayloadRaw === "object"
+        ? (summaryPayloadRaw as Record<string, unknown>)
+        : {};
+    const quotePayload =
+      quotePayloadRaw && typeof quotePayloadRaw === "object"
+        ? (quotePayloadRaw as Record<string, unknown>)
+        : {};
+    const summaryRoot =
+      (((summaryPayload.quoteSummary as any)?.result as Array<Record<string, unknown>> | undefined) || [])[0] || {};
+    const quoteRow =
+      (((quotePayload.quoteResponse as any)?.result as Array<Record<string, unknown>> | undefined) || [])[0] || {};
+
+    if (!Object.keys(summaryRoot).length && !Object.keys(quoteRow).length) {
+      res.status(502).json({ error: "ticker_intel_upstream_empty", ticker });
+      return;
+    }
+
+    const assetProfile =
+      summaryRoot.assetProfile && typeof summaryRoot.assetProfile === "object"
+        ? (summaryRoot.assetProfile as Record<string, unknown>)
+        : {};
+    const summaryDetail =
+      summaryRoot.summaryDetail && typeof summaryRoot.summaryDetail === "object"
+        ? (summaryRoot.summaryDetail as Record<string, unknown>)
+        : {};
+    const defaultStats =
+      summaryRoot.defaultKeyStatistics && typeof summaryRoot.defaultKeyStatistics === "object"
+        ? (summaryRoot.defaultKeyStatistics as Record<string, unknown>)
+        : {};
+    const financialData =
+      summaryRoot.financialData && typeof summaryRoot.financialData === "object"
+        ? (summaryRoot.financialData as Record<string, unknown>)
+        : {};
+    const calendarEvents =
+      summaryRoot.calendarEvents && typeof summaryRoot.calendarEvents === "object"
+        ? (summaryRoot.calendarEvents as Record<string, unknown>)
+        : {};
+    const recommendationTrendRaw =
+      summaryRoot.recommendationTrend && typeof summaryRoot.recommendationTrend === "object"
+        ? (summaryRoot.recommendationTrend as Record<string, unknown>)
+        : {};
+
+    const website = extractYahooText(assetProfile.website || quoteRow.website, 260);
+    const logoUrl = buildLogoUrlFromWebsite(website);
+    const marketCap =
+      extractYahooNumber(quoteRow.marketCap) ??
+      extractYahooNumber(summaryDetail.marketCap) ??
+      extractYahooNumber(defaultStats.marketCap) ??
+      extractYahooNumber(financialData.marketCap);
+    const trailingPe = extractYahooNumber(summaryDetail.trailingPE) ?? extractYahooNumber(quoteRow.trailingPE);
+    const forwardPe = extractYahooNumber(summaryDetail.forwardPE) ?? extractYahooNumber(quoteRow.forwardPE);
+    const priceToBook = extractYahooNumber(defaultStats.priceToBook) ?? extractYahooNumber(quoteRow.priceToBook);
+    const beta = extractYahooNumber(summaryDetail.beta) ?? extractYahooNumber(defaultStats.beta) ?? extractYahooNumber(quoteRow.beta);
+    const fiftyTwoWeekLow = extractYahooNumber(summaryDetail.fiftyTwoWeekLow) ?? extractYahooNumber(quoteRow.fiftyTwoWeekLow);
+    const fiftyTwoWeekHigh =
+      extractYahooNumber(summaryDetail.fiftyTwoWeekHigh) ?? extractYahooNumber(quoteRow.fiftyTwoWeekHigh);
+    const avgVolume = extractYahooNumber(summaryDetail.averageVolume) ?? extractYahooNumber(quoteRow.averageDailyVolume3Month);
+    const sharesOutstanding = extractYahooNumber(defaultStats.sharesOutstanding) ?? extractYahooNumber(quoteRow.sharesOutstanding);
+
+    const profile = {
+      name:
+        extractYahooText(quoteRow.shortName || quoteRow.longName, 180) ||
+        extractYahooText(assetProfile.longName, 180) ||
+        ticker,
+      sector: extractYahooText(assetProfile.sector, 120),
+      industry: extractYahooText(assetProfile.industry, 120),
+      exchange: extractYahooText(quoteRow.fullExchangeName || quoteRow.exchange, 120),
+      currency: extractYahooText(quoteRow.currency, 20),
+      website,
+      summary: extractYahooText(assetProfile.longBusinessSummary, 2000),
+      marketCap,
+      fiftyTwoWeekLow,
+      fiftyTwoWeekHigh,
+      trailingPE: trailingPe,
+      forwardPE: forwardPe,
+      beta,
+      dividendYield: extractYahooNumber(summaryDetail.dividendYield),
+      logoUrl,
+      logo_url: logoUrl,
+    };
+
+    const profileDetails = {
+      longName: extractYahooText(quoteRow.longName || quoteRow.shortName, 180) || profile.name,
+      sector: profile.sector,
+      industry: profile.industry,
+      country: extractYahooText(assetProfile.country, 120),
+      website,
+      longBusinessSummary: profile.summary,
+      logoUrl,
+      logo_url: logoUrl,
+    };
+
+    const valuation = {
+      marketCap,
+      trailingPE: trailingPe,
+      forwardPE: forwardPe,
+      priceToBook,
+      enterpriseValue: extractYahooNumber(defaultStats.enterpriseValue) ?? extractYahooNumber(quoteRow.enterpriseValue),
+    };
+
+    const trading = {
+      beta,
+      fiftyTwoWeekLow,
+      fiftyTwoWeekHigh,
+      avgVolume,
+      sharesOutstanding,
+    };
+
+    const earningsDateRaw = ((calendarEvents.earnings as any)?.earningsDate as Array<unknown> | undefined) || [];
+    const earningsDate = earningsDateRaw
+      .map((entry) => extractYahooText(entry, 60))
+      .filter(Boolean)
+      .slice(0, 2)
+      .join(" to ");
+    const events: Array<{ label: string; value: string }> = [
+      { label: "Earnings date", value: earningsDate || "—" },
+      { label: "Ex-dividend date", value: extractYahooText(summaryDetail.exDividendDate, 60) || "—" },
+      { label: "Dividend rate", value: extractYahooText(summaryDetail.dividendRate, 60) || "—" },
+      {
+        label: "52-week change",
+        value:
+          extractYahooNumber(summaryDetail["52WeekChange"]) === null
+            ? "—"
+            : `${(extractYahooNumber(summaryDetail["52WeekChange"]) as number * 100).toFixed(2)}%`,
+      },
+    ];
+
+    const analyst = {
+      recommendationKey: extractYahooText(financialData.recommendationKey, 80),
+      recommendationMean: extractYahooNumber(financialData.recommendationMean),
+      analystOpinions: extractYahooNumber(financialData.numberOfAnalystOpinions),
+      targetMeanPrice: extractYahooNumber(financialData.targetMeanPrice),
+      targetLowPrice: extractYahooNumber(financialData.targetLowPrice),
+      targetHighPrice: extractYahooNumber(financialData.targetHighPrice),
+    };
+
+    const recommendationTrend = (Array.isArray(recommendationTrendRaw.trend) ? recommendationTrendRaw.trend : [])
+      .map((entry) => {
+        const row = entry && typeof entry === "object" ? (entry as Record<string, unknown>) : {};
+        return {
+          period: extractYahooText(row.period, 24),
+          strongBuy: extractYahooNumber(row.strongBuy) ?? 0,
+          buy: extractYahooNumber(row.buy) ?? 0,
+          hold: extractYahooNumber(row.hold) ?? 0,
+          sell: extractYahooNumber(row.sell) ?? 0,
+          strongSell: extractYahooNumber(row.strongSell) ?? 0,
+        };
+      })
+      .filter((row) => row.period);
+
+    const totalRevenue = extractYahooNumber(financialData.totalRevenue);
+    const grossProfits = extractYahooNumber(financialData.grossProfits);
+    const profitMargin = extractYahooNumber(financialData.profitMargins);
+    const roe = extractYahooNumber(financialData.returnOnEquity);
+    const roa = extractYahooNumber(financialData.returnOnAssets);
+    const totalCash = extractYahooNumber(financialData.totalCash);
+    const totalDebt = extractYahooNumber(financialData.totalDebt);
+    const currentRatio = extractYahooNumber(financialData.currentRatio);
+    const debtToEquity = extractYahooNumber(financialData.debtToEquity);
+    const revenueGrowth = extractYahooNumber(financialData.revenueGrowth);
+
+    const liquidityCoverage =
+      totalCash !== null && totalDebt !== null && totalDebt > 0 ? totalCash / totalDebt : totalCash !== null ? 1.4 : null;
+    const heatmap = [
+      {
+        label: "Liquidity",
+        score: computeSignalScore(liquidityCoverage, 0.25, 2.5),
+        hint: "Cash vs debt coverage",
+      },
+      {
+        label: "Leverage",
+        score: computeSignalScore(debtToEquity, 30, 220, true),
+        hint: "Lower debt-to-equity scores higher",
+      },
+      {
+        label: "Profitability",
+        score: computeSignalScore(profitMargin, 0.02, 0.35),
+        hint: "Net margin trend quality",
+      },
+      {
+        label: "Growth",
+        score: computeSignalScore(revenueGrowth, -0.1, 0.4),
+        hint: "Revenue growth profile",
+      },
+      {
+        label: "Valuation",
+        score: computeSignalScore(forwardPe, 8, 50, true),
+        hint: "Forward P/E relative comfort",
+      },
+    ];
+
+    const responsePayload: Record<string, unknown> = {
+      ticker,
+      source: "yahoo_quote_summary",
+      fetchedAt: new Date().toISOString(),
+      logoUrl,
+      logo_url: logoUrl,
+      profile,
+      profileDetails,
+      valuation,
+      trading,
+      events,
+      analyst,
+      recommendationTrend,
+      executiveSummary: {
+        ticker,
+        exchange: profile.exchange,
+        sector: profile.sector,
+        priceTarget12m: analyst.targetMeanPrice,
+      },
+      fundamentalDeepDive: {
+        revenueMechanics: {
+          totalRevenue,
+          grossProfit: grossProfits,
+          segmentBreakdown: "Segment-level breakout depends on issuer disclosure quality.",
+        },
+        profitability: {
+          netMargin: profitMargin,
+          roi: roe ?? roa,
+        },
+        capitalAllocation: {
+          dividendPolicy:
+            extractYahooText(summaryDetail.dividendRate, 120) || "No recurring cash dividend currently reported.",
+          shareBuybacks: "Review latest filings for authorization cadence and dilution impact.",
+        },
+      },
+      riskAndEsg: {
+        riskMitigation: "Cross-check earnings guidance, leverage, and liquidity before sizing.",
+        liquidity: {
+          totalCash,
+          totalDebt,
+          currentRatio,
+        },
+        esg: {
+          environmental: null,
+          social: null,
+          governance: null,
+          overall: null,
+        },
+      },
+      balanceSheetHeatmap: heatmap,
+      peerComparison: [],
+    };
+
+    setTickerIntelCache(ticker, responsePayload);
+    res.status(200).json(responsePayload);
+  } catch (error: any) {
+    const detail = sanitizeText(error?.message || error, 220) || "ticker_intel_failed";
+    res.status(500).json({ error: "ticker_intel_failed", detail });
+  }
 });
 
 async function handleFxConvert(req: Request, res: Response): Promise<void> {
