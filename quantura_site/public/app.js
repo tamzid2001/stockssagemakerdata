@@ -2309,8 +2309,17 @@
   const bindMobileBottomNav = () => {
     const panelRoot = document.querySelector("[data-panels][data-panel-router]");
     const sidebarNav = document.querySelector(".app-sidebar .sidebar-nav");
-    if (!panelRoot || !sidebarNav) return;
-    const routerName = String(panelRoot.dataset.panelRouter || "").trim();
+    if (!sidebarNav) return;
+    const path = normalizePath(window.location.pathname || "/");
+    const routeRouterFallback = (() => {
+      if (path === "/screener") return "terminal";
+      if (["/dashboard", "/account", "/watchlist", "/productivity", "/collaboration", "/uploads", "/autopilot", "/notifications"].includes(path)) {
+        return "dashboard";
+      }
+      return "";
+    })();
+    const routerName = String(panelRoot?.dataset?.panelRouter || routeRouterFallback || "").trim();
+    if (!routerName) return;
 
     let nav = document.getElementById("mobile-bottom-nav");
     if (!nav) {
@@ -2324,7 +2333,7 @@
     const inner = nav.querySelector(".mobile-bottom-nav-inner");
     if (!inner) return;
 
-    const sidebarLinks = Array.from(sidebarNav.querySelectorAll("a.sidebar-link"));
+    const sidebarLinks = Array.from(sidebarNav.querySelectorAll("a[href]"));
     const byPanel = new Map();
     sidebarLinks.forEach((link) => {
       const panel = String(link.dataset.panelTarget || "").trim();
@@ -2335,7 +2344,19 @@
     });
 
     const preferredByRouter = {
-      terminal: ["forecast", "ticker", "indicators", "ticker-query", "fx"],
+      terminal: [
+        "forecast",
+        "/forecasting",
+        "ticker",
+        "/ticker-intelligence",
+        "indicators",
+        "/indicators",
+        "ticker-query",
+        "/model-council",
+        "fx",
+        "/forecasting?panel=fx",
+        "/tools/fx",
+      ],
       dashboard: ["orders", "/explore", "watchlist", "productivity", "uploads"],
     };
     const preferredPanels = preferredByRouter[routerName] || [];
@@ -2360,7 +2381,8 @@
         const iconMarkup = link.querySelector("i")?.outerHTML || "";
         const label = String(link.textContent || "").trim();
         const panelAttr = panel ? ` data-panel-target="${escapeHtml(panel)}"` : "";
-        const activeClass = link.classList.contains("active") ? " active" : "";
+        const hrefPath = normalizePath(href.split("?")[0].split("#")[0] || "");
+        const activeClass = link.classList.contains("active") || (hrefPath && hrefPath === path) ? " active" : "";
         return `
           <a class="mobile-bottom-link${activeClass}" href="${escapeHtml(href)}"${panelAttr} aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">
             ${iconMarkup}
