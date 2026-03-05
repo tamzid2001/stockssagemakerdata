@@ -3513,14 +3513,20 @@ ROUTES.post("/earnings/refresh", async (req, res) => {
 
     const body = asPlainObject(req.body);
     const symbol = normalizeTicker(body.symbol || body.ticker);
-    if (!symbol) {
-      res.status(400).json({ error: "symbol_required" });
+    const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+    const fallbackStart = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const fallbackEnd = new Date(Date.now() + 120 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const startRaw = sanitizeText(body.start || body.from, 20);
+    const endRaw = sanitizeText(body.end || body.to, 20);
+    const start = datePattern.test(startRaw) ? startRaw : fallbackStart;
+    const end = datePattern.test(endRaw) ? endRaw : fallbackEnd;
+    if (start > end) {
+      res.status(400).json({ error: "invalid_range" });
       return;
     }
-    const start = sanitizeText(body.start || body.from, 20) || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const end = sanitizeText(body.end || body.to, 20) || new Date(Date.now() + 120 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-    const docRef = db.collection("earningsCalendar").doc(symbol);
+    const cacheDocId = symbol ? `symbol_${symbol}_${start}_${end}` : `range_${start}_${end}`;
+    const docRef = db.collection("earningsCalendar").doc(cacheDocId);
     const existingSnap = await docRef.get();
     const existing = (existingSnap.data() || {}) as Record<string, unknown>;
     const lastFetchedAtMs = getTimestampMs(existing.lastFetchedAt);
@@ -3529,7 +3535,10 @@ ROUTES.post("/earnings/refresh", async (req, res) => {
       res.status(200).json({
         ok: true,
         symbol,
+        cacheDocId,
         cached: true,
+        start,
+        end,
         lastFetchedAtMs,
         items: existing.items,
         lastUpdated: sanitizeText(existing.lastUpdated, 30),
@@ -3537,8 +3546,15 @@ ROUTES.post("/earnings/refresh", async (req, res) => {
       return;
     }
 
+    const stableUrl = (() => {
+      const base = `https://financialmodelingprep.com/stable/earnings-calendar?from=${encodeURIComponent(start)}&to=${encodeURIComponent(
+        end
+      )}&apikey=${encodeURIComponent(FMP_API_KEY)}`;
+      if (!symbol) return base;
+      return `${base}&symbol=${encodeURIComponent(symbol)}`;
+    })();
     const candidateUrls = [
-      `https://financialmodelingprep.com/stable/earnings-calendar?symbol=${encodeURIComponent(symbol)}&from=${encodeURIComponent(start)}&to=${encodeURIComponent(end)}&apikey=${encodeURIComponent(FMP_API_KEY)}`,
+      stableUrl,
       `https://financialmodelingprep.com/api/v3/earning_calendar?from=${encodeURIComponent(start)}&to=${encodeURIComponent(end)}&apikey=${encodeURIComponent(FMP_API_KEY)}`,
     ];
 
@@ -3548,27 +3564,50 @@ ROUTES.post("/earnings/refresh", async (req, res) => {
       const response = await fetch(endpoint, { method: "GET" });
       if (!response.ok) continue;
       const rows = (await response.json().catch(() => [])) as Array<Record<string, unknown>>;
-      const filtered = (Array.isArray(rows) ? rows : []).filter((row) => normalizeTicker(row.symbol || row.ticker) === symbol);
-      if (filtered.length) {
-        records = filtered;
-        fetchedFrom = endpoint.includes("/stable/") ? "stable" : "v3";
-        break;
-      }
+      const allRows = Array.isArray(rows) ? rows : [];
+      const filtered = symbol
+        ? allRows.filter((row) => normalizeTicker(row.symbol || row.ticker) === symbol)
+        : allRows;
+      records = filtered;
+      fetchedFrom = endpoint.includes("/stable/") ? "stable" : "v3";
+      if (records.length || endpoint === candidateUrls[candidateUrls.length - 1]) break;
     }
 
     const items = records
-      .map((row) => ({
-        symbol,
-        date: sanitizeText(row.date, 20),
-        epsActual: Number.isFinite(Number((row as any).epsActual)) ? Number((row as any).epsActual) : null,
-        epsEstimated: Number.isFinite(Number((row as any).epsEstimated)) ? Number((row as any).epsEstimated) : null,
-        revenueActual: Number.isFinite(Number((row as any).revenueActual)) ? Number((row as any).revenueActual) : null,
-        revenueEstimated: Number.isFinite(Number((row as any).revenueEstimated)) ? Number((row as any).revenueEstimated) : null,
-        lastUpdated: sanitizeText((row as any).lastUpdated, 20),
-      }))
-      .filter((row) => row.date)
-      .sort((a, b) => a.date.localeCompare(b.date))
-      .slice(0, 160);
+      .map((row) => {
+        const rowSymbol = normalizeTicker(row.symbol || row.ticker || symbol);
+        const date = sanitizeText(row.date || (row as any).reportDate, 20);
+        const epsActual = Number.isFinite(Number((row as any).epsActual))
+          ? Number((row as any).epsActual)
+          : Number.isFinite(Number((row as any).eps))
+          ? Number((row as any).eps)
+          : null;
+        const epsEstimated = Number.isFinite(Number((row as any).epsEstimated))
+          ? Number((row as any).epsEstimated)
+          : Number.isFinite(Number((row as any).epsEstimate))
+          ? Number((row as any).epsEstimate)
+          : null;
+        return {
+          symbol: rowSymbol,
+          date,
+          name: sanitizeText((row as any).name || (row as any).company || (row as any).companyName, 180),
+          eventName: sanitizeText((row as any).eventName || (row as any).event || "Earnings", 120),
+          callTime: sanitizeText((row as any).time || (row as any).hour || (row as any).when, 30).toUpperCase(),
+          market: sanitizeText((row as any).exchange || (row as any).market, 80),
+          epsActual,
+          epsEstimated,
+          epsSurprisePercentage:
+            Number.isFinite(Number((row as any).epsSurprisePercentage)) ? Number((row as any).epsSurprisePercentage) : null,
+          epsSurprise:
+            Number.isFinite(Number((row as any).epsSurprise)) ? Number((row as any).epsSurprise) : null,
+          revenueActual: Number.isFinite(Number((row as any).revenueActual)) ? Number((row as any).revenueActual) : null,
+          revenueEstimated: Number.isFinite(Number((row as any).revenueEstimated)) ? Number((row as any).revenueEstimated) : null,
+          lastUpdated: sanitizeText((row as any).lastUpdated || (row as any).updatedFromDate, 20),
+        };
+      })
+      .filter((row) => row.date && row.symbol)
+      .sort((a, b) => (a.date === b.date ? a.symbol.localeCompare(b.symbol) : a.date.localeCompare(b.date)))
+      .slice(0, symbol ? 400 : 5000);
 
     const lastUpdated = items
       .map((item) => item.lastUpdated)
@@ -3578,12 +3617,14 @@ ROUTES.post("/earnings/refresh", async (req, res) => {
 
     await docRef.set(
       {
-        symbol,
+        cacheDocId,
+        symbol: symbol || null,
         start,
         end,
         source: "fmp",
         sourceVariant: fetchedFrom || "none",
         lastUpdated,
+        itemCount: items.length,
         lastFetchedAt: admin.firestore.FieldValue.serverTimestamp(),
         items,
       },
@@ -3593,6 +3634,7 @@ ROUTES.post("/earnings/refresh", async (req, res) => {
     res.status(200).json({
       ok: true,
       symbol,
+      cacheDocId,
       start,
       end,
       cached: false,
