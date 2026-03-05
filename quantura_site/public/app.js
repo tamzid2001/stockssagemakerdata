@@ -20209,24 +20209,88 @@
             syncTickerInputs(activeTicker, { source: "technicals_form" });
           }
 	        setOutputLoading(ui.technicalsOutput, "Computing indicators...");
-	        const runIndicators = functions.httpsCallable("get_technicals");
-	        const result = await runIndicators(payload);
-	        const data = result.data || {};
+          const headers = await buildApiAuthHeaders({ includeJson: true });
+          const response = await fetch("/api/indicators/analyze", {
+            method: "POST",
+            headers,
+            body: JSON.stringify(payload),
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            const detail = String(data?.detail || data?.error || `HTTP ${response.status}`).trim();
+            throw new Error(detail || "indicator_analysis_failed");
+          }
 	        const rows = data.latest || [];
+          const analysis = data.analysis && typeof data.analysis === "object" ? data.analysis : {};
+          const prediction = analysis.prediction && typeof analysis.prediction === "object" ? analysis.prediction : {};
 	        if (ui.technicalsOutput) {
 	          setOutputReady(ui.technicalsOutput);
 		          if (!rows.length) {
 		            ui.technicalsOutput.textContent = "No indicator data returned.";
 		          } else {
+                const targetPrice = Number(prediction.targetPrice);
+                const lastClose = Number(data?.meta?.lastClose);
+                const upsidePct =
+                  Number.isFinite(targetPrice) && Number.isFinite(lastClose) && lastClose > 0
+                    ? ((targetPrice - lastClose) / lastClose) * 100
+                    : null;
+                const keySignals = Array.isArray(analysis.keySignals) ? analysis.keySignals.slice(0, 6) : [];
+                const summaryText = escapeHtml(String(analysis.summary || "").trim());
+                const narrativeText = escapeHtml(String(analysis.text || "").trim());
 		            ui.technicalsOutput.innerHTML = `
                   <div class="table-wrap">
 		                <table class="data-table">
 	                    <thead><tr><th>Indicator</th><th>Value</th></tr></thead>
 	                    <tbody>
-	                      ${rows.map((row) => `<tr><td>${row.name}</td><td>${row.value}</td></tr>`).join("")}
+	                      ${rows
+                          .map((row) => {
+                            const name = escapeHtml(String(row?.name || "").trim());
+                            const value = escapeHtml(String(row?.display ?? row?.value ?? "—").trim() || "—");
+                            return `<tr><td>${name}</td><td>${value}</td></tr>`;
+                          })
+                          .join("")}
 	                    </tbody>
 	                  </table>
                   </div>
+                  ${
+                    summaryText || narrativeText
+                      ? `<div class="results-panel" style="margin-top: 12px;">
+                          <h3>AI indicator analysis</h3>
+                          <div class="small muted">Provider: ${escapeHtml(String(analysis.provider || "openai"))} · Model: ${escapeHtml(
+                          String(analysis.model || "")
+                        )}</div>
+                          ${summaryText ? `<div class="small" style="margin-top:8px;">${summaryText}</div>` : ""}
+                          <div class="form-grid" style="margin-top:10px;">
+                            <div class="profile-item"><span class="label">Direction</span><span class="value">${escapeHtml(
+                              String(prediction.direction || "neutral")
+                            )}</span></div>
+                            <div class="profile-item"><span class="label">Target price</span><span class="value">${
+                              Number.isFinite(targetPrice) ? formatUsd(targetPrice, 2) : "—"
+                            }</span></div>
+                            <div class="profile-item"><span class="label">Timeline</span><span class="value">${escapeHtml(
+                              String(prediction.timeline || `${prediction.timelineDays || "—"} trading days`)
+                            )}</span></div>
+                            <div class="profile-item"><span class="label">Confidence</span><span class="value">${escapeHtml(
+                              String(prediction.confidence || "medium")
+                            )}</span></div>
+                            <div class="profile-item"><span class="label">Implied move</span><span class="value">${
+                              Number.isFinite(upsidePct) ? formatPercent(upsidePct, { signed: true, digits: 2 }) : "—"
+                            }</span></div>
+                          </div>
+                          ${
+                            keySignals.length
+                              ? `<ul class="small" style="margin:10px 0 0 16px;">${keySignals
+                                  .map((signal) => `<li>${escapeHtml(String(signal || "").trim())}</li>`)
+                                  .join("")}</ul>`
+                              : ""
+                          }
+                          ${narrativeText ? `<div class="small" style="margin-top:10px; white-space:pre-wrap;">${narrativeText}</div>` : ""}
+                          <p class="small muted solve-now-disclaimer" style="margin-top:10px;">${escapeHtml(
+                            String(analysis.disclaimer || MODEL_COUNCIL_OUTPUT_DISCLAIMER)
+                          )}</p>
+                        </div>`
+                      : ""
+                  }
 	            `;
 	          }
 	        }
@@ -20258,13 +20322,19 @@
           },
           outputsMeta: {
             summary:
-              Array.isArray(rows) && rows.length
-                ? rows
+              (() => {
+                const narrative = String(analysis?.summary || "").trim();
+                if (narrative) return narrative.slice(0, 320);
+                if (Array.isArray(rows) && rows.length) {
+                  return rows
                     .slice(0, 4)
-                    .map((row) => `${row?.name}: ${row?.value}`)
-                    .join(" • ")
-                : "Indicator request saved.",
+                    .map((row) => `${row?.name}: ${row?.display ?? row?.value}`)
+                    .join(" • ");
+                }
+                return "Indicator request saved.";
+              })(),
             latestCount: Array.isArray(rows) ? rows.length : 0,
+            prediction: prediction?.direction ? String(prediction.direction) : "",
           },
           sourceRef: {
             collection: "indicator_requests",

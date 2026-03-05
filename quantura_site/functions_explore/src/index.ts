@@ -4,6 +4,7 @@ import admin from "firebase-admin";
 import { GoogleAuth } from "google-auth-library";
 import { registerFiscalDataRoutes } from "./fiscaldataProxy";
 import { runScheduledFiscaldataRefresh } from "./schedules/refreshFiscaldata";
+import { runIndicatorAnalysis } from "./indicators";
 export { shopApi } from "./shopApi";
 
 if (!admin.apps.length) {
@@ -3144,6 +3145,33 @@ ROUTES.post("/fx/convert", async (req, res) => {
 
 ROUTES.get("/fx/convert", async (req, res) => {
   await handleFxConvert(req, res);
+});
+
+ROUTES.post("/indicators/analyze", async (req, res) => {
+  try {
+    const payload = asPlainObject(req.body);
+    const result = await runIndicatorAnalysis(payload, {
+      openAiApiKey: OPENAI_API_KEY,
+      defaultModel: DEFAULT_LLM_MODEL,
+      timeoutMs: LLM_TIMEOUT_MS,
+    });
+    res.status(200).json({
+      ok: true,
+      ...result,
+    });
+  } catch (error: any) {
+    const detail = sanitizeText(error?.message || error, 220) || "indicator_analysis_failed";
+    const lower = detail.toLowerCase();
+    if (lower.includes("ticker is required")) {
+      res.status(400).json({ error: "invalid_ticker", detail });
+      return;
+    }
+    if (lower.includes("market data request failed")) {
+      res.status(502).json({ error: "market_data_failed", detail });
+      return;
+    }
+    res.status(500).json({ error: "indicator_analysis_failed", detail });
+  }
 });
 
 ROUTES.post("/llm/run", async (req, res) => {
