@@ -20,6 +20,7 @@ REQUIRE_PLAY_INTEGRITY="${REQUIRE_PLAY_INTEGRITY:-false}"
 FISCALDATA_REFRESH_TOPIC="${FISCALDATA_REFRESH_TOPIC:-fiscaldata-refresh}"
 LOCAL_FUNCTIONS_BUILD="${LOCAL_FUNCTIONS_BUILD:-false}"
 GCLOUD_BIN="${GCLOUD_BIN:-}"
+REMOVE_SECRETS_KEYS="${REMOVE_SECRETS_KEYS:-}"
 
 # Prefer Homebrew gcloud on macOS if present, then fallback to PATH.
 if [[ -z "${GCLOUD_BIN}" ]]; then
@@ -96,6 +97,9 @@ fi
 EXTRA_FLAGS=()
 if [[ -n "${GCLOUD_SET_SECRETS:-}" ]]; then
   EXTRA_FLAGS+=(--set-secrets="${GCLOUD_SET_SECRETS}")
+fi
+if [[ -n "${REMOVE_SECRETS_KEYS}" ]]; then
+  EXTRA_FLAGS+=(--remove-secrets="${REMOVE_SECRETS_KEYS}")
 fi
 
 if [[ "${LOCAL_FUNCTIONS_BUILD}" == "true" ]]; then
