@@ -2103,6 +2103,7 @@
   } = {}) => {
     if (shouldSkipNativeRewardAds()) return true;
     const normalizedReason = String(reason || "action").trim() || "action";
+    const isNavigationGate = normalizedReason === "nav";
     const declinedAt = Number(state.rewardIncentiveLimits?.[normalizedReason] || 0);
     if (Number.isFinite(declinedAt) && declinedAt > 0 && Date.now() - declinedAt < 10 * 60 * 1000) {
       sendNativeBridgeMessage({
@@ -2111,6 +2112,7 @@
         mode: "fallback",
         ts: Date.now(),
       });
+      if (isNavigationGate) return true;
       showToast("Reward incentives are limited after skipping the video ad. Try again shortly or watch the reward ad.", "warn");
       return false;
     }
@@ -2121,13 +2123,16 @@
       cancelLabel: "Skip reward",
     });
     if (!confirmed) {
-      state.rewardIncentiveLimits[normalizedReason] = Date.now();
+      if (!isNavigationGate) {
+        state.rewardIncentiveLimits[normalizedReason] = Date.now();
+      }
       sendNativeBridgeMessage({
         action: "showInterstitial",
         reason: `${normalizedReason}_reward_declined`,
         mode: "fallback",
         ts: Date.now(),
       });
+      if (isNavigationGate) return true;
       showToast("Reward skipped. Incentive output is limited for this action.", "warn");
       return false;
     }
@@ -2342,20 +2347,12 @@
       toggle.setAttribute("aria-expanded", "false");
       toggle.innerHTML = icon("menu-scale");
       if (logo?.parentNode === nav) {
-        if (logo.nextSibling) {
-          nav.insertBefore(toggle, logo.nextSibling);
-        } else {
-          nav.appendChild(toggle);
-        }
+        nav.insertBefore(toggle, logo);
       } else {
         nav.appendChild(toggle);
       }
-    } else if (logo?.parentNode === nav && toggle.previousElementSibling !== logo) {
-      if (logo.nextSibling) {
-        nav.insertBefore(toggle, logo.nextSibling);
-      } else {
-        nav.appendChild(toggle);
-      }
+    } else if (logo?.parentNode === nav && toggle.nextElementSibling !== logo) {
+      nav.insertBefore(toggle, logo);
     }
     if (!backdrop) {
       backdrop = document.createElement("button");
@@ -2458,6 +2455,7 @@
         "/forecasting",
         "ticker",
         "/ticker-intelligence",
+        "/ticker-intelligence?intel=predictions",
         "indicators",
         "/indicators",
         "ticker-query",
@@ -2491,7 +2489,12 @@
         const label = String(link.textContent || "").trim();
         const panelAttr = panel ? ` data-panel-target="${escapeHtml(panel)}"` : "";
         const hrefPath = normalizePath(href.split("?")[0].split("#")[0] || "");
-        const activeClass = link.classList.contains("active") || (hrefPath && hrefPath === path) ? " active" : "";
+        const hrefQuery = href.includes("?") ? href.split("?")[1].split("#")[0] : "";
+        const currentQuery = String(window.location.search || "").replace(/^\?/, "");
+        const hrefMatchesPath = Boolean(hrefPath && hrefPath === path);
+        const hrefMatchesQuery = !hrefQuery || hrefQuery === currentQuery;
+        const activeClass =
+          link.classList.contains("active") || (hrefMatchesPath && hrefMatchesQuery) ? " active" : "";
         return `
           <a class="mobile-bottom-link${activeClass}" href="${escapeHtml(href)}"${panelAttr} aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">
             ${iconMarkup}
@@ -9388,6 +9391,14 @@
     return `${Math.round(num * 100)}%`;
   };
 
+  const formatPredictionCents = (value) => {
+    const num = clampPredictionPrice(value);
+    if (num === null) return "—";
+    const cents = num * 100;
+    const text = cents.toFixed(1);
+    return `${text.endsWith(".0") ? text.slice(0, -2) : text}¢`;
+  };
+
   const predictionMarketUrl = (market, event = null) => {
     const direct = String(market?.marketUrl || "").trim();
     if (direct) return direct;
@@ -9576,7 +9587,7 @@
 
   const renderPredictionMarketCard = (event, market) => {
     const category = String(market.category || event?.ticker || "Market").trim();
-    const volumeText = Number(market.volumeUsd || 0) > 0 ? `$${formatCompactNumber(market.volumeUsd)}` : "—";
+    const volumeText = Number(market.volumeUsd || 0) > 0 ? `$${formatCompactNumber(market.volumeUsd)} Vol.` : "—";
     const marketUrl = predictionMarketUrl(market, event);
     const binaryRows = (() => {
       if (!market.isBinary || !Array.isArray(market.outcomes) || !Array.isArray(market.outcomePrices)) return [];
@@ -9588,6 +9599,17 @@
         .filter((index) => index >= 0 && index < market.outcomes.length && index < market.outcomePrices.length)
         .map((index) => ({ label: market.outcomes[index], prob: market.outcomePrices[index] }));
     })();
+    const yesProb = binaryRows.find((item) => /^yes$/i.test(item.label))?.prob;
+    const noProb = binaryRows.find((item) => /^no$/i.test(item.label))?.prob;
+    const primaryProb =
+      yesProb ??
+      (Array.isArray(market.topOutcomes) && market.topOutcomes.length ? market.topOutcomes[0].prob : null);
+    const primaryLabel =
+      yesProb !== undefined
+        ? "Yes"
+        : Array.isArray(market.topOutcomes) && market.topOutcomes.length
+        ? String(market.topOutcomes[0].label || "Likely")
+        : "Outcome";
     const pillsHtml = binaryRows.length
       ? binaryRows
           .map((item) => renderPredictionOutcomePill(item.label, item.prob, /^yes$/i.test(item.label) ? "yes" : "no"))
@@ -9599,13 +9621,37 @@
           .join("")
       : "";
     return `
-      <article class="prediction-market-card">
-        <div class="prediction-market-card-top small">
+      <article class="prediction-market-card prediction-market-row">
+        <div class="prediction-market-row-head small">
           <span class="prediction-chip">${escapeHtml(category)}</span>
-          <span>${escapeHtml(volumeText)}</span>
           <span>${escapeHtml(formatPredictionCountdown(market.endDate))}</span>
         </div>
-        <h4 class="prediction-market-title">${escapeHtml(String(market.question || "Untitled market"))}</h4>
+        <div class="prediction-market-row-grid">
+          <div class="prediction-market-row-question">
+            <h4 class="prediction-market-title">${escapeHtml(String(market.question || "Untitled market"))}</h4>
+            <div class="small muted">${escapeHtml(volumeText)}</div>
+          </div>
+          <div class="prediction-market-row-prob">
+            <div class="prediction-market-prob">${escapeHtml(formatPredictionPercent(primaryProb))}</div>
+            <div class="small muted">${escapeHtml(primaryLabel)}</div>
+          </div>
+          <div class="prediction-market-row-actions">
+            ${
+              Number.isFinite(yesProb)
+                ? `<button class="prediction-buy-btn yes" type="button" aria-disabled="true" tabindex="-1">Buy Yes ${escapeHtml(
+                    formatPredictionCents(yesProb)
+                  )}</button>`
+                : ""
+            }
+            ${
+              Number.isFinite(noProb)
+                ? `<button class="prediction-buy-btn no" type="button" aria-disabled="true" tabindex="-1">Buy No ${escapeHtml(
+                    formatPredictionCents(noProb)
+                  )}</button>`
+                : ""
+            }
+          </div>
+        </div>
         <div class="prediction-pill-row">
           ${
             pillsHtml ||
@@ -9987,6 +10033,19 @@
     const previous = state.intelActiveTab || "";
     state.intelActiveTab = next;
 
+    try {
+      const params = new URLSearchParams(window.location.search || "");
+      if (next === "predictions") params.set("intel", "predictions");
+      else params.delete("intel");
+      const nextSearch = params.toString();
+      const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}`;
+      if (nextUrl !== `${window.location.pathname}${window.location.search}`) {
+        history.replaceState(history.state || {}, "", nextUrl);
+      }
+    } catch (error) {
+      // ignore
+    }
+
     if (ui.tickerIntelligenceOutput) {
       ui.tickerIntelligenceOutput.classList.toggle("hidden", next !== "intelligence");
     }
@@ -10029,7 +10088,17 @@
         setTickerIntelTab(String(button.dataset.intelTab || "intelligence"));
       });
     });
-    setTickerIntelTab(state.intelActiveTab || "intelligence", { ensureLoaded: false });
+    const initialTab = (() => {
+      try {
+        const params = new URLSearchParams(window.location.search || "");
+        const intel = String(params.get("intel") || "").trim().toLowerCase();
+        if (intel === "predictions") return "predictions";
+      } catch (error) {
+        // ignore
+      }
+      return state.intelActiveTab || "intelligence";
+    })();
+    setTickerIntelTab(initialTab, { ensureLoaded: false });
   };
 
   const loadTickerIntel = async (functions, ticker, { notify = false, force = false } = {}) => {
