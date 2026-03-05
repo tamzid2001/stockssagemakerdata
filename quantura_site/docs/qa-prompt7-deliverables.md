@@ -4,7 +4,7 @@ Date: 2026-03-03 (America/New_York)
 Environment:
 - Backend deployed with `gcloud functions deploy` (Gen2)
 - Frontend deployed with `firebase deploy --only hosting`
-- Deployed runtime validation: `https://quantura-e2e3d.web.app`
+- Deployed runtime validation: `https://quantura.studio`
 - Local template preview for page-level HTML updates: `python3 -m http.server` against merged `public + pages`
 
 ## 1) Native ads only on iOS/Android
