@@ -1936,6 +1936,112 @@ textarea {
   gap: 8px;
 }
 
+.notification-pref-list {
+  display: grid;
+  gap: 10px;
+  margin: 10px 0 8px;
+}
+
+.notification-pref-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.notification-pref-copy {
+  display: grid;
+  gap: 3px;
+}
+
+.notification-pref-title {
+  font-weight: 700;
+  color: var(--ink-2);
+}
+
+.notification-pref-hint {
+  font-size: 0.8rem;
+  color: var(--ink-3);
+}
+
+.notification-pref-item input[type="checkbox"] {
+  appearance: none;
+  width: 44px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid rgba(18, 24, 42, 0.3);
+  background: rgba(233, 237, 247, 0.92);
+  position: relative;
+  margin: 0;
+  transition: border-color 0.2s ease, background 0.2s ease, opacity 0.2s ease;
+}
+
+.notification-pref-item input[type="checkbox"]::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(18, 24, 42, 0.32);
+  transition: transform 0.18s ease;
+}
+
+.notification-pref-item input[type="checkbox"]:checked {
+  border-color: #1d5ed8;
+  background: #1d5ed8;
+}
+
+.notification-pref-item input[type="checkbox"]:checked::after {
+  transform: translateX(20px);
+}
+
+.notification-pref-item input[type="checkbox"]:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.notification-consent-grid {
+  display: grid;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.notification-privacy-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.notification-privacy-select {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  min-height: 44px;
+  color: var(--ink-1);
+  padding: 0 12px;
+  font-weight: 600;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.notification-privacy-select:focus {
+  outline: 2px solid rgba(45, 108, 223, 0.22);
+  border-color: rgba(45, 108, 223, 0.5);
+}
+
+@media (max-width: 760px) {
+  .notification-privacy-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 #ticker-output {
   max-height: none;
   overflow: visible;
@@ -4644,6 +4750,40 @@ textarea {
 [data-theme="dark"] .native-inline-ad-slot {
   background: rgba(18, 24, 42, 0.82);
   border-color: rgba(233, 237, 247, 0.2);
+}
+
+[data-theme="dark"] .notification-pref-item {
+  background: rgba(18, 24, 42, 0.84);
+  border-color: rgba(233, 237, 247, 0.2);
+}
+
+[data-theme="dark"] .notification-pref-title {
+  color: rgba(233, 237, 247, 0.95);
+}
+
+[data-theme="dark"] .notification-pref-hint {
+  color: rgba(233, 237, 247, 0.72);
+}
+
+[data-theme="dark"] .notification-pref-item input[type="checkbox"] {
+  border-color: rgba(233, 237, 247, 0.3);
+  background: rgba(233, 237, 247, 0.14);
+}
+
+[data-theme="dark"] .notification-pref-item input[type="checkbox"]:checked {
+  border-color: #6091ee;
+  background: #6091ee;
+}
+
+[data-theme="dark"] .notification-privacy-select {
+  background: rgba(18, 24, 42, 0.9);
+  border-color: rgba(233, 237, 247, 0.25);
+  color: rgba(233, 237, 247, 0.93);
+}
+
+[data-theme="dark"] .notification-privacy-select:focus {
+  outline-color: rgba(96, 145, 238, 0.3);
+  border-color: rgba(96, 145, 238, 0.6);
 }
 
 [data-theme="dark"] .native-inline-ad-badge {
