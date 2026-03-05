@@ -2262,6 +2262,16 @@
 		      } catch (error) {
 		        // Ignore.
 		      }
+          try {
+            if (typeof window !== "undefined" && typeof window.__quanturaMobileBottomNavSync === "function") {
+              window.__quanturaMobileBottomNavSync();
+            }
+            if (typeof bindMobileBottomNav === "function") {
+              bindMobileBottomNav();
+            }
+          } catch (error) {
+            // Ignore.
+          }
 		    };
 
 		    const initialFromUrl = () => {
@@ -2418,7 +2428,24 @@
     if (!sidebarNav) return;
     const path = normalizePath(window.location.pathname || "/");
     const routeRouterFallback = (() => {
-      if (path === "/screener") return "terminal";
+      if (
+        [
+          "/terminal",
+          "/forecasting",
+          "/ticker-intelligence",
+          "/indicators",
+          "/trending",
+          "/news",
+          "/events-calendar",
+          "/market-headlines",
+          "/model-council",
+          "/options",
+          "/tools/fx",
+          "/screener",
+        ].includes(path)
+      ) {
+        return "terminal";
+      }
       if (["/dashboard", "/account", "/watchlist", "/productivity", "/collaboration", "/uploads", "/autopilot", "/notifications"].includes(path)) {
         return "dashboard";
       }
@@ -2456,15 +2483,13 @@
         "ticker",
         "/ticker-intelligence",
         "/ticker-intelligence?intel=predictions",
-        "indicators",
-        "/indicators",
         "ticker-query",
         "/model-council",
         "fx",
         "/forecasting?panel=fx",
         "/tools/fx",
       ],
-      dashboard: ["orders", "/explore", "watchlist", "productivity", "uploads"],
+      dashboard: ["orders", "profile", "watchlist", "uploads", "notifications", "/explore"],
     };
     const preferredPanels = preferredByRouter[routerName] || [];
     const selected = preferredPanels
@@ -2485,8 +2510,17 @@
       .map((link) => {
         const panel = String(link.dataset.panelTarget || "").trim();
         const href = String(link.getAttribute("href") || "#");
-        const iconMarkup = link.querySelector("i")?.outerHTML || "";
+        const iconMarkup = link.querySelector("i")?.outerHTML || icon("nav-arrow-right");
         const label = String(link.textContent || "").trim();
+        const compactLabelMap = {
+          "Currency conversion": "FX",
+          "Model Council": "Council",
+          "Watchlist and alerts": "Watchlist",
+          "News and data": "News",
+          "Earnings calendar": "Earnings",
+          Productivity: "Tasks",
+        };
+        const compactLabel = compactLabelMap[label] || label;
         const panelAttr = panel ? ` data-panel-target="${escapeHtml(panel)}"` : "";
         const hrefPath = normalizePath(href.split("?")[0].split("#")[0] || "");
         const hrefQuery = href.includes("?") ? href.split("?")[1].split("#")[0] : "";
@@ -2498,6 +2532,7 @@
         return `
           <a class="mobile-bottom-link${activeClass}" href="${escapeHtml(href)}"${panelAttr} aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">
             ${iconMarkup}
+            <span class="mobile-bottom-label">${escapeHtml(compactLabel)}</span>
           </a>
         `;
       })
@@ -2511,6 +2546,7 @@
 
     syncVisibility();
     window.addEventListener("resize", syncVisibility);
+    window.__quanturaMobileBottomNavSync = syncVisibility;
   };
 
   const bindNativeRewardedNavigationAds = () => {
