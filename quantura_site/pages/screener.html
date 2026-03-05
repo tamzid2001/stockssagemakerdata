@@ -57,41 +57,22 @@
     <main>
       <div class="app-layout">
         <aside class="app-sidebar">
-          <div class="sidebar-card">
-            <div class="small"><strong>Account</strong></div>
-            <div class="small">Signed in as <span id="user-email">Not signed in</span></div>
-            <div class="small">Status <span id="user-status" class="pill">Logged Out</span></div>
-            <details class="profile-settings">
-              <summary>Public profile</summary>
-              <form id="profile-form" class="profile-editor">
-                <label class="label" for="profile-username">Username</label>
-                <input id="profile-username" class="input" type="text" maxlength="32" placeholder="quantura_alpha" />
-                <div class="profile-links-grid">
-                  <label class="label" for="profile-social-x">X</label>
-                  <input id="profile-social-x" class="input" type="url" placeholder="https://x.com/username" />
-                  <label class="label" for="profile-social-linkedin">LinkedIn</label>
-                  <input id="profile-social-linkedin" class="input" type="url" placeholder="https://linkedin.com/in/username" />
-                  <label class="label" for="profile-social-github">GitHub</label>
-                  <input id="profile-social-github" class="input" type="url" placeholder="https://github.com/username" />
-                  <label class="label" for="profile-social-youtube">YouTube</label>
-                  <input id="profile-social-youtube" class="input" type="url" placeholder="https://youtube.com/@channel" />
-                  <label class="label" for="profile-social-tiktok">TikTok</label>
-                  <input id="profile-social-tiktok" class="input" type="url" placeholder="https://tiktok.com/@username" />
-                  <label class="label" for="profile-social-website">Website</label>
-                  <input id="profile-social-website" class="input" type="url" placeholder="https://your-site.com" />
-                </div>
-                <button class="cta secondary small" type="submit">Save profile</button>
-                <p id="profile-status" class="small muted">Sign in to set your public profile.</p>
-              </form>
-            </details>
-            <a class="cta secondary small" href="/forecasting"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Open terminal</span></a>
-            <a class="cta secondary small" href="/dashboard"><i class="iconoir-dashboard" aria-hidden="true"></i><span>Open dashboard</span></a>
-            <a class="cta secondary small hidden" id="nav-admin" href="/admin"><i class="iconoir-shield-check" aria-hidden="true"></i><span>Admin dashboard</span></a>
-          </div>
           <nav class="sidebar-nav">
-            <a href="#screener"><i class="iconoir-search" aria-hidden="true"></i><span>Generate portfolio</span></a>
-            <a href="#screener-result"><i class="iconoir-bookmark" aria-hidden="true"></i><span>Saved sets</span></a>
-            <a href="#screener-output"><i class="iconoir-graph-up" aria-hidden="true"></i><span>Output</span></a>
+            <a class="sidebar-link" href="/forecasting"><i class="iconoir-magic-wand" aria-hidden="true"></i><span>Forecast</span></a>
+            <a class="sidebar-link" href="/ticker-intelligence"><i class="iconoir-eye" aria-hidden="true"></i><span>Ticker</span></a>
+            <a class="sidebar-link" href="/indicators"><i class="iconoir-sigma-function" aria-hidden="true"></i><span>Indicators</span></a>
+            <a class="sidebar-link" href="/trending"><i class="iconoir-fire-flame" aria-hidden="true"></i><span>Trending</span></a>
+            <a class="sidebar-link" href="/news"><i class="iconoir-journal-page" aria-hidden="true"></i><span>News and data</span></a>
+            <a class="sidebar-link" href="/events-calendar"><i class="iconoir-calendar" aria-hidden="true"></i><span>Earnings calendar</span></a>
+            <a class="sidebar-link" href="/market-headlines"><i class="iconoir-globe" aria-hidden="true"></i><span>Market headlines</span></a>
+            <a class="sidebar-link" href="/forecasting?panel=macro"><i class="iconoir-database" aria-hidden="true"></i><span>Macro Dashboard</span></a>
+            <a class="sidebar-link" href="/model-council"><i class="iconoir-brain" aria-hidden="true"></i><span>Model Council</span></a>
+            <a class="sidebar-link" href="/options"><i class="iconoir-numbered-list-left" aria-hidden="true"></i><span>Options</span></a>
+            <a class="sidebar-link" href="/forecasting?panel=fx"><i class="iconoir-coins-swap" aria-hidden="true"></i><span>Currency conversion</span></a>
+            <a class="sidebar-link" href="/studio"><i class="iconoir-info-circle" aria-hidden="true"></i><span>Learn more</span></a>
+            <a class="sidebar-link active" href="/screener"><i class="iconoir-search" aria-hidden="true"></i><span>Screener</span></a>
+            <a class="sidebar-link" href="/explore"><i class="iconoir-binocular" aria-hidden="true"></i><span>Explore</span></a>
+            <a class="sidebar-link" href="/watchlist"><i class="iconoir-bell-notification" aria-hidden="true"></i><span>Watchlist and alerts</span></a>
           </nav>
         </aside>
 
