@@ -45,7 +45,7 @@ This README documents architecture, setup, deployment, and operations.
 - Admin account gate for `tamzid257@gmail.com`
 
 ## Forecasting
-- Meta Prophet and IBM TimeMixer options
+- Meta Prophet and SageMaker Canvas options
 - Quantile forecasting input and saved runs
 - Plotly chart visualization and replay from saved runs
 
@@ -111,7 +111,7 @@ Client and SSR use Remote Config with fallbacks. Current keys in use:
 - `welcome_message` (string)
 - `watchlist_enabled` (bool-ish)
 - `forecast_prophet_enabled` (bool-ish)
-- `forecast_timemixer_enabled` (bool-ish)
+- `forecast_canvas_enabled` (bool-ish)
 - `push_notifications_enabled` (bool-ish)
 - `webpush_vapid_key` (string)
 - `stripe_checkout_enabled` (bool-ish)
@@ -161,7 +161,7 @@ Typical keys:
 - Stripe: `STRIPE_PUBLIC_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`
 - Messaging: `FCM_WEB_VAPID_KEY`
 - Alpaca: `ALPACA_API_KEY`/`ALPACAAPIKEY`, `ALPACA_SECRET_KEY`/`ALPACASECRETKEY`
-- TimeMixer/HF: `IBM_TIMEMIXER_*`, `HUGGINGFACEHUB_API_TOKEN`
+- SageMaker Canvas/HF: `SAGEMAKER_CANVAS_API_KEY`, `HUGGINGFACEHUB_API_TOKEN`
 - Slack/social: `SLACK_WEBHOOK_URL`, `SOCIAL_WEBHOOK_*`
 
 ---

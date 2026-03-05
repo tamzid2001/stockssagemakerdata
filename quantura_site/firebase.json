@@ -64,6 +64,7 @@
     "rewrites": [
       { "source": "/blog", "destination": "/blog/index.html" },
       { "source": "/blog/posts/:slug", "destination": "/blog/posts/:slug.html" },
+      { "source": "/blog/topics/:topic", "destination": "/blog/topics/:topic.html" },
       { "source": "/u/**", "destination": "/profile.html" },
       { "source": "/api/explore", "function": "quanturaExploreApi" },
       { "source": "/api/explore/**", "function": "quanturaExploreApi" },

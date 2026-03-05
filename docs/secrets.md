@@ -16,7 +16,7 @@ All secret reads are centralized through `secrets_loader.get_secret(...)` with a
 
 - `OPENAI_API_KEY`: OpenAI completions and agent analysis.
 - `AMAZON_NOVA_API_KEY`: Amazon Nova provider routing.
-- `IBM_TIMEMIXER_API_KEY`: IBM TimeMixer auth.
+- `SAGEMAKER_CANVAS_API_KEY`: SageMaker Canvas auth.
 - `HUGGINGFACEHUB_API_TOKEN`: Hugging Face fallback inference auth.
 
 ### Market and data providers

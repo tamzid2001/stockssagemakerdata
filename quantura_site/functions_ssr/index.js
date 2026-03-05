@@ -153,6 +153,13 @@ const resolveTemplate = (pathname) => {
     const withExt = slug.endsWith(".html") ? slug : `${slug}.html`;
     return path.join("blog", "posts", withExt);
   }
+  if (route.startsWith("/blog/topics/")) {
+    const topic = route.slice("/blog/topics/".length);
+    if (!topic) return path.join("blog", "index.html");
+    if (topic.includes("..") || topic.includes("/") || topic.includes("\\")) return null;
+    const withExt = topic.endsWith(".html") ? topic : `${topic}.html`;
+    return path.join("blog", "topics", withExt);
+  }
 
   if (route === "/ticker" || route.startsWith("/ticker/")) return "ticker.html";
 
@@ -175,7 +182,7 @@ const getServerTemplate = async () => {
       welcome_message: "Welcome to Quantura",
       watchlist_enabled: "true",
       forecast_prophet_enabled: "true",
-      forecast_timemixer_enabled: "true",
+      forecast_canvas_enabled: "true",
       enable_social_leaderboard: "true",
       forecast_model_primary: "Quantura Horizon",
       promo_banner_text: "",

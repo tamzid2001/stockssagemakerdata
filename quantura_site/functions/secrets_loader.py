@@ -61,7 +61,7 @@ _SECRET_SPECS: dict[str, SecretSpec] = {
         aliases=("AMAZON_NOVA_KEY",),
         usage="Amazon Nova provider routing",
     ),
-    "IBM_TIMEMIXER_API_KEY": SecretSpec("IBM_TIMEMIXER_API_KEY", usage="IBM TimeMixer endpoint auth"),
+    "SAGEMAKER_CANVAS_API_KEY": SecretSpec("SAGEMAKER_CANVAS_API_KEY", usage="SageMaker Canvas endpoint auth"),
     "HUGGINGFACEHUB_API_TOKEN": SecretSpec("HUGGINGFACEHUB_API_TOKEN", usage="Hugging Face inference fallback"),
     "ALPACA_API_KEY": SecretSpec("ALPACA_API_KEY", aliases=("ALPACAAPIKEY",), usage="Alpaca trading API"),
     "ALPACA_SECRET_KEY": SecretSpec("ALPACA_SECRET_KEY", aliases=("ALPACASECRETKEY",), usage="Alpaca trading API"),
