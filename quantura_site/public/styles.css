@@ -3344,7 +3344,7 @@ textarea {
 
 .prediction-card-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 12px;
 }
 
@@ -3355,6 +3355,76 @@ textarea {
   background: rgba(255, 255, 255, 0.48);
   display: grid;
   gap: 8px;
+}
+
+.prediction-market-row {
+  background: linear-gradient(160deg, #0a1322 0%, #0f1b2f 100%);
+  border-color: rgba(77, 111, 161, 0.45);
+  color: #eaf1ff;
+  box-shadow: inset 0 0 0 1px rgba(128, 170, 235, 0.12);
+}
+
+.prediction-market-row .muted {
+  color: rgba(191, 207, 233, 0.84);
+}
+
+.prediction-market-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.prediction-market-row-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto minmax(240px, auto);
+  gap: 12px;
+  align-items: center;
+}
+
+.prediction-market-row-question {
+  display: grid;
+  gap: 6px;
+}
+
+.prediction-market-row-prob {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  min-width: 90px;
+}
+
+.prediction-market-prob {
+  font-size: 2.2rem;
+  line-height: 1;
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  color: #f8fbff;
+}
+
+.prediction-market-row-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(110px, 1fr));
+  gap: 8px;
+}
+
+.prediction-buy-btn {
+  border: 0;
+  border-radius: 10px;
+  min-height: 44px;
+  font-weight: 800;
+  font-size: 0.95rem;
+  line-height: 1.1;
+  color: #e5f2ff;
+  cursor: default;
+}
+
+.prediction-buy-btn.yes {
+  background: linear-gradient(140deg, rgba(31, 114, 76, 0.9) 0%, rgba(41, 182, 123, 0.86) 100%);
+}
+
+.prediction-buy-btn.no {
+  background: linear-gradient(140deg, rgba(126, 30, 30, 0.9) 0%, rgba(188, 52, 62, 0.86) 100%);
 }
 
 .prediction-market-card-top {
@@ -3376,6 +3446,12 @@ textarea {
   font-weight: 800;
 }
 
+.prediction-market-row .prediction-chip {
+  border-color: rgba(130, 169, 228, 0.4);
+  background: rgba(115, 160, 228, 0.16);
+  color: #d9e9ff;
+}
+
 .prediction-market-title {
   margin: 0;
   font-size: 0.98rem;
@@ -3388,10 +3464,19 @@ textarea {
   overflow: hidden;
 }
 
+.prediction-market-row .prediction-market-title {
+  color: #f4f8ff;
+  font-size: 1.05rem;
+}
+
 .prediction-pill-row {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.prediction-market-row .prediction-pill-row {
+  margin-top: 2px;
 }
 
 .prediction-outcome-pill {
@@ -3403,6 +3488,11 @@ textarea {
   min-height: 32px;
   overflow: hidden;
   cursor: default;
+}
+
+.prediction-market-row .prediction-outcome-pill {
+  border-color: rgba(128, 170, 235, 0.34);
+  background: rgba(11, 25, 45, 0.8);
 }
 
 .prediction-outcome-pill-fill {
@@ -3431,6 +3521,10 @@ textarea {
   font-size: 0.82rem;
   font-weight: 800;
   color: var(--ink);
+}
+
+.prediction-market-row .prediction-outcome-pill-text {
+  color: #e8f1ff;
 }
 
 .prediction-market-footer {
@@ -3489,18 +3583,24 @@ textarea {
   }
 }
 
-@media (max-width: 1100px) {
-  .prediction-card-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
 @media (max-width: 780px) {
   .predictions-search-row {
     grid-template-columns: 1fr;
   }
 
-  .prediction-card-grid {
+  .prediction-market-row-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .prediction-market-row-prob {
+    justify-items: flex-start;
+  }
+
+  .prediction-market-prob {
+    font-size: 1.9rem;
+  }
+
+  .prediction-market-row-actions {
     grid-template-columns: 1fr;
   }
 
@@ -5761,7 +5861,8 @@ form[data-provider-accent="amazon_nova"] #screener-generate-button {
 
   .mobile-nav-toggle {
     display: inline-flex;
-    margin-left: 2px;
+    margin-left: 0;
+    margin-right: 6px;
     flex-shrink: 0;
   }
 
