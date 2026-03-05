@@ -1714,6 +1714,8 @@
   }
 
   const polymarketClientCache = new Map();
+  const trendingLogoCache = new Map();
+  const trendingLogoInFlight = new Map();
   let polymarketSearchDebounceTimer = 0;
   let polymarketInFlightController = null;
   let polymarketInFlightNonce = 0;
@@ -12957,19 +12959,106 @@
     }, 220);
   };
 
-  const renderTrendingTickers = (payload) => {
-    if (!ui.trendingList) return;
+  const normalizeTrendingLogoUrl = (raw) => {
+    const value = String(raw || "").trim();
+    return /^https?:\/\//i.test(value) ? value : "";
+  };
+
+  const extractHostnameForLogo = (rawUrl) => {
+    const value = String(rawUrl || "").trim();
+    if (!value) return "";
+    try {
+      const parsed = new URL(value.startsWith("http") ? value : `https://${value}`);
+      const host = String(parsed.hostname || "").trim().toLowerCase();
+      if (!host) return "";
+      return host.replace(/^www\./, "");
+    } catch (error) {
+      return "";
+    }
+  };
+
+  const websiteToYfinanceLogoUrl = (website) => {
+    const host = extractHostnameForLogo(website);
+    return host ? `https://logo.clearbit.com/${host}` : "";
+  };
+
+  const extractTrendingRowLogoUrl = (row) => {
+    if (!row || typeof row !== "object") return "";
+    const direct =
+      normalizeTrendingLogoUrl(row.logoUrl) ||
+      normalizeTrendingLogoUrl(row.logo_url) ||
+      normalizeTrendingLogoUrl(row.logo);
+    if (direct) return direct;
+    return websiteToYfinanceLogoUrl(row.website || row.site || row.domain);
+  };
+
+  const extractIntelLogoUrl = (payload) => {
+    const data = payload && typeof payload === "object" ? payload : {};
+    const profile = data.profile && typeof data.profile === "object" ? data.profile : {};
+    const profileDetails = data.profileDetails && typeof data.profileDetails === "object" ? data.profileDetails : {};
+    return (
+      normalizeTrendingLogoUrl(data.logoUrl) ||
+      normalizeTrendingLogoUrl(data.logo_url) ||
+      normalizeTrendingLogoUrl(profile.logoUrl) ||
+      normalizeTrendingLogoUrl(profile.logo_url) ||
+      normalizeTrendingLogoUrl(profileDetails.logoUrl) ||
+      normalizeTrendingLogoUrl(profileDetails.logo_url) ||
+      websiteToYfinanceLogoUrl(profile.website || profileDetails.website || data.website)
+    );
+  };
+
+  const fetchTrendingTickerLogoUrl = async (functions, symbol) => {
+    const ticker = normalizeTicker(symbol);
+    if (!functions || !ticker) return "";
+    if (trendingLogoCache.has(ticker)) {
+      return String(trendingLogoCache.get(ticker) || "");
+    }
+    if (trendingLogoInFlight.has(ticker)) {
+      return trendingLogoInFlight.get(ticker);
+    }
+    const pending = (async () => {
+      try {
+        const getIntel = functions.httpsCallable("get_ticker_intel");
+        const result = await getIntel({ ticker, meta: buildMeta() });
+        const logoUrl = extractIntelLogoUrl(result?.data || {});
+        trendingLogoCache.set(ticker, logoUrl || "");
+        return logoUrl || "";
+      } catch (error) {
+        trendingLogoCache.set(ticker, "");
+        return "";
+      } finally {
+        trendingLogoInFlight.delete(ticker);
+      }
+    })();
+    trendingLogoInFlight.set(ticker, pending);
+    return pending;
+  };
+
+  const normalizeTrendingTickerRows = (payload) => {
     const items = Array.isArray(payload?.items) ? payload.items : [];
     const tickers = Array.isArray(payload?.tickers) ? payload.tickers : [];
-
-    const rows = items.length
+    const baseRows = items.length
       ? items
       : tickers.map((symbol) => ({
           symbol,
           lastClose: null,
           changePct: null,
         }));
+    return baseRows
+      .map((row) => {
+        const symbol = normalizeTicker(row?.symbol || row?.ticker || "");
+        if (!symbol) return null;
+        return {
+          ...row,
+          symbol,
+          logoUrl: extractTrendingRowLogoUrl(row),
+        };
+      })
+      .filter(Boolean);
+  };
 
+  const renderTrendingTickerRows = (rows) => {
+    if (!ui.trendingList) return;
     if (!rows.length) {
       ui.trendingList.innerHTML = `<div class="small muted">No trending tickers returned.</div>`;
       return;
@@ -12982,6 +13071,7 @@
         const lastClose = row.lastClose;
         const changePct = row.changePct;
         const change = row.change;
+        const logoUrl = extractTrendingRowLogoUrl(row);
 
         const changeNum = typeof changePct === "number" ? changePct : Number(changePct);
         const changeOk = Number.isFinite(changeNum);
@@ -12996,7 +13086,14 @@
         return `
           <button class="trending-hot-chip" type="button" data-action="pick-ticker" data-ticker="${escapeHtml(symbol)}">
             <div class="trending-top">
-              <div class="trending-symbol">${escapeHtml(symbol)}</div>
+              <div class="trending-symbol" style="display:inline-flex; align-items:center; gap:8px;">
+                ${
+                  logoUrl
+                    ? `<img src="${escapeHtml(logoUrl)}" alt="" loading="lazy" style="width:18px; height:18px; border-radius:50%; object-fit:cover; background:rgba(255,255,255,0.9);" />`
+                    : ""
+                }
+                <span>${escapeHtml(symbol)}</span>
+              </div>
               <div class="trending-price">${escapeHtml(priceLabel)}</div>
             </div>
             <div class="trending-bottom">
@@ -13009,15 +13106,46 @@
       .join("");
   };
 
+  const enrichTrendingTickerRowsWithLogos = async (rows, functions) => {
+    const list = Array.isArray(rows) ? rows : [];
+    if (!list.length || !functions) return list;
+    const updated = list.map((row) => ({ ...(row || {}) }));
+    let changed = false;
+    const targets = updated
+      .slice(0, 18)
+      .map((row, index) => ({ row, index }))
+      .filter(({ row }) => !extractTrendingRowLogoUrl(row));
+
+    await Promise.all(
+      targets.map(async ({ row, index }) => {
+        const symbol = normalizeTicker(row?.symbol || row?.ticker || "");
+        if (!symbol) return;
+        const logoUrl = await fetchTrendingTickerLogoUrl(functions, symbol);
+        if (!logoUrl) return;
+        updated[index].logoUrl = logoUrl;
+        changed = true;
+      })
+    );
+    return changed ? updated : list;
+  };
+
   const loadTrendingTickers = async (functions, { notify = false, force = false } = {}) => {
     if (!functions || !ui.trendingList) return;
     try {
       setOutputLoading(ui.trendingList, "Loading trending tickers...");
       const getTrending = functions.httpsCallable("get_trending_tickers");
       const result = await getTrending({ force: Boolean(force), meta: buildMeta() });
+      const rows = normalizeTrendingTickerRows(result.data || {});
       setOutputReady(ui.trendingList);
-      renderTrendingTickers(result.data || {});
-      const count = Array.isArray(result.data?.tickers) ? result.data.tickers.length : 0;
+      renderTrendingTickerRows(rows);
+      enrichTrendingTickerRowsWithLogos(rows, functions)
+        .then((enrichedRows) => {
+          if (enrichedRows !== rows) {
+            renderTrendingTickerRows(enrichedRows);
+          }
+        })
+        .catch(() => undefined);
+      const count = rows.length;
       logEvent("trending_loaded", { count });
     } catch (error) {
       setOutputReady(ui.trendingList);
