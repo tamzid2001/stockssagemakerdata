@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Week 43: Scenario Trees for Concentrated Portfolio Risk | Quantura Blog</title>
+    <meta name="description" content="Portfolio Playbooks: weekly operator notes on signal quality, scenario framing, and execution controls." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://quantura.studio/blog/posts/2025-12-25-scenario-trees-for-concentrated-portfolio-risk" />
+    <meta property="og:title" content="Week 43: Scenario Trees for Concentrated Portfolio Risk | Quantura Blog" />
+    <meta property="og:description" content="Portfolio Playbooks: weekly operator notes on signal quality, scenario framing, and execution controls." />
+    <meta property="og:type" content="article" />
+    <meta property="og:url" content="https://quantura.studio/blog/posts/2025-12-25-scenario-trees-for-concentrated-portfolio-risk" />
+    <meta property="og:image" content="/assets/hero-illustration.svg" />
+    <meta property="article:published_time" content="2025-12-25" />
+    <meta property="article:section" content="Portfolio Playbooks" />
+    <meta property="article:tag" content="portfolio-playbooks" />
+    <meta property="article:tag" content="portfolio" />
+    <meta property="article:tag" content="sizing" />
+    <meta property="article:tag" content="risk-budget" />
+    <meta property="article:tag" content="playbook" />
+    <meta property="article:tag" content="quantura" />
+    <meta property="article:tag" content="markets" />
+    <link rel="alternate" type="application/rss+xml" title="Quantura Blog RSS" href="/blog/rss.xml" />
+    <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "BlogPosting",
+        "headline": "Week 43: Scenario Trees for Concentrated Portfolio Risk",
+        "description": "Portfolio Playbooks: weekly operator notes on signal quality, scenario framing, and execution controls.",
+        "datePublished": "2025-12-25",
+        "dateModified": "2025-12-25",
+        "author": {
+          "@type": "Organization",
+          "name": "Quantura"
+        },
+        "publisher": {
+          "@type": "Organization",
+          "name": "Quantura"
+        },
+        "mainEntityOfPage": "https://quantura.studio/blog/posts/2025-12-25-scenario-trees-for-concentrated-portfolio-risk"
+      }
+    </script>
+    <script defer src="/app.js"></script>
+  </head>
+  <body>
+    <header class="header">
+      <div class="container nav">
+        <a class="logo" href="/" aria-label="Quantura home"><span>QUANTURA</span></a>
+        <nav class="nav-links">
+          <a href="/terminal" data-analytics="nav_terminal"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Terminal</span></a>
+          <a href="/explore" data-analytics="nav_explore"><i class="iconoir-binocular" aria-hidden="true"></i><span>Explore</span></a>
+          <a href="/research" data-analytics="nav_research"><i class="iconoir-bookmark-book" aria-hidden="true"></i><span>Research</span></a>
+          <a href="/blog" data-analytics="nav_blog"><i class="iconoir-page" aria-hidden="true"></i><span>Blog</span></a>
+          <a href="/pricing" data-analytics="nav_pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>Pricing</span></a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="page-hero">
+        <div class="container content-grid">
+          <div>
+            <div class="eyebrow">Quantura Blog</div>
+            <h1>Week 43: Scenario Trees for Concentrated Portfolio Risk</h1>
+            <p>Portfolio Playbooks: weekly operator notes on signal quality, scenario framing, and execution controls.</p>
+            <div class="small muted">Published December 25, 2025 · Topic: <a href="/blog/topics/portfolio-playbooks">Portfolio Playbooks</a></div>
+          </div>
+          <div class="card">
+            <h3>Post metadata</h3>
+            <div class="small"><strong>Slug:</strong> 2025-12-25-scenario-trees-for-concentrated-portfolio-risk</div>
+            <div class="small"><strong>Date:</strong> 2025-12-25</div>
+            <div class="small"><strong>Tags:</strong> portfolio-playbooks, portfolio, sizing, risk-budget, playbook, quantura, markets</div>
+            <div class="small" style="margin-top:8px;"><a href="/blog">Back to blog index</a></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container">
+          <article class="card" style="padding: 28px;">
+            
+    <figure style="margin: 0 0 18px;">
+      <img src="/assets/hero-illustration.svg" alt="Quantura research workflow visual" style="width:100%;border-radius:16px;display:block;" />
+      <figcaption class="small muted" style="margin-top:8px;">Quantura institutional workflow brief · Portfolio Playbooks</figcaption>
+    </figure>
+    <p>
+      Week 43: Scenario Trees for Concentrated Portfolio Risk is written for operators who need a repeatable bridge between signal intake and action execution.
+      The core objective is to reduce latency without reducing rigor. Research loop compression is not about skipping diligence. It is about reducing avoidable context switching, preserving assumptions in structured form, and minimizing handoff loss between forecasting, validation, and execution review.
+    </p>
+    <p>
+      In this playbook, the emphasis is not prediction theater; it is process reliability.
+      When market conditions shift, stale process can be more dangerous than stale data. Weekly process reviews should compare what was planned, what was executed, and where workflow friction introduced avoidable error.
+    </p>
+    <p>Market environments can change faster than model retraining cycles. Because of that mismatch, every model-driven process needs a regime override policy. The override policy should define exactly when human operators can down-weight or ignore model output, and how that override is recorded. Over time, these overrides become valuable training data for process improvements.</p>
+    <p>Signal quality degrades quickly when watchlists grow without ownership constraints. Enforce explicit owner assignments and review dates per symbol. If a symbol has no owner or no next review date, it should not remain in active workflow. This is a simple operational rule that materially improves focus and reduces false urgency.</p>
+
+    <h2>Why it matters</h2>
+    <p>A thesis without sizing logic is incomplete. Playbooks should map conviction and uncertainty into consistent position construction.</p>
+    <p>
+      Any model-derived recommendation should be treated as a proposal, not a verdict. Cross-checking output with market structure, liquidity context, and catalyst timing prevents over-reliance on a single signal source.
+      <em>"The goal of a successful trader is to make the best trades."</em> — Alexander Elder.
+      <span class="small">Source: <a href="https://www.goodreads.com/quotes/795577" target="_blank" rel="noopener noreferrer">https://www.goodreads.com/quotes/795577</a></span>
+    </p>
+    <p>Decision-ready output requires clear narrative discipline. Every thesis should include one paragraph for the base case, one for upside, and one for downside, each tied to measurable evidence. Ambiguous narrative language should be removed. This practice not only improves decision quality but also makes retrospective learning far easier.</p>
+
+    <h2>Practical checklist</h2>
+    <ul>
+  <li>Define risk budget before selecting names.</li>
+  <li>Link forecast uncertainty to notional exposure.</li>
+  <li>Use scenario stress tests before increasing size.</li>
+  <li>Review realized versus expected drawdown monthly.</li>
+</ul>
+
+    <h2>Execution steps</h2>
+    <ol>
+      <li>Define the market objective for this cycle and pin it to one decision horizon.</li>
+      <li>Load context in <a href="/terminal">Terminal</a> and collect structured modules that support or reject the thesis.</li>
+      <li>Run scenario framing in <a href="/forecasting">Forecast</a> and record quantile boundaries with expected catalysts.</li>
+      <li>Cross-check signal quality with <a href="/research">Research</a> and inspect narrative divergence before escalation.</li>
+      <li>Publish a concise note to <a href="/explore">Explore Feed</a> and route unresolved uncertainty to <a href="/model-council">Model Council</a>.</li>
+      <li>Convert approved actions into alert thresholds and assign owner-level accountability.</li>
+    </ol>
+
+    <h2>Implementation snippet</h2>
+    <p>
+      Keep implementation explicit and auditable. The pseudo-code below illustrates one way to formalize
+      the decision layer for this workflow.
+    </p>
+    <pre><code class="language-javascript">const riskBudget = portfolioVolTarget * capital;
+const positionSize = Math.min(maxNotional, riskBudget / Math.max(expectedDrawdown, 0.01));
+return { riskBudget, positionSize };</code></pre>
+
+    
+
+    <h2>Data and validation notes</h2>
+    <p>
+      Every run should log source timestamps, transformation version, and the validation scorecard used before decisions were made.
+      This is critical for governance and for reliable debriefs when the market path diverges from expectations.
+      A practical way to reduce rework is to keep one shared assumptions register for each live thesis. This register should include confidence bands, expected catalyst timing, and a forced-choice invalidation rule. If a thesis cannot be invalidated with observable market evidence, it is not yet operationally ready. The register also improves handoffs across time zones and between research and execution roles.
+    </p>
+    <p>
+      If you rely on no-code outputs in SageMaker Canvas or model-assisted drafting in Model Council, keep a strict separation
+      between exploratory notes and decision-authorized notes. Exploratory artifacts can move quickly; decision artifacts must be reproducible.
+    </p>
+
+    <h2>Execution metrics to track</h2>
+    <ul>
+      <li>Thesis invalidation frequency by sector</li>
+      <li>Scenario plan adherence versus realized market path</li>
+      <li>Owner response time for watchlist alerts tagged as high urgency</li>
+      <li>Percent of published notes with explicit invalidation rules</li>
+      <li>Share of decisions that include documented downside and scenario response</li>
+    </ul>
+
+    <h2>Risks / caveats</h2>
+    <p class="small"><strong>LLMs can sometimes make mistakes.</strong></p>
+    <ul>
+  <li>Data leakage can produce deceptively strong backtests that collapse out of sample.</li>
+  <li>Regime shifts can invalidate historical relationships quickly, especially around policy events.</li>
+  <li>Narrative momentum can overpower model outputs in short windows; sizing must reflect that uncertainty.</li>
+  <li>Cross-source discrepancies can create false precision if validation checks are skipped.</li>
+</ul>
+
+    <h2>Weekly review template</h2>
+    <ol>
+      <li>What changed in macro context and why does it matter for this thesis?</li>
+      <li>Did forecast dispersion widen or narrow, and what does that imply for sizing?</li>
+      <li>Which catalyst is now most likely to break the current narrative?</li>
+      <li>What is the single highest-impact risk if the thesis is wrong right now?</li>
+      <li>What action should be taken before the next review window?</li>
+    </ol>
+
+    <h2>Decision handoff</h2>
+    <p>
+      Before finalizing decisions, route findings to <a href="/pricing">Pricing</a> tier policy checks,
+      validate entitlement limits, and ensure the request metadata is stored for future review.
+      This is where process quality compounds over time.
+    </p>
+    <p>
+      Final operator note (2025-12-25): #portfolio-playbooks #portfolio #sizing #risk-budget #playbook #quantura #markets. Keep assumptions explicit, keep triggers measurable,
+      and never separate signal quality from execution quality.
+    </p>
+  
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="container footer-grid">
+        <div>
+          <div class="logo">QUANTURA</div>
+          <p class="small">Decision intelligence for market research, forecasting, and execution.</p>
+        </div>
+        <div class="small">
+          <strong>Explore</strong>
+          <div><a href="/">Home</a></div>
+          <div><a href="/terminal">Terminal</a></div>
+          <div><a href="/explore">Explore Feed</a></div>
+          <div><a href="/research">Research</a></div>
+          <div><a href="/blog">Blog</a></div>
+          <div><a href="/pricing">Pricing</a></div>
+        </div>
+      </div>
+      <div class="container small" style="margin-top: 24px;">© 2026 Quantura. All rights reserved.</div>
+    </footer>
+  </body>
+</html>

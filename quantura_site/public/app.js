@@ -1886,7 +1886,7 @@
     remoteFlags: {
 	      watchlistEnabled: true,
 	      forecastProphetEnabled: true,
-	      forecastTimeMixerEnabled: true,
+	      forecastCanvasEnabled: true,
         enableSocialLeaderboard: true,
         forecastModelPrimary: "Quantura Horizon",
         promoBannerText: "",
@@ -2885,7 +2885,7 @@
 	            welcome_message: "",
 	            watchlist_enabled: true,
 	            forecast_prophet_enabled: true,
-	            forecast_timemixer_enabled: true,
+	            forecast_canvas_enabled: true,
               enable_social_leaderboard: true,
               forecast_model_primary: "Quantura Horizon",
               promo_banner_text: "",
@@ -2979,7 +2979,7 @@
             welcome_message: "",
             watchlist_enabled: true,
             forecast_prophet_enabled: true,
-            forecast_timemixer_enabled: true,
+            forecast_canvas_enabled: true,
             enable_social_leaderboard: true,
             forecast_model_primary: "Quantura Horizon",
             promo_banner_text: "",
@@ -3079,7 +3079,7 @@
           welcomeMessage: getString("welcome_message", ""),
 		      watchlistEnabled: getBool("watchlist_enabled", true),
 		      forecastProphetEnabled: getBool("forecast_prophet_enabled", true),
-		      forecastTimeMixerEnabled: getBool("forecast_timemixer_enabled", true),
+		      forecastCanvasEnabled: getBool("forecast_canvas_enabled", true),
           enableSocialLeaderboard: getBool("enable_social_leaderboard", true),
           forecastModelPrimary: getString("forecast_model_primary", "Quantura Horizon"),
           promoBannerText: getString("promo_banner_text", ""),
@@ -3549,7 +3549,7 @@
 	    logEvent("remote_config_loaded", {
 	      watchlist: state.remoteFlags.watchlistEnabled,
 	      prophet: state.remoteFlags.forecastProphetEnabled,
-	      timemixer: state.remoteFlags.forecastTimeMixerEnabled,
+	      canvas: state.remoteFlags.forecastCanvasEnabled,
 	    });
 	    return state.remoteFlags;
 	  };
@@ -14178,7 +14178,7 @@
   const labelForecastService = (raw) => {
     const key = String(raw || "").trim().toLowerCase();
     if (key === "prophet") return "Quantura Horizon";
-    if (key === "ibm_timemixer") return "IBM TimeMixer";
+    if (key === "sagemaker_canvas") return "SageMaker Canvas";
     return raw ? String(raw) : "Forecast";
   };
 
