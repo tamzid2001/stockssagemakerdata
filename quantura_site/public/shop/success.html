@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Order Confirmed | Quantura Shop</title>
+    <meta name="description" content="Your Quantura Shop order has been confirmed." />
+    <meta name="robots" content="noindex,follow" />
+    <link rel="canonical" href="https://quantura.studio/shop/success" />
+    <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/shop.css" />
+  </head>
+  <body class="shop-page success-page">
+    <header class="shop-header">
+      <div class="shop-container nav-shell">
+        <a class="brand" href="/" aria-label="Quantura home">
+          <img src="/assets/quantura-logo.svg" alt="Quantura" />
+        </a>
+        <nav class="shop-nav" aria-label="Primary">
+          <a href="/shop" aria-current="page">Shop</a>
+          <a href="/pricing">Pricing</a>
+          <a href="/contact">Contact Us</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="shop-main">
+      <section class="shop-container success-shell">
+        <p class="eyebrow">Order confirmed</p>
+        <h1>Thanks for your purchase.</h1>
+        <p class="muted">We are confirming your payment and preparing shipment details.</p>
+
+        <div id="order-status" class="shop-message">Loading order summary...</div>
+
+        <article id="order-summary" class="order-summary hidden" aria-live="polite">
+          <div class="summary-row">
+            <span>Session</span>
+            <strong id="summary-session">-</strong>
+          </div>
+          <div class="summary-row">
+            <span>Status</span>
+            <strong id="summary-status">-</strong>
+          </div>
+          <div class="summary-row">
+            <span>Email</span>
+            <strong id="summary-email">-</strong>
+          </div>
+          <div class="summary-row">
+            <span>Total</span>
+            <strong id="summary-total">-</strong>
+          </div>
+          <div class="summary-row">
+            <span>Shipping</span>
+            <strong id="summary-shipping">-</strong>
+          </div>
+          <div>
+            <h2>Items</h2>
+            <ul id="summary-items" class="summary-items"></ul>
+          </div>
+        </article>
+
+        <div class="success-actions">
+          <a class="cta" href="/shop">Back to shop</a>
+          <a class="cta secondary" href="/dashboard">Go to dashboard</a>
+        </div>
+      </section>
+    </main>
+
+    <script defer src="/shop-success.js"></script>
+  </body>
+</html>
