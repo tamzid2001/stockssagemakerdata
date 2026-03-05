@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SITE_DIR="$ROOT_DIR/quantura_site"
 FUNCTIONS_SRC="$SITE_DIR/functions_explore"
+SSR_FUNCTIONS_SRC="$SITE_DIR/functions_ssr"
 
 FIREBASERC_PROJECT="$(
   node -e "try{const fs=require('fs');const p=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));process.stdout.write((p.projects&&p.projects.default)||'');}catch(_e){}" \
@@ -112,6 +113,9 @@ else
   echo "==> Skipping local functions build (Cloud Build handles function build during deploy)"
 fi
 
+echo "==> Syncing SSR HTML templates"
+node "${SSR_FUNCTIONS_SRC}/scripts/sync-templates.js"
+
 echo "==> Deploying quanturaExploreApi (Gen2)"
 "${GCLOUD_BIN}" functions deploy quanturaExploreApi \
   --quiet \
@@ -210,6 +214,19 @@ echo "==> Deploying Pub/Sub trigger: refreshFiscaldataDefaults"
   --source="${FUNCTIONS_SRC}" \
   --entry-point=refreshFiscaldataDefaults \
   --trigger-topic="${FISCALDATA_REFRESH_TOPIC}" \
+  ${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"}
+
+echo "==> Deploying ssr (Gen2)"
+"${GCLOUD_BIN}" functions deploy ssr \
+  --quiet \
+  --project="${PROJECT_ID}" \
+  --gen2 \
+  --runtime="${FUNCTIONS_RUNTIME}" \
+  --region="${REGION}" \
+  --source="${SSR_FUNCTIONS_SRC}" \
+  --entry-point=ssr \
+  --trigger-http \
+  --allow-unauthenticated \
   ${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"}
 
 echo "==> Deploying frontend hosting"
