@@ -4,6 +4,7 @@ import admin from "firebase-admin";
 import { GoogleAuth } from "google-auth-library";
 import { registerFiscalDataRoutes } from "./fiscaldataProxy";
 import { runScheduledFiscaldataRefresh } from "./schedules/refreshFiscaldata";
+export { shopApi } from "./shopApi";
 
 if (!admin.apps.length) {
   admin.initializeApp();

@@ -1,300 +1,467 @@
 (() => {
-  const root = document.getElementById("shop-root");
-  if (!root) return;
+  const CART_STORAGE_KEY = "quantura_shop_cart_v1";
+  const EMAIL_STORAGE_KEY = "quantura_shop_email_v1";
 
-  const platformNode = document.getElementById("shop-platform");
-  const statusNode = document.getElementById("shop-status");
-  const productsNode = document.getElementById("shop-products");
-
-  const setStatus = (text, isError = false) => {
-    if (!statusNode) return;
-    statusNode.textContent = text;
-    statusNode.classList.toggle("error", Boolean(isError));
+  const dom = {
+    grid: document.getElementById("shop-grid"),
+    message: document.getElementById("shop-message"),
+    tabs: Array.from(document.querySelectorAll("[data-filter]")),
+    search: document.getElementById("shop-search"),
+    cartToggle: document.getElementById("cart-toggle"),
+    cartClose: document.getElementById("cart-close"),
+    cartDrawer: document.getElementById("cart-drawer"),
+    cartOverlay: document.getElementById("cart-overlay"),
+    cartCount: document.getElementById("cart-count"),
+    cartItems: document.getElementById("cart-items"),
+    subtotal: document.getElementById("subtotal-value"),
+    shipping: document.getElementById("shipping-value"),
+    total: document.getElementById("total-value"),
+    shippingNote: document.getElementById("shipping-note"),
+    checkoutButton: document.getElementById("checkout-button"),
+    portalButton: document.getElementById("portal-button"),
+    email: document.getElementById("checkout-email"),
   };
 
-  const runtime = (() => {
-    const cap = window.Capacitor;
-    const platform = (() => {
-      try {
-        const p = String(cap?.getPlatform?.() || "").toLowerCase();
-        if (p === "ios" || p === "android") return p;
-      } catch {
-        // Ignore platform check errors.
-      }
-      return null;
-    })();
-    const native = (() => {
-      try {
-        if (typeof cap?.isNativePlatform === "function") return Boolean(cap.isNativePlatform());
-      } catch {
-        // Ignore check errors.
-      }
-      return Boolean(platform);
-    })();
+  if (!dom.grid) return;
 
-    return {
-      isNativeApp: native,
-      platform,
-      isInstalledPwa:
-        window.matchMedia?.("(display-mode: standalone)")?.matches || Boolean(window.navigator.standalone),
-    };
-  })();
-
-  const runtimeLabel = runtime.isNativeApp
-    ? `Native (${runtime.platform || "unknown"})`
-    : runtime.isInstalledPwa
-      ? "Installed PWA"
-      : "Web";
-  if (platformNode) platformNode.textContent = runtimeLabel;
-
-  const normalizeText = (value) => String(value ?? "").trim();
-
-  const toCurrency = (amount, currency) => {
-    const num = Number(amount);
-    if (!Number.isFinite(num)) return "-";
-    try {
-      return new Intl.NumberFormat(undefined, {
-        style: "currency",
-        currency: String(currency || "USD").toUpperCase(),
-      }).format(num / 100);
-    } catch {
-      return `${(num / 100).toFixed(2)} ${currency || "USD"}`;
-    }
+  const state = {
+    products: [],
+    shippingPolicy: null,
+    filter: "all",
+    query: "",
+    loading: true,
+    cart: readStoredCart(),
+    email: readStoredEmail(),
   };
 
-  const isDigitalProduct = (product) => {
-    const metadata = product?.metadata && typeof product.metadata === "object" ? product.metadata : {};
-    const directFlag =
-      metadata.isDigital === true ||
-      metadata.is_digital === "true" ||
-      String(metadata.productType || "").toLowerCase() === "digital" ||
-      String(metadata.kind || "").toLowerCase() === "digital";
-    return Boolean(directFlag);
+  const money = (cents, currency = "USD") => {
+    const value = Number(cents);
+    if (!Number.isFinite(value)) return "$0.00";
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: String(currency || "USD").toUpperCase(),
+    }).format(value / 100);
   };
 
-  const openNativeIap = ({ productId, priceId }) => {
-    const detail = { productId, priceId };
-    try {
-      window.dispatchEvent(new CustomEvent("quantura:iap:open", { detail }));
-    } catch {
-      // Ignore event dispatch failures.
+  const showMessage = (text, type = "info") => {
+    if (!dom.message) return;
+    if (!text) {
+      dom.message.textContent = "";
+      dom.message.classList.add("hidden");
+      dom.message.classList.remove("warn", "success");
+      return;
     }
-
-    // iOS webkit bridge
-    try {
-      const handler = window.webkit?.messageHandlers?.quanturaIap;
-      if (handler && typeof handler.postMessage === "function") {
-        handler.postMessage({ action: "openPaywall", ...detail });
-        return true;
-      }
-    } catch {
-      // Ignore webkit bridge errors.
-    }
-
-    // Android bridge
-    try {
-      if (window.Android && typeof window.Android.openIapPaywall === "function") {
-        window.Android.openIapPaywall(JSON.stringify(detail));
-        return true;
-      }
-    } catch {
-      // Ignore Android bridge errors.
-    }
-
-    return false;
+    dom.message.textContent = text;
+    dom.message.classList.remove("hidden", "warn", "success");
+    if (type === "warn") dom.message.classList.add("warn");
+    if (type === "success") dom.message.classList.add("success");
   };
 
-  const createStripeExtensionSession = async ({ uid, priceId, productId, mode }) => {
-    const db = firebase.firestore();
-    const checkoutRef = await db
-      .collection("customers")
-      .doc(uid)
-      .collection("checkout_sessions")
-      .add({
-        price: priceId,
-        mode: mode || "payment",
-        allow_promotion_codes: true,
-        success_url: `${window.location.origin}/shop?checkout=success&product=${encodeURIComponent(productId)}`,
-        cancel_url: `${window.location.origin}/shop?checkout=cancel&product=${encodeURIComponent(productId)}`,
-        metadata: {
-          productId,
-          source: "quantura_shop",
-          runtime: runtime.isNativeApp ? runtime.platform || "native" : runtime.isInstalledPwa ? "pwa" : "web",
-        },
+  function readStoredCart() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(CART_STORAGE_KEY) || "{}");
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+      const safe = {};
+      Object.entries(parsed).forEach(([sku, qtyRaw]) => {
+        const qty = Number(qtyRaw);
+        if (!Number.isFinite(qty)) return;
+        safe[String(sku)] = Math.max(1, Math.min(10, Math.floor(qty)));
       });
+      return safe;
+    } catch {
+      return {};
+    }
+  }
 
-    return new Promise((resolve, reject) => {
-      const unsubscribe = checkoutRef.onSnapshot(
-        (snap) => {
-          const data = snap.data();
-          const err = data?.error;
-          if (err) {
-            unsubscribe();
-            reject(new Error(normalizeText(err.message || err.code || "Checkout session failed.")));
-            return;
-          }
+  function persistCart() {
+    localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(state.cart));
+  }
 
-          const url = normalizeText(data?.url);
-          if (url) {
-            unsubscribe();
-            resolve(url);
-          }
-        },
-        (error) => {
-          unsubscribe();
-          reject(error);
-        }
-      );
+  function readStoredEmail() {
+    return String(localStorage.getItem(EMAIL_STORAGE_KEY) || "").trim();
+  }
+
+  function persistEmail(value) {
+    localStorage.setItem(EMAIL_STORAGE_KEY, String(value || "").trim());
+  }
+
+  function filteredProducts() {
+    const query = String(state.query || "").trim().toLowerCase();
+    return state.products.filter((product) => {
+      if (state.filter !== "all" && product.tab !== state.filter) return false;
+      if (!query) return true;
+      const haystack = `${product.name} ${product.description}`.toLowerCase();
+      return haystack.includes(query);
     });
-  };
+  }
 
-  const loadProducts = async () => {
-    if (!(window.firebase && firebase.firestore && firebase.auth)) {
-      setStatus("Firebase SDK unavailable on this page.", true);
+  function productBySku(sku) {
+    return state.products.find((item) => item.sku === sku) || null;
+  }
+
+  function cartEntries() {
+    return Object.entries(state.cart)
+      .map(([sku, qty]) => ({ sku, qty: Number(qty), product: productBySku(sku) }))
+      .filter((row) => row.product && Number.isFinite(row.qty) && row.qty > 0);
+  }
+
+  function computeTotals() {
+    const rows = cartEntries();
+    const subtotal = rows.reduce((sum, row) => sum + row.product.priceCents * row.qty, 0);
+    const hasHardware = rows.some((row) => row.product.shippingClass === "hardware");
+    const policy = hasHardware ? state.shippingPolicy?.hardware : state.shippingPolicy?.pod;
+    const shipping = policy
+      ? subtotal >= Number(policy.freeOverCents || 0)
+        ? 0
+        : Number(policy.flatRateCents || 0)
+      : 0;
+    return {
+      rows,
+      subtotal,
+      shipping,
+      total: subtotal + shipping,
+      hasHardware,
+      shippingPolicy: policy || null,
+    };
+  }
+
+  function renderProducts() {
+    if (state.loading) return;
+
+    const rows = filteredProducts();
+    if (!rows.length) {
+      dom.grid.innerHTML = '<div class="shop-message">No matching products for this filter.</div>';
       return;
     }
 
-    const db = firebase.firestore();
-    const productsSnap = await db.collection("products").where("active", "==", true).get();
-    const cards = [];
-
-    for (const doc of productsSnap.docs) {
-      const product = doc.data() || {};
-      const pricesSnap = await doc.ref.collection("prices").where("active", "==", true).limit(5).get();
-      const prices = pricesSnap.docs
-        .map((priceDoc) => ({ id: priceDoc.id, ...(priceDoc.data() || {}) }))
-        .filter((price) => price && Number.isFinite(Number(price.unit_amount)));
-
-      if (!prices.length) continue;
-
-      const defaultPrice = prices[0];
-      const digital = isDigitalProduct(product);
-      const isSubscription = String(defaultPrice.type || "").toLowerCase() === "recurring";
-
-      cards.push({
-        id: doc.id,
-        name: normalizeText(product.name || doc.id),
-        description: normalizeText(product.description || ""),
-        active: Boolean(product.active),
-        digital,
-        isSubscription,
-        prices,
-        defaultPrice,
-      });
-    }
-
-    if (!cards.length) {
-      productsNode.innerHTML = '<div class="card"><div class="small muted">No active shop products found in Firestore.</div></div>';
-      setStatus("No active products configured.");
-      return;
-    }
-
-    productsNode.innerHTML = cards
-      .map((card) => {
-        const priceOptions = card.prices
-          .map(
-            (price) =>
-              `<option value="${price.id}">${toCurrency(price.unit_amount, price.currency)}${
-                String(price.type || "").toLowerCase() === "recurring" ? " / recurring" : ""
-              }</option>`
-          )
-          .join("");
-
+    dom.grid.innerHTML = rows
+      .map((product) => {
+        const fullStars = Math.floor(Number(product.rating?.value || 0));
+        const stars = "★".repeat(Math.max(0, Math.min(5, fullStars))).padEnd(5, "☆");
         return `
-          <article class="card" data-shop-product="${card.id}">
-            <h3>${card.name}</h3>
-            <p class="small">${card.description || "No description."}</p>
-            <div class="profile-item"><span class="label">Type</span><span class="value">${card.digital ? "Digital" : "Physical/Web"}</span></div>
-            <div class="profile-item"><span class="label">Runtime lane</span><span class="value">${
-              card.digital && runtime.isNativeApp ? "Native IAP" : "Stripe Checkout"
-            }</span></div>
-            <label class="label" for="shop-price-${card.id}" style="margin-top: 8px;">Price</label>
-            <select id="shop-price-${card.id}" class="input" data-shop-price="${card.id}">
-              ${priceOptions}
-            </select>
-            <div class="hero-actions" style="margin-top: 10px;">
-              <button type="button" class="cta" data-shop-buy="${card.id}"><i class="iconoir-shopping-bag-check" aria-hidden="true"></i><span>Buy</span></button>
+          <article class="product-card" data-sku="${escapeHtml(product.sku)}">
+            <img
+              class="product-image"
+              src="${escapeHtml(product.imageUrl)}"
+              alt="${escapeHtml(product.name)}"
+              loading="lazy"
+              onerror="this.onerror=null;this.src='${escapeHtml(product.placeholderImageUrl || "/assets/shop/placeholder.png")}';"
+            />
+            <div class="product-body">
+              <h2 class="product-name">${escapeHtml(product.name)}</h2>
+              <p class="product-desc">${escapeHtml(product.description)}</p>
+              <div class="product-rating">
+                <span class="product-stars" aria-hidden="true">${stars}</span>
+                <span>${Number(product.rating?.value || 0).toFixed(1)} (${Number(product.rating?.count || 0)})</span>
+              </div>
+              <div class="product-price">${money(product.priceCents, product.currency)}</div>
+              <p class="product-shipping">${escapeHtml(product.ships)}</p>
+              <div class="card-actions">
+                <button type="button" class="cta" data-action="add" data-sku="${escapeHtml(product.sku)}">Add to cart</button>
+              </div>
             </div>
           </article>
         `;
       })
       .join("");
-
-    setStatus(`Loaded ${cards.length} active products.`);
-
-    const byId = Object.fromEntries(cards.map((item) => [item.id, item]));
-
-    productsNode.addEventListener("click", async (event) => {
-      const buyButton = event.target.closest("[data-shop-buy]");
-      if (!buyButton) return;
-
-      const productId = String(buyButton.getAttribute("data-shop-buy") || "");
-      const product = byId[productId];
-      if (!product) return;
-
-      const select = productsNode.querySelector(`[data-shop-price="${productId}"]`);
-      const priceId = normalizeText(select?.value || product.defaultPrice?.id || "");
-      if (!priceId) {
-        setStatus("No active price found for this product.", true);
-        return;
-      }
-
-      if (product.digital && runtime.isNativeApp) {
-        const opened = openNativeIap({ productId, priceId });
-        if (!opened) {
-          setStatus("Native paywall bridge not found. Ensure wrapper exposes IAP bridge.", true);
-        } else {
-          setStatus("Opening native IAP paywall...");
-        }
-        return;
-      }
-
-      const user = firebase.auth().currentUser;
-      if (!user) {
-        setStatus("Sign in before checkout.", true);
-        return;
-      }
-
-      buyButton.disabled = true;
-      setStatus("Creating Stripe Checkout session...");
-
-      try {
-        const checkoutUrl = await createStripeExtensionSession({
-          uid: user.uid,
-          priceId,
-          productId,
-          mode: product.isSubscription ? "subscription" : "payment",
-        });
-        window.location.assign(checkoutUrl);
-      } catch (error) {
-        setStatus(error?.message || "Unable to start checkout.", true);
-        buyButton.disabled = false;
-      }
-    });
-  };
-
-  const query = new URL(window.location.href).searchParams;
-  const checkoutStatus = normalizeText(query.get("checkout"));
-  if (checkoutStatus === "success") {
-    setStatus("Checkout completed. Your order status will appear in dashboard shortly.");
-  } else if (checkoutStatus === "cancel") {
-    setStatus("Checkout canceled.", true);
   }
 
-  const init = () => {
-    if (!(window.firebase && firebase.auth)) {
-      setStatus("Firebase auth unavailable.", true);
+  function renderCart() {
+    const totals = computeTotals();
+
+    if (dom.cartCount) {
+      const count = totals.rows.reduce((sum, row) => sum + row.qty, 0);
+      dom.cartCount.textContent = String(count);
+    }
+
+    if (dom.cartItems) {
+      if (!totals.rows.length) {
+        dom.cartItems.innerHTML = '<p class="muted">Your cart is empty.</p>';
+      } else {
+        dom.cartItems.innerHTML = totals.rows
+          .map(
+            (row) => `
+              <article class="cart-item" data-cart-sku="${escapeHtml(row.sku)}">
+                <div class="cart-item-top">
+                  <div>
+                    <h3>${escapeHtml(row.product.name)}</h3>
+                    <div class="cart-item-price">${money(row.product.priceCents, row.product.currency)} each</div>
+                  </div>
+                  <button class="ghost" type="button" data-action="remove" data-sku="${escapeHtml(row.sku)}">Remove</button>
+                </div>
+                <div class="qty-row">
+                  <button class="qty-btn" type="button" data-action="decrease" data-sku="${escapeHtml(row.sku)}" aria-label="Decrease quantity">-</button>
+                  <span class="qty-value">${row.qty}</span>
+                  <button class="qty-btn" type="button" data-action="increase" data-sku="${escapeHtml(row.sku)}" aria-label="Increase quantity">+</button>
+                </div>
+              </article>
+            `
+          )
+          .join("");
+      }
+    }
+
+    if (dom.subtotal) dom.subtotal.textContent = money(totals.subtotal);
+    if (dom.shipping) dom.shipping.textContent = money(totals.shipping);
+    if (dom.total) dom.total.textContent = money(totals.total);
+
+    if (dom.shippingNote) {
+      if (!totals.rows.length) {
+        dom.shippingNote.textContent = "Shipping cost is finalized at checkout after address selection.";
+      } else if (!totals.shippingPolicy) {
+        dom.shippingNote.textContent = "Shipping estimate unavailable.";
+      } else {
+        const freeOver = Number(totals.shippingPolicy.freeOverCents || 0);
+        const thresholdText = `Free over ${money(freeOver)}.`;
+        dom.shippingNote.textContent = `${totals.shippingPolicy.estimate || ""} ${thresholdText}`.trim();
+      }
+    }
+
+    if (dom.checkoutButton) dom.checkoutButton.disabled = !totals.rows.length;
+    if (dom.portalButton) dom.portalButton.disabled = false;
+  }
+
+  function setFilter(nextFilter) {
+    state.filter = nextFilter;
+    dom.tabs.forEach((tab) => {
+      const active = String(tab.dataset.filter || "") === nextFilter;
+      tab.classList.toggle("active", active);
+      tab.setAttribute("aria-selected", active ? "true" : "false");
+    });
+    renderProducts();
+  }
+
+  function openCartDrawer() {
+    document.body.classList.add("cart-open");
+    if (dom.cartOverlay) dom.cartOverlay.hidden = false;
+    if (dom.cartToggle) dom.cartToggle.setAttribute("aria-expanded", "true");
+  }
+
+  function closeCartDrawer() {
+    document.body.classList.remove("cart-open");
+    if (dom.cartOverlay) dom.cartOverlay.hidden = true;
+    if (dom.cartToggle) dom.cartToggle.setAttribute("aria-expanded", "false");
+  }
+
+  function updateCartSku(sku, nextQty) {
+    const qty = Math.max(0, Math.min(10, Math.floor(Number(nextQty) || 0)));
+    if (qty <= 0) {
+      delete state.cart[sku];
+    } else {
+      state.cart[sku] = qty;
+    }
+    persistCart();
+    renderCart();
+  }
+
+  function addToCart(sku) {
+    const existing = Number(state.cart[sku] || 0);
+    updateCartSku(sku, Math.min(10, existing + 1));
+    showMessage("Added to cart.", "success");
+  }
+
+  async function fetchCatalog() {
+    state.loading = true;
+    showMessage("");
+
+    try {
+      const response = await fetch("/api/shop/catalog", {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+        },
+      });
+      if (!response.ok) throw new Error("Unable to load products.");
+
+      const payload = await response.json();
+      state.products = Array.isArray(payload.products) ? payload.products : [];
+      state.shippingPolicy = payload.shippingPolicy || null;
+      state.loading = false;
+      renderProducts();
+      renderCart();
+    } catch (error) {
+      state.loading = false;
+      dom.grid.innerHTML = '<div class="shop-message warn">Unable to load the product catalog right now.</div>';
+      showMessage(error.message || "Unable to load catalog.", "warn");
+    }
+  }
+
+  async function handleCheckout() {
+    const totals = computeTotals();
+    if (!totals.rows.length) {
+      showMessage("Add at least one item before checkout.", "warn");
       return;
     }
 
-    firebase.auth().onAuthStateChanged(async () => {
-      try {
-        await loadProducts();
-      } catch (error) {
-        setStatus(error?.message || "Failed to load shop products.", true);
+    const email = String(dom.email?.value || "").trim();
+    if (email && !isValidEmail(email)) {
+      showMessage("Enter a valid email address or leave it blank.", "warn");
+      return;
+    }
+
+    persistEmail(email);
+
+    const payload = {
+      items: totals.rows.map((row) => ({
+        sku: row.sku,
+        qty: row.qty,
+      })),
+      user: {
+        email,
+      },
+    };
+
+    if (dom.checkoutButton) {
+      dom.checkoutButton.disabled = true;
+      dom.checkoutButton.textContent = "Redirecting...";
+    }
+
+    try {
+      const response = await fetch("/api/shop/checkout", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.url) {
+        throw new Error(String(data.message || data.error || "Unable to start checkout."));
       }
+
+      window.location.assign(String(data.url));
+    } catch (error) {
+      showMessage(error.message || "Unable to start checkout.", "warn");
+      if (dom.checkoutButton) {
+        dom.checkoutButton.disabled = false;
+        dom.checkoutButton.textContent = "Checkout";
+      }
+    }
+  }
+
+  async function handleBillingPortal() {
+    const email = String(dom.email?.value || "").trim();
+    if (!isValidEmail(email)) {
+      showMessage("Enter your checkout email to open billing portal.", "warn");
+      return;
+    }
+
+    persistEmail(email);
+
+    if (dom.portalButton) {
+      dom.portalButton.disabled = true;
+      dom.portalButton.textContent = "Opening...";
+    }
+
+    try {
+      const response = await fetch("/api/shop/portal", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          email,
+          returnUrl: `${window.location.origin}/shop`,
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.url) {
+        throw new Error(String(data.message || data.error || "Unable to open billing portal."));
+      }
+
+      window.location.assign(String(data.url));
+    } catch (error) {
+      showMessage(error.message || "Unable to open billing portal.", "warn");
+      if (dom.portalButton) {
+        dom.portalButton.disabled = false;
+        dom.portalButton.textContent = "Open billing portal";
+      }
+    }
+  }
+
+  function bindEvents() {
+    dom.tabs.forEach((tab) => {
+      tab.addEventListener("click", () => {
+        setFilter(String(tab.dataset.filter || "all"));
+      });
     });
-  };
+
+    dom.search?.addEventListener("input", () => {
+      state.query = String(dom.search.value || "").trim();
+      renderProducts();
+    });
+
+    dom.grid.addEventListener("click", (event) => {
+      const target = event.target.closest("[data-action]");
+      if (!target) return;
+      const action = String(target.dataset.action || "");
+      const sku = String(target.dataset.sku || "").trim();
+      if (!sku) return;
+
+      if (action === "add") addToCart(sku);
+    });
+
+    dom.cartItems?.addEventListener("click", (event) => {
+      const target = event.target.closest("[data-action]");
+      if (!target) return;
+      const action = String(target.dataset.action || "");
+      const sku = String(target.dataset.sku || "").trim();
+      if (!sku) return;
+
+      const current = Number(state.cart[sku] || 0);
+      if (action === "increase") updateCartSku(sku, current + 1);
+      if (action === "decrease") updateCartSku(sku, current - 1);
+      if (action === "remove") updateCartSku(sku, 0);
+    });
+
+    dom.cartToggle?.addEventListener("click", () => {
+      const open = document.body.classList.contains("cart-open");
+      if (open) closeCartDrawer();
+      else openCartDrawer();
+    });
+
+    dom.cartClose?.addEventListener("click", closeCartDrawer);
+    dom.cartOverlay?.addEventListener("click", closeCartDrawer);
+
+    dom.checkoutButton?.addEventListener("click", handleCheckout);
+    dom.portalButton?.addEventListener("click", handleBillingPortal);
+
+    dom.email?.addEventListener("change", () => {
+      persistEmail(String(dom.email.value || "").trim());
+    });
+  }
+
+  function hydrateFromQuery() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("canceled") === "1") {
+      showMessage("Checkout canceled. Your cart is still saved.", "warn");
+    }
+  }
+
+  function escapeHtml(text) {
+    return String(text || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/\"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function isValidEmail(value) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+  }
+
+  function init() {
+    if (dom.email && state.email) dom.email.value = state.email;
+    bindEvents();
+    hydrateFromQuery();
+    renderCart();
+    fetchCatalog();
+  }
 
   init();
 })();

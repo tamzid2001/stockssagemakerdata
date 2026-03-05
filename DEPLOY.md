@@ -17,7 +17,7 @@ From repo root:
 
 `deploy.sh` always runs both stages in order:
 
-1. `gcloud functions deploy` for the Explore API + Firestore trigger functions.
+1. `gcloud functions deploy` for HTTP APIs (`quanturaExploreApi`, `shopApi`) + Firestore/PubSub trigger functions.
 2. `firebase deploy --only hosting` for frontend.
 
 Deployment is only considered complete after both stages succeed.
@@ -67,6 +67,13 @@ export GCLOUD_SET_SECRETS="OPENAI_API_KEY=projects/<PROJECT_ID>/secrets/OPENAI_A
 ./deploy.sh
 ```
 
+For Shop checkout/webhooks, also bind:
+
+```bash
+export GCLOUD_SET_SECRETS="$GCLOUD_SET_SECRETS,STRIPE_SECRET_KEY=projects/<PROJECT_ID>/secrets/STRIPE_SECRET_KEY:latest,STRIPE_WEBHOOK_SECRET=projects/<PROJECT_ID>/secrets/STRIPE_WEBHOOK_SECRET:latest"
+./deploy.sh
+```
+
 If any secret was previously committed in git history, rotate it.
 
 ## Smoke checks
@@ -77,4 +84,6 @@ curl -sS https://quantura.studio/api/health
 curl -sS -X POST https://quantura.studio/api/analytics/ad-impression \
   -H "Content-Type: application/json" \
   -d '{"platform":"android","adPlatform":"admob","adFormat":"rewarded","adUnitId":"test-unit"}'
+
+curl -sS https://quantura.studio/api/shop/catalog
 ```

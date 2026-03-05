@@ -89,6 +89,8 @@
       { "source": "/api/webhooks/inapppurchasesios", "function": "quanturaExploreApi" },
       { "source": "/api/webhooks/applenotifications", "function": "quanturaExploreApi" },
       { "source": "/api/webhooks/admob/reward", "function": "quanturaExploreApi" },
+      { "source": "/api/shop", "function": "shopApi" },
+      { "source": "/api/shop/**", "function": "shopApi" },
       { "source": "/api/saved", "function": "quanturaExploreApi" },
       { "source": "/api/saved/**", "function": "quanturaExploreApi" },
       { "source": "/api/my-requests", "function": "quanturaExploreApi" },
@@ -150,7 +152,8 @@
       { "source": "/tools/fx", "function": "ssr" },
       { "source": "/ticker", "function": "ssr" },
       { "source": "/ticker/**", "function": "ssr" },
-      { "source": "/shop", "function": "ssr" }
+      { "source": "/shop", "function": "ssr" },
+      { "source": "/shop/**", "function": "ssr" }
     ],
     "ignore": [
       "firebase.json",
