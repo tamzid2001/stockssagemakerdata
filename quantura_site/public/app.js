@@ -14,6 +14,7 @@
   const PROMO_LAST_SESSION_KEY = "quantura_promo_last_session_v1";
   const AUTH_PENDING_CREDENTIAL_KEY = "quantura_auth_pending_credential_v1";
   const AUTH_POST_SIGNIN_REFRESH_KEY = "quantura_auth_post_signin_refresh_v1";
+  const NATIVE_IAP_PENDING_EVENTS_KEY = "quantura_native_iap_pending_events_v1";
   const NOTIFICATION_PRIVACY_CACHE_KEY = "quantura_notification_privacy_v1";
   const FCM_LOG_CACHE_KEY = "quantura_fcm_log_v1";
   const CHART_RANGE_CACHE_KEY = "quantura_chart_range_v1";
@@ -3895,7 +3896,7 @@
     persistNotificationPrivacyCache();
     syncNotificationPrivacyControls();
 
-    if (!hasFullAccount()) return;
+    if (!hasSessionUser()) return;
     const headers = await buildApiAuthHeaders({ includeJson: true });
     const response = await fetch("/api/notifications/preferences", {
       method: "POST",
@@ -3915,7 +3916,7 @@
   };
 
   const loadNotificationPrivacySettings = async () => {
-    if (!hasFullAccount()) {
+    if (!hasSessionUser()) {
       syncNotificationPrivacyControls();
       return;
     }
@@ -5755,6 +5756,9 @@
 
   const setPurchaseState = (user) => {
     const accountAuthed = hasFullAccount(user);
+    const sessionAuthed = hasSessionUser(user);
+    const guestSession = isAnonymousUser(user);
+    const nativeIapRuntime = isNativeIapRuntime();
     ui.purchasePanels.forEach((panel) => {
       const button = panel.querySelector('[data-action="purchase"]');
       const note = panel.querySelector(".purchase-note");
@@ -5762,14 +5766,22 @@
       const stripe = panel.querySelector('[data-action="stripe"]');
       if (!button || !note) return;
 
-      if (accountAuthed) {
+      if (accountAuthed || (nativeIapRuntime && sessionAuthed)) {
         button.disabled = false;
-        button.textContent = button.dataset.labelAuth || "Choose plan";
-        note.textContent = "Subscriptions activate in your dashboard after payment confirmation.";
+        button.textContent = accountAuthed
+          ? button.dataset.labelAuth || "Choose plan"
+          : "Start as guest";
+        note.textContent =
+          accountAuthed
+            ? "Subscriptions activate in your dashboard after payment confirmation."
+            : "Guest checkout is enabled in native app. Purchases can be merged after sign-in.";
       } else {
         button.disabled = true;
         button.textContent = button.dataset.labelGuest || "Sign in to purchase";
-        note.textContent = "You must sign in to purchase. Checkout is secured to your account.";
+        note.textContent =
+          nativeIapRuntime
+            ? "Initializing guest checkout session..."
+            : "You must sign in to purchase. Checkout is secured to your account.";
         stripe?.classList.add("hidden");
         success?.classList.add("hidden");
       }
@@ -5815,12 +5827,12 @@
     }
     if (ui.billingPortalLink) {
       const nativeBilling = isNativeIosStoreKitCheckoutOnly() || isNativeAndroidPlayBillingCheckout();
-      ui.billingPortalLink.textContent = accountAuthed
+      ui.billingPortalLink.textContent = (accountAuthed || (nativeBilling && guestSession))
         ? nativeBilling
           ? nativeBillingPortalLabel()
           : "Open billing portal"
         : "Sign in to manage billing";
-      ui.billingPortalLink.setAttribute("href", accountAuthed ? "#" : "/account");
+      ui.billingPortalLink.setAttribute("href", (accountAuthed || (nativeBilling && guestSession)) ? "#" : "/account");
       ui.billingPortalLink.setAttribute("target", "_self");
       ui.billingPortalLink.removeAttribute("rel");
     }
@@ -16878,9 +16890,25 @@
   const loadVapidKey = async (functions) => {
     if (state.remoteFlags?.webPushVapidKey) return String(state.remoteFlags.webPushVapidKey || "").trim();
     if (window.QUANTURA_VAPID_KEY) return String(window.QUANTURA_VAPID_KEY || "").trim();
-    const getWebPushConfig = functions.httpsCallable("get_web_push_config");
-    const response = await getWebPushConfig({ meta: buildMeta() });
-    return String(response.data?.vapidKey || "").trim();
+    try {
+      const response = await fetch("/api/notifications/config", {
+        method: "GET",
+        credentials: "same-origin",
+      });
+      if (response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        const vapidPublicKey = String(payload?.vapidPublicKey || "").trim();
+        if (vapidPublicKey) return vapidPublicKey;
+      }
+    } catch (error) {
+      // Fall through to legacy callable fallback if available.
+    }
+    if (functions?.httpsCallable) {
+      const getWebPushConfig = functions.httpsCallable("get_web_push_config");
+      const response = await getWebPushConfig({ meta: buildMeta() });
+      return String(response.data?.vapidKey || "").trim();
+    }
+    return "";
   };
 
   const syncNotificationToken = async (functions, token, opts = {}) => {
@@ -16888,21 +16916,57 @@
     if (cleanToken.length < 20) {
       throw new Error("Valid notification token is required.");
     }
-    const registerPushToken = functions.httpsCallable("register_notification_token");
-    await registerPushToken({
-      token: cleanToken,
-      forceRefresh: Boolean(opts.forceRefresh),
-      meta: {
-        ...buildMeta(),
-        tokenSource: String(opts.source || "messaging"),
-      },
+    const headers = await buildApiAuthHeaders({ includeJson: true });
+    if (!headers.Authorization) {
+      throw new Error("Sign in before enabling notifications.");
+    }
+    const response = await fetch("/api/notifications/register-token", {
+      method: "POST",
+      headers,
+      credentials: "same-origin",
+      body: JSON.stringify({
+        token: cleanToken,
+        platform: isNativeApp() ? getNativePlatform() || "native" : "web",
+        source: String(opts.source || "messaging"),
+        notificationPrivacy: {
+          locationConsent: Boolean(state.notificationPrivacy?.locationConsent),
+          ipRegionConsent: Boolean(state.notificationPrivacy?.ipRegionConsent),
+          coarseLocation: state.notificationPrivacy?.coarseLocation || null,
+          ipRegion: String(state.notificationPrivacy?.ipRegion || "").trim(),
+          timezone: String(state.notificationPrivacy?.timezone || "").trim(),
+        },
+      }),
     });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(String(payload?.error || "Unable to register notification token."));
+    }
     localStorage.setItem(FCM_TOKEN_CACHE_KEY, cleanToken);
     return cleanToken;
   };
 
+  const pingNotificationSession = async () => {
+    if (!hasSessionUser()) return false;
+    const headers = await buildApiAuthHeaders({ includeJson: true });
+    if (!headers.Authorization) return false;
+    try {
+      const response = await fetch("/api/notifications/session/ping", {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: JSON.stringify({
+          isAnonymous: isAnonymousUser(),
+        }),
+      });
+      return Boolean(response.ok);
+    } catch (error) {
+      return false;
+    }
+  };
+
   const registerNotificationToken = async (functions, messaging, opts = {}) => {
-    if (!hasFullAccount()) throw new Error("Sign in before enabling notifications.");
+    if (!hasSessionUser()) throw new Error("Sign in before enabling notifications.");
+    await pingNotificationSession().catch(() => undefined);
     if (isNativeApp()) {
       const nativeToken = String(window.__NATIVE_FCM_TOKEN__ || "").trim();
       if (!nativeToken) throw new Error("Native push token is not available yet.");
@@ -16976,13 +17040,23 @@
     const token = localStorage.getItem(FCM_TOKEN_CACHE_KEY);
     if (!token) return;
     try {
-      const unregisterToken = functions.httpsCallable("unregister_notification_token");
-      await unregisterToken({ token, meta: buildMeta() });
-	    } catch (error) {
-	      // Ignore token cleanup errors.
-	    }
-	    localStorage.removeItem(FCM_TOKEN_CACHE_KEY);
-	  };
+      const headers = await buildApiAuthHeaders({ includeJson: true });
+      if (headers.Authorization) {
+        await fetch("/api/notifications/unregister-token", {
+          method: "POST",
+          headers,
+          credentials: "same-origin",
+          body: JSON.stringify({ token }),
+        });
+      } else if (functions?.httpsCallable) {
+        const unregisterToken = functions.httpsCallable("unregister_notification_token");
+        await unregisterToken({ token, meta: buildMeta() });
+      }
+    } catch (error) {
+      // Ignore token cleanup errors.
+    }
+    localStorage.removeItem(FCM_TOKEN_CACHE_KEY);
+  };
 
   const bindForegroundPushHandler = (messaging) => {
     if (!messaging || state.messagingBound) return;
@@ -17204,10 +17278,114 @@
     return sent;
   };
 
+  const isNativeIapRuntime = () => isNativeIosStoreKitCheckoutOnly() || isNativeAndroidPlayBillingCheckout();
+
+  const readPendingNativeIapEvents = () => {
+    try {
+      const raw = String(safeLocalStorageGet(NATIVE_IAP_PENDING_EVENTS_KEY) || "").trim();
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      return [];
+    }
+  };
+
+  const writePendingNativeIapEvents = (events) => {
+    try {
+      const list = Array.isArray(events) ? events.slice(0, 80) : [];
+      safeLocalStorageSet(NATIVE_IAP_PENDING_EVENTS_KEY, JSON.stringify(list));
+    } catch (error) {
+      // Ignore storage write issues.
+    }
+  };
+
+  const queuePendingNativeIapEvent = (payload) => {
+    const event = payload && typeof payload === "object" ? payload : {};
+    const next = {
+      eventId: String(event.eventId || `iap_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`).trim(),
+      productId: String(event.productId || "").trim(),
+      orderId: String(event.orderId || "").trim(),
+      status: String(event.status || "purchased").trim().toLowerCase(),
+      platform: String(event.platform || getNativePlatform() || "").trim().toLowerCase(),
+      source: String(event.source || "native_iap").trim().toLowerCase(),
+      sourceUid: String(event.sourceUid || "").trim(),
+      purchasedAtMs: Number(event.purchasedAtMs || Date.now()) || Date.now(),
+      queuedAtMs: Date.now(),
+    };
+    if (!next.productId) return;
+    const existing = readPendingNativeIapEvents();
+    existing.unshift(next);
+    writePendingNativeIapEvents(existing);
+  };
+
+  const flushPendingNativeIapEvents = async () => {
+    if (!hasSessionUser()) return;
+    const queued = readPendingNativeIapEvents();
+    if (!queued.length) return;
+    const headers = await buildApiAuthHeaders({ includeJson: true });
+    if (!headers.Authorization) return;
+    const remaining = [];
+    for (const event of queued.slice(0, 40)) {
+      try {
+        const response = await fetch("/api/notifications/iap-event", {
+          method: "POST",
+          headers,
+          credentials: "same-origin",
+          body: JSON.stringify(event),
+        });
+        if (!response.ok) {
+          remaining.push(event);
+        }
+      } catch (error) {
+        remaining.push(event);
+      }
+    }
+    writePendingNativeIapEvents(remaining);
+  };
+
+  const mergeAnonymousSessionData = async (sourceUid, targetUid) => {
+    const fromUid = String(sourceUid || "").trim();
+    const toUid = String(targetUid || "").trim();
+    if (!fromUid || !toUid || fromUid === toUid) return;
+    const headers = await buildApiAuthHeaders({ includeJson: true });
+    if (!headers.Authorization) return;
+    try {
+      await fetch("/api/notifications/merge-anon-data", {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: JSON.stringify({ sourceUid: fromUid }),
+      });
+    } catch (error) {
+      // Merge is best-effort and retried implicitly on future sign-ins.
+    }
+  };
+
   const confirmNativePurchaseOnBackend = async ({ orderId, productId, status }) => {
-    if (!orderId || !hasFullAccount()) return;
+    if (!orderId || !hasSessionUser()) {
+      if (orderId) {
+        queuePendingNativeIapEvent({
+          orderId,
+          productId,
+          status,
+          source: "native_iap_order_pending",
+          sourceUid: String(state.user?.uid || "").trim(),
+        });
+      }
+      return;
+    }
     const functions = state.clients?.functions;
-    if (!functions) return;
+    if (!functions) {
+      queuePendingNativeIapEvent({
+        orderId,
+        productId,
+        status,
+        source: "native_iap_order_no_functions",
+        sourceUid: String(state.user?.uid || "").trim(),
+      });
+      return;
+    }
     try {
       const confirm = functions.httpsCallable("confirm_native_iap_purchase");
       await confirm({
@@ -17219,8 +17397,13 @@
         meta: buildMeta(),
       });
     } catch (error) {
-      const message = extractErrorMessage(error, "Unable to finalize native purchase sync.");
-      showToast(message, "warn");
+      queuePendingNativeIapEvent({
+        orderId,
+        productId,
+        status,
+        source: "native_iap_order_retry",
+        sourceUid: String(state.user?.uid || "").trim(),
+      });
     }
   };
 
@@ -17275,6 +17458,15 @@
       showToast("In-app purchase completed.");
       if (orderId) {
         confirmNativePurchaseOnBackend({ orderId, productId, status: "purchased" });
+      } else {
+        queuePendingNativeIapEvent({
+          productId,
+          status: "purchased",
+          platform: getNativePlatform() || "unknown",
+          source: "native_iap_no_order",
+          sourceUid: String(state.user?.uid || "").trim(),
+        });
+        flushPendingNativeIapEvents().catch(() => undefined);
       }
       if (orderId) {
         logEvent("purchase", {
@@ -17318,7 +17510,20 @@
   };
 
   const handlePurchase = async (panel, functions) => {
-    if (!requireFullAccount("Sign in to continue.", { redirect: true })) return;
+    const nativeBillingProvider = isNativeIapRuntime();
+    if (nativeBillingProvider) {
+      try {
+        await ensureSessionUser({
+          reason: "native_iap_checkout",
+          message: "Initializing guest checkout session...",
+        });
+      } catch (error) {
+        showToast(error?.message || "Unable to initialize guest checkout session.", "warn");
+        return;
+      }
+    } else if (!requireFullAccount("Sign in to continue.", { redirect: true })) {
+      return;
+    }
 
     const button = panel.querySelector('[data-action="purchase"]');
     const note = panel.querySelector(".purchase-note");
@@ -17337,7 +17542,6 @@
     try {
       const productId = resolveNativeIapProductId(panel);
       const subscriptionTier = resolveNativeIapPlanKey(panel);
-      const nativeBillingProvider = isNativeIosStoreKitCheckoutOnly() || isNativeAndroidPlayBillingCheckout();
       logEvent("begin_checkout", { currency: panel.dataset.currency || "USD", value: Number(panel.dataset.price || 349) });
       const createOrder = functions.httpsCallable("create_order");
       const result = await createOrder({
@@ -17393,6 +17597,25 @@
         showToast("Order created. Proceed to payment.");
       }
     } catch (error) {
+      if (nativeBillingProvider) {
+        const sent = requestNativeInAppPurchase(panel, { orderId: "", source: "native_no_order_fallback" });
+        if (sent) {
+          if (stripe) stripe.classList.add("hidden");
+          if (note) {
+            note.textContent =
+              "Native checkout opened without a server order. We will sync purchase details after sign-in.";
+          }
+          queuePendingNativeIapEvent({
+            productId: resolveNativeIapProductId(panel),
+            status: "pending",
+            platform: getNativePlatform() || "unknown",
+            source: "native_iap_no_order_fallback",
+            sourceUid: String(state.user?.uid || "").trim(),
+          });
+          showToast("Opening native checkout in guest mode...");
+          return;
+        }
+      }
       showToast(error.message || "Unable to create order.", "warn");
     } finally {
       button.disabled = false;
@@ -17421,9 +17644,18 @@
   };
 
   const handleStripeCheckout = async (panel, functions) => {
-    if (!requireFullAccount("Sign in to continue.", { redirect: true })) return;
-
-    if (isNativeIosStoreKitCheckoutOnly() || isNativeAndroidPlayBillingCheckout()) {
+    if (isNativeIapRuntime()) {
+      if (!hasSessionUser()) {
+        try {
+          await ensureSessionUser({
+            reason: "native_iap_checkout",
+            message: "Initializing guest checkout session...",
+          });
+        } catch (error) {
+          showToast(error?.message || "Unable to initialize guest checkout session.", "warn");
+          return;
+        }
+      }
       const orderId = String(panel?.dataset?.orderId || "").trim();
       const sent = requestNativeInAppPurchase(panel, { orderId, source: "stripe_button" });
       if (!sent) {
@@ -17431,6 +17663,7 @@
       }
       return;
     }
+    if (!requireFullAccount("Sign in to continue.", { redirect: true })) return;
 
     if (!state.remoteFlags.stripeCheckoutEnabled) {
       showToast("Checkout is temporarily disabled.", "warn");
@@ -17488,10 +17721,20 @@
 
   const handleBillingPortalOpen = async (event, functions) => {
     if (!ui.billingPortalLink) return;
-    if (!hasFullAccount()) return;
 
-    if (isNativeIosStoreKitCheckoutOnly() || isNativeAndroidPlayBillingCheckout()) {
+    if (isNativeIapRuntime()) {
       event?.preventDefault?.();
+      if (!hasSessionUser()) {
+        try {
+          await ensureSessionUser({
+            reason: "native_subscription_manager",
+            message: "Initializing guest session...",
+          });
+        } catch (error) {
+          showToast(error?.message || "Unable to initialize session.", "warn");
+          return;
+        }
+      }
       const sent = requestNativeSubscriptionManager("billing_portal");
       if (sent) {
         showToast(
@@ -17504,6 +17747,7 @@
       }
       return;
     }
+    if (!hasFullAccount()) return;
 
     event?.preventDefault?.();
     if (ui.billingPortalLink.dataset.loading === "1") return;
@@ -21853,6 +22097,7 @@
           const previousUser = state.user;
           const previousUid = String(previousUser?.uid || "").trim();
           const previousWasFull = hasFullAccount(previousUser);
+          const previousWasAnonymous = isAnonymousUser(previousUser);
           const isFirstAuthEvent = !state.authStateBootstrapped;
           state.authStateBootstrapped = true;
 
@@ -21893,6 +22138,10 @@
 			      state.authResolved = true;
 			      state.user = user;
           const nextUid = String(user?.uid || "").trim();
+          if (previousWasAnonymous && hasFullAccount(user) && previousUid && nextUid && previousUid !== nextUid) {
+            await mergeAnonymousSessionData(previousUid, nextUid).catch(() => undefined);
+          }
+          await flushPendingNativeIapEvents().catch(() => undefined);
           const shouldRefreshAfterSignIn =
             !isFirstAuthEvent &&
             hasFullAccount(user) &&
@@ -21916,6 +22165,7 @@
             renderTickerHistory();
 			      setAuthUi(user);
 			      setUserId(hasFullAccount(user) ? user.uid : null);
+            await pingNotificationSession().catch(() => undefined);
             if (isNativeApp()) {
               installNativeAuthBridge(auth);
               if (user.isAnonymous) {
@@ -21954,10 +22204,31 @@
           } else if (!isNativeApp() && !messaging) {
             setNotificationStatus("Messaging SDK is not loaded on this page.");
           } else {
-            setNotificationStatus("Sign in and enable notifications.");
+            setNotificationControlsEnabled(true);
+            const cachedToken = localStorage.getItem(FCM_TOKEN_CACHE_KEY) || "";
+            setNotificationTokenPreview(cachedToken);
+            if (isNativeApp()) {
+              try {
+                const token = await registerNotificationToken(functions, messaging, { forceRefresh: !cachedToken });
+                setNotificationTokenPreview(token);
+                setNotificationStatus("Guest session notifications enabled for this device.");
+              } catch (error) {
+                setNotificationStatus(error.message || "Unable to initialize notifications.");
+              }
+            } else if (messaging && Notification.permission === "granted") {
+              try {
+                const token = await registerNotificationToken(functions, messaging, { forceRefresh: !cachedToken });
+                setNotificationTokenPreview(token);
+                setNotificationStatus("Guest session notifications enabled for this device.");
+              } catch (error) {
+                setNotificationStatus(error.message || "Unable to initialize notifications.");
+              }
+            } else if (!messaging) {
+              setNotificationStatus("Messaging SDK is not loaded on this page.");
+            } else {
+              setNotificationStatus("Enable notifications to receive guest-session alerts.");
+            }
           }
-          setNotificationTokenPreview("");
-          setNotificationControlsEnabled(false);
         }
             state.notificationFeed.items = [];
             state.notificationFeed.unreadCount = 0;

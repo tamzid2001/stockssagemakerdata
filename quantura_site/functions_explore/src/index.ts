@@ -4957,6 +4957,31 @@ ROUTES.post("/notifications/register-token", async (req, res) => {
   }
 });
 
+ROUTES.post("/notifications/unregister-token", async (req, res) => {
+  try {
+    const user = await verifyRequestUser(req, true);
+    if (!user) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const token = sanitizeText((req.body || {}).token, 4096);
+    if (!token || token.length < 20) {
+      res.status(400).json({ error: "invalid_token" });
+      return;
+    }
+    await db.collection("users").doc(user.uid).collection("fcmTokens").doc(token).delete().catch(() => undefined);
+    res.status(200).json({ ok: true, tokenSuffix: token.slice(-10) });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Explore] unregister token failed", error);
+    res.status(500).json({ error: "unregister_token_failed" });
+  }
+});
+
 ROUTES.post("/notifications/preferences", async (req, res) => {
   try {
     const user = await verifyRequestUser(req, true);
@@ -5145,6 +5170,184 @@ ROUTES.post("/notifications/session/ping", async (req, res) => {
     }
     console.error("[Notify] session ping failed", error);
     res.status(500).json({ error: "notification_session_ping_failed" });
+  }
+});
+
+ROUTES.post("/notifications/iap-event", async (req, res) => {
+  try {
+    const user = await verifyRequestUser(req, true);
+    if (!user) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const input = asPlainObject(req.body);
+    const productId = sanitizeText(input.productId, 120);
+    if (!productId) {
+      res.status(400).json({ error: "invalid_product_id" });
+      return;
+    }
+    const orderId = sanitizeText(input.orderId, 120);
+    const status = sanitizeText(input.status || "purchased", 40).toLowerCase() || "purchased";
+    const platform = sanitizeText(input.platform || "unknown", 20).toLowerCase() || "unknown";
+    const source = sanitizeText(input.source || "native_iap", 80) || "native_iap";
+    const sourceUid = sanitizeText(input.sourceUid, 220);
+    const purchasedAtMs = Math.max(0, Math.floor(asFinite(input.purchasedAtMs, Date.now())));
+    const requestedEventId = sanitizeText(input.eventId, 220).replace(/[^A-Za-z0-9._-]/g, "");
+    const generatedEventId = `evt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+    const eventId = requestedEventId || generatedEventId;
+    const isAnonymous = sanitizeText(user.firebase?.sign_in_provider, 40) === "anonymous";
+    const userRef = db.collection("users").doc(user.uid);
+
+    await userRef.collection("iapEvents").doc(eventId).set(
+      {
+        eventId,
+        uid: user.uid,
+        sourceUid,
+        productId,
+        orderId,
+        status,
+        platform,
+        source,
+        isAnonymous,
+        purchasedAtMs,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    res.status(200).json({
+      ok: true,
+      eventId,
+      uid: user.uid,
+      isAnonymous,
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Notify] iap-event failed", error);
+    res.status(500).json({ error: "notification_iap_event_failed" });
+  }
+});
+
+ROUTES.post("/notifications/merge-anon-data", async (req, res) => {
+  try {
+    const user = await verifyRequestUser(req, true);
+    if (!user) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const targetUid = sanitizeText(user.uid, 220);
+    const input = asPlainObject(req.body);
+    const sourceUid = sanitizeText(input.sourceUid, 220);
+    if (!sourceUid || !targetUid || sourceUid === targetUid) {
+      res.status(400).json({ error: "invalid_source_uid" });
+      return;
+    }
+
+    const sourceRef = db.collection("users").doc(sourceUid);
+    const targetRef = db.collection("users").doc(targetUid);
+    const [sourceSnap, targetSnap] = await Promise.all([sourceRef.get(), targetRef.get()]);
+    if (!sourceSnap.exists) {
+      res.status(404).json({ error: "source_user_not_found" });
+      return;
+    }
+
+    const sourceData = (sourceSnap.data() || {}) as Record<string, unknown>;
+    const targetData = (targetSnap.data() || {}) as Record<string, unknown>;
+    const sourceIsAnonymous = asBoolean(sourceData.isAnonymous, true);
+    if (!sourceIsAnonymous) {
+      res.status(400).json({ error: "source_user_not_anonymous" });
+      return;
+    }
+
+    const [sourceTokensSnap, sourceIapSnap] = await Promise.all([
+      sourceRef.collection("fcmTokens").limit(200).get(),
+      sourceRef.collection("iapEvents").limit(300).get(),
+    ]);
+
+    const mergeBatch = db.batch();
+    let mergedTokenCount = 0;
+    sourceTokensSnap.docs.forEach((doc) => {
+      const token = sanitizeText(doc.id, 512);
+      if (!token) return;
+      const data = (doc.data() || {}) as Record<string, unknown>;
+      mergeBatch.set(
+        targetRef.collection("fcmTokens").doc(token),
+        {
+          ...data,
+          mergedFromAnonymousUid: sourceUid,
+          lastSeenAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      mergedTokenCount += 1;
+    });
+
+    let mergedIapCount = 0;
+    sourceIapSnap.docs.forEach((doc) => {
+      const sourceEventId = sanitizeText(doc.id, 220).replace(/[^A-Za-z0-9._-]/g, "");
+      if (!sourceEventId) return;
+      const mergedEventId = `m_${sourceUid.slice(0, 20)}_${sourceEventId}`.slice(0, 220);
+      const data = (doc.data() || {}) as Record<string, unknown>;
+      mergeBatch.set(
+        targetRef.collection("iapEvents").doc(mergedEventId),
+        {
+          ...data,
+          uid: targetUid,
+          sourceUid,
+          mergedFromAnonymousUid: sourceUid,
+          mergedAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      mergedIapCount += 1;
+    });
+    await mergeBatch.commit();
+
+    const sourcePrefs = normalizeNotificationPrefs({}, (sourceData.notificationPrefs || {}) as Record<string, unknown>);
+    const targetPrefs = normalizeNotificationPrefs({}, (targetData.notificationPrefs || {}) as Record<string, unknown>);
+    const mergedPrefs = normalizeNotificationPrefs(
+      sourcePrefs as unknown as Record<string, unknown>,
+      targetPrefs as unknown as Record<string, unknown>
+    );
+    await targetRef.set(
+      {
+        notificationPrefs: mergedPrefs,
+        mergedAnonymousUids: admin.firestore.FieldValue.arrayUnion(sourceUid),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    await sourceRef.set(
+      {
+        mergedIntoUid: targetUid,
+        mergedAt: admin.firestore.FieldValue.serverTimestamp(),
+        mergeStatus: "merged",
+      },
+      { merge: true }
+    );
+
+    res.status(200).json({
+      ok: true,
+      sourceUid,
+      targetUid,
+      mergedTokenCount,
+      mergedIapCount,
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Notify] merge-anon-data failed", error);
+    res.status(500).json({ error: "notification_merge_anon_failed" });
   }
 });
 
