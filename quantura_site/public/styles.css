@@ -5530,8 +5530,19 @@ form[data-provider-accent="amazon_nova"] #screener-generate-button {
 }
 
 @media (max-width: 980px) {
+  .nav {
+    justify-content: flex-start;
+    gap: 10px;
+  }
+
+  .logo {
+    margin-right: 0;
+  }
+
   .mobile-nav-toggle {
     display: inline-flex;
+    margin-left: 2px;
+    flex-shrink: 0;
   }
 
   .sidebar-toggle {

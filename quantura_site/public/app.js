@@ -2191,6 +2191,7 @@
   const bindMobileNav = () => {
     const header = document.querySelector(".header");
     const nav = header?.querySelector(".nav");
+    const logo = nav?.querySelector(".logo");
     const links = header?.querySelector(".nav-links");
     const actions = header?.querySelector(".nav-actions");
     if (!header || !nav || !links || !actions) return;
@@ -2201,10 +2202,24 @@
       toggle = document.createElement("button");
       toggle.type = "button";
       toggle.className = "mobile-nav-toggle";
-      toggle.setAttribute("aria-label", "Toggle navigation menu");
+      toggle.setAttribute("aria-label", "Open navigation menu");
       toggle.setAttribute("aria-expanded", "false");
       toggle.innerHTML = icon("menu-scale");
-      nav.appendChild(toggle);
+      if (logo?.parentNode === nav) {
+        if (logo.nextSibling) {
+          nav.insertBefore(toggle, logo.nextSibling);
+        } else {
+          nav.appendChild(toggle);
+        }
+      } else {
+        nav.appendChild(toggle);
+      }
+    } else if (logo?.parentNode === nav && toggle.previousElementSibling !== logo) {
+      if (logo.nextSibling) {
+        nav.insertBefore(toggle, logo.nextSibling);
+      } else {
+        nav.appendChild(toggle);
+      }
     }
     if (!backdrop) {
       backdrop = document.createElement("button");
@@ -2214,9 +2229,15 @@
       header.appendChild(backdrop);
     }
 
+    const setToggleVisualState = (open) => {
+      toggle?.setAttribute("aria-expanded", open ? "true" : "false");
+      toggle?.setAttribute("aria-label", open ? "Close navigation menu" : "Open navigation menu");
+      toggle.innerHTML = open ? icon("xmark") : icon("menu-scale");
+    };
+
     const close = () => {
       header.classList.remove("nav-open");
-      toggle?.setAttribute("aria-expanded", "false");
+      setToggleVisualState(false);
       backdrop?.classList.add("hidden");
       document.body.classList.remove("mobile-nav-lock");
       links.style.removeProperty("top");
@@ -2231,7 +2252,7 @@
     };
     const open = () => {
       header.classList.add("nav-open");
-      toggle?.setAttribute("aria-expanded", "true");
+      setToggleVisualState(true);
       backdrop?.classList.remove("hidden");
       document.body.classList.add("mobile-nav-lock");
       syncOverlayPositions();
@@ -2254,6 +2275,8 @@
       if (window.innerWidth > 980) close();
       else if (header.classList.contains("nav-open")) syncOverlayPositions();
     });
+
+    setToggleVisualState(header.classList.contains("nav-open"));
   };
 
   const bindMobileBottomNav = () => {
