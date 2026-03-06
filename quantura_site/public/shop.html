@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Quantura Shop | Physical Products</title>
+        <meta name="description" content="Shop Quantura physical products for research workspaces, desk setups, and privacy protection." />
+        <meta name="robots" content="index, follow" />
+    <meta name="keywords" content="quantura shop, physical products, desk setup, privacy screen, stripe checkout" />
+        <link rel="canonical" href="https://quantura.studio/shop" />
+        <meta property="og:title" content="Quantura Shop | Physical Products" />
+        <meta property="og:description" content="Physical goods only: merch, desk setup hardware, and privacy products with secure checkout." />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content="https://quantura.studio/shop" />
+        <meta property="og:image" content="/assets/logo.png" />
+    <meta property="og:site_name" content="Quantura" />
+    <meta property="og:locale" content="en_US" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Quantura Shop | Physical Products" />
+    <meta name="twitter:description" content="Physical goods only: merch, desk setup hardware, and privacy products with secure checkout." />
+    <meta name="twitter:image" content="/assets/logo.png" />
+    <meta name="twitter:url" content="https://quantura.studio/shop" />
+    <meta name="author" content="Quantura" />
+    <meta name="theme-color" content="#0B1526" />
+    <link rel="alternate" hreflang="en-US" href="https://quantura.studio/shop" />
+    <link rel="alternate" hreflang="x-default" href="https://quantura.studio/shop" />
+    <link rel="icon" href="/assets/logo.png" type="image/png" />
+    <link rel="stylesheet" href="/shop.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
+  </head>
+  <body class="shop-page">
+    <header class="shop-header">
+      <div class="shop-container nav-shell">
+        <a class="brand" href="/" aria-label="Quantura home">
+          <img src="/assets/logo.png" alt="Quantura" />
+        </a>
+        <nav class="shop-nav" aria-label="Primary">
+          <a href="/forecasting">Terminal</a>
+          <a href="/explore">Explore</a>
+          <a href="/research">Research</a>
+          <a href="/events">Events</a>
+          <a href="/shop" aria-current="page">Shop</a>
+          <a href="/pricing">Pricing</a>
+          <a href="/contact">Contact Us</a>
+        </nav>
+        <button id="cart-toggle" class="cart-toggle" type="button" aria-expanded="false" aria-controls="cart-drawer">
+          Cart <span id="cart-count" class="count-pill">0</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="shop-main">
+      <section class="shop-hero shop-container">
+        <div>
+          <p class="eyebrow">Quantura Shop</p>
+          <h1>Physical products for research desks and execution teams.</h1>
+          <p>
+            Merch, workspace hardware, and privacy gear with secure shipping checkout through Stripe.
+            No in-app subscriptions on this page.
+          </p>
+        </div>
+        <div class="hero-meta">
+          <div>
+            <strong>Shipping</strong>
+            <p>POD: $6.95 (free over $75). Hardware/privacy: $12.95 (free over $250).</p>
+          </div>
+          <div>
+            <strong>Delivery</strong>
+            <p>POD 5-12 business days. Hardware/privacy 5-10 business days.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="shop-controls shop-container" aria-label="Catalog filters">
+        <div class="tabs" role="tablist" aria-label="Catalog categories">
+          <button class="tab active" type="button" data-filter="all" role="tab" aria-selected="true">All</button>
+          <button class="tab" type="button" data-filter="merch" role="tab" aria-selected="false">Merch</button>
+          <button class="tab" type="button" data-filter="desk_setup" role="tab" aria-selected="false">Desk Setup</button>
+          <button class="tab" type="button" data-filter="privacy" role="tab" aria-selected="false">Privacy</button>
+        </div>
+        <label class="search-wrap" for="shop-search">
+          <span>Search</span>
+          <input id="shop-search" type="search" placeholder="Search products" autocomplete="off" />
+        </label>
+      </section>
+
+      <section class="shop-container">
+        <div id="shop-message" class="shop-message hidden" role="status" aria-live="polite"></div>
+      </section>
+
+      <section class="shop-container layout">
+        <div class="catalog-area">
+          <div id="shop-grid" class="shop-grid" aria-live="polite">
+            <div class="skeleton-card"></div>
+            <div class="skeleton-card"></div>
+            <div class="skeleton-card"></div>
+            <div class="skeleton-card"></div>
+            <div class="skeleton-card"></div>
+            <div class="skeleton-card"></div>
+          </div>
+        </div>
+
+        <aside id="cart-drawer" class="cart-drawer" aria-label="Cart panel">
+          <div class="cart-header">
+            <h2>Cart</h2>
+            <button id="cart-close" class="ghost" type="button" aria-label="Close cart">Close</button>
+          </div>
+
+          <div id="cart-items" class="cart-items">
+            <p class="muted">Your cart is empty.</p>
+          </div>
+
+          <div class="cart-email">
+            <label for="checkout-email">Email for receipt and billing portal</label>
+            <input id="checkout-email" type="email" placeholder="you@company.com" autocomplete="email" />
+          </div>
+
+          <div class="cart-totals">
+            <div><span>Subtotal</span><strong id="subtotal-value">$0.00</strong></div>
+            <div><span>Shipping estimate</span><strong id="shipping-value">$0.00</strong></div>
+            <div class="total-row"><span>Total</span><strong id="total-value">$0.00</strong></div>
+            <p id="shipping-note" class="muted">Shipping cost is finalized at checkout after address selection.</p>
+          </div>
+
+          <div class="cart-actions">
+            <button id="checkout-button" class="cta" type="button">Checkout</button>
+            <button id="portal-button" class="cta secondary" type="button">Open billing portal</button>
+          </div>
+        </aside>
+      </section>
+
+      <section class="shop-container policy-section">
+        <details class="policy-card" open>
+          <summary>Shipping &amp; Returns</summary>
+          <div class="policy-grid">
+            <article>
+              <h3>Standard shipping</h3>
+              <p><strong>POD items:</strong> $6.95 (free over $75), estimated 5-12 business days total.</p>
+              <p><strong>Hardware/privacy:</strong> $12.95 (free over $250), estimated 5-10 business days total.</p>
+            </article>
+            <article>
+              <h3>Returns</h3>
+              <p><strong>POD:</strong> Reprint/refund for defects or lost shipments. Contact support for help.</p>
+              <p><strong>Hardware/privacy:</strong> 30-day returns (unopened preferred). Warranty varies by brand.</p>
+            </article>
+          </div>
+        </details>
+      </section>
+    </main>
+
+    <div id="cart-overlay" class="cart-overlay" hidden></div>
+
+    <script defer src="/shop.js"></script>
+  </body>
+</html>

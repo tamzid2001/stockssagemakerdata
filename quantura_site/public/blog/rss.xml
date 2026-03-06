@@ -2,42 +2,424 @@
 <rss version="2.0">
   <channel>
     <title>Quantura Blog</title>
-    <link>https://quantura-e2e3d.web.app/blog</link>
-    <description>Forecasting notes and market workflows from Quantura.</description>
+    <link>https://quantura.studio/blog</link>
+    <description>Institutional-grade market workflows and forecasting notes from Quantura.</description>
     <language>en-us</language>
-    <lastBuildDate>Mon, 23 Feb 2026 00:00:00 GMT</lastBuildDate>
-
+    <lastBuildDate>Thu, 26 Feb 2026 00:00:00 GMT</lastBuildDate>
     <item>
-      <title>Weekly Market Brief (2026-02-23) | Quantura Blog</title>
-      <link>https://quantura-e2e3d.web.app/blog/posts/2026-02-23-weekly-market-brief</link>
-      <guid>https://quantura-e2e3d.web.app/blog/posts/2026-02-23-weekly-market-brief</guid>
-      <pubDate>Mon, 23 Feb 2026 00:00:00 GMT</pubDate>
-      <description><![CDATA[Quantura market workflow notes.]]></description>
+      <title>Week 52: SageMaker Canvas Governance: Leakage, Drift, and Audit | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2026-02-26-sagemaker-canvas-governance-leakage-drift-and-audit</link>
+      <guid>https://quantura.studio/blog/posts/2026-02-26-sagemaker-canvas-governance-leakage-drift-and-audit</guid>
+      <pubDate>Thu, 26 Feb 2026 00:00:00 GMT</pubDate>
+      <description><![CDATA[SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
     </item>
 
     <item>
-      <title>Weekly Market Brief (2026-02-17) | Quantura Blog</title>
-      <link>https://quantura-e2e3d.web.app/blog/posts/2026-02-17-weekly-market-brief</link>
-      <guid>https://quantura-e2e3d.web.app/blog/posts/2026-02-17-weekly-market-brief</guid>
-      <pubDate>Tue, 17 Feb 2026 00:00:00 GMT</pubDate>
-      <description><![CDATA[Quantura market workflow notes.]]></description>
+      <title>Week 51: Model Council Escalation Paths for High Uncertainty | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2026-02-19-model-council-escalation-paths-for-high-uncertainty</link>
+      <guid>https://quantura.studio/blog/posts/2026-02-19-model-council-escalation-paths-for-high-uncertainty</guid>
+      <pubDate>Thu, 19 Feb 2026 00:00:00 GMT</pubDate>
+      <description><![CDATA[SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
     </item>
 
     <item>
-      <title>Forecasting + Screening + Options: A Faster Quantura Workflow | Quantura Blog</title>
-      <link>https://quantura-e2e3d.web.app/blog/posts/2026-02-17-forecasting-screening-options-workflow</link>
-      <guid>https://quantura-e2e3d.web.app/blog/posts/2026-02-17-forecasting-screening-options-workflow</guid>
-      <pubDate>Tue, 17 Feb 2026 00:00:00 GMT</pubDate>
-      <description><![CDATA[Quantura market workflow notes.]]></description>
+      <title>Week 50: Explore Audit Trails for Institutional Compliance | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2026-02-12-explore-audit-trails-for-institutional-compliance</link>
+      <guid>https://quantura.studio/blog/posts/2026-02-12-explore-audit-trails-for-institutional-compliance</guid>
+      <pubDate>Thu, 12 Feb 2026 00:00:00 GMT</pubDate>
+      <description><![CDATA[Model Council: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
     </item>
 
     <item>
-      <title>Weekly Market Brief (2026-02-16) | Quantura Blog</title>
-      <link>https://quantura-e2e3d.web.app/blog/posts/2026-02-16-weekly-market-brief</link>
-      <guid>https://quantura-e2e3d.web.app/blog/posts/2026-02-16-weekly-market-brief</guid>
-      <pubDate>Mon, 16 Feb 2026 00:00:00 GMT</pubDate>
-      <description><![CDATA[Quantura market workflow notes.]]></description>
+      <title>Week 49: Watchlist Ownership Models for Team Execution | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2026-02-05-watchlist-ownership-models-for-team-execution</link>
+      <guid>https://quantura.studio/blog/posts/2026-02-05-watchlist-ownership-models-for-team-execution</guid>
+      <pubDate>Thu, 05 Feb 2026 00:00:00 GMT</pubDate>
+      <description><![CDATA[Explore Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
     </item>
 
+    <item>
+      <title>Week 48: Narrative Contradictions and Tactical Repositioning | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2026-01-29-narrative-contradictions-and-tactical-repositioning</link>
+      <guid>https://quantura.studio/blog/posts/2026-01-29-narrative-contradictions-and-tactical-repositioning</guid>
+      <pubDate>Thu, 29 Jan 2026 00:00:00 GMT</pubDate>
+      <description><![CDATA[Watchlists & Alerts: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 47: Forecast Confidence Intervals in Position Reviews | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2026-01-22-forecast-confidence-intervals-in-position-reviews</link>
+      <guid>https://quantura.studio/blog/posts/2026-01-22-forecast-confidence-intervals-in-position-reviews</guid>
+      <pubDate>Thu, 22 Jan 2026 00:00:00 GMT</pubDate>
+      <description><![CDATA[Market Narratives: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 46: Momentum Exhaustion Signals and Risk Tapering | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2026-01-15-momentum-exhaustion-signals-and-risk-tapering</link>
+      <guid>https://quantura.studio/blog/posts/2026-01-15-momentum-exhaustion-signals-and-risk-tapering</guid>
+      <pubDate>Thu, 15 Jan 2026 00:00:00 GMT</pubDate>
+      <description><![CDATA[Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 45: Macro Breadth Dashboards for Cross-Asset Context | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2026-01-08-macro-breadth-dashboards-for-cross-asset-context</link>
+      <guid>https://quantura.studio/blog/posts/2026-01-08-macro-breadth-dashboards-for-cross-asset-context</guid>
+      <pubDate>Thu, 08 Jan 2026 00:00:00 GMT</pubDate>
+      <description><![CDATA[Technical Risk: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 44: SageMaker Canvas to Quantura Export Pipeline | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2026-01-01-sagemaker-canvas-to-quantura-export-pipeline</link>
+      <guid>https://quantura.studio/blog/posts/2026-01-01-sagemaker-canvas-to-quantura-export-pipeline</guid>
+      <pubDate>Thu, 01 Jan 2026 00:00:00 GMT</pubDate>
+      <description><![CDATA[Macro Signals: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 43: Scenario Trees for Concentrated Portfolio Risk | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-12-25-scenario-trees-for-concentrated-portfolio-risk</link>
+      <guid>https://quantura.studio/blog/posts/2025-12-25-scenario-trees-for-concentrated-portfolio-risk</guid>
+      <pubDate>Thu, 25 Dec 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[Portfolio Playbooks: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 42: Input Validation Patterns for Market Data APIs | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-12-18-input-validation-patterns-for-market-data-apis</link>
+      <guid>https://quantura.studio/blog/posts/2025-12-18-input-validation-patterns-for-market-data-apis</guid>
+      <pubDate>Thu, 18 Dec 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 41: Release Checklists for Native + Web Shells | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-12-11-release-checklists-for-native-web-shells</link>
+      <guid>https://quantura.studio/blog/posts/2025-12-11-release-checklists-for-native-web-shells</guid>
+      <pubDate>Thu, 11 Dec 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[Build Notes: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 40: Guardrails for Multi-Provider Model Routing | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-12-04-guardrails-for-multi-provider-model-routing</link>
+      <guid>https://quantura.studio/blog/posts/2025-12-04-guardrails-for-multi-provider-model-routing</guid>
+      <pubDate>Thu, 04 Dec 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[Model Council: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 39: Explore Post Templates for Reproducible Research | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-11-27-explore-post-templates-for-reproducible-research</link>
+      <guid>https://quantura.studio/blog/posts/2025-11-27-explore-post-templates-for-reproducible-research</guid>
+      <pubDate>Thu, 27 Nov 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[Explore Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 38: Alert Fatigue Reduction in Active Watchlists | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-11-20-alert-fatigue-reduction-in-active-watchlists</link>
+      <guid>https://quantura.studio/blog/posts/2025-11-20-alert-fatigue-reduction-in-active-watchlists</guid>
+      <pubDate>Thu, 20 Nov 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[Watchlists & Alerts: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 37: Narrative-to-Trade Translation Without Overfitting | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-11-13-narrative-to-trade-translation-without-overfitting</link>
+      <guid>https://quantura.studio/blog/posts/2025-11-13-narrative-to-trade-translation-without-overfitting</guid>
+      <pubDate>Thu, 13 Nov 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[Market Narratives: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 36: Forecast Error Decomposition for Better Retraining | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-11-06-forecast-error-decomposition-for-better-retraining</link>
+      <guid>https://quantura.studio/blog/posts/2025-11-06-forecast-error-decomposition-for-better-retraining</guid>
+      <pubDate>Thu, 06 Nov 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 35: Trend + Volatility Filters for Cleaner Signal Intake | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-10-30-trend-volatility-filters-for-cleaner-signal-intake</link>
+      <guid>https://quantura.studio/blog/posts/2025-10-30-trend-volatility-filters-for-cleaner-signal-intake</guid>
+      <pubDate>Thu, 30 Oct 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[Technical Risk: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 34: Macro Shock Drills for Weekly Research Meetings | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-10-23-macro-shock-drills-for-weekly-research-meetings</link>
+      <guid>https://quantura.studio/blog/posts/2025-10-23-macro-shock-drills-for-weekly-research-meetings</guid>
+      <pubDate>Thu, 23 Oct 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[Macro Signals: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 33: SageMaker Canvas Feature Design for Regime Shifts | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-10-16-sagemaker-canvas-feature-design-for-regime-shifts</link>
+      <guid>https://quantura.studio/blog/posts/2025-10-16-sagemaker-canvas-feature-design-for-regime-shifts</guid>
+      <pubDate>Thu, 16 Oct 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 32: Drawdown-Aware Position Sizing for Multi-Asset Books | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-10-09-drawdown-aware-position-sizing-for-multi-asset-books</link>
+      <guid>https://quantura.studio/blog/posts/2025-10-09-drawdown-aware-position-sizing-for-multi-asset-books</guid>
+      <pubDate>Thu, 09 Oct 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[Portfolio Playbooks: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 31: Data Freshness SLAs for Forecast Credibility | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-10-02-data-freshness-slas-for-forecast-credibility</link>
+      <guid>https://quantura.studio/blog/posts/2025-10-02-data-freshness-slas-for-forecast-credibility</guid>
+      <pubDate>Thu, 02 Oct 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 30: SSR + Hosting Route Checks for Production Reliability | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-09-25-ssr-hosting-route-checks-for-production-reliability</link>
+      <guid>https://quantura.studio/blog/posts/2025-09-25-ssr-hosting-route-checks-for-production-reliability</guid>
+      <pubDate>Thu, 25 Sep 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[Build Notes: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 29: Citation-First LLM Output Standards | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-09-18-citation-first-llm-output-standards</link>
+      <guid>https://quantura.studio/blog/posts/2025-09-18-citation-first-llm-output-standards</guid>
+      <pubDate>Thu, 18 Sep 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[Model Council: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 28: Explore Publishing Metrics That Matter | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-09-11-explore-publishing-metrics-that-matter</link>
+      <guid>https://quantura.studio/blog/posts/2025-09-11-explore-publishing-metrics-that-matter</guid>
+      <pubDate>Thu, 11 Sep 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[Explore Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 27: Turning Watchlists into Action Queues | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-09-04-turning-watchlists-into-action-queues</link>
+      <guid>https://quantura.studio/blog/posts/2025-09-04-turning-watchlists-into-action-queues</guid>
+      <pubDate>Thu, 04 Sep 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[Watchlists & Alerts: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 26: Narrative Compression Signals Ahead of Event Windows | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-08-28-narrative-compression-signals-ahead-of-event-windows</link>
+      <guid>https://quantura.studio/blog/posts/2025-08-28-narrative-compression-signals-ahead-of-event-windows</guid>
+      <pubDate>Thu, 28 Aug 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[Market Narratives: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 25: From Quantiles to Orders: Closing the Workflow Gap | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-08-21-from-quantiles-to-orders-closing-the-workflow-gap</link>
+      <guid>https://quantura.studio/blog/posts/2025-08-21-from-quantiles-to-orders-closing-the-workflow-gap</guid>
+      <pubDate>Thu, 21 Aug 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 24: Structure Breaks Versus False Breakouts in Practice | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-08-14-structure-breaks-versus-false-breakouts-in-practice</link>
+      <guid>https://quantura.studio/blog/posts/2025-08-14-structure-breaks-versus-false-breakouts-in-practice</guid>
+      <pubDate>Thu, 14 Aug 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 23: Rates Volatility and Sector Rotation Playbooks | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-08-07-rates-volatility-and-sector-rotation-playbooks</link>
+      <guid>https://quantura.studio/blog/posts/2025-08-07-rates-volatility-and-sector-rotation-playbooks</guid>
+      <pubDate>Thu, 07 Aug 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[Technical Risk: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 22: SageMaker Canvas What-If Testing for Earnings Weeks | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-07-31-sagemaker-canvas-what-if-testing-for-earnings-weeks</link>
+      <guid>https://quantura.studio/blog/posts/2025-07-31-sagemaker-canvas-what-if-testing-for-earnings-weeks</guid>
+      <pubDate>Thu, 31 Jul 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[Macro Signals: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 21: Risk Budget Allocation Across Correlated Themes | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-07-24-risk-budget-allocation-across-correlated-themes</link>
+      <guid>https://quantura.studio/blog/posts/2025-07-24-risk-budget-allocation-across-correlated-themes</guid>
+      <pubDate>Thu, 24 Jul 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[Portfolio Playbooks: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 20: Cross-Source Data Reconciliation for Live Pipelines | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-07-17-cross-source-data-reconciliation-for-live-pipelines</link>
+      <guid>https://quantura.studio/blog/posts/2025-07-17-cross-source-data-reconciliation-for-live-pipelines</guid>
+      <pubDate>Thu, 17 Jul 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 19: Cloud Function Rollouts with Measurable Blast Radius | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-07-10-cloud-function-rollouts-with-measurable-blast-radius</link>
+      <guid>https://quantura.studio/blog/posts/2025-07-10-cloud-function-rollouts-with-measurable-blast-radius</guid>
+      <pubDate>Thu, 10 Jul 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[Build Notes: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 18: Prompt Rewrites That Improve Model Council Precision | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-07-03-prompt-rewrites-that-improve-model-council-precision</link>
+      <guid>https://quantura.studio/blog/posts/2025-07-03-prompt-rewrites-that-improve-model-council-precision</guid>
+      <pubDate>Thu, 03 Jul 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[Model Council: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 17: Explore Feed Governance: Publish, Review, Unpublish | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-06-26-explore-feed-governance-publish-review-unpublish</link>
+      <guid>https://quantura.studio/blog/posts/2025-06-26-explore-feed-governance-publish-review-unpublish</guid>
+      <pubDate>Thu, 26 Jun 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 16: Alert Escalation Ladders for Small Teams | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-06-19-alert-escalation-ladders-for-small-teams</link>
+      <guid>https://quantura.studio/blog/posts/2025-06-19-alert-escalation-ladders-for-small-teams</guid>
+      <pubDate>Thu, 19 Jun 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[Watchlists & Alerts: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 15: Catalyst Mapping with Explicit Invalidation Levels | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-06-12-catalyst-mapping-with-explicit-invalidation-levels</link>
+      <guid>https://quantura.studio/blog/posts/2025-06-12-catalyst-mapping-with-explicit-invalidation-levels</guid>
+      <pubDate>Thu, 12 Jun 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[Market Narratives: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 14: Forecast Review Rituals That Improve Decision Quality | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-06-05-forecast-review-rituals-that-improve-decision-quality</link>
+      <guid>https://quantura.studio/blog/posts/2025-06-05-forecast-review-rituals-that-improve-decision-quality</guid>
+      <pubDate>Thu, 05 Jun 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 13: ATR-Conditioned Risk Triggers for Tactical Trades | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-05-29-atr-conditioned-risk-triggers-for-tactical-trades</link>
+      <guid>https://quantura.studio/blog/posts/2025-05-29-atr-conditioned-risk-triggers-for-tactical-trades</guid>
+      <pubDate>Thu, 29 May 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[Technical Risk: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 12: Liquidity Regime Checklists for Better Entry Timing | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-05-22-liquidity-regime-checklists-for-better-entry-timing</link>
+      <guid>https://quantura.studio/blog/posts/2025-05-22-liquidity-regime-checklists-for-better-entry-timing</guid>
+      <pubDate>Thu, 22 May 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[Macro Signals: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 11: SageMaker Canvas Baselines for Weekly Forecast Cycles | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-05-15-sagemaker-canvas-baselines-for-weekly-forecast-cycles</link>
+      <guid>https://quantura.studio/blog/posts/2025-05-15-sagemaker-canvas-baselines-for-weekly-forecast-cycles</guid>
+      <pubDate>Thu, 15 May 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 10: Portfolio Sizing Under Uncertain Macro Backdrops | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-05-08-portfolio-sizing-under-uncertain-macro-backdrops</link>
+      <guid>https://quantura.studio/blog/posts/2025-05-08-portfolio-sizing-under-uncertain-macro-backdrops</guid>
+      <pubDate>Thu, 08 May 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[Portfolio Playbooks: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 9: Data Validation Rules That Prevent Silent Forecast Breaks | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-05-01-data-validation-rules-that-prevent-silent-forecast-breaks</link>
+      <guid>https://quantura.studio/blog/posts/2025-05-01-data-validation-rules-that-prevent-silent-forecast-breaks</guid>
+      <pubDate>Thu, 01 May 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 8: Deployment Discipline for Fast, Safe Market Releases | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-04-24-deployment-discipline-for-fast-safe-market-releases</link>
+      <guid>https://quantura.studio/blog/posts/2025-04-24-deployment-discipline-for-fast-safe-market-releases</guid>
+      <pubDate>Thu, 24 Apr 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[Build Notes: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 7: Model Council Verification Workflow for High-Impact Calls | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-04-17-model-council-verification-workflow-for-high-impact-calls</link>
+      <guid>https://quantura.studio/blog/posts/2025-04-17-model-council-verification-workflow-for-high-impact-calls</guid>
+      <pubDate>Thu, 17 Apr 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[Model Council: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 6: Publishing Research to Explore Without Creating Noise | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-04-10-publishing-research-to-explore-without-creating-noise</link>
+      <guid>https://quantura.studio/blog/posts/2025-04-10-publishing-research-to-explore-without-creating-noise</guid>
+      <pubDate>Thu, 10 Apr 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[Explore Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 5: Watchlist Alert Design That Actually Gets Used | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-04-03-watchlist-alert-design-that-actually-gets-used</link>
+      <guid>https://quantura.studio/blog/posts/2025-04-03-watchlist-alert-design-that-actually-gets-used</guid>
+      <pubDate>Thu, 03 Apr 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[Watchlists & Alerts: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 4: Narrative Drift Detection Before Consensus Reprices | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-03-27-narrative-drift-detection-before-consensus-reprices</link>
+      <guid>https://quantura.studio/blog/posts/2025-03-27-narrative-drift-detection-before-consensus-reprices</guid>
+      <pubDate>Thu, 27 Mar 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[Market Narratives: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 3: Scenario Bands for Operators, Not Spectators | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-03-20-scenario-bands-for-operators-not-spectators</link>
+      <guid>https://quantura.studio/blog/posts/2025-03-20-scenario-bands-for-operators-not-spectators</guid>
+      <pubDate>Thu, 20 Mar 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 2: When Momentum Confirmation Fails at the Worst Time | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-03-13-when-momentum-confirmation-fails-at-the-worst-time</link>
+      <guid>https://quantura.studio/blog/posts/2025-03-13-when-momentum-confirmation-fails-at-the-worst-time</guid>
+      <pubDate>Thu, 13 Mar 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[Technical Risk: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
+
+    <item>
+      <title>Week 1: Macro Regime Map Before Positioning Risk | Quantura Blog</title>
+      <link>https://quantura.studio/blog/posts/2025-03-06-macro-regime-map-before-positioning-risk</link>
+      <guid>https://quantura.studio/blog/posts/2025-03-06-macro-regime-map-before-positioning-risk</guid>
+      <pubDate>Thu, 06 Mar 2025 00:00:00 GMT</pubDate>
+      <description><![CDATA[Macro Signals: weekly operator notes on signal quality, scenario framing, and execution controls.]]></description>
+    </item>
   </channel>
 </rss>

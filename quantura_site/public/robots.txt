@@ -11,4 +11,4 @@ Disallow: /autopilot
 Disallow: /notifications
 Disallow: /admin
 Disallow: /saved-forecasts
-Sitemap: https://quantura-e2e3d.web.app/sitemap.xml
+Sitemap: https://quantura.studio/sitemap.xml

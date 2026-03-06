@@ -2,6 +2,10 @@ import cors from "cors";
 import express, { Request, Response } from "express";
 import admin from "firebase-admin";
 import { GoogleAuth } from "google-auth-library";
+import { registerFiscalDataRoutes } from "./fiscaldataProxy";
+import { runScheduledFiscaldataRefresh } from "./schedules/refreshFiscaldata";
+import { runIndicatorAnalysis } from "./indicators";
+export { shopApi } from "./shopApi";
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -60,7 +64,7 @@ type ExploreCursor = {
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 40;
-const PUBLIC_ORIGIN = asString(process.env.PUBLIC_ORIGIN, "https://quantura-e2e3d.web.app").replace(/\/$/, "");
+const PUBLIC_ORIGIN = asString(process.env.PUBLIC_ORIGIN, "https://quantura.studio").replace(/\/$/, "");
 const ADMIN_EMAIL = "tamzid257@gmail.com";
 const MODEL_COUNCIL_RESPONSE_COLLECTION = "model_council_responses";
 const OPENAI_API_KEY = asString(process.env.OPENAI_API_KEY).trim();
@@ -83,6 +87,14 @@ const PROMO_CODE = asString(process.env.PROMO_CODE, "QUANTURA50").trim().toUpper
 const PROMO_DISCOUNT_PERCENT = Math.max(1, Math.min(95, asFinite(process.env.PROMO_DISCOUNT_PERCENT, 50)));
 const PROMO_ACTIVE = asBoolean(process.env.PROMO_ACTIVE, true);
 const PROMO_DURATION_DAYS = Math.max(1, Math.min(120, Math.floor(asFinite(process.env.PROMO_DURATION_DAYS, 30))));
+const GAMMA_API_BASE = "https://gamma-api.polymarket.com";
+const POLYMARKET_CACHE_TTL_MS = 10 * 60 * 1000;
+const POLYMARKET_CACHE_MAX_ENTRIES = 160;
+const TICKER_INTEL_CACHE_TTL_MS = 10 * 60 * 1000;
+const TICKER_INTEL_CACHE_MAX_ENTRIES = 200;
+const FX_RATE_CACHE_TTL_MS = 60 * 60 * 1000;
+const FX_RATE_CACHE_MAX_ENTRIES = 120;
+const FX_RATE_FETCH_TIMEOUT_MS = 7000;
 const PROMO_START_MS = (() => {
   const raw = asString(process.env.PROMO_START_AT).trim();
   if (!raw) return Date.now() - 24 * 60 * 60 * 1000;
@@ -99,6 +111,8 @@ const PROMO_END_MS = (() => {
 })();
 
 type SavedItemType = "forecast" | "screener" | "model_council" | "post";
+type MyRequestType = "forecast" | "screener" | "indicator" | "modelCouncil";
+type MyRequestShareVisibility = "private" | "unlisted" | "public";
 
 type SystemFolderConfig = {
   id: string;
@@ -121,6 +135,84 @@ type NotificationPrefs = {
   inactiveHidden: boolean;
 };
 
+type PolymarketTopOutcome = {
+  label: string;
+  prob: number;
+};
+
+type PolymarketMarketRecord = {
+  id: string;
+  question: string;
+  slug?: string;
+  endDate?: string;
+  category?: string;
+  image?: string;
+  icon?: string;
+  volumeUsd?: number;
+  liquidityUsd?: number;
+  outcomes: string[];
+  outcomePrices: number[];
+  isBinary: boolean;
+  yesProb?: number;
+  topOutcomes: PolymarketTopOutcome[];
+  closed: boolean;
+  active: boolean;
+};
+
+type PolymarketEventRecord = {
+  id: string;
+  title: string;
+  slug?: string;
+  ticker?: string;
+  markets: PolymarketMarketRecord[];
+};
+
+type PolymarketSearchResponse = {
+  query: string;
+  fetchedAt: string;
+  events: PolymarketEventRecord[];
+};
+
+type PolymarketPriceRecord = {
+  eventId: string;
+  eventTitle: string;
+  eventSlug?: string;
+  id: string;
+  question: string;
+  slug?: string;
+  category?: string;
+  endDate?: string;
+  volumeUsd?: number;
+  liquidityUsd?: number;
+  outcomes: string[];
+  outcomePrices: number[];
+  isBinary: boolean;
+  yesProb?: number;
+  topOutcomes: PolymarketTopOutcome[];
+  active: boolean;
+  closed: boolean;
+};
+
+type PolymarketCacheEntry = {
+  expiresAtMs: number;
+  value: PolymarketSearchResponse;
+};
+
+type FxRateCacheEntry = {
+  expiresAtMs: number;
+  value: {
+    rate: number;
+    asOf: string;
+    symbolUsed: string;
+    source: string;
+  };
+};
+
+type TickerIntelCacheEntry = {
+  expiresAtMs: number;
+  value: Record<string, unknown>;
+};
+
 const SYSTEM_FOLDERS: SystemFolderConfig[] = [
   { id: "liked-posts", displayName: "Liked posts", flag: "liked" },
   { id: "reposted-posts", displayName: "Reposted posts", flag: "reposted" },
@@ -141,10 +233,24 @@ const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   inactiveHidden: true,
 };
 
+const MY_REQUEST_TYPE_SET = new Set<MyRequestType>(["forecast", "screener", "indicator", "modelCouncil"]);
+const MY_REQUEST_SHARE_VISIBILITY_SET = new Set<MyRequestShareVisibility>(["private", "unlisted", "public"]);
+const MY_REQUEST_TYPE_LABEL: Record<MyRequestType, string> = {
+  forecast: "Forecast",
+  screener: "Screener",
+  indicator: "Indicator",
+  modelCouncil: "Model Council",
+};
+
 const ROUTES = express.Router();
+const polymarketCache = new Map<string, PolymarketCacheEntry>();
+const tickerIntelCache = new Map<string, TickerIntelCacheEntry>();
+const fxRateCache = new Map<string, FxRateCacheEntry>();
 const PLAY_INTEGRITY_AUTH = new GoogleAuth({
   scopes: ["https://www.googleapis.com/auth/playintegrity"],
 });
+
+registerFiscalDataRoutes(ROUTES, { db });
 
 function asString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
@@ -352,6 +458,93 @@ function normalizeTicker(value: unknown): string {
   return raw.replace(/[^A-Z0-9.\-]/g, "").slice(0, 12);
 }
 
+function extractYahooFieldValue(value: unknown): unknown {
+  if (!value || typeof value !== "object") return value;
+  const payload = value as Record<string, unknown>;
+  if (payload.raw !== undefined && payload.raw !== null) return payload.raw;
+  if (payload.fmt !== undefined && payload.fmt !== null) return payload.fmt;
+  if (payload.longFmt !== undefined && payload.longFmt !== null) return payload.longFmt;
+  return value;
+}
+
+function extractYahooNumber(value: unknown): number | null {
+  const raw = extractYahooFieldValue(value);
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function extractYahooText(value: unknown, maxLen = 280): string {
+  return sanitizeText(extractYahooFieldValue(value), maxLen);
+}
+
+function buildLogoUrlFromWebsite(website: unknown): string {
+  const text = sanitizeText(website, 300);
+  if (!text) return "";
+  try {
+    const parsed = new URL(text.startsWith("http") ? text : `https://${text}`);
+    const host = sanitizeText(parsed.hostname, 220).replace(/^www\./i, "");
+    if (!host) return "";
+    return `https://logo.clearbit.com/${host}`;
+  } catch {
+    return "";
+  }
+}
+
+function computeSignalScore(value: number | null, min: number, max: number, invert = false): number | null {
+  if (value === null || !Number.isFinite(value)) return null;
+  if (max <= min) return null;
+  const normalized = Math.max(0, Math.min(1, (value - min) / (max - min)));
+  const score = invert ? 100 - normalized * 100 : normalized * 100;
+  return Math.max(0, Math.min(100, Number(score.toFixed(1))));
+}
+
+function getTickerIntelCache(ticker: string): Record<string, unknown> | null {
+  const key = normalizeTicker(ticker);
+  if (!key) return null;
+  const cached = tickerIntelCache.get(key);
+  if (!cached) return null;
+  if (cached.expiresAtMs <= Date.now()) {
+    tickerIntelCache.delete(key);
+    return null;
+  }
+  return cached.value;
+}
+
+function setTickerIntelCache(ticker: string, value: Record<string, unknown>): void {
+  const key = normalizeTicker(ticker);
+  if (!key) return;
+  tickerIntelCache.set(key, {
+    expiresAtMs: Date.now() + TICKER_INTEL_CACHE_TTL_MS,
+    value,
+  });
+  while (tickerIntelCache.size > TICKER_INTEL_CACHE_MAX_ENTRIES) {
+    const oldestKey = tickerIntelCache.keys().next().value;
+    if (!oldestKey) break;
+    tickerIntelCache.delete(oldestKey);
+  }
+}
+
+async function fetchJsonWithTimeout(url: string, timeoutMs = 7500): Promise<unknown> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      signal: controller.signal,
+      headers: {
+        Accept: "application/json",
+        "User-Agent": "quantura-explore-api/1.0",
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`upstream_http_${response.status}`);
+    }
+    return await response.json().catch(() => ({}));
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function normalizeHandle(value: unknown): string {
   return asString(value).trim().toLowerCase().replace(/[^a-z0-9_.-]/g, "").slice(0, 40);
 }
@@ -473,6 +666,521 @@ function getTimestampMs(value: unknown): number {
 
 function timestampFromMs(ms: number): admin.firestore.Timestamp {
   return admin.firestore.Timestamp.fromMillis(ms);
+}
+
+function normalizeMyRequestType(value: unknown): MyRequestType | "" {
+  const raw = sanitizeText(value, 40).trim();
+  if (!raw) return "";
+  const lower = raw.toLowerCase();
+  if (lower === "forecast" || lower === "screener" || lower === "indicator") return lower;
+  if (lower === "modelcouncil" || lower === "model_council" || lower === "model-council") return "modelCouncil";
+  return "";
+}
+
+function normalizeMyRequestVisibility(value: unknown, fallback: MyRequestShareVisibility = "private"): MyRequestShareVisibility {
+  const raw = sanitizeText(value, 20).toLowerCase();
+  if (raw === "public" || raw === "unlisted" || raw === "private") return raw;
+  return fallback;
+}
+
+function normalizeMyRequestId(value: unknown): string {
+  const raw = sanitizeText(value, 220);
+  if (!raw) return "";
+  return raw.replace(/[^A-Za-z0-9._:\-]/g, "_").slice(0, 220);
+}
+
+function buildMyRequestDocId(type: MyRequestType, sourceId: string): string {
+  const cleanType = normalizeMyRequestType(type) || "forecast";
+  const cleanSourceId = normalizeSourceId(sourceId).replace(/[^A-Za-z0-9._:\-]/g, "_").slice(0, 180);
+  return `${cleanType}__${cleanSourceId || "item"}`;
+}
+
+function defaultMyRequestTitle(type: MyRequestType, payload: Record<string, unknown> = {}): string {
+  const ticker = normalizeTicker(payload.ticker);
+  if (type === "forecast") {
+    return sanitizeText(payload.title, 160) || `${ticker || "Ticker"} forecast`;
+  }
+  if (type === "screener") {
+    return sanitizeText(payload.title, 160) || "Screener run";
+  }
+  if (type === "indicator") {
+    return sanitizeText(payload.title, 160) || `${ticker || "Ticker"} indicators`;
+  }
+  return sanitizeText(payload.title, 160) || `${ticker || "Ticker"} Model Council`;
+}
+
+function ensureMyRequestShareSlug(seed = ""): string {
+  const existing = normalizeShareId(seed);
+  if (existing) return existing;
+  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+  let out = "";
+  for (let i = 0; i < 16; i += 1) {
+    out += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return out;
+}
+
+async function ensureUniqueMyRequestShareSlug(ownerUid: string, requestId: string, seed = ""): Promise<string> {
+  const preferred = ensureMyRequestShareSlug(seed);
+  const preferredRef = db.collection("request_shares").doc(preferred);
+  const preferredSnap = await preferredRef.get();
+  if (!preferredSnap.exists) return preferred;
+  const preferredData = (preferredSnap.data() || {}) as Record<string, unknown>;
+  if (asString(preferredData.ownerUid) === ownerUid && asString(preferredData.requestId) === requestId) return preferred;
+
+  for (let i = 0; i < 12; i += 1) {
+    const candidate = ensureMyRequestShareSlug();
+    const candidateRef = db.collection("request_shares").doc(candidate);
+    const candidateSnap = await candidateRef.get();
+    if (!candidateSnap.exists) return candidate;
+    const candidateData = (candidateSnap.data() || {}) as Record<string, unknown>;
+    if (asString(candidateData.ownerUid) === ownerUid && asString(candidateData.requestId) === requestId) return candidate;
+  }
+  return ensureMyRequestShareSlug(`${ownerUid.slice(0, 6)}${requestId.slice(0, 6)}${Date.now()}`);
+}
+
+function normalizeMyRequestShareObject(input: unknown): { visibility: MyRequestShareVisibility; slug: string; createdAt: unknown } {
+  const raw = asPlainObject(input);
+  return {
+    visibility: normalizeMyRequestVisibility(raw.visibility, "private"),
+    slug: normalizeShareId(raw.slug),
+    createdAt: raw.createdAt || null,
+  };
+}
+
+function trimOutputsMeta(input: unknown): Record<string, unknown> {
+  const raw = asPlainObject(input);
+  const out: Record<string, unknown> = {};
+  Object.entries(raw)
+    .slice(0, 18)
+    .forEach(([key, value]) => {
+      const cleanKey = sanitizeText(key, 60);
+      if (!cleanKey) return;
+      if (typeof value === "string") {
+        out[cleanKey] = sanitizeText(value, 2400);
+        return;
+      }
+      if (typeof value === "number" || typeof value === "boolean") {
+        out[cleanKey] = value;
+        return;
+      }
+      if (Array.isArray(value)) {
+        out[cleanKey] = value
+          .slice(0, 24)
+          .map((item) => sanitizeText(item, 120))
+          .filter(Boolean);
+        return;
+      }
+      if (value && typeof value === "object") {
+        const childOut: Record<string, unknown> = {};
+        Object.entries(value as Record<string, unknown>)
+          .slice(0, 12)
+          .forEach(([childKey, childValue]) => {
+            const cleanChildKey = sanitizeText(childKey, 40);
+            if (!cleanChildKey) return;
+            if (typeof childValue === "number" || typeof childValue === "boolean") {
+              childOut[cleanChildKey] = childValue;
+              return;
+            }
+            if (typeof childValue === "string") {
+              childOut[cleanChildKey] = sanitizeText(childValue, 220);
+            }
+          });
+        if (Object.keys(childOut).length) out[cleanKey] = childOut;
+      }
+    });
+  return out;
+}
+
+function normalizeMyRequestInput(input: unknown): Record<string, unknown> {
+  const raw = asPlainObject(input);
+  const out: Record<string, unknown> = {};
+  Object.entries(raw)
+    .slice(0, 30)
+    .forEach(([key, value]) => {
+      const cleanKey = sanitizeText(key, 60);
+      if (!cleanKey) return;
+      if (typeof value === "string") {
+        out[cleanKey] = sanitizeText(value, 4000);
+        return;
+      }
+      if (typeof value === "number" || typeof value === "boolean") {
+        out[cleanKey] = value;
+        return;
+      }
+      if (Array.isArray(value)) {
+        out[cleanKey] = value
+          .slice(0, 40)
+          .map((item) => (typeof item === "number" ? item : sanitizeText(item, 120)))
+          .filter((item) => (typeof item === "number" ? Number.isFinite(item) : Boolean(item)));
+        return;
+      }
+      if (value && typeof value === "object") {
+        out[cleanKey] = trimOutputsMeta(value);
+      }
+    });
+  return out;
+}
+
+function firstTickerFromRequest(input: Record<string, unknown>, sourceRef: Record<string, unknown>, outputsMeta: Record<string, unknown>): string {
+  const direct = normalizeTicker(input.ticker || outputsMeta.ticker);
+  if (direct) return direct;
+  const topSymbols = Array.isArray(outputsMeta.topSymbols) ? outputsMeta.topSymbols : [];
+  const first = normalizeTicker(topSymbols[0]);
+  if (first) return first;
+  return normalizeTicker(sourceRef.ticker);
+}
+
+function buildMyRequestSearchText(
+  title: string,
+  type: MyRequestType,
+  ticker: string,
+  input: Record<string, unknown>,
+  outputsMeta: Record<string, unknown>
+): string {
+  const parts = [
+    title,
+    type,
+    ticker,
+    asString(input.question),
+    asString(input.notes),
+    asString(input.universe),
+    asString(outputsMeta.summary),
+  ]
+    .join(" ")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+  return parts.slice(0, 2400);
+}
+
+function myRequestShareUrl(slug: string): string {
+  const cleanSlug = normalizeShareId(slug);
+  if (!cleanSlug) return "";
+  return `${PUBLIC_ORIGIN}/forecasting?requestShare=${encodeURIComponent(cleanSlug)}`;
+}
+
+function toMyRequestResponse(
+  docId: string,
+  data: Record<string, unknown>,
+  opts: { includePayload?: boolean } = {}
+): Record<string, unknown> {
+  const includePayload = Boolean(opts.includePayload);
+  const type = normalizeMyRequestType(data.type) || "forecast";
+  const title = sanitizeText(data.title, 180) || defaultMyRequestTitle(type, data);
+  const input = normalizeMyRequestInput(data.input);
+  const outputsMeta = trimOutputsMeta(data.outputsMeta);
+  const sourceRef = asPlainObject(data.sourceRef);
+  const ticker = firstTickerFromRequest(input, sourceRef, outputsMeta);
+  const createdAtMs = getTimestampMs(data.createdAt);
+  const updatedAtMs = getTimestampMs(data.updatedAt || data.createdAt);
+  const share = normalizeMyRequestShareObject(data.share);
+  const visibility = normalizeMyRequestVisibility(data.visibility, share.visibility);
+  const published = asBoolean(data.published, false);
+  const deleted = asBoolean(data.deleted, false);
+  const shareUrl =
+    share.slug && share.visibility !== "private"
+      ? myRequestShareUrl(share.slug)
+      : "";
+
+  const response: Record<string, unknown> = {
+    id: docId,
+    type,
+    typeLabel: MY_REQUEST_TYPE_LABEL[type],
+    title,
+    ticker,
+    ownerUid: asString(data.ownerUid),
+    published,
+    publishedAtMs: data.publishedAt ? getTimestampMs(data.publishedAt) : null,
+    explorePostId: asString(data.explorePostId),
+    deleted,
+    createdAtMs,
+    updatedAtMs,
+    createdAt: new Date(createdAtMs).toISOString(),
+    updatedAt: new Date(updatedAtMs).toISOString(),
+    sourceRef: {
+      collection: sanitizeText(sourceRef.collection, 80),
+      id: sanitizeText(sourceRef.id, 220),
+    },
+    share: {
+      visibility,
+      slug: share.slug,
+      shareUrl,
+    },
+  };
+
+  if (includePayload) {
+    response.input = input;
+    response.outputsMeta = outputsMeta;
+  } else {
+    response.outputsMeta = trimOutputsMeta({
+      summary: outputsMeta.summary,
+      resultsCount: outputsMeta.resultsCount,
+      forecastRowsCount: outputsMeta.forecastRowsCount,
+      provider: outputsMeta.provider,
+      model: outputsMeta.model,
+      topSymbols: outputsMeta.topSymbols,
+    });
+  }
+
+  return response;
+}
+
+function normalizeMyRequestPublishedFilter(input: unknown): "all" | "published" | "unpublished" {
+  const raw = sanitizeText(input, 20).toLowerCase();
+  if (raw === "published") return "published";
+  if (raw === "unpublished" || raw === "draft") return "unpublished";
+  return "all";
+}
+
+function extractScreenerTopSymbols(resultsRaw: unknown): string[] {
+  const results = Array.isArray(resultsRaw) ? resultsRaw : [];
+  const out: string[] = [];
+  results.slice(0, 24).forEach((row) => {
+    const symbol = normalizeTicker((row as Record<string, unknown>)?.symbol);
+    if (!symbol || out.includes(symbol)) return;
+    out.push(symbol);
+  });
+  return out.slice(0, 12);
+}
+
+function trimModelCouncilAnswer(answerRaw: unknown): string {
+  const answer = sanitizeText(answerRaw, 2600);
+  if (answer.length <= 700) return answer;
+  return `${answer.slice(0, 697)}...`;
+}
+
+async function syncLegacyRequestsForUser(uid: string): Promise<void> {
+  const cleanUid = sanitizeText(uid, 220);
+  if (!cleanUid) return;
+
+  const requestsRef = db.collection("users").doc(cleanUid).collection("requests");
+  const [existingSnap, forecastSnap, screenerSnap, councilSnap] = await Promise.all([
+    requestsRef.limit(240).get(),
+    db.collection("forecast_requests").where("userId", "==", cleanUid).limit(120).get(),
+    db.collection("screener_runs").where("userId", "==", cleanUid).limit(120).get(),
+    db.collection(MODEL_COUNCIL_RESPONSE_COLLECTION).where("userId", "==", cleanUid).limit(120).get(),
+  ]);
+
+  const existingMap = new Map<string, Record<string, unknown>>();
+  existingSnap.docs.forEach((doc) => {
+    existingMap.set(doc.id, (doc.data() || {}) as Record<string, unknown>);
+  });
+
+  const postIds = [
+    ...forecastSnap.docs.map((doc) => `forecast_${doc.id}`),
+    ...screenerSnap.docs.map((doc) => `screener_${doc.id}`),
+  ];
+  const postMap = new Map<string, Record<string, unknown>>();
+  if (postIds.length) {
+    const postDocs = await db.getAll(...postIds.map((postId) => db.collection("posts").doc(postId)));
+    postDocs.forEach((doc) => {
+      if (!doc.exists) return;
+      postMap.set(doc.id, (doc.data() || {}) as Record<string, unknown>);
+    });
+  }
+
+  const writes: Array<Promise<unknown>> = [];
+  const queueSync = (
+    requestId: string,
+    seed: {
+      type: MyRequestType;
+      title: string;
+      input: Record<string, unknown>;
+      outputsMeta: Record<string, unknown>;
+      sourceRef: Record<string, unknown>;
+      published: boolean;
+      publishedAt: unknown;
+      explorePostId: string;
+      createdAt: unknown;
+      updatedAt: unknown;
+    }
+  ) => {
+    const existing = existingMap.get(requestId) || {};
+    const existingShare = normalizeMyRequestShareObject(existing.share);
+    const existingTitleEdited = asBoolean(existing.titleEdited, false);
+    const existingTitle = sanitizeText(existing.title, 180);
+    const nextTitle = existingTitleEdited && existingTitle ? existingTitle : sanitizeText(seed.title, 180) || defaultMyRequestTitle(seed.type, seed.input);
+    const existingPublished = asBoolean(existing.published, false);
+    const nextPublished = existingPublished || seed.published;
+    const ticker = firstTickerFromRequest(seed.input, seed.sourceRef, seed.outputsMeta);
+    const nextInput = normalizeMyRequestInput(seed.input);
+    const nextOutputsMeta = trimOutputsMeta({
+      ...seed.outputsMeta,
+      ticker,
+    });
+    const nextShare = {
+      visibility: normalizeMyRequestVisibility(existingShare.visibility, "private"),
+      slug: normalizeShareId(existingShare.slug),
+      createdAt: existingShare.createdAt || null,
+    };
+    const nextCreatedAt = existing.createdAt || seed.createdAt || admin.firestore.FieldValue.serverTimestamp();
+    const seedUpdatedMs = getTimestampMs(seed.updatedAt || seed.createdAt);
+    const existingUpdatedMs = getTimestampMs(existing.updatedAt || existing.createdAt);
+    const nextUpdatedAt = existingUpdatedMs > seedUpdatedMs ? existing.updatedAt || existing.createdAt : timestampFromMs(seedUpdatedMs);
+
+    const payload: Record<string, unknown> = {
+      type: seed.type,
+      ownerUid: cleanUid,
+      title: nextTitle,
+      titleEdited: existingTitleEdited,
+      input: nextInput,
+      outputsMeta: nextOutputsMeta,
+      sourceRef: {
+        collection: sanitizeText(seed.sourceRef.collection, 80),
+        id: sanitizeText(seed.sourceRef.id, 220),
+      },
+      searchText: buildMyRequestSearchText(nextTitle, seed.type, ticker, nextInput, nextOutputsMeta),
+      published: nextPublished,
+      publishedAt:
+        nextPublished
+          ? existing.publishedAt || seed.publishedAt || seed.createdAt || admin.firestore.FieldValue.serverTimestamp()
+          : null,
+      explorePostId: nextPublished ? sanitizeText(existing.explorePostId || seed.explorePostId, 220) : "",
+      deleted: asBoolean(existing.deleted, false),
+      share: nextShare,
+      createdAt: nextCreatedAt,
+      updatedAt: nextUpdatedAt || admin.firestore.FieldValue.serverTimestamp(),
+      visibility: normalizeMyRequestVisibility(existing.visibility, nextShare.visibility),
+    };
+
+    writes.push(requestsRef.doc(requestId).set(payload, { merge: true }));
+  };
+
+  forecastSnap.docs.forEach((doc) => {
+    const data = (doc.data() || {}) as Record<string, unknown>;
+    const ticker = normalizeTicker(data.ticker);
+    const postId = `forecast_${doc.id}`;
+    const postData = postMap.get(postId) || {};
+    const postVisibility = sanitizeText(postData.visibility, 20).toLowerCase();
+    const published = postVisibility === "public";
+    const metricsRaw = asPlainObject(data.metrics);
+    const metrics: Record<string, unknown> = {};
+    ["lastClose", "medianEnd", "mae", "rmse", "mape", "coverage10_90", "historyPoints", "drift", "volatility"].forEach((key) => {
+      const value = metricsRaw[key];
+      if (value === null || value === undefined || value === "") return;
+      if (typeof value === "number" && Number.isFinite(value)) {
+        metrics[key] = value;
+        return;
+      }
+      if (typeof value === "string") metrics[key] = sanitizeText(value, 80);
+    });
+    const requestId = buildMyRequestDocId("forecast", doc.id);
+    queueSync(requestId, {
+      type: "forecast",
+      title: sanitizeText(data.title, 160) || `${ticker || "Ticker"} forecast`,
+      input: {
+        ticker,
+        interval: sanitizeText(data.interval, 20),
+        horizon: asFinite(data.horizon, 0) || null,
+        service: sanitizeText(data.service, 40),
+        quantiles: Array.isArray(data.quantiles) ? data.quantiles.slice(0, 12) : [],
+      },
+      outputsMeta: {
+        summary: sanitizeText(data.serviceMessage || data.notes || "", 320),
+        serviceMessage: sanitizeText(data.serviceMessage, 320),
+        service: sanitizeText(data.service, 40),
+        interval: sanitizeText(data.interval, 20),
+        forecastRowsCount: Array.isArray(data.forecastRows) ? data.forecastRows.length : asFinite(data.forecastRowsCount, 0),
+        metrics,
+      },
+      sourceRef: {
+        collection: "forecast_requests",
+        id: doc.id,
+      },
+      published,
+      publishedAt: published ? postData.createdAt || data.createdAt : null,
+      explorePostId: published ? postId : "",
+      createdAt: data.createdAt || admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: data.updatedAt || data.createdAt || admin.firestore.FieldValue.serverTimestamp(),
+    });
+  });
+
+  screenerSnap.docs.forEach((doc) => {
+    const data = (doc.data() || {}) as Record<string, unknown>;
+    const topSymbols = extractScreenerTopSymbols(data.results);
+    const postId = `screener_${doc.id}`;
+    const postData = postMap.get(postId) || {};
+    const postVisibility = sanitizeText(postData.visibility, 20).toLowerCase();
+    const published = postVisibility === "public";
+    const requestId = buildMyRequestDocId("screener", doc.id);
+    queueSync(requestId, {
+      type: "screener",
+      title: sanitizeText(data.title, 160) || "Screener run",
+      input: {
+        universe: sanitizeText(data.universe, 40),
+        market: sanitizeText(data.market, 20),
+        maxNames: asFinite(data.maxNames, 0) || null,
+        notes: sanitizeText(data.notes, 1200),
+        model: sanitizeText(data.modelUsed || data.model, 80),
+        filters: trimOutputsMeta(data.filters),
+      },
+      outputsMeta: {
+        summary: sanitizeText(data.notes, 320),
+        resultsCount: Array.isArray(data.results) ? data.results.length : asFinite(data.resultsFound, 0),
+        topSymbols,
+        modelUsed: sanitizeText(data.modelUsed || data.model, 80),
+      },
+      sourceRef: {
+        collection: "screener_runs",
+        id: doc.id,
+      },
+      published,
+      publishedAt: published ? postData.createdAt || data.createdAt : null,
+      explorePostId: published ? postId : "",
+      createdAt: data.createdAt || admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: data.updatedAt || data.createdAt || admin.firestore.FieldValue.serverTimestamp(),
+    });
+  });
+
+  councilSnap.docs.forEach((doc) => {
+    const data = (doc.data() || {}) as Record<string, unknown>;
+    const ticker = normalizeTicker(data.ticker);
+    const requestId = buildMyRequestDocId("modelCouncil", doc.id);
+    queueSync(requestId, {
+      type: "modelCouncil",
+      title: sanitizeText(data.title, 160) || `${ticker || "Ticker"} Model Council`,
+      input: {
+        ticker,
+        question: sanitizeText(data.question, 4000),
+        provider: sanitizeText(data.provider, 80),
+        model: sanitizeText(data.model, 120),
+        language: sanitizeText(data.language, 20),
+        modules: Array.isArray(data.selectedModules) ? data.selectedModules.slice(0, 24) : [],
+      },
+      outputsMeta: {
+        summary: trimModelCouncilAnswer(data.answer),
+        answer: trimModelCouncilAnswer(data.answer),
+        provider: sanitizeText(data.provider, 80),
+        model: sanitizeText(data.model, 120),
+        citationsCount: Array.isArray(data.citations) ? data.citations.length : 0,
+      },
+      sourceRef: {
+        collection: MODEL_COUNCIL_RESPONSE_COLLECTION,
+        id: doc.id,
+      },
+      published: false,
+      publishedAt: null,
+      explorePostId: "",
+      createdAt: data.createdAt || admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: data.updatedAt || data.createdAt || admin.firestore.FieldValue.serverTimestamp(),
+    });
+  });
+
+  if (writes.length) {
+    await Promise.all(writes);
+  }
+}
+
+async function readMyRequestForOwner(uid: string, requestId: string): Promise<{ id: string; data: Record<string, unknown> } | null> {
+  const cleanUid = sanitizeText(uid, 220);
+  const cleanRequestId = normalizeMyRequestId(requestId);
+  if (!cleanUid || !cleanRequestId) return null;
+  const snap = await db.collection("users").doc(cleanUid).collection("requests").doc(cleanRequestId).get();
+  if (!snap.exists) return null;
+  const data = (snap.data() || {}) as Record<string, unknown>;
+  if (asString(data.ownerUid) && asString(data.ownerUid) !== cleanUid) return null;
+  return { id: snap.id, data };
 }
 
 function computeDecay(recencyHours: number): number {
@@ -850,6 +1558,421 @@ function asPlainObject(value: unknown): Record<string, unknown> {
     return value as Record<string, unknown>;
   }
   return {};
+}
+
+function normalizePolymarketSort(value: unknown): "relevance" | "volume" {
+  return sanitizeText(value, 24).toLowerCase() === "volume" ? "volume" : "relevance";
+}
+
+function parseGammaArray(raw: unknown): unknown[] {
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw !== "string") return [];
+  const text = raw.trim();
+  if (!text) return [];
+  try {
+    const parsed = JSON.parse(text);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function clampProbability(value: unknown): number | null {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return null;
+  if (num < 0) return 0;
+  if (num > 1) return 1;
+  return num;
+}
+
+function parseUsdNumber(raw: unknown): number | undefined {
+  const num = Number(raw);
+  if (!Number.isFinite(num)) return undefined;
+  return Math.max(0, num);
+}
+
+function parsePolymarketOutcomes(raw: unknown): string[] {
+  return parseGammaArray(raw)
+    .map((value) => sanitizeText(value, 120))
+    .filter(Boolean)
+    .slice(0, 16);
+}
+
+function parsePolymarketOutcomePrices(raw: unknown): number[] {
+  return parseGammaArray(raw)
+    .map((value) => clampProbability(value))
+    .filter((value): value is number => typeof value === "number")
+    .slice(0, 16);
+}
+
+function polymarketUrlFromSlug(slug: unknown): string {
+  const clean = sanitizeText(slug, 240).replace(/^\/+|\/+$/g, "");
+  if (!clean) return "";
+  return `https://polymarket.com/event/${encodeURIComponent(clean)}`;
+}
+
+function normalizePolymarketMarket(raw: unknown, event: Record<string, unknown>): PolymarketMarketRecord | null {
+  const market = asPlainObject(raw);
+  const id = sanitizeText(market.id || market.marketId || market.conditionId || market.market_id, 120);
+  const question = sanitizeText(market.question || market.title, 320);
+  if (!id || !question) return null;
+
+  const parsedOutcomes = parsePolymarketOutcomes(market.outcomes);
+  const parsedPrices = parsePolymarketOutcomePrices(market.outcomePrices);
+  const alignedLength = Math.min(parsedOutcomes.length, parsedPrices.length);
+  const outcomes = alignedLength > 0 ? parsedOutcomes.slice(0, alignedLength) : [];
+  const outcomePrices = alignedLength > 0 ? parsedPrices.slice(0, alignedLength) : [];
+
+  const topOutcomes = outcomes
+    .map((label, index) => ({ label, prob: outcomePrices[index] }))
+    .filter((entry) => typeof entry.label === "string" && Number.isFinite(entry.prob))
+    .sort((a, b) => b.prob - a.prob)
+    .slice(0, 6);
+
+  let closed = asBoolean(market.closed, false);
+  const status = sanitizeText(market.status, 40).toLowerCase();
+  if (status === "closed" || status === "resolved" || status === "ended") closed = true;
+  const active = asBoolean(market.active, !closed);
+
+  let yesProb: number | undefined = undefined;
+  if (outcomes.length === 2) {
+    const yesIndex = outcomes.findIndex((label) => /^yes$/i.test(label));
+    if (yesIndex >= 0 && Number.isFinite(outcomePrices[yesIndex])) {
+      yesProb = outcomePrices[yesIndex];
+    }
+  }
+
+  return {
+    id,
+    question,
+    slug: sanitizeText(market.slug, 220) || undefined,
+    endDate: sanitizeText(market.endDate || market.end_date, 40) || undefined,
+    category: sanitizeText(market.category || event.category, 80) || undefined,
+    image: sanitizeText(market.image, 600) || undefined,
+    icon: sanitizeText(market.icon, 600) || undefined,
+    volumeUsd: parseUsdNumber(market.volume),
+    liquidityUsd: parseUsdNumber(market.liquidity),
+    outcomes,
+    outcomePrices,
+    isBinary: outcomes.length === 2,
+    yesProb,
+    topOutcomes,
+    closed,
+    active,
+  };
+}
+
+function normalizePolymarketResponse(
+  rawPayload: unknown,
+  opts: { query: string; sort: "relevance" | "volume"; includeClosed: boolean }
+): PolymarketSearchResponse {
+  const root = asPlainObject(rawPayload);
+  const rawEvents = Array.isArray(root.events) ? root.events : Array.isArray(rawPayload) ? (rawPayload as unknown[]) : [];
+  const events: PolymarketEventRecord[] = [];
+
+  rawEvents.forEach((rawEvent, index) => {
+    const event = asPlainObject(rawEvent);
+    const eventId = sanitizeText(event.id || event.eventId, 120) || `${opts.query || "event"}_${index + 1}`;
+    const eventTitle = sanitizeText(event.title || event.name || event.question, 240) || "Prediction markets";
+    const eventSlug = sanitizeText(event.slug, 220) || undefined;
+    const eventTicker = sanitizeText(event.ticker, 24).toUpperCase() || undefined;
+    const marketRows = Array.isArray(event.markets) ? event.markets : [];
+    const markets = marketRows
+      .map((rawMarket) => normalizePolymarketMarket(rawMarket, event))
+      .filter((market): market is PolymarketMarketRecord => Boolean(market))
+      .filter((market) => (opts.includeClosed ? true : !market.closed && market.active !== false));
+
+    if (opts.sort === "volume") {
+      markets.sort((a, b) => {
+        const volumeDelta = (b.volumeUsd || 0) - (a.volumeUsd || 0);
+        if (volumeDelta !== 0) return volumeDelta;
+        return (b.liquidityUsd || 0) - (a.liquidityUsd || 0);
+      });
+    }
+
+    if (!markets.length) return;
+    events.push({
+      id: eventId,
+      title: eventTitle,
+      slug: eventSlug,
+      ticker: eventTicker,
+      markets,
+    });
+  });
+
+  return {
+    query: sanitizeText(opts.query, 120),
+    fetchedAt: new Date().toISOString(),
+    events,
+  };
+}
+
+function flattenPolymarketMarkets(
+  response: PolymarketSearchResponse,
+  filters: { marketId: string; slug: string; eventId: string }
+): PolymarketPriceRecord[] {
+  const cleanMarketId = sanitizeText(filters.marketId, 120);
+  const cleanSlug = sanitizeText(filters.slug, 220).replace(/^\/+|\/+$/g, "");
+  const cleanEventId = sanitizeText(filters.eventId, 120);
+  const rows: PolymarketPriceRecord[] = [];
+  response.events.forEach((event) => {
+    const eventId = sanitizeText(event.id, 120);
+    const eventTitle = sanitizeText(event.title, 260) || "Prediction markets";
+    const eventSlug = sanitizeText(event.slug, 220) || undefined;
+    event.markets.forEach((market) => {
+      if (cleanEventId && cleanEventId !== eventId) return;
+      const marketId = sanitizeText(market.id, 120);
+      const marketSlug = sanitizeText(market.slug, 220).replace(/^\/+|\/+$/g, "");
+      if (cleanMarketId && marketId !== cleanMarketId) return;
+      if (cleanSlug && cleanSlug !== marketSlug && cleanSlug !== (eventSlug || "")) return;
+      rows.push({
+        eventId,
+        eventTitle,
+        eventSlug,
+        id: marketId,
+        question: sanitizeText(market.question, 320),
+        slug: marketSlug || undefined,
+        category: sanitizeText(market.category, 80) || undefined,
+        endDate: sanitizeText(market.endDate, 40) || undefined,
+        volumeUsd: market.volumeUsd,
+        liquidityUsd: market.liquidityUsd,
+        outcomes: Array.isArray(market.outcomes) ? market.outcomes : [],
+        outcomePrices: Array.isArray(market.outcomePrices) ? market.outcomePrices : [],
+        isBinary: Boolean(market.isBinary),
+        yesProb: typeof market.yesProb === "number" ? market.yesProb : undefined,
+        topOutcomes: Array.isArray(market.topOutcomes) ? market.topOutcomes : [],
+        active: market.active !== false,
+        closed: Boolean(market.closed),
+      });
+    });
+  });
+  rows.sort((a, b) => {
+    const volumeDelta = (b.volumeUsd || 0) - (a.volumeUsd || 0);
+    if (volumeDelta !== 0) return volumeDelta;
+    const liqDelta = (b.liquidityUsd || 0) - (a.liquidityUsd || 0);
+    if (liqDelta !== 0) return liqDelta;
+    return a.question.localeCompare(b.question);
+  });
+  return rows;
+}
+
+function prunePolymarketCache(nowMs = Date.now()): void {
+  for (const [key, entry] of polymarketCache.entries()) {
+    if (entry.expiresAtMs <= nowMs) polymarketCache.delete(key);
+  }
+  while (polymarketCache.size > POLYMARKET_CACHE_MAX_ENTRIES) {
+    const oldestKey = polymarketCache.keys().next().value as string | undefined;
+    if (!oldestKey) break;
+    polymarketCache.delete(oldestKey);
+  }
+}
+
+function getPolymarketCache(cacheKey: string): PolymarketSearchResponse | null {
+  const entry = polymarketCache.get(cacheKey);
+  if (!entry) return null;
+  if (entry.expiresAtMs <= Date.now()) {
+    polymarketCache.delete(cacheKey);
+    return null;
+  }
+  polymarketCache.delete(cacheKey);
+  polymarketCache.set(cacheKey, entry);
+  return entry.value;
+}
+
+function setPolymarketCache(cacheKey: string, value: PolymarketSearchResponse): void {
+  prunePolymarketCache();
+  polymarketCache.set(cacheKey, {
+    expiresAtMs: Date.now() + POLYMARKET_CACHE_TTL_MS,
+    value,
+  });
+  prunePolymarketCache();
+}
+
+async function fetchGammaJson(path: string, params: Record<string, string | number | boolean>): Promise<unknown> {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === null || value === undefined) return;
+    const serialized = String(value).trim();
+    if (!serialized) return;
+    query.set(key, serialized);
+  });
+  const url = `${GAMMA_API_BASE}${path}${query.toString() ? `?${query.toString()}` : ""}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12000);
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      signal: controller.signal,
+      headers: {
+        Accept: "application/json",
+        "User-Agent": "QuanturaPolymarket/1.0",
+      },
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const detail = sanitizeText((payload as any)?.error || (payload as any)?.message || "", 180);
+      throw new Error(detail || `Gamma request failed (${response.status})`);
+    }
+    return payload;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function normalizeFxCode(value: unknown, fallback = "USD"): string {
+  const normalized = sanitizeText(value, 8)
+    .toUpperCase()
+    .replace(/[^A-Z]/g, "")
+    .slice(0, 6);
+  if (normalized) return normalized;
+  return sanitizeText(fallback, 8)
+    .toUpperCase()
+    .replace(/[^A-Z]/g, "")
+    .slice(0, 6);
+}
+
+function pruneFxRateCache(nowMs = Date.now()): void {
+  for (const [key, entry] of fxRateCache.entries()) {
+    if (entry.expiresAtMs <= nowMs) fxRateCache.delete(key);
+  }
+  while (fxRateCache.size > FX_RATE_CACHE_MAX_ENTRIES) {
+    const oldestKey = fxRateCache.keys().next().value as string | undefined;
+    if (!oldestKey) break;
+    fxRateCache.delete(oldestKey);
+  }
+}
+
+function getFxRateCache(cacheKey: string): FxRateCacheEntry["value"] | null {
+  const entry = fxRateCache.get(cacheKey);
+  if (!entry) return null;
+  if (entry.expiresAtMs <= Date.now()) {
+    fxRateCache.delete(cacheKey);
+    return null;
+  }
+  fxRateCache.delete(cacheKey);
+  fxRateCache.set(cacheKey, entry);
+  return entry.value;
+}
+
+function setFxRateCache(cacheKey: string, value: FxRateCacheEntry["value"]): void {
+  pruneFxRateCache();
+  fxRateCache.set(cacheKey, {
+    expiresAtMs: Date.now() + FX_RATE_CACHE_TTL_MS,
+    value,
+  });
+  pruneFxRateCache();
+}
+
+async function fetchYahooFxRate(symbol: string): Promise<{ rate: number; asOf: string } | null> {
+  const cleanSymbol = sanitizeText(symbol, 24);
+  if (!cleanSymbol) return null;
+  const endpoint = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(cleanSymbol)}?interval=1d&range=5d`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FX_RATE_FETCH_TIMEOUT_MS);
+  try {
+    const response = await fetch(endpoint, {
+      method: "GET",
+      signal: controller.signal,
+      headers: {
+        Accept: "application/json",
+        "User-Agent": "QuanturaFx/1.0",
+      },
+    });
+    if (!response.ok) return null;
+    const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    const result = Array.isArray((payload.chart as any)?.result) ? ((payload.chart as any).result[0] as Record<string, unknown>) : null;
+    if (!result) return null;
+    const meta = asPlainObject(result.meta);
+    const quoteSeries = Array.isArray((result.indicators as any)?.quote) ? ((result.indicators as any).quote[0] as Record<string, unknown>) : null;
+    const closes = Array.isArray(quoteSeries?.close) ? quoteSeries?.close : [];
+    let close = Number(meta.regularMarketPrice);
+    if (!Number.isFinite(close)) {
+      for (let idx = closes.length - 1; idx >= 0; idx -= 1) {
+        const candidate = Number(closes[idx]);
+        if (Number.isFinite(candidate) && candidate > 0) {
+          close = candidate;
+          break;
+        }
+      }
+    }
+    if (!Number.isFinite(close) || close <= 0) return null;
+    let asOfMs = Number(meta.regularMarketTime) * 1000;
+    if (!Number.isFinite(asOfMs) || asOfMs <= 0) {
+      const timestamps = Array.isArray(result.timestamp) ? result.timestamp : [];
+      const latestTs = Number(timestamps[timestamps.length - 1]);
+      asOfMs = Number.isFinite(latestTs) ? latestTs * 1000 : Date.now();
+    }
+    return {
+      rate: close,
+      asOf: new Date(asOfMs).toISOString(),
+    };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function resolveFxRate(baseCode: string, quoteCode: string): Promise<{
+  rate: number;
+  asOf: string;
+  symbolUsed: string;
+  source: string;
+}> {
+  const base = normalizeFxCode(baseCode, "USD");
+  const quote = normalizeFxCode(quoteCode, "USD");
+  if (!base || !quote) {
+    throw new Error("invalid_currency_code");
+  }
+  if (base === quote) {
+    return {
+      rate: 1,
+      asOf: new Date().toISOString(),
+      symbolUsed: `${base}${quote}=X`,
+      source: "identity",
+    };
+  }
+
+  const cacheKey = `${base}_${quote}`;
+  const cached = getFxRateCache(cacheKey);
+  if (cached) {
+    return {
+      rate: cached.rate,
+      asOf: cached.asOf,
+      symbolUsed: cached.symbolUsed,
+      source: cached.source,
+    };
+  }
+
+  const directSymbols = [`${base}${quote}=X`, `${base}-${quote}`];
+  for (const symbol of directSymbols) {
+    const quoteData = await fetchYahooFxRate(symbol);
+    if (!quoteData) continue;
+    const value = {
+      rate: quoteData.rate,
+      asOf: quoteData.asOf,
+      symbolUsed: symbol,
+      source: "yahoo_finance",
+    };
+    setFxRateCache(cacheKey, value);
+    return value;
+  }
+
+  const inverseSymbols = [`${quote}${base}=X`, `${quote}-${base}`];
+  for (const symbol of inverseSymbols) {
+    const quoteData = await fetchYahooFxRate(symbol);
+    if (!quoteData || !Number.isFinite(quoteData.rate) || quoteData.rate <= 0) continue;
+    const value = {
+      rate: 1 / quoteData.rate,
+      asOf: quoteData.asOf,
+      symbolUsed: symbol,
+      source: "yahoo_finance_inverse",
+    };
+    setFxRateCache(cacheKey, value);
+    return value;
+  }
+
+  throw new Error("fx_rate_unavailable");
 }
 
 function summarizeWebhookPayload(req: Request): Record<string, unknown> {
@@ -2055,6 +3178,389 @@ ROUTES.get("/health", (_req, res) => {
   res.status(200).json({ ok: true, service: "quantura-explore-api", ts: new Date().toISOString() });
 });
 
+ROUTES.get("/ticker/intel", async (req, res) => {
+  try {
+    const query = asPlainObject(req.query);
+    const ticker = normalizeTicker(query.ticker || query.symbol);
+    const force = asBoolean(query.force, false);
+    if (!ticker) {
+      res.status(400).json({ error: "invalid_ticker" });
+      return;
+    }
+
+    if (!force) {
+      const cached = getTickerIntelCache(ticker);
+      if (cached) {
+        res.status(200).json({
+          ...cached,
+          cached: true,
+        });
+        return;
+      }
+    }
+
+    const modules = [
+      "assetProfile",
+      "summaryDetail",
+      "defaultKeyStatistics",
+      "financialData",
+      "calendarEvents",
+      "recommendationTrend",
+    ].join(",");
+    const summaryUrl = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(
+      ticker
+    )}?modules=${encodeURIComponent(modules)}`;
+    const quoteUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(ticker)}`;
+
+    const [summaryPayloadRaw, quotePayloadRaw] = await Promise.all([
+      fetchJsonWithTimeout(summaryUrl, 8000).catch(() => null),
+      fetchJsonWithTimeout(quoteUrl, 7000).catch(() => null),
+    ]);
+
+    const summaryPayload =
+      summaryPayloadRaw && typeof summaryPayloadRaw === "object"
+        ? (summaryPayloadRaw as Record<string, unknown>)
+        : {};
+    const quotePayload =
+      quotePayloadRaw && typeof quotePayloadRaw === "object"
+        ? (quotePayloadRaw as Record<string, unknown>)
+        : {};
+    const summaryRoot =
+      (((summaryPayload.quoteSummary as any)?.result as Array<Record<string, unknown>> | undefined) || [])[0] || {};
+    const quoteRow =
+      (((quotePayload.quoteResponse as any)?.result as Array<Record<string, unknown>> | undefined) || [])[0] || {};
+
+    if (!Object.keys(summaryRoot).length && !Object.keys(quoteRow).length) {
+      res.status(502).json({ error: "ticker_intel_upstream_empty", ticker });
+      return;
+    }
+
+    const assetProfile =
+      summaryRoot.assetProfile && typeof summaryRoot.assetProfile === "object"
+        ? (summaryRoot.assetProfile as Record<string, unknown>)
+        : {};
+    const summaryDetail =
+      summaryRoot.summaryDetail && typeof summaryRoot.summaryDetail === "object"
+        ? (summaryRoot.summaryDetail as Record<string, unknown>)
+        : {};
+    const defaultStats =
+      summaryRoot.defaultKeyStatistics && typeof summaryRoot.defaultKeyStatistics === "object"
+        ? (summaryRoot.defaultKeyStatistics as Record<string, unknown>)
+        : {};
+    const financialData =
+      summaryRoot.financialData && typeof summaryRoot.financialData === "object"
+        ? (summaryRoot.financialData as Record<string, unknown>)
+        : {};
+    const calendarEvents =
+      summaryRoot.calendarEvents && typeof summaryRoot.calendarEvents === "object"
+        ? (summaryRoot.calendarEvents as Record<string, unknown>)
+        : {};
+    const recommendationTrendRaw =
+      summaryRoot.recommendationTrend && typeof summaryRoot.recommendationTrend === "object"
+        ? (summaryRoot.recommendationTrend as Record<string, unknown>)
+        : {};
+
+    const website = extractYahooText(assetProfile.website || quoteRow.website, 260);
+    const logoUrl = buildLogoUrlFromWebsite(website);
+    const marketCap =
+      extractYahooNumber(quoteRow.marketCap) ??
+      extractYahooNumber(summaryDetail.marketCap) ??
+      extractYahooNumber(defaultStats.marketCap) ??
+      extractYahooNumber(financialData.marketCap);
+    const trailingPe = extractYahooNumber(summaryDetail.trailingPE) ?? extractYahooNumber(quoteRow.trailingPE);
+    const forwardPe = extractYahooNumber(summaryDetail.forwardPE) ?? extractYahooNumber(quoteRow.forwardPE);
+    const priceToBook = extractYahooNumber(defaultStats.priceToBook) ?? extractYahooNumber(quoteRow.priceToBook);
+    const beta = extractYahooNumber(summaryDetail.beta) ?? extractYahooNumber(defaultStats.beta) ?? extractYahooNumber(quoteRow.beta);
+    const fiftyTwoWeekLow = extractYahooNumber(summaryDetail.fiftyTwoWeekLow) ?? extractYahooNumber(quoteRow.fiftyTwoWeekLow);
+    const fiftyTwoWeekHigh =
+      extractYahooNumber(summaryDetail.fiftyTwoWeekHigh) ?? extractYahooNumber(quoteRow.fiftyTwoWeekHigh);
+    const avgVolume = extractYahooNumber(summaryDetail.averageVolume) ?? extractYahooNumber(quoteRow.averageDailyVolume3Month);
+    const sharesOutstanding = extractYahooNumber(defaultStats.sharesOutstanding) ?? extractYahooNumber(quoteRow.sharesOutstanding);
+
+    const profile = {
+      name:
+        extractYahooText(quoteRow.shortName || quoteRow.longName, 180) ||
+        extractYahooText(assetProfile.longName, 180) ||
+        ticker,
+      sector: extractYahooText(assetProfile.sector, 120),
+      industry: extractYahooText(assetProfile.industry, 120),
+      exchange: extractYahooText(quoteRow.fullExchangeName || quoteRow.exchange, 120),
+      currency: extractYahooText(quoteRow.currency, 20),
+      website,
+      summary: extractYahooText(assetProfile.longBusinessSummary, 2000),
+      marketCap,
+      fiftyTwoWeekLow,
+      fiftyTwoWeekHigh,
+      trailingPE: trailingPe,
+      forwardPE: forwardPe,
+      beta,
+      dividendYield: extractYahooNumber(summaryDetail.dividendYield),
+      logoUrl,
+      logo_url: logoUrl,
+    };
+
+    const profileDetails = {
+      longName: extractYahooText(quoteRow.longName || quoteRow.shortName, 180) || profile.name,
+      sector: profile.sector,
+      industry: profile.industry,
+      country: extractYahooText(assetProfile.country, 120),
+      website,
+      longBusinessSummary: profile.summary,
+      logoUrl,
+      logo_url: logoUrl,
+    };
+
+    const valuation = {
+      marketCap,
+      trailingPE: trailingPe,
+      forwardPE: forwardPe,
+      priceToBook,
+      enterpriseValue: extractYahooNumber(defaultStats.enterpriseValue) ?? extractYahooNumber(quoteRow.enterpriseValue),
+    };
+
+    const trading = {
+      beta,
+      fiftyTwoWeekLow,
+      fiftyTwoWeekHigh,
+      avgVolume,
+      sharesOutstanding,
+    };
+
+    const earningsDateRaw = ((calendarEvents.earnings as any)?.earningsDate as Array<unknown> | undefined) || [];
+    const earningsDate = earningsDateRaw
+      .map((entry) => extractYahooText(entry, 60))
+      .filter(Boolean)
+      .slice(0, 2)
+      .join(" to ");
+    const events: Array<{ label: string; value: string }> = [
+      { label: "Earnings date", value: earningsDate || "—" },
+      { label: "Ex-dividend date", value: extractYahooText(summaryDetail.exDividendDate, 60) || "—" },
+      { label: "Dividend rate", value: extractYahooText(summaryDetail.dividendRate, 60) || "—" },
+      {
+        label: "52-week change",
+        value:
+          extractYahooNumber(summaryDetail["52WeekChange"]) === null
+            ? "—"
+            : `${(extractYahooNumber(summaryDetail["52WeekChange"]) as number * 100).toFixed(2)}%`,
+      },
+    ];
+
+    const analyst = {
+      recommendationKey: extractYahooText(financialData.recommendationKey, 80),
+      recommendationMean: extractYahooNumber(financialData.recommendationMean),
+      analystOpinions: extractYahooNumber(financialData.numberOfAnalystOpinions),
+      targetMeanPrice: extractYahooNumber(financialData.targetMeanPrice),
+      targetLowPrice: extractYahooNumber(financialData.targetLowPrice),
+      targetHighPrice: extractYahooNumber(financialData.targetHighPrice),
+    };
+
+    const recommendationTrend = (Array.isArray(recommendationTrendRaw.trend) ? recommendationTrendRaw.trend : [])
+      .map((entry) => {
+        const row = entry && typeof entry === "object" ? (entry as Record<string, unknown>) : {};
+        return {
+          period: extractYahooText(row.period, 24),
+          strongBuy: extractYahooNumber(row.strongBuy) ?? 0,
+          buy: extractYahooNumber(row.buy) ?? 0,
+          hold: extractYahooNumber(row.hold) ?? 0,
+          sell: extractYahooNumber(row.sell) ?? 0,
+          strongSell: extractYahooNumber(row.strongSell) ?? 0,
+        };
+      })
+      .filter((row) => row.period);
+
+    const totalRevenue = extractYahooNumber(financialData.totalRevenue);
+    const grossProfits = extractYahooNumber(financialData.grossProfits);
+    const profitMargin = extractYahooNumber(financialData.profitMargins);
+    const roe = extractYahooNumber(financialData.returnOnEquity);
+    const roa = extractYahooNumber(financialData.returnOnAssets);
+    const totalCash = extractYahooNumber(financialData.totalCash);
+    const totalDebt = extractYahooNumber(financialData.totalDebt);
+    const currentRatio = extractYahooNumber(financialData.currentRatio);
+    const debtToEquity = extractYahooNumber(financialData.debtToEquity);
+    const revenueGrowth = extractYahooNumber(financialData.revenueGrowth);
+
+    const liquidityCoverage =
+      totalCash !== null && totalDebt !== null && totalDebt > 0 ? totalCash / totalDebt : totalCash !== null ? 1.4 : null;
+    const heatmap = [
+      {
+        label: "Liquidity",
+        score: computeSignalScore(liquidityCoverage, 0.25, 2.5),
+        hint: "Cash vs debt coverage",
+      },
+      {
+        label: "Leverage",
+        score: computeSignalScore(debtToEquity, 30, 220, true),
+        hint: "Lower debt-to-equity scores higher",
+      },
+      {
+        label: "Profitability",
+        score: computeSignalScore(profitMargin, 0.02, 0.35),
+        hint: "Net margin trend quality",
+      },
+      {
+        label: "Growth",
+        score: computeSignalScore(revenueGrowth, -0.1, 0.4),
+        hint: "Revenue growth profile",
+      },
+      {
+        label: "Valuation",
+        score: computeSignalScore(forwardPe, 8, 50, true),
+        hint: "Forward P/E relative comfort",
+      },
+    ];
+
+    const responsePayload: Record<string, unknown> = {
+      ticker,
+      source: "yahoo_quote_summary",
+      fetchedAt: new Date().toISOString(),
+      logoUrl,
+      logo_url: logoUrl,
+      profile,
+      profileDetails,
+      valuation,
+      trading,
+      events,
+      analyst,
+      recommendationTrend,
+      executiveSummary: {
+        ticker,
+        exchange: profile.exchange,
+        sector: profile.sector,
+        priceTarget12m: analyst.targetMeanPrice,
+      },
+      fundamentalDeepDive: {
+        revenueMechanics: {
+          totalRevenue,
+          grossProfit: grossProfits,
+          segmentBreakdown: "Segment-level breakout depends on issuer disclosure quality.",
+        },
+        profitability: {
+          netMargin: profitMargin,
+          roi: roe ?? roa,
+        },
+        capitalAllocation: {
+          dividendPolicy:
+            extractYahooText(summaryDetail.dividendRate, 120) || "No recurring cash dividend currently reported.",
+          shareBuybacks: "Review latest filings for authorization cadence and dilution impact.",
+        },
+      },
+      riskAndEsg: {
+        riskMitigation: "Cross-check earnings guidance, leverage, and liquidity before sizing.",
+        liquidity: {
+          totalCash,
+          totalDebt,
+          currentRatio,
+        },
+        esg: {
+          environmental: null,
+          social: null,
+          governance: null,
+          overall: null,
+        },
+      },
+      balanceSheetHeatmap: heatmap,
+      peerComparison: [],
+    };
+
+    setTickerIntelCache(ticker, responsePayload);
+    res.status(200).json(responsePayload);
+  } catch (error: any) {
+    const detail = sanitizeText(error?.message || error, 220) || "ticker_intel_failed";
+    res.status(500).json({ error: "ticker_intel_failed", detail });
+  }
+});
+
+async function handleFxConvert(req: Request, res: Response): Promise<void> {
+  let viewer: admin.auth.DecodedIdToken | null = null;
+  try {
+    viewer = await verifyRequestUser(req, false);
+  } catch (error: any) {
+    if (String(error?.message) === "invalid_token") {
+      res.status(401).json({ error: "invalid_token" });
+      return;
+    }
+  }
+
+  const body = req.method === "GET" ? asPlainObject(req.query) : asPlainObject(req.body);
+  const amount = asFinite(body.amount, NaN);
+  const base = normalizeFxCode(body.base || body.from, "USD");
+  const quote = normalizeFxCode(body.quote || body.to, "USD");
+  if (!Number.isFinite(amount) || amount <= 0) {
+    res.status(400).json({ error: "invalid_amount", detail: "Amount must be greater than zero." });
+    return;
+  }
+  if (!base || !quote) {
+    res.status(400).json({ error: "invalid_currency", detail: "Base and quote currencies are required." });
+    return;
+  }
+
+  try {
+    const resolved = await resolveFxRate(base, quote);
+    const amountOut = Number((amount * resolved.rate).toFixed(8));
+    const payload = {
+      base,
+      quote,
+      amountIn: amount,
+      rate: resolved.rate,
+      amountOut,
+      asOf: resolved.asOf,
+      symbolUsed: resolved.symbolUsed,
+      source: resolved.source,
+      cachedTtlSeconds: Math.round(FX_RATE_CACHE_TTL_MS / 1000),
+    };
+
+    if (viewer?.uid) {
+      await db
+        .collection("users")
+        .doc(viewer.uid)
+        .collection("fxHistory")
+        .add({
+          ...payload,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+    }
+    res.status(200).json(payload);
+  } catch (error: any) {
+    const detail = sanitizeText(error?.message || error, 200) || "fx_convert_failed";
+    res.status(502).json({ error: "fx_convert_failed", detail });
+  }
+}
+
+ROUTES.post("/fx/convert", async (req, res) => {
+  await handleFxConvert(req, res);
+});
+
+ROUTES.get("/fx/convert", async (req, res) => {
+  await handleFxConvert(req, res);
+});
+
+ROUTES.post("/indicators/analyze", async (req, res) => {
+  try {
+    const payload = asPlainObject(req.body);
+    const result = await runIndicatorAnalysis(payload, {
+      openAiApiKey: OPENAI_API_KEY,
+      defaultModel: DEFAULT_LLM_MODEL,
+      timeoutMs: LLM_TIMEOUT_MS,
+    });
+    res.status(200).json({
+      ok: true,
+      ...result,
+    });
+  } catch (error: any) {
+    const detail = sanitizeText(error?.message || error, 220) || "indicator_analysis_failed";
+    const lower = detail.toLowerCase();
+    if (lower.includes("ticker is required")) {
+      res.status(400).json({ error: "invalid_ticker", detail });
+      return;
+    }
+    if (lower.includes("market data request failed")) {
+      res.status(502).json({ error: "market_data_failed", detail });
+      return;
+    }
+    res.status(500).json({ error: "indicator_analysis_failed", detail });
+  }
+});
+
 ROUTES.post("/llm/run", async (req, res) => {
   const startedAt = Date.now();
   const requestPayload = asPlainObject(req.body);
@@ -2423,23 +3929,32 @@ ROUTES.post("/earnings/refresh", async (req, res) => {
 
     const body = asPlainObject(req.body);
     const symbol = normalizeTicker(body.symbol || body.ticker);
-    if (!symbol) {
-      res.status(400).json({ error: "symbol_required" });
+    const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+    const fallbackStart = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const fallbackEnd = new Date(Date.now() + 120 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const startRaw = sanitizeText(body.start || body.from, 20);
+    const endRaw = sanitizeText(body.end || body.to, 20);
+    const start = datePattern.test(startRaw) ? startRaw : fallbackStart;
+    const end = datePattern.test(endRaw) ? endRaw : fallbackEnd;
+    if (start > end) {
+      res.status(400).json({ error: "invalid_range" });
       return;
     }
-    const start = sanitizeText(body.start || body.from, 20) || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const end = sanitizeText(body.end || body.to, 20) || new Date(Date.now() + 120 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-    const docRef = db.collection("earningsCalendar").doc(symbol);
+    const cacheDocId = symbol ? `symbol_${symbol}_${start}_${end}` : `range_${start}_${end}`;
+    const docRef = db.collection("earningsCalendar").doc(cacheDocId);
     const existingSnap = await docRef.get();
     const existing = (existingSnap.data() || {}) as Record<string, unknown>;
     const lastFetchedAtMs = getTimestampMs(existing.lastFetchedAt);
-    const hasRecentCache = Array.isArray(existing.items) && existing.items.length > 0 && Date.now() - lastFetchedAtMs < 7 * 24 * 60 * 60 * 1000;
+    const hasRecentCache = Array.isArray(existing.items) && Date.now() - lastFetchedAtMs < 7 * 24 * 60 * 60 * 1000;
     if (hasRecentCache) {
       res.status(200).json({
         ok: true,
         symbol,
+        cacheDocId,
         cached: true,
+        start,
+        end,
         lastFetchedAtMs,
         items: existing.items,
         lastUpdated: sanitizeText(existing.lastUpdated, 30),
@@ -2447,8 +3962,15 @@ ROUTES.post("/earnings/refresh", async (req, res) => {
       return;
     }
 
+    const stableUrl = (() => {
+      const base = `https://financialmodelingprep.com/stable/earnings-calendar?from=${encodeURIComponent(start)}&to=${encodeURIComponent(
+        end
+      )}&apikey=${encodeURIComponent(FMP_API_KEY)}`;
+      if (!symbol) return base;
+      return `${base}&symbol=${encodeURIComponent(symbol)}`;
+    })();
     const candidateUrls = [
-      `https://financialmodelingprep.com/stable/earnings-calendar?symbol=${encodeURIComponent(symbol)}&from=${encodeURIComponent(start)}&to=${encodeURIComponent(end)}&apikey=${encodeURIComponent(FMP_API_KEY)}`,
+      stableUrl,
       `https://financialmodelingprep.com/api/v3/earning_calendar?from=${encodeURIComponent(start)}&to=${encodeURIComponent(end)}&apikey=${encodeURIComponent(FMP_API_KEY)}`,
     ];
 
@@ -2458,32 +3980,50 @@ ROUTES.post("/earnings/refresh", async (req, res) => {
       const response = await fetch(endpoint, { method: "GET" });
       if (!response.ok) continue;
       const rows = (await response.json().catch(() => [])) as Array<Record<string, unknown>>;
-      const filtered = (Array.isArray(rows) ? rows : []).filter((row) => normalizeTicker(row.symbol || row.ticker) === symbol);
-      if (filtered.length) {
-        records = filtered;
-        fetchedFrom = endpoint.includes("/stable/") ? "stable" : "v3";
-        break;
-      }
-    }
-
-    if (!records.length) {
-      res.status(502).json({ error: "fmp_fetch_failed", symbol, start, end });
-      return;
+      const allRows = Array.isArray(rows) ? rows : [];
+      const filtered = symbol
+        ? allRows.filter((row) => normalizeTicker(row.symbol || row.ticker) === symbol)
+        : allRows;
+      records = filtered;
+      fetchedFrom = endpoint.includes("/stable/") ? "stable" : "v3";
+      if (records.length || endpoint === candidateUrls[candidateUrls.length - 1]) break;
     }
 
     const items = records
-      .map((row) => ({
-        symbol,
-        date: sanitizeText(row.date, 20),
-        epsActual: Number.isFinite(Number((row as any).epsActual)) ? Number((row as any).epsActual) : null,
-        epsEstimated: Number.isFinite(Number((row as any).epsEstimated)) ? Number((row as any).epsEstimated) : null,
-        revenueActual: Number.isFinite(Number((row as any).revenueActual)) ? Number((row as any).revenueActual) : null,
-        revenueEstimated: Number.isFinite(Number((row as any).revenueEstimated)) ? Number((row as any).revenueEstimated) : null,
-        lastUpdated: sanitizeText((row as any).lastUpdated, 20),
-      }))
-      .filter((row) => row.date)
-      .sort((a, b) => a.date.localeCompare(b.date))
-      .slice(0, 160);
+      .map((row) => {
+        const rowSymbol = normalizeTicker(row.symbol || row.ticker || symbol);
+        const date = sanitizeText(row.date || (row as any).reportDate, 20);
+        const epsActual = Number.isFinite(Number((row as any).epsActual))
+          ? Number((row as any).epsActual)
+          : Number.isFinite(Number((row as any).eps))
+          ? Number((row as any).eps)
+          : null;
+        const epsEstimated = Number.isFinite(Number((row as any).epsEstimated))
+          ? Number((row as any).epsEstimated)
+          : Number.isFinite(Number((row as any).epsEstimate))
+          ? Number((row as any).epsEstimate)
+          : null;
+        return {
+          symbol: rowSymbol,
+          date,
+          name: sanitizeText((row as any).name || (row as any).company || (row as any).companyName, 180),
+          eventName: sanitizeText((row as any).eventName || (row as any).event || "Earnings", 120),
+          callTime: sanitizeText((row as any).time || (row as any).hour || (row as any).when, 30).toUpperCase(),
+          market: sanitizeText((row as any).exchange || (row as any).market, 80),
+          epsActual,
+          epsEstimated,
+          epsSurprisePercentage:
+            Number.isFinite(Number((row as any).epsSurprisePercentage)) ? Number((row as any).epsSurprisePercentage) : null,
+          epsSurprise:
+            Number.isFinite(Number((row as any).epsSurprise)) ? Number((row as any).epsSurprise) : null,
+          revenueActual: Number.isFinite(Number((row as any).revenueActual)) ? Number((row as any).revenueActual) : null,
+          revenueEstimated: Number.isFinite(Number((row as any).revenueEstimated)) ? Number((row as any).revenueEstimated) : null,
+          lastUpdated: sanitizeText((row as any).lastUpdated || (row as any).updatedFromDate, 20),
+        };
+      })
+      .filter((row) => row.date && row.symbol)
+      .sort((a, b) => (a.date === b.date ? a.symbol.localeCompare(b.symbol) : a.date.localeCompare(b.date)))
+      .slice(0, symbol ? 400 : 5000);
 
     const lastUpdated = items
       .map((item) => item.lastUpdated)
@@ -2493,12 +4033,14 @@ ROUTES.post("/earnings/refresh", async (req, res) => {
 
     await docRef.set(
       {
-        symbol,
+        cacheDocId,
+        symbol: symbol || null,
         start,
         end,
         source: "fmp",
-        sourceVariant: fetchedFrom,
+        sourceVariant: fetchedFrom || "none",
         lastUpdated,
+        itemCount: items.length,
         lastFetchedAt: admin.firestore.FieldValue.serverTimestamp(),
         items,
       },
@@ -2508,16 +4050,167 @@ ROUTES.post("/earnings/refresh", async (req, res) => {
     res.status(200).json({
       ok: true,
       symbol,
+      cacheDocId,
       start,
       end,
       cached: false,
       fetchedCount: items.length,
       lastUpdated,
+      lastFetchedAtMs: Date.now(),
       items,
     });
   } catch (error: any) {
     console.error("[Earnings] refresh failed", error);
     res.status(500).json({ error: "earnings_refresh_failed" });
+  }
+});
+
+ROUTES.post("/polymarket/search", async (req, res) => {
+  try {
+    const body = asPlainObject(req.body);
+    const query = sanitizeText(body.q, 120);
+    if (!query) {
+      res.status(400).json({ error: "query_required" });
+      return;
+    }
+    const limitPerType = Math.max(1, Math.min(60, Math.floor(asFinite(body.limitPerType, 20))));
+    const includeClosed = asBoolean(body.includeClosed, false);
+    const sort = normalizePolymarketSort(body.sort);
+    const cacheKey = `search::${query.toLowerCase()}::${limitPerType}::${includeClosed ? 1 : 0}::${sort}`;
+    const cached = getPolymarketCache(cacheKey);
+    if (cached) {
+      res.status(200).json(cached);
+      return;
+    }
+
+    const payload = await fetchGammaJson("/public-search", {
+      q: query,
+      limit_per_type: limitPerType,
+      keep_closed_markets: includeClosed ? 1 : 0,
+    });
+    const normalized = normalizePolymarketResponse(payload, {
+      query,
+      sort,
+      includeClosed,
+    });
+    setPolymarketCache(cacheKey, normalized);
+    res.status(200).json(normalized);
+  } catch (error: any) {
+    console.error("[Polymarket] search failed", error);
+    res.status(502).json({
+      error: "polymarket_search_failed",
+      detail: sanitizeText(error?.message, 180) || "Unable to fetch Polymarket markets.",
+    });
+  }
+});
+
+ROUTES.post("/polymarket/active", async (req, res) => {
+  try {
+    const body = asPlainObject(req.body);
+    const limit = Math.max(1, Math.min(60, Math.floor(asFinite(body.limit, 24))));
+    const offset = Math.max(0, Math.min(2000, Math.floor(asFinite(body.offset, 0))));
+    const sort = normalizePolymarketSort(body.sort || "volume");
+    const cacheKey = `active::${limit}::${offset}::${sort}`;
+    const cached = getPolymarketCache(cacheKey);
+    if (cached) {
+      res.status(200).json(cached);
+      return;
+    }
+
+    const payload = await fetchGammaJson("/events", {
+      active: true,
+      closed: false,
+      limit,
+      offset,
+    });
+    const normalized = normalizePolymarketResponse(payload, {
+      query: "top-active",
+      sort,
+      includeClosed: false,
+    });
+    setPolymarketCache(cacheKey, normalized);
+    res.status(200).json(normalized);
+  } catch (error: any) {
+    console.error("[Polymarket] active failed", error);
+    res.status(502).json({
+      error: "polymarket_active_failed",
+      detail: sanitizeText(error?.message, 180) || "Unable to fetch active markets.",
+    });
+  }
+});
+
+ROUTES.post("/polymarket/price", async (req, res) => {
+  try {
+    const body = asPlainObject(req.body);
+    const query = sanitizeText(body.q || body.query, 120);
+    const includeClosed = asBoolean(body.includeClosed, false);
+    const sort = normalizePolymarketSort(body.sort || "volume");
+    const marketId = sanitizeText(body.marketId, 120);
+    const slug = sanitizeText(body.slug, 220);
+    const eventId = sanitizeText(body.eventId, 120);
+    const limit = Math.max(1, Math.min(80, Math.floor(asFinite(body.limit, 20))));
+    const limitPerType = Math.max(1, Math.min(60, Math.floor(asFinite(body.limitPerType, 20))));
+
+    let normalized: PolymarketSearchResponse;
+    if (query) {
+      const cacheKey = `price::search::${query.toLowerCase()}::${includeClosed ? 1 : 0}::${sort}::${limitPerType}`;
+      const cached = getPolymarketCache(cacheKey);
+      if (cached) {
+        normalized = cached;
+      } else {
+        const payload = await fetchGammaJson("/public-search", {
+          q: query,
+          limit_per_type: limitPerType,
+          keep_closed_markets: includeClosed ? 1 : 0,
+        });
+        normalized = normalizePolymarketResponse(payload, {
+          query,
+          sort,
+          includeClosed,
+        });
+        setPolymarketCache(cacheKey, normalized);
+      }
+    } else {
+      const offset = Math.max(0, Math.min(2000, Math.floor(asFinite(body.offset, 0))));
+      const activeLimit = Math.max(limit, 24);
+      const cacheKey = `price::active::${activeLimit}::${offset}::${sort}`;
+      const cached = getPolymarketCache(cacheKey);
+      if (cached) {
+        normalized = cached;
+      } else {
+        const payload = await fetchGammaJson("/events", {
+          active: true,
+          closed: false,
+          limit: activeLimit,
+          offset,
+        });
+        normalized = normalizePolymarketResponse(payload, {
+          query: "top-active",
+          sort,
+          includeClosed: false,
+        });
+        setPolymarketCache(cacheKey, normalized);
+      }
+    }
+
+    const markets = flattenPolymarketMarkets(normalized, {
+      marketId,
+      slug,
+      eventId,
+    }).slice(0, limit);
+
+    res.status(200).json({
+      query: normalized.query || query,
+      fetchedAt: normalized.fetchedAt,
+      count: markets.length,
+      markets,
+    });
+  } catch (error: any) {
+    console.error("[Polymarket] price failed", error);
+    res.status(502).json({
+      error: "polymarket_price_failed",
+      detail: sanitizeText(error?.message, 180) || "Unable to fetch Polymarket implied prices.",
+    });
   }
 });
 
@@ -2549,39 +4242,71 @@ ROUTES.post("/webhooks/applenotifications", async (req, res) => {
   }
 });
 
-ROUTES.post("/webhooks/admob/reward", async (req, res) => {
+async function handleAdmobRewardWebhook(req: Request, res: Response): Promise<void> {
   try {
-    if (!checkWebhookSecret(req, ADMOB_SSV_WEBHOOK_SECRET)) {
-      res.status(401).json({ error: "invalid_webhook_secret" });
-      return;
-    }
     const query = asPlainObject(req.query);
     const body = asPlainObject(req.body);
+    const secretValid = checkWebhookSecret(req, ADMOB_SSV_WEBHOOK_SECRET);
     const rewardAmount = asFinite(query.reward_amount || body.reward_amount, NaN);
-    const rewardType = sanitizeText(query.reward_type || body.reward_type, 120);
+    const rewardType = sanitizeText(query.reward_type || body.reward_type || query.reward_item || body.reward_item, 120);
     const adUnit = sanitizeText(query.ad_unit || body.ad_unit, 220);
     const userId = sanitizeText(query.user_id || body.user_id, 220);
-    const customData = sanitizeText(query.custom_data || body.custom_data, 1200);
+    const customData = sanitizeText(query.custom_data || body.custom_data, 1600);
 
     await db.collection("webhook_admob_ssv").add({
       ...summarizeWebhookPayload(req),
+      callbackAccepted: secretValid,
+      callbackMethod: sanitizeText(req.method, 12),
+      callbackPath: sanitizeText(req.path, 180),
       rewardAmount: Number.isFinite(rewardAmount) ? rewardAmount : null,
       rewardType,
+      rewardItem: sanitizeText(query.reward_item || body.reward_item, 120),
       adUnit,
       userId,
       customData,
       transactionId: sanitizeText(query.transaction_id || body.transaction_id, 220),
       adNetwork: sanitizeText(query.ad_network || body.ad_network, 120),
-      timestamp: sanitizeText(query.timestamp || body.timestamp, 40),
-      signature: sanitizeText(query.signature || body.signature, 600),
+      timestamp: sanitizeText(query.timestamp || body.timestamp, 60),
+      signature: sanitizeText(query.signature || body.signature, 900),
       keyId: sanitizeText(query.key_id || body.key_id, 120),
+      mediationGroupName: sanitizeText(query.mediation_group_name || body.mediation_group_name, 220),
+      mediationAbTestName: sanitizeText(query.mediation_ab_test_name || body.mediation_ab_test_name, 220),
+      mediationAbTestVariant: sanitizeText(query.mediation_ab_test_variant || body.mediation_ab_test_variant, 120),
+      adSourceId: sanitizeText(query.ad_source_id || body.ad_source_id, 120),
+      adSourceInstanceId: sanitizeText(query.ad_source_instance_id || body.ad_source_instance_id, 180),
+      rawQuery: query,
     });
 
+    // Always ACK 200 to prevent repeated retries from AdMob SSV callback delivery.
     res.status(200).send("ok");
   } catch (error) {
     console.error("[Webhook] admob reward failed", error);
-    res.status(500).json({ error: "webhook_store_failed" });
+    res.status(200).send("ok");
   }
+}
+
+ROUTES.get("/webhooks/admob/reward", async (req, res) => {
+  await handleAdmobRewardWebhook(req, res);
+});
+
+ROUTES.post("/webhooks/admob/reward", async (req, res) => {
+  await handleAdmobRewardWebhook(req, res);
+});
+
+ROUTES.get("/webhook/admob/reward", async (req, res) => {
+  await handleAdmobRewardWebhook(req, res);
+});
+
+ROUTES.post("/webhook/admob/reward", async (req, res) => {
+  await handleAdmobRewardWebhook(req, res);
+});
+
+ROUTES.get("/admob/reward", async (req, res) => {
+  await handleAdmobRewardWebhook(req, res);
+});
+
+ROUTES.post("/admob/reward", async (req, res) => {
+  await handleAdmobRewardWebhook(req, res);
 });
 
 ROUTES.get("/explore/suggestions", async (req, res) => {
@@ -3619,6 +5344,31 @@ ROUTES.post("/notifications/register-token", async (req, res) => {
   }
 });
 
+ROUTES.post("/notifications/unregister-token", async (req, res) => {
+  try {
+    const user = await verifyRequestUser(req, true);
+    if (!user) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const token = sanitizeText((req.body || {}).token, 4096);
+    if (!token || token.length < 20) {
+      res.status(400).json({ error: "invalid_token" });
+      return;
+    }
+    await db.collection("users").doc(user.uid).collection("fcmTokens").doc(token).delete().catch(() => undefined);
+    res.status(200).json({ ok: true, tokenSuffix: token.slice(-10) });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Explore] unregister token failed", error);
+    res.status(500).json({ error: "unregister_token_failed" });
+  }
+});
+
 ROUTES.post("/notifications/preferences", async (req, res) => {
   try {
     const user = await verifyRequestUser(req, true);
@@ -3807,6 +5557,184 @@ ROUTES.post("/notifications/session/ping", async (req, res) => {
     }
     console.error("[Notify] session ping failed", error);
     res.status(500).json({ error: "notification_session_ping_failed" });
+  }
+});
+
+ROUTES.post("/notifications/iap-event", async (req, res) => {
+  try {
+    const user = await verifyRequestUser(req, true);
+    if (!user) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const input = asPlainObject(req.body);
+    const productId = sanitizeText(input.productId, 120);
+    if (!productId) {
+      res.status(400).json({ error: "invalid_product_id" });
+      return;
+    }
+    const orderId = sanitizeText(input.orderId, 120);
+    const status = sanitizeText(input.status || "purchased", 40).toLowerCase() || "purchased";
+    const platform = sanitizeText(input.platform || "unknown", 20).toLowerCase() || "unknown";
+    const source = sanitizeText(input.source || "native_iap", 80) || "native_iap";
+    const sourceUid = sanitizeText(input.sourceUid, 220);
+    const purchasedAtMs = Math.max(0, Math.floor(asFinite(input.purchasedAtMs, Date.now())));
+    const requestedEventId = sanitizeText(input.eventId, 220).replace(/[^A-Za-z0-9._-]/g, "");
+    const generatedEventId = `evt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+    const eventId = requestedEventId || generatedEventId;
+    const isAnonymous = sanitizeText(user.firebase?.sign_in_provider, 40) === "anonymous";
+    const userRef = db.collection("users").doc(user.uid);
+
+    await userRef.collection("iapEvents").doc(eventId).set(
+      {
+        eventId,
+        uid: user.uid,
+        sourceUid,
+        productId,
+        orderId,
+        status,
+        platform,
+        source,
+        isAnonymous,
+        purchasedAtMs,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    res.status(200).json({
+      ok: true,
+      eventId,
+      uid: user.uid,
+      isAnonymous,
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Notify] iap-event failed", error);
+    res.status(500).json({ error: "notification_iap_event_failed" });
+  }
+});
+
+ROUTES.post("/notifications/merge-anon-data", async (req, res) => {
+  try {
+    const user = await verifyRequestUser(req, true);
+    if (!user) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const targetUid = sanitizeText(user.uid, 220);
+    const input = asPlainObject(req.body);
+    const sourceUid = sanitizeText(input.sourceUid, 220);
+    if (!sourceUid || !targetUid || sourceUid === targetUid) {
+      res.status(400).json({ error: "invalid_source_uid" });
+      return;
+    }
+
+    const sourceRef = db.collection("users").doc(sourceUid);
+    const targetRef = db.collection("users").doc(targetUid);
+    const [sourceSnap, targetSnap] = await Promise.all([sourceRef.get(), targetRef.get()]);
+    if (!sourceSnap.exists) {
+      res.status(404).json({ error: "source_user_not_found" });
+      return;
+    }
+
+    const sourceData = (sourceSnap.data() || {}) as Record<string, unknown>;
+    const targetData = (targetSnap.data() || {}) as Record<string, unknown>;
+    const sourceIsAnonymous = asBoolean(sourceData.isAnonymous, true);
+    if (!sourceIsAnonymous) {
+      res.status(400).json({ error: "source_user_not_anonymous" });
+      return;
+    }
+
+    const [sourceTokensSnap, sourceIapSnap] = await Promise.all([
+      sourceRef.collection("fcmTokens").limit(200).get(),
+      sourceRef.collection("iapEvents").limit(300).get(),
+    ]);
+
+    const mergeBatch = db.batch();
+    let mergedTokenCount = 0;
+    sourceTokensSnap.docs.forEach((doc) => {
+      const token = sanitizeText(doc.id, 512);
+      if (!token) return;
+      const data = (doc.data() || {}) as Record<string, unknown>;
+      mergeBatch.set(
+        targetRef.collection("fcmTokens").doc(token),
+        {
+          ...data,
+          mergedFromAnonymousUid: sourceUid,
+          lastSeenAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      mergedTokenCount += 1;
+    });
+
+    let mergedIapCount = 0;
+    sourceIapSnap.docs.forEach((doc) => {
+      const sourceEventId = sanitizeText(doc.id, 220).replace(/[^A-Za-z0-9._-]/g, "");
+      if (!sourceEventId) return;
+      const mergedEventId = `m_${sourceUid.slice(0, 20)}_${sourceEventId}`.slice(0, 220);
+      const data = (doc.data() || {}) as Record<string, unknown>;
+      mergeBatch.set(
+        targetRef.collection("iapEvents").doc(mergedEventId),
+        {
+          ...data,
+          uid: targetUid,
+          sourceUid,
+          mergedFromAnonymousUid: sourceUid,
+          mergedAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      mergedIapCount += 1;
+    });
+    await mergeBatch.commit();
+
+    const sourcePrefs = normalizeNotificationPrefs({}, (sourceData.notificationPrefs || {}) as Record<string, unknown>);
+    const targetPrefs = normalizeNotificationPrefs({}, (targetData.notificationPrefs || {}) as Record<string, unknown>);
+    const mergedPrefs = normalizeNotificationPrefs(
+      sourcePrefs as unknown as Record<string, unknown>,
+      targetPrefs as unknown as Record<string, unknown>
+    );
+    await targetRef.set(
+      {
+        notificationPrefs: mergedPrefs,
+        mergedAnonymousUids: admin.firestore.FieldValue.arrayUnion(sourceUid),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    await sourceRef.set(
+      {
+        mergedIntoUid: targetUid,
+        mergedAt: admin.firestore.FieldValue.serverTimestamp(),
+        mergeStatus: "merged",
+      },
+      { merge: true }
+    );
+
+    res.status(200).json({
+      ok: true,
+      sourceUid,
+      targetUid,
+      mergedTokenCount,
+      mergedIapCount,
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Notify] merge-anon-data failed", error);
+    res.status(500).json({ error: "notification_merge_anon_failed" });
   }
 });
 
@@ -4246,6 +6174,623 @@ ROUTES.post("/watch-tickers/:ticker", async (req, res) => {
     }
     console.error("[Explore] watch ticker failed", error);
     res.status(500).json({ error: "watch_ticker_failed" });
+  }
+});
+
+ROUTES.get("/my-requests/shared/:slug", async (req, res) => {
+  try {
+    const slug = normalizeShareId(req.params.slug);
+    if (!slug) {
+      res.status(400).json({ error: "invalid_share_slug" });
+      return;
+    }
+
+    const viewer = await verifyRequestUser(req, false).catch(() => null);
+    const shareSnap = await db.collection("request_shares").doc(slug).get();
+    if (!shareSnap.exists) {
+      res.status(404).json({ error: "share_not_found" });
+      return;
+    }
+    const shareData = (shareSnap.data() || {}) as Record<string, unknown>;
+    const visibility = normalizeMyRequestVisibility(shareData.visibility, "private");
+    const ownerUid = sanitizeText(shareData.ownerUid, 220);
+    const requestId = normalizeMyRequestId(shareData.requestId);
+    if (!ownerUid || !requestId) {
+      res.status(404).json({ error: "share_invalid" });
+      return;
+    }
+    const canRead =
+      visibility === "public" ||
+      visibility === "unlisted" ||
+      (viewer?.uid && viewer.uid === ownerUid);
+    if (!canRead) {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
+
+    const requestSnap = await db.collection("users").doc(ownerUid).collection("requests").doc(requestId).get();
+    if (!requestSnap.exists) {
+      res.status(404).json({ error: "request_not_found" });
+      return;
+    }
+    const data = (requestSnap.data() || {}) as Record<string, unknown>;
+    if (asBoolean(data.deleted, false)) {
+      res.status(404).json({ error: "request_not_found" });
+      return;
+    }
+    const responseItem = toMyRequestResponse(requestSnap.id, data, { includePayload: true });
+    res.status(200).json({
+      request: responseItem,
+      readOnly: !(viewer?.uid && viewer.uid === ownerUid),
+      share: {
+        slug,
+        visibility,
+        shareUrl: myRequestShareUrl(slug),
+      },
+    });
+  } catch (error) {
+    console.error("[Explore] read shared request failed", error);
+    res.status(500).json({ error: "request_share_lookup_failed" });
+  }
+});
+
+ROUTES.get("/my-requests", async (req, res) => {
+  try {
+    const viewer = await verifyRequestUser(req, true);
+    if (!viewer) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+
+    await syncLegacyRequestsForUser(viewer.uid);
+
+    const typeFilter = normalizeMyRequestType(req.query.type);
+    const publishedFilter = normalizeMyRequestPublishedFilter(req.query.published);
+    const queryText = sanitizeText(req.query.q, 140).toLowerCase();
+    const limit = parseLimit(req.query.limit);
+
+    const snap = await db
+      .collection("users")
+      .doc(viewer.uid)
+      .collection("requests")
+      .orderBy("updatedAt", "desc")
+      .limit(Math.max(limit * 4, 140))
+      .get();
+
+    const rows = snap.docs
+      .map((doc) => toMyRequestResponse(doc.id, (doc.data() || {}) as Record<string, unknown>, { includePayload: true }))
+      .filter((item) => !asBoolean(item.deleted, false))
+      .filter((item) => {
+        const itemType = normalizeMyRequestType(item.type);
+        if (typeFilter && itemType !== typeFilter) return false;
+        if (publishedFilter === "published" && !asBoolean(item.published, false)) return false;
+        if (publishedFilter === "unpublished" && asBoolean(item.published, false)) return false;
+        if (!queryText) return true;
+        const haystack = [
+          asString(item.title),
+          asString(item.ticker),
+          asString(item.typeLabel),
+          asString((item.outputsMeta as Record<string, unknown>)?.summary || ""),
+          asString((item.input as Record<string, unknown>)?.question || ""),
+          asString((item.input as Record<string, unknown>)?.notes || ""),
+          asString(item.createdAt),
+        ]
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(queryText);
+      })
+      .slice(0, limit);
+
+    res.status(200).json({
+      items: rows,
+      count: rows.length,
+      type: typeFilter || "all",
+      published: publishedFilter,
+      q: queryText,
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Explore] list my requests failed", error);
+    res.status(500).json({ error: "my_requests_list_failed" });
+  }
+});
+
+ROUTES.post("/my-requests", async (req, res) => {
+  try {
+    const viewer = await verifyRequestUser(req, true);
+    if (!viewer) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const body = asPlainObject(req.body);
+    const type = normalizeMyRequestType(body.type);
+    if (!type || !MY_REQUEST_TYPE_SET.has(type)) {
+      res.status(400).json({ error: "invalid_request_type" });
+      return;
+    }
+
+    const sourceRefRaw = asPlainObject(body.sourceRef);
+    const sourceCollection = sanitizeText(sourceRefRaw.collection, 80);
+    const sourceId = sanitizeText(sourceRefRaw.id, 220);
+    const requestIdFromBody = normalizeMyRequestId(body.requestId);
+    const requestId = requestIdFromBody || (sourceCollection && sourceId ? buildMyRequestDocId(type, sourceId) : `req_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`);
+    const requestRef = db.collection("users").doc(viewer.uid).collection("requests").doc(requestId);
+    const existingSnap = await requestRef.get();
+    const existing = (existingSnap.data() || {}) as Record<string, unknown>;
+
+    const input = normalizeMyRequestInput(body.input);
+    const outputsMeta = trimOutputsMeta(body.outputsMeta);
+    const titleEdited = asBoolean(existing.titleEdited, false);
+    const title = titleEdited
+      ? sanitizeText(existing.title, 180) || defaultMyRequestTitle(type, input)
+      : sanitizeText(body.title, 180) || sanitizeText(existing.title, 180) || defaultMyRequestTitle(type, input);
+    const shareExisting = normalizeMyRequestShareObject(existing.share);
+    const shareRequested = normalizeMyRequestShareObject(body.share);
+    const share: Record<string, unknown> = {
+      visibility: normalizeMyRequestVisibility(shareRequested.visibility, shareExisting.visibility),
+      slug: normalizeShareId(shareRequested.slug || shareExisting.slug),
+      createdAt: shareExisting.createdAt || shareRequested.createdAt || null,
+    };
+    const ticker = firstTickerFromRequest(input, { collection: sourceCollection, id: sourceId }, outputsMeta);
+
+    const payload: Record<string, unknown> = {
+      type,
+      ownerUid: viewer.uid,
+      title,
+      titleEdited,
+      input,
+      outputsMeta,
+      sourceRef: {
+        collection: sourceCollection,
+        id: sourceId,
+      },
+      searchText: buildMyRequestSearchText(title, type, ticker, input, outputsMeta),
+      published: asBoolean(body.published, asBoolean(existing.published, false)),
+      publishedAt: existing.publishedAt || null,
+      explorePostId: sanitizeText(body.explorePostId || existing.explorePostId, 220),
+      deleted: false,
+      share,
+      visibility: normalizeMyRequestVisibility(body.visibility, normalizeMyRequestVisibility(existing.visibility, share.visibility as MyRequestShareVisibility)),
+      createdAt: existing.createdAt || admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    await requestRef.set(payload, { merge: true });
+    const refreshed = await requestRef.get();
+    res.status(200).json({
+      ok: true,
+      request: toMyRequestResponse(refreshed.id, (refreshed.data() || {}) as Record<string, unknown>, { includePayload: true }),
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Explore] upsert my request failed", error);
+    res.status(500).json({ error: "my_request_upsert_failed" });
+  }
+});
+
+ROUTES.get("/my-requests/:requestId", async (req, res) => {
+  try {
+    const viewer = await verifyRequestUser(req, true);
+    if (!viewer) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const requestId = normalizeMyRequestId(req.params.requestId);
+    if (!requestId) {
+      res.status(400).json({ error: "invalid_request_id" });
+      return;
+    }
+    const item = await readMyRequestForOwner(viewer.uid, requestId);
+    if (!item || asBoolean(item.data.deleted, false)) {
+      res.status(404).json({ error: "request_not_found" });
+      return;
+    }
+    res.status(200).json({
+      request: toMyRequestResponse(item.id, item.data, { includePayload: true }),
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Explore] read my request failed", error);
+    res.status(500).json({ error: "my_request_read_failed" });
+  }
+});
+
+ROUTES.patch("/my-requests/:requestId", async (req, res) => {
+  try {
+    const viewer = await verifyRequestUser(req, true);
+    if (!viewer) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const requestId = normalizeMyRequestId(req.params.requestId);
+    if (!requestId) {
+      res.status(400).json({ error: "invalid_request_id" });
+      return;
+    }
+    const body = asPlainObject(req.body);
+    const title = sanitizeText(body.title, 180);
+    if (!title) {
+      res.status(400).json({ error: "invalid_title" });
+      return;
+    }
+
+    const requestRef = db.collection("users").doc(viewer.uid).collection("requests").doc(requestId);
+    const snap = await requestRef.get();
+    if (!snap.exists) {
+      res.status(404).json({ error: "request_not_found" });
+      return;
+    }
+    const existing = (snap.data() || {}) as Record<string, unknown>;
+    if (asBoolean(existing.deleted, false)) {
+      res.status(404).json({ error: "request_not_found" });
+      return;
+    }
+
+    await requestRef.set(
+      {
+        title,
+        titleEdited: true,
+        searchText: buildMyRequestSearchText(
+          title,
+          normalizeMyRequestType(existing.type) || "forecast",
+          normalizeTicker((existing.input as Record<string, unknown>)?.ticker),
+          normalizeMyRequestInput(existing.input),
+          trimOutputsMeta(existing.outputsMeta)
+        ),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    const share = normalizeMyRequestShareObject(existing.share);
+    if (share.slug && share.visibility !== "private") {
+      await db
+        .collection("request_shares")
+        .doc(share.slug)
+        .set(
+          {
+            title,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+    }
+
+    const refreshed = await requestRef.get();
+    res.status(200).json({
+      ok: true,
+      request: toMyRequestResponse(refreshed.id, (refreshed.data() || {}) as Record<string, unknown>, { includePayload: true }),
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Explore] rename my request failed", error);
+    res.status(500).json({ error: "my_request_rename_failed" });
+  }
+});
+
+ROUTES.post("/my-requests/:requestId/share", async (req, res) => {
+  try {
+    const viewer = await verifyRequestUser(req, true);
+    if (!viewer) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const requestId = normalizeMyRequestId(req.params.requestId);
+    if (!requestId) {
+      res.status(400).json({ error: "invalid_request_id" });
+      return;
+    }
+
+    const requestRef = db.collection("users").doc(viewer.uid).collection("requests").doc(requestId);
+    const snap = await requestRef.get();
+    if (!snap.exists) {
+      res.status(404).json({ error: "request_not_found" });
+      return;
+    }
+    const existing = (snap.data() || {}) as Record<string, unknown>;
+    if (asBoolean(existing.deleted, false)) {
+      res.status(404).json({ error: "request_not_found" });
+      return;
+    }
+
+    const body = asPlainObject(req.body);
+    const visibility = normalizeMyRequestVisibility(body.visibility, "unlisted");
+    const shareExisting = normalizeMyRequestShareObject(existing.share);
+
+    if (visibility === "private") {
+      await requestRef.set(
+        {
+          share: {
+            visibility: "private",
+            slug: shareExisting.slug || "",
+            createdAt: shareExisting.createdAt || null,
+          },
+          visibility: "private",
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      if (shareExisting.slug) {
+        await db.collection("request_shares").doc(shareExisting.slug).delete().catch(() => undefined);
+      }
+      const refreshed = await requestRef.get();
+      res.status(200).json({
+        ok: true,
+        share: {
+          visibility: "private",
+          slug: shareExisting.slug || "",
+          shareUrl: "",
+        },
+        request: toMyRequestResponse(refreshed.id, (refreshed.data() || {}) as Record<string, unknown>, { includePayload: true }),
+      });
+      return;
+    }
+
+    const slug = await ensureUniqueMyRequestShareSlug(viewer.uid, requestId, shareExisting.slug);
+    const sharePayload = {
+      visibility,
+      slug,
+      createdAt: shareExisting.createdAt || admin.firestore.FieldValue.serverTimestamp(),
+    };
+    const type = normalizeMyRequestType(existing.type) || "forecast";
+    const title = sanitizeText(existing.title, 180) || defaultMyRequestTitle(type, normalizeMyRequestInput(existing.input));
+    const ticker = firstTickerFromRequest(
+      normalizeMyRequestInput(existing.input),
+      asPlainObject(existing.sourceRef),
+      trimOutputsMeta(existing.outputsMeta)
+    );
+
+    await Promise.all([
+      requestRef.set(
+        {
+          share: sharePayload,
+          visibility,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      ),
+      db
+        .collection("request_shares")
+        .doc(slug)
+        .set(
+          {
+            slug,
+            ownerUid: viewer.uid,
+            requestId,
+            type,
+            title,
+            ticker,
+            visibility,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        ),
+    ]);
+
+    const shareUrl = myRequestShareUrl(slug);
+    const refreshed = await requestRef.get();
+    res.status(200).json({
+      ok: true,
+      share: {
+        visibility,
+        slug,
+        shareUrl,
+      },
+      request: toMyRequestResponse(refreshed.id, (refreshed.data() || {}) as Record<string, unknown>, { includePayload: true }),
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Explore] share my request failed", error);
+    res.status(500).json({ error: "my_request_share_failed" });
+  }
+});
+
+ROUTES.post("/my-requests/:requestId/unpublish", async (req, res) => {
+  try {
+    const viewer = await verifyRequestUser(req, true);
+    if (!viewer) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const requestId = normalizeMyRequestId(req.params.requestId);
+    if (!requestId) {
+      res.status(400).json({ error: "invalid_request_id" });
+      return;
+    }
+    const requestRef = db.collection("users").doc(viewer.uid).collection("requests").doc(requestId);
+    const snap = await requestRef.get();
+    if (!snap.exists) {
+      res.status(404).json({ error: "request_not_found" });
+      return;
+    }
+    const existing = (snap.data() || {}) as Record<string, unknown>;
+    if (asBoolean(existing.deleted, false)) {
+      res.status(404).json({ error: "request_not_found" });
+      return;
+    }
+
+    const sourceRef = asPlainObject(existing.sourceRef);
+    const sourceCollection = sanitizeText(sourceRef.collection, 80);
+    const sourceId = sanitizeText(sourceRef.id, 220);
+    const type = normalizeMyRequestType(existing.type) || "forecast";
+    const candidatePostIds = [
+      sanitizeText(existing.explorePostId, 220),
+      type === "forecast" && sourceCollection === "forecast_requests" ? `forecast_${sourceId}` : "",
+      type === "screener" && sourceCollection === "screener_runs" ? `screener_${sourceId}` : "",
+    ]
+      .map((item) => sanitizeText(item, 220))
+      .filter(Boolean);
+
+    await Promise.all(
+      candidatePostIds.map((postId) =>
+        db
+          .collection("posts")
+          .doc(postId)
+          .set(
+            {
+              visibility: "hidden",
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            },
+            { merge: true }
+          )
+          .catch(() => undefined)
+      )
+    );
+
+    await requestRef.set(
+      {
+        published: false,
+        publishedAt: null,
+        explorePostId: "",
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    const refreshed = await requestRef.get();
+    res.status(200).json({
+      ok: true,
+      request: toMyRequestResponse(refreshed.id, (refreshed.data() || {}) as Record<string, unknown>, { includePayload: true }),
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Explore] unpublish my request failed", error);
+    res.status(500).json({ error: "my_request_unpublish_failed" });
+  }
+});
+
+ROUTES.post("/my-requests/:requestId/duplicate", async (req, res) => {
+  try {
+    const viewer = await verifyRequestUser(req, true);
+    if (!viewer) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const requestId = normalizeMyRequestId(req.params.requestId);
+    if (!requestId) {
+      res.status(400).json({ error: "invalid_request_id" });
+      return;
+    }
+    const source = await readMyRequestForOwner(viewer.uid, requestId);
+    if (!source || asBoolean(source.data.deleted, false)) {
+      res.status(404).json({ error: "request_not_found" });
+      return;
+    }
+    const type = normalizeMyRequestType(source.data.type) || "forecast";
+    const cloneId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    const cloneTitle = sanitizeText(source.data.title, 160) || defaultMyRequestTitle(type, normalizeMyRequestInput(source.data.input));
+
+    await db
+      .collection("users")
+      .doc(viewer.uid)
+      .collection("requests")
+      .doc(cloneId)
+      .set(
+        {
+          ...source.data,
+          ownerUid: viewer.uid,
+          title: `${cloneTitle} (Copy)`,
+          titleEdited: true,
+          published: false,
+          publishedAt: null,
+          explorePostId: "",
+          share: {
+            visibility: "private",
+            slug: "",
+            createdAt: null,
+          },
+          visibility: "private",
+          deleted: false,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: false }
+      );
+
+    const cloneSnap = await db.collection("users").doc(viewer.uid).collection("requests").doc(cloneId).get();
+    res.status(200).json({
+      ok: true,
+      request: toMyRequestResponse(cloneSnap.id, (cloneSnap.data() || {}) as Record<string, unknown>, { includePayload: true }),
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Explore] duplicate my request failed", error);
+    res.status(500).json({ error: "my_request_duplicate_failed" });
+  }
+});
+
+ROUTES.delete("/my-requests/:requestId", async (req, res) => {
+  try {
+    const viewer = await verifyRequestUser(req, true);
+    if (!viewer) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const requestId = normalizeMyRequestId(req.params.requestId);
+    if (!requestId) {
+      res.status(400).json({ error: "invalid_request_id" });
+      return;
+    }
+    const requestRef = db.collection("users").doc(viewer.uid).collection("requests").doc(requestId);
+    const snap = await requestRef.get();
+    if (!snap.exists) {
+      res.status(404).json({ error: "request_not_found" });
+      return;
+    }
+    const existing = (snap.data() || {}) as Record<string, unknown>;
+    const share = normalizeMyRequestShareObject(existing.share);
+
+    await requestRef.set(
+      {
+        deleted: true,
+        published: false,
+        publishedAt: null,
+        explorePostId: "",
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    if (share.slug) {
+      await db.collection("request_shares").doc(share.slug).delete().catch(() => undefined);
+    }
+    res.status(200).json({ ok: true, deleted: true, requestId });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Explore] delete my request failed", error);
+    res.status(500).json({ error: "my_request_delete_failed" });
   }
 });
 
@@ -4756,4 +7301,8 @@ export async function onAgentRunCreated(cloudEvent: any): Promise<void> {
 
 export async function onScreenerRunCreated(cloudEvent: any): Promise<void> {
   await handleCreateTrigger("screener", cloudEvent);
+}
+
+export async function refreshFiscaldataDefaults(_cloudEvent: any): Promise<void> {
+  await runScheduledFiscaldataRefresh({ db });
 }

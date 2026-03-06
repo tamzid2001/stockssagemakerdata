@@ -153,6 +153,13 @@ const resolveTemplate = (pathname) => {
     const withExt = slug.endsWith(".html") ? slug : `${slug}.html`;
     return path.join("blog", "posts", withExt);
   }
+  if (route.startsWith("/blog/topics/")) {
+    const topic = route.slice("/blog/topics/".length);
+    if (!topic) return path.join("blog", "index.html");
+    if (topic.includes("..") || topic.includes("/") || topic.includes("\\")) return null;
+    const withExt = topic.endsWith(".html") ? topic : `${topic}.html`;
+    return path.join("blog", "topics", withExt);
+  }
 
   if (route === "/ticker" || route.startsWith("/ticker/")) return "ticker.html";
 
@@ -175,7 +182,7 @@ const getServerTemplate = async () => {
       welcome_message: "Welcome to Quantura",
       watchlist_enabled: "true",
       forecast_prophet_enabled: "true",
-      forecast_timemixer_enabled: "true",
+      forecast_canvas_enabled: "true",
       enable_social_leaderboard: "true",
       forecast_model_primary: "Quantura Horizon",
       promo_banner_text: "",
@@ -188,18 +195,40 @@ const getServerTemplate = async () => {
           weekly_limit: 3,
           daily_limit: 3,
           volatility_alerts: false,
+          workspace_limit: 0,
+          ad_free: false,
         },
-        pro: {
-          allowed_models: ["gpt-5-mini", "gpt-5", "gpt-5.1"],
+        go: {
+          allowed_models: ["gpt-5-nano", "gpt-5-mini"],
+          weekly_limit: 10,
+          daily_limit: 10,
+          volatility_alerts: true,
+          workspace_limit: 1,
+          ad_free: true,
+        },
+        plus: {
+          allowed_models: ["gpt-5-mini", "gpt-5"],
           weekly_limit: 25,
           daily_limit: 25,
           volatility_alerts: true,
+          workspace_limit: 3,
+          ad_free: true,
         },
-        desk: {
-          allowed_models: ["gpt-5-nano", "gpt-5-mini", "gpt-5", "gpt-5.1", "gpt-5.2"],
-          weekly_limit: 75,
-          daily_limit: 75,
+        pro: {
+          allowed_models: ["gpt-5-mini", "gpt-5", "gpt-5.1"],
+          weekly_limit: 60,
+          daily_limit: 60,
           volatility_alerts: true,
+          workspace_limit: 8,
+          ad_free: true,
+        },
+        business: {
+          allowed_models: ["gpt-5-nano", "gpt-5-mini", "gpt-5", "gpt-5.1", "gpt-5.2", "amazon.nova-lite-v1:0", "amazon.nova-pro-v1:0"],
+          weekly_limit: 150,
+          daily_limit: 150,
+          volatility_alerts: true,
+          workspace_limit: 30,
+          ad_free: true,
         },
       }),
       push_notifications_enabled: "true",
@@ -209,17 +238,36 @@ const getServerTemplate = async () => {
       native_ios_storekit_checkout_only: "true",
       native_android_play_billing_enabled: "true",
       native_iap_product_ids: JSON.stringify({
-        pro: "quantura_pro_monthly",
-        desk: "quantura_pro_monthly",
-        forecast: "quantura_pro_monthly",
-        default: "quantura_pro_monthly",
+        ios: {
+          go: "goplan",
+          plus: "premium",
+          pro: "pro",
+          business: "businessplan",
+          desk: "businessplan",
+          forecast: "goplan",
+          annual_go: "annualgoplan",
+          annual_plus: "annualplusplan",
+          annual_pro: "pro",
+          annual_business: "annualbusinessplan",
+          default: "pro",
+        },
+        android: {
+          go: "goplan",
+          plus: "premium",
+          pro: "quanturapro",
+          business: "quanturabusiness",
+          desk: "quanturabusiness",
+          forecast: "goplan",
+          annual_go: "goplanyearly",
+          annual_plus: "annualplusplan",
+          annual_pro: "quanturapro",
+          annual_business: "annualbusinessplan",
+          default: "quanturapro",
+        },
       }),
       ads_use_real_ios: "true",
       ads_use_real_android: "true",
       holiday_promo: "false",
-      backtesting_enabled: "false",
-      backtesting_free_daily_limit: "0",
-      backtesting_pro_daily_limit: "0",
     },
   });
   try {

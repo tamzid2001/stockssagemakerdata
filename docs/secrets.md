@@ -16,15 +16,17 @@ All secret reads are centralized through `secrets_loader.get_secret(...)` with a
 
 - `OPENAI_API_KEY`: OpenAI completions and agent analysis.
 - `AMAZON_NOVA_API_KEY`: Amazon Nova provider routing.
-- `IBM_TIMEMIXER_API_KEY`: IBM TimeMixer auth.
+- `SAGEMAKER_CANVAS_API_KEY`: SageMaker Canvas auth.
 - `HUGGINGFACEHUB_API_TOKEN`: Hugging Face fallback inference auth.
 
 ### Market and data providers
 
 - `ALPACA_API_KEY`: Alpaca trading/data auth.
 - `ALPACA_SECRET_KEY`: Alpaca trading/data auth.
-- `MASSIVE_API_KEY`: Massive market data auth.
+- `FMP_API_KEY`: Financial Modeling Prep earnings calendar auth (server-side only).
 - `UNSPLASH_ACCESS_KEY`: Unsplash API auth.
+
+Treasury Fiscal Data API does not require authentication.
 
 ### Billing and monetization
 
@@ -69,4 +71,3 @@ Functions that require a missing secret return `FAILED_PRECONDITION` with explic
 ## Local development
 
 Use a local pull script (ignored by git) to materialize secrets into `.env.local` for local emulators only. Do not commit `.env`, `.env.local`, or any secret values.
-

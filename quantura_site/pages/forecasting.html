@@ -4,17 +4,26 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Quantura Terminal | Quantura Horizon + Indicators</title>
-    <meta
-      name="description"
-      content="Generate quantile forecasts, toggle technical indicators, and track ticker momentum with Quantura's terminal."
-    />
-    <meta name="robots" content="index, follow" />
-    <link rel="canonical" href="https://quantura-e2e3d.web.app/forecasting" />
-    <meta property="og:title" content="Quantura Forecasting Studio" />
-    <meta property="og:description" content="Quantile forecasting, technical indicators, and demand intelligence for serious investors." />
-    <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://quantura-e2e3d.web.app/forecasting" />
-    <meta property="og:image" content="/assets/quantura-logo.svg" />
+        <meta name="description" content="Generate quantile forecasts, toggle technical indicators, and track ticker momentum with Quantura's terminal." />
+        <meta name="robots" content="index, follow" />
+    <meta name="keywords" content="stock forecasting terminal, quantile forecast, fan chart, ticker analysis, model council" />
+        <link rel="canonical" href="https://quantura.studio/forecasting" />
+        <meta property="og:title" content="Quantura Forecasting Studio" />
+        <meta property="og:description" content="Quantile forecasting, technical indicators, and demand intelligence for serious investors." />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content="https://quantura.studio/forecasting" />
+        <meta property="og:image" content="/assets/quantura-logo.svg" />
+    <meta property="og:site_name" content="Quantura" />
+    <meta property="og:locale" content="en_US" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Quantura Forecasting Studio" />
+    <meta name="twitter:description" content="Quantile forecasting, technical indicators, and demand intelligence for serious investors." />
+    <meta name="twitter:image" content="/assets/quantura-logo.svg" />
+    <meta name="twitter:url" content="https://quantura.studio/forecasting" />
+    <meta name="author" content="Quantura" />
+    <meta name="theme-color" content="#0B1526" />
+    <link rel="alternate" hreflang="en-US" href="https://quantura.studio/forecasting" />
+    <link rel="alternate" hreflang="x-default" href="https://quantura.studio/forecasting" />
     <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="stylesheet" href="/styles.css" />
@@ -33,10 +42,9 @@
   
     <script>
       window.__QUANTURA_RC_TEMPLATE_ID__ = "firebase-server";
-      window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ = {"status":200,"eTag":"etag-quantura-e2e3d-firebase-server-fetch--1213937490","config":{"welcome_message":"","watchlist_enabled":"true","forecast_prophet_enabled":"true","forecast_timemixer_enabled":"true","push_notifications_enabled":"true","webpush_vapid_key":"","stripe_checkout_enabled":"true","stripe_public_key":"","holiday_promo":"false","backtesting_enabled":"false","backtesting_free_daily_limit":"0","backtesting_pro_daily_limit":"0"}};
+      window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ = {"status":200,"eTag":"etag-quantura-e2e3d-firebase-server-fetch--1213937490","config":{"welcome_message":"","watchlist_enabled":"true","forecast_prophet_enabled":"true","forecast_canvas_enabled":"true","push_notifications_enabled":"true","webpush_vapid_key":"","stripe_checkout_enabled":"true","stripe_public_key":"","holiday_promo":"false"}};
     </script>
-  
-</head>
+  </head>
   <body>
     <header class="header">
       <div class="container nav">
@@ -69,7 +77,6 @@
             </select>
           </div>
           <span id="header-user-status" class="pill">Logged Out</span>
-          <a class="cta secondary solve-now-cta" id="header-solve-now" href="/model-council" data-analytics="nav_solve_now" aria-label="Solve now. Powered by AI" title="Powered by AI"><i class="iconoir-brain" aria-hidden="true"></i><span>Solve now</span></a>
           <a class="cta secondary icon-only" id="header-notifications" href="/account" data-analytics="nav_notifications" aria-label="Sign in to manage notifications" title="Notifications"><i class="iconoir-bell-notification" aria-hidden="true"></i></a>
           <button class="cta secondary icon-only" id="header-auth" type="button" aria-label="Sign in" title="Sign in"><i class="iconoir-log-in" aria-hidden="true"></i></button>
           <a class="cta" href="/pricing"><i class="iconoir-page" aria-hidden="true"></i><span>View plans</span></a>
@@ -83,16 +90,17 @@
 	          <nav class="sidebar-nav" aria-label="Terminal navigation">
 	            <a class="sidebar-link active" href="/forecasting" data-panel-target="forecast"><i class="iconoir-magic-wand" aria-hidden="true"></i><span>Forecast</span></a>
 	            <a class="sidebar-link" href="/ticker-intelligence" data-panel-target="ticker"><i class="iconoir-eye" aria-hidden="true"></i><span>Ticker</span></a>
+              <a class="sidebar-link" href="/ticker-intelligence?panel=predictions" data-panel-target="predictions"><i class="iconoir-graph-up" aria-hidden="true"></i><span>Predictions</span></a>
 	            <a class="sidebar-link" href="/indicators" data-panel-target="indicators"><i class="iconoir-sigma-function" aria-hidden="true"></i><span>Indicators</span></a>
               <a class="sidebar-link" href="/trending" data-panel-target="trending"><i class="iconoir-fire-flame" aria-hidden="true"></i><span>Trending</span></a>
 	            <a class="sidebar-link" href="/news" data-panel-target="news"><i class="iconoir-journal-page" aria-hidden="true"></i><span>News and data</span></a>
               <a class="sidebar-link" href="/events-calendar" data-panel-target="events-calendar"><i class="iconoir-calendar" aria-hidden="true"></i><span>Earnings calendar</span></a>
               <a class="sidebar-link" href="/market-headlines" data-panel-target="market-headlines"><i class="iconoir-globe" aria-hidden="true"></i><span>Market headlines</span></a>
+              <a class="sidebar-link" href="/forecasting" data-panel-target="macro"><i class="iconoir-database" aria-hidden="true"></i><span>Macro Dashboard</span></a>
               <a class="sidebar-link" href="/model-council" data-panel-target="ticker-query"><i class="iconoir-brain" aria-hidden="true"></i><span>Model Council</span></a>
-	            <a class="sidebar-link" href="/options" data-panel-target="options"><i class="iconoir-numbered-list-left" aria-hidden="true"></i><span>Options</span></a>
-              <a class="sidebar-link" href="/tools/fx" data-panel-target="fx"><i class="iconoir-coins-swap" aria-hidden="true"></i><span>Currency conversion</span></a>
-	            <a class="sidebar-link" href="/saved-forecasts" data-panel-target="saved"><i class="iconoir-bookmark" aria-hidden="true"></i><span>Saved forecasts</span></a>
-	            <a class="sidebar-link" href="/studio" data-panel-target="learn"><i class="iconoir-info-circle" aria-hidden="true"></i><span>Learn more</span></a>
+              <a class="sidebar-link" href="/options" data-panel-target="options"><i class="iconoir-numbered-list-left" aria-hidden="true"></i><span>Options</span></a>
+              <a class="sidebar-link" href="/forecasting?panel=fx" data-panel-target="fx"><i class="iconoir-coins-swap" aria-hidden="true"></i><span>Currency conversion</span></a>
+              <a class="sidebar-link" href="/studio" data-panel-target="learn"><i class="iconoir-info-circle" aria-hidden="true"></i><span>Learn more</span></a>
 	            <a class="sidebar-link" href="/screener"><i class="iconoir-search" aria-hidden="true"></i><span>Screener</span></a>
               <a class="sidebar-link" href="/explore"><i class="iconoir-binocular" aria-hidden="true"></i><span>Explore</span></a>
 	            <a class="sidebar-link" href="/watchlist"><i class="iconoir-bell-notification" aria-hidden="true"></i><span>Watchlist and alerts</span></a>
@@ -103,29 +111,7 @@
           <section class="section studio-section" id="terminal">
             <div class="container">
 	              <div class="studio-layout" data-panels data-panel-router="terminal">
-                <div class="studio-primary">
-                  <div class="terminal-dock card">
-                    <form id="terminal-form" class="terminal-dock-form">
-                      <div class="field">
-                        <label class="label" for="terminal-ticker">Ticker</label>
-                        <input id="terminal-ticker" placeholder="AAPL" required />
-                      </div>
-                      <div class="field">
-                        <label class="label" for="terminal-interval">Timeframe</label>
-                        <select id="terminal-interval">
-                          <option value="1d">Daily</option>
-                          <option value="1h">Hourly</option>
-                        </select>
-                      </div>
-                      <button class="cta" type="submit" data-analytics="terminal_load"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Load chart</span></button>
-                      <p class="small" id="terminal-status"></p>
-                    </form>
-                    <div class="small ticker-hint">
-                      Tip: pick a panel on the left, then click any ticker in results to update the chart immediately.
-                    </div>
-                    <div id="ticker-history" class="ticker-history" aria-live="polite"></div>
-                  </div>
-
+                <div class="studio-main">
                   <div class="chart-shell studio-chart">
                     <div class="chart-toolbar" id="chart-toolbar" aria-label="Chart controls">
                       <div class="chart-range-group" role="group" aria-label="Chart range">
@@ -177,7 +163,7 @@
                         <details class="learn-more">
                           <summary>Learn more</summary>
                           <p class="small">
-                            Headlines refresh automatically when you load a new ticker. Use them to find catalysts, then confirm with indicator overlays and saved forecast bands.
+                            Headlines refresh automatically when you load a new ticker. Use them to find catalysts, then confirm with indicator overlays and saved run bands.
                           </p>
                         </details>
                       </div>
@@ -243,30 +229,44 @@
                               <strong>Quantura Horizon</strong> is optimized for transparent trend and seasonality interpretation with stable uncertainty bands.
                               Quantura stores each run so you can compare results, review confidence structure, and export files for downstream analysis.
                             </p>
-                            <p>
-                              After you generate a run, use <strong>Load saved forecast</strong> (or the <strong>Saved forecasts</strong> panel) to re-plot it later and export CSV for analysis.
-                            </p>
                           </div>
 	                      </details>
 	                    </form>
-                      <div class="card">
-                        <h3>Load saved forecast</h3>
-                        <div class="form-grid">
-                          <div class="field">
-                            <label class="label" for="forecast-load-select">Recent forecasts</label>
-                            <select id="forecast-load-select">
-                              <option value="">Select a forecast</option>
-                            </select>
-                          </div>
-                        </div>
-                        <div class="hero-actions" style="margin-top: 12px;">
-                          <button class="cta secondary" id="forecast-load-button" type="button" data-analytics="forecast_load_saved"><i class="iconoir-bookmark" aria-hidden="true"></i><span>Load forecast</span></button>
-                        </div>
-                        <p class="small muted" id="forecast-load-status"></p>
-                      </div>
                     <div class="results-panel">
                       <h3>Forecast output</h3>
                       <div id="forecast-output" class="panel-output small">Run a forecast to see model summary and preview rows.</div>
+                    </div>
+                    <div class="card" data-my-requests-panel data-default-type="forecast">
+                      <div class="card-head">
+                        <h3>My Requests</h3>
+                        <button class="cta secondary small" type="button" data-action="my-requests-refresh">Refresh</button>
+                      </div>
+                      <div class="form-grid">
+                        <div class="field">
+                          <label class="label">Search</label>
+                          <input type="search" data-my-requests-search placeholder="Title, ticker, date" />
+                        </div>
+                        <div class="field">
+                          <label class="label">Type</label>
+                          <select data-my-requests-type>
+                            <option value="">All</option>
+                            <option value="forecast">Forecasting</option>
+                            <option value="screener">Screeners</option>
+                            <option value="indicator">Indicators</option>
+                            <option value="modelCouncil">Model Council</option>
+                          </select>
+                        </div>
+                        <div class="field">
+                          <label class="label">Published</label>
+                          <select data-my-requests-published>
+                            <option value="all">All</option>
+                            <option value="published">Published</option>
+                            <option value="unpublished">Unpublished</option>
+                          </select>
+                        </div>
+                      </div>
+                      <p class="small muted" data-my-requests-status>Sign in to load your requests.</p>
+                      <div class="order-list panel-output" data-my-requests-list></div>
                     </div>
                   </section>
 
@@ -278,13 +278,19 @@
                     <div class="results-panel ticker-intelligence-panel">
                       <div class="card-head">
                         <h3>Institutional View</h3>
-                        <div class="intel-subtabs" id="ticker-intel-tabs" role="tablist" aria-label="Ticker intelligence tabs">
-                          <button class="task-chip active" id="intel-tab-intelligence" type="button" role="tab" aria-selected="true" data-intel-tab="intelligence">Intelligence</button>
-                          <button class="task-chip" id="intel-tab-predictions" type="button" role="tab" aria-selected="false" data-intel-tab="predictions">Predictions</button>
-                        </div>
                       </div>
-                      <div id="ticker-output" class="panel-output small" data-intel-view="intelligence">Load a ticker to generate the institutional intelligence panel.</div>
-                      <div id="ticker-predictions-output" class="panel-output small hidden" data-intel-view="predictions">Load a ticker to view related Polymarket prediction markets.</div>
+                      <div id="ticker-output" class="panel-output small">Load a ticker to generate the institutional intelligence panel.</div>
+                    </div>
+                  </section>
+
+                  <section class="panel hidden" data-panel="predictions">
+                    <div class="panel-header">
+                      <h2>Predictions</h2>
+                      <p class="small">Polymarket-style prediction cards powered by Gamma API. Search by ticker or browse top active markets.</p>
+                    </div>
+                    <div class="results-panel">
+                      <h3>Prediction Markets</h3>
+                      <div id="ticker-predictions-output" class="panel-output small">Load a ticker to view related Polymarket prediction markets.</div>
                       <p class="small muted" style="margin-top:10px;">Predictions are informational only and not investment advice.</p>
                     </div>
                   </section>
@@ -338,12 +344,44 @@
                         </p>
                       </details>
                     </form>
-	                    <div class="results-panel">
-	                      <h3>Indicator output</h3>
-	                      <div id="technicals-output" class="panel-output small">Select indicators to see the latest values.</div>
-	                      <div id="indicator-chart" class="chart" style="margin-top: 16px;"></div>
-	                    </div>
-	                  </section>
+                    <div class="results-panel">
+                      <h3>Indicator output</h3>
+                      <div id="technicals-output" class="panel-output small">Select indicators to see the latest values.</div>
+                      <div id="indicator-chart" class="chart" style="margin-top: 16px;"></div>
+                    </div>
+                    <div class="card" data-my-requests-panel data-default-type="indicator">
+                      <div class="card-head">
+                        <h3>My Requests</h3>
+                        <button class="cta secondary small" type="button" data-action="my-requests-refresh">Refresh</button>
+                      </div>
+                      <div class="form-grid">
+                        <div class="field">
+                          <label class="label">Search</label>
+                          <input type="search" data-my-requests-search placeholder="Title, ticker, date" />
+                        </div>
+                        <div class="field">
+                          <label class="label">Type</label>
+                          <select data-my-requests-type>
+                            <option value="">All</option>
+                            <option value="forecast">Forecasting</option>
+                            <option value="screener">Screeners</option>
+                            <option value="indicator">Indicators</option>
+                            <option value="modelCouncil">Model Council</option>
+                          </select>
+                        </div>
+                        <div class="field">
+                          <label class="label">Published</label>
+                          <select data-my-requests-published>
+                            <option value="all">All</option>
+                            <option value="published">Published</option>
+                            <option value="unpublished">Unpublished</option>
+                          </select>
+                        </div>
+                      </div>
+                      <p class="small muted" data-my-requests-status>Sign in to load your requests.</p>
+                      <div class="order-list panel-output" data-my-requests-list></div>
+                    </div>
+                  </section>
 
                   <section class="panel hidden" data-panel="trending">
                     <div class="panel-header">
@@ -433,38 +471,55 @@
 
                   <section class="panel hidden" data-panel="events-calendar">
                     <div class="panel-header">
-                      <h2>Earnings calendar</h2>
-                      <p class="small">Weekly-cached FMP earnings pulled by backend and rendered from Firestore.</p>
+                      <h2>Earnings Calendar</h2>
+                      <p class="small">Date-based earnings across all tickers for the selected range.</p>
                     </div>
-                    <form id="events-calendar-form" class="card">
-                      <div class="form-grid">
-                        <div class="field">
-                          <label class="label" for="events-calendar-symbol">Ticker</label>
-                          <input id="events-calendar-symbol" name="symbol" placeholder="AAPL" />
-                          <div class="small muted">Defaults to your active ticker if blank.</div>
+                    <div class="card earnings-calendar-shell">
+                      <div class="earnings-calendar-topbar">
+                        <div class="earnings-calendar-range-controls">
+                          <button
+                            class="cta secondary icon-only small"
+                            id="events-calendar-prev"
+                            type="button"
+                            aria-label="Previous range"
+                            title="Previous range"
+                          >
+                            <i class="iconoir-nav-arrow-left" aria-hidden="true"></i>
+                          </button>
+                          <div class="field earnings-calendar-range-field">
+                            <label class="label" for="events-calendar-preset">Range</label>
+                            <select id="events-calendar-preset" name="preset">
+                              <option value="this-week">This Week</option>
+                              <option value="next-week">Next Week</option>
+                              <option value="last-week">Last Week</option>
+                              <option value="next-30-days">Next 30 Days</option>
+                            </select>
+                          </div>
+                          <button
+                            class="cta secondary icon-only small"
+                            id="events-calendar-next"
+                            type="button"
+                            aria-label="Next range"
+                            title="Next range"
+                          >
+                            <i class="iconoir-nav-arrow-right" aria-hidden="true"></i>
+                          </button>
                         </div>
-                        <div class="field">
-                          <label class="label" for="events-calendar-window">Window</label>
-                          <select id="events-calendar-window" name="window">
-                            <option value="month">Next month</option>
-                            <option value="week">Next week</option>
-                          </select>
-                        </div>
-                        <div class="field">
-                          <label class="label" for="events-calendar-start">Start</label>
-                          <input id="events-calendar-start" name="startDate" type="date" />
-                        </div>
-                        <div class="field">
-                          <label class="label" for="events-calendar-end">End</label>
-                          <input id="events-calendar-end" name="endDate" type="date" />
+                        <div class="small muted earnings-calendar-range-label" id="events-calendar-range-label">—</div>
+                        <div class="field earnings-calendar-search-field">
+                          <label class="label" for="events-calendar-search">Search</label>
+                          <div class="earnings-calendar-search-wrap">
+                            <input id="events-calendar-search" type="search" placeholder="Find earnings for symbols or companies" />
+                            <button class="cta secondary small" id="events-calendar-search-clear" type="button">Clear</button>
+                          </div>
                         </div>
                       </div>
-                      <button class="cta" type="submit" data-analytics="events_calendar_load"><i class="iconoir-calendar" aria-hidden="true"></i><span>Load earnings calendar</span></button>
+                      <div id="events-calendar-day-strip" class="earnings-day-strip" role="tablist" aria-label="Earnings by day"></div>
                       <p class="small muted" id="events-calendar-status"></p>
-                    </form>
+                    </div>
                     <div class="results-panel">
-                      <h3>Upcoming earnings</h3>
-                      <div id="events-calendar-output" class="panel-output small">Load earnings to see EPS and revenue deltas with last-updated metadata.</div>
+                      <h3 id="events-calendar-selected-day-title">Earnings on —</h3>
+                      <div id="events-calendar-output" class="panel-output small">Load earnings to see all reporting tickers by day.</div>
                     </div>
                   </section>
 
@@ -508,6 +563,23 @@
                         <div id="market-social-output" class="panel-output small">Social posts from X, Reddit, Facebook, and Instagram will appear here.</div>
                       </div>
                     </div>
+                  </section>
+
+                  <section class="panel hidden" data-panel="macro">
+                    <div class="panel-header">
+                      <h2>Macro Dashboard</h2>
+                      <p class="small">Registry-driven Fiscal Data cards with schema-aware rendering and pagination.</p>
+                    </div>
+                    <div class="card" style="margin-bottom:16px;">
+                      <h3>U.S. Treasury Fiscal Data</h3>
+                      <p class="small muted" id="fiscaldata-macro-status">Loading registry and default macro cards...</p>
+                    </div>
+                    <div id="fiscaldata-macro-groups" class="content-grid">
+                      <div class="card">
+                        <div class="small muted">Loading cards...</div>
+                      </div>
+                    </div>
+                    <div id="fiscaldata-macro-details" class="modal hidden"></div>
                   </section>
 
                   <section class="panel hidden" data-panel="ticker-query">
@@ -563,9 +635,19 @@
                         <label class="label" for="ticker-query-question">Question</label>
                         <textarea id="ticker-query-question" name="question" placeholder="Example: Is this stock overvalued vs peers, and what are the top near-term risks?"></textarea>
                       </div>
+                      <div class="model-council-prompt-panel">
+                        <div class="model-council-prompt-head">
+                          <div class="small"><strong>Question cards</strong></div>
+                          <button class="cta secondary small" id="ticker-query-prompt-shuffle" type="button">
+                            <i class="iconoir-refresh" aria-hidden="true"></i><span>Shuffle</span>
+                          </button>
+                        </div>
+                        <div id="ticker-query-prompt-cards" class="model-council-prompt-grid"></div>
+                        <div class="small muted">Click a card to auto-fill the question box.</div>
+                      </div>
                       <label class="small muted model-council-improve-toggle">
                         <input id="ticker-query-improve-toggle" type="checkbox" checked />
-                        Improve my prompt before final run
+                        <span class="model-council-toggle-label">Improve my prompt before final run</span>
                       </label>
                       <div id="ticker-query-improve-preview-wrap" class="field hidden">
                         <label class="label" for="ticker-query-improve-preview">Improved prompt preview</label>
@@ -578,9 +660,9 @@
                       <button class="cta" type="submit" data-analytics="model_council_submit"><i class="iconoir-brain" aria-hidden="true"></i><span>Prepare Model Council</span></button>
                       <p class="small muted" id="ticker-query-status"></p>
                       <p class="small muted" id="ticker-query-model-info">Latency: — · Tokens: — · Cached: —</p>
-                      <label id="ticker-query-cache-toggle-wrap" class="small muted hidden" style="display:flex;align-items:center;gap:8px;">
+                      <label id="ticker-query-cache-toggle-wrap" class="small muted model-council-improve-toggle model-council-cache-toggle hidden">
                         <input id="ticker-query-show-cache-stats" type="checkbox" />
-                        Show cache stats (dev)
+                        <span class="model-council-toggle-label">Show cache stats (dev)</span>
                       </label>
                       <div id="ticker-query-cache-stats" class="panel-output small hidden">Cache stats will appear after a response.</div>
                     </form>
@@ -588,6 +670,38 @@
                       <h3>Model Council output</h3>
                       <div id="ticker-query-output" class="panel-output small">Ask a question to generate a Model Council response with evidence and risk caveats.</div>
                       <div id="ticker-query-modules-output" class="panel-output small hidden" style="margin-top:10px;">Selected yfinance modules will render here.</div>
+                    </div>
+                    <div class="card" data-my-requests-panel data-default-type="modelCouncil">
+                      <div class="card-head">
+                        <h3>My Requests</h3>
+                        <button class="cta secondary small" type="button" data-action="my-requests-refresh">Refresh</button>
+                      </div>
+                      <div class="form-grid">
+                        <div class="field">
+                          <label class="label">Search</label>
+                          <input type="search" data-my-requests-search placeholder="Title, ticker, date" />
+                        </div>
+                        <div class="field">
+                          <label class="label">Type</label>
+                          <select data-my-requests-type>
+                            <option value="">All</option>
+                            <option value="forecast">Forecasting</option>
+                            <option value="screener">Screeners</option>
+                            <option value="indicator">Indicators</option>
+                            <option value="modelCouncil">Model Council</option>
+                          </select>
+                        </div>
+                        <div class="field">
+                          <label class="label">Published</label>
+                          <select data-my-requests-published>
+                            <option value="all">All</option>
+                            <option value="published">Published</option>
+                            <option value="unpublished">Unpublished</option>
+                          </select>
+                        </div>
+                      </div>
+                      <p class="small muted" data-my-requests-status>Sign in to load your requests.</p>
+                      <div class="order-list panel-output" data-my-requests-list></div>
                     </div>
                   </section>
 
@@ -622,6 +736,68 @@
                     <div class="results-panel options-chain-panel">
                       <h3>Options chain</h3>
                       <div id="options-output" class="panel-output small">Calls and puts will appear here.</div>
+                    </div>
+                  </section>
+
+                  <section class="panel hidden" data-panel="fx">
+                    <div class="panel-header">
+                      <h2>Currency conversion</h2>
+                      <p class="small">Convert with live FX rates and keep a quick recent list for repeat checks.</p>
+                    </div>
+                    <form id="terminal-fx-form" class="card" autocomplete="off">
+                      <div class="form-grid">
+                        <div class="field">
+                          <label class="label" for="terminal-fx-amount">Amount</label>
+                          <input id="terminal-fx-amount" name="amount" type="number" min="0" step="0.0001" value="1" required />
+                        </div>
+                        <div class="field">
+                          <label class="label" for="terminal-fx-base">Base currency</label>
+                          <select id="terminal-fx-base" name="base" required>
+                            <option value="USD">USD</option>
+                            <option value="EUR">EUR</option>
+                            <option value="GBP">GBP</option>
+                            <option value="JPY">JPY</option>
+                            <option value="CAD">CAD</option>
+                            <option value="AUD">AUD</option>
+                            <option value="CHF">CHF</option>
+                            <option value="BDT">BDT</option>
+                            <option value="INR">INR</option>
+                            <option value="BTC">BTC</option>
+                          </select>
+                        </div>
+                        <div class="field">
+                          <label class="label" for="terminal-fx-quote">Quote currency</label>
+                          <select id="terminal-fx-quote" name="quote" required>
+                            <option value="EUR">EUR</option>
+                            <option value="USD" selected>USD</option>
+                            <option value="GBP">GBP</option>
+                            <option value="JPY">JPY</option>
+                            <option value="CAD">CAD</option>
+                            <option value="AUD">AUD</option>
+                            <option value="CHF">CHF</option>
+                            <option value="BDT">BDT</option>
+                            <option value="INR">INR</option>
+                            <option value="BTC">BTC</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div class="hero-actions" style="margin-top: 12px;">
+                        <button type="button" class="cta secondary small" id="terminal-fx-swap">
+                          <i class="iconoir-arrows-up-from-line" aria-hidden="true"></i><span>Swap</span>
+                        </button>
+                        <button type="submit" class="cta small fx-convert-cta" id="terminal-fx-submit">
+                          <i class="iconoir-calculator" aria-hidden="true"></i><span>Convert</span>
+                        </button>
+                      </div>
+                      <p id="terminal-fx-status" class="small muted" style="margin-top: 10px;">Ready.</p>
+                    </form>
+                    <div class="results-panel">
+                      <h3>Conversion result</h3>
+                      <div id="terminal-fx-result" class="panel-output small">Run a conversion to view rate details.</div>
+                    </div>
+                    <div class="card">
+                      <h3>Recent conversions</h3>
+                      <div id="terminal-fx-recent" class="order-list panel-output small">No recent conversions yet.</div>
                     </div>
                   </section>
 
@@ -1062,22 +1238,39 @@
 	                      <h3>Portfolio output</h3>
 	                      <div id="screener-output" class="panel-output small">Generate a portfolio to see ranked candidates and AI Agent performance.</div>
 	                    </div>
-                      <div class="card">
-                        <h3>Load saved portfolio run</h3>
+                      <div class="card" data-my-requests-panel data-default-type="screener">
+                        <div class="card-head">
+                          <h3>My Requests</h3>
+                          <button class="cta secondary small" type="button" data-action="my-requests-refresh">Refresh</button>
+                        </div>
                         <div class="form-grid">
                           <div class="field">
-                            <label class="label" for="screener-load-select">Recent runs</label>
-                            <select id="screener-load-select">
-                              <option value="">Select a run</option>
+                            <label class="label">Search</label>
+                            <input type="search" data-my-requests-search placeholder="Title, ticker, date" />
+                          </div>
+                          <div class="field">
+                            <label class="label">Type</label>
+                            <select data-my-requests-type>
+                              <option value="">All</option>
+                              <option value="forecast">Forecasting</option>
+                              <option value="screener">Screeners</option>
+                              <option value="indicator">Indicators</option>
+                              <option value="modelCouncil">Model Council</option>
+                            </select>
+                          </div>
+                          <div class="field">
+                            <label class="label">Published</label>
+                            <select data-my-requests-published>
+                              <option value="all">All</option>
+                              <option value="published">Published</option>
+                              <option value="unpublished">Unpublished</option>
                             </select>
                           </div>
                         </div>
-                        <div class="hero-actions" style="margin-top: 12px;">
-                          <button class="cta secondary" id="screener-load-button" type="button" data-analytics="screener_load_saved">Load portfolio</button>
-                        </div>
-                        <p class="small muted" id="screener-load-status"></p>
+                        <p class="small muted" data-my-requests-status>Sign in to load your requests.</p>
+                        <div class="order-list panel-output" data-my-requests-list></div>
                       </div>
-	                  </section>
+                  </section>
 
 	                  <section class="panel hidden" data-panel="watchlist">
 	                    <div class="panel-header">
@@ -1156,25 +1349,6 @@
 	                      </div>
 	                    </div>
 	                  </section>
-
-                  <section class="panel hidden" data-panel="saved">
-	                    <div class="panel-header">
-	                      <h2>Saved forecasts</h2>
-	                      <p class="small">Plot any saved run onto the chart without leaving this page.</p>
-                    </div>
-                    <div id="saved-forecasts-list" class="order-list panel-output"></div>
-                    <details class="learn-more">
-                      <summary>Learn more</summary>
-                      <div class="small">
-                        <p>
-                          Saved forecasts are linked to your active workspace. Use <strong>Plot on chart</strong> to overlay quantile bands, or <strong>Download CSV</strong> to export the full run.
-                        </p>
-                        <p>
-                          If you are working with collaborators, pick the correct workspace in the Dashboard so you are viewing the same saved runs and history.
-                        </p>
-                      </div>
-                    </details>
-                  </section>
 
                   <section class="panel hidden" data-panel="learn">
                     <div class="panel-header">

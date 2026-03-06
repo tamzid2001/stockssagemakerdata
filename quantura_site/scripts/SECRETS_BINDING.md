@@ -10,7 +10,6 @@ Secrets used by `functions/main.py` are declared in `set_global_options(secrets=
 | ALPACA_SECRET_KEY   | ALPACA_SECRET_KEY   | Direct match                   |
 | AMAZON_NOVA_KEY     | AMAZON_NOVA_API_KEY | Mapped in code                 |
 | FCM_WEB_VAPID_KEY   | FCM_WEB_VAPID_KEY   | Direct match                   |
-| MASSIVE_API_KEY     | MASSIVE_API_KEY     | Direct match                   |
 | OPENAI_API_KEY      | OPENAI_API_KEY      | Direct match                   |
 | SLACK_WEBHOOK_URL   | SLACK_WEBHOOK_URL   | Direct match                   |
 | STRIPE_PRIVATE_KEY  | STRIPE_SECRET_KEY   | Mapped in code                 |
@@ -42,11 +41,11 @@ Secrets used by `functions/main.py` are declared in `set_global_options(secrets=
    firebase functions:secrets:set SECRET_NAME
    ```
 
-3. Deploy functions (Firebase grants Secret Manager access automatically):
+3. Deploy functions via gcloud, then deploy hosting:
 
    ```bash
-   firebase use quantura-e2e3d
-   firebase deploy --only functions
+   cd ..
+   CLOUDSDK_PYTHON=/opt/homebrew/bin/python3.13 ./deploy.sh
    ```
 
 ## Secrets not used by Firebase Functions

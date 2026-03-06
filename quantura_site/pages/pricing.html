@@ -4,17 +4,26 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Quantura Pricing | Plans for Research, Forecasting, and Collaboration</title>
-    <meta
-      name="description"
-      content="Choose a Quantura plan for forecasting, screening, collaboration, and premium research workflows. Shipped weekly."
-    />
-    <meta name="robots" content="index, follow" />
-    <link rel="canonical" href="https://quantura-e2e3d.web.app/pricing" />
-    <meta property="og:title" content="Quantura Pricing" />
-    <meta property="og:description" content="Plans for forecasting, screening, collaboration, and premium research workflows." />
-    <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://quantura-e2e3d.web.app/pricing" />
-    <meta property="og:image" content="/assets/quantura-logo.svg" />
+        <meta name="description" content="Choose a Quantura plan for forecasting, screening, collaboration, and premium research workflows. Shipped weekly." />
+        <meta name="robots" content="index, follow" />
+    <meta name="keywords" content="quantura pricing, quantura plans, go plan, plus plan, business plan, pro plan" />
+        <link rel="canonical" href="https://quantura.studio/pricing" />
+        <meta property="og:title" content="Quantura Pricing" />
+        <meta property="og:description" content="Plans for forecasting, screening, collaboration, and premium research workflows." />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content="https://quantura.studio/pricing" />
+        <meta property="og:image" content="/assets/quantura-logo.svg" />
+    <meta property="og:site_name" content="Quantura" />
+    <meta property="og:locale" content="en_US" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Quantura Pricing" />
+    <meta name="twitter:description" content="Plans for forecasting, screening, collaboration, and premium research workflows." />
+    <meta name="twitter:image" content="/assets/quantura-logo.svg" />
+    <meta name="twitter:url" content="https://quantura.studio/pricing" />
+    <meta name="author" content="Quantura" />
+    <meta name="theme-color" content="#0B1526" />
+    <link rel="alternate" hreflang="en-US" href="https://quantura.studio/pricing" />
+    <link rel="alternate" hreflang="x-default" href="https://quantura.studio/pricing" />
     <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="stylesheet" href="/styles.css" />
@@ -29,6 +38,7 @@
 	    <script defer src="/__/firebase/12.9.0/firebase-analytics-compat.js"></script>
 	    <script defer src="/__/firebase/init.js?useEmulator=false"></script>
 	    <script defer src="/app.js"></script>
+    <script defer src="/marketing-carousel.js"></script>
   </head>
   <body class="pricing-page">
     <header class="header">
@@ -39,7 +49,7 @@
           <a href="/research" data-analytics="nav_research"><i class="iconoir-bookmark-book" aria-hidden="true"></i><span>Research</span></a>
           <a href="/blog" data-analytics="nav_blog"><i class="iconoir-page" aria-hidden="true"></i><span>Blog</span></a>
           <a href="/pricing" data-analytics="nav_pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>Pricing</span></a>
-          <a href="/contact" data-analytics="nav_contact"><i class="iconoir-mail" aria-hidden="true"></i><span>Contact</span></a>
+          <a href="/contact" data-analytics="nav_contact"><i class="iconoir-mail" aria-hidden="true"></i><span>Contact Us</span></a>
         </nav>
         <div class="nav-actions">
           <span id="header-user-email" class="small" style="max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Guest</span>
@@ -51,50 +61,128 @@
     </header>
 
     <main>
-      <section class="page-hero">
-        <div class="container content-grid">
-          <div>
-            <div class="eyebrow">Pricing</div>
-            <h1>Plans that scale from solo research to a full desk workflow.</h1>
-            <p>
-              Quantura keeps everything structured: forecasts, indicator overlays, screen runs, uploads, audit logs, and collaboration.
-              Choose a plan based on how much compute and automation you want to run each week.
-            </p>
-            <div class="hero-actions">
-              <a class="cta" id="pricing-auth-cta" href="/account" data-analytics="pricing_signin"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></a>
-              <a class="cta secondary" href="/forecasting" data-analytics="pricing_terminal"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Try the terminal</span></a>
-            </div>
+	      <section class="page-hero">
+	        <div class="container content-grid">
+	          <div>
+	            <div class="eyebrow">Pricing</div>
+	            <h1>Institutional workflow, simplified for every team size.</h1>
+	            <p>
+	              From signal to scenario to decision-ready output, each plan scales your research loop compression:
+                charts + narrative + alerts, with auditable handoff.
+	            </p>
+	            <div class="hero-actions">
+	              <a class="cta" id="pricing-auth-cta" href="/account" data-analytics="pricing_signin"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></a>
+	              <a class="cta secondary" href="/forecasting" data-analytics="pricing_terminal"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Try the terminal</span></a>
+	            </div>
+	          </div>
+	          <div class="card">
+	            <h3>From signal &rarr; scenario &rarr; decision-ready output</h3>
+	            <div class="feature-list">
+	              <div class="feature"><span></span><i class="iconoir-shield-check" aria-hidden="true"></i>Secure sign-in and role-aware workspace controls</div>
+	              <div class="feature"><span></span><i class="iconoir-bookmark" aria-hidden="true"></i>Saved requests across forecasting, indicators, screeners, and Model Council</div>
+	              <div class="feature"><span></span><i class="iconoir-group" aria-hidden="true"></i>Shareable request links for internal or client-facing review</div>
+	              <div class="feature"><span></span><i class="iconoir-bell-notification" aria-hidden="true"></i>Operational alerts with in-app notification history</div>
+	            </div>
+	          </div>
+	        </div>
+	      </section>
+
+      <section class="section section-compact">
+        <div class="container">
+          <div class="section-title">
+            <h2>Use Cases and Trusted Workflows</h2>
+            <p class="small">Public examples of institutional-grade systems adjacent to Quantura-style operating patterns.</p>
           </div>
-          <div class="card">
-            <h3>What’s included in every plan</h3>
-            <div class="feature-list">
-              <div class="feature"><span></span><i class="iconoir-shield-check" aria-hidden="true"></i>Secure sign-in with persistent sessions</div>
-              <div class="feature"><span></span><i class="iconoir-bookmark" aria-hidden="true"></i>Saved forecasts, screeners, and uploads</div>
-              <div class="feature"><span></span><i class="iconoir-group" aria-hidden="true"></i>Workspace collaboration and invite controls</div>
-              <div class="feature"><span></span><i class="iconoir-bell-notification" aria-hidden="true"></i>Push alerts and operational notifications</div>
-            </div>
+          <div class="use-case-grid">
+            <a class="use-case-card" href="https://marquee.gs.com/welcome/campaigns/marketview" target="_blank" rel="noopener noreferrer">
+              <div class="use-case-media use-case-media-goldman">
+                <img src="https://cdn.simpleicons.org/goldmansachs/ffffff" alt="Goldman Sachs logo" loading="lazy" />
+              </div>
+              <div class="use-case-body">
+                <h3>Goldman Marquee MarketView</h3>
+                <p class="small">Institutional visualization and market intelligence workflows.</p>
+                <span class="use-case-link">Open reference</span>
+              </div>
+            </a>
+            <a class="use-case-card" href="https://openai.com/customer-stories/morgan-stanley/" target="_blank" rel="noopener noreferrer">
+              <div class="use-case-media use-case-media-openai">
+                <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTg4b2xFrY7mhOS9pGOnckG88R0ZzHpzYZ7hA&s" alt="OpenAI x Morgan Stanley" loading="lazy" />
+              </div>
+              <div class="use-case-body">
+                <h3>OpenAI x Morgan Stanley</h3>
+                <p class="small">AI-assisted advisory workflow at enterprise scale.</p>
+                <span class="use-case-link">Open reference</span>
+              </div>
+            </a>
+            <a class="use-case-card" href="https://aws.amazon.com/financial-services/capital-markets/" target="_blank" rel="noopener noreferrer">
+              <div class="use-case-media use-case-media-aws">
+                <img src="https://w7.pngwing.com/pngs/610/693/png-transparent-amazon-aws-logo.png" alt="AWS logo" loading="lazy" />
+              </div>
+              <div class="use-case-body">
+                <h3>AWS Capital Markets</h3>
+                <p class="small">Cloud architecture references for modern market infrastructure.</p>
+                <span class="use-case-link">Open reference</span>
+              </div>
+            </a>
+            <a class="use-case-card" href="https://docs.perplexity.ai/docs/sonar/quickstart" target="_blank" rel="noopener noreferrer">
+              <div class="use-case-media use-case-media-perplexity">
+                <img src="https://cdn.simpleicons.org/perplexity/ffffff" alt="Perplexity logo" loading="lazy" />
+              </div>
+              <div class="use-case-body">
+                <h3>Perplexity Sonar API</h3>
+                <p class="small">Web-grounded LLM quickstart for retrieval-rich market research.</p>
+                <span class="use-case-link">Open reference</span>
+              </div>
+            </a>
           </div>
         </div>
       </section>
 
-      <section class="section">
-        <div class="container">
-          <div class="section-title">
+	      <section class="section">
+	        <div class="container">
+	          <div class="section-title">
             <h2>Choose your plan</h2>
-            <p class="small">Monthly subscriptions include forecasting compute, screener storage, automation quotas, and collaboration controls.</p>
+            <p class="small">Switch monthly vs yearly pricing and launch native checkout with the correct StoreKit or Google Play product IDs.</p>
+          </div>
+          <div class="hero-actions" id="pricing-billing-toggle" style="margin-bottom:18px;">
+            <button class="cta" type="button" data-billing-cycle="monthly" aria-pressed="true">Monthly</button>
+            <button class="cta secondary" type="button" data-billing-cycle="yearly" aria-pressed="false">Yearly (save up to 16.7%)</button>
+          </div>
+          <div class="card" style="margin-bottom:18px;">
+            <h3>Annual savings snapshot</h3>
+            <div class="table-wrap" style="margin-top:10px;">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Plan</th>
+                    <th>Monthly</th>
+                    <th>12x monthly</th>
+                    <th>Recommended annual</th>
+                    <th>You save</th>
+                    <th>Effective monthly</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td>Quantura Go</td><td>$8/mo</td><td>$96/yr</td><td><strong>$80/yr</strong></td><td>$16/yr (16.7%)</td><td>$6.67/mo</td></tr>
+                  <tr><td>Quantura Plus</td><td>$20/mo</td><td>$240/yr</td><td><strong>$200/yr</strong></td><td>$40/yr (16.7%)</td><td>$16.67/mo</td></tr>
+                  <tr><td>Quantura Business</td><td>$30/mo</td><td>$360/yr</td><td><strong>$300/yr</strong></td><td>$60/yr (16.7%)</td><td>$25.00/mo</td></tr>
+                  <tr><td>Quantura Pro</td><td>$200/mo</td><td>$2,400/yr</td><td><strong>$2,160/yr</strong></td><td>$240/yr (10.0%)</td><td>$180.00/mo</td></tr>
+                </tbody>
+              </table>
+            </div>
           </div>
 
           <div class="grid-3">
-            <div class="card">
+            <div class="card" data-pricing-plan-card="starter">
               <span class="badge">Starter</span>
               <h3 style="margin-top: 14px;">Quantura Starter</h3>
               <div class="price">$0</div>
-              <p class="small">For trying the terminal, saving forecasts, and exploring the screener.</p>
+              <p class="small">For trying the terminal, saving runs, and exploring the screener.</p>
               <div class="feature-list" style="margin-top: 16px;">
                 <div class="feature"><span></span><i class="iconoir-candlestick-chart" aria-hidden="true"></i>Forecasting terminal + saved runs</div>
                 <div class="feature"><span></span><i class="iconoir-graph-up" aria-hidden="true"></i>Indicator overlays and market context</div>
                 <div class="feature"><span></span><i class="iconoir-search" aria-hidden="true"></i>Basic screener runs with history</div>
-                <div class="feature"><span></span><i class="iconoir-bookmark" aria-hidden="true"></i>10 saved forecasts and 10 screener archives</div>
+                <div class="feature"><span></span><i class="iconoir-bookmark" aria-hidden="true"></i>10 saved runs and 10 screener archives</div>
                 <div class="feature"><span></span><i class="iconoir-bell-notification" aria-hidden="true"></i>Email notifications + one browser push endpoint</div>
               </div>
               <div class="hero-actions" style="margin-top: 18px;">
@@ -102,98 +190,143 @@
               </div>
             </div>
 
-            <div class="card">
+            <div class="card" data-pricing-plan-card="go">
               <span class="badge" style="background: #e8f4ff; color: #0c4a6e;">Go</span>
               <h3 style="margin-top: 14px;">Quantura Go</h3>
-              <div class="price">$9</div>
-              <p class="small">For focused solo workflows with light automation and ad-free usage.</p>
+              <div class="price" data-pricing-price>$8/mo</div>
+              <p class="small" data-pricing-cycle-copy>Pay yearly to lock in <strong>$80/yr</strong> (save $16).</p>
+              <p class="small">Ad-free research with higher forecast, screener, and Model Council throughput.</p>
               <div class="feature-list" style="margin-top: 16px;">
                 <div class="feature"><span></span><i class="iconoir-shield-check" aria-hidden="true"></i>Ad-free experience after purchase</div>
-                <div class="feature"><span></span><i class="iconoir-graph-up" aria-hidden="true"></i>Higher model-call and screener limits vs Starter</div>
+                <div class="feature"><span></span><i class="iconoir-graph-up" aria-hidden="true"></i>Higher limits for forecasts, screeners, and indicators</div>
                 <div class="feature"><span></span><i class="iconoir-group" aria-hidden="true"></i>1 collaborator seat</div>
-                <div class="feature"><span></span><i class="iconoir-brain" aria-hidden="true"></i>GPT-5 mini model access</div>
+                <div class="feature"><span></span><i class="iconoir-brain" aria-hidden="true"></i>Pro model access: GPT-5 mini</div>
               </div>
-              <div class="purchase-panel" data-product="Quantura Go" data-iap-plan="go" data-price="9" data-currency="USD" data-stripe-url="#">
-                <button class="cta" data-action="purchase" data-label-guest="Sign in to continue" data-label-auth="Start Go plan" disabled>
-                  Sign in to continue
+              <div
+                class="purchase-panel"
+                data-product="Quantura Go Monthly"
+                data-iap-plan="go"
+                data-price="8"
+                data-currency="USD"
+                data-stripe-url="#"
+                data-monthly-price="8"
+                data-yearly-price="80"
+                data-monthly-product="Quantura Go Monthly"
+                data-yearly-product="Quantura Go Annual"
+                data-monthly-iap-plan="go"
+                data-yearly-iap-plan="annual_go"
+              >
+                <button class="cta" data-action="purchase" data-label-guest="Continue as guest" data-label-auth="Start Go plan">
+                  Continue as guest
                 </button>
-                <p class="small purchase-note">Sign in to continue.</p>
+                <p class="small purchase-note">Guest checkout is enabled. You can merge purchases after sign-in.</p>
                 <div class="notice purchase-success hidden"></div>
                 <button class="cta secondary hidden" data-action="stripe" type="button">Proceed to payment</button>
               </div>
             </div>
 
-            <div class="card">
+            <div class="card" data-pricing-plan-card="plus">
               <span class="badge" style="background: #e1f4f0; color: #146a5d;">Most popular</span>
               <h3 style="margin-top: 14px;">Quantura Plus</h3>
-              <div class="price">$19</div>
-              <p class="small">For active investors who need faster iteration and broader model access.</p>
+              <div class="price" data-pricing-price>$20/mo</div>
+              <p class="small" data-pricing-cycle-copy>Pay yearly to lock in <strong>$200/yr</strong> (save $40).</p>
+              <p class="small">For active investors who want stronger models, ad-free speed, and higher rate limits.</p>
               <div class="feature-list" style="margin-top: 16px;">
                 <div class="feature"><span></span><i class="iconoir-shield-check" aria-hidden="true"></i>Ad-free experience after purchase</div>
-                <div class="feature"><span></span><i class="iconoir-graph-up" aria-hidden="true"></i>Expanded weekly model-call limits</div>
+                <div class="feature"><span></span><i class="iconoir-graph-up" aria-hidden="true"></i>Expanded limits for forecasts, screeners, and Model Council</div>
                 <div class="feature"><span></span><i class="iconoir-group" aria-hidden="true"></i>3 collaborator seats</div>
-                <div class="feature"><span></span><i class="iconoir-brain" aria-hidden="true"></i>GPT-5 + GPT-5 mini access</div>
+                <div class="feature"><span></span><i class="iconoir-brain" aria-hidden="true"></i>Pro model access: GPT-5 + GPT-5 mini</div>
               </div>
-              <div class="purchase-panel" data-product="Quantura Plus" data-iap-plan="plus" data-price="19" data-currency="USD" data-stripe-url="#">
-                <button class="cta" data-action="purchase" data-label-guest="Sign in to continue" data-label-auth="Start Plus plan" disabled>
-                  Sign in to continue
+              <div
+                class="purchase-panel"
+                data-product="Quantura Plus Monthly"
+                data-iap-plan="plus"
+                data-price="20"
+                data-currency="USD"
+                data-stripe-url="#"
+                data-monthly-price="20"
+                data-yearly-price="200"
+                data-monthly-product="Quantura Plus Monthly"
+                data-yearly-product="Quantura Plus Annual"
+                data-monthly-iap-plan="plus"
+                data-yearly-iap-plan="annual_plus"
+              >
+                <button class="cta" data-action="purchase" data-label-guest="Continue as guest" data-label-auth="Start Plus plan">
+                  Continue as guest
                 </button>
-                <p class="small purchase-note">Sign in to continue.</p>
+                <p class="small purchase-note">Guest checkout is enabled. You can merge purchases after sign-in.</p>
                 <div class="notice purchase-success hidden"></div>
                 <button class="cta secondary hidden" data-action="stripe" type="button">Proceed to payment</button>
               </div>
             </div>
           </div>
           <div class="grid-3" style="margin-top: 18px;">
-            <div class="card">
-              <span class="badge" style="background: #eef2ff; color: #312e81;">Pro</span>
-              <h3 style="margin-top: 14px;">Quantura Pro</h3>
-              <div class="price">$39</div>
-              <p class="small">For power users balancing advanced AI output with disciplined workflow control.</p>
-              <div class="feature-list" style="margin-top: 16px;">
-                <div class="feature"><span></span><i class="iconoir-shield-check" aria-hidden="true"></i>Ad-free experience after purchase</div>
-                <div class="feature"><span></span><i class="iconoir-rocket" aria-hidden="true"></i>High weekly model-call and screener throughput</div>
-                <div class="feature"><span></span><i class="iconoir-group" aria-hidden="true"></i>8 collaborator seats</div>
-                <div class="feature"><span></span><i class="iconoir-brain" aria-hidden="true"></i>GPT-5, GPT-5 mini, GPT-5.1 access</div>
-              </div>
-              <div class="purchase-panel" data-product="Quantura Pro" data-iap-plan="pro" data-price="39" data-currency="USD" data-stripe-url="#">
-                <button class="cta" data-action="purchase" data-label-guest="Sign in to continue" data-label-auth="Start Pro plan" disabled>
-                  Sign in to continue
-                </button>
-                <p class="small purchase-note">Sign in to continue.</p>
-                <div class="notice purchase-success hidden"></div>
-                <button class="cta secondary hidden" data-action="stripe" type="button">Proceed to payment</button>
-              </div>
-            </div>
-            <div class="card">
+            <div class="card" data-pricing-plan-card="business">
               <span class="badge" style="background: #fef1cc; color: #6d4c00;">Business</span>
               <h3 style="margin-top: 14px;">Quantura Business</h3>
-              <div class="price">$199</div>
-              <p class="small">For teams that require maximal limits, advanced controls, and broad collaborator access.</p>
+              <div class="price" data-pricing-price>$30/mo</div>
+              <p class="small" data-pricing-cycle-copy>Pay yearly to lock in <strong>$300/yr</strong> (save $60).</p>
+              <p class="small">For teams requiring maximum throughput, strict controls, and broad workspace capacity.</p>
               <div class="feature-list" style="margin-top: 16px;">
                 <div class="feature"><span></span><i class="iconoir-shield-check" aria-hidden="true"></i>Ad-free experience after purchase</div>
                 <div class="feature"><span></span><i class="iconoir-rocket" aria-hidden="true"></i>Highest request throughput and priority execution lane</div>
                 <div class="feature"><span></span><i class="iconoir-group" aria-hidden="true"></i>30 collaborator seats</div>
-                <div class="feature"><span></span><i class="iconoir-brain" aria-hidden="true"></i>Full GPT-5 stack + Nova model access</div>
+                <div class="feature"><span></span><i class="iconoir-brain" aria-hidden="true"></i>Full pro models + expanded workspace limits</div>
               </div>
-              <div class="purchase-panel" data-product="Quantura Business" data-iap-plan="business" data-price="199" data-currency="USD" data-stripe-url="#">
-                <button class="cta" data-action="purchase" data-label-guest="Sign in to continue" data-label-auth="Start Business plan" disabled>
-                  Sign in to continue
+              <div
+                class="purchase-panel"
+                data-product="Quantura Business Monthly"
+                data-iap-plan="business"
+                data-price="30"
+                data-currency="USD"
+                data-stripe-url="#"
+                data-monthly-price="30"
+                data-yearly-price="300"
+                data-monthly-product="Quantura Business Monthly"
+                data-yearly-product="Quantura Business Annual"
+                data-monthly-iap-plan="business"
+                data-yearly-iap-plan="annual_business"
+              >
+                <button class="cta" data-action="purchase" data-label-guest="Continue as guest" data-label-auth="Start Business plan">
+                  Continue as guest
                 </button>
-                <p class="small purchase-note">Sign in to continue.</p>
+                <p class="small purchase-note">Guest checkout is enabled. You can merge purchases after sign-in.</p>
                 <div class="notice purchase-success hidden"></div>
                 <button class="cta secondary hidden" data-action="stripe" type="button">Proceed to payment</button>
               </div>
             </div>
-            <div class="card">
-              <span class="badge" style="background: #f1f5f9; color: #0f172a;">Annual options</span>
-              <h3 style="margin-top: 14px;">Annual plans</h3>
-              <p class="small">Yearly plans are available in native checkout.</p>
+            <div class="card" data-pricing-plan-card="pro">
+              <span class="badge" style="background: #eef2ff; color: #312e81;">Pro</span>
+              <h3 style="margin-top: 14px;">Quantura Pro</h3>
+              <div class="price" data-pricing-price>$200/mo</div>
+              <p class="small" data-pricing-cycle-copy>Pay yearly to lock in <strong>$2,160/yr</strong> (save $240).</p>
+              <p class="small">For desks demanding premium model access, top-tier rate limits, and expanded workspace ceilings.</p>
               <div class="feature-list" style="margin-top: 16px;">
-                <div class="feature"><span></span><i class="iconoir-check" aria-hidden="true"></i>Go Annual: <code>annualgoplan</code> (iOS) / <code>goplanyearly</code> (Android)</div>
-                <div class="feature"><span></span><i class="iconoir-check" aria-hidden="true"></i>Plus Annual: <code>annualplusplan</code></div>
-                <div class="feature"><span></span><i class="iconoir-check" aria-hidden="true"></i>Business Annual: <code>annualbusinessplan</code></div>
-                <div class="feature"><span></span><i class="iconoir-mobile-dev-mode" aria-hidden="true"></i>iOS uses StoreKit, Android uses Google Play Billing</div>
+                <div class="feature"><span></span><i class="iconoir-shield-check" aria-hidden="true"></i>Ad-free experience after purchase</div>
+                <div class="feature"><span></span><i class="iconoir-rocket" aria-hidden="true"></i>High throughput for forecasts, screeners, and model responses</div>
+                <div class="feature"><span></span><i class="iconoir-group" aria-hidden="true"></i>8 collaborator seats</div>
+                <div class="feature"><span></span><i class="iconoir-brain" aria-hidden="true"></i>Pro model stack: GPT-5, GPT-5 mini, GPT-5.1</div>
+              </div>
+              <div
+                class="purchase-panel"
+                data-product="Quantura Pro Monthly"
+                data-iap-plan="pro"
+                data-price="200"
+                data-currency="USD"
+                data-stripe-url="#"
+                data-monthly-price="200"
+                data-yearly-price="2160"
+                data-monthly-product="Quantura Pro Monthly"
+                data-yearly-product="Quantura Pro Annual"
+                data-monthly-iap-plan="pro"
+                data-yearly-iap-plan="annual_pro"
+              >
+                <button class="cta" data-action="purchase" data-label-guest="Continue as guest" data-label-auth="Start Pro plan">
+                  Continue as guest
+                </button>
+                <p class="small purchase-note">Guest checkout is enabled. You can merge purchases after sign-in.</p>
+                <div class="notice purchase-success hidden"></div>
+                <button class="cta secondary hidden" data-action="stripe" type="button">Proceed to payment</button>
               </div>
             </div>
           </div>
@@ -219,65 +352,6 @@
               <h3><i class="iconoir-bell-notification" aria-hidden="true"></i> Alerts and push workflow</h3>
               <p class="small">Track price moves, news catalysts, filings, and screener triggers with email and push delivery for time-sensitive decisions.</p>
             </article>
-          </div>
-        </div>
-      </section>
-
-      <section class="section">
-        <div class="container">
-          <div class="section-title">
-            <h2>Model Access by Tier</h2>
-            <p class="small">Higher subscriptions unlock stronger model variants and larger weekly usage and workspace limits.</p>
-          </div>
-          <div class="table-wrap card">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Model</th>
-                  <th>Input / 1M</th>
-                  <th>Cached Input / 1M</th>
-                  <th>Output / 1M</th>
-                  <th>Access Tier</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td><i class="iconoir-flash" aria-hidden="true"></i> gpt-5-nano</td>
-                  <td>$0.05</td>
-                  <td>$0.005</td>
-                  <td>$0.40</td>
-                  <td>Free / Go / Plus / Pro / Business</td>
-                </tr>
-                <tr>
-                  <td><i class="iconoir-light-bulb-on" aria-hidden="true"></i> gpt-5-mini</td>
-                  <td>$0.25</td>
-                  <td>$0.025</td>
-                  <td>$2.00</td>
-                  <td>Free / Go / Plus / Pro / Business</td>
-                </tr>
-                <tr>
-                  <td><i class="iconoir-brain" aria-hidden="true"></i> gpt-5</td>
-                  <td>$1.25</td>
-                  <td>$0.125</td>
-                  <td>$10.00</td>
-                  <td>Plus / Pro / Business</td>
-                </tr>
-                <tr>
-                  <td><i class="iconoir-journal-page" aria-hidden="true"></i> gpt-5.1</td>
-                  <td>$1.25</td>
-                  <td>$0.125</td>
-                  <td>$10.00</td>
-                  <td>Pro / Business</td>
-                </tr>
-                <tr>
-                  <td><i class="iconoir-star" aria-hidden="true"></i> gpt-5.2</td>
-                  <td>$1.75</td>
-                  <td>$0.175</td>
-                  <td>$14.00</td>
-                  <td>Business</td>
-                </tr>
-              </tbody>
-            </table>
           </div>
         </div>
       </section>
@@ -311,10 +385,53 @@
                 <tr><td><i class="iconoir-share-android" aria-hidden="true"></i> Export/API workflows</td><td>Limited</td><td>Starter exports</td><td>Extended exports</td><td>Advanced exports</td><td>Advanced + onboarding support</td></tr>
               </tbody>
             </table>
+	          </div>
+	        </div>
+	      </section>
+
+      <section class="section">
+        <div class="container">
+          <div class="section-title">
+            <h2>Quoted from public sources</h2>
+            <p class="small">Short excerpts with attribution and links.</p>
+          </div>
+          <div class="quote-carousel card" data-quote-carousel data-quote-interval="8000">
+            <div class="quote-carousel-controls">
+              <label class="small quote-autoplay-label">
+                <input type="checkbox" data-quote-autoplay checked />
+                Auto-rotate
+              </label>
+              <div class="quote-nav-buttons">
+                <button class="cta secondary small" type="button" data-quote-prev>Prev</button>
+                <button class="cta secondary small" type="button" data-quote-next>Next</button>
+              </div>
+            </div>
+            <div class="quote-carousel-track">
+              <!-- source: https://marquee.gs.com/welcome/campaigns/marketview -->
+              <figure class="quote-slide" data-quote-slide>
+                <blockquote>"An award-winning ecosystem of visual insights answering important questions in global markets."</blockquote>
+                <figcaption>Goldman Sachs Marquee MarketView <a href="https://marquee.gs.com/welcome/campaigns/marketview" target="_blank" rel="noopener noreferrer">Source</a></figcaption>
+              </figure>
+              <!-- source: https://openai.com/customer-stories/morgan-stanley/ -->
+              <figure class="quote-slide" data-quote-slide>
+                <blockquote>"This technology makes you as smart as the smartest person in the organization."</blockquote>
+                <figcaption>Jeff McMillan, Morgan Stanley <a href="https://openai.com/customer-stories/morgan-stanley/" target="_blank" rel="noopener noreferrer">Source</a></figcaption>
+              </figure>
+              <!-- source: https://aws.amazon.com/financial-services/capital-markets/ -->
+              <figure class="quote-slide" data-quote-slide>
+                <blockquote>"Reimagine capital markets for today and tomorrow."</blockquote>
+                <figcaption>AWS Capital Markets <a href="https://aws.amazon.com/financial-services/capital-markets/" target="_blank" rel="noopener noreferrer">Source</a></figcaption>
+              </figure>
+              <!-- source: https://docs.perplexity.ai/docs/sonar/quickstart -->
+              <figure class="quote-slide" data-quote-slide>
+                <blockquote>"Get started with Perplexity's Sonar API for web-grounded AI responses."</blockquote>
+                <figcaption>Perplexity Sonar Quickstart <a href="https://docs.perplexity.ai/docs/sonar/quickstart" target="_blank" rel="noopener noreferrer">Source</a></figcaption>
+              </figure>
+            </div>
           </div>
         </div>
       </section>
-    </main>
+	    </main>
 
     <footer class="footer">
       <div class="container footer-grid">
@@ -344,7 +461,7 @@
           <div><a href="/blog">Blog</a></div>
           <div><a href="/dashboard">Dashboard</a></div>
           <div><a href="/pricing">Pricing</a></div>
-          <div><a href="/contact">Contact</a></div>
+          <div><a href="/contact">Contact Us</a></div>
         </div>
         <div class="small">
           <strong>Legal</strong>

@@ -2,8 +2,13 @@ import {
   createApiClient,
   escapeHtml,
   formatRelativeTime,
+  getNativeFeedAdRules,
   initAuth,
+  isNativeRuntime,
   normalizeTicker,
+  reportNativeFeedAdClick,
+  reportNativeFeedAdImpression,
+  requestNativeFeedAd,
   track,
 } from "./explore-common.js";
 
@@ -47,6 +52,9 @@ const state = {
   postsById: new Map(),
   activePostId: "",
   reportPostId: "",
+  isPremium: false,
+  adImpressionObserver: null,
+  adImpressionSeen: new Set(),
 };
 
 function setAuthButton() {
@@ -74,6 +82,143 @@ function setTabState() {
     tab.setAttribute("aria-selected", active ? "true" : "false");
   });
   refs.tickerWrap?.classList.toggle("hidden", state.mode !== "tickers");
+}
+
+function canRenderNativeFeedAds() {
+  return isNativeRuntime() && !state.isPremium;
+}
+
+function ensureNativeAdImpressionObserver() {
+  if (state.adImpressionObserver || typeof IntersectionObserver !== "function") return;
+  state.adImpressionObserver = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting || entry.intersectionRatio < 0.45) return;
+        const target = entry.target;
+        const slotId = String(target.dataset.nativeAdSlotId || "").trim();
+        if (!slotId || state.adImpressionSeen.has(slotId)) return;
+        state.adImpressionSeen.add(slotId);
+        const placement = String(target.dataset.placement || "explore_feed").trim();
+        const adUnitId = String(target.dataset.adUnitId || "").trim();
+        track("ad_impression", { placement, slot_id: slotId, ad_unit_id: adUnitId });
+        reportNativeFeedAdImpression({ slotId, placement, adUnitId });
+      });
+    },
+    { threshold: [0.45] }
+  );
+}
+
+function shouldInsertNativeFeedAd(position, config, totalCount) {
+  if (!Number.isFinite(position) || position <= 0) return false;
+  if (!Number.isFinite(totalCount) || totalCount < config.feedStart) return false;
+  if (position === config.feedStart) return true;
+  if (position < config.feedStart) return false;
+  return (position - config.feedStart) % config.feedInterval === 0;
+}
+
+function createNativeAdSlotNode(slotId, placement) {
+  const card = document.createElement("article");
+  card.className = "post-card native-ad-slot native-ad-loading";
+  card.dataset.nativeAdSlotId = slotId;
+  card.dataset.placement = placement;
+  card.setAttribute("aria-live", "polite");
+  card.innerHTML = `
+    <div class="native-ad-skeleton">
+      <div class="skeleton native-ad-line w50"></div>
+      <div class="skeleton native-ad-line w85"></div>
+      <div class="skeleton native-ad-line w70"></div>
+      <div class="skeleton native-ad-media"></div>
+    </div>
+  `;
+  return card;
+}
+
+function toInlineDataImage(value = "") {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (/^data:image\//i.test(raw)) return raw;
+  if (/^https?:\/\//i.test(raw)) return raw;
+  return `data:image/png;base64,${raw}`;
+}
+
+function hydrateNativeAdCard(slotNode, detail) {
+  const ad = detail?.ad && typeof detail.ad === "object" ? detail.ad : detail;
+  const slotId = String(detail?.slotId || slotNode.dataset.nativeAdSlotId || "").trim();
+  const placement = String(detail?.placement || slotNode.dataset.placement || "explore_feed").trim();
+  const adUnitId = String(detail?.adUnitId || ad?.adUnitId || "").trim();
+  const headline = String(ad?.headline || "").trim();
+  const body = String(ad?.body || "").trim();
+  const cta = String(ad?.callToAction || "Learn more").trim();
+  const advertiser = String(ad?.advertiser || ad?.store || "").trim();
+  const iconUrl = toInlineDataImage(ad?.iconDataUrl || ad?.iconUrl || "");
+  const mediaUrl = toInlineDataImage(ad?.mediaDataUrl || ad?.mediaUrl || "");
+  const destinationUrl = /^https?:\/\//i.test(String(ad?.destinationUrl || "").trim()) ? String(ad.destinationUrl).trim() : "";
+
+  slotNode.classList.remove("native-ad-loading");
+  slotNode.classList.add("native-ad-ready");
+  slotNode.dataset.adUnitId = adUnitId;
+  slotNode.innerHTML = `
+    <div class="native-ad-inner">
+      <div class="native-ad-top">
+        <span class="native-ad-badge">Ad</span>
+        <span class="native-ad-choices">AdChoices</span>
+      </div>
+      <div class="native-ad-main">
+        <div class="native-ad-copy">
+          <h3 class="native-ad-headline">${escapeHtml(headline || "Sponsored insight")}</h3>
+          <p class="native-ad-body">${escapeHtml(body || "Quantura partner message.")}</p>
+          <div class="native-ad-meta">${escapeHtml(advertiser || "Sponsored")}</div>
+        </div>
+        ${
+          iconUrl
+            ? `<img class="native-ad-icon" src="${escapeHtml(iconUrl)}" alt="" loading="lazy" />`
+            : `<div class="native-ad-icon native-ad-icon-fallback" aria-hidden="true">Q</div>`
+        }
+      </div>
+      ${
+        mediaUrl
+          ? `<img class="native-ad-media" src="${escapeHtml(mediaUrl)}" alt="" loading="lazy" />`
+          : `<div class="native-ad-media native-ad-media-fallback" aria-hidden="true"></div>`
+      }
+      <button type="button" class="native-ad-cta" data-native-ad-click="true">${escapeHtml(cta || "Learn more")}</button>
+    </div>
+  `;
+
+  const clickHandler = (event) => {
+    if (!event.target.closest("[data-native-ad-click='true']")) return;
+    track("ad_click", { placement, slot_id: slotId, ad_unit_id: adUnitId });
+    reportNativeFeedAdClick({ slotId, placement, adUnitId });
+    if (destinationUrl) {
+      window.open(destinationUrl, "_blank", "noopener,noreferrer");
+    }
+  };
+  slotNode.addEventListener("click", clickHandler, { once: false });
+  ensureNativeAdImpressionObserver();
+  state.adImpressionObserver?.observe(slotNode);
+}
+
+async function requestNativeAdForSlot(slotNode) {
+  if (!slotNode || !canRenderNativeFeedAds()) {
+    slotNode?.remove();
+    return;
+  }
+  const slotId = String(slotNode.dataset.nativeAdSlotId || "").trim();
+  const placement = String(slotNode.dataset.placement || "explore_feed").trim();
+  track("ad_request", { placement, slot_id: slotId });
+  try {
+    const detail = await requestNativeFeedAd({
+      slotId,
+      placement,
+      variant: "nativeAdvanced",
+      timeoutMs: 12000,
+    });
+    hydrateNativeAdCard(slotNode, detail || {});
+    const adUnitId = String(detail?.adUnitId || detail?.ad?.adUnitId || "").trim();
+    track("ad_loaded", { placement, slot_id: slotId, ad_unit_id: adUnitId });
+  } catch (error) {
+    track("ad_failed", { placement, slot_id: slotId, reason: String(error?.message || "load_failed").slice(0, 120) });
+    slotNode.remove();
+  }
 }
 
 function getPreviewMarkup(post) {
@@ -156,14 +301,52 @@ function upsertPost(post) {
 
 function appendPosts(posts, reset = false) {
   if (!refs.grid) return;
-  if (reset) refs.grid.innerHTML = "";
+  if (reset) {
+    refs.grid.innerHTML = "";
+    state.adImpressionSeen.clear();
+  }
+
+  const canShowAds = canRenderNativeFeedAds();
+  const rules = getNativeFeedAdRules();
+  const existingPostCount = reset ? 0 : refs.grid.querySelectorAll("[data-post-id]").length;
+  const totalPostCount = existingPostCount + posts.length;
+  const fragment = document.createDocumentFragment();
+  const pendingAdSlots = [];
+  let renderedPostIndex = existingPostCount;
+
   posts.forEach((post) => {
     state.postsById.set(post.id, post);
     const node = renderCard(post);
-    if (node) refs.grid.appendChild(node);
+    if (!node) return;
+    fragment.appendChild(node);
+    renderedPostIndex += 1;
+
+    if (!canShowAds) return;
+    if (!shouldInsertNativeFeedAd(renderedPostIndex, rules, totalPostCount)) return;
+    const slotId = `explore-feed-${renderedPostIndex}`;
+    const slotNode = createNativeAdSlotNode(slotId, "explore_feed");
+    fragment.appendChild(slotNode);
+    pendingAdSlots.push(slotNode);
+  });
+
+  refs.grid.appendChild(fragment);
+  pendingAdSlots.forEach((slotNode) => {
+    requestNativeAdForSlot(slotNode).catch(() => undefined);
   });
 
   showEmpty(state.postsById.size === 0);
+}
+
+async function refreshPremiumStatus() {
+  state.isPremium = false;
+  if (!state.api) return;
+  if (!state.user || state.user.isAnonymous) return;
+  try {
+    const profile = await state.api.get("/me/profile");
+    state.isPremium = Boolean(profile?.premium);
+  } catch {
+    state.isPremium = false;
+  }
 }
 
 async function loadSuggestions() {
@@ -508,6 +691,54 @@ function bindEvents() {
   if (refs.sentinel) state.observer.observe(refs.sentinel);
 }
 
+function bindMobileBottomNav() {
+  const normalizePath = (value) => {
+    const cleaned = String(value || "/").split("?")[0].split("#")[0].trim() || "/";
+    const normalized = cleaned.startsWith("/") ? cleaned : `/${cleaned}`;
+    return normalized.length > 1 ? normalized.replace(/\/+$/, "") : normalized;
+  };
+  const path = normalizePath(window.location.pathname || "/explore");
+  const links = [
+    { href: "/explore", label: "Explore", icon: "iconoir-binocular" },
+    { href: "/research", label: "Research", icon: "iconoir-bookmark-book" },
+    { href: "/pricing", label: "Pricing", icon: "iconoir-wallet" },
+    { href: "/shop", label: "Shop", icon: "iconoir-shop" },
+    { href: "/contact", label: "Contact", icon: "iconoir-mail" },
+  ];
+
+  let nav = document.getElementById("mobile-bottom-nav");
+  if (!nav) {
+    nav = document.createElement("nav");
+    nav.id = "mobile-bottom-nav";
+    nav.className = "mobile-bottom-nav hidden";
+    nav.setAttribute("aria-label", "Mobile navigation");
+    nav.innerHTML = '<div class="mobile-bottom-nav-inner"></div>';
+    document.body.appendChild(nav);
+  }
+  const inner = nav.querySelector(".mobile-bottom-nav-inner");
+  if (!inner) return;
+
+  inner.innerHTML = links
+    .map((entry) => {
+      const active = normalizePath(entry.href) === path ? " active" : "";
+      return `
+        <a class="mobile-bottom-link${active}" href="${escapeHtml(entry.href)}" aria-label="${escapeHtml(entry.label)}">
+          <i class="${escapeHtml(entry.icon)}" aria-hidden="true"></i>
+          <span class="mobile-bottom-label">${escapeHtml(entry.label)}</span>
+        </a>
+      `;
+    })
+    .join("");
+
+  const syncVisibility = () => {
+    const visible = window.innerWidth <= 980;
+    nav.classList.toggle("hidden", !visible);
+    document.body.classList.toggle("mobile-bottom-nav-enabled", visible);
+  };
+  syncVisibility();
+  window.addEventListener("resize", syncVisibility);
+}
+
 async function bootstrap() {
   const params = new URLSearchParams(window.location.search);
   state.mode = params.get("mode") || "trending";
@@ -522,13 +753,19 @@ async function bootstrap() {
   state.authClient = await initAuth((user) => {
     state.user = user;
     setAuthButton();
-    if (state.initialized) {
-      loadPosts(true).catch(() => undefined);
-    }
+    refreshPremiumStatus()
+      .catch(() => undefined)
+      .finally(() => {
+        if (state.initialized) {
+          loadPosts(true).catch(() => undefined);
+        }
+      });
   });
 
   state.api = await createApiClient(() => state.authClient.getAuthToken());
   bindEvents();
+  bindMobileBottomNav();
+  await refreshPremiumStatus();
   await loadSuggestions();
   await loadPosts(true);
   state.initialized = true;

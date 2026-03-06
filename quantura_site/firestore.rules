@@ -203,5 +203,23 @@ service cloud.firestore {
     match /users/{userId}/fcmTokens/{token} {
       allow read, create, update, delete: if isSignedIn() && request.auth.uid == userId;
     }
+
+    match /users/{userId}/requests/{requestId} {
+      allow read: if isAdmin()
+        || (isSignedIn() && request.auth.uid == userId)
+        || resource.data.share.visibility == "public";
+      allow create, update, delete: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /request_shares/{slug} {
+      allow read: if resource.data.visibility == "public"
+        || resource.data.visibility == "unlisted"
+        || (isSignedIn() && request.auth.uid == resource.data.ownerUid)
+        || isAdmin();
+      allow create: if isAdmin()
+        || (isSignedIn() && request.auth.uid == request.resource.data.ownerUid);
+      allow update, delete: if isAdmin()
+        || (isSignedIn() && request.auth.uid == resource.data.ownerUid);
+    }
   }
 }
