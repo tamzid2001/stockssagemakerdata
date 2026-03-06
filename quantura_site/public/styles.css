@@ -3207,6 +3207,7 @@ textarea {
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
+  contain: layout paint;
 }
 
 #fiscaldata-macro-groups section {
@@ -3245,6 +3246,12 @@ textarea {
   border-radius: 12px;
   background: color-mix(in srgb, var(--surface-solid) 96%, var(--paper-2) 4%);
   -webkit-overflow-scrolling: touch;
+}
+
+.fiscaldata-card .panel-output,
+.fiscaldata-card .fiscaldata-detail-line {
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .insider-table.fiscaldata-macro-table {
@@ -5427,7 +5434,7 @@ body.mobile-sidebar-lock {
 .mobile-sidebar-toggle {
   position: fixed;
   right: 14px;
-  bottom: calc(var(--mobile-bottom-nav-height) + var(--safe-area-bottom) + 44px);
+  bottom: calc(var(--mobile-bottom-nav-height) + var(--safe-area-bottom) + 56px);
   z-index: 75;
   width: 54px;
   height: 54px;
