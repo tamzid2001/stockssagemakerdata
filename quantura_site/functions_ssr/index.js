@@ -102,6 +102,7 @@ const resolveTemplate = (pathname) => {
   const forecastingAliases = new Set([
     "/forecasting",
     "/ticker-intelligence",
+    "/predictions",
     "/indicators",
     "/trending",
     "/news",
@@ -146,6 +147,7 @@ const resolveTemplate = (pathname) => {
   if (route === "/disclaimer") return "disclaimer.html";
 
   if (route === "/blog") return path.join("blog", "index.html");
+  if (route === "/blogs") return path.join("blog", "index.html");
   if (route.startsWith("/blog/posts/")) {
     const slug = route.slice("/blog/posts/".length);
     if (!slug) return path.join("blog", "index.html");

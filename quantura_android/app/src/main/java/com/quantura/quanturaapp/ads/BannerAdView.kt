@@ -9,6 +9,8 @@ import com.google.android.gms.ads.AdSize
 import com.google.android.gms.ads.AdView
 import com.google.android.gms.ads.AdListener
 import com.google.android.gms.ads.LoadAdError
+import com.quantura.quanturaapp.config.AdFormat
+import com.quantura.quanturaapp.config.AdPlatform
 import com.quantura.quanturaapp.config.RemoteConfigManager
 
 /**
@@ -31,12 +33,16 @@ class BannerAdView @JvmOverloads constructor(
 
     fun loadAd(manager: RemoteConfigManager) {
         remoteConfigManager = manager
-        if (!manager.isFeatureEnabled("ads_enabled")) {
+        if (!manager.areAdsEnabled()) {
             Log.d(tag, "Banner hidden because ads feature flag is disabled.")
+            AdDebugStatusRegistry.updateLoad("banner", "disabled")
             hideAd()
             return
         }
-        val adUnitId = manager.getAdUnitIds().adaptiveBanner
+        val adUnitId = manager.resolveAdUnitId(
+            platform = AdPlatform.ANDROID,
+            format = AdFormat.BANNER
+        )
         removeAllViews()
         adView?.destroy()
         adView = AdView(context).apply {
@@ -45,14 +51,19 @@ class BannerAdView @JvmOverloads constructor(
             adListener = object : AdListener() {
                 override fun onAdLoaded() {
                     Log.d(this@BannerAdView.tag, "Banner load succeeded.")
+                    Log.i(this@BannerAdView.tag, "[Ads][Android] Load success for banner")
+                    AdDebugStatusRegistry.updateLoad("banner", "loaded")
                 }
 
                 override fun onAdFailedToLoad(error: LoadAdError) {
                     Log.w(this@BannerAdView.tag, "Banner load failed: ${error.message}")
+                    Log.w(this@BannerAdView.tag, "[Ads][Android] Load fail for banner: ${error.message}")
+                    AdDebugStatusRegistry.updateLoad("banner", "failed:${error.message}")
                 }
 
                 override fun onAdImpression() {
                     Log.d(this@BannerAdView.tag, "Banner impression recorded.")
+                    AdDebugStatusRegistry.updateShow("banner", "impression")
                     AdImpressionReporter.report(
                         context = context,
                         adFormat = "banner",
@@ -64,13 +75,14 @@ class BannerAdView @JvmOverloads constructor(
         }
         addView(adView)
         Log.d(tag, "Loading banner unit=$adUnitId")
+        AdDebugStatusRegistry.updateLoad("banner", "loading")
         adView?.loadAd(AdRequest.Builder().build())
         visibility = VISIBLE
     }
 
     fun refreshAdVisibility() {
         val manager = remoteConfigManager ?: return
-        if (!manager.isFeatureEnabled("ads_enabled")) {
+        if (!manager.areAdsEnabled()) {
             hideAd()
             return
         }

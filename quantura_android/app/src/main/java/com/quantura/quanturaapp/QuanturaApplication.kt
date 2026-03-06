@@ -2,6 +2,7 @@ package com.quantura.quanturaapp
 
 import android.app.Application
 import android.content.pm.ApplicationInfo
+import android.os.Build
 import android.util.Log
 import com.google.android.gms.ads.AdRequest
 import com.quantura.quanturaapp.di.AppContainer
@@ -25,8 +26,9 @@ class QuanturaApplication : Application() {
             Log.w("QuanturaApplication", "Firebase disabled: missing google-services.json for local build.")
         }
         val isDebuggable = (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        val isEmulator = detectEmulator()
         try {
-            if (isDebuggable) {
+            if (isDebuggable || isEmulator) {
                 MobileAds.setRequestConfiguration(
                     RequestConfiguration.Builder()
                         .setTestDeviceIds(listOf(AdRequest.DEVICE_ID_EMULATOR))
@@ -42,5 +44,18 @@ class QuanturaApplication : Application() {
         container = AppContainer(this, firebaseReady)
         AuthSessionManager.start(firebaseReady)
         container.appOpenAdManager.start()
+    }
+
+    private fun detectEmulator(): Boolean {
+        val fingerprint = Build.FINGERPRINT.lowercase()
+        val model = Build.MODEL.lowercase()
+        val product = Build.PRODUCT.lowercase()
+        val hardware = Build.HARDWARE.lowercase()
+        return fingerprint.contains("generic") ||
+            model.contains("emulator") ||
+            model.contains("sdk_gphone") ||
+            hardware.contains("ranchu") ||
+            hardware.contains("goldfish") ||
+            product.contains("sdk")
     }
 }

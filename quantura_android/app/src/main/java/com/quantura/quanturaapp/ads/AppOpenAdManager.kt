@@ -12,6 +12,8 @@ import com.google.android.gms.ads.FullScreenContentCallback
 import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.appopen.AppOpenAd
 import com.quantura.quanturaapp.MainActivity
+import com.quantura.quanturaapp.config.AdFormat
+import com.quantura.quanturaapp.config.AdPlatform
 import com.quantura.quanturaapp.config.RemoteConfigManager
 
 class AppOpenAdManager(
@@ -38,7 +40,6 @@ class AppOpenAdManager(
     fun start() {
         application.registerActivityLifecycleCallbacks(this)
         ProcessLifecycleOwner.get().lifecycle.addObserver(this)
-        loadAdIfNeeded()
     }
 
     override fun onStart(owner: LifecycleOwner) {
@@ -53,13 +54,18 @@ class AppOpenAdManager(
     }
 
     fun loadAdIfNeeded() {
-        if (!remoteConfigManager.isFeatureEnabled("ads_enabled")) {
+        if (!remoteConfigManager.areAdsEnabled()) {
             Log.d(tag, "App open ads disabled by feature flag.")
+            AdDebugStatusRegistry.updateLoad("app_open", "disabled")
             return
         }
         if (isLoadingAd || isAdAvailable()) return
-        val unitId = remoteConfigManager.getAdUnitIds().appOpen
+        val unitId = remoteConfigManager.resolveAdUnitId(
+            platform = AdPlatform.ANDROID,
+            format = AdFormat.APP_OPEN
+        )
         Log.d(tag, "Loading app open ad unit=$unitId")
+        AdDebugStatusRegistry.updateLoad("app_open", "loading")
         isLoadingAd = true
         AppOpenAd.load(
             application,
@@ -71,6 +77,8 @@ class AppOpenAdManager(
                     appOpenAd = ad
                     loadedAtMs = SystemClock.elapsedRealtime()
                     Log.d(tag, "App open ad load succeeded.")
+                    Log.i(tag, "[Ads][Android] Load success for app_open")
+                    AdDebugStatusRegistry.updateLoad("app_open", "loaded")
                 }
 
                 override fun onAdFailedToLoad(loadAdError: LoadAdError) {
@@ -78,32 +86,38 @@ class AppOpenAdManager(
                     appOpenAd = null
                     loadedAtMs = 0L
                     Log.w(tag, "App open ad load failed: ${loadAdError.message}")
+                    Log.w(tag, "[Ads][Android] Load fail for app_open: ${loadAdError.message}")
+                    AdDebugStatusRegistry.updateLoad("app_open", "failed:${loadAdError.message}")
                 }
             }
         )
     }
 
     fun showAdIfAvailable() {
-        if (!remoteConfigManager.isFeatureEnabled("ads_enabled")) return
+        if (!remoteConfigManager.areAdsEnabled()) return
         if (isShowingAd) return
         if (presentationBlockedByAuthGate) {
             Log.d(tag, "Skipping app open show; auth gate is visible.")
+            AdDebugStatusRegistry.updateShow("app_open", "skipped:auth_gate")
             return
         }
         if (adManager.isShowingFullScreenAd()) {
             Log.d(tag, "Skipping app open show; another fullscreen ad is visible.")
+            AdDebugStatusRegistry.updateShow("app_open", "skipped:fullscreen_visible")
             return
         }
 
         val activity = currentActivity
         if (!canShowOn(activity)) {
             Log.d(tag, "Skipping app open show; activity not ready (${activity?.javaClass?.simpleName ?: "none"}).")
+            AdDebugStatusRegistry.updateShow("app_open", "skipped:activity_not_ready")
             return
         }
 
         val cached = appOpenAd
         if (!isAdAvailable() || cached == null) {
             Log.d(tag, "No fresh app open ad available; loading.")
+            AdDebugStatusRegistry.updateShow("app_open", "skipped:not_ready")
             loadAdIfNeeded()
             return
         }
@@ -112,10 +126,15 @@ class AppOpenAdManager(
         cached.fullScreenContentCallback = object : FullScreenContentCallback() {
             override fun onAdShowedFullScreenContent() {
                 Log.d(tag, "App open ad shown.")
+                Log.i(tag, "[Ads][Android] Show success for app_open")
+                AdDebugStatusRegistry.updateShow("app_open", "shown")
             }
 
             override fun onAdImpression() {
-                val adUnitId = remoteConfigManager.getAdUnitIds().appOpen
+                val adUnitId = remoteConfigManager.resolveAdUnitId(
+                    platform = AdPlatform.ANDROID,
+                    format = AdFormat.APP_OPEN
+                )
                 AdImpressionReporter.report(
                     context = application.applicationContext,
                     adFormat = "app_open",
@@ -129,6 +148,7 @@ class AppOpenAdManager(
                 isShowingAd = false
                 appOpenAd = null
                 loadedAtMs = 0L
+                AdDebugStatusRegistry.updateShow("app_open", "failed:${adError.message}")
                 loadAdIfNeeded()
             }
 
@@ -137,11 +157,16 @@ class AppOpenAdManager(
                 isShowingAd = false
                 appOpenAd = null
                 loadedAtMs = 0L
+                AdDebugStatusRegistry.updateShow("app_open", "dismissed")
                 loadAdIfNeeded()
             }
         }
         Log.d(tag, "Presenting app open ad.")
         cached.show(activity!!)
+    }
+
+    fun debugState(): AdFormatStatusSnapshot {
+        return AdDebugStatusRegistry.snapshot(listOf("app_open")).first()
     }
 
     private fun isAdAvailable(): Boolean {

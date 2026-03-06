@@ -59,7 +59,9 @@
       { "source": "/ai-leaderboard", "destination": "/explore", "type": 302 },
       { "source": "/leaderboard", "destination": "/explore", "type": 302 },
       { "source": "/ai-agent-leaderboard", "destination": "/explore", "type": 302 },
-      { "source": "/fx", "destination": "/tools/fx", "type": 302 }
+      { "source": "/blogs", "destination": "/blog", "type": 301 },
+      { "source": "/fx", "destination": "/tools/fx", "type": 302 },
+      { "source": "/terminal/fx", "destination": "/tools/fx", "type": 302 }
     ],
     "rewrites": [
       { "source": "/blog", "destination": "/blog/index.html" },
@@ -76,6 +78,7 @@
       { "source": "/api/notifications/**", "function": "quanturaExploreApi" },
       { "source": "/api/health", "function": "quanturaExploreApi" },
       { "source": "/api/llm/run", "function": "quanturaExploreApi" },
+      { "source": "/api/llm/**", "function": "quanturaExploreApi" },
       { "source": "/api/mobile/auth/exchange", "function": "quanturaExploreApi" },
       { "source": "/api/mobile/play-integrity/verify", "function": "quanturaExploreApi" },
       { "source": "/api/analytics/ad-impression", "function": "quanturaExploreApi" },
@@ -116,6 +119,8 @@
       { "source": "/api/model-council/feedback", "function": "api_model_council_feedback" },
       { "source": "/api/model-council/share", "function": "api_model_council_share" },
       { "source": "/api/model-council/share/**", "function": "api_model_council_share" },
+      { "source": "/api/ticker/intel", "function": "quanturaExploreApi" },
+      { "source": "/api/ticker/trending", "function": "quanturaExploreApi" },
       { "source": "/api/ticker/modules", "function": "api_ticker_modules" },
       { "source": "/api/chat", "function": "api_chat" },
       { "source": "/", "function": "ssr" },
@@ -123,6 +128,7 @@
       { "source": "/forecast", "function": "ssr" },
       { "source": "/terminal", "function": "ssr" },
       { "source": "/ticker-intelligence", "function": "ssr" },
+      { "source": "/predictions", "function": "ssr" },
       { "source": "/indicators", "function": "ssr" },
       { "source": "/trending", "function": "ssr" },
       { "source": "/news", "function": "ssr" },
@@ -151,6 +157,9 @@
       { "source": "/blog/posts/**", "function": "ssr" },
 
       { "source": "/dashboard", "function": "ssr" },
+      { "source": "/dashboard/orders", "function": "ssr" },
+      { "source": "/dashboard/profile", "function": "ssr" },
+      { "source": "/dashboard/collaboration", "function": "ssr" },
       { "source": "/account", "function": "ssr" },
       { "source": "/watchlist", "function": "ssr" },
       { "source": "/productivity", "function": "ssr" },

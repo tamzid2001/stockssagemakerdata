@@ -143,6 +143,47 @@ final class AdImpressionReporter {
     }
 }
 
+struct AdFormatStatusSnapshot: Equatable {
+    let format: String
+    let lastLoadStatus: String
+    let lastShowStatus: String
+}
+
+final class AdDebugStatusStore {
+    static let shared = AdDebugStatusStore()
+
+    private var loadStatuses: [String: String] = [:]
+    private var showStatuses: [String: String] = [:]
+    private let queue = DispatchQueue(label: "com.quantura.ads.debug.status")
+
+    private init() {}
+
+    func updateLoad(format: String, status: String) {
+        queue.async {
+            self.loadStatuses[format.lowercased()] = status
+        }
+    }
+
+    func updateShow(format: String, status: String) {
+        queue.async {
+            self.showStatuses[format.lowercased()] = status
+        }
+    }
+
+    func snapshot(for formats: [String]) -> [AdFormatStatusSnapshot] {
+        queue.sync {
+            formats.map { format in
+                let key = format.lowercased()
+                return AdFormatStatusSnapshot(
+                    format: key,
+                    lastLoadStatus: loadStatuses[key] ?? "idle",
+                    lastShowStatus: showStatuses[key] ?? "idle"
+                )
+            }
+        }
+    }
+}
+
 #if canImport(StoreKit)
 @available(iOS 15.0, *)
 final class StoreKitIapManager: ObservableObject {
@@ -208,10 +249,65 @@ final class AppContainer {
     lazy var appOpenAdManager = AppOpenAdManager(remoteConfigManager: remoteConfigManager, adManager: adManager)
 }
 
+enum AdPlatform {
+    case ios
+    case android
+}
+
+enum AdFormat: String {
+    case appOpen = "app_open"
+    case banner = "banner"
+    case interstitial = "interstitial"
+    case rewarded = "rewarded"
+    case rewardedInterstitial = "rewarded_interstitial"
+    case native = "native"
+}
+
+struct AdFeatureFlags: Equatable {
+    let nativeBridgeEnabled: Bool
+    let adsEnabled: Bool
+}
+
+struct AdsRemoteConfigState: Equatable {
+    let adsEnabled: Bool
+    let adsUseRealIos: Bool
+    let adsUseRealAndroid: Bool
+    let featureFlags: AdFeatureFlags
+    let iosUnits: RemoteConfigManager.AdUnitIDs
+    let androidUnits: RemoteConfigManager.AdUnitIDs
+}
+
+struct AdsEnvironment: Equatable {
+    let isDebugBuild: Bool
+    let isSimulatorOrEmulator: Bool
+    let isReleaseBuild: Bool
+}
+
+struct EffectiveAdsConfig: Equatable {
+    let adsEnabled: Bool
+    let usingRealAds: Bool
+    let usingTestAds: Bool
+    let selectedUnits: RemoteConfigManager.AdUnitIDs
+    let adsEnabledTopLevel: Bool
+    let adsUseRealIos: Bool
+    let adsUseRealAndroid: Bool
+    let featureFlags: AdFeatureFlags
+    let environment: AdsEnvironment
+    let remoteConfigFetched: Bool
+    let remoteConfigFetchedAt: Date?
+}
+
 final class RemoteConfigManager {
     private let remoteConfig: RemoteConfig?
+    private let isDebugBuild: Bool
+    private let isSimulator: Bool
+    private let tag = "[Ads][iOS]"
 
-    struct AdUnitIDs {
+    private var lastFetchSucceeded = false
+    private var lastFetchAt: Date?
+    private var cachedEffectiveConfig: EffectiveAdsConfig?
+
+    struct AdUnitIDs: Equatable {
         let appOpen: String
         let adaptiveBanner: String
         let fixedBanner: String
@@ -222,7 +318,7 @@ final class RemoteConfigManager {
         let nativeVideo: String
     }
 
-    private let demoIDs = AdUnitIDs(
+    private let testIOSIDs = AdUnitIDs(
         appOpen: "ca-app-pub-3940256099942544/5575463023",
         adaptiveBanner: "ca-app-pub-3940256099942544/2435281174",
         fixedBanner: "ca-app-pub-3940256099942544/2435281174",
@@ -244,18 +340,49 @@ final class RemoteConfigManager {
         nativeVideo: "ca-app-pub-5322412772082850/5615422478"
     )
 
+    private let liveAndroidIDs = AdUnitIDs(
+        appOpen: "ca-app-pub-5322412772082850/1802977031",
+        adaptiveBanner: "ca-app-pub-5322412772082850/3390017725",
+        fixedBanner: "ca-app-pub-5322412772082850/3390017725",
+        interstitial: "ca-app-pub-5322412772082850/7358556043",
+        rewarded: "ca-app-pub-5322412772082850/1867749156",
+        rewardedInterstitial: "ca-app-pub-5322412772082850/4780998745",
+        nativeAdvanced: "ca-app-pub-5322412772082850/1144501483",
+        nativeVideo: "ca-app-pub-5322412772082850/1144501483"
+    )
+
+    private let testAndroidIDs = AdUnitIDs(
+        appOpen: "ca-app-pub-3940256099942544/9257395921",
+        adaptiveBanner: "ca-app-pub-3940256099942544/9214589741",
+        fixedBanner: "ca-app-pub-3940256099942544/9214589741",
+        interstitial: "ca-app-pub-3940256099942544/1033173712",
+        rewarded: "ca-app-pub-3940256099942544/5224354917",
+        rewardedInterstitial: "ca-app-pub-3940256099942544/5354046379",
+        nativeAdvanced: "ca-app-pub-3940256099942544/2247696110",
+        nativeVideo: "ca-app-pub-3940256099942544/2247696110"
+    )
+
     init() {
+        isDebugBuild = _isDebugAssertConfiguration()
+#if targetEnvironment(simulator)
+        isSimulator = true
+#else
+        isSimulator = false
+#endif
+
         guard FirebaseApp.app() != nil else {
             remoteConfig = nil
             return
         }
         let rc = RemoteConfig.remoteConfig()
         let settings = RemoteConfigSettings()
-        settings.minimumFetchInterval = _isDebugAssertConfiguration() ? 0 : 3600
+        settings.minimumFetchInterval = (isDebugBuild || isSimulator) ? 0 : 3600
         rc.configSettings = settings
         rc.setDefaults([
+            "ads_enabled": true as NSObject,
             "ads_use_real_ios": true as NSObject,
             "ads_use_real_android": true as NSObject,
+            "ad_unit_ids": RemoteConfigManager.defaultAdUnitIdsSeedPayload as NSObject,
             "native_feed_ad_start": 6 as NSObject,
             "native_feed_ad_interval": 8 as NSObject,
             "native_page_ad_midpoint": 0.55 as NSObject,
@@ -268,51 +395,137 @@ final class RemoteConfigManager {
 
     func fetchAndActivate(completion: ((Bool) -> Void)? = nil) {
         guard let remoteConfig else {
+            lastFetchSucceeded = false
+            lastFetchAt = Date()
+            logEffectiveAdsConfig()
             completion?(false)
             return
         }
         remoteConfig.fetchAndActivate { status, _ in
-            completion?(status == .successFetchedFromRemote || status == .successUsingPreFetchedData)
+            let ok = status == .successFetchedFromRemote || status == .successUsingPreFetchedData
+            self.lastFetchSucceeded = ok
+            self.lastFetchAt = Date()
+            print("\(self.tag) RC fetched success=\(ok)")
+            self.logEffectiveAdsConfig()
+            completion?(ok)
         }
     }
 
-    func adUnitIDs() -> AdUnitIDs {
-        let isDebugBuild = _isDebugAssertConfiguration()
-        let useRealIOSAds = !isDebugBuild && (remoteConfig?.configValue(forKey: "ads_use_real_ios").boolValue ?? true)
-        let seed = useRealIOSAds ? liveIOSIDs : demoIDs
-
-        guard
-            let raw = remoteConfig?["ad_unit_ids"].stringValue,
-            !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-            let data = raw.data(using: .utf8),
-            let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: String]
-        else {
-            return seed
-        }
-
-        return AdUnitIDs(
-            appOpen: json["appOpen"] ?? seed.appOpen,
-            adaptiveBanner: json["adaptiveBanner"] ?? seed.adaptiveBanner,
-            fixedBanner: json["fixedBanner"] ?? seed.fixedBanner,
-            interstitial: json["interstitial"] ?? seed.interstitial,
-            rewarded: json["rewarded"] ?? seed.rewarded,
-            rewardedInterstitial: json["rewardedInterstitial"] ?? seed.rewardedInterstitial,
-            nativeAdvanced: json["nativeAdvanced"] ?? seed.nativeAdvanced,
-            nativeVideo: json["nativeVideo"] ?? seed.nativeVideo
+    func adsEnvironment() -> AdsEnvironment {
+        AdsEnvironment(
+            isDebugBuild: isDebugBuild,
+            isSimulatorOrEmulator: isSimulator,
+            isReleaseBuild: !isDebugBuild && !isSimulator
         )
     }
 
+    func areAdsEnabled() -> Bool {
+        effectiveAdsConfig().adsEnabled
+    }
+
+    func isUsingTestAds() -> Bool {
+        effectiveAdsConfig().usingTestAds
+    }
+
+    func debugStatus() -> EffectiveAdsConfig {
+        effectiveAdsConfig()
+    }
+
+    func effectiveAdsConfig() -> EffectiveAdsConfig {
+        let state = currentRemoteConfigState()
+        let environment = adsEnvironment()
+        let adsEnabled = state.adsEnabled && state.featureFlags.adsEnabled
+        let usingRealAds = adsEnabled &&
+            state.adsUseRealIos &&
+            environment.isReleaseBuild &&
+            !environment.isSimulatorOrEmulator
+        let selectedUnits = usingRealAds ? state.iosUnits : testIOSIDs
+        let effective = EffectiveAdsConfig(
+            adsEnabled: adsEnabled,
+            usingRealAds: usingRealAds,
+            usingTestAds: !usingRealAds,
+            selectedUnits: selectedUnits,
+            adsEnabledTopLevel: state.adsEnabled,
+            adsUseRealIos: state.adsUseRealIos,
+            adsUseRealAndroid: state.adsUseRealAndroid,
+            featureFlags: state.featureFlags,
+            environment: environment,
+            remoteConfigFetched: lastFetchSucceeded,
+            remoteConfigFetchedAt: lastFetchAt
+        )
+        if cachedEffectiveConfig != effective {
+            cachedEffectiveConfig = effective
+        }
+        return effective
+    }
+
+    func adUnitIDs() -> AdUnitIDs {
+        let state = currentRemoteConfigState()
+        return AdUnitIDs(
+            appOpen: resolveAdUnitId(platform: .ios, format: .appOpen, remoteConfigState: state),
+            adaptiveBanner: resolveAdUnitId(platform: .ios, format: .banner, remoteConfigState: state),
+            fixedBanner: resolveAdUnitId(platform: .ios, format: .banner, remoteConfigState: state),
+            interstitial: resolveAdUnitId(platform: .ios, format: .interstitial, remoteConfigState: state),
+            rewarded: resolveAdUnitId(platform: .ios, format: .rewarded, remoteConfigState: state),
+            rewardedInterstitial: resolveAdUnitId(platform: .ios, format: .rewardedInterstitial, remoteConfigState: state),
+            nativeAdvanced: resolveAdUnitId(platform: .ios, format: .native, remoteConfigState: state),
+            nativeVideo: resolveAdUnitId(platform: .ios, format: .native, remoteConfigState: state)
+        )
+    }
+
+    func resolveAdUnitId(
+        platform: AdPlatform,
+        format: AdFormat,
+        environment: AdsEnvironment? = nil,
+        remoteConfigState: AdsRemoteConfigState? = nil
+    ) -> String {
+        let resolvedEnvironment = environment ?? adsEnvironment()
+        let state = remoteConfigState ?? currentRemoteConfigState()
+        let adsEnabled = state.adsEnabled && state.featureFlags.adsEnabled
+        let platformUseRealAds = (platform == .ios) ? state.adsUseRealIos : state.adsUseRealAndroid
+        let useRealAds = adsEnabled &&
+            platformUseRealAds &&
+            resolvedEnvironment.isReleaseBuild &&
+            !resolvedEnvironment.isSimulatorOrEmulator
+        let selected: AdUnitIDs
+        switch platform {
+        case .ios:
+            selected = useRealAds ? state.iosUnits : testIOSIDs
+        case .android:
+            selected = useRealAds ? state.androidUnits : testAndroidIDs
+        }
+
+        let adUnitId: String
+        switch format {
+        case .appOpen:
+            adUnitId = selected.appOpen
+        case .banner:
+            adUnitId = selected.adaptiveBanner
+        case .interstitial:
+            adUnitId = selected.interstitial
+        case .rewarded:
+            adUnitId = selected.rewarded
+        case .rewardedInterstitial:
+            adUnitId = selected.rewardedInterstitial
+        case .native:
+            adUnitId = selected.nativeAdvanced
+        }
+        if platform == .ios {
+            print("\(tag) Selected ad unit for \(format.rawValue) = \(adUnitId)")
+        }
+        return adUnitId
+    }
+
     func featureFlag(_ key: String, default defaultValue: Bool = false) -> Bool {
-        guard let remoteConfig else {
+        let flags = parseFeatureFlags()
+        switch key {
+        case "native_bridge_enabled":
+            return flags.nativeBridgeEnabled
+        case "ads_enabled":
+            return flags.adsEnabled
+        default:
             return defaultValue
         }
-        guard
-            let data = remoteConfig["feature_flags"].stringValue.data(using: .utf8),
-            let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-        else {
-            return defaultValue
-        }
-        return (json[key] as? Bool) ?? defaultValue
     }
 
     func nativeFeedAdStart() -> Int {
@@ -329,6 +542,102 @@ final class RemoteConfigManager {
         let value = remoteConfig?["native_page_ad_midpoint"].numberValue.doubleValue ?? 0.55
         return max(0.2, min(0.9, value))
     }
+
+    private func currentRemoteConfigState() -> AdsRemoteConfigState {
+        let adsEnabled = remoteConfig?.configValue(forKey: "ads_enabled").boolValue ?? true
+        let adsUseRealIos = remoteConfig?.configValue(forKey: "ads_use_real_ios").boolValue ?? true
+        let adsUseRealAndroid = remoteConfig?.configValue(forKey: "ads_use_real_android").boolValue ?? true
+        let featureFlags = parseFeatureFlags()
+        let payload = parseAdUnitPayload(remoteConfig?["ad_unit_ids"].stringValue ?? "")
+        let iosUnits = parsePlatformUnitIDs(payload: payload, platform: .ios, seed: liveIOSIDs)
+        let androidUnits = parsePlatformUnitIDs(payload: payload, platform: .android, seed: liveAndroidIDs)
+        return AdsRemoteConfigState(
+            adsEnabled: adsEnabled,
+            adsUseRealIos: adsUseRealIos,
+            adsUseRealAndroid: adsUseRealAndroid,
+            featureFlags: featureFlags,
+            iosUnits: iosUnits,
+            androidUnits: androidUnits
+        )
+    }
+
+    private func parseFeatureFlags() -> AdFeatureFlags {
+        guard
+            let data = (remoteConfig?["feature_flags"].stringValue ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .ifEmpty(replacement: #"{"native_bridge_enabled":true,"ads_enabled":true}"#)
+                .data(using: .utf8),
+            let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        else {
+            return AdFeatureFlags(nativeBridgeEnabled: true, adsEnabled: true)
+        }
+        return AdFeatureFlags(
+            nativeBridgeEnabled: (json["native_bridge_enabled"] as? Bool) ?? true,
+            adsEnabled: (json["ads_enabled"] as? Bool) ?? true
+        )
+    }
+
+    private func parseAdUnitPayload(_ raw: String) -> [String: Any]? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let data = trimmed.data(using: .utf8) else {
+            return nil
+        }
+        return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+    }
+
+    private func parsePlatformUnitIDs(
+        payload: [String: Any]?,
+        platform: AdPlatform,
+        seed: AdUnitIDs
+    ) -> AdUnitIDs {
+        guard let payload else { return seed }
+        let platformKey = platform == .ios ? "ios" : "android"
+        if let nested = payload[platformKey] as? [String: Any] {
+            return mergeUnits(nested: nested, seed: seed)
+        }
+        if payload.keys.contains(where: { ["appOpen", "banner", "interstitial", "rewarded", "rewardedInterstitial", "native", "adaptiveBanner", "nativeAdvanced"].contains($0) }) {
+            return mergeUnits(nested: payload, seed: seed)
+        }
+        return seed
+    }
+
+    private func mergeUnits(nested: [String: Any], seed: AdUnitIDs) -> AdUnitIDs {
+        let banner = ((nested["banner"] as? String) ?? (nested["adaptiveBanner"] as? String) ?? seed.adaptiveBanner)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .ifEmpty(replacement: seed.adaptiveBanner)
+        let fixedBanner = ((nested["fixedBanner"] as? String) ?? banner)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .ifEmpty(replacement: banner)
+        let native = ((nested["native"] as? String) ?? (nested["nativeAdvanced"] as? String) ?? seed.nativeAdvanced)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .ifEmpty(replacement: seed.nativeAdvanced)
+        let nativeVideo = ((nested["nativeVideo"] as? String) ?? native)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .ifEmpty(replacement: native)
+        return AdUnitIDs(
+            appOpen: ((nested["appOpen"] as? String) ?? seed.appOpen).trimmingCharacters(in: .whitespacesAndNewlines).ifEmpty(replacement: seed.appOpen),
+            adaptiveBanner: banner,
+            fixedBanner: fixedBanner,
+            interstitial: ((nested["interstitial"] as? String) ?? seed.interstitial).trimmingCharacters(in: .whitespacesAndNewlines).ifEmpty(replacement: seed.interstitial),
+            rewarded: ((nested["rewarded"] as? String) ?? seed.rewarded).trimmingCharacters(in: .whitespacesAndNewlines).ifEmpty(replacement: seed.rewarded),
+            rewardedInterstitial: ((nested["rewardedInterstitial"] as? String) ?? seed.rewardedInterstitial).trimmingCharacters(in: .whitespacesAndNewlines).ifEmpty(replacement: seed.rewardedInterstitial),
+            nativeAdvanced: native,
+            nativeVideo: nativeVideo
+        )
+    }
+
+    private func logEffectiveAdsConfig() {
+        let config = effectiveAdsConfig()
+        print(
+            "\(tag) Final ad config adsEnabled=\(config.adsEnabled) " +
+                "topLevel=\(config.adsEnabledTopLevel) featureFlag=\(config.featureFlags.adsEnabled) " +
+                "useRealIOS=\(config.adsUseRealIos) debug=\(config.environment.isDebugBuild) " +
+                "simulator=\(config.environment.isSimulatorOrEmulator) usingTest=\(config.usingTestAds)"
+        )
+    }
+
+    private static let defaultAdUnitIdsSeedPayload =
+        #"{"ios":{"appOpen":"ca-app-pub-5322412772082850/9489895363","banner":"ca-app-pub-5322412772082850/1256686703","interstitial":"ca-app-pub-5322412772082850/8775579497","rewarded":"ca-app-pub-5322412772082850/6928504142","rewardedInterstitial":"ca-app-pub-5322412772082850/1200846386","native":"ca-app-pub-5322412772082850/5615422478"},"android":{"appOpen":"ca-app-pub-5322412772082850/1802977031","banner":"ca-app-pub-5322412772082850/3390017725","interstitial":"ca-app-pub-5322412772082850/7358556043","rewarded":"ca-app-pub-5322412772082850/1867749156","rewardedInterstitial":"ca-app-pub-5322412772082850/4780998745","native":"ca-app-pub-5322412772082850/1144501483"}}"#
 }
 
 #if canImport(GoogleMobileAds) && canImport(UIKit)
@@ -380,23 +689,54 @@ final class AdManager: NSObject, FullScreenContentDelegate {
     }
 
     func primeAds() {
-        guard remoteConfigManager.featureFlag("ads_enabled", default: true) else { return }
-        print("[Ads][iOS] Priming interstitial and rewarded ads.")
+        guard remoteConfigManager.areAdsEnabled() else {
+            print("[Ads][iOS] Prime skipped because ads are disabled.")
+            return
+        }
+        print(
+            "[Ads][iOS] Priming all formats usingTestAds=\(remoteConfigManager.isUsingTestAds()) " +
+                "debug=\(remoteConfigManager.adsEnvironment().isDebugBuild) " +
+                "simulator=\(remoteConfigManager.adsEnvironment().isSimulatorOrEmulator)"
+        )
         loadInterstitial()
         loadRewarded()
         loadRewardedInterstitial()
     }
 
+    func preloadAllFormatsForQa() {
+        primeAds()
+        requestNativeFeedAd(slotId: "qa-native-slot", placement: "qa_panel", variant: "nativeAdvanced") { detail in
+            let ok = (detail["ok"] as? Bool) ?? false
+            if ok {
+                AdDebugStatusStore.shared.updateLoad(format: "native", status: "loaded")
+            } else {
+                let reason = (detail["error"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+                AdDebugStatusStore.shared.updateLoad(
+                    format: "native",
+                    status: "failed:\(reason?.isEmpty == false ? reason! : "native_request_failed")"
+                )
+            }
+        }
+    }
+
+    func debugStatusSnapshots() -> [AdFormatStatusSnapshot] {
+        AdDebugStatusStore.shared.snapshot(
+            for: ["app_open", "banner", "interstitial", "rewarded", "rewarded_interstitial", "native"]
+        )
+    }
+
     func showInterstitial(from rootViewController: UIViewController?) {
         DispatchQueue.main.async {
-            guard self.remoteConfigManager.featureFlag("ads_enabled", default: true) else { return }
+            guard self.remoteConfigManager.areAdsEnabled() else { return }
             guard let rootViewController else { return }
             guard !self.isShowingFullScreenAd else {
                 print("[Ads][iOS] Interstitial show skipped; another fullscreen ad is visible.")
+                AdDebugStatusStore.shared.updateShow(format: "interstitial", status: "skipped:fullscreen_visible")
                 return
             }
             guard let ad = self.interstitialAd else {
                 print("[Ads][iOS] Interstitial unavailable; reloading.")
+                AdDebugStatusStore.shared.updateShow(format: "interstitial", status: "skipped:not_ready")
                 self.loadInterstitial()
                 return
             }
@@ -408,10 +748,12 @@ final class AdManager: NSObject, FullScreenContentDelegate {
 
     func showRewarded(from rootViewController: UIViewController?) {
         DispatchQueue.main.async {
-            guard self.remoteConfigManager.featureFlag("ads_enabled", default: true) else { return }
+            guard self.remoteConfigManager.areAdsEnabled() else { return }
             guard let rootViewController else { return }
             guard !self.isShowingFullScreenAd else {
                 print("[Ads][iOS] Rewarded show skipped; another fullscreen ad is visible.")
+                AdDebugStatusStore.shared.updateShow(format: "rewarded", status: "skipped:fullscreen_visible")
+                AdDebugStatusStore.shared.updateShow(format: "rewarded_interstitial", status: "skipped:fullscreen_visible")
                 return
             }
             if let rewardedInterstitial = self.rewardedInterstitialAd {
@@ -424,6 +766,7 @@ final class AdManager: NSObject, FullScreenContentDelegate {
             }
             guard let ad = self.rewardedAd else {
                 print("[Ads][iOS] Rewarded unavailable; reloading.")
+                AdDebugStatusStore.shared.updateShow(format: "rewarded", status: "skipped:not_ready")
                 self.loadRewarded()
                 self.loadRewardedInterstitial()
                 return
@@ -450,15 +793,17 @@ final class AdManager: NSObject, FullScreenContentDelegate {
             completion(buildNativeFeedErrorPayload(slotId: "", placement: normalizedPlacement, reason: "slot_id_missing"))
             return
         }
-        guard remoteConfigManager.featureFlag("ads_enabled", default: true) else {
+        guard remoteConfigManager.areAdsEnabled() else {
             completion(buildNativeFeedErrorPayload(slotId: normalizedSlotId, placement: normalizedPlacement, reason: "ads_disabled"))
             return
         }
 
-        let adUnits = remoteConfigManager.adUnitIDs()
         let useVideo = variant.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "nativevideo"
-        let adUnitId = useVideo ? adUnits.nativeVideo : adUnits.nativeAdvanced
+        let adUnitId = useVideo
+            ? remoteConfigManager.adUnitIDs().nativeVideo
+            : remoteConfigManager.resolveAdUnitId(platform: .ios, format: .native)
         logNativeAdEvent(name: "ad_request", placement: normalizedPlacement, adUnitId: adUnitId, slotId: normalizedSlotId)
+        AdDebugStatusStore.shared.updateLoad(format: "native", status: "loading")
 
         let loadKey = "\(normalizedSlotId)-\(UUID().uuidString)"
         let loader = NativeFeedLoader(
@@ -466,6 +811,8 @@ final class AdManager: NSObject, FullScreenContentDelegate {
             onLoaded: { [weak self] ad in
                 guard let self else { return }
                 self.logNativeAdEvent(name: "ad_loaded", placement: normalizedPlacement, adUnitId: adUnitId, slotId: normalizedSlotId)
+                print("[Ads][iOS] Load success for native")
+                AdDebugStatusStore.shared.updateLoad(format: "native", status: "loaded")
                 completion([
                     "ok": true,
                     "slotId": normalizedSlotId,
@@ -484,6 +831,8 @@ final class AdManager: NSObject, FullScreenContentDelegate {
                     slotId: normalizedSlotId,
                     reason: reason
                 )
+                print("[Ads][iOS] Load fail for native: \(reason)")
+                AdDebugStatusStore.shared.updateLoad(format: "native", status: "failed:\(reason)")
                 completion(self.buildNativeFeedErrorPayload(slotId: normalizedSlotId, placement: normalizedPlacement, reason: reason))
             },
             onFinished: { [weak self] key in
@@ -506,13 +855,14 @@ final class AdManager: NSObject, FullScreenContentDelegate {
             ? "feed"
             : placement.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedAdUnit = adUnitId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? remoteConfigManager.adUnitIDs().nativeAdvanced
+            ? remoteConfigManager.resolveAdUnitId(platform: .ios, format: .native)
             : adUnitId.trimmingCharacters(in: .whitespacesAndNewlines)
         AdImpressionReporter.shared.report(
             adFormat: "native",
             adUnitId: resolvedAdUnit,
             placement: normalizedPlacement
         )
+        AdDebugStatusStore.shared.updateShow(format: "native", status: "impression")
         logNativeAdEvent(name: "ad_impression", placement: normalizedPlacement, adUnitId: resolvedAdUnit, slotId: slotId)
     }
 
@@ -521,29 +871,35 @@ final class AdManager: NSObject, FullScreenContentDelegate {
             ? "feed"
             : placement.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedAdUnit = adUnitId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? remoteConfigManager.adUnitIDs().nativeAdvanced
+            ? remoteConfigManager.resolveAdUnitId(platform: .ios, format: .native)
             : adUnitId.trimmingCharacters(in: .whitespacesAndNewlines)
         logNativeAdEvent(name: "ad_click", placement: normalizedPlacement, adUnitId: resolvedAdUnit, slotId: slotId)
     }
 
     private func loadInterstitial() {
-        let adUnitID = remoteConfigManager.adUnitIDs().interstitial
+        let adUnitID = remoteConfigManager.resolveAdUnitId(platform: .ios, format: .interstitial)
         print("[Ads][iOS] Loading interstitial unit=\(adUnitID)")
+        AdDebugStatusStore.shared.updateLoad(format: "interstitial", status: "loading")
         InterstitialAd.load(with: adUnitID, request: Request()) { [weak self] ad, error in
             guard let self else { return }
             self.interstitialAd = ad
             self.interstitialAd?.fullScreenContentDelegate = self
             if let error {
                 print("[Ads][iOS] Interstitial load failed: \(error.localizedDescription)")
+                print("[Ads][iOS] Load fail for interstitial: \(error.localizedDescription)")
+                AdDebugStatusStore.shared.updateLoad(format: "interstitial", status: "failed:\(error.localizedDescription)")
             } else {
                 print("[Ads][iOS] Interstitial load succeeded.")
+                print("[Ads][iOS] Load success for interstitial")
+                AdDebugStatusStore.shared.updateLoad(format: "interstitial", status: "loaded")
             }
         }
     }
 
     private func loadRewarded() {
-        let adUnitID = remoteConfigManager.adUnitIDs().rewarded
+        let adUnitID = remoteConfigManager.resolveAdUnitId(platform: .ios, format: .rewarded)
         print("[Ads][iOS] Loading rewarded unit=\(adUnitID)")
+        AdDebugStatusStore.shared.updateLoad(format: "rewarded", status: "loading")
         RewardedAd.load(with: adUnitID, request: Request()) { [weak self] ad, error in
             guard let self else { return }
             self.rewardedAd = ad
@@ -551,15 +907,20 @@ final class AdManager: NSObject, FullScreenContentDelegate {
             self.configureServerSideVerification(for: self.rewardedAd, adFormat: "rewarded")
             if let error {
                 print("[Ads][iOS] Rewarded load failed: \(error.localizedDescription)")
+                print("[Ads][iOS] Load fail for rewarded: \(error.localizedDescription)")
+                AdDebugStatusStore.shared.updateLoad(format: "rewarded", status: "failed:\(error.localizedDescription)")
             } else {
                 print("[Ads][iOS] Rewarded load succeeded.")
+                print("[Ads][iOS] Load success for rewarded")
+                AdDebugStatusStore.shared.updateLoad(format: "rewarded", status: "loaded")
             }
         }
     }
 
     private func loadRewardedInterstitial() {
-        let adUnitID = remoteConfigManager.adUnitIDs().rewardedInterstitial
+        let adUnitID = remoteConfigManager.resolveAdUnitId(platform: .ios, format: .rewardedInterstitial)
         print("[Ads][iOS] Loading rewarded interstitial unit=\(adUnitID)")
+        AdDebugStatusStore.shared.updateLoad(format: "rewarded_interstitial", status: "loading")
         RewardedInterstitialAd.load(with: adUnitID, request: Request()) { [weak self] ad, error in
             guard let self else { return }
             self.rewardedInterstitialAd = ad
@@ -567,8 +928,12 @@ final class AdManager: NSObject, FullScreenContentDelegate {
             self.configureServerSideVerification(for: self.rewardedInterstitialAd, adFormat: "rewarded_interstitial")
             if let error {
                 print("[Ads][iOS] Rewarded interstitial load failed: \(error.localizedDescription)")
+                print("[Ads][iOS] Load fail for rewarded_interstitial: \(error.localizedDescription)")
+                AdDebugStatusStore.shared.updateLoad(format: "rewarded_interstitial", status: "failed:\(error.localizedDescription)")
             } else {
                 print("[Ads][iOS] Rewarded interstitial load succeeded.")
+                print("[Ads][iOS] Load success for rewarded_interstitial")
+                AdDebugStatusStore.shared.updateLoad(format: "rewarded_interstitial", status: "loaded")
             }
         }
     }
@@ -678,45 +1043,60 @@ final class AdManager: NSObject, FullScreenContentDelegate {
     }
 
     func adDidRecordImpression(_ ad: FullScreenPresentingAd) {
-        let adUnits = remoteConfigManager.adUnitIDs()
         if ad === interstitialAd {
             AdImpressionReporter.shared.report(
                 adFormat: "interstitial",
-                adUnitId: adUnits.interstitial,
+                adUnitId: remoteConfigManager.resolveAdUnitId(platform: .ios, format: .interstitial),
                 placement: "navigation"
             )
+            AdDebugStatusStore.shared.updateShow(format: "interstitial", status: "impression")
             return
         }
         if ad === rewardedAd {
             AdImpressionReporter.shared.report(
                 adFormat: "rewarded",
-                adUnitId: adUnits.rewarded,
+                adUnitId: remoteConfigManager.resolveAdUnitId(platform: .ios, format: .rewarded),
                 placement: "reward_action"
             )
+            AdDebugStatusStore.shared.updateShow(format: "rewarded", status: "impression")
             return
         }
         if ad === rewardedInterstitialAd {
             AdImpressionReporter.shared.report(
                 adFormat: "rewarded_interstitial",
-                adUnitId: adUnits.rewardedInterstitial,
+                adUnitId: remoteConfigManager.resolveAdUnitId(platform: .ios, format: .rewardedInterstitial),
                 placement: "reward_action"
             )
+            AdDebugStatusStore.shared.updateShow(format: "rewarded_interstitial", status: "impression")
         }
     }
 
     func adWillPresentFullScreenContent(_ ad: FullScreenPresentingAd) {
         isShowingFullScreenAd = true
+        if ad === interstitialAd {
+            print("[Ads][iOS] Show success for interstitial")
+            AdDebugStatusStore.shared.updateShow(format: "interstitial", status: "shown")
+        } else if ad === rewardedAd {
+            print("[Ads][iOS] Show success for rewarded")
+            AdDebugStatusStore.shared.updateShow(format: "rewarded", status: "shown")
+        } else if ad === rewardedInterstitialAd {
+            print("[Ads][iOS] Show success for rewarded_interstitial")
+            AdDebugStatusStore.shared.updateShow(format: "rewarded_interstitial", status: "shown")
+        }
     }
 
     func adDidDismissFullScreenContent(_ ad: FullScreenPresentingAd) {
         isShowingFullScreenAd = false
         if ad === interstitialAd {
+            AdDebugStatusStore.shared.updateShow(format: "interstitial", status: "dismissed")
             interstitialAd = nil
             loadInterstitial()
         } else if ad === rewardedAd {
+            AdDebugStatusStore.shared.updateShow(format: "rewarded", status: "dismissed")
             rewardedAd = nil
             loadRewarded()
         } else if ad === rewardedInterstitialAd {
+            AdDebugStatusStore.shared.updateShow(format: "rewarded_interstitial", status: "dismissed")
             rewardedInterstitialAd = nil
             loadRewardedInterstitial()
         }
@@ -729,12 +1109,15 @@ final class AdManager: NSObject, FullScreenContentDelegate {
         isShowingFullScreenAd = false
         print("[Ads][iOS] Fullscreen ad failed to present: \(error.localizedDescription)")
         if ad === interstitialAd {
+            AdDebugStatusStore.shared.updateShow(format: "interstitial", status: "failed:\(error.localizedDescription)")
             interstitialAd = nil
             loadInterstitial()
         } else if ad === rewardedAd {
+            AdDebugStatusStore.shared.updateShow(format: "rewarded", status: "failed:\(error.localizedDescription)")
             rewardedAd = nil
             loadRewarded()
         } else if ad === rewardedInterstitialAd {
+            AdDebugStatusStore.shared.updateShow(format: "rewarded_interstitial", status: "failed:\(error.localizedDescription)")
             rewardedInterstitialAd = nil
             loadRewardedInterstitial()
         }
@@ -1850,11 +2233,47 @@ struct QuanturaWebView: View {
 }
 #endif
 
+private struct AdsQaFormatRow: Identifiable {
+    let id = UUID()
+    let format: String
+    let adUnitId: String
+    let loadStatus: String
+    let showStatus: String
+}
+
+private struct AdsQaSnapshot {
+    let remoteConfigFetched: Bool
+    let remoteConfigFetchedAt: Date?
+    let adsEnabled: Bool
+    let adsEnabledTopLevel: Bool
+    let featureFlagAdsEnabled: Bool
+    let usingRealAds: Bool
+    let usingTestAds: Bool
+    let isDebugBuild: Bool
+    let isSimulator: Bool
+    let rows: [AdsQaFormatRow]
+
+    static let empty = AdsQaSnapshot(
+        remoteConfigFetched: false,
+        remoteConfigFetchedAt: nil,
+        adsEnabled: false,
+        adsEnabledTopLevel: false,
+        featureFlagAdsEnabled: false,
+        usingRealAds: false,
+        usingTestAds: true,
+        isDebugBuild: false,
+        isSimulator: false,
+        rows: []
+    )
+}
+
 struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var lifecycleController = WebViewLifecycleController()
     @StateObject private var authGateViewModel = AuthGateViewModel()
     @State private var bannerAdsVisible: Bool = true
+    @State private var adsQaPanelVisible: Bool = false
+    @State private var adsQaSnapshot: AdsQaSnapshot = .empty
 #if canImport(StoreKit)
     @StateObject private var storeKitManager = StoreKitIapManager()
 #endif
@@ -1876,29 +2295,57 @@ struct ContentView: View {
                     .transition(.opacity)
                     .zIndex(999)
             }
+
+            if container.remoteConfigManager.adsEnvironment().isDebugBuild || container.remoteConfigManager.adsEnvironment().isSimulatorOrEmulator {
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        Button("Ads QA") {
+                            refreshAdsQaSnapshot()
+                            adsQaPanelVisible = true
+                        }
+                        .buttonStyle(.bordered)
+                        .padding(.trailing, 14)
+                        .padding(.bottom, 90)
+                    }
+                }
+                .zIndex(1000)
+            }
         }
 #if canImport(GoogleMobileAds) && canImport(UIKit)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if bannerAdsVisible {
-                AdaptiveBannerContainer(adUnitID: container.remoteConfigManager.adUnitIDs().adaptiveBanner)
+                AdaptiveBannerContainer(
+                    adUnitID: container.remoteConfigManager.resolveAdUnitId(platform: .ios, format: .banner)
+                )
                     .frame(height: 60)
                     .background(.ultraThinMaterial)
             }
         }
 #endif
+        .sheet(isPresented: $adsQaPanelVisible) {
+            AdsQaPanelView(
+                snapshot: adsQaSnapshot,
+                onRefresh: { refreshAdsQaSnapshot() },
+                onLoadAll: { testAllAdFormatsFromQaPanel() }
+            )
+        }
         .onAppear {
             authGateViewModel.start()
             container.appOpenAdManager.setPresentationBlockedByAuthGate(authGateViewModel.isGateVisible)
-            bannerAdsVisible = container.remoteConfigManager.featureFlag("ads_enabled", default: true)
+            bannerAdsVisible = container.remoteConfigManager.areAdsEnabled()
             container.adManager.primeAds()
             container.appOpenAdManager.preloadAdIfNeeded()
+            refreshAdsQaSnapshot()
             container.remoteConfigManager.fetchAndActivate { _ in
-                let enabled = container.remoteConfigManager.featureFlag("ads_enabled", default: true)
+                let enabled = container.remoteConfigManager.areAdsEnabled()
                 DispatchQueue.main.async {
                     bannerAdsVisible = enabled
                 }
                 container.adManager.primeAds()
                 container.appOpenAdManager.preloadAdIfNeeded()
+                refreshAdsQaSnapshot()
             }
 #if canImport(StoreKit)
             if #available(iOS 15.0, *) {
@@ -1918,10 +2365,114 @@ struct ContentView: View {
             case .active:
                 lifecycleController.sceneWillEnterForeground()
                 container.appOpenAdManager.sceneDidBecomeActive()
+                refreshAdsQaSnapshot()
             default:
                 break
             }
         }
+    }
+
+    private func refreshAdsQaSnapshot() {
+        let config = container.remoteConfigManager.debugStatus()
+        let statusByFormat = Dictionary(
+            uniqueKeysWithValues: container.adManager.debugStatusSnapshots().map { ($0.format.lowercased(), $0) }
+        )
+        let rows: [AdsQaFormatRow] = [
+            ("app_open", container.remoteConfigManager.resolveAdUnitId(platform: .ios, format: .appOpen)),
+            ("banner", container.remoteConfigManager.resolveAdUnitId(platform: .ios, format: .banner)),
+            ("interstitial", container.remoteConfigManager.resolveAdUnitId(platform: .ios, format: .interstitial)),
+            ("rewarded", container.remoteConfigManager.resolveAdUnitId(platform: .ios, format: .rewarded)),
+            ("rewarded_interstitial", container.remoteConfigManager.resolveAdUnitId(platform: .ios, format: .rewardedInterstitial)),
+            ("native", container.remoteConfigManager.resolveAdUnitId(platform: .ios, format: .native)),
+        ].map { key, adUnitId in
+            let status = statusByFormat[key]
+            return AdsQaFormatRow(
+                format: key,
+                adUnitId: adUnitId,
+                loadStatus: status?.lastLoadStatus ?? "idle",
+                showStatus: status?.lastShowStatus ?? "idle"
+            )
+        }
+
+        adsQaSnapshot = AdsQaSnapshot(
+            remoteConfigFetched: config.remoteConfigFetched,
+            remoteConfigFetchedAt: config.remoteConfigFetchedAt,
+            adsEnabled: config.adsEnabled,
+            adsEnabledTopLevel: config.adsEnabledTopLevel,
+            featureFlagAdsEnabled: config.featureFlags.adsEnabled,
+            usingRealAds: config.usingRealAds,
+            usingTestAds: config.usingTestAds,
+            isDebugBuild: config.environment.isDebugBuild,
+            isSimulator: config.environment.isSimulatorOrEmulator,
+            rows: rows
+        )
+    }
+
+    private func testAllAdFormatsFromQaPanel() {
+        container.adManager.preloadAllFormatsForQa()
+        container.appOpenAdManager.preloadAdIfNeeded()
+        Task {
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            await MainActor.run {
+                refreshAdsQaSnapshot()
+            }
+        }
+    }
+}
+
+private struct AdsQaPanelView: View {
+    let snapshot: AdsQaSnapshot
+    let onRefresh: () -> Void
+    let onLoadAll: () -> Void
+
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(
+                        "RC fetched=\(snapshot.remoteConfigFetched) " +
+                            "adsEnabled=\(snapshot.adsEnabled) topLevel=\(snapshot.adsEnabledTopLevel) " +
+                            "featureFlag=\(snapshot.featureFlagAdsEnabled)"
+                    )
+                    .font(.caption)
+
+                    Text(
+                        "usingRealAds=\(snapshot.usingRealAds) usingTestAds=\(snapshot.usingTestAds) " +
+                            "debug=\(snapshot.isDebugBuild) simulator=\(snapshot.isSimulator)"
+                    )
+                    .font(.caption)
+
+                    ForEach(snapshot.rows) { row in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(row.format.replacingOccurrences(of: "_", with: " ").capitalized)
+                                .font(.subheadline.weight(.semibold))
+                            Text(row.adUnitId)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text("load=\(row.loadStatus) · show=\(row.showStatus)")
+                                .font(.caption2)
+                        }
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                }
+                .padding(16)
+            }
+            .navigationTitle("Ads QA")
+            .toolbar {
+                ToolbarItemGroup(placement: .navigationBarTrailing) {
+                    Button("Refresh", action: onRefresh)
+                    Button("Load all ads", action: onLoadAll)
+                }
+            }
+        }
+    }
+}
+
+private extension String {
+    func ifEmpty(replacement: String) -> String {
+        isEmpty ? replacement : self
     }
 }
 

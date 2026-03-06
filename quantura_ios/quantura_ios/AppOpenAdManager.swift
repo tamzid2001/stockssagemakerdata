@@ -19,8 +19,9 @@ final class AppOpenAdManager: NSObject, FullScreenContentDelegate {
     }
 
     func preloadAdIfNeeded() {
-        guard remoteConfigManager.featureFlag("ads_enabled", default: true) else {
+        guard remoteConfigManager.areAdsEnabled() else {
             print("[Ads][iOS][AppOpen] Ads disabled by feature flag.")
+            AdDebugStatusStore.shared.updateLoad(format: "app_open", status: "disabled")
             return
         }
         guard !isLoading else { return }
@@ -45,9 +46,10 @@ final class AppOpenAdManager: NSObject, FullScreenContentDelegate {
     }
 
     private func loadAd() {
-        let unitID = remoteConfigManager.adUnitIDs().appOpen
+        let unitID = remoteConfigManager.resolveAdUnitId(platform: .ios, format: .appOpen)
         isLoading = true
         print("[Ads][iOS][AppOpen] Loading ad unit=\(unitID)")
+        AdDebugStatusStore.shared.updateLoad(format: "app_open", status: "loading")
         AppOpenAd.load(with: unitID, request: Request()) { [weak self] ad, error in
             guard let self else { return }
             self.isLoading = false
@@ -55,29 +57,36 @@ final class AppOpenAdManager: NSObject, FullScreenContentDelegate {
                 self.appOpenAd = nil
                 self.loadedAt = nil
                 print("[Ads][iOS][AppOpen] Load failed: \(error.localizedDescription)")
+                print("[Ads][iOS] Load fail for app_open: \(error.localizedDescription)")
+                AdDebugStatusStore.shared.updateLoad(format: "app_open", status: "failed:\(error.localizedDescription)")
                 return
             }
             self.appOpenAd = ad
             self.loadedAt = Date()
             self.appOpenAd?.fullScreenContentDelegate = self
             print("[Ads][iOS][AppOpen] Load succeeded.")
+            print("[Ads][iOS] Load success for app_open")
+            AdDebugStatusStore.shared.updateLoad(format: "app_open", status: "loaded")
         }
     }
 
     private func showIfAvailable() {
-        guard remoteConfigManager.featureFlag("ads_enabled", default: true) else { return }
+        guard remoteConfigManager.areAdsEnabled() else { return }
         guard !isShowing else { return }
         guard !presentationBlockedByAuthGate else {
             print("[Ads][iOS][AppOpen] Skipping show; auth gate is visible.")
+            AdDebugStatusStore.shared.updateShow(format: "app_open", status: "skipped:auth_gate")
             return
         }
         guard !adManager.isShowingFullScreenAd else {
             print("[Ads][iOS][AppOpen] Skipping show; another fullscreen ad is already visible.")
+            AdDebugStatusStore.shared.updateShow(format: "app_open", status: "skipped:fullscreen_visible")
             return
         }
 
         guard isAdFresh, let ad = appOpenAd else {
             print("[Ads][iOS][AppOpen] No fresh ad available; preloading.")
+            AdDebugStatusStore.shared.updateShow(format: "app_open", status: "skipped:not_ready")
             preloadAdIfNeeded()
             return
         }
@@ -101,13 +110,16 @@ final class AppOpenAdManager: NSObject, FullScreenContentDelegate {
         print("[Ads][iOS][AppOpen] Impression recorded.")
         AdImpressionReporter.shared.report(
             adFormat: "app_open",
-            adUnitId: remoteConfigManager.adUnitIDs().appOpen,
+            adUnitId: remoteConfigManager.resolveAdUnitId(platform: .ios, format: .appOpen),
             placement: "app_open"
         )
+        AdDebugStatusStore.shared.updateShow(format: "app_open", status: "impression")
     }
 
     func adWillPresentFullScreenContent(_ ad: FullScreenPresentingAd) {
         print("[Ads][iOS][AppOpen] Will present.")
+        print("[Ads][iOS] Show success for app_open")
+        AdDebugStatusStore.shared.updateShow(format: "app_open", status: "shown")
     }
 
     func adDidDismissFullScreenContent(_ ad: FullScreenPresentingAd) {
@@ -115,6 +127,7 @@ final class AppOpenAdManager: NSObject, FullScreenContentDelegate {
         isShowing = false
         appOpenAd = nil
         loadedAt = nil
+        AdDebugStatusStore.shared.updateShow(format: "app_open", status: "dismissed")
         preloadAdIfNeeded()
     }
 
@@ -126,6 +139,7 @@ final class AppOpenAdManager: NSObject, FullScreenContentDelegate {
         isShowing = false
         appOpenAd = nil
         loadedAt = nil
+        AdDebugStatusStore.shared.updateShow(format: "app_open", status: "failed:\(error.localizedDescription)")
         preloadAdIfNeeded()
     }
 
