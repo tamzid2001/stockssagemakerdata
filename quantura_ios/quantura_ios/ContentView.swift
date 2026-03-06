@@ -256,6 +256,9 @@ final class RemoteConfigManager {
         rc.setDefaults([
             "ads_use_real_ios": true as NSObject,
             "ads_use_real_android": true as NSObject,
+            "native_feed_ad_start": 6 as NSObject,
+            "native_feed_ad_interval": 8 as NSObject,
+            "native_page_ad_midpoint": 0.55 as NSObject,
             "feature_flags": """
             {"native_bridge_enabled":true,"ads_enabled":true}
             """ as NSObject,
@@ -311,6 +314,21 @@ final class RemoteConfigManager {
         }
         return (json[key] as? Bool) ?? defaultValue
     }
+
+    func nativeFeedAdStart() -> Int {
+        let value = Int(remoteConfig?["native_feed_ad_start"].numberValue.intValue ?? 6)
+        return max(3, min(20, value))
+    }
+
+    func nativeFeedAdInterval() -> Int {
+        let value = Int(remoteConfig?["native_feed_ad_interval"].numberValue.intValue ?? 8)
+        return max(3, min(20, value))
+    }
+
+    func nativePageAdMidpoint() -> Double {
+        let value = remoteConfig?["native_page_ad_midpoint"].numberValue.doubleValue ?? 0.55
+        return max(0.2, min(0.9, value))
+    }
 }
 
 #if canImport(GoogleMobileAds) && canImport(UIKit)
@@ -319,7 +337,43 @@ final class AdManager: NSObject, FullScreenContentDelegate {
     private var interstitialAd: InterstitialAd?
     private var rewardedAd: RewardedAd?
     private var rewardedInterstitialAd: RewardedInterstitialAd?
+    private var nativeFeedLoaders: [String: NativeFeedLoader] = [:]
     private(set) var isShowingFullScreenAd = false
+
+    private final class NativeFeedLoader: NSObject, AdLoaderDelegate, NativeAdLoaderDelegate {
+        let key: String
+        private(set) var adLoader: AdLoader?
+        private let onLoaded: (NativeAd) -> Void
+        private let onFailed: (Error) -> Void
+        private let onFinished: (String) -> Void
+
+        init(
+            key: String,
+            onLoaded: @escaping (NativeAd) -> Void,
+            onFailed: @escaping (Error) -> Void,
+            onFinished: @escaping (String) -> Void
+        ) {
+            self.key = key
+            self.onLoaded = onLoaded
+            self.onFailed = onFailed
+            self.onFinished = onFinished
+        }
+
+        func attach(_ adLoader: AdLoader) {
+            self.adLoader = adLoader
+            adLoader.delegate = self
+        }
+
+        func adLoader(_ adLoader: AdLoader, didReceive nativeAd: NativeAd) {
+            onLoaded(nativeAd)
+            onFinished(key)
+        }
+
+        func adLoader(_ adLoader: AdLoader, didFailToReceiveAdWithError error: Error) {
+            onFailed(error)
+            onFinished(key)
+        }
+    }
 
     init(remoteConfigManager: RemoteConfigManager) {
         self.remoteConfigManager = remoteConfigManager
@@ -380,6 +434,96 @@ final class AdManager: NSObject, FullScreenContentDelegate {
                 _ = ad.adReward
             }
         }
+    }
+
+    func requestNativeFeedAd(
+        slotId: String,
+        placement: String,
+        variant: String = "nativeAdvanced",
+        completion: @escaping ([String: Any]) -> Void
+    ) {
+        let normalizedSlotId = slotId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedPlacement = placement.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "feed"
+            : placement.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedSlotId.isEmpty else {
+            completion(buildNativeFeedErrorPayload(slotId: "", placement: normalizedPlacement, reason: "slot_id_missing"))
+            return
+        }
+        guard remoteConfigManager.featureFlag("ads_enabled", default: true) else {
+            completion(buildNativeFeedErrorPayload(slotId: normalizedSlotId, placement: normalizedPlacement, reason: "ads_disabled"))
+            return
+        }
+
+        let adUnits = remoteConfigManager.adUnitIDs()
+        let useVideo = variant.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "nativevideo"
+        let adUnitId = useVideo ? adUnits.nativeVideo : adUnits.nativeAdvanced
+        logNativeAdEvent(name: "ad_request", placement: normalizedPlacement, adUnitId: adUnitId, slotId: normalizedSlotId)
+
+        let loadKey = "\(normalizedSlotId)-\(UUID().uuidString)"
+        let loader = NativeFeedLoader(
+            key: loadKey,
+            onLoaded: { [weak self] ad in
+                guard let self else { return }
+                self.logNativeAdEvent(name: "ad_loaded", placement: normalizedPlacement, adUnitId: adUnitId, slotId: normalizedSlotId)
+                completion([
+                    "ok": true,
+                    "slotId": normalizedSlotId,
+                    "placement": normalizedPlacement,
+                    "adUnitId": adUnitId,
+                    "ad": self.serializeNativeAd(ad: ad, adUnitId: adUnitId),
+                ])
+            },
+            onFailed: { [weak self] error in
+                guard let self else { return }
+                let reason = error.localizedDescription.isEmpty ? "native_load_failed" : error.localizedDescription
+                self.logNativeAdEvent(
+                    name: "ad_failed",
+                    placement: normalizedPlacement,
+                    adUnitId: adUnitId,
+                    slotId: normalizedSlotId,
+                    reason: reason
+                )
+                completion(self.buildNativeFeedErrorPayload(slotId: normalizedSlotId, placement: normalizedPlacement, reason: reason))
+            },
+            onFinished: { [weak self] key in
+                self?.nativeFeedLoaders.removeValue(forKey: key)
+            }
+        )
+        let adLoader = AdLoader(
+            adUnitID: adUnitId,
+            rootViewController: nil,
+            adTypes: [AdLoaderAdType.native],
+            options: nil
+        )
+        loader.attach(adLoader)
+        nativeFeedLoaders[loadKey] = loader
+        adLoader.load(Request())
+    }
+
+    func reportNativeFeedAdImpression(slotId: String, placement: String, adUnitId: String) {
+        let normalizedPlacement = placement.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "feed"
+            : placement.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedAdUnit = adUnitId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? remoteConfigManager.adUnitIDs().nativeAdvanced
+            : adUnitId.trimmingCharacters(in: .whitespacesAndNewlines)
+        AdImpressionReporter.shared.report(
+            adFormat: "native",
+            adUnitId: resolvedAdUnit,
+            placement: normalizedPlacement
+        )
+        logNativeAdEvent(name: "ad_impression", placement: normalizedPlacement, adUnitId: resolvedAdUnit, slotId: slotId)
+    }
+
+    func reportNativeFeedAdClick(slotId: String, placement: String, adUnitId: String) {
+        let normalizedPlacement = placement.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "feed"
+            : placement.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedAdUnit = adUnitId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? remoteConfigManager.adUnitIDs().nativeAdvanced
+            : adUnitId.trimmingCharacters(in: .whitespacesAndNewlines)
+        logNativeAdEvent(name: "ad_click", placement: normalizedPlacement, adUnitId: resolvedAdUnit, slotId: slotId)
     }
 
     private func loadInterstitial() {
@@ -475,6 +619,62 @@ final class AdManager: NSObject, FullScreenContentDelegate {
             options.customRewardText = String(json.prefix(450))
         }
         ad.serverSideVerificationOptions = options
+    }
+
+    private func buildNativeFeedErrorPayload(slotId: String, placement: String, reason: String) -> [String: Any] {
+        [
+            "ok": false,
+            "slotId": slotId,
+            "placement": placement,
+            "error": String(reason.prefix(220)),
+        ]
+    }
+
+    private func serializeNativeAd(ad: NativeAd, adUnitId: String) -> [String: Any] {
+        let iconDataUrl = imageDataUrl(from: ad.icon?.image)
+        let mediaImage = ad.images?.first?.image
+        let mediaDataUrl = imageDataUrl(from: mediaImage)
+        return [
+            "headline": ad.headline ?? "",
+            "body": ad.body ?? "",
+            "callToAction": ad.callToAction ?? "",
+            "advertiser": ad.advertiser ?? "",
+            "store": ad.store ?? "",
+            "price": ad.price ?? "",
+            "starRating": ad.starRating ?? 0,
+            "iconDataUrl": iconDataUrl,
+            "mediaDataUrl": mediaDataUrl,
+            "hasVideoContent": ad.mediaContent.hasVideoContent,
+            "adUnitId": adUnitId,
+        ]
+    }
+
+    private func imageDataUrl(from image: UIImage?) -> String {
+        guard let data = image?.pngData(), !data.isEmpty else { return "" }
+        return "data:image/png;base64,\(data.base64EncodedString())"
+    }
+
+    private func logNativeAdEvent(
+        name: String,
+        placement: String,
+        adUnitId: String,
+        slotId: String,
+        reason: String = ""
+    ) {
+#if canImport(FirebaseAnalytics)
+        var params: [String: Any] = [
+            AnalyticsParameterAdPlatform: "admob",
+            AnalyticsParameterAdSource: "admob",
+            AnalyticsParameterAdFormat: "native",
+            AnalyticsParameterAdUnitName: adUnitId,
+            "placement": String(placement.prefix(80)),
+            "slot_id": String(slotId.prefix(80)),
+        ]
+        if !reason.isEmpty {
+            params["reason"] = String(reason.prefix(120))
+        }
+        Analytics.logEvent(name, parameters: params)
+#endif
     }
 
     func adDidRecordImpression(_ ad: FullScreenPresentingAd) {
@@ -601,12 +801,14 @@ struct QuanturaWebView: UIViewRepresentable {
     let url: URL
     let lifecycleController: WebViewLifecycleController
     let adManager: AdManager
+    let remoteConfigManager: RemoteConfigManager
     @ObservedObject var authGateViewModel: AuthGateViewModel
 
     func makeCoordinator() -> Coordinator {
         Coordinator(
             lifecycleController: lifecycleController,
             adManager: adManager,
+            remoteConfigManager: remoteConfigManager,
             authGateViewModel: authGateViewModel
         )
     }
@@ -662,6 +864,7 @@ struct QuanturaWebView: UIViewRepresentable {
     final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         private let lifecycleController: WebViewLifecycleController
         private let adManager: AdManager
+        private let remoteConfigManager: RemoteConfigManager
         private weak var authGateViewModel: AuthGateViewModel?
         private var tokenObserver: NSObjectProtocol?
         private var deepLinkObserver: NSObjectProtocol?
@@ -685,10 +888,12 @@ struct QuanturaWebView: UIViewRepresentable {
         init(
             lifecycleController: WebViewLifecycleController,
             adManager: AdManager,
+            remoteConfigManager: RemoteConfigManager,
             authGateViewModel: AuthGateViewModel
         ) {
             self.lifecycleController = lifecycleController
             self.adManager = adManager
+            self.remoteConfigManager = remoteConfigManager
             self.authGateViewModel = authGateViewModel
             super.init()
 
@@ -826,6 +1031,12 @@ struct QuanturaWebView: UIViewRepresentable {
                     self.handleNativeStoreKitPurchase(payload: payload)
                 case "openNativeSubscriptionManager":
                     self.handleNativeSubscriptionManager(payload: payload)
+                case "requestNativeFeedAd":
+                    self.handleNativeFeedAdRequest(payload: payload)
+                case "nativeFeedAdImpression":
+                    self.handleNativeFeedAdImpression(payload: payload)
+                case "nativeFeedAdClick":
+                    self.handleNativeFeedAdClick(payload: payload)
                 default:
                     break
                 }
@@ -876,6 +1087,61 @@ struct QuanturaWebView: UIViewRepresentable {
             let finalText = text.isEmpty ? url : "\(text) \(url)"
             let activityVC = UIActivityViewController(activityItems: [title, finalText], applicationActivities: nil)
             presenter.present(activityVC, animated: true)
+        }
+
+        private func handleNativeFeedAdRequest(payload: [String: Any]) {
+            let slotId = String(describing: payload["slotId"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let placementRaw = String(describing: payload["placement"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let placement = placementRaw.isEmpty ? "feed" : placementRaw
+            let variantRaw = String(describing: payload["variant"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let variant = variantRaw.isEmpty ? "nativeAdvanced" : variantRaw
+            guard !slotId.isEmpty else {
+                dispatchNativeFeedAdEvent([
+                    "ok": false,
+                    "slotId": "",
+                    "placement": placement,
+                    "error": "slot_id_missing",
+                ])
+                return
+            }
+            guard authGateViewModel?.isGateVisible != true else {
+                dispatchNativeFeedAdEvent([
+                    "ok": false,
+                    "slotId": slotId,
+                    "placement": placement,
+                    "error": "auth_gate_visible",
+                ])
+                return
+            }
+            adManager.requestNativeFeedAd(slotId: slotId, placement: placement, variant: variant) { [weak self] detail in
+                self?.dispatchNativeFeedAdEvent(detail)
+            }
+        }
+
+        private func handleNativeFeedAdImpression(payload: [String: Any]) {
+            let slotId = String(describing: payload["slotId"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let placementRaw = String(describing: payload["placement"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let placement = placementRaw.isEmpty ? "feed" : placementRaw
+            let adUnitId = String(describing: payload["adUnitId"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            adManager.reportNativeFeedAdImpression(slotId: slotId, placement: placement, adUnitId: adUnitId)
+        }
+
+        private func handleNativeFeedAdClick(payload: [String: Any]) {
+            let slotId = String(describing: payload["slotId"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let placementRaw = String(describing: payload["placement"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let placement = placementRaw.isEmpty ? "feed" : placementRaw
+            let adUnitId = String(describing: payload["adUnitId"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            adManager.reportNativeFeedAdClick(slotId: slotId, placement: placement, adUnitId: adUnitId)
+        }
+
+        private func dispatchNativeFeedAdEvent(_ detailPayload: [String: Any]) {
+            guard
+                let data = try? JSONSerialization.data(withJSONObject: detailPayload, options: []),
+                let detail = String(data: data, encoding: .utf8)
+            else { return }
+            webView?.evaluateJavaScript(
+                "window.dispatchEvent(new CustomEvent('quantura:native-feed-ad',{detail:\(detail)}));"
+            )
         }
 
         private func handleNativeStoreKitPurchase(payload: [String: Any]) {
@@ -1401,10 +1667,14 @@ struct QuanturaWebView: UIViewRepresentable {
         }
 
         func injectNativeRuntime() {
+            let feedStart = remoteConfigManager.nativeFeedAdStart()
+            let feedInterval = remoteConfigManager.nativeFeedAdInterval()
+            let pageMidpoint = remoteConfigManager.nativePageAdMidpoint()
             webView?.evaluateJavaScript("""
                 window.__QUANTURA_NATIVE_APP__ = true;
                 window.__QUANTURA_NATIVE_PLATFORM__ = 'ios';
                 window.__QUANTURA_NATIVE_AUTH_BRIDGE__ = true;
+                window.__QUANTURA_NATIVE_AD_RULES__ = { feedStart: \(feedStart), feedInterval: \(feedInterval), pageMidpoint: \(pageMidpoint) };
                 window.dispatchEvent(new CustomEvent('quantura:native-runtime-ready', { detail: { platform: 'ios', authBridge: true } }));
             """)
         }
@@ -1596,6 +1866,7 @@ struct ContentView: View {
                 url: quanturaURL,
                 lifecycleController: lifecycleController,
                 adManager: container.adManager,
+                remoteConfigManager: container.remoteConfigManager,
                 authGateViewModel: authGateViewModel
             )
             .ignoresSafeArea(edges: [.top, .leading, .trailing])

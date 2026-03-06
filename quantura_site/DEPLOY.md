@@ -78,6 +78,14 @@ gcloud functions deploy onAgentRunCreated \
   --trigger-event-filters=type=google.cloud.firestore.document.v1.created \
   --trigger-event-filters=database='(default)' \
   --trigger-event-filters-path-pattern=document='agent_runs/{runId}'
+
+gcloud functions deploy refreshFiscaldataDefaults \
+  --gen2 \
+  --runtime=nodejs24 \
+  --region=us-central1 \
+  --source=. \
+  --entry-point=refreshFiscaldataDefaults \
+  --trigger-topic=fiscaldata-refresh
 ```
 
 ## 3) Deploy Firestore Rules and Indexes
@@ -95,7 +103,7 @@ firebase deploy --only hosting
 
 ## 5) Verify Rewrites
 
-`firebase.json` routes `/api/explore*`, `/api/posts/**`, `/api/profile/**`, `/api/me/**`, `/api/follows/**`, `/api/watch-tickers/**`, and `/api/notifications/**` to `quanturaExploreApi`.
+`firebase.json` routes `/api/explore*`, `/api/posts/**`, `/api/profile/**`, `/api/me/**`, `/api/follows/**`, `/api/watch-tickers/**`, `/api/notifications/**`, and `/api/fiscaldata/**` to `quanturaExploreApi`.
 
 ## 6) Optional local run
 
@@ -105,4 +113,3 @@ npm install
 npm run dev
 # API listens on :8080 (functions-framework)
 ```
-

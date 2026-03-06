@@ -11,7 +11,6 @@ SECRETS=(
   ALPACA_SECRET_KEY
   AMAZON_NOVA_KEY
   FCM_WEB_VAPID_KEY
-  MASSIVE_API_KEY
   OPENAI_API_KEY
   SLACK_WEBHOOK_URL
   STRIPE_PRIVATE_KEY
@@ -45,11 +44,11 @@ done
 echo ""
 if [ "$MISSING" -gt 0 ]; then
   echo "Create missing secrets with:"
-  echo "  firebase functions:secrets:set SECRET_NAME"
+  echo "  gcloud secrets create SECRET_NAME --data-file=-"
   echo ""
 fi
 
-echo "Deploy functions (binding secrets automatically):"
-echo "  cd quantura_site && firebase use $PROJECT_ID && firebase deploy --only functions"
+echo "Deploy with required flow:"
+echo "  CLOUDSDK_PYTHON=/opt/homebrew/bin/python3.13 ./deploy.sh"
 echo ""
-echo "Firebase grants the default compute service account Secret Manager access during deploy."
+echo "Ensure gcloud deploy includes --set-secrets for required keys."

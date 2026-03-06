@@ -13,7 +13,10 @@
   const PROMO_FORECAST_COUNT_KEY = "quantura_promo_forecast_count_v1";
   const PROMO_LAST_SESSION_KEY = "quantura_promo_last_session_v1";
   const AUTH_PENDING_CREDENTIAL_KEY = "quantura_auth_pending_credential_v1";
+  const AUTH_POST_SIGNIN_REFRESH_KEY = "quantura_auth_post_signin_refresh_v1";
+  const NATIVE_IAP_PENDING_EVENTS_KEY = "quantura_native_iap_pending_events_v1";
   const NOTIFICATION_PRIVACY_CACHE_KEY = "quantura_notification_privacy_v1";
+  const NOTIFICATION_PREFS_CACHE_KEY = "quantura_notification_prefs_v1";
   const FCM_LOG_CACHE_KEY = "quantura_fcm_log_v1";
   const CHART_RANGE_CACHE_KEY = "quantura_chart_range_v1";
   const CHART_VIEW_CACHE_KEY = "quantura_chart_view_v1";
@@ -26,6 +29,10 @@
   const TICKER_QUERY_MODULES_KEY = "quantura_ticker_query_modules_v1";
   const TICKER_QUERY_IMPROVE_TOGGLE_KEY = "quantura_ticker_query_improve_toggle_v1";
   const TICKER_HISTORY_KEY_PREFIX = "quantura_ticker_history_v1";
+  const FORECAST_CACHE_DB_NAME = "quantura_forecast_cache_v1";
+  const FORECAST_CACHE_STORE_NAME = "forecast_series";
+  const FORECAST_CACHE_INDEX_KEY = "quantura_forecast_cache_index_v1";
+  const FORECAST_CACHE_LOCAL_PREFIX = "quantura_forecast_cache_entry_v1::";
   const TICKER_HISTORY_LIMIT = 14;
   const TRADINGVIEW_LOAD_TIMEOUT_MS = 9000;
   const AI_LEADERBOARD_DEFAULT_HORIZON = "1y";
@@ -47,6 +54,98 @@
     "Purchase",
   ]);
   const MODEL_COUNCIL_OUTPUT_DISCLAIMER = "LLMs can sometimes make mistakes.";
+  const MODEL_COUNCIL_PROMPT_VISIBLE_COUNT = 3;
+  const MODEL_COUNCIL_PROMPT_SUGGESTIONS = Object.freeze([
+    "What is the strongest bullish and bearish case for {ticker} over the next 3 months?",
+    "Summarize the top 5 catalysts for {ticker} and rank them by probability and impact.",
+    "Is {ticker} trading rich or cheap versus peers on forward growth and margins?",
+    "Build a base/bull/bear scenario table for {ticker} with key assumptions.",
+    "What are the biggest risks in the latest quarter for {ticker}?",
+    "Compare {ticker} trend strength versus sector ETF and closest competitors.",
+    "Which earnings metrics should I monitor next for {ticker}, and why?",
+    "Create an entry plan for {ticker} with invalidation and risk controls.",
+    "What does the options market imply about {ticker} volatility into the next event?",
+    "Estimate whether recent price action in {ticker} is momentum or mean-reversion likely.",
+    "Give a 7-day watchlist checklist for {ticker} before making a decision.",
+    "What macro variables are most likely to move {ticker} this quarter?",
+    "Should {ticker} be considered a compounder, cyclical trade, or event-driven setup?",
+    "Summarize analyst sentiment changes on {ticker} and what matters most.",
+    "What would invalidate the current thesis on {ticker}?",
+    "Create a decision memo for {ticker}: thesis, evidence, risks, and next steps.",
+    "What are the most important balance sheet signals for {ticker} right now?",
+    "How sensitive is {ticker} to rates, FX, and commodity inputs?",
+    "If I can only track 3 indicators for {ticker}, which ones and why?",
+    "Draft a portfolio sizing suggestion for {ticker} under conservative risk assumptions.",
+  ]);
+  const POLYMARKET_CLIENT_CACHE_TTL_MS = 10 * 60 * 1000;
+  const POLYMARKET_CLIENT_CACHE_MAX_ENTRIES = 80;
+  const POLYMARKET_DEFAULT_MARKET_LIMIT = 12;
+  const POLYMARKET_SEARCH_DEBOUNCE_MS = 400;
+  const TERMINAL_FX_RECENT_KEY = "quantura_terminal_fx_recent_v1";
+  const TERMINAL_FX_RECENT_LIMIT = 8;
+  const DEFAULT_NOTIFICATION_PREFS = Object.freeze({
+    global: true,
+    following: true,
+    tickers: true,
+    watchlist: true,
+    explore: true,
+    earnings: true,
+    ipos: true,
+    daily: true,
+    weekly: true,
+    inactiveHidden: true,
+  });
+  const NOTIFICATION_PREF_DEFS = Object.freeze([
+    { key: "global", label: "Global notifications", hint: "Master switch for all outbound notifications." },
+    { key: "watchlist", label: "Watchlist alerts", hint: "Price and watchlist-trigger updates." },
+    { key: "explore", label: "Explore feed", hint: "Relevant public posts and activity updates." },
+    { key: "earnings", label: "Earnings calendar", hint: "Company earnings date updates." },
+    { key: "ipos", label: "IPO updates", hint: "New IPO calendar changes." },
+    { key: "daily", label: "Daily reminders", hint: "Daily activity reminders." },
+    { key: "weekly", label: "Weekly recap", hint: "Weekly summary reminders." },
+  ]);
+  const NOTIFICATION_COUNTRY_OPTIONS = Object.freeze([
+    { value: "US", label: "United States" },
+    { value: "CA", label: "Canada" },
+    { value: "GB", label: "United Kingdom" },
+    { value: "DE", label: "Germany" },
+    { value: "FR", label: "France" },
+    { value: "ES", label: "Spain" },
+    { value: "IT", label: "Italy" },
+    { value: "AU", label: "Australia" },
+    { value: "JP", label: "Japan" },
+    { value: "SG", label: "Singapore" },
+    { value: "AE", label: "United Arab Emirates" },
+    { value: "IN", label: "India" },
+    { value: "BR", label: "Brazil" },
+    { value: "MX", label: "Mexico" },
+  ]);
+  const NOTIFICATION_TIMEZONE_OPTIONS = Object.freeze([
+    "America/New_York",
+    "America/Chicago",
+    "America/Denver",
+    "America/Los_Angeles",
+    "America/Toronto",
+    "America/Mexico_City",
+    "America/Sao_Paulo",
+    "Europe/London",
+    "Europe/Berlin",
+    "Europe/Paris",
+    "Europe/Madrid",
+    "Asia/Dubai",
+    "Asia/Kolkata",
+    "Asia/Singapore",
+    "Asia/Tokyo",
+    "Australia/Sydney",
+    "Etc/UTC",
+  ]);
+  const MY_REQUEST_TYPES = new Set(["forecast", "screener", "indicator", "modelCouncil"]);
+  const MY_REQUEST_TYPE_LABELS = {
+    forecast: "Forecasting",
+    screener: "Screeners",
+    indicator: "Indicators",
+    modelCouncil: "Model Council",
+  };
   const getNativePlatform = () => {
     try {
       const explicit = String(window.__QUANTURA_NATIVE_PLATFORM__ || "").trim().toLowerCase();
@@ -89,6 +188,15 @@
     return "web";
   };
 
+  const applyRuntimeBodyClasses = () => {
+    if (!document?.body) return;
+    const nativePlatform = getNativePlatform();
+    const runtimeLabel = resolveRuntimeLabel();
+    document.body.classList.toggle("native-runtime", runtimeLabel === "native");
+    document.body.classList.toggle("native-platform-ios", nativePlatform === "ios");
+    document.body.classList.toggle("native-platform-android", nativePlatform === "android");
+  };
+
   const triggerSubtleHaptic = () => {
     try {
       if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
@@ -113,6 +221,14 @@
       const iosHandler = window.webkit?.messageHandlers?.QuanturaBridge?.postMessage;
       if (iosHandler) {
         iosHandler(message);
+        return true;
+      }
+    } catch (error) {
+      // Try standard ReactNativeWebView bridge below.
+    }
+    try {
+      if (window.ReactNativeWebView?.postMessage) {
+        window.ReactNativeWebView.postMessage(JSON.stringify(message));
         return true;
       }
     } catch (error) {
@@ -159,6 +275,14 @@
         } else {
           iosLegacyHandler({ action: "authSignIn", provider: String(message.provider || "").trim().toLowerCase() });
         }
+        return true;
+      }
+    } catch (error) {
+      // Try standard ReactNativeWebView bridge below.
+    }
+    try {
+      if (window.ReactNativeWebView?.postMessage) {
+        window.ReactNativeWebView.postMessage(JSON.stringify(message));
         return true;
       }
     } catch (error) {
@@ -211,14 +335,15 @@
     uploads: "Upload predictions CSV",
     autopilot: "Weekly Brief Autopilot",
   });
-  const MASSIVE_CAPABILITY_LABELS = Object.freeze({
-    economy_treasury_yields: "Economy · Treasury Yields",
-    economy_inflation: "Economy · Inflation",
-    economy_inflation_expectations: "Economy · Inflation Expectations",
-    economy_labor_market: "Economy · Labor Market",
-    stocks_ipos: "Stocks · IPOs",
-    options_all_contracts: "Options · All Contracts",
-  });
+  const FISCALDATA_DEFAULT_PREFERRED_COLUMNS = Object.freeze([
+    "record_date",
+    "country_currency_desc",
+    "security_desc",
+    "exchange_rate",
+    "avg_interest_rate_amt",
+    "close_today_bal",
+    "tot_pub_debt_out_amt",
+  ]);
   const AI_MODEL_CATALOG = [
     {
       id: "gpt-5-nano",
@@ -372,6 +497,7 @@
       forecast: "goplan",
       annual_go: "annualgoplan",
       annual_plus: "annualplusplan",
+      annual_pro: "pro",
       annual_business: "annualbusinessplan",
       default: "pro",
     }),
@@ -384,6 +510,7 @@
       forecast: "goplan",
       annual_go: "goplanyearly",
       annual_plus: "annualplusplan",
+      annual_pro: "quanturapro",
       annual_business: "annualbusinessplan",
       default: "quanturapro",
     }),
@@ -463,8 +590,7 @@
       sidebar_market_headlines: "Market headlines",
       sidebar_ask_gpt5: "Model Council",
       sidebar_options: "Options",
-      sidebar_saved_forecasts: "Saved forecasts",
-      sidebar_backtesting: "Backtesting",
+      sidebar_currency_conversion: "Currency conversion",
       sidebar_learn_more: "Learn more",
       sidebar_screener: "Screener",
       sidebar_watchlist_alerts: "Watchlist and alerts",
@@ -526,8 +652,7 @@
       sidebar_market_headlines: "Titulares del mercado",
       sidebar_ask_gpt5: "Model Council",
       sidebar_options: "Opciones",
-      sidebar_saved_forecasts: "Pronosticos guardados",
-      sidebar_backtesting: "Backtesting",
+      sidebar_currency_conversion: "Conversion de divisas",
       sidebar_learn_more: "Mas informacion",
       sidebar_screener: "Screener",
       sidebar_watchlist_alerts: "Lista y alertas",
@@ -589,8 +714,7 @@
       sidebar_market_headlines: "Titres du marche",
       sidebar_ask_gpt5: "Model Council",
       sidebar_options: "Options",
-      sidebar_saved_forecasts: "Previsions enregistrees",
-      sidebar_backtesting: "Backtesting",
+      sidebar_currency_conversion: "Conversion de devises",
       sidebar_learn_more: "En savoir plus",
       sidebar_screener: "Screener",
       sidebar_watchlist_alerts: "Watchlist et alertes",
@@ -652,8 +776,7 @@
       sidebar_market_headlines: "Markt-Schlagzeilen",
       sidebar_ask_gpt5: "Model Council",
       sidebar_options: "Optionen",
-      sidebar_saved_forecasts: "Gespeicherte Forecasts",
-      sidebar_backtesting: "Backtesting",
+      sidebar_currency_conversion: "Waehrungsumrechnung",
       sidebar_learn_more: "Mehr erfahren",
       sidebar_screener: "Screener",
       sidebar_watchlist_alerts: "Watchlist und Alarme",
@@ -715,8 +838,7 @@
       sidebar_market_headlines: "عناوين السوق",
       sidebar_ask_gpt5: "Model Council",
       sidebar_options: "الخيارات",
-      sidebar_saved_forecasts: "التوقعات المحفوظة",
-      sidebar_backtesting: "اختبار رجعي",
+      sidebar_currency_conversion: "تحويل العملات",
       sidebar_learn_more: "اعرف المزيد",
       sidebar_screener: "الفلتر",
       sidebar_watchlist_alerts: "قائمة المراقبة والتنبيهات",
@@ -778,8 +900,7 @@
       sidebar_market_headlines: "মার্কেট হেডলাইন",
       sidebar_ask_gpt5: "Model Council",
       sidebar_options: "অপশন",
-      sidebar_saved_forecasts: "সংরক্ষিত ফোরকাস্ট",
-      sidebar_backtesting: "ব্যাকটেস্টিং",
+      sidebar_currency_conversion: "কারেন্সি কনভার্সন",
       sidebar_learn_more: "আরও জানুন",
       sidebar_screener: "স্ক্রিনার",
       sidebar_watchlist_alerts: "ওয়াচলিস্ট ও অ্যালার্ট",
@@ -829,8 +950,7 @@
     sidebar_market_headlines: ['[data-panel-target="market-headlines"] span'],
     sidebar_ask_gpt5: ['[data-panel-target="ticker-query"] span'],
     sidebar_options: ['[data-panel-target="options"] span'],
-    sidebar_saved_forecasts: ['[data-panel-target="saved"] span'],
-    sidebar_backtesting: ['[data-panel-target="backtesting"] span'],
+    sidebar_currency_conversion: ['[data-panel-target="fx"] span'],
     sidebar_learn_more: ['[data-panel-target="learn"] span'],
     sidebar_screener: ['a[href="/screener"] span'],
     sidebar_watchlist_alerts: ['a[href="/watchlist"] span'],
@@ -1218,12 +1338,6 @@
       symbols: ["AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL"],
     },
   ];
-  const BACKTEST_SOURCE_OPTIONS = [
-    { key: "python", label: "Python (.py)", ext: "py", mimeType: "text/x-python" },
-    { key: "tradingview", label: "TradingView (.pine)", ext: "pine", mimeType: "text/plain" },
-    { key: "metatrader5", label: "MetaTrader 5 (.mq5)", ext: "mq5", mimeType: "text/plain" },
-    { key: "tradelocker", label: "TradeLocker (JSON)", ext: "json", mimeType: "application/json" },
-  ];
 
   const hydrateUnsplashGallery = async (functionsClient) => {
     const gallery = document.getElementById("unsplash-grid");
@@ -1250,7 +1364,7 @@
             ? `Photo by ${photo.photographer} on Unsplash`
             : "Photo on Unsplash";
           creditLink.textContent = creditText;
-          creditLink.href = photo.photographerLink || photo.link || "https://unsplash.com/?utm_source=quantura&utm_medium=referral";
+          creditLink.href = photo.photographerLink || photo.link || "https://unsplash.com/";
           creditLink.setAttribute("target", "_blank");
           creditLink.setAttribute("rel", "noopener noreferrer");
         }
@@ -1306,6 +1420,118 @@
     }
   };
 
+  const ensureTerminalFxPanelScaffold = () => {
+    const terminalRoot = document.querySelector('[data-panels][data-panel-router="terminal"]');
+    const panelColumn = terminalRoot?.querySelector(".studio-panel");
+    if (!terminalRoot || !panelColumn) return;
+
+    const fxSidebarLink = document.querySelector('[data-panel-target="fx"]');
+    if (fxSidebarLink) {
+      fxSidebarLink.setAttribute("href", "/forecasting?panel=fx");
+    }
+
+    if (panelColumn.querySelector('[data-panel="fx"]')) return;
+
+    const fxPanel = document.createElement("section");
+    fxPanel.className = "panel hidden";
+    fxPanel.dataset.panel = "fx";
+    fxPanel.innerHTML = `
+      <div class="panel-header">
+        <h2>Currency conversion</h2>
+        <p class="small">Convert with live FX rates and keep a quick recent list for repeat checks.</p>
+      </div>
+      <form id="terminal-fx-form" class="card" autocomplete="off">
+        <div class="form-grid">
+          <div class="field">
+            <label class="label" for="terminal-fx-amount">Amount</label>
+            <input id="terminal-fx-amount" name="amount" type="number" min="0" step="0.0001" value="1" required />
+          </div>
+          <div class="field">
+            <label class="label" for="terminal-fx-base">Base currency</label>
+            <select id="terminal-fx-base" name="base" required>
+              <option value="USD">USD</option>
+              <option value="EUR">EUR</option>
+              <option value="GBP">GBP</option>
+              <option value="JPY">JPY</option>
+              <option value="CAD">CAD</option>
+              <option value="AUD">AUD</option>
+              <option value="CHF">CHF</option>
+              <option value="BDT">BDT</option>
+              <option value="INR">INR</option>
+              <option value="BTC">BTC</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="label" for="terminal-fx-quote">Quote currency</label>
+            <select id="terminal-fx-quote" name="quote" required>
+              <option value="EUR">EUR</option>
+              <option value="USD" selected>USD</option>
+              <option value="GBP">GBP</option>
+              <option value="JPY">JPY</option>
+              <option value="CAD">CAD</option>
+              <option value="AUD">AUD</option>
+              <option value="CHF">CHF</option>
+              <option value="BDT">BDT</option>
+              <option value="INR">INR</option>
+              <option value="BTC">BTC</option>
+            </select>
+          </div>
+        </div>
+        <div class="hero-actions" style="margin-top: 12px;">
+          <button type="button" class="cta secondary small" id="terminal-fx-swap">
+            <i class="iconoir-arrows-up-from-line" aria-hidden="true"></i><span>Swap</span>
+          </button>
+          <button type="submit" class="cta small fx-convert-cta" id="terminal-fx-submit">
+            <i class="iconoir-calculator" aria-hidden="true"></i><span>Convert</span>
+          </button>
+        </div>
+        <p id="terminal-fx-status" class="small muted" style="margin-top: 10px;">Ready.</p>
+      </form>
+      <div class="results-panel">
+        <h3>Conversion result</h3>
+        <div id="terminal-fx-result" class="panel-output small">Run a conversion to view rate details.</div>
+      </div>
+      <div class="card">
+        <h3>Recent conversions</h3>
+        <div id="terminal-fx-recent" class="order-list panel-output small">No recent conversions yet.</div>
+      </div>
+    `;
+
+    const screenerPanel = panelColumn.querySelector('[data-panel="screener"]');
+    if (screenerPanel?.parentNode) {
+      screenerPanel.parentNode.insertBefore(fxPanel, screenerPanel);
+    } else {
+      panelColumn.appendChild(fxPanel);
+    }
+  };
+
+  ensureTerminalFxPanelScaffold();
+  const ensureFiscalMacroPanelScaffold = () => {
+    const macroSidebarLink = document.querySelector('[data-panel-target="macro"] span');
+    if (macroSidebarLink) macroSidebarLink.textContent = "Macro Dashboard";
+    const macroPanel = document.querySelector('[data-panel="macro"]');
+    if (!macroPanel) return;
+    if (macroPanel.querySelector("#fiscaldata-macro-groups")) return;
+    macroPanel.innerHTML = `
+      <div class="panel-header">
+        <h2>Macro Dashboard</h2>
+        <p class="small">Registry-driven Fiscal Data cards with schema-aware rendering and pagination.</p>
+      </div>
+      <div class="card" style="margin-bottom:16px;">
+        <h3>U.S. Treasury Fiscal Data</h3>
+        <p class="small muted" id="fiscaldata-macro-status">Loading registry and default macro cards...</p>
+      </div>
+      <div id="fiscaldata-macro-groups" class="content-grid">
+        <div class="card">
+          <div class="small muted">Loading cards...</div>
+        </div>
+      </div>
+      <div id="fiscaldata-macro-details" class="modal hidden"></div>
+    `;
+  };
+
+  ensureFiscalMacroPanelScaffold();
+
 	  const ui = {
     headerAuth: document.getElementById("header-auth"),
     headerSignOut: document.getElementById("header-signout"),
@@ -1357,8 +1583,8 @@
     adminOrders: document.getElementById("admin-orders"),
     adminAutopilot: document.getElementById("admin-autopilot"),
     adminFeatureVoteResults: document.getElementById("admin-feature-vote-results"),
-    adminMassiveCapabilitiesStatus: document.getElementById("admin-massive-capabilities-status"),
-    adminMassiveCapabilities: document.getElementById("admin-massive-capabilities"),
+    adminFiscaldataCapabilitiesStatus: document.getElementById("admin-fiscaldata-capabilities-status"),
+    adminFiscaldataCapabilities: document.getElementById("admin-fiscaldata-capabilities"),
     contactForm: document.getElementById("contact-form"),
     navAdmin: document.getElementById("nav-admin"),
     terminalForm: document.getElementById("terminal-form"),
@@ -1389,33 +1615,39 @@
     intelOutput: document.getElementById("intel-output"),
     newsOutput: document.getElementById("news-output"),
     xTrendingOutput: document.getElementById("x-trending-output"),
-    eventsCalendarForm: document.getElementById("events-calendar-form"),
-    eventsCalendarSymbol: document.getElementById("events-calendar-symbol"),
-    eventsCalendarWindow: document.getElementById("events-calendar-window"),
-    eventsCalendarStart: document.getElementById("events-calendar-start"),
-    eventsCalendarEnd: document.getElementById("events-calendar-end"),
+    eventsCalendarPreset: document.getElementById("events-calendar-preset"),
+    eventsCalendarPrev: document.getElementById("events-calendar-prev"),
+    eventsCalendarNext: document.getElementById("events-calendar-next"),
+    eventsCalendarRangeLabel: document.getElementById("events-calendar-range-label"),
+    eventsCalendarSearch: document.getElementById("events-calendar-search"),
+    eventsCalendarSearchClear: document.getElementById("events-calendar-search-clear"),
+    eventsCalendarDayStrip: document.getElementById("events-calendar-day-strip"),
+    eventsCalendarSelectedDayTitle: document.getElementById("events-calendar-selected-day-title"),
     eventsCalendarStatus: document.getElementById("events-calendar-status"),
     eventsCalendarOutput: document.getElementById("events-calendar-output"),
+    terminalFxForm: document.getElementById("terminal-fx-form"),
+    terminalFxAmount: document.getElementById("terminal-fx-amount"),
+    terminalFxBase: document.getElementById("terminal-fx-base"),
+    terminalFxQuote: document.getElementById("terminal-fx-quote"),
+    terminalFxSwap: document.getElementById("terminal-fx-swap"),
+    terminalFxSubmit: document.getElementById("terminal-fx-submit"),
+    terminalFxStatus: document.getElementById("terminal-fx-status"),
+    terminalFxResult: document.getElementById("terminal-fx-result"),
+    terminalFxRecent: document.getElementById("terminal-fx-recent"),
     marketHeadlinesForm: document.getElementById("market-headlines-form"),
     marketHeadlinesCountry: document.getElementById("market-headlines-country"),
     marketHeadlinesLimit: document.getElementById("market-headlines-limit"),
     marketHeadlinesStatus: document.getElementById("market-headlines-status"),
     marketHeadlinesOutput: document.getElementById("market-headlines-output"),
     marketSocialOutput: document.getElementById("market-social-output"),
-    massiveEconomyStatus: document.getElementById("massive-economy-status"),
-    massiveEconomyYields: document.getElementById("massive-economy-yields"),
-    massiveEconomyInflation: document.getElementById("massive-economy-inflation"),
-    massiveEconomyInflationExpectations: document.getElementById("massive-economy-inflation-expectations"),
-    massiveEconomyLabor: document.getElementById("massive-economy-labor"),
-    massiveIpoForm: document.getElementById("massive-ipo-form"),
-    massiveIpoStart: document.getElementById("massive-ipo-start"),
-    massiveIpoEnd: document.getElementById("massive-ipo-end"),
-    massiveIpoStatus: document.getElementById("massive-ipo-status"),
-    massiveIpoStatusText: document.getElementById("massive-ipo-status-text"),
-    massiveIpoOutput: document.getElementById("massive-ipo-output"),
+    macroDashboardStatus: document.getElementById("fiscaldata-macro-status"),
+    macroDashboardGroups: document.getElementById("fiscaldata-macro-groups"),
+    macroDetailsModal: document.getElementById("fiscaldata-macro-details"),
     tickerQueryForm: document.getElementById("ticker-query-form"),
     tickerQueryTicker: document.getElementById("ticker-query-ticker"),
     tickerQueryQuestion: document.getElementById("ticker-query-question"),
+    tickerQueryPromptCards: document.getElementById("ticker-query-prompt-cards"),
+    tickerQueryPromptShuffle: document.getElementById("ticker-query-prompt-shuffle"),
     tickerQueryLanguage: document.getElementById("ticker-query-language"),
     tickerQueryProvider: document.getElementById("ticker-query-provider"),
     tickerQueryProviderHint: document.getElementById("ticker-query-provider-hint"),
@@ -1447,6 +1679,7 @@
 	    screenerLoadSelect: document.getElementById("screener-load-select"),
 	    screenerLoadButton: document.getElementById("screener-load-button"),
 	    screenerLoadStatus: document.getElementById("screener-load-status"),
+    myRequestsPanels: Array.from(document.querySelectorAll("[data-my-requests-panel]")),
 	    watchlistForm: document.getElementById("watchlist-form"),
 	    watchlistTicker: document.getElementById("watchlist-ticker"),
 	    watchlistNotes: document.getElementById("watchlist-notes"),
@@ -1507,6 +1740,9 @@
     notificationsLocationOptIn: document.getElementById("notifications-location-optin"),
     notificationsIpOptIn: document.getElementById("notifications-ip-optin"),
     notificationsRequestLocation: document.getElementById("notifications-request-location"),
+    notificationsPrefInputs: Array.from(document.querySelectorAll("[data-notification-pref]")),
+    notificationsCoarseCountry: document.getElementById("notifications-coarse-country"),
+    notificationsTimezone: document.getElementById("notifications-timezone"),
     notificationsPrivacyStatus: document.getElementById("notifications-privacy-status"),
     billingPortalLink: document.getElementById("billing-portal-link"),
     chartRangeButtons: Array.from(document.querySelectorAll("[data-chart-range]")),
@@ -1527,18 +1763,6 @@
     predictionsPlotMeta: document.getElementById("predictions-plot-meta"),
     predictionsAgentButton: document.getElementById("predictions-agent-button"),
     predictionsAgentOutput: document.getElementById("predictions-agent-output"),
-    backtestForm: document.getElementById("backtest-form"),
-    backtestStrategy: document.getElementById("backtest-strategy"),
-    backtestOutput: document.getElementById("backtest-output"),
-    backtestAgentLookback: document.getElementById("backtest-agent-lookback"),
-    backtestAgentButton: document.getElementById("backtest-agent-button"),
-    backtestAgentStatus: document.getElementById("backtest-agent-status"),
-    backtestAgentOutput: document.getElementById("backtest-agent-output"),
-    backtestLoadSelect: document.getElementById("backtest-load-select"),
-    backtestLoadId: document.getElementById("backtest-load-id"),
-    backtestLoadButton: document.getElementById("backtest-load-button"),
-    backtestLoadStatus: document.getElementById("backtest-load-status"),
-    savedBacktestsList: document.getElementById("saved-backtests-list"),
     toast: document.getElementById("toast"),
 	    purchasePanels: Array.from(document.querySelectorAll(".purchase-panel")),
 	  };
@@ -1548,6 +1772,13 @@
     ui.anonymousSignin.disabled = true;
     ui.anonymousSignin.setAttribute("aria-hidden", "true");
   }
+
+  const polymarketClientCache = new Map();
+  const trendingLogoCache = new Map();
+  const trendingLogoInFlight = new Map();
+  let polymarketSearchDebounceTimer = 0;
+  let polymarketInFlightController = null;
+  let polymarketInFlightNonce = 0;
 
 	  const state = {
 	    user: null,
@@ -1582,6 +1813,20 @@
         lastUpdatedMs: Number(cached?.lastUpdatedMs || 0) || 0,
       };
     })(),
+    notificationPrefs: (() => {
+      let cached = {};
+      try {
+        const raw = localStorage.getItem(NOTIFICATION_PREFS_CACHE_KEY);
+        cached = raw ? JSON.parse(raw) : {};
+      } catch (error) {
+        cached = {};
+      }
+      const next = { ...DEFAULT_NOTIFICATION_PREFS };
+      Object.keys(next).forEach((key) => {
+        if (typeof cached?.[key] === "boolean") next[key] = Boolean(cached[key]);
+      });
+      return next;
+    })(),
     cookieConsent: (() => {
       try {
         return localStorage.getItem(COOKIE_CONSENT_KEY) || "";
@@ -1603,12 +1848,19 @@
 	      rows: [],
       forecastId: "",
       forecastDoc: null,
-      indicatorOverlays: [],
-      forecastTablePage: 0,
+	      indicatorOverlays: [],
+	      forecastTablePage: 0,
+      forecastAiSummary: null,
+      forecastCacheMeta: null,
       newsTicker: "",
       xTicker: "",
       intelTicker: "",
       predictionsTicker: "",
+      predictionsMode: "ticker",
+      predictionsQuery: "",
+      predictionsIncludeClosed: false,
+      predictionsExpanded: false,
+      predictionsRequestKey: "",
       optionsTicker: "",
       predictionsData: null,
       tickerHistory: [],
@@ -1625,6 +1877,8 @@
       tickerQueryPendingProvider: "",
       tickerQueryPendingModel: "",
       tickerQueryFeedback: "",
+      tickerQueryPromptDeck: [],
+      tickerQueryPromptCursor: 0,
     },
     predictionsContext: {
       uploadId: "",
@@ -1638,8 +1892,26 @@
     aiAgents: [],
     aiFollowSet: new Set(),
     aiLikeSet: new Set(),
-    massiveCapabilities: null,
-    massiveCapabilitiesLoadedAt: 0,
+    fiscaldataCapabilities: null,
+    fiscaldataCapabilitiesLoadedAt: 0,
+    fiscaldataRegistry: [],
+    fiscaldataRegistryLoadedAt: 0,
+    fiscaldataMacroPages: {},
+    earningsCalendar: {
+      preset: "this-week",
+      rangeStart: "",
+      rangeEnd: "",
+      selectedDate: "",
+      search: "",
+      rows: [],
+      rowsByDate: {},
+      rangeDates: [],
+      requestCache: new Map(),
+      inFlightController: null,
+      pageByDate: {},
+      follows: new Set(),
+      followsUid: "",
+    },
     aiUsageToday: 0,
     aiUsageDateKey: "",
     aiUsageTierKey: "free",
@@ -1675,7 +1947,6 @@
 	    unsubscribeForecasts: null,
 	    unsubscribeAutopilot: null,
 	    unsubscribePredictions: null,
-      unsubscribeBacktests: null,
 	    unsubscribeTasks: null,
 	    unsubscribeWatchlist: null,
 	    unsubscribeAlerts: null,
@@ -1687,13 +1958,12 @@
       pendingCollabInviteCount: 0,
 	    screenerUrlRunLoaded: false,
       uploadUrlLoaded: false,
-      backtestUrlLoaded: false,
 	    messagingBound: false,
 	    remoteConfigLoaded: false,
     remoteFlags: {
 	      watchlistEnabled: true,
 	      forecastProphetEnabled: true,
-	      forecastTimeMixerEnabled: true,
+	      forecastCanvasEnabled: true,
         enableSocialLeaderboard: true,
         forecastModelPrimary: "Quantura Horizon",
         promoBannerText: "",
@@ -1710,9 +1980,6 @@
         nativeIapProductIds: DEFAULT_NATIVE_IAP_PRODUCT_IDS,
         adsUseRealIOS: true,
         adsUseRealAndroid: true,
-        backtestingEnabled: true,
-        backtestingFreeDailyLimit: 1,
-        backtestingProDailyLimit: 25,
 	    },
 	    remoteConfigRefreshTimer: null,
 	    remoteConfigUnsubscribe: null,
@@ -1780,9 +2047,18 @@
       unreadOnly: false,
       loading: false,
     },
+    myRequests: [],
+    myRequestsById: {},
+    myRequestsLoading: false,
+    myRequestsLoadedAt: 0,
+    myRequestsPanelState: {},
     sharedWorkspaces: [],
     unsubscribeSharedWorkspaces: null,
+    authStateBootstrapped: false,
+    postSignInReloadInFlight: false,
+    rewardIncentiveLimits: {},
   };
+  applyRuntimeBodyClasses();
 
   const remoteConfigStore = (() => {
     const listeners = new Set();
@@ -1808,10 +2084,66 @@
   // React-style hook analogue for this vanilla app: subscribe to Remote Config updates.
   const useRemoteConfig = (listener) => remoteConfigStore.subscribe(listener);
 
+  const hasSessionUser = (user = state.user) => Boolean(user?.uid);
   const isAnonymousUser = (user = state.user) => Boolean(user?.isAnonymous);
   const hasFullAccount = (user = state.user) => Boolean(user && !user.isAnonymous);
   const isAdminUser = (user = state.user) =>
     String(user?.email || "").trim().toLowerCase() === String(ADMIN_EMAIL).trim().toLowerCase();
+  const requestNativeAuthGate = ({ reason = "sign_in_required", message = "Sign in to continue." } = {}) => {
+    if (!isNativeApp()) return false;
+    const branding = {
+      name: "Quantura",
+      logoUrl: `${window.location.origin}/assets/logo.png`,
+      primaryColor: "#0f2a61",
+      accentColor: "#3ab5a2",
+      ctaColor: "#1d5ed8",
+      textColor: "#12182a",
+    };
+    const nativeAuthRequested = sendNativeAuthMessage({
+      type: "REQUEST_SIGN_IN",
+      reason: String(reason || "").trim().slice(0, 80),
+      message: String(message || "").trim().slice(0, 280),
+      branding,
+      sourcePath: window.location.pathname,
+      sourceRuntime: resolveRuntimeLabel(),
+    });
+    sendNativeBridgeMessage({
+      action: "showAuthGate",
+      reason: String(reason || "").trim().slice(0, 80),
+      message: String(message || "").trim().slice(0, 280),
+      branding,
+      sourcePath: window.location.pathname,
+      sourceRuntime: resolveRuntimeLabel(),
+      ts: Date.now(),
+    });
+    return nativeAuthRequested;
+  };
+  const ensureSessionUser = async ({ reason = "session_required", message = "Initializing guest session..." } = {}) => {
+    if (hasSessionUser()) return state.user;
+    const auth = state.clients?.auth;
+    if (!auth) throw new Error("Authentication is not initialized.");
+    const ownsBootstrap = !state.anonymousBootstrapInFlight;
+    if (ownsBootstrap) {
+      state.anonymousBootstrapInFlight = true;
+    }
+    try {
+      await auth.signInAnonymously();
+    } catch (error) {
+      requestNativeAuthGate({ reason, message });
+      throw error;
+    } finally {
+      if (ownsBootstrap) {
+        state.anonymousBootstrapInFlight = false;
+      }
+    }
+    const nextUser = auth.currentUser || state.user;
+    if (nextUser) {
+      state.user = nextUser;
+      return nextUser;
+    }
+    requestNativeAuthGate({ reason, message });
+    throw new Error("Unable to initialize guest session.");
+  };
   const requireFullAccount = (message = "Sign in to continue.", opts = {}) => {
     if (hasFullAccount()) return true;
     const redirect = opts && opts.redirect === true;
@@ -1819,7 +2151,11 @@
       ? "Create an account or sign in to use this feature."
       : String(message || "Sign in to continue.");
     showToast(nextMessage, "warn");
-    if (redirect && window.location.pathname !== "/account") {
+    requestNativeAuthGate({
+      reason: "full_account_required",
+      message: nextMessage,
+    });
+    if (redirect && !isNativeApp() && window.location.pathname !== "/account") {
       window.location.href = "/account";
     }
     return false;
@@ -1834,7 +2170,6 @@
   const shouldSkipNativeRewardAds = () => {
     if (!isNativeApp()) return true;
     if (!state.authResolved) return true;
-    if (!hasFullAccount()) return true;
     return false;
   };
 
@@ -1844,16 +2179,44 @@
     message = "This action can unlock additional output. Continue to show a rewarded ad.",
   } = {}) => {
     if (shouldSkipNativeRewardAds()) return true;
+    const normalizedReason = String(reason || "action").trim() || "action";
+    const isNavigationGate = normalizedReason === "nav";
+    const declinedAt = Number(state.rewardIncentiveLimits?.[normalizedReason] || 0);
+    if (Number.isFinite(declinedAt) && declinedAt > 0 && Date.now() - declinedAt < 10 * 60 * 1000) {
+      sendNativeBridgeMessage({
+        action: "showInterstitial",
+        reason: `${normalizedReason}_reward_limited`,
+        mode: "fallback",
+        ts: Date.now(),
+      });
+      if (isNavigationGate) return true;
+      showToast("Reward incentives are limited after skipping the video ad. Try again shortly or watch the reward ad.", "warn");
+      return false;
+    }
     const confirmed = await openConfirmModal({
       title,
       message,
-      confirmLabel: "Watch ad",
-      cancelLabel: "Skip",
+      confirmLabel: "Watch video ad",
+      cancelLabel: "Skip reward",
     });
-    if (!confirmed) return false;
+    if (!confirmed) {
+      if (!isNavigationGate) {
+        state.rewardIncentiveLimits[normalizedReason] = Date.now();
+      }
+      sendNativeBridgeMessage({
+        action: "showInterstitial",
+        reason: `${normalizedReason}_reward_declined`,
+        mode: "fallback",
+        ts: Date.now(),
+      });
+      if (isNavigationGate) return true;
+      showToast("Reward skipped. Incentive output is limited for this action.", "warn");
+      return false;
+    }
+    delete state.rewardIncentiveLimits[normalizedReason];
     sendNativeBridgeMessage({
       action: "showRewardedInterstitial",
-      reason,
+      reason: normalizedReason,
       ts: Date.now(),
     });
     return true;
@@ -1909,20 +2272,23 @@
 		        panelToPath: {
 		          forecast: "/forecasting",
               ticker: "/ticker-intelligence",
+              predictions: "/predictions",
 		          indicators: "/indicators",
               trending: "/trending",
 		          news: "/news",
               "events-calendar": "/events-calendar",
               "market-headlines": "/market-headlines",
               "ticker-query": "/model-council",
-	          options: "/options",
-	          saved: "/saved-forecasts",
-	          learn: "/studio",
+		          options: "/options",
+              fx: "/forecasting",
+		          learn: "/studio",
             },
             pathAliases: {
               "/ticker-intelligence": "ticker",
+              "/predictions": "predictions",
               "/ticker-query": "ticker-query",
               "/model-council": "ticker-query",
+              "/tools/fx": "fx",
             },
           },
 			      dashboard: {
@@ -1944,13 +2310,39 @@
 		      if (!router) return {};
 		      const mapping = {};
 		      Object.entries(router.panelToPath || {}).forEach(([panel, path]) => {
-		        mapping[String(path)] = String(panel);
+		        mapping[normalizePath(String(path))] = String(panel);
 		      });
           Object.entries(router.pathAliases || {}).forEach(([path, panel]) => {
-            mapping[String(path)] = String(panel);
+            mapping[normalizePath(String(path))] = String(panel);
           });
 		      return mapping;
 		    })();
+        const defaultPanelPath = router?.defaultPanel ? normalizePath(router.panelToPath?.[router.defaultPanel] || "") : "";
+        const normalizePanelParam = (value) => {
+          const panel = String(value || "").trim();
+          if (panel === "ticker-intelligence") return "ticker";
+          return panel;
+        };
+        const panelQueryValueForRoute = (panel) => {
+          const next = String(panel || "").trim();
+          if (!next || !router?.panelToPath?.[next]) return "";
+          const targetPath = normalizePath(router.panelToPath[next]);
+          if (!defaultPanelPath || targetPath !== defaultPanelPath) return "";
+          if (next === router.defaultPanel) return "";
+          return next;
+        };
+        const buildPanelUrl = (panel) => {
+          const next = String(panel || "").trim();
+          if (!next || !router?.panelToPath?.[next]) return "";
+          const targetPath = normalizePath(router.panelToPath[next]);
+          const params = new URLSearchParams(window.location.search || "");
+          params.delete("panel");
+          params.delete("intel");
+          const panelQuery = panelQueryValueForRoute(next);
+          if (panelQuery) params.set("panel", panelQuery);
+          const query = params.toString();
+          return query ? `${targetPath}?${query}` : targetPath;
+        };
 
 		    const setActive = (target, { pushPath = true } = {}) => {
 		      const next = String(target || "").trim();
@@ -1958,10 +2350,11 @@
 		      panels.forEach((panel) => panel.classList.toggle("hidden", panel.dataset.panel !== next));
 		      buttons.forEach((btn) => btn.classList.toggle("active", btn.dataset.panelTarget === next));
 		      if (pushPath && router?.panelToPath?.[next]) {
-		        const desired = router.panelToPath[next];
-		        if (desired && window.location.pathname !== desired) {
+		        const desiredUrl = buildPanelUrl(next);
+            const currentUrl = `${window.location.pathname}${window.location.search}`;
+		        if (desiredUrl && currentUrl !== desiredUrl) {
 		          try {
-		            history.pushState({ panel: next }, "", `${desired}${window.location.search}`);
+		            history.pushState({ panel: next }, "", desiredUrl);
 		          } catch (error) {
 		            // Ignore.
 		          }
@@ -1975,19 +2368,38 @@
 		      } catch (error) {
 		        // Ignore.
 		      }
+          try {
+            if (typeof window !== "undefined" && typeof window.__quanturaMobileBottomNavSync === "function") {
+              window.__quanturaMobileBottomNavSync();
+            }
+            if (typeof bindMobileBottomNav === "function") {
+              bindMobileBottomNav();
+            }
+          } catch (error) {
+            // Ignore.
+          }
 		    };
 
 		    const initialFromUrl = () => {
 		      try {
 		        const params = new URLSearchParams(window.location.search);
-		        const panel = String(params.get("panel") || "").trim();
-		        if (panel === "ticker-intelligence") return "ticker";
-		        if (panel) return panel;
+		        const panelFromQuery = normalizePanelParam(params.get("panel"));
+		        if (router) {
+              const panelFromPath = pathToPanel[normalizePath(window.location.pathname)];
+              if (panelFromPath) {
+                if (!defaultPanelPath || normalizePath(window.location.pathname) !== defaultPanelPath || !panelFromQuery) {
+                  return panelFromPath;
+                }
+              }
+            }
+            if (panelFromQuery) return panelFromQuery;
+            const intel = String(params.get("intel") || "").trim().toLowerCase();
+            if (intel === "predictions") return "predictions";
 		      } catch (error) {
 		        // Ignore.
 		      }
-		      if (router && pathToPanel[window.location.pathname]) {
-		        return pathToPanel[window.location.pathname];
+		      if (router && pathToPanel[normalizePath(window.location.pathname)]) {
+		        return pathToPanel[normalizePath(window.location.pathname)];
 		      }
 		      return (window.location.hash || "").replace(/^#/, "");
 		    };
@@ -2045,6 +2457,7 @@
   const bindMobileNav = () => {
     const header = document.querySelector(".header");
     const nav = header?.querySelector(".nav");
+    const logo = nav?.querySelector(".logo");
     const links = header?.querySelector(".nav-links");
     const actions = header?.querySelector(".nav-actions");
     if (!header || !nav || !links || !actions) return;
@@ -2055,10 +2468,14 @@
       toggle = document.createElement("button");
       toggle.type = "button";
       toggle.className = "mobile-nav-toggle";
-      toggle.setAttribute("aria-label", "Toggle navigation menu");
+      toggle.setAttribute("aria-label", "Open navigation menu");
       toggle.setAttribute("aria-expanded", "false");
       toggle.innerHTML = icon("menu-scale");
-      nav.appendChild(toggle);
+    }
+    if (logo?.parentNode === nav) {
+      nav.insertBefore(toggle, logo);
+    } else {
+      nav.prepend(toggle);
     }
     if (!backdrop) {
       backdrop = document.createElement("button");
@@ -2068,9 +2485,15 @@
       header.appendChild(backdrop);
     }
 
+    const setToggleVisualState = (open) => {
+      toggle?.setAttribute("aria-expanded", open ? "true" : "false");
+      toggle?.setAttribute("aria-label", open ? "Close navigation menu" : "Open navigation menu");
+      toggle.innerHTML = open ? icon("xmark") : icon("menu-scale");
+    };
+
     const close = () => {
       header.classList.remove("nav-open");
-      toggle?.setAttribute("aria-expanded", "false");
+      setToggleVisualState(false);
       backdrop?.classList.add("hidden");
       document.body.classList.remove("mobile-nav-lock");
       links.style.removeProperty("top");
@@ -2085,7 +2508,7 @@
     };
     const open = () => {
       header.classList.add("nav-open");
-      toggle?.setAttribute("aria-expanded", "true");
+      setToggleVisualState(true);
       backdrop?.classList.remove("hidden");
       document.body.classList.add("mobile-nav-lock");
       syncOverlayPositions();
@@ -2108,13 +2531,42 @@
       if (window.innerWidth > 980) close();
       else if (header.classList.contains("nav-open")) syncOverlayPositions();
     });
+
+    setToggleVisualState(header.classList.contains("nav-open"));
   };
 
   const bindMobileBottomNav = () => {
     const panelRoot = document.querySelector("[data-panels][data-panel-router]");
     const sidebarNav = document.querySelector(".app-sidebar .sidebar-nav");
-    if (!panelRoot || !sidebarNav) return;
-    const routerName = String(panelRoot.dataset.panelRouter || "").trim();
+    if (!sidebarNav) return;
+    const path = normalizePath(window.location.pathname || "/");
+    const routeRouterFallback = (() => {
+      if (
+        [
+          "/terminal",
+          "/forecasting",
+          "/ticker-intelligence",
+          "/predictions",
+          "/indicators",
+          "/trending",
+          "/news",
+          "/events-calendar",
+          "/market-headlines",
+          "/model-council",
+          "/options",
+          "/tools/fx",
+          "/screener",
+        ].includes(path)
+      ) {
+        return "terminal";
+      }
+      if (["/dashboard", "/account", "/watchlist", "/productivity", "/collaboration", "/uploads", "/autopilot", "/notifications"].includes(path)) {
+        return "dashboard";
+      }
+      return "";
+    })();
+    const routerName = String(panelRoot?.dataset?.panelRouter || routeRouterFallback || "").trim();
+    if (!routerName) return;
 
     let nav = document.getElementById("mobile-bottom-nav");
     if (!nav) {
@@ -2128,7 +2580,7 @@
     const inner = nav.querySelector(".mobile-bottom-nav-inner");
     if (!inner) return;
 
-    const sidebarLinks = Array.from(sidebarNav.querySelectorAll("a.sidebar-link"));
+    const sidebarLinks = Array.from(sidebarNav.querySelectorAll("a[href]"));
     const byPanel = new Map();
     sidebarLinks.forEach((link) => {
       const panel = String(link.dataset.panelTarget || "").trim();
@@ -2139,8 +2591,20 @@
     });
 
     const preferredByRouter = {
-      terminal: ["forecast", "/explore", "ticker", "indicators", "news"],
-      dashboard: ["orders", "/explore", "watchlist", "productivity", "uploads"],
+      terminal: [
+        "forecast",
+        "/forecasting",
+        "ticker",
+        "/ticker-intelligence",
+        "predictions",
+        "/predictions",
+        "ticker-query",
+        "/model-council",
+        "fx",
+        "/forecasting?panel=fx",
+        "/tools/fx",
+      ],
+      dashboard: ["orders", "profile", "watchlist", "uploads", "notifications", "/explore"],
     };
     const preferredPanels = preferredByRouter[routerName] || [];
     const selected = preferredPanels
@@ -2161,13 +2625,29 @@
       .map((link) => {
         const panel = String(link.dataset.panelTarget || "").trim();
         const href = String(link.getAttribute("href") || "#");
-        const iconMarkup = link.querySelector("i")?.outerHTML || "";
+        const iconMarkup = link.querySelector("i")?.outerHTML || icon("nav-arrow-right");
         const label = String(link.textContent || "").trim();
+        const compactLabelMap = {
+          "Currency conversion": "FX",
+          "Model Council": "Council",
+          "Watchlist and alerts": "Watchlist",
+          "News and data": "News",
+          "Earnings calendar": "Earnings",
+          Productivity: "Tasks",
+        };
+        const compactLabel = compactLabelMap[label] || label;
         const panelAttr = panel ? ` data-panel-target="${escapeHtml(panel)}"` : "";
-        const activeClass = link.classList.contains("active") ? " active" : "";
+        const hrefPath = normalizePath(href.split("?")[0].split("#")[0] || "");
+        const hrefQuery = href.includes("?") ? href.split("?")[1].split("#")[0] : "";
+        const currentQuery = String(window.location.search || "").replace(/^\?/, "");
+        const hrefMatchesPath = Boolean(hrefPath && hrefPath === path);
+        const hrefMatchesQuery = !hrefQuery || hrefQuery === currentQuery;
+        const activeClass =
+          link.classList.contains("active") || (hrefMatchesPath && hrefMatchesQuery) ? " active" : "";
         return `
           <a class="mobile-bottom-link${activeClass}" href="${escapeHtml(href)}"${panelAttr} aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">
             ${iconMarkup}
+            <span class="mobile-bottom-label">${escapeHtml(compactLabel)}</span>
           </a>
         `;
       })
@@ -2181,6 +2661,65 @@
 
     syncVisibility();
     window.addEventListener("resize", syncVisibility);
+    window.__quanturaMobileBottomNavSync = syncVisibility;
+  };
+
+  const bindMarketingBottomNav = () => {
+    const path = normalizePath(window.location.pathname || "/");
+    const supported = new Set(["/pricing", "/shop", "/blog", "/about", "/contact", "/events", "/research", "/explore"]);
+    if (!supported.has(path)) return;
+    if (document.querySelector(".app-sidebar .sidebar-nav")) return;
+
+    const pageMeta = {
+      "/explore": { label: "Explore", iconName: "binocular" },
+      "/research": { label: "Research", iconName: "bookmark-book" },
+      "/pricing": { label: "Pricing", iconName: "wallet" },
+      "/shop": { label: "Shop", iconName: "shop" },
+      "/contact": { label: "Contact", iconName: "mail" },
+      "/blog": { label: "Blog", iconName: "page" },
+      "/about": { label: "About", iconName: "info-circle" },
+      "/events": { label: "Events", iconName: "calendar" },
+    };
+    const baseLinks = ["/explore", "/research", "/pricing", "/shop", "/contact"];
+    const links = baseLinks.slice();
+    if (!links.includes(path)) {
+      links[0] = path;
+    }
+
+    let nav = document.getElementById("mobile-bottom-nav");
+    if (!nav) {
+      nav = document.createElement("nav");
+      nav.id = "mobile-bottom-nav";
+      nav.className = "mobile-bottom-nav hidden liquid-glass";
+      nav.setAttribute("aria-label", "Mobile navigation");
+      nav.innerHTML = '<div class="mobile-bottom-nav-inner"></div>';
+      document.body.appendChild(nav);
+    }
+    const inner = nav.querySelector(".mobile-bottom-nav-inner");
+    if (!inner) return;
+
+    inner.innerHTML = links
+      .map((href) => {
+        const meta = pageMeta[href];
+        if (!meta) return "";
+        const activeClass = href === path ? " active" : "";
+        return `
+          <a class="mobile-bottom-link${activeClass}" href="${escapeHtml(href)}" aria-label="${escapeHtml(meta.label)}" title="${escapeHtml(meta.label)}">
+            ${icon(meta.iconName)}
+            <span class="mobile-bottom-label">${escapeHtml(meta.label)}</span>
+          </a>
+        `;
+      })
+      .join("");
+
+    const syncVisibility = () => {
+      const visible = window.innerWidth <= 980;
+      nav.classList.toggle("hidden", !visible);
+      document.body.classList.toggle("mobile-bottom-nav-enabled", visible);
+    };
+    syncVisibility();
+    window.addEventListener("resize", syncVisibility);
+    window.__quanturaMobileBottomNavSync = syncVisibility;
   };
 
   const bindNativeRewardedNavigationAds = () => {
@@ -2324,7 +2863,7 @@
     const dockTop = Math.round(headerHeight + gutter);
     document.documentElement.style.setProperty("--dock-top", `${dockTop}px`);
 
-    const dock = document.querySelector(".terminal-dock, .ticker-dock");
+    const dock = document.querySelector(".terminal-context");
     const dockHeight = dock ? dock.getBoundingClientRect().height : 0;
     if (dockHeight) {
       const chartTop = Math.round(dockTop + dockHeight + gutter);
@@ -2521,7 +3060,7 @@
 	            welcome_message: "",
 	            watchlist_enabled: true,
 	            forecast_prophet_enabled: true,
-	            forecast_timemixer_enabled: true,
+	            forecast_canvas_enabled: true,
               enable_social_leaderboard: true,
               forecast_model_primary: "Quantura Horizon",
               promo_banner_text: "",
@@ -2538,9 +3077,6 @@
               native_iap_product_ids: JSON.stringify(DEFAULT_NATIVE_IAP_PRODUCT_IDS),
               ads_use_real_ios: true,
               ads_use_real_android: true,
-              backtesting_enabled: false,
-              backtesting_free_daily_limit: "0",
-              backtesting_pro_daily_limit: "0",
 	          };
 	      return rc;
 	    } catch (error) {
@@ -2618,7 +3154,7 @@
             welcome_message: "",
             watchlist_enabled: true,
             forecast_prophet_enabled: true,
-            forecast_timemixer_enabled: true,
+            forecast_canvas_enabled: true,
             enable_social_leaderboard: true,
             forecast_model_primary: "Quantura Horizon",
             promo_banner_text: "",
@@ -2635,9 +3171,6 @@
             native_iap_product_ids: JSON.stringify(DEFAULT_NATIVE_IAP_PRODUCT_IDS),
             ads_use_real_ios: true,
             ads_use_real_android: true,
-            backtesting_enabled: false,
-            backtesting_free_daily_limit: "0",
-            backtesting_pro_daily_limit: "0",
           };
 
           const wrap = {
@@ -2721,7 +3254,7 @@
           welcomeMessage: getString("welcome_message", ""),
 		      watchlistEnabled: getBool("watchlist_enabled", true),
 		      forecastProphetEnabled: getBool("forecast_prophet_enabled", true),
-		      forecastTimeMixerEnabled: getBool("forecast_timemixer_enabled", true),
+		      forecastCanvasEnabled: getBool("forecast_canvas_enabled", true),
           enableSocialLeaderboard: getBool("enable_social_leaderboard", true),
           forecastModelPrimary: getString("forecast_model_primary", "Quantura Horizon"),
           promoBannerText: getString("promo_banner_text", ""),
@@ -2738,9 +3271,6 @@
           nativeIapProductIds: getJson("native_iap_product_ids", DEFAULT_NATIVE_IAP_PRODUCT_IDS),
           adsUseRealIOS: getBool("ads_use_real_ios", true),
           adsUseRealAndroid: getBool("ads_use_real_android", true),
-          backtestingEnabled: getBool("backtesting_enabled", false),
-          backtestingFreeDailyLimit: getInt("backtesting_free_daily_limit", 0),
-          backtestingProDailyLimit: getInt("backtesting_pro_daily_limit", 0),
 		    };
 		  };
 
@@ -2752,11 +3282,6 @@
 	    document.querySelectorAll('[data-panel="watchlist"]').forEach((el) => {
 	      if (!flags.watchlistEnabled) el.classList.add("hidden");
 	    });
-
-      document.querySelectorAll("[data-backtesting-module]").forEach((el) => {
-        el.classList.toggle("hidden", !flags.backtestingEnabled);
-      });
-
       document.querySelectorAll('[data-panel-target="notifications"]').forEach((el) => {
         el.classList.toggle("hidden", !flags.pushEnabled);
       });
@@ -2807,6 +3332,20 @@
             ipRegion: String(state.notificationPrivacy?.ipRegion || "").trim(),
             timezone: String(state.notificationPrivacy?.timezone || "").trim(),
             lastUpdatedMs: Number(state.notificationPrivacy?.lastUpdatedMs || Date.now()),
+          })
+        );
+      } catch (error) {
+        // Ignore storage issues.
+      }
+    };
+
+    const persistNotificationPrefsCache = () => {
+      try {
+        localStorage.setItem(
+          NOTIFICATION_PREFS_CACHE_KEY,
+          JSON.stringify({
+            ...DEFAULT_NOTIFICATION_PREFS,
+            ...(state.notificationPrefs && typeof state.notificationPrefs === "object" ? state.notificationPrefs : {}),
           })
         );
       } catch (error) {
@@ -3199,7 +3738,7 @@
 	    logEvent("remote_config_loaded", {
 	      watchlist: state.remoteFlags.watchlistEnabled,
 	      prophet: state.remoteFlags.forecastProphetEnabled,
-	      timemixer: state.remoteFlags.forecastTimeMixerEnabled,
+	      canvas: state.remoteFlags.forecastCanvasEnabled,
 	    });
 	    return state.remoteFlags;
 	  };
@@ -3322,6 +3861,7 @@
 
   const installNativeAuthBridge = (auth) => {
     if (!isNativeApp() || !auth) return null;
+    applyRuntimeBodyClasses();
     const existingBridge = window.__quanturaAuthBridge && typeof window.__quanturaAuthBridge === "object"
       ? window.__quanturaAuthBridge
       : {};
@@ -3347,6 +3887,7 @@
     bridge.onNativeAuthState = (authState) => {
       const nextState = authState && typeof authState === "object" ? authState : {};
       state.nativeAuthState = nextState;
+      applyRuntimeBodyClasses();
       window.dispatchEvent(new CustomEvent("quantura:native-auth-state-bridge", { detail: nextState }));
       return nextState;
     };
@@ -3426,7 +3967,56 @@
     ui.notificationsLocationOptIn = document.getElementById("notifications-location-optin");
     ui.notificationsIpOptIn = document.getElementById("notifications-ip-optin");
     ui.notificationsRequestLocation = document.getElementById("notifications-request-location");
+    ui.notificationsPrefInputs = Array.from(document.querySelectorAll("[data-notification-pref]"));
+    ui.notificationsCoarseCountry = document.getElementById("notifications-coarse-country");
+    ui.notificationsTimezone = document.getElementById("notifications-timezone");
     ui.notificationsPrivacyStatus = document.getElementById("notifications-privacy-status");
+  };
+
+  const normalizeNotificationPrefsState = (input = {}, fallback = DEFAULT_NOTIFICATION_PREFS) => {
+    const next = { ...(fallback && typeof fallback === "object" ? fallback : DEFAULT_NOTIFICATION_PREFS) };
+    Object.keys(DEFAULT_NOTIFICATION_PREFS).forEach((key) => {
+      if (typeof input?.[key] === "boolean") next[key] = Boolean(input[key]);
+    });
+    return next;
+  };
+
+  const applyNotificationPrefsFromUi = () => {
+    const nextPrefs = normalizeNotificationPrefsState(state.notificationPrefs, DEFAULT_NOTIFICATION_PREFS);
+    if (Array.isArray(ui.notificationsPrefInputs)) {
+      ui.notificationsPrefInputs.forEach((input) => {
+        const key = String(input?.dataset?.notificationPref || "").trim();
+        if (!(key in DEFAULT_NOTIFICATION_PREFS)) return;
+        nextPrefs[key] = Boolean(input.checked);
+      });
+    }
+    state.notificationPrefs = nextPrefs;
+    if (!state.notificationPrefs.global) {
+      state.notificationPrefs.watchlist = false;
+      state.notificationPrefs.explore = false;
+      state.notificationPrefs.earnings = false;
+      state.notificationPrefs.ipos = false;
+      state.notificationPrefs.daily = false;
+      state.notificationPrefs.weekly = false;
+    }
+    persistNotificationPrefsCache();
+  };
+
+  const buildNotificationCountryOptions = (selected) => {
+    const preferred = normalizeCountryCode(selected || state.notificationPrivacy?.coarseLocation?.countryCode || state.preferredCountry || "US");
+    const merged = new Map();
+    merged.set(preferred, preferred === "US" ? "United States" : preferred);
+    NOTIFICATION_COUNTRY_OPTIONS.forEach((item) => {
+      merged.set(String(item.value || "").toUpperCase(), String(item.label || "").trim());
+    });
+    return Array.from(merged.entries()).map(([value, label]) => ({ value, label }));
+  };
+
+  const buildNotificationTimezoneOptions = (selected) => {
+    const fallbackZone = String(Intl.DateTimeFormat().resolvedOptions().timeZone || "Etc/UTC").trim() || "Etc/UTC";
+    const preferred = String(selected || fallbackZone).trim();
+    const merged = new Set([preferred, ...NOTIFICATION_TIMEZONE_OPTIONS]);
+    return Array.from(merged).filter(Boolean);
   };
 
   const setNotificationPrivacyStatus = (text, isError = false) => {
@@ -3439,6 +4029,7 @@
     refreshNotificationPrivacyRefs();
     if (!ui.notificationsPrivacyContainer) return;
     const privacy = state.notificationPrivacy || {};
+    state.notificationPrefs = normalizeNotificationPrefsState(state.notificationPrefs, DEFAULT_NOTIFICATION_PREFS);
     const locationConsent = Boolean(privacy.locationConsent);
     const ipRegionConsent = Boolean(privacy.ipRegionConsent);
     if (ui.notificationsLocationOptIn) ui.notificationsLocationOptIn.checked = locationConsent;
@@ -3447,12 +4038,45 @@
       ui.notificationsIpOptIn.disabled = !locationConsent;
     }
     if (ui.notificationsRequestLocation) ui.notificationsRequestLocation.disabled = !locationConsent;
+    if (Array.isArray(ui.notificationsPrefInputs)) {
+      ui.notificationsPrefInputs.forEach((input) => {
+        const key = String(input?.dataset?.notificationPref || "").trim();
+        if (!(key in DEFAULT_NOTIFICATION_PREFS)) return;
+        input.checked = Boolean(state.notificationPrefs?.[key]);
+        input.disabled = key !== "global" && !Boolean(state.notificationPrefs?.global);
+      });
+    }
+
+    const selectedCountry = normalizeCountryCode(
+      privacy?.coarseLocation?.countryCode || state.preferredCountry || "US"
+    );
+    if (ui.notificationsCoarseCountry) {
+      const options = buildNotificationCountryOptions(selectedCountry);
+      ui.notificationsCoarseCountry.innerHTML = options
+        .map((item) => `<option value="${escapeHtml(item.value)}">${escapeHtml(item.label)}</option>`)
+        .join("");
+      ui.notificationsCoarseCountry.value = selectedCountry;
+      ui.notificationsCoarseCountry.disabled = !locationConsent;
+    }
+
+    const selectedTimezone = String(privacy.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "Etc/UTC").trim();
+    if (ui.notificationsTimezone) {
+      const zones = buildNotificationTimezoneOptions(selectedTimezone);
+      ui.notificationsTimezone.innerHTML = zones
+        .map((zone) => `<option value="${escapeHtml(zone)}">${escapeHtml(zone)}</option>`)
+        .join("");
+      ui.notificationsTimezone.value = selectedTimezone || zones[0] || "Etc/UTC";
+      ui.notificationsTimezone.disabled = !locationConsent;
+    }
+
     if (!locationConsent) {
       setNotificationPrivacyStatus("Location consent is off. Notification text stays generic.");
       return;
     }
-    const timezone = String(privacy.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "").trim();
-    const country = String(privacy?.coarseLocation?.countryCode || "").trim();
+    const timezone = String(
+      ui.notificationsTimezone?.value || privacy.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || ""
+    ).trim();
+    const country = String(ui.notificationsCoarseCountry?.value || privacy?.coarseLocation?.countryCode || "").trim();
     const region = String(privacy.ipRegion || "").trim();
     const summary = [`Consent on`, country ? `country ${country}` : "", region ? `region ${region}` : "", timezone ? timezone : ""]
       .filter(Boolean)
@@ -3472,13 +4096,39 @@
     wrap.id = "notifications-privacy-controls";
     wrap.className = "notice small";
     wrap.style.marginTop = "12px";
+    const categoryItems = NOTIFICATION_PREF_DEFS.map(
+      (item) => `
+        <label class="notification-pref-item">
+          <span class="notification-pref-copy">
+            <span class="notification-pref-title">${escapeHtml(item.label)}</span>
+            <span class="notification-pref-hint">${escapeHtml(item.hint)}</span>
+          </span>
+          <input type="checkbox" data-notification-pref="${escapeHtml(item.key)}" />
+        </label>
+      `
+    ).join("");
     wrap.innerHTML = `
       <strong>Personalized notifications (optional)</strong>
       <p class="small" style="margin: 6px 0 8px;">
         Location and IP-derived region are sensitive. We only store coarse location, timezone, and region after explicit consent.
       </p>
-      <label class="feature" style="align-items:flex-start;"><span></span><input id="notifications-location-optin" type="checkbox" /> <span>Allow coarse location + timezone for notification context</span></label>
-      <label class="feature" style="align-items:flex-start;"><span></span><input id="notifications-ip-optin" type="checkbox" /> <span>Allow IP-derived region lookup/storage</span></label>
+      <div class="notification-pref-list">
+        ${categoryItems}
+      </div>
+      <div class="notification-consent-grid">
+        <label class="feature" style="align-items:flex-start;"><span></span><input id="notifications-location-optin" type="checkbox" /> <span>Allow coarse location + timezone for notification context</span></label>
+        <label class="feature" style="align-items:flex-start;"><span></span><input id="notifications-ip-optin" type="checkbox" /> <span>Allow IP-derived region lookup/storage</span></label>
+      </div>
+      <div class="notification-privacy-grid">
+        <div class="field">
+          <label class="label" for="notifications-coarse-country">Coarse country</label>
+          <select id="notifications-coarse-country" class="notification-privacy-select"></select>
+        </div>
+        <div class="field">
+          <label class="label" for="notifications-timezone">Timezone</label>
+          <select id="notifications-timezone" class="notification-privacy-select"></select>
+        </div>
+      </div>
       <div class="hero-actions" style="margin-top:8px;">
         <button class="cta secondary small" id="notifications-request-location" type="button">Capture coarse location</button>
       </div>
@@ -3532,23 +4182,51 @@
   const saveNotificationPrivacySettings = async () => {
     const locationConsent = Boolean(ui.notificationsLocationOptIn?.checked);
     const ipRegionConsent = locationConsent && Boolean(ui.notificationsIpOptIn?.checked);
+    applyNotificationPrefsFromUi();
     if (!locationConsent) {
       state.notificationPrivacy.coarseLocation = null;
       state.notificationPrivacy.ipRegion = "";
     }
     state.notificationPrivacy.locationConsent = locationConsent;
     state.notificationPrivacy.ipRegionConsent = ipRegionConsent;
-    state.notificationPrivacy.timezone = locationConsent ? (Intl.DateTimeFormat().resolvedOptions().timeZone || "") : "";
+    const selectedTimezone = String(ui.notificationsTimezone?.value || "").trim();
+    state.notificationPrivacy.timezone = locationConsent
+      ? selectedTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone || ""
+      : "";
+    if (locationConsent) {
+      const selectedCountry = normalizeCountryCode(
+        ui.notificationsCoarseCountry?.value || state.notificationPrivacy?.coarseLocation?.countryCode || state.preferredCountry || "US"
+      );
+      state.notificationPrivacy.coarseLocation = {
+        ...(state.notificationPrivacy?.coarseLocation && typeof state.notificationPrivacy.coarseLocation === "object"
+          ? state.notificationPrivacy.coarseLocation
+          : {}),
+        countryCode: selectedCountry,
+        capturedAt:
+          String(state.notificationPrivacy?.coarseLocation?.capturedAt || "").trim() || new Date().toISOString(),
+      };
+      applyCountryPreference(selectedCountry, { persist: true });
+    }
     state.notificationPrivacy.lastUpdatedMs = Date.now();
     persistNotificationPrivacyCache();
     syncNotificationPrivacyControls();
 
-    if (!hasFullAccount()) return;
+    if (!hasSessionUser()) return;
     const headers = await buildApiAuthHeaders({ includeJson: true });
     const response = await fetch("/api/notifications/preferences", {
       method: "POST",
       headers,
       body: JSON.stringify({
+        global: Boolean(state.notificationPrefs.global),
+        following: Boolean(state.notificationPrefs.following),
+        tickers: Boolean(state.notificationPrefs.tickers),
+        watchlist: Boolean(state.notificationPrefs.watchlist),
+        explore: Boolean(state.notificationPrefs.explore),
+        earnings: Boolean(state.notificationPrefs.earnings),
+        ipos: Boolean(state.notificationPrefs.ipos),
+        daily: Boolean(state.notificationPrefs.daily),
+        weekly: Boolean(state.notificationPrefs.weekly),
+        inactiveHidden: Boolean(state.notificationPrefs.inactiveHidden),
         locationConsent,
         ipRegionConsent,
         timezone: state.notificationPrivacy.timezone || "",
@@ -3563,7 +4241,7 @@
   };
 
   const loadNotificationPrivacySettings = async () => {
-    if (!hasFullAccount()) {
+    if (!hasSessionUser()) {
       syncNotificationPrivacyControls();
       return;
     }
@@ -3574,6 +4252,9 @@
     });
     if (!response.ok) return;
     const payload = await response.json().catch(() => ({}));
+    const prefs = payload?.notificationPrefs && typeof payload.notificationPrefs === "object" ? payload.notificationPrefs : {};
+    state.notificationPrefs = normalizeNotificationPrefsState(prefs, state.notificationPrefs);
+    persistNotificationPrefsCache();
     const privacy = payload?.notificationPrivacy && typeof payload.notificationPrivacy === "object" ? payload.notificationPrivacy : {};
     state.notificationPrivacy.locationConsent = Boolean(privacy.locationConsent);
     state.notificationPrivacy.ipRegionConsent = Boolean(privacy.ipRegionConsent);
@@ -3608,6 +4289,262 @@
       // Ignore storage failures.
     }
   }
+
+  let forecastCacheDbPromise = null;
+
+  const computeFastHash = (input) => {
+    const text = String(input || "");
+    let hash = 2166136261;
+    for (let i = 0; i < text.length; i += 1) {
+      hash ^= text.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(16).padStart(8, "0");
+  };
+
+  const buildForecastParamsHash = ({ ticker, interval, horizon, service, quantiles, start } = {}) => {
+    const sortedQuantiles = Array.isArray(quantiles)
+      ? quantiles
+          .map((value) => Number(value))
+          .filter((value) => Number.isFinite(value) && value > 0 && value < 1)
+          .sort((a, b) => a - b)
+      : [];
+    const payload = JSON.stringify({
+      ticker: String(ticker || "").trim().toUpperCase(),
+      interval: String(interval || "1d").trim().toLowerCase(),
+      horizon: Number.isFinite(Number(horizon)) ? Number(horizon) : 0,
+      service: String(service || "prophet").trim().toLowerCase(),
+      quantiles: sortedQuantiles,
+      start: String(start || "").trim(),
+    });
+    return computeFastHash(payload);
+  };
+
+  const buildForecastCacheOwnerId = () => {
+    const uid = String(state?.user?.uid || "").trim();
+    if (uid) return uid;
+    return "anon";
+  };
+
+  const buildForecastCacheKey = ({ ownerId, ticker, paramsHash } = {}) => {
+    const cleanOwner = String(ownerId || "anon").trim() || "anon";
+    const cleanTicker = String(normalizeTicker(ticker || "") || "TICKER").trim() || "TICKER";
+    const cleanHash = String(paramsHash || "").trim() || computeFastHash(`${cleanOwner}:${cleanTicker}:${Date.now()}`);
+    return `${cleanOwner}::${cleanTicker}::${cleanHash}`;
+  };
+
+  const readForecastCacheIndex = () => {
+    const raw = safeLocalStorageGet(FORECAST_CACHE_INDEX_KEY);
+    if (!raw) return {};
+    try {
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") return {};
+      return parsed;
+    } catch (error) {
+      return {};
+    }
+  };
+
+  const writeForecastCacheIndex = (index) => {
+    try {
+      safeLocalStorageSet(FORECAST_CACHE_INDEX_KEY, JSON.stringify(index || {}));
+    } catch (error) {
+      // Ignore cache index persistence failures.
+    }
+  };
+
+  const setForecastCacheKeyForRequest = (requestId, cacheKey) => {
+    const reqId = String(requestId || "").trim();
+    const key = String(cacheKey || "").trim();
+    if (!reqId || !key) return;
+    const index = readForecastCacheIndex();
+    index[reqId] = { cacheKey: key, updatedAtMs: Date.now() };
+    const keys = Object.keys(index);
+    if (keys.length > 220) {
+      keys
+        .sort((a, b) => Number(index[a]?.updatedAtMs || 0) - Number(index[b]?.updatedAtMs || 0))
+        .slice(0, keys.length - 220)
+        .forEach((entryKey) => {
+          delete index[entryKey];
+        });
+    }
+    writeForecastCacheIndex(index);
+  };
+
+  const getForecastCacheKeyForRequest = (requestId) => {
+    const reqId = String(requestId || "").trim();
+    if (!reqId) return "";
+    const index = readForecastCacheIndex();
+    return String(index?.[reqId]?.cacheKey || "").trim();
+  };
+
+  const normalizeForecastSeriesRows = (rows) => {
+    if (!Array.isArray(rows)) return [];
+    return rows
+      .map((rawRow) => {
+        if (!rawRow || typeof rawRow !== "object") return null;
+        const row = rawRow;
+        const rawDs = String(row.ds || row.date || row.datetime || "").trim();
+        if (!rawDs) return null;
+        const normalized = { ds: rawDs };
+        Object.entries(row).forEach(([key, value]) => {
+          if (!/^q\d{1,3}$/.test(String(key || ""))) return;
+          const numeric = Number(value);
+          if (!Number.isFinite(numeric)) return;
+          normalized[key] = Number(numeric.toFixed(6));
+        });
+        if (Object.keys(normalized).length <= 1) return null;
+        return normalized;
+      })
+      .filter(Boolean);
+  };
+
+  const openForecastCacheDb = () => {
+    if (forecastCacheDbPromise) return forecastCacheDbPromise;
+    if (typeof window === "undefined" || !window.indexedDB) {
+      forecastCacheDbPromise = Promise.resolve(null);
+      return forecastCacheDbPromise;
+    }
+    forecastCacheDbPromise = new Promise((resolve) => {
+      try {
+        const request = window.indexedDB.open(FORECAST_CACHE_DB_NAME, 1);
+        request.onupgradeneeded = () => {
+          const dbInstance = request.result;
+          if (!dbInstance.objectStoreNames.contains(FORECAST_CACHE_STORE_NAME)) {
+            dbInstance.createObjectStore(FORECAST_CACHE_STORE_NAME, { keyPath: "id" });
+          }
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => resolve(null);
+      } catch (error) {
+        resolve(null);
+      }
+    });
+    return forecastCacheDbPromise;
+  };
+
+  const withForecastCacheStore = async (mode, callback) => {
+    const dbInstance = await openForecastCacheDb();
+    if (!dbInstance) return null;
+    return new Promise((resolve) => {
+      try {
+        const tx = dbInstance.transaction(FORECAST_CACHE_STORE_NAME, mode);
+        const store = tx.objectStore(FORECAST_CACHE_STORE_NAME);
+        const request = callback(store);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => resolve(null);
+      } catch (error) {
+        resolve(null);
+      }
+    });
+  };
+
+  const putForecastCacheEntry = async (entry) => {
+    const payload = entry && typeof entry === "object" ? { ...entry } : null;
+    const id = String(payload?.id || "").trim();
+    if (!payload || !id) return false;
+    payload.id = id;
+    payload.updatedAtMs = Number(payload.updatedAtMs || Date.now()) || Date.now();
+    payload.createdAtMs = Number(payload.createdAtMs || payload.updatedAtMs) || payload.updatedAtMs;
+    let persisted = false;
+    const dbResult = await withForecastCacheStore("readwrite", (store) => store.put(payload));
+    if (dbResult) persisted = true;
+    if (!persisted) {
+      safeLocalStorageSet(`${FORECAST_CACHE_LOCAL_PREFIX}${id}`, JSON.stringify(payload));
+      persisted = true;
+    }
+    return persisted;
+  };
+
+  const getForecastCacheEntryByKey = async (cacheKey) => {
+    const id = String(cacheKey || "").trim();
+    if (!id) return null;
+    const dbValue = await withForecastCacheStore("readonly", (store) => store.get(id));
+    if (dbValue && typeof dbValue === "object") return dbValue;
+    const raw = safeLocalStorageGet(`${FORECAST_CACHE_LOCAL_PREFIX}${id}`);
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" ? parsed : null;
+    } catch (error) {
+      return null;
+    }
+  };
+
+  const saveForecastSeriesToClientCache = async ({
+    requestId = "",
+    ticker = "",
+    interval = "1d",
+    horizon = 0,
+    service = "prophet",
+    quantiles = [],
+    start = "",
+    forecastRows = [],
+    historicalRows = [],
+    chartConfig = {},
+    metrics = {},
+  } = {}) => {
+    const normalizedRows = normalizeForecastSeriesRows(forecastRows);
+    if (!normalizedRows.length) return null;
+    const ownerId = buildForecastCacheOwnerId();
+    const paramsHash = buildForecastParamsHash({ ticker, interval, horizon, service, quantiles, start });
+    const cacheKey = buildForecastCacheKey({
+      ownerId,
+      ticker,
+      paramsHash,
+    });
+    const entry = {
+      id: cacheKey,
+      requestId: String(requestId || "").trim(),
+      ownerId,
+      ticker: String(normalizeTicker(ticker || "") || "").trim(),
+      interval: String(interval || "1d").trim().toLowerCase(),
+      horizon: Number(horizon) || normalizedRows.length,
+      service: String(service || "prophet").trim().toLowerCase(),
+      quantiles: Array.isArray(quantiles) ? quantiles : [],
+      start: String(start || "").trim(),
+      paramsHash,
+      forecastRows: normalizedRows,
+      historicalRows: Array.isArray(historicalRows) ? historicalRows.slice(-1200) : [],
+      chartConfig: chartConfig && typeof chartConfig === "object" ? chartConfig : {},
+      metrics: metrics && typeof metrics === "object" ? metrics : {},
+      createdAtMs: Date.now(),
+      updatedAtMs: Date.now(),
+    };
+    await putForecastCacheEntry(entry);
+    if (entry.requestId) setForecastCacheKeyForRequest(entry.requestId, cacheKey);
+    return {
+      cacheKey,
+      paramsHash,
+      rowCount: normalizedRows.length,
+    };
+  };
+
+  const loadForecastSeriesFromClientCache = async ({
+    requestId = "",
+    ticker = "",
+    interval = "1d",
+    horizon = 0,
+    service = "prophet",
+    quantiles = [],
+    start = "",
+  } = {}) => {
+    const directCacheKey = getForecastCacheKeyForRequest(requestId);
+    if (directCacheKey) {
+      const byRequest = await getForecastCacheEntryByKey(directCacheKey);
+      if (byRequest) return byRequest;
+    }
+    const paramsHash = buildForecastParamsHash({ ticker, interval, horizon, service, quantiles, start });
+    const ownerId = buildForecastCacheOwnerId();
+    const derivedCacheKey = buildForecastCacheKey({ ownerId, ticker, paramsHash });
+    const byParams = await getForecastCacheEntryByKey(derivedCacheKey);
+    if (byParams) {
+      const reqId = String(requestId || byParams.requestId || "").trim();
+      if (reqId) setForecastCacheKeyForRequest(reqId, derivedCacheKey);
+      return byParams;
+    }
+    return null;
+  };
 
   const i18nTextDefaults = new WeakMap();
   const i18nAttrDefaults = new WeakMap();
@@ -4101,6 +5038,9 @@
 	            startWorkspaceTasks(db, resolved);
 	            startWatchlist(db, resolved);
 	            startPriceAlerts(db, resolved);
+              fetchMyRequestsList({ force: true }).then(() => {
+                renderMyRequestsPanels();
+              });
 	          }
 	        },
 	        () => {
@@ -4438,7 +5378,7 @@
           <summary>Full AI output</summary>
           <pre class="small">${escapeHtml(cleanAnswer || "No output returned.")}</pre>
         </details>
-        <div class="small muted solve-now-meta">Context ticker: ${escapeHtml(ticker)} · Model: ${escapeHtml(model || "gpt-5-mini")} · Provider: ${escapeHtml(provider || "openai")}</div>
+        <div class="small muted solve-now-meta">Context ticker: ${escapeHtml(ticker)} · Provider: ${escapeHtml(provider || "openai")}</div>
         <p class="small muted solve-now-disclaimer">LLMs can sometimes make mistakes.</p>
       </article>
     `;
@@ -4553,6 +5493,16 @@
       const source = String(element.getAttribute("data-solve-source") || "").trim() || "contact";
       bindClick(element, source);
     });
+    if (!state.solveNowDelegateBound) {
+      state.solveNowDelegateBound = true;
+      document.addEventListener("click", (event) => {
+        const trigger = event.target?.closest?.('[data-action="open-solve-now"]');
+        if (!(trigger instanceof HTMLElement)) return;
+        event.preventDefault();
+        const source = String(trigger.getAttribute("data-solve-source") || "").trim() || "contact";
+        openSolveNowModal({ source });
+      });
+    }
     if (!state.solveNowHashChecked) {
       state.solveNowHashChecked = true;
       if (window.location.hash === "#solve-now") {
@@ -4743,7 +5693,10 @@
   const applyAdFreeExperience = () => {
     const adFree = hasAdFreeEntitlement();
     document.body.classList.toggle("ad-free-user", adFree);
-    if (!adFree) return;
+    if (!adFree) {
+      scheduleNativeInlineAdsRefresh();
+      return;
+    }
     const selectors = [
       '[data-ad-slot]',
       '.ad-slot',
@@ -4751,6 +5704,7 @@
       '#ad-banner',
       '#ad-container',
       '.promo-banner-ad',
+      '.native-inline-ad-slot',
     ];
     selectors.forEach((selector) => {
       document.querySelectorAll(selector).forEach((node) => {
@@ -4758,6 +5712,453 @@
         node.setAttribute("aria-hidden", "true");
       });
     });
+    scheduleNativeInlineAdsRefresh();
+  };
+
+  const nativeInlineAdState = {
+    listenerBound: false,
+    sequence: 0,
+    pendingBySlot: new Map(),
+    impressionObserver: null,
+    seenImpressions: new Set(),
+    observedContainers: new WeakSet(),
+    observerMap: new Map(),
+    refreshTimer: 0,
+  };
+
+  const getNativeInlineAdRules = () => {
+    const defaults = { feedStart: 6, feedInterval: 8, pageMidpoint: 0.55 };
+    const raw = window.__QUANTURA_NATIVE_AD_RULES__ && typeof window.__QUANTURA_NATIVE_AD_RULES__ === "object"
+      ? window.__QUANTURA_NATIVE_AD_RULES__
+      : {};
+    const feedStart = Number(raw.feedStart);
+    const feedInterval = Number(raw.feedInterval);
+    const pageMidpoint = Number(raw.pageMidpoint);
+    return {
+      feedStart: Number.isFinite(feedStart) ? Math.max(3, Math.min(20, Math.floor(feedStart))) : defaults.feedStart,
+      feedInterval: Number.isFinite(feedInterval) ? Math.max(3, Math.min(20, Math.floor(feedInterval))) : defaults.feedInterval,
+      pageMidpoint: Number.isFinite(pageMidpoint) ? Math.max(0.2, Math.min(0.9, pageMidpoint)) : defaults.pageMidpoint,
+    };
+  };
+
+  const isNativeInlineAdEligible = () => {
+    if (!isNativeApp()) return false;
+    if (hasAdFreeEntitlement()) return false;
+    if (state.authGateVisible) return false;
+    const pathname = String(window.location.pathname || "").trim().toLowerCase();
+    if (pathname === "/account" || pathname === "/pricing") return false;
+    return true;
+  };
+
+  const ensureNativeInlineAdListener = () => {
+    if (nativeInlineAdState.listenerBound) return;
+    nativeInlineAdState.listenerBound = true;
+    window.addEventListener("quantura:native-feed-ad", (event) => {
+      const detail = event?.detail && typeof event.detail === "object" ? event.detail : {};
+      const slotId = String(detail.slotId || "").trim();
+      if (!slotId) return;
+      const pending = nativeInlineAdState.pendingBySlot.get(slotId);
+      if (!pending) return;
+      nativeInlineAdState.pendingBySlot.delete(slotId);
+      if (detail.ok === false) {
+        pending.reject(new Error(String(detail.error || "Native ad failed.")));
+        return;
+      }
+      pending.resolve(detail);
+    });
+  };
+
+  const reportNativeInlineAdBridgeEvent = (action, payload = {}) => {
+    if (!isNativeApp()) return false;
+    return sendNativeBridgeMessage({
+      action,
+      slotId: String(payload.slotId || "").trim(),
+      placement: String(payload.placement || "").trim(),
+      adUnitId: String(payload.adUnitId || "").trim(),
+    });
+  };
+
+  const requestNativeInlineAd = ({ slotId, placement, variant = "nativeAdvanced", timeoutMs = 12000 } = {}) =>
+    new Promise((resolve, reject) => {
+      if (!isNativeInlineAdEligible()) {
+        reject(new Error("native_ads_ineligible"));
+        return;
+      }
+      ensureNativeInlineAdListener();
+      const resolvedSlotId = String(slotId || "").trim();
+      if (!resolvedSlotId) {
+        reject(new Error("slot_id_missing"));
+        return;
+      }
+      const timeoutHandle = window.setTimeout(() => {
+        nativeInlineAdState.pendingBySlot.delete(resolvedSlotId);
+        reject(new Error("native_ad_timeout"));
+      }, Math.max(2000, Number(timeoutMs) || 12000));
+      nativeInlineAdState.pendingBySlot.set(resolvedSlotId, {
+        resolve: (detail) => {
+          clearTimeout(timeoutHandle);
+          resolve(detail);
+        },
+        reject: (error) => {
+          clearTimeout(timeoutHandle);
+          reject(error);
+        },
+      });
+      let sent = sendNativeBridgeMessage({
+        action: "requestNativeFeedAd",
+        slotId: resolvedSlotId,
+        placement: String(placement || "inline").trim(),
+        variant: String(variant || "nativeAdvanced").trim(),
+      });
+      if (!sent) {
+        sent =
+          sendNativeBridgeMessage({
+            action: "showNativeAd",
+            slotId: resolvedSlotId,
+            placement: String(placement || "inline").trim(),
+            variant: String(variant || "nativeAdvanced").trim(),
+          }) ||
+          sendNativeBridgeMessage({
+            action: "loadNativeAd",
+            slotId: resolvedSlotId,
+            placement: String(placement || "inline").trim(),
+            variant: String(variant || "nativeAdvanced").trim(),
+          });
+      }
+      if (!sent) {
+        sent =
+          sendNativeAuthMessage({
+            type: "REQUEST_NATIVE_FEED_AD",
+            slotId: resolvedSlotId,
+            placement: String(placement || "inline").trim(),
+            variant: String(variant || "nativeAdvanced").trim(),
+          }) ||
+          sendNativeAuthMessage({
+            type: "SHOW_NATIVE_AD",
+            slotId: resolvedSlotId,
+            placement: String(placement || "inline").trim(),
+            variant: String(variant || "nativeAdvanced").trim(),
+          });
+      }
+      if (!sent) {
+        clearTimeout(timeoutHandle);
+        nativeInlineAdState.pendingBySlot.delete(resolvedSlotId);
+        reject(new Error("native_bridge_unavailable"));
+      }
+    });
+
+  const toNativeInlineAdImage = (value) => {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    if (/^data:image\//i.test(raw)) return raw;
+    if (/^https?:\/\//i.test(raw)) return raw;
+    return `data:image/png;base64,${raw}`;
+  };
+
+  const ensureNativeInlineAdImpressionObserver = () => {
+    if (nativeInlineAdState.impressionObserver || typeof IntersectionObserver !== "function") return;
+    nativeInlineAdState.impressionObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting || entry.intersectionRatio < 0.45) return;
+          const target = entry.target;
+          const slotId = String(target.dataset.nativeInlineAdSlot || "").trim();
+          if (!slotId || nativeInlineAdState.seenImpressions.has(slotId)) return;
+          nativeInlineAdState.seenImpressions.add(slotId);
+          const placement = String(target.dataset.placement || "inline").trim();
+          const adUnitId = String(target.dataset.adUnitId || "").trim();
+          logEvent("ad_impression", { slot_id: slotId, placement, ad_unit_id: adUnitId, runtime: resolveRuntimeLabel() });
+          reportNativeInlineAdBridgeEvent("nativeFeedAdImpression", { slotId, placement, adUnitId });
+        });
+      },
+      { threshold: [0.45] }
+    );
+  };
+
+  const buildNativeInlineAdSlot = (slotId, placement) => {
+    const node = document.createElement("article");
+    node.className = "native-inline-ad-slot native-inline-ad-loading";
+    node.dataset.nativeInlineAdSlot = slotId;
+    node.dataset.placement = placement;
+    node.dataset.adSlot = "native-inline";
+    node.setAttribute("aria-live", "polite");
+    node.innerHTML = `
+      <div class="native-inline-ad-skeleton">
+        <div class="skeleton-line w50"></div>
+        <div class="skeleton-line w85"></div>
+        <div class="skeleton-line w70"></div>
+        <div class="native-inline-ad-media"></div>
+      </div>
+    `;
+    return node;
+  };
+
+  const hydrateNativeInlineAdSlot = (slotNode, detail = {}) => {
+    const ad = detail?.ad && typeof detail.ad === "object" ? detail.ad : detail;
+    const slotId = String(detail.slotId || slotNode.dataset.nativeInlineAdSlot || "").trim();
+    const placement = String(detail.placement || slotNode.dataset.placement || "inline").trim();
+    const adUnitId = String(detail.adUnitId || ad?.adUnitId || "").trim();
+    const headline = String(ad?.headline || "Sponsored insight").trim();
+    const body = String(ad?.body || "This section is sponsored.").trim();
+    const cta = String(ad?.callToAction || "Learn more").trim();
+    const advertiser = String(ad?.advertiser || ad?.store || "Sponsored").trim();
+    const iconUrl = toNativeInlineAdImage(ad?.iconDataUrl || ad?.iconUrl || "");
+    const mediaUrl = toNativeInlineAdImage(ad?.mediaDataUrl || ad?.mediaUrl || "");
+    const destinationUrl = /^https?:\/\//i.test(String(ad?.destinationUrl || "").trim()) ? String(ad.destinationUrl).trim() : "";
+
+    slotNode.classList.remove("native-inline-ad-loading");
+    slotNode.classList.add("native-inline-ad-ready");
+    slotNode.dataset.adUnitId = adUnitId;
+    slotNode.innerHTML = `
+      <div class="native-inline-ad-inner">
+        <div class="native-inline-ad-top">
+          <span class="native-inline-ad-badge">Ad</span>
+          <span class="native-inline-ad-choices">AdChoices</span>
+        </div>
+        <div class="native-inline-ad-main">
+          <div class="native-inline-ad-copy">
+            <h4 class="native-inline-ad-title">${escapeHtml(headline)}</h4>
+            <p class="native-inline-ad-body">${escapeHtml(body)}</p>
+            <div class="native-inline-ad-meta">${escapeHtml(advertiser)}</div>
+          </div>
+          ${
+            iconUrl
+              ? `<img class="native-inline-ad-icon" src="${escapeHtml(iconUrl)}" alt="" loading="lazy" />`
+              : `<div class="native-inline-ad-icon native-inline-ad-icon-fallback">Q</div>`
+          }
+        </div>
+        ${
+          mediaUrl
+            ? `<img class="native-inline-ad-media" src="${escapeHtml(mediaUrl)}" alt="" loading="lazy" />`
+            : `<div class="native-inline-ad-media native-inline-ad-media-fallback" aria-hidden="true"></div>`
+        }
+        <button type="button" class="task-chip native-inline-ad-cta" data-native-inline-ad-click="1">${escapeHtml(cta)}</button>
+      </div>
+    `;
+
+    slotNode.addEventListener("click", (event) => {
+      if (!event.target.closest("[data-native-inline-ad-click='1']")) return;
+      logEvent("ad_click", { slot_id: slotId, placement, ad_unit_id: adUnitId, runtime: resolveRuntimeLabel() });
+      reportNativeInlineAdBridgeEvent("nativeFeedAdClick", { slotId, placement, adUnitId });
+      if (destinationUrl) {
+        window.open(destinationUrl, "_blank", "noopener,noreferrer");
+      }
+    });
+    ensureNativeInlineAdImpressionObserver();
+    nativeInlineAdState.impressionObserver?.observe(slotNode);
+  };
+
+  const loadNativeInlineAdSlot = async (slotNode) => {
+    if (!slotNode || !isNativeInlineAdEligible()) {
+      slotNode?.remove();
+      return;
+    }
+    const slotId = String(slotNode.dataset.nativeInlineAdSlot || "").trim();
+    const placement = String(slotNode.dataset.placement || "inline").trim();
+    logEvent("ad_request", { slot_id: slotId, placement, runtime: resolveRuntimeLabel() });
+    try {
+      const detail = await requestNativeInlineAd({ slotId, placement, variant: "nativeAdvanced" });
+      hydrateNativeInlineAdSlot(slotNode, detail || {});
+      const adUnitId = String(detail?.adUnitId || detail?.ad?.adUnitId || "").trim();
+      logEvent("ad_loaded", { slot_id: slotId, placement, ad_unit_id: adUnitId, runtime: resolveRuntimeLabel() });
+    } catch (error) {
+      logEvent("ad_failed", {
+        slot_id: slotId,
+        placement,
+        reason: String(error?.message || "load_failed").slice(0, 120),
+        runtime: resolveRuntimeLabel(),
+      });
+      hydrateNativeInlineAdSlot(slotNode, {
+        slotId,
+        placement,
+        adUnitId: "native_fallback",
+        ad: {
+          headline: "Sponsored insight",
+          body: "Ad inventory is loading. You can continue using Quantura while this slot refreshes.",
+          callToAction: "View plans",
+          advertiser: "Quantura",
+          destinationUrl: `${window.location.origin}/pricing`,
+        },
+      });
+      slotNode.dataset.nativeInlineAdFallback = "1";
+    }
+  };
+
+  const normalizeNativeAdInjectionPayload = (rawPayload) => {
+    let parsed = rawPayload;
+    if (typeof rawPayload === "string") {
+      const text = rawPayload.trim();
+      if (!text) return null;
+      try {
+        parsed = JSON.parse(text);
+      } catch (_error) {
+        return null;
+      }
+    }
+    if (!parsed || typeof parsed !== "object") return null;
+    const sourceAd = parsed.ad && typeof parsed.ad === "object" ? parsed.ad : parsed;
+    const slotId = String(parsed.slotId || sourceAd.slotId || `legacy-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`).trim();
+    const placement = String(parsed.placement || sourceAd.placement || "inline").trim() || "inline";
+    const adUnitId = String(parsed.adUnitId || sourceAd.adUnitId || "").trim();
+    const containerId = String(parsed.containerId || sourceAd.containerId || "").trim();
+    const iconUrl = sourceAd.iconUrl || sourceAd.iconURI || sourceAd.icon?.uri || sourceAd.iconDataUrl || "";
+    const mediaUrl = sourceAd.mediaUrl || sourceAd.mediaURI || sourceAd.imageUrl || sourceAd.mediaDataUrl || "";
+    return {
+      slotId,
+      placement,
+      adUnitId,
+      containerId,
+      ad: {
+        headline: String(sourceAd.headline || sourceAd.title || "Sponsored insight").trim(),
+        body: String(sourceAd.body || sourceAd.description || "Sponsored content from our advertising partner.").trim(),
+        callToAction: String(sourceAd.callToAction || sourceAd.cta || "Learn more").trim(),
+        advertiser: String(sourceAd.advertiser || sourceAd.brand || sourceAd.store || "Sponsored").trim(),
+        destinationUrl: String(sourceAd.destinationUrl || sourceAd.clickUrl || "").trim(),
+        iconUrl: String(iconUrl || "").trim(),
+        mediaUrl: String(mediaUrl || "").trim(),
+      },
+    };
+  };
+
+  const findNativeInlineAdSlotNode = (slotId) => {
+    const targetId = String(slotId || "").trim();
+    if (!targetId) return null;
+    return (
+      Array.from(document.querySelectorAll("[data-native-inline-ad-slot]")).find(
+        (node) => String(node.dataset.nativeInlineAdSlot || "").trim() === targetId
+      ) || null
+    );
+  };
+
+  const resolveNativeAdInjectionContainer = (containerId) => {
+    const id = String(containerId || "").trim();
+    if (id) {
+      const explicit = document.getElementById(id);
+      if (explicit) return explicit;
+    }
+    const legacy = document.getElementById("native-ad-container");
+    if (legacy) return legacy;
+    const targets = collectNativeInlineAdTargets();
+    if (targets.length) return targets[0];
+    return null;
+  };
+
+  const registerLegacyNativeAdInjectionHook = () => {
+    if (typeof window.handleNativeAd === "function" && window.handleNativeAd.__quanturaBound === true) return;
+    const handler = (rawPayload) => {
+      if (!isNativeInlineAdEligible()) return false;
+      const detail = normalizeNativeAdInjectionPayload(rawPayload);
+      if (!detail) return false;
+      let slotNode = findNativeInlineAdSlotNode(detail.slotId);
+      if (!slotNode) {
+        const container = resolveNativeAdInjectionContainer(detail.containerId);
+        if (!container) return false;
+        slotNode = buildNativeInlineAdSlot(detail.slotId, detail.placement);
+        container.prepend(slotNode);
+      }
+      hydrateNativeInlineAdSlot(slotNode, detail);
+      return true;
+    };
+    handler.__quanturaBound = true;
+    window.handleNativeAd = handler;
+  };
+
+  const collectNativeInlineAdTargets = () => {
+    const ids = [
+      "trending-list",
+      "intel-output",
+      "news-output",
+      "x-trending-output",
+      "events-calendar-output",
+      "market-headlines-output",
+      "market-social-output",
+      "fiscaldata-macro-groups",
+      "ticker-output",
+      "ticker-predictions-output",
+      "screener-output",
+      "watchlist-list",
+      "alerts-list",
+      "notifications-items",
+      "saved-forecasts-list",
+      "user-orders",
+      "user-forecasts",
+      "options-output",
+      "predictions-output",
+      "autopilot-output",
+      "productivity-board",
+      "collab-collaborators-list",
+      "collab-invites-list",
+    ];
+    const set = new Set();
+    ids.forEach((id) => {
+      const node = document.getElementById(id);
+      if (node) set.add(node);
+    });
+    document.querySelectorAll(".panel-output, .order-list, .news-stream").forEach((node) => {
+      if (node?.id === "profile-status" || node?.id === "auth-email-message") return;
+      set.add(node);
+    });
+    return Array.from(set);
+  };
+
+  const maybeInjectNativeInlineAd = (container) => {
+    if (!container) return;
+    if (!isNativeInlineAdEligible()) {
+      container.querySelectorAll("[data-native-inline-ad-slot]").forEach((node) => node.remove());
+      return;
+    }
+    if (container.closest("form, .auth-card, .checkout-shell, .purchase-panel")) return;
+    if (container.querySelector("[data-native-inline-ad-slot]")) return;
+    if (container.classList.contains("hidden")) return;
+    if (String(container.dataset.loading || "") === "true") return;
+
+    const children = Array.from(container.children).filter((child) => !child.matches("[data-native-inline-ad-slot]"));
+    const textLength = String(container.textContent || "").trim().length;
+    if (children.length < 2 && textLength < 240) return;
+
+    nativeInlineAdState.sequence += 1;
+    const slotId = `inline-${Date.now()}-${nativeInlineAdState.sequence}`;
+    const placement = container.id ? `section_${container.id}` : "section_panel";
+    const slotNode = buildNativeInlineAdSlot(slotId, placement);
+    const rules = getNativeInlineAdRules();
+    const index = Math.max(0, Math.min(children.length - 1, Math.floor(children.length * rules.pageMidpoint)));
+    const anchor = children[index] || null;
+    if (anchor && anchor.parentElement === container && anchor.nextSibling) {
+      container.insertBefore(slotNode, anchor.nextSibling);
+    } else if (anchor && anchor.parentElement === container) {
+      container.appendChild(slotNode);
+    } else {
+      container.appendChild(slotNode);
+    }
+    loadNativeInlineAdSlot(slotNode).catch(() => undefined);
+  };
+
+  const observeNativeInlineAdContainer = (container) => {
+    if (!container || nativeInlineAdState.observedContainers.has(container)) return;
+    nativeInlineAdState.observedContainers.add(container);
+    const observer = new MutationObserver(() => {
+      if (nativeInlineAdState.refreshTimer) {
+        clearTimeout(nativeInlineAdState.refreshTimer);
+      }
+      nativeInlineAdState.refreshTimer = window.setTimeout(() => {
+        maybeInjectNativeInlineAd(container);
+      }, 180);
+    });
+    observer.observe(container, { childList: true, subtree: false });
+    nativeInlineAdState.observerMap.set(container, observer);
+  };
+
+  const refreshNativeInlineAds = () => {
+    const targets = collectNativeInlineAdTargets();
+    targets.forEach((container) => {
+      observeNativeInlineAdContainer(container);
+      maybeInjectNativeInlineAd(container);
+    });
+  };
+
+  const scheduleNativeInlineAdsRefresh = () => {
+    if (nativeInlineAdState.refreshTimer) clearTimeout(nativeInlineAdState.refreshTimer);
+    nativeInlineAdState.refreshTimer = window.setTimeout(refreshNativeInlineAds, 200);
   };
 
   const getWorkspaceSeatLimitForTier = () => {
@@ -4772,24 +6173,32 @@
 
   const setPurchaseState = (user) => {
     const accountAuthed = hasFullAccount(user);
+    const sessionAuthed = hasSessionUser(user);
+    const guestSession = isAnonymousUser(user);
+    const nativeIapRuntime = isNativeIapRuntime();
     ui.purchasePanels.forEach((panel) => {
       const button = panel.querySelector('[data-action="purchase"]');
       const note = panel.querySelector(".purchase-note");
       const success = panel.querySelector(".purchase-success");
       const stripe = panel.querySelector('[data-action="stripe"]');
       if (!button || !note) return;
-
+      button.disabled = false;
+      button.textContent = accountAuthed
+        ? button.dataset.labelAuth || "Choose plan"
+        : button.dataset.labelGuest || "Continue as guest";
       if (accountAuthed) {
-        button.disabled = false;
-        button.textContent = button.dataset.labelAuth || "Choose plan";
         note.textContent = "Subscriptions activate in your dashboard after payment confirmation.";
+      } else if (nativeIapRuntime) {
+        note.textContent = guestSession || sessionAuthed
+          ? "Guest checkout is enabled in native app. Purchases can be merged after sign-in."
+          : "Continue as guest to initialize native checkout.";
       } else {
-        button.disabled = true;
-        button.textContent = button.dataset.labelGuest || "Sign in to purchase";
-        note.textContent = "You must sign in to purchase. Checkout is secured to your account.";
-        stripe?.classList.add("hidden");
-        success?.classList.add("hidden");
+        note.textContent = guestSession || sessionAuthed
+          ? "Guest checkout is enabled on web. Purchases can be merged after sign-in."
+          : "Continue as guest to initialize secure checkout.";
       }
+      stripe?.classList.add("hidden");
+      success?.classList.add("hidden");
     });
   };
 
@@ -4832,12 +6241,12 @@
     }
     if (ui.billingPortalLink) {
       const nativeBilling = isNativeIosStoreKitCheckoutOnly() || isNativeAndroidPlayBillingCheckout();
-      ui.billingPortalLink.textContent = accountAuthed
+      ui.billingPortalLink.textContent = (accountAuthed || (nativeBilling && guestSession))
         ? nativeBilling
           ? nativeBillingPortalLabel()
           : "Open billing portal"
         : "Sign in to manage billing";
-      ui.billingPortalLink.setAttribute("href", accountAuthed ? "#" : "/account");
+      ui.billingPortalLink.setAttribute("href", (accountAuthed || (nativeBilling && guestSession)) ? "#" : "/account");
       ui.billingPortalLink.setAttribute("target", "_self");
       ui.billingPortalLink.removeAttribute("rel");
     }
@@ -5037,121 +6446,175 @@
     renderAdminFeatureVoteSummary(result.data || {});
   };
 
-  const renderMassiveCapabilitiesAudit = (payload = null) => {
-    if (!ui.adminMassiveCapabilities) return;
-    const capabilities = payload && typeof payload.capabilities === "object" ? payload.capabilities : {};
-    const entries = Object.entries(capabilities);
-    if (!entries.length) {
-      ui.adminMassiveCapabilities.innerHTML = `<div class="small muted">No capability probe results available yet.</div>`;
-      if (ui.adminMassiveCapabilitiesStatus) {
-        ui.adminMassiveCapabilitiesStatus.textContent = "Capability audit did not return endpoint results.";
+  const renderFiscaldataCapabilitiesAudit = (payload = null) => {
+    if (!ui.adminFiscaldataCapabilities) return;
+    const rows = Array.isArray(payload?.results) ? payload.results : [];
+    if (!rows.length) {
+      ui.adminFiscaldataCapabilities.innerHTML = `<div class="small muted">No Fiscal Data endpoint checks have run yet.</div>`;
+      if (ui.adminFiscaldataCapabilitiesStatus) {
+        ui.adminFiscaldataCapabilitiesStatus.textContent = "Endpoint check returned no rows.";
       }
       return;
     }
 
-    const cards = entries
-      .map(([key, raw]) => {
-        const row = raw && typeof raw === "object" ? raw : {};
-        const status = String(row.status || "ERROR").toUpperCase();
-        const httpStatus = Number(row.httpStatus || 0);
-        const available = status === "AVAILABLE";
-        const label = MASSIVE_CAPABILITY_LABELS[key] || key.replace(/_/g, " ");
-        const statusClass = available ? "completed" : status === "UNAUTHORIZED" ? "pending" : "cancelled";
-        const message = String(row.message || "").trim();
+    ui.adminFiscaldataCapabilities.innerHTML = rows
+      .map((row) => {
+        const status = String(row?.status || "error").toLowerCase();
+        const statusClass = status === "available" ? "completed" : status === "warning" ? "pending" : "cancelled";
+        const detail = String(row?.detail || "").trim();
         return `
           <div class="order-card">
             <div class="order-header">
-              <div class="order-title">${escapeHtml(label)}</div>
-              <span class="status ${statusClass}">${escapeHtml(status)}</span>
+              <div class="order-title">${escapeHtml(String(row?.title || row?.id || "Fiscal endpoint"))}</div>
+              <span class="status ${statusClass}">${escapeHtml(status.toUpperCase())}</span>
             </div>
             <div class="order-meta">
-              <div><strong>HTTP</strong> ${Number.isFinite(httpStatus) && httpStatus > 0 ? httpStatus : "—"}</div>
-              <div><strong>Path</strong> ${escapeHtml(String(row.path || "—"))}</div>
-              <div><strong>Availability</strong> ${available ? "Enabled" : "Unavailable"}</div>
-              <div><strong>Detail</strong> ${escapeHtml(message || "—")}</div>
+              <div><strong>Endpoint</strong> ${escapeHtml(String(row?.endpoint || "—"))}</div>
+              <div><strong>Category</strong> ${escapeHtml(String(row?.category || "—"))}</div>
+              <div><strong>Rows</strong> ${Number.isFinite(Number(row?.count)) ? Number(row?.count) : "—"}</div>
+              <div><strong>Detail</strong> ${escapeHtml(detail || "—")}</div>
             </div>
           </div>
         `;
       })
       .join("");
-    ui.adminMassiveCapabilities.innerHTML = cards;
 
-    if (ui.adminMassiveCapabilitiesStatus) {
+    if (ui.adminFiscaldataCapabilitiesStatus) {
       const generated = payload?.generatedAt ? formatTimestamp(payload.generatedAt) : "—";
       const fromCache = payload?.fromCache ? " (cached)" : "";
-      ui.adminMassiveCapabilitiesStatus.textContent = `Last capability audit: ${generated}${fromCache}.`;
+      ui.adminFiscaldataCapabilitiesStatus.textContent = `Last Fiscal Data endpoint check: ${generated}${fromCache}.`;
     }
   };
 
-  const isMassiveCapabilityAvailable = (key) => {
-    const capabilities = state.massiveCapabilities && typeof state.massiveCapabilities === "object"
-      ? state.massiveCapabilities
-      : {};
-    const row = capabilities[key] && typeof capabilities[key] === "object" ? capabilities[key] : {};
-    return String(row.status || "").toUpperCase() === "AVAILABLE";
-  };
-
-  const loadMassiveCapabilities = async ({ force = false } = {}) => {
+  const loadFiscaldataRegistry = async ({ force = false } = {}) => {
     const now = Date.now();
-    if (!force && state.massiveCapabilities && now - Number(state.massiveCapabilitiesLoadedAt || 0) < 5 * 60 * 1000) {
-      renderMassiveCapabilitiesAudit({
-        generatedAt: new Date(state.massiveCapabilitiesLoadedAt).toISOString(),
-        fromCache: true,
-        capabilities: state.massiveCapabilities,
-      });
-      return state.massiveCapabilities;
+    if (!force && Array.isArray(state.fiscaldataRegistry) && state.fiscaldataRegistry.length && now - Number(state.fiscaldataRegistryLoadedAt || 0) < 5 * 60 * 1000) {
+      return state.fiscaldataRegistry;
     }
-
-    if (ui.adminMassiveCapabilitiesStatus) {
-      ui.adminMassiveCapabilitiesStatus.textContent = "Running capability audit...";
-    }
-
     const headers = await buildApiAuthHeaders();
-    const query = force ? "?force=1" : "";
-    const response = await fetch(`/api/massive/capabilities${query}`, {
+    const response = await fetch("/api/fiscaldata/registry", {
       method: "GET",
       headers,
       credentials: "same-origin",
     });
-    if (!response.ok) {
-      throw new Error("Unable to load Massive capabilities.");
-    }
-    const payload = await response.json();
-    const capabilities = payload && typeof payload.capabilities === "object" ? payload.capabilities : {};
-    state.massiveCapabilities = capabilities;
-    state.massiveCapabilitiesLoadedAt = now;
-    renderMassiveCapabilitiesAudit(payload);
-    return capabilities;
+    if (!response.ok) throw new Error("Unable to load Fiscal Data registry.");
+    const payload = await response.json().catch(() => ({}));
+    const endpoints = Array.isArray(payload?.endpoints) ? payload.endpoints : [];
+    state.fiscaldataRegistry = endpoints;
+    state.fiscaldataRegistryLoadedAt = now;
+    return endpoints;
   };
 
-  const fetchMassiveApi = async (path, params = {}) => {
-    const query = new URLSearchParams();
-    Object.entries(params || {}).forEach(([key, value]) => {
-      if (value === null || value === undefined) return;
-      const text = String(value).trim();
-      if (!text) return;
-      query.set(key, text);
+  const loadFiscaldataCapabilities = async ({ force = false } = {}) => {
+    const now = Date.now();
+    if (!force && state.fiscaldataCapabilities && now - Number(state.fiscaldataCapabilitiesLoadedAt || 0) < 5 * 60 * 1000) {
+      renderFiscaldataCapabilitiesAudit({
+        generatedAt: new Date(state.fiscaldataCapabilitiesLoadedAt).toISOString(),
+        fromCache: true,
+        results: state.fiscaldataCapabilities,
+      });
+      return state.fiscaldataCapabilities;
+    }
+    if (ui.adminFiscaldataCapabilitiesStatus) {
+      ui.adminFiscaldataCapabilitiesStatus.textContent = "Running Fiscal Data endpoint check...";
+    }
+    const endpoints = await loadFiscaldataRegistry({ force });
+    const checks = await Promise.all(
+      endpoints.map(async (entry) => {
+        const endpoint = String(entry?.endpoint || "").trim();
+        const params = new URLSearchParams({
+          endpoint,
+          format: "json",
+          "page[number]": "1",
+          "page[size]": "1",
+        });
+        if (Array.isArray(entry?.defaultQuery?.fields) && entry.defaultQuery.fields.length) {
+          params.set("fields", entry.defaultQuery.fields.join(","));
+        }
+        try {
+          const headers = await buildApiAuthHeaders();
+          const response = await fetch(`/api/fiscaldata?${params.toString()}`, {
+            method: "GET",
+            headers,
+            credentials: "same-origin",
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            return {
+              id: entry?.id,
+              title: entry?.title,
+              category: entry?.category,
+              endpoint,
+              status: "error",
+              detail: String(payload?.detail || payload?.error || `HTTP ${response.status}`),
+              count: 0,
+            };
+          }
+          const count = Number(payload?.meta?.count || payload?.data?.length || 0);
+          return {
+            id: entry?.id,
+            title: entry?.title,
+            category: entry?.category,
+            endpoint,
+            status: "available",
+            detail: String(payload?.links?.self || "OK"),
+            count,
+          };
+        } catch (error) {
+          return {
+            id: entry?.id,
+            title: entry?.title,
+            category: entry?.category,
+            endpoint,
+            status: "error",
+            detail: String(error?.message || "request_failed"),
+            count: 0,
+          };
+        }
+      })
+    );
+
+    state.fiscaldataCapabilities = checks;
+    state.fiscaldataCapabilitiesLoadedAt = now;
+    renderFiscaldataCapabilitiesAudit({
+      generatedAt: new Date(now).toISOString(),
+      fromCache: false,
+      results: checks,
     });
+    return checks;
+  };
+
+  const fetchFiscaldataApi = async ({
+    endpoint,
+    fields = [],
+    filter = "",
+    sort = [],
+    pageNumber = 1,
+    pageSize = 100,
+  }) => {
+    const cleanEndpoint = String(endpoint || "").trim();
+    if (!cleanEndpoint) throw new Error("Fiscal Data endpoint is required.");
+    const params = new URLSearchParams();
+    params.set("endpoint", cleanEndpoint);
+    params.set("format", "json");
+    params.set("page[number]", String(Math.max(1, Number(pageNumber || 1))));
+    params.set("page[size]", String(Math.max(1, Math.min(5000, Number(pageSize || 100)))));
+    if (Array.isArray(fields) && fields.length) params.set("fields", fields.join(","));
+    if (Array.isArray(sort) && sort.length) params.set("sort", sort.join(","));
+    if (String(filter || "").trim()) params.set("filter", String(filter || "").trim());
+
     const headers = await buildApiAuthHeaders();
-    const url = query.toString() ? `${path}?${query.toString()}` : path;
-    const response = await fetch(url, {
+    const response = await fetch(`/api/fiscaldata?${params.toString()}`, {
       method: "GET",
       headers,
       credentials: "same-origin",
     });
+    const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      let message = "Massive endpoint unavailable.";
-      try {
-        const payload = await response.json();
-        if (payload && typeof payload.error === "string" && payload.error.trim()) {
-          message = payload.error.trim();
-        }
-      } catch (error) {
-        // Ignore parse failures.
-      }
-      throw new Error(message);
+      const detail = String(payload?.detail || payload?.error || `HTTP ${response.status}`).trim();
+      throw new Error(detail || "Fiscal Data request failed.");
     }
-    return response.json();
+    return payload;
   };
 
   const buildMiniLineSvg = (values = []) => {
@@ -5178,190 +6641,297 @@
     `;
   };
 
-  const MASSIVE_SERIES_FREQUENCY = Object.freeze({
-    economy_treasury_yields: "Updated daily",
-    economy_inflation: "Updated monthly",
-    economy_inflation_expectations: "Updated weekly",
-    economy_labor_market: "Updated weekly",
-  });
-
-  const renderResearchMacroSeries = (container, payload, fallbackLabel, frequencyLabel = "") => {
-    if (!container) return;
-    const rows = Array.isArray(payload?.rows) ? payload.rows : [];
-    if (!rows.length) {
-      container.innerHTML = `<div class="small muted">No ${escapeHtml(fallbackLabel)} data returned.</div>`;
-      return;
-    }
-    const latest = rows.slice(0, 8);
-    const values = latest
-      .map((row) => Number(row?.value))
-      .filter((value) => Number.isFinite(value))
-      .reverse();
-    const sparkline = buildMiniLineSvg(values);
-    const listMarkup = latest
-      .map((row) => {
-        const date = escapeHtml(String(row?.date || "—"));
-        const value = Number(row?.value);
-        const pretty = Number.isFinite(value) ? value.toFixed(3) : "—";
-        return `<div class="small"><strong>${date}</strong> · ${escapeHtml(pretty)}</div>`;
-      })
-      .join("");
-    const generatedAtRaw = String(payload?.generatedAt || payload?.updatedAt || "").trim();
-    const generatedAt = generatedAtRaw && Number.isFinite(Date.parse(generatedAtRaw))
-      ? new Date(generatedAtRaw).toLocaleString()
-      : "";
-    container.innerHTML = `
-      ${frequencyLabel ? `<div class="small muted" style="margin-bottom:6px;">${escapeHtml(frequencyLabel)}${generatedAt ? ` · ${escapeHtml(generatedAt)}` : ""}</div>` : ""}
-      ${sparkline}
-      ${listMarkup}
-    `;
+  const inferFiscalFieldKind = (field, dataType) => {
+    const fieldName = String(field || "").toLowerCase();
+    const type = String(dataType || "").toLowerCase();
+    if (type.includes("date") || fieldName.endsWith("_date")) return "date";
+    if (type.includes("currency") || fieldName.includes("amount") || fieldName.includes("balance")) return "currency";
+    if (type.includes("percent") || fieldName.includes("percent") || fieldName.includes("rate")) return "percent";
+    if (type.includes("number") || type.includes("integer") || type.includes("float") || type.includes("double")) return "number";
+    return "string";
   };
 
-  const renderResearchIpoTable = (payload) => {
-    if (!ui.massiveIpoOutput) return;
-    const items = Array.isArray(payload?.items) ? payload.items : [];
-    if (!items.length) {
-      ui.massiveIpoOutput.innerHTML = `<div class="small muted">No IPO rows found for the selected filters.</div>`;
-      return;
+  const normalizeFiscalCellValue = (value, kind) => {
+    if (value == null) return null;
+    if (typeof value === "string" && ["", "null", "undefined", "na", "n/a", "-"].includes(value.trim().toLowerCase())) return null;
+    if (kind === "number" || kind === "currency" || kind === "percent") {
+      const parsed = Number(String(value).replace(/,/g, "").trim());
+      return Number.isFinite(parsed) ? parsed : null;
     }
-    const rows = items
-      .slice(0, 120)
+    if (kind === "date") {
+      const parsed = Date.parse(String(value).trim());
+      return Number.isFinite(parsed) ? new Date(parsed).toISOString() : String(value);
+    }
+    return String(value);
+  };
+
+  const formatFiscalCellValue = (value, kind) => {
+    if (value == null || value === "") return "—";
+    if (kind === "date") {
+      const parsed = Date.parse(String(value));
+      return Number.isFinite(parsed) ? new Date(parsed).toLocaleDateString() : String(value);
+    }
+    if (kind === "currency") {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) return "—";
+      return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(numeric);
+    }
+    if (kind === "percent") {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) return "—";
+      return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 3 }).format(numeric)}%`;
+    }
+    if (kind === "number") {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) return "—";
+      return new Intl.NumberFormat(undefined, { maximumFractionDigits: 3 }).format(numeric);
+    }
+    return String(value);
+  };
+
+  const chooseFiscalDisplayColumns = (meta, rows, preferredOrder = []) => {
+    const labels = meta && typeof meta === "object" && meta.labels && typeof meta.labels === "object" ? meta.labels : {};
+    const candidates = Object.keys(labels).length ? Object.keys(labels) : (Array.isArray(rows) && rows[0] ? Object.keys(rows[0]) : []);
+    const order = [];
+    const seen = new Set();
+    [...preferredOrder, ...FISCALDATA_DEFAULT_PREFERRED_COLUMNS].forEach((field) => {
+      if (!candidates.includes(field) || seen.has(field)) return;
+      seen.add(field);
+      order.push(field);
+    });
+    candidates.forEach((field) => {
+      if (seen.has(field)) return;
+      seen.add(field);
+      order.push(field);
+    });
+    return order.slice(0, 8);
+  };
+
+  const renderFiscalMacroTable = (payload, preferredOrder = []) => {
+    const rows = Array.isArray(payload?.data) ? payload.data : [];
+    if (!rows.length) return `<div class="small muted">No rows returned for this query.</div>`;
+    const meta = payload?.meta && typeof payload.meta === "object" ? payload.meta : {};
+    const labels = meta.labels && typeof meta.labels === "object" ? meta.labels : {};
+    const dataTypes = meta.dataTypes && typeof meta.dataTypes === "object" ? meta.dataTypes : {};
+    const columns = chooseFiscalDisplayColumns(meta, rows, preferredOrder);
+    if (!columns.length) return `<div class="small muted">No displayable columns.</div>`;
+
+    const normalized = rows.slice(0, 20).map((row) => {
+      const source = row && typeof row === "object" ? row : {};
+      const next = {};
+      columns.forEach((field) => {
+        const kind = inferFiscalFieldKind(field, dataTypes[field]);
+        next[field] = normalizeFiscalCellValue(source[field], kind);
+      });
+      return next;
+    });
+
+    const seriesValues = normalized
       .map((row) => {
-        const date = escapeHtml(String(row?.date || "—"));
-        const symbol = escapeHtml(String(row?.symbol || "—"));
-        const exchange = escapeHtml(String(row?.exchange || "—"));
-        const status = escapeHtml(String(row?.status || "—"));
-        const name = escapeHtml(String(row?.name || "—"));
-        return `<tr><td>${date}</td><td>${symbol}</td><td>${exchange}</td><td>${status}</td><td>${name}</td></tr>`;
+        const candidateField = columns.find((field) => {
+          const kind = inferFiscalFieldKind(field, dataTypes[field]);
+          return kind === "number" || kind === "currency" || kind === "percent";
+        });
+        if (!candidateField) return null;
+        const numeric = Number(row[candidateField]);
+        return Number.isFinite(numeric) ? numeric : null;
+      })
+      .filter((value) => value != null);
+    const sparkline = seriesValues.length >= 2 ? buildMiniLineSvg(seriesValues.reverse()) : "";
+
+    const head = columns
+      .map((field) => `<th>${escapeHtml(String(labels[field] || field).trim())}</th>`)
+      .join("");
+    const body = normalized
+      .map((row) => {
+        const cells = columns
+          .map((field) => {
+            const kind = inferFiscalFieldKind(field, dataTypes[field]);
+            return `<td>${escapeHtml(formatFiscalCellValue(row[field], kind))}</td>`;
+          })
+          .join("");
+        return `<tr>${cells}</tr>`;
       })
       .join("");
-    ui.massiveIpoOutput.innerHTML = `
-      <div style="overflow:auto;">
-        <table class="insider-table">
-          <thead><tr><th>Date</th><th>Symbol</th><th>Exchange</th><th>Status</th><th>Name</th></tr></thead>
-          <tbody>${rows}</tbody>
+
+    return `
+      ${sparkline ? `<div class="fiscaldata-sparkline">${sparkline}</div>` : ""}
+      <div class="fiscaldata-table-wrap">
+        <table class="insider-table fiscaldata-macro-table">
+          <thead><tr>${head}</tr></thead>
+          <tbody>${body}</tbody>
         </table>
       </div>
     `;
   };
 
-  const loadResearchMacroWidgets = async () => {
-    if (!ui.massiveEconomyStatus) return;
-    ui.massiveEconomyStatus.textContent = "Loading Massive macro series...";
-    logEvent("research_macro_load_started", { source: "massive" });
-    try {
-      await loadMassiveCapabilities({ force: false });
-      const requests = [
-        {
-          key: "economy_treasury_yields",
-          path: "/api/massive/economy/treasury-yields",
-          node: ui.massiveEconomyYields,
-          label: "treasury yield",
-        },
-        {
-          key: "economy_inflation",
-          path: "/api/massive/economy/inflation",
-          node: ui.massiveEconomyInflation,
-          label: "inflation",
-        },
-        {
-          key: "economy_inflation_expectations",
-          path: "/api/massive/economy/inflation-expectations",
-          node: ui.massiveEconomyInflationExpectations,
-          label: "inflation expectations",
-        },
-        {
-          key: "economy_labor_market",
-          path: "/api/massive/economy/labor-market",
-          node: ui.massiveEconomyLabor,
-          label: "labor market",
-        },
-      ];
+  const buildFiscalCardQueryParams = (entry, pageNumber) => {
+    const defaultQuery = entry?.defaultQuery && typeof entry.defaultQuery === "object" ? entry.defaultQuery : {};
+    const fields = Array.isArray(defaultQuery.fields) ? defaultQuery.fields : [];
+    const sort = Array.isArray(defaultQuery.sort) ? defaultQuery.sort : [];
+    const filter = String(defaultQuery.filter || "").trim();
+    const pageSize = Number(defaultQuery?.page?.size || 100);
+    const nextPageNumber = Math.max(1, Number(pageNumber || defaultQuery?.page?.number || 1));
+    return { fields, sort, filter, pageSize, pageNumber: nextPageNumber };
+  };
 
-      await Promise.all(
-        requests.map(async (item) => {
-          if (!isMassiveCapabilityAvailable(item.key)) {
-            if (item.node) {
-              item.node.innerHTML = `<div class="small muted">Not available on current Massive plan.</div>`;
-            }
-            logEvent("research_macro_capability_blocked", { series_key: item.key });
-            return;
-          }
-          try {
-            const payload = await fetchMassiveApi(item.path, { limit: 120 });
-            renderResearchMacroSeries(
-              item.node,
-              payload,
-              item.label,
-              MASSIVE_SERIES_FREQUENCY[item.key] || "Updated periodically"
-            );
-            logEvent("research_macro_series_loaded", {
-              series_key: item.key,
-              rows: Number(payload?.count || payload?.rows?.length || 0),
-            });
-          } catch (error) {
-            if (item.node) {
-              item.node.innerHTML = `<div class="small muted">${escapeHtml(extractErrorMessage(error, "Unable to load series."))}</div>`;
-            }
-            logEvent("research_macro_series_error", {
-              series_key: item.key,
-              message: String(error?.message || "load_failed").slice(0, 120),
-            });
-          }
+  const renderFiscalMacroDetailsModal = (entry, cardState) => {
+    const modal = document.getElementById("fiscaldata-macro-details");
+    if (!modal) return;
+    const payload = cardState?.payload || {};
+    const query = cardState?.query || {};
+    const endpoint = String(entry?.endpoint || "");
+    const queryString = new URLSearchParams({
+      endpoint,
+      format: "json",
+      "page[number]": String(query.pageNumber || 1),
+      "page[size]": String(query.pageSize || 100),
+      ...(Array.isArray(query.fields) && query.fields.length ? { fields: query.fields.join(",") } : {}),
+      ...(Array.isArray(query.sort) && query.sort.length ? { sort: query.sort.join(",") } : {}),
+      ...(String(query.filter || "").trim() ? { filter: String(query.filter || "").trim() } : {}),
+    }).toString();
+
+    modal.innerHTML = `
+      <div class="modal-backdrop" data-fiscaldata-close></div>
+      <div class="modal-dialog card" style="max-width: 980px; width: calc(100% - 24px); max-height: calc(100vh - 40px); overflow:auto;">
+        <button class="modal-close" type="button" data-fiscaldata-close aria-label="Close details">×</button>
+        <h3>${escapeHtml(String(entry?.title || "Fiscal Data details"))}</h3>
+        <p class="small muted fiscaldata-detail-line">Endpoint: <code class="fiscaldata-detail-code">${escapeHtml(endpoint)}</code></p>
+        <p class="small muted fiscaldata-detail-line">Query: <code class="fiscaldata-detail-code">${escapeHtml(queryString)}</code></p>
+        <div class="fiscaldata-detail-table">${renderFiscalMacroTable(payload, [entry?.ui?.primaryDateField, entry?.ui?.primaryValueField].filter(Boolean))}</div>
+      </div>
+    `;
+    modal.classList.remove("hidden");
+  };
+
+  const renderFiscalMacroDashboard = () => {
+    if (!ui.macroDashboardGroups) return;
+    const entries = Array.isArray(state.fiscaldataRegistry) ? state.fiscaldataRegistry : [];
+    if (!entries.length) {
+      ui.macroDashboardGroups.innerHTML = `<div class="small muted">No macro cards configured.</div>`;
+      return;
+    }
+
+    const grouped = new Map();
+    entries.forEach((entry) => {
+      const category = String(entry?.category || "Other");
+      if (!grouped.has(category)) grouped.set(category, []);
+      grouped.get(category).push(entry);
+    });
+
+    const blocks = Array.from(grouped.entries()).map(([category, cards]) => {
+      const cardMarkup = cards
+        .map((entry) => {
+          const cardState = state.fiscaldataMacroPages?.[entry.id] || {};
+          const payload = cardState.payload || {};
+          const rows = Array.isArray(payload?.data) ? payload.data : [];
+          const meta = payload?.meta && typeof payload.meta === "object" ? payload.meta : {};
+          const count = Number(meta?.count || rows.length || 0);
+          const totalPages = Number(meta?.totalPages || 1);
+          const pageNumber = Number(cardState.pageNumber || 1);
+          const hasNextLink = Boolean(String(payload?.links?.next || "").trim());
+          const canLoadMore = hasNextLink || totalPages > pageNumber;
+          const frequency = String(entry?.updateCadence || "periodic").trim();
+          const table = rows.length
+            ? renderFiscalMacroTable(payload, [entry?.ui?.primaryDateField, entry?.ui?.primaryValueField].filter(Boolean))
+            : `<div class="small muted">${escapeHtml(String(cardState.error || "Loading..."))}</div>`;
+          return `
+            <article class="card fiscaldata-card" data-fiscaldata-card-id="${escapeHtml(entry.id)}">
+              <div class="order-header">
+                <div class="order-title">${escapeHtml(String(entry?.title || entry?.id || "Macro card"))}</div>
+                <span class="status pending">${escapeHtml(frequency)}</span>
+              </div>
+              <div class="small muted fiscaldata-endpoint">${escapeHtml(String(entry?.endpoint || ""))}</div>
+              <div class="fiscaldata-card-table">${table}</div>
+              <div class="hero-actions fiscaldata-card-actions">
+                <button class="cta secondary small" type="button" data-fiscaldata-view-details="${escapeHtml(entry.id)}">View details</button>
+                ${
+                  canLoadMore
+                    ? `<button class="cta secondary small" type="button" data-fiscaldata-load-more="${escapeHtml(entry.id)}">Load more</button>`
+                    : ""
+                }
+              </div>
+              <div class="small muted fiscaldata-card-meta">Rows: ${Number.isFinite(count) ? count : rows.length} · Page ${pageNumber}${totalPages > 1 ? ` of ${totalPages}` : ""}</div>
+            </article>
+          `;
         })
-      );
-      ui.massiveEconomyStatus.textContent = "Macro context loaded via Massive capability-gated endpoints.";
-      logEvent("research_macro_loaded", { source: "massive" });
+        .join("");
+      return `
+        <section style="margin-bottom:18px;">
+          <h3 style="margin-bottom:10px;">${escapeHtml(String(category))}</h3>
+          <div class="content-grid">${cardMarkup}</div>
+        </section>
+      `;
+    });
+
+    ui.macroDashboardGroups.innerHTML = blocks.join("");
+  };
+
+  const loadFiscalMacroCard = async (entry, { pageNumber = 1, append = false } = {}) => {
+    const query = buildFiscalCardQueryParams(entry, pageNumber);
+    const cardId = String(entry?.id || "").trim();
+    if (!cardId) return;
+    try {
+      const payload = await fetchFiscaldataApi({
+        endpoint: entry.endpoint,
+        fields: query.fields,
+        filter: query.filter,
+        sort: query.sort,
+        pageNumber: query.pageNumber,
+        pageSize: query.pageSize,
+      });
+      const previous = append ? state.fiscaldataMacroPages?.[cardId]?.payload : null;
+      const mergedRows = append
+        ? [...(Array.isArray(previous?.data) ? previous.data : []), ...(Array.isArray(payload?.data) ? payload.data : [])]
+        : (Array.isArray(payload?.data) ? payload.data : []);
+      let nextPageNumber = null;
+      const nextHref = String(payload?.links?.next || "").trim();
+      if (nextHref) {
+        try {
+          const nextUrl = new URL(nextHref, window.location.origin);
+          const parsedPage = Number(nextUrl.searchParams.get("page[number]") || "");
+          if (Number.isFinite(parsedPage) && parsedPage > 0) {
+            nextPageNumber = Math.floor(parsedPage);
+          }
+        } catch (error) {
+          nextPageNumber = null;
+        }
+      }
+      const nextPayload = {
+        ...payload,
+        data: mergedRows,
+      };
+      state.fiscaldataMacroPages[cardId] = {
+        payload: nextPayload,
+        pageNumber: query.pageNumber,
+        nextPageNumber,
+        query,
+        error: "",
+      };
     } catch (error) {
-      ui.massiveEconomyStatus.textContent = extractErrorMessage(error, "Macro context is unavailable.");
-      [ui.massiveEconomyYields, ui.massiveEconomyInflation, ui.massiveEconomyInflationExpectations, ui.massiveEconomyLabor].forEach((node) => {
-        if (!node) return;
-        node.innerHTML = `<div class="small muted">Capability audit unavailable.</div>`;
-      });
-      logEvent("research_macro_error", {
-        message: String(error?.message || "load_failed").slice(0, 120),
-      });
+      state.fiscaldataMacroPages[cardId] = {
+        ...(state.fiscaldataMacroPages?.[cardId] || {}),
+        error: extractErrorMessage(error, "Unable to load macro card."),
+      };
     }
   };
 
-  const loadResearchIpoCalendar = async ({ force = false } = {}) => {
-    if (!ui.massiveIpoOutput || !ui.massiveIpoStatusText) return;
-    logEvent("research_ipo_load_started", { force: Boolean(force) });
+  const loadFiscalMacroDashboard = async ({ force = false } = {}) => {
+    if (!ui.macroDashboardStatus || !ui.macroDashboardGroups) return;
+    ui.macroDashboardStatus.textContent = "Loading Fiscal Data macro cards...";
+    logEvent("macro_dashboard_load_started", { source: "fiscaldata" });
     try {
-      await loadMassiveCapabilities({ force: false });
-      if (!isMassiveCapabilityAvailable("stocks_ipos")) {
-        ui.massiveIpoStatusText.textContent = "IPO endpoint is not available in the current Massive plan.";
-        ui.massiveIpoOutput.innerHTML = `<div class="small muted">IPO data is currently gated off by plan capability.</div>`;
-        logEvent("research_ipo_capability_blocked", {});
-        return;
-      }
-
-      const start = String(ui.massiveIpoStart?.value || "").trim();
-      const end = String(ui.massiveIpoEnd?.value || "").trim();
-      const status = String(ui.massiveIpoStatus?.value || "").trim().toLowerCase();
-      ui.massiveIpoStatusText.textContent = "Loading IPO calendar...";
-      const payload = await fetchMassiveApi("/api/massive/stocks/ipos", {
-        start,
-        end,
-        status,
-        limit: 250,
-        force: force ? "1" : "",
-      });
-      renderResearchIpoTable(payload);
-      const count = Number(payload?.count || 0);
-      ui.massiveIpoStatusText.textContent = count
-        ? `Loaded ${count} IPO row${count === 1 ? "" : "s"}.`
-        : "No IPO rows for selected filters.";
-      logEvent("research_ipo_loaded", {
-        count,
-        status: status || "all",
-        start_date: start,
-        end_date: end,
-      });
+      const entries = await loadFiscaldataRegistry({ force });
+      await Promise.all(entries.map((entry) => loadFiscalMacroCard(entry, { pageNumber: 1, append: false })));
+      renderFiscalMacroDashboard();
+      ui.macroDashboardStatus.textContent = `Loaded ${entries.length} Fiscal Data cards.`;
+      logEvent("macro_dashboard_loaded", { source: "fiscaldata", cards: entries.length });
     } catch (error) {
-      ui.massiveIpoStatusText.textContent = extractErrorMessage(error, "Unable to load IPO calendar.");
-      ui.massiveIpoOutput.innerHTML = `<div class="small muted">${escapeHtml(extractErrorMessage(error, "Unable to load IPO calendar."))}</div>`;
-      logEvent("research_ipo_error", {
+      ui.macroDashboardStatus.textContent = extractErrorMessage(error, "Macro dashboard is unavailable.");
+      ui.macroDashboardGroups.innerHTML = `<div class="small muted">${escapeHtml(
+        extractErrorMessage(error, "Macro dashboard is unavailable.")
+      )}</div>`;
+      logEvent("macro_dashboard_error", {
         message: String(error?.message || "load_failed").slice(0, 120),
       });
     }
@@ -6277,221 +7847,6 @@
       );
   };
 
-  const syncBacktestStrategyFields = () => {
-    if (!ui.backtestStrategy) return;
-    const selected = String(ui.backtestStrategy.value || "").trim();
-    document.querySelectorAll("[data-backtest-strategy]").forEach((el) => {
-      const key = String(el.dataset.backtestStrategy || "").trim();
-      el.classList.toggle("hidden", key && key !== selected);
-    });
-  };
-
-  const renderBacktestSourceControls = (backtestId, selectedKey = "python") => {
-    const options = BACKTEST_SOURCE_OPTIONS.map(
-      (item) =>
-        `<option value="${item.key}" ${item.key === selectedKey ? "selected" : ""}>${item.label}</option>`
-    ).join("");
-    return `
-      <div class="backtest-source-controls">
-        <label class="label" for="backtest-source-${escapeHtml(backtestId)}">Download source</label>
-        <div class="backtest-source-row">
-          <select id="backtest-source-${escapeHtml(backtestId)}" data-backtest-source-format data-backtest-id="${escapeHtml(backtestId)}">
-            ${options}
-          </select>
-          <button class="cta secondary small" type="button" data-action="download-backtest-source" data-backtest-id="${escapeHtml(
-            backtestId
-          )}">${icon("download")}<span>Download Source</span></button>
-        </div>
-      </div>
-    `;
-  };
-
-  const resolveBacktestSourceExport = (doc, selectedKey) => {
-    const key = String(selectedKey || "python").trim().toLowerCase();
-    const exports = doc?.exportSources && typeof doc.exportSources === "object" ? doc.exportSources : {};
-    const candidate = exports?.[key] && typeof exports[key] === "object" ? exports[key] : null;
-    if (candidate?.content) {
-      return {
-        content: String(candidate.content),
-        filename: String(candidate.filename || ""),
-        mimeType: String(candidate.mimeType || ""),
-      };
-    }
-    if (key === "python") {
-      const fallback = String(doc?.code || "").trim();
-      if (fallback) {
-        return {
-          content: fallback,
-          filename: "",
-          mimeType: "text/x-python",
-        };
-      }
-    }
-    return null;
-  };
-
-  const renderBacktestPicker = (items) => {
-    if (!ui.backtestLoadSelect) return;
-    const list = Array.isArray(items) ? items : [];
-    ui.backtestLoadSelect.innerHTML = `<option value="">Select a backtest</option>`;
-    list.slice(0, 60).forEach((item) => {
-      const opt = document.createElement("option");
-      opt.value = item.id;
-      const createdLabel = item.createdAt ? formatTimestamp(item.createdAt) : "";
-      opt.textContent = `${item.title || item.ticker || "Backtest"}${createdLabel ? ` · ${createdLabel}` : ""}`;
-      ui.backtestLoadSelect.appendChild(opt);
-    });
-  };
-
-  const renderBacktestList = (items) => {
-    if (!ui.savedBacktestsList) return;
-    const list = Array.isArray(items) ? items : [];
-    ui.savedBacktestsList.innerHTML = "";
-    if (!list.length) {
-      ui.savedBacktestsList.innerHTML = `<div class="small muted">No backtests yet.</div>`;
-      return;
-    }
-
-    list.slice(0, 30).forEach((item) => {
-      const card = document.createElement("div");
-      card.className = "order-card";
-      const title = escapeHtml(item.title || item.ticker || "Backtest");
-      const strategy = escapeHtml(item.strategy || "");
-      const interval = escapeHtml(item.interval || "");
-      const created = item.createdAt ? formatTimestamp(item.createdAt) : "";
-      const metrics = item.metrics || {};
-      const returnPct = typeof metrics.ReturnPct === "number" ? `${metrics.ReturnPct.toFixed(2)}%` : "—";
-      const sharpe = typeof metrics.Sharpe === "number" ? metrics.Sharpe.toFixed(2) : "—";
-      const maxDd = typeof metrics.MaxDrawdownPct === "number" ? `${metrics.MaxDrawdownPct.toFixed(2)}%` : "—";
-      const trades = typeof metrics.Trades === "number" ? String(metrics.Trades) : "—";
-
-      card.innerHTML = `
-        <div class="order-header">
-          <div>
-            <div class="order-title">${title}</div>
-            <div class="small">ID: ${escapeHtml(item.id)}</div>
-          </div>
-          <span class="status completed">saved</span>
-        </div>
-        <div class="order-meta">
-          ${created ? `<div><strong>Created</strong> ${escapeHtml(created)}</div>` : ""}
-          ${item.ticker ? `<div><strong>Ticker</strong> ${escapeHtml(item.ticker)}</div>` : ""}
-          ${interval ? `<div><strong>Interval</strong> ${interval}</div>` : ""}
-          ${strategy ? `<div><strong>Strategy</strong> ${strategy}</div>` : ""}
-          <div><strong>Return</strong> ${escapeHtml(returnPct)} · <strong>Sharpe</strong> ${escapeHtml(sharpe)} · <strong>Max DD</strong> ${escapeHtml(
-            maxDd
-          )} · <strong>Trades</strong> ${escapeHtml(trades)}</div>
-        </div>
-        <div class="order-actions" style="display:flex; gap:10px; flex-wrap:wrap;">
-          <button class="cta secondary small" type="button" data-action="plot-backtest" data-backtest-id="${escapeHtml(item.id)}">Load</button>
-          <button class="cta secondary small" type="button" data-action="rename-backtest" data-backtest-id="${escapeHtml(item.id)}">Rename</button>
-          <button class="cta secondary small danger" type="button" data-action="delete-backtest" data-backtest-id="${escapeHtml(item.id)}">Delete</button>
-        </div>
-        ${renderBacktestSourceControls(item.id, "python")}
-      `;
-      ui.savedBacktestsList.appendChild(card);
-    });
-  };
-
-  const renderBacktestDetails = async (doc, { imageUrl }) => {
-    if (!ui.backtestOutput) return;
-    const metrics = doc.metrics || {};
-    const ret = typeof metrics.ReturnPct === "number" ? `${metrics.ReturnPct.toFixed(2)}%` : "—";
-    const sharpe = typeof metrics.Sharpe === "number" ? metrics.Sharpe.toFixed(2) : "—";
-    const maxDd = typeof metrics.MaxDrawdownPct === "number" ? `${metrics.MaxDrawdownPct.toFixed(2)}%` : "—";
-    const trades = typeof metrics.Trades === "number" ? String(metrics.Trades) : "—";
-    const winRate = typeof metrics.WinRatePct === "number" ? `${metrics.WinRatePct.toFixed(1)}%` : "—";
-
-    const title = escapeHtml(doc.title || doc.ticker || "Backtest");
-    const code = String(doc.code || "").trim();
-    const codeMarkup = code
-      ? `
-        <details class="learn-more">
-          <summary>Source code (generated)</summary>
-          <pre class="code-block">${escapeHtml(code)}</pre>
-        </details>
-      `
-      : "";
-
-    ui.backtestOutput.innerHTML = `
-      <div class="card">
-        <div class="card-head">
-          <h3>${title}</h3>
-        </div>
-        <div class="small muted" style="margin-bottom: 12px;">
-          ${escapeHtml(doc.ticker || "")}${doc.interval ? ` · ${escapeHtml(doc.interval)}` : ""}${doc.strategy ? ` · ${escapeHtml(doc.strategy)}` : ""}
-        </div>
-        <div class="metrics metrics-tight">
-          <div class="stat-card"><strong>${escapeHtml(ret)}</strong><span class="small">Return</span></div>
-          <div class="stat-card"><strong>${escapeHtml(sharpe)}</strong><span class="small">Sharpe</span></div>
-          <div class="stat-card"><strong>${escapeHtml(maxDd)}</strong><span class="small">Max drawdown</span></div>
-          <div class="stat-card"><strong>${escapeHtml(trades)}</strong><span class="small">Trades</span></div>
-          <div class="stat-card"><strong>${escapeHtml(winRate)}</strong><span class="small">Win rate</span></div>
-        </div>
-        ${
-          imageUrl
-            ? `<div style="margin-top: 14px;"><img class="backtest-image" src="${escapeHtml(imageUrl)}" alt="Backtest equity curve" loading="lazy" /></div>`
-            : `<div class="small muted" style="margin-top: 14px;">Chart unavailable.</div>`
-        }
-        <div style="margin-top: 14px;">${renderBacktestSourceControls(doc.id, "python")}</div>
-        ${codeMarkup}
-      </div>
-    `;
-  };
-
-  const loadBacktestById = async (db, storage, backtestId) => {
-    if (!db || !backtestId) throw new Error("Backtest ID is required.");
-    if (!ui.backtestOutput) return;
-    const cleanId = String(backtestId || "").trim();
-    if (!cleanId) throw new Error("Backtest ID is required.");
-    setOutputLoading(ui.backtestOutput, "Loading backtest...");
-
-    const snap = await db.collection("backtests").doc(cleanId).get();
-    if (!snap.exists) throw new Error("Backtest not found.");
-    const doc = { id: snap.id, ...(snap.data() || {}) };
-
-    let imageUrl = "";
-    if (storage && doc.imagePath) {
-      try {
-        imageUrl = await storage.ref().child(String(doc.imagePath)).getDownloadURL();
-      } catch (error) {
-        imageUrl = "";
-      }
-    }
-
-    await renderBacktestDetails(doc, { imageUrl });
-    setOutputReady(ui.backtestOutput);
-    logEvent("backtest_loaded", { backtest_id: cleanId });
-  };
-
-  const startBacktests = (db, user) => {
-    if (state.unsubscribeBacktests) state.unsubscribeBacktests();
-    if (!user || !ui.savedBacktestsList || !ui.backtestLoadSelect) return;
-    state.unsubscribeBacktests = db
-      .collection("backtests")
-      .where("userId", "==", user.uid)
-      .orderBy("createdAt", "desc")
-      .limit(60)
-      .onSnapshot(
-        (snapshot) => {
-          const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-          renderBacktestList(items);
-          renderBacktestPicker(items);
-
-          const params = new URLSearchParams(window.location.search);
-          const urlBacktestId = String(params.get("backtestId") || params.get("id") || "").trim();
-          if (urlBacktestId && !state.backtestUrlLoaded) {
-            state.backtestUrlLoaded = true;
-            loadBacktestById(db, state.clients?.storage, urlBacktestId).catch(() => {});
-          }
-        },
-        () => {
-          renderBacktestList([]);
-          renderBacktestPicker([]);
-        }
-      );
-  };
-
   const startAdminOrders = (db) => {
     if (state.unsubscribeAdmin) state.unsubscribeAdmin();
     state.unsubscribeAdmin = db
@@ -6901,6 +8256,12 @@
 
   const toPrettyJson = (value) => `<pre class="small">${escapeHtml(JSON.stringify(value, null, 2))}</pre>`;
 
+  const normalizePath = (rawPath = "/") => {
+    const pathname = String(rawPath || "/").split("?")[0] || "/";
+    if (pathname.length > 1 && pathname.endsWith("/")) return pathname.slice(0, -1);
+    return pathname;
+  };
+
   const FOOTER_SOCIAL_LINKS = [
     {
       key: "tiktok",
@@ -6969,6 +8330,20 @@
           </a>
         `
       ).join("");
+    });
+  };
+
+  const normalizeFooterContactInfo = () => {
+    const roots = Array.from(document.querySelectorAll(".footer .footer-grid > div:first-child"));
+    if (!roots.length) return;
+    roots.forEach((root) => {
+      if (!(root instanceof HTMLElement)) return;
+      if (root.querySelector(".footer-contact-block")) return;
+      const node = document.createElement("p");
+      node.className = "small footer-contact-block";
+      node.innerHTML =
+        '1603 Robertson PL, Bronx, New York 10465<br /><a href="mailto:hello@quantura.studio">hello@quantura.studio</a>';
+      root.appendChild(node);
     });
   };
 
@@ -7083,22 +8458,20 @@
       });
     };
 
-  const ensureHeaderSolveNowCta = () => {
-    const actions = document.querySelector(".header .nav-actions");
-    if (!actions) return;
-    let solveLink = document.getElementById("header-solve-now");
-    if (!solveLink) {
-      solveLink = document.createElement("a");
-      solveLink.id = "header-solve-now";
-      solveLink.className = "cta secondary solve-now-cta";
-      solveLink.href = "/contact#solve-now";
-      solveLink.setAttribute("data-analytics", "nav_solve_now");
-      solveLink.innerHTML = `${icon("brain")}<span>Solve now</span>`;
-      actions.prepend(solveLink);
-    }
-    solveLink.href = "/contact#solve-now";
-    solveLink.setAttribute("title", "Powered by AI");
-    solveLink.setAttribute("aria-label", "Solve now. Powered by AI");
+  const ensureHeaderSolveNowCta = () => {};
+
+  const removeHeaderSolveNowCta = () => {
+    const headerRoots = Array.from(document.querySelectorAll(".header, .top-nav, .nav-actions"));
+    if (!headerRoots.length) return;
+    headerRoots.forEach((root) => {
+      root
+        .querySelectorAll('#header-solve-now, [data-action="open-solve-now"], a[href*="#solve-now"]')
+        .forEach((node) => node.remove());
+      root.querySelectorAll("a, button").forEach((node) => {
+        const text = String(node.textContent || "").trim().toLowerCase();
+        if (text === "solve now") node.remove();
+      });
+    });
   };
 
   const ensureHeaderNotificationsCta = () => {
@@ -7936,7 +9309,6 @@
     "news-ticker",
     "intel-ticker",
     "options-ticker",
-    "events-calendar-symbol",
     "ticker-query-ticker",
     "watchlist-ticker",
     "alert-ticker",
@@ -8061,7 +9433,6 @@
   const bindTickerInputSync = () => {
     const seen = new Set();
     TICKER_SYNC_INPUT_IDS.forEach((id) => {
-      if (id === "events-calendar-symbol") return;
       const el = document.getElementById(id);
       if (!el || seen.has(el)) return;
       seen.add(el);
@@ -8445,20 +9816,31 @@
     });
   };
 
+  const formatPredictionCountdown = (value) => {
+    const text = String(value || "").trim();
+    if (!text) return "No end date";
+    const target = new Date(text);
+    if (Number.isNaN(target.getTime())) return "No end date";
+    const deltaMs = target.getTime() - Date.now();
+    if (deltaMs <= 0) return "Ended";
+    const totalHours = Math.ceil(deltaMs / (60 * 60 * 1000));
+    if (totalHours >= 48) return `Ends in ${Math.ceil(totalHours / 24)}d`;
+    if (totalHours >= 1) return `Ends in ${totalHours}h`;
+    const minutes = Math.max(1, Math.ceil(deltaMs / (60 * 1000)));
+    return `Ends in ${minutes}m`;
+  };
+
   const parsePredictionArray = (raw) => {
     if (Array.isArray(raw)) return raw;
-    if (raw === null || raw === undefined) return [];
-    if (typeof raw === "string") {
-      const text = raw.trim();
-      if (!text) return [];
-      try {
-        const parsed = JSON.parse(text);
-        if (Array.isArray(parsed)) return parsed;
-      } catch (error) {
-        if (text.includes(",")) return text.split(",").map((part) => part.trim()).filter(Boolean);
-      }
+    if (typeof raw !== "string") return [];
+    const text = raw.trim();
+    if (!text) return [];
+    try {
+      const parsed = JSON.parse(text);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      return [];
     }
-    return [];
   };
 
   const clampPredictionPrice = (value) => {
@@ -8472,383 +9854,663 @@
   const formatPredictionPercent = (value) => {
     const num = clampPredictionPrice(value);
     if (num === null) return "—";
-    return `${(num * 100).toFixed(1)}%`;
+    return `${Math.round(num * 100)}%`;
   };
 
-  const formatPredictionSpread = (value) => {
-    const num = Number(value);
-    if (!Number.isFinite(num)) return "—";
-    return `${(num * 100).toFixed(2)} pts`;
+  const formatPredictionCents = (value) => {
+    const num = clampPredictionPrice(value);
+    if (num === null) return "—";
+    const cents = num * 100;
+    const text = cents.toFixed(1);
+    return `${text.endsWith(".0") ? text.slice(0, -2) : text}¢`;
+  };
+
+  const predictionMarketUrl = (market, event = null) => {
+    const direct = String(market?.marketUrl || "").trim();
+    if (direct) return direct;
+    const marketSlug = String(market?.slug || "").trim().replace(/^\/+|\/+$/g, "");
+    if (marketSlug) return `https://polymarket.com/event/${encodeURIComponent(marketSlug)}`;
+    const eventSlug = String(event?.slug || market?.eventSlug || "").trim().replace(/^\/+|\/+$/g, "");
+    return eventSlug ? `https://polymarket.com/event/${encodeURIComponent(eventSlug)}` : "";
   };
 
   const normalizePredictionMarket = (rawMarket) => {
     const market = rawMarket && typeof rawMarket === "object" ? rawMarket : {};
-    const outcomes = parsePredictionArray(market.outcomes).map((item) => String(item || "").trim()).filter(Boolean);
-    const outcomePrices = parsePredictionArray(market.outcomePrices)
+    const parsedOutcomes = parsePredictionArray(market.outcomes)
+      .map((item) => String(item || "").trim())
+      .filter(Boolean)
+      .slice(0, 16);
+    const parsedOutcomePrices = parsePredictionArray(market.outcomePrices)
       .map((item) => clampPredictionPrice(item))
-      .filter((item) => item !== null);
-    const tokenIds = parsePredictionArray(market.clobTokenIds).map((item) => String(item || "").trim()).filter(Boolean);
+      .filter((item) => item !== null)
+      .slice(0, 16);
+    const alignedLength = Math.min(parsedOutcomes.length, parsedOutcomePrices.length);
+    const outcomes = alignedLength > 0 ? parsedOutcomes.slice(0, alignedLength) : [];
+    const outcomePrices = alignedLength > 0 ? parsedOutcomePrices.slice(0, alignedLength) : [];
+
+    const status = String(market.status || "").trim().toLowerCase();
+    const closed = Boolean(market.closed) || status === "closed" || status === "resolved" || status === "ended";
+    const active = typeof market.active === "boolean" ? market.active : !closed;
+    const volumeUsdRaw = Number(market.volumeUsd ?? market.volume ?? 0);
+    const liquidityUsdRaw = Number(market.liquidityUsd ?? market.liquidity ?? 0);
+    const volumeUsd = Number.isFinite(volumeUsdRaw) ? Math.max(0, volumeUsdRaw) : 0;
+    const liquidityUsd = Number.isFinite(liquidityUsdRaw) ? Math.max(0, liquidityUsdRaw) : 0;
+    const topOutcomes = outcomes
+      .map((label, index) => ({ label, prob: outcomePrices[index] }))
+      .filter((entry) => typeof entry.label === "string" && Number.isFinite(entry.prob))
+      .sort((a, b) => b.prob - a.prob)
+      .slice(0, 6);
+    const yesIndex = outcomes.findIndex((label) => /^yes$/i.test(label));
+    const yesProb = yesIndex >= 0 ? outcomePrices[yesIndex] : null;
+
     return {
-      ...market,
+      id: String(market.id || market.marketId || market.conditionId || market.market_id || "").trim(),
+      question: String(market.question || market.title || "").trim(),
+      slug: String(market.slug || "").trim(),
+      endDate: String(market.endDate || market.end_date || "").trim(),
+      category: String(market.category || "").trim(),
+      image: String(market.image || "").trim(),
+      icon: String(market.icon || "").trim(),
+      volumeUsd,
+      liquidityUsd,
       outcomes,
       outcomePrices,
-      clobTokenIds: tokenIds,
-      volume24hr: Number(market.volume24hr || 0) || 0,
-      volume: Number(market.volume || 0) || 0,
-      enableOrderBook: Boolean(market.enableOrderBook),
+      isBinary: outcomes.length === 2,
+      yesProb,
+      topOutcomes,
+      closed,
+      active,
     };
   };
 
-  const deriveYesNoProbabilities = (market) => {
-    const normalized = normalizePredictionMarket(market);
-    const outcomes = normalized.outcomes;
-    const prices = normalized.outcomePrices;
-    if (!outcomes.length || !prices.length) {
-      return { yes: null, no: null };
-    }
-    let yesIndex = outcomes.findIndex((outcome) => /^yes$/i.test(outcome));
-    let noIndex = outcomes.findIndex((outcome) => /^no$/i.test(outcome));
-    if (yesIndex < 0 && prices.length >= 1) yesIndex = 0;
-    if (noIndex < 0 && prices.length >= 2) noIndex = 1;
+  const normalizePredictionEvent = (rawEvent, index = 0) => {
+    const event = rawEvent && typeof rawEvent === "object" ? rawEvent : {};
+    const markets = (Array.isArray(event.markets) ? event.markets : [])
+      .map((item) => normalizePredictionMarket(item))
+      .filter((item) => item.id && item.question);
+    markets.sort((a, b) => {
+      const volumeDelta = Number(b.volumeUsd || 0) - Number(a.volumeUsd || 0);
+      if (volumeDelta !== 0) return volumeDelta;
+      return Number(b.liquidityUsd || 0) - Number(a.liquidityUsd || 0);
+    });
+    if (!markets.length) return null;
     return {
-      yes: yesIndex >= 0 ? clampPredictionPrice(prices[yesIndex]) : null,
-      no: noIndex >= 0 ? clampPredictionPrice(prices[noIndex]) : null,
+      id: String(event.id || event.eventId || `event-${index + 1}`).trim(),
+      title: String(event.title || event.name || event.question || "Prediction markets").trim(),
+      slug: String(event.slug || "").trim(),
+      ticker: String(event.ticker || "").trim(),
+      markets,
     };
   };
 
-  const categorizePredictionMarkets = (markets) => {
-    const categories = {
-      "Price Targets / Ranges": [],
-      "Up/Down / Directional": [],
-      "Earnings / Events / Catalysts": [],
-      "Macro / Regulatory / IPO related": [],
-      Other: [],
+  const normalizePredictionsPayload = (rawPayload, fallbackQuery = "") => {
+    const payload = rawPayload && typeof rawPayload === "object" ? rawPayload : {};
+    const eventsRaw = Array.isArray(payload.events) ? payload.events : Array.isArray(rawPayload) ? rawPayload : [];
+    const events = eventsRaw
+      .map((event, index) => normalizePredictionEvent(event, index))
+      .filter((event) => Boolean(event));
+    return {
+      query: String(payload.query || fallbackQuery || "").trim(),
+      fetchedAt: String(payload.fetchedAt || new Date().toISOString()),
+      events,
     };
-
-    const priceTargetsRegex = /(close|above|below|at \$|\$[0-9]+)/i;
-    const upDownRegex = /(up or down|up\/down|green|red|higher|lower)/i;
-    const earningsRegex = /(earnings|guidance|revenue|eps)/i;
-    const macroRegex = /(ipo|sec|doj|ftc|rate|inflation|treasury|labor)/i;
-
-    const sorted = [...markets].sort((a, b) => {
-      const a24 = Number(a?.volume24hr || 0) || 0;
-      const b24 = Number(b?.volume24hr || 0) || 0;
-      if (b24 !== a24) return b24 - a24;
-      const aTot = Number(a?.volume || 0) || 0;
-      const bTot = Number(b?.volume || 0) || 0;
-      return bTot - aTot;
-    });
-
-    sorted.forEach((market) => {
-      const question = String(market?.question || "").trim();
-      if (priceTargetsRegex.test(question)) {
-        categories["Price Targets / Ranges"].push(market);
-      } else if (upDownRegex.test(question)) {
-        categories["Up/Down / Directional"].push(market);
-      } else if (earningsRegex.test(question)) {
-        categories["Earnings / Events / Catalysts"].push(market);
-      } else if (macroRegex.test(question)) {
-        categories["Macro / Regulatory / IPO related"].push(market);
-      } else {
-        categories.Other.push(market);
-      }
-    });
-
-    return categories;
   };
 
-  const predictionMarketUrl = (market) => {
-    const direct = String(market?.marketUrl || "").trim();
-    if (direct) return direct;
-    const eventUrl = String(market?.eventUrl || "").trim();
-    if (eventUrl) return eventUrl;
-    const slug = String(market?.slug || market?.eventSlug || "").trim().replace(/^\/+|\/+$/g, "");
-    return slug ? `https://polymarket.com/event/${slug}` : "";
+  const getPredictionsPanelState = (ticker = "") => {
+    const activeSymbol = normalizeTicker(ticker || state.tickerContext.predictionsTicker || state.tickerContext.ticker || "");
+    const mode = state.tickerContext.predictionsMode === "topActive" ? "topActive" : "ticker";
+    const rawQuery = String(state.tickerContext.predictionsQuery || "").trim().slice(0, 80);
+    const query = mode === "ticker" ? rawQuery || activeSymbol : "";
+    return {
+      ticker: activeSymbol,
+      mode,
+      query,
+      includeClosed: Boolean(state.tickerContext.predictionsIncludeClosed),
+      expanded: Boolean(state.tickerContext.predictionsExpanded),
+    };
   };
 
-  const sparklineSvg = (historyPoints, color = "rgba(29, 78, 216, 0.85)") => {
-    const points = (Array.isArray(historyPoints) ? historyPoints : [])
-      .map((item) => ({ t: Number(item?.t), p: Number(item?.p) }))
-      .filter((item) => Number.isFinite(item.t) && Number.isFinite(item.p));
-    if (points.length < 2) return "";
-    const width = 160;
-    const height = 44;
-    const minPrice = Math.min(...points.map((item) => item.p));
-    const maxPrice = Math.max(...points.map((item) => item.p));
-    const span = maxPrice - minPrice || 0.0001;
-    const xStep = width / Math.max(1, points.length - 1);
-    const path = points
-      .map((point, idx) => {
-        const x = Math.round(idx * xStep * 100) / 100;
-        const y = Math.round((height - ((point.p - minPrice) / span) * (height - 4) - 2) * 100) / 100;
-        return `${x},${y}`;
-      })
-      .join(" ");
+  const buildPredictionsCacheKey = ({ mode, query, includeClosed }) => {
+    if (mode === "topActive") return "top-active::limit-36::offset-0";
+    return `ticker::${String(query || "").trim().toLowerCase()}::${includeClosed ? "closed" : "open"}`;
+  };
+
+  const getPredictionsCache = (cacheKey) => {
+    if (!cacheKey || !polymarketClientCache.has(cacheKey)) return null;
+    const record = polymarketClientCache.get(cacheKey);
+    const expiresAtMs = Number(record?.expiresAtMs || 0);
+    if (!Number.isFinite(expiresAtMs) || expiresAtMs <= Date.now()) {
+      polymarketClientCache.delete(cacheKey);
+      return null;
+    }
+    polymarketClientCache.delete(cacheKey);
+    polymarketClientCache.set(cacheKey, record);
+    return record.payload || null;
+  };
+
+  const setPredictionsCache = (cacheKey, payload) => {
+    if (!cacheKey || !payload) return;
+    polymarketClientCache.set(cacheKey, {
+      expiresAtMs: Date.now() + POLYMARKET_CLIENT_CACHE_TTL_MS,
+      payload,
+    });
+    while (polymarketClientCache.size > POLYMARKET_CLIENT_CACHE_MAX_ENTRIES) {
+      const oldestKey = polymarketClientCache.keys().next().value;
+      if (!oldestKey) break;
+      polymarketClientCache.delete(oldestKey);
+    }
+  };
+
+  const buildVisiblePredictionGroups = (events, { includeClosed = false, expanded = false } = {}) => {
+    const groups = [];
+    let totalMarkets = 0;
+    events.forEach((event) => {
+      const markets = (Array.isArray(event?.markets) ? event.markets : [])
+        .filter((market) => {
+          if (!includeClosed && (market.closed || market.active === false)) return false;
+          return true;
+        })
+        .sort((a, b) => {
+          const volumeDelta = Number(b.volumeUsd || 0) - Number(a.volumeUsd || 0);
+          if (volumeDelta !== 0) return volumeDelta;
+          return Number(b.liquidityUsd || 0) - Number(a.liquidityUsd || 0);
+        });
+      if (!markets.length) return;
+      totalMarkets += markets.length;
+      groups.push({ ...event, markets });
+    });
+
+    const limit = expanded ? Number.POSITIVE_INFINITY : POLYMARKET_DEFAULT_MARKET_LIMIT;
+    let remaining = limit;
+    let shownMarkets = 0;
+    const visibleGroups = [];
+    groups.forEach((event) => {
+      if (remaining <= 0) return;
+      const slice = event.markets.slice(0, remaining);
+      if (!slice.length) return;
+      shownMarkets += slice.length;
+      remaining -= slice.length;
+      visibleGroups.push({ ...event, markets: slice });
+    });
+
+    return { groups: visibleGroups, shownMarkets, totalMarkets };
+  };
+
+  const renderPredictionOutcomePill = (label, prob, variant = "neutral") => {
+    const cleanLabel = String(label || "").trim();
+    const cleanProb = clampPredictionPrice(prob);
+    if (!cleanLabel || cleanProb === null) return "";
+    const percent = Math.max(0, Math.min(100, Math.round(cleanProb * 100)));
     return `
-      <svg class="predictions-sparkline" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true">
-        <polyline points="${path}" fill="none" stroke="${color}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></polyline>
-      </svg>
+      <button class="prediction-outcome-pill ${variant}" type="button" aria-disabled="true" tabindex="-1" aria-label="${escapeHtml(
+        `${cleanLabel} ${percent}%`
+      )}">
+        <span class="prediction-outcome-pill-fill" style="width:${percent}%"></span>
+        <span class="prediction-outcome-pill-text">${escapeHtml(cleanLabel)} ${percent}%</span>
+      </button>
     `;
   };
 
-  const renderOrderbookWidget = (market, orderbook) => {
-    if (!market?.enableOrderBook) {
-      return `<div class="small muted">Orderbook unavailable for this market.</div>`;
-    }
-    const tokenId = Array.isArray(market.clobTokenIds) && market.clobTokenIds.length ? String(market.clobTokenIds[0]) : "";
-    if (!tokenId || !orderbook || typeof orderbook !== "object") {
-      return `<div class="small muted">Orderbook unavailable for this market.</div>`;
-    }
-
-    const bestBid = clampPredictionPrice(orderbook.bestBid);
-    const bestAsk = clampPredictionPrice(orderbook.bestAsk);
-    const midpoint = clampPredictionPrice(orderbook.midpoint);
-    const spread = Number(orderbook.spread);
-    const bids = Array.isArray(orderbook.bids) ? orderbook.bids.slice(0, 5) : [];
-    const asks = Array.isArray(orderbook.asks) ? orderbook.asks.slice(0, 5) : [];
-    const history1d = Array.isArray(orderbook.history?.["1d"]) ? orderbook.history["1d"] : [];
-    const history1w = Array.isArray(orderbook.history?.["1w"]) ? orderbook.history["1w"] : [];
-
-    const levels = Math.max(bids.length, asks.length, 1);
-    const rows = [];
-    for (let idx = 0; idx < levels; idx += 1) {
-      const bid = bids[idx] || {};
-      const ask = asks[idx] || {};
-      rows.push(`
-        <tr>
-          <td>${formatPredictionPercent(bid.price)}</td>
-          <td>${toFiniteOrNull(bid.size) === null ? "—" : escapeHtml(formatCompactNumber(bid.size))}</td>
-          <td>${formatPredictionPercent(ask.price)}</td>
-          <td>${toFiniteOrNull(ask.size) === null ? "—" : escapeHtml(formatCompactNumber(ask.size))}</td>
-        </tr>
-      `);
-    }
-
+  const renderPredictionMarketCard = (event, market) => {
+    const category = String(market.category || event?.ticker || "Market").trim();
+    const volumeText = Number(market.volumeUsd || 0) > 0 ? `$${formatCompactNumber(market.volumeUsd)} Vol.` : "—";
+    const marketUrl = predictionMarketUrl(market, event);
+    const binaryRows = (() => {
+      if (!market.isBinary || !Array.isArray(market.outcomes) || !Array.isArray(market.outcomePrices)) return [];
+      let yesIndex = market.outcomes.findIndex((label) => /^yes$/i.test(label));
+      let noIndex = market.outcomes.findIndex((label) => /^no$/i.test(label));
+      if (yesIndex < 0) yesIndex = 0;
+      if (noIndex < 0) noIndex = yesIndex === 0 ? 1 : 0;
+      return [yesIndex, noIndex]
+        .filter((index) => index >= 0 && index < market.outcomes.length && index < market.outcomePrices.length)
+        .map((index) => ({ label: market.outcomes[index], prob: market.outcomePrices[index] }));
+    })();
+    const yesProb = binaryRows.find((item) => /^yes$/i.test(item.label))?.prob;
+    const noProb = binaryRows.find((item) => /^no$/i.test(item.label))?.prob;
+    const primaryProb =
+      yesProb ??
+      (Array.isArray(market.topOutcomes) && market.topOutcomes.length ? market.topOutcomes[0].prob : null);
+    const primaryLabel =
+      yesProb !== undefined
+        ? "Yes"
+        : Array.isArray(market.topOutcomes) && market.topOutcomes.length
+        ? String(market.topOutcomes[0].label || "Likely")
+        : "Outcome";
+    const pillsHtml = binaryRows.length
+      ? binaryRows
+          .map((item) => renderPredictionOutcomePill(item.label, item.prob, /^yes$/i.test(item.label) ? "yes" : "no"))
+          .join("")
+      : Array.isArray(market.topOutcomes) && market.topOutcomes.length
+      ? market.topOutcomes
+          .slice(0, 3)
+          .map((item) => renderPredictionOutcomePill(item.label, item.prob))
+          .join("")
+      : "";
     return `
-      <div class="predictions-orderbook">
-        <div class="predictions-orderbook-head small">
-          <span>Bid ${formatPredictionPercent(bestBid)}</span>
-          <span>Ask ${formatPredictionPercent(bestAsk)}</span>
-          <span>Mid ${formatPredictionPercent(midpoint)}</span>
-          <span>Spread ${formatPredictionSpread(spread)}</span>
+      <article class="prediction-market-card prediction-market-row">
+        <div class="prediction-market-row-head small">
+          <span class="prediction-chip">${escapeHtml(category)}</span>
+          <span>${escapeHtml(formatPredictionCountdown(market.endDate))}</span>
         </div>
-        <div class="table-wrap">
-          <table class="data-table predictions-orderbook-table">
-            <thead>
-              <tr><th>Bid</th><th>Size</th><th>Ask</th><th>Size</th></tr>
-            </thead>
-            <tbody>${rows.join("")}</tbody>
-          </table>
-        </div>
-        <div class="predictions-history-grid">
-          <div class="predictions-history-card">
-            <div class="small muted">Price history (1D)</div>
-            ${sparklineSvg(history1d)}
+        <div class="prediction-market-row-grid">
+          <div class="prediction-market-row-question">
+            <h4 class="prediction-market-title">${escapeHtml(String(market.question || "Untitled market"))}</h4>
+            <div class="small muted">${escapeHtml(volumeText)}</div>
           </div>
-          <div class="predictions-history-card">
-            <div class="small muted">Price history (1W)</div>
-            ${sparklineSvg(history1w, "rgba(58, 181, 162, 0.88)")}
+          <div class="prediction-market-row-prob">
+            <div class="prediction-market-prob">${escapeHtml(formatPredictionPercent(primaryProb))}</div>
+            <div class="small muted">${escapeHtml(primaryLabel)}</div>
+          </div>
+          <div class="prediction-market-row-actions">
+            ${
+              Number.isFinite(yesProb)
+                ? `<button class="prediction-buy-btn yes" type="button" aria-disabled="true" tabindex="-1">Buy Yes ${escapeHtml(
+                    formatPredictionCents(yesProb)
+                  )}</button>`
+                : ""
+            }
+            ${
+              Number.isFinite(noProb)
+                ? `<button class="prediction-buy-btn no" type="button" aria-disabled="true" tabindex="-1">Buy No ${escapeHtml(
+                    formatPredictionCents(noProb)
+                  )}</button>`
+                : ""
+            }
           </div>
         </div>
-      </div>
+        <div class="prediction-pill-row">
+          ${
+            pillsHtml ||
+            `<span class="prediction-no-price-badge small" aria-label="No price data for this market">No price data</span>`
+          }
+        </div>
+        <div class="prediction-market-footer">
+          ${
+            marketUrl
+              ? `<a class="news-link" href="${escapeHtml(marketUrl)}" target="_blank" rel="noreferrer" data-analytics="polymarket_market_open" data-label="${escapeHtml(String(market.question || "polymarket_market"))}" aria-label="${escapeHtml(
+                  `View ${String(market.question || "market")} on Polymarket`
+                )}">View on Polymarket</a>`
+              : `<span class="small muted">Market link unavailable</span>`
+          }
+          <span class="small muted prediction-warning" aria-label="Markets can be wrong">Markets can be wrong</span>
+        </div>
+      </article>
     `;
   };
 
-  const renderPredictionsOutput = (payload, ticker) => {
+  const buildPredictionsSkeleton = () =>
+    new Array(6)
+      .fill(0)
+      .map(
+        () => `
+      <article class="prediction-market-card prediction-skeleton-card" aria-hidden="true">
+        <div class="prediction-skeleton-line short"></div>
+        <div class="prediction-skeleton-line"></div>
+        <div class="prediction-skeleton-line medium"></div>
+        <div class="prediction-skeleton-line"></div>
+      </article>
+    `
+      )
+      .join("");
+
+  const renderPredictionsOutput = ({ payload = null, ticker = "", loading = false, error = "" } = {}) => {
     if (!ui.tickerPredictionsOutput) return;
-    const cleanTicker = normalizeTicker(ticker || payload?.ticker || state.tickerContext.ticker || "");
-    const markets = Array.isArray(payload?.markets) ? payload.markets.map(normalizePredictionMarket) : [];
-    const orderbooks = payload?.orderbooks && typeof payload.orderbooks === "object" ? payload.orderbooks : {};
-
-    if (!cleanTicker || !markets.length) {
-      ui.tickerPredictionsOutput.innerHTML = `<div class="small muted">No Polymarket markets found for ${escapeHtml(cleanTicker || "this ticker")}.</div>`;
-      return;
-    }
-
-    const ranked = [...markets].sort((a, b) => {
-      const b24 = Number(b.volume24hr || 0) || 0;
-      const a24 = Number(a.volume24hr || 0) || 0;
-      if (b24 !== a24) return b24 - a24;
-      return (Number(b.volume || 0) || 0) - (Number(a.volume || 0) || 0);
+    const panel = getPredictionsPanelState(ticker);
+    const normalized = normalizePredictionsPayload(payload || state.tickerContext.predictionsData || {}, panel.query || panel.ticker);
+    const { groups, shownMarkets, totalMarkets } = buildVisiblePredictionGroups(normalized.events, {
+      includeClosed: panel.includeClosed,
+      expanded: panel.expanded,
     });
+    const includeClosedToggle = panel.mode === "ticker";
 
-    const quick = ranked.slice(0, 3).map((market) => {
-      const probs = deriveYesNoProbabilities(market);
-      const tokenId = Array.isArray(market.clobTokenIds) && market.clobTokenIds.length ? String(market.clobTokenIds[0]) : "";
-      const book = tokenId ? orderbooks[tokenId] : null;
-      const midpoint = clampPredictionPrice(book?.midpoint);
-      const spread = Number(book?.spread);
-      return `
-        <article class="prediction-snapshot-card">
-          <div class="small muted">${escapeHtml(String(market.eventTitle || "Prediction market"))}</div>
-          <div class="prediction-question">${escapeHtml(String(market.question || "Untitled market"))}</div>
-          <div class="prediction-meta-row">
-            <span>Midpoint</span><span>${formatPredictionPercent(midpoint !== null ? midpoint : probs.yes)}</span>
-          </div>
-          <div class="prediction-meta-row">
-            <span>Bid / Ask</span><span>${formatPredictionPercent(book?.bestBid)} / ${formatPredictionPercent(book?.bestAsk)}</span>
-          </div>
-          <div class="prediction-meta-row">
-            <span>Spread</span><span>${formatPredictionSpread(spread)}</span>
-          </div>
-          <div class="prediction-meta-row">
-            <span>24h / Total Vol</span><span>${escapeHtml(formatCompactNumber(market.volume24hr))} / ${escapeHtml(formatCompactNumber(market.volume))}</span>
-          </div>
-          <div class="prediction-meta-row">
-            <span>End Date</span><span>${escapeHtml(formatPredictionDate(market.endDate))}</span>
-          </div>
-          <div class="prediction-meta-row">
-            <span>Yes / No</span><span>${formatPredictionPercent(probs.yes)} / ${formatPredictionPercent(probs.no)}</span>
+    const resultBody = (() => {
+      if (loading) {
+        return `<div class="prediction-card-grid">${buildPredictionsSkeleton()}</div>`;
+      }
+      if (groups.length) {
+        return `
+          <div class="predictions-events">
+            ${groups
+              .map(
+                (event) => `
+              <section class="prediction-event-group">
+                <div class="prediction-event-head">
+                  <div>
+                    <h3 class="prediction-event-title">${escapeHtml(String(event.title || "Prediction markets"))}</h3>
+                    <span class="small muted">Prediction markets</span>
+                  </div>
+                  ${
+                    event.slug
+                      ? `<a class="news-link" href="https://polymarket.com/event/${encodeURIComponent(
+                          String(event.slug)
+                        )}" target="_blank" rel="noreferrer">Event</a>`
+                      : ""
+                  }
+                </div>
+                <div class="prediction-card-grid">
+                  ${event.markets.map((market) => renderPredictionMarketCard(event, market)).join("")}
+                </div>
+              </section>
+            `
+              )
+              .join("")}
           </div>
           ${
-            predictionMarketUrl(market)
-              ? `<a class="news-link" href="${escapeHtml(predictionMarketUrl(market))}" target="_blank" rel="noreferrer" data-analytics="polymarket_market_open" data-label="${escapeHtml(String(market.question || "polymarket_market"))}">View on Polymarket</a>`
+            totalMarkets > shownMarkets
+              ? `<div class="predictions-show-more-row"><button class="cta secondary small" type="button" data-action="predictions-show-more">${
+                  panel.expanded ? "Show less" : `Show more (${totalMarkets - shownMarkets})`
+                }</button></div>`
               : ""
           }
-        </article>
-      `;
-    });
-
-    const categories = categorizePredictionMarkets(markets);
-    const categoryHtml = Object.entries(categories)
-      .map(([name, items]) => {
-        if (!Array.isArray(items) || !items.length) return "";
-        const cards = items
-          .map((market) => {
-            const probs = deriveYesNoProbabilities(market);
-            const marketUrl = predictionMarketUrl(market);
-            const tokenId = Array.isArray(market.clobTokenIds) && market.clobTokenIds.length ? String(market.clobTokenIds[0]) : "";
-            const orderbook = tokenId ? orderbooks[tokenId] : null;
-            const tags = Array.isArray(market.tags) ? market.tags.slice(0, 4).map((tag) => String(tag || "").trim()).filter(Boolean) : [];
-            const tagsHtml = tags.length
-              ? `<div class="prediction-tags">${tags.map((tag) => `<span class="status">${escapeHtml(tag)}</span>`).join("")}</div>`
-              : "";
-            return `
-              <article class="prediction-market-card">
-                <div class="prediction-question">${escapeHtml(String(market.question || "Untitled market"))}</div>
-                <div class="prediction-grid">
-                  <div class="prediction-meta-row"><span>Yes</span><span>${formatPredictionPercent(probs.yes)}</span></div>
-                  <div class="prediction-meta-row"><span>No</span><span>${formatPredictionPercent(probs.no)}</span></div>
-                  <div class="prediction-meta-row"><span>24h Volume</span><span>${escapeHtml(formatCompactNumber(market.volume24hr))}</span></div>
-                  <div class="prediction-meta-row"><span>Total Volume</span><span>${escapeHtml(formatCompactNumber(market.volume))}</span></div>
-                  <div class="prediction-meta-row"><span>End Date</span><span>${escapeHtml(formatPredictionDate(market.endDate))}</span></div>
-                </div>
-                ${tagsHtml}
-                ${
-                  marketUrl
-                    ? `<a class="news-link" href="${escapeHtml(marketUrl)}" target="_blank" rel="noreferrer" data-analytics="polymarket_market_open" data-label="${escapeHtml(String(market.question || "polymarket_market"))}">View on Polymarket</a>`
-                    : ""
-                }
-                ${renderOrderbookWidget(market, orderbook)}
-              </article>
-            `;
-          })
-          .join("");
-        return `
-          <details class="prediction-accordion" open>
-            <summary>${escapeHtml(name)} <span class="small muted">(${items.length})</span></summary>
-            <div class="prediction-category-list">${cards}</div>
-          </details>
         `;
-      })
-      .join("");
+      }
+      if (error) {
+        return `<div class="small muted">Polymarket predictions are temporarily unavailable${panel.ticker ? ` for ${escapeHtml(panel.ticker)}` : ""}.</div>`;
+      }
+      if (panel.mode === "ticker" && !panel.query) {
+        return `<div class="small muted">Enter a ticker or keyword to search prediction markets.</div>`;
+      }
+      return `<div class="small muted">No active prediction markets found for ${escapeHtml(panel.query || panel.ticker || "this search")}.</div>`;
+    })();
 
     ui.tickerPredictionsOutput.innerHTML = `
       <div class="predictions-shell">
-        <div class="predictions-section">
-          <div class="small"><strong>Quick Snapshot</strong></div>
-          <div class="prediction-snapshot-grid">${quick.join("")}</div>
+        <div class="predictions-toolbar">
+          <div class="predictions-tabs" role="tablist" aria-label="Predictions source">
+            <button class="task-chip ${panel.mode === "ticker" ? "active" : ""}" type="button" role="tab" aria-selected="${
+      panel.mode === "ticker" ? "true" : "false"
+    }" data-action="predictions-tab" data-mode="ticker">For this ticker</button>
+            <button class="task-chip ${panel.mode === "topActive" ? "active" : ""}" type="button" role="tab" aria-selected="${
+      panel.mode === "topActive" ? "true" : "false"
+    }" data-action="predictions-tab" data-mode="topActive">Top Active</button>
+          </div>
+          <div class="predictions-search-row">
+            <input
+              type="search"
+              class="input"
+              data-action="predictions-query"
+              aria-label="Search prediction markets"
+              placeholder="Search ticker or keyword"
+              value="${escapeHtml(panel.mode === "ticker" ? panel.query : panel.ticker || "")}"
+            />
+            <button class="cta secondary small" type="button" data-action="predictions-search-now">Search</button>
+            <label class="predictions-include-closed ${includeClosedToggle ? "" : "hidden"}">
+              <input type="checkbox" data-action="predictions-include-closed" ${panel.includeClosed ? "checked" : ""} />
+              <span>Include closed</span>
+            </label>
+          </div>
+          <div class="predictions-meta small">
+            <span>${loading ? "Loading markets..." : `${shownMarkets} of ${totalMarkets} markets`}</span>
+            <span>${normalized.fetchedAt ? `Updated ${escapeHtml(formatPredictionDate(normalized.fetchedAt))}` : ""}</span>
+          </div>
         </div>
-        <div class="predictions-section">
-          ${categoryHtml || `<div class="small muted">No categorized markets were found for ${escapeHtml(cleanTicker)}.</div>`}
-        </div>
+        ${resultBody}
       </div>
     `;
   };
 
-  const loadTickerPredictions = async (ticker, { notify = false, force = false } = {}) => {
-    if (!ui.tickerPredictionsOutput) return;
-    const symbol = normalizeTicker(ticker);
-    if (!symbol) {
-      ui.tickerPredictionsOutput.innerHTML = `<div class="small muted">No Polymarket markets found for this ticker.</div>`;
-      return;
+  const fetchTickerPredictionsPayload = async ({ mode, query, includeClosed, signal }) => {
+    if (mode === "topActive") {
+      const response = await fetch("/api/polymarket/active", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ limit: 36, offset: 0, sort: "volume" }),
+        signal,
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(String(payload?.detail || payload?.error || "Unable to load active prediction markets."));
+      }
+      return normalizePredictionsPayload(payload, "top-active");
     }
-    if (!force && state.tickerContext.predictionsTicker === symbol && state.tickerContext.predictionsData) {
-      renderPredictionsOutput(state.tickerContext.predictionsData, symbol);
+
+    const term = String(query || "").trim();
+    if (!term) {
+      return normalizePredictionsPayload({ query: "", events: [] }, "");
+    }
+
+    const callSearch = async (q) => {
+      const response = await fetch("/api/polymarket/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          q,
+          limitPerType: 24,
+          includeClosed: Boolean(includeClosed),
+          sort: "volume",
+        }),
+        signal,
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(String(payload?.detail || payload?.error || "Unable to load prediction markets."));
+      }
+      return normalizePredictionsPayload(payload, q);
+    };
+
+    const primary = await callSearch(term);
+    const total = primary.events.reduce((sum, event) => sum + (Array.isArray(event.markets) ? event.markets.length : 0), 0);
+    if (total > 0) return primary;
+
+    if (/^[A-Z0-9.\-]{1,12}$/i.test(term)) {
+      const fallback = await callSearch(`${term} stock`);
+      const fallbackTotal = fallback.events.reduce(
+        (sum, event) => sum + (Array.isArray(event.markets) ? event.markets.length : 0),
+        0
+      );
+      if (fallbackTotal > 0) return fallback;
+    }
+    return primary;
+  };
+
+  const loadTickerPredictions = async (
+    ticker,
+    { notify = false, force = false, mode = null, query = null, includeClosed = null } = {}
+  ) => {
+    if (!ui.tickerPredictionsOutput) return;
+    const symbol = normalizeTicker(ticker || state.tickerContext.ticker || state.tickerContext.intelTicker || "");
+    const previousTicker = normalizeTicker(state.tickerContext.predictionsTicker || "");
+    state.tickerContext.predictionsTicker = symbol;
+    if (mode === "ticker" || mode === "topActive") {
+      state.tickerContext.predictionsMode = mode;
+    }
+    if (typeof includeClosed === "boolean") {
+      state.tickerContext.predictionsIncludeClosed = includeClosed;
+    }
+    if (typeof query === "string") {
+      state.tickerContext.predictionsQuery = query.trim().slice(0, 80);
+    } else if (state.tickerContext.predictionsMode !== "topActive") {
+      const currentQuery = String(state.tickerContext.predictionsQuery || "").trim();
+      if (symbol && symbol !== previousTicker) {
+        state.tickerContext.predictionsQuery = symbol;
+      } else if (!currentQuery || currentQuery.toUpperCase() === previousTicker) {
+        state.tickerContext.predictionsQuery = symbol;
+      }
+    }
+
+    const panel = getPredictionsPanelState(symbol);
+    const requestKey = buildPredictionsCacheKey(panel);
+
+    if (!force && requestKey && state.tickerContext.predictionsRequestKey === requestKey && state.tickerContext.predictionsData) {
+      renderPredictionsOutput({ payload: state.tickerContext.predictionsData, ticker: symbol });
       return;
     }
 
-    state.tickerContext.predictionsTicker = symbol;
-    setOutputLoading(ui.tickerPredictionsOutput, "Loading prediction markets...");
-    logEvent("polymarket_load_started", { ticker: symbol, force: Boolean(force) });
+    const cached = !force ? getPredictionsCache(requestKey) : null;
+    if (cached) {
+      state.tickerContext.predictionsData = cached;
+      state.tickerContext.predictionsRequestKey = requestKey;
+      renderPredictionsOutput({ payload: cached, ticker: symbol });
+      return;
+    }
+
+    if (panel.mode === "ticker" && !panel.query) {
+      state.tickerContext.predictionsData = normalizePredictionsPayload({ query: "", events: [] }, "");
+      state.tickerContext.predictionsRequestKey = requestKey;
+      renderPredictionsOutput({ payload: state.tickerContext.predictionsData, ticker: symbol });
+      return;
+    }
+
+    renderPredictionsOutput({
+      payload: state.tickerContext.predictionsData,
+      ticker: symbol,
+      loading: true,
+    });
+    logEvent("polymarket_load_started", {
+      ticker: panel.ticker || panel.query || "",
+      mode: panel.mode,
+      force: Boolean(force),
+    });
+
+    if (polymarketInFlightController) {
+      try {
+        polymarketInFlightController.abort();
+      } catch (error) {
+        // Best effort.
+      }
+      polymarketInFlightController = null;
+    }
+
+    const requestNonce = (polymarketInFlightNonce += 1);
+    const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+    polymarketInFlightController = controller;
 
     try {
-      const searchResp = await fetch(`/api/predictions/search?ticker=${encodeURIComponent(symbol)}`, {
-        method: "GET",
-        headers: { Accept: "application/json" },
+      const payload = await fetchTickerPredictionsPayload({
+        mode: panel.mode,
+        query: panel.query,
+        includeClosed: panel.includeClosed,
+        signal: controller?.signal,
       });
-      const searchPayload = await searchResp.json().catch(() => ({}));
-      if (!searchResp.ok) {
-        throw new Error(String(searchPayload?.detail || searchPayload?.error || "Unable to load predictions."));
-      }
-
-      const markets = Array.isArray(searchPayload?.markets) ? searchPayload.markets.map(normalizePredictionMarket) : [];
-      const tokenIds = [];
-      const seen = new Set();
-      markets.forEach((market) => {
-        const ids = Array.isArray(market?.clobTokenIds) ? market.clobTokenIds : [];
-        ids.forEach((id) => {
-          const clean = String(id || "").trim();
-          if (!clean || seen.has(clean)) return;
-          seen.add(clean);
-          tokenIds.push(clean);
-        });
-      });
-
-      let orderbooks = {};
-      if (tokenIds.length) {
-        const orderResp = await fetch("/api/predictions/orderbook", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Accept: "application/json" },
-          body: JSON.stringify({ tokenIds, maxLevels: 5 }),
-        });
-        const orderPayload = await orderResp.json().catch(() => ({}));
-        if (orderResp.ok && orderPayload?.orderbooks && typeof orderPayload.orderbooks === "object") {
-          orderbooks = orderPayload.orderbooks;
-        }
-      }
-
-      const normalized = {
-        ticker: symbol,
-        events: Array.isArray(searchPayload?.events) ? searchPayload.events : [],
-        markets,
-        orderbooks,
-      };
-      state.tickerContext.predictionsData = normalized;
-      setOutputReady(ui.tickerPredictionsOutput);
-      renderPredictionsOutput(normalized, symbol);
-      logEvent("predictions_loaded", { ticker: symbol, markets: markets.length, token_ids: tokenIds.length });
-      logEvent("polymarket_orderbooks_loaded", {
-        ticker: symbol,
-        orderbooks: Object.keys(orderbooks || {}).length,
+      if (requestNonce !== polymarketInFlightNonce) return;
+      state.tickerContext.predictionsData = payload;
+      state.tickerContext.predictionsRequestKey = requestKey;
+      setPredictionsCache(requestKey, payload);
+      renderPredictionsOutput({ payload, ticker: symbol });
+      const marketCount = payload.events.reduce((sum, event) => sum + (Array.isArray(event.markets) ? event.markets.length : 0), 0);
+      logEvent("predictions_loaded", {
+        ticker: panel.ticker || panel.query || "",
+        mode: panel.mode,
+        markets: marketCount,
       });
     } catch (error) {
-      setOutputReady(ui.tickerPredictionsOutput);
-      ui.tickerPredictionsOutput.innerHTML = `
-        <div class="small muted">Polymarket predictions are temporarily unavailable for ${escapeHtml(symbol)}.</div>
-      `;
-      logEvent("polymarket_load_error", {
+      const aborted = controller?.signal?.aborted;
+      if (aborted) return;
+      renderPredictionsOutput({
+        payload: state.tickerContext.predictionsData,
         ticker: symbol,
+        error: String(error?.message || "Unable to load predictions."),
+      });
+      logEvent("polymarket_load_error", {
+        ticker: panel.ticker || panel.query || "",
+        mode: panel.mode,
         message: String(error?.message || "load_failed").slice(0, 120),
       });
       if (notify) showToast(error.message || "Unable to load predictions.", "warn");
+    } finally {
+      if (requestNonce === polymarketInFlightNonce) {
+        polymarketInFlightController = null;
+      }
     }
+  };
+
+  const bindPredictionsPanelInteractions = () => {
+    if (!ui.tickerPredictionsOutput || ui.tickerPredictionsOutput.dataset.boundPredictions === "1") return;
+    ui.tickerPredictionsOutput.dataset.boundPredictions = "1";
+
+    ui.tickerPredictionsOutput.addEventListener("click", (event) => {
+      const tabButton = event.target.closest("[data-action='predictions-tab']");
+      if (tabButton) {
+        event.preventDefault();
+        triggerSubtleHaptic();
+        const nextMode = String(tabButton.dataset.mode || "ticker");
+        state.tickerContext.predictionsExpanded = false;
+        const activeTicker = normalizeTicker(state.tickerContext.ticker || state.tickerContext.intelTicker || "");
+        if (nextMode === "ticker" && !String(state.tickerContext.predictionsQuery || "").trim()) {
+          state.tickerContext.predictionsQuery = activeTicker;
+        }
+        loadTickerPredictions(activeTicker, { mode: nextMode, force: true, notify: false }).catch(() => {});
+        return;
+      }
+
+      const showMore = event.target.closest("[data-action='predictions-show-more']");
+      if (showMore) {
+        event.preventDefault();
+        state.tickerContext.predictionsExpanded = !state.tickerContext.predictionsExpanded;
+        const activeTicker = normalizeTicker(state.tickerContext.ticker || state.tickerContext.intelTicker || "");
+        renderPredictionsOutput({ payload: state.tickerContext.predictionsData, ticker: activeTicker });
+        return;
+      }
+
+      const searchNow = event.target.closest("[data-action='predictions-search-now']");
+      if (searchNow) {
+        event.preventDefault();
+        state.tickerContext.predictionsMode = "ticker";
+        state.tickerContext.predictionsExpanded = false;
+        const queryInput = ui.tickerPredictionsOutput.querySelector("[data-action='predictions-query']");
+        const queryValue = String(queryInput?.value || "").trim().slice(0, 80);
+        state.tickerContext.predictionsQuery = queryValue;
+        const activeTicker = normalizeTicker(state.tickerContext.ticker || state.tickerContext.intelTicker || "");
+        loadTickerPredictions(activeTicker, {
+          mode: "ticker",
+          query: queryValue,
+          force: true,
+          notify: true,
+        }).catch(() => {});
+      }
+    });
+
+    ui.tickerPredictionsOutput.addEventListener("input", (event) => {
+      const input = event.target.closest("[data-action='predictions-query']");
+      if (!input) return;
+      const queryValue = String(input.value || "").trim().slice(0, 80);
+      state.tickerContext.predictionsMode = "ticker";
+      state.tickerContext.predictionsQuery = queryValue;
+      state.tickerContext.predictionsExpanded = false;
+      if (polymarketSearchDebounceTimer) window.clearTimeout(polymarketSearchDebounceTimer);
+      polymarketSearchDebounceTimer = window.setTimeout(() => {
+        const activeTicker = normalizeTicker(state.tickerContext.ticker || state.tickerContext.intelTicker || "");
+        loadTickerPredictions(activeTicker, {
+          mode: "ticker",
+          query: queryValue,
+          force: true,
+          notify: false,
+        }).catch(() => {});
+      }, POLYMARKET_SEARCH_DEBOUNCE_MS);
+    });
+
+    ui.tickerPredictionsOutput.addEventListener("change", (event) => {
+      const toggle = event.target.closest("[data-action='predictions-include-closed']");
+      if (!toggle) return;
+      const checked = Boolean(toggle.checked);
+      state.tickerContext.predictionsIncludeClosed = checked;
+      state.tickerContext.predictionsExpanded = false;
+      const activeTicker = normalizeTicker(state.tickerContext.ticker || state.tickerContext.intelTicker || "");
+      loadTickerPredictions(activeTicker, {
+        includeClosed: checked,
+        force: true,
+        notify: false,
+      }).catch(() => {});
+    });
   };
 
   const setTickerIntelTab = (tab, { ensureLoaded = true } = {}) => {
     const next = tab === "predictions" ? "predictions" : "intelligence";
     const previous = state.intelActiveTab || "";
     state.intelActiveTab = next;
+
+    try {
+      const params = new URLSearchParams(window.location.search || "");
+      if (next === "predictions") params.set("intel", "predictions");
+      else params.delete("intel");
+      const nextSearch = params.toString();
+      const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}`;
+      if (nextUrl !== `${window.location.pathname}${window.location.search}`) {
+        history.replaceState(history.state || {}, "", nextUrl);
+      }
+    } catch (error) {
+      // ignore
+    }
 
     if (ui.tickerIntelligenceOutput) {
       ui.tickerIntelligenceOutput.classList.toggle("hidden", next !== "intelligence");
@@ -8875,11 +10537,14 @@
       if (activeTicker) {
         logEvent("polymarket_tab_opened", { ticker: activeTicker });
         loadTickerPredictions(activeTicker, { notify: false }).catch(() => {});
+      } else {
+        renderPredictionsOutput({ payload: state.tickerContext.predictionsData, ticker: "" });
       }
     }
   };
 
   const bindTickerIntelTabs = () => {
+    bindPredictionsPanelInteractions();
     if (!ui.tickerIntelTabs.length) return;
     ui.tickerIntelTabs.forEach((button) => {
       if (button.dataset.bound === "1") return;
@@ -8889,11 +10554,59 @@
         setTickerIntelTab(String(button.dataset.intelTab || "intelligence"));
       });
     });
-    setTickerIntelTab(state.intelActiveTab || "intelligence", { ensureLoaded: false });
+    const initialTab = (() => {
+      try {
+        const params = new URLSearchParams(window.location.search || "");
+        const intel = String(params.get("intel") || "").trim().toLowerCase();
+        if (intel === "predictions") return "predictions";
+      } catch (error) {
+        // ignore
+      }
+      return state.intelActiveTab || "intelligence";
+    })();
+    setTickerIntelTab(initialTab, { ensureLoaded: false });
+  };
+
+  const fetchTickerIntelPayload = async (functions, ticker, { force = false } = {}) => {
+    const symbol = normalizeTicker(ticker);
+    if (!symbol) throw new Error("Ticker is required.");
+    let callableError = null;
+    if (functions?.httpsCallable) {
+      try {
+        const getIntel = functions.httpsCallable("get_ticker_intel");
+        const result = await getIntel({ ticker: symbol, force: Boolean(force), meta: buildMeta() });
+        const payload = result?.data && typeof result.data === "object" ? result.data : {};
+        return payload;
+      } catch (error) {
+        callableError = error;
+      }
+    }
+
+    const headers = await buildApiAuthHeaders({ includeJson: false });
+    const params = new URLSearchParams();
+    params.set("ticker", symbol);
+    if (force) params.set("force", "1");
+    const response = await fetch(`/api/ticker/intel?${params.toString()}`, {
+      method: "GET",
+      headers,
+      credentials: "same-origin",
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      const detail = String(payload?.detail || payload?.error || "").trim();
+      if (callableError?.message && detail) {
+        throw new Error(`${callableError.message} (${detail})`);
+      }
+      if (detail) throw new Error(detail);
+      if (callableError?.message) throw new Error(callableError.message);
+      throw new Error("Unable to load ticker intelligence.");
+    }
+    const payload = await response.json().catch(() => ({}));
+    return payload && typeof payload === "object" ? payload : {};
   };
 
   const loadTickerIntel = async (functions, ticker, { notify = false, force = false } = {}) => {
-    if (!functions || (!ui.intelOutput && !ui.tickerIntelligenceOutput)) return;
+    if ((!functions && !window.fetch) || (!ui.intelOutput && !ui.tickerIntelligenceOutput)) return;
     const symbol = normalizeTicker(ticker);
     if (!symbol) {
       if (ui.intelOutput) ui.intelOutput.innerHTML = `<div class="small muted">Load a ticker to see company context.</div>`;
@@ -8901,7 +10614,11 @@
         ui.tickerIntelligenceOutput.innerHTML = `<div class="small muted">Load a ticker to generate institutional intelligence.</div>`;
       }
       if (ui.tickerPredictionsOutput) {
-        ui.tickerPredictionsOutput.innerHTML = `<div class="small muted">Load a ticker to view related Polymarket markets.</div>`;
+        state.tickerContext.predictionsTicker = "";
+        state.tickerContext.predictionsQuery = "";
+        state.tickerContext.predictionsData = normalizePredictionsPayload({ query: "", events: [] }, "");
+        state.tickerContext.predictionsRequestKey = "";
+        renderPredictionsOutput({ payload: state.tickerContext.predictionsData, ticker: "" });
       }
       return;
     }
@@ -8912,11 +10629,10 @@
       if (ui.intelOutput) setOutputLoading(ui.intelOutput, "Loading company context...");
       if (ui.tickerIntelligenceOutput) setOutputLoading(ui.tickerIntelligenceOutput, "Loading institutional intelligence...");
 
-      const getIntel = functions.httpsCallable("get_ticker_intel");
-      const result = await getIntel({ ticker: symbol, meta: buildMeta() });
+      const intelPayload = await fetchTickerIntelPayload(functions, symbol, { force });
       if (ui.intelOutput) setOutputReady(ui.intelOutput);
       if (ui.tickerIntelligenceOutput) setOutputReady(ui.tickerIntelligenceOutput);
-      renderTickerIntel(result.data || {});
+      renderTickerIntel(intelPayload || {});
       if (state.intelActiveTab === "predictions") {
         loadTickerPredictions(symbol, { notify: false, force }).catch(() => {});
       }
@@ -8931,8 +10647,11 @@
         ui.tickerIntelligenceOutput.innerHTML = `<div class="small muted">Unable to load institutional intelligence right now.</div>`;
       }
       if (ui.tickerPredictionsOutput && state.intelActiveTab === "predictions") {
-        setOutputReady(ui.tickerPredictionsOutput);
-        ui.tickerPredictionsOutput.innerHTML = `<div class="small muted">Polymarket predictions are temporarily unavailable for ${escapeHtml(symbol)}.</div>`;
+        renderPredictionsOutput({
+          payload: state.tickerContext.predictionsData,
+          ticker: symbol,
+          error: "Unable to load predictions.",
+        });
       }
       if (notify) showToast(error.message || "Unable to load ticker intelligence.", "warn");
     }
@@ -9002,12 +10721,123 @@
 
   const normalizeXSocialQuery = (raw) => String(raw || "").trim();
 
+  const normalizeXAuthorHandle = (value) => sanitizeText(String(value || "").replace(/^@+/, ""), 80);
+
+  const readXCount = (...values) => {
+    for (const value of values) {
+      const num = Number(value);
+      if (Number.isFinite(num)) return Math.max(0, Math.floor(num));
+    }
+    return 0;
+  };
+
+  const normalizeXTrendPost = (raw) => {
+    const post = raw && typeof raw === "object" ? raw : {};
+    const author = post.author && typeof post.author === "object" ? post.author : {};
+    const user = post.user && typeof post.user === "object" ? post.user : {};
+    const account = post.account && typeof post.account === "object" ? post.account : {};
+    const metricsRaw =
+      (post.metrics && typeof post.metrics === "object" ? post.metrics : null) ||
+      (post.public_metrics && typeof post.public_metrics === "object" ? post.public_metrics : null) ||
+      (post.engagement && typeof post.engagement === "object" ? post.engagement : null) ||
+      {};
+
+    const authorUsername = normalizeXAuthorHandle(
+      post.authorUsername ||
+        post.author_username ||
+        post.username ||
+        post.screen_name ||
+        post.handle ||
+        author.username ||
+        author.screen_name ||
+        author.handle ||
+        user.username ||
+        user.screen_name ||
+        user.handle ||
+        account.username ||
+        account.screen_name
+    );
+    const authorName =
+      sanitizeText(
+        post.authorName ||
+          post.author_name ||
+          post.authorDisplayName ||
+          post.author_display_name ||
+          post.name ||
+          author.name ||
+          author.display_name ||
+          author.full_name ||
+          user.name ||
+          user.display_name ||
+          account.name,
+        120
+      ) || authorUsername;
+
+    const postId = sanitizeText(post.id || post.id_str || post.tweet_id || post.status_id, 120);
+    const text = sanitizeText(post.text || post.full_text || post.content || post.body || post.title || post.snippet, 8000);
+    const createdAt = post.createdAt || post.created_at || post.publishedAt || post.timestamp || post.date || null;
+    const permalink =
+      sanitizeText(post.permalink || post.url || post.link || post.tweetUrl || post.tweet_url, 500) ||
+      (postId ? `https://x.com/i/web/status/${encodeURIComponent(postId)}` : "");
+
+    const likes = readXCount(
+      metricsRaw.like_count,
+      metricsRaw.favorite_count,
+      metricsRaw.likes,
+      metricsRaw.likeCount,
+      post.like_count,
+      post.favorite_count,
+      post.likes,
+      post.likeCount,
+      post.favoriteCount
+    );
+    const reposts = readXCount(
+      metricsRaw.retweet_count,
+      metricsRaw.repost_count,
+      metricsRaw.reposts,
+      metricsRaw.retweetCount,
+      metricsRaw.repostCount,
+      post.retweet_count,
+      post.repost_count,
+      post.reposts,
+      post.retweetCount,
+      post.repostCount
+    );
+    const replies = readXCount(
+      metricsRaw.reply_count,
+      metricsRaw.replies,
+      metricsRaw.replyCount,
+      post.reply_count,
+      post.replies,
+      post.replyCount
+    );
+
+    return {
+      ...post,
+      id: postId || sanitizeText(post.id, 120),
+      text,
+      createdAt,
+      permalink,
+      authorName,
+      authorUsername,
+      likes,
+      reposts,
+      replies,
+      metrics: {
+        ...metricsRaw,
+        like_count: likes,
+        retweet_count: reposts,
+        reply_count: replies,
+      },
+    };
+  };
+
   const uniqueSocialRows = (rows) => {
     const list = Array.isArray(rows) ? rows : [];
     const seen = new Set();
     const out = [];
     for (const row of list) {
-      const key = String(row?.id || row?.permalink || `${row?.title || ""}_${row?.createdAt || ""}`).trim();
+      const key = String(row?.id || row?.permalink || `${row?.text || row?.title || ""}_${row?.createdAt || ""}`).trim();
       if (!key || seen.has(key)) continue;
       seen.add(key);
       out.push(row);
@@ -9121,9 +10951,16 @@
             const text = escapeHtml(post.text || post.title || "");
             const created = formatEpoch(post.createdAt);
             const metrics = post.metrics && typeof post.metrics === "object" ? post.metrics : {};
-            const likes = Number(metrics.like_count || 0);
-            const reposts = Number(metrics.retweet_count || 0);
-            const replies = Number(metrics.reply_count || 0);
+            const likes = readXCount(post.likes, metrics.like_count, metrics.favorite_count, metrics.likes, metrics.likeCount);
+            const reposts = readXCount(
+              post.reposts,
+              metrics.retweet_count,
+              metrics.repost_count,
+              metrics.reposts,
+              metrics.retweetCount,
+              metrics.repostCount
+            );
+            const replies = readXCount(post.replies, metrics.reply_count, metrics.replies, metrics.replyCount);
             const permalink = post.permalink ? escapeHtml(post.permalink) : "";
             return `
               <article class="x-post-card">
@@ -9236,7 +11073,7 @@
         meta: buildMeta(),
       });
       const payload = result.data || {};
-      const incomingPosts = Array.isArray(payload.posts) ? payload.posts : [];
+      const incomingPosts = (Array.isArray(payload.posts) ? payload.posts : []).map(normalizeXTrendPost).filter(Boolean);
       const incomingStories = Array.isArray(payload.stories) ? payload.stories : [];
 
       const mergedPosts = append ? uniqueSocialRows([...(state.tickerContext.xPosts || []), ...incomingPosts]) : uniqueSocialRows(incomingPosts);
@@ -9298,89 +11135,439 @@
       .filter(Boolean)
       .slice(0, 30);
 
-  const renderEarningsCalendar = (payload) => {
-    if (!ui.eventsCalendarOutput) return;
-    const items = Array.isArray(payload?.items) ? payload.items : [];
-    const symbol = normalizeTicker(payload?.symbol || "");
-    const lastUpdated = String(payload?.lastUpdated || "").trim();
-    const lastFetched = Number(payload?.lastFetchedAtMs || 0);
-    const windowKey = String(ui.eventsCalendarWindow?.value || "month").trim().toLowerCase();
+  const EARNINGS_TIMEZONE = "America/New_York";
+  const EARNINGS_DAY_MS = 24 * 60 * 60 * 1000;
+  const EARNINGS_PAGE_SIZE = 60;
 
-    const now = Date.now();
-    const windowMs = windowKey === "week" ? 7 * 24 * 60 * 60 * 1000 : 31 * 24 * 60 * 60 * 1000;
-    const cutoff = now - 24 * 60 * 60 * 1000;
-    const upper = now + windowMs;
-    const filtered = items.filter((row) => {
-      const t = Date.parse(String(row?.date || ""));
-      return Number.isFinite(t) ? t >= cutoff && t <= upper : false;
+  const toYmdUtc = (date) => {
+    if (!(date instanceof Date) || !Number.isFinite(date.getTime())) return "";
+    const y = date.getUTCFullYear();
+    const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(date.getUTCDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  };
+
+  const parseYmdUtc = (value) => {
+    const text = String(value || "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return null;
+    const parsed = new Date(`${text}T00:00:00Z`);
+    return Number.isFinite(parsed.getTime()) ? parsed : null;
+  };
+
+  const shiftEarningsYmd = (value, days) => {
+    const base = parseYmdUtc(value);
+    if (!base) return "";
+    return toYmdUtc(new Date(base.getTime() + Number(days || 0) * EARNINGS_DAY_MS));
+  };
+
+  const getTimeZoneYmd = (date, timeZone) => {
+    try {
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).formatToParts(date);
+      const year = parts.find((item) => item.type === "year")?.value || "";
+      const month = parts.find((item) => item.type === "month")?.value || "";
+      const day = parts.find((item) => item.type === "day")?.value || "";
+      if (year && month && day) return `${year}-${month}-${day}`;
+    } catch (error) {
+      // Ignore.
+    }
+    return toYmdUtc(date);
+  };
+
+  const getNyTodayYmd = () => getTimeZoneYmd(new Date(), EARNINGS_TIMEZONE);
+
+  const getWeekStartYmd = (value) => {
+    const date = parseYmdUtc(value);
+    if (!date) return "";
+    const day = date.getUTCDay();
+    return toYmdUtc(new Date(date.getTime() - day * EARNINGS_DAY_MS));
+  };
+
+  const buildDateSpan = (from, to) => {
+    const start = parseYmdUtc(from);
+    const end = parseYmdUtc(to);
+    if (!start || !end || start.getTime() > end.getTime()) return [];
+    const out = [];
+    for (let cursor = start.getTime(); cursor <= end.getTime(); cursor += EARNINGS_DAY_MS) {
+      out.push(toYmdUtc(new Date(cursor)));
+    }
+    return out;
+  };
+
+  const formatRangeLabel = (from, to) => {
+    const start = parseYmdUtc(from);
+    const end = parseYmdUtc(to);
+    if (!start || !end) return "—";
+    const fmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: "UTC",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
     });
+    return `${fmt.format(start)} – ${fmt.format(end)}`;
+  };
 
-    if (!filtered.length) {
-      ui.eventsCalendarOutput.innerHTML = `<div class="small muted">No earnings events found for the selected window.</div>`;
+  const formatDayLabel = (value) => {
+    const date = parseYmdUtc(value);
+    if (!date) return { weekday: "—", day: "—" };
+    return {
+      weekday: new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "short" }).format(date),
+      day: new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "short", day: "numeric" }).format(date),
+    };
+  };
+
+  const parseNullableNumber = (value) => {
+    if (value === null || value === undefined) return null;
+    const text = String(value).trim();
+    if (!text || text.toLowerCase() === "null" || text === "—") return null;
+    const num = Number(text.replace(/,/g, ""));
+    return Number.isFinite(num) ? num : null;
+  };
+
+  const normalizeCallTime = (value) => {
+    const text = sanitizeText(value, 60).toUpperCase();
+    if (!text) return "—";
+    if (text.includes("BMO") || text.includes("BEFORE")) return "BMO";
+    if (text.includes("AMC") || text.includes("AFTER")) return "AMC";
+    if (text.includes("TAS") || text.includes("TIME NOT SUPPLIED")) return "TAS";
+    return text;
+  };
+
+  const computeSurprisePct = (epsActual, epsEstimate) => {
+    if (!Number.isFinite(epsActual) || !Number.isFinite(epsEstimate) || Math.abs(epsEstimate) < 1e-9) return null;
+    return ((epsActual - epsEstimate) / Math.abs(epsEstimate)) * 100;
+  };
+
+  const normalizeEarningsRow = (raw) => {
+    const row = raw && typeof raw === "object" ? raw : {};
+    const symbol = normalizeTicker(row.symbol || row.ticker);
+    const dateRaw = sanitizeText(row.date || row.reportDate, 20);
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : "";
+    if (!symbol || !date) return null;
+    const company = sanitizeText(row.name || row.company || row.companyName, 180) || symbol;
+    const epsEstimate = parseNullableNumber(row.epsEstimated ?? row.epsEstimate ?? row.estimate);
+    const epsActual = parseNullableNumber(row.epsActual ?? row.eps);
+    const providedSurprise = parseNullableNumber(row.epsSurprisePercentage ?? row.surprisePercent ?? row.surprise);
+    const surprisePct = Number.isFinite(providedSurprise) ? providedSurprise : computeSurprisePct(epsActual, epsEstimate);
+    return {
+      date,
+      symbol,
+      company,
+      eventName: sanitizeText(row.eventName || row.event || "Earnings", 120) || "Earnings",
+      callTime: normalizeCallTime(row.callTime || row.time || row.hour || row.when),
+      epsEstimate,
+      epsActual,
+      surprisePct: Number.isFinite(surprisePct) ? surprisePct : null,
+      market: sanitizeText(row.market || row.exchange, 80) || null,
+    };
+  };
+
+  const buildRowsByDate = (rows) => {
+    const out = {};
+    (Array.isArray(rows) ? rows : []).forEach((raw) => {
+      const row = normalizeEarningsRow(raw);
+      if (!row) return;
+      if (!out[row.date]) out[row.date] = [];
+      out[row.date].push(row);
+    });
+    Object.keys(out).forEach((date) => {
+      out[date].sort((a, b) => a.symbol.localeCompare(b.symbol));
+    });
+    return out;
+  };
+
+  const getEarningsFollowStorageKey = () => {
+    const uid = String(state.user?.uid || "anon").trim() || "anon";
+    return `quantura:earnings:follows:${uid}`;
+  };
+
+  const readLocalEarningsFollows = () => {
+    try {
+      const raw = String(safeLocalStorageGet(getEarningsFollowStorageKey()) || "").trim();
+      if (!raw) return new Set();
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return new Set();
+      return new Set(parsed.map((item) => normalizeTicker(item)).filter(Boolean));
+    } catch (error) {
+      return new Set();
+    }
+  };
+
+  const writeLocalEarningsFollows = (set) => {
+    const out = Array.from(set || []).map((item) => normalizeTicker(item)).filter(Boolean);
+    safeLocalStorageSet(getEarningsFollowStorageKey(), JSON.stringify(Array.from(new Set(out))));
+  };
+
+  const loadEarningsFollowSet = async ({ force = false } = {}) => {
+    const db = state.clients?.db;
+    const uid = String(state.user?.uid || "").trim();
+    if (!db || !uid) {
+      state.earningsCalendar.follows = readLocalEarningsFollows();
+      state.earningsCalendar.followsUid = uid || "anon";
+      return state.earningsCalendar.follows;
+    }
+    if (!force && state.earningsCalendar.followsUid === uid && state.earningsCalendar.follows instanceof Set) {
+      return state.earningsCalendar.follows;
+    }
+    try {
+      const snap = await db.collection("users").doc(uid).collection("earnings_follows").limit(1200).get();
+      const follows = new Set(
+        snap.docs
+          .map((doc) => normalizeTicker(doc.id || doc.data()?.symbol))
+          .filter(Boolean)
+      );
+      state.earningsCalendar.follows = follows;
+      state.earningsCalendar.followsUid = uid;
+      writeLocalEarningsFollows(follows);
+      return follows;
+    } catch (error) {
+      const fallback = readLocalEarningsFollows();
+      state.earningsCalendar.follows = fallback;
+      state.earningsCalendar.followsUid = uid || "anon";
+      return fallback;
+    }
+  };
+
+  const resolveEarningsRangeFromPreset = (preset) => {
+    const currentPreset = String(preset || "this-week").trim().toLowerCase();
+    const nyToday = getNyTodayYmd();
+    const thisWeekStart = getWeekStartYmd(nyToday);
+    if (currentPreset === "next-week") {
+      const start = shiftEarningsYmd(thisWeekStart, 7);
+      return { start, end: shiftEarningsYmd(start, 6), stepDays: 7 };
+    }
+    if (currentPreset === "last-week") {
+      const start = shiftEarningsYmd(thisWeekStart, -7);
+      return { start, end: shiftEarningsYmd(start, 6), stepDays: 7 };
+    }
+    if (currentPreset === "next-30-days") {
+      return { start: nyToday, end: shiftEarningsYmd(nyToday, 29), stepDays: 30 };
+    }
+    return { start: thisWeekStart, end: shiftEarningsYmd(thisWeekStart, 6), stepDays: 7 };
+  };
+
+  const ensureEarningsRangeState = () => {
+    if (state.earningsCalendar.rangeStart && state.earningsCalendar.rangeEnd) {
+      return {
+        start: state.earningsCalendar.rangeStart,
+        end: state.earningsCalendar.rangeEnd,
+        stepDays: state.earningsCalendar.preset === "next-30-days" ? 30 : 7,
+      };
+    }
+    const initial = resolveEarningsRangeFromPreset(state.earningsCalendar.preset);
+    state.earningsCalendar.rangeStart = initial.start;
+    state.earningsCalendar.rangeEnd = initial.end;
+    return initial;
+  };
+
+  const getFilteredRowsByDate = () => {
+    const query = String(state.earningsCalendar.search || "").trim().toLowerCase();
+    const rowsByDate = state.earningsCalendar.rowsByDate || {};
+    const out = {};
+    (state.earningsCalendar.rangeDates || []).forEach((date) => {
+      const rows = Array.isArray(rowsByDate[date]) ? rowsByDate[date] : [];
+      if (!query) {
+        out[date] = rows;
+        return;
+      }
+      out[date] = rows.filter((row) => {
+        const symbol = String(row?.symbol || "").toLowerCase();
+        const company = String(row?.company || "").toLowerCase();
+        return symbol.includes(query) || company.includes(query);
+      });
+    });
+    return out;
+  };
+
+  const renderEarningsDayStrip = (filteredByDate) => {
+    if (!ui.eventsCalendarDayStrip) return;
+    const dates = Array.isArray(state.earningsCalendar.rangeDates) ? state.earningsCalendar.rangeDates : [];
+    if (!dates.length) {
+      ui.eventsCalendarDayStrip.innerHTML = `<div class="small muted">No days in selected range.</div>`;
+      return;
+    }
+    ui.eventsCalendarDayStrip.innerHTML = dates
+      .map((date) => {
+        const labels = formatDayLabel(date);
+        const count = Array.isArray(filteredByDate?.[date]) ? filteredByDate[date].length : 0;
+        const isActive = String(state.earningsCalendar.selectedDate || "") === date;
+        return `
+          <button class="earnings-day-tile${isActive ? " is-active" : ""}" type="button" role="tab" aria-selected="${
+            isActive ? "true" : "false"
+          }" data-earnings-date="${escapeHtml(date)}">
+            <span class="earnings-day-weekday">${escapeHtml(labels.weekday)}</span>
+            <span class="earnings-day-date">${escapeHtml(labels.day)}</span>
+            <span class="earnings-day-badge">${count} Earnings</span>
+          </button>
+        `;
+      })
+      .join("");
+  };
+
+  const renderEarningsTable = (filteredByDate) => {
+    if (!ui.eventsCalendarOutput) return;
+    const selectedDate = String(state.earningsCalendar.selectedDate || "");
+    const selectedRowsRaw = Array.isArray(filteredByDate?.[selectedDate]) ? filteredByDate[selectedDate] : [];
+    const selectedRows = selectedRowsRaw.slice(0, 500);
+    const page = Math.max(1, Number(state.earningsCalendar.pageByDate?.[selectedDate] || 1));
+    const visibleCount = Math.min(selectedRows.length, page * EARNINGS_PAGE_SIZE);
+    const visibleRows = selectedRows.slice(0, visibleCount);
+
+    if (ui.eventsCalendarSelectedDayTitle) {
+      const label = formatDayLabel(selectedDate);
+      ui.eventsCalendarSelectedDayTitle.textContent = selectedDate
+        ? `Earnings on ${label.day} (${selectedRows.length})`
+        : "Earnings on —";
+    }
+
+    if (!selectedRows.length) {
+      ui.eventsCalendarOutput.innerHTML = `<div class="small muted">No earnings found for the selected day.</div>`;
       return;
     }
 
-    const cardHtml = filtered
+    const follows = state.earningsCalendar.follows instanceof Set ? state.earningsCalendar.follows : new Set();
+    const rowsHtml = visibleRows
       .map((row) => {
-        const date = escapeHtml(String(row?.date || "—"));
-        const epsActual = Number(row?.epsActual);
-        const epsEstimated = Number(row?.epsEstimated);
-        const revenueActual = Number(row?.revenueActual);
-        const revenueEstimated = Number(row?.revenueEstimated);
-        const epsDelta = Number.isFinite(epsActual) && Number.isFinite(epsEstimated) ? epsActual - epsEstimated : NaN;
-        const revenueDelta =
-          Number.isFinite(revenueActual) && Number.isFinite(revenueEstimated) ? revenueActual - revenueEstimated : NaN;
-        const epsDeltaLabel = Number.isFinite(epsDelta) ? `${epsDelta >= 0 ? "+" : ""}${epsDelta.toFixed(2)}` : "—";
-        const revenueDeltaLabel = Number.isFinite(revenueDelta)
-          ? `${revenueDelta >= 0 ? "+" : ""}${formatCompactNumber(revenueDelta)}`
-          : "—";
+        const followed = follows.has(row.symbol);
+        const epsEstimate = Number.isFinite(row.epsEstimate) ? row.epsEstimate.toFixed(2) : "—";
+        const epsActual = Number.isFinite(row.epsActual) ? row.epsActual.toFixed(2) : "—";
+        const surprise = Number.isFinite(row.surprisePct) ? `${row.surprisePct > 0 ? "+" : ""}${row.surprisePct.toFixed(1)}%` : "—";
+        const surpriseClass = Number.isFinite(row.surprisePct)
+          ? row.surprisePct > 0
+            ? "is-positive"
+            : row.surprisePct < 0
+            ? "is-negative"
+            : ""
+          : "";
         return `
-          <article class="news-card">
-            <div class="news-title">${escapeHtml(symbol || String(row?.symbol || "Ticker"))} · ${date}</div>
-            <div class="small">EPS: ${Number.isFinite(epsActual) ? epsActual.toFixed(2) : "—"} vs ${Number.isFinite(epsEstimated) ? epsEstimated.toFixed(2) : "—"} <span class="muted">(delta ${escapeHtml(epsDeltaLabel)})</span></div>
-            <div class="small">Revenue: ${Number.isFinite(revenueActual) ? formatCompactNumber(revenueActual) : "—"} vs ${Number.isFinite(revenueEstimated) ? formatCompactNumber(revenueEstimated) : "—"} <span class="muted">(delta ${escapeHtml(revenueDeltaLabel)})</span></div>
-          </article>
+          <tr>
+            <td data-label="Follow">
+              <button
+                class="earnings-follow-star${followed ? " is-active" : ""}"
+                type="button"
+                data-earnings-follow="${escapeHtml(row.symbol)}"
+                aria-label="${followed ? "Unfollow" : "Follow"} ${escapeHtml(row.symbol)}"
+                title="${followed ? "Unfollow" : "Follow"} ${escapeHtml(row.symbol)}"
+              >
+                ${followed ? "★" : "☆"}
+              </button>
+            </td>
+            <td data-label="Symbol"><strong>${escapeHtml(row.symbol)}</strong></td>
+            <td data-label="Company">${escapeHtml(row.company || "—")}</td>
+            <td data-label="Event">${escapeHtml(row.eventName || "Earnings")}</td>
+            <td data-label="Call Time">${escapeHtml(row.callTime || "—")}</td>
+            <td data-label="EPS Estimate">${escapeHtml(epsEstimate)}</td>
+            <td data-label="Reported EPS">${escapeHtml(epsActual)}</td>
+            <td data-label="Surprise %" class="earnings-surprise ${surpriseClass}">${escapeHtml(surprise)}</td>
+            <td data-label="Market">${escapeHtml(row.market || "—")}</td>
+          </tr>
         `;
       })
       .join("");
 
+    const hasMore = visibleCount < selectedRows.length;
     ui.eventsCalendarOutput.innerHTML = `
-      <div class="small muted" style="margin-bottom:10px;">
-        ${escapeHtml(symbol || "Ticker")} · ${filtered.length} event${filtered.length === 1 ? "" : "s"} ·
-        ${lastFetched ? `Last fetched ${escapeHtml(new Date(lastFetched).toLocaleString())}` : "Last fetched —"}
-        ${lastUpdated ? ` · Last updated ${escapeHtml(lastUpdated)}` : ""}
+      <div class="earnings-table-wrap">
+        <table class="data-table earnings-data-table">
+          <thead>
+            <tr>
+              <th>Follow</th>
+              <th>Symbol</th>
+              <th>Company</th>
+              <th>Event Name</th>
+              <th>Earnings Call Time</th>
+              <th>EPS Estimate</th>
+              <th>Reported EPS</th>
+              <th>Surprise %</th>
+              <th>Market/Exchange</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
       </div>
-      <div class="news-stream">${cardHtml}</div>
+      ${
+        hasMore
+          ? `<div class="earnings-table-footer"><button class="cta secondary small" type="button" data-earnings-load-more="${escapeHtml(
+              selectedDate
+            )}">Load more</button><span class="small muted">${visibleCount} / ${selectedRows.length}</span></div>`
+          : `<div class="small muted earnings-table-footer">${selectedRows.length} row${selectedRows.length === 1 ? "" : "s"}</div>`
+      }
     `;
+  };
+
+  const renderEarningsCalendar = () => {
+    if (!ui.eventsCalendarOutput) return;
+    const rangeStart = state.earningsCalendar.rangeStart;
+    const rangeEnd = state.earningsCalendar.rangeEnd;
+    const rangeDates = buildDateSpan(rangeStart, rangeEnd);
+    state.earningsCalendar.rangeDates = rangeDates;
+    if (ui.eventsCalendarRangeLabel) ui.eventsCalendarRangeLabel.textContent = formatRangeLabel(rangeStart, rangeEnd);
+
+    const filteredByDate = getFilteredRowsByDate();
+    const selectedDateExists = rangeDates.includes(String(state.earningsCalendar.selectedDate || ""));
+    if (!selectedDateExists) {
+      const firstWithRows = rangeDates.find((date) => (filteredByDate[date] || []).length > 0);
+      state.earningsCalendar.selectedDate = firstWithRows || rangeDates[0] || "";
+    }
+    if (!state.earningsCalendar.pageByDate) state.earningsCalendar.pageByDate = {};
+    if (!state.earningsCalendar.pageByDate[state.earningsCalendar.selectedDate]) {
+      state.earningsCalendar.pageByDate[state.earningsCalendar.selectedDate] = 1;
+    }
+
+    renderEarningsDayStrip(filteredByDate);
+    renderEarningsTable(filteredByDate);
   };
 
   const loadEarningsCalendar = async ({ force = false, notify = false } = {}) => {
     if (!ui.eventsCalendarOutput) return;
-    const tickerSeed = normalizeTicker(state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "");
-    const symbol = normalizeTicker(ui.eventsCalendarSymbol?.value || tickerSeed || "");
-    if (!symbol) {
-      if (notify) showToast("Enter a ticker for earnings calendar.", "warn");
+    const range = ensureEarningsRangeState();
+    const start = range.start;
+    const end = range.end;
+    const cacheKey = `${start}_${end}`;
+
+    await loadEarningsFollowSet({ force: false });
+
+    const cached = state.earningsCalendar.requestCache.get(cacheKey);
+    if (!force && cached && Array.isArray(cached.rows)) {
+      state.earningsCalendar.rows = cached.rows;
+      state.earningsCalendar.rowsByDate = buildRowsByDate(cached.rows);
+      state.earningsCalendar.rangeStart = start;
+      state.earningsCalendar.rangeEnd = end;
+      if (ui.eventsCalendarStatus) {
+        ui.eventsCalendarStatus.textContent = `Showing ${cached.rows.length} earnings rows (cached).`;
+      }
+      renderEarningsCalendar();
       return;
     }
 
-    const startDate = String(ui.eventsCalendarStart?.value || "").trim();
-    const endDate = String(ui.eventsCalendarEnd?.value || "").trim();
-    const requestKey = JSON.stringify({ symbol, startDate, endDate, window: String(ui.eventsCalendarWindow?.value || "month") });
-    if (!force && ui.eventsCalendarOutput.dataset.requestKey === requestKey) return;
-    ui.eventsCalendarOutput.dataset.requestKey = requestKey;
+    if (state.earningsCalendar.inFlightController) {
+      try {
+        state.earningsCalendar.inFlightController.abort();
+      } catch (error) {
+        // Ignore.
+      }
+    }
+    const controller = new AbortController();
+    state.earningsCalendar.inFlightController = controller;
 
     try {
-      if (ui.eventsCalendarStatus) ui.eventsCalendarStatus.textContent = "Refreshing earnings cache...";
+      if (ui.eventsCalendarStatus) ui.eventsCalendarStatus.textContent = "Loading earnings range...";
       setOutputLoading(ui.eventsCalendarOutput, "Loading earnings calendar...");
       const headers = await buildApiAuthHeaders({ includeJson: true });
       const refreshResp = await fetch("/api/earnings/refresh", {
         method: "POST",
         headers,
         credentials: "same-origin",
+        signal: controller.signal,
         body: JSON.stringify({
-          symbol,
-          start: startDate,
-          end: endDate,
+          start,
+          end,
         }),
       });
       const refreshPayload = await refreshResp.json().catch(() => ({}));
@@ -9388,43 +11575,115 @@
         throw new Error(String(refreshPayload?.error || "Unable to refresh earnings cache.").trim());
       }
 
-      let payloadFromFirestore = null;
-      try {
-        const db = state.clients?.db;
-        if (db) {
-          const snap = await db.collection("earningsCalendar").doc(symbol).get();
-          if (snap.exists) {
-            const data = snap.data() || {};
-            payloadFromFirestore = {
-              symbol,
-              lastUpdated: String(data?.lastUpdated || refreshPayload?.lastUpdated || ""),
-              items: Array.isArray(data?.items) ? data.items : [],
-              lastFetchedAtMs: Number(data?.lastFetchedAt?.toMillis?.() || 0),
-            };
-          }
-        }
-      } catch (error) {
-        payloadFromFirestore = null;
-      }
+      const normalizedRows = (Array.isArray(refreshPayload?.items) ? refreshPayload.items : [])
+        .map((row) => normalizeEarningsRow(row))
+        .filter(Boolean);
+      state.earningsCalendar.requestCache.set(cacheKey, {
+        rows: normalizedRows,
+        fetchedAtMs: Number(refreshPayload?.lastFetchedAtMs || Date.now()) || Date.now(),
+        lastUpdated: String(refreshPayload?.lastUpdated || "").trim(),
+      });
 
-      if (!payloadFromFirestore) {
-        throw new Error("Earnings cache was refreshed but Firestore read is unavailable.");
-      }
-      const renderPayload = payloadFromFirestore;
+      state.earningsCalendar.rows = normalizedRows;
+      state.earningsCalendar.rowsByDate = buildRowsByDate(normalizedRows);
+      state.earningsCalendar.rangeStart = start;
+      state.earningsCalendar.rangeEnd = end;
+      state.earningsCalendar.pageByDate = {};
       setOutputReady(ui.eventsCalendarOutput);
-      renderEarningsCalendar(renderPayload);
+      renderEarningsCalendar();
       if (ui.eventsCalendarStatus) {
-        ui.eventsCalendarStatus.textContent = `Earnings calendar updated for ${symbol}.`;
+        ui.eventsCalendarStatus.textContent = `Loaded ${normalizedRows.length} earnings row${normalizedRows.length === 1 ? "" : "s"}.`;
       }
       logEvent("earnings_calendar_loaded", {
-        ticker: symbol,
-        rows: Array.isArray(renderPayload.items) ? renderPayload.items.length : 0,
+        rangeStart: start,
+        rangeEnd: end,
+        rows: normalizedRows.length,
       });
     } catch (error) {
+      const aborted = String(error?.name || "").toLowerCase() === "aborterror";
+      if (aborted) return;
+      const message = String(error?.message || "").trim();
+      const lower = message.toLowerCase();
+      const keyMissing = lower.includes("missing_fmp_api_key");
+      const rateLimited = lower.includes("429") || lower.includes("rate") || lower.includes("too many");
+      const cachedRows = Array.isArray(state.earningsCalendar.rows) ? state.earningsCalendar.rows : [];
       setOutputReady(ui.eventsCalendarOutput);
-      ui.eventsCalendarOutput.innerHTML = `<div class="small muted">Unable to load earnings calendar right now.</div>`;
-      if (ui.eventsCalendarStatus) ui.eventsCalendarStatus.textContent = "Unable to load earnings calendar.";
-      if (notify) showToast(error.message || "Unable to load earnings calendar.", "warn");
+      if (cachedRows.length) {
+        state.earningsCalendar.rowsByDate = buildRowsByDate(cachedRows);
+        renderEarningsCalendar();
+        if (ui.eventsCalendarStatus) {
+          ui.eventsCalendarStatus.textContent = "Showing cached earnings data. Live refresh is temporarily unavailable.";
+        }
+      } else {
+        const detail = keyMissing
+          ? "Earnings data is unavailable: server FMP key is not configured."
+          : rateLimited
+          ? "Earnings provider is rate-limited right now. Try again shortly."
+          : "Unable to load earnings calendar right now.";
+        ui.eventsCalendarOutput.innerHTML = `<div class="small muted">${escapeHtml(detail)}</div>`;
+        if (ui.eventsCalendarStatus) ui.eventsCalendarStatus.textContent = detail;
+      }
+      if (notify) showToast(message || "Unable to load earnings calendar.", "warn");
+    } finally {
+      if (state.earningsCalendar.inFlightController === controller) {
+        state.earningsCalendar.inFlightController = null;
+      }
+    }
+  };
+
+  const shiftEarningsCalendarRange = (direction = 1) => {
+    const current = ensureEarningsRangeState();
+    const stepDays = current.stepDays || 7;
+    const delta = Math.max(1, stepDays) * (direction >= 0 ? 1 : -1);
+    state.earningsCalendar.rangeStart = shiftEarningsYmd(current.start, delta);
+    state.earningsCalendar.rangeEnd = shiftEarningsYmd(current.end, delta);
+    state.earningsCalendar.selectedDate = "";
+    state.earningsCalendar.pageByDate = {};
+  };
+
+  const setEarningsCalendarPreset = (presetValue) => {
+    const preset = String(presetValue || "this-week").trim().toLowerCase();
+    const allowed = new Set(["this-week", "next-week", "last-week", "next-30-days"]);
+    state.earningsCalendar.preset = allowed.has(preset) ? preset : "this-week";
+    const range = resolveEarningsRangeFromPreset(state.earningsCalendar.preset);
+    state.earningsCalendar.rangeStart = range.start;
+    state.earningsCalendar.rangeEnd = range.end;
+    state.earningsCalendar.selectedDate = "";
+    state.earningsCalendar.pageByDate = {};
+  };
+
+  const toggleEarningsFollow = async (symbol) => {
+    const clean = normalizeTicker(symbol);
+    if (!clean) return;
+    if (!(state.earningsCalendar.follows instanceof Set)) {
+      state.earningsCalendar.follows = new Set();
+    }
+    const next = new Set(state.earningsCalendar.follows);
+    const willFollow = !next.has(clean);
+    if (willFollow) next.add(clean);
+    else next.delete(clean);
+    state.earningsCalendar.follows = next;
+    writeLocalEarningsFollows(next);
+    renderEarningsCalendar();
+
+    const db = state.clients?.db;
+    const uid = String(state.user?.uid || "").trim();
+    if (!db || !uid) return;
+    const ref = db.collection("users").doc(uid).collection("earnings_follows").doc(clean);
+    try {
+      if (willFollow) {
+        await ref.set(
+          {
+            symbol: clean,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+      } else {
+        await ref.delete();
+      }
+    } catch (error) {
+      // Keep local optimistic state even if network write fails.
     }
   };
 
@@ -9633,6 +11892,10 @@
     ui.tickerQueryModulesPicker.querySelectorAll('input[type="checkbox"][data-module-id]').forEach((node) => {
       const token = String(node.dataset.moduleId || "").trim();
       node.checked = selectedSet.has(token);
+      const chip = node.closest(".module-picker-chip");
+      if (chip && typeof chip.classList?.toggle === "function") {
+        chip.classList.toggle("is-selected", node.checked);
+      }
     });
   };
 
@@ -9644,8 +11907,9 @@
     ui.tickerQueryModulesPicker.innerHTML = MODEL_COUNCIL_MODULE_CATALOG.map((module) => {
       const id = String(module.id || "").trim();
       const label = String(module.label || id);
+      const selectedClass = selectedSet.has(id) ? " is-selected" : "";
       return `
-        <label class="module-picker-chip">
+        <label class="module-picker-chip${selectedClass}">
           <input type="checkbox" data-module-id="${escapeHtml(id)}" ${selectedSet.has(id) ? "checked" : ""} />
           <span>${escapeHtml(label)}</span>
         </label>
@@ -9659,6 +11923,62 @@
       });
       ui.tickerQueryModulesPicker.dataset.bound = "1";
     }
+  };
+
+  const createShuffledModelCouncilPromptDeck = () => {
+    const deck = MODEL_COUNCIL_PROMPT_SUGGESTIONS.slice();
+    for (let i = deck.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [deck[i], deck[j]] = [deck[j], deck[i]];
+    }
+    return deck;
+  };
+
+  const materializeModelCouncilPrompt = (template, ticker) => {
+    const symbol = normalizeTicker(ticker || ui.tickerQueryTicker?.value || state.tickerContext.ticker || "") || "AAPL";
+    return String(template || "").replace(/\{ticker\}/gi, symbol);
+  };
+
+  const renderModelCouncilPromptCards = ({ reshuffle = false } = {}) => {
+    if (!ui.tickerQueryPromptCards) return;
+    const total = MODEL_COUNCIL_PROMPT_SUGGESTIONS.length;
+    if (!total) {
+      ui.tickerQueryPromptCards.innerHTML = "";
+      return;
+    }
+    if (
+      reshuffle ||
+      !Array.isArray(state.tickerContext.tickerQueryPromptDeck) ||
+      state.tickerContext.tickerQueryPromptDeck.length !== total
+    ) {
+      state.tickerContext.tickerQueryPromptDeck = createShuffledModelCouncilPromptDeck();
+      state.tickerContext.tickerQueryPromptCursor = 0;
+    }
+
+    const deck = state.tickerContext.tickerQueryPromptDeck;
+    let cursor = Math.max(0, Number(state.tickerContext.tickerQueryPromptCursor || 0));
+    if (cursor + MODEL_COUNCIL_PROMPT_VISIBLE_COUNT > deck.length) {
+      state.tickerContext.tickerQueryPromptDeck = createShuffledModelCouncilPromptDeck();
+      state.tickerContext.tickerQueryPromptCursor = 0;
+      cursor = 0;
+    }
+    const visible = state.tickerContext.tickerQueryPromptDeck.slice(cursor, cursor + MODEL_COUNCIL_PROMPT_VISIBLE_COUNT);
+    ui.tickerQueryPromptCards.innerHTML = visible
+      .map((template) => {
+        const text = materializeModelCouncilPrompt(template, ui.tickerQueryTicker?.value || state.tickerContext.ticker || "");
+        return `
+          <button
+            class="model-council-prompt-card"
+            type="button"
+            data-action="model-council-prompt"
+            data-template="${escapeHtml(String(template || ""))}"
+            title="${escapeHtml(text)}"
+          >
+            ${escapeHtml(text)}
+          </button>
+        `;
+      })
+      .join("");
   };
 
   const renderTickerQueryModulesOutput = (moduleData, selectedModules) => {
@@ -9698,6 +12018,8 @@
     const model = escapeHtml(modelRaw);
     const provider = escapeHtml(MODEL_PROVIDER_LABEL[providerRaw] || providerRaw || "OpenAI");
     const context = payload?.context && typeof payload.context === "object" ? payload.context : {};
+    const logoUrlRaw = String(context.logoUrl || context.logo_url || "").trim();
+    const logoUrl = /^https?:\/\//i.test(logoUrlRaw) ? logoUrlRaw : "";
     const sector = escapeHtml(String(context.sector || "").trim());
     const industry = escapeHtml(String(context.industry || "").trim());
     const exchange = escapeHtml(String(context.exchange || "").trim());
@@ -9708,7 +12030,10 @@
     const shareUrl = String(payload?.shareUrl || state.tickerContext.tickerQueryShareUrl || "").trim();
 
     ui.tickerQueryOutput.innerHTML = `
-      <div class="small muted">Provider: ${provider} · Model: ${model}</div>
+      <div class="small muted" style="display:flex; align-items:center; gap:10px;">
+        ${logoUrl ? `<img src="${escapeHtml(logoUrl)}" alt="" loading="lazy" style="width:20px; height:20px; border-radius:50%; object-fit:cover;" />` : ""}
+        <span>Provider: ${provider} · Model: ${model}</span>
+      </div>
       <div class="small" style="margin-top:10px; white-space:pre-wrap;">${answer}</div>
       <div class="model-council-actions">
         <button class="task-chip${feedbackState === "like" ? " active" : ""}" type="button" data-action="model-council-like" data-response-id="${escapeHtml(responseId)}">Like</button>
@@ -9790,6 +12115,616 @@
     }
     return headers;
   };
+
+  const normalizeFxCode = (value, fallback = "USD") => {
+    const normalized = String(value || "")
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z]/g, "")
+      .slice(0, 6);
+    if (normalized) return normalized;
+    return String(fallback || "USD")
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z]/g, "")
+      .slice(0, 6);
+  };
+
+  const readTerminalFxRecent = () => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(TERMINAL_FX_RECENT_KEY) || "[]");
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      return [];
+    }
+  };
+
+  const writeTerminalFxRecent = (items) => {
+    try {
+      localStorage.setItem(TERMINAL_FX_RECENT_KEY, JSON.stringify((Array.isArray(items) ? items : []).slice(0, TERMINAL_FX_RECENT_LIMIT)));
+    } catch (error) {
+      // Ignore storage write failures.
+    }
+  };
+
+  const formatFxNumber = (value, maxDigits = 6) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return "-";
+    return new Intl.NumberFormat(undefined, {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: maxDigits,
+    }).format(numeric);
+  };
+
+  const setTerminalFxStatus = (message, isError = false) => {
+    if (!ui.terminalFxStatus) return;
+    ui.terminalFxStatus.textContent = String(message || "");
+    ui.terminalFxStatus.classList.toggle("error", Boolean(isError));
+  };
+
+  const renderTerminalFxResult = (payload) => {
+    if (!ui.terminalFxResult) return;
+    if (!payload || typeof payload !== "object") {
+      ui.terminalFxResult.innerHTML = '<div class="small muted">Run a conversion to view rate details.</div>';
+      return;
+    }
+    ui.terminalFxResult.innerHTML = `
+      <div class="profile-item"><span class="label">Amount in</span><span class="value">${formatFxNumber(payload.amountIn, 6)} ${escapeHtml(payload.base || "")}</span></div>
+      <div class="profile-item"><span class="label">Rate</span><span class="value">${formatFxNumber(payload.rate, 8)}</span></div>
+      <div class="profile-item"><span class="label">Amount out</span><span class="value">${formatFxNumber(payload.amountOut, 6)} ${escapeHtml(payload.quote || "")}</span></div>
+      <div class="profile-item"><span class="label">Symbol</span><span class="value">${escapeHtml(payload.symbolUsed || "-")}</span></div>
+      <div class="profile-item"><span class="label">Updated</span><span class="value">${
+        payload.asOf ? escapeHtml(new Date(payload.asOf).toLocaleString()) : "-"
+      }</span></div>
+      <div class="small muted" style="margin-top: 8px;">Source: ${escapeHtml(payload.source || "yahoo_finance")}</div>
+    `;
+  };
+
+  const renderTerminalFxRecent = () => {
+    if (!ui.terminalFxRecent) return;
+    const items = readTerminalFxRecent();
+    if (!items.length) {
+      ui.terminalFxRecent.innerHTML = '<div class="small muted">No recent conversions yet.</div>';
+      return;
+    }
+    ui.terminalFxRecent.innerHTML = items
+      .map((item, index) => {
+        const label = `${formatFxNumber(item.amountIn, 4)} ${normalizeFxCode(item.base)} -> ${formatFxNumber(
+          item.amountOut,
+          4
+        )} ${normalizeFxCode(item.quote)}`;
+        return `<button type="button" class="task-chip" data-terminal-fx-recent-index="${index}" style="margin: 4px 6px 4px 0;">${escapeHtml(
+          label
+        )}</button>`;
+      })
+      .join("");
+  };
+
+  const pushTerminalFxRecent = (payload) => {
+    const rows = readTerminalFxRecent();
+    const normalizedBase = normalizeFxCode(payload.base || "USD");
+    const normalizedQuote = normalizeFxCode(payload.quote || "USD");
+    const normalizedAmount = Number(payload.amountIn || 0);
+    const deduped = rows.filter((row) => {
+      const rowBase = normalizeFxCode(row.base || "USD");
+      const rowQuote = normalizeFxCode(row.quote || "USD");
+      return !(rowBase === normalizedBase && rowQuote === normalizedQuote && Number(row.amountIn || 0) === normalizedAmount);
+    });
+    deduped.unshift({
+      base: normalizedBase,
+      quote: normalizedQuote,
+      amountIn: normalizedAmount,
+      amountOut: Number(payload.amountOut || 0),
+      rate: Number(payload.rate || 0),
+      asOf: String(payload.asOf || ""),
+      symbolUsed: String(payload.symbolUsed || ""),
+      source: String(payload.source || ""),
+      createdAt: Date.now(),
+    });
+    writeTerminalFxRecent(deduped);
+    renderTerminalFxRecent();
+  };
+
+  const runTerminalFxConvert = async () => {
+    const amount = Number(ui.terminalFxAmount?.value || 0);
+    const base = normalizeFxCode(ui.terminalFxBase?.value || "USD");
+    const quote = normalizeFxCode(ui.terminalFxQuote?.value || "USD");
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setTerminalFxStatus("Enter a valid amount greater than zero.", true);
+      return;
+    }
+    if (!base || !quote) {
+      setTerminalFxStatus("Select base and quote currencies.", true);
+      return;
+    }
+
+    const submitButton = ui.terminalFxSubmit;
+    const submitLabel = submitButton?.querySelector("span");
+    if (submitButton) submitButton.disabled = true;
+    if (submitLabel) submitLabel.textContent = "Converting...";
+    setTerminalFxStatus("Requesting FX quote...");
+
+    try {
+      const headers = await buildApiAuthHeaders({ includeJson: true });
+      const response = await fetch("/api/fx/convert", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          base,
+          quote,
+          amount,
+          meta: buildMeta(),
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const detail = String(payload?.error || payload?.detail || `HTTP ${response.status}`).trim();
+        throw new Error(detail || "fx_convert_failed");
+      }
+
+      const normalized = {
+        base,
+        quote,
+        amountIn: Number(payload?.amountIn || amount),
+        amountOut: Number(payload?.amountOut || 0),
+        rate: Number(payload?.rate || 0),
+        symbolUsed: String(payload?.symbolUsed || ""),
+        source: String(payload?.source || "yahoo_finance"),
+        asOf: String(payload?.asOf || ""),
+      };
+      renderTerminalFxResult(normalized);
+      pushTerminalFxRecent(normalized);
+      setTerminalFxStatus(`Converted ${base}/${quote} using ${normalized.symbolUsed || "Yahoo FX"}.`);
+      logEvent("fx_convert", { base, quote });
+    } catch (error) {
+      const message = extractErrorMessage(error, "Currency conversion failed.");
+      setTerminalFxStatus(message, true);
+      renderTerminalFxResult(null);
+      showToast(message, "warn");
+    } finally {
+      if (submitButton) submitButton.disabled = false;
+      if (submitLabel) submitLabel.textContent = "Convert";
+    }
+  };
+
+  const normalizeMyRequestType = (value) => {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    const lowered = raw.toLowerCase();
+    if (lowered === "forecast" || lowered === "screener" || lowered === "indicator") return lowered;
+    if (lowered === "modelcouncil" || lowered === "model_council" || lowered === "model-council") return "modelCouncil";
+    return "";
+  };
+
+  const normalizeMyRequestVisibility = (value, fallback = "private") => {
+    const raw = String(value || "").trim().toLowerCase();
+    if (raw === "public" || raw === "unlisted" || raw === "private") return raw;
+    return fallback;
+  };
+
+  const normalizeMyRequestPublishedFilter = (value) => {
+    const raw = String(value || "").trim().toLowerCase();
+    if (raw === "published") return "published";
+    if (raw === "unpublished" || raw === "draft") return "unpublished";
+    return "all";
+  };
+
+  const getMyRequestPanelStateKey = (panel, idx) => {
+    const explicit = String(panel?.dataset?.myRequestsPanelKey || "").trim();
+    if (explicit) return explicit;
+    const panelName = String(panel?.closest?.("[data-panel]")?.dataset?.panel || "").trim() || `panel_${idx}`;
+    panel.dataset.myRequestsPanelKey = panelName;
+    return panelName;
+  };
+
+  const readMyRequestPanelState = (panel, idx = 0) => {
+    const key = getMyRequestPanelStateKey(panel, idx);
+    const current = state.myRequestsPanelState[key] || {};
+    const defaultType = normalizeMyRequestType(panel?.dataset?.defaultType || "");
+    const controls = {
+      search: panel?.querySelector?.("[data-my-requests-search]"),
+      type: panel?.querySelector?.("[data-my-requests-type]"),
+      published: panel?.querySelector?.("[data-my-requests-published]"),
+      status: panel?.querySelector?.("[data-my-requests-status]"),
+      list: panel?.querySelector?.("[data-my-requests-list]"),
+    };
+    const next = {
+      search: String(current.search || controls.search?.value || "").trim(),
+      type: normalizeMyRequestType(current.type || controls.type?.value || "") || defaultType || "",
+      published: normalizeMyRequestPublishedFilter(current.published || controls.published?.value || "all"),
+    };
+    state.myRequestsPanelState[key] = next;
+    return { key, controls, filters: next };
+  };
+
+  const sortMyRequestsInState = () => {
+    state.myRequests = (Array.isArray(state.myRequests) ? state.myRequests : [])
+      .slice()
+      .sort((a, b) => {
+        const aMs = Number(a?.updatedAtMs || a?.createdAtMs || 0);
+        const bMs = Number(b?.updatedAtMs || b?.createdAtMs || 0);
+        return bMs - aMs;
+      });
+    const byId = {};
+    state.myRequests.forEach((item) => {
+      const id = String(item?.id || "").trim();
+      if (!id) return;
+      byId[id] = item;
+    });
+    state.myRequestsById = byId;
+  };
+
+  const upsertMyRequestInState = (request) => {
+    const id = String(request?.id || "").trim();
+    if (!id) return;
+    const index = state.myRequests.findIndex((item) => String(item?.id || "").trim() === id);
+    if (index >= 0) {
+      state.myRequests[index] = { ...state.myRequests[index], ...request };
+    } else {
+      state.myRequests.push(request);
+    }
+    sortMyRequestsInState();
+  };
+
+  const removeMyRequestFromState = (requestId) => {
+    const id = String(requestId || "").trim();
+    if (!id) return;
+    state.myRequests = state.myRequests.filter((item) => String(item?.id || "").trim() !== id);
+    delete state.myRequestsById[id];
+  };
+
+  const fetchMyRequestsList = async ({ force = false, notify = false } = {}) => {
+    if (!hasFullAccount()) {
+      state.myRequests = [];
+      state.myRequestsById = {};
+      state.myRequestsLoadedAt = 0;
+      return [];
+    }
+    if (state.myRequestsLoading) return state.myRequests;
+    if (!force && state.myRequests.length && Date.now() - Number(state.myRequestsLoadedAt || 0) < 15000) {
+      return state.myRequests;
+    }
+
+    state.myRequestsLoading = true;
+    try {
+      const headers = await buildApiAuthHeaders();
+      const response = await fetch("/api/my-requests?limit=160", {
+        method: "GET",
+        headers,
+        credentials: "same-origin",
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(String(payload?.error || "Unable to load requests.").trim());
+      state.myRequests = Array.isArray(payload?.items) ? payload.items : [];
+      sortMyRequestsInState();
+      state.myRequestsLoadedAt = Date.now();
+      return state.myRequests;
+    } catch (error) {
+      if (notify) showToast(error.message || "Unable to load requests.", "warn");
+      return state.myRequests;
+    } finally {
+      state.myRequestsLoading = false;
+    }
+  };
+
+  const getMyRequestById = (requestId) => {
+    const id = String(requestId || "").trim();
+    if (!id) return null;
+    return state.myRequestsById[id] || state.myRequests.find((item) => String(item?.id || "").trim() === id) || null;
+  };
+
+  const fetchMyRequestById = async (requestId) => {
+    const id = String(requestId || "").trim();
+    if (!id) return null;
+    const cached = getMyRequestById(id);
+    if (cached?.input && cached?.outputsMeta) return cached;
+    const headers = await buildApiAuthHeaders();
+    const response = await fetch(`/api/my-requests/${encodeURIComponent(id)}`, {
+      method: "GET",
+      headers,
+      credentials: "same-origin",
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(String(payload?.error || "Unable to load request.").trim());
+    const request = payload?.request && typeof payload.request === "object" ? payload.request : null;
+    if (request) {
+      upsertMyRequestInState(request);
+    }
+    return request;
+  };
+
+  const renderMyRequestCards = (items = []) => {
+    if (!Array.isArray(items) || !items.length) return `<div class="small muted">No requests matched this filter.</div>`;
+    return items
+      .map((item) => {
+        const id = escapeHtml(String(item?.id || ""));
+        const type = normalizeMyRequestType(item?.type) || "forecast";
+        const typeLabel = escapeHtml(String(item?.typeLabel || MY_REQUEST_TYPE_LABELS[type] || type));
+        const title = escapeHtml(String(item?.title || "Request"));
+        const ticker = escapeHtml(String(item?.ticker || "—"));
+        const createdAt = escapeHtml(formatTimestamp(item?.createdAt || item?.createdAtMs));
+        const updatedAt = escapeHtml(formatTimestamp(item?.updatedAt || item?.updatedAtMs));
+        const published = Boolean(item?.published);
+        const share = item?.share && typeof item.share === "object" ? item.share : {};
+        const shareVisibility = escapeHtml(String(share?.visibility || "private").toLowerCase());
+        const summary = escapeHtml(String((item?.outputsMeta || {})?.summary || ""));
+        return `
+          <div class="order-card" data-request-id="${id}">
+            <div class="order-header">
+              <div>
+                <div class="order-title">${title}</div>
+                <div class="small">ID: ${id}</div>
+              </div>
+              <span class="status ${published ? "fulfilled" : "pending"}">${published ? "published" : "unpublished"}</span>
+            </div>
+            <div class="order-meta">
+              <div><strong>Type</strong> ${typeLabel}</div>
+              <div><strong>Ticker</strong> ${ticker}</div>
+              <div><strong>Created</strong> ${createdAt}</div>
+              <div><strong>Updated</strong> ${updatedAt}</div>
+              <div><strong>Share</strong> ${shareVisibility}</div>
+              ${summary ? `<div><strong>Summary</strong> ${summary}</div>` : ""}
+            </div>
+            <div class="order-actions" style="display:flex;gap:10px;flex-wrap:wrap;">
+              <button class="cta secondary small" type="button" data-action="my-request-load" data-request-id="${id}">${icon("play")}<span>Load</span></button>
+              <button class="cta secondary small" type="button" data-action="my-request-share" data-request-id="${id}">${icon("share-ios")}<span>Share</span></button>
+              <button class="cta secondary small" type="button" data-action="my-request-rename" data-request-id="${id}">${icon("edit-pencil")}<span>Rename</span></button>
+              <button class="cta secondary small" type="button" data-action="my-request-duplicate" data-request-id="${id}">${icon("copy")}<span>Duplicate</span></button>
+              ${published ? `<button class="cta secondary small" type="button" data-action="my-request-unpublish" data-request-id="${id}">${icon("eye-off")}<span>Unpublish</span></button>` : ""}
+              <button class="cta secondary small danger" type="button" data-action="my-request-delete" data-request-id="${id}">${icon("trash")}<span>Delete</span></button>
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+  };
+
+  const renderMyRequestsPanels = () => {
+    const panels = Array.isArray(ui.myRequestsPanels) ? ui.myRequestsPanels : [];
+    panels.forEach((panel, idx) => {
+      const { controls, filters } = readMyRequestPanelState(panel, idx);
+      if (!controls?.list || !controls?.status) return;
+
+      const searchText = String(filters.search || "").trim().toLowerCase();
+      const typeFilter = normalizeMyRequestType(filters.type);
+      const publishedFilter = normalizeMyRequestPublishedFilter(filters.published);
+      const sourceRows = Array.isArray(state.myRequests) ? state.myRequests : [];
+      const rows = sourceRows.filter((item) => {
+        if (Boolean(item?.deleted)) return false;
+        const itemType = normalizeMyRequestType(item?.type);
+        if (typeFilter && itemType !== typeFilter) return false;
+        if (publishedFilter === "published" && !Boolean(item?.published)) return false;
+        if (publishedFilter === "unpublished" && Boolean(item?.published)) return false;
+        if (!searchText) return true;
+        const haystack = [
+          String(item?.title || ""),
+          String(item?.ticker || ""),
+          String(item?.typeLabel || ""),
+          String((item?.outputsMeta || {})?.summary || ""),
+          String((item?.input || {})?.question || ""),
+          String(item?.createdAt || ""),
+        ]
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(searchText);
+      });
+
+      if (!hasFullAccount()) {
+        controls.status.textContent = "Sign in to manage requests.";
+        controls.list.innerHTML = `<div class="small muted">Sign in to load your requests.</div>`;
+        return;
+      }
+      if (state.myRequestsLoading) {
+        controls.status.textContent = "Loading requests...";
+        controls.list.innerHTML = `<div class="small muted">${skeletonHtml(3)}</div>`;
+        return;
+      }
+      controls.status.textContent = rows.length
+        ? `${rows.length} request${rows.length === 1 ? "" : "s"}`
+        : "No requests matched this filter.";
+      controls.list.innerHTML = renderMyRequestCards(rows.slice(0, 60));
+    });
+  };
+
+  const bindMyRequestsPanels = () => {
+    const panels = Array.isArray(ui.myRequestsPanels) ? ui.myRequestsPanels : [];
+    panels.forEach((panel, idx) => {
+      if (!panel || panel.dataset.bound === "1") return;
+      panel.dataset.bound = "1";
+      const { controls, key, filters } = readMyRequestPanelState(panel, idx);
+      if (controls?.type) controls.type.value = filters.type || "";
+      if (controls?.published) controls.published.value = filters.published || "all";
+      if (controls?.search) controls.search.value = filters.search || "";
+
+      controls?.search?.addEventListener("input", () => {
+        state.myRequestsPanelState[key] = {
+          ...state.myRequestsPanelState[key],
+          search: String(controls.search.value || "").trim(),
+        };
+        renderMyRequestsPanels();
+      });
+      controls?.type?.addEventListener("change", () => {
+        state.myRequestsPanelState[key] = {
+          ...state.myRequestsPanelState[key],
+          type: normalizeMyRequestType(controls.type.value || "") || "",
+        };
+        renderMyRequestsPanels();
+      });
+      controls?.published?.addEventListener("change", () => {
+        state.myRequestsPanelState[key] = {
+          ...state.myRequestsPanelState[key],
+          published: normalizeMyRequestPublishedFilter(controls.published.value || "all"),
+        };
+        renderMyRequestsPanels();
+      });
+      panel.querySelector('[data-action="my-requests-refresh"]')?.addEventListener("click", async () => {
+        await fetchMyRequestsList({ force: true, notify: true });
+        renderMyRequestsPanels();
+      });
+    });
+  };
+
+  const upsertMyRequest = async (payload = {}) => {
+    if (!hasFullAccount()) return null;
+    const type = normalizeMyRequestType(payload.type);
+    if (!type || !MY_REQUEST_TYPES.has(type)) return null;
+    const headers = await buildApiAuthHeaders({ includeJson: true });
+    const response = await fetch("/api/my-requests", {
+      method: "POST",
+      headers,
+      credentials: "same-origin",
+      body: JSON.stringify({
+        type,
+        requestId: String(payload.requestId || "").trim(),
+        title: String(payload.title || "").trim(),
+        input: payload.input && typeof payload.input === "object" ? payload.input : {},
+        outputsMeta: payload.outputsMeta && typeof payload.outputsMeta === "object" ? payload.outputsMeta : {},
+        sourceRef: payload.sourceRef && typeof payload.sourceRef === "object" ? payload.sourceRef : {},
+        published: Boolean(payload.published),
+      }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(String(body?.error || "Unable to save request.").trim());
+    const request = body?.request && typeof body.request === "object" ? body.request : null;
+    if (request) {
+      upsertMyRequestInState(request);
+      renderMyRequestsPanels();
+    }
+    return request;
+  };
+
+  const updateMyRequest = async (requestId, payload = {}, { method = "PATCH", path = "" } = {}) => {
+    const id = String(requestId || "").trim();
+    if (!id) throw new Error("Request ID is required.");
+    const headers = await buildApiAuthHeaders({ includeJson: true });
+    const target = path || `/api/my-requests/${encodeURIComponent(id)}`;
+    const response = await fetch(target, {
+      method,
+      headers,
+      credentials: "same-origin",
+      body: method === "GET" || method === "DELETE" ? undefined : JSON.stringify(payload),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(String(body?.error || "Request update failed.").trim());
+    const request = body?.request && typeof body.request === "object" ? body.request : null;
+    if (request) {
+      upsertMyRequestInState(request);
+    } else if (method === "DELETE" || body?.deleted) {
+      removeMyRequestFromState(id);
+    }
+    renderMyRequestsPanels();
+    return body;
+  };
+
+  const openMyRequestShareModal = ({ request, onSaved } = {}) =>
+    new Promise((resolve) => {
+      const item = request && typeof request === "object" ? request : null;
+      if (!item) {
+        resolve(null);
+        return;
+      }
+      const requestId = String(item.id || "").trim();
+      if (!requestId) {
+        resolve(null);
+        return;
+      }
+
+      const modal = ensureActionModal();
+      const card = modal.querySelector(".modal-card");
+      if (!card) {
+        resolve(null);
+        return;
+      }
+
+      const currentShare = item.share && typeof item.share === "object" ? item.share : {};
+      const currentVisibility = normalizeMyRequestVisibility(currentShare.visibility, "private");
+      card.innerHTML = `
+        <h3>Share request</h3>
+        <p class="small">Choose visibility and copy a read-only link.</p>
+        <label class="label" for="my-request-share-visibility">Visibility</label>
+        <select id="my-request-share-visibility" class="modal-input">
+          <option value="private"${currentVisibility === "private" ? " selected" : ""}>Private</option>
+          <option value="unlisted"${currentVisibility === "unlisted" ? " selected" : ""}>Unlisted</option>
+          <option value="public"${currentVisibility === "public" ? " selected" : ""}>Public</option>
+        </select>
+        <div class="modal-actions" style="margin-top:14px;">
+          <button class="cta secondary" type="button" data-action="cancel">Close</button>
+          <button class="cta" type="button" data-action="confirm">Save visibility</button>
+          <button class="cta secondary" type="button" data-action="copy" disabled>Copy link</button>
+        </div>
+        <p class="small muted" style="margin-top:10px;" data-role="status"></p>
+      `;
+
+      const visibilityInput = card.querySelector("#my-request-share-visibility");
+      const copyBtn = card.querySelector('[data-action="copy"]');
+      const confirmBtn = card.querySelector('[data-action="confirm"]');
+      const status = card.querySelector('[data-role="status"]');
+      let latestShareUrl = String(currentShare.shareUrl || "").trim();
+      if (latestShareUrl) copyBtn.disabled = false;
+      if (status) status.textContent = latestShareUrl ? latestShareUrl : "";
+
+      const cleanup = (result = null) => {
+        modal.classList.add("hidden");
+        modal.removeEventListener("click", onClick);
+        window.removeEventListener("keydown", onKeyDown, true);
+        resolve(result);
+      };
+
+      const onClick = async (event) => {
+        const action = event.target?.dataset?.action;
+        if (!action) return;
+        if (action === "close" || action === "cancel") {
+          cleanup(null);
+          return;
+        }
+        if (action === "copy") {
+          if (!latestShareUrl) return;
+          try {
+            await performShare({
+              url: latestShareUrl,
+              title: "Quantura request",
+              text: "Shared request from Quantura",
+            });
+            showToast("Share link copied.");
+          } catch (error) {
+            showToast(error.message || "Unable to copy link.", "warn");
+          }
+          return;
+        }
+        if (action !== "confirm") return;
+        const visibility = normalizeMyRequestVisibility(visibilityInput?.value || "private", "private");
+        confirmBtn.disabled = true;
+        if (copyBtn) copyBtn.disabled = true;
+        if (status) status.textContent = "Saving...";
+        try {
+          const body = await updateMyRequest(requestId, { visibility }, { method: "POST", path: `/api/my-requests/${encodeURIComponent(requestId)}/share` });
+          latestShareUrl = String(body?.share?.shareUrl || "").trim();
+          if (status) status.textContent = latestShareUrl || "Share disabled for private visibility.";
+          if (copyBtn) copyBtn.disabled = !latestShareUrl;
+          const refreshed = body?.request && typeof body.request === "object" ? body.request : null;
+          if (refreshed && typeof onSaved === "function") onSaved(refreshed);
+          if (visibility === "private") {
+            showToast("Request set to private.");
+          } else {
+            showToast("Share link ready.");
+          }
+        } catch (error) {
+          if (status) status.textContent = error.message || "Unable to update share settings.";
+          showToast(error.message || "Unable to update share settings.", "warn");
+        } finally {
+          confirmBtn.disabled = false;
+        }
+      };
+
+      const onKeyDown = (event) => {
+        if (event.key === "Escape") cleanup(null);
+      };
+
+      modal.addEventListener("click", onClick);
+      window.addEventListener("keydown", onKeyDown, true);
+      modal.classList.remove("hidden");
+    });
 
   const applyTickerQueryModelSelection = (modelId, providerId = "") => {
     const normalizedModel = normalizeAiModelId(modelId || "") || "gpt-5-mini";
@@ -10064,7 +12999,7 @@
         };
       }
     } catch (error) {
-      // Fall through to /api/llm/run fallback.
+      // Fall through to /api/llm/:provider fallback.
     }
 
     // Fallback path guarantees selected provider/model produces output.
@@ -10075,14 +13010,15 @@
       moduleContext,
       technicalContext,
     });
-    const fallbackResponse = await fetch("/api/llm/run", {
+    const providerPath = normalizeModelCouncilProviderId(provider || "openai") || "openai";
+    const fallbackResponse = await fetch(`/api/llm/${encodeURIComponent(providerPath)}`, {
       method: "POST",
       headers,
       credentials: "same-origin",
       body: JSON.stringify({
-        provider,
+        provider: providerPath,
         model,
-        fallbackProviders: ["openai", "gemini", "mistral", "perplexity", "other"],
+        fallbackProviders: ["openai", "claude", "gemini", "deepseek", "mistral", "perplexity", "qwen", "amazon_nova", "other"],
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: String(prompt || "").trim() },
@@ -10146,17 +13082,17 @@
         };
       }
     } catch (error) {
-      // Fallback to /api/llm/run below.
+      // Fallback to /api/llm/openai below.
     }
 
-    const rewriteResponse = await fetch("/api/llm/run", {
+    const rewriteResponse = await fetch("/api/llm/openai", {
       method: "POST",
       headers,
       credentials: "same-origin",
       body: JSON.stringify({
         provider: "openai",
         model: "gpt-5-mini",
-        fallbackProviders: ["openai", "gemini", "mistral", "perplexity", "other"],
+        fallbackProviders: ["openai", "claude", "gemini", "deepseek", "mistral", "perplexity", "qwen", "amazon_nova", "other"],
         messages: [
           {
             role: "system",
@@ -10397,162 +13333,51 @@
       if (ui.tickerQueryImprovePreviewWrap && skipImprove) {
         ui.tickerQueryImprovePreviewWrap.classList.add("hidden");
       }
-      logEvent("model_council_completed", {
-        ticker: symbol,
-        language,
-        provider: responsePayload.provider || selectedProvider,
-        model: responsePayload.model || selectedModel,
-        modules_count: (responsePayload.selectedModules || selectedModules || []).length,
-        prompt_tokens: Number(usage?.prompt_tokens || 0),
-        completion_tokens: Number(usage?.completion_tokens || 0),
-        cached_tokens: Number(usage?.cached_tokens || 0),
-      });
-    } catch (error) {
-      setOutputReady(ui.tickerQueryOutput);
-      renderTickerQueryErrorState({
-        message: error.message || "Unable to run Model Council right now.",
+	      logEvent("model_council_completed", {
+	        ticker: symbol,
+	        language,
+	        provider: responsePayload.provider || selectedProvider,
+	        model: responsePayload.model || selectedModel,
+	        modules_count: (responsePayload.selectedModules || selectedModules || []).length,
+	        prompt_tokens: Number(usage?.prompt_tokens || 0),
+	        completion_tokens: Number(usage?.completion_tokens || 0),
+	        cached_tokens: Number(usage?.cached_tokens || 0),
+	      });
+	      upsertMyRequest({
+	        type: "modelCouncil",
+	        title: `${symbol} Model Council`,
+	        input: {
+	          ticker: symbol,
+	          question: finalPrompt,
+	          language,
+	          provider: responsePayload.provider || selectedProvider,
+	          model: responsePayload.model || selectedModel,
+	          modules: Array.isArray(responsePayload.selectedModules)
+	            ? responsePayload.selectedModules
+	            : selectedModules,
+	        },
+	        outputsMeta: {
+	          summary: String(responsePayload.answer || "").trim().slice(0, 480),
+	          answer: String(responsePayload.answer || "").trim().slice(0, 4000),
+	          provider: responsePayload.provider || selectedProvider,
+	          model: responsePayload.model || selectedModel,
+	          latencyMs,
+	        },
+	        sourceRef: {
+	          collection: "model_council_responses",
+	          id: String(responsePayload.responseId || "").trim(),
+	        },
+	      }).catch(() => {});
+	    } catch (error) {
+	      setOutputReady(ui.tickerQueryOutput);
+	      renderTickerQueryErrorState({
+	        message: error.message || "Unable to run Model Council right now.",
         retryProvider: error.retryProvider || "",
         retryModel: error.retryModel || "",
       });
       if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Unable to complete Model Council request.";
       if (notify) showToast(error.message || "Unable to run Model Council.", "warn");
     }
-  };
-
-  const clampBacktestAgentLookback = (value) => {
-    const parsed = Number(value);
-    if (!Number.isFinite(parsed)) return 90;
-    return Math.max(20, Math.min(730, Math.round(parsed)));
-  };
-
-  const summarizeBacktestTechnicalContext = ({ latestRows, series, lookbackDays, interval } = {}) => {
-    const latest = Array.isArray(latestRows)
-      ? latestRows
-          .map((row) => ({
-            name: String(row?.name || "").trim(),
-            value: Number(row?.value),
-          }))
-          .filter((row) => row.name && Number.isFinite(row.value))
-          .map((row) => ({
-            name: row.name,
-            value: Number(row.value.toFixed(4)),
-          }))
-      : [];
-
-    const latestMap = Object.fromEntries(latest.map((row) => [row.name, row.value]));
-    const pointsPerDay = String(interval || "1d") === "1h" ? 6 : 1;
-    const targetWindow = Math.max(20, Math.min(360, Math.round(Number(lookbackDays || 90) * pointsPerDay)));
-    const seriesItems = Array.isArray(series?.items) ? series.items : [];
-
-    const trend = seriesItems
-      .map((item) => {
-        const name = String(item?.name || "").trim();
-        const numericValues = (Array.isArray(item?.values) ? item.values : [])
-          .map((value) => {
-            const num = Number(value);
-            return Number.isFinite(num) ? num : null;
-          })
-          .filter((value) => value !== null);
-        if (!name || numericValues.length < 2) return null;
-        const windowValues = numericValues.slice(-targetWindow);
-        if (windowValues.length < 2) return null;
-        const start = Number(windowValues[0]);
-        const end = Number(windowValues[windowValues.length - 1]);
-        const delta = end - start;
-        const pctChange = Math.abs(start) > 1e-9 ? (delta / Math.abs(start)) * 100 : null;
-        const magnitude = Math.abs(pctChange ?? delta);
-        const direction =
-          pctChange !== null ? (pctChange > 0.75 ? "up" : pctChange < -0.75 ? "down" : "flat") : delta > 0 ? "up" : delta < 0 ? "down" : "flat";
-        return {
-          name,
-          start: Number(start.toFixed(6)),
-          end: Number(end.toFixed(6)),
-          delta: Number(delta.toFixed(6)),
-          pctChange: pctChange === null ? null : Number(pctChange.toFixed(3)),
-          magnitude: Number(magnitude.toFixed(3)),
-          direction,
-        };
-      })
-      .filter(Boolean)
-      .sort((a, b) => Number(b.magnitude || 0) - Number(a.magnitude || 0))
-      .slice(0, 10);
-
-    const heuristics = [];
-    const rsi = latestMap.RSI;
-    if (Number.isFinite(rsi)) {
-      if (rsi >= 70) heuristics.push(`RSI ${rsi.toFixed(2)} indicates overbought conditions.`);
-      else if (rsi <= 30) heuristics.push(`RSI ${rsi.toFixed(2)} indicates oversold conditions.`);
-      else heuristics.push(`RSI ${rsi.toFixed(2)} is in neutral range.`);
-    }
-    const mfi = latestMap.MFI;
-    if (Number.isFinite(mfi)) {
-      if (mfi >= 80) heuristics.push(`MFI ${mfi.toFixed(2)} suggests strong inflow / overbought pressure.`);
-      else if (mfi <= 20) heuristics.push(`MFI ${mfi.toFixed(2)} suggests outflow / oversold pressure.`);
-    }
-    const adx = latestMap.ADX;
-    if (Number.isFinite(adx)) {
-      if (adx >= 25) heuristics.push(`ADX ${adx.toFixed(2)} indicates trend strength is active.`);
-      else heuristics.push(`ADX ${adx.toFixed(2)} indicates weak or ranging trend.`);
-    }
-    const macd = latestMap.MACD;
-    if (Number.isFinite(macd)) {
-      if (macd > 0) heuristics.push(`MACD is positive (${macd.toFixed(4)}), favoring bullish momentum bias.`);
-      else if (macd < 0) heuristics.push(`MACD is negative (${macd.toFixed(4)}), favoring bearish momentum bias.`);
-      else heuristics.push("MACD is flat near zero.");
-    }
-    const sma = latestMap.SMA;
-    const ema = latestMap.EMA;
-    if (Number.isFinite(sma) && Number.isFinite(ema)) {
-      if (ema > sma) heuristics.push(`EMA (${ema.toFixed(4)}) is above SMA (${sma.toFixed(4)}), showing short-term strength.`);
-      else if (ema < sma) heuristics.push(`EMA (${ema.toFixed(4)}) is below SMA (${sma.toFixed(4)}), showing short-term weakness.`);
-    }
-
-    return {
-      lookbackDays: Number(lookbackDays || 90),
-      interval: String(interval || "1d"),
-      latest,
-      trend,
-      heuristics,
-      generatedAt: new Date().toISOString(),
-    };
-  };
-
-  const renderBacktestAgentResult = (payload, technicalContext) => {
-    if (!ui.backtestAgentOutput) return;
-    const answer = escapeHtml(String(payload?.answer || "").trim() || "No answer returned.");
-    const model = escapeHtml(String(payload?.model || "gpt-5"));
-    const provider = escapeHtml(String(payload?.provider || "openai"));
-    const lookbackDays = Number(technicalContext?.lookbackDays || 0);
-    const interval = escapeHtml(String(technicalContext?.interval || "1d"));
-    const heuristics = Array.isArray(technicalContext?.heuristics) ? technicalContext.heuristics : [];
-    const trend = Array.isArray(technicalContext?.trend) ? technicalContext.trend : [];
-
-    ui.backtestAgentOutput.innerHTML = `
-      <div class="small muted">Provider: ${provider} · Model: ${model} · Window: ${lookbackDays || "n/a"}d (${interval})</div>
-      <div class="small" style="margin-top:10px; white-space:pre-wrap;">${answer}</div>
-      ${
-        heuristics.length
-          ? `<div class="small" style="margin-top:12px;"><strong>Indicator signals</strong></div>
-             <ul class="small" style="margin:6px 0 0 16px;">
-               ${heuristics.slice(0, 6).map((item) => `<li>${escapeHtml(String(item || ""))}</li>`).join("")}
-             </ul>`
-          : ""
-      }
-      ${
-        trend.length
-          ? `<div class="small" style="margin-top:12px;"><strong>Recent trend shifts</strong></div>
-             <ul class="small" style="margin:6px 0 0 16px;">
-               ${trend
-                 .slice(0, 5)
-                 .map((item) => {
-                   const pct = Number.isFinite(Number(item?.pctChange)) ? `${Number(item.pctChange).toFixed(2)}%` : "n/a";
-                   return `<li>${escapeHtml(String(item?.name || "Indicator"))}: ${escapeHtml(pct)} (${escapeHtml(String(item?.direction || "flat"))})</li>`;
-                 })
-                 .join("")}
-             </ul>`
-          : ""
-      }
-    `;
   };
 
   const isPanelVisible = (panelName) => {
@@ -10567,14 +13392,6 @@
 
     const tickerInput = document.getElementById("options-ticker");
     if (tickerInput && "value" in tickerInput) tickerInput.value = symbol;
-
-    if (!hasFullAccount()) {
-      if (isPanelVisible("options")) {
-        setOutputReady(ui.optionsOutput);
-        ui.optionsOutput.innerHTML = `<div class="small muted">Sign in to load the options chain.</div>`;
-      }
-      return;
-    }
 
     if (!force && state.tickerContext.optionsTicker === symbol) return;
     state.tickerContext.optionsTicker = symbol;
@@ -10602,19 +13419,105 @@
     }, 220);
   };
 
-  const renderTrendingTickers = (payload) => {
-    if (!ui.trendingList) return;
+  const normalizeTrendingLogoUrl = (raw) => {
+    const value = String(raw || "").trim();
+    return /^https?:\/\//i.test(value) ? value : "";
+  };
+
+  const extractHostnameForLogo = (rawUrl) => {
+    const value = String(rawUrl || "").trim();
+    if (!value) return "";
+    try {
+      const parsed = new URL(value.startsWith("http") ? value : `https://${value}`);
+      const host = String(parsed.hostname || "").trim().toLowerCase();
+      if (!host) return "";
+      return host.replace(/^www\./, "");
+    } catch (error) {
+      return "";
+    }
+  };
+
+  const websiteToYfinanceLogoUrl = (website) => {
+    const host = extractHostnameForLogo(website);
+    return host ? `https://logo.clearbit.com/${host}` : "";
+  };
+
+  const extractTrendingRowLogoUrl = (row) => {
+    if (!row || typeof row !== "object") return "";
+    const direct =
+      normalizeTrendingLogoUrl(row.logoUrl) ||
+      normalizeTrendingLogoUrl(row.logo_url) ||
+      normalizeTrendingLogoUrl(row.logo);
+    if (direct) return direct;
+    return websiteToYfinanceLogoUrl(row.website || row.site || row.domain);
+  };
+
+  const extractIntelLogoUrl = (payload) => {
+    const data = payload && typeof payload === "object" ? payload : {};
+    const profile = data.profile && typeof data.profile === "object" ? data.profile : {};
+    const profileDetails = data.profileDetails && typeof data.profileDetails === "object" ? data.profileDetails : {};
+    return (
+      normalizeTrendingLogoUrl(data.logoUrl) ||
+      normalizeTrendingLogoUrl(data.logo_url) ||
+      normalizeTrendingLogoUrl(profile.logoUrl) ||
+      normalizeTrendingLogoUrl(profile.logo_url) ||
+      normalizeTrendingLogoUrl(profileDetails.logoUrl) ||
+      normalizeTrendingLogoUrl(profileDetails.logo_url) ||
+      websiteToYfinanceLogoUrl(profile.website || profileDetails.website || data.website)
+    );
+  };
+
+  const fetchTrendingTickerLogoUrl = async (functions, symbol) => {
+    const ticker = normalizeTicker(symbol);
+    if (!ticker) return "";
+    if (trendingLogoCache.has(ticker)) {
+      return String(trendingLogoCache.get(ticker) || "");
+    }
+    if (trendingLogoInFlight.has(ticker)) {
+      return trendingLogoInFlight.get(ticker);
+    }
+    const pending = (async () => {
+      try {
+        const result = await fetchTickerIntelPayload(functions, ticker, { force: false });
+        const logoUrl = extractIntelLogoUrl(result || {});
+        trendingLogoCache.set(ticker, logoUrl || "");
+        return logoUrl || "";
+      } catch (error) {
+        trendingLogoCache.set(ticker, "");
+        return "";
+      } finally {
+        trendingLogoInFlight.delete(ticker);
+      }
+    })();
+    trendingLogoInFlight.set(ticker, pending);
+    return pending;
+  };
+
+  const normalizeTrendingTickerRows = (payload) => {
     const items = Array.isArray(payload?.items) ? payload.items : [];
     const tickers = Array.isArray(payload?.tickers) ? payload.tickers : [];
-
-    const rows = items.length
+    const baseRows = items.length
       ? items
       : tickers.map((symbol) => ({
           symbol,
           lastClose: null,
           changePct: null,
         }));
+    return baseRows
+      .map((row) => {
+        const symbol = normalizeTicker(row?.symbol || row?.ticker || "");
+        if (!symbol) return null;
+        return {
+          ...row,
+          symbol,
+          logoUrl: extractTrendingRowLogoUrl(row),
+        };
+      })
+      .filter(Boolean);
+  };
 
+  const renderTrendingTickerRows = (rows) => {
+    if (!ui.trendingList) return;
     if (!rows.length) {
       ui.trendingList.innerHTML = `<div class="small muted">No trending tickers returned.</div>`;
       return;
@@ -10627,6 +13530,7 @@
         const lastClose = row.lastClose;
         const changePct = row.changePct;
         const change = row.change;
+        const logoUrl = extractTrendingRowLogoUrl(row);
 
         const changeNum = typeof changePct === "number" ? changePct : Number(changePct);
         const changeOk = Number.isFinite(changeNum);
@@ -10641,7 +13545,14 @@
         return `
           <button class="trending-hot-chip" type="button" data-action="pick-ticker" data-ticker="${escapeHtml(symbol)}">
             <div class="trending-top">
-              <div class="trending-symbol">${escapeHtml(symbol)}</div>
+              <div class="trending-symbol" style="display:inline-flex; align-items:center; gap:8px;">
+                ${
+                  logoUrl
+                    ? `<img src="${escapeHtml(logoUrl)}" alt="" loading="lazy" style="width:18px; height:18px; border-radius:50%; object-fit:cover; background:rgba(255,255,255,0.9);" />`
+                    : ""
+                }
+                <span>${escapeHtml(symbol)}</span>
+              </div>
               <div class="trending-price">${escapeHtml(priceLabel)}</div>
             </div>
             <div class="trending-bottom">
@@ -10654,16 +13565,74 @@
       .join("");
   };
 
+  const enrichTrendingTickerRowsWithLogos = async (rows, functions) => {
+    const list = Array.isArray(rows) ? rows : [];
+    if (!list.length) return list;
+    const updated = list.map((row) => ({ ...(row || {}) }));
+    let changed = false;
+    const targets = updated
+      .slice(0, 18)
+      .map((row, index) => ({ row, index }))
+      .filter(({ row }) => !extractTrendingRowLogoUrl(row));
+
+    await Promise.all(
+      targets.map(async ({ row, index }) => {
+        const symbol = normalizeTicker(row?.symbol || row?.ticker || "");
+        if (!symbol) return;
+        const logoUrl = await fetchTrendingTickerLogoUrl(functions, symbol);
+        if (!logoUrl) return;
+        updated[index].logoUrl = logoUrl;
+        changed = true;
+      })
+    );
+    return changed ? updated : list;
+  };
+
+  const fetchTrendingTickersFromApi = async ({ force = false } = {}) => {
+    const headers = await buildApiAuthHeaders({ includeJson: false });
+    const params = new URLSearchParams();
+    if (force) params.set("force", "1");
+    const query = params.toString();
+    const response = await fetch(`/api/ticker/trending${query ? `?${query}` : ""}`, {
+      method: "GET",
+      headers,
+      credentials: "same-origin",
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const detail = String(payload?.detail || payload?.error || "").trim();
+      throw new Error(detail || "Unable to load trending tickers right now.");
+    }
+    return payload && typeof payload === "object" ? payload : {};
+  };
+
   const loadTrendingTickers = async (functions, { notify = false, force = false } = {}) => {
-    if (!functions || !ui.trendingList) return;
+    if (!ui.trendingList) return;
     try {
       setOutputLoading(ui.trendingList, "Loading trending tickers...");
-      const getTrending = functions.httpsCallable("get_trending_tickers");
-      const result = await getTrending({ force: Boolean(force), meta: buildMeta() });
+      let rows = [];
+      let source = "api";
+      try {
+        const apiPayload = await fetchTrendingTickersFromApi({ force });
+        rows = normalizeTrendingTickerRows(apiPayload || {});
+      } catch (apiError) {
+        if (!functions?.httpsCallable) throw apiError;
+        source = "callable";
+        const getTrending = functions.httpsCallable("get_trending_tickers");
+        const result = await getTrending({ force: Boolean(force), meta: buildMeta() });
+        rows = normalizeTrendingTickerRows(result.data || {});
+      }
       setOutputReady(ui.trendingList);
-      renderTrendingTickers(result.data || {});
-      const count = Array.isArray(result.data?.tickers) ? result.data.tickers.length : 0;
-      logEvent("trending_loaded", { count });
+      renderTrendingTickerRows(rows);
+      enrichTrendingTickerRowsWithLogos(rows, functions || null)
+        .then((enrichedRows) => {
+          if (enrichedRows !== rows) {
+            renderTrendingTickerRows(enrichedRows);
+          }
+        })
+        .catch(() => undefined);
+      const count = rows.length;
+      logEvent("trending_loaded", { count, source });
     } catch (error) {
       setOutputReady(ui.trendingList);
       ui.trendingList.innerHTML = `<div class="small muted">Unable to load trending tickers right now.</div>`;
@@ -11835,7 +14804,7 @@
   const labelForecastService = (raw) => {
     const key = String(raw || "").trim().toLowerCase();
     if (key === "prophet") return "Quantura Horizon";
-    if (key === "ibm_timemixer") return "IBM TimeMixer";
+    if (key === "sagemaker_canvas") return "SageMaker Canvas";
     return raw ? String(raw) : "Forecast";
   };
 
@@ -13077,10 +16046,14 @@
           <tbody>
             ${rows
               .map(
-                (row) => `
+                (row) => {
+                  const logoRaw = String(row?.logoUrl || row?.logo_url || "").trim();
+                  const logoUrl = /^https?:\/\//i.test(logoRaw) ? logoRaw : "";
+                  return `
                   <tr>
                     <td>
-                      <button class="link-button" type="button" data-action="pick-ticker" data-ticker="${escapeHtml(row.symbol)}">
+                      <button class="link-button" type="button" data-action="pick-ticker" data-ticker="${escapeHtml(row.symbol)}" style="display:inline-flex; align-items:center; gap:8px;">
+                        ${logoUrl ? `<img src="${escapeHtml(logoUrl)}" alt="" loading="lazy" style="width:16px; height:16px; border-radius:50%; object-fit:cover;" />` : ""}
                         ${escapeHtml(row.symbol)}
                       </button>
                     </td>
@@ -13092,7 +16065,8 @@
                     <td>${row.score ?? "—"}</td>
                     <td>${formatRoiPercent(toFiniteOrNull(row.projectedRoi))}</td>
                   </tr>
-                `
+                `;
+                }
               )
               .join("")}
           </tbody>
@@ -13128,6 +16102,58 @@
       }
     }
     return null;
+  };
+
+  const toIsoTimestamp = (date, interval = "1d") => {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
+    if (String(interval || "1d").toLowerCase() === "1h") {
+      return date.toISOString();
+    }
+    return date.toISOString().slice(0, 10);
+  };
+
+  const buildForwardForecastDates = ({ lastDate, horizon = 0, interval = "1d" } = {}) => {
+    const total = Math.max(0, Number(horizon) || 0);
+    const out = [];
+    if (!(lastDate instanceof Date) || Number.isNaN(lastDate.getTime()) || total <= 0) return out;
+    let cursor = new Date(lastDate.getTime());
+    const hourly = String(interval || "1d").toLowerCase() === "1h";
+    while (out.length < total) {
+      if (hourly) {
+        cursor = new Date(cursor.getTime() + 60 * 60 * 1000);
+        out.push(toIsoTimestamp(cursor, interval));
+        continue;
+      }
+      cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
+      const weekday = cursor.getUTCDay();
+      if (weekday === 0 || weekday === 6) continue;
+      out.push(toIsoTimestamp(cursor, interval));
+    }
+    return out;
+  };
+
+  const alignForecastRowsWithHistory = ({ forecastRows = [], historyRows = [], interval = "1d", horizon = 0 } = {}) => {
+    const normalized = normalizeForecastSeriesRows(forecastRows);
+    if (!normalized.length) return [];
+    const quantileKeys = Object.keys(normalized[0] || {}).filter((key) => /^q\d{1,3}$/.test(key));
+    if (!quantileKeys.length) return normalized;
+    const providedDates = normalized.map((row) => String(row.ds || "").trim()).filter(Boolean);
+    if (providedDates.length === normalized.length) {
+      return normalized;
+    }
+    const historyList = Array.isArray(historyRows) ? historyRows : [];
+    const lastHistoryDate = extractDateFromHistoryRow(historyList[historyList.length - 1] || null);
+    if (!lastHistoryDate) return normalized;
+    const generatedDates = buildForwardForecastDates({
+      lastDate: lastHistoryDate,
+      horizon: Math.max(Number(horizon) || 0, normalized.length),
+      interval,
+    });
+    if (!generatedDates.length) return normalized;
+    return normalized.map((row, idx) => ({
+      ...row,
+      ds: generatedDates[idx] || row.ds,
+    }));
   };
 
   const summarizeTickerRationale = ({ projectedRoi, q4Seasonality }) => {
@@ -13179,13 +16205,8 @@
       start,
       meta: buildMeta(),
     });
-    const requestId = String(forecastResult.data?.requestId || "").trim();
-    if (!requestId) return null;
-
-    const forecastSnap = await db.collection("forecast_requests").doc(requestId).get();
-    if (!forecastSnap.exists) return null;
-    const forecastDoc = forecastSnap.data() || {};
-    const forecastRows = Array.isArray(forecastDoc.forecastRows) ? forecastDoc.forecastRows : [];
+    const forecastData = forecastResult.data && typeof forecastResult.data === "object" ? forecastResult.data : {};
+    const forecastRows = normalizeForecastSeriesRows(forecastData.forecastSeries || forecastData.forecastRows || []);
     if (!forecastRows.length) return null;
 
     const lastRow = forecastRows[forecastRows.length - 1] || {};
@@ -13592,7 +16613,7 @@
           ownerUsername: "quantura",
           ownerEmail: "system@quantura.ai",
           ownerSocialLinks: {
-            website: "https://quantura-e2e3d.web.app/",
+            website: "https://quantura.studio/",
             x: "",
             linkedin: "",
             github: "",
@@ -13719,7 +16740,16 @@
 
   const loadScreenerRunById = async (db, runId) => {
     if (!db || !runId) throw new Error("Run ID is required.");
-    if (!hasFullAccount()) throw new Error("Sign in to load saved runs.");
+    if (!hasSessionUser()) {
+      try {
+        await ensureSessionUser({
+          reason: "screener_load_requires_session",
+          message: "Sign in to sync saved screener runs.",
+        });
+      } catch (error) {
+        throw new Error("Sign in to load saved runs.");
+      }
+    }
 
     const cleanId = String(runId || "").trim();
     if (!cleanId) throw new Error("Run ID is required.");
@@ -13746,12 +16776,289 @@
     return Array.from(set).sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
   };
 
+  const extractForecastKeyLevels = (rows = []) => {
+    const normalizedRows = normalizeForecastSeriesRows(rows);
+    if (!normalizedRows.length) {
+      return { support: null, median: null, resistance: null, bandWidth: null, bandWidthPct: null };
+    }
+    const quantileKeys = extractQuantileKeys(normalizedRows);
+    if (!quantileKeys.length) {
+      return { support: null, median: null, resistance: null, bandWidth: null, bandWidthPct: null };
+    }
+    const last = normalizedRows[normalizedRows.length - 1] || {};
+    const supportKey = quantileKeys[0];
+    const resistanceKey = quantileKeys[quantileKeys.length - 1];
+    const medianKey =
+      quantileKeys.find((key) => key === "q50") ||
+      quantileKeys
+        .slice()
+        .sort((a, b) => Math.abs(Number(a.slice(1)) - 50) - Math.abs(Number(b.slice(1)) - 50))[0];
+    const support = Number(last[supportKey]);
+    const median = Number(last[medianKey]);
+    const resistance = Number(last[resistanceKey]);
+    const bandWidth = Number.isFinite(resistance) && Number.isFinite(support) ? resistance - support : null;
+    const bandWidthPct =
+      Number.isFinite(bandWidth) && Number.isFinite(median) && median > 0 ? (bandWidth / median) * 100 : null;
+    return {
+      support: Number.isFinite(support) ? support : null,
+      median: Number.isFinite(median) ? median : null,
+      resistance: Number.isFinite(resistance) ? resistance : null,
+      bandWidth: Number.isFinite(bandWidth) ? bandWidth : null,
+      bandWidthPct: Number.isFinite(bandWidthPct) ? bandWidthPct : null,
+    };
+  };
+
+  const buildForecastAutoSummaryContext = (forecastDoc = {}) => {
+    const rows = normalizeForecastSeriesRows(forecastDoc.forecastRows || []);
+    const metrics = forecastDoc.metrics && typeof forecastDoc.metrics === "object" ? forecastDoc.metrics : {};
+    const keyLevels = extractForecastKeyLevels(rows);
+    const recentClose = Number(metrics.lastClose);
+    const finalMedian = Number(keyLevels.median);
+    const delta = Number.isFinite(recentClose) && Number.isFinite(finalMedian) ? finalMedian - recentClose : null;
+    const deltaPct =
+      Number.isFinite(delta) && Number.isFinite(recentClose) && recentClose > 0 ? (delta / recentClose) * 100 : null;
+    return {
+      ticker: normalizeTicker(forecastDoc.ticker || state.tickerContext.ticker || ""),
+      interval: String(forecastDoc.interval || state.tickerContext.interval || "1d"),
+      horizon: Number(forecastDoc.horizon || metrics.horizon || rows.length || 0) || rows.length || 0,
+      service: String(forecastDoc.service || "prophet"),
+      quantiles: Array.isArray(forecastDoc.quantiles) ? forecastDoc.quantiles : [],
+      rowCount: rows.length,
+      recentClose: Number.isFinite(recentClose) ? recentClose : null,
+      finalMedian: Number.isFinite(finalMedian) ? finalMedian : null,
+      support: keyLevels.support,
+      resistance: keyLevels.resistance,
+      bandWidth: keyLevels.bandWidth,
+      bandWidthPct: keyLevels.bandWidthPct,
+      medianDelta: Number.isFinite(delta) ? delta : null,
+      medianDeltaPct: Number.isFinite(deltaPct) ? deltaPct : null,
+      mae: Number.isFinite(Number(metrics.mae)) ? Number(metrics.mae) : null,
+      coverage10_90: Number.isFinite(Number(metrics.coverage10_90)) ? Number(metrics.coverage10_90) : null,
+      volatility: Number.isFinite(Number(metrics.volatility)) ? Number(metrics.volatility) : null,
+      drift: Number.isFinite(Number(metrics.drift)) ? Number(metrics.drift) : null,
+    };
+  };
+
+  const syncForecastAiSummaryToMyRequest = async ({ requestId = "", summary = null } = {}) => {
+    if (!hasSessionUser()) return;
+    const reqId = String(requestId || "").trim();
+    if (!reqId) return;
+    const myRequestId = `forecast__${reqId}`;
+    const existing = getMyRequestById(myRequestId);
+    if (!existing) return;
+    const outputsMeta = existing.outputsMeta && typeof existing.outputsMeta === "object" ? existing.outputsMeta : {};
+    const nextOutputsMeta = {
+      ...outputsMeta,
+      aiSummary: String(summary?.text || "").trim().slice(0, 1600),
+      aiProvider: String(summary?.provider || "").trim(),
+      aiModel: String(summary?.model || "").trim(),
+      aiLatencyMs: Number(summary?.latencyMs || 0) || 0,
+      aiGeneratedAt: Date.now(),
+    };
+    await upsertMyRequest({
+      type: "forecast",
+      requestId: myRequestId,
+      title: String(existing.title || ""),
+      input: existing.input && typeof existing.input === "object" ? existing.input : {},
+      outputsMeta: nextOutputsMeta,
+      sourceRef: existing.sourceRef && typeof existing.sourceRef === "object" ? existing.sourceRef : { collection: "forecast_requests", id: reqId },
+      published: Boolean(existing.published),
+    }).catch(() => {});
+  };
+
+  const runForecastAutoSummary = async ({ forecastDoc = null, requestId = "", notify = false } = {}) => {
+    const doc = forecastDoc && typeof forecastDoc === "object" ? forecastDoc : null;
+    const targetId = String(requestId || doc?.id || state.tickerContext.forecastId || "").trim();
+    if (!doc || !targetId) return null;
+    const rows = normalizeForecastSeriesRows(doc.forecastRows || []);
+    if (!rows.length) return null;
+
+    const requestToken = `forecast_ai_${targetId}_${Date.now()}`;
+    state.tickerContext.forecastAiSummary = {
+      requestId: targetId,
+      loading: true,
+      text: "",
+      provider: normalizeModelCouncilProviderId(state.tickerContext.tickerQueryProvider || "openai"),
+      model: normalizeAiModelId(state.tickerContext.tickerQueryModel || "gpt-5-mini") || "gpt-5-mini",
+      latencyMs: null,
+      usage: {},
+      responseId: "",
+      shareUrl: "",
+      feedback: "",
+      error: "",
+      requestToken,
+    };
+    if (state.tickerContext.forecastDoc && String(state.tickerContext.forecastDoc.id || "") === targetId) {
+      renderForecastDetails(state.tickerContext.forecastDoc);
+    }
+
+    const context = buildForecastAutoSummaryContext(doc);
+    const provider = normalizeModelCouncilProviderId(state.tickerContext.tickerQueryProvider || "openai");
+    const model = normalizeAiModelId(state.tickerContext.tickerQueryModel || "gpt-5-mini") || "gpt-5-mini";
+    const startedAt = Date.now();
+    try {
+      const headers = await buildApiAuthHeaders({ includeJson: true });
+      const providerPath = normalizeModelCouncilProviderId(provider || "openai") || "openai";
+      const response = await fetch(`/api/llm/${encodeURIComponent(providerPath)}`, {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: JSON.stringify({
+          provider: providerPath,
+          model,
+          fallbackProviders: ["openai", "claude", "gemini", "deepseek", "mistral", "perplexity", "qwen", "amazon_nova", "other"],
+          messages: [
+            {
+              role: "system",
+              content:
+                "You are Quantura Model Council. Write a concise analyst narrative with sections: Thesis, Risk frame, Key levels, Next steps. Mention uncertainty clearly.",
+            },
+            {
+              role: "user",
+              content: `Forecast context (JSON):\n${JSON.stringify(context)}\n\nWrite a practical summary in under 180 words.`,
+            },
+          ],
+          params: {
+            temperature: 0.2,
+            maxTokens: 360,
+            webSearch: false,
+            stream: false,
+            background: false,
+          },
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(String(payload?.error || payload?.message || "Unable to generate AI forecast summary right now.").trim());
+      }
+      const nextSummary = {
+        requestId: targetId,
+        loading: false,
+        text: String(payload?.text || "").trim() || "No summary returned.",
+        provider: normalizeModelCouncilProviderId(payload?.provider || provider),
+        model: normalizeAiModelId(payload?.model || model) || model,
+        latencyMs: Number.isFinite(Number(payload?.latencyMs)) ? Number(payload.latencyMs) : Date.now() - startedAt,
+        usage: payload?.usage && typeof payload.usage === "object" ? payload.usage : {},
+        responseId: String(payload?.responseId || "").trim(),
+        shareUrl: "",
+        feedback: "",
+        error: "",
+        requestToken,
+      };
+      if (String(state.tickerContext.forecastAiSummary?.requestToken || "") !== requestToken) {
+        return nextSummary;
+      }
+      state.tickerContext.forecastAiSummary = nextSummary;
+      if (state.tickerContext.forecastDoc && String(state.tickerContext.forecastDoc.id || "") === targetId) {
+        renderForecastDetails(state.tickerContext.forecastDoc);
+      }
+      syncForecastAiSummaryToMyRequest({ requestId: targetId, summary: nextSummary }).catch(() => {});
+      return nextSummary;
+    } catch (error) {
+      const message = String(error?.message || "Unable to generate AI forecast summary right now.").trim();
+      if (String(state.tickerContext.forecastAiSummary?.requestToken || "") === requestToken) {
+        state.tickerContext.forecastAiSummary = {
+          requestId: targetId,
+          loading: false,
+          text: "",
+          provider,
+          model,
+          latencyMs: null,
+          usage: {},
+          responseId: "",
+          shareUrl: "",
+          feedback: "",
+          error: message,
+          requestToken,
+        };
+        if (state.tickerContext.forecastDoc && String(state.tickerContext.forecastDoc.id || "") === targetId) {
+          renderForecastDetails(state.tickerContext.forecastDoc);
+        }
+      }
+      if (notify) showToast(message, "warn");
+      return null;
+    }
+  };
+
+  const renderForecastAiSummaryMarkup = (forecastDoc) => {
+    const forecastId = String(forecastDoc?.id || state.tickerContext.forecastId || "").trim();
+    const summary = state.tickerContext.forecastAiSummary && typeof state.tickerContext.forecastAiSummary === "object"
+      ? state.tickerContext.forecastAiSummary
+      : null;
+    const isCurrent = summary && String(summary.requestId || "").trim() === forecastId;
+    const model = String(isCurrent ? summary?.model || "" : "").trim();
+    const provider = String(isCurrent ? summary?.provider || "" : "").trim();
+    const latencyMs = Number(isCurrent ? summary?.latencyMs : NaN);
+    const responseId = String(isCurrent ? summary?.responseId || "" : "").trim();
+    const shareUrl = String(isCurrent ? summary?.shareUrl || "" : "").trim();
+    const feedback = String(isCurrent ? summary?.feedback || "" : "").trim().toLowerCase();
+    const loading = Boolean(isCurrent && summary?.loading);
+    const error = String(isCurrent ? summary?.error || "" : "").trim();
+    const answer = String(isCurrent ? summary?.text || "" : "").trim();
+    const disabled = !forecastId;
+    const statusLine = loading
+      ? "Generating automatic Model Council summary..."
+      : error
+        ? error
+        : answer
+          ? `${model || "Model"}${provider ? ` · ${provider}` : ""}${
+              Number.isFinite(latencyMs) && latencyMs >= 0 ? ` · ${Math.round(latencyMs)}ms` : ""
+            }`
+          : "Run a forecast to generate an automatic AI narrative.";
+    return `
+      <div class="results-panel forecast-ai-summary-panel">
+        <h3>Automatic AI summary</h3>
+        <div class="small muted">${escapeHtml(statusLine)}</div>
+        <div class="panel-output small" style="margin-top:8px;">
+          ${
+            loading
+              ? skeletonHtml(2)
+              : error
+                ? `<div class="small muted">${escapeHtml(error)}</div>`
+                : answer
+                  ? `<div>${escapeHtml(answer).replace(/\n/g, "<br>")}</div>`
+                  : `<div class="small muted">No AI narrative generated yet.</div>`
+          }
+        </div>
+        <div class="task-chip-row" style="margin-top:10px;">
+          <button class="task-chip${feedback === "like" ? " active" : ""}" type="button" data-action="forecast-ai-like" data-forecast-id="${escapeHtml(
+            forecastId
+          )}" ${disabled ? "disabled" : ""}>Like</button>
+          <button class="task-chip${feedback === "dislike" ? " active" : ""}" type="button" data-action="forecast-ai-dislike" data-forecast-id="${escapeHtml(
+            forecastId
+          )}" ${disabled ? "disabled" : ""}>Dislike</button>
+          <button class="task-chip" type="button" data-action="forecast-ai-share" data-forecast-id="${escapeHtml(
+            forecastId
+          )}" data-response-id="${escapeHtml(responseId)}" ${disabled || (!answer && !shareUrl) ? "disabled" : ""}>${icon("share-ios")}<span>Share link</span></button>
+        </div>
+        ${
+          shareUrl
+            ? `<div class="small muted" style="margin-top:8px;">Shared: <a href="${escapeHtml(shareUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(
+                shareUrl
+              )}</a></div>`
+            : ""
+        }
+        <p class="small muted solve-now-disclaimer">${escapeHtml(MODEL_COUNCIL_OUTPUT_DISCLAIMER)}</p>
+      </div>
+    `;
+  };
+
   const renderForecastDetails = (forecastDoc) => {
     if (!ui.forecastOutput || !forecastDoc) return;
     const rows = Array.isArray(forecastDoc.forecastRows) ? forecastDoc.forecastRows : [];
     if (!rows.length) {
       setOutputReady(ui.forecastOutput);
-      ui.forecastOutput.innerHTML = `<div class="small muted">No forecast rows were stored for this run.</div>`;
+      const source = String(forecastDoc.chartSeriesSource || "").trim();
+      const message =
+        source === "missing"
+          ? "No local fan-chart series found for this run on this device. Re-run the forecast to regenerate chart data."
+          : source === "preview_only"
+            ? "Only preview rows are available on this device. Full fan-chart series was kept client-side on the originating device."
+            : "No forecast rows are available for this run.";
+      ui.forecastOutput.innerHTML = `
+        <div class="small muted">${escapeHtml(message)}</div>
+        ${renderForecastAiSummaryMarkup(forecastDoc)}
+      `;
       return;
     }
 
@@ -13864,6 +17171,9 @@
 
     const summary = [
       `<div class="small meta-line">${icon("hashtag")}<strong>Forecast ID:</strong> ${escapeHtml(forecastDoc.id || "")}</div>`,
+      `<div class="small meta-line">${icon("check-circle")}<strong>Status:</strong> ${escapeHtml(
+        sanitizeText(forecastDoc.status, 40) || "Forecast ready"
+      )}</div>`,
       `<div class="small meta-line">${icon("magic-wand")}<strong>Service:</strong> ${escapeHtml(labelForecastService(forecastDoc.service))}</div>`,
       forecastDoc.engine ? `<div class="small meta-line">${icon("electronics-chip")}<strong>Engine:</strong> ${escapeHtml(forecastDoc.engine)}</div>` : "",
       quantileLabel ? `<div class="small meta-line">${icon("percentage")}<strong>Quantiles:</strong> ${escapeHtml(quantileLabel)}</div>` : "",
@@ -13917,9 +17227,10 @@
         <details class="learn-more">
           <summary>Learn more</summary>
           <p class="small">
-            Forecasts are saved to your account so you can re-plot them later. Use Indicators to overlay trend signals, then switch to News and Options for context.
+            Fan-chart series are stored client-side on this device for fast rendering. Firestore stores only request metadata and compact summaries.
           </p>
         </details>
+        ${renderForecastAiSummaryMarkup(forecastDoc)}
       </div>
     `;
   };
@@ -13935,17 +17246,64 @@
   const loadForecastDoc = async (db, forecastId) => {
     const snap = await db.collection("forecast_requests").doc(forecastId).get();
     if (!snap.exists) throw new Error("Forecast not found.");
-    return { id: snap.id, ...snap.data() };
+    const doc = { id: snap.id, ...(snap.data() || {}) };
+    const fromCache = await loadForecastSeriesFromClientCache({
+      requestId: snap.id,
+      ticker: doc.ticker,
+      interval: doc.interval,
+      horizon: doc.horizon,
+      service: doc.service,
+      quantiles: doc.quantiles,
+      start: doc.start,
+    });
+    const cachedRows = normalizeForecastSeriesRows(fromCache?.forecastRows || []);
+    if (cachedRows.length) {
+      doc.forecastRows = cachedRows;
+      doc.chartSeriesSource = "client_cache";
+      doc.chartCacheKey = String(fromCache?.id || "").trim();
+      return doc;
+    }
+
+    const legacyRows = normalizeForecastSeriesRows(doc.forecastRows || []);
+    if (legacyRows.length) {
+      doc.forecastRows = legacyRows;
+      doc.chartSeriesSource = "firestore_legacy";
+      saveForecastSeriesToClientCache({
+        requestId: snap.id,
+        ticker: doc.ticker,
+        interval: doc.interval,
+        horizon: doc.horizon,
+        service: doc.service,
+        quantiles: doc.quantiles,
+        start: doc.start,
+        forecastRows: legacyRows,
+        metrics: doc.metrics,
+      }).catch(() => {});
+      return doc;
+    }
+
+    const previewRows = normalizeForecastSeriesRows(doc.forecastPreview || []);
+    doc.forecastRows = previewRows;
+    doc.chartSeriesSource = previewRows.length ? "preview_only" : "missing";
+    return doc;
   };
 
-  const plotForecastById = async (db, functions, forecastId) => {
+  const plotForecastById = async (db, functions, forecastId, { preloadedDoc = null } = {}) => {
     if (!forecastId) return;
-    const doc = await loadForecastDoc(db, forecastId);
+    const doc =
+      preloadedDoc && typeof preloadedDoc === "object"
+        ? { ...preloadedDoc, id: String(preloadedDoc.id || forecastId).trim() }
+        : await loadForecastDoc(db, forecastId);
     const ticker = normalizeTicker(doc.ticker);
     const interval = doc.interval || state.tickerContext.interval || "1d";
     state.tickerContext.forecastId = forecastId;
     state.tickerContext.forecastDoc = doc;
     state.tickerContext.forecastTablePage = 0;
+    state.tickerContext.forecastCacheMeta = {
+      source: String(doc.chartSeriesSource || ""),
+      cacheKey: String(doc.chartCacheKey || ""),
+      forecastId,
+    };
     syncTickerInputs(ticker, { source: "forecast_load" });
 
     if (!ticker) throw new Error("Forecast ticker is missing.");
@@ -13959,9 +17317,185 @@
     const forecastOverlays = buildForecastOverlays(doc.forecastRows || []);
     const overlays = [...forecastOverlays, ...(state.tickerContext.indicatorOverlays || [])];
     await renderTickerChart(state.tickerContext.rows, ticker, interval, overlays);
-    setTerminalStatus(`Plotted forecast ${forecastId}.`);
+    if (String(doc.chartSeriesSource || "") === "missing") {
+      setTerminalStatus("Forecast metadata loaded. Re-run on this device to regenerate fan chart data.");
+    } else if (String(doc.chartSeriesSource || "") === "preview_only") {
+      setTerminalStatus("Forecast preview loaded. Full fan chart data is stored on the originating device.");
+    } else {
+      setTerminalStatus(`Plotted forecast ${forecastId}.`);
+    }
     renderForecastDetails(doc);
     return doc;
+  };
+
+  const mapMyRequestTypeToPanel = (type) => {
+    const normalized = normalizeMyRequestType(type);
+    if (normalized === "screener") return "screener";
+    if (normalized === "indicator") return "indicators";
+    if (normalized === "modelCouncil") return "ticker-query";
+    return "forecast";
+  };
+
+  const loadMyRequestIntoUi = async ({ requestId = "", request = null, db, functions, notify = true } = {}) => {
+    if (!hasFullAccount()) {
+      throw new Error("Sign in to load saved requests.");
+    }
+    const id = String(requestId || request?.id || "").trim();
+    if (!id) throw new Error("Request ID is required.");
+    const item = request && typeof request === "object" ? request : await fetchMyRequestById(id);
+    if (!item) throw new Error("Request not found.");
+
+    const type = normalizeMyRequestType(item.type) || "forecast";
+    const panelId = mapMyRequestTypeToPanel(type);
+    if (typeof window.__quanturaSetPanel === "function") {
+      window.__quanturaSetPanel(panelId, { pushPath: false });
+    }
+
+    const sourceRef = item.sourceRef && typeof item.sourceRef === "object" ? item.sourceRef : {};
+    const sourceId = String(sourceRef.id || "").trim();
+    const input = item.input && typeof item.input === "object" ? item.input : {};
+    const outputsMeta = item.outputsMeta && typeof item.outputsMeta === "object" ? item.outputsMeta : {};
+    const ticker = normalizeTicker(input.ticker || item.ticker || "");
+    if (ticker) syncTickerInputs(ticker, { source: "my_request_load" });
+
+    if (type === "forecast") {
+      const forecastId = sourceId || String(id.split("__").slice(1).join("__") || "").trim();
+      if (!forecastId) throw new Error("Forecast source is missing.");
+      await plotForecastById(db, functions, forecastId);
+      if (notify) showToast("Forecast request loaded.");
+      return item;
+    }
+
+    if (type === "screener") {
+      const runId = sourceId || String(id.split("__").slice(1).join("__") || "").trim();
+      if (!runId) throw new Error("Screener source is missing.");
+      await loadScreenerRunById(db, runId);
+      if (notify) showToast("Screener request loaded.");
+      return item;
+    }
+
+    if (type === "indicator") {
+      const tickerInput = document.getElementById("technicals-ticker");
+      const intervalInput = document.getElementById("technicals-interval");
+      const lookbackInput = document.getElementById("technicals-lookback");
+      if (tickerInput && ticker) tickerInput.value = ticker;
+      if (intervalInput && input.interval) intervalInput.value = String(input.interval);
+      if (lookbackInput && Number(input.lookback)) lookbackInput.value = String(Math.max(1, Number(input.lookback)));
+      const indicators = Array.isArray(input.indicators) ? input.indicators.map((entry) => String(entry || "").trim().toUpperCase()) : [];
+      if (indicators.length) {
+        document.querySelectorAll('#technicals-form input[name="indicators"]').forEach((checkbox) => {
+          const value = String(checkbox.value || "").trim().toUpperCase();
+          checkbox.checked = indicators.includes(value);
+        });
+      }
+      if (ui.technicalsOutput) {
+        setOutputReady(ui.technicalsOutput);
+        const summary = String(outputsMeta.summary || "").trim();
+        ui.technicalsOutput.innerHTML = `<div class="small muted">${
+          summary ? escapeHtml(summary) : "Indicator inputs restored. Run indicators to refresh values."
+        }</div>`;
+      }
+      if (notify) showToast("Indicator request loaded.");
+      return item;
+    }
+
+    if (type === "modelCouncil") {
+      const provider = String(input.provider || outputsMeta.provider || "").trim().toLowerCase();
+      const model = normalizeAiModelId(input.model || outputsMeta.model || "");
+      if (ui.tickerQueryTicker && ticker) ui.tickerQueryTicker.value = ticker;
+      if (ui.tickerQueryQuestion) ui.tickerQueryQuestion.value = String(input.question || "");
+      if (ui.tickerQueryLanguage && input.language) ui.tickerQueryLanguage.value = String(input.language);
+      if (provider) {
+        state.tickerContext.tickerQueryProvider = provider;
+        if (ui.tickerQueryProvider) ui.tickerQueryProvider.value = provider;
+      }
+      if (model) {
+        state.tickerContext.tickerQueryModel = model;
+        if (ui.tickerQueryModel) ui.tickerQueryModel.value = model;
+      }
+      if (Array.isArray(input.modules) && input.modules.length) {
+        setTickerQueryModulesSelection(input.modules, { persist: true });
+      }
+      applyTickerQueryModelSelection(model || state.tickerContext.tickerQueryModel || "gpt-5-mini", provider || state.tickerContext.tickerQueryProvider || "openai");
+      const answer = String(outputsMeta.answer || outputsMeta.summary || "").trim();
+      if (answer) {
+        const responseId = sourceId || String(item.id || "").trim();
+        state.tickerContext.tickerQueryLastResponseId = responseId;
+        const responsePayload = {
+          answer,
+          model: model || state.tickerContext.tickerQueryModel || "",
+          provider: provider || state.tickerContext.tickerQueryProvider || "",
+          usage: {},
+          context: {},
+          moduleData: {},
+          selectedModules: Array.isArray(input.modules) ? input.modules : [],
+          responseId,
+          citations: [],
+        };
+        state.tickerContext.tickerQueryLastResponse = responsePayload;
+        renderTickerQueryResult(responsePayload);
+      }
+      if (notify) showToast("Model Council request loaded.");
+      return item;
+    }
+
+    return item;
+  };
+
+  const loadSharedMyRequestFromUrl = async ({ setPanel = true } = {}) => {
+    const shareSlug = String(getQueryParam("requestShare") || "").trim();
+    if (!shareSlug) return false;
+    try {
+      const headers = await buildApiAuthHeaders();
+      const response = await fetch(`/api/my-requests/shared/${encodeURIComponent(shareSlug)}`, {
+        method: "GET",
+        headers,
+        credentials: "same-origin",
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(String(payload?.error || "Shared request unavailable.").trim());
+      }
+      const request = payload?.request && typeof payload.request === "object" ? payload.request : null;
+      if (!request) throw new Error("Shared request unavailable.");
+      const type = normalizeMyRequestType(request.type) || "forecast";
+      const panelId = mapMyRequestTypeToPanel(type);
+      if (setPanel && typeof window.__quanturaSetPanel === "function") {
+        window.__quanturaSetPanel(panelId, { pushPath: false });
+      }
+      if (type === "modelCouncil" && ui.tickerQueryOutput) {
+        const outputsMeta = request.outputsMeta && typeof request.outputsMeta === "object" ? request.outputsMeta : {};
+        const answer = String(outputsMeta.answer || outputsMeta.summary || "").trim();
+        renderTickerQueryResult({
+          answer,
+          model: String(outputsMeta.model || request.input?.model || ""),
+          provider: String(outputsMeta.provider || request.input?.provider || ""),
+          context: {},
+          moduleData: {},
+          selectedModules: Array.isArray(request.input?.modules) ? request.input.modules : [],
+          responseId: String(request.sourceRef?.id || request.id || ""),
+          citations: [],
+          shareUrl: String(payload?.share?.shareUrl || ""),
+        });
+      } else if (type === "forecast" && ui.forecastOutput) {
+        setOutputReady(ui.forecastOutput);
+        const summary = String(request.outputsMeta?.summary || "Shared forecast request loaded.");
+        ui.forecastOutput.innerHTML = `<div class="small muted">${escapeHtml(summary)}</div>`;
+      } else if (type === "screener" && ui.screenerOutput) {
+        setOutputReady(ui.screenerOutput);
+        const summary = String(request.outputsMeta?.summary || "Shared screener request loaded.");
+        ui.screenerOutput.innerHTML = `<div class="small muted">${escapeHtml(summary)}</div>`;
+      } else if (type === "indicator" && ui.technicalsOutput) {
+        setOutputReady(ui.technicalsOutput);
+        const summary = String(request.outputsMeta?.summary || "Shared indicator request loaded.");
+        ui.technicalsOutput.innerHTML = `<div class="small muted">${escapeHtml(summary)}</div>`;
+      }
+      showToast("Viewing shared request.");
+      return true;
+    } catch (error) {
+      showToast(error.message || "Unable to load shared request.", "warn");
+      return false;
+    }
   };
 
   const ensureMessagingServiceWorker = async () => {
@@ -13974,9 +17508,25 @@
   const loadVapidKey = async (functions) => {
     if (state.remoteFlags?.webPushVapidKey) return String(state.remoteFlags.webPushVapidKey || "").trim();
     if (window.QUANTURA_VAPID_KEY) return String(window.QUANTURA_VAPID_KEY || "").trim();
-    const getWebPushConfig = functions.httpsCallable("get_web_push_config");
-    const response = await getWebPushConfig({ meta: buildMeta() });
-    return String(response.data?.vapidKey || "").trim();
+    try {
+      const response = await fetch("/api/notifications/config", {
+        method: "GET",
+        credentials: "same-origin",
+      });
+      if (response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        const vapidPublicKey = String(payload?.vapidPublicKey || "").trim();
+        if (vapidPublicKey) return vapidPublicKey;
+      }
+    } catch (error) {
+      // Fall through to legacy callable fallback if available.
+    }
+    if (functions?.httpsCallable) {
+      const getWebPushConfig = functions.httpsCallable("get_web_push_config");
+      const response = await getWebPushConfig({ meta: buildMeta() });
+      return String(response.data?.vapidKey || "").trim();
+    }
+    return "";
   };
 
   const syncNotificationToken = async (functions, token, opts = {}) => {
@@ -13984,21 +17534,57 @@
     if (cleanToken.length < 20) {
       throw new Error("Valid notification token is required.");
     }
-    const registerPushToken = functions.httpsCallable("register_notification_token");
-    await registerPushToken({
-      token: cleanToken,
-      forceRefresh: Boolean(opts.forceRefresh),
-      meta: {
-        ...buildMeta(),
-        tokenSource: String(opts.source || "messaging"),
-      },
+    const headers = await buildApiAuthHeaders({ includeJson: true });
+    if (!headers.Authorization) {
+      throw new Error("Sign in before enabling notifications.");
+    }
+    const response = await fetch("/api/notifications/register-token", {
+      method: "POST",
+      headers,
+      credentials: "same-origin",
+      body: JSON.stringify({
+        token: cleanToken,
+        platform: isNativeApp() ? getNativePlatform() || "native" : "web",
+        source: String(opts.source || "messaging"),
+        notificationPrivacy: {
+          locationConsent: Boolean(state.notificationPrivacy?.locationConsent),
+          ipRegionConsent: Boolean(state.notificationPrivacy?.ipRegionConsent),
+          coarseLocation: state.notificationPrivacy?.coarseLocation || null,
+          ipRegion: String(state.notificationPrivacy?.ipRegion || "").trim(),
+          timezone: String(state.notificationPrivacy?.timezone || "").trim(),
+        },
+      }),
     });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(String(payload?.error || "Unable to register notification token."));
+    }
     localStorage.setItem(FCM_TOKEN_CACHE_KEY, cleanToken);
     return cleanToken;
   };
 
+  const pingNotificationSession = async () => {
+    if (!hasSessionUser()) return false;
+    const headers = await buildApiAuthHeaders({ includeJson: true });
+    if (!headers.Authorization) return false;
+    try {
+      const response = await fetch("/api/notifications/session/ping", {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: JSON.stringify({
+          isAnonymous: isAnonymousUser(),
+        }),
+      });
+      return Boolean(response.ok);
+    } catch (error) {
+      return false;
+    }
+  };
+
   const registerNotificationToken = async (functions, messaging, opts = {}) => {
-    if (!hasFullAccount()) throw new Error("Sign in before enabling notifications.");
+    if (!hasSessionUser()) throw new Error("Sign in before enabling notifications.");
+    await pingNotificationSession().catch(() => undefined);
     if (isNativeApp()) {
       const nativeToken = String(window.__NATIVE_FCM_TOKEN__ || "").trim();
       if (!nativeToken) throw new Error("Native push token is not available yet.");
@@ -14072,13 +17658,23 @@
     const token = localStorage.getItem(FCM_TOKEN_CACHE_KEY);
     if (!token) return;
     try {
-      const unregisterToken = functions.httpsCallable("unregister_notification_token");
-      await unregisterToken({ token, meta: buildMeta() });
-	    } catch (error) {
-	      // Ignore token cleanup errors.
-	    }
-	    localStorage.removeItem(FCM_TOKEN_CACHE_KEY);
-	  };
+      const headers = await buildApiAuthHeaders({ includeJson: true });
+      if (headers.Authorization) {
+        await fetch("/api/notifications/unregister-token", {
+          method: "POST",
+          headers,
+          credentials: "same-origin",
+          body: JSON.stringify({ token }),
+        });
+      } else if (functions?.httpsCallable) {
+        const unregisterToken = functions.httpsCallable("unregister_notification_token");
+        await unregisterToken({ token, meta: buildMeta() });
+      }
+    } catch (error) {
+      // Ignore token cleanup errors.
+    }
+    localStorage.removeItem(FCM_TOKEN_CACHE_KEY);
+  };
 
   const bindForegroundPushHandler = (messaging) => {
     if (!messaging || state.messagingBound) return;
@@ -14173,6 +17769,88 @@
     return productId;
   };
 
+  const formatUsdPriceLabel = (amount, cycle) => {
+    const numeric = Number(amount);
+    if (!Number.isFinite(numeric) || numeric <= 0) return cycle === "yearly" ? "$0/yr" : "$0/mo";
+    const decimals = numeric % 1 === 0 ? 0 : 2;
+    return cycle === "yearly" ? `$${numeric.toFixed(decimals)}/yr` : `$${numeric.toFixed(decimals)}/mo`;
+  };
+
+  const applyPricingBillingCycle = (cycle = "monthly") => {
+    const normalizedCycle = cycle === "yearly" ? "yearly" : "monthly";
+    document.querySelectorAll('[data-billing-cycle]').forEach((btn) => {
+      const active = String(btn?.dataset?.billingCycle || "") === normalizedCycle;
+      btn.setAttribute("aria-pressed", active ? "true" : "false");
+      btn.classList.toggle("secondary", !active);
+    });
+
+    ui.purchasePanels.forEach((panel) => {
+      if (!panel?.dataset?.monthlyPrice) return;
+      const monthlyPrice = Number(panel.dataset.monthlyPrice || panel.dataset.price || 0);
+      const yearlyPrice = Number(panel.dataset.yearlyPrice || monthlyPrice * 12 || 0);
+      const nextPrice = normalizedCycle === "yearly" ? yearlyPrice : monthlyPrice;
+      const nextProduct =
+        normalizedCycle === "yearly"
+          ? String(panel.dataset.yearlyProduct || panel.dataset.product || "")
+          : String(panel.dataset.monthlyProduct || panel.dataset.product || "");
+      const nextIapPlan =
+        normalizedCycle === "yearly"
+          ? String(panel.dataset.yearlyIapPlan || panel.dataset.iapPlan || "")
+          : String(panel.dataset.monthlyIapPlan || panel.dataset.iapPlan || "");
+
+      panel.dataset.price = String(nextPrice || 0);
+      panel.dataset.product = nextProduct;
+      panel.dataset.iapPlan = nextIapPlan;
+
+      const card = panel.closest("[data-pricing-plan-card]");
+      const priceNode = card?.querySelector("[data-pricing-price]");
+      if (priceNode) {
+        priceNode.textContent = formatUsdPriceLabel(nextPrice, normalizedCycle);
+      }
+      const copyNode = card?.querySelector("[data-pricing-cycle-copy]");
+      if (copyNode) {
+        const annualList = monthlyPrice * 12;
+        const savings = Math.max(0, annualList - yearlyPrice);
+        if (normalizedCycle === "yearly") {
+          if (savings > 0) {
+            copyNode.innerHTML = `You save <strong>$${savings.toFixed(0)}/yr</strong> vs monthly billing.`;
+          } else {
+            copyNode.innerHTML = "Annual display shown. Native yearly SKU may map to monthly where unavailable.";
+          }
+        } else {
+          if (savings > 0) {
+            copyNode.innerHTML = `Pay yearly to lock in <strong>$${yearlyPrice.toFixed(0)}/yr</strong>.`;
+          } else {
+            copyNode.innerHTML = "Monthly billing shown.";
+          }
+        }
+      }
+    });
+  };
+
+  const initPricingBillingToggle = () => {
+    const wrap = document.getElementById("pricing-billing-toggle");
+    if (!wrap) return;
+    const buttons = Array.from(wrap.querySelectorAll("[data-billing-cycle]"));
+    if (!buttons.length) return;
+
+    const initialCycle = String(safeLocalStorageGet("quantura_pricing_cycle") || "monthly").trim().toLowerCase();
+    applyPricingBillingCycle(initialCycle === "yearly" ? "yearly" : "monthly");
+
+    buttons.forEach((button) => {
+      if (!(button instanceof HTMLElement)) return;
+      if (button.dataset.bound === "1") return;
+      button.dataset.bound = "1";
+      button.addEventListener("click", () => {
+        const cycle = String(button.dataset.billingCycle || "monthly").trim().toLowerCase();
+        const normalized = cycle === "yearly" ? "yearly" : "monthly";
+        safeLocalStorageSet("quantura_pricing_cycle", normalized);
+        applyPricingBillingCycle(normalized);
+        logEvent("pricing_cycle_toggled", { cycle: normalized, page_path: window.location.pathname });
+      });
+    });
+  };
+
   const requestNativeInAppPurchase = (panel, opts = {}) => {
     const requestId = `np_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
     const orderId = String(opts.orderId || panel?.dataset?.orderId || "").trim();
@@ -14218,10 +17896,114 @@
     return sent;
   };
 
+  const isNativeIapRuntime = () => isNativeIosStoreKitCheckoutOnly() || isNativeAndroidPlayBillingCheckout();
+
+  const readPendingNativeIapEvents = () => {
+    try {
+      const raw = String(safeLocalStorageGet(NATIVE_IAP_PENDING_EVENTS_KEY) || "").trim();
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      return [];
+    }
+  };
+
+  const writePendingNativeIapEvents = (events) => {
+    try {
+      const list = Array.isArray(events) ? events.slice(0, 80) : [];
+      safeLocalStorageSet(NATIVE_IAP_PENDING_EVENTS_KEY, JSON.stringify(list));
+    } catch (error) {
+      // Ignore storage write issues.
+    }
+  };
+
+  const queuePendingNativeIapEvent = (payload) => {
+    const event = payload && typeof payload === "object" ? payload : {};
+    const next = {
+      eventId: String(event.eventId || `iap_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`).trim(),
+      productId: String(event.productId || "").trim(),
+      orderId: String(event.orderId || "").trim(),
+      status: String(event.status || "purchased").trim().toLowerCase(),
+      platform: String(event.platform || getNativePlatform() || "").trim().toLowerCase(),
+      source: String(event.source || "native_iap").trim().toLowerCase(),
+      sourceUid: String(event.sourceUid || "").trim(),
+      purchasedAtMs: Number(event.purchasedAtMs || Date.now()) || Date.now(),
+      queuedAtMs: Date.now(),
+    };
+    if (!next.productId) return;
+    const existing = readPendingNativeIapEvents();
+    existing.unshift(next);
+    writePendingNativeIapEvents(existing);
+  };
+
+  const flushPendingNativeIapEvents = async () => {
+    if (!hasSessionUser()) return;
+    const queued = readPendingNativeIapEvents();
+    if (!queued.length) return;
+    const headers = await buildApiAuthHeaders({ includeJson: true });
+    if (!headers.Authorization) return;
+    const remaining = [];
+    for (const event of queued.slice(0, 40)) {
+      try {
+        const response = await fetch("/api/notifications/iap-event", {
+          method: "POST",
+          headers,
+          credentials: "same-origin",
+          body: JSON.stringify(event),
+        });
+        if (!response.ok) {
+          remaining.push(event);
+        }
+      } catch (error) {
+        remaining.push(event);
+      }
+    }
+    writePendingNativeIapEvents(remaining);
+  };
+
+  const mergeAnonymousSessionData = async (sourceUid, targetUid) => {
+    const fromUid = String(sourceUid || "").trim();
+    const toUid = String(targetUid || "").trim();
+    if (!fromUid || !toUid || fromUid === toUid) return;
+    const headers = await buildApiAuthHeaders({ includeJson: true });
+    if (!headers.Authorization) return;
+    try {
+      await fetch("/api/notifications/merge-anon-data", {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: JSON.stringify({ sourceUid: fromUid }),
+      });
+    } catch (error) {
+      // Merge is best-effort and retried implicitly on future sign-ins.
+    }
+  };
+
   const confirmNativePurchaseOnBackend = async ({ orderId, productId, status }) => {
-    if (!orderId || !hasFullAccount()) return;
+    if (!orderId || !hasSessionUser()) {
+      if (orderId) {
+        queuePendingNativeIapEvent({
+          orderId,
+          productId,
+          status,
+          source: "native_iap_order_pending",
+          sourceUid: String(state.user?.uid || "").trim(),
+        });
+      }
+      return;
+    }
     const functions = state.clients?.functions;
-    if (!functions) return;
+    if (!functions) {
+      queuePendingNativeIapEvent({
+        orderId,
+        productId,
+        status,
+        source: "native_iap_order_no_functions",
+        sourceUid: String(state.user?.uid || "").trim(),
+      });
+      return;
+    }
     try {
       const confirm = functions.httpsCallable("confirm_native_iap_purchase");
       await confirm({
@@ -14233,8 +18015,13 @@
         meta: buildMeta(),
       });
     } catch (error) {
-      const message = extractErrorMessage(error, "Unable to finalize native purchase sync.");
-      showToast(message, "warn");
+      queuePendingNativeIapEvent({
+        orderId,
+        productId,
+        status,
+        source: "native_iap_order_retry",
+        sourceUid: String(state.user?.uid || "").trim(),
+      });
     }
   };
 
@@ -14289,6 +18076,15 @@
       showToast("In-app purchase completed.");
       if (orderId) {
         confirmNativePurchaseOnBackend({ orderId, productId, status: "purchased" });
+      } else {
+        queuePendingNativeIapEvent({
+          productId,
+          status: "purchased",
+          platform: getNativePlatform() || "unknown",
+          source: "native_iap_no_order",
+          sourceUid: String(state.user?.uid || "").trim(),
+        });
+        flushPendingNativeIapEvents().catch(() => undefined);
       }
       if (orderId) {
         logEvent("purchase", {
@@ -14332,7 +18128,21 @@
   };
 
   const handlePurchase = async (panel, functions) => {
-    if (!requireFullAccount("Sign in to continue.", { redirect: true })) return;
+    const nativeBillingProvider = isNativeIapRuntime();
+    if (!hasSessionUser()) {
+      try {
+        await ensureSessionUser({
+          reason: nativeBillingProvider ? "native_iap_checkout" : "web_checkout",
+          message: "Initializing guest checkout session...",
+        });
+      } catch (error) {
+        showToast(error?.message || "Unable to initialize guest checkout session.", "warn");
+        return;
+      }
+    }
+    if (!hasSessionUser()) {
+      return;
+    }
 
     const button = panel.querySelector('[data-action="purchase"]');
     const note = panel.querySelector(".purchase-note");
@@ -14351,7 +18161,6 @@
     try {
       const productId = resolveNativeIapProductId(panel);
       const subscriptionTier = resolveNativeIapPlanKey(panel);
-      const nativeBillingProvider = isNativeIosStoreKitCheckoutOnly() || isNativeAndroidPlayBillingCheckout();
       logEvent("begin_checkout", { currency: panel.dataset.currency || "USD", value: Number(panel.dataset.price || 349) });
       const createOrder = functions.httpsCallable("create_order");
       const result = await createOrder({
@@ -14407,10 +18216,31 @@
         showToast("Order created. Proceed to payment.");
       }
     } catch (error) {
+      if (nativeBillingProvider) {
+        const sent = requestNativeInAppPurchase(panel, { orderId: "", source: "native_no_order_fallback" });
+        if (sent) {
+          if (stripe) stripe.classList.add("hidden");
+          if (note) {
+            note.textContent =
+              "Native checkout opened without a server order. We will sync purchase details after sign-in.";
+          }
+          queuePendingNativeIapEvent({
+            productId: resolveNativeIapProductId(panel),
+            status: "pending",
+            platform: getNativePlatform() || "unknown",
+            source: "native_iap_no_order_fallback",
+            sourceUid: String(state.user?.uid || "").trim(),
+          });
+          showToast("Opening native checkout in guest mode...");
+          return;
+        }
+      }
       showToast(error.message || "Unable to create order.", "warn");
     } finally {
       button.disabled = false;
-      button.textContent = button.dataset.labelAuth || "Choose plan";
+      button.textContent = hasFullAccount()
+        ? button.dataset.labelAuth || "Choose plan"
+        : button.dataset.labelGuest || "Continue as guest";
     }
   };
 
@@ -14435,9 +18265,18 @@
   };
 
   const handleStripeCheckout = async (panel, functions) => {
-    if (!requireFullAccount("Sign in to continue.", { redirect: true })) return;
-
-    if (isNativeIosStoreKitCheckoutOnly() || isNativeAndroidPlayBillingCheckout()) {
+    if (isNativeIapRuntime()) {
+      if (!hasSessionUser()) {
+        try {
+          await ensureSessionUser({
+            reason: "native_iap_checkout",
+            message: "Initializing guest checkout session...",
+          });
+        } catch (error) {
+          showToast(error?.message || "Unable to initialize guest checkout session.", "warn");
+          return;
+        }
+      }
       const orderId = String(panel?.dataset?.orderId || "").trim();
       const sent = requestNativeInAppPurchase(panel, { orderId, source: "stripe_button" });
       if (!sent) {
@@ -14445,6 +18284,18 @@
       }
       return;
     }
+    if (!hasSessionUser()) {
+      try {
+        await ensureSessionUser({
+          reason: "web_checkout",
+          message: "Initializing guest checkout session...",
+        });
+      } catch (error) {
+        showToast(error?.message || "Unable to initialize guest checkout session.", "warn");
+        return;
+      }
+    }
+    if (!hasSessionUser()) return;
 
     if (!state.remoteFlags.stripeCheckoutEnabled) {
       showToast("Checkout is temporarily disabled.", "warn");
@@ -14502,10 +18353,20 @@
 
   const handleBillingPortalOpen = async (event, functions) => {
     if (!ui.billingPortalLink) return;
-    if (!hasFullAccount()) return;
 
-    if (isNativeIosStoreKitCheckoutOnly() || isNativeAndroidPlayBillingCheckout()) {
+    if (isNativeIapRuntime()) {
       event?.preventDefault?.();
+      if (!hasSessionUser()) {
+        try {
+          await ensureSessionUser({
+            reason: "native_subscription_manager",
+            message: "Initializing guest session...",
+          });
+        } catch (error) {
+          showToast(error?.message || "Unable to initialize session.", "warn");
+          return;
+        }
+      }
       const sent = requestNativeSubscriptionManager("billing_portal");
       if (sent) {
         showToast(
@@ -14518,6 +18379,7 @@
       }
       return;
     }
+    if (!hasFullAccount()) return;
 
     event?.preventDefault?.();
     if (ui.billingPortalLink.dataset.loading === "1") return;
@@ -14528,13 +18390,42 @@
     ui.billingPortalLink.setAttribute("aria-disabled", "true");
 
     try {
-      const createPortal = functions.httpsCallable("create_stripe_billing_portal_session");
       const returnUrl = `${window.location.origin}${window.location.pathname}`;
-      const result = await createPortal({
-        returnUrl,
-        meta: buildMeta(),
-      });
-      const url = String(result.data?.url || "").trim();
+      const email = String(state.user?.email || "").trim().toLowerCase();
+      const customerId = String(state.user?.stripeCustomerId || "").trim();
+
+      let url = "";
+      try {
+        const response = await fetch("/api/shop/portal", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          credentials: "same-origin",
+          body: JSON.stringify({
+            email,
+            customerId,
+            returnUrl,
+          }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (response.ok && payload?.url) {
+          url = String(payload.url || "").trim();
+        }
+      } catch (_error) {}
+
+      if (!url) {
+        const createPortal = functions.httpsCallable("create_stripe_billing_portal_session");
+        const result = await createPortal({
+          returnUrl,
+          email,
+          customerId,
+          meta: buildMeta(),
+        });
+        url = String(result.data?.url || "").trim();
+      }
+
       if (!url) throw new Error("Stripe billing portal URL is missing.");
       logEvent("billing_portal_open", { provider: "stripe" });
       window.location.assign(url);
@@ -14586,7 +18477,18 @@
     }
 
     if (checkout !== "success" || !sessionId) return;
-    if (!requireFullAccount("Sign in to finalize checkout.", { redirect: true })) return;
+    if (!hasSessionUser()) {
+      try {
+        await ensureSessionUser({
+          reason: "checkout_finalize",
+          message: "Restoring checkout session...",
+        });
+      } catch (error) {
+        showToast(error?.message || "Unable to restore checkout session.", "warn");
+        return;
+      }
+    }
+    if (!hasSessionUser()) return;
 
     try {
       const confirm = functions.httpsCallable("confirm_stripe_checkout");
@@ -14649,7 +18551,10 @@
           ui.intelStrip.classList.toggle("hidden", !showTickerChart);
         }
         if (next === "ticker") {
-          setTickerIntelTab(state.intelActiveTab || "intelligence");
+          state.intelActiveTab = "intelligence";
+          if (ui.tickerIntelligenceOutput) {
+            ui.tickerIntelligenceOutput.classList.remove("hidden");
+          }
           const activeTicker = getActiveTicker() || normalizeTicker(safeLocalStorageGet(LAST_TICKER_KEY) || "");
           if (activeTicker) {
             syncTickerInputs(activeTicker, { source: "panel_open_ticker", skipHistory: true });
@@ -14670,6 +18575,20 @@
           }
         } else {
           setTerminalChartEngineVisibility("legacy");
+        }
+
+        if (next === "predictions") {
+          const activeTicker = getActiveTicker() || normalizeTicker(safeLocalStorageGet(LAST_TICKER_KEY) || "");
+          if (activeTicker) {
+            syncTickerInputs(activeTicker, { source: "panel_open_predictions", skipHistory: true });
+          }
+          const firstPredictionsLoad = !state.panelAutoloaded.predictions;
+          state.panelAutoloaded.predictions = true;
+          loadTickerPredictions(activeTicker, {
+            mode: activeTicker ? "ticker" : "topActive",
+            force: firstPredictionsLoad,
+            notify: false,
+          }).catch(() => {});
         }
 
         if (next === "trending") {
@@ -14696,6 +18615,12 @@
           const first = !state.panelAutoloaded.marketHeadlines;
           state.panelAutoloaded.marketHeadlines = true;
           loadMarketHeadlinesFeed(functions, { force: first, notify: false });
+        }
+
+        if (next === "macro") {
+          const firstMacro = !state.panelAutoloaded.macro;
+          state.panelAutoloaded.macro = true;
+          loadFiscalMacroDashboard({ force: firstMacro }).catch(() => {});
         }
 
         if (next === "ticker-query") {
@@ -14727,20 +18652,28 @@
             silent: true,
           }).catch(() => {});
         }
+
+        scheduleNativeInlineAdsRefresh();
       };
 
       ensureThemeToggle();
       normalizeHeaderBranding();
       normalizeTopNavigation();
       normalizeFooterSocialLinks();
-      ensureHeaderSolveNowCta();
+      normalizeFooterContactInfo();
+      initPricingBillingToggle();
       bindSolveNowModalTriggers();
+      removeHeaderSolveNowCta();
       ensureHeaderNotificationsCta();
       ensureSidebarCollapseToggle();
       bindMobileNav();
       bindMobileSidebarDrawer();
       bindMobileBottomNav();
+      bindMarketingBottomNav();
       bindNativeRewardedNavigationAds();
+      registerLegacyNativeAdInjectionHook();
+      scheduleNativeInlineAdsRefresh();
+      window.setInterval(scheduleNativeInlineAdsRefresh, 3500);
       initializeLanguageControls().catch(() => {});
       captureShareFromUrl();
       renderNotificationLog();
@@ -15029,8 +18962,13 @@
 		      const forecastId = plotButton.dataset.forecastId;
 		      if (!forecastId) return;
 
-      if (!hasFullAccount()) {
-        showToast("Sign in to view saved forecasts.", "warn");
+      try {
+        await ensureSessionUser({
+          reason: "forecast_plot_requires_session",
+          message: "Sign in to sync saved forecast runs.",
+        });
+      } catch (error) {
+        showToast(error?.message || "Unable to start guest session.", "warn");
         return;
       }
 
@@ -15044,7 +18982,7 @@
 		      }
 
 	      try {
-	        setTerminalStatus("Loading saved forecast...");
+	        setTerminalStatus("Loading saved run...");
 	        await plotForecastById(db, functions, forecastId);
 	        logEvent("forecast_plotted", { forecast_id: forecastId });
           document.querySelector('[data-panel-target="forecast"]')?.click?.();
@@ -15059,8 +18997,13 @@
           const dlButton = event.target.closest('[data-action="download-forecast"]');
           if (!dlButton) return;
           event.preventDefault();
-          if (!hasFullAccount()) {
-            showToast("Sign in to download forecasts.", "warn");
+          try {
+            await ensureSessionUser({
+              reason: "forecast_download_requires_session",
+              message: "Sign in to sync forecast downloads.",
+            });
+          } catch (error) {
+            showToast(error?.message || "Unable to start guest session.", "warn");
             return;
           }
           const forecastId = String(dlButton.dataset.forecastId || "").trim();
@@ -15069,9 +19012,12 @@
           try {
             dlButton.disabled = true;
             setTerminalStatus("Preparing download...");
-            const doc = await loadForecastDoc(db, forecastId);
-            const rows = Array.isArray(doc.forecastRows) ? doc.forecastRows : [];
-            if (!rows.length) throw new Error("No forecast rows stored for this run.");
+	            const doc = await loadForecastDoc(db, forecastId);
+	            const rows = Array.isArray(doc.forecastRows) ? doc.forecastRows : [];
+	            if (!rows.length) throw new Error("No forecast rows stored for this run.");
+              if (String(doc.chartSeriesSource || "") === "preview_only") {
+                showToast("Only preview rows are available on this device. Downloading preview CSV.", "warn");
+              }
 
             const quantKeys = Object.keys(rows[0] || {})
               .filter((key) => /^q\d\d$/.test(key))
@@ -15118,8 +19064,13 @@
             return;
           }
 
-          if (!hasFullAccount()) {
-            showToast("Sign in to download screener runs.", "warn");
+          try {
+            await ensureSessionUser({
+              reason: "screener_download_requires_session",
+              message: "Sign in to sync screener downloads.",
+            });
+          } catch (error) {
+            showToast(error?.message || "Unable to start guest session.", "warn");
             return;
           }
           const runId = String(dlButton.dataset.runId || "").trim();
@@ -15142,6 +19093,134 @@
             showToast(error.message || "Unable to download screener run.", "warn");
           } finally {
             dlButton.disabled = false;
+          }
+        });
+
+        document.addEventListener("click", async (event) => {
+          const actionTarget = event.target.closest('[data-action^="my-request-"]');
+          if (!actionTarget) return;
+          const action = String(actionTarget.dataset.action || "").trim();
+          if (!action || action === "my-requests-refresh") return;
+          const requestId = String(actionTarget.dataset.requestId || "").trim();
+          if (!requestId) return;
+          event.preventDefault();
+
+          try {
+            await ensureSessionUser({
+              reason: "my_requests_requires_session",
+              message: "Sign in to sync your saved requests.",
+            });
+          } catch (error) {
+            showToast(error?.message || "Unable to start guest session.", "warn");
+            return;
+          }
+
+          const button = actionTarget.closest("button") || actionTarget;
+          const previousDisabled = Boolean(button.disabled);
+          button.disabled = true;
+          try {
+            let request = getMyRequestById(requestId);
+            if (!request && action !== "my-request-delete") {
+              request = await fetchMyRequestById(requestId);
+            }
+
+            if (action === "my-request-load") {
+              await loadMyRequestIntoUi({ requestId, request, db, functions, notify: true });
+              logEvent("my_request_loaded", {
+                request_id: requestId,
+                type: normalizeMyRequestType(request?.type || ""),
+              });
+              return;
+            }
+
+            if (action === "my-request-share") {
+              if (!request) throw new Error("Request not found.");
+              await openMyRequestShareModal({
+                request,
+                onSaved: (saved) => {
+                  if (saved && typeof saved === "object") {
+                    upsertMyRequestInState(saved);
+                    renderMyRequestsPanels();
+                  }
+                },
+              });
+              logEvent("my_request_share_opened", {
+                request_id: requestId,
+                type: normalizeMyRequestType(request?.type || ""),
+              });
+              return;
+            }
+
+            if (action === "my-request-rename") {
+              if (!request) throw new Error("Request not found.");
+              const nextTitle = await openPromptModal({
+                title: "Rename request",
+                message: "Use a short title so you can find this request quickly later.",
+                label: "Title",
+                placeholder: "Request title",
+                initialValue: String(request.title || ""),
+                confirmLabel: "Save",
+              });
+              if (!nextTitle) return;
+              await updateMyRequest(requestId, { title: nextTitle }, { method: "PATCH" });
+              showToast("Request renamed.");
+              logEvent("my_request_renamed", {
+                request_id: requestId,
+                type: normalizeMyRequestType(request?.type || ""),
+              });
+              return;
+            }
+
+            if (action === "my-request-duplicate") {
+              const body = await updateMyRequest(
+                requestId,
+                {},
+                { method: "POST", path: `/api/my-requests/${encodeURIComponent(requestId)}/duplicate` }
+              );
+              const duplicatedId = String(body?.request?.id || "").trim();
+              showToast(duplicatedId ? `Request duplicated (${duplicatedId.slice(0, 12)}...).` : "Request duplicated.");
+              logEvent("my_request_duplicated", {
+                request_id: requestId,
+                duplicated_request_id: duplicatedId,
+                type: normalizeMyRequestType(request?.type || body?.request?.type || ""),
+              });
+              return;
+            }
+
+            if (action === "my-request-unpublish") {
+              await updateMyRequest(
+                requestId,
+                {},
+                { method: "POST", path: `/api/my-requests/${encodeURIComponent(requestId)}/unpublish` }
+              );
+              showToast("Request unpublished from Explore.");
+              logEvent("my_request_unpublished", {
+                request_id: requestId,
+                type: normalizeMyRequestType(request?.type || ""),
+              });
+              return;
+            }
+
+            if (action === "my-request-delete") {
+              const confirmed = await openConfirmModal({
+                title: "Delete request?",
+                message: "This removes the request from your list and unpublishes it from Explore.",
+                confirmLabel: "Delete",
+                danger: true,
+              });
+              if (!confirmed) return;
+              await updateMyRequest(
+                requestId,
+                {},
+                { method: "DELETE", path: `/api/my-requests/${encodeURIComponent(requestId)}` }
+              );
+              showToast("Request deleted.");
+              logEvent("my_request_deleted", { request_id: requestId, type: normalizeMyRequestType(request?.type || "") });
+            }
+          } catch (error) {
+            showToast(error.message || "Unable to update request.", "warn");
+          } finally {
+            button.disabled = previousDisabled;
           }
         });
 
@@ -15243,8 +19322,8 @@
 	            const forecastId = String(deleteForecast.dataset.forecastId || "").trim();
 	            if (!forecastId) return;
 	            const ok = await openConfirmModal({
-	              title: "Delete saved forecast?",
-	              message: "This removes the saved forecast from your workspace. This cannot be undone.",
+	              title: "Delete saved run?",
+	              message: "This removes the saved run from your workspace. This cannot be undone.",
 	              confirmLabel: "Delete",
 	              danger: true,
 	            });
@@ -15786,136 +19865,6 @@
             }
           }
 
-          const plotBacktest = event.target.closest('[data-action="plot-backtest"]');
-          if (plotBacktest) {
-            event.preventDefault();
-            if (!hasFullAccount()) {
-              showToast("Sign in to load backtests.", "warn");
-              return;
-            }
-            const backtestId = String(plotBacktest.dataset.backtestId || "").trim();
-            if (!backtestId) return;
-            try {
-              await loadBacktestById(db, storage, backtestId);
-              showToast("Backtest loaded.");
-            } catch (error) {
-              showToast(error.message || "Unable to load backtest.", "warn");
-            }
-            return;
-          }
-
-          const downloadBacktestCode =
-            event.target.closest('[data-action="download-backtest-source"]') ||
-            event.target.closest('[data-action="download-backtest-code"]');
-          if (downloadBacktestCode) {
-            event.preventDefault();
-            if (!hasFullAccount()) {
-              showToast("Sign in to download backtest code.", "warn");
-              return;
-            }
-            const backtestId = String(downloadBacktestCode.dataset.backtestId || "").trim();
-            if (!backtestId) return;
-            downloadBacktestCode.disabled = true;
-            try {
-              const snap = await db.collection("backtests").doc(backtestId).get();
-              if (!snap.exists) throw new Error("Backtest not found.");
-              const doc = { id: snap.id, ...(snap.data() || {}) };
-              const sourceSelect = downloadBacktestCode
-                .closest(".backtest-source-controls")
-                ?.querySelector('[data-backtest-source-format]');
-              const sourceKey = String(sourceSelect?.value || "python").trim().toLowerCase();
-              const source = resolveBacktestSourceExport(doc, sourceKey);
-              if (!source || !String(source.content || "").trim()) {
-                throw new Error("No exported source available for the selected format.");
-              }
-              const safeTicker = normalizeTicker(doc.ticker || "backtest") || "backtest";
-              const optionMeta =
-                BACKTEST_SOURCE_OPTIONS.find((item) => item.key === sourceKey) || BACKTEST_SOURCE_OPTIONS[0];
-              const suggestedFilename = source.filename
-                ? String(source.filename)
-                : `${safeTicker}_${backtestId}.${optionMeta.ext}`;
-              triggerDownload(suggestedFilename, source.content, {
-                mimeType: source.mimeType || optionMeta.mimeType,
-              });
-              showToast("Source downloaded.");
-              logEvent("backtest_code_downloaded", { backtest_id: backtestId, source_format: sourceKey });
-            } catch (error) {
-              showToast(error.message || "Unable to download code.", "warn");
-            } finally {
-              downloadBacktestCode.disabled = false;
-            }
-            return;
-          }
-
-          const renameBacktest = event.target.closest('[data-action="rename-backtest"]');
-          if (renameBacktest) {
-            event.preventDefault();
-            if (!hasFullAccount()) {
-              showToast("Sign in to rename backtests.", "warn");
-              return;
-            }
-            const backtestId = String(renameBacktest.dataset.backtestId || "").trim();
-            if (!backtestId) return;
-            let currentTitle = "";
-            try {
-              const snap = await db.collection("backtests").doc(backtestId).get();
-              if (snap.exists) currentTitle = String(snap.data()?.title || "");
-            } catch (error) {
-              currentTitle = "";
-            }
-            const nextTitle = await openPromptModal({
-              title: "Rename backtest",
-              message: "Update the label shown in your saved list.",
-              label: "Title",
-              placeholder: "Backtest",
-              initialValue: currentTitle,
-              confirmLabel: "Rename",
-            });
-            if (!nextTitle) return;
-            renameBacktest.disabled = true;
-            try {
-              const rename = functions.httpsCallable("rename_backtest");
-              await rename({ backtestId, title: nextTitle, meta: buildMeta() });
-              showToast("Backtest renamed.");
-              logEvent("backtest_renamed", { backtest_id: backtestId });
-            } catch (error) {
-              showToast(error.message || "Unable to rename backtest.", "warn");
-            } finally {
-              renameBacktest.disabled = false;
-            }
-            return;
-          }
-
-          const deleteBacktest = event.target.closest('[data-action="delete-backtest"]');
-          if (deleteBacktest) {
-            event.preventDefault();
-            if (!hasFullAccount()) {
-              showToast("Sign in to delete backtests.", "warn");
-              return;
-            }
-            const backtestId = String(deleteBacktest.dataset.backtestId || "").trim();
-            if (!backtestId) return;
-            const ok = await openConfirmModal({
-              title: "Delete backtest?",
-              message: "This deletes the saved backtest and removes its chart from storage. This cannot be undone.",
-              confirmLabel: "Delete",
-              danger: true,
-            });
-            if (!ok) return;
-            deleteBacktest.disabled = true;
-            try {
-              const del = functions.httpsCallable("delete_backtest");
-              await del({ backtestId, meta: buildMeta() });
-              showToast("Backtest deleted.");
-              logEvent("backtest_deleted", { backtest_id: backtestId });
-              if (ui.backtestOutput) ui.backtestOutput.innerHTML = `<div class="small muted">Backtest deleted.</div>`;
-            } catch (error) {
-              showToast(error.message || "Unable to delete backtest.", "warn");
-            } finally {
-              deleteBacktest.disabled = false;
-            }
-            return;
-          }
         });
 
 		    document.addEventListener("click", async (event) => {
@@ -15934,14 +19883,17 @@
 		      }
 
 		      const csvBtn = event.target.closest('[data-action="forecast-csv"]');
-		      if (csvBtn) {
+			      if (csvBtn) {
 		        event.preventDefault();
 		        const doc = state.tickerContext.forecastDoc;
 		        if (!doc || !Array.isArray(doc.forecastRows) || !doc.forecastRows.length) {
 		          showToast("No forecast rows available to export.", "warn");
 		          return;
 		        }
-		        const rows = doc.forecastRows;
+			        const rows = doc.forecastRows;
+              if (String(doc.chartSeriesSource || "") === "preview_only") {
+                showToast("Only preview rows are available on this device. Downloading preview CSV.", "warn");
+              }
 		        const quantKeys = extractQuantileKeys(rows);
 		        const headers = ["ds", ...quantKeys];
 		        const csv = buildCsv(rows, headers);
@@ -15987,8 +19939,11 @@
         } catch (error) {
           // Ignore persistence failures.
         }
-        showToast("Using session-only sign-in in this browser.", "warn");
-      });
+	        showToast("Using session-only sign-in in this browser.", "warn");
+	      });
+
+        bindMyRequestsPanels();
+        renderMyRequestsPanels();
 
 			    ui.headerAuth?.addEventListener("click", () => {
 			      window.location.href = hasFullAccount() ? "/dashboard" : "/account";
@@ -16010,12 +19965,16 @@
 		      setActiveWorkspaceId(next);
 		      logEvent("workspace_switched", { workspace_id: next });
 		      startUserForecasts(db, next);
+          startScreenerRuns(db, next);
 		      startWorkspaceTasks(db, next);
 		      startWatchlist(db, next);
 		      startPriceAlerts(db, next);
           startAIAgents(db, next);
           startVolatilityMonitor(db, functions, next);
           seedDefaultAIAgents(db, next).catch(() => {});
+          fetchMyRequestsList({ force: true }).then(() => {
+            renderMyRequestsPanels();
+          });
 		      showToast("Workspace updated.");
 		    });
 
@@ -17003,11 +20962,13 @@
           showToast("Enter a ticker.", "warn");
           return;
         }
-        syncTickerInputs(ticker, { source: "terminal_submit", emitAnalytics: true });
-        state.tickerContext.interval = interval;
-        state.tickerContext.forecastDoc = null;
-        state.tickerContext.forecastId = "";
-        setTerminalStatus("Loading price history...");
+	        syncTickerInputs(ticker, { source: "terminal_submit", emitAnalytics: true });
+	        state.tickerContext.interval = interval;
+	        state.tickerContext.forecastDoc = null;
+	        state.tickerContext.forecastId = "";
+        state.tickerContext.forecastAiSummary = null;
+        state.tickerContext.forecastCacheMeta = null;
+	        setTerminalStatus("Loading price history...");
         try {
           const rows = await loadTickerHistory(functions, ticker, interval);
           state.tickerContext.rows = rows;
@@ -17143,7 +21104,16 @@
 
 		    ui.forecastForm?.addEventListener("submit", async (event) => {
 		      event.preventDefault();
-		      if (!requireFullAccount("Sign in to run a forecast.", { redirect: true })) return;
+          let sessionUser = null;
+          try {
+            sessionUser = await ensureSessionUser({
+              reason: "forecast_requires_session",
+              message: "Sign in to sync forecast history across devices.",
+            });
+          } catch (error) {
+            showToast(error?.message || "Unable to start guest session.", "warn");
+            return;
+          }
           const rewardApproved = await maybeShowNativeRewardGate({
             reason: "forecast",
             title: "Watch a rewarded ad to unlock forecast output?",
@@ -17175,7 +21145,7 @@
 	        interval: formData.get("interval"),
 	        service: "prophet",
 	        quantiles,
-          workspaceId: state.activeWorkspaceId || state.user.uid,
+          workspaceId: state.activeWorkspaceId || sessionUser?.uid || state.user?.uid || "",
 	        meta: buildMeta(),
 	        utm: getUtm(),
 		      };
@@ -17201,36 +21171,137 @@
             return computeHistoryStart(desiredInterval);
           })();
 
-		      try {
-		        setOutputLoading(ui.forecastOutput, "Generating forecast...");
-		        const runForecast = functions.httpsCallable("run_timeseries_forecast");
-		        const result = await runForecast(payload);
-		        const data = result.data || {};
-		        const requestId = String(data.requestId || "").trim();
-		        if (!requestId) {
-		          throw new Error("Forecast run did not return a request ID.");
-		        }
+			      try {
+			        setOutputLoading(ui.forecastOutput, "Generating forecast...");
+              state.tickerContext.forecastAiSummary = {
+                requestId: "",
+                loading: false,
+                text: "",
+                provider: "",
+                model: "",
+                latencyMs: null,
+                usage: {},
+                responseId: "",
+                shareUrl: "",
+                feedback: "",
+                error: "",
+              };
+			        const runForecast = functions.httpsCallable("run_timeseries_forecast");
+			        const result = await runForecast(payload);
+			        const data = result.data || {};
+			        const requestId = String(data.requestId || "").trim();
+			        if (!requestId) {
+			          throw new Error("Forecast run did not return a request ID.");
+			        }
+              const responseRows = normalizeForecastSeriesRows(data.forecastSeries || data.forecastRows || []);
+              const historyRows =
+                Array.isArray(state.tickerContext.rows) &&
+                state.tickerContext.rows.length &&
+                normalizeTicker(state.tickerContext.ticker || "") === ticker &&
+                String(state.tickerContext.interval || "1d") === String(payload.interval || "1d")
+                  ? state.tickerContext.rows
+                  : await loadTickerHistory(functions, ticker, String(payload.interval || "1d"));
+              const alignedRows = alignForecastRowsWithHistory({
+                forecastRows: responseRows,
+                historyRows,
+                interval: String(payload.interval || "1d"),
+                horizon: Number(payload.horizon || 0) || responseRows.length,
+              });
+              const cacheMeta = await saveForecastSeriesToClientCache({
+                requestId,
+                ticker,
+                interval: String(payload.interval || "1d"),
+                horizon: Number(payload.horizon || 0),
+                service: String(payload.service || "prophet"),
+                quantiles: Array.isArray(payload.quantiles) ? payload.quantiles : [],
+                start: String(payload.start || ""),
+                forecastRows: alignedRows,
+                historicalRows: historyRows,
+                chartConfig: {
+                  quantileKeys: extractQuantileKeys(alignedRows),
+                  interval: String(payload.interval || "1d"),
+                },
+                metrics: data.metrics && typeof data.metrics === "object" ? data.metrics : {},
+              });
+              state.tickerContext.forecastCacheMeta = cacheMeta;
+              const localKeyLevels = extractForecastKeyLevels(alignedRows);
 
-		        logEvent("forecast_request", { ticker: payload.ticker, interval: payload.interval, service: payload.service });
-		        showToast("Forecast saved.");
-            recordPromoForecastUsage();
+              const forecastDocLocal = {
+                id: requestId,
+                ticker,
+                interval: String(payload.interval || "1d"),
+                horizon: Number(payload.horizon || 0) || alignedRows.length,
+                start: String(payload.start || ""),
+                quantiles: Array.isArray(payload.quantiles) ? payload.quantiles : [],
+                service: String(payload.service || "prophet"),
+                engine: String(data.engine || ""),
+                status: String(data.status || "completed"),
+                serviceMessage: String(data.serviceMessage || "").trim(),
+                metrics:
+                  data.metrics && typeof data.metrics === "object"
+                    ? data.metrics
+                    : {
+                        lastClose: data.lastClose,
+                        mae: data.mae,
+                        coverage10_90: data.coverage10_90,
+                        medianEnd: localKeyLevels.median,
+                      },
+                forecastPreview: Array.isArray(data.forecastPreview) ? data.forecastPreview : alignedRows.slice(0, 12),
+                forecastRows: alignedRows,
+                forecastQuantilesEnd: data.forecastQuantilesEnd && typeof data.forecastQuantilesEnd === "object" ? data.forecastQuantilesEnd : {},
+                tradeRationale: String(data.tradeRationale || "").trim(),
+                chartSeriesSource: "client_cache",
+                chartCacheKey: String(cacheMeta?.cacheKey || "").trim(),
+              };
 
-		        try {
-		          if (ui.tickerChart) {
-		            setTerminalStatus("Loading forecast for chart...");
-		            await plotForecastById(db, functions, requestId);
-		            document.getElementById("terminal")?.scrollIntoView({ behavior: "smooth" });
-		          } else {
-		            const doc = await loadForecastDoc(db, requestId);
-		            state.tickerContext.forecastDoc = doc;
-		            state.tickerContext.forecastId = requestId;
-		            state.tickerContext.forecastTablePage = 0;
-		            renderForecastDetails(doc);
-		          }
-		        } catch (plotError) {
-		          setOutputReady(ui.forecastOutput);
-		          if (ui.forecastOutput) {
-		            ui.forecastOutput.innerHTML = `
+				        logEvent("forecast_request", { ticker: payload.ticker, interval: payload.interval, service: payload.service });
+				        showToast("Forecast saved.");
+	            recordPromoForecastUsage();
+	            upsertMyRequest({
+              type: "forecast",
+              requestId: `forecast__${requestId}`,
+              title: `${normalizeTicker(payload.ticker || "") || "Ticker"} forecast`,
+              input: {
+                ticker: normalizeTicker(payload.ticker || ""),
+                interval: String(payload.interval || "1d"),
+                horizon: Number(payload.horizon || 0) || null,
+                service: String(payload.service || ""),
+                quantiles: Array.isArray(payload.quantiles) ? payload.quantiles : [],
+              },
+	              outputsMeta: {
+	                summary: String(data?.serviceMessage || "").trim(),
+	                service: String(payload.service || ""),
+	                interval: String(payload.interval || ""),
+                  chartStorage: "client_only",
+                  chartCacheKey: String(cacheMeta?.cacheKey || "").trim(),
+                  chartParamsHash: String(cacheMeta?.paramsHash || "").trim(),
+                  chartRows: Number(cacheMeta?.rowCount || 0) || 0,
+	              },
+	              sourceRef: {
+	                collection: "forecast_requests",
+	                id: requestId,
+	              },
+	            }).catch(() => {});
+
+				        try {
+			          if (ui.tickerChart) {
+			            setTerminalStatus("Loading forecast for chart...");
+			            await plotForecastById(db, functions, requestId, { preloadedDoc: forecastDocLocal });
+			            document.getElementById("terminal")?.scrollIntoView({ behavior: "smooth" });
+			          } else {
+			            state.tickerContext.forecastDoc = forecastDocLocal;
+			            state.tickerContext.forecastId = requestId;
+			            state.tickerContext.forecastTablePage = 0;
+                  state.tickerContext.rows = Array.isArray(historyRows) ? historyRows : [];
+                  state.tickerContext.interval = String(payload.interval || "1d");
+			            renderForecastDetails(forecastDocLocal);
+			          }
+                runForecastAutoSummary({ forecastDoc: forecastDocLocal, requestId, notify: false }).catch(() => {});
+				        } catch (plotError) {
+                runForecastAutoSummary({ forecastDoc: forecastDocLocal, requestId, notify: false }).catch(() => {});
+			          setOutputReady(ui.forecastOutput);
+			          if (ui.forecastOutput) {
+			            ui.forecastOutput.innerHTML = `
 		              <div class="small"><strong>Forecast ID:</strong> ${escapeHtml(requestId)}</div>
 		              <div class="small"><strong>Service:</strong> ${escapeHtml(labelForecastService(payload.service))}</div>
 		              <div class="small muted" style="margin-top:10px;">${escapeHtml(plotError.message || "Forecast saved, but could not be loaded yet.")}</div>
@@ -17238,20 +21309,37 @@
 		          }
 		        }
 	      } catch (error) {
-	        showToast(error.message || "Unable to run forecast.", "warn");
+          const message = String(error?.message || "Unable to run forecast.").trim();
+          setOutputReady(ui.forecastOutput);
+          if (ui.forecastOutput) {
+            ui.forecastOutput.innerHTML = `
+              <div class="small"><strong>Status:</strong> Forecast failed</div>
+              <div class="small muted" style="margin-top:8px;">${escapeHtml(message || "Unable to run forecast.")}</div>
+              <div class="small muted" style="margin-top:8px;">AI analysis was skipped because the forecast step did not complete.</div>
+            `;
+          }
+	        showToast(message || "Unable to run forecast.", "warn");
 	      }
 	    });
 
-        ui.forecastLoadButton?.addEventListener("click", async () => {
-          if (!requireFullAccount("Sign in to load saved forecasts.", { redirect: true })) return;
+	        ui.forecastLoadButton?.addEventListener("click", async () => {
+          try {
+            await ensureSessionUser({
+              reason: "forecast_saved_load_requires_session",
+              message: "Sign in to sync saved forecast runs.",
+            });
+          } catch (error) {
+            showToast(error?.message || "Unable to start guest session.", "warn");
+            return;
+          }
           const forecastId = String(ui.forecastLoadSelect?.value || "").trim();
           if (!forecastId) {
-            showToast("Select a saved forecast.", "warn");
+            showToast("Select a saved run.", "warn");
             return;
           }
           if (ui.forecastLoadStatus) ui.forecastLoadStatus.textContent = "Loading...";
           try {
-            setTerminalStatus("Loading saved forecast...");
+            setTerminalStatus("Loading saved run...");
             await plotForecastById(db, functions, forecastId);
             if (ui.forecastLoadStatus) ui.forecastLoadStatus.textContent = "";
             showToast("Forecast loaded.");
@@ -17260,15 +21348,106 @@
           } catch (error) {
             if (ui.forecastLoadStatus) ui.forecastLoadStatus.textContent = error.message || "Unable to load forecast.";
             showToast(error.message || "Unable to load forecast.", "warn");
-          }
-        });
+	          }
+	        });
+
+        if (ui.forecastOutput && ui.forecastOutput.dataset.bound !== "1") {
+          ui.forecastOutput.addEventListener("click", async (event) => {
+            const likeBtn = event.target.closest('[data-action="forecast-ai-like"]');
+            if (likeBtn) {
+              event.preventDefault();
+              const forecastId = String(likeBtn.dataset.forecastId || state.tickerContext.forecastId || "").trim();
+              if (!forecastId) return;
+              const summary = state.tickerContext.forecastAiSummary || {};
+              state.tickerContext.forecastAiSummary = { ...summary, requestId: forecastId, feedback: "like" };
+              const responseId = String(summary.responseId || "").trim();
+              if (responseId) {
+                await submitModelCouncilFeedback({ responseId, action: "like" });
+              }
+              if (state.tickerContext.forecastDoc) renderForecastDetails(state.tickerContext.forecastDoc);
+              showToast("Feedback saved.");
+              return;
+            }
+
+            const dislikeBtn = event.target.closest('[data-action="forecast-ai-dislike"]');
+            if (dislikeBtn) {
+              event.preventDefault();
+              const forecastId = String(dislikeBtn.dataset.forecastId || state.tickerContext.forecastId || "").trim();
+              if (!forecastId) return;
+              const summary = state.tickerContext.forecastAiSummary || {};
+              state.tickerContext.forecastAiSummary = { ...summary, requestId: forecastId, feedback: "dislike" };
+              const responseId = String(summary.responseId || "").trim();
+              if (responseId) {
+                await submitModelCouncilFeedback({ responseId, action: "dislike" });
+              }
+              if (state.tickerContext.forecastDoc) renderForecastDetails(state.tickerContext.forecastDoc);
+              showToast("Feedback saved.");
+              return;
+            }
+
+            const shareBtn = event.target.closest('[data-action="forecast-ai-share"]');
+            if (shareBtn) {
+              event.preventDefault();
+              const forecastId = String(shareBtn.dataset.forecastId || state.tickerContext.forecastId || "").trim();
+              if (!forecastId) return;
+              shareBtn.disabled = true;
+              try {
+                const summary = state.tickerContext.forecastAiSummary || {};
+                const responseId = String(shareBtn.dataset.responseId || summary.responseId || "").trim();
+                let shareUrl = String(summary.shareUrl || "").trim();
+                if (!shareUrl && responseId) {
+                  try {
+                    shareUrl = await createModelCouncilShareLink(responseId);
+                    await submitModelCouncilFeedback({ responseId, action: "share" });
+                  } catch (error) {
+                    shareUrl = "";
+                  }
+                }
+                if (!shareUrl && hasFullAccount()) {
+                  const requestDocId = `forecast__${forecastId}`;
+                  try {
+                    const body = await updateMyRequest(
+                      requestDocId,
+                      { visibility: "unlisted" },
+                      { method: "POST", path: `/api/my-requests/${encodeURIComponent(requestDocId)}/share` }
+                    );
+                    shareUrl = String(body?.share?.shareUrl || "").trim();
+                  } catch (error) {
+                    shareUrl = "";
+                  }
+                }
+                if (!shareUrl) {
+                  shareUrl = `${window.location.origin}/forecasting?forecastId=${encodeURIComponent(forecastId)}`;
+                }
+                state.tickerContext.forecastAiSummary = {
+                  ...summary,
+                  requestId: forecastId,
+                  shareUrl,
+                  responseId: responseId || String(summary.responseId || "").trim(),
+                };
+                if (state.tickerContext.forecastDoc) renderForecastDetails(state.tickerContext.forecastDoc);
+                await performShare({
+                  url: shareUrl,
+                  title: "Quantura forecast summary",
+                  text: String(summary.text || "Forecast narrative generated by Model Council.").slice(0, 220),
+                });
+                showToast("Share link copied.");
+              } catch (error) {
+                showToast(error.message || "Unable to share forecast summary.", "warn");
+              } finally {
+                shareBtn.disabled = false;
+              }
+            }
+          });
+          ui.forecastOutput.dataset.bound = "1";
+        }
 
 	    ui.technicalsForm?.addEventListener("submit", async (event) => {
 	      event.preventDefault();
 	      const formData = new FormData(ui.technicalsForm);
 	      const indicators = formData.getAll("indicators");
 	      const includeSeries = Boolean(ui.indicatorChart || ui.tickerChart);
-	      const payload = {
+      const payload = {
         ticker: formData.get("ticker"),
         interval: formData.get("interval"),
         lookback: Number(formData.get("lookback")),
@@ -17278,6 +21457,13 @@
         meta: buildMeta(),
 	      };
 
+        const rewardApproved = await maybeShowNativeRewardGate({
+          reason: "indicator_llm",
+          title: "Watch a rewarded ad to unlock indicator AI output?",
+          message: "Indicator calculations and AI narrative can require a rewarded video in native apps.",
+        });
+        if (!rewardApproved) return;
+
 	      try {
           const activeTicker = normalizeTicker(payload.ticker || state.tickerContext.ticker || "");
           if (activeTicker) {
@@ -17285,24 +21471,88 @@
             syncTickerInputs(activeTicker, { source: "technicals_form" });
           }
 	        setOutputLoading(ui.technicalsOutput, "Computing indicators...");
-	        const runIndicators = functions.httpsCallable("get_technicals");
-	        const result = await runIndicators(payload);
-	        const data = result.data || {};
+          const headers = await buildApiAuthHeaders({ includeJson: true });
+          const response = await fetch("/api/indicators/analyze", {
+            method: "POST",
+            headers,
+            body: JSON.stringify(payload),
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            const detail = String(data?.detail || data?.error || `HTTP ${response.status}`).trim();
+            throw new Error(detail || "indicator_analysis_failed");
+          }
 	        const rows = data.latest || [];
+          const analysis = data.analysis && typeof data.analysis === "object" ? data.analysis : {};
+          const prediction = analysis.prediction && typeof analysis.prediction === "object" ? analysis.prediction : {};
 	        if (ui.technicalsOutput) {
 	          setOutputReady(ui.technicalsOutput);
 		          if (!rows.length) {
 		            ui.technicalsOutput.textContent = "No indicator data returned.";
 		          } else {
+                const targetPrice = Number(prediction.targetPrice);
+                const lastClose = Number(data?.meta?.lastClose);
+                const upsidePct =
+                  Number.isFinite(targetPrice) && Number.isFinite(lastClose) && lastClose > 0
+                    ? ((targetPrice - lastClose) / lastClose) * 100
+                    : null;
+                const keySignals = Array.isArray(analysis.keySignals) ? analysis.keySignals.slice(0, 6) : [];
+                const summaryText = escapeHtml(String(analysis.summary || "").trim());
+                const narrativeText = escapeHtml(String(analysis.text || "").trim());
 		            ui.technicalsOutput.innerHTML = `
                   <div class="table-wrap">
 		                <table class="data-table">
 	                    <thead><tr><th>Indicator</th><th>Value</th></tr></thead>
 	                    <tbody>
-	                      ${rows.map((row) => `<tr><td>${row.name}</td><td>${row.value}</td></tr>`).join("")}
+	                      ${rows
+                          .map((row) => {
+                            const name = escapeHtml(String(row?.name || "").trim());
+                            const value = escapeHtml(String(row?.display ?? row?.value ?? "—").trim() || "—");
+                            return `<tr><td>${name}</td><td>${value}</td></tr>`;
+                          })
+                          .join("")}
 	                    </tbody>
 	                  </table>
                   </div>
+                  ${
+                    summaryText || narrativeText
+                      ? `<div class="results-panel" style="margin-top: 12px;">
+                          <h3>AI indicator analysis</h3>
+                          <div class="small muted">Provider: ${escapeHtml(String(analysis.provider || "openai"))} · Model: ${escapeHtml(
+                          String(analysis.model || "")
+                        )}</div>
+                          ${summaryText ? `<div class="small" style="margin-top:8px;">${summaryText}</div>` : ""}
+                          <div class="form-grid" style="margin-top:10px;">
+                            <div class="profile-item"><span class="label">Direction</span><span class="value">${escapeHtml(
+                              String(prediction.direction || "neutral")
+                            )}</span></div>
+                            <div class="profile-item"><span class="label">Target price</span><span class="value">${
+                              Number.isFinite(targetPrice) ? formatUsd(targetPrice, 2) : "—"
+                            }</span></div>
+                            <div class="profile-item"><span class="label">Timeline</span><span class="value">${escapeHtml(
+                              String(prediction.timeline || `${prediction.timelineDays || "—"} trading days`)
+                            )}</span></div>
+                            <div class="profile-item"><span class="label">Confidence</span><span class="value">${escapeHtml(
+                              String(prediction.confidence || "medium")
+                            )}</span></div>
+                            <div class="profile-item"><span class="label">Implied move</span><span class="value">${
+                              Number.isFinite(upsidePct) ? formatPercent(upsidePct, { signed: true, digits: 2 }) : "—"
+                            }</span></div>
+                          </div>
+                          ${
+                            keySignals.length
+                              ? `<ul class="small" style="margin:10px 0 0 16px;">${keySignals
+                                  .map((signal) => `<li>${escapeHtml(String(signal || "").trim())}</li>`)
+                                  .join("")}</ul>`
+                              : ""
+                          }
+                          ${narrativeText ? `<div class="small" style="margin-top:10px; white-space:pre-wrap;">${narrativeText}</div>` : ""}
+                          <p class="small muted solve-now-disclaimer" style="margin-top:10px;">${escapeHtml(
+                            String(analysis.disclaimer || MODEL_COUNCIL_OUTPUT_DISCLAIMER)
+                          )}</p>
+                        </div>`
+                      : ""
+                  }
 	            `;
 	          }
 	        }
@@ -17322,15 +21572,53 @@
             ]);
           }
         }
-        logEvent("technicals_request", { ticker: payload.ticker });
-      } catch (error) {
-        showToast(error.message || "Unable to run indicators.", "warn");
-      }
-    });
+	        logEvent("technicals_request", { ticker: payload.ticker });
+        upsertMyRequest({
+          type: "indicator",
+          title: `${normalizeTicker(payload.ticker || "") || "Ticker"} indicators`,
+          input: {
+            ticker: normalizeTicker(payload.ticker || ""),
+            interval: String(payload.interval || "1d"),
+            lookback: Number(payload.lookback || 0) || null,
+            indicators: Array.isArray(indicators) ? indicators.map((entry) => String(entry || "").trim().toUpperCase()) : [],
+          },
+          outputsMeta: {
+            summary:
+              (() => {
+                const narrative = String(analysis?.summary || "").trim();
+                if (narrative) return narrative.slice(0, 320);
+                if (Array.isArray(rows) && rows.length) {
+                  return rows
+                    .slice(0, 4)
+                    .map((row) => `${row?.name}: ${row?.display ?? row?.value}`)
+                    .join(" • ");
+                }
+                return "Indicator request saved.";
+              })(),
+            latestCount: Array.isArray(rows) ? rows.length : 0,
+            prediction: prediction?.direction ? String(prediction.direction) : "",
+          },
+          sourceRef: {
+            collection: "indicator_requests",
+            id: `ind_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          },
+        }).catch(() => {});
+	      } catch (error) {
+	        showToast(error.message || "Unable to run indicators.", "warn");
+	      }
+	    });
 
     ui.downloadForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
-      if (!requireFullAccount("Sign in to download price history.", { redirect: true })) return;
+      try {
+        await ensureSessionUser({
+          reason: "history_download_requires_session",
+          message: "Sign in to sync download history.",
+        });
+      } catch (error) {
+        showToast(error?.message || "Unable to start guest session.", "warn");
+        return;
+      }
       const rewardApproved = await maybeShowNativeRewardGate({
         reason: "history_download",
         title: "Watch a rewarded ad to unlock download output?",
@@ -17395,25 +21683,84 @@
 		      await loadTrendingTickers(functions, { notify: true, force: true });
 		    });
 
-    if (ui.eventsCalendarStart && ui.eventsCalendarEnd) {
-      const today = new Date();
-      const end = new Date(today);
-      end.setDate(end.getDate() + 90);
-      if (!ui.eventsCalendarStart.value) ui.eventsCalendarStart.value = today.toISOString().slice(0, 10);
-      if (!ui.eventsCalendarEnd.value) ui.eventsCalendarEnd.value = end.toISOString().slice(0, 10);
+    if (ui.eventsCalendarPreset && !String(ui.eventsCalendarPreset.value || "").trim()) {
+      ui.eventsCalendarPreset.value = "this-week";
     }
-    if (ui.eventsCalendarSymbol && !String(ui.eventsCalendarSymbol.value || "").trim()) {
-      ui.eventsCalendarSymbol.value = normalizeTicker(state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "");
-    }
-    if (ui.eventsCalendarWindow && !String(ui.eventsCalendarWindow.value || "").trim()) {
-      ui.eventsCalendarWindow.value = "month";
-    }
-    ui.eventsCalendarForm?.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      await loadEarningsCalendar({ force: true, notify: true });
-    });
-    ui.eventsCalendarWindow?.addEventListener("change", async () => {
+    setEarningsCalendarPreset(ui.eventsCalendarPreset?.value || "this-week");
+    ui.eventsCalendarPreset?.addEventListener("change", async () => {
+      setEarningsCalendarPreset(ui.eventsCalendarPreset?.value || "this-week");
       await loadEarningsCalendar({ force: false, notify: false });
+    });
+    ui.eventsCalendarPrev?.addEventListener("click", async () => {
+      shiftEarningsCalendarRange(-1);
+      await loadEarningsCalendar({ force: false, notify: false });
+    });
+    ui.eventsCalendarNext?.addEventListener("click", async () => {
+      shiftEarningsCalendarRange(1);
+      await loadEarningsCalendar({ force: false, notify: false });
+    });
+    ui.eventsCalendarSearch?.addEventListener("input", () => {
+      state.earningsCalendar.search = String(ui.eventsCalendarSearch?.value || "").trim();
+      state.earningsCalendar.pageByDate = {};
+      renderEarningsCalendar();
+    });
+    ui.eventsCalendarSearchClear?.addEventListener("click", () => {
+      if (ui.eventsCalendarSearch) ui.eventsCalendarSearch.value = "";
+      state.earningsCalendar.search = "";
+      state.earningsCalendar.pageByDate = {};
+      renderEarningsCalendar();
+    });
+    ui.eventsCalendarDayStrip?.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-earnings-date]");
+      if (!button) return;
+      const date = String(button.getAttribute("data-earnings-date") || "").trim();
+      if (!date) return;
+      state.earningsCalendar.selectedDate = date;
+      state.earningsCalendar.pageByDate[date] = 1;
+      renderEarningsCalendar();
+    });
+    ui.eventsCalendarOutput?.addEventListener("click", async (event) => {
+      const followButton = event.target.closest("[data-earnings-follow]");
+      if (followButton) {
+        const symbol = String(followButton.getAttribute("data-earnings-follow") || "").trim();
+        if (!symbol) return;
+        await toggleEarningsFollow(symbol);
+        return;
+      }
+      const loadMoreButton = event.target.closest("[data-earnings-load-more]");
+      if (loadMoreButton) {
+        const date = String(loadMoreButton.getAttribute("data-earnings-load-more") || "").trim();
+        if (!date) return;
+        const current = Math.max(1, Number(state.earningsCalendar.pageByDate?.[date] || 1));
+        state.earningsCalendar.pageByDate[date] = current + 1;
+        renderEarningsCalendar();
+      }
+    });
+
+    if (ui.terminalFxBase && !String(ui.terminalFxBase.value || "").trim()) ui.terminalFxBase.value = "USD";
+    if (ui.terminalFxQuote && !String(ui.terminalFxQuote.value || "").trim()) ui.terminalFxQuote.value = "EUR";
+    if (ui.terminalFxAmount && !String(ui.terminalFxAmount.value || "").trim()) ui.terminalFxAmount.value = "1";
+    renderTerminalFxRecent();
+    ui.terminalFxSwap?.addEventListener("click", () => {
+      const currentBase = normalizeFxCode(ui.terminalFxBase?.value || "USD");
+      const currentQuote = normalizeFxCode(ui.terminalFxQuote?.value || "EUR");
+      if (ui.terminalFxBase) ui.terminalFxBase.value = currentQuote;
+      if (ui.terminalFxQuote) ui.terminalFxQuote.value = currentBase;
+    });
+    ui.terminalFxForm?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      await runTerminalFxConvert();
+    });
+    ui.terminalFxRecent?.addEventListener("click", async (event) => {
+      const button = event.target.closest("[data-terminal-fx-recent-index]");
+      if (!button) return;
+      const idx = Number(button.getAttribute("data-terminal-fx-recent-index"));
+      const record = readTerminalFxRecent()[idx];
+      if (!record) return;
+      if (ui.terminalFxAmount) ui.terminalFxAmount.value = String(record.amountIn || 1);
+      if (ui.terminalFxBase) ui.terminalFxBase.value = normalizeFxCode(record.base || "USD");
+      if (ui.terminalFxQuote) ui.terminalFxQuote.value = normalizeFxCode(record.quote || "EUR");
+      await runTerminalFxConvert();
     });
 
     if (ui.marketHeadlinesCountry && !ui.marketHeadlinesCountry.value) {
@@ -17424,36 +21771,79 @@
       await loadMarketHeadlinesFeed(functions, { force: true, notify: true });
     });
 
-    if (ui.massiveIpoStart && ui.massiveIpoEnd) {
-      const today = new Date();
-      const start = new Date(today);
-      start.setDate(start.getDate() - 30);
-      const end = new Date(today);
-      end.setDate(end.getDate() + 180);
-      if (!ui.massiveIpoStart.value) ui.massiveIpoStart.value = start.toISOString().slice(0, 10);
-      if (!ui.massiveIpoEnd.value) ui.massiveIpoEnd.value = end.toISOString().slice(0, 10);
+    if (ui.macroDashboardStatus) {
+      loadFiscalMacroDashboard({ force: false }).catch((error) => {
+        ui.macroDashboardStatus.textContent = extractErrorMessage(error, "Macro dashboard is unavailable.");
+      });
     }
-    ui.massiveIpoForm?.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      await loadResearchIpoCalendar({ force: true });
+    ui.macroDashboardGroups?.addEventListener("click", async (event) => {
+      const loadMoreButton = event.target.closest("[data-fiscaldata-load-more]");
+      const detailsButton = event.target.closest("[data-fiscaldata-view-details]");
+      if (loadMoreButton) {
+        const cardId = String(loadMoreButton.getAttribute("data-fiscaldata-load-more") || "").trim();
+        const entry = Array.isArray(state.fiscaldataRegistry)
+          ? state.fiscaldataRegistry.find((item) => String(item?.id || "").trim() === cardId)
+          : null;
+        if (!entry) return;
+      const cardState = state.fiscaldataMacroPages?.[cardId] || {};
+      const nextPage = Number(cardState?.nextPageNumber || Number(cardState?.pageNumber || 1) + 1);
+      await loadFiscalMacroCard(entry, { pageNumber: nextPage, append: true });
+      renderFiscalMacroDashboard();
+      return;
+      }
+      if (detailsButton) {
+        const cardId = String(detailsButton.getAttribute("data-fiscaldata-view-details") || "").trim();
+        const entry = Array.isArray(state.fiscaldataRegistry)
+          ? state.fiscaldataRegistry.find((item) => String(item?.id || "").trim() === cardId)
+          : null;
+        if (!entry) return;
+        renderFiscalMacroDetailsModal(entry, state.fiscaldataMacroPages?.[cardId] || {});
+      }
     });
-    if (ui.massiveEconomyStatus) {
-      loadResearchMacroWidgets().catch((error) => {
-        ui.massiveEconomyStatus.textContent = extractErrorMessage(error, "Macro context is unavailable.");
-      });
-    }
-    if (ui.massiveIpoOutput) {
-      loadResearchIpoCalendar({ force: false }).catch((error) => {
-        if (ui.massiveIpoStatusText) {
-          ui.massiveIpoStatusText.textContent = extractErrorMessage(error, "Unable to load IPO calendar.");
-        }
-      });
-    }
+    document.addEventListener("click", (event) => {
+      const closeButton = event.target.closest("[data-fiscaldata-close]");
+      if (!closeButton) return;
+      const modal = document.getElementById("fiscaldata-macro-details");
+      modal?.classList.add("hidden");
+    });
 
     if (ui.tickerQueryLanguage && !ui.tickerQueryLanguage.value) {
       ui.tickerQueryLanguage.value = state.preferredLanguage || "en";
     }
     renderTickerQueryModulePicker();
+    renderModelCouncilPromptCards({ reshuffle: true });
+    if (ui.tickerQueryPromptShuffle && ui.tickerQueryPromptShuffle.dataset.bound !== "1") {
+      ui.tickerQueryPromptShuffle.addEventListener("click", () => {
+        state.tickerContext.tickerQueryPromptDeck = createShuffledModelCouncilPromptDeck();
+        state.tickerContext.tickerQueryPromptCursor = 0;
+        renderModelCouncilPromptCards();
+      });
+      ui.tickerQueryPromptShuffle.dataset.bound = "1";
+    }
+    if (ui.tickerQueryPromptCards && ui.tickerQueryPromptCards.dataset.bound !== "1") {
+      ui.tickerQueryPromptCards.addEventListener("click", (event) => {
+        const card = event.target.closest('[data-action="model-council-prompt"]');
+        if (!card) return;
+        const template = String(card.dataset.template || "").trim();
+        if (!template) return;
+        const prompt = materializeModelCouncilPrompt(template, ui.tickerQueryTicker?.value || state.tickerContext.ticker || "");
+        if (ui.tickerQueryQuestion) {
+          ui.tickerQueryQuestion.value = prompt;
+          ui.tickerQueryQuestion.focus();
+          const len = ui.tickerQueryQuestion.value.length;
+          if (typeof ui.tickerQueryQuestion.setSelectionRange === "function") {
+            ui.tickerQueryQuestion.setSelectionRange(len, len);
+          }
+        }
+      });
+      ui.tickerQueryPromptCards.dataset.bound = "1";
+    }
+    if (ui.tickerQueryTicker && ui.tickerQueryTicker.dataset.promptBound !== "1") {
+      ui.tickerQueryTicker.addEventListener("input", () => {
+        renderModelCouncilPromptCards();
+      });
+      ui.tickerQueryTicker.dataset.promptBound = "1";
+    }
     const improvePref = String(safeLocalStorageGet(TICKER_QUERY_IMPROVE_TOGGLE_KEY) || "1");
     if (ui.tickerQueryImproveToggle) {
       ui.tickerQueryImproveToggle.checked = improvePref !== "0";
@@ -17587,13 +21977,22 @@
       });
       ui.tickerQueryOutput.dataset.bound = "1";
     }
-    loadTickerQueryModels().catch(() => {});
-    loadPublicModelCouncilShare({ setPanel: false }).catch(() => {});
-    syncModelCouncilSeo();
+	    loadTickerQueryModels().catch(() => {});
+	    loadPublicModelCouncilShare({ setPanel: false }).catch(() => {});
+      loadSharedMyRequestFromUrl({ setPanel: false }).catch(() => {});
+	    syncModelCouncilSeo();
 
 	    ui.optionsForm?.addEventListener("submit", async (event) => {
 	      event.preventDefault();
-	      if (!requireFullAccount("Sign in to load options.", { redirect: true })) return;
+        try {
+          await ensureSessionUser({
+            reason: "options_requires_session",
+            message: "Sign in to sync options preferences.",
+          });
+        } catch (error) {
+          showToast(error?.message || "Unable to start guest session.", "warn");
+          return;
+        }
 	      const formData = new FormData(ui.optionsForm);
 	      const ticker = normalizeTicker(formData.get("ticker"));
 	      const cacheKey = ticker ? `${OPTIONS_EXPIRATION_PREFIX}${ticker}` : "";
@@ -17719,15 +22118,15 @@
 	              <div class="options-meta">
 	                <div class="small"><strong>Underlying:</strong> ${money(underlyingPrice)}</div>
 	                <div class="small"><strong>Expiration:</strong> ${escapeHtml(selectedExpiration)}</div>
-                  <div class="small"><strong>Source:</strong> ${escapeHtml(source === "massive" ? "Powered by Massive" : "Yahoo Finance")}</div>
+                  <div class="small"><strong>Source:</strong> ${escapeHtml(source === "reference" ? "Reference contract feed" : "Yahoo Finance")}</div>
 	                <div class="small"><strong>RFR:</strong> ${typeof riskFreeRate === "number" ? fmt(riskFreeRate, 3) : "—"} · <strong>T:</strong> ${
 	                  typeof timeToExpiryYears === "number" ? fmt(timeToExpiryYears, 3) : "—"
 	                }y</div>
 	              </div>
                 ${
-                  source === "massive" || referenceOnly || fallbackUsed
+                  source === "reference" || referenceOnly || fallbackUsed
                     ? `<div class="notice" style="margin:10px 0;">${escapeHtml(
-                        notice || "Powered by Massive fallback. Quotes are not enabled on current plan; showing reference-only contracts."
+                        notice || "Reference fallback is active. Quotes are not enabled on current plan; showing reference-only contracts."
                       )}</div>`
                     : ""
                 }
@@ -17753,7 +22152,6 @@
 
 	    ui.optionsExpiration?.addEventListener("change", () => {
 	      if (!ui.optionsForm) return;
-	      if (!requireFullAccount("Sign in to load options.", { redirect: true })) return;
 	      try {
 	        ui.optionsForm.requestSubmit?.();
 	      } catch (error) {
@@ -17773,7 +22171,16 @@
 
 	    ui.screenerForm?.addEventListener("submit", async (event) => {
 	      event.preventDefault();
-	      if (!requireFullAccount("Sign in to generate an AI Portfolio.", { redirect: true })) return;
+        let sessionUser = null;
+        try {
+          sessionUser = await ensureSessionUser({
+            reason: "screener_requires_session",
+            message: "Sign in to sync screener runs across devices.",
+          });
+        } catch (error) {
+          showToast(error?.message || "Unable to start guest session.", "warn");
+          return;
+        }
 	      const formData = new FormData(ui.screenerForm);
       const requestedNames = Number(formData.get("maxNames"));
       const boundedNames = Number.isFinite(requestedNames) ? Math.max(5, Math.min(25, requestedNames)) : 10;
@@ -17804,7 +22211,7 @@
         filters: collectScreenerFilters(formData),
         model: selectedModel,
         personality: String(selectedMeta.personality || "balanced"),
-        workspaceId: state.activeWorkspaceId || state.user.uid,
+        workspaceId: state.activeWorkspaceId || sessionUser?.uid || state.user?.uid || "",
         meta: buildMeta(),
       };
 
@@ -17828,6 +22235,33 @@
             modelTier: tier.key,
             createdAt: new Date().toISOString(),
           });
+          if (runId) {
+            upsertMyRequest({
+              type: "screener",
+              requestId: `screener__${runId}`,
+              title: runTitle || `${payload.universe || "AI Portfolio"} run`,
+              input: {
+                universe: String(payload.universe || ""),
+                market: String(payload.market || ""),
+                maxNames: Number(payload.maxNames || 0) || null,
+                notes: String(payload.notes || ""),
+                model: String(payload.model || ""),
+                filters: payload.filters && typeof payload.filters === "object" ? payload.filters : {},
+              },
+              outputsMeta: {
+                summary: String(payload.notes || "").trim(),
+                resultsCount: Number.isFinite(resultsFound) ? resultsFound : rows.length,
+                topSymbols: Array.isArray(rows)
+                  ? rows.slice(0, 12).map((row) => normalizeTicker(row?.symbol || "")).filter(Boolean)
+                  : [],
+                modelUsed: String(payload.model || ""),
+              },
+              sourceRef: {
+                collection: "screener_runs",
+                id: runId,
+              },
+            }).catch(() => {});
+          }
           state.aiUsageToday = Number(state.aiUsageToday || 0) + 1;
           refreshScreenerCreditsUi();
           if (runId) {
@@ -17857,7 +22291,15 @@
     });
 
     ui.screenerLoadButton?.addEventListener("click", async () => {
-      if (!requireFullAccount("Sign in to load saved screener runs.", { redirect: true })) return;
+      try {
+        await ensureSessionUser({
+          reason: "screener_saved_load_requires_session",
+          message: "Sign in to sync saved screener runs.",
+        });
+      } catch (error) {
+        showToast(error?.message || "Unable to start guest session.", "warn");
+        return;
+      }
       const runId = String(ui.screenerLoadSelect?.value || "").trim();
       if (!runId) {
         showToast("Select a saved run.", "warn");
@@ -17876,7 +22318,15 @@
 
     ui.predictionsForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
-      if (!requireFullAccount("Sign in to upload predictions.", { redirect: true })) return;
+      try {
+        await ensureSessionUser({
+          reason: "predictions_upload_requires_session",
+          message: "Sign in to sync prediction uploads.",
+        });
+      } catch (error) {
+        showToast(error?.message || "Unable to start guest session.", "warn");
+        return;
+      }
       if (!requireAdminAccess("Upload predictions is currently admin-only.")) return;
       if (!storage) {
         showToast("File uploads are not available.", "warn");
@@ -17932,7 +22382,15 @@
     });
 
     ui.predictionsAgentButton?.addEventListener("click", async () => {
-      if (!requireFullAccount("Sign in to run the OpenAI CSV Agent.", { redirect: true })) return;
+      try {
+        await ensureSessionUser({
+          reason: "predictions_agent_requires_session",
+          message: "Sign in to sync prediction agent runs.",
+        });
+      } catch (error) {
+        showToast(error?.message || "Unable to start guest session.", "warn");
+        return;
+      }
       if (!requireAdminAccess("OpenAI CSV Agent is currently admin-only.")) return;
       if (!functions) {
         showToast("Functions client is not ready.", "warn");
@@ -17993,179 +22451,17 @@
       }
     });
 
-    ui.backtestStrategy?.addEventListener("change", () => {
-      syncBacktestStrategyFields();
-      logEvent("backtest_strategy_changed", { strategy: String(ui.backtestStrategy?.value || "") });
-    });
-    syncBacktestStrategyFields();
-
-    ui.backtestAgentButton?.addEventListener("click", async () => {
-      if (!functions) {
-        showToast("Functions client is not ready.", "warn");
-        return;
-      }
-      const ticker = normalizeTicker(state.tickerContext.ticker || ui.terminalTicker?.value || "");
-      if (!ticker) {
-        showToast("Load a ticker in the chart before requesting a suggestion.", "warn");
-        return;
-      }
-      const interval = String(ui.terminalInterval?.value || state.tickerContext.interval || "1d");
-      const lookbackDays = clampBacktestAgentLookback(ui.backtestAgentLookback?.value || document.getElementById("backtest-lookback")?.value || 90);
-      if (ui.backtestAgentLookback) ui.backtestAgentLookback.value = String(lookbackDays);
-      syncTickerInputs(ticker);
-
-      const indicatorList = ["RSI", "MACD", "SMA", "EMA", "BBANDS", "ATR", "ADX", "CCI", "MFI", "OBV", "ROC", "STOCH", "WILLR"];
-      const maxPoints = interval === "1h" ? Math.max(120, Math.min(900, lookbackDays * 8)) : Math.max(90, Math.min(900, lookbackDays + 30));
-
-      try {
-        if (ui.backtestAgentStatus) ui.backtestAgentStatus.textContent = "Computing technical snapshot...";
-        setOutputLoading(ui.backtestAgentOutput, "Computing indicator context...");
-
-        const runIndicators = functions.httpsCallable("get_technicals");
-        const technicalResult = await runIndicators({
-          ticker,
-          interval,
-          lookback: lookbackDays,
-          indicators: indicatorList,
-          includeSeries: true,
-          maxPoints,
-          meta: buildMeta(),
-        });
-        const technicalData = technicalResult.data || {};
-        const latestRows = Array.isArray(technicalData.latest) ? technicalData.latest : [];
-        if (!latestRows.length) {
-          throw new Error("No technical indicator values were returned.");
-        }
-        const technicalContext = summarizeBacktestTechnicalContext({
-          latestRows,
-          series: technicalData.series,
-          lookbackDays,
-          interval,
-        });
-
-        const languageRaw = normalizeLanguageCode(ui.tickerQueryLanguage?.value || state.preferredLanguage || "en");
-        const language = languageRaw === "auto" ? state.preferredLanguage || "en" : languageRaw;
-        const question = [
-          `Generate one backtestable setup idea for ${ticker} using the supplied technical indicator context on ${interval} data.`,
-          "Output should include: bias, entry trigger, invalidation/exit, and position-risk constraints.",
-          "Reference conflicting signals and keep the plan practical for research workflows only.",
-        ].join(" ");
-
-        if (ui.backtestAgentStatus) ui.backtestAgentStatus.textContent = "Querying GPT-5...";
-        const queryInsight = functions.httpsCallable("query_ticker_insight");
-        const result = await queryInsight({
-          ticker,
-          question,
-          language,
-          technicalContext,
-          meta: buildMeta(),
-        });
-        const payload = result.data || {};
-        setOutputReady(ui.backtestAgentOutput);
-        renderBacktestAgentResult(payload, technicalContext);
-        if (ui.backtestAgentStatus) ui.backtestAgentStatus.textContent = "Suggestion ready.";
-        logEvent("backtest_agent_suggestion", {
-          ticker,
-          interval,
-          lookback_days: lookbackDays,
-          provider: String(payload.provider || ""),
-          model: String(payload.model || ""),
-        });
-        showToast("OpenAI technical suggestion ready.");
-      } catch (error) {
-        setOutputReady(ui.backtestAgentOutput);
-        if (ui.backtestAgentOutput) {
-          ui.backtestAgentOutput.innerHTML = `<div class="small muted">${escapeHtml(error.message || "Unable to generate technical suggestion.")}</div>`;
-        }
-        if (ui.backtestAgentStatus) ui.backtestAgentStatus.textContent = "Unable to generate suggestion.";
-        showToast(error.message || "Unable to generate technical suggestion.", "warn");
-      }
-    });
-
-    ui.backtestLoadSelect?.addEventListener("change", () => {
-      if (!ui.backtestLoadId || !ui.backtestLoadSelect) return;
-      const value = String(ui.backtestLoadSelect.value || "").trim();
-      if (value) ui.backtestLoadId.value = value;
-    });
-
-    ui.backtestLoadButton?.addEventListener("click", async () => {
-      if (!requireFullAccount("Sign in to load saved backtests.", { redirect: true })) return;
-      const backtestId = String(ui.backtestLoadId?.value || "").trim() || String(ui.backtestLoadSelect?.value || "").trim();
-      if (!backtestId) {
-        showToast("Select a backtest or paste an ID.", "warn");
-        return;
-      }
-      if (ui.backtestLoadStatus) ui.backtestLoadStatus.textContent = "Loading...";
-      try {
-        await loadBacktestById(db, storage, backtestId);
-        if (ui.backtestLoadStatus) ui.backtestLoadStatus.textContent = "";
-        showToast("Backtest loaded.");
-      } catch (error) {
-        if (ui.backtestLoadStatus) ui.backtestLoadStatus.textContent = error.message || "Unable to load backtest.";
-        showToast(error.message || "Unable to load backtest.", "warn");
-      }
-    });
-
-    ui.backtestForm?.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      if (!requireFullAccount("Sign in to run backtests.", { redirect: true })) return;
-      if (!state.remoteFlags.backtestingEnabled) {
-        showToast("Backtesting is temporarily disabled.", "warn");
-        return;
-      }
-      const ticker = normalizeTicker(state.tickerContext.ticker || ui.terminalTicker?.value || "");
-      if (!ticker) {
-        showToast("Load a ticker in the chart before backtesting.", "warn");
-        return;
-      }
-      const interval = String(ui.terminalInterval?.value || state.tickerContext.interval || "1d");
-      const formData = new FormData(ui.backtestForm);
-      const strategy = String(formData.get("strategy") || "sma_cross").trim();
-      const lookbackDays = Number(formData.get("lookback") || 730);
-      const cash = Number(formData.get("cash") || 10000);
-      const commission = Number(formData.get("commission") || 0.0);
-
-      const params = {};
-      if (strategy === "sma_cross") {
-        params.fast = Number(formData.get("fast") || 20);
-        params.slow = Number(formData.get("slow") || 50);
-      } else {
-        params.rsiPeriod = Number(formData.get("rsiPeriod") || 14);
-        params.oversold = Number(formData.get("oversold") || 30);
-        params.exitAbove = Number(formData.get("exitAbove") || 55);
-      }
-      params.slPct = Number(formData.get("slPct") || 0);
-      params.tpPct = Number(formData.get("tpPct") || 0);
-
-      const payload = {
-        ticker,
-        interval,
-        strategy,
-        lookbackDays,
-        cash,
-        commission,
-        params,
-        meta: buildMeta(),
-      };
-
-      try {
-        setOutputLoading(ui.backtestOutput, "Running backtest...");
-        const run = functions.httpsCallable("run_backtest");
-        const result = await run(payload);
-        const backtestId = String(result.data?.backtestId || "").trim();
-        showToast("Backtest saved.");
-        logEvent("backtest_run", { ticker, interval, strategy });
-        if (backtestId) {
-          await loadBacktestById(db, storage, backtestId);
-        }
-      } catch (error) {
-        showToast(error.message || "Unable to run backtest.", "warn");
-      }
-    });
-
     ui.autopilotForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
-      if (!requireFullAccount("Sign in to queue autopilot runs.", { redirect: true })) return;
+      try {
+        await ensureSessionUser({
+          reason: "autopilot_requires_session",
+          message: "Sign in to sync autopilot runs.",
+        });
+      } catch (error) {
+        showToast(error?.message || "Unable to start guest session.", "warn");
+        return;
+      }
       if (!requireAdminAccess("Autopilot queue is currently admin-only.")) return;
       const formData = new FormData(ui.autopilotForm);
       const rawTickerInput = String(formData.get("ticker") || "").trim();
@@ -18400,6 +22696,50 @@
       }
     });
 
+    if (Array.isArray(ui.notificationsPrefInputs)) {
+      ui.notificationsPrefInputs.forEach((input) => {
+        if (input.dataset.bound === "1") return;
+        input.dataset.bound = "1";
+        input.addEventListener("change", async () => {
+          try {
+            await saveNotificationPrivacySettings();
+            const key = String(input?.dataset?.notificationPref || "").trim();
+            setNotificationPrivacyStatus("Notification category preferences saved.");
+            logEvent("notifications_category_pref_updated", {
+              category: key,
+              enabled: Boolean(input.checked),
+            });
+          } catch (error) {
+            setNotificationPrivacyStatus(error.message || "Unable to save category preferences.", true);
+          }
+        });
+      });
+    }
+
+    ui.notificationsCoarseCountry?.addEventListener("change", async () => {
+      try {
+        await saveNotificationPrivacySettings();
+        setNotificationPrivacyStatus("Coarse country updated.");
+        logEvent("notifications_coarse_country_updated", {
+          country: String(ui.notificationsCoarseCountry?.value || "").trim(),
+        });
+      } catch (error) {
+        setNotificationPrivacyStatus(error.message || "Unable to update coarse country.", true);
+      }
+    });
+
+    ui.notificationsTimezone?.addEventListener("change", async () => {
+      try {
+        await saveNotificationPrivacySettings();
+        setNotificationPrivacyStatus("Notification timezone updated.");
+        logEvent("notifications_timezone_updated", {
+          timezone: String(ui.notificationsTimezone?.value || "").trim(),
+        });
+      } catch (error) {
+        setNotificationPrivacyStatus(error.message || "Unable to update timezone.", true);
+      }
+    });
+
     ui.notificationsRequestLocation?.addEventListener("click", async () => {
       try {
         setNotificationPrivacyStatus("Requesting location permission...");
@@ -18498,9 +22838,21 @@
 
 			    persistenceReady.finally(() => {
 			      auth.onAuthStateChanged(async (user) => {
+          const previousUser = state.user;
+          const previousUid = String(previousUser?.uid || "").trim();
+          const previousWasFull = hasFullAccount(previousUser);
+          const previousWasAnonymous = isAnonymousUser(previousUser);
+          const isFirstAuthEvent = !state.authStateBootstrapped;
+          state.authStateBootstrapped = true;
+
           if (!user) {
             state.authResolved = true;
             state.user = null;
+            state.earningsCalendar.followsUid = "anon";
+            state.earningsCalendar.follows = readLocalEarningsFollows();
+            if (isPanelVisible("events-calendar")) {
+              renderEarningsCalendar();
+            }
             state.tickerContext.tickerHistory = readTickerHistory();
             renderTickerHistory();
             setAuthUi(null);
@@ -18529,11 +22881,35 @@
           }
 			      state.authResolved = true;
 			      state.user = user;
+          const nextUid = String(user?.uid || "").trim();
+          if (previousWasAnonymous && hasFullAccount(user) && previousUid && nextUid && previousUid !== nextUid) {
+            await mergeAnonymousSessionData(previousUid, nextUid).catch(() => undefined);
+          }
+          await flushPendingNativeIapEvents().catch(() => undefined);
+          const shouldRefreshAfterSignIn =
+            !isFirstAuthEvent &&
+            hasFullAccount(user) &&
+            (!previousWasFull || previousUid !== nextUid) &&
+            !state.postSignInReloadInFlight;
+          if (shouldRefreshAfterSignIn) {
+            state.postSignInReloadInFlight = true;
+            safeLocalStorageSet(AUTH_POST_SIGNIN_REFRESH_KEY, `${nextUid}:${Date.now()}`);
+            showToast("Signed in. Refreshing workspace...");
+            window.setTimeout(() => {
+              window.location.reload();
+            }, 120);
+            return;
+          }
+            await loadEarningsFollowSet({ force: true }).catch(() => {});
+            if (isPanelVisible("events-calendar")) {
+              renderEarningsCalendar();
+            }
             await linkPendingCredentialIfPresent({ silent: true }).catch(() => {});
             state.tickerContext.tickerHistory = readTickerHistory();
             renderTickerHistory();
 			      setAuthUi(user);
 			      setUserId(hasFullAccount(user) ? user.uid : null);
+            await pingNotificationSession().catch(() => undefined);
             if (isNativeApp()) {
               installNativeAuthBridge(auth);
               if (user.isAnonymous) {
@@ -18546,7 +22922,7 @@
               }
             }
 
-		      if (!hasFullAccount(user)) {
+			      if (!hasFullAccount(user)) {
 		        state.userHasPaidPlan = false;
             state.userSubscriptionTier = "free";
             state.aiUsageToday = 0;
@@ -18558,11 +22934,6 @@
             renderRequestList([], ui.userForecasts, "No forecast requests yet.");
             renderRequestList([], ui.autopilotOutput, "No autopilot requests yet.");
             renderRequestList([], ui.predictionsOutput, "No uploads yet.");
-            if (ui.backtestOutput) ui.backtestOutput.textContent = "Sign in to run backtests.";
-            if (ui.savedBacktestsList) ui.savedBacktestsList.textContent = "Sign in to view backtests.";
-            if (ui.backtestLoadSelect) ui.backtestLoadSelect.innerHTML = `<option value="">Select a backtest</option>`;
-            if (ui.backtestLoadId) ui.backtestLoadId.value = "";
-            if (ui.backtestLoadStatus) ui.backtestLoadStatus.textContent = "";
 		        if (ui.watchlistList) ui.watchlistList.textContent = "Sign in to manage your watchlist.";
 		        if (ui.alertsList) ui.alertsList.textContent = "Sign in to manage your alerts.";
 	        if (ui.alertsStatus) ui.alertsStatus.textContent = "";
@@ -18577,10 +22948,31 @@
           } else if (!isNativeApp() && !messaging) {
             setNotificationStatus("Messaging SDK is not loaded on this page.");
           } else {
-            setNotificationStatus("Sign in and enable notifications.");
+            setNotificationControlsEnabled(true);
+            const cachedToken = localStorage.getItem(FCM_TOKEN_CACHE_KEY) || "";
+            setNotificationTokenPreview(cachedToken);
+            if (isNativeApp()) {
+              try {
+                const token = await registerNotificationToken(functions, messaging, { forceRefresh: !cachedToken });
+                setNotificationTokenPreview(token);
+                setNotificationStatus("Guest session notifications enabled for this device.");
+              } catch (error) {
+                setNotificationStatus(error.message || "Unable to initialize notifications.");
+              }
+            } else if (messaging && Notification.permission === "granted") {
+              try {
+                const token = await registerNotificationToken(functions, messaging, { forceRefresh: !cachedToken });
+                setNotificationTokenPreview(token);
+                setNotificationStatus("Guest session notifications enabled for this device.");
+              } catch (error) {
+                setNotificationStatus(error.message || "Unable to initialize notifications.");
+              }
+            } else if (!messaging) {
+              setNotificationStatus("Messaging SDK is not loaded on this page.");
+            } else {
+              setNotificationStatus("Enable notifications to receive guest-session alerts.");
+            }
           }
-          setNotificationTokenPreview("");
-          setNotificationControlsEnabled(false);
         }
             state.notificationFeed.items = [];
             state.notificationFeed.unreadCount = 0;
@@ -18593,7 +22985,6 @@
 				        if (state.unsubscribeForecasts) state.unsubscribeForecasts();
 				        if (state.unsubscribeAutopilot) state.unsubscribeAutopilot();
 				        if (state.unsubscribePredictions) state.unsubscribePredictions();
-                if (state.unsubscribeBacktests) state.unsubscribeBacktests();
 				        if (state.unsubscribeTasks) state.unsubscribeTasks();
 				        if (state.unsubscribeWatchlist) state.unsubscribeWatchlist();
 				        if (state.unsubscribeAlerts) state.unsubscribeAlerts();
@@ -18610,9 +23001,18 @@
             state.aiFollowSet = new Set();
             state.aiLikeSet = new Set();
             state.aiDefaultsSeededWorkspaceId = "";
-		        state.sharedWorkspaces = [];
-            state.sharedScreenerView = null;
-		        setActiveWorkspaceId("");
+            state.myRequests = [];
+            state.myRequestsById = {};
+            state.myRequestsLoading = false;
+            state.myRequestsLoadedAt = 0;
+			        state.sharedWorkspaces = [];
+	            state.sharedScreenerView = null;
+            state.tickerContext.forecastDoc = null;
+            state.tickerContext.forecastId = "";
+            state.tickerContext.forecastTablePage = 0;
+            state.tickerContext.forecastAiSummary = null;
+            state.tickerContext.forecastCacheMeta = null;
+			        setActiveWorkspaceId("");
             state.userProfile = {
               username: "",
               socialLinks: cloneDefaultProfileSocialLinks(),
@@ -18630,6 +23030,7 @@
             if (ui.screenerLoadSelect) ui.screenerLoadSelect.innerHTML = `<option value="">Select a run</option>`;
             if (ui.screenerLoadStatus) ui.screenerLoadStatus.textContent = "";
             if (ui.screenerOutput && !ui.screenerOutput.dataset.loading) ui.screenerOutput.textContent = "Sign in to generate an AI Portfolio.";
+            renderMyRequestsPanels();
             refreshScreenerModelUi();
             refreshScreenerCreditsUi();
             state.predictionsContext.uploadId = "";
@@ -18657,18 +23058,6 @@
               return;
             }
 
-				        const gated = new Set([
-				          "/dashboard",
-				          "/watchlist",
-				          "/productivity",
-				          "/collaboration",
-				          "/uploads",
-				          "/autopilot",
-				          "/notifications",
-				        ]);
-			        if (gated.has(window.location.pathname) && window.location.pathname !== "/account") {
-			          window.location.href = "/account";
-			        }
 			        return;
 			      }
 
@@ -18682,6 +23071,8 @@
 		      renderWorkspaceSelect(user);
 		      startUserForecasts(db, activeWorkspaceId);
           startScreenerRuns(db, activeWorkspaceId);
+          await fetchMyRequestsList({ force: true }).catch(() => []);
+          renderMyRequestsPanels();
           loadScreenerUsageToday(db);
           startWorkspaceTasks(db, activeWorkspaceId);
 			      startWatchlist(db, activeWorkspaceId);
@@ -18692,7 +23083,6 @@
           startVolatilityMonitor(db, functions, activeWorkspaceId);
 	      startAutopilotRequests(db, user);
 	      startPredictionsUploads(db, user);
-        startBacktests(db, user);
 	      refreshCollaboration(functions);
 
         const pendingShare = String(getPendingShareId() || "").trim();
@@ -18756,10 +23146,10 @@
 
 	      if (ui.terminalForm && ui.tickerChart && state.tickerContext.forecastId && !state.tickerContext.forecastDoc) {
 	        try {
-	          setTerminalStatus("Loading saved forecast...");
+	          setTerminalStatus("Loading saved run...");
 	          await plotForecastById(db, functions, state.tickerContext.forecastId);
 	        } catch (error) {
-	          setTerminalStatus(error.message || "Unable to load saved forecast.");
+	          setTerminalStatus(error.message || "Unable to load saved run.");
 	        }
 	      }
 
@@ -18769,12 +23159,12 @@
 	        startAdminOrders(db);
 	        startAdminAutopilotQueue(db);
             setFeatureVoteSummaryPolling(functions, true);
-          loadMassiveCapabilities({ force: false }).catch((error) => {
-            if (ui.adminMassiveCapabilitiesStatus) {
-              ui.adminMassiveCapabilitiesStatus.textContent = extractErrorMessage(error, "Unable to load capability audit.");
+          loadFiscaldataCapabilities({ force: false }).catch((error) => {
+            if (ui.adminFiscaldataCapabilitiesStatus) {
+              ui.adminFiscaldataCapabilitiesStatus.textContent = extractErrorMessage(error, "Unable to load endpoint check.");
             }
-            if (ui.adminMassiveCapabilities) {
-              ui.adminMassiveCapabilities.innerHTML = `<div class="small muted">Capability audit unavailable.</div>`;
+            if (ui.adminFiscaldataCapabilities) {
+              ui.adminFiscaldataCapabilities.innerHTML = `<div class="small muted">Endpoint check unavailable.</div>`;
             }
           });
 	      } else {
@@ -18783,8 +23173,8 @@
 	        if (state.unsubscribeAdmin) state.unsubscribeAdmin();
 	        if (state.unsubscribeAdminAutopilot) state.unsubscribeAdminAutopilot();
             setFeatureVoteSummaryPolling(functions, false);
-          if (ui.adminMassiveCapabilitiesStatus) ui.adminMassiveCapabilitiesStatus.textContent = "Admin access required.";
-          if (ui.adminMassiveCapabilities) ui.adminMassiveCapabilities.innerHTML = `<div class="small muted">Admin access required.</div>`;
+          if (ui.adminFiscaldataCapabilitiesStatus) ui.adminFiscaldataCapabilitiesStatus.textContent = "Admin access required.";
+          if (ui.adminFiscaldataCapabilities) ui.adminFiscaldataCapabilities.innerHTML = `<div class="small muted">Admin access required.</div>`;
 	      }
     });
   });

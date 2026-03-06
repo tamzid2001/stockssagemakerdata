@@ -113,7 +113,7 @@ flowchart LR
     PY --> RC["Firebase Remote Config"]
     PY --> Stripe["Stripe APIs"]
     PY --> YF["Yahoo Finance / yfinance"]
-    PY --> MX["Massive (US corporate events)"]
+    PY --> FD["Treasury Fiscal Data API (macro datasets)"]
     PY --> OAI["OpenAI APIs"]
     PY --> NOVA["Amazon Nova Gateway (optional)"]
     PY --> SM["Social Platform APIs / Webhooks"]
@@ -215,7 +215,7 @@ Use `.env.example` as baseline. Critical categories:
 - Messaging:
   - `FCM_WEB_VAPID_KEY`
 - Data providers:
-  - Massive, Alpaca, yfinance dependencies
+  - Treasury Fiscal Data API, Alpaca, yfinance dependencies
 - Social APIs/webhooks:
   - X/LinkedIn/Facebook/Instagram/etc
 

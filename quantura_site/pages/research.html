@@ -3,18 +3,27 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Quantura Research | Demand Forecasting + MLOps Notes</title>
-    <meta
-      name="description"
-      content="Curated Quantura research notes on demand forecasting, demand inflection signals, and production MLOps architecture."
-    />
-    <meta name="robots" content="index, follow" />
-    <link rel="canonical" href="https://quantura-e2e3d.web.app/research" />
-    <meta property="og:title" content="Quantura Research | Demand Forecasting + MLOps" />
-    <meta property="og:description" content="Curated research notes and architecture blueprint for demand forecasting and MLOps." />
-    <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://quantura-e2e3d.web.app/research" />
-    <meta property="og:image" content="/assets/quantura-logo.svg" />
+    <title>Quantura Research | Market Intelligence + MLOps Notes</title>
+        <meta name="description" content="Curated Quantura research notes on demand forecasting, demand inflection signals, and production MLOps architecture." />
+        <meta name="robots" content="index, follow" />
+    <meta name="keywords" content="market research dashboard, macro analysis, treasury data, inflation data" />
+        <link rel="canonical" href="https://quantura.studio/research" />
+        <meta property="og:title" content="Quantura Research | Market Intelligence + MLOps" />
+        <meta property="og:description" content="Curated research notes and architecture blueprint for demand forecasting and MLOps." />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content="https://quantura.studio/research" />
+        <meta property="og:image" content="/assets/quantura-logo.svg" />
+    <meta property="og:site_name" content="Quantura" />
+    <meta property="og:locale" content="en_US" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Quantura Research | Market Intelligence + MLOps" />
+    <meta name="twitter:description" content="Curated research notes and architecture blueprint for demand forecasting and MLOps." />
+    <meta name="twitter:image" content="/assets/quantura-logo.svg" />
+    <meta name="twitter:url" content="https://quantura.studio/research" />
+    <meta name="author" content="Quantura" />
+    <meta name="theme-color" content="#0B1526" />
+    <link rel="alternate" hreflang="en-US" href="https://quantura.studio/research" />
+    <link rel="alternate" hreflang="x-default" href="https://quantura.studio/research" />
     <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="stylesheet" href="/styles.css" />
@@ -52,7 +61,7 @@
       <section class="section research-shell">
         <div class="container">
           <div class="section-title research-intro">
-            <h1>Demand Forecasting + MLOps Library</h1>
+            <h1>Market Intelligence + MLOps Library</h1>
             <p class="small">
               Quantura research is organized into two product pillars: demand inflection forecasting and production-grade MLOps.
               Use the note cards to jump to internal pages and keep your implementation decisions consistent across teams.
@@ -61,11 +70,11 @@
 
           <div class="research-pillars" aria-label="Research pillars">
             <article class="card research-pillar">
-              <h2>Pillar A: Demand Forecasting</h2>
+              <h2>Pillar A: Market Intelligence</h2>
               <ul class="research-bullet-list">
                 <li>Foundations: naive, moving-average, ARIMA/ETS, Prophet-style decomposition.</li>
                 <li>Modern: multi-horizon forecasting with interpretable deep models like TFT.</li>
-                <li>Evaluation: rolling backtests, leakage prevention, interval calibration.</li>
+                <li>Evaluation: rolling validation windows, leakage prevention, interval calibration.</li>
                 <li>Signals: transform forecast deltas into demand inflection features.</li>
               </ul>
             </article>
@@ -80,68 +89,6 @@
             </article>
           </div>
 
-          <section class="research-library" aria-labelledby="macro-context-heading">
-            <div class="research-library-head">
-              <h2 id="macro-context-heading">US Economy + Catalyst Monitor</h2>
-              <p class="small muted" id="massive-economy-status">Loading capability-gated macro context...</p>
-            </div>
-            <div class="research-note-grid">
-              <article class="card research-note-card">
-                <span class="research-note-tag">Macro</span>
-                <h3>Treasury yield curve</h3>
-                <div id="massive-economy-yields" class="panel-output small">Yield curve data will appear here.</div>
-              </article>
-              <article class="card research-note-card">
-                <span class="research-note-tag">Macro</span>
-                <h3>Inflation</h3>
-                <div id="massive-economy-inflation" class="panel-output small">Inflation series will appear here.</div>
-              </article>
-              <article class="card research-note-card">
-                <span class="research-note-tag">Macro</span>
-                <h3>Inflation expectations</h3>
-                <div id="massive-economy-inflation-expectations" class="panel-output small">Expectation series will appear here.</div>
-              </article>
-              <article class="card research-note-card">
-                <span class="research-note-tag">Macro</span>
-                <h3>Labor market</h3>
-                <div id="massive-economy-labor" class="panel-output small">Labor market series will appear here.</div>
-              </article>
-            </div>
-          </section>
-
-          <section class="research-library" aria-labelledby="ipo-calendar-heading">
-            <div class="research-library-head">
-              <h2 id="ipo-calendar-heading">IPO Calendar</h2>
-              <p class="small muted" id="massive-ipo-status-text">Set filters and load upcoming or recent IPOs.</p>
-            </div>
-            <form id="massive-ipo-form" class="card" style="margin-bottom:18px;">
-              <div class="form-grid">
-                <div class="field">
-                  <label class="label" for="massive-ipo-start">Start date</label>
-                  <input id="massive-ipo-start" type="date" />
-                </div>
-                <div class="field">
-                  <label class="label" for="massive-ipo-end">End date</label>
-                  <input id="massive-ipo-end" type="date" />
-                </div>
-                <div class="field">
-                  <label class="label" for="massive-ipo-status">Status</label>
-                  <select id="massive-ipo-status">
-                    <option value="">All</option>
-                    <option value="scheduled">Scheduled</option>
-                    <option value="priced">Priced</option>
-                    <option value="listed">Listed</option>
-                    <option value="withdrawn">Withdrawn</option>
-                  </select>
-                </div>
-              </div>
-              <button class="cta secondary" type="submit"><i class="iconoir-search" aria-hidden="true"></i><span>Load IPOs</span></button>
-            </form>
-            <div class="card">
-              <div id="massive-ipo-output" class="panel-output small">IPO rows will appear here when available.</div>
-            </div>
-          </section>
-
           <section class="research-library" aria-labelledby="research-notes-heading">
             <div class="research-library-head">
               <h2 id="research-notes-heading">Research Notes</h2>
@@ -149,25 +96,25 @@
             </div>
             <div class="research-note-grid">
               <article class="card research-note-card">
-                <span class="research-note-tag">Demand Forecasting</span>
+                <span class="research-note-tag">Market Intelligence</span>
                 <h3>Foundations and baselines</h3>
                 <p>Reference setup for naive, moving-average, and classical models before introducing advanced architectures.</p>
                 <a class="news-link" href="#note-demand-foundations">Open note</a>
               </article>
               <article class="card research-note-card">
-                <span class="research-note-tag">Demand Forecasting</span>
+                <span class="research-note-tag">Market Intelligence</span>
                 <h3>Modern multi-horizon models</h3>
                 <p>Design for direct multi-horizon outputs with explainability hooks suitable for operations and revenue teams.</p>
                 <a class="news-link" href="#note-demand-modern">Open note</a>
               </article>
               <article class="card research-note-card">
-                <span class="research-note-tag">Demand Forecasting</span>
+                <span class="research-note-tag">Market Intelligence</span>
                 <h3>Evaluation and leakage controls</h3>
-                <p>Walk-forward backtesting standards with leakage checks, confidence calibration, and error decomposition.</p>
+                <p>Walk-forward validation standards with leakage checks, confidence calibration, and error decomposition.</p>
                 <a class="news-link" href="#note-demand-evaluation">Open note</a>
               </article>
               <article class="card research-note-card">
-                <span class="research-note-tag">Demand Forecasting</span>
+                <span class="research-note-tag">Market Intelligence</span>
                 <h3>Demand inflection signals</h3>
                 <p>How to derive acceleration, surprise, and regime features from forecast trajectories.</p>
                 <a class="news-link" href="#note-demand-signals">Open note</a>
@@ -227,7 +174,7 @@
             </article>
 
             <article class="card research-note-page" id="note-demand-evaluation">
-              <h3>Evaluation: Rolling backtests and leakage controls</h3>
+              <h3>Evaluation: Rolling validation and leakage controls</h3>
               <p>
                 Use rolling windows with strict time ordering, then report point and interval metrics side by side. Validate
                 that feature snapshots and joins do not leak future information into training or evaluation windows.

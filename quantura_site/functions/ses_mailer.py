@@ -14,7 +14,7 @@ from google.cloud import secretmanager
 
 DEFAULT_TEMPLATE_NAME = "quantura_newsletter_v1"
 DEFAULT_SITE_ORIGIN = "https://quantura.studio"
-LEGACY_SITE_ORIGIN = "https://quantura-e2e3d.web.app"
+LEGACY_SITE_ORIGIN = "https://quantura.studio"
 DAILY_SEND_CAP = 200
 
 _SECRET_CACHE: dict[str, tuple[float, str]] = {}

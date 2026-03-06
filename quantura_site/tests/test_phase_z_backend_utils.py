@@ -8,9 +8,6 @@ if str(FUNCTIONS) not in sys.path:
     sys.path.insert(0, str(FUNCTIONS))
 
 from chat_runtime import build_chat_prompt_messages, select_model_for_request
-from massive_capabilities import classify_capability_status
-from massive_client import MassiveApiError, MassiveClient, is_blocked_massive_path
-from options_fallback import should_use_massive_fallback
 
 
 class PhaseZBackendUtilsTests(unittest.TestCase):
@@ -38,42 +35,6 @@ class PhaseZBackendUtilsTests(unittest.TestCase):
         self.assertIn("Question: What changed this week?", prompts["dynamic_user_prompt"])
         self.assertIn("Ticker context payload:", prompts["dynamic_user_prompt"])
         self.assertNotIn("STATIC_SYSTEM_PREFIX", prompts["dynamic_user_prompt"])
-
-    def test_capability_audit_status_classification(self) -> None:
-        cases = [
-            (200, "AVAILABLE"),
-            (401, "UNAUTHORIZED"),
-            (402, "FORBIDDEN_OR_NOT_IN_PLAN"),
-            (403, "FORBIDDEN_OR_NOT_IN_PLAN"),
-            (500, "ERROR"),
-        ]
-        for status_code, expected in cases:
-            with self.subTest(status_code=status_code):
-                self.assertEqual(classify_capability_status(status_code), expected)
-
-    def test_options_fallback_triggers_when_yfinance_is_unavailable(self) -> None:
-        self.assertTrue(
-            should_use_massive_fallback(
-                yfinance_expirations=[],
-                calls=[],
-                puts=[],
-                yfinance_error=True,
-            )
-        )
-        self.assertTrue(
-            should_use_massive_fallback(
-                yfinance_expirations=["2026-06-19"],
-                calls=[],
-                puts=[],
-                yfinance_error=False,
-            )
-        )
-
-    def test_balance_sheets_path_is_denied_before_network_request(self) -> None:
-        self.assertTrue(is_blocked_massive_path("/v3/reference/balance-sheets"))
-        client = MassiveClient(api_key="test-key")
-        with self.assertRaises(MassiveApiError):
-            client._assert_allowed_path("/v3/reference/balance-sheets")
 
 
 if __name__ == "__main__":

@@ -4,14 +4,26 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Quantura Screener | Ranked Watchlists</title>
-    <meta name="description" content="Run a fast stock screen, rank candidates, and save every run to your workspace." />
-    <meta name="robots" content="index, follow" />
-    <link rel="canonical" href="https://quantura-e2e3d.web.app/screener" />
-    <meta property="og:title" content="Quantura Stock Screener" />
-    <meta property="og:description" content="Rank candidates, export results, and store every screener run in your workspace." />
-    <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://quantura-e2e3d.web.app/screener" />
-    <meta property="og:image" content="/assets/quantura-logo.svg" />
+        <meta name="description" content="Run a fast stock screen, rank candidates, and save every run to your workspace." />
+        <meta name="robots" content="index, follow" />
+    <meta name="keywords" content="stock screener, market data screener, ranked tickers, quantura screener" />
+        <link rel="canonical" href="https://quantura.studio/screener" />
+        <meta property="og:title" content="Quantura Stock Screener" />
+        <meta property="og:description" content="Rank candidates, export results, and store every screener run in your workspace." />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content="https://quantura.studio/screener" />
+        <meta property="og:image" content="/assets/quantura-logo.svg" />
+    <meta property="og:site_name" content="Quantura" />
+    <meta property="og:locale" content="en_US" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Quantura Stock Screener" />
+    <meta name="twitter:description" content="Rank candidates, export results, and store every screener run in your workspace." />
+    <meta name="twitter:image" content="/assets/quantura-logo.svg" />
+    <meta name="twitter:url" content="https://quantura.studio/screener" />
+    <meta name="author" content="Quantura" />
+    <meta name="theme-color" content="#0B1526" />
+    <link rel="alternate" hreflang="en-US" href="https://quantura.studio/screener" />
+    <link rel="alternate" hreflang="x-default" href="https://quantura.studio/screener" />
     <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="stylesheet" href="/styles.css" />
@@ -30,10 +42,9 @@
   
     <script>
       window.__QUANTURA_RC_TEMPLATE_ID__ = "firebase-server";
-      window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ = {"status":200,"eTag":"etag-quantura-e2e3d-firebase-server-fetch--1213937490","config":{"welcome_message":"","watchlist_enabled":"true","forecast_prophet_enabled":"true","forecast_timemixer_enabled":"true","push_notifications_enabled":"true","webpush_vapid_key":"","stripe_checkout_enabled":"true","stripe_public_key":"","holiday_promo":"false","backtesting_enabled":"false","backtesting_free_daily_limit":"0","backtesting_pro_daily_limit":"0"}};
+      window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ = {"status":200,"eTag":"etag-quantura-e2e3d-firebase-server-fetch--1213937490","config":{"welcome_message":"","watchlist_enabled":"true","forecast_prophet_enabled":"true","forecast_canvas_enabled":"true","push_notifications_enabled":"true","webpush_vapid_key":"","stripe_checkout_enabled":"true","stripe_public_key":"","holiday_promo":"false"}};
     </script>
-  
-</head>
+  </head>
   <body>
     <header class="header">
       <div class="container nav">
@@ -57,41 +68,22 @@
     <main>
       <div class="app-layout">
         <aside class="app-sidebar">
-          <div class="sidebar-card">
-            <div class="small"><strong>Account</strong></div>
-            <div class="small">Signed in as <span id="user-email">Not signed in</span></div>
-            <div class="small">Status <span id="user-status" class="pill">Logged Out</span></div>
-            <details class="profile-settings">
-              <summary>Public profile</summary>
-              <form id="profile-form" class="profile-editor">
-                <label class="label" for="profile-username">Username</label>
-                <input id="profile-username" class="input" type="text" maxlength="32" placeholder="quantura_alpha" />
-                <div class="profile-links-grid">
-                  <label class="label" for="profile-social-x">X</label>
-                  <input id="profile-social-x" class="input" type="url" placeholder="https://x.com/username" />
-                  <label class="label" for="profile-social-linkedin">LinkedIn</label>
-                  <input id="profile-social-linkedin" class="input" type="url" placeholder="https://linkedin.com/in/username" />
-                  <label class="label" for="profile-social-github">GitHub</label>
-                  <input id="profile-social-github" class="input" type="url" placeholder="https://github.com/username" />
-                  <label class="label" for="profile-social-youtube">YouTube</label>
-                  <input id="profile-social-youtube" class="input" type="url" placeholder="https://youtube.com/@channel" />
-                  <label class="label" for="profile-social-tiktok">TikTok</label>
-                  <input id="profile-social-tiktok" class="input" type="url" placeholder="https://tiktok.com/@username" />
-                  <label class="label" for="profile-social-website">Website</label>
-                  <input id="profile-social-website" class="input" type="url" placeholder="https://your-site.com" />
-                </div>
-                <button class="cta secondary small" type="submit">Save profile</button>
-                <p id="profile-status" class="small muted">Sign in to set your public profile.</p>
-              </form>
-            </details>
-            <a class="cta secondary small" href="/forecasting"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Open terminal</span></a>
-            <a class="cta secondary small" href="/dashboard"><i class="iconoir-dashboard" aria-hidden="true"></i><span>Open dashboard</span></a>
-            <a class="cta secondary small hidden" id="nav-admin" href="/admin"><i class="iconoir-shield-check" aria-hidden="true"></i><span>Admin dashboard</span></a>
-          </div>
           <nav class="sidebar-nav">
-            <a href="#screener"><i class="iconoir-search" aria-hidden="true"></i><span>Generate portfolio</span></a>
-            <a href="#screener-result"><i class="iconoir-bookmark" aria-hidden="true"></i><span>Saved sets</span></a>
-            <a href="#screener-output"><i class="iconoir-graph-up" aria-hidden="true"></i><span>Output</span></a>
+            <a class="sidebar-link" href="/forecasting"><i class="iconoir-magic-wand" aria-hidden="true"></i><span>Forecast</span></a>
+            <a class="sidebar-link" href="/ticker-intelligence"><i class="iconoir-eye" aria-hidden="true"></i><span>Ticker</span></a>
+            <a class="sidebar-link" href="/indicators"><i class="iconoir-sigma-function" aria-hidden="true"></i><span>Indicators</span></a>
+            <a class="sidebar-link" href="/trending"><i class="iconoir-fire-flame" aria-hidden="true"></i><span>Trending</span></a>
+            <a class="sidebar-link" href="/news"><i class="iconoir-journal-page" aria-hidden="true"></i><span>News and data</span></a>
+            <a class="sidebar-link" href="/events-calendar"><i class="iconoir-calendar" aria-hidden="true"></i><span>Earnings calendar</span></a>
+            <a class="sidebar-link" href="/market-headlines"><i class="iconoir-globe" aria-hidden="true"></i><span>Market headlines</span></a>
+            <a class="sidebar-link" href="/forecasting?panel=macro"><i class="iconoir-database" aria-hidden="true"></i><span>Macro Dashboard</span></a>
+            <a class="sidebar-link" href="/model-council"><i class="iconoir-brain" aria-hidden="true"></i><span>Model Council</span></a>
+            <a class="sidebar-link" href="/options"><i class="iconoir-numbered-list-left" aria-hidden="true"></i><span>Options</span></a>
+            <a class="sidebar-link" href="/forecasting?panel=fx"><i class="iconoir-coins-swap" aria-hidden="true"></i><span>Currency conversion</span></a>
+            <a class="sidebar-link" href="/studio"><i class="iconoir-info-circle" aria-hidden="true"></i><span>Learn more</span></a>
+            <a class="sidebar-link active" href="/screener"><i class="iconoir-search" aria-hidden="true"></i><span>Screener</span></a>
+            <a class="sidebar-link" href="/explore"><i class="iconoir-binocular" aria-hidden="true"></i><span>Explore</span></a>
+            <a class="sidebar-link" href="/watchlist"><i class="iconoir-bell-notification" aria-hidden="true"></i><span>Watchlist and alerts</span></a>
           </nav>
         </aside>
 
@@ -527,24 +519,41 @@
               </div>
 	              <button class="cta" id="screener-generate-button" type="submit" data-analytics="screener_submit"><i class="iconoir-search" aria-hidden="true"></i><span>Generate AI Portfolio</span></button>
 	            </form>
-              <div class="card">
-                <h3>Load saved portfolio run</h3>
+              <div class="card" data-my-requests-panel data-default-type="screener">
+                <div class="card-head">
+                  <h3>My Requests</h3>
+                  <button class="cta secondary small" type="button" data-action="my-requests-refresh">Refresh</button>
+                </div>
                 <div class="form-grid">
                   <div class="field">
-                    <label class="label" for="screener-load-select">Recent runs</label>
-                    <select id="screener-load-select">
-                      <option value="">Select a run</option>
+                    <label class="label">Search</label>
+                    <input type="search" data-my-requests-search placeholder="Title, ticker, date" />
+                  </div>
+                  <div class="field">
+                    <label class="label">Type</label>
+                    <select data-my-requests-type>
+                      <option value="">All</option>
+                      <option value="forecast">Forecasting</option>
+                      <option value="screener">Screeners</option>
+                      <option value="indicator">Indicators</option>
+                      <option value="modelCouncil">Model Council</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label class="label">Published</label>
+                    <select data-my-requests-published>
+                      <option value="all">All</option>
+                      <option value="published">Published</option>
+                      <option value="unpublished">Unpublished</option>
                     </select>
                   </div>
                 </div>
-                <div class="hero-actions" style="margin-top: 12px;">
-                  <button class="cta secondary" id="screener-load-button" type="button" data-analytics="screener_load_saved"><i class="iconoir-bookmark" aria-hidden="true"></i><span>Load portfolio</span></button>
-                </div>
-                <p class="small muted" id="screener-load-status"></p>
+                <p class="small muted" data-my-requests-status>Sign in to load your requests.</p>
+                <div class="order-list panel-output" data-my-requests-list></div>
                 <details class="learn-more">
                   <summary>Learn more</summary>
                   <p class="small">
-                    Every run is saved so you can revisit candidates, regenerate the AI portfolio, and publish the best runs into Explore.
+                    Requests can be loaded, renamed, shared, unpublished from Explore, or soft-deleted.
                   </p>
                 </details>
               </div>
