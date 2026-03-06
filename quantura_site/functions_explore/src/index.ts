@@ -4940,8 +4940,15 @@ ROUTES.post("/earnings/refresh", async (req, res) => {
 
     const items = records
       .map((row) => normalizeItem(row, symbol))
-      .filter(Boolean)
-      .sort((a, b) => (a.date === b.date ? a.symbol.localeCompare(b.symbol) : a.date.localeCompare(b.date)))
+      .filter((item): item is Record<string, string | number | null> => Boolean(item))
+      .sort((a, b) => {
+        const dateA = sanitizeText(a.date, 20);
+        const dateB = sanitizeText(b.date, 20);
+        if (dateA === dateB) {
+          return sanitizeText(a.symbol, 24).localeCompare(sanitizeText(b.symbol, 24));
+        }
+        return dateA.localeCompare(dateB);
+      })
       .slice(0, symbol ? 500 : 7000);
 
     const successfulFetch = fetchDiagnostics.some((entry) => entry.includes(":ok:"));
