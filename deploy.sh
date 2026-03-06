@@ -217,7 +217,7 @@ echo "==> Deploying shopApi (Gen2)"
   --entry-point=shopApi \
   --trigger-http \
   --allow-unauthenticated \
-  --set-env-vars="PUBLIC_ORIGIN=${PUBLIC_ORIGIN},SHOP_ALLOWED_ORIGINS=${SHOP_ALLOWED_ORIGINS}" \
+  --set-env-vars="^##^PUBLIC_ORIGIN=${PUBLIC_ORIGIN}##SHOP_ALLOWED_ORIGINS=${SHOP_ALLOWED_ORIGINS}" \
   ${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"}
 
 echo "==> Deploying Firestore trigger: onForecastCreated"
