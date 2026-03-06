@@ -6187,18 +6187,18 @@
       if (!button || !note) return;
       button.disabled = false;
       button.textContent = accountAuthed
-        ? button.dataset.labelAuth || "Choose plan"
-        : button.dataset.labelGuest || "Continue as guest";
+        ? button.dataset.labelAuth || "Checkout now"
+        : button.dataset.labelGuest || "Checkout now";
       if (accountAuthed) {
         note.textContent = "Subscriptions activate in your dashboard after payment confirmation.";
       } else if (nativeIapRuntime) {
         note.textContent = guestSession || sessionAuthed
-          ? "Guest checkout is enabled in native app. Purchases can be merged after sign-in."
-          : "Continue as guest to initialize native checkout.";
+          ? "Native checkout opens directly in-app."
+          : "Preparing native checkout…";
       } else {
         note.textContent = guestSession || sessionAuthed
-          ? "Guest checkout is enabled on web. Purchases can be merged after sign-in."
-          : "Continue as guest to initialize secure checkout.";
+          ? "Secure checkout opens immediately."
+          : "Preparing secure checkout…";
       }
       stripe?.classList.add("hidden");
       success?.classList.add("hidden");
@@ -18300,118 +18300,55 @@
 
   const handlePurchase = async (panel, functions) => {
     const nativeBillingProvider = isNativeIapRuntime();
-    if (!hasSessionUser()) {
-      try {
-        await ensureSessionUser({
-          reason: nativeBillingProvider ? "native_iap_checkout" : "web_checkout",
-          message: "Initializing guest checkout session...",
-        });
-      } catch (error) {
-        showToast(error?.message || "Unable to initialize guest checkout session.", "warn");
-        return;
-      }
-    }
-    if (!hasSessionUser()) {
-      return;
-    }
-
     const button = panel.querySelector('[data-action="purchase"]');
     const note = panel.querySelector(".purchase-note");
-    const success = panel.querySelector(".purchase-success");
-    const stripe = panel.querySelector('[data-action="stripe"]');
     if (!button) return;
 
     button.disabled = true;
-    button.textContent = "Creating order...";
-
-    const meta = {
-      ...buildMeta(),
-      utm: getUtm(),
-    };
+    button.textContent = "Opening checkout...";
 
     try {
-      const productId = resolveNativeIapProductId(panel);
-      const subscriptionTier = resolveNativeIapPlanKey(panel);
-      logEvent("begin_checkout", { currency: panel.dataset.currency || "USD", value: Number(panel.dataset.price || 349) });
-      const createOrder = functions.httpsCallable("create_order");
-      const result = await createOrder({
-        product: panel.dataset.product || "Quantura Subscription",
-        productId,
-        tier: subscriptionTier,
-        paymentProvider: nativeBillingProvider ? "native_iap" : "stripe",
-        price: Number(panel.dataset.price || 349),
-        currency: panel.dataset.currency || "USD",
-        meta: {
-          ...meta,
-          subscriptionTier,
-          productId,
-          purchaseRuntime: nativeBillingProvider ? (getNativePlatform() || "native") : "web",
-        },
-      });
-      const orderId = result.data?.orderId;
-      if (orderId) {
-        panel.dataset.orderId = String(orderId);
-      }
-      if (success) {
-        success.textContent = `Order ${orderId} created. Proceed to payment to finalize.`;
-        success.classList.remove("hidden");
-      }
-      const nativePlatform = getNativePlatform();
-      if (isNativeIosStoreKitCheckoutOnly() || isNativeAndroidPlayBillingCheckout()) {
-        const sent = requestNativeInAppPurchase(panel, { orderId, source: "order_created" });
-        if (sent) {
-          stripe?.classList.add("hidden");
-          note.textContent =
-            nativePlatform === "ios"
-              ? "Order created. Opening App Store in-app purchase..."
-              : "Order created. Opening Google Play in-app purchase...";
-          showToast(
-            nativePlatform === "ios"
-              ? "Opening native iOS checkout..."
-              : "Opening native Android checkout..."
-          );
-        } else {
-          stripe?.classList.add("hidden");
-          note.textContent =
-            nativePlatform === "ios"
-              ? "Native iOS checkout is required. Please reopen this page in the app."
-              : "Native Android checkout is unavailable right now.";
-          showToast(note.textContent, "warn");
-        }
-      } else {
-        stripe?.classList.remove("hidden");
-        note.textContent = "Order created. Proceed to payment to finalize.";
-      }
-      logEvent("order_created", { order_id: orderId, currency: panel.dataset.currency || "USD" });
-      if (!isNativeIosStoreKitCheckoutOnly() && !isNativeAndroidPlayBillingCheckout()) {
-        showToast("Order created. Proceed to payment.");
-      }
-    } catch (error) {
       if (nativeBillingProvider) {
-        const sent = requestNativeInAppPurchase(panel, { orderId: "", source: "native_no_order_fallback" });
-        if (sent) {
-          if (stripe) stripe.classList.add("hidden");
-          if (note) {
-            note.textContent =
-              "Native checkout opened without a server order. We will sync purchase details after sign-in.";
+        if (!hasSessionUser()) {
+          try {
+            await ensureSessionUser({
+              reason: "native_iap_checkout",
+              message: "Preparing secure checkout...",
+            });
+          } catch (_error) {
+            // Native purchase can still proceed without a synced web session.
           }
-          queuePendingNativeIapEvent({
-            productId: resolveNativeIapProductId(panel),
-            status: "pending",
-            platform: getNativePlatform() || "unknown",
-            source: "native_iap_no_order_fallback",
-            sourceUid: String(state.user?.uid || "").trim(),
-          });
-          showToast("Opening native checkout in guest mode...");
+        }
+        const sent = requestNativeInAppPurchase(panel, { orderId: "", source: "direct_checkout" });
+        if (!sent) {
+          if (note) {
+            note.textContent = "Native Android checkout is unavailable right now.";
+          }
+          showToast("Native Android checkout is unavailable right now.", "warn");
           return;
         }
+        if (note) {
+          note.textContent =
+            getNativePlatform() === "ios"
+              ? "Opening App Store in-app purchase..."
+              : "Opening Google Play in-app purchase...";
+        }
+        showToast(
+          getNativePlatform() === "ios"
+            ? "Opening native iOS checkout..."
+            : "Opening native Android checkout..."
+        );
+        return;
       }
-      showToast(error.message || "Unable to create order.", "warn");
+
+      await handleStripeCheckout(panel, functions);
+    } catch (error) {
+      showToast(error?.message || "Unable to open checkout.", "warn");
     } finally {
       button.disabled = false;
       button.textContent = hasFullAccount()
-        ? button.dataset.labelAuth || "Choose plan"
-        : button.dataset.labelGuest || "Continue as guest";
+        ? button.dataset.labelAuth || "Checkout now"
+        : button.dataset.labelGuest || "Checkout now";
     }
   };
 
@@ -18437,19 +18374,7 @@
 
   const handleStripeCheckout = async (panel, functions) => {
     if (isNativeIapRuntime()) {
-      if (!hasSessionUser()) {
-        try {
-          await ensureSessionUser({
-            reason: "native_iap_checkout",
-            message: "Initializing guest checkout session...",
-          });
-        } catch (error) {
-          showToast(error?.message || "Unable to initialize guest checkout session.", "warn");
-          return;
-        }
-      }
-      const orderId = String(panel?.dataset?.orderId || "").trim();
-      const sent = requestNativeInAppPurchase(panel, { orderId, source: "stripe_button" });
+      const sent = requestNativeInAppPurchase(panel, { orderId: "", source: "stripe_button" });
       if (!sent) {
         showToast("Native in-app checkout is required in the mobile app.", "warn");
       }
@@ -18459,27 +18384,20 @@
       try {
         await ensureSessionUser({
           reason: "web_checkout",
-          message: "Initializing guest checkout session...",
+          message: "Preparing secure checkout...",
         });
       } catch (error) {
-        showToast(error?.message || "Unable to initialize guest checkout session.", "warn");
+        showToast(error?.message || "Unable to initialize checkout session.", "warn");
         return;
       }
     }
     if (!hasSessionUser()) return;
-
-    if (!state.remoteFlags.stripeCheckoutEnabled) {
-      showToast("Checkout is temporarily disabled.", "warn");
-      return;
-    }
-
-    const stripeBtn = panel.querySelector('[data-action="stripe"]');
+    const stripeBtn = panel.querySelector('[data-action="purchase"]');
     const note = panel.querySelector(".purchase-note");
-    const orderId = String(panel.dataset.orderId || "").trim();
-    if (!orderId) {
-      showToast("Create an order first.", "warn");
-      return;
-    }
+    const cycle = String(safeLocalStorageGet("quantura_pricing_cycle") || "monthly").trim().toLowerCase() === "yearly"
+      ? "yearly"
+      : "monthly";
+    const tier = resolveNativeIapPlanKey(panel);
 
     if (stripeBtn) {
       stripeBtn.disabled = true;
@@ -18488,36 +18406,54 @@
     if (note) note.textContent = "Starting secure checkout...";
 
     try {
-      logEvent("add_payment_info", { currency: panel.dataset.currency || "USD", value: Number(panel.dataset.price || 349) });
-      const createSession = functions.httpsCallable("create_stripe_checkout_session");
-      const result = await createSession({ orderId, meta: buildMeta() });
-      const sessionId = String(result.data?.sessionId || "");
-      const url = String(result.data?.url || "");
+      logEvent("add_payment_info", {
+        currency: panel.dataset.currency || "USD",
+        value: Number(panel.dataset.price || 0) || 0,
+      });
 
-      logEvent("checkout_redirect", { order_id: orderId, mode: result.data?.mode || "" });
-      if (url) {
-        window.location.assign(url);
-        return;
+      const payload = {
+        tier,
+        cycle,
+        product: String(panel.dataset.product || "Quantura Subscription"),
+        productId: resolveNativeIapProductId(panel),
+        user: {
+          uid: String(state.user?.uid || "").trim(),
+          email: String(state.user?.email || "").trim().toLowerCase(),
+        },
+        meta: {
+          ...buildMeta(),
+          utm: getUtm(),
+        },
+      };
+
+      const response = await fetch("/api/shop/subscription-checkout", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        credentials: "same-origin",
+        body: JSON.stringify(payload),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const detail = String(result?.message || result?.detail || result?.error || "").trim();
+        throw new Error(detail || "Unable to start subscription checkout.");
       }
-
-      const stripeKey = String(state.remoteFlags.stripePublicKey || "").trim();
-      if (stripeKey && sessionId) {
-        const StripeCtor = await loadStripeJs();
-        if (StripeCtor) {
-          const stripe = StripeCtor(stripeKey);
-          await stripe.redirectToCheckout({ sessionId });
-          return;
-        }
-      }
-
-      throw new Error("Checkout URL is not available.");
+      const url = String(result?.url || "").trim();
+      if (!url) throw new Error("Checkout URL is not available.");
+      logEvent("checkout_redirect", { mode: "subscription", tier, cycle });
+      window.location.assign(url);
+      return;
     } catch (error) {
       showToast(error.message || "Unable to start checkout.", "warn");
       if (note) note.textContent = "Unable to start checkout. Try again.";
     } finally {
       if (stripeBtn) {
         stripeBtn.disabled = false;
-        stripeBtn.textContent = "Proceed to payment";
+        stripeBtn.textContent = hasFullAccount()
+          ? panel?.querySelector('[data-action="purchase"]')?.dataset?.labelAuth || "Checkout now"
+          : panel?.querySelector('[data-action="purchase"]')?.dataset?.labelGuest || "Checkout now";
       }
     }
   };
@@ -18565,37 +18501,25 @@
       const email = String(state.user?.email || "").trim().toLowerCase();
       const customerId = String(state.user?.stripeCustomerId || "").trim();
 
-      let url = "";
-      try {
-        const response = await fetch("/api/shop/portal", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          credentials: "same-origin",
-          body: JSON.stringify({
-            email,
-            customerId,
-            returnUrl,
-          }),
-        });
-        const payload = await response.json().catch(() => ({}));
-        if (response.ok && payload?.url) {
-          url = String(payload.url || "").trim();
-        }
-      } catch (_error) {}
-
-      if (!url) {
-        const createPortal = functions.httpsCallable("create_stripe_billing_portal_session");
-        const result = await createPortal({
-          returnUrl,
+      const response = await fetch("/api/shop/portal", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        credentials: "same-origin",
+        body: JSON.stringify({
           email,
           customerId,
-          meta: buildMeta(),
-        });
-        url = String(result.data?.url || "").trim();
+          returnUrl,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const detail = String(payload?.message || payload?.detail || payload?.error || "").trim();
+        throw new Error(detail || "Unable to open Stripe billing portal.");
       }
+      const url = String(payload?.url || "").trim();
 
       if (!url) throw new Error("Stripe billing portal URL is missing.");
       logEvent("billing_portal_open", { provider: "stripe" });
@@ -18629,9 +18553,7 @@
     const checkout = String(getQueryParam("checkout") || "").trim().toLowerCase();
     if (!checkout) return;
 
-    const orderId = String(getQueryParam("orderId") || "").trim();
     const sessionId = String(getQueryParam("session_id") || "").trim();
-    if (!orderId) return;
 
     if (checkout === "cancel") {
       showToast("Checkout cancelled.", "warn");
@@ -18662,19 +18584,36 @@
     if (!hasSessionUser()) return;
 
     try {
-      const confirm = functions.httpsCallable("confirm_stripe_checkout");
-      const result = await confirm({ orderId, sessionId });
-      const paid = Boolean(result.data?.paid);
-      const currency = String(result.data?.currency || "USD");
-      const price = Number(result.data?.price || 0);
-      const product = String(result.data?.product || "");
+      const response = await fetch(`/api/shop/order/${encodeURIComponent(sessionId)}`, {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        credentials: "same-origin",
+      });
+      const payload = await response.json().catch(() => ({}));
+      const order = payload?.order || {};
+      const paymentStatus = String(order?.paymentStatus || order?.status || "").trim().toLowerCase();
+      const paid = ["paid", "succeeded", "complete", "completed", "active"].includes(paymentStatus);
+      const currency = String(order?.currency || "USD");
+      const price = Number(order?.amountTotal || 0) / 100;
+      const product = Array.isArray(order?.items) && order.items.length
+        ? String(order.items[0]?.name || "")
+        : "";
       showToast(paid ? "Payment confirmed." : "Payment pending review.");
       logEvent("purchase", {
-        transaction_id: orderId,
+        transaction_id: sessionId,
         currency,
         value: Number.isFinite(price) ? price : 0,
         items: product ? [{ item_name: product, item_id: product, price }] : undefined,
       });
+      try {
+        const params = new URLSearchParams(window.location.search);
+        params.delete("checkout");
+        params.delete("orderId");
+        params.delete("session_id");
+        history.replaceState({}, "", `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ""}`);
+      } catch (error) {
+        // Ignore cleanup issues.
+      }
       if (paid) {
         try {
           history.replaceState({}, "", "/dashboard");

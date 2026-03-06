@@ -25,6 +25,9 @@ import AdSupport
 #if canImport(GoogleMobileAds)
 import GoogleMobileAds
 #endif
+#if canImport(FBAudienceNetwork)
+import FBAudienceNetwork
+#endif
 #if canImport(GoogleSignIn)
 import GoogleSignIn
 #endif
@@ -480,6 +483,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         #if DEBUG || targetEnvironment(simulator)
         MobileAds.shared.requestConfiguration.testDeviceIdentifiers = ["SIMULATOR"]
         #endif
+#if canImport(FBAudienceNetwork)
+        if #available(iOS 14, *) {
+            // Meta Audience Network guidance: explicitly opt into advertiser tracking when policy permits.
+            FBAdSettings.setAdvertiserTrackingEnabled(true)
+        }
+#endif
         MobileAds.shared.start { status in
             print("[Ads][iOS] Mobile Ads initialized adapters=\(status.adapterStatusesByClassName.count)")
         }
@@ -564,8 +573,14 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
                 switch status {
                 case .authorized:
                     print("[Privacy][iOS] ATT authorized.")
+#if canImport(FBAudienceNetwork)
+                    FBAdSettings.setAdvertiserTrackingEnabled(true)
+#endif
                 case .denied, .restricted, .notDetermined:
                     print("[Privacy][iOS] ATT denied/restricted/notDetermined.")
+#if canImport(FBAudienceNetwork)
+                    FBAdSettings.setAdvertiserTrackingEnabled(false)
+#endif
                 @unknown default:
                     break
                 }
