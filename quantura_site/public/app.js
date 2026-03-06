@@ -2550,11 +2550,28 @@
     const byPanel = new Map();
     sidebarLinks.forEach((link) => {
       const panel = String(link.dataset.panelTarget || "").trim();
-      const href = String(link.getAttribute("href") || "").trim();
-      const key = panel || href;
-      if (!key || byPanel.has(key)) return;
-      byPanel.set(key, link);
+      if (!panel || byPanel.has(panel)) return;
+      byPanel.set(panel, link);
     });
+    const findPreferredLink = (target) => {
+      const key = String(target || "").trim();
+      if (!key) return null;
+      if (!key.startsWith("/")) {
+        const normalizedKey = normalizePanelName(key);
+        const panelMatch =
+          byPanel.get(key) ||
+          sidebarLinks.find((link) => normalizePanelName(String(link.dataset.panelTarget || "").trim()) === normalizedKey);
+        return panelMatch || null;
+      }
+      const targetPath = normalizePath(key);
+      return (
+        sidebarLinks.find((link) => {
+          const href = String(link.getAttribute("href") || "").trim();
+          if (!href) return false;
+          return normalizePath(href.split("?")[0].split("#")[0] || "/") === targetPath;
+        }) || null
+      );
+    };
 
     const preferredByRouter = {
       terminal: [
@@ -2573,8 +2590,9 @@
     };
     const preferredPanels = preferredByRouter[routerName] || [];
     const selected = preferredPanels
-      .map((panel) => byPanel.get(panel))
+      .map((panel) => findPreferredLink(panel))
       .filter(Boolean)
+      .filter((link, index, arr) => arr.indexOf(link) === index)
       .slice(0, 5);
 
     if (selected.length < 5) {
@@ -13185,8 +13203,16 @@
       err.retryModel = String(payload?.retryModel || "").trim();
       throw err;
     }
+    const fallbackAnswer = String(payload?.text || payload?.answer || "").trim();
+    if (!fallbackAnswer) {
+      const message = String(payload?.error || payload?.message || "Model provider returned an empty response.").trim();
+      const err = new Error(message);
+      err.retryProvider = String(payload?.retryProvider || "").trim();
+      err.retryModel = String(payload?.retryModel || "").trim();
+      throw err;
+    }
     return {
-      answer: String(payload?.text || "").trim(),
+      answer: fallbackAnswer,
       model: normalizeAiModelId(payload?.model || model) || model,
       provider: normalizeModelCouncilProviderId(payload?.provider || provider || "openai"),
       usage: payload?.usage && typeof payload.usage === "object" ? payload.usage : {},

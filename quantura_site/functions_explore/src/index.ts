@@ -2375,7 +2375,10 @@ async function invokeOpenAiLlm(payload: {
     const text = sanitizeText(extractResponsesOutputText(body), 20000);
     const responseId = sanitizeText((body as any)?.id, 120);
     const status = sanitizeText((body as any)?.status, 80);
-    if (!text && !responseId) throw new Error("OpenAI returned an empty response.");
+    if (!text) {
+      const statusLabel = status || "unknown";
+      throw new Error(`OpenAI returned an empty response (status: ${statusLabel}).`);
+    }
     return {
       text,
       usage: extractResponsesUsage(body),
@@ -2913,6 +2916,11 @@ async function invokeLlmWithFallback(rawPayload: Record<string, unknown>): Promi
 
   const errors: string[] = [];
   const startedAt = Date.now();
+  const ensureProviderText = (providerName: string, textValue: unknown) => {
+    const text = sanitizeText(textValue, 20000);
+    if (!text) throw new Error(`${providerName} returned an empty response.`);
+    return text;
+  };
   for (const currentProvider of providers) {
     const modelPick = pickModelForProvider(currentProvider, requestedModel, userTier);
     const model = modelPick.model;
@@ -2932,7 +2940,7 @@ async function invokeLlmWithFallback(rawPayload: Record<string, unknown>): Promi
         return {
           provider: currentProvider,
           model,
-          text: result.text,
+          text: ensureProviderText(currentProvider, result.text),
           latencyMs: Date.now() - startedAt,
           usage: result.usage,
           attempted: [...errors],
@@ -2946,7 +2954,7 @@ async function invokeLlmWithFallback(rawPayload: Record<string, unknown>): Promi
         return {
           provider: currentProvider,
           model,
-          text: result.text,
+          text: ensureProviderText(currentProvider, result.text),
           latencyMs: Date.now() - startedAt,
           usage: result.usage,
           attempted: [...errors],
@@ -2958,7 +2966,7 @@ async function invokeLlmWithFallback(rawPayload: Record<string, unknown>): Promi
         return {
           provider: currentProvider,
           model,
-          text: result.text,
+          text: ensureProviderText(currentProvider, result.text),
           latencyMs: Date.now() - startedAt,
           usage: result.usage,
           attempted: [...errors],
@@ -2970,7 +2978,7 @@ async function invokeLlmWithFallback(rawPayload: Record<string, unknown>): Promi
         return {
           provider: currentProvider,
           model,
-          text: result.text,
+          text: ensureProviderText(currentProvider, result.text),
           latencyMs: Date.now() - startedAt,
           usage: result.usage,
           attempted: [...errors],
@@ -2982,7 +2990,7 @@ async function invokeLlmWithFallback(rawPayload: Record<string, unknown>): Promi
         return {
           provider: currentProvider,
           model,
-          text: result.text,
+          text: ensureProviderText(currentProvider, result.text),
           latencyMs: Date.now() - startedAt,
           usage: result.usage,
           attempted: [...errors],
@@ -2994,7 +3002,7 @@ async function invokeLlmWithFallback(rawPayload: Record<string, unknown>): Promi
         return {
           provider: currentProvider,
           model,
-          text: result.text,
+          text: ensureProviderText(currentProvider, result.text),
           latencyMs: Date.now() - startedAt,
           usage: result.usage,
           citations: result.citations,
@@ -3007,7 +3015,7 @@ async function invokeLlmWithFallback(rawPayload: Record<string, unknown>): Promi
         return {
           provider: currentProvider,
           model,
-          text: result.text,
+          text: ensureProviderText(currentProvider, result.text),
           latencyMs: Date.now() - startedAt,
           usage: result.usage,
           attempted: [...errors],
@@ -3019,7 +3027,7 @@ async function invokeLlmWithFallback(rawPayload: Record<string, unknown>): Promi
         return {
           provider: currentProvider,
           model,
-          text: result.text,
+          text: ensureProviderText(currentProvider, result.text),
           latencyMs: Date.now() - startedAt,
           usage: result.usage,
           attempted: [...errors],
@@ -3039,7 +3047,7 @@ async function invokeLlmWithFallback(rawPayload: Record<string, unknown>): Promi
         return {
           provider: currentProvider,
           model,
-          text: result.text,
+          text: ensureProviderText(currentProvider, result.text),
           latencyMs: Date.now() - startedAt,
           usage: result.usage,
           citations: result.citations,
