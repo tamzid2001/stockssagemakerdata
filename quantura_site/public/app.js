@@ -2173,6 +2173,77 @@
     return false;
   };
 
+  const nativeAdActionState = {
+    bound: false,
+    seq: 0,
+    pending: new Map(),
+  };
+
+  const ensureNativeAdActionListener = () => {
+    if (nativeAdActionState.bound) return;
+    nativeAdActionState.bound = true;
+    window.addEventListener("quantura:native-ad-result", (event) => {
+      const detail = event?.detail && typeof event.detail === "object" ? event.detail : {};
+      const requestId = String(detail.requestId || "").trim();
+      if (!requestId) return;
+      const pending = nativeAdActionState.pending.get(requestId);
+      if (!pending) return;
+      const status = String(detail.status || "").trim().toLowerCase();
+      if (!status) return;
+      pending.onUpdate(detail);
+    });
+  };
+
+  const runNativeAdAction = ({ action, reason = "action", timeoutMs = 26000, successStatuses = [] } = {}) =>
+    new Promise((resolve) => {
+      if (!isNativeApp()) {
+        resolve({ ok: false, status: "native_unavailable", message: "Native runtime unavailable." });
+        return;
+      }
+      ensureNativeAdActionListener();
+      const requestId = `ad_${Date.now()}_${++nativeAdActionState.seq}`;
+      const successSet = new Set(
+        (Array.isArray(successStatuses) ? successStatuses : [])
+          .map((entry) => String(entry || "").trim().toLowerCase())
+          .filter(Boolean)
+      );
+      const finalize = (result) => {
+        nativeAdActionState.pending.delete(requestId);
+        clearTimeout(timeoutHandle);
+        resolve(result);
+      };
+      const onUpdate = (detail) => {
+        const status = String(detail?.status || "").trim().toLowerCase();
+        const message = String(detail?.message || "").trim();
+        if (!status) return;
+        if (successSet.has(status)) {
+          finalize({ ok: true, status, detail });
+          return;
+        }
+        if (
+          status.startsWith("failed") ||
+          status.startsWith("skipped") ||
+          status === "dismissed" ||
+          status === "timeout"
+        ) {
+          finalize({ ok: false, status, detail, message });
+        }
+      };
+      nativeAdActionState.pending.set(requestId, { onUpdate });
+      const timeoutHandle = window.setTimeout(() => {
+        finalize({ ok: false, status: "timeout", message: "Native ad request timed out." });
+      }, Math.max(5000, Number(timeoutMs) || 26000));
+      const sent = sendNativeBridgeMessage({
+        action,
+        requestId,
+        reason: String(reason || "").trim().slice(0, 80),
+        ts: Date.now(),
+      });
+      if (!sent) {
+        finalize({ ok: false, status: "bridge_unavailable", message: "Native bridge unavailable." });
+      }
+    });
+
   const maybeShowNativeRewardGate = async ({
     reason = "action",
     title = "Watch a short ad first?",
@@ -2204,7 +2275,7 @@
         state.rewardIncentiveLimits[normalizedReason] = Date.now();
       }
       sendNativeBridgeMessage({
-        action: "showInterstitial",
+        action: "showInterstitialAd",
         reason: `${normalizedReason}_reward_declined`,
         mode: "fallback",
         ts: Date.now(),
@@ -2214,12 +2285,43 @@
       return false;
     }
     delete state.rewardIncentiveLimits[normalizedReason];
-    sendNativeBridgeMessage({
+    let rewardedInterstitialResult = await runNativeAdAction({
       action: "showRewardedInterstitial",
       reason: normalizedReason,
+      successStatuses: ["rewarded"],
+    });
+    if (!rewardedInterstitialResult.ok && String(rewardedInterstitialResult.status || "").includes("not_ready")) {
+      await new Promise((resolve) => window.setTimeout(resolve, 1400));
+      rewardedInterstitialResult = await runNativeAdAction({
+        action: "showRewardedInterstitial",
+        reason: `${normalizedReason}_retry`,
+        successStatuses: ["rewarded"],
+      });
+    }
+    if (rewardedInterstitialResult.ok) return true;
+    let rewardedResult = await runNativeAdAction({
+      action: "showRewardedAd",
+      reason: `${normalizedReason}_fallback`,
+      successStatuses: ["rewarded"],
+    });
+    if (!rewardedResult.ok && String(rewardedResult.status || "").includes("not_ready")) {
+      await new Promise((resolve) => window.setTimeout(resolve, 1400));
+      rewardedResult = await runNativeAdAction({
+        action: "showRewardedAd",
+        reason: `${normalizedReason}_fallback_retry`,
+        successStatuses: ["rewarded"],
+      });
+    }
+    if (rewardedResult.ok) return true;
+    sendNativeBridgeMessage({
+      action: "showInterstitialAd",
+      reason: `${normalizedReason}_reward_unavailable`,
+      mode: "fallback",
       ts: Date.now(),
     });
-    return true;
+    if (isNavigationGate) return true;
+    showToast("Rewarded ad is not ready yet. Please try again in a moment.", "warn");
+    return false;
   };
 
 	  const showToast = (message, variant = "default") => {
