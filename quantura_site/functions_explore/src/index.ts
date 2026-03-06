@@ -4796,6 +4796,7 @@ ROUTES.post("/earnings/refresh", async (req, res) => {
         lastUpdated: normalizeDate((raw as any).lastUpdated || (raw as any).updatedFromDate),
       };
     };
+    type NormalizedEarningsItem = NonNullable<ReturnType<typeof normalizeItem>>;
 
     const buildDays = (from: string, to: string, normalizedItems: Array<Record<string, unknown>>) => {
       const startDate = new Date(`${from}T00:00:00Z`);
@@ -4940,7 +4941,7 @@ ROUTES.post("/earnings/refresh", async (req, res) => {
 
     const items = records
       .map((row) => normalizeItem(row, symbol))
-      .filter((item): item is Record<string, string | number | null> => Boolean(item))
+      .filter((item): item is NormalizedEarningsItem => item !== null)
       .sort((a, b) => {
         const dateA = sanitizeText(a.date, 20);
         const dateB = sanitizeText(b.date, 20);
