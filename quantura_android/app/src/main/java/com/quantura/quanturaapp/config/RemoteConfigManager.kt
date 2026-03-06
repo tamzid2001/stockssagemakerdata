@@ -249,7 +249,12 @@ class RemoteConfigManager(
             AdFormat.NATIVE -> selected.nativeAdvanced
         }
         if (platform == AdPlatform.ANDROID) {
-            Log.i(tag, "[Ads][Android] Selected ad unit for ${format.name.lowercase()} = $resolved")
+            Log.i(
+                tag,
+                "[Ads][Android] Selected ad unit for ${format.name.lowercase()} = $resolved " +
+                    "useReal=$useRealAds adsEnabled=$adsEnabled platformRealFlag=$platformWantsRealAds " +
+                    "debug=${environment.isDebugBuild} emulator=${environment.isSimulatorOrEmulator}"
+            )
         }
         return resolved
     }
