@@ -2272,7 +2272,7 @@
 		        panelToPath: {
 		          forecast: "/forecasting",
               ticker: "/ticker-intelligence",
-              predictions: "/ticker-intelligence?panel=predictions",
+              predictions: "/predictions",
 		          indicators: "/indicators",
               trending: "/trending",
 		          news: "/news",
@@ -2285,6 +2285,7 @@
             },
             pathAliases: {
               "/ticker-intelligence": "ticker",
+              "/predictions": "predictions",
               "/ticker-query": "ticker-query",
               "/model-council": "ticker-query",
               "/tools/fx": "fx",
@@ -2309,13 +2310,39 @@
 		      if (!router) return {};
 		      const mapping = {};
 		      Object.entries(router.panelToPath || {}).forEach(([panel, path]) => {
-		        mapping[String(path)] = String(panel);
+		        mapping[normalizePath(String(path))] = String(panel);
 		      });
           Object.entries(router.pathAliases || {}).forEach(([path, panel]) => {
-            mapping[String(path)] = String(panel);
+            mapping[normalizePath(String(path))] = String(panel);
           });
 		      return mapping;
 		    })();
+        const defaultPanelPath = router?.defaultPanel ? normalizePath(router.panelToPath?.[router.defaultPanel] || "") : "";
+        const normalizePanelParam = (value) => {
+          const panel = String(value || "").trim();
+          if (panel === "ticker-intelligence") return "ticker";
+          return panel;
+        };
+        const panelQueryValueForRoute = (panel) => {
+          const next = String(panel || "").trim();
+          if (!next || !router?.panelToPath?.[next]) return "";
+          const targetPath = normalizePath(router.panelToPath[next]);
+          if (!defaultPanelPath || targetPath !== defaultPanelPath) return "";
+          if (next === router.defaultPanel) return "";
+          return next;
+        };
+        const buildPanelUrl = (panel) => {
+          const next = String(panel || "").trim();
+          if (!next || !router?.panelToPath?.[next]) return "";
+          const targetPath = normalizePath(router.panelToPath[next]);
+          const params = new URLSearchParams(window.location.search || "");
+          params.delete("panel");
+          params.delete("intel");
+          const panelQuery = panelQueryValueForRoute(next);
+          if (panelQuery) params.set("panel", panelQuery);
+          const query = params.toString();
+          return query ? `${targetPath}?${query}` : targetPath;
+        };
 
 		    const setActive = (target, { pushPath = true } = {}) => {
 		      const next = String(target || "").trim();
@@ -2323,8 +2350,7 @@
 		      panels.forEach((panel) => panel.classList.toggle("hidden", panel.dataset.panel !== next));
 		      buttons.forEach((btn) => btn.classList.toggle("active", btn.dataset.panelTarget === next));
 		      if (pushPath && router?.panelToPath?.[next]) {
-		        const desired = router.panelToPath[next];
-            const desiredUrl = desired.includes("?") ? desired : `${desired}${window.location.search}`;
+		        const desiredUrl = buildPanelUrl(next);
             const currentUrl = `${window.location.pathname}${window.location.search}`;
 		        if (desiredUrl && currentUrl !== desiredUrl) {
 		          try {
@@ -2357,16 +2383,23 @@
 		    const initialFromUrl = () => {
 		      try {
 		        const params = new URLSearchParams(window.location.search);
-		        const panel = String(params.get("panel") || "").trim();
-		        if (panel === "ticker-intelligence") return "ticker";
-		        if (panel) return panel;
+		        const panelFromQuery = normalizePanelParam(params.get("panel"));
+		        if (router) {
+              const panelFromPath = pathToPanel[normalizePath(window.location.pathname)];
+              if (panelFromPath) {
+                if (!defaultPanelPath || normalizePath(window.location.pathname) !== defaultPanelPath || !panelFromQuery) {
+                  return panelFromPath;
+                }
+              }
+            }
+            if (panelFromQuery) return panelFromQuery;
             const intel = String(params.get("intel") || "").trim().toLowerCase();
             if (intel === "predictions") return "predictions";
 		      } catch (error) {
 		        // Ignore.
 		      }
-		      if (router && pathToPanel[window.location.pathname]) {
-		        return pathToPanel[window.location.pathname];
+		      if (router && pathToPanel[normalizePath(window.location.pathname)]) {
+		        return pathToPanel[normalizePath(window.location.pathname)];
 		      }
 		      return (window.location.hash || "").replace(/^#/, "");
 		    };
@@ -2513,6 +2546,7 @@
           "/terminal",
           "/forecasting",
           "/ticker-intelligence",
+          "/predictions",
           "/indicators",
           "/trending",
           "/news",
@@ -2563,8 +2597,7 @@
         "ticker",
         "/ticker-intelligence",
         "predictions",
-        "/ticker-intelligence?panel=predictions",
-        "/ticker-intelligence?intel=predictions",
+        "/predictions",
         "ticker-query",
         "/model-council",
         "fx",
@@ -2626,6 +2659,64 @@
       document.body.classList.toggle("mobile-bottom-nav-enabled", visible);
     };
 
+    syncVisibility();
+    window.addEventListener("resize", syncVisibility);
+    window.__quanturaMobileBottomNavSync = syncVisibility;
+  };
+
+  const bindMarketingBottomNav = () => {
+    const path = normalizePath(window.location.pathname || "/");
+    const supported = new Set(["/pricing", "/shop", "/blog", "/about", "/contact", "/events", "/research", "/explore"]);
+    if (!supported.has(path)) return;
+    if (document.querySelector(".app-sidebar .sidebar-nav")) return;
+
+    const pageMeta = {
+      "/explore": { label: "Explore", iconName: "binocular" },
+      "/research": { label: "Research", iconName: "bookmark-book" },
+      "/pricing": { label: "Pricing", iconName: "wallet" },
+      "/shop": { label: "Shop", iconName: "shop" },
+      "/contact": { label: "Contact", iconName: "mail" },
+      "/blog": { label: "Blog", iconName: "page" },
+      "/about": { label: "About", iconName: "info-circle" },
+      "/events": { label: "Events", iconName: "calendar" },
+    };
+    const baseLinks = ["/explore", "/research", "/pricing", "/shop", "/contact"];
+    const links = baseLinks.slice();
+    if (!links.includes(path)) {
+      links[0] = path;
+    }
+
+    let nav = document.getElementById("mobile-bottom-nav");
+    if (!nav) {
+      nav = document.createElement("nav");
+      nav.id = "mobile-bottom-nav";
+      nav.className = "mobile-bottom-nav hidden liquid-glass";
+      nav.setAttribute("aria-label", "Mobile navigation");
+      nav.innerHTML = '<div class="mobile-bottom-nav-inner"></div>';
+      document.body.appendChild(nav);
+    }
+    const inner = nav.querySelector(".mobile-bottom-nav-inner");
+    if (!inner) return;
+
+    inner.innerHTML = links
+      .map((href) => {
+        const meta = pageMeta[href];
+        if (!meta) return "";
+        const activeClass = href === path ? " active" : "";
+        return `
+          <a class="mobile-bottom-link${activeClass}" href="${escapeHtml(href)}" aria-label="${escapeHtml(meta.label)}" title="${escapeHtml(meta.label)}">
+            ${icon(meta.iconName)}
+            <span class="mobile-bottom-label">${escapeHtml(meta.label)}</span>
+          </a>
+        `;
+      })
+      .join("");
+
+    const syncVisibility = () => {
+      const visible = window.innerWidth <= 980;
+      nav.classList.toggle("hidden", !visible);
+      document.body.classList.toggle("mobile-bottom-nav-enabled", visible);
+    };
     syncVisibility();
     window.addEventListener("resize", syncVisibility);
     window.__quanturaMobileBottomNavSync = syncVisibility;
@@ -5287,7 +5378,7 @@
           <summary>Full AI output</summary>
           <pre class="small">${escapeHtml(cleanAnswer || "No output returned.")}</pre>
         </details>
-        <div class="small muted solve-now-meta">Context ticker: ${escapeHtml(ticker)} · Model: ${escapeHtml(model || "gpt-5-mini")} · Provider: ${escapeHtml(provider || "openai")}</div>
+        <div class="small muted solve-now-meta">Context ticker: ${escapeHtml(ticker)} · Provider: ${escapeHtml(provider || "openai")}</div>
         <p class="small muted solve-now-disclaimer">LLMs can sometimes make mistakes.</p>
       </article>
     `;
@@ -5402,6 +5493,16 @@
       const source = String(element.getAttribute("data-solve-source") || "").trim() || "contact";
       bindClick(element, source);
     });
+    if (!state.solveNowDelegateBound) {
+      state.solveNowDelegateBound = true;
+      document.addEventListener("click", (event) => {
+        const trigger = event.target?.closest?.('[data-action="open-solve-now"]');
+        if (!(trigger instanceof HTMLElement)) return;
+        event.preventDefault();
+        const source = String(trigger.getAttribute("data-solve-source") || "").trim() || "contact";
+        openSolveNowModal({ source });
+      });
+    }
     if (!state.solveNowHashChecked) {
       state.solveNowHashChecked = true;
       if (window.location.hash === "#solve-now") {
@@ -5883,6 +5984,85 @@
     }
   };
 
+  const normalizeNativeAdInjectionPayload = (rawPayload) => {
+    let parsed = rawPayload;
+    if (typeof rawPayload === "string") {
+      const text = rawPayload.trim();
+      if (!text) return null;
+      try {
+        parsed = JSON.parse(text);
+      } catch (_error) {
+        return null;
+      }
+    }
+    if (!parsed || typeof parsed !== "object") return null;
+    const sourceAd = parsed.ad && typeof parsed.ad === "object" ? parsed.ad : parsed;
+    const slotId = String(parsed.slotId || sourceAd.slotId || `legacy-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`).trim();
+    const placement = String(parsed.placement || sourceAd.placement || "inline").trim() || "inline";
+    const adUnitId = String(parsed.adUnitId || sourceAd.adUnitId || "").trim();
+    const containerId = String(parsed.containerId || sourceAd.containerId || "").trim();
+    const iconUrl = sourceAd.iconUrl || sourceAd.iconURI || sourceAd.icon?.uri || sourceAd.iconDataUrl || "";
+    const mediaUrl = sourceAd.mediaUrl || sourceAd.mediaURI || sourceAd.imageUrl || sourceAd.mediaDataUrl || "";
+    return {
+      slotId,
+      placement,
+      adUnitId,
+      containerId,
+      ad: {
+        headline: String(sourceAd.headline || sourceAd.title || "Sponsored insight").trim(),
+        body: String(sourceAd.body || sourceAd.description || "Sponsored content from our advertising partner.").trim(),
+        callToAction: String(sourceAd.callToAction || sourceAd.cta || "Learn more").trim(),
+        advertiser: String(sourceAd.advertiser || sourceAd.brand || sourceAd.store || "Sponsored").trim(),
+        destinationUrl: String(sourceAd.destinationUrl || sourceAd.clickUrl || "").trim(),
+        iconUrl: String(iconUrl || "").trim(),
+        mediaUrl: String(mediaUrl || "").trim(),
+      },
+    };
+  };
+
+  const findNativeInlineAdSlotNode = (slotId) => {
+    const targetId = String(slotId || "").trim();
+    if (!targetId) return null;
+    return (
+      Array.from(document.querySelectorAll("[data-native-inline-ad-slot]")).find(
+        (node) => String(node.dataset.nativeInlineAdSlot || "").trim() === targetId
+      ) || null
+    );
+  };
+
+  const resolveNativeAdInjectionContainer = (containerId) => {
+    const id = String(containerId || "").trim();
+    if (id) {
+      const explicit = document.getElementById(id);
+      if (explicit) return explicit;
+    }
+    const legacy = document.getElementById("native-ad-container");
+    if (legacy) return legacy;
+    const targets = collectNativeInlineAdTargets();
+    if (targets.length) return targets[0];
+    return null;
+  };
+
+  const registerLegacyNativeAdInjectionHook = () => {
+    if (typeof window.handleNativeAd === "function" && window.handleNativeAd.__quanturaBound === true) return;
+    const handler = (rawPayload) => {
+      if (!isNativeInlineAdEligible()) return false;
+      const detail = normalizeNativeAdInjectionPayload(rawPayload);
+      if (!detail) return false;
+      let slotNode = findNativeInlineAdSlotNode(detail.slotId);
+      if (!slotNode) {
+        const container = resolveNativeAdInjectionContainer(detail.containerId);
+        if (!container) return false;
+        slotNode = buildNativeInlineAdSlot(detail.slotId, detail.placement);
+        container.prepend(slotNode);
+      }
+      hydrateNativeInlineAdSlot(slotNode, detail);
+      return true;
+    };
+    handler.__quanturaBound = true;
+    window.handleNativeAd = handler;
+  };
+
   const collectNativeInlineAdTargets = () => {
     const ids = [
       "trending-list",
@@ -6002,26 +6182,23 @@
       const success = panel.querySelector(".purchase-success");
       const stripe = panel.querySelector('[data-action="stripe"]');
       if (!button || !note) return;
-
-      if (accountAuthed || (nativeIapRuntime && sessionAuthed)) {
-        button.disabled = false;
-        button.textContent = accountAuthed
-          ? button.dataset.labelAuth || "Choose plan"
-          : "Start as guest";
-        note.textContent =
-          accountAuthed
-            ? "Subscriptions activate in your dashboard after payment confirmation."
-            : "Guest checkout is enabled in native app. Purchases can be merged after sign-in.";
+      button.disabled = false;
+      button.textContent = accountAuthed
+        ? button.dataset.labelAuth || "Choose plan"
+        : button.dataset.labelGuest || "Continue as guest";
+      if (accountAuthed) {
+        note.textContent = "Subscriptions activate in your dashboard after payment confirmation.";
+      } else if (nativeIapRuntime) {
+        note.textContent = guestSession || sessionAuthed
+          ? "Guest checkout is enabled in native app. Purchases can be merged after sign-in."
+          : "Continue as guest to initialize native checkout.";
       } else {
-        button.disabled = true;
-        button.textContent = button.dataset.labelGuest || "Sign in to purchase";
-        note.textContent =
-          nativeIapRuntime
-            ? "Initializing guest checkout session..."
-            : "You must sign in to purchase. Checkout is secured to your account.";
-        stripe?.classList.add("hidden");
-        success?.classList.add("hidden");
+        note.textContent = guestSession || sessionAuthed
+          ? "Guest checkout is enabled on web. Purchases can be merged after sign-in."
+          : "Continue as guest to initialize secure checkout.";
       }
+      stripe?.classList.add("hidden");
+      success?.classList.add("hidden");
     });
   };
 
@@ -6578,9 +6755,9 @@
       .join("");
 
     return `
-      ${sparkline}
-      <div style="overflow:auto; margin-top:8px;">
-        <table class="insider-table">
+      ${sparkline ? `<div class="fiscaldata-sparkline">${sparkline}</div>` : ""}
+      <div class="fiscaldata-table-wrap">
+        <table class="insider-table fiscaldata-macro-table">
           <thead><tr>${head}</tr></thead>
           <tbody>${body}</tbody>
         </table>
@@ -6619,9 +6796,9 @@
       <div class="modal-dialog card" style="max-width: 980px; width: calc(100% - 24px); max-height: calc(100vh - 40px); overflow:auto;">
         <button class="modal-close" type="button" data-fiscaldata-close aria-label="Close details">×</button>
         <h3>${escapeHtml(String(entry?.title || "Fiscal Data details"))}</h3>
-        <p class="small muted">Endpoint: <code>${escapeHtml(endpoint)}</code></p>
-        <p class="small muted">Query: <code>${escapeHtml(queryString)}</code></p>
-        <div>${renderFiscalMacroTable(payload, [entry?.ui?.primaryDateField, entry?.ui?.primaryValueField].filter(Boolean))}</div>
+        <p class="small muted fiscaldata-detail-line">Endpoint: <code class="fiscaldata-detail-code">${escapeHtml(endpoint)}</code></p>
+        <p class="small muted fiscaldata-detail-line">Query: <code class="fiscaldata-detail-code">${escapeHtml(queryString)}</code></p>
+        <div class="fiscaldata-detail-table">${renderFiscalMacroTable(payload, [entry?.ui?.primaryDateField, entry?.ui?.primaryValueField].filter(Boolean))}</div>
       </div>
     `;
     modal.classList.remove("hidden");
@@ -6659,14 +6836,14 @@
             ? renderFiscalMacroTable(payload, [entry?.ui?.primaryDateField, entry?.ui?.primaryValueField].filter(Boolean))
             : `<div class="small muted">${escapeHtml(String(cardState.error || "Loading..."))}</div>`;
           return `
-            <article class="card" data-fiscaldata-card-id="${escapeHtml(entry.id)}">
+            <article class="card fiscaldata-card" data-fiscaldata-card-id="${escapeHtml(entry.id)}">
               <div class="order-header">
                 <div class="order-title">${escapeHtml(String(entry?.title || entry?.id || "Macro card"))}</div>
                 <span class="status pending">${escapeHtml(frequency)}</span>
               </div>
-              <div class="small muted" style="margin-top:6px;">${escapeHtml(String(entry?.endpoint || ""))}</div>
-              <div style="margin-top:10px;">${table}</div>
-              <div class="hero-actions" style="margin-top:12px;">
+              <div class="small muted fiscaldata-endpoint">${escapeHtml(String(entry?.endpoint || ""))}</div>
+              <div class="fiscaldata-card-table">${table}</div>
+              <div class="hero-actions fiscaldata-card-actions">
                 <button class="cta secondary small" type="button" data-fiscaldata-view-details="${escapeHtml(entry.id)}">View details</button>
                 ${
                   canLoadMore
@@ -6674,7 +6851,7 @@
                     : ""
                 }
               </div>
-              <div class="small muted" style="margin-top:8px;">Rows: ${Number.isFinite(count) ? count : rows.length} · Page ${pageNumber}${totalPages > 1 ? ` of ${totalPages}` : ""}</div>
+              <div class="small muted fiscaldata-card-meta">Rows: ${Number.isFinite(count) ? count : rows.length} · Page ${pageNumber}${totalPages > 1 ? ` of ${totalPages}` : ""}</div>
             </article>
           `;
         })
@@ -11425,10 +11602,28 @@
     } catch (error) {
       const aborted = String(error?.name || "").toLowerCase() === "aborterror";
       if (aborted) return;
+      const message = String(error?.message || "").trim();
+      const lower = message.toLowerCase();
+      const keyMissing = lower.includes("missing_fmp_api_key");
+      const rateLimited = lower.includes("429") || lower.includes("rate") || lower.includes("too many");
+      const cachedRows = Array.isArray(state.earningsCalendar.rows) ? state.earningsCalendar.rows : [];
       setOutputReady(ui.eventsCalendarOutput);
-      ui.eventsCalendarOutput.innerHTML = `<div class="small muted">Unable to load earnings calendar right now.</div>`;
-      if (ui.eventsCalendarStatus) ui.eventsCalendarStatus.textContent = "Unable to load earnings calendar.";
-      if (notify) showToast(error.message || "Unable to load earnings calendar.", "warn");
+      if (cachedRows.length) {
+        state.earningsCalendar.rowsByDate = buildRowsByDate(cachedRows);
+        renderEarningsCalendar();
+        if (ui.eventsCalendarStatus) {
+          ui.eventsCalendarStatus.textContent = "Showing cached earnings data. Live refresh is temporarily unavailable.";
+        }
+      } else {
+        const detail = keyMissing
+          ? "Earnings data is unavailable: server FMP key is not configured."
+          : rateLimited
+          ? "Earnings provider is rate-limited right now. Try again shortly."
+          : "Unable to load earnings calendar right now.";
+        ui.eventsCalendarOutput.innerHTML = `<div class="small muted">${escapeHtml(detail)}</div>`;
+        if (ui.eventsCalendarStatus) ui.eventsCalendarStatus.textContent = detail;
+      }
+      if (notify) showToast(message || "Unable to load earnings calendar.", "warn");
     } finally {
       if (state.earningsCalendar.inFlightController === controller) {
         state.earningsCalendar.inFlightController = null;
@@ -12804,7 +12999,7 @@
         };
       }
     } catch (error) {
-      // Fall through to /api/llm/run fallback.
+      // Fall through to /api/llm/:provider fallback.
     }
 
     // Fallback path guarantees selected provider/model produces output.
@@ -12815,14 +13010,15 @@
       moduleContext,
       technicalContext,
     });
-    const fallbackResponse = await fetch("/api/llm/run", {
+    const providerPath = normalizeModelCouncilProviderId(provider || "openai") || "openai";
+    const fallbackResponse = await fetch(`/api/llm/${encodeURIComponent(providerPath)}`, {
       method: "POST",
       headers,
       credentials: "same-origin",
       body: JSON.stringify({
-        provider,
+        provider: providerPath,
         model,
-        fallbackProviders: ["openai", "gemini", "mistral", "perplexity", "other"],
+        fallbackProviders: ["openai", "claude", "gemini", "deepseek", "mistral", "perplexity", "qwen", "amazon_nova", "other"],
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: String(prompt || "").trim() },
@@ -12886,17 +13082,17 @@
         };
       }
     } catch (error) {
-      // Fallback to /api/llm/run below.
+      // Fallback to /api/llm/openai below.
     }
 
-    const rewriteResponse = await fetch("/api/llm/run", {
+    const rewriteResponse = await fetch("/api/llm/openai", {
       method: "POST",
       headers,
       credentials: "same-origin",
       body: JSON.stringify({
         provider: "openai",
         model: "gpt-5-mini",
-        fallbackProviders: ["openai", "gemini", "mistral", "perplexity", "other"],
+        fallbackProviders: ["openai", "claude", "gemini", "deepseek", "mistral", "perplexity", "qwen", "amazon_nova", "other"],
         messages: [
           {
             role: "system",
@@ -13197,14 +13393,6 @@
     const tickerInput = document.getElementById("options-ticker");
     if (tickerInput && "value" in tickerInput) tickerInput.value = symbol;
 
-    if (!hasFullAccount()) {
-      if (isPanelVisible("options")) {
-        setOutputReady(ui.optionsOutput);
-        ui.optionsOutput.innerHTML = `<div class="small muted">Sign in to load the options chain.</div>`;
-      }
-      return;
-    }
-
     if (!force && state.tickerContext.optionsTicker === symbol) return;
     state.tickerContext.optionsTicker = symbol;
 
@@ -13281,7 +13469,7 @@
 
   const fetchTrendingTickerLogoUrl = async (functions, symbol) => {
     const ticker = normalizeTicker(symbol);
-    if (!functions || !ticker) return "";
+    if (!ticker) return "";
     if (trendingLogoCache.has(ticker)) {
       return String(trendingLogoCache.get(ticker) || "");
     }
@@ -13379,7 +13567,7 @@
 
   const enrichTrendingTickerRowsWithLogos = async (rows, functions) => {
     const list = Array.isArray(rows) ? rows : [];
-    if (!list.length || !functions) return list;
+    if (!list.length) return list;
     const updated = list.map((row) => ({ ...(row || {}) }));
     let changed = false;
     const targets = updated
@@ -13400,16 +13588,43 @@
     return changed ? updated : list;
   };
 
+  const fetchTrendingTickersFromApi = async ({ force = false } = {}) => {
+    const headers = await buildApiAuthHeaders({ includeJson: false });
+    const params = new URLSearchParams();
+    if (force) params.set("force", "1");
+    const query = params.toString();
+    const response = await fetch(`/api/ticker/trending${query ? `?${query}` : ""}`, {
+      method: "GET",
+      headers,
+      credentials: "same-origin",
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const detail = String(payload?.detail || payload?.error || "").trim();
+      throw new Error(detail || "Unable to load trending tickers right now.");
+    }
+    return payload && typeof payload === "object" ? payload : {};
+  };
+
   const loadTrendingTickers = async (functions, { notify = false, force = false } = {}) => {
-    if (!functions || !ui.trendingList) return;
+    if (!ui.trendingList) return;
     try {
       setOutputLoading(ui.trendingList, "Loading trending tickers...");
-      const getTrending = functions.httpsCallable("get_trending_tickers");
-      const result = await getTrending({ force: Boolean(force), meta: buildMeta() });
-      const rows = normalizeTrendingTickerRows(result.data || {});
+      let rows = [];
+      let source = "api";
+      try {
+        const apiPayload = await fetchTrendingTickersFromApi({ force });
+        rows = normalizeTrendingTickerRows(apiPayload || {});
+      } catch (apiError) {
+        if (!functions?.httpsCallable) throw apiError;
+        source = "callable";
+        const getTrending = functions.httpsCallable("get_trending_tickers");
+        const result = await getTrending({ force: Boolean(force), meta: buildMeta() });
+        rows = normalizeTrendingTickerRows(result.data || {});
+      }
       setOutputReady(ui.trendingList);
       renderTrendingTickerRows(rows);
-      enrichTrendingTickerRowsWithLogos(rows, functions)
+      enrichTrendingTickerRowsWithLogos(rows, functions || null)
         .then((enrichedRows) => {
           if (enrichedRows !== rows) {
             renderTrendingTickerRows(enrichedRows);
@@ -13417,7 +13632,7 @@
         })
         .catch(() => undefined);
       const count = rows.length;
-      logEvent("trending_loaded", { count });
+      logEvent("trending_loaded", { count, source });
     } catch (error) {
       setOutputReady(ui.trendingList);
       ui.trendingList.innerHTML = `<div class="small muted">Unable to load trending tickers right now.</div>`;
@@ -16683,14 +16898,15 @@
     const startedAt = Date.now();
     try {
       const headers = await buildApiAuthHeaders({ includeJson: true });
-      const response = await fetch("/api/llm/run", {
+      const providerPath = normalizeModelCouncilProviderId(provider || "openai") || "openai";
+      const response = await fetch(`/api/llm/${encodeURIComponent(providerPath)}`, {
         method: "POST",
         headers,
         credentials: "same-origin",
         body: JSON.stringify({
-          provider,
+          provider: providerPath,
           model,
-          fallbackProviders: ["openai", "gemini", "mistral", "perplexity", "other"],
+          fallbackProviders: ["openai", "claude", "gemini", "deepseek", "mistral", "perplexity", "qwen", "amazon_nova", "other"],
           messages: [
             {
               role: "system",
@@ -16955,6 +17171,9 @@
 
     const summary = [
       `<div class="small meta-line">${icon("hashtag")}<strong>Forecast ID:</strong> ${escapeHtml(forecastDoc.id || "")}</div>`,
+      `<div class="small meta-line">${icon("check-circle")}<strong>Status:</strong> ${escapeHtml(
+        sanitizeText(forecastDoc.status, 40) || "Forecast ready"
+      )}</div>`,
       `<div class="small meta-line">${icon("magic-wand")}<strong>Service:</strong> ${escapeHtml(labelForecastService(forecastDoc.service))}</div>`,
       forecastDoc.engine ? `<div class="small meta-line">${icon("electronics-chip")}<strong>Engine:</strong> ${escapeHtml(forecastDoc.engine)}</div>` : "",
       quantileLabel ? `<div class="small meta-line">${icon("percentage")}<strong>Quantiles:</strong> ${escapeHtml(quantileLabel)}</div>` : "",
@@ -17910,17 +18129,18 @@
 
   const handlePurchase = async (panel, functions) => {
     const nativeBillingProvider = isNativeIapRuntime();
-    if (nativeBillingProvider) {
+    if (!hasSessionUser()) {
       try {
         await ensureSessionUser({
-          reason: "native_iap_checkout",
+          reason: nativeBillingProvider ? "native_iap_checkout" : "web_checkout",
           message: "Initializing guest checkout session...",
         });
       } catch (error) {
         showToast(error?.message || "Unable to initialize guest checkout session.", "warn");
         return;
       }
-    } else if (!requireFullAccount("Sign in to continue.", { redirect: true })) {
+    }
+    if (!hasSessionUser()) {
       return;
     }
 
@@ -18018,7 +18238,9 @@
       showToast(error.message || "Unable to create order.", "warn");
     } finally {
       button.disabled = false;
-      button.textContent = button.dataset.labelAuth || "Choose plan";
+      button.textContent = hasFullAccount()
+        ? button.dataset.labelAuth || "Choose plan"
+        : button.dataset.labelGuest || "Continue as guest";
     }
   };
 
@@ -18062,7 +18284,18 @@
       }
       return;
     }
-    if (!requireFullAccount("Sign in to continue.", { redirect: true })) return;
+    if (!hasSessionUser()) {
+      try {
+        await ensureSessionUser({
+          reason: "web_checkout",
+          message: "Initializing guest checkout session...",
+        });
+      } catch (error) {
+        showToast(error?.message || "Unable to initialize guest checkout session.", "warn");
+        return;
+      }
+    }
+    if (!hasSessionUser()) return;
 
     if (!state.remoteFlags.stripeCheckoutEnabled) {
       showToast("Checkout is temporarily disabled.", "warn");
@@ -18244,7 +18477,18 @@
     }
 
     if (checkout !== "success" || !sessionId) return;
-    if (!requireFullAccount("Sign in to finalize checkout.", { redirect: true })) return;
+    if (!hasSessionUser()) {
+      try {
+        await ensureSessionUser({
+          reason: "checkout_finalize",
+          message: "Restoring checkout session...",
+        });
+      } catch (error) {
+        showToast(error?.message || "Unable to restore checkout session.", "warn");
+        return;
+      }
+    }
+    if (!hasSessionUser()) return;
 
     try {
       const confirm = functions.httpsCallable("confirm_stripe_checkout");
@@ -18425,7 +18669,9 @@
       bindMobileNav();
       bindMobileSidebarDrawer();
       bindMobileBottomNav();
+      bindMarketingBottomNav();
       bindNativeRewardedNavigationAds();
+      registerLegacyNativeAdInjectionHook();
       scheduleNativeInlineAdsRefresh();
       window.setInterval(scheduleNativeInlineAdsRefresh, 3500);
       initializeLanguageControls().catch(() => {});
@@ -21063,7 +21309,16 @@
 		          }
 		        }
 	      } catch (error) {
-	        showToast(error.message || "Unable to run forecast.", "warn");
+          const message = String(error?.message || "Unable to run forecast.").trim();
+          setOutputReady(ui.forecastOutput);
+          if (ui.forecastOutput) {
+            ui.forecastOutput.innerHTML = `
+              <div class="small"><strong>Status:</strong> Forecast failed</div>
+              <div class="small muted" style="margin-top:8px;">${escapeHtml(message || "Unable to run forecast.")}</div>
+              <div class="small muted" style="margin-top:8px;">AI analysis was skipped because the forecast step did not complete.</div>
+            `;
+          }
+	        showToast(message || "Unable to run forecast.", "warn");
 	      }
 	    });
 
