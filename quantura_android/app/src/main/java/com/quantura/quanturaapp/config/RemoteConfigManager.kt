@@ -1,9 +1,25 @@
 package com.quantura.quanturaapp.config
 
+import android.os.Build
+import android.util.Log
 import com.google.firebase.remoteconfig.FirebaseRemoteConfig
 import com.google.firebase.remoteconfig.FirebaseRemoteConfigSettings
 import kotlinx.coroutines.tasks.await
 import org.json.JSONObject
+
+enum class AdPlatform {
+    IOS,
+    ANDROID,
+}
+
+enum class AdFormat {
+    APP_OPEN,
+    BANNER,
+    INTERSTITIAL,
+    REWARDED,
+    REWARDED_INTERSTITIAL,
+    NATIVE,
+}
 
 data class AdUnitIds(
     val appOpen: String,
@@ -16,22 +32,70 @@ data class AdUnitIds(
     val nativeVideo: String,
 )
 
+data class AdFeatureFlags(
+    val nativeBridgeEnabled: Boolean,
+    val adsEnabled: Boolean,
+)
+
+data class AdsRemoteConfigState(
+    val adsEnabled: Boolean,
+    val adsUseRealIos: Boolean,
+    val adsUseRealAndroid: Boolean,
+    val featureFlags: AdFeatureFlags,
+    val ios: AdUnitIds,
+    val android: AdUnitIds,
+)
+
+data class AdsEnvironment(
+    val isDebugBuild: Boolean,
+    val isSimulatorOrEmulator: Boolean,
+    val isReleaseBuild: Boolean,
+)
+
+data class EffectiveAdsConfig(
+    val adsEnabled: Boolean,
+    val usingRealAds: Boolean,
+    val usingTestAds: Boolean,
+    val selectedUnits: AdUnitIds,
+    val featureFlags: AdFeatureFlags,
+    val adsEnabledTopLevel: Boolean,
+    val adsUseRealAndroid: Boolean,
+    val adsUseRealIos: Boolean,
+    val environment: AdsEnvironment,
+    val remoteConfigFetched: Boolean,
+    val remoteConfigFetchedAtMs: Long?,
+)
+
 class RemoteConfigManager(
     private val remoteConfig: FirebaseRemoteConfig?,
     private val isDebug: Boolean = false,
+    private val isEmulator: Boolean = false,
 ) {
+    private val tag = "RemoteConfigManager"
+
+    @Volatile
+    private var lastFetchSucceeded: Boolean = false
+
+    @Volatile
+    private var lastFetchAtMs: Long? = null
+
+    @Volatile
+    private var lastEffectiveConfig: EffectiveAdsConfig? = null
+
     init {
         remoteConfig?.let {
-            // 0s fetch interval in debug, 1h in production.
-            val minIntervalSeconds = if (isDebug) 0L else 3600L
+            // 0s fetch interval in debug/emulator, 1h in production.
+            val minIntervalSeconds = if (isDebug || isEmulator) 0L else 3600L
             val settings = FirebaseRemoteConfigSettings.Builder()
                 .setMinimumFetchIntervalInSeconds(minIntervalSeconds)
                 .build()
             it.setConfigSettingsAsync(settings)
             it.setDefaultsAsync(
                 mapOf(
+                    "ads_enabled" to true,
                     "ads_use_real_android" to true,
                     "ads_use_real_ios" to true,
+                    "ad_unit_ids" to defaultAdUnitIdsPayload(),
                     "play_integrity_enabled" to true,
                     "play_integrity_required" to false,
                     "play_integrity_cloud_project_number" to "",
@@ -47,46 +111,149 @@ class RemoteConfigManager(
     suspend fun fetchAndActivate(): Boolean {
         val activeRemoteConfig = remoteConfig ?: return false
         return try {
-            activeRemoteConfig.fetchAndActivate().await()
-        } catch (_: Exception) {
+            val fetched = activeRemoteConfig.fetchAndActivate().await()
+            lastFetchSucceeded = fetched
+            lastFetchAtMs = System.currentTimeMillis()
+            Log.i(tag, "[Ads][Android] RC fetched success=$fetched")
+            logEffectiveAdsConfig()
+            fetched
+        } catch (error: Exception) {
+            lastFetchSucceeded = false
+            lastFetchAtMs = System.currentTimeMillis()
+            Log.w(tag, "[Ads][Android] RC fetch failed: ${error.message}")
+            logEffectiveAdsConfig()
             false
         }
     }
 
+    fun areAdsEnabled(): Boolean = getEffectiveAdsConfig().adsEnabled
+
+    fun isUsingTestAds(): Boolean = getEffectiveAdsConfig().usingTestAds
+
+    fun getAdsEnvironment(): AdsEnvironment =
+        AdsEnvironment(
+            isDebugBuild = isDebug,
+            isSimulatorOrEmulator = isEmulator,
+            isReleaseBuild = !isDebug && !isEmulator
+        )
+
+    fun getEffectiveAdsConfig(): EffectiveAdsConfig {
+        val cached = lastEffectiveConfig
+        val state = currentRemoteConfigState()
+        val environment = getAdsEnvironment()
+        val adsEnabled = state.adsEnabled && state.featureFlags.adsEnabled
+        val usingRealAds = adsEnabled &&
+            state.adsUseRealAndroid &&
+            environment.isReleaseBuild &&
+            !environment.isSimulatorOrEmulator
+        val selectedUnits = if (usingRealAds) state.android else TEST_ANDROID_IDS
+        val effective = EffectiveAdsConfig(
+            adsEnabled = adsEnabled,
+            usingRealAds = usingRealAds,
+            usingTestAds = !usingRealAds,
+            selectedUnits = selectedUnits,
+            featureFlags = state.featureFlags,
+            adsEnabledTopLevel = state.adsEnabled,
+            adsUseRealAndroid = state.adsUseRealAndroid,
+            adsUseRealIos = state.adsUseRealIos,
+            environment = environment,
+            remoteConfigFetched = lastFetchSucceeded,
+            remoteConfigFetchedAtMs = lastFetchAtMs
+        )
+        if (cached != effective) {
+            lastEffectiveConfig = effective
+        }
+        return effective
+    }
+
+    fun debugStatus(): EffectiveAdsConfig = getEffectiveAdsConfig()
+
     fun getAdUnitIds(): AdUnitIds {
-        val useRealAndroidAds = if (isDebug) {
-            false
-        } else {
-            remoteConfig?.getBoolean("ads_use_real_android") ?: true
-        }
-        val seed = if (useRealAndroidAds) LIVE_ANDROID_IDS else DEMO_AD_IDS
-
-        val rawOverride = remoteConfig?.getString("ad_unit_ids").orEmpty()
-        if (rawOverride.isBlank()) return seed
-
-        return try {
-            val json = JSONObject(rawOverride)
-            AdUnitIds(
-                appOpen = json.optString("appOpen", seed.appOpen),
-                adaptiveBanner = json.optString("adaptiveBanner", seed.adaptiveBanner),
-                fixedBanner = json.optString("fixedBanner", seed.fixedBanner),
-                interstitial = json.optString("interstitial", seed.interstitial),
-                rewarded = json.optString("rewarded", seed.rewarded),
-                rewardedInterstitial = json.optString("rewardedInterstitial", seed.rewardedInterstitial),
-                nativeAdvanced = json.optString("nativeAdvanced", seed.nativeAdvanced),
-                nativeVideo = json.optString("nativeVideo", seed.nativeVideo),
+        val state = currentRemoteConfigState()
+        return AdUnitIds(
+            appOpen = resolveAdUnitId(
+                platform = AdPlatform.ANDROID,
+                format = AdFormat.APP_OPEN,
+                remoteConfigState = state
+            ),
+            adaptiveBanner = resolveAdUnitId(
+                platform = AdPlatform.ANDROID,
+                format = AdFormat.BANNER,
+                remoteConfigState = state
+            ),
+            fixedBanner = resolveAdUnitId(
+                platform = AdPlatform.ANDROID,
+                format = AdFormat.BANNER,
+                remoteConfigState = state
+            ),
+            interstitial = resolveAdUnitId(
+                platform = AdPlatform.ANDROID,
+                format = AdFormat.INTERSTITIAL,
+                remoteConfigState = state
+            ),
+            rewarded = resolveAdUnitId(
+                platform = AdPlatform.ANDROID,
+                format = AdFormat.REWARDED,
+                remoteConfigState = state
+            ),
+            rewardedInterstitial = resolveAdUnitId(
+                platform = AdPlatform.ANDROID,
+                format = AdFormat.REWARDED_INTERSTITIAL,
+                remoteConfigState = state
+            ),
+            nativeAdvanced = resolveAdUnitId(
+                platform = AdPlatform.ANDROID,
+                format = AdFormat.NATIVE,
+                remoteConfigState = state
+            ),
+            nativeVideo = resolveAdUnitId(
+                platform = AdPlatform.ANDROID,
+                format = AdFormat.NATIVE,
+                remoteConfigState = state
             )
-        } catch (_: Exception) {
-            seed
+        )
+    }
+
+    fun resolveAdUnitId(
+        platform: AdPlatform,
+        format: AdFormat,
+        environment: AdsEnvironment = getAdsEnvironment(),
+        remoteConfigState: AdsRemoteConfigState = currentRemoteConfigState(),
+    ): String {
+        val adsEnabled = remoteConfigState.adsEnabled && remoteConfigState.featureFlags.adsEnabled
+        val platformWantsRealAds = when (platform) {
+            AdPlatform.IOS -> remoteConfigState.adsUseRealIos
+            AdPlatform.ANDROID -> remoteConfigState.adsUseRealAndroid
         }
+        val useRealAds = adsEnabled &&
+            platformWantsRealAds &&
+            environment.isReleaseBuild &&
+            !environment.isSimulatorOrEmulator
+        val selected = when (platform) {
+            AdPlatform.IOS -> if (useRealAds) remoteConfigState.ios else TEST_IOS_IDS
+            AdPlatform.ANDROID -> if (useRealAds) remoteConfigState.android else TEST_ANDROID_IDS
+        }
+
+        val resolved = when (format) {
+            AdFormat.APP_OPEN -> selected.appOpen
+            AdFormat.BANNER -> selected.adaptiveBanner
+            AdFormat.INTERSTITIAL -> selected.interstitial
+            AdFormat.REWARDED -> selected.rewarded
+            AdFormat.REWARDED_INTERSTITIAL -> selected.rewardedInterstitial
+            AdFormat.NATIVE -> selected.nativeAdvanced
+        }
+        if (platform == AdPlatform.ANDROID) {
+            Log.i(tag, "[Ads][Android] Selected ad unit for ${format.name.lowercase()} = $resolved")
+        }
+        return resolved
     }
 
     fun isFeatureEnabled(key: String): Boolean {
-        val raw = remoteConfig?.getString("feature_flags").orEmpty().ifBlank { DEFAULT_FEATURE_FLAGS_JSON }
-        return try {
-            JSONObject(raw).optBoolean(key, false)
-        } catch (_: Exception) {
-            false
+        val flags = parseFeatureFlags()
+        return when (key) {
+            "ads_enabled" -> flags.adsEnabled
+            "native_bridge_enabled" -> flags.nativeBridgeEnabled
+            else -> false
         }
     }
 
@@ -119,28 +286,185 @@ class RemoteConfigManager(
         return value.coerceIn(0.2, 0.9)
     }
 
+    private fun currentRemoteConfigState(): AdsRemoteConfigState {
+        val adsEnabled = remoteConfig?.getBoolean("ads_enabled") ?: true
+        val adsUseRealIos = remoteConfig?.getBoolean("ads_use_real_ios") ?: true
+        val adsUseRealAndroid = remoteConfig?.getBoolean("ads_use_real_android") ?: true
+        val featureFlags = parseFeatureFlags()
+        val payload = parseAdUnitPayload(remoteConfig?.getString("ad_unit_ids").orEmpty())
+        val ios = parsePlatformUnitIds(
+            payload = payload,
+            platform = AdPlatform.IOS,
+            seed = LIVE_IOS_IDS
+        )
+        val android = parsePlatformUnitIds(
+            payload = payload,
+            platform = AdPlatform.ANDROID,
+            seed = LIVE_ANDROID_IDS
+        )
+        return AdsRemoteConfigState(
+            adsEnabled = adsEnabled,
+            adsUseRealIos = adsUseRealIos,
+            adsUseRealAndroid = adsUseRealAndroid,
+            featureFlags = featureFlags,
+            ios = ios,
+            android = android
+        )
+    }
+
+    private fun parseFeatureFlags(): AdFeatureFlags {
+        val raw = remoteConfig?.getString("feature_flags").orEmpty().ifBlank { DEFAULT_FEATURE_FLAGS_JSON }
+        return try {
+            val json = JSONObject(raw)
+            AdFeatureFlags(
+                nativeBridgeEnabled = json.optBoolean("native_bridge_enabled", true),
+                adsEnabled = json.optBoolean("ads_enabled", true)
+            )
+        } catch (_: Exception) {
+            AdFeatureFlags(nativeBridgeEnabled = true, adsEnabled = true)
+        }
+    }
+
+    private fun parseAdUnitPayload(raw: String): JSONObject? {
+        val normalized = raw.trim()
+        if (normalized.isEmpty()) return null
+        return try {
+            JSONObject(normalized)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun parsePlatformUnitIds(
+        payload: JSONObject?,
+        platform: AdPlatform,
+        seed: AdUnitIds,
+    ): AdUnitIds {
+        if (payload == null) return seed
+        val platformKey = when (platform) {
+            AdPlatform.IOS -> "ios"
+            AdPlatform.ANDROID -> "android"
+        }
+
+        val platformJson = payload.optJSONObject(platformKey)
+        if (platformJson != null) {
+            return mergeUnitIds(platformJson, seed)
+        }
+
+        // Backward compatibility for flat JSON shape.
+        return if (isFlatAdUnitPayload(payload)) mergeUnitIds(payload, seed) else seed
+    }
+
+    private fun isFlatAdUnitPayload(payload: JSONObject): Boolean {
+        val keys = listOf(
+            "appOpen",
+            "banner",
+            "adaptiveBanner",
+            "fixedBanner",
+            "interstitial",
+            "rewarded",
+            "rewardedInterstitial",
+            "native",
+            "nativeAdvanced",
+            "nativeVideo",
+        )
+        return keys.any { payload.has(it) }
+    }
+
+    private fun mergeUnitIds(json: JSONObject, seed: AdUnitIds): AdUnitIds {
+        val banner = json.optString("banner", json.optString("adaptiveBanner", seed.adaptiveBanner))
+            .trim()
+            .ifEmpty { seed.adaptiveBanner }
+        val fixedBanner = json.optString("fixedBanner", banner)
+            .trim()
+            .ifEmpty { banner }
+        val native = json.optString("native", json.optString("nativeAdvanced", seed.nativeAdvanced))
+            .trim()
+            .ifEmpty { seed.nativeAdvanced }
+        val nativeVideo = json.optString("nativeVideo", native)
+            .trim()
+            .ifEmpty { native }
+
+        return AdUnitIds(
+            appOpen = json.optString("appOpen", seed.appOpen).trim().ifEmpty { seed.appOpen },
+            adaptiveBanner = banner,
+            fixedBanner = fixedBanner,
+            interstitial = json.optString("interstitial", seed.interstitial).trim().ifEmpty { seed.interstitial },
+            rewarded = json.optString("rewarded", seed.rewarded).trim().ifEmpty { seed.rewarded },
+            rewardedInterstitial = json.optString("rewardedInterstitial", seed.rewardedInterstitial)
+                .trim()
+                .ifEmpty { seed.rewardedInterstitial },
+            nativeAdvanced = native,
+            nativeVideo = nativeVideo
+        )
+    }
+
+    private fun defaultAdUnitIdsPayload(): String {
+        return JSONObject()
+            .put("ios", toPayload(LIVE_IOS_IDS))
+            .put("android", toPayload(LIVE_ANDROID_IDS))
+            .toString()
+    }
+
+    private fun toPayload(units: AdUnitIds): JSONObject {
+        return JSONObject()
+            .put("appOpen", units.appOpen)
+            .put("banner", units.adaptiveBanner)
+            .put("interstitial", units.interstitial)
+            .put("rewarded", units.rewarded)
+            .put("rewardedInterstitial", units.rewardedInterstitial)
+            .put("native", units.nativeAdvanced)
+    }
+
+    private fun logEffectiveAdsConfig() {
+        val effective = getEffectiveAdsConfig()
+        Log.i(
+            tag,
+            "[Ads][Android] Final ad config adsEnabled=${effective.adsEnabled} " +
+                "topLevel=${effective.adsEnabledTopLevel} featureFlag=${effective.featureFlags.adsEnabled} " +
+                "useRealAndroid=${effective.adsUseRealAndroid} debug=${effective.environment.isDebugBuild} " +
+                "emulator=${effective.environment.isSimulatorOrEmulator} usingTest=${effective.usingTestAds}"
+        )
+    }
+
     companion object {
         fun create(firebaseReady: Boolean, isDebug: Boolean = false): RemoteConfigManager {
+            val isEmulator = detectEmulator()
             if (!firebaseReady) {
-                return RemoteConfigManager(remoteConfig = null, isDebug = isDebug)
+                return RemoteConfigManager(remoteConfig = null, isDebug = isDebug, isEmulator = isEmulator)
             }
             val remoteConfig = try {
                 FirebaseRemoteConfig.getInstance()
             } catch (_: Exception) {
                 null
             }
-            return RemoteConfigManager(remoteConfig = remoteConfig, isDebug = isDebug)
+            return RemoteConfigManager(
+                remoteConfig = remoteConfig,
+                isDebug = isDebug,
+                isEmulator = isEmulator
+            )
         }
 
-        private val DEMO_AD_IDS = AdUnitIds(
+        private val TEST_ANDROID_IDS = AdUnitIds(
             appOpen = "ca-app-pub-3940256099942544/9257395921",
             adaptiveBanner = "ca-app-pub-3940256099942544/9214589741",
-            fixedBanner = "ca-app-pub-3940256099942544/6300978111",
+            fixedBanner = "ca-app-pub-3940256099942544/9214589741",
             interstitial = "ca-app-pub-3940256099942544/1033173712",
             rewarded = "ca-app-pub-3940256099942544/5224354917",
             rewardedInterstitial = "ca-app-pub-3940256099942544/5354046379",
             nativeAdvanced = "ca-app-pub-3940256099942544/2247696110",
-            nativeVideo = "ca-app-pub-3940256099942544/1044960115",
+            nativeVideo = "ca-app-pub-3940256099942544/2247696110",
+        )
+
+        private val TEST_IOS_IDS = AdUnitIds(
+            appOpen = "ca-app-pub-3940256099942544/5575463023",
+            adaptiveBanner = "ca-app-pub-3940256099942544/2435281174",
+            fixedBanner = "ca-app-pub-3940256099942544/2435281174",
+            interstitial = "ca-app-pub-3940256099942544/4411468910",
+            rewarded = "ca-app-pub-3940256099942544/1712485313",
+            rewardedInterstitial = "ca-app-pub-3940256099942544/6978759866",
+            nativeAdvanced = "ca-app-pub-3940256099942544/3986624511",
+            nativeVideo = "ca-app-pub-3940256099942544/3986624511",
         )
 
         private val LIVE_ANDROID_IDS = AdUnitIds(
@@ -154,7 +478,40 @@ class RemoteConfigManager(
             nativeVideo = "ca-app-pub-5322412772082850/1144501483",
         )
 
+        private val LIVE_IOS_IDS = AdUnitIds(
+            appOpen = "ca-app-pub-5322412772082850/9489895363",
+            adaptiveBanner = "ca-app-pub-5322412772082850/1256686703",
+            fixedBanner = "ca-app-pub-5322412772082850/1256686703",
+            interstitial = "ca-app-pub-5322412772082850/8775579497",
+            rewarded = "ca-app-pub-5322412772082850/6928504142",
+            rewardedInterstitial = "ca-app-pub-5322412772082850/1200846386",
+            nativeAdvanced = "ca-app-pub-5322412772082850/5615422478",
+            nativeVideo = "ca-app-pub-5322412772082850/5615422478",
+        )
+
         private const val DEFAULT_FEATURE_FLAGS_JSON =
             """{"native_bridge_enabled":true,"ads_enabled":true}"""
+
+        private fun detectEmulator(): Boolean {
+            val fingerprint = Build.FINGERPRINT.lowercase()
+            val model = Build.MODEL.lowercase()
+            val brand = Build.BRAND.lowercase()
+            val device = Build.DEVICE.lowercase()
+            val product = Build.PRODUCT.lowercase()
+            val hardware = Build.HARDWARE.lowercase()
+            val manufacturer = Build.MANUFACTURER.lowercase()
+            return fingerprint.contains("generic") ||
+                fingerprint.contains("emulator") ||
+                fingerprint.contains("vbox") ||
+                model.contains("emulator") ||
+                model.contains("sdk_gphone") ||
+                model.contains("android sdk built for x86") ||
+                manufacturer.contains("genymotion") ||
+                hardware.contains("goldfish") ||
+                hardware.contains("ranchu") ||
+                (brand.startsWith("generic") && device.startsWith("generic")) ||
+                product.contains("sdk") ||
+                product.contains("simulator")
+        }
     }
 }

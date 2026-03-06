@@ -585,7 +585,7 @@
       sidebar_ticker_intelligence: "Ticker",
       sidebar_indicators: "Indicators",
       sidebar_trending: "Trending",
-      sidebar_news_data: "News and data",
+      sidebar_news_data: "Historical Data Download",
       sidebar_corporate_events: "Earnings calendar",
       sidebar_market_headlines: "Market headlines",
       sidebar_ask_gpt5: "Model Council",
@@ -1427,7 +1427,7 @@
 
     const fxSidebarLink = document.querySelector('[data-panel-target="fx"]');
     if (fxSidebarLink) {
-      fxSidebarLink.setAttribute("href", "/forecasting?panel=fx");
+      fxSidebarLink.setAttribute("href", "/tools/fx");
     }
 
     if (panelColumn.querySelector('[data-panel="fx"]')) return;
@@ -2265,64 +2265,11 @@
 		    );
 		    if (buttons.length === 0 || panels.length === 0) return;
 
-		    const routerKey = String(panelsRoot.dataset.panelRouter || "").trim();
-		    const routers = {
-		      terminal: {
-		        defaultPanel: "forecast",
-		        panelToPath: {
-		          forecast: "/forecasting",
-              ticker: "/ticker-intelligence",
-              predictions: "/predictions",
-		          indicators: "/indicators",
-              trending: "/trending",
-		          news: "/news",
-              "events-calendar": "/events-calendar",
-              "market-headlines": "/market-headlines",
-              "ticker-query": "/model-council",
-		          options: "/options",
-              fx: "/forecasting",
-		          learn: "/studio",
-            },
-            pathAliases: {
-              "/ticker-intelligence": "ticker",
-              "/predictions": "predictions",
-              "/ticker-query": "ticker-query",
-              "/model-council": "ticker-query",
-              "/tools/fx": "fx",
-            },
-          },
-			      dashboard: {
-			        defaultPanel: "orders",
-			        panelToPath: {
-			          orders: "/dashboard",
-			          watchlist: "/watchlist",
-			          productivity: "/productivity",
-			          collaboration: "/collaboration",
-			          uploads: "/uploads",
-			          autopilot: "/autopilot",
-			          notifications: "/notifications",
-			          auth: "/account",
-			        },
-			      },
-		    };
-		    const router = routers[routerKey] || null;
-		    const pathToPanel = (() => {
-		      if (!router) return {};
-		      const mapping = {};
-		      Object.entries(router.panelToPath || {}).forEach(([panel, path]) => {
-		        mapping[normalizePath(String(path))] = String(panel);
-		      });
-          Object.entries(router.pathAliases || {}).forEach(([path, panel]) => {
-            mapping[normalizePath(String(path))] = String(panel);
-          });
-		      return mapping;
-		    })();
+	    const routerKey = String(panelsRoot.dataset.panelRouter || "").trim();
+	    const router = getPanelRouterConfig(routerKey);
+	    const pathToPanel = buildPathToPanelMap(router);
         const defaultPanelPath = router?.defaultPanel ? normalizePath(router.panelToPath?.[router.defaultPanel] || "") : "";
-        const normalizePanelParam = (value) => {
-          const panel = String(value || "").trim();
-          if (panel === "ticker-intelligence") return "ticker";
-          return panel;
-        };
+        const normalizePanelParam = (value) => normalizePanelName(value);
         const panelQueryValueForRoute = (panel) => {
           const next = String(panel || "").trim();
           if (!next || !router?.panelToPath?.[next]) return "";
@@ -2545,6 +2492,7 @@
         [
           "/terminal",
           "/forecasting",
+          "/terminal/fx",
           "/ticker-intelligence",
           "/predictions",
           "/indicators",
@@ -2560,7 +2508,25 @@
       ) {
         return "terminal";
       }
-      if (["/dashboard", "/account", "/watchlist", "/productivity", "/collaboration", "/uploads", "/autopilot", "/notifications"].includes(path)) {
+      if (
+        [
+          "/dashboard",
+          "/dashboard/orders",
+          "/dashboard/profile",
+          "/dashboard/watchlist",
+          "/dashboard/productivity",
+          "/dashboard/collaboration",
+          "/dashboard/uploads",
+          "/dashboard/notifications",
+          "/account",
+          "/watchlist",
+          "/productivity",
+          "/collaboration",
+          "/uploads",
+          "/autopilot",
+          "/notifications",
+        ].includes(path)
+      ) {
         return "dashboard";
       }
       return "";
@@ -2601,10 +2567,9 @@
         "ticker-query",
         "/model-council",
         "fx",
-        "/forecasting?panel=fx",
         "/tools/fx",
       ],
-      dashboard: ["orders", "profile", "watchlist", "uploads", "notifications", "/explore"],
+      dashboard: ["orders", "profile", "watchlist", "collaboration", "notifications", "/explore"],
     };
     const preferredPanels = preferredByRouter[routerName] || [];
     const selected = preferredPanels
@@ -2621,6 +2586,19 @@
 
     if (!selected.length) return;
 
+    const currentPath = normalizePath(window.location.pathname || "/");
+    const currentSearch = String(window.location.search || "");
+    const router = getPanelRouterConfig(routerName);
+    const activePanel = resolvePanelFromLocation(router, currentPath, currentSearch);
+    const currentQuery = (() => {
+      try {
+        const params = new URLSearchParams(currentSearch);
+        return params.toString();
+      } catch (error) {
+        return "";
+      }
+    })();
+
     inner.innerHTML = selected
       .map((link) => {
         const panel = String(link.dataset.panelTarget || "").trim();
@@ -2631,19 +2609,26 @@
           "Currency conversion": "FX",
           "Model Council": "Council",
           "Watchlist and alerts": "Watchlist",
-          "News and data": "News",
+          "News and data": "History",
+          "Historical Data Download": "History",
           "Earnings calendar": "Earnings",
           Productivity: "Tasks",
         };
         const compactLabel = compactLabelMap[label] || label;
         const panelAttr = panel ? ` data-panel-target="${escapeHtml(panel)}"` : "";
         const hrefPath = normalizePath(href.split("?")[0].split("#")[0] || "");
-        const hrefQuery = href.includes("?") ? href.split("?")[1].split("#")[0] : "";
-        const currentQuery = String(window.location.search || "").replace(/^\?/, "");
-        const hrefMatchesPath = Boolean(hrefPath && hrefPath === path);
-        const hrefMatchesQuery = !hrefQuery || hrefQuery === currentQuery;
-        const activeClass =
-          link.classList.contains("active") || (hrefMatchesPath && hrefMatchesQuery) ? " active" : "";
+        const hrefQuery = (() => {
+          try {
+            const raw = href.includes("?") ? href.split("?")[1].split("#")[0] : "";
+            return new URLSearchParams(raw).toString();
+          } catch (error) {
+            return "";
+          }
+        })();
+        const normalizedPanel = normalizePanelName(panel);
+        const activeByPanel = Boolean(activePanel && normalizedPanel && activePanel === normalizedPanel);
+        const activeByRoute = !activeByPanel && Boolean(hrefPath && hrefPath === currentPath && hrefQuery === currentQuery);
+        const activeClass = activeByPanel || activeByRoute ? " active" : "";
         return `
           <a class="mobile-bottom-link${activeClass}" href="${escapeHtml(href)}"${panelAttr} aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">
             ${iconMarkup}
@@ -8262,6 +8247,99 @@
     return pathname;
   };
 
+  const PANEL_ROUTERS = Object.freeze({
+    terminal: {
+      defaultPanel: "forecast",
+      panelToPath: {
+        forecast: "/forecasting",
+        ticker: "/ticker-intelligence",
+        predictions: "/predictions",
+        indicators: "/indicators",
+        trending: "/trending",
+        news: "/news",
+        "events-calendar": "/events-calendar",
+        "market-headlines": "/market-headlines",
+        "ticker-query": "/model-council",
+        options: "/options",
+        fx: "/tools/fx",
+        learn: "/studio",
+      },
+      pathAliases: {
+        "/ticker-intelligence": "ticker",
+        "/predictions": "predictions",
+        "/ticker-query": "ticker-query",
+        "/model-council": "ticker-query",
+        "/tools/fx": "fx",
+        "/terminal/fx": "fx",
+      },
+    },
+    dashboard: {
+      defaultPanel: "orders",
+      panelToPath: {
+        orders: "/dashboard",
+        profile: "/dashboard",
+        watchlist: "/watchlist",
+        productivity: "/productivity",
+        collaboration: "/collaboration",
+        uploads: "/uploads",
+        autopilot: "/autopilot",
+        notifications: "/notifications",
+        auth: "/account",
+      },
+      pathAliases: {
+        "/dashboard/orders": "orders",
+        "/dashboard/profile": "profile",
+        "/dashboard/watchlist": "watchlist",
+        "/dashboard/productivity": "productivity",
+        "/dashboard/collaboration": "collaboration",
+        "/dashboard/uploads": "uploads",
+      },
+    },
+  });
+
+  const normalizePanelName = (value) => {
+    const panel = String(value || "").trim();
+    if (panel === "ticker-intelligence") return "ticker";
+    return panel;
+  };
+
+  const getPanelRouterConfig = (routerKey) => {
+    const key = String(routerKey || "").trim();
+    return PANEL_ROUTERS[key] || null;
+  };
+
+  const buildPathToPanelMap = (router) => {
+    if (!router) return {};
+    const mapping = {};
+    Object.entries(router.panelToPath || {}).forEach(([panel, path]) => {
+      const key = normalizePath(String(path));
+      if (!mapping[key]) {
+        mapping[key] = String(panel);
+      }
+    });
+    Object.entries(router.pathAliases || {}).forEach(([path, panel]) => {
+      mapping[normalizePath(String(path))] = String(panel);
+    });
+    return mapping;
+  };
+
+  const resolvePanelFromLocation = (router, path, search) => {
+    if (!router) return "";
+    const normalizedPath = normalizePath(path || "/");
+    const pathToPanel = buildPathToPanelMap(router);
+    const panelFromPath = normalizePanelName(pathToPanel[normalizedPath] || "");
+    let panelFromQuery = "";
+    try {
+      panelFromQuery = normalizePanelName(new URLSearchParams(search || "").get("panel"));
+    } catch (error) {
+      panelFromQuery = "";
+    }
+    const defaultPanelPath = normalizePath(router.panelToPath?.[router.defaultPanel] || "");
+    if (panelFromQuery && normalizedPath === defaultPanelPath) return panelFromQuery;
+    if (panelFromPath) return panelFromPath;
+    return panelFromQuery || "";
+  };
+
   const FOOTER_SOCIAL_LINKS = [
     {
       key: "tiktok",
@@ -8307,6 +8385,7 @@
     navs.forEach((nav) => {
       nav.innerHTML = `
         <a href="/forecasting" data-analytics="nav_terminal">${icon("candlestick-chart")}<span>Terminal</span></a>
+        <a href="/dashboard" data-analytics="nav_dashboard">${icon("dashboard-dots")}<span>Dashboard</span></a>
         <a href="/explore" data-analytics="nav_explore">${icon("binocular")}<span>Explore</span></a>
         <a href="/research" data-analytics="nav_research">${icon("bookmark-book")}<span>Research</span></a>
         <a href="/blog" data-analytics="nav_blog">${icon("page")}<span>Blog</span></a>
@@ -10611,7 +10690,7 @@
     if (!symbol) {
       if (ui.intelOutput) ui.intelOutput.innerHTML = `<div class="small muted">Load a ticker to see company context.</div>`;
       if (ui.tickerIntelligenceOutput) {
-        ui.tickerIntelligenceOutput.innerHTML = `<div class="small muted">Load a ticker to generate institutional intelligence.</div>`;
+        ui.tickerIntelligenceOutput.innerHTML = `<div class="small muted">Load a ticker to generate ticker context.</div>`;
       }
       if (ui.tickerPredictionsOutput) {
         state.tickerContext.predictionsTicker = "";
@@ -10627,7 +10706,7 @@
 
     try {
       if (ui.intelOutput) setOutputLoading(ui.intelOutput, "Loading company context...");
-      if (ui.tickerIntelligenceOutput) setOutputLoading(ui.tickerIntelligenceOutput, "Loading institutional intelligence...");
+      if (ui.tickerIntelligenceOutput) setOutputLoading(ui.tickerIntelligenceOutput, "Loading ticker context...");
 
       const intelPayload = await fetchTickerIntelPayload(functions, symbol, { force });
       if (ui.intelOutput) setOutputReady(ui.intelOutput);
@@ -10644,7 +10723,7 @@
       }
       if (ui.tickerIntelligenceOutput) {
         setOutputReady(ui.tickerIntelligenceOutput);
-        ui.tickerIntelligenceOutput.innerHTML = `<div class="small muted">Unable to load institutional intelligence right now.</div>`;
+        ui.tickerIntelligenceOutput.innerHTML = `<div class="small muted">Unable to load ticker context right now.</div>`;
       }
       if (ui.tickerPredictionsOutput && state.intelActiveTab === "predictions") {
         renderPredictionsOutput({
@@ -11280,6 +11359,35 @@
     return out;
   };
 
+  const extractRowsFromEarningsPayload = (payload) => {
+    if (Array.isArray(payload?.days)) {
+      const rows = [];
+      payload.days.forEach((dayEntry) => {
+        const day = dayEntry && typeof dayEntry === "object" ? dayEntry : {};
+        const date = sanitizeText(day.date, 20);
+        const dayItems = Array.isArray(day.items) ? day.items : [];
+        dayItems.forEach((item) => {
+          if (!item || typeof item !== "object") return;
+          rows.push({
+            ...(item || {}),
+            date: sanitizeText(item.date, 20) || date,
+            name: sanitizeText(item.company || item.name, 180),
+          });
+        });
+      });
+      if (rows.length) return rows;
+    }
+    return Array.isArray(payload?.items) ? payload.items : [];
+  };
+
+  const logEarningsUiState = (event, details = {}) => {
+    try {
+      console.info("[EarningsUI]", event, details);
+    } catch (error) {
+      // Ignore logging failures.
+    }
+  };
+
   const getEarningsFollowStorageKey = () => {
     const uid = String(state.user?.uid || "anon").trim() || "anon";
     return `quantura:earnings:follows:${uid}`;
@@ -11520,6 +11628,15 @@
       state.earningsCalendar.pageByDate[state.earningsCalendar.selectedDate] = 1;
     }
 
+    logEarningsUiState("render", {
+      rangeStart,
+      rangeEnd,
+      selectedDate: state.earningsCalendar.selectedDate || "",
+      rangeDays: rangeDates.length,
+      totalRows: Array.isArray(state.earningsCalendar.rows) ? state.earningsCalendar.rows.length : 0,
+      search: String(state.earningsCalendar.search || ""),
+    });
+
     renderEarningsDayStrip(filteredByDate);
     renderEarningsTable(filteredByDate);
   };
@@ -11532,6 +11649,7 @@
     const cacheKey = `${start}_${end}`;
 
     await loadEarningsFollowSet({ force: false });
+    logEarningsUiState("load_begin", { start, end, force: Boolean(force) });
 
     const cached = state.earningsCalendar.requestCache.get(cacheKey);
     if (!force && cached && Array.isArray(cached.rows)) {
@@ -11543,6 +11661,7 @@
         ui.eventsCalendarStatus.textContent = `Showing ${cached.rows.length} earnings rows (cached).`;
       }
       renderEarningsCalendar();
+      logEarningsUiState("load_cache_hit", { start, end, rows: cached.rows.length });
       return;
     }
 
@@ -11571,11 +11690,18 @@
         }),
       });
       const refreshPayload = await refreshResp.json().catch(() => ({}));
+      logEarningsUiState("load_response", {
+        start,
+        end,
+        status: refreshResp.status,
+        ok: refreshResp.ok,
+        requestId: refreshPayload?.requestId || "",
+      });
       if (!refreshResp.ok) {
         throw new Error(String(refreshPayload?.error || "Unable to refresh earnings cache.").trim());
       }
 
-      const normalizedRows = (Array.isArray(refreshPayload?.items) ? refreshPayload.items : [])
+      const normalizedRows = extractRowsFromEarningsPayload(refreshPayload)
         .map((row) => normalizeEarningsRow(row))
         .filter(Boolean);
       state.earningsCalendar.requestCache.set(cacheKey, {
@@ -11592,8 +11718,17 @@
       setOutputReady(ui.eventsCalendarOutput);
       renderEarningsCalendar();
       if (ui.eventsCalendarStatus) {
-        ui.eventsCalendarStatus.textContent = `Loaded ${normalizedRows.length} earnings row${normalizedRows.length === 1 ? "" : "s"}.`;
+        const dayCount = Array.isArray(refreshPayload?.days) ? refreshPayload.days.length : state.earningsCalendar.rangeDates.length;
+        ui.eventsCalendarStatus.textContent = `Loaded ${normalizedRows.length} earnings row${
+          normalizedRows.length === 1 ? "" : "s"
+        } across ${dayCount} day${dayCount === 1 ? "" : "s"}.`;
       }
+      logEarningsUiState("load_success", {
+        start,
+        end,
+        rows: normalizedRows.length,
+        days: Array.isArray(refreshPayload?.days) ? refreshPayload.days.length : 0,
+      });
       logEvent("earnings_calendar_loaded", {
         rangeStart: start,
         rangeEnd: end,
@@ -11620,9 +11755,15 @@
           : rateLimited
           ? "Earnings provider is rate-limited right now. Try again shortly."
           : "Unable to load earnings calendar right now.";
-        ui.eventsCalendarOutput.innerHTML = `<div class="small muted">${escapeHtml(detail)}</div>`;
+        ui.eventsCalendarOutput.innerHTML = `
+          <div class="small muted">${escapeHtml(detail)}</div>
+          <div style="margin-top:10px;">
+            <button class="cta secondary small" type="button" data-earnings-retry="1">Retry</button>
+          </div>
+        `;
         if (ui.eventsCalendarStatus) ui.eventsCalendarStatus.textContent = detail;
       }
+      logEarningsUiState("load_error", { start, end, message, cachedRows: cachedRows.length });
       if (notify) showToast(message || "Unable to load earnings calendar.", "warn");
     } finally {
       if (state.earningsCalendar.inFlightController === controller) {
@@ -12985,8 +13126,12 @@
       });
       const payload = await response.json().catch(() => ({}));
       if (response.ok) {
+        const answerText = String(payload?.answer || payload?.text || "").trim();
+        if (!answerText) {
+          throw new Error("Empty Model Council response.");
+        }
         return {
-          answer: String(payload?.answer || "").trim(),
+          answer: answerText,
           model: normalizeAiModelId(payload?.model || model) || model,
           provider: normalizeModelCouncilProviderId(payload?.provider || provider || "openai"),
           usage: payload?.usage && typeof payload.usage === "object" ? payload.usage : {},
@@ -13028,7 +13173,7 @@
           maxTokens: 900,
           webSearch: true,
           stream: true,
-          background: true,
+          background: false,
         },
       }),
     });
@@ -21720,6 +21865,11 @@
       renderEarningsCalendar();
     });
     ui.eventsCalendarOutput?.addEventListener("click", async (event) => {
+      const retryButton = event.target.closest("[data-earnings-retry]");
+      if (retryButton) {
+        await loadEarningsCalendar({ force: true, notify: true });
+        return;
+      }
       const followButton = event.target.closest("[data-earnings-follow]");
       if (followButton) {
         const symbol = String(followButton.getAttribute("data-earnings-follow") || "").trim();

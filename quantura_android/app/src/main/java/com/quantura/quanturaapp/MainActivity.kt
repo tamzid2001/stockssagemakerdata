@@ -2,6 +2,7 @@ package com.quantura.quanturaapp
 
 import android.Manifest
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -18,6 +19,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,6 +31,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -68,9 +71,12 @@ import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.OAuthProvider
 import com.google.firebase.auth.UserProfileChangeRequest
 import com.google.firebase.messaging.FirebaseMessaging
+import com.quantura.quanturaapp.ads.AdFormatStatusSnapshot
 import com.quantura.quanturaapp.ads.AdManager
 import com.quantura.quanturaapp.ads.BannerAdView
 import com.quantura.quanturaapp.auth.PlayIntegrityClient
+import com.quantura.quanturaapp.config.AdFormat
+import com.quantura.quanturaapp.config.AdPlatform
 import com.quantura.quanturaapp.config.RemoteConfigManager
 import com.quantura.quanturaapp.iap.PlayBillingIapService
 import com.quantura.quanturaapp.messaging.InactivityNotificationScheduler
@@ -79,6 +85,7 @@ import com.quantura.quanturaapp.messaging.QuanturaFcmTokenHolder
 import com.quantura.quanturaapp.messaging.QuanturaMessagingService
 import com.quantura.quanturaapp.web.QuanturaJavascriptBridge
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -97,8 +104,48 @@ private enum class EmailDialogMode {
     SIGN_UP,
 }
 
+private data class AdsQaFormatRow(
+    val format: String,
+    val adUnitId: String,
+    val loadStatus: String,
+    val showStatus: String,
+)
+
+private data class AdsQaSnapshot(
+    val remoteConfigFetched: Boolean,
+    val remoteConfigFetchedAtMs: Long?,
+    val adsEnabled: Boolean,
+    val adsEnabledTopLevel: Boolean,
+    val featureFlagAdsEnabled: Boolean,
+    val usingRealAds: Boolean,
+    val usingTestAds: Boolean,
+    val isDebugBuild: Boolean,
+    val isEmulator: Boolean,
+    val rows: List<AdsQaFormatRow>,
+) {
+    companion object {
+        fun empty(): AdsQaSnapshot {
+            return AdsQaSnapshot(
+                remoteConfigFetched = false,
+                remoteConfigFetchedAtMs = null,
+                adsEnabled = false,
+                adsEnabledTopLevel = false,
+                featureFlagAdsEnabled = false,
+                usingRealAds = false,
+                usingTestAds = true,
+                isDebugBuild = false,
+                isEmulator = false,
+                rows = emptyList()
+            )
+        }
+    }
+}
+
 class MainActivity : ComponentActivity() {
     private val appContainer by lazy { (application as QuanturaApplication).container }
+    private val isDebugBuild by lazy {
+        (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+    }
     private val firebaseAuth by lazy { FirebaseAuth.getInstance() }
     private val playBillingIapService by lazy { PlayBillingIapService(applicationContext) }
     private val playIntegrityClient by lazy { PlayIntegrityClient(applicationContext) }
@@ -124,6 +171,8 @@ class MainActivity : ComponentActivity() {
     private var usernameValue by mutableStateOf("")
     private var passwordValue by mutableStateOf("")
     private var confirmPasswordValue by mutableStateOf("")
+    private var adsQaDialogVisible by mutableStateOf(false)
+    private var adsQaSnapshot by mutableStateOf(AdsQaSnapshot.empty())
 
     private val googleSignInLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -145,6 +194,7 @@ class MainActivity : ComponentActivity() {
             appContainer.adManager.primeAds(this@MainActivity)
             appContainer.appOpenAdManager.loadAdIfNeeded()
             refreshBannerAdVisibility()
+            refreshAdsQaSnapshot()
         }
 
         val deepLinkUrl = intent?.getStringExtra(QuanturaMessagingService.EXTRA_DEEP_LINK_URL)
@@ -231,6 +281,35 @@ class MainActivity : ComponentActivity() {
                                         signInWithEmail(emailValue, passwordValue)
                                     }
                                 },
+                            )
+                        }
+
+                        if (isDebugBuild) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 12.dp, vertical = 92.dp),
+                                contentAlignment = Alignment.BottomEnd,
+                            ) {
+                                OutlinedButton(
+                                    onClick = {
+                                        refreshAdsQaSnapshot()
+                                        adsQaDialogVisible = true
+                                    },
+                                    enabled = !authBusy,
+                                    shape = RoundedCornerShape(14.dp),
+                                ) {
+                                    Text("Ads QA")
+                                }
+                            }
+                        }
+
+                        if (adsQaDialogVisible) {
+                            AdsQaDialog(
+                                snapshot = adsQaSnapshot,
+                                onRefresh = { refreshAdsQaSnapshot() },
+                                onTestAll = { testAllAdFormatsFromQaPanel() },
+                                onDismiss = { adsQaDialogVisible = false },
                             )
                         }
                     }
@@ -1049,6 +1128,71 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun refreshAdsQaSnapshot() {
+        val effective = appContainer.remoteConfigManager.debugStatus()
+        val adRowsByFormat: Map<String, AdFormatStatusSnapshot> =
+            appContainer.adManager.debugStatusSnapshots().associateBy { it.format.lowercase() }
+        val adUnitsByFormat = linkedMapOf(
+            "app_open" to appContainer.remoteConfigManager.resolveAdUnitId(
+                platform = AdPlatform.ANDROID,
+                format = AdFormat.APP_OPEN
+            ),
+            "banner" to appContainer.remoteConfigManager.resolveAdUnitId(
+                platform = AdPlatform.ANDROID,
+                format = AdFormat.BANNER
+            ),
+            "interstitial" to appContainer.remoteConfigManager.resolveAdUnitId(
+                platform = AdPlatform.ANDROID,
+                format = AdFormat.INTERSTITIAL
+            ),
+            "rewarded" to appContainer.remoteConfigManager.resolveAdUnitId(
+                platform = AdPlatform.ANDROID,
+                format = AdFormat.REWARDED
+            ),
+            "rewarded_interstitial" to appContainer.remoteConfigManager.resolveAdUnitId(
+                platform = AdPlatform.ANDROID,
+                format = AdFormat.REWARDED_INTERSTITIAL
+            ),
+            "native" to appContainer.remoteConfigManager.resolveAdUnitId(
+                platform = AdPlatform.ANDROID,
+                format = AdFormat.NATIVE
+            ),
+        )
+
+        val rows = adUnitsByFormat.map { (formatKey, adUnitId) ->
+            val status = adRowsByFormat[formatKey]
+            AdsQaFormatRow(
+                format = formatKey,
+                adUnitId = adUnitId,
+                loadStatus = status?.lastLoadStatus ?: "idle",
+                showStatus = status?.lastShowStatus ?: "idle",
+            )
+        }
+
+        adsQaSnapshot = AdsQaSnapshot(
+            remoteConfigFetched = effective.remoteConfigFetched,
+            remoteConfigFetchedAtMs = effective.remoteConfigFetchedAtMs,
+            adsEnabled = effective.adsEnabled,
+            adsEnabledTopLevel = effective.adsEnabledTopLevel,
+            featureFlagAdsEnabled = effective.featureFlags.adsEnabled,
+            usingRealAds = effective.usingRealAds,
+            usingTestAds = effective.usingTestAds,
+            isDebugBuild = effective.environment.isDebugBuild,
+            isEmulator = effective.environment.isSimulatorOrEmulator,
+            rows = rows,
+        )
+    }
+
+    private fun testAllAdFormatsFromQaPanel() {
+        lifecycleScope.launch {
+            appContainer.adManager.preloadAllFormatsForQa(this@MainActivity)
+            appContainer.appOpenAdManager.loadAdIfNeeded()
+            bannerAdViewRef?.loadAd(appContainer.remoteConfigManager)
+            delay(600)
+            refreshAdsQaSnapshot()
+        }
+    }
+
     private fun syncNotificationSession(forcePing: Boolean) {
         val user = firebaseAuth.currentUser ?: return
         val now = System.currentTimeMillis()
@@ -1136,6 +1280,7 @@ class MainActivity : ComponentActivity() {
         InactivityNotificationScheduler.reschedule(this)
         syncNotificationSession(forcePing = true)
         refreshBannerAdVisibility()
+        refreshAdsQaSnapshot()
     }
 
     override fun onDestroy() {
@@ -1514,6 +1659,64 @@ private fun EmailSignInDialog(
         dismissButton = {
             TextButton(onClick = onDismiss, enabled = !isBusy) {
                 Text("Cancel")
+            }
+        },
+    )
+}
+
+@Composable
+private fun AdsQaDialog(
+    snapshot: AdsQaSnapshot,
+    onRefresh: () -> Unit,
+    onTestAll: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Ads QA") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = "Remote Config fetched=${snapshot.remoteConfigFetched} " +
+                        "adsEnabled=${snapshot.adsEnabled} topLevel=${snapshot.adsEnabledTopLevel} " +
+                        "featureFlag=${snapshot.featureFlagAdsEnabled}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Text(
+                    text = "usingRealAds=${snapshot.usingRealAds} usingTestAds=${snapshot.usingTestAds} " +
+                        "debug=${snapshot.isDebugBuild} emulator=${snapshot.isEmulator}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                snapshot.rows.forEach { row ->
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = row.format.replace("_", " ").replaceFirstChar { it.uppercase() },
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            text = row.adUnitId,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            text = "load=${row.loadStatus} · show=${row.showStatus}",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                TextButton(onClick = onRefresh) { Text("Refresh") }
+                TextButton(onClick = onTestAll) { Text("Load all ads") }
+                TextButton(onClick = onDismiss) { Text("Close") }
             }
         },
     )

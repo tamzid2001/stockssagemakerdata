@@ -394,29 +394,78 @@ enum FirebaseBootstrap {
             return true
         }
 
-        let options: FirebaseOptions? = {
-            let candidates = [
-                ("GoogleService-Info", "plist"),
-                ("GoogleService-Info.local", "plist"),
-            ]
-            for candidate in candidates {
-                if let path = Bundle.main.path(forResource: candidate.0, ofType: candidate.1),
-                   let parsed = FirebaseOptions(contentsOfFile: path) {
-                    print("[Firebase][iOS] Using Firebase config \(candidate.0).\(candidate.1).")
-                    return parsed
-                }
-            }
-            return nil
-        }()
+        let options = optionsFromInfoPlist()
 
         guard let options else {
-            print("[Firebase][iOS] Firebase disabled: missing GoogleService-Info(.local).plist in app bundle.")
+            print("[Firebase][iOS] Firebase disabled: missing valid Firebase keys in app Info.plist.")
+            return false
+        }
+
+        guard validate(options, source: "Info.plist") else {
+            print("[Firebase][iOS] Firebase disabled: invalid Firebase keys in app Info.plist.")
             return false
         }
 
         FirebaseApp.configure(options: options)
         print("[Firebase][iOS] Firebase configured successfully.")
         return FirebaseApp.app() != nil
+    }
+
+    private static func optionsFromInfoPlist() -> FirebaseOptions? {
+        guard let info = Bundle.main.infoDictionary else {
+            return nil
+        }
+        func value(_ key: String) -> String {
+            (info[key] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        }
+
+        let googleAppID = value("GOOGLE_APP_ID")
+        let gcmSenderID = value("GCM_SENDER_ID")
+        let apiKey = value("API_KEY")
+        let projectID = value("PROJECT_ID")
+        let clientID = value("CLIENT_ID")
+        let storageBucket = value("STORAGE_BUCKET")
+
+        guard !googleAppID.isEmpty, !gcmSenderID.isEmpty, !apiKey.isEmpty else {
+            return nil
+        }
+
+        let options = FirebaseOptions(googleAppID: googleAppID, gcmSenderID: gcmSenderID)
+        options.apiKey = apiKey
+        options.projectID = projectID.isEmpty ? nil : projectID
+        options.clientID = clientID.isEmpty ? nil : clientID
+        options.bundleID = Bundle.main.bundleIdentifier ?? value("BUNDLE_ID")
+        options.storageBucket = storageBucket.isEmpty ? nil : storageBucket
+        return options
+    }
+
+    private static func validate(_ options: FirebaseOptions, source: String) -> Bool {
+        let apiKey = (options.apiKey ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let apiKeyRegex = #"^A[0-9A-Za-z_-]{38}$"#
+        guard apiKey.range(of: apiKeyRegex, options: .regularExpression) != nil else {
+            print("[Firebase][iOS] Invalid API_KEY in \(source): expected 39 chars and prefix 'A'.")
+            return false
+        }
+
+        let googleAppID = options.googleAppID.trimmingCharacters(in: .whitespacesAndNewlines)
+        if googleAppID.isEmpty || googleAppID.contains("REPLACE_WITH_") {
+            print("[Firebase][iOS] Invalid GOOGLE_APP_ID in \(source).")
+            return false
+        }
+
+        let projectID = options.projectID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if projectID.isEmpty || projectID.contains("REPLACE_WITH_") {
+            print("[Firebase][iOS] Invalid PROJECT_ID in \(source).")
+            return false
+        }
+
+        let gcmSenderID = options.gcmSenderID.trimmingCharacters(in: .whitespacesAndNewlines)
+        if gcmSenderID.isEmpty || gcmSenderID.contains("REPLACE_WITH_") {
+            print("[Firebase][iOS] Invalid GCM_SENDER_ID in \(source).")
+            return false
+        }
+
+        return true
     }
 }
 
@@ -428,7 +477,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     ) -> Bool {
         let firebaseReady = FirebaseBootstrap.configureIfAvailable()
 #if canImport(GoogleMobileAds)
-        #if DEBUG
+        #if DEBUG || targetEnvironment(simulator)
         MobileAds.shared.requestConfiguration.testDeviceIdentifiers = ["SIMULATOR"]
         #endif
         MobileAds.shared.start { status in
