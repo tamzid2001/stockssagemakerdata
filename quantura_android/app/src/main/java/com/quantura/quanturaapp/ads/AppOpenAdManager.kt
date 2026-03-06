@@ -79,6 +79,8 @@ class AppOpenAdManager(
                     Log.d(tag, "App open ad load succeeded.")
                     Log.i(tag, "[Ads][Android] Load success for app_open")
                     AdDebugStatusRegistry.updateLoad("app_open", "loaded")
+                    // If app is already foregrounded, attempt an immediate presentation.
+                    showAdIfAvailable()
                 }
 
                 override fun onAdFailedToLoad(loadAdError: LoadAdError) {

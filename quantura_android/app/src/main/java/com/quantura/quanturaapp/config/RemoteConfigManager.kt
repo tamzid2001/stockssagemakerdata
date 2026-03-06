@@ -112,7 +112,9 @@ class RemoteConfigManager(
         val activeRemoteConfig = remoteConfig ?: return false
         return try {
             val fetched = activeRemoteConfig.fetchAndActivate().await()
-            lastFetchSucceeded = fetched
+            // fetchAndActivate() returns false when no new values were activated.
+            // Treat both true/false as a successful fetch operation.
+            lastFetchSucceeded = true
             lastFetchAtMs = System.currentTimeMillis()
             Log.i(tag, "[Ads][Android] RC fetched success=$fetched")
             logEffectiveAdsConfig()
@@ -141,7 +143,11 @@ class RemoteConfigManager(
         val cached = lastEffectiveConfig
         val state = currentRemoteConfigState()
         val environment = getAdsEnvironment()
-        val adsEnabled = state.adsEnabled && state.featureFlags.adsEnabled
+        val adsEnabled = if (environment.isDebugBuild || environment.isSimulatorOrEmulator) {
+            true
+        } else {
+            state.adsEnabled && state.featureFlags.adsEnabled
+        }
         val usingRealAds = adsEnabled &&
             state.adsUseRealAndroid &&
             environment.isReleaseBuild &&

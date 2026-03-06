@@ -36,9 +36,10 @@ class QuanturaJavascriptBridge(
                 return@runOnUiThread
             }
             when (action) {
-                "showInterstitialAd" -> showInterstitialIfAllowed()
-                "showRewardedAd" -> showRewardedIfAllowed()
-                "showRewardedInterstitial" -> showRewardedIfAllowed()
+                "showInterstitialAd", "showInterstitial" -> showInterstitialIfAllowed(payload)
+                "showRewardedAd" -> showRewardedIfAllowed(payload, preferRewardedInterstitial = false)
+                "showRewardedInterstitial" -> showRewardedIfAllowed(payload, preferRewardedInterstitial = true)
+                "showAuthGate" -> onNativeAuthMessage("REQUEST_SIGN_IN", payload)
                 "openNewsLink" -> openNewsLink(payload.optString("url"))
                 "handleButtonClick" -> handleButtonClick(payload.optString("buttonId"))
                 "share" -> openNativeShare(payload.optString("url"), payload.optString("title"), payload.optString("text"))
@@ -71,7 +72,7 @@ class QuanturaJavascriptBridge(
         val normalized = url.trim()
         if (!normalized.startsWith("http")) return
         Log.d(tag, "News link trigger interstitial url=$normalized")
-        showInterstitialIfAllowed()
+        showInterstitialIfAllowed(JSONObject())
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(normalized))
         if (intent.resolveActivity(activity.packageManager) != null) {
             activity.startActivity(intent)
@@ -80,27 +81,73 @@ class QuanturaJavascriptBridge(
 
     private fun handleButtonClick(buttonId: String) {
         Log.d(tag, "Button trigger rewarded buttonId=${buttonId.trim()}")
-        showRewardedIfAllowed()
+        showRewardedIfAllowed(JSONObject(), preferRewardedInterstitial = true)
         FirebaseAnalytics.getInstance(activity).logEvent(
             "native_bridge_button_click",
             bundleOf("button_id" to buttonId)
         )
     }
 
-    private fun showInterstitialIfAllowed() {
+    private fun showInterstitialIfAllowed(payload: JSONObject) {
+        val requestId = payload.optString("requestId").trim()
         if (isAuthGateVisible()) {
             Log.d(tag, "Interstitial skipped; auth gate visible.")
+            emitAdResult(
+                requestId = requestId,
+                adFormat = "interstitial",
+                status = "skipped:auth_gate",
+                message = "Auth gate is visible."
+            )
             return
         }
-        adManager.showInterstitial(activity)
+        adManager.showInterstitial(activity, requestId = requestId) { result ->
+            emitAdResult(
+                requestId = requestId,
+                adFormat = result.optString("adFormat").trim().ifEmpty { "interstitial" },
+                status = result.optString("status").trim(),
+                message = result.optString("message").trim(),
+                rewardType = result.optString("rewardType").trim(),
+                rewardAmount = if (result.has("rewardAmount") && !result.isNull("rewardAmount")) {
+                    result.optDouble("rewardAmount")
+                } else {
+                    Double.NaN
+                }
+            )
+        }
     }
 
-    private fun showRewardedIfAllowed() {
+    private fun showRewardedIfAllowed(payload: JSONObject, preferRewardedInterstitial: Boolean) {
+        val requestId = payload.optString("requestId").trim()
         if (isAuthGateVisible()) {
             Log.d(tag, "Rewarded skipped; auth gate visible.")
+            emitAdResult(
+                requestId = requestId,
+                adFormat = if (preferRewardedInterstitial) "rewarded_interstitial" else "rewarded",
+                status = "skipped:auth_gate",
+                message = "Auth gate is visible."
+            )
             return
         }
-        adManager.showRewarded(activity)
+        adManager.showRewarded(
+            activity = activity,
+            requestId = requestId,
+            preferRewardedInterstitial = preferRewardedInterstitial,
+            callback = { result ->
+                emitAdResult(
+                    requestId = requestId,
+                    adFormat = result.optString("adFormat").trim()
+                        .ifEmpty { if (preferRewardedInterstitial) "rewarded_interstitial" else "rewarded" },
+                    status = result.optString("status").trim(),
+                    message = result.optString("message").trim(),
+                    rewardType = result.optString("rewardType").trim(),
+                    rewardAmount = if (result.has("rewardAmount") && !result.isNull("rewardAmount")) {
+                        result.optDouble("rewardAmount")
+                    } else {
+                        Double.NaN
+                    }
+                )
+            }
+        )
     }
 
     private fun openNativeShare(url: String, title: String, text: String) {
@@ -170,5 +217,23 @@ class QuanturaJavascriptBridge(
             placement = placement,
             adUnitId = adUnitId
         )
+    }
+
+    private fun emitAdResult(
+        requestId: String,
+        adFormat: String,
+        status: String,
+        message: String = "",
+        rewardType: String = "",
+        rewardAmount: Double = Double.NaN,
+    ) {
+        val payload = JSONObject()
+            .put("requestId", requestId)
+            .put("adFormat", adFormat)
+            .put("status", status)
+            .put("message", message)
+            .put("rewardType", rewardType)
+            .put("rewardAmount", if (rewardAmount.isNaN()) JSONObject.NULL else rewardAmount)
+        onBridgeEvent("quantura:native-ad-result", payload)
     }
 }

@@ -98,17 +98,44 @@ class AdManager(
         return AdDebugStatusRegistry.snapshot(knownFormats.map { it.name.lowercase() })
     }
 
-    fun showInterstitial(activity: Activity) {
-        if (!remoteConfigManager.areAdsEnabled()) return
+    fun showInterstitial(
+        activity: Activity,
+        requestId: String = "",
+        callback: (JSONObject) -> Unit = {},
+    ) {
+        if (!remoteConfigManager.areAdsEnabled()) {
+            emitAdActionResult(
+                callback = callback,
+                requestId = requestId,
+                adFormat = "interstitial",
+                status = "skipped:ads_disabled",
+                message = "Ads are disabled."
+            )
+            return
+        }
         if (isShowingFullScreenAdInternal) {
             Log.d(tag, "Interstitial show skipped; fullscreen ad already visible.")
             AdDebugStatusRegistry.updateShow("interstitial", "skipped:fullscreen_visible")
+            emitAdActionResult(
+                callback = callback,
+                requestId = requestId,
+                adFormat = "interstitial",
+                status = "skipped:fullscreen_visible",
+                message = "Another fullscreen ad is currently visible."
+            )
             return
         }
         val cachedAd = interstitialAd
         if (cachedAd == null) {
             Log.d(tag, "Interstitial unavailable; loading.")
             AdDebugStatusRegistry.updateShow("interstitial", "skipped:not_ready")
+            emitAdActionResult(
+                callback = callback,
+                requestId = requestId,
+                adFormat = "interstitial",
+                status = "skipped:not_ready",
+                message = "Interstitial ad is still loading."
+            )
             loadInterstitial(activity)
             return
         }
@@ -119,6 +146,12 @@ class AdManager(
                 Log.d(tag, "Interstitial shown.")
                 Log.i(tag, "[Ads][Android] Show success for interstitial")
                 AdDebugStatusRegistry.updateShow("interstitial", "shown")
+                emitAdActionResult(
+                    callback = callback,
+                    requestId = requestId,
+                    adFormat = "interstitial",
+                    status = "shown"
+                )
             }
 
             override fun onAdImpression() {
@@ -139,6 +172,12 @@ class AdManager(
                 Log.d(tag, "Interstitial dismissed.")
                 interstitialAd = null
                 AdDebugStatusRegistry.updateShow("interstitial", "dismissed")
+                emitAdActionResult(
+                    callback = callback,
+                    requestId = requestId,
+                    adFormat = "interstitial",
+                    status = "dismissed"
+                )
                 loadInterstitial(activity)
             }
 
@@ -148,6 +187,13 @@ class AdManager(
                 interstitialAd = null
                 Log.w(tag, "[Ads][Android] Show fail for interstitial: ${adError.message}")
                 AdDebugStatusRegistry.updateShow("interstitial", "failed:${adError.message}")
+                emitAdActionResult(
+                    callback = callback,
+                    requestId = requestId,
+                    adFormat = "interstitial",
+                    status = "failed",
+                    message = adError.message
+                )
                 loadInterstitial(activity)
             }
         }
@@ -155,15 +201,37 @@ class AdManager(
         cachedAd.show(activity)
     }
 
-    fun showRewarded(activity: Activity, onReward: (RewardItem) -> Unit = {}) {
-        if (!remoteConfigManager.areAdsEnabled()) return
+    fun showRewarded(
+        activity: Activity,
+        requestId: String = "",
+        preferRewardedInterstitial: Boolean = true,
+        onReward: (RewardItem) -> Unit = {},
+        callback: (JSONObject) -> Unit = {},
+    ) {
+        if (!remoteConfigManager.areAdsEnabled()) {
+            emitAdActionResult(
+                callback = callback,
+                requestId = requestId,
+                adFormat = if (preferRewardedInterstitial) "rewarded_interstitial" else "rewarded",
+                status = "skipped:ads_disabled",
+                message = "Ads are disabled."
+            )
+            return
+        }
         if (isShowingFullScreenAdInternal) {
             Log.d(tag, "Rewarded show skipped; fullscreen ad already visible.")
             AdDebugStatusRegistry.updateShow("rewarded", "skipped:fullscreen_visible")
             AdDebugStatusRegistry.updateShow("rewarded_interstitial", "skipped:fullscreen_visible")
+            emitAdActionResult(
+                callback = callback,
+                requestId = requestId,
+                adFormat = if (preferRewardedInterstitial) "rewarded_interstitial" else "rewarded",
+                status = "skipped:fullscreen_visible",
+                message = "Another fullscreen ad is currently visible."
+            )
             return
         }
-        val rewardedInterstitial = rewardedInterstitialAd
+        val rewardedInterstitial = if (preferRewardedInterstitial) rewardedInterstitialAd else null
         if (rewardedInterstitial != null) {
             rewardedInterstitial.fullScreenContentCallback = object : FullScreenContentCallback() {
                 override fun onAdShowedFullScreenContent() {
@@ -171,6 +239,12 @@ class AdManager(
                     Log.d(tag, "Rewarded interstitial ad shown.")
                     Log.i(tag, "[Ads][Android] Show success for rewarded_interstitial")
                     AdDebugStatusRegistry.updateShow("rewarded_interstitial", "shown")
+                    emitAdActionResult(
+                        callback = callback,
+                        requestId = requestId,
+                        adFormat = "rewarded_interstitial",
+                        status = "shown"
+                    )
                 }
 
                 override fun onAdImpression() {
@@ -191,6 +265,12 @@ class AdManager(
                     Log.d(tag, "Rewarded interstitial ad dismissed.")
                     rewardedInterstitialAd = null
                     AdDebugStatusRegistry.updateShow("rewarded_interstitial", "dismissed")
+                    emitAdActionResult(
+                        callback = callback,
+                        requestId = requestId,
+                        adFormat = "rewarded_interstitial",
+                        status = "dismissed"
+                    )
                     loadRewardedInterstitial(activity)
                 }
 
@@ -200,11 +280,28 @@ class AdManager(
                     rewardedInterstitialAd = null
                     Log.w(tag, "[Ads][Android] Show fail for rewarded_interstitial: ${adError.message}")
                     AdDebugStatusRegistry.updateShow("rewarded_interstitial", "failed:${adError.message}")
+                    emitAdActionResult(
+                        callback = callback,
+                        requestId = requestId,
+                        adFormat = "rewarded_interstitial",
+                        status = "failed",
+                        message = adError.message
+                    )
                     loadRewardedInterstitial(activity)
                 }
             }
             Log.d(tag, "Presenting rewarded interstitial ad.")
-            rewardedInterstitial.show(activity) { reward -> onReward(reward) }
+            rewardedInterstitial.show(activity) { reward ->
+                emitAdActionResult(
+                    callback = callback,
+                    requestId = requestId,
+                    adFormat = "rewarded_interstitial",
+                    status = "rewarded",
+                    rewardType = reward.type,
+                    rewardAmount = reward.amount.toDouble()
+                )
+                onReward(reward)
+            }
             return
         }
 
@@ -212,6 +309,13 @@ class AdManager(
         if (cachedAd == null) {
             Log.d(tag, "Rewarded unavailable; loading.")
             AdDebugStatusRegistry.updateShow("rewarded", "skipped:not_ready")
+            emitAdActionResult(
+                callback = callback,
+                requestId = requestId,
+                adFormat = "rewarded",
+                status = "skipped:not_ready",
+                message = "Rewarded ad is still loading."
+            )
             loadRewarded(activity)
             loadRewardedInterstitial(activity)
             return
@@ -223,6 +327,12 @@ class AdManager(
                 Log.d(tag, "Rewarded ad shown.")
                 Log.i(tag, "[Ads][Android] Show success for rewarded")
                 AdDebugStatusRegistry.updateShow("rewarded", "shown")
+                emitAdActionResult(
+                    callback = callback,
+                    requestId = requestId,
+                    adFormat = "rewarded",
+                    status = "shown"
+                )
             }
 
             override fun onAdImpression() {
@@ -243,6 +353,12 @@ class AdManager(
                 Log.d(tag, "Rewarded ad dismissed.")
                 rewardedAd = null
                 AdDebugStatusRegistry.updateShow("rewarded", "dismissed")
+                emitAdActionResult(
+                    callback = callback,
+                    requestId = requestId,
+                    adFormat = "rewarded",
+                    status = "dismissed"
+                )
                 loadRewarded(activity)
             }
 
@@ -252,11 +368,28 @@ class AdManager(
                 rewardedAd = null
                 Log.w(tag, "[Ads][Android] Show fail for rewarded: ${adError.message}")
                 AdDebugStatusRegistry.updateShow("rewarded", "failed:${adError.message}")
+                emitAdActionResult(
+                    callback = callback,
+                    requestId = requestId,
+                    adFormat = "rewarded",
+                    status = "failed",
+                    message = adError.message
+                )
                 loadRewarded(activity)
             }
         }
         Log.d(tag, "Presenting rewarded ad.")
-        cachedAd.show(activity) { reward -> onReward(reward) }
+        cachedAd.show(activity) { reward ->
+            emitAdActionResult(
+                callback = callback,
+                requestId = requestId,
+                adFormat = "rewarded",
+                status = "rewarded",
+                rewardType = reward.type,
+                rewardAmount = reward.amount.toDouble()
+            )
+            onReward(reward)
+        }
     }
 
     fun onPrimaryNavigation(activity: Activity, url: String) {
@@ -619,5 +752,27 @@ class AdManager(
             if (reason.isNotBlank()) putString("reason", reason.take(120))
         }
         FirebaseAnalytics.getInstance(context).logEvent(eventName, payload)
+    }
+
+    private fun emitAdActionResult(
+        callback: (JSONObject) -> Unit,
+        requestId: String,
+        adFormat: String,
+        status: String,
+        message: String = "",
+        rewardType: String = "",
+        rewardAmount: Double? = null,
+    ) {
+        runCatching {
+            callback(
+                JSONObject()
+                    .put("requestId", requestId)
+                    .put("adFormat", adFormat)
+                    .put("status", status)
+                    .put("message", message)
+                    .put("rewardType", rewardType)
+                    .put("rewardAmount", rewardAmount ?: JSONObject.NULL)
+            )
+        }
     }
 }

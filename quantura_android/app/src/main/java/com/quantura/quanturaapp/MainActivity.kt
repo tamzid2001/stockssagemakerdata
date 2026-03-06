@@ -198,7 +198,7 @@ class MainActivity : ComponentActivity() {
         }
 
         val deepLinkUrl = intent?.getStringExtra(QuanturaMessagingService.EXTRA_DEEP_LINK_URL)
-        val startUrl = deepLinkUrl ?: DEFAULT_START_URL
+        val startUrl = sanitizePrimaryQuanturaUrl(deepLinkUrl)
 
         setContent {
             MaterialTheme {
@@ -388,6 +388,9 @@ class MainActivity : ComponentActivity() {
     private fun updateAuthGateVisibility(visible: Boolean) {
         authGateVisible = visible
         appContainer.appOpenAdManager.setPresentationBlockedByAuthGate(visible)
+        if (!visible) {
+            appContainer.appOpenAdManager.showAdIfAvailable()
+        }
     }
 
     private fun continueAnonymouslyForNow() {
@@ -1297,10 +1300,13 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         val deepLinkUrl = intent.getStringExtra(QuanturaMessagingService.EXTRA_DEEP_LINK_URL).orEmpty()
         if (deepLinkUrl.isNotBlank()) {
+            val sanitized = sanitizePrimaryQuanturaUrl(deepLinkUrl)
+            if (sanitized != DEFAULT_START_URL) {
+                webViewRef?.loadUrl(sanitized)
+                return
+            }
             val uri = runCatching { Uri.parse(deepLinkUrl) }.getOrNull()
-            if (isTrustedUri(uri)) {
-                webViewRef?.loadUrl(deepLinkUrl)
-            } else if (uri != null) {
+            if (uri != null) {
                 runCatching { startActivity(Intent(Intent.ACTION_VIEW, uri)) }
             }
         }
@@ -1309,6 +1315,18 @@ class MainActivity : ComponentActivity() {
     companion object {
         private const val REQUEST_NOTIFICATION_PERMISSION = 9001
     }
+}
+
+private fun sanitizePrimaryQuanturaUrl(rawUrl: String?): String {
+    val candidate = rawUrl.orEmpty().trim()
+    if (candidate.isBlank()) return DEFAULT_START_URL
+    val uri = runCatching { Uri.parse(candidate) }.getOrNull() ?: return DEFAULT_START_URL
+    val scheme = uri.scheme?.lowercase().orEmpty()
+    val host = uri.host?.lowercase().orEmpty()
+    if ((scheme == "https" || scheme == "http") && (host == "quantura.studio" || host == "www.quantura.studio")) {
+        return candidate
+    }
+    return DEFAULT_START_URL
 }
 
 @Composable
