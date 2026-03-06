@@ -691,6 +691,54 @@ function bindEvents() {
   if (refs.sentinel) state.observer.observe(refs.sentinel);
 }
 
+function bindMobileBottomNav() {
+  const normalizePath = (value) => {
+    const cleaned = String(value || "/").split("?")[0].split("#")[0].trim() || "/";
+    const normalized = cleaned.startsWith("/") ? cleaned : `/${cleaned}`;
+    return normalized.length > 1 ? normalized.replace(/\/+$/, "") : normalized;
+  };
+  const path = normalizePath(window.location.pathname || "/explore");
+  const links = [
+    { href: "/explore", label: "Explore", icon: "iconoir-binocular" },
+    { href: "/research", label: "Research", icon: "iconoir-bookmark-book" },
+    { href: "/pricing", label: "Pricing", icon: "iconoir-wallet" },
+    { href: "/shop", label: "Shop", icon: "iconoir-shop" },
+    { href: "/contact", label: "Contact", icon: "iconoir-mail" },
+  ];
+
+  let nav = document.getElementById("mobile-bottom-nav");
+  if (!nav) {
+    nav = document.createElement("nav");
+    nav.id = "mobile-bottom-nav";
+    nav.className = "mobile-bottom-nav hidden";
+    nav.setAttribute("aria-label", "Mobile navigation");
+    nav.innerHTML = '<div class="mobile-bottom-nav-inner"></div>';
+    document.body.appendChild(nav);
+  }
+  const inner = nav.querySelector(".mobile-bottom-nav-inner");
+  if (!inner) return;
+
+  inner.innerHTML = links
+    .map((entry) => {
+      const active = normalizePath(entry.href) === path ? " active" : "";
+      return `
+        <a class="mobile-bottom-link${active}" href="${escapeHtml(entry.href)}" aria-label="${escapeHtml(entry.label)}">
+          <i class="${escapeHtml(entry.icon)}" aria-hidden="true"></i>
+          <span class="mobile-bottom-label">${escapeHtml(entry.label)}</span>
+        </a>
+      `;
+    })
+    .join("");
+
+  const syncVisibility = () => {
+    const visible = window.innerWidth <= 980;
+    nav.classList.toggle("hidden", !visible);
+    document.body.classList.toggle("mobile-bottom-nav-enabled", visible);
+  };
+  syncVisibility();
+  window.addEventListener("resize", syncVisibility);
+}
+
 async function bootstrap() {
   const params = new URLSearchParams(window.location.search);
   state.mode = params.get("mode") || "trending";
@@ -716,6 +764,7 @@ async function bootstrap() {
 
   state.api = await createApiClient(() => state.authClient.getAuthToken());
   bindEvents();
+  bindMobileBottomNav();
   await refreshPremiumStatus();
   await loadSuggestions();
   await loadPosts(true);

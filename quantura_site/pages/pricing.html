@@ -106,7 +106,7 @@
             </a>
             <a class="use-case-card" href="https://openai.com/customer-stories/morgan-stanley/" target="_blank" rel="noopener noreferrer">
               <div class="use-case-media use-case-media-openai">
-                <img src="https://cdn.simpleicons.org/openai/ffffff" alt="OpenAI logo" loading="lazy" />
+                <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTg4b2xFrY7mhOS9pGOnckG88R0ZzHpzYZ7hA&s" alt="OpenAI x Morgan Stanley" loading="lazy" />
               </div>
               <div class="use-case-body">
                 <h3>OpenAI x Morgan Stanley</h3>
@@ -116,7 +116,7 @@
             </a>
             <a class="use-case-card" href="https://aws.amazon.com/financial-services/capital-markets/" target="_blank" rel="noopener noreferrer">
               <div class="use-case-media use-case-media-aws">
-                <img src="https://cdn.simpleicons.org/amazonaws/ffffff" alt="AWS logo" loading="lazy" />
+                <img src="https://w7.pngwing.com/pngs/610/693/png-transparent-amazon-aws-logo.png" alt="AWS logo" loading="lazy" />
               </div>
               <div class="use-case-body">
                 <h3>AWS Capital Markets</h3>
@@ -216,10 +216,10 @@
                 data-monthly-iap-plan="go"
                 data-yearly-iap-plan="annual_go"
               >
-                <button class="cta" data-action="purchase" data-label-guest="Sign in to continue" data-label-auth="Start Go plan" disabled>
-                  Sign in to continue
+                <button class="cta" data-action="purchase" data-label-guest="Continue as guest" data-label-auth="Start Go plan">
+                  Continue as guest
                 </button>
-                <p class="small purchase-note">Sign in to continue.</p>
+                <p class="small purchase-note">Guest checkout is enabled. You can merge purchases after sign-in.</p>
                 <div class="notice purchase-success hidden"></div>
                 <button class="cta secondary hidden" data-action="stripe" type="button">Proceed to payment</button>
               </div>
@@ -251,50 +251,16 @@
                 data-monthly-iap-plan="plus"
                 data-yearly-iap-plan="annual_plus"
               >
-                <button class="cta" data-action="purchase" data-label-guest="Sign in to continue" data-label-auth="Start Plus plan" disabled>
-                  Sign in to continue
+                <button class="cta" data-action="purchase" data-label-guest="Continue as guest" data-label-auth="Start Plus plan">
+                  Continue as guest
                 </button>
-                <p class="small purchase-note">Sign in to continue.</p>
+                <p class="small purchase-note">Guest checkout is enabled. You can merge purchases after sign-in.</p>
                 <div class="notice purchase-success hidden"></div>
                 <button class="cta secondary hidden" data-action="stripe" type="button">Proceed to payment</button>
               </div>
             </div>
           </div>
           <div class="grid-3" style="margin-top: 18px;">
-            <div class="card" data-pricing-plan-card="pro">
-              <span class="badge" style="background: #eef2ff; color: #312e81;">Pro</span>
-              <h3 style="margin-top: 14px;">Quantura Pro</h3>
-              <div class="price" data-pricing-price>$200/mo</div>
-              <p class="small" data-pricing-cycle-copy>Pay yearly to lock in <strong>$2,160/yr</strong> (save $240).</p>
-              <p class="small">For desks demanding premium model access, top-tier rate limits, and expanded workspace ceilings.</p>
-              <div class="feature-list" style="margin-top: 16px;">
-                <div class="feature"><span></span><i class="iconoir-shield-check" aria-hidden="true"></i>Ad-free experience after purchase</div>
-                <div class="feature"><span></span><i class="iconoir-rocket" aria-hidden="true"></i>High throughput for forecasts, screeners, and model responses</div>
-                <div class="feature"><span></span><i class="iconoir-group" aria-hidden="true"></i>8 collaborator seats</div>
-                <div class="feature"><span></span><i class="iconoir-brain" aria-hidden="true"></i>Pro model stack: GPT-5, GPT-5 mini, GPT-5.1</div>
-              </div>
-              <div
-                class="purchase-panel"
-                data-product="Quantura Pro Monthly"
-                data-iap-plan="pro"
-                data-price="200"
-                data-currency="USD"
-                data-stripe-url="#"
-                data-monthly-price="200"
-                data-yearly-price="2160"
-                data-monthly-product="Quantura Pro Monthly"
-                data-yearly-product="Quantura Pro Annual"
-                data-monthly-iap-plan="pro"
-                data-yearly-iap-plan="annual_pro"
-              >
-                <button class="cta" data-action="purchase" data-label-guest="Sign in to continue" data-label-auth="Start Pro plan" disabled>
-                  Sign in to continue
-                </button>
-                <p class="small purchase-note">Sign in to continue.</p>
-                <div class="notice purchase-success hidden"></div>
-                <button class="cta secondary hidden" data-action="stripe" type="button">Proceed to payment</button>
-              </div>
-            </div>
             <div class="card" data-pricing-plan-card="business">
               <span class="badge" style="background: #fef1cc; color: #6d4c00;">Business</span>
               <h3 style="margin-top: 14px;">Quantura Business</h3>
@@ -321,24 +287,46 @@
                 data-monthly-iap-plan="business"
                 data-yearly-iap-plan="annual_business"
               >
-                <button class="cta" data-action="purchase" data-label-guest="Sign in to continue" data-label-auth="Start Business plan" disabled>
-                  Sign in to continue
+                <button class="cta" data-action="purchase" data-label-guest="Continue as guest" data-label-auth="Start Business plan">
+                  Continue as guest
                 </button>
-                <p class="small purchase-note">Sign in to continue.</p>
+                <p class="small purchase-note">Guest checkout is enabled. You can merge purchases after sign-in.</p>
                 <div class="notice purchase-success hidden"></div>
                 <button class="cta secondary hidden" data-action="stripe" type="button">Proceed to payment</button>
               </div>
             </div>
-            <div class="card">
-              <span class="badge" style="background: #f1f5f9; color: #0f172a;">Native billing map</span>
-              <h3 style="margin-top: 14px;">StoreKit + Google Play</h3>
-              <p class="small">Buttons route to native purchase bridges, not web Stripe, for iOS and Android builds.</p>
+            <div class="card" data-pricing-plan-card="pro">
+              <span class="badge" style="background: #eef2ff; color: #312e81;">Pro</span>
+              <h3 style="margin-top: 14px;">Quantura Pro</h3>
+              <div class="price" data-pricing-price>$200/mo</div>
+              <p class="small" data-pricing-cycle-copy>Pay yearly to lock in <strong>$2,160/yr</strong> (save $240).</p>
+              <p class="small">For desks demanding premium model access, top-tier rate limits, and expanded workspace ceilings.</p>
               <div class="feature-list" style="margin-top: 16px;">
-                <div class="feature"><span></span><i class="iconoir-check" aria-hidden="true"></i>iOS monthly: <code>goplan</code>, <code>premium</code>, <code>pro</code>, <code>businessplan</code></div>
-                <div class="feature"><span></span><i class="iconoir-check" aria-hidden="true"></i>iOS annual: <code>annualgoplan</code>, <code>annualplusplan</code>, <code>annualbusinessplan</code></div>
-                <div class="feature"><span></span><i class="iconoir-check" aria-hidden="true"></i>Android monthly: <code>goplan</code>, <code>premium</code>, <code>quanturapro</code>, <code>quanturabusiness</code></div>
-                <div class="feature"><span></span><i class="iconoir-check" aria-hidden="true"></i>Android annual: <code>goplanyearly</code>, <code>annualplusplan</code>, <code>annualbusinessplan</code></div>
-                <div class="feature"><span></span><i class="iconoir-check" aria-hidden="true"></i>Pro annual pricing falls back to Pro monthly SKU where a native annual Pro SKU is unavailable.</div>
+                <div class="feature"><span></span><i class="iconoir-shield-check" aria-hidden="true"></i>Ad-free experience after purchase</div>
+                <div class="feature"><span></span><i class="iconoir-rocket" aria-hidden="true"></i>High throughput for forecasts, screeners, and model responses</div>
+                <div class="feature"><span></span><i class="iconoir-group" aria-hidden="true"></i>8 collaborator seats</div>
+                <div class="feature"><span></span><i class="iconoir-brain" aria-hidden="true"></i>Pro model stack: GPT-5, GPT-5 mini, GPT-5.1</div>
+              </div>
+              <div
+                class="purchase-panel"
+                data-product="Quantura Pro Monthly"
+                data-iap-plan="pro"
+                data-price="200"
+                data-currency="USD"
+                data-stripe-url="#"
+                data-monthly-price="200"
+                data-yearly-price="2160"
+                data-monthly-product="Quantura Pro Monthly"
+                data-yearly-product="Quantura Pro Annual"
+                data-monthly-iap-plan="pro"
+                data-yearly-iap-plan="annual_pro"
+              >
+                <button class="cta" data-action="purchase" data-label-guest="Continue as guest" data-label-auth="Start Pro plan">
+                  Continue as guest
+                </button>
+                <p class="small purchase-note">Guest checkout is enabled. You can merge purchases after sign-in.</p>
+                <div class="notice purchase-success hidden"></div>
+                <button class="cta secondary hidden" data-action="stripe" type="button">Proceed to payment</button>
               </div>
             </div>
           </div>
@@ -364,65 +352,6 @@
               <h3><i class="iconoir-bell-notification" aria-hidden="true"></i> Alerts and push workflow</h3>
               <p class="small">Track price moves, news catalysts, filings, and screener triggers with email and push delivery for time-sensitive decisions.</p>
             </article>
-          </div>
-        </div>
-      </section>
-
-      <section class="section">
-        <div class="container">
-          <div class="section-title">
-            <h2>Model Access by Tier</h2>
-            <p class="small">Higher subscriptions unlock stronger model variants and larger weekly usage and workspace limits.</p>
-          </div>
-          <div class="table-wrap card">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Model</th>
-                  <th>Input / 1M</th>
-                  <th>Cached Input / 1M</th>
-                  <th>Output / 1M</th>
-                  <th>Access Tier</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td><i class="iconoir-flash" aria-hidden="true"></i> gpt-5-nano</td>
-                  <td>$0.05</td>
-                  <td>$0.005</td>
-                  <td>$0.40</td>
-                  <td>Free / Go / Plus / Pro / Business</td>
-                </tr>
-                <tr>
-                  <td><i class="iconoir-light-bulb-on" aria-hidden="true"></i> gpt-5-mini</td>
-                  <td>$0.25</td>
-                  <td>$0.025</td>
-                  <td>$2.00</td>
-                  <td>Free / Go / Plus / Pro / Business</td>
-                </tr>
-                <tr>
-                  <td><i class="iconoir-brain" aria-hidden="true"></i> gpt-5</td>
-                  <td>$1.25</td>
-                  <td>$0.125</td>
-                  <td>$10.00</td>
-                  <td>Plus / Pro / Business</td>
-                </tr>
-                <tr>
-                  <td><i class="iconoir-journal-page" aria-hidden="true"></i> gpt-5.1</td>
-                  <td>$1.25</td>
-                  <td>$0.125</td>
-                  <td>$10.00</td>
-                  <td>Pro / Business</td>
-                </tr>
-                <tr>
-                  <td><i class="iconoir-star" aria-hidden="true"></i> gpt-5.2</td>
-                  <td>$1.75</td>
-                  <td>$0.175</td>
-                  <td>$14.00</td>
-                  <td>Business</td>
-                </tr>
-              </tbody>
-            </table>
           </div>
         </div>
       </section>
