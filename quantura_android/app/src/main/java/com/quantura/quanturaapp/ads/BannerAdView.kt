@@ -3,6 +3,7 @@ package com.quantura.quanturaapp.ads
 import android.content.Context
 import android.util.AttributeSet
 import android.util.Log
+import android.view.ViewTreeObserver
 import android.widget.FrameLayout
 import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.AdSize
@@ -23,9 +24,13 @@ class BannerAdView @JvmOverloads constructor(
     defStyleAttr: Int = 0,
 ) : FrameLayout(context, attrs, defStyleAttr) {
     private val tag = "BannerAdView"
+    private val retryDelayMs = 30_000L
+    private val minReservedHeightPx = (56f * resources.displayMetrics.density).toInt()
 
     private var adView: AdView? = null
     private var remoteConfigManager: RemoteConfigManager? = null
+    private var waitingForLayout = false
+    private var pendingRetry: Runnable? = null
 
     fun setRemoteConfigManager(manager: RemoteConfigManager?) {
         remoteConfigManager = manager
@@ -39,26 +44,50 @@ class BannerAdView @JvmOverloads constructor(
             hideAd()
             return
         }
+        if (width <= 0) {
+            deferLoadUntilMeasured(manager)
+            return
+        }
+        pendingRetry?.let { removeCallbacks(it) }
+        pendingRetry = null
         val adUnitId = manager.resolveAdUnitId(
             platform = AdPlatform.ANDROID,
             format = AdFormat.BANNER
         )
+        val metrics = resources.displayMetrics
+        val rawWidthPx = width.coerceAtLeast(1)
+        val density = metrics.density.coerceAtLeast(1f)
+        val bannerWidthDp = (rawWidthPx / density).toInt().coerceAtLeast(1)
+        val adaptiveSize = AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(context, bannerWidthDp)
+        val requestedHeightPx = adaptiveSize.getHeightInPixels(context).coerceAtLeast(minReservedHeightPx)
+        Log.i(
+            tag,
+            "[Ads][Android] Banner sizing rawPx=$rawWidthPx density=$density widthDp=$bannerWidthDp " +
+                "heightPx=${adaptiveSize.getHeightInPixels(context)}"
+        )
+        layoutParams = (layoutParams ?: LayoutParams(LayoutParams.MATCH_PARENT, requestedHeightPx)).apply {
+            width = LayoutParams.MATCH_PARENT
+            height = requestedHeightPx
+        }
         removeAllViews()
         adView?.destroy()
         adView = AdView(context).apply {
-            setAdSize(AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(context, resources.displayMetrics.widthPixels))
+            setAdSize(adaptiveSize)
             setAdUnitId(adUnitId)
+            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
             adListener = object : AdListener() {
                 override fun onAdLoaded() {
                     Log.d(this@BannerAdView.tag, "Banner load succeeded.")
                     Log.i(this@BannerAdView.tag, "[Ads][Android] Load success for banner")
                     AdDebugStatusRegistry.updateLoad("banner", "loaded")
+                    visibility = VISIBLE
                 }
 
                 override fun onAdFailedToLoad(error: LoadAdError) {
                     Log.w(this@BannerAdView.tag, "Banner load failed: ${error.message}")
                     Log.w(this@BannerAdView.tag, "[Ads][Android] Load fail for banner: ${error.message}")
                     AdDebugStatusRegistry.updateLoad("banner", "failed:${error.message}")
+                    scheduleRetry()
                 }
 
                 override fun onAdImpression() {
@@ -97,12 +126,50 @@ class BannerAdView @JvmOverloads constructor(
         removeAllViews()
         adView?.destroy()
         adView = null
-        visibility = GONE
+        minimumHeight = minReservedHeightPx
+        visibility = INVISIBLE
     }
 
     override fun onDetachedFromWindow() {
+        pendingRetry?.let { removeCallbacks(it) }
+        pendingRetry = null
         adView?.destroy()
         adView = null
         super.onDetachedFromWindow()
+    }
+
+    private fun scheduleRetry() {
+        val manager = remoteConfigManager ?: return
+        pendingRetry?.let { removeCallbacks(it) }
+        pendingRetry = Runnable {
+            if (!isAttachedToWindow) return@Runnable
+            loadAd(manager)
+        }
+        postDelayed(pendingRetry, retryDelayMs)
+    }
+
+    private fun deferLoadUntilMeasured(manager: RemoteConfigManager) {
+        if (waitingForLayout) return
+        waitingForLayout = true
+        val listener = object : ViewTreeObserver.OnGlobalLayoutListener {
+            override fun onGlobalLayout() {
+                if (width <= 0) return
+                if (viewTreeObserver.isAlive) {
+                    viewTreeObserver.removeOnGlobalLayoutListener(this)
+                }
+                waitingForLayout = false
+                loadAd(manager)
+            }
+        }
+        viewTreeObserver.addOnGlobalLayoutListener(listener)
+        postDelayed({
+            if (!waitingForLayout || width > 0) return@postDelayed
+            if (viewTreeObserver.isAlive) {
+                viewTreeObserver.removeOnGlobalLayoutListener(listener)
+            }
+            waitingForLayout = false
+            Log.w(tag, "[Ads][Android] Banner width not measured yet; retrying after layout.")
+            scheduleRetry()
+        }, 1000L)
     }
 }
