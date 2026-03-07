@@ -25,8 +25,9 @@ interface IapService {
      * Purchase result.
      */
     sealed class PurchaseResult {
-        data class Success(val productId: String) : PurchaseResult()
-        data class Cancelled(val productId: String) : PurchaseResult()
+        data class Success(val productId: String, val orderId: String = "") : PurchaseResult()
+        data class Pending(val productId: String, val orderId: String = "") : PurchaseResult()
+        data class Cancelled(val productId: String, val orderId: String = "") : PurchaseResult()
         data class Error(val message: String) : PurchaseResult()
     }
 

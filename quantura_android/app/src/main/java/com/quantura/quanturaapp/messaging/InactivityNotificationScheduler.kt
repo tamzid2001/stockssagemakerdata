@@ -18,14 +18,19 @@ object InactivityNotificationScheduler {
 
     fun reschedule(context: Context) {
         cancel(context)
-        schedule(context, ACTION_DAILY, REQUEST_DAILY, DAY_MS)
-        schedule(context, ACTION_WEEKLY, REQUEST_WEEKLY, 7L * DAY_MS)
+        rescheduleAction(context, ACTION_DAILY)
+        rescheduleAction(context, ACTION_WEEKLY)
     }
 
     fun cancel(context: Context) {
         val manager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         manager.cancel(buildPendingIntent(context, ACTION_DAILY, REQUEST_DAILY))
         manager.cancel(buildPendingIntent(context, ACTION_WEEKLY, REQUEST_WEEKLY))
+    }
+
+    fun rescheduleAction(context: Context, action: String) {
+        val spec = scheduleSpecFor(action) ?: return
+        schedule(context, action, spec.requestCode, spec.delayMs)
     }
 
     private fun schedule(context: Context, action: String, requestCode: Int, delayMs: Long) {
@@ -61,4 +66,16 @@ object InactivityNotificationScheduler {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
     }
+
+    private fun scheduleSpecFor(action: String): ScheduleSpec? =
+        when (action) {
+            ACTION_DAILY -> ScheduleSpec(REQUEST_DAILY, DAY_MS)
+            ACTION_WEEKLY -> ScheduleSpec(REQUEST_WEEKLY, 7L * DAY_MS)
+            else -> null
+        }
+
+    private data class ScheduleSpec(
+        val requestCode: Int,
+        val delayMs: Long,
+    )
 }
