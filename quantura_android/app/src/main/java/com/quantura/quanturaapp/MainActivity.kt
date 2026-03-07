@@ -876,7 +876,8 @@ class MainActivity : ComponentActivity() {
         val parsed = runCatching { Uri.parse(webViewRef?.url ?: "") }.getOrNull()
         val host = parsed?.host?.lowercase()
         val scheme = parsed?.scheme?.lowercase().orEmpty().ifBlank { "https" }
-        return if (isTrustedHost(host)) "$scheme://$host" else "https://quantura.studio"
+        val authority = parsed?.encodedAuthority?.trim().orEmpty()
+        return if (isTrustedHost(host) && authority.isNotBlank()) "$scheme://$authority" else "https://quantura.studio"
     }
 
     private fun injectCustomTokenIntoWeb(customToken: String) {
@@ -1026,17 +1027,28 @@ class MainActivity : ComponentActivity() {
                     is com.quantura.quanturaapp.iap.IapService.PurchaseResult.Success -> {
                         emitNativePurchaseResult(
                             requestId = requestId,
-                            orderId = orderId,
+                            orderId = result.orderId.ifBlank { orderId },
                             productId = result.productId,
                             ok = true,
                             status = "purchased"
                         )
                     }
 
+                    is com.quantura.quanturaapp.iap.IapService.PurchaseResult.Pending -> {
+                        emitNativePurchaseResult(
+                            requestId = requestId,
+                            orderId = result.orderId.ifBlank { orderId },
+                            productId = result.productId,
+                            ok = false,
+                            status = "pending",
+                            message = "Purchase is pending approval in Google Play."
+                        )
+                    }
+
                     is com.quantura.quanturaapp.iap.IapService.PurchaseResult.Cancelled -> {
                         emitNativePurchaseResult(
                             requestId = requestId,
-                            orderId = orderId,
+                            orderId = result.orderId.ifBlank { orderId },
                             productId = result.productId,
                             ok = false,
                             status = "cancelled"

@@ -200,8 +200,11 @@ final class NativeAuthWebBridge {
 
     private func preferredWebOrigin() -> URL {
         if let url = webView?.url, isTrusted(url: url), let host = url.host {
-            let scheme = (url.scheme?.isEmpty == false ? url.scheme! : "https")
-            return URL(string: "\(scheme)://\(host)") ?? fallbackWebOrigin
+            var components = URLComponents()
+            components.scheme = (url.scheme?.isEmpty == false ? url.scheme! : "https")
+            components.host = host
+            components.port = url.port
+            return components.url ?? fallbackWebOrigin
         }
         return fallbackWebOrigin
     }

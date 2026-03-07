@@ -121,12 +121,12 @@ enum InactivityLocalNotificationScheduler {
             let dailyRequest = UNNotificationRequest(
                 identifier: dailyIdentifier,
                 content: daily,
-                trigger: UNTimeIntervalNotificationTrigger(timeInterval: 24 * 60 * 60, repeats: false)
+                trigger: UNTimeIntervalNotificationTrigger(timeInterval: 24 * 60 * 60, repeats: true)
             )
             let weeklyRequest = UNNotificationRequest(
                 identifier: weeklyIdentifier,
                 content: weekly,
-                trigger: UNTimeIntervalNotificationTrigger(timeInterval: 7 * 24 * 60 * 60, repeats: false)
+                trigger: UNTimeIntervalNotificationTrigger(timeInterval: 7 * 24 * 60 * 60, repeats: true)
             )
 
             center.add(dailyRequest) { error in
