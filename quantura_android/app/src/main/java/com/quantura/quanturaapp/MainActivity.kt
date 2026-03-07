@@ -2,6 +2,7 @@ package com.quantura.quanturaapp
 
 import android.Manifest
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -18,6 +19,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,9 +28,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -50,10 +54,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
@@ -68,9 +77,12 @@ import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.OAuthProvider
 import com.google.firebase.auth.UserProfileChangeRequest
 import com.google.firebase.messaging.FirebaseMessaging
+import com.quantura.quanturaapp.ads.AdFormatStatusSnapshot
 import com.quantura.quanturaapp.ads.AdManager
 import com.quantura.quanturaapp.ads.BannerAdView
 import com.quantura.quanturaapp.auth.PlayIntegrityClient
+import com.quantura.quanturaapp.config.AdFormat
+import com.quantura.quanturaapp.config.AdPlatform
 import com.quantura.quanturaapp.config.RemoteConfigManager
 import com.quantura.quanturaapp.iap.PlayBillingIapService
 import com.quantura.quanturaapp.messaging.InactivityNotificationScheduler
@@ -79,6 +91,7 @@ import com.quantura.quanturaapp.messaging.QuanturaFcmTokenHolder
 import com.quantura.quanturaapp.messaging.QuanturaMessagingService
 import com.quantura.quanturaapp.web.QuanturaJavascriptBridge
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -91,14 +104,56 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 private const val DEFAULT_START_URL = "https://quantura.studio/"
+private val BANNER_RESERVED_HEIGHT: Dp = 72.dp
 
 private enum class EmailDialogMode {
     SIGN_IN,
     SIGN_UP,
 }
 
+private data class AdsQaFormatRow(
+    val format: String,
+    val adUnitId: String,
+    val loadStatus: String,
+    val showStatus: String,
+)
+
+private data class AdsQaSnapshot(
+    val remoteConfigFetched: Boolean,
+    val remoteConfigFetchedAtMs: Long?,
+    val adsEnabled: Boolean,
+    val adsEnabledTopLevel: Boolean,
+    val featureFlagAdsEnabled: Boolean,
+    val usingRealAds: Boolean,
+    val usingTestAds: Boolean,
+    val isDebugBuild: Boolean,
+    val isEmulator: Boolean,
+    val rows: List<AdsQaFormatRow>,
+) {
+    companion object {
+        fun empty(): AdsQaSnapshot {
+            return AdsQaSnapshot(
+                remoteConfigFetched = false,
+                remoteConfigFetchedAtMs = null,
+                adsEnabled = false,
+                adsEnabledTopLevel = false,
+                featureFlagAdsEnabled = false,
+                usingRealAds = false,
+                usingTestAds = true,
+                isDebugBuild = false,
+                isEmulator = false,
+                rows = emptyList()
+            )
+        }
+    }
+}
+
 class MainActivity : ComponentActivity() {
     private val appContainer by lazy { (application as QuanturaApplication).container }
+    private val firebaseReady by lazy { (application as QuanturaApplication).firebaseReady }
+    private val isDebugBuild by lazy {
+        (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+    }
     private val firebaseAuth by lazy { FirebaseAuth.getInstance() }
     private val playBillingIapService by lazy { PlayBillingIapService(applicationContext) }
     private val playIntegrityClient by lazy { PlayIntegrityClient(applicationContext) }
@@ -124,6 +179,8 @@ class MainActivity : ComponentActivity() {
     private var usernameValue by mutableStateOf("")
     private var passwordValue by mutableStateOf("")
     private var confirmPasswordValue by mutableStateOf("")
+    private var adsQaDialogVisible by mutableStateOf(false)
+    private var adsQaSnapshot by mutableStateOf(AdsQaSnapshot.empty())
 
     private val googleSignInLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -134,11 +191,17 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         enableEdgeToEdge()
-        requestNotificationPermission()
-        fetchFcmToken()
-        NativePersonalizedNotificationManager.start(this)
+        if (firebaseReady) {
+            requestNotificationPermission()
+            fetchFcmToken()
+            NativePersonalizedNotificationManager.start(this)
+            registerAuthStateListener()
+        } else {
+            authGateVisible = false
+            Log.w("MainActivity", "[Auth][Android] Firebase not ready at startup; native auth disabled.")
+            emitAuthStateToWeb(null, idTokenFresh = false)
+        }
         InactivityNotificationScheduler.reschedule(this)
-        registerAuthStateListener()
 
         lifecycleScope.launch {
             appContainer.remoteConfigManager.fetchAndActivate()
@@ -148,15 +211,21 @@ class MainActivity : ComponentActivity() {
         }
 
         val deepLinkUrl = intent?.getStringExtra(QuanturaMessagingService.EXTRA_DEEP_LINK_URL)
-        val startUrl = deepLinkUrl ?: DEFAULT_START_URL
+        val startUrl = sanitizePrimaryQuanturaUrl(deepLinkUrl)
 
         setContent {
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    Box(modifier = Modifier.fillMaxSize()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
+                    ) {
                         Column(modifier = Modifier.fillMaxSize()) {
                             QuanturaWebViewScreen(
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth(),
                                 activity = this@MainActivity,
                                 startUrl = startUrl,
                                 adManager = appContainer.adManager,
@@ -168,11 +237,14 @@ class MainActivity : ComponentActivity() {
                                 onReady = { webView ->
                                     webViewRef = webView
                                     appContainer.appOpenAdManager.setPresentationBlockedByAuthGate(authGateVisible)
-                                    emitAuthStateToWeb(firebaseAuth.currentUser, idTokenFresh = false)
+                                    emitAuthStateToWeb(currentFirebaseUser(), idTokenFresh = false)
                                 },
                             )
                             AndroidView(
-                                modifier = Modifier.fillMaxWidth().wrapContentHeight(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(BANNER_RESERVED_HEIGHT)
+                                    .navigationBarsPadding(),
                                 factory = { ctx ->
                                     BannerAdView(ctx).apply {
                                         bannerAdViewRef = this
@@ -188,6 +260,9 @@ class MainActivity : ComponentActivity() {
 
                         if (authGateVisible) {
                             NativeAuthGate(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(bottom = BANNER_RESERVED_HEIGHT),
                                 isBusy = authBusy,
                                 errorText = authErrorText,
                                 onGoogle = { startGoogleSignInFlow(trigger = "auth_gate") },
@@ -233,6 +308,15 @@ class MainActivity : ComponentActivity() {
                                 },
                             )
                         }
+
+                        if (adsQaDialogVisible) {
+                            AdsQaDialog(
+                                snapshot = adsQaSnapshot,
+                                onRefresh = { refreshAdsQaSnapshot() },
+                                onTestAll = { testAllAdFormatsFromQaPanel() },
+                                onDismiss = { adsQaDialogVisible = false },
+                            )
+                        }
                     }
                 }
             }
@@ -242,12 +326,13 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun registerAuthStateListener() {
+        val auth = firebaseAuthOrNull() ?: return
         if (authStateListener != null) return
         authStateListener = FirebaseAuth.AuthStateListener { auth ->
             handleAuthStateChanged(auth.currentUser)
         }
-        firebaseAuth.addAuthStateListener(authStateListener!!)
-        handleAuthStateChanged(firebaseAuth.currentUser)
+        auth.addAuthStateListener(authStateListener!!)
+        handleAuthStateChanged(auth.currentUser)
     }
 
     private fun handleAuthStateChanged(user: FirebaseUser?) {
@@ -289,12 +374,13 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun ensureAnonymousSessionIfNeeded() {
-        if (firebaseAuth.currentUser != null) return
+        val auth = firebaseAuthOrNull() ?: return
+        if (auth.currentUser != null) return
         if (anonymousBootstrapInFlight) return
 
         anonymousBootstrapInFlight = true
         Log.i("MainActivity", "[Auth][Android] Bootstrapping anonymous session.")
-        firebaseAuth.signInAnonymously()
+        auth.signInAnonymously()
             .addOnSuccessListener { result ->
                 anonymousBootstrapInFlight = false
                 Log.i("MainActivity", "[Auth][Android] Anonymous sign-in succeeded uid=${result.user?.uid.orEmpty()}")
@@ -309,6 +395,9 @@ class MainActivity : ComponentActivity() {
     private fun updateAuthGateVisibility(visible: Boolean) {
         authGateVisible = visible
         appContainer.appOpenAdManager.setPresentationBlockedByAuthGate(visible)
+        if (!visible) {
+            appContainer.appOpenAdManager.showAdIfAvailable()
+        }
     }
 
     private fun continueAnonymouslyForNow() {
@@ -317,7 +406,7 @@ class MainActivity : ComponentActivity() {
         authBusy = false
         authErrorText = ""
         updateAuthGateVisibility(false)
-        emitAuthStateToWeb(firebaseAuth.currentUser, idTokenFresh = false)
+        emitAuthStateToWeb(currentFirebaseUser(), idTokenFresh = false)
     }
 
     private fun openEmailDialog(mode: EmailDialogMode) {
@@ -331,17 +420,22 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startGoogleSignInFlow(trigger: String) {
+        if (!beginInteractiveSignIn("google", trigger)) return
         val client = resolveGoogleSignInClient()
         if (client == null) {
             failInteractiveSignIn("Google sign-in is not configured (missing default_web_client_id).")
             return
         }
-        beginInteractiveSignIn("google", trigger)
         googleSignInLauncher.launch(client.signInIntent)
     }
 
     private fun startOAuthProviderSignIn(providerId: String, trigger: String) {
-        beginInteractiveSignIn(providerId, trigger)
+        if (!beginInteractiveSignIn(providerId, trigger)) return
+        val auth = firebaseAuthOrNull()
+        if (auth == null) {
+            failInteractiveSignIn("Native Firebase sign-in is unavailable on this build.")
+            return
+        }
         val providerBuilder = OAuthProvider.newBuilder(providerId).apply {
             when (providerId.lowercase()) {
                 "github.com" -> setScopes(listOf("read:user", "user:email"))
@@ -351,12 +445,12 @@ class MainActivity : ComponentActivity() {
             }
         }
         val provider = providerBuilder.build()
-        val currentUser = firebaseAuth.currentUser
+        val currentUser = auth.currentUser
 
         val task = if (currentUser?.isAnonymous == true) {
             currentUser.startActivityForLinkWithProvider(this, provider)
         } else {
-            firebaseAuth.startActivityForSignInWithProvider(this, provider)
+            auth.startActivityForSignInWithProvider(this, provider)
         }
 
         task.addOnSuccessListener { authResult ->
@@ -410,7 +504,7 @@ class MainActivity : ComponentActivity() {
             authErrorText = "Enter both email and password."
             return
         }
-        beginInteractiveSignIn("email", "auth_gate_email")
+        if (!beginInteractiveSignIn("email", "auth_gate_email")) return
         val credential = EmailAuthProvider.getCredential(email, password)
         signInOrLinkWithCredential(provider = "email", credential = credential, emailHint = email)
     }
@@ -442,9 +536,14 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        beginInteractiveSignIn("email_signup", "auth_gate_email_signup")
+        if (!beginInteractiveSignIn("email_signup", "auth_gate_email_signup")) return
+        val auth = firebaseAuthOrNull()
+        if (auth == null) {
+            failInteractiveSignIn("Native Firebase sign-up is unavailable on this build.")
+            return
+        }
         val credential = EmailAuthProvider.getCredential(email, password)
-        val currentUser = firebaseAuth.currentUser
+        val currentUser = auth.currentUser
         if (currentUser?.isAnonymous == true) {
             currentUser.linkWithCredential(credential)
                 .addOnSuccessListener { authResult ->
@@ -460,7 +559,7 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        firebaseAuth.createUserWithEmailAndPassword(email, password)
+        auth.createUserWithEmailAndPassword(email, password)
             .addOnSuccessListener { authResult ->
                 applyDisplayNameAndComplete(
                     provider = "email_signup",
@@ -473,13 +572,21 @@ class MainActivity : ComponentActivity() {
             }
     }
 
-    private fun beginInteractiveSignIn(provider: String, trigger: String) {
+    private fun beginInteractiveSignIn(provider: String, trigger: String): Boolean {
+        if (firebaseAuthOrNull() == null) {
+            authBusy = false
+            bridgeSyncRequired = false
+            authErrorText = "Native Firebase auth is unavailable. Verify google-services.json and rebuild."
+            updateAuthGateVisibility(true)
+            return false
+        }
         Log.i("MainActivity", "[Auth][Android] Starting interactive sign-in provider=$provider trigger=$trigger")
         gateDismissedForSession = false
         bridgeSyncRequired = true
         authBusy = true
         authErrorText = ""
         updateAuthGateVisibility(true)
+        return true
     }
 
     private fun signInOrLinkWithCredential(
@@ -487,7 +594,12 @@ class MainActivity : ComponentActivity() {
         credential: AuthCredential,
         emailHint: String = "",
     ) {
-        val currentUser = firebaseAuth.currentUser
+        val auth = firebaseAuthOrNull()
+        if (auth == null) {
+            failInteractiveSignIn("Native Firebase sign-in is unavailable on this build.")
+            return
+        }
+        val currentUser = auth.currentUser
         if (currentUser?.isAnonymous == true) {
             Log.i("MainActivity", "[Auth][Android] Attempting anonymous link provider=$provider")
             currentUser.linkWithCredential(credential)
@@ -502,7 +614,7 @@ class MainActivity : ComponentActivity() {
                     } else {
                         Log.w("MainActivity", "[Auth][Android] Link failed; trying sign-in fallback provider=$provider", error)
                     }
-                    firebaseAuth.signInWithCredential(fallbackCredential)
+                    auth.signInWithCredential(fallbackCredential)
                         .addOnSuccessListener { authResult ->
                             completeInteractiveSignIn(provider, authResult.user)
                         }
@@ -513,7 +625,7 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        firebaseAuth.signInWithCredential(credential)
+        auth.signInWithCredential(credential)
             .addOnSuccessListener { authResult ->
                 completeInteractiveSignIn(provider, authResult.user)
             }
@@ -537,18 +649,23 @@ class MainActivity : ComponentActivity() {
             .build()
         user.updateProfile(request)
             .addOnSuccessListener {
-                completeInteractiveSignIn(provider, firebaseAuth.currentUser ?: user)
+                completeInteractiveSignIn(provider, currentFirebaseUser() ?: user)
             }
             .addOnFailureListener {
-                completeInteractiveSignIn(provider, firebaseAuth.currentUser ?: user)
+                completeInteractiveSignIn(provider, currentFirebaseUser() ?: user)
             }
     }
 
     private fun handleSignInFailure(provider: String, error: Exception, emailHint: String = "") {
+        val auth = firebaseAuthOrNull()
+        if (auth == null) {
+            failInteractiveSignIn(error.message ?: "Native Firebase sign-in failed.")
+            return
+        }
         val collision = error as? FirebaseAuthUserCollisionException
         val candidateEmail = collision?.email?.trim().orEmpty().ifBlank { emailHint.trim() }
         if (candidateEmail.isNotEmpty()) {
-            firebaseAuth.fetchSignInMethodsForEmail(candidateEmail)
+            auth.fetchSignInMethodsForEmail(candidateEmail)
                 .addOnSuccessListener { methodsResult ->
                     val methods = methodsResult.signInMethods.orEmpty().map(::friendlyProviderName)
                     val providerLabel = friendlyProviderName(provider)
@@ -598,7 +715,7 @@ class MainActivity : ComponentActivity() {
     private fun failInteractiveSignIn(message: String) {
         Log.w("MainActivity", "[Auth][Android] Interactive sign-in failed: $message")
         authBusy = false
-        bridgeSyncRequired = firebaseAuth.currentUser?.isAnonymous == false
+        bridgeSyncRequired = currentFirebaseUser()?.isAnonymous == false
         authErrorText = message
         updateAuthGateVisibility(true)
     }
@@ -638,7 +755,7 @@ class MainActivity : ComponentActivity() {
                 Log.e("MainActivity", "[Auth][Android] Web custom token sync failed source=$source", error)
                 if (interactive) {
                     authBusy = false
-                    bridgeSyncRequired = firebaseAuth.currentUser?.isAnonymous == false
+                    bridgeSyncRequired = currentFirebaseUser()?.isAnonymous == false
                     authErrorText = "Signed in, but website sync failed: ${error.message ?: "unknown error"}"
                     updateAuthGateVisibility(true)
                 }
@@ -759,7 +876,8 @@ class MainActivity : ComponentActivity() {
         val parsed = runCatching { Uri.parse(webViewRef?.url ?: "") }.getOrNull()
         val host = parsed?.host?.lowercase()
         val scheme = parsed?.scheme?.lowercase().orEmpty().ifBlank { "https" }
-        return if (isTrustedHost(host)) "$scheme://$host" else "https://quantura.studio"
+        val authority = parsed?.encodedAuthority?.trim().orEmpty()
+        return if (isTrustedHost(host) && authority.isNotBlank()) "$scheme://$authority" else "https://quantura.studio"
     }
 
     private fun injectCustomTokenIntoWeb(customToken: String) {
@@ -819,10 +937,22 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun firebaseAuthOrNull(): FirebaseAuth? {
+        if (!firebaseReady) return null
+        return runCatching { firebaseAuth }.getOrNull()
+    }
+
+    private fun currentFirebaseUser(): FirebaseUser? = firebaseAuthOrNull()?.currentUser
+
     private fun handleNativeAuthMessage(typeRaw: String, payload: JSONObject) {
         when (typeRaw.trim().uppercase()) {
             "REQUEST_SIGN_IN" -> {
                 Log.i("MainActivity", "[Auth][Android] REQUEST_SIGN_IN received from web.")
+                if (firebaseAuthOrNull() == null) {
+                    authErrorText = "Native Firebase auth is unavailable in this build."
+                    updateAuthGateVisibility(true)
+                    return
+                }
                 gateDismissedForSession = false
                 authErrorText = ""
                 updateAuthGateVisibility(true)
@@ -844,7 +974,7 @@ class MainActivity : ComponentActivity() {
 
             "GET_AUTH_STATE" -> {
                 Log.i("MainActivity", "[Auth][Android] GET_AUTH_STATE received from web.")
-                emitAuthStateToWeb(firebaseAuth.currentUser, idTokenFresh = false)
+                emitAuthStateToWeb(currentFirebaseUser(), idTokenFresh = false)
             }
 
             "SIGN_OUT" -> {
@@ -897,17 +1027,28 @@ class MainActivity : ComponentActivity() {
                     is com.quantura.quanturaapp.iap.IapService.PurchaseResult.Success -> {
                         emitNativePurchaseResult(
                             requestId = requestId,
-                            orderId = orderId,
+                            orderId = result.orderId.ifBlank { orderId },
                             productId = result.productId,
                             ok = true,
                             status = "purchased"
                         )
                     }
 
+                    is com.quantura.quanturaapp.iap.IapService.PurchaseResult.Pending -> {
+                        emitNativePurchaseResult(
+                            requestId = requestId,
+                            orderId = result.orderId.ifBlank { orderId },
+                            productId = result.productId,
+                            ok = false,
+                            status = "pending",
+                            message = "Purchase is pending approval in Google Play."
+                        )
+                    }
+
                     is com.quantura.quanturaapp.iap.IapService.PurchaseResult.Cancelled -> {
                         emitNativePurchaseResult(
                             requestId = requestId,
-                            orderId = orderId,
+                            orderId = result.orderId.ifBlank { orderId },
                             productId = result.productId,
                             ok = false,
                             status = "cancelled"
@@ -1008,8 +1149,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun signOutToAnonymous() {
+        val auth = firebaseAuthOrNull()
         try {
-            firebaseAuth.signOut()
+            auth?.signOut()
             resolveGoogleSignInClient()?.signOut()
         } catch (error: Exception) {
             Log.w("MainActivity", "[Auth][Android] Sign-out warning: ${error.message}")
@@ -1020,7 +1162,7 @@ class MainActivity : ComponentActivity() {
         authErrorText = ""
         lastSyncedUid = ""
         updateAuthGateVisibility(true)
-        emitAuthStateToWeb(firebaseAuth.currentUser, idTokenFresh = false)
+        emitAuthStateToWeb(currentFirebaseUser(), idTokenFresh = false)
         ensureAnonymousSessionIfNeeded()
     }
 
@@ -1049,8 +1191,73 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun refreshAdsQaSnapshot() {
+        val effective = appContainer.remoteConfigManager.debugStatus()
+        val adRowsByFormat: Map<String, AdFormatStatusSnapshot> =
+            appContainer.adManager.debugStatusSnapshots().associateBy { it.format.lowercase() }
+        val adUnitsByFormat = linkedMapOf(
+            "app_open" to appContainer.remoteConfigManager.resolveAdUnitId(
+                platform = AdPlatform.ANDROID,
+                format = AdFormat.APP_OPEN
+            ),
+            "banner" to appContainer.remoteConfigManager.resolveAdUnitId(
+                platform = AdPlatform.ANDROID,
+                format = AdFormat.BANNER
+            ),
+            "interstitial" to appContainer.remoteConfigManager.resolveAdUnitId(
+                platform = AdPlatform.ANDROID,
+                format = AdFormat.INTERSTITIAL
+            ),
+            "rewarded" to appContainer.remoteConfigManager.resolveAdUnitId(
+                platform = AdPlatform.ANDROID,
+                format = AdFormat.REWARDED
+            ),
+            "rewarded_interstitial" to appContainer.remoteConfigManager.resolveAdUnitId(
+                platform = AdPlatform.ANDROID,
+                format = AdFormat.REWARDED_INTERSTITIAL
+            ),
+            "native" to appContainer.remoteConfigManager.resolveAdUnitId(
+                platform = AdPlatform.ANDROID,
+                format = AdFormat.NATIVE
+            ),
+        )
+
+        val rows = adUnitsByFormat.map { (formatKey, adUnitId) ->
+            val status = adRowsByFormat[formatKey]
+            AdsQaFormatRow(
+                format = formatKey,
+                adUnitId = adUnitId,
+                loadStatus = status?.lastLoadStatus ?: "idle",
+                showStatus = status?.lastShowStatus ?: "idle",
+            )
+        }
+
+        adsQaSnapshot = AdsQaSnapshot(
+            remoteConfigFetched = effective.remoteConfigFetched,
+            remoteConfigFetchedAtMs = effective.remoteConfigFetchedAtMs,
+            adsEnabled = effective.adsEnabled,
+            adsEnabledTopLevel = effective.adsEnabledTopLevel,
+            featureFlagAdsEnabled = effective.featureFlags.adsEnabled,
+            usingRealAds = effective.usingRealAds,
+            usingTestAds = effective.usingTestAds,
+            isDebugBuild = effective.environment.isDebugBuild,
+            isEmulator = effective.environment.isSimulatorOrEmulator,
+            rows = rows,
+        )
+    }
+
+    private fun testAllAdFormatsFromQaPanel() {
+        lifecycleScope.launch {
+            appContainer.adManager.preloadAllFormatsForQa(this@MainActivity)
+            appContainer.appOpenAdManager.loadAdIfNeeded()
+            bannerAdViewRef?.loadAd(appContainer.remoteConfigManager)
+            delay(600)
+            refreshAdsQaSnapshot()
+        }
+    }
+
     private fun syncNotificationSession(forcePing: Boolean) {
-        val user = firebaseAuth.currentUser ?: return
+        val user = currentFirebaseUser() ?: return
         val now = System.currentTimeMillis()
         if (!forcePing && now - lastNotificationSessionPingAtMs < 45_000L) {
             return
@@ -1139,7 +1346,10 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        authStateListener?.let { firebaseAuth.removeAuthStateListener(it) }
+        val auth = firebaseAuthOrNull()
+        authStateListener?.let { listener ->
+            runCatching { auth?.removeAuthStateListener(listener) }
+        }
         authStateListener = null
         webViewRef?.removeJavascriptInterface("QuanturaBridge")
         webViewRef?.removeJavascriptInterface("quanturaAuth")
@@ -1152,10 +1362,13 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         val deepLinkUrl = intent.getStringExtra(QuanturaMessagingService.EXTRA_DEEP_LINK_URL).orEmpty()
         if (deepLinkUrl.isNotBlank()) {
+            val sanitized = sanitizePrimaryQuanturaUrl(deepLinkUrl)
+            if (sanitized != DEFAULT_START_URL) {
+                webViewRef?.loadUrl(sanitized)
+                return
+            }
             val uri = runCatching { Uri.parse(deepLinkUrl) }.getOrNull()
-            if (isTrustedUri(uri)) {
-                webViewRef?.loadUrl(deepLinkUrl)
-            } else if (uri != null) {
+            if (uri != null) {
                 runCatching { startActivity(Intent(Intent.ACTION_VIEW, uri)) }
             }
         }
@@ -1164,6 +1377,18 @@ class MainActivity : ComponentActivity() {
     companion object {
         private const val REQUEST_NOTIFICATION_PERMISSION = 9001
     }
+}
+
+private fun sanitizePrimaryQuanturaUrl(rawUrl: String?): String {
+    val candidate = rawUrl.orEmpty().trim()
+    if (candidate.isBlank()) return DEFAULT_START_URL
+    val uri = runCatching { Uri.parse(candidate) }.getOrNull() ?: return DEFAULT_START_URL
+    val scheme = uri.scheme?.lowercase().orEmpty()
+    val host = uri.host?.lowercase().orEmpty()
+    if ((scheme == "https" || scheme == "http") && (host == "quantura.studio" || host == "www.quantura.studio")) {
+        return candidate
+    }
+    return DEFAULT_START_URL
 }
 
 @Composable
@@ -1287,6 +1512,7 @@ private fun QuanturaWebViewScreen(
 
 @Composable
 private fun NativeAuthGate(
+    modifier: Modifier = Modifier,
     isBusy: Boolean,
     errorText: String,
     onGoogle: () -> Unit,
@@ -1298,7 +1524,7 @@ private fun NativeAuthGate(
     onNotNow: () -> Unit,
 ) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
@@ -1514,6 +1740,64 @@ private fun EmailSignInDialog(
         dismissButton = {
             TextButton(onClick = onDismiss, enabled = !isBusy) {
                 Text("Cancel")
+            }
+        },
+    )
+}
+
+@Composable
+private fun AdsQaDialog(
+    snapshot: AdsQaSnapshot,
+    onRefresh: () -> Unit,
+    onTestAll: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Ads QA") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = "Remote Config fetched=${snapshot.remoteConfigFetched} " +
+                        "adsEnabled=${snapshot.adsEnabled} topLevel=${snapshot.adsEnabledTopLevel} " +
+                        "featureFlag=${snapshot.featureFlagAdsEnabled}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Text(
+                    text = "usingRealAds=${snapshot.usingRealAds} usingTestAds=${snapshot.usingTestAds} " +
+                        "debug=${snapshot.isDebugBuild} emulator=${snapshot.isEmulator}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                snapshot.rows.forEach { row ->
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = row.format.replace("_", " ").replaceFirstChar { it.uppercase() },
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            text = row.adUnitId,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            text = "load=${row.loadStatus} · show=${row.showStatus}",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                TextButton(onClick = onRefresh) { Text("Refresh") }
+                TextButton(onClick = onTestAll) { Text("Load all ads") }
+                TextButton(onClick = onDismiss) { Text("Close") }
             }
         },
     )

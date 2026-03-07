@@ -100,22 +100,6 @@
       <section class="section">
         <div class="container content-grid">
           <article class="card">
-            <h3>Developer profile image</h3>
-            <p class="small muted">Upload a profile photo preview for this page.</p>
-            <img
-              id="about-profile-preview"
-              src="/assets/quantura-icon.svg"
-              alt="Developer profile preview"
-              style="width: 140px; height: 140px; border-radius: 20px; object-fit: cover; border: 1px solid var(--line); margin-top: 8px;"
-            />
-            <div class="field" style="margin-top: 12px;">
-              <label class="label" for="about-profile-upload">Profile image</label>
-              <input id="about-profile-upload" class="modal-input" type="file" accept="image/*" />
-            </div>
-            <p class="small muted" style="margin-top: 8px;">Local preview only. Upload persistence can be connected in dashboard settings.</p>
-          </article>
-
-          <article class="card">
             <h3>Why Quantura exists</h3>
             <div class="feature-list" style="margin-top: 10px;">
               <div class="feature"><span></span>Make research and forecasting transparent and auditable.</div>
@@ -180,21 +164,6 @@
         © 2026 Quantura. All rights reserved.
       </div>
     </footer>
-
-    <script>
-      document.addEventListener("DOMContentLoaded", () => {
-        const input = document.getElementById("about-profile-upload");
-        const preview = document.getElementById("about-profile-preview");
-        if (!(input instanceof HTMLInputElement) || !(preview instanceof HTMLImageElement)) return;
-        input.addEventListener("change", () => {
-          const file = input.files && input.files[0];
-          if (!file) return;
-          const nextUrl = URL.createObjectURL(file);
-          preview.src = nextUrl;
-          preview.onload = () => URL.revokeObjectURL(nextUrl);
-        });
-      });
-    </script>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
   </body>

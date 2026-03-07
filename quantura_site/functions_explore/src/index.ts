@@ -67,14 +67,23 @@ const MAX_LIMIT = 40;
 const PUBLIC_ORIGIN = asString(process.env.PUBLIC_ORIGIN, "https://quantura.studio").replace(/\/$/, "");
 const ADMIN_EMAIL = "tamzid257@gmail.com";
 const MODEL_COUNCIL_RESPONSE_COLLECTION = "model_council_responses";
-const OPENAI_API_KEY = asString(process.env.OPENAI_API_KEY).trim();
-const GEMINI_API_KEY = asString(process.env.GEMINI_API_KEY).trim();
-const MISTRAL_API_KEY = asString(process.env.MISTRAL_API_KEY).trim();
-const PERPLEXITY_API_KEY = asString(process.env.PERPLEXITY_API_KEY).trim();
-const MODEL_COUNCIL_OTHER_API_KEY = asString(process.env.MODEL_COUNCIL_OTHER_API_KEY).trim();
+const OPENAI_API_KEY = resolveEnvSecret(["OPENAI_API_KEY", "OPENAI_SECRET_KEY", "OPENAI_KEY"], /^OPENAI_.*KEY$/i);
+const CLAUDE_API_KEY = resolveEnvSecret(["CLAUDE_API_KEY", "ANTHROPIC_API_KEY"], /^(CLAUDE|ANTHROPIC)_.*KEY$/i);
+const GEMINI_API_KEY = resolveEnvSecret(["GEMINI_API_KEY", "GOOGLE_GENAI_API_KEY"], /^GEMINI_.*KEY$/i);
+const DEEPSEEK_API_KEY = resolveEnvSecret(["DEEPSEEK_API_KEY", "DEEPSEEK_SECRET_KEY"], /^DEEPSEEK_.*KEY$/i);
+const MISTRAL_API_KEY = resolveEnvSecret(["MISTRAL_API_KEY", "MISTRAL_SECRET_KEY"], /^MISTRAL_.*KEY$/i);
+const PERPLEXITY_API_KEY = resolveEnvSecret(["PERPLEXITY_API_KEY", "PERPLEXITY_SECRET_KEY"], /^PERPLEXITY_.*KEY$/i);
+const QWEN_API_KEY = resolveEnvSecret(["QWEN_API_KEY", "QWEN_SECRET_KEY"], /^QWEN_.*KEY$/i);
+const AMAZON_NOVA_API_KEY = resolveEnvSecret(["AMAZON_NOVA_API_KEY", "BEDROCK_API_KEY"], /^(AMAZON_NOVA|BEDROCK)_.*KEY$/i);
+const AMAZON_NOVA_BASE_URL = asString(process.env.AMAZON_NOVA_BASE_URL).trim().replace(/\/$/, "");
+const CLAUDE_API_VERSION = asString(process.env.CLAUDE_API_VERSION, "2023-06-01").trim();
+const MODEL_COUNCIL_OTHER_API_KEY = resolveEnvSecret(
+  ["MODEL_COUNCIL_OTHER_API_KEY", "MODEL_COUNCIL_OTHER_KEY"],
+  /^MODEL_COUNCIL_OTHER_.*KEY$/i
+);
 const MODEL_COUNCIL_OTHER_BASE_URL = asString(process.env.MODEL_COUNCIL_OTHER_BASE_URL).trim().replace(/\/$/, "");
 const NOTIFICATION_REWRITE_MODEL = asString(process.env.NOTIFICATION_REWRITE_MODEL, "gpt-4o-mini").trim();
-const FMP_API_KEY = asString(process.env.FMP_API_KEY).trim();
+const FMP_API_KEY = resolveEnvSecret(["FMP_API_KEY", "FMP_SECRET_KEY", "FMP_KEY"], /^FMP_.*_KEY$/i);
 const PLAY_INTEGRITY_ANDROID_PACKAGE = asString(process.env.PLAY_INTEGRITY_ANDROID_PACKAGE).trim();
 const REQUIRE_PLAY_INTEGRITY = asBoolean(process.env.REQUIRE_PLAY_INTEGRITY, false);
 const IOS_IAP_WEBHOOK_SECRET = asString(process.env.IOS_IAP_WEBHOOK_SECRET).trim();
@@ -92,6 +101,8 @@ const POLYMARKET_CACHE_TTL_MS = 10 * 60 * 1000;
 const POLYMARKET_CACHE_MAX_ENTRIES = 160;
 const TICKER_INTEL_CACHE_TTL_MS = 10 * 60 * 1000;
 const TICKER_INTEL_CACHE_MAX_ENTRIES = 200;
+const TICKER_TRENDING_CACHE_TTL_MS = 5 * 60 * 1000;
+const TICKER_TRENDING_CACHE_MAX_ENTRIES = 64;
 const FX_RATE_CACHE_TTL_MS = 60 * 60 * 1000;
 const FX_RATE_CACHE_MAX_ENTRIES = 120;
 const FX_RATE_FETCH_TIMEOUT_MS = 7000;
@@ -213,6 +224,11 @@ type TickerIntelCacheEntry = {
   value: Record<string, unknown>;
 };
 
+type TickerTrendingCacheEntry = {
+  expiresAtMs: number;
+  value: Record<string, unknown>;
+};
+
 const SYSTEM_FOLDERS: SystemFolderConfig[] = [
   { id: "liked-posts", displayName: "Liked posts", flag: "liked" },
   { id: "reposted-posts", displayName: "Reposted posts", flag: "reposted" },
@@ -245,6 +261,7 @@ const MY_REQUEST_TYPE_LABEL: Record<MyRequestType, string> = {
 const ROUTES = express.Router();
 const polymarketCache = new Map<string, PolymarketCacheEntry>();
 const tickerIntelCache = new Map<string, TickerIntelCacheEntry>();
+const tickerTrendingCache = new Map<string, TickerTrendingCacheEntry>();
 const fxRateCache = new Map<string, FxRateCacheEntry>();
 const PLAY_INTEGRITY_AUTH = new GoogleAuth({
   scopes: ["https://www.googleapis.com/auth/playintegrity"],
@@ -269,6 +286,19 @@ function asBoolean(value: unknown, fallback = false): boolean {
     if (normalized === "false") return false;
   }
   return fallback;
+}
+
+function resolveEnvSecret(preferredKeys: string[], pattern?: RegExp): string {
+  for (const key of preferredKeys) {
+    const value = asString(process.env[key]).trim();
+    if (value) return value;
+  }
+  if (!pattern) return "";
+  const matches = Object.entries(process.env)
+    .filter(([key, value]) => pattern.test(key) && asString(value).trim().length > 0)
+    .sort(([a], [b]) => a.localeCompare(b));
+  if (!matches.length) return "";
+  return asString(matches[0][1]).trim();
 }
 
 function requestIpAddress(req: Request): string {
@@ -522,6 +552,140 @@ function setTickerIntelCache(ticker: string, value: Record<string, unknown>): vo
     if (!oldestKey) break;
     tickerIntelCache.delete(oldestKey);
   }
+}
+
+function normalizeRemoteLogoUrl(value: unknown): string {
+  const text = sanitizeText(value, 500);
+  if (!/^https?:\/\//i.test(text)) return "";
+  return text;
+}
+
+function getTickerTrendingCache(cacheKey: string): Record<string, unknown> | null {
+  const key = sanitizeText(cacheKey, 120);
+  if (!key) return null;
+  const cached = tickerTrendingCache.get(key);
+  if (!cached) return null;
+  if (cached.expiresAtMs <= Date.now()) {
+    tickerTrendingCache.delete(key);
+    return null;
+  }
+  return cached.value;
+}
+
+function setTickerTrendingCache(cacheKey: string, value: Record<string, unknown>): void {
+  const key = sanitizeText(cacheKey, 120);
+  if (!key) return;
+  tickerTrendingCache.set(key, {
+    expiresAtMs: Date.now() + TICKER_TRENDING_CACHE_TTL_MS,
+    value,
+  });
+  while (tickerTrendingCache.size > TICKER_TRENDING_CACHE_MAX_ENTRIES) {
+    const oldestKey = tickerTrendingCache.keys().next().value;
+    if (!oldestKey) break;
+    tickerTrendingCache.delete(oldestKey);
+  }
+}
+
+function chunkSymbols(symbols: string[], chunkSize = 12): string[][] {
+  const size = Math.max(1, Math.floor(chunkSize));
+  const out: string[][] = [];
+  for (let index = 0; index < symbols.length; index += size) {
+    out.push(symbols.slice(index, index + size));
+  }
+  return out;
+}
+
+async function fetchYahooTrendingSymbols(region: string, limit: number): Promise<string[]> {
+  const safeRegion = sanitizeText(region, 10).toUpperCase().replace(/[^A-Z]/g, "") || "US";
+  const url = `https://query1.finance.yahoo.com/v1/finance/trending/${encodeURIComponent(safeRegion)}`;
+  const payloadRaw = await fetchJsonWithTimeout(url, 7000);
+  const payload = payloadRaw && typeof payloadRaw === "object" ? (payloadRaw as Record<string, unknown>) : {};
+  const quotesRaw = ((((payload.finance as any)?.result as Array<Record<string, unknown>> | undefined) || [])[0] as
+    | Record<string, unknown>
+    | undefined)?.quotes;
+  const quotes = Array.isArray(quotesRaw) ? quotesRaw : [];
+  const symbols = Array.from(
+    new Set(
+      quotes
+        .map((row) => normalizeTicker((row as Record<string, unknown>)?.symbol))
+        .filter((symbol) => Boolean(symbol))
+    )
+  );
+  return symbols.slice(0, Math.max(1, Math.min(40, Math.floor(limit))));
+}
+
+async function fetchYahooSparkMetaBySymbols(symbols: string[]): Promise<Map<string, Record<string, unknown>>> {
+  const out = new Map<string, Record<string, unknown>>();
+  const unique = Array.from(new Set((Array.isArray(symbols) ? symbols : []).map((symbol) => normalizeTicker(symbol)).filter(Boolean)));
+  if (!unique.length) return out;
+
+  const chunks = chunkSymbols(unique, 12);
+  await Promise.all(
+    chunks.map(async (chunk) => {
+      if (!chunk.length) return;
+      const url = `https://query1.finance.yahoo.com/v7/finance/spark?symbols=${encodeURIComponent(
+        chunk.join(",")
+      )}&range=1d&interval=5m`;
+      const payloadRaw = await fetchJsonWithTimeout(url, 7000).catch(() => null);
+      if (!payloadRaw || typeof payloadRaw !== "object") return;
+      const payload = payloadRaw as Record<string, unknown>;
+      const result = (((payload.spark as any)?.result as Array<Record<string, unknown>> | undefined) || []).filter(Boolean);
+      result.forEach((entry) => {
+        const symbol = normalizeTicker(entry.symbol || (entry as any)?.meta?.symbol);
+        if (!symbol) return;
+        const response = Array.isArray(entry.response) ? entry.response : [];
+        const meta =
+          response.length && response[0] && typeof response[0] === "object"
+            ? ((response[0] as Record<string, unknown>).meta as Record<string, unknown>) || {}
+            : {};
+        if (meta && typeof meta === "object" && Object.keys(meta).length) {
+          out.set(symbol, meta);
+        }
+      });
+    })
+  );
+
+  return out;
+}
+
+async function fetchFmpTickerLogoMap(
+  symbols: string[]
+): Promise<Map<string, { logoUrl: string; website: string; companyName: string }>> {
+  const out = new Map<string, { logoUrl: string; website: string; companyName: string }>();
+  if (!FMP_API_KEY) return out;
+  const unique = Array.from(new Set((Array.isArray(symbols) ? symbols : []).map((symbol) => normalizeTicker(symbol)).filter(Boolean))).slice(
+    0,
+    24
+  );
+  if (!unique.length) return out;
+
+  await Promise.all(
+    unique.map(async (symbol) => {
+      const url = `https://financialmodelingprep.com/stable/profile?symbol=${encodeURIComponent(symbol)}&apikey=${encodeURIComponent(
+        FMP_API_KEY
+      )}`;
+      const payloadRaw = await fetchJsonWithTimeout(url, 7000).catch(() => null);
+      const rows = Array.isArray(payloadRaw)
+        ? (payloadRaw as Array<Record<string, unknown>>)
+        : payloadRaw && typeof payloadRaw === "object"
+          ? [payloadRaw as Record<string, unknown>]
+          : [];
+      if (!rows.length) return;
+      const matched = rows.find((row) => normalizeTicker(row.symbol || row.ticker) === symbol) || rows[0] || {};
+      const website = sanitizeText(matched.website, 280);
+      const directLogo =
+        normalizeRemoteLogoUrl(matched.image) ||
+        normalizeRemoteLogoUrl(matched.logoUrl) ||
+        normalizeRemoteLogoUrl(matched.logo_url) ||
+        normalizeRemoteLogoUrl(matched.logo);
+      const logoUrl = directLogo || buildLogoUrlFromWebsite(website);
+      const companyName = sanitizeText(matched.companyName || matched.name || matched.longName || "", 180);
+      if (!logoUrl && !website && !companyName) return;
+      out.set(symbol, { logoUrl, website, companyName });
+    })
+  );
+
+  return out;
 }
 
 async function fetchJsonWithTimeout(url: string, timeoutMs = 7500): Promise<unknown> {
@@ -2004,14 +2168,107 @@ function normalizeLlmMessages(raw: unknown): Array<{ role: "system" | "user" | "
     .slice(0, 40);
 }
 
-type LlmProviderId = "openai" | "gemini" | "mistral" | "perplexity" | "other";
+type LlmProviderId =
+  | "openai"
+  | "claude"
+  | "gemini"
+  | "deepseek"
+  | "mistral"
+  | "perplexity"
+  | "qwen"
+  | "amazon_nova"
+  | "other";
+type LlmUserTier = "free" | "premium";
+
+type LlmProviderPolicy = {
+  freeModels: string[];
+  premiumModels: string[];
+};
+
+const LLM_PROVIDER_POLICY: Record<LlmProviderId, LlmProviderPolicy> = {
+  openai: {
+    freeModels: ["gpt-5-nano", "gpt-5-mini", "gpt-4o-mini"],
+    premiumModels: ["gpt-5", "gpt-5.1", "gpt-5.2", "gpt-5.4", "gpt-5.4-pro", "gpt-4.1"],
+  },
+  claude: {
+    freeModels: ["claude-haiku*", "claude-3-haiku*"],
+    premiumModels: ["claude-sonnet*", "claude-opus*"],
+  },
+  gemini: {
+    freeModels: ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"],
+    premiumModels: ["gemini-2.5-pro", "gemini-1.5-pro"],
+  },
+  deepseek: {
+    freeModels: ["deepseek-chat"],
+    premiumModels: ["deepseek-reasoner"],
+  },
+  mistral: {
+    freeModels: ["mistral-small*", "mistral-small-latest"],
+    premiumModels: ["mistral-medium*", "mistral-large*", "mistral-large-latest"],
+  },
+  perplexity: {
+    freeModels: ["sonar"],
+    premiumModels: ["sonar-pro", "sonar-reasoning-pro", "sonar-deep-research"],
+  },
+  qwen: {
+    freeModels: ["qwen-flash"],
+    premiumModels: ["qwen-plus", "qwen-max"],
+  },
+  amazon_nova: {
+    freeModels: ["amazon.nova-micro-v1:0", "amazon.nova-lite-v1:0"],
+    premiumModels: ["amazon.nova-pro-v1:0", "amazon.nova-premier-v1:0"],
+  },
+  other: {
+    freeModels: [DEFAULT_LLM_MODEL],
+    premiumModels: ["*"],
+  },
+};
 
 function normalizeProvider(raw: unknown): LlmProviderId {
-  const value = asString(raw).trim().toLowerCase();
-  if (value === "gemini" || value === "mistral" || value === "perplexity" || value === "openai" || value === "other") {
-    return value;
-  }
+  const value = asString(raw).trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
+  if (value === "openai") return "openai";
+  if (value === "claude" || value === "anthropic") return "claude";
+  if (value === "gemini") return "gemini";
+  if (value === "deepseek") return "deepseek";
+  if (value === "mistral") return "mistral";
+  if (value === "perplexity") return "perplexity";
+  if (value === "qwen") return "qwen";
+  if (value === "amazon_nova" || value === "amazon-nova" || value === "nova") return "amazon_nova";
+  if (value === "other") return "other";
   return "openai";
+}
+
+function normalizeLlmTier(raw: unknown): LlmUserTier {
+  const value = asString(raw).trim().toLowerCase();
+  return value === "premium" || value === "pro" || value === "business" ? "premium" : "free";
+}
+
+function modelMatchesPattern(modelId: string, pattern: string): boolean {
+  if (!pattern || pattern === "*") return true;
+  const cleanPattern = pattern.trim().toLowerCase();
+  const cleanModel = modelId.trim().toLowerCase();
+  if (!cleanPattern) return false;
+  if (cleanPattern.endsWith("*")) {
+    return cleanModel.startsWith(cleanPattern.slice(0, -1));
+  }
+  return cleanModel === cleanPattern;
+}
+
+function pickModelForProvider(
+  provider: LlmProviderId,
+  requestedModel: string,
+  tier: LlmUserTier
+): { model: string; adjustedFrom: string } {
+  const policy = LLM_PROVIDER_POLICY[provider] || LLM_PROVIDER_POLICY.openai;
+  const free = Array.isArray(policy.freeModels) ? policy.freeModels : [];
+  const premium = Array.isArray(policy.premiumModels) ? policy.premiumModels : [];
+  const allowed = tier === "premium" ? [...free, ...premium] : [...free];
+  const requested = sanitizeText(requestedModel, 120);
+  const defaultModel = allowed[0] || DEFAULT_LLM_MODEL;
+  if (!requested) return { model: defaultModel, adjustedFrom: "" };
+  const isAllowed = allowed.some((pattern) => modelMatchesPattern(requested, pattern));
+  if (isAllowed) return { model: requested, adjustedFrom: "" };
+  return { model: defaultModel, adjustedFrom: requested };
 }
 
 function parseWebhookSecret(req: Request): string {
@@ -2041,8 +2298,49 @@ async function invokeOpenAiLlm(payload: {
   allowWebSearch: boolean;
   stream: boolean;
   background: boolean;
-}): Promise<{ text: string; usage: Record<string, unknown> }> {
+  tools?: unknown[];
+  jsonSchema?: unknown;
+}): Promise<{ text: string; usage: Record<string, unknown>; responseId: string; status: string }> {
   if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is not configured.");
+  const requestedTools = Array.isArray(payload.tools) ? payload.tools : [];
+  const tools: Array<Record<string, unknown>> = [];
+  const pushWebSearch = () => {
+    if (!tools.some((tool) => sanitizeText(tool.type, 80) === "web_search_preview")) {
+      tools.push({ type: "web_search_preview" });
+    }
+  };
+  if (payload.allowWebSearch) pushWebSearch();
+  requestedTools.forEach((tool) => {
+    const row = tool && typeof tool === "object" ? (tool as Record<string, unknown>) : {};
+    const type = sanitizeText(row.type, 80).toLowerCase();
+    if (!type) return;
+    if (type === "web_search" || type === "web_search_preview") {
+      pushWebSearch();
+      return;
+    }
+    if (type === "file_search") {
+      tools.push({ type: "file_search" });
+    }
+  });
+
+  const schemaSource = payload.jsonSchema && typeof payload.jsonSchema === "object" ? (payload.jsonSchema as Record<string, unknown>) : null;
+  const schemaNameRaw = schemaSource ? sanitizeText(schemaSource.name || "quantura_structured_output", 120) : "";
+  const schemaObject =
+    schemaSource && schemaSource.schema && typeof schemaSource.schema === "object"
+      ? (schemaSource.schema as Record<string, unknown>)
+      : schemaSource;
+  const textFormat =
+    schemaObject && typeof schemaObject === "object"
+      ? {
+          format: {
+            type: "json_schema",
+            name: schemaNameRaw || "quantura_structured_output",
+            schema: schemaObject,
+            strict: true,
+          },
+        }
+      : undefined;
+
   const { signal, clear } = llmTimeoutSignal();
   try {
     const response = await fetch("https://api.openai.com/v1/responses", {
@@ -2061,7 +2359,8 @@ async function invokeOpenAiLlm(payload: {
         max_output_tokens: payload.maxTokens,
         stream: Boolean(payload.stream),
         background: Boolean(payload.background),
-        tools: payload.allowWebSearch ? [{ type: "web_search_preview" }] : [],
+        tools,
+        text: textFormat,
         metadata: {
           quantura_workflow: "model_council",
           quantura_prompt_caching: "enabled",
@@ -2074,8 +2373,18 @@ async function invokeOpenAiLlm(payload: {
       throw new Error(detail || `OpenAI request failed (${response.status}).`);
     }
     const text = sanitizeText(extractResponsesOutputText(body), 20000);
-    if (!text) throw new Error("OpenAI returned an empty response.");
-    return { text, usage: extractResponsesUsage(body) };
+    const responseId = sanitizeText((body as any)?.id, 120);
+    const status = sanitizeText((body as any)?.status, 80);
+    if (!text) {
+      const statusLabel = status || "unknown";
+      throw new Error(`OpenAI returned an empty response (status: ${statusLabel}).`);
+    }
+    return {
+      text,
+      usage: extractResponsesUsage(body),
+      responseId,
+      status,
+    };
   } finally {
     clear();
   }
@@ -2266,6 +2575,263 @@ async function invokePerplexityLlm(payload: {
   }
 }
 
+async function invokeClaudeLlm(payload: {
+  model: string;
+  messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
+  temperature: number;
+  maxTokens: number;
+}): Promise<{ text: string; usage: Record<string, unknown> }> {
+  if (!CLAUDE_API_KEY) throw new Error("CLAUDE_API_KEY is not configured.");
+  const system = payload.messages
+    .filter((item) => item.role === "system")
+    .map((item) => item.content)
+    .join("\n\n")
+    .trim();
+  const messages = payload.messages
+    .filter((item) => item.role !== "system")
+    .map((item) => ({
+      role: item.role === "assistant" ? "assistant" : "user",
+      content: item.content,
+    }));
+  if (!messages.length) messages.push({ role: "user", content: "Summarize the provided context clearly." });
+  const { signal, clear } = llmTimeoutSignal();
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      signal,
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": CLAUDE_API_KEY,
+        "anthropic-version": CLAUDE_API_VERSION,
+      },
+      body: JSON.stringify({
+        model: payload.model,
+        max_tokens: payload.maxTokens,
+        temperature: payload.temperature,
+        system,
+        messages,
+      }),
+    });
+    const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!response.ok) {
+      const detail = sanitizeText((body as any)?.error?.message || "", 180);
+      throw new Error(detail || `Claude request failed (${response.status}).`);
+    }
+    const content = Array.isArray((body as any)?.content) ? ((body as any).content as Array<Record<string, unknown>>) : [];
+    const text = sanitizeText(
+      content
+        .map((part) => sanitizeText(part?.text, 8000))
+        .filter(Boolean)
+        .join("\n"),
+      20000
+    );
+    if (!text) throw new Error("Claude returned an empty response.");
+    return { text, usage: ((body.usage as any) || {}) as Record<string, unknown> };
+  } finally {
+    clear();
+  }
+}
+
+async function invokeOpenAiCompatibleChatLlm(payload: {
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+  messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
+  temperature: number;
+  maxTokens: number;
+  providerLabel: string;
+}): Promise<{ text: string; usage: Record<string, unknown> }> {
+  const baseUrl = payload.baseUrl.replace(/\/$/, "");
+  if (!baseUrl) throw new Error(`${payload.providerLabel} base URL is not configured.`);
+  const { signal, clear } = llmTimeoutSignal();
+  try {
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      signal,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${payload.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: payload.model,
+        messages: payload.messages,
+        temperature: payload.temperature,
+        max_tokens: payload.maxTokens,
+      }),
+    });
+    const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!response.ok) {
+      const detail = sanitizeText((body as any)?.error?.message || "", 180);
+      throw new Error(detail || `${payload.providerLabel} request failed (${response.status}).`);
+    }
+    const text = sanitizeText((((body.choices as any)?.[0] || {}).message || {}).content, 20000);
+    if (!text) throw new Error(`${payload.providerLabel} returned an empty response.`);
+    return {
+      text,
+      usage: ((body.usage as any) || {}) as Record<string, unknown>,
+    };
+  } finally {
+    clear();
+  }
+}
+
+async function invokeDeepseekLlm(payload: {
+  model: string;
+  messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
+  temperature: number;
+  maxTokens: number;
+}): Promise<{ text: string; usage: Record<string, unknown> }> {
+  if (!DEEPSEEK_API_KEY) throw new Error("DEEPSEEK_API_KEY is not configured.");
+  return invokeOpenAiCompatibleChatLlm({
+    apiKey: DEEPSEEK_API_KEY,
+    baseUrl: "https://api.deepseek.com/v1",
+    providerLabel: "DeepSeek",
+    ...payload,
+  });
+}
+
+async function invokeQwenLlm(payload: {
+  model: string;
+  messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
+  temperature: number;
+  maxTokens: number;
+}): Promise<{ text: string; usage: Record<string, unknown> }> {
+  if (!QWEN_API_KEY) throw new Error("QWEN_API_KEY is not configured.");
+  return invokeOpenAiCompatibleChatLlm({
+    apiKey: QWEN_API_KEY,
+    baseUrl: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+    providerLabel: "Qwen",
+    ...payload,
+  });
+}
+
+async function invokeAmazonNovaLlm(payload: {
+  model: string;
+  messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
+  temperature: number;
+  maxTokens: number;
+}): Promise<{ text: string; usage: Record<string, unknown> }> {
+  if (!AMAZON_NOVA_API_KEY) throw new Error("AMAZON_NOVA_API_KEY is not configured.");
+  if (!AMAZON_NOVA_BASE_URL) throw new Error("AMAZON_NOVA_BASE_URL is not configured.");
+  return invokeOpenAiCompatibleChatLlm({
+    apiKey: AMAZON_NOVA_API_KEY,
+    baseUrl: AMAZON_NOVA_BASE_URL,
+    providerLabel: "Amazon Nova",
+    ...payload,
+  });
+}
+
+async function streamOpenAiLlmSse(
+  req: Request,
+  res: Response,
+  payload: {
+    model: string;
+    messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
+    maxTokens: number;
+    allowWebSearch: boolean;
+    background: boolean;
+    tools?: unknown[];
+    jsonSchema?: unknown;
+  }
+): Promise<void> {
+  if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is not configured.");
+  const requestedTools = Array.isArray(payload.tools) ? payload.tools : [];
+  const tools: Array<Record<string, unknown>> = [];
+  const pushWebSearch = () => {
+    if (!tools.some((tool) => sanitizeText(tool.type, 80) === "web_search_preview")) {
+      tools.push({ type: "web_search_preview" });
+    }
+  };
+  if (payload.allowWebSearch) pushWebSearch();
+  requestedTools.forEach((tool) => {
+    const row = tool && typeof tool === "object" ? (tool as Record<string, unknown>) : {};
+    const type = sanitizeText(row.type, 80).toLowerCase();
+    if (type === "web_search" || type === "web_search_preview") pushWebSearch();
+    if (type === "file_search") tools.push({ type: "file_search" });
+  });
+
+  const schemaSource = payload.jsonSchema && typeof payload.jsonSchema === "object" ? (payload.jsonSchema as Record<string, unknown>) : null;
+  const schemaNameRaw = schemaSource ? sanitizeText(schemaSource.name || "quantura_structured_output", 120) : "";
+  const schemaObject =
+    schemaSource && schemaSource.schema && typeof schemaSource.schema === "object"
+      ? (schemaSource.schema as Record<string, unknown>)
+      : schemaSource;
+  const textFormat =
+    schemaObject && typeof schemaObject === "object"
+      ? {
+          format: {
+            type: "json_schema",
+            name: schemaNameRaw || "quantura_structured_output",
+            schema: schemaObject,
+            strict: true,
+          },
+        }
+      : undefined;
+
+  const abort = new AbortController();
+  const closeListener = () => abort.abort();
+  req.on("close", closeListener);
+
+  try {
+    const upstream = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      signal: abort.signal,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: payload.model,
+        input: payload.messages.map((item) => ({
+          role: item.role,
+          content: [{ type: "input_text", text: item.content }],
+        })),
+        max_output_tokens: payload.maxTokens,
+        stream: true,
+        background: Boolean(payload.background),
+        tools,
+        text: textFormat,
+        metadata: {
+          quantura_workflow: "model_council",
+          quantura_stream: "sse",
+        },
+      }),
+    });
+
+    if (!upstream.ok) {
+      const bodyText = sanitizeText(await upstream.text().catch(() => ""), 800);
+      throw new Error(bodyText || `OpenAI stream request failed (${upstream.status}).`);
+    }
+
+    res.status(200);
+    res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    if (typeof (res as any).flushHeaders === "function") {
+      (res as any).flushHeaders();
+    }
+
+    if (!upstream.body) {
+      res.write(`event: error\ndata: ${JSON.stringify({ error: "empty_stream_body" })}\n\n`);
+      res.end();
+      return;
+    }
+
+    const reader = upstream.body.getReader();
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      if (chunk.value && chunk.value.length) {
+        res.write(Buffer.from(chunk.value));
+      }
+    }
+    res.end();
+  } finally {
+    req.off("close", closeListener);
+  }
+}
+
 async function invokeOtherLlm(payload: {
   model: string;
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
@@ -2323,6 +2889,9 @@ async function invokeLlmWithFallback(rawPayload: Record<string, unknown>): Promi
   usage: Record<string, unknown>;
   citations?: unknown[];
   attempted: string[];
+  modelAdjustedFrom?: string;
+  responseId?: string;
+  status?: string;
 }> {
   const provider = normalizeProvider(rawPayload.provider);
   const fallbackProviders = Array.isArray(rawPayload.fallbackProviders)
@@ -2331,17 +2900,30 @@ async function invokeLlmWithFallback(rawPayload: Record<string, unknown>): Promi
   const providers = Array.from(new Set([provider, ...fallbackProviders]));
   const messages = normalizeLlmMessages(rawPayload.messages);
   if (!messages.length) throw new Error("messages are required.");
-  const model = sanitizeText(rawPayload.model, 120) || DEFAULT_LLM_MODEL;
+  const requestedModel = sanitizeText(rawPayload.model, 120) || DEFAULT_LLM_MODEL;
   const params = (rawPayload.params || {}) as Record<string, unknown>;
   const temperature = Math.max(0, Math.min(2, asFinite(params.temperature, 0.2)));
   const maxTokens = Math.max(64, Math.min(4000, Math.floor(asFinite(params.maxTokens, 600))));
   const allowWebSearch = asBoolean(params.webSearch ?? params.allowWebSearch ?? rawPayload.webSearch, true);
-  const stream = asBoolean(params.stream ?? rawPayload.stream, false);
-  const background = asBoolean(params.background ?? rawPayload.background, true);
+  // `/api/llm/run` returns JSON (not SSE), so streaming is intentionally disabled on this code path.
+  const stream = false;
+  const background = asBoolean(params.background ?? rawPayload.background, false);
+  const tools: unknown[] = Array.isArray(params.tools ?? rawPayload.tools)
+    ? ((params.tools ?? rawPayload.tools) as unknown[])
+    : [];
+  const jsonSchema = params.jsonSchema ?? rawPayload.jsonSchema;
+  const userTier = normalizeLlmTier(rawPayload.userTier ?? rawPayload.tier ?? params.userTier ?? params.tier);
 
   const errors: string[] = [];
   const startedAt = Date.now();
+  const ensureProviderText = (providerName: string, textValue: unknown) => {
+    const text = sanitizeText(textValue, 20000);
+    if (!text) throw new Error(`${providerName} returned an empty response.`);
+    return text;
+  };
   for (const currentProvider of providers) {
+    const modelPick = pickModelForProvider(currentProvider, requestedModel, userTier);
+    const model = modelPick.model;
     try {
       if (currentProvider === "openai") {
         const result = await invokeOpenAiLlm({
@@ -2352,14 +2934,31 @@ async function invokeLlmWithFallback(rawPayload: Record<string, unknown>): Promi
           allowWebSearch,
           stream,
           background,
+          tools,
+          jsonSchema,
         });
         return {
           provider: currentProvider,
           model,
-          text: result.text,
+          text: ensureProviderText(currentProvider, result.text),
           latencyMs: Date.now() - startedAt,
           usage: result.usage,
           attempted: [...errors],
+          modelAdjustedFrom: modelPick.adjustedFrom || undefined,
+          responseId: result.responseId || undefined,
+          status: result.status || undefined,
+        };
+      }
+      if (currentProvider === "claude") {
+        const result = await invokeClaudeLlm({ model, messages, temperature, maxTokens });
+        return {
+          provider: currentProvider,
+          model,
+          text: ensureProviderText(currentProvider, result.text),
+          latencyMs: Date.now() - startedAt,
+          usage: result.usage,
+          attempted: [...errors],
+          modelAdjustedFrom: modelPick.adjustedFrom || undefined,
         };
       }
       if (currentProvider === "gemini") {
@@ -2367,10 +2966,23 @@ async function invokeLlmWithFallback(rawPayload: Record<string, unknown>): Promi
         return {
           provider: currentProvider,
           model,
-          text: result.text,
+          text: ensureProviderText(currentProvider, result.text),
           latencyMs: Date.now() - startedAt,
           usage: result.usage,
           attempted: [...errors],
+          modelAdjustedFrom: modelPick.adjustedFrom || undefined,
+        };
+      }
+      if (currentProvider === "deepseek") {
+        const result = await invokeDeepseekLlm({ model, messages, temperature, maxTokens });
+        return {
+          provider: currentProvider,
+          model,
+          text: ensureProviderText(currentProvider, result.text),
+          latencyMs: Date.now() - startedAt,
+          usage: result.usage,
+          attempted: [...errors],
+          modelAdjustedFrom: modelPick.adjustedFrom || undefined,
         };
       }
       if (currentProvider === "mistral") {
@@ -2378,10 +2990,11 @@ async function invokeLlmWithFallback(rawPayload: Record<string, unknown>): Promi
         return {
           provider: currentProvider,
           model,
-          text: result.text,
+          text: ensureProviderText(currentProvider, result.text),
           latencyMs: Date.now() - startedAt,
           usage: result.usage,
           attempted: [...errors],
+          modelAdjustedFrom: modelPick.adjustedFrom || undefined,
         };
       }
       if (currentProvider === "perplexity") {
@@ -2389,11 +3002,36 @@ async function invokeLlmWithFallback(rawPayload: Record<string, unknown>): Promi
         return {
           provider: currentProvider,
           model,
-          text: result.text,
+          text: ensureProviderText(currentProvider, result.text),
           latencyMs: Date.now() - startedAt,
           usage: result.usage,
           citations: result.citations,
           attempted: [...errors],
+          modelAdjustedFrom: modelPick.adjustedFrom || undefined,
+        };
+      }
+      if (currentProvider === "qwen") {
+        const result = await invokeQwenLlm({ model, messages, temperature, maxTokens });
+        return {
+          provider: currentProvider,
+          model,
+          text: ensureProviderText(currentProvider, result.text),
+          latencyMs: Date.now() - startedAt,
+          usage: result.usage,
+          attempted: [...errors],
+          modelAdjustedFrom: modelPick.adjustedFrom || undefined,
+        };
+      }
+      if (currentProvider === "amazon_nova") {
+        const result = await invokeAmazonNovaLlm({ model, messages, temperature, maxTokens });
+        return {
+          provider: currentProvider,
+          model,
+          text: ensureProviderText(currentProvider, result.text),
+          latencyMs: Date.now() - startedAt,
+          usage: result.usage,
+          attempted: [...errors],
+          modelAdjustedFrom: modelPick.adjustedFrom || undefined,
         };
       }
       if (currentProvider === "other") {
@@ -2409,11 +3047,12 @@ async function invokeLlmWithFallback(rawPayload: Record<string, unknown>): Promi
         return {
           provider: currentProvider,
           model,
-          text: result.text,
+          text: ensureProviderText(currentProvider, result.text),
           latencyMs: Date.now() - startedAt,
           usage: result.usage,
           citations: result.citations,
           attempted: [...errors],
+          modelAdjustedFrom: modelPick.adjustedFrom || undefined,
         };
       }
     } catch (error: any) {
@@ -2422,6 +3061,21 @@ async function invokeLlmWithFallback(rawPayload: Record<string, unknown>): Promi
   }
 
   throw new Error(errors.join(" | ") || "No provider succeeded.");
+}
+
+async function resolveLlmTierForRequest(req: Request, payload: Record<string, unknown>): Promise<LlmUserTier> {
+  const requestedTier = normalizeLlmTier(payload.userTier || payload.tier || (payload.params as Record<string, unknown> | undefined)?.tier);
+  let user: admin.auth.DecodedIdToken | null = null;
+  try {
+    user = await verifyRequestUser(req, false);
+  } catch (error: any) {
+    if (String(error?.message || "") === "invalid_token") {
+      throw new Error("invalid_token");
+    }
+  }
+  if (!user?.uid) return requestedTier;
+  const premium = await inferPremiumUser(user.uid);
+  return premium ? "premium" : requestedTier;
 }
 
 async function decodePlayIntegrityToken(input: {
@@ -3178,6 +3832,96 @@ ROUTES.get("/health", (_req, res) => {
   res.status(200).json({ ok: true, service: "quantura-explore-api", ts: new Date().toISOString() });
 });
 
+ROUTES.get("/ticker/trending", async (req, res) => {
+  try {
+    const query = asPlainObject(req.query);
+    const force = asBoolean(query.force, false);
+    const regionRaw = sanitizeText(query.region || "US", 12).toUpperCase().replace(/[^A-Z]/g, "");
+    const region = regionRaw || "US";
+    const limit = Math.max(1, Math.min(36, Math.floor(asFinite(query.limit, 18))));
+    const cacheKey = `${region}:${limit}`;
+
+    if (!force) {
+      const cached = getTickerTrendingCache(cacheKey);
+      if (cached) {
+        res.status(200).json({ ...cached, cached: true });
+        return;
+      }
+    }
+
+    const symbols = await fetchYahooTrendingSymbols(region, limit);
+    if (!symbols.length) {
+      const emptyPayload = {
+        region,
+        tickers: [],
+        items: [],
+        source: "yahoo_trending_v1",
+        fetchedAt: new Date().toISOString(),
+        cached: false,
+      };
+      setTickerTrendingCache(cacheKey, emptyPayload);
+      res.status(200).json(emptyPayload);
+      return;
+    }
+
+    const [sparkMetaBySymbol, fmpProfileBySymbol] = await Promise.all([
+      fetchYahooSparkMetaBySymbols(symbols),
+      fetchFmpTickerLogoMap(symbols),
+    ]);
+
+    const rows = symbols.map((symbol) => {
+      const sparkMeta = sparkMetaBySymbol.get(symbol) || {};
+      const fmpProfile = fmpProfileBySymbol.get(symbol);
+      const lastClose =
+        extractYahooNumber(sparkMeta.regularMarketPrice) ??
+        extractYahooNumber(sparkMeta.previousClose) ??
+        extractYahooNumber(sparkMeta.chartPreviousClose);
+      const previousClose = extractYahooNumber(sparkMeta.previousClose) ?? extractYahooNumber(sparkMeta.chartPreviousClose);
+      const change =
+        lastClose !== null && previousClose !== null ? Number((lastClose - previousClose).toFixed(4)) : null;
+      const changePct =
+        change !== null && previousClose !== null && Math.abs(previousClose) > 1e-9
+          ? Number(((change / Math.abs(previousClose)) * 100).toFixed(4))
+          : null;
+
+      const website = sanitizeText(fmpProfile?.website, 280);
+      const logoUrl =
+        normalizeRemoteLogoUrl(fmpProfile?.logoUrl) || buildLogoUrlFromWebsite(website);
+      const companyName =
+        sanitizeText(sparkMeta.longName || sparkMeta.shortName, 180) ||
+        sanitizeText(fmpProfile?.companyName, 180);
+
+      return {
+        symbol,
+        ticker: symbol,
+        companyName,
+        lastClose,
+        previousClose,
+        change,
+        changePct,
+        website,
+        logoUrl,
+        logo_url: logoUrl,
+      };
+    });
+
+    const payload = {
+      region,
+      tickers: rows.map((row) => row.symbol),
+      items: rows,
+      source: "yahoo_trending_v1+fmp_profile",
+      fetchedAt: new Date().toISOString(),
+      cached: false,
+    };
+
+    setTickerTrendingCache(cacheKey, payload);
+    res.status(200).json(payload);
+  } catch (error: any) {
+    const detail = sanitizeText(error?.message || error, 220) || "trending_fetch_failed";
+    res.status(500).json({ error: "trending_fetch_failed", detail });
+  }
+});
+
 ROUTES.get("/ticker/intel", async (req, res) => {
   try {
     const query = asPlainObject(req.query);
@@ -3561,17 +4305,71 @@ ROUTES.post("/indicators/analyze", async (req, res) => {
   }
 });
 
-ROUTES.post("/llm/run", async (req, res) => {
+async function handleLlmRunRoute(req: Request, res: Response, providerOverride: LlmProviderId | null): Promise<void> {
   const startedAt = Date.now();
   const requestPayload = asPlainObject(req.body);
+  if (providerOverride) requestPayload.provider = providerOverride;
   const requestedProvider = normalizeProvider(requestPayload.provider || "openai");
+  requestPayload.provider = requestedProvider;
   const fallbackProviders = Array.isArray(requestPayload.fallbackProviders)
     ? requestPayload.fallbackProviders.map((item) => normalizeProvider(item))
     : [];
   const providerChain = Array.from(new Set([requestedProvider, ...fallbackProviders]));
   const retryProvider = providerChain.find((item) => item !== requestedProvider) || "openai";
   const requestedModel = sanitizeText(requestPayload.model, 120) || DEFAULT_LLM_MODEL;
+  const params = (requestPayload.params || {}) as Record<string, unknown>;
+  const allowWebSearch = asBoolean(params.webSearch ?? params.allowWebSearch ?? requestPayload.webSearch, true);
+  const maxTokens = Math.max(64, Math.min(4000, Math.floor(asFinite(params.maxTokens, 900))));
+  const background = asBoolean(params.background ?? requestPayload.background, false);
+  const wantsStream = Boolean(
+    asBoolean(requestPayload.sse, false) ||
+      asBoolean(params.sse, false) ||
+      sanitizeText(requestPayload.responseMode, 20).toLowerCase() === "sse" ||
+      asString(req.headers.accept).toLowerCase().includes("text/event-stream")
+  );
   try {
+    try {
+      requestPayload.userTier = await resolveLlmTierForRequest(req, requestPayload);
+    } catch (error: any) {
+      if (String(error?.message || "") === "invalid_token") {
+        res.status(401).json({ error: "invalid_token" });
+        return;
+      }
+      requestPayload.userTier = normalizeLlmTier(requestPayload.userTier);
+    }
+
+    if (wantsStream) {
+      if (requestedProvider !== "openai") {
+        res.status(400).json({
+          error: "streaming_supported_for_openai_only",
+          detail: "Use /api/llm/openai for SSE streaming.",
+        });
+        return;
+      }
+      const messages = normalizeLlmMessages(requestPayload.messages);
+      if (!messages.length) {
+        res.status(400).json({ error: "messages_required" });
+        return;
+      }
+      const modelPick = pickModelForProvider(
+        "openai",
+        requestedModel,
+        normalizeLlmTier(requestPayload.userTier || "free")
+      );
+      await streamOpenAiLlmSse(req, res, {
+        model: modelPick.model,
+        messages,
+        maxTokens,
+        allowWebSearch,
+        background,
+        tools: Array.isArray(params.tools ?? requestPayload.tools)
+          ? ((params.tools ?? requestPayload.tools) as unknown[])
+          : undefined,
+        jsonSchema: params.jsonSchema ?? requestPayload.jsonSchema,
+      });
+      return;
+    }
+
     const result = await invokeLlmWithFallback(requestPayload);
     res.status(200).json({
       text: result.text,
@@ -3581,10 +4379,14 @@ ROUTES.post("/llm/run", async (req, res) => {
       usage: result.usage,
       citations: result.citations || [],
       attempted: result.attempted || [],
+      modelAdjustedFrom: result.modelAdjustedFrom || "",
+      responseId: result.responseId || "",
+      status: result.status || "",
       disclaimer: "LLMs can sometimes make mistakes.",
     });
   } catch (error: any) {
     const message = sanitizeText(error?.message || error, 220) || "llm_run_failed";
+    const configMissing = /not configured/i.test(message);
     res.status(502).json({
       text: "",
       model: requestedModel,
@@ -3593,10 +4395,22 @@ ROUTES.post("/llm/run", async (req, res) => {
       usage: {},
       citations: [],
       error: message,
+      detail: configMissing
+        ? "Provider secret is missing in runtime. Bind OpenAI/Gemini/Claude/DeepSeek/Mistral/Perplexity/Qwen secrets via Secret Manager."
+        : "",
       retryProvider,
       retryModel: requestedModel,
     });
   }
+}
+
+ROUTES.post("/llm/run", async (req, res) => {
+  await handleLlmRunRoute(req, res, null);
+});
+
+ROUTES.post("/llm/:provider", async (req, res) => {
+  const provider = normalizeProvider(req.params.provider || "openai");
+  await handleLlmRunRoute(req, res, provider);
 });
 
 ROUTES.post("/mobile/play-integrity/verify", async (req, res) => {
@@ -3921,9 +4735,16 @@ ROUTES.post("/notify/sendTest", async (req, res) => {
 });
 
 ROUTES.post("/earnings/refresh", async (req, res) => {
+  const requestId = `earnings_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
   try {
+    const hasFmpKey = Boolean(FMP_API_KEY);
+    console.info("[Earnings] env_check", { requestId, hasFmpKey });
     if (!FMP_API_KEY) {
-      res.status(503).json({ error: "missing_fmp_api_key" });
+      res.status(503).json({
+        error: "missing_fmp_api_key",
+        detail: "FMP API key is not configured in function runtime. Bind FMP_API_KEY (or FMP_*_KEY) via Secret Manager.",
+        requestId,
+      });
       return;
     }
 
@@ -3936,10 +4757,83 @@ ROUTES.post("/earnings/refresh", async (req, res) => {
     const endRaw = sanitizeText(body.end || body.to, 20);
     const start = datePattern.test(startRaw) ? startRaw : fallbackStart;
     const end = datePattern.test(endRaw) ? endRaw : fallbackEnd;
+    console.info("[Earnings] fetch_start", { requestId, start, end, symbol: symbol || null });
+
     if (start > end) {
-      res.status(400).json({ error: "invalid_range" });
+      res.status(400).json({ error: "invalid_range", requestId });
       return;
     }
+
+    const toNullableNumber = (value: unknown): number | null => {
+      if (value === null || value === undefined) return null;
+      const text = sanitizeText(value, 40);
+      if (!text || text.toLowerCase() === "null" || text === "—") return null;
+      const parsed = Number(text.replace(/,/g, ""));
+      return Number.isFinite(parsed) ? parsed : null;
+    };
+
+    const normalizeDate = (value: unknown): string => {
+      const text = sanitizeText(value, 30);
+      if (!text) return "";
+      if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+      const parsed = Date.parse(text);
+      if (!Number.isFinite(parsed)) return "";
+      return new Date(parsed).toISOString().slice(0, 10);
+    };
+
+    const normalizeItem = (raw: Record<string, unknown>, symbolHint = "") => {
+      const rowSymbol = normalizeTicker(raw.symbol || raw.ticker || symbolHint);
+      const date = normalizeDate(raw.date || (raw as any).reportDate);
+      if (!rowSymbol || !date) return null;
+      return {
+        symbol: rowSymbol,
+        company: sanitizeText((raw as any).name || (raw as any).company || (raw as any).companyName, 180) || rowSymbol,
+        date,
+        epsEstimated: toNullableNumber((raw as any).epsEstimated ?? (raw as any).epsEstimate ?? (raw as any).estimate),
+        epsActual: toNullableNumber((raw as any).epsActual ?? (raw as any).eps),
+        revenueEstimated: toNullableNumber((raw as any).revenueEstimated),
+        revenueActual: toNullableNumber((raw as any).revenueActual),
+        lastUpdated: normalizeDate((raw as any).lastUpdated || (raw as any).updatedFromDate),
+      };
+    };
+    type NormalizedEarningsItem = NonNullable<ReturnType<typeof normalizeItem>>;
+
+    const buildDays = (from: string, to: string, normalizedItems: Array<Record<string, unknown>>) => {
+      const startDate = new Date(`${from}T00:00:00Z`);
+      const endDate = new Date(`${to}T00:00:00Z`);
+      const byDate = new Map<string, Array<Record<string, unknown>>>();
+      normalizedItems.forEach((item) => {
+        const date = sanitizeText((item as any).date, 20);
+        if (!date) return;
+        if (!byDate.has(date)) byDate.set(date, []);
+        byDate.get(date)!.push(item);
+      });
+      const out: Array<{ date: string; count: number; items: Array<Record<string, unknown>> }> = [];
+      for (let cursor = startDate.getTime(); cursor <= endDate.getTime(); cursor += 24 * 60 * 60 * 1000) {
+        const date = new Date(cursor).toISOString().slice(0, 10);
+        const rows = byDate.get(date) || [];
+        rows.sort((a, b) =>
+          String((a as any).symbol || "").localeCompare(String((b as any).symbol || ""))
+        );
+        out.push({ date, count: rows.length, items: rows });
+      }
+      return out;
+    };
+
+    const extractRows = (payload: unknown): Array<Record<string, unknown>> => {
+      if (Array.isArray(payload)) {
+        return payload.filter((row) => row && typeof row === "object") as Array<Record<string, unknown>>;
+      }
+      if (!payload || typeof payload !== "object") return [];
+      const maybeObject = payload as Record<string, unknown>;
+      const candidates = [maybeObject.earningsCalendar, maybeObject.data, maybeObject.items];
+      for (const candidate of candidates) {
+        if (Array.isArray(candidate)) {
+          return candidate.filter((row) => row && typeof row === "object") as Array<Record<string, unknown>>;
+        }
+      }
+      return [];
+    };
 
     const cacheDocId = symbol ? `symbol_${symbol}_${start}_${end}` : `range_${start}_${end}`;
     const docRef = db.collection("earningsCalendar").doc(cacheDocId);
@@ -3948,6 +4842,22 @@ ROUTES.post("/earnings/refresh", async (req, res) => {
     const lastFetchedAtMs = getTimestampMs(existing.lastFetchedAt);
     const hasRecentCache = Array.isArray(existing.items) && Date.now() - lastFetchedAtMs < 7 * 24 * 60 * 60 * 1000;
     if (hasRecentCache) {
+      const normalizedCachedItems = (Array.isArray(existing.items) ? existing.items : [])
+        .map((item) => normalizeItem(asPlainObject(item), symbol))
+        .filter(Boolean) as Array<Record<string, unknown>>;
+      const days = buildDays(start, end, normalizedCachedItems);
+      const lastUpdated =
+        normalizedCachedItems
+          .map((item) => sanitizeText((item as any).lastUpdated, 20))
+          .filter(Boolean)
+          .sort()
+          .pop() || sanitizeText(existing.lastUpdated, 20);
+      console.info("[Earnings] cache_hit", {
+        requestId,
+        cacheDocId,
+        itemCount: normalizedCachedItems.length,
+        dayCount: days.length,
+      });
       res.status(200).json({
         ok: true,
         symbol,
@@ -3955,9 +4865,12 @@ ROUTES.post("/earnings/refresh", async (req, res) => {
         cached: true,
         start,
         end,
+        range: { from: start, to: end },
         lastFetchedAtMs,
-        items: existing.items,
-        lastUpdated: sanitizeText(existing.lastUpdated, 30),
+        items: normalizedCachedItems,
+        days,
+        lastUpdated,
+        requestId,
       });
       return;
     }
@@ -3969,64 +4882,126 @@ ROUTES.post("/earnings/refresh", async (req, res) => {
       if (!symbol) return base;
       return `${base}&symbol=${encodeURIComponent(symbol)}`;
     })();
-    const candidateUrls = [
-      stableUrl,
-      `https://financialmodelingprep.com/api/v3/earning_calendar?from=${encodeURIComponent(start)}&to=${encodeURIComponent(end)}&apikey=${encodeURIComponent(FMP_API_KEY)}`,
+    const candidateUrls: Array<{ label: string; url: string }> = [
+      { label: "stable", url: stableUrl },
+      {
+        label: "v3",
+        url: `https://financialmodelingprep.com/api/v3/earning_calendar?from=${encodeURIComponent(start)}&to=${encodeURIComponent(end)}&apikey=${encodeURIComponent(FMP_API_KEY)}`,
+      },
     ];
 
     let records: Array<Record<string, unknown>> = [];
     let fetchedFrom = "";
-    for (const endpoint of candidateUrls) {
-      const response = await fetch(endpoint, { method: "GET" });
-      if (!response.ok) continue;
-      const rows = (await response.json().catch(() => [])) as Array<Record<string, unknown>>;
-      const allRows = Array.isArray(rows) ? rows : [];
-      const filtered = symbol
-        ? allRows.filter((row) => normalizeTicker(row.symbol || row.ticker) === symbol)
-        : allRows;
-      records = filtered;
-      fetchedFrom = endpoint.includes("/stable/") ? "stable" : "v3";
-      if (records.length || endpoint === candidateUrls[candidateUrls.length - 1]) break;
+    const fetchDiagnostics: string[] = [];
+
+    for (const candidate of candidateUrls) {
+      const startedAt = Date.now();
+      try {
+        console.info("[Earnings] provider_attempt", { requestId, source: candidate.label });
+        const response = await fetch(candidate.url, {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+          },
+        });
+        if (!response.ok) {
+          fetchDiagnostics.push(`${candidate.label}:status_${response.status}`);
+          console.warn("[Earnings] provider_status", {
+            requestId,
+            source: candidate.label,
+            status: response.status,
+          });
+          continue;
+        }
+        const payload = (await response.json().catch(() => null)) as unknown;
+        const allRows = extractRows(payload);
+        fetchDiagnostics.push(`${candidate.label}:ok:${allRows.length}`);
+        const filtered = symbol
+          ? allRows.filter((row) => normalizeTicker((row as any).symbol || (row as any).ticker) === symbol)
+          : allRows;
+        records = filtered;
+        fetchedFrom = candidate.label;
+        console.info("[Earnings] provider_success", {
+          requestId,
+          source: candidate.label,
+          rowCount: filtered.length,
+          durationMs: Date.now() - startedAt,
+        });
+        if (records.length || candidate === candidateUrls[candidateUrls.length - 1]) break;
+      } catch (error: any) {
+        const message = sanitizeText(error?.message, 120) || "fetch_failed";
+        fetchDiagnostics.push(`${candidate.label}:error:${message}`);
+        console.warn("[Earnings] provider_error", {
+          requestId,
+          source: candidate.label,
+          error: message,
+        });
+      }
     }
 
     const items = records
-      .map((row) => {
-        const rowSymbol = normalizeTicker(row.symbol || row.ticker || symbol);
-        const date = sanitizeText(row.date || (row as any).reportDate, 20);
-        const epsActual = Number.isFinite(Number((row as any).epsActual))
-          ? Number((row as any).epsActual)
-          : Number.isFinite(Number((row as any).eps))
-          ? Number((row as any).eps)
-          : null;
-        const epsEstimated = Number.isFinite(Number((row as any).epsEstimated))
-          ? Number((row as any).epsEstimated)
-          : Number.isFinite(Number((row as any).epsEstimate))
-          ? Number((row as any).epsEstimate)
-          : null;
-        return {
-          symbol: rowSymbol,
-          date,
-          name: sanitizeText((row as any).name || (row as any).company || (row as any).companyName, 180),
-          eventName: sanitizeText((row as any).eventName || (row as any).event || "Earnings", 120),
-          callTime: sanitizeText((row as any).time || (row as any).hour || (row as any).when, 30).toUpperCase(),
-          market: sanitizeText((row as any).exchange || (row as any).market, 80),
-          epsActual,
-          epsEstimated,
-          epsSurprisePercentage:
-            Number.isFinite(Number((row as any).epsSurprisePercentage)) ? Number((row as any).epsSurprisePercentage) : null,
-          epsSurprise:
-            Number.isFinite(Number((row as any).epsSurprise)) ? Number((row as any).epsSurprise) : null,
-          revenueActual: Number.isFinite(Number((row as any).revenueActual)) ? Number((row as any).revenueActual) : null,
-          revenueEstimated: Number.isFinite(Number((row as any).revenueEstimated)) ? Number((row as any).revenueEstimated) : null,
-          lastUpdated: sanitizeText((row as any).lastUpdated || (row as any).updatedFromDate, 20),
-        };
+      .map((row) => normalizeItem(row, symbol))
+      .filter((item): item is NormalizedEarningsItem => item !== null)
+      .sort((a, b) => {
+        const dateA = sanitizeText(a.date, 20);
+        const dateB = sanitizeText(b.date, 20);
+        if (dateA === dateB) {
+          return sanitizeText(a.symbol, 24).localeCompare(sanitizeText(b.symbol, 24));
+        }
+        return dateA.localeCompare(dateB);
       })
-      .filter((row) => row.date && row.symbol)
-      .sort((a, b) => (a.date === b.date ? a.symbol.localeCompare(b.symbol) : a.date.localeCompare(b.date)))
-      .slice(0, symbol ? 400 : 5000);
+      .slice(0, symbol ? 500 : 7000);
+
+    const successfulFetch = fetchDiagnostics.some((entry) => entry.includes(":ok:"));
+    if (!items.length && !successfulFetch) {
+      const staleItems = (Array.isArray(existing.items) ? existing.items : [])
+        .map((item) => normalizeItem(asPlainObject(item), symbol))
+        .filter(Boolean) as Array<Record<string, unknown>>;
+      if (staleItems.length) {
+        const staleDays = buildDays(start, end, staleItems);
+        console.warn("[Earnings] provider_failed_using_stale_cache", {
+          requestId,
+          cacheDocId,
+          staleItemCount: staleItems.length,
+          diagnostics: fetchDiagnostics.slice(0, 4),
+        });
+        res.status(200).json({
+          ok: true,
+          symbol,
+          cacheDocId,
+          cached: true,
+          stale: true,
+          warning: "provider_unavailable_showing_cached_data",
+          range: { from: start, to: end },
+          start,
+          end,
+          lastFetchedAtMs,
+          fetchedCount: staleItems.length,
+          items: staleItems,
+          days: staleDays,
+          lastUpdated: sanitizeText(existing.lastUpdated, 20),
+          diagnostics: fetchDiagnostics.slice(0, 4),
+          requestId,
+        });
+        return;
+      }
+      console.error("[Earnings] provider_failed_no_data", {
+        requestId,
+        diagnostics: fetchDiagnostics.slice(0, 4),
+      });
+      res.status(502).json({
+        error: "earnings_provider_unavailable",
+        detail: "Unable to load earnings data from provider.",
+        diagnostics: fetchDiagnostics.slice(0, 4),
+        requestId,
+      });
+      return;
+    }
+
+    const days = buildDays(start, end, items as Array<Record<string, unknown>>);
 
     const lastUpdated = items
-      .map((item) => item.lastUpdated)
+      .map((item) => sanitizeText((item as any).lastUpdated, 20))
       .filter(Boolean)
       .sort()
       .pop() || "";
@@ -4041,11 +5016,21 @@ ROUTES.post("/earnings/refresh", async (req, res) => {
         sourceVariant: fetchedFrom || "none",
         lastUpdated,
         itemCount: items.length,
+        range: { from: start, to: end },
+        diagnostics: fetchDiagnostics.slice(0, 8),
         lastFetchedAt: admin.firestore.FieldValue.serverTimestamp(),
         items,
       },
       { merge: true }
     );
+
+    console.info("[Earnings] fetch_complete", {
+      requestId,
+      cacheDocId,
+      fetchedFrom: fetchedFrom || "none",
+      itemCount: items.length,
+      dayCount: days.length,
+    });
 
     res.status(200).json({
       ok: true,
@@ -4053,15 +5038,19 @@ ROUTES.post("/earnings/refresh", async (req, res) => {
       cacheDocId,
       start,
       end,
+      range: { from: start, to: end },
       cached: false,
       fetchedCount: items.length,
       lastUpdated,
       lastFetchedAtMs: Date.now(),
       items,
+      days,
+      diagnostics: fetchDiagnostics.slice(0, 4),
+      requestId,
     });
   } catch (error: any) {
-    console.error("[Earnings] refresh failed", error);
-    res.status(500).json({ error: "earnings_refresh_failed" });
+    console.error("[Earnings] refresh_failed", { requestId, error: sanitizeText(error?.message, 220) || "unknown" });
+    res.status(500).json({ error: "earnings_refresh_failed", requestId });
   }
 });
 
