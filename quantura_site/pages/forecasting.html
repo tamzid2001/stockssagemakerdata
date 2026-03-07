@@ -90,16 +90,16 @@
 	          <nav class="sidebar-nav" aria-label="Terminal navigation">
 	            <a class="sidebar-link active" href="/forecasting" data-panel-target="forecast"><i class="iconoir-magic-wand" aria-hidden="true"></i><span>Forecast</span></a>
 	            <a class="sidebar-link" href="/ticker-intelligence" data-panel-target="ticker"><i class="iconoir-eye" aria-hidden="true"></i><span>Ticker</span></a>
-              <a class="sidebar-link" href="/ticker-intelligence?panel=predictions" data-panel-target="predictions"><i class="iconoir-graph-up" aria-hidden="true"></i><span>Predictions</span></a>
+              <a class="sidebar-link" href="/predictions" data-panel-target="predictions"><i class="iconoir-graph-up" aria-hidden="true"></i><span>Predictions</span></a>
 	            <a class="sidebar-link" href="/indicators" data-panel-target="indicators"><i class="iconoir-sigma-function" aria-hidden="true"></i><span>Indicators</span></a>
               <a class="sidebar-link" href="/trending" data-panel-target="trending"><i class="iconoir-fire-flame" aria-hidden="true"></i><span>Trending</span></a>
-	            <a class="sidebar-link" href="/news" data-panel-target="news"><i class="iconoir-journal-page" aria-hidden="true"></i><span>News and data</span></a>
+	            <a class="sidebar-link" href="/news" data-panel-target="news"><i class="iconoir-journal-page" aria-hidden="true"></i><span>Historical Data Download</span></a>
               <a class="sidebar-link" href="/events-calendar" data-panel-target="events-calendar"><i class="iconoir-calendar" aria-hidden="true"></i><span>Earnings calendar</span></a>
               <a class="sidebar-link" href="/market-headlines" data-panel-target="market-headlines"><i class="iconoir-globe" aria-hidden="true"></i><span>Market headlines</span></a>
               <a class="sidebar-link" href="/forecasting" data-panel-target="macro"><i class="iconoir-database" aria-hidden="true"></i><span>Macro Dashboard</span></a>
               <a class="sidebar-link" href="/model-council" data-panel-target="ticker-query"><i class="iconoir-brain" aria-hidden="true"></i><span>Model Council</span></a>
               <a class="sidebar-link" href="/options" data-panel-target="options"><i class="iconoir-numbered-list-left" aria-hidden="true"></i><span>Options</span></a>
-              <a class="sidebar-link" href="/forecasting?panel=fx" data-panel-target="fx"><i class="iconoir-coins-swap" aria-hidden="true"></i><span>Currency conversion</span></a>
+              <a class="sidebar-link" href="/tools/fx" data-panel-target="fx"><i class="iconoir-coins-swap" aria-hidden="true"></i><span>Currency conversion</span></a>
               <a class="sidebar-link" href="/studio" data-panel-target="learn"><i class="iconoir-info-circle" aria-hidden="true"></i><span>Learn more</span></a>
 	            <a class="sidebar-link" href="/screener"><i class="iconoir-search" aria-hidden="true"></i><span>Screener</span></a>
               <a class="sidebar-link" href="/explore"><i class="iconoir-binocular" aria-hidden="true"></i><span>Explore</span></a>
@@ -273,13 +273,10 @@
                   <section class="panel hidden" data-panel="ticker">
                     <div class="panel-header">
                       <h2>Ticker</h2>
-                      <p class="small">Institutional three-column view with fundamentals, risk, ESG, and peer benchmarking.</p>
+                      <p class="small">Ticker context with fundamentals, risk, ESG, and peer benchmarking.</p>
                     </div>
                     <div class="results-panel ticker-intelligence-panel">
-                      <div class="card-head">
-                        <h3>Institutional View</h3>
-                      </div>
-                      <div id="ticker-output" class="panel-output small">Load a ticker to generate the institutional intelligence panel.</div>
+                      <div id="ticker-output" class="panel-output small">Load a ticker to generate ticker context.</div>
                     </div>
                   </section>
 
@@ -421,7 +418,7 @@
 
                   <section class="panel hidden" data-panel="news">
                     <div class="panel-header">
-                      <h2>News and data</h2>
+                      <h2>Historical Data Download</h2>
                       <p class="small">Company context and headlines update automatically and render below your chart.</p>
                     </div>
                     <div class="content-grid">

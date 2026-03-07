@@ -21,10 +21,10 @@ const PUBLIC_ORIGIN = asString(process.env.PUBLIC_ORIGIN, "https://quantura.stud
 const GCP_PROJECT_ID = resolveProjectId();
 const SHOP_ALLOWED_ORIGINS = parseOriginList(process.env.SHOP_ALLOWED_ORIGINS);
 const SECRET_MANAGER_CLIENT = GCP_PROJECT_ID ? new SecretManagerServiceClient() : null;
-const STRIPE_SECRET_ENV_KEYS = ["STRIPE_SECRET_KEY", "STRIPE_PRIVATE_KEY"];
-const STRIPE_WEBHOOK_ENV_KEYS = ["STRIPE_WEBHOOK_SECRET", "STRIPE_WEBHOOK_SECRET_CONNECT"];
-const STRIPE_SECRET_NAMES = ["STRIPE_SECRET_KEY", "STRIPE_PRIVATE_KEY"];
-const STRIPE_WEBHOOK_SECRET_NAMES = ["STRIPE_WEBHOOK_SECRET", "STRIPE_WEBHOOK_SECRET_CONNECT"];
+const STRIPE_SECRET_ENV_KEYS = ["STRIPE_SECRET_KEY", "STRIPE_PRIVATE_KEY", "STRIPE_SECRET", "STRIPE_API_KEY"];
+const STRIPE_WEBHOOK_ENV_KEYS = ["STRIPE_WEBHOOK_SECRET", "STRIPE_WEBHOOK_SECRET_CONNECT", "STRIPE_SIGNING_SECRET"];
+const STRIPE_SECRET_NAMES = ["STRIPE_SECRET_KEY", "STRIPE_PRIVATE_KEY", "STRIPE_SECRET", "STRIPE_API_KEY"];
+const STRIPE_WEBHOOK_SECRET_NAMES = ["STRIPE_WEBHOOK_SECRET", "STRIPE_WEBHOOK_SECRET_CONNECT", "STRIPE_SIGNING_SECRET"];
 let stripeClientPromise: Promise<Stripe | null> | null = null;
 let stripeWebhookSecretPromise: Promise<string> | null = null;
 
@@ -36,7 +36,77 @@ type RateRecord = {
   resetAtMs: number;
 };
 
+type SubscriptionTier = "go" | "plus" | "business" | "pro";
+type SubscriptionCycle = "monthly" | "yearly";
+type SubscriptionPlan = {
+  tier: SubscriptionTier;
+  cycle: SubscriptionCycle;
+  amountCents: number;
+  label: string;
+  description: string;
+};
+
 const checkoutRateLimiter = new Map<string, RateRecord>();
+const SECRET_NAME_CACHE = new Map<string, string>();
+
+const SUBSCRIPTION_PLANS: Record<string, SubscriptionPlan> = {
+  go_monthly: {
+    tier: "go",
+    cycle: "monthly",
+    amountCents: 800,
+    label: "Quantura Go Monthly",
+    description: "Ad-free plan with higher limits for forecasts, screeners, and Model Council.",
+  },
+  go_yearly: {
+    tier: "go",
+    cycle: "yearly",
+    amountCents: 8000,
+    label: "Quantura Go Annual",
+    description: "Annual Quantura Go plan with discounted yearly billing.",
+  },
+  plus_monthly: {
+    tier: "plus",
+    cycle: "monthly",
+    amountCents: 2000,
+    label: "Quantura Plus Monthly",
+    description: "Ad-free plan with expanded throughput and pro model access.",
+  },
+  plus_yearly: {
+    tier: "plus",
+    cycle: "yearly",
+    amountCents: 20000,
+    label: "Quantura Plus Annual",
+    description: "Annual Quantura Plus plan with discounted yearly billing.",
+  },
+  business_monthly: {
+    tier: "business",
+    cycle: "monthly",
+    amountCents: 3000,
+    label: "Quantura Business Monthly",
+    description: "Business plan with higher workspace limits and team collaboration capacity.",
+  },
+  business_yearly: {
+    tier: "business",
+    cycle: "yearly",
+    amountCents: 30000,
+    label: "Quantura Business Annual",
+    description: "Annual Quantura Business plan with discounted yearly billing.",
+  },
+  pro_monthly: {
+    tier: "pro",
+    cycle: "monthly",
+    amountCents: 20000,
+    label: "Quantura Pro Monthly",
+    description: "Highest limits, pro models, and expanded workspace controls.",
+  },
+  pro_yearly: {
+    tier: "pro",
+    cycle: "yearly",
+    amountCents: 216000,
+    label: "Quantura Pro Annual",
+    description: "Annual Quantura Pro plan with discounted yearly billing.",
+  },
+};
 
 const app = express();
 app.disable("x-powered-by");
@@ -237,6 +307,103 @@ app.post("/api/shop/checkout", async (req, res) => {
     res.status(500).json({
       error: "checkout_session_failed",
       detail: sanitizeText(error?.message, 180),
+    });
+  }
+});
+
+app.options("/api/shop/subscription-checkout", (req, res) => {
+  if (!applyCheckoutCors(req, res)) {
+    res.status(403).json({ error: "origin_not_allowed" });
+    return;
+  }
+  res.status(204).send("");
+});
+
+app.post("/api/shop/subscription-checkout", async (req, res) => {
+  if (!applyCheckoutCors(req, res)) {
+    res.status(403).json({ error: "origin_not_allowed" });
+    return;
+  }
+
+  const stripe = await getStripeClient();
+  if (!stripe) {
+    res.status(503).json({
+      error: "stripe_not_configured",
+      message: "Stripe secret key is missing. Configure STRIPE_SECRET_KEY (or alias) in Secret Manager.",
+    });
+    return;
+  }
+
+  const ip = getRequestIp(req);
+  if (isRateLimited(ip)) {
+    res.status(429).json({ error: "rate_limited", message: "Too many checkout attempts. Please retry shortly." });
+    return;
+  }
+
+  const payload = asRecord(req.body);
+  const user = asRecord(payload.user);
+  const email = normalizeEmail(user.email || payload.email);
+  const uid = sanitizeToken(user.uid || payload.uid, 160);
+  const plan = resolveSubscriptionPlan(payload);
+  if (!plan) {
+    res.status(400).json({
+      error: "invalid_plan",
+      message: "Unknown subscription plan. Supported tiers: go, plus, business, pro.",
+    });
+    return;
+  }
+
+  try {
+    const session = await stripe.checkout.sessions.create({
+      mode: "subscription",
+      customer_email: email || undefined,
+      customer_creation: "always",
+      client_reference_id: uid || undefined,
+      allow_promotion_codes: true,
+      success_url: `${PUBLIC_ORIGIN}/pricing?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${PUBLIC_ORIGIN}/pricing?checkout=cancel`,
+      line_items: [
+        {
+          quantity: 1,
+          price_data: {
+            currency: "usd",
+            unit_amount: plan.amountCents,
+            recurring: {
+              interval: plan.cycle === "yearly" ? "year" : "month",
+            },
+            product_data: {
+              name: plan.label,
+              description: plan.description,
+              metadata: {
+                tier: plan.tier,
+                cycle: plan.cycle,
+              },
+            },
+          },
+        },
+      ],
+      metadata: {
+        uid,
+        email,
+        source: "quantura_pricing",
+        tier: plan.tier,
+        cycle: plan.cycle,
+        amountCents: String(plan.amountCents),
+      },
+    });
+
+    const url = asString(session.url).trim();
+    if (!url) {
+      res.status(502).json({ error: "missing_checkout_url" });
+      return;
+    }
+    res.status(200).json({ url, sessionId: sanitizeToken(session.id, 220) });
+  } catch (error: any) {
+    console.error("[shopApi] subscription checkout session creation failed", error);
+    res.status(500).json({
+      error: "subscription_checkout_failed",
+      detail: sanitizeText(error?.message, 200),
+      message: "Unable to start subscription checkout.",
     });
   }
 });
@@ -620,6 +787,14 @@ async function resolveSecretValue(envKeys: string[], secretNames: string[]): Pro
     const fromManager = await readSecretManager(secretName);
     if (fromManager) return fromManager;
   }
+
+  const patterns = envKeys.some((key) => key.startsWith("STRIPE_WEBHOOK"))
+    ? [/^stripe[-_]?webhook/i, /^stripe[-_]?.*sign/i]
+    : [/^stripe[-_]?.*(secret|private|api)/i, /^stripe[-_]?sk/i];
+  for (const pattern of patterns) {
+    const discovered = await discoverSecretValueByPattern(pattern);
+    if (discovered) return discovered;
+  }
   return "";
 }
 
@@ -673,6 +848,7 @@ function extractRequestHosts(req: Request): Set<string> {
 function isAllowedOrigin(normalizedOrigin: string, requestHosts: Set<string> | null): boolean {
   if (!normalizedOrigin) return false;
   if (normalizedOrigin === "null") return true;
+  if (normalizedOrigin === "capacitor://localhost" || normalizedOrigin === "ionic://localhost") return true;
 
   const staticAllowlist = new Set<string>([
     normalizeOrigin(PUBLIC_ORIGIN),
@@ -687,7 +863,12 @@ function isAllowedOrigin(normalizedOrigin: string, requestHosts: Set<string> | n
   if (staticAllowlist.has(normalizedOrigin)) return true;
 
   try {
-    const host = new URL(normalizedOrigin).host.toLowerCase();
+    const parsed = new URL(normalizedOrigin);
+    const host = parsed.host.toLowerCase();
+    const hostname = parsed.hostname.toLowerCase();
+    if (hostname.endsWith(".quantura.studio")) return true;
+    if (hostname.endsWith(".web.app") || hostname.endsWith(".firebaseapp.com")) return true;
+    if (hostname === "localhost" || hostname === "127.0.0.1") return true;
     if (requestHosts && requestHosts.has(host)) return true;
   } catch {
     return false;
@@ -701,4 +882,57 @@ function findSkuByProductName(name: string): string {
   if (!clean) return "";
   const item = getCatalogPublicItems().find((row) => sanitizeText(row.name, 220).toLowerCase() === clean);
   return item ? sanitizeToken(item.sku, 64).toUpperCase() : "";
+}
+
+function normalizeSubscriptionTier(value: unknown): SubscriptionTier | null {
+  const raw = sanitizeText(value, 60).toLowerCase();
+  if (!raw) return null;
+  if (raw.includes("annual_business") || raw === "business" || raw === "quanturabusiness") return "business";
+  if (raw.includes("annual_plus") || raw === "plus" || raw === "premium") return "plus";
+  if (raw.includes("annual_go") || raw === "go" || raw === "goplan") return "go";
+  if (raw === "pro" || raw === "quanturapro") return "pro";
+  return null;
+}
+
+function normalizeSubscriptionCycle(value: unknown, tierHint: unknown): SubscriptionCycle {
+  const cycleRaw = sanitizeText(value, 32).toLowerCase();
+  if (cycleRaw === "yearly" || cycleRaw === "annual" || cycleRaw === "year") return "yearly";
+  const hint = sanitizeText(tierHint, 60).toLowerCase();
+  if (hint.includes("annual_") || hint.includes("year")) return "yearly";
+  return "monthly";
+}
+
+function resolveSubscriptionPlan(payload: Record<string, unknown>): SubscriptionPlan | null {
+  const tierRaw = payload.tier || payload.plan || payload.planKey || payload.productId || payload.product;
+  const tier = normalizeSubscriptionTier(tierRaw);
+  if (!tier) return null;
+  const cycle = normalizeSubscriptionCycle(payload.cycle, tierRaw);
+  const key = `${tier}_${cycle}`;
+  return SUBSCRIPTION_PLANS[key] || null;
+}
+
+async function discoverSecretValueByPattern(pattern: RegExp): Promise<string> {
+  if (!SECRET_MANAGER_CLIENT || !GCP_PROJECT_ID) return "";
+  const cacheKey = pattern.source;
+  const cachedName = SECRET_NAME_CACHE.get(cacheKey);
+  if (cachedName) {
+    return readSecretManager(cachedName);
+  }
+
+  try {
+    const [secrets] = await SECRET_MANAGER_CLIENT.listSecrets({
+      parent: `projects/${GCP_PROJECT_ID}`,
+    });
+    const names = (secrets || [])
+      .map((secret) => asString(secret.name).split("/").pop() || "")
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+    const matched = names.find((name) => pattern.test(name));
+    if (!matched) return "";
+    SECRET_NAME_CACHE.set(cacheKey, matched);
+    return readSecretManager(matched);
+  } catch (error: any) {
+    console.warn("[shopApi] secret discovery failed:", error?.message || error);
+    return "";
+  }
 }

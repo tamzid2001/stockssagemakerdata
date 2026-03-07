@@ -32,6 +32,7 @@ private struct BannerRepresentable: UIViewRepresentable {
         bannerView.rootViewController = Self.topViewController()
         bannerView.delegate = context.coordinator
         print("[Ads][iOS][Banner] Loading ad unit=\(adUnitID)")
+        AdDebugStatusStore.shared.updateLoad(format: "banner", status: "loading")
         bannerView.load(Request())
         return bannerView
     }
@@ -62,14 +63,19 @@ private struct BannerRepresentable: UIViewRepresentable {
     final class Coordinator: NSObject, BannerViewDelegate {
         func bannerViewDidReceiveAd(_ bannerView: BannerView) {
             print("[Ads][iOS][Banner] Load succeeded.")
+            print("[Ads][iOS] Load success for banner")
+            AdDebugStatusStore.shared.updateLoad(format: "banner", status: "loaded")
         }
 
         func bannerView(_ bannerView: BannerView, didFailToReceiveAdWithError error: Error) {
             print("[Ads][iOS][Banner] Load failed: \(error.localizedDescription)")
+            print("[Ads][iOS] Load fail for banner: \(error.localizedDescription)")
+            AdDebugStatusStore.shared.updateLoad(format: "banner", status: "failed:\(error.localizedDescription)")
         }
 
         func bannerViewDidRecordImpression(_ bannerView: BannerView) {
             print("[Ads][iOS][Banner] Impression recorded.")
+            AdDebugStatusStore.shared.updateShow(format: "banner", status: "impression")
             AdImpressionReporter.shared.report(
                 adFormat: "banner",
                 adUnitId: bannerView.adUnitID ?? "",

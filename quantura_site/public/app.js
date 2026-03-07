@@ -585,7 +585,7 @@
       sidebar_ticker_intelligence: "Ticker",
       sidebar_indicators: "Indicators",
       sidebar_trending: "Trending",
-      sidebar_news_data: "News and data",
+      sidebar_news_data: "Historical Data Download",
       sidebar_corporate_events: "Earnings calendar",
       sidebar_market_headlines: "Market headlines",
       sidebar_ask_gpt5: "Model Council",
@@ -1427,7 +1427,7 @@
 
     const fxSidebarLink = document.querySelector('[data-panel-target="fx"]');
     if (fxSidebarLink) {
-      fxSidebarLink.setAttribute("href", "/forecasting?panel=fx");
+      fxSidebarLink.setAttribute("href", "/tools/fx");
     }
 
     if (panelColumn.querySelector('[data-panel="fx"]')) return;
@@ -2173,6 +2173,77 @@
     return false;
   };
 
+  const nativeAdActionState = {
+    bound: false,
+    seq: 0,
+    pending: new Map(),
+  };
+
+  const ensureNativeAdActionListener = () => {
+    if (nativeAdActionState.bound) return;
+    nativeAdActionState.bound = true;
+    window.addEventListener("quantura:native-ad-result", (event) => {
+      const detail = event?.detail && typeof event.detail === "object" ? event.detail : {};
+      const requestId = String(detail.requestId || "").trim();
+      if (!requestId) return;
+      const pending = nativeAdActionState.pending.get(requestId);
+      if (!pending) return;
+      const status = String(detail.status || "").trim().toLowerCase();
+      if (!status) return;
+      pending.onUpdate(detail);
+    });
+  };
+
+  const runNativeAdAction = ({ action, reason = "action", timeoutMs = 26000, successStatuses = [] } = {}) =>
+    new Promise((resolve) => {
+      if (!isNativeApp()) {
+        resolve({ ok: false, status: "native_unavailable", message: "Native runtime unavailable." });
+        return;
+      }
+      ensureNativeAdActionListener();
+      const requestId = `ad_${Date.now()}_${++nativeAdActionState.seq}`;
+      const successSet = new Set(
+        (Array.isArray(successStatuses) ? successStatuses : [])
+          .map((entry) => String(entry || "").trim().toLowerCase())
+          .filter(Boolean)
+      );
+      const finalize = (result) => {
+        nativeAdActionState.pending.delete(requestId);
+        clearTimeout(timeoutHandle);
+        resolve(result);
+      };
+      const onUpdate = (detail) => {
+        const status = String(detail?.status || "").trim().toLowerCase();
+        const message = String(detail?.message || "").trim();
+        if (!status) return;
+        if (successSet.has(status)) {
+          finalize({ ok: true, status, detail });
+          return;
+        }
+        if (
+          status.startsWith("failed") ||
+          status.startsWith("skipped") ||
+          status === "dismissed" ||
+          status === "timeout"
+        ) {
+          finalize({ ok: false, status, detail, message });
+        }
+      };
+      nativeAdActionState.pending.set(requestId, { onUpdate });
+      const timeoutHandle = window.setTimeout(() => {
+        finalize({ ok: false, status: "timeout", message: "Native ad request timed out." });
+      }, Math.max(5000, Number(timeoutMs) || 26000));
+      const sent = sendNativeBridgeMessage({
+        action,
+        requestId,
+        reason: String(reason || "").trim().slice(0, 80),
+        ts: Date.now(),
+      });
+      if (!sent) {
+        finalize({ ok: false, status: "bridge_unavailable", message: "Native bridge unavailable." });
+      }
+    });
+
   const maybeShowNativeRewardGate = async ({
     reason = "action",
     title = "Watch a short ad first?",
@@ -2204,7 +2275,7 @@
         state.rewardIncentiveLimits[normalizedReason] = Date.now();
       }
       sendNativeBridgeMessage({
-        action: "showInterstitial",
+        action: "showInterstitialAd",
         reason: `${normalizedReason}_reward_declined`,
         mode: "fallback",
         ts: Date.now(),
@@ -2214,12 +2285,43 @@
       return false;
     }
     delete state.rewardIncentiveLimits[normalizedReason];
-    sendNativeBridgeMessage({
+    let rewardedInterstitialResult = await runNativeAdAction({
       action: "showRewardedInterstitial",
       reason: normalizedReason,
+      successStatuses: ["rewarded"],
+    });
+    if (!rewardedInterstitialResult.ok && String(rewardedInterstitialResult.status || "").includes("not_ready")) {
+      await new Promise((resolve) => window.setTimeout(resolve, 1400));
+      rewardedInterstitialResult = await runNativeAdAction({
+        action: "showRewardedInterstitial",
+        reason: `${normalizedReason}_retry`,
+        successStatuses: ["rewarded"],
+      });
+    }
+    if (rewardedInterstitialResult.ok) return true;
+    let rewardedResult = await runNativeAdAction({
+      action: "showRewardedAd",
+      reason: `${normalizedReason}_fallback`,
+      successStatuses: ["rewarded"],
+    });
+    if (!rewardedResult.ok && String(rewardedResult.status || "").includes("not_ready")) {
+      await new Promise((resolve) => window.setTimeout(resolve, 1400));
+      rewardedResult = await runNativeAdAction({
+        action: "showRewardedAd",
+        reason: `${normalizedReason}_fallback_retry`,
+        successStatuses: ["rewarded"],
+      });
+    }
+    if (rewardedResult.ok) return true;
+    sendNativeBridgeMessage({
+      action: "showInterstitialAd",
+      reason: `${normalizedReason}_reward_unavailable`,
+      mode: "fallback",
       ts: Date.now(),
     });
-    return true;
+    if (isNavigationGate) return true;
+    showToast("Rewarded ad is not ready yet. Please try again in a moment.", "warn");
+    return false;
   };
 
 	  const showToast = (message, variant = "default") => {
@@ -2265,64 +2367,11 @@
 		    );
 		    if (buttons.length === 0 || panels.length === 0) return;
 
-		    const routerKey = String(panelsRoot.dataset.panelRouter || "").trim();
-		    const routers = {
-		      terminal: {
-		        defaultPanel: "forecast",
-		        panelToPath: {
-		          forecast: "/forecasting",
-              ticker: "/ticker-intelligence",
-              predictions: "/predictions",
-		          indicators: "/indicators",
-              trending: "/trending",
-		          news: "/news",
-              "events-calendar": "/events-calendar",
-              "market-headlines": "/market-headlines",
-              "ticker-query": "/model-council",
-		          options: "/options",
-              fx: "/forecasting",
-		          learn: "/studio",
-            },
-            pathAliases: {
-              "/ticker-intelligence": "ticker",
-              "/predictions": "predictions",
-              "/ticker-query": "ticker-query",
-              "/model-council": "ticker-query",
-              "/tools/fx": "fx",
-            },
-          },
-			      dashboard: {
-			        defaultPanel: "orders",
-			        panelToPath: {
-			          orders: "/dashboard",
-			          watchlist: "/watchlist",
-			          productivity: "/productivity",
-			          collaboration: "/collaboration",
-			          uploads: "/uploads",
-			          autopilot: "/autopilot",
-			          notifications: "/notifications",
-			          auth: "/account",
-			        },
-			      },
-		    };
-		    const router = routers[routerKey] || null;
-		    const pathToPanel = (() => {
-		      if (!router) return {};
-		      const mapping = {};
-		      Object.entries(router.panelToPath || {}).forEach(([panel, path]) => {
-		        mapping[normalizePath(String(path))] = String(panel);
-		      });
-          Object.entries(router.pathAliases || {}).forEach(([path, panel]) => {
-            mapping[normalizePath(String(path))] = String(panel);
-          });
-		      return mapping;
-		    })();
+	    const routerKey = String(panelsRoot.dataset.panelRouter || "").trim();
+	    const router = getPanelRouterConfig(routerKey);
+	    const pathToPanel = buildPathToPanelMap(router);
         const defaultPanelPath = router?.defaultPanel ? normalizePath(router.panelToPath?.[router.defaultPanel] || "") : "";
-        const normalizePanelParam = (value) => {
-          const panel = String(value || "").trim();
-          if (panel === "ticker-intelligence") return "ticker";
-          return panel;
-        };
+        const normalizePanelParam = (value) => normalizePanelName(value);
         const panelQueryValueForRoute = (panel) => {
           const next = String(panel || "").trim();
           if (!next || !router?.panelToPath?.[next]) return "";
@@ -2545,6 +2594,7 @@
         [
           "/terminal",
           "/forecasting",
+          "/terminal/fx",
           "/ticker-intelligence",
           "/predictions",
           "/indicators",
@@ -2560,7 +2610,25 @@
       ) {
         return "terminal";
       }
-      if (["/dashboard", "/account", "/watchlist", "/productivity", "/collaboration", "/uploads", "/autopilot", "/notifications"].includes(path)) {
+      if (
+        [
+          "/dashboard",
+          "/dashboard/orders",
+          "/dashboard/profile",
+          "/dashboard/watchlist",
+          "/dashboard/productivity",
+          "/dashboard/collaboration",
+          "/dashboard/uploads",
+          "/dashboard/notifications",
+          "/account",
+          "/watchlist",
+          "/productivity",
+          "/collaboration",
+          "/uploads",
+          "/autopilot",
+          "/notifications",
+        ].includes(path)
+      ) {
         return "dashboard";
       }
       return "";
@@ -2584,11 +2652,28 @@
     const byPanel = new Map();
     sidebarLinks.forEach((link) => {
       const panel = String(link.dataset.panelTarget || "").trim();
-      const href = String(link.getAttribute("href") || "").trim();
-      const key = panel || href;
-      if (!key || byPanel.has(key)) return;
-      byPanel.set(key, link);
+      if (!panel || byPanel.has(panel)) return;
+      byPanel.set(panel, link);
     });
+    const findPreferredLink = (target) => {
+      const key = String(target || "").trim();
+      if (!key) return null;
+      if (!key.startsWith("/")) {
+        const normalizedKey = normalizePanelName(key);
+        const panelMatch =
+          byPanel.get(key) ||
+          sidebarLinks.find((link) => normalizePanelName(String(link.dataset.panelTarget || "").trim()) === normalizedKey);
+        return panelMatch || null;
+      }
+      const targetPath = normalizePath(key);
+      return (
+        sidebarLinks.find((link) => {
+          const href = String(link.getAttribute("href") || "").trim();
+          if (!href) return false;
+          return normalizePath(href.split("?")[0].split("#")[0] || "/") === targetPath;
+        }) || null
+      );
+    };
 
     const preferredByRouter = {
       terminal: [
@@ -2601,15 +2686,15 @@
         "ticker-query",
         "/model-council",
         "fx",
-        "/forecasting?panel=fx",
         "/tools/fx",
       ],
-      dashboard: ["orders", "profile", "watchlist", "uploads", "notifications", "/explore"],
+      dashboard: ["orders", "profile", "watchlist", "collaboration", "notifications", "/explore"],
     };
     const preferredPanels = preferredByRouter[routerName] || [];
     const selected = preferredPanels
-      .map((panel) => byPanel.get(panel))
+      .map((panel) => findPreferredLink(panel))
       .filter(Boolean)
+      .filter((link, index, arr) => arr.indexOf(link) === index)
       .slice(0, 5);
 
     if (selected.length < 5) {
@@ -2621,6 +2706,19 @@
 
     if (!selected.length) return;
 
+    const currentPath = normalizePath(window.location.pathname || "/");
+    const currentSearch = String(window.location.search || "");
+    const router = getPanelRouterConfig(routerName);
+    const activePanel = resolvePanelFromLocation(router, currentPath, currentSearch);
+    const currentQuery = (() => {
+      try {
+        const params = new URLSearchParams(currentSearch);
+        return params.toString();
+      } catch (error) {
+        return "";
+      }
+    })();
+
     inner.innerHTML = selected
       .map((link) => {
         const panel = String(link.dataset.panelTarget || "").trim();
@@ -2631,19 +2729,26 @@
           "Currency conversion": "FX",
           "Model Council": "Council",
           "Watchlist and alerts": "Watchlist",
-          "News and data": "News",
+          "News and data": "History",
+          "Historical Data Download": "History",
           "Earnings calendar": "Earnings",
           Productivity: "Tasks",
         };
         const compactLabel = compactLabelMap[label] || label;
         const panelAttr = panel ? ` data-panel-target="${escapeHtml(panel)}"` : "";
         const hrefPath = normalizePath(href.split("?")[0].split("#")[0] || "");
-        const hrefQuery = href.includes("?") ? href.split("?")[1].split("#")[0] : "";
-        const currentQuery = String(window.location.search || "").replace(/^\?/, "");
-        const hrefMatchesPath = Boolean(hrefPath && hrefPath === path);
-        const hrefMatchesQuery = !hrefQuery || hrefQuery === currentQuery;
-        const activeClass =
-          link.classList.contains("active") || (hrefMatchesPath && hrefMatchesQuery) ? " active" : "";
+        const hrefQuery = (() => {
+          try {
+            const raw = href.includes("?") ? href.split("?")[1].split("#")[0] : "";
+            return new URLSearchParams(raw).toString();
+          } catch (error) {
+            return "";
+          }
+        })();
+        const normalizedPanel = normalizePanelName(panel);
+        const activeByPanel = Boolean(activePanel && normalizedPanel && activePanel === normalizedPanel);
+        const activeByRoute = !activeByPanel && Boolean(hrefPath && hrefPath === currentPath && hrefQuery === currentQuery);
+        const activeClass = activeByPanel || activeByRoute ? " active" : "";
         return `
           <a class="mobile-bottom-link${activeClass}" href="${escapeHtml(href)}"${panelAttr} aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">
             ${iconMarkup}
@@ -6184,18 +6289,18 @@
       if (!button || !note) return;
       button.disabled = false;
       button.textContent = accountAuthed
-        ? button.dataset.labelAuth || "Choose plan"
-        : button.dataset.labelGuest || "Continue as guest";
+        ? button.dataset.labelAuth || "Checkout now"
+        : button.dataset.labelGuest || "Checkout now";
       if (accountAuthed) {
         note.textContent = "Subscriptions activate in your dashboard after payment confirmation.";
       } else if (nativeIapRuntime) {
         note.textContent = guestSession || sessionAuthed
-          ? "Guest checkout is enabled in native app. Purchases can be merged after sign-in."
-          : "Continue as guest to initialize native checkout.";
+          ? "Native checkout opens directly in-app."
+          : "Preparing native checkout…";
       } else {
         note.textContent = guestSession || sessionAuthed
-          ? "Guest checkout is enabled on web. Purchases can be merged after sign-in."
-          : "Continue as guest to initialize secure checkout.";
+          ? "Secure checkout opens immediately."
+          : "Preparing secure checkout…";
       }
       stripe?.classList.add("hidden");
       success?.classList.add("hidden");
@@ -8262,6 +8367,99 @@
     return pathname;
   };
 
+  const PANEL_ROUTERS = Object.freeze({
+    terminal: {
+      defaultPanel: "forecast",
+      panelToPath: {
+        forecast: "/forecasting",
+        ticker: "/ticker-intelligence",
+        predictions: "/predictions",
+        indicators: "/indicators",
+        trending: "/trending",
+        news: "/news",
+        "events-calendar": "/events-calendar",
+        "market-headlines": "/market-headlines",
+        "ticker-query": "/model-council",
+        options: "/options",
+        fx: "/tools/fx",
+        learn: "/studio",
+      },
+      pathAliases: {
+        "/ticker-intelligence": "ticker",
+        "/predictions": "predictions",
+        "/ticker-query": "ticker-query",
+        "/model-council": "ticker-query",
+        "/tools/fx": "fx",
+        "/terminal/fx": "fx",
+      },
+    },
+    dashboard: {
+      defaultPanel: "orders",
+      panelToPath: {
+        orders: "/dashboard",
+        profile: "/dashboard",
+        watchlist: "/watchlist",
+        productivity: "/productivity",
+        collaboration: "/collaboration",
+        uploads: "/uploads",
+        autopilot: "/autopilot",
+        notifications: "/notifications",
+        auth: "/account",
+      },
+      pathAliases: {
+        "/dashboard/orders": "orders",
+        "/dashboard/profile": "profile",
+        "/dashboard/watchlist": "watchlist",
+        "/dashboard/productivity": "productivity",
+        "/dashboard/collaboration": "collaboration",
+        "/dashboard/uploads": "uploads",
+      },
+    },
+  });
+
+  const normalizePanelName = (value) => {
+    const panel = String(value || "").trim();
+    if (panel === "ticker-intelligence") return "ticker";
+    return panel;
+  };
+
+  const getPanelRouterConfig = (routerKey) => {
+    const key = String(routerKey || "").trim();
+    return PANEL_ROUTERS[key] || null;
+  };
+
+  const buildPathToPanelMap = (router) => {
+    if (!router) return {};
+    const mapping = {};
+    Object.entries(router.panelToPath || {}).forEach(([panel, path]) => {
+      const key = normalizePath(String(path));
+      if (!mapping[key]) {
+        mapping[key] = String(panel);
+      }
+    });
+    Object.entries(router.pathAliases || {}).forEach(([path, panel]) => {
+      mapping[normalizePath(String(path))] = String(panel);
+    });
+    return mapping;
+  };
+
+  const resolvePanelFromLocation = (router, path, search) => {
+    if (!router) return "";
+    const normalizedPath = normalizePath(path || "/");
+    const pathToPanel = buildPathToPanelMap(router);
+    const panelFromPath = normalizePanelName(pathToPanel[normalizedPath] || "");
+    let panelFromQuery = "";
+    try {
+      panelFromQuery = normalizePanelName(new URLSearchParams(search || "").get("panel"));
+    } catch (error) {
+      panelFromQuery = "";
+    }
+    const defaultPanelPath = normalizePath(router.panelToPath?.[router.defaultPanel] || "");
+    if (panelFromQuery && normalizedPath === defaultPanelPath) return panelFromQuery;
+    if (panelFromPath) return panelFromPath;
+    return panelFromQuery || "";
+  };
+
   const FOOTER_SOCIAL_LINKS = [
     {
       key: "tiktok",
@@ -8307,6 +8505,7 @@
     navs.forEach((nav) => {
       nav.innerHTML = `
         <a href="/forecasting" data-analytics="nav_terminal">${icon("candlestick-chart")}<span>Terminal</span></a>
+        <a href="/dashboard" data-analytics="nav_dashboard">${icon("dashboard-dots")}<span>Dashboard</span></a>
         <a href="/explore" data-analytics="nav_explore">${icon("binocular")}<span>Explore</span></a>
         <a href="/research" data-analytics="nav_research">${icon("bookmark-book")}<span>Research</span></a>
         <a href="/blog" data-analytics="nav_blog">${icon("page")}<span>Blog</span></a>
@@ -10611,7 +10810,7 @@
     if (!symbol) {
       if (ui.intelOutput) ui.intelOutput.innerHTML = `<div class="small muted">Load a ticker to see company context.</div>`;
       if (ui.tickerIntelligenceOutput) {
-        ui.tickerIntelligenceOutput.innerHTML = `<div class="small muted">Load a ticker to generate institutional intelligence.</div>`;
+        ui.tickerIntelligenceOutput.innerHTML = `<div class="small muted">Load a ticker to generate ticker context.</div>`;
       }
       if (ui.tickerPredictionsOutput) {
         state.tickerContext.predictionsTicker = "";
@@ -10627,7 +10826,7 @@
 
     try {
       if (ui.intelOutput) setOutputLoading(ui.intelOutput, "Loading company context...");
-      if (ui.tickerIntelligenceOutput) setOutputLoading(ui.tickerIntelligenceOutput, "Loading institutional intelligence...");
+      if (ui.tickerIntelligenceOutput) setOutputLoading(ui.tickerIntelligenceOutput, "Loading ticker context...");
 
       const intelPayload = await fetchTickerIntelPayload(functions, symbol, { force });
       if (ui.intelOutput) setOutputReady(ui.intelOutput);
@@ -10644,7 +10843,7 @@
       }
       if (ui.tickerIntelligenceOutput) {
         setOutputReady(ui.tickerIntelligenceOutput);
-        ui.tickerIntelligenceOutput.innerHTML = `<div class="small muted">Unable to load institutional intelligence right now.</div>`;
+        ui.tickerIntelligenceOutput.innerHTML = `<div class="small muted">Unable to load ticker context right now.</div>`;
       }
       if (ui.tickerPredictionsOutput && state.intelActiveTab === "predictions") {
         renderPredictionsOutput({
@@ -11280,6 +11479,35 @@
     return out;
   };
 
+  const extractRowsFromEarningsPayload = (payload) => {
+    if (Array.isArray(payload?.days)) {
+      const rows = [];
+      payload.days.forEach((dayEntry) => {
+        const day = dayEntry && typeof dayEntry === "object" ? dayEntry : {};
+        const date = sanitizeText(day.date, 20);
+        const dayItems = Array.isArray(day.items) ? day.items : [];
+        dayItems.forEach((item) => {
+          if (!item || typeof item !== "object") return;
+          rows.push({
+            ...(item || {}),
+            date: sanitizeText(item.date, 20) || date,
+            name: sanitizeText(item.company || item.name, 180),
+          });
+        });
+      });
+      if (rows.length) return rows;
+    }
+    return Array.isArray(payload?.items) ? payload.items : [];
+  };
+
+  const logEarningsUiState = (event, details = {}) => {
+    try {
+      console.info("[EarningsUI]", event, details);
+    } catch (error) {
+      // Ignore logging failures.
+    }
+  };
+
   const getEarningsFollowStorageKey = () => {
     const uid = String(state.user?.uid || "anon").trim() || "anon";
     return `quantura:earnings:follows:${uid}`;
@@ -11520,6 +11748,15 @@
       state.earningsCalendar.pageByDate[state.earningsCalendar.selectedDate] = 1;
     }
 
+    logEarningsUiState("render", {
+      rangeStart,
+      rangeEnd,
+      selectedDate: state.earningsCalendar.selectedDate || "",
+      rangeDays: rangeDates.length,
+      totalRows: Array.isArray(state.earningsCalendar.rows) ? state.earningsCalendar.rows.length : 0,
+      search: String(state.earningsCalendar.search || ""),
+    });
+
     renderEarningsDayStrip(filteredByDate);
     renderEarningsTable(filteredByDate);
   };
@@ -11532,6 +11769,7 @@
     const cacheKey = `${start}_${end}`;
 
     await loadEarningsFollowSet({ force: false });
+    logEarningsUiState("load_begin", { start, end, force: Boolean(force) });
 
     const cached = state.earningsCalendar.requestCache.get(cacheKey);
     if (!force && cached && Array.isArray(cached.rows)) {
@@ -11543,6 +11781,7 @@
         ui.eventsCalendarStatus.textContent = `Showing ${cached.rows.length} earnings rows (cached).`;
       }
       renderEarningsCalendar();
+      logEarningsUiState("load_cache_hit", { start, end, rows: cached.rows.length });
       return;
     }
 
@@ -11571,11 +11810,18 @@
         }),
       });
       const refreshPayload = await refreshResp.json().catch(() => ({}));
+      logEarningsUiState("load_response", {
+        start,
+        end,
+        status: refreshResp.status,
+        ok: refreshResp.ok,
+        requestId: refreshPayload?.requestId || "",
+      });
       if (!refreshResp.ok) {
         throw new Error(String(refreshPayload?.error || "Unable to refresh earnings cache.").trim());
       }
 
-      const normalizedRows = (Array.isArray(refreshPayload?.items) ? refreshPayload.items : [])
+      const normalizedRows = extractRowsFromEarningsPayload(refreshPayload)
         .map((row) => normalizeEarningsRow(row))
         .filter(Boolean);
       state.earningsCalendar.requestCache.set(cacheKey, {
@@ -11592,8 +11838,17 @@
       setOutputReady(ui.eventsCalendarOutput);
       renderEarningsCalendar();
       if (ui.eventsCalendarStatus) {
-        ui.eventsCalendarStatus.textContent = `Loaded ${normalizedRows.length} earnings row${normalizedRows.length === 1 ? "" : "s"}.`;
+        const dayCount = Array.isArray(refreshPayload?.days) ? refreshPayload.days.length : state.earningsCalendar.rangeDates.length;
+        ui.eventsCalendarStatus.textContent = `Loaded ${normalizedRows.length} earnings row${
+          normalizedRows.length === 1 ? "" : "s"
+        } across ${dayCount} day${dayCount === 1 ? "" : "s"}.`;
       }
+      logEarningsUiState("load_success", {
+        start,
+        end,
+        rows: normalizedRows.length,
+        days: Array.isArray(refreshPayload?.days) ? refreshPayload.days.length : 0,
+      });
       logEvent("earnings_calendar_loaded", {
         rangeStart: start,
         rangeEnd: end,
@@ -11620,9 +11875,15 @@
           : rateLimited
           ? "Earnings provider is rate-limited right now. Try again shortly."
           : "Unable to load earnings calendar right now.";
-        ui.eventsCalendarOutput.innerHTML = `<div class="small muted">${escapeHtml(detail)}</div>`;
+        ui.eventsCalendarOutput.innerHTML = `
+          <div class="small muted">${escapeHtml(detail)}</div>
+          <div style="margin-top:10px;">
+            <button class="cta secondary small" type="button" data-earnings-retry="1">Retry</button>
+          </div>
+        `;
         if (ui.eventsCalendarStatus) ui.eventsCalendarStatus.textContent = detail;
       }
+      logEarningsUiState("load_error", { start, end, message, cachedRows: cachedRows.length });
       if (notify) showToast(message || "Unable to load earnings calendar.", "warn");
     } finally {
       if (state.earningsCalendar.inFlightController === controller) {
@@ -12985,8 +13246,12 @@
       });
       const payload = await response.json().catch(() => ({}));
       if (response.ok) {
+        const answerText = String(payload?.answer || payload?.text || "").trim();
+        if (!answerText) {
+          throw new Error("Empty Model Council response.");
+        }
         return {
-          answer: String(payload?.answer || "").trim(),
+          answer: answerText,
           model: normalizeAiModelId(payload?.model || model) || model,
           provider: normalizeModelCouncilProviderId(payload?.provider || provider || "openai"),
           usage: payload?.usage && typeof payload.usage === "object" ? payload.usage : {},
@@ -13028,7 +13293,7 @@
           maxTokens: 900,
           webSearch: true,
           stream: true,
-          background: true,
+          background: false,
         },
       }),
     });
@@ -13040,8 +13305,16 @@
       err.retryModel = String(payload?.retryModel || "").trim();
       throw err;
     }
+    const fallbackAnswer = String(payload?.text || payload?.answer || "").trim();
+    if (!fallbackAnswer) {
+      const message = String(payload?.error || payload?.message || "Model provider returned an empty response.").trim();
+      const err = new Error(message);
+      err.retryProvider = String(payload?.retryProvider || "").trim();
+      err.retryModel = String(payload?.retryModel || "").trim();
+      throw err;
+    }
     return {
-      answer: String(payload?.text || "").trim(),
+      answer: fallbackAnswer,
       model: normalizeAiModelId(payload?.model || model) || model,
       provider: normalizeModelCouncilProviderId(payload?.provider || provider || "openai"),
       usage: payload?.usage && typeof payload.usage === "object" ? payload.usage : {},
@@ -18129,118 +18402,55 @@
 
   const handlePurchase = async (panel, functions) => {
     const nativeBillingProvider = isNativeIapRuntime();
-    if (!hasSessionUser()) {
-      try {
-        await ensureSessionUser({
-          reason: nativeBillingProvider ? "native_iap_checkout" : "web_checkout",
-          message: "Initializing guest checkout session...",
-        });
-      } catch (error) {
-        showToast(error?.message || "Unable to initialize guest checkout session.", "warn");
-        return;
-      }
-    }
-    if (!hasSessionUser()) {
-      return;
-    }
-
     const button = panel.querySelector('[data-action="purchase"]');
     const note = panel.querySelector(".purchase-note");
-    const success = panel.querySelector(".purchase-success");
-    const stripe = panel.querySelector('[data-action="stripe"]');
     if (!button) return;
 
     button.disabled = true;
-    button.textContent = "Creating order...";
-
-    const meta = {
-      ...buildMeta(),
-      utm: getUtm(),
-    };
+    button.textContent = "Opening checkout...";
 
     try {
-      const productId = resolveNativeIapProductId(panel);
-      const subscriptionTier = resolveNativeIapPlanKey(panel);
-      logEvent("begin_checkout", { currency: panel.dataset.currency || "USD", value: Number(panel.dataset.price || 349) });
-      const createOrder = functions.httpsCallable("create_order");
-      const result = await createOrder({
-        product: panel.dataset.product || "Quantura Subscription",
-        productId,
-        tier: subscriptionTier,
-        paymentProvider: nativeBillingProvider ? "native_iap" : "stripe",
-        price: Number(panel.dataset.price || 349),
-        currency: panel.dataset.currency || "USD",
-        meta: {
-          ...meta,
-          subscriptionTier,
-          productId,
-          purchaseRuntime: nativeBillingProvider ? (getNativePlatform() || "native") : "web",
-        },
-      });
-      const orderId = result.data?.orderId;
-      if (orderId) {
-        panel.dataset.orderId = String(orderId);
-      }
-      if (success) {
-        success.textContent = `Order ${orderId} created. Proceed to payment to finalize.`;
-        success.classList.remove("hidden");
-      }
-      const nativePlatform = getNativePlatform();
-      if (isNativeIosStoreKitCheckoutOnly() || isNativeAndroidPlayBillingCheckout()) {
-        const sent = requestNativeInAppPurchase(panel, { orderId, source: "order_created" });
-        if (sent) {
-          stripe?.classList.add("hidden");
-          note.textContent =
-            nativePlatform === "ios"
-              ? "Order created. Opening App Store in-app purchase..."
-              : "Order created. Opening Google Play in-app purchase...";
-          showToast(
-            nativePlatform === "ios"
-              ? "Opening native iOS checkout..."
-              : "Opening native Android checkout..."
-          );
-        } else {
-          stripe?.classList.add("hidden");
-          note.textContent =
-            nativePlatform === "ios"
-              ? "Native iOS checkout is required. Please reopen this page in the app."
-              : "Native Android checkout is unavailable right now.";
-          showToast(note.textContent, "warn");
-        }
-      } else {
-        stripe?.classList.remove("hidden");
-        note.textContent = "Order created. Proceed to payment to finalize.";
-      }
-      logEvent("order_created", { order_id: orderId, currency: panel.dataset.currency || "USD" });
-      if (!isNativeIosStoreKitCheckoutOnly() && !isNativeAndroidPlayBillingCheckout()) {
-        showToast("Order created. Proceed to payment.");
-      }
-    } catch (error) {
       if (nativeBillingProvider) {
-        const sent = requestNativeInAppPurchase(panel, { orderId: "", source: "native_no_order_fallback" });
-        if (sent) {
-          if (stripe) stripe.classList.add("hidden");
-          if (note) {
-            note.textContent =
-              "Native checkout opened without a server order. We will sync purchase details after sign-in.";
+        if (!hasSessionUser()) {
+          try {
+            await ensureSessionUser({
+              reason: "native_iap_checkout",
+              message: "Preparing secure checkout...",
+            });
+          } catch (_error) {
+            // Native purchase can still proceed without a synced web session.
           }
-          queuePendingNativeIapEvent({
-            productId: resolveNativeIapProductId(panel),
-            status: "pending",
-            platform: getNativePlatform() || "unknown",
-            source: "native_iap_no_order_fallback",
-            sourceUid: String(state.user?.uid || "").trim(),
-          });
-          showToast("Opening native checkout in guest mode...");
+        }
+        const sent = requestNativeInAppPurchase(panel, { orderId: "", source: "direct_checkout" });
+        if (!sent) {
+          if (note) {
+            note.textContent = "Native Android checkout is unavailable right now.";
+          }
+          showToast("Native Android checkout is unavailable right now.", "warn");
           return;
         }
+        if (note) {
+          note.textContent =
+            getNativePlatform() === "ios"
+              ? "Opening App Store in-app purchase..."
+              : "Opening Google Play in-app purchase...";
+        }
+        showToast(
+          getNativePlatform() === "ios"
+            ? "Opening native iOS checkout..."
+            : "Opening native Android checkout..."
+        );
+        return;
       }
-      showToast(error.message || "Unable to create order.", "warn");
+
+      await handleStripeCheckout(panel, functions);
+    } catch (error) {
+      showToast(error?.message || "Unable to open checkout.", "warn");
     } finally {
       button.disabled = false;
       button.textContent = hasFullAccount()
-        ? button.dataset.labelAuth || "Choose plan"
-        : button.dataset.labelGuest || "Continue as guest";
+        ? button.dataset.labelAuth || "Checkout now"
+        : button.dataset.labelGuest || "Checkout now";
     }
   };
 
@@ -18266,19 +18476,7 @@
 
   const handleStripeCheckout = async (panel, functions) => {
     if (isNativeIapRuntime()) {
-      if (!hasSessionUser()) {
-        try {
-          await ensureSessionUser({
-            reason: "native_iap_checkout",
-            message: "Initializing guest checkout session...",
-          });
-        } catch (error) {
-          showToast(error?.message || "Unable to initialize guest checkout session.", "warn");
-          return;
-        }
-      }
-      const orderId = String(panel?.dataset?.orderId || "").trim();
-      const sent = requestNativeInAppPurchase(panel, { orderId, source: "stripe_button" });
+      const sent = requestNativeInAppPurchase(panel, { orderId: "", source: "stripe_button" });
       if (!sent) {
         showToast("Native in-app checkout is required in the mobile app.", "warn");
       }
@@ -18288,27 +18486,20 @@
       try {
         await ensureSessionUser({
           reason: "web_checkout",
-          message: "Initializing guest checkout session...",
+          message: "Preparing secure checkout...",
         });
       } catch (error) {
-        showToast(error?.message || "Unable to initialize guest checkout session.", "warn");
+        showToast(error?.message || "Unable to initialize checkout session.", "warn");
         return;
       }
     }
     if (!hasSessionUser()) return;
-
-    if (!state.remoteFlags.stripeCheckoutEnabled) {
-      showToast("Checkout is temporarily disabled.", "warn");
-      return;
-    }
-
-    const stripeBtn = panel.querySelector('[data-action="stripe"]');
+    const stripeBtn = panel.querySelector('[data-action="purchase"]');
     const note = panel.querySelector(".purchase-note");
-    const orderId = String(panel.dataset.orderId || "").trim();
-    if (!orderId) {
-      showToast("Create an order first.", "warn");
-      return;
-    }
+    const cycle = String(safeLocalStorageGet("quantura_pricing_cycle") || "monthly").trim().toLowerCase() === "yearly"
+      ? "yearly"
+      : "monthly";
+    const tier = resolveNativeIapPlanKey(panel);
 
     if (stripeBtn) {
       stripeBtn.disabled = true;
@@ -18317,36 +18508,54 @@
     if (note) note.textContent = "Starting secure checkout...";
 
     try {
-      logEvent("add_payment_info", { currency: panel.dataset.currency || "USD", value: Number(panel.dataset.price || 349) });
-      const createSession = functions.httpsCallable("create_stripe_checkout_session");
-      const result = await createSession({ orderId, meta: buildMeta() });
-      const sessionId = String(result.data?.sessionId || "");
-      const url = String(result.data?.url || "");
+      logEvent("add_payment_info", {
+        currency: panel.dataset.currency || "USD",
+        value: Number(panel.dataset.price || 0) || 0,
+      });
 
-      logEvent("checkout_redirect", { order_id: orderId, mode: result.data?.mode || "" });
-      if (url) {
-        window.location.assign(url);
-        return;
+      const payload = {
+        tier,
+        cycle,
+        product: String(panel.dataset.product || "Quantura Subscription"),
+        productId: resolveNativeIapProductId(panel),
+        user: {
+          uid: String(state.user?.uid || "").trim(),
+          email: String(state.user?.email || "").trim().toLowerCase(),
+        },
+        meta: {
+          ...buildMeta(),
+          utm: getUtm(),
+        },
+      };
+
+      const response = await fetch("/api/shop/subscription-checkout", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        credentials: "same-origin",
+        body: JSON.stringify(payload),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const detail = String(result?.message || result?.detail || result?.error || "").trim();
+        throw new Error(detail || "Unable to start subscription checkout.");
       }
-
-      const stripeKey = String(state.remoteFlags.stripePublicKey || "").trim();
-      if (stripeKey && sessionId) {
-        const StripeCtor = await loadStripeJs();
-        if (StripeCtor) {
-          const stripe = StripeCtor(stripeKey);
-          await stripe.redirectToCheckout({ sessionId });
-          return;
-        }
-      }
-
-      throw new Error("Checkout URL is not available.");
+      const url = String(result?.url || "").trim();
+      if (!url) throw new Error("Checkout URL is not available.");
+      logEvent("checkout_redirect", { mode: "subscription", tier, cycle });
+      window.location.assign(url);
+      return;
     } catch (error) {
       showToast(error.message || "Unable to start checkout.", "warn");
       if (note) note.textContent = "Unable to start checkout. Try again.";
     } finally {
       if (stripeBtn) {
         stripeBtn.disabled = false;
-        stripeBtn.textContent = "Proceed to payment";
+        stripeBtn.textContent = hasFullAccount()
+          ? panel?.querySelector('[data-action="purchase"]')?.dataset?.labelAuth || "Checkout now"
+          : panel?.querySelector('[data-action="purchase"]')?.dataset?.labelGuest || "Checkout now";
       }
     }
   };
@@ -18394,37 +18603,25 @@
       const email = String(state.user?.email || "").trim().toLowerCase();
       const customerId = String(state.user?.stripeCustomerId || "").trim();
 
-      let url = "";
-      try {
-        const response = await fetch("/api/shop/portal", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          credentials: "same-origin",
-          body: JSON.stringify({
-            email,
-            customerId,
-            returnUrl,
-          }),
-        });
-        const payload = await response.json().catch(() => ({}));
-        if (response.ok && payload?.url) {
-          url = String(payload.url || "").trim();
-        }
-      } catch (_error) {}
-
-      if (!url) {
-        const createPortal = functions.httpsCallable("create_stripe_billing_portal_session");
-        const result = await createPortal({
-          returnUrl,
+      const response = await fetch("/api/shop/portal", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        credentials: "same-origin",
+        body: JSON.stringify({
           email,
           customerId,
-          meta: buildMeta(),
-        });
-        url = String(result.data?.url || "").trim();
+          returnUrl,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const detail = String(payload?.message || payload?.detail || payload?.error || "").trim();
+        throw new Error(detail || "Unable to open Stripe billing portal.");
       }
+      const url = String(payload?.url || "").trim();
 
       if (!url) throw new Error("Stripe billing portal URL is missing.");
       logEvent("billing_portal_open", { provider: "stripe" });
@@ -18458,9 +18655,7 @@
     const checkout = String(getQueryParam("checkout") || "").trim().toLowerCase();
     if (!checkout) return;
 
-    const orderId = String(getQueryParam("orderId") || "").trim();
     const sessionId = String(getQueryParam("session_id") || "").trim();
-    if (!orderId) return;
 
     if (checkout === "cancel") {
       showToast("Checkout cancelled.", "warn");
@@ -18491,19 +18686,36 @@
     if (!hasSessionUser()) return;
 
     try {
-      const confirm = functions.httpsCallable("confirm_stripe_checkout");
-      const result = await confirm({ orderId, sessionId });
-      const paid = Boolean(result.data?.paid);
-      const currency = String(result.data?.currency || "USD");
-      const price = Number(result.data?.price || 0);
-      const product = String(result.data?.product || "");
+      const response = await fetch(`/api/shop/order/${encodeURIComponent(sessionId)}`, {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        credentials: "same-origin",
+      });
+      const payload = await response.json().catch(() => ({}));
+      const order = payload?.order || {};
+      const paymentStatus = String(order?.paymentStatus || order?.status || "").trim().toLowerCase();
+      const paid = ["paid", "succeeded", "complete", "completed", "active"].includes(paymentStatus);
+      const currency = String(order?.currency || "USD");
+      const price = Number(order?.amountTotal || 0) / 100;
+      const product = Array.isArray(order?.items) && order.items.length
+        ? String(order.items[0]?.name || "")
+        : "";
       showToast(paid ? "Payment confirmed." : "Payment pending review.");
       logEvent("purchase", {
-        transaction_id: orderId,
+        transaction_id: sessionId,
         currency,
         value: Number.isFinite(price) ? price : 0,
         items: product ? [{ item_name: product, item_id: product, price }] : undefined,
       });
+      try {
+        const params = new URLSearchParams(window.location.search);
+        params.delete("checkout");
+        params.delete("orderId");
+        params.delete("session_id");
+        history.replaceState({}, "", `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ""}`);
+      } catch (error) {
+        // Ignore cleanup issues.
+      }
       if (paid) {
         try {
           history.replaceState({}, "", "/dashboard");
@@ -21720,6 +21932,11 @@
       renderEarningsCalendar();
     });
     ui.eventsCalendarOutput?.addEventListener("click", async (event) => {
+      const retryButton = event.target.closest("[data-earnings-retry]");
+      if (retryButton) {
+        await loadEarningsCalendar({ force: true, notify: true });
+        return;
+      }
       const followButton = event.target.closest("[data-earnings-follow]");
       if (followButton) {
         const symbol = String(followButton.getAttribute("data-earnings-follow") || "").trim();

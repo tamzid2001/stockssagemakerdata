@@ -18,8 +18,10 @@ FIRESTORE_TRIGGER_LOCATION="${FIRESTORE_TRIGGER_LOCATION:-nam5}"
 FUNCTIONS_RUNTIME="${FUNCTIONS_RUNTIME:-nodejs24}"
 PYTHON_FUNCTIONS_RUNTIME="${PYTHON_FUNCTIONS_RUNTIME:-python313}"
 PUBLIC_ORIGIN="${PUBLIC_ORIGIN:-https://quantura.studio}"
+SHOP_ALLOWED_ORIGINS="${SHOP_ALLOWED_ORIGINS:-https://quantura.studio,https://www.quantura.studio,https://quantura-e2e3d.web.app,https://quantura-e2e3d.firebaseapp.com}"
 PLAY_INTEGRITY_ANDROID_PACKAGE="${PLAY_INTEGRITY_ANDROID_PACKAGE:-com.quantura.quanturaapp}"
 REQUIRE_PLAY_INTEGRITY="${REQUIRE_PLAY_INTEGRITY:-false}"
+AMAZON_NOVA_BASE_URL="${AMAZON_NOVA_BASE_URL:-}"
 FISCALDATA_REFRESH_TOPIC="${FISCALDATA_REFRESH_TOPIC:-fiscaldata-refresh}"
 NEWSLETTER_TOPIC="${NEWSLETTER_TOPIC:-quantura-newsletter-weekly}"
 NEWSLETTER_SCHEDULER_JOB="${NEWSLETTER_SCHEDULER_JOB:-quantura-newsletter-weekly}"
@@ -106,14 +108,66 @@ EXTRA_FLAGS=()
 
 if [[ -z "${GCLOUD_SET_SECRETS:-}" ]]; then
   AUTO_SECRET_BINDINGS=()
-  for secret_name in STRIPE_SECRET_KEY STRIPE_PRIVATE_KEY STRIPE_WEBHOOK_SECRET STRIPE_WEBHOOK_SECRET_CONNECT; do
-    if "${GCLOUD_BIN}" secrets describe "${secret_name}" --project="${PROJECT_ID}" >/dev/null 2>&1; then
-      AUTO_SECRET_BINDINGS+=("${secret_name}=projects/${PROJECT_ID}/secrets/${secret_name}:latest")
+  add_secret_binding() {
+    local env_name="$1"
+    shift
+    local candidate=""
+    for candidate in "$@"; do
+      [[ -n "${candidate}" ]] || continue
+      if "${GCLOUD_BIN}" secrets describe "${candidate}" --project="${PROJECT_ID}" >/dev/null 2>&1; then
+        AUTO_SECRET_BINDINGS+=("${env_name}=projects/${PROJECT_ID}/secrets/${candidate}:latest")
+        return 0
+      fi
+    done
+    return 1
+  }
+
+  # Secret Manager to runtime env mapping:
+  # - Billing: STRIPE_SECRET_KEY / STRIPE_PRIVATE_KEY, STRIPE_WEBHOOK_SECRET / STRIPE_WEBHOOK_SECRET_CONNECT
+  # - LLM providers: OPENAI_API_KEY, CLAUDE_API_KEY, GEMINI_API_KEY, DEEPSEEK_API_KEY, MISTRAL_API_KEY, PERPLEXITY_API_KEY, QWEN_API_KEY, AMAZON_NOVA_API_KEY
+  # - Data providers: FMP_API_KEY
+  # - Webhook security: IOS_IAP_WEBHOOK_SECRET, APPLE_NOTIFICATIONS_WEBHOOK_SECRET, ADMOB_SSV_WEBHOOK_SECRET
+  # - Newsletter email pipeline: NEWSLETTER_ADMIN_KEY, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, SES_FROM_EMAIL, SES_CONFIG_SET
+  add_secret_binding "STRIPE_SECRET_KEY" "STRIPE_SECRET_KEY" "STRIPE_PRIVATE_KEY" "STRIPE_SECRET" "STRIPE_API_KEY" || true
+  add_secret_binding "STRIPE_PRIVATE_KEY" "STRIPE_PRIVATE_KEY" "STRIPE_SECRET_KEY" "STRIPE_SECRET" "STRIPE_API_KEY" || true
+  add_secret_binding "STRIPE_WEBHOOK_SECRET" "STRIPE_WEBHOOK_SECRET" "STRIPE_WEBHOOK_SECRET_CONNECT" "STRIPE_SIGNING_SECRET" || true
+  add_secret_binding "STRIPE_WEBHOOK_SECRET_CONNECT" "STRIPE_WEBHOOK_SECRET_CONNECT" "STRIPE_WEBHOOK_SECRET" "STRIPE_SIGNING_SECRET" || true
+
+  add_secret_binding "OPENAI_API_KEY" "OPENAI_API_KEY" "OPENAI_KEY" "OPENAI_SECRET_KEY" || true
+  add_secret_binding "CLAUDE_API_KEY" "CLAUDE_API_KEY" "ANTHROPIC_API_KEY" || true
+  add_secret_binding "GEMINI_API_KEY" "GEMINI_API_KEY" "GOOGLE_GENAI_API_KEY" || true
+  add_secret_binding "DEEPSEEK_API_KEY" "DEEPSEEK_API_KEY" "DEEPSEEK_SECRET_KEY" || true
+  add_secret_binding "MISTRAL_API_KEY" "MISTRAL_API_KEY" "MISTRAL_SECRET_KEY" || true
+  add_secret_binding "PERPLEXITY_API_KEY" "PERPLEXITY_API_KEY" "PERPLEXITY_SECRET_KEY" || true
+  add_secret_binding "QWEN_API_KEY" "QWEN_API_KEY" "QWEN_SECRET_KEY" || true
+  add_secret_binding "AMAZON_NOVA_API_KEY" "AMAZON_NOVA_API_KEY" "BEDROCK_API_KEY" || true
+  add_secret_binding "MODEL_COUNCIL_OTHER_API_KEY" "MODEL_COUNCIL_OTHER_API_KEY" "MODEL_COUNCIL_OTHER_KEY" || true
+  add_secret_binding "IOS_IAP_WEBHOOK_SECRET" "IOS_IAP_WEBHOOK_SECRET" || true
+  add_secret_binding "APPLE_NOTIFICATIONS_WEBHOOK_SECRET" "APPLE_NOTIFICATIONS_WEBHOOK_SECRET" || true
+  add_secret_binding "ADMOB_SSV_WEBHOOK_SECRET" "ADMOB_SSV_WEBHOOK_SECRET" || true
+  add_secret_binding "NEWSLETTER_ADMIN_KEY" "NEWSLETTER_ADMIN_KEY" || true
+  add_secret_binding "AWS_ACCESS_KEY_ID" "AWS_ACCESS_KEY_ID" || true
+  add_secret_binding "AWS_SECRET_ACCESS_KEY" "AWS_SECRET_ACCESS_KEY" || true
+  add_secret_binding "AWS_REGION" "AWS_REGION" || true
+  add_secret_binding "SES_FROM_EMAIL" "SES_FROM_EMAIL" || true
+  add_secret_binding "SES_CONFIG_SET" "SES_CONFIG_SET" || true
+
+  if ! add_secret_binding "FMP_API_KEY" "FMP_API_KEY" "FMP_SECRET_KEY" "FMP_KEY"; then
+    FMP_FALLBACK_SECRET="$("${GCLOUD_BIN}" secrets list --project="${PROJECT_ID}" --format='value(name)' --filter='name~^FMP_.*_KEY$' 2>/dev/null | head -n 1 | tr -d '[:space:]')"
+    if [[ -n "${FMP_FALLBACK_SECRET}" ]]; then
+      AUTO_SECRET_BINDINGS+=("FMP_API_KEY=projects/${PROJECT_ID}/secrets/${FMP_FALLBACK_SECRET}:latest")
     fi
-  done
+  fi
+
   if [[ ${#AUTO_SECRET_BINDINGS[@]} -gt 0 ]]; then
     GCLOUD_SET_SECRETS="$(IFS=,; echo "${AUTO_SECRET_BINDINGS[*]}")"
     export GCLOUD_SET_SECRETS
+    # Secret env var mapping (values remain in Secret Manager):
+    # - LLM providers: OPENAI_API_KEY, CLAUDE_API_KEY, GEMINI_API_KEY, DEEPSEEK_API_KEY, MISTRAL_API_KEY, PERPLEXITY_API_KEY, QWEN_API_KEY, AMAZON_NOVA_API_KEY
+    # - Market data: FMP_API_KEY
+    # - Billing/webhooks: STRIPE_SECRET_KEY, STRIPE_PRIVATE_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_WEBHOOK_SECRET_CONNECT
+    # - Native/webhook security: IOS_IAP_WEBHOOK_SECRET, APPLE_NOTIFICATIONS_WEBHOOK_SECRET, ADMOB_SSV_WEBHOOK_SECRET
+    # - Newsletter/email: NEWSLETTER_ADMIN_KEY, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, SES_FROM_EMAIL, SES_CONFIG_SET
     echo "==> Auto-discovered Secret Manager bindings for deploy: ${GCLOUD_SET_SECRETS}"
   fi
 fi
@@ -149,7 +203,7 @@ echo "==> Deploying quanturaExploreApi (Gen2)"
   --entry-point=quanturaExploreApi \
   --trigger-http \
   --allow-unauthenticated \
-  --set-env-vars="PUBLIC_ORIGIN=${PUBLIC_ORIGIN},PLAY_INTEGRITY_ANDROID_PACKAGE=${PLAY_INTEGRITY_ANDROID_PACKAGE},REQUIRE_PLAY_INTEGRITY=${REQUIRE_PLAY_INTEGRITY}" \
+  --set-env-vars="PUBLIC_ORIGIN=${PUBLIC_ORIGIN},PLAY_INTEGRITY_ANDROID_PACKAGE=${PLAY_INTEGRITY_ANDROID_PACKAGE},REQUIRE_PLAY_INTEGRITY=${REQUIRE_PLAY_INTEGRITY},AMAZON_NOVA_BASE_URL=${AMAZON_NOVA_BASE_URL}" \
   ${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"}
 
 echo "==> Deploying shopApi (Gen2)"
@@ -163,7 +217,7 @@ echo "==> Deploying shopApi (Gen2)"
   --entry-point=shopApi \
   --trigger-http \
   --allow-unauthenticated \
-  --set-env-vars="PUBLIC_ORIGIN=${PUBLIC_ORIGIN}" \
+  --set-env-vars="^##^PUBLIC_ORIGIN=${PUBLIC_ORIGIN}##SHOP_ALLOWED_ORIGINS=${SHOP_ALLOWED_ORIGINS}" \
   ${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"}
 
 echo "==> Deploying Firestore trigger: onForecastCreated"

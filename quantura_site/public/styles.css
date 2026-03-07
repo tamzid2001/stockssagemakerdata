@@ -2036,6 +2036,15 @@ textarea {
   border-color: rgba(45, 108, 223, 0.5);
 }
 
+.notification-privacy-grid .field {
+  gap: 3px;
+}
+
+.notification-privacy-grid .label {
+  margin-bottom: 0;
+  line-height: 1.2;
+}
+
 @media (max-width: 760px) {
   .notification-privacy-grid {
     grid-template-columns: 1fr;
@@ -2239,13 +2248,13 @@ textarea {
 }
 
 .panel[data-panel="events-calendar"] .panel-header {
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 
 .earnings-calendar-shell {
   display: grid;
   gap: 12px;
-  padding-top: 12px;
+  padding-top: 6px;
 }
 
 .earnings-calendar-topbar {
@@ -3057,11 +3066,15 @@ textarea {
   box-shadow: var(--shadow-soft);
   padding: 12px;
   margin-top: 12px;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .native-inline-ad-inner {
   display: grid;
   gap: 10px;
+  min-width: 0;
 }
 
 .native-inline-ad-top {
@@ -3110,6 +3123,7 @@ textarea {
   font-size: 0.86rem;
   line-height: 1.45;
   color: var(--ink-3);
+  overflow-wrap: anywhere;
 }
 
 .native-inline-ad-meta {
@@ -3152,6 +3166,12 @@ textarea {
   justify-self: start;
 }
 
+#native-ad-container {
+  width: 100%;
+  max-width: 100%;
+  margin-top: 12px;
+}
+
 .native-inline-ad-skeleton {
   display: grid;
   gap: 10px;
@@ -3176,6 +3196,105 @@ textarea {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
   line-height: 1.35;
+}
+
+#fiscaldata-macro-groups,
+#fiscaldata-macro-groups .content-grid {
+  min-width: 0;
+}
+
+#fiscaldata-macro-groups .fiscaldata-card {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  contain: layout paint;
+}
+
+#fiscaldata-macro-groups section {
+  min-width: 0;
+}
+
+.fiscaldata-endpoint,
+.fiscaldata-card-meta,
+.fiscaldata-detail-line {
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.fiscaldata-card-table,
+.fiscaldata-detail-table {
+  margin-top: 10px;
+  width: 100%;
+  min-width: 0;
+}
+
+.fiscaldata-card-actions {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.fiscaldata-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-solid) 96%, var(--paper-2) 4%);
+  -webkit-overflow-scrolling: touch;
+}
+
+.fiscaldata-card .panel-output,
+.fiscaldata-card .fiscaldata-detail-line {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.insider-table.fiscaldata-macro-table {
+  width: 100%;
+  min-width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+}
+
+.insider-table.fiscaldata-macro-table th,
+.insider-table.fiscaldata-macro-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 9px 10px;
+  vertical-align: top;
+}
+
+.insider-table.fiscaldata-macro-table th {
+  background: color-mix(in srgb, var(--paper-2) 75%, var(--surface-solid) 25%);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--ink-2);
+  text-transform: none;
+}
+
+.insider-table.fiscaldata-macro-table td {
+  font-size: 0.84rem;
+  color: var(--ink);
+  white-space: normal;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.insider-table.fiscaldata-macro-table tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--paper-2) 24%, var(--surface-solid) 76%);
+}
+
+.fiscaldata-detail-code {
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .ticker-grid {
@@ -3751,6 +3870,15 @@ textarea {
 
   .checkbox-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .insider-table.fiscaldata-macro-table {
+    min-width: 460px;
+  }
+
+  .fiscaldata-card .hero-actions {
+    width: 100%;
+    justify-content: flex-start;
   }
 }
 
@@ -5306,7 +5434,7 @@ body.mobile-sidebar-lock {
 .mobile-sidebar-toggle {
   position: fixed;
   right: 14px;
-  bottom: calc(var(--mobile-bottom-nav-height) + var(--safe-area-bottom) + 16px);
+  bottom: calc(var(--mobile-bottom-nav-height) + var(--safe-area-bottom) + 56px);
   z-index: 75;
   width: 54px;
   height: 54px;
@@ -5352,11 +5480,22 @@ body.mobile-sidebar-lock {
   bottom: calc(10px + var(--safe-area-bottom));
   z-index: 92;
   border-radius: calc(var(--glass-radius) + 6px);
-  border: 1px solid rgba(29, 94, 216, 0.25);
-  background: linear-gradient(140deg, rgba(255, 255, 255, 0.92) 0%, rgba(239, 246, 255, 0.88) 100%);
-  box-shadow: 0 18px 36px rgba(15, 42, 97, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.55);
-  backdrop-filter: blur(var(--glass-blur)) saturate(145%);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(145%);
+  border: 1px solid rgba(29, 94, 216, 0.22);
+  background: linear-gradient(142deg, rgba(255, 255, 255, 0.88) 0%, rgba(232, 241, 255, 0.8) 100%);
+  box-shadow: 0 18px 34px rgba(15, 42, 97, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.58);
+  backdrop-filter: blur(calc(var(--glass-blur) + 2px)) saturate(155%);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) + 2px)) saturate(155%);
+  overflow: hidden;
+}
+
+.mobile-bottom-nav::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.58) 0%, rgba(229, 241, 255, 0.22) 100%);
+  pointer-events: none;
+  z-index: 0;
 }
 
 .mobile-bottom-nav.hidden {
@@ -5369,6 +5508,8 @@ body.mobile-sidebar-lock {
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 6px;
   padding: 10px 10px calc(10px + var(--safe-area-bottom));
+  position: relative;
+  z-index: 1;
 }
 
 .mobile-bottom-link {
@@ -5386,7 +5527,7 @@ body.mobile-sidebar-lock {
   border: 1px solid transparent;
   text-align: center;
   font-weight: 800;
-  transition: background 180ms ease, color 180ms ease, border-color 180ms ease;
+  transition: background 180ms ease, color 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
 }
 
 .mobile-bottom-link i {
@@ -5402,7 +5543,7 @@ body.mobile-sidebar-lock {
   background: linear-gradient(135deg, #1f5dff 0%, #0f3fb8 100%);
   border-color: rgba(31, 93, 255, 0.58);
   color: #ffffff;
-  box-shadow: 0 8px 20px rgba(31, 93, 255, 0.34);
+  box-shadow: 0 8px 18px rgba(31, 93, 255, 0.34), 0 0 0 1px rgba(255, 255, 255, 0.16) inset;
 }
 
 .mobile-bottom-link.active i {
@@ -5413,6 +5554,10 @@ body.mobile-sidebar-lock {
   border-color: rgba(129, 166, 233, 0.22);
   background: linear-gradient(145deg, rgba(15, 24, 42, 0.92) 0%, rgba(17, 34, 61, 0.86) 100%);
   box-shadow: 0 18px 36px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(148, 163, 184, 0.12);
+}
+
+[data-theme="dark"] .mobile-bottom-nav::before {
+  background: linear-gradient(155deg, rgba(148, 163, 184, 0.2) 0%, rgba(30, 41, 59, 0.06) 100%);
 }
 
 #fx-submit,
