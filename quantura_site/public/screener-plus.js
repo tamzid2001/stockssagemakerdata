@@ -19,7 +19,7 @@
   mount.id = "market-data-screener-bridge";
   mount.innerHTML = `
     <details class="learn-more" open>
-      <summary><i class="iconoir-database" aria-hidden="true"></i><span>Market Data Screener bridge (YFinance)</span></summary>
+      <summary><i class="iconoir-database" aria-hidden="true"></i><span>Market Data Screener bridge</span></summary>
       <p class="small muted" style="margin-top:8px;">
         This is merged into the main screener flow. Pull deterministic market-data rows, then feed symbols into your AI portfolio notes.
       </p>
@@ -305,7 +305,7 @@
       return;
     }
     const previous = String(notesInput?.value || "").trim();
-    const chip = `Top YFinance symbols: ${top.join(", ")}`;
+    const chip = `Top market-data symbols: ${top.join(", ")}`;
     const next = previous ? `${previous}\n${chip}` : chip;
     if (notesInput) notesInput.value = next;
     setStatus(`Added ${top.length} symbols to screener criteria.`);

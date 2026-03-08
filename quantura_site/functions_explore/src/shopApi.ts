@@ -5,6 +5,7 @@ import Stripe from "stripe";
 import {
   SHOP_SHIPPING_POLICY,
   getCatalogBySku,
+  getCatalogPublicBundles,
   getCatalogPublicItems,
   getCatalogSize,
   getCatalogVisibilityDefaults,
@@ -159,6 +160,7 @@ app.get("/api/shop/catalog", (_req, res) => {
   res.status(200).json({
     currency: "usd",
     products: getCatalogPublicItems(),
+    bundles: getCatalogPublicBundles(),
     visibilityConfig: getCatalogVisibilityDefaults(),
     shippingPolicy: {
       pod: {
@@ -174,8 +176,8 @@ app.get("/api/shop/catalog", (_req, res) => {
         detail: SHOP_SHIPPING_POLICY.hardware.detail,
       },
       returns: {
-        pod: "POD: reprint/refund for defects or lost shipments. Contact support for resolution.",
-        hardware: "Hardware/privacy: 30-day returns (unopened preferred). Warranty varies by brand.",
+        pod: "Physical products: reprint or refund for defects, transit issues, or damaged deliveries. Contact support for resolution.",
+        hardware: "Physical products: return support depends on product condition and fulfillment stage. Contact support before shipping items back.",
       },
     },
   });
