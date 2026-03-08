@@ -192,6 +192,14 @@ fi
 echo "==> Syncing SSR HTML templates"
 node "${SSR_FUNCTIONS_SRC}/scripts/sync-templates.js"
 
+echo "==> Building React Native Web injection bundle"
+pushd "${SITE_DIR}" >/dev/null
+if [[ ! -d node_modules ]]; then
+  npm install --no-audit --no-fund
+fi
+npm run build:rnweb
+popd >/dev/null
+
 echo "==> Deploying quanturaExploreApi (Gen2)"
 "${GCLOUD_BIN}" functions deploy quanturaExploreApi \
   --quiet \

@@ -80,6 +80,7 @@ import com.google.firebase.messaging.FirebaseMessaging
 import com.quantura.quanturaapp.ads.AdFormatStatusSnapshot
 import com.quantura.quanturaapp.ads.AdManager
 import com.quantura.quanturaapp.ads.BannerAdView
+import com.quantura.quanturaapp.ads.MobileAdsBootstrap
 import com.quantura.quanturaapp.auth.PlayIntegrityClient
 import com.quantura.quanturaapp.config.AdFormat
 import com.quantura.quanturaapp.config.AdPlatform

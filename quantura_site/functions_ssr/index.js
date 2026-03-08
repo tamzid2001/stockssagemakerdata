@@ -101,12 +101,13 @@ const resolveTemplate = (pathname) => {
 
   const forecastingAliases = new Set([
     "/forecasting",
+    "/terminal/fx",
+    "/tools/fx",
     "/ticker-intelligence",
     "/predictions",
     "/indicators",
     "/trending",
     "/news",
-    "/events-calendar",
     "/market-headlines",
     "/model-council",
     "/ticker-query",
@@ -122,6 +123,7 @@ const resolveTemplate = (pathname) => {
     "/gpt5",
   ]);
   if (forecastingAliases.has(route)) return "forecasting.html";
+  if (route === "/events-calendar") return "events.html";
 
   const dashboardAliases = new Set([
     "/dashboard",

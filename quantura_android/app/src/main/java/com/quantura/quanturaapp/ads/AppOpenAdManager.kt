@@ -65,6 +65,11 @@ class AppOpenAdManager(
             AdDebugStatusRegistry.updateLoad("app_open", "disabled")
             return
         }
+        if (!MobileAdsBootstrap.isInitialized()) {
+            Log.d(tag, "App open load deferred until Mobile Ads finishes initializing.")
+            AdDebugStatusRegistry.updateLoad("app_open", "waiting:sdk_init")
+            return
+        }
         if (isLoadingAd || isAdAvailable()) return
         val unitId = remoteConfigManager.resolveAdUnitId(
             platform = AdPlatform.ANDROID,

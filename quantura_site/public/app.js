@@ -330,7 +330,97 @@
     "UNH", "LLY", "JNJ", "XOM", "CVX", "CAT", "DE", "KO", "PEP",
     "COST", "WMT", "NKE", "PLTR",
   ];
+  const POPULAR_TICKER_POOL = Object.freeze([
+    "AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL",
+    "TSLA", "AMD", "NFLX", "SPY", "QQQ", "JPM",
+    "XOM", "AVGO", "PLTR", "COST",
+  ]);
+  const TRADINGVIEW_EXCHANGE_OVERRIDES = Object.freeze({
+    AAPL: "NASDAQ:AAPL",
+    MSFT: "NASDAQ:MSFT",
+    NVDA: "NASDAQ:NVDA",
+    AMZN: "NASDAQ:AMZN",
+    META: "NASDAQ:META",
+    GOOGL: "NASDAQ:GOOGL",
+    TSLA: "NASDAQ:TSLA",
+    AMD: "NASDAQ:AMD",
+    NFLX: "NASDAQ:NFLX",
+    SPY: "AMEX:SPY",
+    QQQ: "NASDAQ:QQQ",
+    JPM: "NYSE:JPM",
+    XOM: "NYSE:XOM",
+    AVGO: "NASDAQ:AVGO",
+    PLTR: "NASDAQ:PLTR",
+    COST: "NASDAQ:COST",
+    ORCL: "NYSE:ORCL",
+    CRM: "NYSE:CRM",
+    BAC: "NYSE:BAC",
+    GS: "NYSE:GS",
+    V: "NYSE:V",
+    MA: "NYSE:MA",
+    UNH: "NYSE:UNH",
+    LLY: "NYSE:LLY",
+    JNJ: "NYSE:JNJ",
+    CVX: "NYSE:CVX",
+    CAT: "NYSE:CAT",
+    DE: "NYSE:DE",
+    KO: "NYSE:KO",
+    PEP: "NASDAQ:PEP",
+    WMT: "NYSE:WMT",
+    NKE: "NYSE:NKE",
+  });
+  const SESSION_DEFAULT_TICKER =
+    POPULAR_TICKER_POOL[Math.floor(Math.random() * POPULAR_TICKER_POOL.length)] || "AAPL";
   const FEATURE_VOTE_KEYS = new Set(["uploads", "autopilot"]);
+  const DEFAULT_AUTO_PUBLISH_PREFS = Object.freeze({
+    autoPublishForecasts: true,
+    autoPublishIndicators: true,
+    autoPublishModelCouncilConvos: true,
+  });
+  const ANON_USERNAME_ADJECTIVES = Object.freeze([
+    "alpha",
+    "amber",
+    "arc",
+    "blue",
+    "clear",
+    "delta",
+    "eager",
+    "ember",
+    "focal",
+    "keen",
+    "lunar",
+    "mint",
+    "nova",
+    "polar",
+    "prime",
+    "rapid",
+    "smart",
+    "steady",
+    "swift",
+    "vivid",
+  ]);
+  const ANON_USERNAME_NOUNS = Object.freeze([
+    "analyst",
+    "atlas",
+    "beacon",
+    "bull",
+    "chartist",
+    "cipher",
+    "desk",
+    "falcon",
+    "fox",
+    "grid",
+    "harbor",
+    "hedge",
+    "matrix",
+    "pilot",
+    "pulse",
+    "ranger",
+    "signal",
+    "trader",
+    "vector",
+    "wave",
+  ]);
   const FEATURE_VOTE_LABELS = Object.freeze({
     uploads: "Upload predictions CSV",
     autopilot: "Weekly Brief Autopilot",
@@ -391,6 +481,24 @@
       pricing: { input: 1.75, cached_input: 0.175, output: 14.0 },
     },
     {
+      id: "claude-sonnet-4-5",
+      provider: "claude",
+      tier: "Council",
+      label: "Claude Sonnet 4.5",
+      personality: "balanced",
+      helper: "Strong reasoning and synthesis for model council.",
+      pricing: { input: null, cached_input: null, output: null },
+    },
+    {
+      id: "claude-opus-4-5",
+      provider: "claude",
+      tier: "Council",
+      label: "Claude Opus 4.5",
+      personality: "deep_research",
+      helper: "High-depth long-form synthesis for premium analysis.",
+      pricing: { input: null, cached_input: null, output: null },
+    },
+    {
       id: "amazon.nova-lite-v1:0",
       provider: "amazon_nova",
       tier: "Nova",
@@ -418,6 +526,24 @@
       pricing: { input: null, cached_input: null, output: null },
     },
     {
+      id: "deepseek-chat",
+      provider: "deepseek",
+      tier: "Council",
+      label: "DeepSeek Chat",
+      personality: "balanced",
+      helper: "DeepSeek baseline analysis path.",
+      pricing: { input: null, cached_input: null, output: null },
+    },
+    {
+      id: "qwen-plus",
+      provider: "qwen",
+      tier: "Council",
+      label: "Qwen Plus",
+      personality: "balanced",
+      helper: "Qwen balanced analysis path.",
+      pricing: { input: null, cached_input: null, output: null },
+    },
+    {
       id: "mistral-small-latest",
       provider: "mistral",
       tier: "Council",
@@ -436,7 +562,15 @@
       pricing: { input: null, cached_input: null, output: null },
     },
   ];
-  const DEFAULT_LLM_ALLOWED_MODELS = ["gpt-5-nano", "gpt-5-mini", "gpt-5", "gpt-5.1", "gpt-5.2"];
+  const DEFAULT_LLM_ALLOWED_MODELS = [
+    "gpt-5-nano",
+    "gpt-5-mini",
+    "gpt-5",
+    "gpt-5.1",
+    "gpt-5.2",
+    "claude-sonnet-4-5",
+    "claude-opus-4-5",
+  ];
   const AI_USAGE_TIER_DEFAULTS = {
     free: {
       allowed_models: ["gpt-5-nano", "gpt-5-mini"],
@@ -455,7 +589,7 @@
       ad_free: true,
     },
     plus: {
-      allowed_models: ["gpt-5-mini", "gpt-5"],
+      allowed_models: ["gpt-5-mini", "gpt-5", "claude-sonnet-4-5"],
       weekly_limit: 25,
       daily_limit: 25,
       volatility_alerts: true,
@@ -463,7 +597,7 @@
       ad_free: true,
     },
     pro: {
-      allowed_models: ["gpt-5-mini", "gpt-5", "gpt-5.1"],
+      allowed_models: ["gpt-5-mini", "gpt-5", "gpt-5.1", "claude-sonnet-4-5"],
       weekly_limit: 60,
       daily_limit: 60,
       volatility_alerts: true,
@@ -471,7 +605,17 @@
       ad_free: true,
     },
     business: {
-      allowed_models: ["gpt-5-nano", "gpt-5-mini", "gpt-5", "gpt-5.1", "gpt-5.2", "amazon.nova-lite-v1:0", "amazon.nova-pro-v1:0"],
+      allowed_models: [
+        "gpt-5-nano",
+        "gpt-5-mini",
+        "gpt-5",
+        "gpt-5.1",
+        "gpt-5.2",
+        "claude-sonnet-4-5",
+        "claude-opus-4-5",
+        "amazon.nova-lite-v1:0",
+        "amazon.nova-pro-v1:0",
+      ],
       weekly_limit: 150,
       daily_limit: 150,
       volatility_alerts: true,
@@ -479,7 +623,7 @@
       ad_free: true,
     },
     desk: {
-      allowed_models: ["gpt-5-nano", "gpt-5-mini", "gpt-5", "gpt-5.1", "gpt-5.2"],
+      allowed_models: ["gpt-5-nano", "gpt-5-mini", "gpt-5", "gpt-5.1", "gpt-5.2", "claude-sonnet-4-5", "claude-opus-4-5"],
       weekly_limit: 150,
       daily_limit: 150,
       volatility_alerts: true,
@@ -516,11 +660,14 @@
     }),
   });
   const MODEL_PROVIDER_LABEL = {
-    openai: "OpenAI",
+    openai: "ChatGPT",
+    claude: "Claude",
     amazon_nova: "Amazon Nova",
     gemini: "Gemini",
+    deepseek: "DeepSeek",
     mistral: "Mistral",
     perplexity: "Perplexity Sonar",
+    qwen: "Qwen",
     other: "Other",
   };
   const MODEL_COUNCIL_MODULE_CATALOG = Object.freeze([
@@ -597,14 +744,14 @@
       panel_forecast_title: "Forecast",
       panel_forecast_subtitle: "Generate quantile bands for the ticker in your chart and save the run so you can re-plot it later.",
       panel_market_headlines_title: "Top market headlines",
-      panel_market_headlines_subtitle: "Top country-level market headlines plus social posts from X, Reddit, Facebook, and Instagram.",
+      panel_market_headlines_subtitle: "Attributed RSS market headlines with provider selection, source links, and native-only ad slots between article groups.",
       panel_ticker_query_title: "Model Council",
       panel_ticker_query_subtitle: "Run multi-provider analysis with structured Yahoo Finance context modules.",
       label_ticker: "Ticker",
       label_timeframe: "Timeframe",
       button_load_chart: "Load chart",
       terminal_tip: "Tip: pick a panel on the left, then click any ticker in results to update the chart immediately.",
-      label_market_country: "Country",
+      label_market_country: "Source provider",
       button_load_market_feed: "Load market feed",
       label_response_language: "Response language",
       label_question: "Question",
@@ -659,14 +806,14 @@
       panel_forecast_title: "Pronostico",
       panel_forecast_subtitle: "Genera bandas de cuantiles para el ticker de tu grafico y guarda la ejecucion para volver a trazarla despues.",
       panel_market_headlines_title: "Titulares del mercado",
-      panel_market_headlines_subtitle: "Principales titulares por pais junto con publicaciones de X, Reddit, Facebook e Instagram.",
+      panel_market_headlines_subtitle: "Titulares RSS atribuidos con seleccion de proveedor, enlaces de fuente y espacios publicitarios nativos entre grupos de articulos.",
       panel_ticker_query_title: "Model Council",
       panel_ticker_query_subtitle: "Analisis multi-modelo con contexto estructurado de Yahoo Finance.",
       label_ticker: "Ticker",
       label_timeframe: "Periodo",
       button_load_chart: "Cargar grafico",
       terminal_tip: "Consejo: elige un panel a la izquierda y luego haz clic en cualquier ticker para actualizar el grafico al instante.",
-      label_market_country: "Pais",
+      label_market_country: "Proveedor",
       button_load_market_feed: "Cargar mercado",
       label_response_language: "Idioma de respuesta",
       label_question: "Pregunta",
@@ -721,14 +868,14 @@
       panel_forecast_title: "Prevision",
       panel_forecast_subtitle: "Generez des bandes de quantiles pour le ticker de votre graphique et enregistrez l'execution pour la recharger plus tard.",
       panel_market_headlines_title: "Titres du marche",
-      panel_market_headlines_subtitle: "Principaux titres par pays avec des publications de X, Reddit, Facebook et Instagram.",
+      panel_market_headlines_subtitle: "Titres RSS attribues avec selection du fournisseur, liens source et emplacements publicitaires natifs entre groupes d articles.",
       panel_ticker_query_title: "Model Council",
       panel_ticker_query_subtitle: "Analyse multi-modeles avec contexte Yahoo Finance structure.",
       label_ticker: "Ticker",
       label_timeframe: "Horizon",
       button_load_chart: "Charger le graphique",
       terminal_tip: "Astuce: choisissez un panneau a gauche puis cliquez sur un ticker pour mettre a jour le graphique immediatement.",
-      label_market_country: "Pays",
+      label_market_country: "Source",
       button_load_market_feed: "Charger le flux marche",
       label_response_language: "Langue de reponse",
       label_question: "Question",
@@ -783,14 +930,14 @@
       panel_forecast_title: "Forecast",
       panel_forecast_subtitle: "Erzeuge Quantil-Bander fur den Ticker in deinem Chart und speichere den Lauf fur spatere Vergleiche.",
       panel_market_headlines_title: "Top-Markt-Schlagzeilen",
-      panel_market_headlines_subtitle: "Wichtigste Schlagzeilen je Land plus Social-Posts von X, Reddit, Facebook und Instagram.",
+      panel_market_headlines_subtitle: "Zugeordnete RSS-Marktschlagzeilen mit Anbieterauswahl, Quellenlinks und nativen Anzeigenplatzen zwischen Artikelgruppen.",
       panel_ticker_query_title: "Model Council",
       panel_ticker_query_subtitle: "Multi-Provider-Analyse mit strukturiertem Yahoo-Finance-Kontext.",
       label_ticker: "Ticker",
       label_timeframe: "Zeitrahmen",
       button_load_chart: "Chart laden",
       terminal_tip: "Tipp: Wahle links ein Panel und klicke dann auf einen Ticker, um den Chart sofort zu aktualisieren.",
-      label_market_country: "Land",
+      label_market_country: "Quelle",
       button_load_market_feed: "Markt-Feed laden",
       label_response_language: "Antwortsprache",
       label_question: "Frage",
@@ -845,14 +992,14 @@
       panel_forecast_title: "التوقع",
       panel_forecast_subtitle: "انشئ نطاقات الكوانتايل للرمز في الرسم واحفظ التشغيل لاعادة عرضه لاحقا.",
       panel_market_headlines_title: "ابرز عناوين السوق",
-      panel_market_headlines_subtitle: "ابرز عناوين السوق حسب البلد مع منشورات من X وReddit وFacebook وInstagram.",
+      panel_market_headlines_subtitle: "عناوين RSS منسوبة مع اختيار المزود وروابط المصدر ومواضع اعلانات اصلية بين مجموعات المقالات.",
       panel_ticker_query_title: "Model Council",
       panel_ticker_query_subtitle: "تحليل متعدد النماذج مع سياق Yahoo Finance المنظم.",
       label_ticker: "الرمز",
       label_timeframe: "الاطار الزمني",
       button_load_chart: "تحميل الرسم",
       terminal_tip: "نصيحة: اختر لوحة من اليسار ثم اضغط على اي رمز لتحديث الرسم فورا.",
-      label_market_country: "البلد",
+      label_market_country: "المزود",
       button_load_market_feed: "تحميل موجز السوق",
       label_response_language: "لغة الاجابة",
       label_question: "السؤال",
@@ -907,14 +1054,14 @@
       panel_forecast_title: "ফোরকাস্ট",
       panel_forecast_subtitle: "চার্টে থাকা টিকারের জন্য কোয়ান্টাইল ব্যান্ড তৈরি করুন এবং পরে পুনরায় দেখার জন্য রান সংরক্ষণ করুন।",
       panel_market_headlines_title: "শীর্ষ মার্কেট হেডলাইন",
-      panel_market_headlines_subtitle: "দেশভিত্তিক শীর্ষ বাজারের খবরের সাথে X, Reddit, Facebook এবং Instagram পোস্ট দেখুন।",
+      panel_market_headlines_subtitle: "অ্যাট্রিবিউটেড RSS মার্কেট হেডলাইন, প্রোভাইডার নির্বাচন, সোর্স লিংক এবং আর্টিকেল গ্রুপের মাঝে নেটিভ অ্যাড স্লট।",
       panel_ticker_query_title: "Model Council",
       panel_ticker_query_subtitle: "স্ট্রাকচার্ড Yahoo Finance কনটেক্সটে মাল্টি-মডেল বিশ্লেষণ।",
       label_ticker: "টিকার",
       label_timeframe: "টাইমফ্রেম",
       button_load_chart: "চার্ট লোড করুন",
       terminal_tip: "টিপ: বামে একটি প্যানেল বেছে নিন, তারপর যেকোনো টিকারে ক্লিক করলে চার্ট সাথে সাথে আপডেট হবে।",
-      label_market_country: "দেশ",
+      label_market_country: "সোর্স",
       button_load_market_feed: "মার্কেট ফিড লোড করুন",
       label_response_language: "উত্তরের ভাষা",
       label_question: "প্রশ্ন",
@@ -946,7 +1093,6 @@
     sidebar_indicators: ['[data-panel-target="indicators"] span'],
     sidebar_trending: ['[data-panel-target="trending"] span'],
     sidebar_news_data: ['[data-panel-target="news"] span'],
-    sidebar_corporate_events: ['[data-panel-target="events-calendar"] span'],
     sidebar_market_headlines: ['[data-panel-target="market-headlines"] span'],
     sidebar_ask_gpt5: ['[data-panel-target="ticker-query"] span'],
     sidebar_options: ['[data-panel-target="options"] span'],
@@ -964,7 +1110,7 @@
     label_timeframe: ['label[for="terminal-interval"]'],
     button_load_chart: ['button[data-analytics="terminal_load"] span'],
     terminal_tip: [".ticker-hint"],
-    label_market_country: ['label[for="market-headlines-country"]'],
+    label_market_country: ['label[for="market-headlines-provider"]'],
     button_load_market_feed: ['button[data-analytics="market_headlines_load"] span'],
     label_response_language: ['label[for="ticker-query-language"]'],
     label_question: ['label[for="ticker-query-question"]'],
@@ -1427,7 +1573,7 @@
 
     const fxSidebarLink = document.querySelector('[data-panel-target="fx"]');
     if (fxSidebarLink) {
-      fxSidebarLink.setAttribute("href", "/tools/fx");
+      fxSidebarLink.setAttribute("href", "/terminal/fx");
     }
 
     if (panelColumn.querySelector('[data-panel="fx"]')) return;
@@ -1594,6 +1740,7 @@
     tickerHistory: document.getElementById("ticker-history"),
     tickerChart: document.getElementById("ticker-chart"),
     studioChartShell: document.querySelector(".chart-shell.studio-chart"),
+    studioLayout: document.querySelector(".studio-layout"),
     indicatorChart: document.getElementById("indicator-chart"),
     intelStrip: document.getElementById("intel-strip"),
     tickerIntelligenceOutput: document.getElementById("ticker-output"),
@@ -1635,11 +1782,12 @@
     terminalFxResult: document.getElementById("terminal-fx-result"),
     terminalFxRecent: document.getElementById("terminal-fx-recent"),
     marketHeadlinesForm: document.getElementById("market-headlines-form"),
-    marketHeadlinesCountry: document.getElementById("market-headlines-country"),
+    marketHeadlinesProvider: document.getElementById("market-headlines-provider"),
+    marketHeadlinesFeed: document.getElementById("market-headlines-feed"),
     marketHeadlinesLimit: document.getElementById("market-headlines-limit"),
     marketHeadlinesStatus: document.getElementById("market-headlines-status"),
     marketHeadlinesOutput: document.getElementById("market-headlines-output"),
-    marketSocialOutput: document.getElementById("market-social-output"),
+    marketHeadlinesMeta: document.getElementById("market-headlines-meta"),
     macroDashboardStatus: document.getElementById("fiscaldata-macro-status"),
     macroDashboardGroups: document.getElementById("fiscaldata-macro-groups"),
     macroDetailsModal: document.getElementById("fiscaldata-macro-details"),
@@ -1779,6 +1927,103 @@
   let polymarketSearchDebounceTimer = 0;
   let polymarketInFlightController = null;
   let polymarketInFlightNonce = 0;
+  let predictionCountdownTimer = 0;
+  const DEFAULT_MARKET_HEADLINES_PROVIDER = "cnn";
+  const DEFAULT_MARKET_HEADLINES_FEED = "cnn_topstories";
+  const MARKET_HEADLINES_SOURCE_CATALOG = Object.freeze({
+    cnn: Object.freeze({
+      id: "cnn",
+      label: "CNN RSS",
+      feedIds: Object.freeze([
+        "cnn_topstories",
+        "cnn_world",
+        "cnn_us",
+        "cnn_business",
+        "cnn_politics",
+        "cnn_technology",
+        "cnn_health",
+        "cnn_entertainment",
+        "cnn_travel",
+        "cnn_video",
+        "cnn10",
+        "cnn_latest",
+        "cnn_underscored",
+      ]),
+    }),
+    spglobal: Object.freeze({
+      id: "spglobal",
+      label: "S&P DJI RSS",
+      feedIds: Object.freeze([
+        "spglobal_research",
+        "spglobal_commentary",
+        "spglobal_index_launches",
+        "spglobal_index_announcements",
+        "spglobal_consultations",
+      ]),
+    }),
+    mql5: Object.freeze({ id: "mql5", label: "MQL5 Blogs RSS", feedIds: Object.freeze(["mql5_blogs"]) }),
+    cnbc: Object.freeze({ id: "cnbc", label: "CNBC Market Insider", feedIds: Object.freeze(["cnbc_market_insider"]) }),
+    economictimes: Object.freeze({
+      id: "economictimes",
+      label: "Economic Times Stocks",
+      feedIds: Object.freeze(["economictimes_stocks"]),
+    }),
+    investing: Object.freeze({ id: "investing", label: "Investing.com Markets", feedIds: Object.freeze(["investing_markets"]) }),
+    seekingalpha: Object.freeze({ id: "seekingalpha", label: "Seeking Alpha", feedIds: Object.freeze(["seekingalpha_top"]) }),
+    marketwatch: Object.freeze({
+      id: "marketwatch",
+      label: "MarketWatch Top Stories",
+      feedIds: Object.freeze(["marketwatch_topstories"]),
+    }),
+  });
+  const MARKET_HEADLINES_FEED_CATALOG = Object.freeze({
+    cnn_topstories: Object.freeze({ id: "cnn_topstories", provider: "cnn", label: "Top Stories" }),
+    cnn_world: Object.freeze({ id: "cnn_world", provider: "cnn", label: "World" }),
+    cnn_us: Object.freeze({ id: "cnn_us", provider: "cnn", label: "U.S." }),
+    cnn_business: Object.freeze({ id: "cnn_business", provider: "cnn", label: "Business" }),
+    cnn_politics: Object.freeze({ id: "cnn_politics", provider: "cnn", label: "Politics" }),
+    cnn_technology: Object.freeze({ id: "cnn_technology", provider: "cnn", label: "Technology" }),
+    cnn_health: Object.freeze({ id: "cnn_health", provider: "cnn", label: "Health" }),
+    cnn_entertainment: Object.freeze({ id: "cnn_entertainment", provider: "cnn", label: "Entertainment" }),
+    cnn_travel: Object.freeze({ id: "cnn_travel", provider: "cnn", label: "Travel" }),
+    cnn_video: Object.freeze({ id: "cnn_video", provider: "cnn", label: "Video" }),
+    cnn10: Object.freeze({ id: "cnn10", provider: "cnn", label: "CNN 10" }),
+    cnn_latest: Object.freeze({ id: "cnn_latest", provider: "cnn", label: "Most Recent" }),
+    cnn_underscored: Object.freeze({ id: "cnn_underscored", provider: "cnn", label: "CNN Underscored" }),
+    spglobal_research: Object.freeze({ id: "spglobal_research", provider: "spglobal", label: "Research" }),
+    spglobal_commentary: Object.freeze({ id: "spglobal_commentary", provider: "spglobal", label: "Commentary" }),
+    spglobal_index_launches: Object.freeze({ id: "spglobal_index_launches", provider: "spglobal", label: "Index launches" }),
+    spglobal_index_announcements: Object.freeze({
+      id: "spglobal_index_announcements",
+      provider: "spglobal",
+      label: "Index announcements",
+    }),
+    spglobal_consultations: Object.freeze({ id: "spglobal_consultations", provider: "spglobal", label: "Consultations" }),
+    mql5_blogs: Object.freeze({ id: "mql5_blogs", provider: "mql5", label: "Latest blogs" }),
+    cnbc_market_insider: Object.freeze({ id: "cnbc_market_insider", provider: "cnbc", label: "Market Insider" }),
+    economictimes_stocks: Object.freeze({ id: "economictimes_stocks", provider: "economictimes", label: "Stocks" }),
+    investing_markets: Object.freeze({ id: "investing_markets", provider: "investing", label: "Market news" }),
+    seekingalpha_top: Object.freeze({ id: "seekingalpha_top", provider: "seekingalpha", label: "Top feed" }),
+    marketwatch_topstories: Object.freeze({ id: "marketwatch_topstories", provider: "marketwatch", label: "Top stories" }),
+  });
+  const predictionInterstitialState = {
+    url: "",
+    question: "",
+    side: "",
+    price: "",
+    autoOpenTimer: 0,
+    tickTimer: 0,
+    unlockAtMs: 0,
+  };
+  const marketHeadlinesInterstitialState = {
+    url: "",
+    title: "",
+    source: "",
+    feedLabel: "",
+    autoOpenTimer: 0,
+    tickTimer: 0,
+    unlockAtMs: 0,
+  };
 
 	  const state = {
 	    user: null,
@@ -1844,9 +2089,10 @@
     tickerContext: {
 	      ticker: "",
       activeTicker: "",
-	      interval: "1d",
-	      rows: [],
+      interval: "1d",
+      rows: [],
       forecastId: "",
+      forecastRequestId: "",
       forecastDoc: null,
 	      indicatorOverlays: [],
 	      forecastTablePage: 0,
@@ -1879,6 +2125,8 @@
       tickerQueryFeedback: "",
       tickerQueryPromptDeck: [],
       tickerQueryPromptCursor: 0,
+      tickerQueryRequestId: "",
+      indicatorRequestId: "",
     },
     predictionsContext: {
       uploadId: "",
@@ -2052,6 +2300,7 @@
     myRequestsLoading: false,
     myRequestsLoadedAt: 0,
     myRequestsPanelState: {},
+    publishPrefs: { ...DEFAULT_AUTO_PUBLISH_PREFS },
     sharedWorkspaces: [],
     unsubscribeSharedWorkspaces: null,
     authStateBootstrapped: false,
@@ -2322,6 +2571,54 @@
     if (isNavigationGate) return true;
     showToast("Rewarded ad is not ready yet. Please try again in a moment.", "warn");
     return false;
+  };
+
+  const runNativeRewardUnlock = async ({ reason = "shop_bundle" } = {}) => {
+    if (!isNativeApp()) {
+      return { ok: false, status: "native_unavailable", message: "Native runtime unavailable." };
+    }
+    if (hasAdFreeEntitlement()) {
+      return { ok: true, status: "ad_free", message: "Ad-free access is already active." };
+    }
+    const normalizedReason = String(reason || "shop_bundle").trim() || "shop_bundle";
+    let rewardedInterstitialResult = await runNativeAdAction({
+      action: "showRewardedInterstitial",
+      reason: normalizedReason,
+      successStatuses: ["rewarded"],
+    });
+    if (!rewardedInterstitialResult.ok && String(rewardedInterstitialResult.status || "").includes("not_ready")) {
+      await new Promise((resolve) => window.setTimeout(resolve, 1400));
+      rewardedInterstitialResult = await runNativeAdAction({
+        action: "showRewardedInterstitial",
+        reason: `${normalizedReason}_retry`,
+        successStatuses: ["rewarded"],
+      });
+    }
+    if (rewardedInterstitialResult.ok) return rewardedInterstitialResult;
+
+    let rewardedResult = await runNativeAdAction({
+      action: "showRewardedAd",
+      reason: `${normalizedReason}_fallback`,
+      successStatuses: ["rewarded"],
+    });
+    if (!rewardedResult.ok && String(rewardedResult.status || "").includes("not_ready")) {
+      await new Promise((resolve) => window.setTimeout(resolve, 1400));
+      rewardedResult = await runNativeAdAction({
+        action: "showRewardedAd",
+        reason: `${normalizedReason}_fallback_retry`,
+        successStatuses: ["rewarded"],
+      });
+    }
+    return rewardedResult.ok
+      ? rewardedResult
+      : {
+          ok: false,
+          status: rewardedResult.status || rewardedInterstitialResult.status || "unavailable",
+          message:
+            rewardedResult.message ||
+            rewardedInterstitialResult.message ||
+            "Rewarded ad is not ready yet. Please try again in a moment.",
+        };
   };
 
 	  const showToast = (message, variant = "default") => {
@@ -2600,7 +2897,6 @@
           "/indicators",
           "/trending",
           "/news",
-          "/events-calendar",
           "/market-headlines",
           "/model-council",
           "/options",
@@ -2686,11 +2982,14 @@
         "ticker-query",
         "/model-council",
         "fx",
-        "/tools/fx",
+        "/terminal/fx",
       ],
       dashboard: ["orders", "profile", "watchlist", "collaboration", "notifications", "/explore"],
     };
-    const preferredPanels = preferredByRouter[routerName] || [];
+    const preferredByPath = {
+      "/screener": ["/forecasting", "/ticker-intelligence", "/indicators", "/screener", "/model-council"],
+    };
+    const preferredPanels = preferredByPath[path] || preferredByRouter[routerName] || [];
     const selected = preferredPanels
       .map((panel) => findPreferredLink(panel))
       .filter(Boolean)
@@ -2698,7 +2997,7 @@
       .slice(0, 5);
 
     if (selected.length < 5) {
-      for (const link of byPanel.values()) {
+      for (const link of sidebarLinks) {
         if (selected.length >= 5) break;
         if (!selected.includes(link)) selected.push(link);
       }
@@ -2770,7 +3069,8 @@
   };
 
   const bindMarketingBottomNav = () => {
-    const path = normalizePath(window.location.pathname || "/");
+    const rawPath = normalizePath(window.location.pathname || "/");
+    const path = rawPath.startsWith("/blog/") ? "/blog" : rawPath;
     const supported = new Set(["/pricing", "/shop", "/blog", "/about", "/contact", "/events", "/research", "/explore"]);
     if (!supported.has(path)) return;
     if (document.querySelector(".app-sidebar .sidebar-nav")) return;
@@ -4811,7 +5111,6 @@
   const setCountryControls = (countryCode) => {
     const code = normalizeCountryCode(countryCode);
     state.preferredCountry = code;
-    if (ui.marketHeadlinesCountry && ui.marketHeadlinesCountry.value !== code) ui.marketHeadlinesCountry.value = code;
   };
 
   const applyLanguagePreference = (languageCode, { persist = true } = {}) => {
@@ -5066,7 +5365,7 @@
 	  const buildWorkspaceOptions = (user) => {
 	    const opts = [];
 	    if (!user) return opts;
-	    opts.push({ id: user.uid, label: "My workspace" });
+	    opts.push({ id: user.uid, label: isAnonymousUser(user) ? "Guest workspace" : "My workspace" });
     state.sharedWorkspaces.forEach((ws) => {
       const id = ws.workspaceUserId || ws.id;
       if (!id) return;
@@ -5456,6 +5755,7 @@
     const modal = document.getElementById("solve-now-modal");
     if (!modal) return;
     modal.classList.add("hidden");
+    document.body.classList.remove("modal-open");
     if (window.location.hash === "#solve-now" && window.history?.replaceState) {
       window.history.replaceState({}, "", `${window.location.pathname}${window.location.search}`);
     }
@@ -5474,16 +5774,16 @@
     output.innerHTML = `
       <article class="solve-now-response">
         <h4>Summary</h4>
-        <p>${escapeHtml(summaryParagraph || "No summary was returned.")}</p>
+        <div class="markdown-output">${renderMarkdown(summaryParagraph || "No summary was returned.", { fallback: "No summary was returned." })}</div>
         <h4>Suggested next steps</h4>
         <ol>
           ${steps.length ? steps.map((step) => `<li>${escapeHtml(step)}</li>`).join("") : "<li>Refine your request with ticker, timeframe, and risk limits.</li>"}
         </ol>
         <details>
           <summary>Full AI output</summary>
-          <pre class="small">${escapeHtml(cleanAnswer || "No output returned.")}</pre>
+          <div class="markdown-output">${renderMarkdown(cleanAnswer || "No output returned.", { fallback: "No output returned." })}</div>
         </details>
-        <div class="small muted solve-now-meta">Context ticker: ${escapeHtml(ticker)} · Provider: ${escapeHtml(provider || "openai")}</div>
+        <div class="small muted solve-now-meta">Context ticker: ${escapeHtml(ticker)}</div>
         <p class="small muted solve-now-disclaimer">LLMs can sometimes make mistakes.</p>
       </article>
     `;
@@ -5576,6 +5876,7 @@
     if (prefillPrompt && !String(input.value || "").trim()) input.value = String(prefillPrompt || "").trim();
     status.textContent = "";
     modal.classList.remove("hidden");
+    document.body.classList.add("modal-open");
     if (window.history?.replaceState) {
       window.history.replaceState({}, "", `${window.location.pathname}${window.location.search}#solve-now`);
     }
@@ -5795,6 +6096,15 @@
   const hasAdFreeEntitlement = () =>
     hasFullAccount() && normalizeSubscriptionTier(state.userSubscriptionTier) !== "free";
 
+  const publishShopRuntimeBridge = () => {
+    window.QuanturaShopRuntime = {
+      ...(window.QuanturaShopRuntime || {}),
+      isNativeApp,
+      hasAdFreeEntitlement,
+      runRewardUnlock: ({ reason = "shop_bundle" } = {}) => runNativeRewardUnlock({ reason }),
+    };
+  };
+
   const applyAdFreeExperience = () => {
     const adFree = hasAdFreeEntitlement();
     document.body.classList.toggle("ad-free-user", adFree);
@@ -5832,7 +6142,7 @@
   };
 
   const getNativeInlineAdRules = () => {
-    const defaults = { feedStart: 6, feedInterval: 8, pageMidpoint: 0.55 };
+    const defaults = { feedStart: 4, feedInterval: 5, pageMidpoint: 0.45 };
     const raw = window.__QUANTURA_NATIVE_AD_RULES__ && typeof window.__QUANTURA_NATIVE_AD_RULES__ === "object"
       ? window.__QUANTURA_NATIVE_AD_RULES__
       : {};
@@ -5996,6 +6306,52 @@
       </div>
     `;
     return node;
+  };
+
+  const getNativeInlineAdSlotNodes = (container) =>
+    Array.from(container?.children || []).filter(
+      (child) => child instanceof HTMLElement && child.matches("[data-native-inline-ad-slot]")
+    );
+
+  const clearNativeInlineAdSlots = (container) => {
+    getNativeInlineAdSlotNodes(container).forEach((node) => node.remove());
+  };
+
+  const isNativeInlineAdVisibleChild = (child) => {
+    if (!(child instanceof HTMLElement)) return false;
+    if (child.matches("[data-native-inline-ad-slot], script, style, template, noscript")) return false;
+    if (child.hidden) return false;
+    if (child.classList.contains("hidden")) return false;
+    if (String(child.getAttribute("aria-hidden") || "").trim().toLowerCase() === "true") return false;
+    if (String(child.dataset.loading || "").trim().toLowerCase() === "true") return false;
+    try {
+      const styles = window.getComputedStyle?.(child);
+      if (styles && (styles.display === "none" || styles.visibility === "hidden")) return false;
+    } catch (_error) {
+      // Ignore visibility probing errors and treat the element as visible.
+    }
+    return true;
+  };
+
+  const toNativeInlinePlacementToken = (value, fallback = "panel") => {
+    const normalized = String(value || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+    return normalized || fallback;
+  };
+
+  const resolveNativeInlinePlacementBase = (container) => {
+    const explicit =
+      String(container?.dataset?.panel || "").trim() ||
+      String(container?.dataset?.panelTarget || "").trim() ||
+      String(container?.id || "").trim();
+    if (explicit) return `section_${toNativeInlinePlacementToken(explicit)}`;
+    const classToken = Array.from(container?.classList || []).find((token) =>
+      /(hero|grid|section|panel|list|layout|container)/i.test(String(token || ""))
+    );
+    return `section_${toNativeInlinePlacementToken(classToken || container?.tagName || "panel")}`;
   };
 
   const hydrateNativeInlineAdSlot = (slotNode, detail = {}) => {
@@ -6169,6 +6525,10 @@
   };
 
   const collectNativeInlineAdTargets = () => {
+    const pathname = normalizePath(window.location.pathname || "/");
+    const isBlogRoute = pathname === "/blog" || pathname.startsWith("/blog/");
+    const isShopRoute = pathname === "/shop";
+    const isResearchRoute = pathname === "/research";
     const ids = [
       "trending-list",
       "intel-output",
@@ -6176,7 +6536,6 @@
       "x-trending-output",
       "events-calendar-output",
       "market-headlines-output",
-      "market-social-output",
       "fiscaldata-macro-groups",
       "ticker-output",
       "ticker-predictions-output",
@@ -6199,43 +6558,148 @@
       const node = document.getElementById(id);
       if (node) set.add(node);
     });
-    document.querySelectorAll(".panel-output, .order-list, .news-stream").forEach((node) => {
+    const selectorList = [
+      "main",
+      "main > section",
+      "main section > .container",
+      "main section > .shop-container",
+      "main .app-main",
+      "main .hero-grid",
+      "main .content-grid",
+      "main .dashboard-grid",
+      "main .insight-grid",
+      "main .feature-grid",
+      "main .results-grid",
+      "main .layout",
+      ".panel-output",
+      ".order-list",
+      ".news-stream",
+    ];
+    if (isBlogRoute) {
+      selectorList.push("main .grid-3");
+    }
+    if (isShopRoute) {
+      selectorList.push("main .shop-grid", "main .bundle-grid");
+    }
+    if (isResearchRoute) {
+      selectorList.push("main .research-pillars", "main .research-note-grid", "main .research-note-pages");
+    }
+    document.querySelectorAll(selectorList.join(", ")).forEach((node) => {
+      if (!(node instanceof HTMLElement)) return;
+      if (node.closest("header, footer, nav, aside, dialog, .modal, .sidebar")) return;
+      if (node.matches(".quantura-rn-root, .quantura-rn-injection-shell")) return;
       if (node?.id === "profile-status" || node?.id === "auth-email-message") return;
       set.add(node);
     });
     return Array.from(set);
   };
 
+  const isDenseNativeInlineAdContainer = (container, children) => {
+    if (!(container instanceof HTMLElement)) return false;
+    const pathname = normalizePath(window.location.pathname || "/");
+    if (children.length < 2) return false;
+    if (pathname === "/blog" || pathname.startsWith("/blog/")) {
+      if (!container.matches(".grid-3")) return false;
+      return children.every((child) => child.matches("a.card"));
+    }
+    if (pathname === "/shop") {
+      if (container.matches(".shop-grid")) {
+        return children.every((child) => child.matches(".product-card"));
+      }
+      if (container.matches(".bundle-grid")) {
+        return children.every((child) => child.matches(".bundle-card"));
+      }
+    }
+    if (pathname === "/research") {
+      if (container.matches(".research-pillars")) {
+        return children.every((child) => child.matches(".research-pillar"));
+      }
+      if (container.matches(".research-note-grid")) {
+        return children.every((child) => child.matches(".research-note-card"));
+      }
+      if (container.matches(".research-note-pages")) {
+        return children.every((child) => child.matches(".research-note-page"));
+      }
+    }
+    return false;
+  };
+
+  const getNativeInlineAdAnchorIndexes = (childrenCount, rules, container, children) => {
+    if (!Number.isFinite(childrenCount) || childrenCount < 2) return [];
+    if (isDenseNativeInlineAdContainer(container, children)) {
+      return Array.from({ length: Math.max(0, childrenCount - 1) }, (_value, index) => index);
+    }
+    const indexes = new Set();
+    const midpointIndex = Math.max(0, Math.min(childrenCount - 1, Math.floor((childrenCount - 1) * rules.pageMidpoint)));
+    indexes.add(midpointIndex);
+    if (childrenCount >= rules.feedStart) {
+      for (let position = rules.feedStart; position <= childrenCount; position += rules.feedInterval) {
+        indexes.add(Math.max(0, Math.min(childrenCount - 1, position - 1)));
+      }
+    }
+    return Array.from(indexes).sort((left, right) => left - right);
+  };
+
   const maybeInjectNativeInlineAd = (container) => {
     if (!container) return;
     if (!isNativeInlineAdEligible()) {
-      container.querySelectorAll("[data-native-inline-ad-slot]").forEach((node) => node.remove());
+      clearNativeInlineAdSlots(container);
       return;
     }
-    if (container.closest("form, .auth-card, .checkout-shell, .purchase-panel")) return;
-    if (container.querySelector("[data-native-inline-ad-slot]")) return;
-    if (container.classList.contains("hidden")) return;
-    if (String(container.dataset.loading || "") === "true") return;
-
-    const children = Array.from(container.children).filter((child) => !child.matches("[data-native-inline-ad-slot]"));
-    const textLength = String(container.textContent || "").trim().length;
-    if (children.length < 2 && textLength < 240) return;
-
-    nativeInlineAdState.sequence += 1;
-    const slotId = `inline-${Date.now()}-${nativeInlineAdState.sequence}`;
-    const placement = container.id ? `section_${container.id}` : "section_panel";
-    const slotNode = buildNativeInlineAdSlot(slotId, placement);
-    const rules = getNativeInlineAdRules();
-    const index = Math.max(0, Math.min(children.length - 1, Math.floor(children.length * rules.pageMidpoint)));
-    const anchor = children[index] || null;
-    if (anchor && anchor.parentElement === container && anchor.nextSibling) {
-      container.insertBefore(slotNode, anchor.nextSibling);
-    } else if (anchor && anchor.parentElement === container) {
-      container.appendChild(slotNode);
-    } else {
-      container.appendChild(slotNode);
+    if (container.closest("form, .auth-card, .checkout-shell, .purchase-panel, .auth-section, #auth")) {
+      clearNativeInlineAdSlots(container);
+      return;
     }
-    loadNativeInlineAdSlot(slotNode).catch(() => undefined);
+    if (
+      container.hidden ||
+      container.classList.contains("hidden") ||
+      String(container.getAttribute("aria-hidden") || "").trim().toLowerCase() === "true" ||
+      String(container.dataset.loading || "").trim().toLowerCase() === "true"
+    ) {
+      clearNativeInlineAdSlots(container);
+      return;
+    }
+
+    const children = Array.from(container.children).filter(isNativeInlineAdVisibleChild);
+    const existingSlots = getNativeInlineAdSlotNodes(container);
+    const textLength = children.map((child) => String(child.textContent || "")).join(" ").trim().length;
+    if (children.length < 2 && textLength < 240) {
+      clearNativeInlineAdSlots(container);
+      return;
+    }
+
+    const rules = getNativeInlineAdRules();
+    const desiredAnchorIndexes = getNativeInlineAdAnchorIndexes(children.length, rules, container, children);
+    const desiredAnchorIndexSet = new Set(desiredAnchorIndexes);
+
+    existingSlots.forEach((slotNode) => {
+      const anchorIndex = Number(slotNode.dataset.anchorIndex);
+      if (!Number.isFinite(anchorIndex) || desiredAnchorIndexSet.has(anchorIndex)) return;
+      slotNode.remove();
+    });
+
+    desiredAnchorIndexes.forEach((anchorIndex) => {
+      const existingSlot = getNativeInlineAdSlotNodes(container).find(
+        (node) => Number(node.dataset.anchorIndex) === anchorIndex
+      );
+      if (existingSlot) return;
+
+      const anchor = children[anchorIndex] || null;
+      if (!anchor || anchor.parentElement !== container) return;
+
+      nativeInlineAdState.sequence += 1;
+      const slotId = `inline-${Date.now()}-${nativeInlineAdState.sequence}`;
+      const placementBase = resolveNativeInlinePlacementBase(container);
+      const slotNode = buildNativeInlineAdSlot(slotId, `${placementBase}_${anchorIndex + 1}`);
+      slotNode.dataset.anchorIndex = String(anchorIndex);
+
+      if (anchor.nextSibling) {
+        container.insertBefore(slotNode, anchor.nextSibling);
+      } else {
+        container.appendChild(slotNode);
+      }
+      loadNativeInlineAdSlot(slotNode).catch(() => undefined);
+    });
   };
 
   const observeNativeInlineAdContainer = (container) => {
@@ -6249,7 +6713,12 @@
         maybeInjectNativeInlineAd(container);
       }, 180);
     });
-    observer.observe(container, { childList: true, subtree: false });
+    observer.observe(container, {
+      childList: true,
+      subtree: false,
+      attributes: true,
+      attributeFilter: ["class", "hidden", "style", "aria-hidden", "data-loading"],
+    });
     nativeInlineAdState.observerMap.set(container, observer);
   };
 
@@ -6338,8 +6807,12 @@
       ui.headerUserStatus.classList.toggle("pill", true);
     }
 
-    if (ui.userEmail) ui.userEmail.textContent = accountAuthed ? user?.email || "Not signed in" : guestSession ? "Guest session" : "Not signed in";
-    if (ui.userProvider) ui.userProvider.textContent = accountAuthed ? user?.providerData?.[0]?.providerId || "—" : guestSession ? "anonymous" : "—";
+    const guestHandle = sanitizeProfileUsername(
+      state.userProfile?.username || getDefaultProfileUsername(user),
+      user
+    );
+    if (ui.userEmail) ui.userEmail.textContent = accountAuthed ? user?.email || "Not signed in" : guestSession ? `@${guestHandle}` : "Not signed in";
+    if (ui.userProvider) ui.userProvider.textContent = accountAuthed ? user?.providerData?.[0]?.providerId || "—" : guestSession ? "guest" : "—";
     if (ui.userStatus) {
       ui.userStatus.textContent = authLabel;
       ui.userStatus.classList.toggle("pill", true);
@@ -7073,20 +7546,37 @@
     return new Date(ts).toLocaleString();
   };
 
+  const renderStatusBadgeIcon = (kind) => {
+    if (kind === "cancelled") {
+      return `
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <circle cx="12" cy="12" r="8.25"></circle>
+          <path d="M9 9l6 6M15 9l-6 6"></path>
+        </svg>
+      `;
+    }
+    return `
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <circle cx="12" cy="12" r="8.25"></circle>
+        <path d="M8.5 12.3l2.4 2.4 4.8-5.2"></path>
+      </svg>
+    `;
+  };
+
   const renderOrderStatusBadge = (rawStatus) => {
     const status = String(rawStatus || "pending").trim().toLowerCase();
     const statusLabel = status.replace(/_/g, " ");
     if (status === "cancelled") {
       return `
         <span class="status ${escapeHtml(status)} status-icon-only" aria-label="Cancelled">
-          <span class="status-icon status-icon-cancelled" aria-hidden="true">${icon("cancel")}</span>
+          <span class="status-icon status-icon-cancelled" aria-hidden="true">${renderStatusBadgeIcon("cancelled")}</span>
         </span>
       `;
     }
     if (status === "completed" || status === "fulfilled") {
       return `
         <span class="status ${escapeHtml(status)} status-icon-only" aria-label="Completed">
-          <span class="status-icon status-icon-completed" aria-hidden="true">${icon("check-circle")}</span>
+          <span class="status-icon status-icon-completed" aria-hidden="true">${renderStatusBadgeIcon("completed")}</span>
         </span>
       `;
     }
@@ -7343,8 +7833,25 @@
   };
 
   const refreshCollaboration = async (functions) => {
-    if (!hasFullAccount()) return;
     if (!ui.collabInvitesList && !ui.collabCollaboratorsList) return;
+    if (!hasSessionUser()) return;
+    if (isAnonymousUser()) {
+      state.pendingCollabInviteCount = 0;
+      state.collaboratorCount = 0;
+      if (ui.collabInvitesList) {
+        ui.collabInvitesList.textContent =
+          "Guest workspace active. Create a full account if you want emailed workspace invites.";
+      }
+      if (ui.collabCollaboratorsList) {
+        ui.collabCollaboratorsList.textContent =
+          "Guest workspace active. Save forecasts and workspace context now, then upgrade later to add collaborators.";
+      }
+      if (ui.collabInviteStatus) {
+        ui.collabInviteStatus.textContent =
+          "Guest workspace ready. Email invites unlock after you create or sign in to a full account.";
+      }
+      return;
+    }
     try {
       const listInvites = functions.httpsCallable("list_collab_invites");
       const listCollaborators = functions.httpsCallable("list_collaborators");
@@ -7442,8 +7949,9 @@
     };
 
 	  const resolveWorkspaceRole = (workspaceId) => {
-	    if (!hasFullAccount() || !workspaceId) return "guest";
+	    if (!hasSessionUser() || !workspaceId) return "guest";
 	    if (state.user.uid === workspaceId) return "owner";
+	    if (!hasFullAccount()) return "guest";
 	    const shared = (state.sharedWorkspaces || []).find((ws) => ws.workspaceUserId === workspaceId || ws.id === workspaceId);
 	    return shared?.role || "viewer";
 	  };
@@ -7989,6 +8497,48 @@
 
   const cloneDefaultProfileSocialLinks = () => ({ ...DEFAULT_PROFILE_SOCIAL_LINKS });
 
+  const normalizeAutoPublishPrefs = (source = null) => {
+    const raw = source && typeof source === "object" ? source : {};
+    return {
+      autoPublishForecasts:
+        raw.autoPublishForecasts !== undefined
+          ? Boolean(raw.autoPublishForecasts)
+          : DEFAULT_AUTO_PUBLISH_PREFS.autoPublishForecasts,
+      autoPublishIndicators:
+        raw.autoPublishIndicators !== undefined
+          ? Boolean(raw.autoPublishIndicators)
+          : DEFAULT_AUTO_PUBLISH_PREFS.autoPublishIndicators,
+      autoPublishModelCouncilConvos:
+        raw.autoPublishModelCouncilConvos !== undefined
+          ? Boolean(raw.autoPublishModelCouncilConvos)
+          : DEFAULT_AUTO_PUBLISH_PREFS.autoPublishModelCouncilConvos,
+    };
+  };
+
+  const shouldAutoPublishForType = (requestType) => {
+    const type = normalizeMyRequestType(requestType);
+    return Boolean(type && MY_REQUEST_TYPES.has(type));
+  };
+
+  const hashStringToInt = (value) => {
+    const source = String(value || "");
+    let hash = 0;
+    for (let i = 0; i < source.length; i += 1) {
+      hash = (hash << 5) - hash + source.charCodeAt(i);
+      hash |= 0;
+    }
+    return Math.abs(hash);
+  };
+
+  const buildAnonymousUsername = (user = null) => {
+    const uid = String(user?.uid || "").trim() || String(Date.now());
+    const hash = hashStringToInt(uid);
+    const adjective = ANON_USERNAME_ADJECTIVES[hash % ANON_USERNAME_ADJECTIVES.length];
+    const noun = ANON_USERNAME_NOUNS[Math.floor(hash / 13) % ANON_USERNAME_NOUNS.length];
+    const suffix = String(100 + (hash % 900));
+    return `${adjective}_${noun}_${suffix}`;
+  };
+
   const normalizeProfileAvatar = (raw) => {
     const value = String(raw || "").trim().toLowerCase();
     if (value && PROFILE_AVATAR_OPTIONS[value]) return value;
@@ -8003,6 +8553,9 @@
   };
 
   const getDefaultProfileUsername = (user) => {
+    if (isAnonymousUser(user)) {
+      return buildAnonymousUsername(user);
+    }
     const display = String(user?.displayName || "").trim();
     const emailLocal = String(user?.email || "")
       .trim()
@@ -8140,6 +8693,7 @@
 
   const loadUserProfile = async (db, user) => {
     if (!db || !user) {
+      state.publishPrefs = normalizeAutoPublishPrefs(null);
       state.userProfile = {
         username: "",
         socialLinks: cloneDefaultProfileSocialLinks(),
@@ -8156,12 +8710,14 @@
     try {
       const snap = await db.collection("users").doc(user.uid).get();
       const doc = snap.exists ? snap.data() || {} : {};
+      state.publishPrefs = normalizeAutoPublishPrefs(doc);
       const rawProfile = doc.profile && typeof doc.profile === "object" ? doc.profile : {};
       if (!rawProfile.stripeConnectAccountId && doc?.stripeConnectAccountId) {
         rawProfile.stripeConnectAccountId = doc.stripeConnectAccountId;
       }
       renderProfileForm(rawProfile, user);
     } catch (error) {
+      state.publishPrefs = normalizeAutoPublishPrefs(null);
       renderProfileForm({ username: getDefaultProfileUsername(user) }, user);
     }
   };
@@ -8183,18 +8739,13 @@
     const stripeConnectAccountId = String(
       existingProfile.stripeConnectAccountId || existing?.stripeConnectAccountId || ""
     ).trim();
-    const autopublishDefaults = {
-      autoPublishForecasts: existing?.autoPublishForecasts !== undefined ? Boolean(existing.autoPublishForecasts) : true,
-      autoPublishIndicators: existing?.autoPublishIndicators !== undefined ? Boolean(existing.autoPublishIndicators) : true,
-      autoPublishModelCouncilConvos:
-        existing?.autoPublishModelCouncilConvos !== undefined ? Boolean(existing.autoPublishModelCouncilConvos) : true,
-    };
+    const autopublishDefaults = normalizeAutoPublishPrefs(existing);
 
     await userRef.set(
       {
         email: user.email,
         name: user.displayName || "",
-        provider: user.providerData?.[0]?.providerId || "email",
+        provider: user.providerData?.[0]?.providerId || (user.isAnonymous ? "anonymous" : "email"),
         photoURL: user.photoURL || "",
         lastLoginAt: firebase.firestore.FieldValue.serverTimestamp(),
         createdAt,
@@ -8359,6 +8910,117 @@
 
   const icon = (name) => `<i class="iconoir-${name}" aria-hidden="true"></i>`;
 
+  const MARKED_SCRIPT_URL = "https://cdn.jsdelivr.net/npm/marked/marked.min.js";
+  const MARKDOWN_ALLOWED_TAGS = new Set([
+    "p",
+    "br",
+    "hr",
+    "strong",
+    "em",
+    "b",
+    "i",
+    "u",
+    "s",
+    "ul",
+    "ol",
+    "li",
+    "blockquote",
+    "code",
+    "pre",
+    "a",
+    "table",
+    "thead",
+    "tbody",
+    "tr",
+    "th",
+    "td",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+  ]);
+  const MARKDOWN_ALLOWED_ATTRS = new Set(["href", "target", "rel", "title", "colspan", "rowspan"]);
+  let markedLoaderPromise = null;
+
+  const ensureMarkedLibrary = () => {
+    if (window.marked?.parse) return Promise.resolve(window.marked);
+    if (markedLoaderPromise) return markedLoaderPromise;
+    markedLoaderPromise = new Promise((resolve) => {
+      const existing = document.querySelector('script[data-quantura-marked="1"]');
+      if (existing) {
+        existing.addEventListener("load", () => resolve(window.marked || null), { once: true });
+        existing.addEventListener("error", () => resolve(null), { once: true });
+        return;
+      }
+      const script = document.createElement("script");
+      script.src = MARKED_SCRIPT_URL;
+      script.async = true;
+      script.defer = true;
+      script.dataset.quanturaMarked = "1";
+      script.addEventListener("load", () => resolve(window.marked || null), { once: true });
+      script.addEventListener("error", () => resolve(null), { once: true });
+      document.head.appendChild(script);
+    });
+    return markedLoaderPromise;
+  };
+
+  const sanitizeMarkdownHtml = (rawHtml) => {
+    const html = String(rawHtml || "").trim();
+    if (!html) return "";
+    const template = document.createElement("template");
+    template.innerHTML = html;
+    Array.from(template.content.querySelectorAll("*")).forEach((node) => {
+      const tag = String(node.tagName || "").toLowerCase();
+      if (!MARKDOWN_ALLOWED_TAGS.has(tag)) {
+        const replacement = document.createTextNode(node.textContent || "");
+        node.replaceWith(replacement);
+        return;
+      }
+      Array.from(node.attributes || []).forEach((attr) => {
+        const attrName = String(attr.name || "").toLowerCase();
+        const attrValue = String(attr.value || "");
+        if (!MARKDOWN_ALLOWED_ATTRS.has(attrName)) {
+          node.removeAttribute(attr.name);
+          return;
+        }
+        if (attrName === "href") {
+          const safeHref = attrValue.trim();
+          if (!/^(https?:|mailto:|tel:)/i.test(safeHref)) {
+            node.removeAttribute(attr.name);
+          }
+        }
+      });
+      if (tag === "a") {
+        node.setAttribute("target", "_blank");
+        node.setAttribute("rel", "noopener noreferrer");
+      }
+    });
+    return template.innerHTML;
+  };
+
+  const renderMarkdown = (text, { fallback = "No output returned." } = {}) => {
+    const source = String(text || "").trim();
+    if (!source) return `<p>${escapeHtml(fallback)}</p>`;
+    try {
+      if (window.marked?.parse) {
+        const parsed = window.marked.parse(source, {
+          gfm: true,
+          breaks: true,
+          mangle: false,
+          headerIds: false,
+        });
+        return sanitizeMarkdownHtml(parsed);
+      }
+    } catch (_error) {
+      // Fall back to escaped text.
+    }
+    return `<p>${escapeHtml(source).replace(/\n/g, "<br>")}</p>`;
+  };
+
+  ensureMarkedLibrary().catch(() => null);
+
   const toPrettyJson = (value) => `<pre class="small">${escapeHtml(JSON.stringify(value, null, 2))}</pre>`;
 
   const normalizePath = (rawPath = "/") => {
@@ -8377,11 +9039,10 @@
         indicators: "/indicators",
         trending: "/trending",
         news: "/news",
-        "events-calendar": "/events-calendar",
         "market-headlines": "/market-headlines",
         "ticker-query": "/model-council",
         options: "/options",
-        fx: "/tools/fx",
+        fx: "/terminal/fx",
         learn: "/studio",
       },
       pathAliases: {
@@ -8474,6 +9135,16 @@
       icon: "/assets/social/instagram.svg",
     },
     {
+      key: "pinterest",
+      label: "Pinterest",
+      href: "https://pin.it/iGJbqOHSp",
+      svg: `
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M12.46 2C7.42 2 5 5.62 5 9.59c0 2.45.93 4.62 2.93 5.43.33.14.63.01.72-.36.07-.26.23-.92.3-1.19.1-.36.06-.48-.2-.79-.58-.69-.95-1.58-.95-2.85 0-3.67 2.74-6.96 7.13-6.96 3.89 0 6.03 2.38 6.03 5.55 0 4.17-1.85 7.69-4.59 7.69-1.51 0-2.64-1.25-2.28-2.78.43-1.82 1.27-3.78 1.27-5.09 0-1.17-.63-2.15-1.93-2.15-1.53 0-2.76 1.58-2.76 3.69 0 1.35.46 2.27.46 2.27l-1.85 7.85c-.55 2.33-.08 5.2-.04 5.49.03.17.24.21.33.08.13-.17 1.76-2.19 2.32-4.21.16-.57.91-3.53.91-3.53.45.86 1.78 1.61 3.18 1.61 4.19 0 7.03-3.82 7.03-8.93C22 5.6 17.98 2 12.46 2z"/>
+        </svg>
+      `,
+    },
+    {
       key: "facebook",
       label: "Facebook",
       href: "https://www.facebook.com/quanturaai/",
@@ -8525,7 +9196,7 @@
       group.innerHTML = FOOTER_SOCIAL_LINKS.map(
         (entry) => `
           <a class="social-link" href="${entry.href}" target="_blank" rel="noopener noreferrer" data-analytics="social_${entry.key}" aria-label="${entry.label}">
-            <img src="${entry.icon}" alt="" loading="lazy" decoding="async" />
+            ${entry.svg || `<img src="${entry.icon}" alt="" loading="lazy" decoding="async" />`}
           </a>
         `
       ).join("");
@@ -8562,14 +9233,16 @@
       iconImg.setAttribute("aria-hidden", "true");
       logo.prepend(iconImg);
     });
-    let favicon = document.querySelector('link[rel="icon"]');
+    const faviconHref = "/favicon-96x96.png";
+    let favicon = document.querySelector('link[rel="icon"][sizes="96x96"]');
     if (!(favicon instanceof HTMLLinkElement)) {
       favicon = document.createElement("link");
       favicon.setAttribute("rel", "icon");
+      favicon.setAttribute("sizes", "96x96");
       document.head.appendChild(favicon);
     }
     favicon.setAttribute("type", "image/png");
-    favicon.setAttribute("href", brandIcon);
+    favicon.setAttribute("href", faviconHref);
   };
 
     const ensureSidebarCollapseToggle = () => {
@@ -8997,11 +9670,28 @@
     return isDarkMode() ? "dark" : "light";
   };
 
-  const normalizeTradingViewSymbol = (ticker) => {
+  const getDefaultPopularTicker = () => normalizeTicker(SESSION_DEFAULT_TICKER) || "AAPL";
+
+  const resolveTradingViewExchangeSymbol = (ticker) => {
     const clean = normalizeTicker(ticker);
-    if (!clean) return "NASDAQ:AAPL";
-    if (clean.includes(":")) return clean;
-    return `NASDAQ:${clean}`;
+    if (!clean) return TRADINGVIEW_EXCHANGE_OVERRIDES[getDefaultPopularTicker()] || "NASDAQ:AAPL";
+    return TRADINGVIEW_EXCHANGE_OVERRIDES[clean] || `NASDAQ:${clean}`;
+  };
+
+  const normalizeTradingViewSymbol = (ticker) => {
+    const raw = String(ticker || "").trim().toUpperCase();
+    if (!raw) return resolveTradingViewExchangeSymbol(getDefaultPopularTicker());
+    if (raw.includes(":")) return raw;
+    return resolveTradingViewExchangeSymbol(raw);
+  };
+
+  const buildTradingViewTickerTapeSymbols = (ticker) => {
+    const active = normalizeTicker(ticker) || getDefaultPopularTicker();
+    const ordered = [active, ...POPULAR_TICKER_POOL.filter((candidate) => normalizeTicker(candidate) !== active)].slice(0, 10);
+    return ordered.map((candidate) => ({
+      proName: normalizeTradingViewSymbol(candidate),
+      title: normalizeTicker(candidate) || candidate,
+    }));
   };
 
   const resolveTradingViewInterval = (interval, rangePreset) => {
@@ -9070,7 +9760,8 @@
 
   const renderTradingViewTerminal = ({ ticker, interval, onFallback = null }) => {
     if (!ui.tradingViewRoot || !ui.tradingViewAdvanced) return false;
-    const symbol = normalizeTradingViewSymbol(ticker);
+    const activeTicker = normalizeTicker(ticker) || getDefaultPopularTicker();
+    const symbol = normalizeTradingViewSymbol(activeTicker);
     const theme = resolveTradingViewTheme();
     const tvInterval = resolveTradingViewInterval(interval, state.chartRangePreset);
     const style = resolveTradingViewStyle();
@@ -9110,13 +9801,13 @@
     mountTradingViewIframe({
       container: ui.tradingViewTickerTape,
       src: buildTradingViewWidgetSrc("https://www.tradingview-widget.com/embed-widget/ticker-tape/?locale=en", {
-        symbols: [{ proName: symbol, title: symbol }],
+        symbols: buildTradingViewTickerTapeSymbols(activeTicker),
         showSymbolLogo: true,
         displayMode: "adaptive",
         colorTheme: theme,
         isTransparent: true,
       }),
-      title: `Ticker tape ${symbol}`,
+      title: `Ticker tape ${activeTicker}`,
     });
 
     mountTradingViewIframe({
@@ -10015,18 +10706,22 @@
     });
   };
 
-  const formatPredictionCountdown = (value) => {
+  const getPredictionCountdownParts = (value) => {
     const text = String(value || "").trim();
-    if (!text) return "No end date";
+    if (!text) return { days: "00", hrs: "00", mins: "00", active: false };
     const target = new Date(text);
-    if (Number.isNaN(target.getTime())) return "No end date";
-    const deltaMs = target.getTime() - Date.now();
-    if (deltaMs <= 0) return "Ended";
-    const totalHours = Math.ceil(deltaMs / (60 * 60 * 1000));
-    if (totalHours >= 48) return `Ends in ${Math.ceil(totalHours / 24)}d`;
-    if (totalHours >= 1) return `Ends in ${totalHours}h`;
-    const minutes = Math.max(1, Math.ceil(deltaMs / (60 * 1000)));
-    return `Ends in ${minutes}m`;
+    if (Number.isNaN(target.getTime())) return { days: "00", hrs: "00", mins: "00", active: false };
+    const deltaMs = Math.max(0, target.getTime() - Date.now());
+    const totalMinutes = Math.floor(deltaMs / (60 * 1000));
+    const days = Math.floor(totalMinutes / (60 * 24));
+    const hrs = Math.floor((totalMinutes % (60 * 24)) / 60);
+    const mins = totalMinutes % 60;
+    return {
+      days: String(days).padStart(2, "0"),
+      hrs: String(hrs).padStart(2, "0"),
+      mins: String(mins).padStart(2, "0"),
+      active: deltaMs > 0,
+    };
   };
 
   const parsePredictionArray = (raw) => {
@@ -10041,6 +10736,12 @@
       return [];
     }
   };
+
+  const parsePredictionTokenIds = (raw) =>
+    parsePredictionArray(raw)
+      .map((item) => String(item || "").trim())
+      .filter(Boolean)
+      .slice(0, 16);
 
   const clampPredictionPrice = (value) => {
     const num = Number(value);
@@ -10079,13 +10780,15 @@
       .map((item) => String(item || "").trim())
       .filter(Boolean)
       .slice(0, 16);
-    const parsedOutcomePrices = parsePredictionArray(market.outcomePrices)
+    const parsedOutcomePrices = parsePredictionArray(market.outcomePrices || market.prices)
       .map((item) => clampPredictionPrice(item))
       .filter((item) => item !== null)
       .slice(0, 16);
+    const parsedTokenIds = parsePredictionTokenIds(market.clobTokenIds);
     const alignedLength = Math.min(parsedOutcomes.length, parsedOutcomePrices.length);
     const outcomes = alignedLength > 0 ? parsedOutcomes.slice(0, alignedLength) : [];
     const outcomePrices = alignedLength > 0 ? parsedOutcomePrices.slice(0, alignedLength) : [];
+    const clobTokenIds = alignedLength > 0 ? parsedTokenIds.slice(0, alignedLength) : [];
 
     const status = String(market.status || "").trim().toLowerCase();
     const closed = Boolean(market.closed) || status === "closed" || status === "resolved" || status === "ended";
@@ -10114,6 +10817,7 @@
       liquidityUsd,
       outcomes,
       outcomePrices,
+      clobTokenIds,
       isBinary: outcomes.length === 2,
       yesProb,
       topOutcomes,
@@ -10138,6 +10842,9 @@
       title: String(event.title || event.name || event.question || "Prediction markets").trim(),
       slug: String(event.slug || "").trim(),
       ticker: String(event.ticker || "").trim(),
+      category: String(event.category || "").trim(),
+      image: String(event.image || "").trim(),
+      icon: String(event.icon || "").trim(),
       markets,
     };
   };
@@ -10235,118 +10942,235 @@
     return { groups: visibleGroups, shownMarkets, totalMarkets };
   };
 
-  const renderPredictionOutcomePill = (label, prob, variant = "neutral") => {
-    const cleanLabel = String(label || "").trim();
-    const cleanProb = clampPredictionPrice(prob);
-    if (!cleanLabel || cleanProb === null) return "";
-    const percent = Math.max(0, Math.min(100, Math.round(cleanProb * 100)));
+  const formatPredictionVolumeText = (value) => {
+    const num = Number(value || 0);
+    if (!Number.isFinite(num) || num <= 0) return "$0 Vol.";
+    return `$${formatCompactNumber(num)} Vol.`;
+  };
+
+  const getPredictionBinaryPrices = (market) => {
+    if (!Array.isArray(market.outcomes) || !Array.isArray(market.outcomePrices) || !market.outcomes.length) {
+      return { yesProb: null, noProb: null, yesTokenId: "", noTokenId: "" };
+    }
+    let yesIndex = market.outcomes.findIndex((label) => /^yes$/i.test(label));
+    let noIndex = market.outcomes.findIndex((label) => /^no$/i.test(label));
+    if (yesIndex < 0 && Number.isFinite(market.yesProb)) {
+      yesIndex = 0;
+    }
+    if (noIndex < 0 && market.outcomes.length === 2) {
+      noIndex = yesIndex === 0 ? 1 : 0;
+    }
+    const yesProb =
+      yesIndex >= 0 && yesIndex < market.outcomePrices.length
+        ? clampPredictionPrice(market.outcomePrices[yesIndex])
+        : clampPredictionPrice(market.yesProb);
+    const noProb =
+      noIndex >= 0 && noIndex < market.outcomePrices.length
+        ? clampPredictionPrice(market.outcomePrices[noIndex])
+        : yesProb !== null
+        ? clampPredictionPrice(1 - yesProb)
+        : null;
+    return {
+      yesProb,
+      noProb,
+      yesTokenId: Array.isArray(market.clobTokenIds) && yesIndex >= 0 ? String(market.clobTokenIds[yesIndex] || "") : "",
+      noTokenId: Array.isArray(market.clobTokenIds) && noIndex >= 0 ? String(market.clobTokenIds[noIndex] || "") : "",
+    };
+  };
+
+  const extractPredictionTargetLabel = (question, index = 0) => {
+    const text = String(question || "").trim();
+    if (!text) return `Target ${index + 1}`;
+    const dollarMatch = text.match(/\$\s?\d+(?:\.\d+)?/);
+    if (dollarMatch) {
+      return dollarMatch[0].replace(/\s+/g, "");
+    }
+    const thresholdMatch = text.match(/\b(?:above|below|over|under|at)\s+([0-9]+(?:\.[0-9]+)?)/i);
+    if (thresholdMatch) {
+      return `$${thresholdMatch[1]}`;
+    }
+    return text.length <= 26 ? text : `Target ${index + 1}`;
+  };
+
+  const parsePredictionTargetValue = (label) => {
+    const match = String(label || "").match(/-?\d+(?:\.\d+)?/);
+    if (!match) return null;
+    const parsed = Number(match[0]);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  const getPredictionEventQuestion = (event) =>
+    String(event?.title || event?.markets?.[0]?.question || "Prediction market").trim() || "Prediction market";
+
+  const getPredictionEventEndDate = (event) => {
+    const values = (Array.isArray(event?.markets) ? event.markets : [])
+      .map((market) => String(market?.endDate || "").trim())
+      .filter(Boolean)
+      .map((value) => new Date(value))
+      .filter((date) => !Number.isNaN(date.getTime()))
+      .sort((left, right) => left.getTime() - right.getTime());
+    return values.length ? values[0].toISOString() : "";
+  };
+
+  const getPredictionEventIconUrl = (event) => {
+    const direct = String(event?.icon || event?.image || "").trim();
+    if (direct) return direct;
+    const markets = Array.isArray(event?.markets) ? event.markets : [];
+    for (const market of markets) {
+      const marketIcon = String(market?.icon || market?.image || "").trim();
+      if (marketIcon) return marketIcon;
+    }
+    return "";
+  };
+
+  const getPredictionBreadcrumbs = (event) => {
+    const primary = String(event?.category || event?.markets?.[0]?.category || "Finance").trim() || "Finance";
+    const secondary = event?.ticker ? "Stocks" : "Markets";
+    return { primary, secondary };
+  };
+
+  const renderPredictionCountdown = (endDate) => {
+    const parts = getPredictionCountdownParts(endDate);
     return `
-      <button class="prediction-outcome-pill ${variant}" type="button" aria-disabled="true" tabindex="-1" aria-label="${escapeHtml(
-        `${cleanLabel} ${percent}%`
-      )}">
-        <span class="prediction-outcome-pill-fill" style="width:${percent}%"></span>
-        <span class="prediction-outcome-pill-text">${escapeHtml(cleanLabel)} ${percent}%</span>
-      </button>
+      <div class="prediction-countdown" data-prediction-countdown data-end="${escapeHtml(endDate || "")}">
+        <div class="prediction-countdown-unit">
+          <span class="prediction-countdown-digit" data-prediction-countdown-value="days">${parts.days}</span>
+          <small>DAYS</small>
+        </div>
+        <div class="prediction-countdown-unit">
+          <span class="prediction-countdown-digit" data-prediction-countdown-value="hrs">${parts.hrs}</span>
+          <small>HRS</small>
+        </div>
+        <div class="prediction-countdown-unit">
+          <span class="prediction-countdown-digit" data-prediction-countdown-value="mins">${parts.mins}</span>
+          <small>MINS</small>
+        </div>
+      </div>
     `;
   };
 
-  const renderPredictionMarketCard = (event, market) => {
-    const category = String(market.category || event?.ticker || "Market").trim();
-    const volumeText = Number(market.volumeUsd || 0) > 0 ? `$${formatCompactNumber(market.volumeUsd)} Vol.` : "—";
-    const marketUrl = predictionMarketUrl(market, event);
-    const binaryRows = (() => {
-      if (!market.isBinary || !Array.isArray(market.outcomes) || !Array.isArray(market.outcomePrices)) return [];
-      let yesIndex = market.outcomes.findIndex((label) => /^yes$/i.test(label));
-      let noIndex = market.outcomes.findIndex((label) => /^no$/i.test(label));
-      if (yesIndex < 0) yesIndex = 0;
-      if (noIndex < 0) noIndex = yesIndex === 0 ? 1 : 0;
-      return [yesIndex, noIndex]
-        .filter((index) => index >= 0 && index < market.outcomes.length && index < market.outcomePrices.length)
-        .map((index) => ({ label: market.outcomes[index], prob: market.outcomePrices[index] }));
-    })();
-    const yesProb = binaryRows.find((item) => /^yes$/i.test(item.label))?.prob;
-    const noProb = binaryRows.find((item) => /^no$/i.test(item.label))?.prob;
-    const primaryProb =
-      yesProb ??
-      (Array.isArray(market.topOutcomes) && market.topOutcomes.length ? market.topOutcomes[0].prob : null);
-    const primaryLabel =
-      yesProb !== undefined
-        ? "Yes"
-        : Array.isArray(market.topOutcomes) && market.topOutcomes.length
-        ? String(market.topOutcomes[0].label || "Likely")
-        : "Outcome";
-    const pillsHtml = binaryRows.length
-      ? binaryRows
-          .map((item) => renderPredictionOutcomePill(item.label, item.prob, /^yes$/i.test(item.label) ? "yes" : "no"))
-          .join("")
-      : Array.isArray(market.topOutcomes) && market.topOutcomes.length
-      ? market.topOutcomes
-          .slice(0, 3)
-          .map((item) => renderPredictionOutcomePill(item.label, item.prob))
-          .join("")
-      : "";
+  const buildPredictionRows = (event) =>
+    (Array.isArray(event?.markets) ? event.markets : [])
+      .map((market, index) => {
+        const { yesProb, noProb, yesTokenId, noTokenId } = getPredictionBinaryPrices(market);
+        const targetLabel = extractPredictionTargetLabel(market.question, index);
+        return {
+          market,
+          targetLabel,
+          targetValue: parsePredictionTargetValue(targetLabel),
+          probability: yesProb ?? (Array.isArray(market.topOutcomes) && market.topOutcomes.length ? market.topOutcomes[0].prob : null),
+          yesProb,
+          noProb,
+          yesTokenId,
+          noTokenId,
+          marketUrl: predictionMarketUrl(market, event),
+          volumeText: formatPredictionVolumeText(market.volumeUsd),
+        };
+      })
+      .filter((row) => row.market && row.market.question)
+      .sort((left, right) => {
+        if (left.targetValue !== null && right.targetValue !== null && left.targetValue !== right.targetValue) {
+          return left.targetValue - right.targetValue;
+        }
+        return Number(right.probability || 0) - Number(left.probability || 0);
+      });
+
+  const renderPredictionMarketRow = (row) => {
+    const yesPrice = row.yesProb !== null ? formatPredictionCents(row.yesProb) : "—";
+    const noPrice = row.noProb !== null ? formatPredictionCents(row.noProb) : "—";
+    const tradeDisabled = !row.marketUrl || row.yesProb === null || row.noProb === null;
     return `
-      <article class="prediction-market-card prediction-market-row">
-        <div class="prediction-market-row-head small">
-          <span class="prediction-chip">${escapeHtml(category)}</span>
-          <span>${escapeHtml(formatPredictionCountdown(market.endDate))}</span>
+      <article class="prediction-list-row">
+        <div class="prediction-list-row-target">
+          <div class="prediction-target-price">${escapeHtml(row.targetLabel)}</div>
+          <div class="prediction-row-volume small muted">${escapeHtml(row.volumeText)}</div>
         </div>
-        <div class="prediction-market-row-grid">
-          <div class="prediction-market-row-question">
-            <h4 class="prediction-market-title">${escapeHtml(String(market.question || "Untitled market"))}</h4>
-            <div class="small muted">${escapeHtml(volumeText)}</div>
-          </div>
-          <div class="prediction-market-row-prob">
-            <div class="prediction-market-prob">${escapeHtml(formatPredictionPercent(primaryProb))}</div>
-            <div class="small muted">${escapeHtml(primaryLabel)}</div>
-          </div>
-          <div class="prediction-market-row-actions">
-            ${
-              Number.isFinite(yesProb)
-                ? `<button class="prediction-buy-btn yes" type="button" aria-disabled="true" tabindex="-1">Buy Yes ${escapeHtml(
-                    formatPredictionCents(yesProb)
-                  )}</button>`
-                : ""
-            }
-            ${
-              Number.isFinite(noProb)
-                ? `<button class="prediction-buy-btn no" type="button" aria-disabled="true" tabindex="-1">Buy No ${escapeHtml(
-                    formatPredictionCents(noProb)
-                  )}</button>`
-                : ""
-            }
-          </div>
+        <div class="prediction-list-row-probability">
+          <div class="prediction-market-prob">${escapeHtml(formatPredictionPercent(row.probability))}</div>
         </div>
-        <div class="prediction-pill-row">
-          ${
-            pillsHtml ||
-            `<span class="prediction-no-price-badge small" aria-label="No price data for this market">No price data</span>`
-          }
-        </div>
-        <div class="prediction-market-footer">
-          ${
-            marketUrl
-              ? `<a class="news-link" href="${escapeHtml(marketUrl)}" target="_blank" rel="noreferrer" data-analytics="polymarket_market_open" data-label="${escapeHtml(String(market.question || "polymarket_market"))}" aria-label="${escapeHtml(
-                  `View ${String(market.question || "market")} on Polymarket`
-                )}">View on Polymarket</a>`
-              : `<span class="small muted">Market link unavailable</span>`
-          }
-          <span class="small muted prediction-warning" aria-label="Markets can be wrong">Markets can be wrong</span>
+        <div class="prediction-market-row-actions">
+          <button
+            class="prediction-trade-btn yes"
+            type="button"
+            data-action="prediction-open-market"
+            data-side="yes"
+            data-url="${escapeHtml(row.marketUrl || "")}"
+            data-question="${escapeHtml(String(row.market.question || ""))}"
+            data-price="${escapeHtml(yesPrice)}"
+            data-token-id="${escapeHtml(row.yesTokenId || "")}"
+            ${tradeDisabled ? "disabled" : ""}
+          >
+            <span>Buy Yes</span>
+            <strong>${escapeHtml(yesPrice)}</strong>
+          </button>
+          <button
+            class="prediction-trade-btn no"
+            type="button"
+            data-action="prediction-open-market"
+            data-side="no"
+            data-url="${escapeHtml(row.marketUrl || "")}"
+            data-question="${escapeHtml(String(row.market.question || ""))}"
+            data-price="${escapeHtml(noPrice)}"
+            data-token-id="${escapeHtml(row.noTokenId || "")}"
+            ${tradeDisabled ? "disabled" : ""}
+          >
+            <span>Buy No</span>
+            <strong>${escapeHtml(noPrice)}</strong>
+          </button>
         </div>
       </article>
     `;
   };
 
+  const renderPredictionEventList = (event) => {
+    const rows = buildPredictionRows(event);
+    const heroImage = getPredictionEventIconUrl(event);
+    const endDate = getPredictionEventEndDate(event);
+    const breadcrumbs = getPredictionBreadcrumbs(event);
+    const question = getPredictionEventQuestion(event);
+    return `
+      <section class="prediction-event-group prediction-list-view">
+        <div class="prediction-event-hero">
+          <div class="prediction-event-main">
+            <div class="prediction-event-icon-shell">
+              ${
+                heroImage
+                  ? `<img class="prediction-event-icon" src="${escapeHtml(heroImage)}" alt="${escapeHtml(question)}" loading="lazy" />`
+                  : `<div class="prediction-event-icon prediction-event-icon-fallback" aria-hidden="true">Q</div>`
+              }
+            </div>
+            <div class="prediction-event-copy">
+              <div class="prediction-breadcrumbs">
+                <span>${escapeHtml(breadcrumbs.primary)}</span>
+                <span aria-hidden="true">·</span>
+                <span>${escapeHtml(breadcrumbs.secondary)}</span>
+              </div>
+              <h3 class="prediction-event-question">${escapeHtml(question)}</h3>
+              <div class="prediction-event-meta">
+                <span class="prediction-meta-pill">Gamma API</span>
+                <span class="prediction-meta-pill">${escapeHtml(endDate ? formatPredictionDate(endDate) : "No end date")}</span>
+                <span class="prediction-market-brand">Opens on Polymarket</span>
+              </div>
+            </div>
+          </div>
+          ${renderPredictionCountdown(endDate)}
+        </div>
+        <div class="prediction-market-list">
+          ${rows.map((row) => renderPredictionMarketRow(row)).join("")}
+        </div>
+      </section>
+    `;
+  };
+
   const buildPredictionsSkeleton = () =>
-    new Array(6)
+    new Array(5)
       .fill(0)
       .map(
         () => `
-      <article class="prediction-market-card prediction-skeleton-card" aria-hidden="true">
+      <article class="prediction-skeleton-card" aria-hidden="true">
         <div class="prediction-skeleton-line short"></div>
         <div class="prediction-skeleton-line"></div>
         <div class="prediction-skeleton-line medium"></div>
-        <div class="prediction-skeleton-line"></div>
       </article>
     `
       )
@@ -10369,30 +11193,7 @@
       if (groups.length) {
         return `
           <div class="predictions-events">
-            ${groups
-              .map(
-                (event) => `
-              <section class="prediction-event-group">
-                <div class="prediction-event-head">
-                  <div>
-                    <h3 class="prediction-event-title">${escapeHtml(String(event.title || "Prediction markets"))}</h3>
-                    <span class="small muted">Prediction markets</span>
-                  </div>
-                  ${
-                    event.slug
-                      ? `<a class="news-link" href="https://polymarket.com/event/${encodeURIComponent(
-                          String(event.slug)
-                        )}" target="_blank" rel="noreferrer">Event</a>`
-                      : ""
-                  }
-                </div>
-                <div class="prediction-card-grid">
-                  ${event.markets.map((market) => renderPredictionMarketCard(event, market)).join("")}
-                </div>
-              </section>
-            `
-              )
-              .join("")}
+            ${groups.map((event) => renderPredictionEventList(event)).join("")}
           </div>
           ${
             totalMarkets > shownMarkets
@@ -10446,6 +11247,309 @@
         ${resultBody}
       </div>
     `;
+    refreshPredictionCountdownNodes();
+    ensurePredictionCountdownTicker();
+  };
+
+  const refreshPredictionCountdownNodes = () => {
+    document.querySelectorAll("[data-prediction-countdown]").forEach((node) => {
+      if (!(node instanceof HTMLElement)) return;
+      const endDate = String(node.dataset.end || "").trim();
+      const parts = getPredictionCountdownParts(endDate);
+      const daysNode = node.querySelector("[data-prediction-countdown-value='days']");
+      const hrsNode = node.querySelector("[data-prediction-countdown-value='hrs']");
+      const minsNode = node.querySelector("[data-prediction-countdown-value='mins']");
+      if (daysNode) daysNode.textContent = parts.days;
+      if (hrsNode) hrsNode.textContent = parts.hrs;
+      if (minsNode) minsNode.textContent = parts.mins;
+      node.classList.toggle("is-inactive", !parts.active);
+    });
+  };
+
+  const ensurePredictionCountdownTicker = () => {
+    if (predictionCountdownTimer) return;
+    predictionCountdownTimer = window.setInterval(() => {
+      refreshPredictionCountdownNodes();
+    }, 1000);
+  };
+
+  const ensurePredictionInterstitialOverlay = () => {
+    let overlay = document.getElementById("prediction-interstitial-overlay");
+    if (overlay) return overlay;
+    overlay = document.createElement("div");
+    overlay.id = "prediction-interstitial-overlay";
+    overlay.className = "prediction-interstitial-overlay hidden";
+    overlay.setAttribute("aria-hidden", "true");
+    overlay.innerHTML = `
+      <div class="prediction-interstitial-backdrop" data-action="prediction-interstitial-close"></div>
+      <div class="prediction-interstitial-card" role="dialog" aria-modal="true" aria-labelledby="prediction-interstitial-title">
+        <div class="prediction-interstitial-topline">
+          <span class="prediction-interstitial-badge">Sponsored Interstitial</span>
+          <button class="prediction-interstitial-dismiss" type="button" data-action="prediction-interstitial-close" disabled>
+            Continue in 5s
+          </button>
+        </div>
+        <div class="prediction-interstitial-body">
+          <p class="prediction-interstitial-kicker">Quantura Markets</p>
+          <h3 id="prediction-interstitial-title">Preparing your market link</h3>
+          <p id="prediction-interstitial-copy">
+            Hold for a short sponsor view before we open the selected Polymarket market in a new tab.
+          </p>
+          <div class="prediction-interstitial-creative">
+            <div class="prediction-interstitial-orb"></div>
+            <div>
+              <strong id="prediction-interstitial-side">Buy side</strong>
+              <p id="prediction-interstitial-question" class="small muted">Selected market</p>
+            </div>
+          </div>
+          <div class="prediction-interstitial-footer">
+            <span id="prediction-interstitial-price" class="prediction-interstitial-price">—</span>
+            <button class="cta" type="button" data-action="prediction-interstitial-open" disabled>Open market</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    overlay.addEventListener("click", (event) => {
+      const closeAction = event.target.closest("[data-action='prediction-interstitial-close']");
+      if (closeAction) {
+        event.preventDefault();
+        if (Date.now() >= predictionInterstitialState.unlockAtMs) {
+          finalizePredictionInterstitial(true);
+        }
+        return;
+      }
+      const openAction = event.target.closest("[data-action='prediction-interstitial-open']");
+      if (openAction) {
+        event.preventDefault();
+        if (Date.now() >= predictionInterstitialState.unlockAtMs) {
+          finalizePredictionInterstitial(true);
+        }
+      }
+    });
+    return overlay;
+  };
+
+  const updatePredictionInterstitialOverlay = () => {
+    const overlay = ensurePredictionInterstitialOverlay();
+    const secondsRemaining = Math.max(0, Math.ceil((predictionInterstitialState.unlockAtMs - Date.now()) / 1000));
+    const closeButton = overlay.querySelector("[data-action='prediction-interstitial-close']");
+    const openButton = overlay.querySelector("[data-action='prediction-interstitial-open']");
+    const sideNode = overlay.querySelector("#prediction-interstitial-side");
+    const questionNode = overlay.querySelector("#prediction-interstitial-question");
+    const priceNode = overlay.querySelector("#prediction-interstitial-price");
+    if (sideNode) sideNode.textContent = predictionInterstitialState.side || "Trade";
+    if (questionNode) questionNode.textContent = predictionInterstitialState.question || "Selected market";
+    if (priceNode) priceNode.textContent = predictionInterstitialState.price || "—";
+    if (closeButton) {
+      closeButton.disabled = secondsRemaining > 0;
+      closeButton.textContent = secondsRemaining > 0 ? `Continue in ${secondsRemaining}s` : "Continue";
+    }
+    if (openButton) {
+      openButton.disabled = secondsRemaining > 0;
+      openButton.textContent = secondsRemaining > 0 ? `Opening in ${secondsRemaining}s` : "Open market";
+    }
+  };
+
+  const finalizePredictionInterstitial = (shouldOpen = false) => {
+    const overlay = document.getElementById("prediction-interstitial-overlay");
+    if (predictionInterstitialState.tickTimer) {
+      window.clearInterval(predictionInterstitialState.tickTimer);
+      predictionInterstitialState.tickTimer = 0;
+    }
+    if (predictionInterstitialState.autoOpenTimer) {
+      window.clearTimeout(predictionInterstitialState.autoOpenTimer);
+      predictionInterstitialState.autoOpenTimer = 0;
+    }
+    if (overlay) {
+      overlay.classList.add("hidden");
+      overlay.setAttribute("aria-hidden", "true");
+    }
+    document.body.classList.remove("prediction-interstitial-open");
+    const targetUrl = String(predictionInterstitialState.url || "").trim();
+    predictionInterstitialState.url = "";
+    predictionInterstitialState.question = "";
+    predictionInterstitialState.side = "";
+    predictionInterstitialState.price = "";
+    predictionInterstitialState.unlockAtMs = 0;
+    if (shouldOpen && targetUrl) {
+      window.open(targetUrl, "_blank");
+    }
+  };
+
+  const openPredictionMarketInterstitial = ({ url = "", question = "", side = "", price = "" } = {}) => {
+    const cleanUrl = String(url || "").trim();
+    if (!cleanUrl) {
+      showToast("Market link unavailable for this prediction row.", "warn");
+      return;
+    }
+    const overlay = ensurePredictionInterstitialOverlay();
+    predictionInterstitialState.url = cleanUrl;
+    predictionInterstitialState.question = String(question || "Selected market").trim();
+    predictionInterstitialState.side = String(side || "Trade").trim();
+    predictionInterstitialState.price = String(price || "—").trim();
+    predictionInterstitialState.unlockAtMs = Date.now() + 5000;
+    updatePredictionInterstitialOverlay();
+    overlay.classList.remove("hidden");
+    overlay.setAttribute("aria-hidden", "false");
+    document.body.classList.add("prediction-interstitial-open");
+    if (predictionInterstitialState.tickTimer) {
+      window.clearInterval(predictionInterstitialState.tickTimer);
+    }
+    predictionInterstitialState.tickTimer = window.setInterval(() => {
+      updatePredictionInterstitialOverlay();
+    }, 1000);
+    if (predictionInterstitialState.autoOpenTimer) {
+      window.clearTimeout(predictionInterstitialState.autoOpenTimer);
+    }
+    predictionInterstitialState.autoOpenTimer = window.setTimeout(() => {
+      finalizePredictionInterstitial(true);
+    }, 5000);
+  };
+
+  const ensureMarketHeadlinesInterstitialOverlay = () => {
+    let overlay = document.getElementById("market-headlines-interstitial-overlay");
+    if (overlay) return overlay;
+    overlay = document.createElement("div");
+    overlay.id = "market-headlines-interstitial-overlay";
+    overlay.className = "prediction-interstitial-overlay hidden";
+    overlay.setAttribute("aria-hidden", "true");
+    overlay.innerHTML = `
+      <div class="prediction-interstitial-backdrop" data-action="market-headlines-interstitial-close"></div>
+      <div class="prediction-interstitial-card" role="dialog" aria-modal="true" aria-labelledby="market-headlines-interstitial-title">
+        <div class="prediction-interstitial-topline">
+          <span class="prediction-interstitial-badge">Sponsored Interstitial</span>
+          <button class="prediction-interstitial-dismiss" type="button" data-action="market-headlines-interstitial-close" disabled>
+            Continue in 5s
+          </button>
+        </div>
+        <div class="prediction-interstitial-body">
+          <p class="prediction-interstitial-kicker">Quantura Headlines</p>
+          <h3 id="market-headlines-interstitial-title">Preparing your publisher link</h3>
+          <p>
+            Hold for a short sponsor view before we open the selected article in a new tab.
+          </p>
+          <div class="prediction-interstitial-creative">
+            <div class="prediction-interstitial-orb"></div>
+            <div>
+              <strong id="market-headlines-interstitial-source">Selected source</strong>
+              <p id="market-headlines-interstitial-copy" class="small muted">Selected article</p>
+            </div>
+          </div>
+          <div class="prediction-interstitial-footer">
+            <span id="market-headlines-interstitial-feed" class="prediction-interstitial-price">RSS feed</span>
+            <button class="cta" type="button" data-action="market-headlines-interstitial-open" disabled>Open article</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    overlay.addEventListener("click", (event) => {
+      const closeAction = event.target.closest("[data-action='market-headlines-interstitial-close']");
+      if (closeAction) {
+        event.preventDefault();
+        if (Date.now() >= marketHeadlinesInterstitialState.unlockAtMs) {
+          finalizeMarketHeadlinesInterstitial(true);
+        }
+        return;
+      }
+      const openAction = event.target.closest("[data-action='market-headlines-interstitial-open']");
+      if (openAction) {
+        event.preventDefault();
+        if (Date.now() >= marketHeadlinesInterstitialState.unlockAtMs) {
+          finalizeMarketHeadlinesInterstitial(true);
+        }
+      }
+    });
+    return overlay;
+  };
+
+  const updateMarketHeadlinesInterstitialOverlay = () => {
+    const overlay = ensureMarketHeadlinesInterstitialOverlay();
+    const secondsRemaining = Math.max(0, Math.ceil((marketHeadlinesInterstitialState.unlockAtMs - Date.now()) / 1000));
+    const closeButton = overlay.querySelector("[data-action='market-headlines-interstitial-close']");
+    const openButton = overlay.querySelector("[data-action='market-headlines-interstitial-open']");
+    const sourceNode = overlay.querySelector("#market-headlines-interstitial-source");
+    const copyNode = overlay.querySelector("#market-headlines-interstitial-copy");
+    const feedNode = overlay.querySelector("#market-headlines-interstitial-feed");
+    if (sourceNode) sourceNode.textContent = marketHeadlinesInterstitialState.source || "Selected source";
+    if (copyNode) copyNode.textContent = marketHeadlinesInterstitialState.title || "Selected article";
+    if (feedNode) feedNode.textContent = marketHeadlinesInterstitialState.feedLabel || "RSS feed";
+    if (closeButton) {
+      closeButton.disabled = secondsRemaining > 0;
+      closeButton.textContent = secondsRemaining > 0 ? `Continue in ${secondsRemaining}s` : "Continue";
+    }
+    if (openButton) {
+      openButton.disabled = secondsRemaining > 0;
+      openButton.textContent = secondsRemaining > 0 ? `Opening in ${secondsRemaining}s` : "Open article";
+    }
+  };
+
+  const finalizeMarketHeadlinesInterstitial = (shouldOpen = false) => {
+    const overlay = document.getElementById("market-headlines-interstitial-overlay");
+    if (marketHeadlinesInterstitialState.tickTimer) {
+      window.clearInterval(marketHeadlinesInterstitialState.tickTimer);
+      marketHeadlinesInterstitialState.tickTimer = 0;
+    }
+    if (marketHeadlinesInterstitialState.autoOpenTimer) {
+      window.clearTimeout(marketHeadlinesInterstitialState.autoOpenTimer);
+      marketHeadlinesInterstitialState.autoOpenTimer = 0;
+    }
+    if (overlay) {
+      overlay.classList.add("hidden");
+      overlay.setAttribute("aria-hidden", "true");
+    }
+    document.body.classList.remove("prediction-interstitial-open");
+    const targetUrl = String(marketHeadlinesInterstitialState.url || "").trim();
+    marketHeadlinesInterstitialState.url = "";
+    marketHeadlinesInterstitialState.title = "";
+    marketHeadlinesInterstitialState.source = "";
+    marketHeadlinesInterstitialState.feedLabel = "";
+    marketHeadlinesInterstitialState.unlockAtMs = 0;
+    if (shouldOpen && targetUrl) {
+      window.open(targetUrl, "_blank", "noopener,noreferrer");
+    }
+  };
+
+  const openMarketHeadlinesInterstitial = async ({ url = "", title = "", source = "", feedLabel = "" } = {}) => {
+    const cleanUrl = String(url || "").trim();
+    if (!cleanUrl) {
+      showToast("Article link unavailable for this headline.", "warn");
+      return;
+    }
+    if (isNativeApp()) {
+      const rewardApproved = await maybeShowNativeRewardGate({
+        reason: "market_headlines_link",
+        title: "Watch an ad before opening this article?",
+        message: "Opening publisher links from Market headlines can trigger a rewarded interstitial.",
+      });
+      if (!rewardApproved) return;
+      window.open(cleanUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+    const overlay = ensureMarketHeadlinesInterstitialOverlay();
+    marketHeadlinesInterstitialState.url = cleanUrl;
+    marketHeadlinesInterstitialState.title = String(title || "Selected article").trim();
+    marketHeadlinesInterstitialState.source = String(source || "Selected source").trim();
+    marketHeadlinesInterstitialState.feedLabel = String(feedLabel || "RSS feed").trim();
+    marketHeadlinesInterstitialState.unlockAtMs = Date.now() + 5000;
+    updateMarketHeadlinesInterstitialOverlay();
+    overlay.classList.remove("hidden");
+    overlay.setAttribute("aria-hidden", "false");
+    document.body.classList.add("prediction-interstitial-open");
+    if (marketHeadlinesInterstitialState.tickTimer) {
+      window.clearInterval(marketHeadlinesInterstitialState.tickTimer);
+    }
+    marketHeadlinesInterstitialState.tickTimer = window.setInterval(() => {
+      updateMarketHeadlinesInterstitialOverlay();
+    }, 1000);
+    if (marketHeadlinesInterstitialState.autoOpenTimer) {
+      window.clearTimeout(marketHeadlinesInterstitialState.autoOpenTimer);
+    }
+    marketHeadlinesInterstitialState.autoOpenTimer = window.setTimeout(() => {
+      finalizeMarketHeadlinesInterstitial(true);
+    }, 5000);
   };
 
   const fetchTickerPredictionsPayload = async ({ mode, query, includeClosed, signal }) => {
@@ -10638,6 +11742,19 @@
         state.tickerContext.predictionsExpanded = !state.tickerContext.predictionsExpanded;
         const activeTicker = normalizeTicker(state.tickerContext.ticker || state.tickerContext.intelTicker || "");
         renderPredictionsOutput({ payload: state.tickerContext.predictionsData, ticker: activeTicker });
+        return;
+      }
+
+      const marketTrade = event.target.closest("[data-action='prediction-open-market']");
+      if (marketTrade) {
+        event.preventDefault();
+        triggerSubtleHaptic();
+        openPredictionMarketInterstitial({
+          url: marketTrade.dataset.url,
+          question: marketTrade.dataset.question,
+          side: `Buy ${String(marketTrade.dataset.side || "").trim().toUpperCase()}`,
+          price: marketTrade.dataset.price,
+        });
         return;
       }
 
@@ -11948,117 +13065,164 @@
     }
   };
 
-  const renderMarketHeadlinesFeed = (payload) => {
-    if (!ui.marketHeadlinesOutput || !ui.marketSocialOutput) return;
-    const headlines = Array.isArray(payload?.headlines) ? payload.headlines : [];
-    const social = payload?.social && typeof payload.social === "object" ? payload.social : {};
-    const warnings = Array.isArray(payload?.warnings) ? payload.warnings.filter(Boolean) : [];
-    const query = String(payload?.query || "").trim();
-
-    if (!headlines.length) {
-      ui.marketHeadlinesOutput.innerHTML = `<div class="small muted">No headlines returned.</div>`;
-    } else {
-      ui.marketHeadlinesOutput.innerHTML = `
-        ${query ? `<div class="small muted" style="margin-bottom:10px;">Query: ${escapeHtml(query)}</div>` : ""}
-        ${headlines
-          .map((item) => {
-            const title = escapeHtml(String(item?.title || "Headline"));
-            const summary = escapeHtml(String(item?.summary || "").trim());
-            const publisher = escapeHtml(String(item?.publisher || "Unknown"));
-            const when = escapeHtml(formatEpoch(item?.publishedAt) || "");
-            const link = escapeHtml(String(item?.link || "").trim());
-            const thumb = escapeHtml(String(item?.thumbnailUrl || "").trim());
-            return `
-              <article class="news-card${thumb ? " news-card--with-thumb" : ""}">
-                ${thumb ? `<img class="news-thumb" src="${thumb}" alt="" loading="lazy" />` : ""}
-                <div class="news-body">
-                  <div class="news-title">${title}</div>
-                  <div class="news-meta small">${publisher}${when ? ` · ${when}` : ""}</div>
-                  ${summary ? `<div class="news-summary small">${summary}</div>` : ""}
-                  ${link ? `<a class="news-link" href="${link}" target="_blank" rel="noopener noreferrer">Open source</a>` : ""}
-                </div>
-              </article>
-            `;
-          })
-          .join("")}
-      `;
-    }
-
-    const networks = [
-      ["x", "X posts"],
-      ["reddit", "Reddit"],
-      ["facebook", "Facebook"],
-      ["instagram", "Instagram"],
-    ];
-    ui.marketSocialOutput.innerHTML = networks
-      .map(([key, label]) => {
-        const rows = Array.isArray(social[key]) ? social[key] : [];
-        const content = rows.length
-          ? rows
-              .slice(0, 8)
-              .map((row) => {
-                const text = escapeHtml(String(row?.text || row?.title || "").trim() || "No text");
-                const link = escapeHtml(String(row?.permalink || "").trim());
-                const author = escapeHtml(
-                  String(row?.authorUsername || row?.author || row?.authorName || row?.subreddit || "").trim()
-                );
-                const metrics =
-                  key === "x"
-                    ? `Likes ${Number((row?.metrics || {}).like_count || 0).toLocaleString()}`
-                    : key === "reddit"
-                    ? `Score ${Number(row?.score || 0).toLocaleString()}`
-                    : "";
-                return `
-                  <article class="x-post-card">
-                    <div class="x-post-top">
-                      <div class="x-post-author">${author || escapeHtml(label)}</div>
-                    </div>
-                    <div class="x-post-text small">${text}</div>
-                    ${metrics ? `<div class="x-post-meta small"><span>${escapeHtml(metrics)}</span></div>` : ""}
-                    ${link ? `<a class="x-post-link" href="${link}" target="_blank" rel="noopener noreferrer">Open post</a>` : ""}
-                  </article>
-                `;
-              })
-              .join("")
-          : `<div class="small muted">No ${escapeHtml(label)} returned.</div>`;
-        return `
-          <section style="margin-bottom:14px;">
-            <div class="small" style="margin-bottom:8px;"><strong>${escapeHtml(label)}</strong></div>
-            ${content}
-          </section>
-        `;
-      })
-      .join("");
-
-    if (warnings.length) {
-      ui.marketSocialOutput.innerHTML += `<div class="small muted">${escapeHtml(warnings.join(" "))}</div>`;
-    }
+  const normalizeMarketHeadlinesProviderId = (value) => {
+    const clean = String(value || "").trim().toLowerCase();
+    return MARKET_HEADLINES_SOURCE_CATALOG[clean] ? clean : DEFAULT_MARKET_HEADLINES_PROVIDER;
   };
 
-  const loadMarketHeadlinesFeed = async (functions, { force = false, notify = false } = {}) => {
-    if (!functions || !ui.marketHeadlinesOutput) return;
-    const country = normalizeCountryCode(ui.marketHeadlinesCountry?.value || state.preferredCountry || "US");
+  const getMarketHeadlinesFeedsForProvider = (providerId) => {
+    const provider = MARKET_HEADLINES_SOURCE_CATALOG[normalizeMarketHeadlinesProviderId(providerId)];
+    return (provider?.feedIds || []).map((feedId) => MARKET_HEADLINES_FEED_CATALOG[feedId]).filter(Boolean);
+  };
+
+  const resolveMarketHeadlinesFeedId = (providerId, candidate = "") => {
+    const feeds = getMarketHeadlinesFeedsForProvider(providerId);
+    const selected = String(candidate || "").trim();
+    if (selected && MARKET_HEADLINES_FEED_CATALOG[selected]?.provider === normalizeMarketHeadlinesProviderId(providerId)) {
+      return selected;
+    }
+    return feeds[0]?.id || DEFAULT_MARKET_HEADLINES_FEED;
+  };
+
+  const syncMarketHeadlinesFeedOptions = (providerInput, preferredFeed = "") => {
+    if (!ui.marketHeadlinesProvider || !ui.marketHeadlinesFeed) return DEFAULT_MARKET_HEADLINES_FEED;
+    const providerId = normalizeMarketHeadlinesProviderId(providerInput || ui.marketHeadlinesProvider.value);
+    if (ui.marketHeadlinesProvider.value !== providerId) ui.marketHeadlinesProvider.value = providerId;
+    const feeds = getMarketHeadlinesFeedsForProvider(providerId);
+    const nextFeedId = resolveMarketHeadlinesFeedId(providerId, preferredFeed || ui.marketHeadlinesFeed.value);
+    ui.marketHeadlinesFeed.innerHTML = feeds
+      .map((feed) => `<option value="${escapeHtml(feed.id)}">${escapeHtml(feed.label)}</option>`)
+      .join("");
+    ui.marketHeadlinesFeed.value = nextFeedId;
+    ui.marketHeadlinesFeed.disabled = feeds.length <= 1;
+    return nextFeedId;
+  };
+
+  const renderMarketHeadlinesFeed = (payload) => {
+    if (!ui.marketHeadlinesOutput || !ui.marketHeadlinesMeta) return;
+    const headlines = Array.isArray(payload?.headlines) ? payload.headlines : [];
+    const warnings = Array.isArray(payload?.warnings) ? payload.warnings.filter(Boolean) : [];
+    const provider = payload?.provider && typeof payload.provider === "object" ? payload.provider : {};
+    const feed = payload?.feed && typeof payload.feed === "object" ? payload.feed : {};
+    const providerLabel =
+      String(provider?.label || MARKET_HEADLINES_SOURCE_CATALOG[normalizeMarketHeadlinesProviderId(provider?.id)]?.label || "RSS source").trim() ||
+      "RSS source";
+    const feedLabel =
+      String(feed?.label || MARKET_HEADLINES_FEED_CATALOG[String(feed?.id || "").trim()]?.label || "Selected feed").trim() ||
+      "Selected feed";
+    const fetchedAt = formatEpoch(payload?.fetchedAt || "") || "";
+    const sourceUrl = String(feed?.url || "").trim();
+    const providerUrl = String(provider?.sourceUrl || provider?.directoryUrl || "").trim();
+    const termsUrl = String(provider?.termsUrl || "").trim();
+    const attributionNote = String(payload?.attribution?.note || "").trim();
+
+    if (!headlines.length) {
+      ui.marketHeadlinesOutput.innerHTML = `
+        <div class="small muted">No headlines returned for ${escapeHtml(providerLabel)} · ${escapeHtml(feedLabel)}.</div>
+        ${warnings.length ? `<div class="small muted" style="margin-top:8px;">${escapeHtml(warnings.join(" "))}</div>` : ""}
+      `;
+    } else {
+      ui.marketHeadlinesOutput.innerHTML = headlines
+        .map((item) => {
+          const title = escapeHtml(String(item?.title || "Headline"));
+          const summary = escapeHtml(String(item?.summary || "").trim());
+          const publisher = escapeHtml(String(item?.publisher || providerLabel));
+          const when = escapeHtml(formatEpoch(item?.publishedAt) || "");
+          const link = escapeHtml(String(item?.link || "").trim());
+          const thumb = escapeHtml(String(item?.thumbnailUrl || "").trim());
+          const source = escapeHtml(String(item?.sourceLabel || providerLabel).trim() || providerLabel);
+          return `
+            <article class="news-card${thumb ? " news-card--with-thumb" : ""}">
+              ${thumb ? `<img class="news-thumb" src="${thumb}" alt="" loading="lazy" />` : ""}
+              <div class="news-body">
+                <div class="news-title">${title}</div>
+                <div class="news-meta small">${publisher}${when ? ` · ${when}` : ""} · ${source}</div>
+                ${summary ? `<div class="news-summary small">${summary}</div>` : ""}
+                ${
+                  link
+                    ? `<a class="news-link" href="${link}" target="_blank" rel="noopener noreferrer" data-market-headlines-link="1" data-market-headlines-title="${title}" data-market-headlines-source="${source}" data-market-headlines-feed-label="${escapeHtml(feedLabel)}">Open article</a>`
+                    : ""
+                }
+              </div>
+            </article>
+          `;
+        })
+        .join("");
+    }
+
+    const warningMarkup = warnings.length
+      ? warnings.map((warning) => `<div class="small muted">${escapeHtml(warning)}</div>`).join("")
+      : `<div class="small muted">Source attribution is ready for this feed.</div>`;
+    ui.marketHeadlinesMeta.innerHTML = `
+      <article class="news-card">
+        <div class="news-body">
+          <div class="news-title">${escapeHtml(providerLabel)} · ${escapeHtml(feedLabel)}</div>
+          <div class="news-meta small">${fetchedAt ? `Fetched ${escapeHtml(fetchedAt)}` : "Feed attribution"}</div>
+          ${
+            attributionNote
+              ? `<div class="news-summary small">${escapeHtml(attributionNote)}</div>`
+              : `<div class="news-summary small">Use the provider feed link below to inspect the raw source used for this headline set.</div>`
+          }
+          ${
+            sourceUrl
+              ? `<div class="small">Feed URL: <a class="news-link" href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer" data-market-headlines-link="1" data-market-headlines-title="${escapeHtml(feedLabel)} RSS feed" data-market-headlines-source="${escapeHtml(providerLabel)}" data-market-headlines-feed-label="${escapeHtml(feedLabel)}">Open RSS feed</a></div>`
+              : `<div class="small muted">Feed URL unavailable for this source.</div>`
+          }
+          ${
+            providerUrl
+              ? `<div class="small">Provider page: <a class="news-link" href="${escapeHtml(providerUrl)}" target="_blank" rel="noopener noreferrer" data-market-headlines-link="1" data-market-headlines-title="${escapeHtml(providerLabel)} provider page" data-market-headlines-source="${escapeHtml(providerLabel)}" data-market-headlines-feed-label="${escapeHtml(feedLabel)}">Open provider page</a></div>`
+              : ""
+          }
+          ${
+            termsUrl
+              ? `<div class="small">Terms: <a class="news-link" href="${escapeHtml(termsUrl)}" target="_blank" rel="noopener noreferrer" data-market-headlines-link="1" data-market-headlines-title="${escapeHtml(providerLabel)} terms" data-market-headlines-source="${escapeHtml(providerLabel)}" data-market-headlines-feed-label="${escapeHtml(feedLabel)}">View source terms</a></div>`
+              : ""
+          }
+          ${warningMarkup}
+        </div>
+      </article>
+    `;
+    scheduleNativeInlineAdsRefresh();
+  };
+
+  const loadMarketHeadlinesFeed = async (_functions, { force = false, notify = false } = {}) => {
+    if (!ui.marketHeadlinesOutput) return;
+    const provider = normalizeMarketHeadlinesProviderId(ui.marketHeadlinesProvider?.value || DEFAULT_MARKET_HEADLINES_PROVIDER);
+    const feed = syncMarketHeadlinesFeedOptions(provider, ui.marketHeadlinesFeed?.value || DEFAULT_MARKET_HEADLINES_FEED);
+    const providerLabel = MARKET_HEADLINES_SOURCE_CATALOG[provider]?.label || "RSS source";
+    const feedLabel = MARKET_HEADLINES_FEED_CATALOG[feed]?.label || "Selected feed";
     const limitRaw = Number(ui.marketHeadlinesLimit?.value || 18);
     const limit = Number.isFinite(limitRaw) ? Math.max(5, Math.min(40, limitRaw)) : 18;
-    const requestKey = `${country}_${limit}`;
+    const requestKey = `${provider}_${feed}_${limit}`;
     if (!force && ui.marketHeadlinesOutput.dataset.requestKey === requestKey) return;
     ui.marketHeadlinesOutput.dataset.requestKey = requestKey;
     try {
-      if (ui.marketHeadlinesStatus) ui.marketHeadlinesStatus.textContent = "Loading market feed...";
-      setOutputLoading(ui.marketHeadlinesOutput, "Loading market headlines...");
-      setOutputLoading(ui.marketSocialOutput, "Loading social posts...");
-      const getFeed = functions.httpsCallable("get_market_headlines_feed");
-      const result = await getFeed({ country, limit, meta: buildMeta() });
+      if (ui.marketHeadlinesStatus) ui.marketHeadlinesStatus.textContent = `Loading ${feedLabel} from ${providerLabel}...`;
+      setOutputLoading(ui.marketHeadlinesOutput, "Loading RSS headlines...");
+      setOutputLoading(ui.marketHeadlinesMeta, "Loading source attribution...");
+      const params = new URLSearchParams({
+        provider,
+        feed,
+        limit: String(limit),
+      });
+      const response = await fetch(`/api/market-headlines?${params.toString()}`, {
+        method: "GET",
+        headers: { Accept: "application/json" },
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(String(payload?.detail || payload?.error || "Unable to load market headlines."));
+      }
       setOutputReady(ui.marketHeadlinesOutput);
-      setOutputReady(ui.marketSocialOutput);
-      renderMarketHeadlinesFeed(result.data || {});
-      if (ui.marketHeadlinesStatus) ui.marketHeadlinesStatus.textContent = `Loaded ${country} market feed.`;
-      logEvent("market_headlines_loaded", { country, limit });
+      setOutputReady(ui.marketHeadlinesMeta);
+      renderMarketHeadlinesFeed(payload || {});
+      if (ui.marketHeadlinesStatus) ui.marketHeadlinesStatus.textContent = `Loaded ${providerLabel} · ${feedLabel}.`;
+      logEvent("market_headlines_loaded", { provider, feed, limit });
     } catch (error) {
       setOutputReady(ui.marketHeadlinesOutput);
-      setOutputReady(ui.marketSocialOutput);
+      setOutputReady(ui.marketHeadlinesMeta);
       ui.marketHeadlinesOutput.innerHTML = `<div class="small muted">Unable to load market headlines right now.</div>`;
-      ui.marketSocialOutput.innerHTML = `<div class="small muted">Unable to load social feed right now.</div>`;
+      ui.marketHeadlinesMeta.innerHTML = `<div class="small muted">Unable to load feed attribution right now.</div>`;
       if (ui.marketHeadlinesStatus) ui.marketHeadlinesStatus.textContent = "Unable to load market feed.";
       if (notify) showToast(error.message || "Unable to load market feed.", "warn");
     }
@@ -12067,17 +13231,23 @@
   const normalizeModelCouncilProviderId = (provider) => {
     const value = String(provider || "").trim().toLowerCase();
     if (!value) return "";
+    if (value === "chatgpt") return "openai";
     if (value === "amazon_nova") return "amazon_nova";
     if (value === "perplexity_sonar") return "perplexity";
+    if (value === "anthropic") return "claude";
+    if (value === "amazon-nova") return "amazon_nova";
     return value;
   };
 
   const modelCouncilProviderFromModel = (modelId) => {
     const id = normalizeAiModelId(modelId || "").toLowerCase();
     if (!id) return "openai";
+    if (id.startsWith("claude")) return "claude";
+    if (id.startsWith("deepseek")) return "deepseek";
     if (id.startsWith("amazon.nova")) return "amazon_nova";
     if (id.startsWith("gemini")) return "gemini";
     if (id.startsWith("mistral")) return "mistral";
+    if (id.startsWith("qwen")) return "qwen";
     if (id.startsWith("sonar")) return "perplexity";
     if (id.startsWith("other/")) return "other";
     return "openai";
@@ -12271,13 +13441,36 @@
     ui.tickerQueryModulesOutput.classList.remove("hidden");
   };
 
+  const renderOutputPublishControlsMarkup = ({ requestId = "", requestType = "" } = {}) => {
+    const id = String(requestId || "").trim();
+    const type = String(requestType || "").trim();
+    if (!id) {
+      return `<div class="small muted">Save this output to publish it to Explore.</div>`;
+    }
+    const request = typeof getMyRequestById === "function" ? getMyRequestById(id) : null;
+    const published = Boolean(request?.published);
+    const stateLabel = published ? "Published to Explore" : "Not published to Explore";
+    return `
+      <div class="task-chip-row" data-output-publish-controls data-request-id="${escapeHtml(id)}" data-request-type="${escapeHtml(type)}">
+        <span class="status status-icon-only ${published ? "fulfilled" : "pending"}" role="img" aria-label="${escapeHtml(stateLabel)}" title="${escapeHtml(stateLabel)}">
+          ${icon(published ? "eye" : "eye-off")}
+        </span>
+        ${
+          published
+            ? `<button class="task-chip" type="button" data-action="output-unpublish" data-request-id="${escapeHtml(id)}" data-request-type="${escapeHtml(type)}">${icon(
+                "eye-off"
+              )}<span>Unpublish</span></button>`
+            : `<button class="task-chip" type="button" data-action="output-publish" data-request-id="${escapeHtml(id)}" data-request-type="${escapeHtml(type)}">${icon(
+                "send"
+              )}<span>Publish to Explore</span></button>`
+        }
+      </div>
+    `;
+  };
+
   const renderTickerQueryResult = (payload) => {
     if (!ui.tickerQueryOutput) return;
-    const answer = escapeHtml(String(payload?.answer || "").trim() || "No answer returned.");
-    const modelRaw = String(payload?.model || "gpt-5-mini");
-    const providerRaw = normalizeModelCouncilProviderId(payload?.provider || modelCouncilProviderFromModel(modelRaw) || "openai");
-    const model = escapeHtml(modelRaw);
-    const provider = escapeHtml(MODEL_PROVIDER_LABEL[providerRaw] || providerRaw || "OpenAI");
+    const answerText = String(payload?.answer || "").trim() || "No answer returned.";
     const context = payload?.context && typeof payload.context === "object" ? payload.context : {};
     const logoUrlRaw = String(context.logoUrl || context.logo_url || "").trim();
     const logoUrl = /^https?:\/\//i.test(logoUrlRaw) ? logoUrlRaw : "";
@@ -12289,18 +13482,20 @@
     const responseId = String(payload?.responseId || state.tickerContext.tickerQueryLastResponseId || "").trim();
     const feedbackState = String(payload?.feedback || state.tickerContext.tickerQueryFeedback || "").trim().toLowerCase();
     const shareUrl = String(payload?.shareUrl || state.tickerContext.tickerQueryShareUrl || "").trim();
+    const requestDocId = String(payload?.requestDocId || state.tickerContext.tickerQueryRequestId || "").trim();
 
     ui.tickerQueryOutput.innerHTML = `
       <div class="small muted" style="display:flex; align-items:center; gap:10px;">
         ${logoUrl ? `<img src="${escapeHtml(logoUrl)}" alt="" loading="lazy" style="width:20px; height:20px; border-radius:50%; object-fit:cover;" />` : ""}
-        <span>Provider: ${provider} · Model: ${model}</span>
+        <span>Model Council response</span>
       </div>
-      <div class="small" style="margin-top:10px; white-space:pre-wrap;">${answer}</div>
+      <div class="small markdown-output" style="margin-top:10px;">${renderMarkdown(answerText, { fallback: "No answer returned." })}</div>
       <div class="model-council-actions">
         <button class="task-chip${feedbackState === "like" ? " active" : ""}" type="button" data-action="model-council-like" data-response-id="${escapeHtml(responseId)}">Like</button>
         <button class="task-chip${feedbackState === "dislike" ? " active" : ""}" type="button" data-action="model-council-dislike" data-response-id="${escapeHtml(responseId)}">Dislike</button>
         <button class="task-chip" type="button" data-action="model-council-share" data-response-id="${escapeHtml(responseId)}" ${responseId ? "" : "disabled"}>${icon("share-ios")}<span>Share link</span></button>
       </div>
+      ${renderOutputPublishControlsMarkup({ requestId: requestDocId, requestType: "modelCouncil" })}
       ${shareUrl ? `<div class="small muted">Shared: <a href="${escapeHtml(shareUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(shareUrl)}</a></div>` : ""}
       <p class="small muted solve-now-disclaimer">${escapeHtml(MODEL_COUNCIL_OUTPUT_DISCLAIMER)}</p>
       <div class="small muted" style="margin-top:10px;">
@@ -12636,7 +13831,7 @@
   };
 
   const fetchMyRequestsList = async ({ force = false, notify = false } = {}) => {
-    if (!hasFullAccount()) {
+    if (!hasSessionUser()) {
       state.myRequests = [];
       state.myRequestsById = {};
       state.myRequestsLoadedAt = 0;
@@ -12707,6 +13902,7 @@
         const createdAt = escapeHtml(formatTimestamp(item?.createdAt || item?.createdAtMs));
         const updatedAt = escapeHtml(formatTimestamp(item?.updatedAt || item?.updatedAtMs));
         const published = Boolean(item?.published);
+        const publishStateLabel = published ? "Published to Explore" : "Not published to Explore";
         const share = item?.share && typeof item.share === "object" ? item.share : {};
         const shareVisibility = escapeHtml(String(share?.visibility || "private").toLowerCase());
         const summary = escapeHtml(String((item?.outputsMeta || {})?.summary || ""));
@@ -12717,7 +13913,9 @@
                 <div class="order-title">${title}</div>
                 <div class="small">ID: ${id}</div>
               </div>
-              <span class="status ${published ? "fulfilled" : "pending"}">${published ? "published" : "unpublished"}</span>
+              <span class="status status-icon-only ${published ? "fulfilled" : "pending"}" role="img" aria-label="${escapeHtml(
+                publishStateLabel
+              )}" title="${escapeHtml(publishStateLabel)}">${icon(published ? "eye" : "eye-off")}</span>
             </div>
             <div class="order-meta">
               <div><strong>Type</strong> ${typeLabel}</div>
@@ -12732,7 +13930,11 @@
               <button class="cta secondary small" type="button" data-action="my-request-share" data-request-id="${id}">${icon("share-ios")}<span>Share</span></button>
               <button class="cta secondary small" type="button" data-action="my-request-rename" data-request-id="${id}">${icon("edit-pencil")}<span>Rename</span></button>
               <button class="cta secondary small" type="button" data-action="my-request-duplicate" data-request-id="${id}">${icon("copy")}<span>Duplicate</span></button>
-              ${published ? `<button class="cta secondary small" type="button" data-action="my-request-unpublish" data-request-id="${id}">${icon("eye-off")}<span>Unpublish</span></button>` : ""}
+              ${
+                published
+                  ? `<button class="cta secondary small" type="button" data-action="my-request-unpublish" data-request-id="${id}">${icon("eye-off")}<span>Unpublish</span></button>`
+                  : `<button class="cta secondary small" type="button" data-action="my-request-publish" data-request-id="${id}">${icon("send")}<span>Publish</span></button>`
+              }
               <button class="cta secondary small danger" type="button" data-action="my-request-delete" data-request-id="${id}">${icon("trash")}<span>Delete</span></button>
             </div>
           </div>
@@ -12771,7 +13973,7 @@
         return haystack.includes(searchText);
       });
 
-      if (!hasFullAccount()) {
+      if (!hasSessionUser()) {
         controls.status.textContent = "Sign in to manage requests.";
         controls.list.innerHTML = `<div class="small muted">Sign in to load your requests.</div>`;
         return;
@@ -12827,7 +14029,7 @@
   };
 
   const upsertMyRequest = async (payload = {}) => {
-    if (!hasFullAccount()) return null;
+    if (!hasSessionUser()) return null;
     const type = normalizeMyRequestType(payload.type);
     if (!type || !MY_REQUEST_TYPES.has(type)) return null;
     const headers = await buildApiAuthHeaders({ includeJson: true });
@@ -12871,6 +14073,21 @@
     const request = body?.request && typeof body.request === "object" ? body.request : null;
     if (request) {
       upsertMyRequestInState(request);
+    } else if (target.endsWith("/publish") || target.endsWith("/unpublish")) {
+      const existing = getMyRequestById(id);
+      if (existing) {
+        const nextPublished = target.endsWith("/publish");
+        upsertMyRequestInState({
+          ...existing,
+          published: nextPublished,
+          publishedAtMs: nextPublished ? Date.now() : null,
+          explorePostId: nextPublished
+            ? String(body?.post?.id || body?.explorePostId || existing.explorePostId || "").trim()
+            : "",
+          updatedAtMs: Date.now(),
+          updatedAt: new Date().toISOString(),
+        });
+      }
     } else if (method === "DELETE" || body?.deleted) {
       removeMyRequestFromState(id);
     }
@@ -13071,14 +14288,14 @@
       : [];
     const source = rows.length ? rows.filter((row) => row?.available !== false) : fallbackRows;
     if (!source.length) {
-      ui.tickerQueryProvider.innerHTML = `<option value="openai">OpenAI</option>`;
+      ui.tickerQueryProvider.innerHTML = `<option value="openai">ChatGPT</option>`;
       applyTickerQueryModelSelection("gpt-5-mini", "openai");
       return;
     }
     ui.tickerQueryProvider.innerHTML = source
       .map((row) => {
         const id = normalizeModelCouncilProviderId(row?.id || "");
-        const label = String(row?.displayName || MODEL_PROVIDER_LABEL[id] || id || "").trim();
+        const label = String(row?.displayName || row?.label || MODEL_PROVIDER_LABEL[id] || id || "").trim();
         return `<option value="${escapeHtml(id)}">${escapeHtml(label)}</option>`;
       })
       .join("");
@@ -13095,14 +14312,18 @@
     renderTickerQueryModels(models, { provider: selectedProvider });
   };
 
-  const loadTickerQueryModels = async ({ force = false } = {}) => {
+  let tickerQueryModelsController = null;
+  let tickerQueryModelsNonce = 0;
+
+  const loadTickerQueryModels = async ({ force = false, providerOverride = "" } = {}) => {
     if (!ui.tickerQueryModel) return;
-    if (!force && state.tickerContext.tickerQueryModelsLoaded && state.tickerContext.tickerQueryModels.length) {
+    const requestedProvider = normalizeModelCouncilProviderId(providerOverride || "");
+    if (!force && !requestedProvider && state.tickerContext.tickerQueryModelsLoaded && state.tickerContext.tickerQueryModels.length) {
       renderTickerQueryProviderOptions(state.tickerContext.tickerQueryProviders || [], state.tickerContext.tickerQueryModels);
       return;
     }
 
-    const fallback = () => {
+    const fallback = (preferredProvider = "") => {
       const localModels = AI_MODEL_CATALOG.map((model) => ({
         id: normalizeAiModelId(model.id),
         provider: normalizeModelCouncilProviderId(model.provider || modelCouncilProviderFromModel(model.id)),
@@ -13117,18 +14338,65 @@
         ).values()
       );
       state.tickerContext.tickerQueryModelsLoaded = true;
+      if (ui.tickerQueryProviderHint) {
+        ui.tickerQueryProviderHint.textContent = "Provider list fallback is active (local catalog).";
+      }
+      if (ui.tickerQueryModelHint) {
+        ui.tickerQueryModelHint.textContent = "Model list fallback is active. Some remote providers may be temporarily unavailable.";
+      }
       renderTickerQueryProviderOptions(state.tickerContext.tickerQueryProviders, localModels);
+      if (preferredProvider) {
+        renderTickerQueryModels(localModels, { provider: preferredProvider });
+      }
     };
+
+    tickerQueryModelsNonce += 1;
+    const requestNonce = tickerQueryModelsNonce;
+    if (tickerQueryModelsController?.abort) tickerQueryModelsController.abort();
+    tickerQueryModelsController = typeof AbortController !== "undefined" ? new AbortController() : null;
+
+    if (ui.tickerQueryProvider && (!ui.tickerQueryProvider.options || !ui.tickerQueryProvider.options.length)) {
+      ui.tickerQueryProvider.innerHTML = `<option value="openai">Loading providers...</option>`;
+    }
+    ui.tickerQueryModel.innerHTML = `<option value="">Loading models...</option>`;
 
     try {
       const headers = await buildApiAuthHeaders();
-      const response = await fetch("/api/model-council/models", {
+      const providerResponse = await fetch("/api/model-council/providers", {
         method: "GET",
         headers,
         credentials: "same-origin",
+        signal: tickerQueryModelsController?.signal,
+      });
+      const providerPayload = await providerResponse.json().catch(() => ({}));
+      if (!providerResponse.ok) throw new Error(String(providerPayload?.error || "Provider list unavailable.").trim());
+      const providerRows = Array.isArray(providerPayload?.providers) ? providerPayload.providers : [];
+      const availableProviders = providerRows
+        .map((row) => ({
+          id: normalizeModelCouncilProviderId(row?.id || ""),
+          label: String(row?.label || row?.displayName || "").trim(),
+          displayName: String(row?.displayName || row?.label || "").trim(),
+          available: row?.available !== false,
+        }))
+        .filter((row) => row.id && row.available !== false);
+
+      const persistedProvider = normalizeModelCouncilProviderId(
+        requestedProvider || state.tickerContext.tickerQueryProvider || safeLocalStorageGet(TICKER_QUERY_PROVIDER_KEY) || ""
+      );
+      const availableSet = new Set(availableProviders.map((row) => row.id));
+      const activeProvider = availableSet.has(persistedProvider)
+        ? persistedProvider
+        : normalizeModelCouncilProviderId(providerPayload?.defaultProvider || availableProviders[0]?.id || "openai");
+
+      const response = await fetch(`/api/model-council/models?provider=${encodeURIComponent(activeProvider || "openai")}`, {
+        method: "GET",
+        headers,
+        credentials: "same-origin",
+        signal: tickerQueryModelsController?.signal,
       });
       if (!response.ok) throw new Error("Model list unavailable.");
       const payload = await response.json();
+      if (requestNonce !== tickerQueryModelsNonce) return;
       const remoteModels = Array.isArray(payload?.models) ? payload.models : [];
       const models = remoteModels
         .map((row) => {
@@ -13144,14 +14412,37 @@
           };
         })
         .filter(Boolean);
-      if (!models.length) throw new Error("No compatible models returned.");
-      const providers = Array.isArray(payload?.providers) ? payload.providers : [];
-      state.tickerContext.tickerQueryModels = models;
+      const localModels = AI_MODEL_CATALOG.map((row) => {
+        const id = normalizeAiModelId(row?.id || "");
+        if (!id) return null;
+        const provider = normalizeModelCouncilProviderId(row?.provider || modelCouncilProviderFromModel(id));
+        return {
+          id,
+          provider,
+          label: String(row?.label || id),
+          group: String(row?.group || tickerQueryModelGroup(id, provider)),
+          hint: String(row?.hint || tickerQueryModelHint(id, provider)),
+        };
+        }).filter(Boolean);
+      const mergedMap = new Map();
+      localModels.forEach((row) => mergedMap.set(row.id, row));
+      models.forEach((row) => mergedMap.set(row.id, row));
+      const mergedModels = Array.from(mergedMap.values());
+      if (!mergedModels.length) throw new Error("No compatible models returned.");
+      const providers = availableProviders.length ? availableProviders : (Array.isArray(payload?.providers) ? payload.providers : []);
+      state.tickerContext.tickerQueryModels = mergedModels;
       state.tickerContext.tickerQueryProviders = providers;
       state.tickerContext.tickerQueryModelsLoaded = true;
-      renderTickerQueryProviderOptions(providers, models);
+      renderTickerQueryProviderOptions(providers, mergedModels);
+      renderTickerQueryModels(mergedModels, { provider: activeProvider });
     } catch (error) {
-      fallback();
+      if (error?.name === "AbortError") return;
+      fallback(requestedProvider);
+      showToast("Failed to load models. Using fallback catalog.", "warn");
+    } finally {
+      if (requestNonce === tickerQueryModelsNonce) {
+        tickerQueryModelsController = null;
+      }
     }
   };
 
@@ -13568,6 +14859,7 @@
       applyTickerQueryModelSelection(selectedModel, selectedProvider);
       setTickerQueryModulesSelection(selectedModules, { persist: true });
       renderTickerQueryCacheStats(null, { visible: false });
+      state.tickerContext.tickerQueryRequestId = "";
       renderTickerQueryResult({
         answer: "",
         model: selectedModel,
@@ -13616,8 +14908,12 @@
 	        completion_tokens: Number(usage?.completion_tokens || 0),
 	        cached_tokens: Number(usage?.cached_tokens || 0),
 	      });
-	      upsertMyRequest({
+        const requestDocId = String(responsePayload.responseId || "").trim()
+          ? `modelCouncil__${String(responsePayload.responseId || "").trim()}`
+          : `modelCouncil__${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        const savedRequest = await upsertMyRequest({
 	        type: "modelCouncil",
+          requestId: requestDocId,
 	        title: `${symbol} Model Council`,
 	        input: {
 	          ticker: symbol,
@@ -13640,7 +14936,17 @@
 	          collection: "model_council_responses",
 	          id: String(responsePayload.responseId || "").trim(),
 	        },
-	      }).catch(() => {});
+          published: shouldAutoPublishForType("modelCouncil"),
+	      }).catch(() => null);
+        state.tickerContext.tickerQueryRequestId = String(savedRequest?.id || requestDocId).trim();
+        renderTickerQueryResult({
+          ...(state.tickerContext.tickerQueryLastResponse || responsePayload),
+          answer: responsePayload.answer || "No answer returned.",
+          context: responsePayload.context || {},
+          responseId: responsePayload.responseId || "",
+          citations: responsePayload.citations || [],
+          requestDocId: state.tickerContext.tickerQueryRequestId,
+        });
 	    } catch (error) {
 	      setOutputReady(ui.tickerQueryOutput);
 	      renderTickerQueryErrorState({
@@ -13679,12 +14985,11 @@
   const scheduleSideDataRefresh = (ticker, { force = false } = {}) => {
     const symbol = normalizeTicker(ticker) || "";
     const functions = state.clients?.functions;
-    if (!functions || (!ui.newsOutput && !ui.xTrendingOutput && !ui.intelOutput && !ui.optionsOutput)) return;
+    if (!functions || (!ui.newsOutput && !ui.intelOutput && !ui.optionsOutput)) return;
     if (!symbol) return;
     if (state.sideDataRefreshTimer) window.clearTimeout(state.sideDataRefreshTimer);
     state.sideDataRefreshTimer = window.setTimeout(() => {
       loadTickerNews(functions, symbol, { force, notify: false });
-      loadTickerXTrends(functions, symbol, { force, notify: false });
       loadTickerIntel(functions, symbol, { force, notify: false });
       if (state.panelAutoloaded.options || isPanelVisible("options")) {
         autoloadOptionsChain(functions, { force });
@@ -13938,7 +15243,7 @@
       setTerminalChartEngineVisibility("legacy");
       return;
     }
-    const cleanTicker = normalizeTicker(ticker || state.tickerContext.ticker || "") || "AAPL";
+    const cleanTicker = normalizeTicker(ticker || state.tickerContext.ticker || "") || getDefaultPopularTicker();
     const hasOverlays = Array.isArray(overlays) && overlays.length > 0;
     const skipTradingView = Boolean(options?.skipTradingView);
 
@@ -15209,7 +16514,7 @@
       : DEFAULT_LLM_ALLOWED_MODELS;
     const globalAllowed = rawGlobalAllowed
       .map((x) => normalizeAiModelId(String(x).trim()))
-      .filter((modelId) => modelId && (modelId.startsWith("gpt-5") || modelId.startsWith("amazon.nova")));
+      .filter(Boolean);
     const globalSet = new Set(globalAllowed);
     const tiers = state.remoteFlags.aiUsageTiers && typeof state.remoteFlags.aiUsageTiers === "object"
       ? state.remoteFlags.aiUsageTiers
@@ -15224,11 +16529,11 @@
     const rawAllowed = Array.isArray(config.allowed_models) ? config.allowed_models : [];
     const allowedModels = rawAllowed
       .map((x) => normalizeAiModelId(String(x).trim()))
-      .filter((modelId) => modelId && (modelId.startsWith("gpt-5") || modelId.startsWith("amazon.nova")))
+      .filter(Boolean)
       .filter((modelId) => !globalSet.size || globalSet.has(modelId));
     const fallbackAllowed = (AI_USAGE_TIER_DEFAULTS[normalizedKey]?.allowed_models || AI_USAGE_TIER_DEFAULTS[key]?.allowed_models || AI_USAGE_TIER_DEFAULTS.free.allowed_models)
       .map((x) => normalizeAiModelId(String(x).trim()))
-      .filter((modelId) => modelId && (modelId.startsWith("gpt-5") || modelId.startsWith("amazon.nova")))
+      .filter(Boolean)
       .filter((modelId) => !globalSet.size || globalSet.has(modelId));
     const weeklyLimitRaw = Number(config.weekly_limit ?? config.daily_limit ?? AI_USAGE_TIER_DEFAULTS[normalizedKey]?.weekly_limit ?? AI_USAGE_TIER_DEFAULTS[key]?.weekly_limit ?? 3);
     const weeklyLimit = Number.isFinite(weeklyLimitRaw) ? Math.max(1, weeklyLimitRaw) : 3;
@@ -17255,12 +18560,11 @@
 
   const renderForecastAiSummaryMarkup = (forecastDoc) => {
     const forecastId = String(forecastDoc?.id || state.tickerContext.forecastId || "").trim();
+    const requestDocId = forecastId ? `forecast__${forecastId}` : "";
     const summary = state.tickerContext.forecastAiSummary && typeof state.tickerContext.forecastAiSummary === "object"
       ? state.tickerContext.forecastAiSummary
       : null;
     const isCurrent = summary && String(summary.requestId || "").trim() === forecastId;
-    const model = String(isCurrent ? summary?.model || "" : "").trim();
-    const provider = String(isCurrent ? summary?.provider || "" : "").trim();
     const latencyMs = Number(isCurrent ? summary?.latencyMs : NaN);
     const responseId = String(isCurrent ? summary?.responseId || "" : "").trim();
     const shareUrl = String(isCurrent ? summary?.shareUrl || "" : "").trim();
@@ -17274,9 +18578,7 @@
       : error
         ? error
         : answer
-          ? `${model || "Model"}${provider ? ` · ${provider}` : ""}${
-              Number.isFinite(latencyMs) && latencyMs >= 0 ? ` · ${Math.round(latencyMs)}ms` : ""
-            }`
+          ? `Summary ready${Number.isFinite(latencyMs) && latencyMs >= 0 ? ` · ${Math.round(latencyMs)}ms` : ""}`
           : "Run a forecast to generate an automatic AI narrative.";
     return `
       <div class="results-panel forecast-ai-summary-panel">
@@ -17289,7 +18591,7 @@
               : error
                 ? `<div class="small muted">${escapeHtml(error)}</div>`
                 : answer
-                  ? `<div>${escapeHtml(answer).replace(/\n/g, "<br>")}</div>`
+                  ? `<div class="markdown-output">${renderMarkdown(answer, { fallback: "No AI narrative generated yet." })}</div>`
                   : `<div class="small muted">No AI narrative generated yet.</div>`
           }
         </div>
@@ -17304,6 +18606,7 @@
             forecastId
           )}" data-response-id="${escapeHtml(responseId)}" ${disabled || (!answer && !shareUrl) ? "disabled" : ""}>${icon("share-ios")}<span>Share link</span></button>
         </div>
+        ${renderOutputPublishControlsMarkup({ requestId: requestDocId, requestType: "forecast" })}
         ${
           shareUrl
             ? `<div class="small muted" style="margin-top:8px;">Shared: <a href="${escapeHtml(shareUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(
@@ -17610,7 +18913,7 @@
   };
 
   const loadMyRequestIntoUi = async ({ requestId = "", request = null, db, functions, notify = true } = {}) => {
-    if (!hasFullAccount()) {
+    if (!hasSessionUser()) {
       throw new Error("Sign in to load saved requests.");
     }
     const id = String(requestId || request?.id || "").trim();
@@ -17666,7 +18969,7 @@
         const summary = String(outputsMeta.summary || "").trim();
         ui.technicalsOutput.innerHTML = `<div class="small muted">${
           summary ? escapeHtml(summary) : "Indicator inputs restored. Run indicators to refresh values."
-        }</div>`;
+        }</div>${renderOutputPublishControlsMarkup({ requestId: String(item.id || "").trim(), requestType: "indicator" })}`;
       }
       if (notify) showToast("Indicator request loaded.");
       return item;
@@ -17693,6 +18996,7 @@
       const answer = String(outputsMeta.answer || outputsMeta.summary || "").trim();
       if (answer) {
         const responseId = sourceId || String(item.id || "").trim();
+        state.tickerContext.tickerQueryRequestId = String(item.id || "").trim();
         state.tickerContext.tickerQueryLastResponseId = responseId;
         const responsePayload = {
           answer,
@@ -17704,6 +19008,7 @@
           selectedModules: Array.isArray(input.modules) ? input.modules : [],
           responseId,
           citations: [],
+          requestDocId: String(item.id || "").trim(),
         };
         state.tickerContext.tickerQueryLastResponse = responsePayload;
         renderTickerQueryResult(responsePayload);
@@ -18753,6 +20058,11 @@
         const next = String(panel || "").trim();
         if (!next) return;
         const showTickerChart = next === "ticker";
+        const showStudioMain = showTickerChart;
+
+        if (ui.studioLayout) {
+          ui.studioLayout.classList.toggle("is-main-hidden", !showStudioMain);
+        }
 
         if (ui.studioChartShell) {
           // Keep the chart window scoped to the ticker panel only.
@@ -18817,12 +20127,6 @@
           state.panelAutoloaded.news = true;
         }
 
-        if (next === "events-calendar") {
-          const first = !state.panelAutoloaded.eventsCalendar;
-          state.panelAutoloaded.eventsCalendar = true;
-          loadEarningsCalendar({ force: first, notify: false });
-        }
-
         if (next === "market-headlines") {
           const first = !state.panelAutoloaded.marketHeadlines;
           state.panelAutoloaded.marketHeadlines = true;
@@ -18868,6 +20172,7 @@
         scheduleNativeInlineAdsRefresh();
       };
 
+      publishShopRuntimeBridge();
       ensureThemeToggle();
       normalizeHeaderBranding();
       normalizeTopNavigation();
@@ -19405,8 +20710,26 @@
                 {},
                 { method: "POST", path: `/api/my-requests/${encodeURIComponent(requestId)}/unpublish` }
               );
+              await fetchMyRequestsList({ force: true });
+              renderMyRequestsPanels();
               showToast("Request unpublished from Explore.");
               logEvent("my_request_unpublished", {
+                request_id: requestId,
+                type: normalizeMyRequestType(request?.type || ""),
+              });
+              return;
+            }
+
+            if (action === "my-request-publish") {
+              await updateMyRequest(
+                requestId,
+                {},
+                { method: "POST", path: `/api/my-requests/${encodeURIComponent(requestId)}/publish` }
+              );
+              await fetchMyRequestsList({ force: true });
+              renderMyRequestsPanels();
+              showToast("Request published to Explore.");
+              logEvent("my_request_published", {
                 request_id: requestId,
                 type: normalizeMyRequestType(request?.type || ""),
               });
@@ -19433,6 +20756,70 @@
             showToast(error.message || "Unable to update request.", "warn");
           } finally {
             button.disabled = previousDisabled;
+          }
+        });
+
+        document.addEventListener("click", async (event) => {
+          const publishBtn = event.target.closest('[data-action="output-publish"], [data-action="output-unpublish"]');
+          if (!publishBtn) return;
+          event.preventDefault();
+          const requestId = String(publishBtn.dataset.requestId || "").trim();
+          const requestType = normalizeMyRequestType(publishBtn.dataset.requestType || "");
+          if (!requestId) return;
+
+          try {
+            await ensureSessionUser({
+              reason: "output_publish_requires_session",
+              message: "Sign in to publish outputs to Explore.",
+            });
+          } catch (error) {
+            showToast(error?.message || "Unable to start guest session.", "warn");
+            return;
+          }
+
+          publishBtn.disabled = true;
+          try {
+            const nextPublished = publishBtn.dataset.action === "output-publish";
+            const body = await updateMyRequest(
+              requestId,
+              {},
+              {
+                method: "POST",
+                path: `/api/my-requests/${encodeURIComponent(requestId)}/${nextPublished ? "publish" : "unpublish"}`,
+              }
+            );
+            const refreshedRequest =
+              body?.request && typeof body.request === "object"
+                ? body.request
+                : getMyRequestById(requestId);
+            if (refreshedRequest && typeof refreshedRequest === "object") {
+              upsertMyRequestInState(refreshedRequest);
+            }
+            const host = publishBtn.closest("[data-output-publish-controls]");
+            if (host) {
+              host.outerHTML = renderOutputPublishControlsMarkup({ requestId, requestType });
+            }
+            if (requestType === "forecast" && state.tickerContext.forecastDoc) {
+              renderForecastDetails(state.tickerContext.forecastDoc);
+            } else if (requestType === "modelCouncil") {
+              renderTickerQueryResult({
+                ...(state.tickerContext.tickerQueryLastResponse || {}),
+                requestDocId: requestId,
+              });
+            } else if (requestType === "indicator" && ui.technicalsOutput) {
+              const indicatorHost = ui.technicalsOutput.querySelector("[data-output-publish-controls]");
+              if (indicatorHost) {
+                indicatorHost.outerHTML = renderOutputPublishControlsMarkup({
+                  requestId,
+                  requestType: "indicator",
+                });
+              }
+            }
+            showToast(nextPublished ? "Published to Explore." : "Unpublished from Explore.");
+          } catch (error) {
+            showToast(error?.message || "Unable to update publish status.", "warn");
+          } finally {
+            publishBtn.disabled = false;
           }
         });
 
@@ -20162,9 +21549,9 @@
 			    });
 
 	    ui.workspaceSelect?.addEventListener("change", () => {
-	      if (!hasFullAccount()) {
-	        showToast("Sign in first.", "warn");
-	        renderWorkspaceSelect(null);
+	      if (!hasSessionUser()) {
+	        showToast("Workspace is still initializing.", "warn");
+	        renderWorkspaceSelect(state.user);
 	        return;
 	      }
 	      const next = String(ui.workspaceSelect.value || "");
@@ -20192,8 +21579,16 @@
 
 	    ui.collabInviteForm?.addEventListener("submit", async (event) => {
 	      event.preventDefault();
+	      if (!hasSessionUser()) {
+	        showToast("Guest workspace is still initializing.", "warn");
+	        return;
+	      }
 	      if (!hasFullAccount()) {
-	        showToast("Sign in to invite collaborators.", "warn");
+	        if (ui.collabInviteStatus) {
+	          ui.collabInviteStatus.textContent =
+	            "Guest workspaces can save collaboration context immediately. Create a full account to send email invites.";
+	        }
+	        showToast("Create a full account to send collaborator invites.", "warn");
 	        return;
 	      }
 	      const seatLimit = getWorkspaceSeatLimitForTier();
@@ -20235,7 +21630,7 @@
 		        const inviteId = acceptButton.dataset.inviteId;
 		        if (!inviteId) return;
 	        if (!hasFullAccount()) {
-	          showToast("Sign in to accept invites.", "warn");
+	          showToast("Create a full account to accept collaborator invites.", "warn");
 	          return;
 	        }
 	        acceptButton.disabled = true;
@@ -20258,7 +21653,7 @@
 	      const collaboratorUserId = removeButton.dataset.collaboratorId;
 	      if (!collaboratorUserId) return;
 	      if (!hasFullAccount()) {
-	        showToast("Sign in to manage collaborators.", "warn");
+	        showToast("Create a full account to manage collaborators.", "warn");
 	        return;
 	      }
 	      removeButton.disabled = true;
@@ -21154,7 +22549,7 @@
         normalizeTicker(getQueryParam("symbol")) ||
         normalizeTicker(safeLocalStorageGet(LAST_TICKER_KEY)) ||
         normalizeTicker(ui.terminalTicker.value) ||
-        "AAPL";
+        getDefaultPopularTicker();
       const initialInterval = getQueryParam("interval") || (ui.terminalInterval?.value || "1d");
       ui.terminalTicker.value = initialTicker;
       if (ui.terminalInterval) ui.terminalInterval.value = initialInterval;
@@ -21469,7 +22864,7 @@
 				        logEvent("forecast_request", { ticker: payload.ticker, interval: payload.interval, service: payload.service });
 				        showToast("Forecast saved.");
 	            recordPromoForecastUsage();
-	            upsertMyRequest({
+              const savedForecastRequest = await upsertMyRequest({
               type: "forecast",
               requestId: `forecast__${requestId}`,
               title: `${normalizeTicker(payload.ticker || "") || "Ticker"} forecast`,
@@ -21489,11 +22884,13 @@
                   chartParamsHash: String(cacheMeta?.paramsHash || "").trim(),
                   chartRows: Number(cacheMeta?.rowCount || 0) || 0,
 	              },
-	              sourceRef: {
-	                collection: "forecast_requests",
-	                id: requestId,
-	              },
-	            }).catch(() => {});
+              sourceRef: {
+                collection: "forecast_requests",
+                id: requestId,
+              },
+              published: shouldAutoPublishForType("forecast"),
+	            }).catch(() => null);
+              state.tickerContext.forecastRequestId = String(savedForecastRequest?.id || `forecast__${requestId}`).trim();
 
 				        try {
 			          if (ui.tickerChart) {
@@ -21697,6 +23094,8 @@
 	        const rows = data.latest || [];
           const analysis = data.analysis && typeof data.analysis === "object" ? data.analysis : {};
           const prediction = analysis.prediction && typeof analysis.prediction === "object" ? analysis.prediction : {};
+          const indicatorRequestId = `indicator__${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+          const indicatorAutoPublish = shouldAutoPublishForType("indicator");
 	        if (ui.technicalsOutput) {
 	          setOutputReady(ui.technicalsOutput);
 		          if (!rows.length) {
@@ -21709,8 +23108,8 @@
                     ? ((targetPrice - lastClose) / lastClose) * 100
                     : null;
                 const keySignals = Array.isArray(analysis.keySignals) ? analysis.keySignals.slice(0, 6) : [];
-                const summaryText = escapeHtml(String(analysis.summary || "").trim());
-                const narrativeText = escapeHtml(String(analysis.text || "").trim());
+                const summaryText = String(analysis.summary || "").trim();
+                const narrativeText = String(analysis.text || "").trim();
 		            ui.technicalsOutput.innerHTML = `
                   <div class="table-wrap">
 		                <table class="data-table">
@@ -21730,10 +23129,7 @@
                     summaryText || narrativeText
                       ? `<div class="results-panel" style="margin-top: 12px;">
                           <h3>AI indicator analysis</h3>
-                          <div class="small muted">Provider: ${escapeHtml(String(analysis.provider || "openai"))} · Model: ${escapeHtml(
-                          String(analysis.model || "")
-                        )}</div>
-                          ${summaryText ? `<div class="small" style="margin-top:8px;">${summaryText}</div>` : ""}
+                          ${summaryText ? `<div class="small markdown-output" style="margin-top:8px;">${renderMarkdown(summaryText, { fallback: "" })}</div>` : ""}
                           <div class="form-grid" style="margin-top:10px;">
                             <div class="profile-item"><span class="label">Direction</span><span class="value">${escapeHtml(
                               String(prediction.direction || "neutral")
@@ -21758,7 +23154,11 @@
                                   .join("")}</ul>`
                               : ""
                           }
-                          ${narrativeText ? `<div class="small" style="margin-top:10px; white-space:pre-wrap;">${narrativeText}</div>` : ""}
+                          ${narrativeText ? `<div class="small markdown-output" style="margin-top:10px;">${renderMarkdown(narrativeText, { fallback: "" })}</div>` : ""}
+                          ${renderOutputPublishControlsMarkup({
+                            requestId: indicatorRequestId,
+                            requestType: "indicator",
+                          })}
                           <p class="small muted solve-now-disclaimer" style="margin-top:10px;">${escapeHtml(
                             String(analysis.disclaimer || MODEL_COUNCIL_OUTPUT_DISCLAIMER)
                           )}</p>
@@ -21785,8 +23185,9 @@
           }
         }
 	        logEvent("technicals_request", { ticker: payload.ticker });
-        upsertMyRequest({
+        const savedIndicatorRequest = await upsertMyRequest({
           type: "indicator",
+          requestId: indicatorRequestId,
           title: `${normalizeTicker(payload.ticker || "") || "Ticker"} indicators`,
           input: {
             ticker: normalizeTicker(payload.ticker || ""),
@@ -21814,7 +23215,16 @@
             collection: "indicator_requests",
             id: `ind_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
           },
-        }).catch(() => {});
+          published: indicatorAutoPublish,
+        }).catch(() => null);
+        state.tickerContext.indicatorRequestId = String(savedIndicatorRequest?.id || indicatorRequestId).trim();
+        const indicatorPublishHost = ui.technicalsOutput?.querySelector?.("[data-output-publish-controls]");
+        if (indicatorPublishHost) {
+          indicatorPublishHost.outerHTML = renderOutputPublishControlsMarkup({
+            requestId: state.tickerContext.indicatorRequestId,
+            requestType: "indicator",
+          });
+        }
 	      } catch (error) {
 	        showToast(error.message || "Unable to run indicators.", "warn");
 	      }
@@ -21980,13 +23390,36 @@
       await runTerminalFxConvert();
     });
 
-    if (ui.marketHeadlinesCountry && !ui.marketHeadlinesCountry.value) {
-      ui.marketHeadlinesCountry.value = state.preferredCountry || "US";
+    if (ui.marketHeadlinesProvider && !ui.marketHeadlinesProvider.value) {
+      ui.marketHeadlinesProvider.value = DEFAULT_MARKET_HEADLINES_PROVIDER;
     }
+    syncMarketHeadlinesFeedOptions(
+      ui.marketHeadlinesProvider?.value || DEFAULT_MARKET_HEADLINES_PROVIDER,
+      ui.marketHeadlinesFeed?.value || DEFAULT_MARKET_HEADLINES_FEED
+    );
+    ui.marketHeadlinesProvider?.addEventListener("change", () => {
+      syncMarketHeadlinesFeedOptions(ui.marketHeadlinesProvider?.value || DEFAULT_MARKET_HEADLINES_PROVIDER);
+      if (ui.marketHeadlinesStatus) ui.marketHeadlinesStatus.textContent = "";
+    });
     ui.marketHeadlinesForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
       await loadMarketHeadlinesFeed(functions, { force: true, notify: true });
     });
+    const bindMarketHeadlinesLinkGate = async (event) => {
+      const link = event.target.closest("a[data-market-headlines-link='1']");
+      if (!link) return;
+      if (event.defaultPrevented) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      event.preventDefault();
+      await openMarketHeadlinesInterstitial({
+        url: String(link.getAttribute("href") || "").trim(),
+        title: String(link.dataset.marketHeadlinesTitle || link.textContent || "Selected article").trim(),
+        source: String(link.dataset.marketHeadlinesSource || "Selected source").trim(),
+        feedLabel: String(link.dataset.marketHeadlinesFeedLabel || "RSS feed").trim(),
+      });
+    };
+    ui.marketHeadlinesOutput?.addEventListener("click", bindMarketHeadlinesLinkGate);
+    ui.marketHeadlinesMeta?.addEventListener("click", bindMarketHeadlinesLinkGate);
 
     if (ui.macroDashboardStatus) {
       loadFiscalMacroDashboard({ force: false }).catch((error) => {
@@ -22080,7 +23513,10 @@
         const providerId = normalizeModelCouncilProviderId(ui.tickerQueryProvider?.value || "openai");
         state.tickerContext.tickerQueryProvider = providerId;
         safeLocalStorageSet(TICKER_QUERY_PROVIDER_KEY, providerId);
-        renderTickerQueryModels(state.tickerContext.tickerQueryModels || [], { provider: providerId });
+        loadTickerQueryModels({ force: true, providerOverride: providerId })
+          .catch(() => {
+            renderTickerQueryModels(state.tickerContext.tickerQueryModels || [], { provider: providerId });
+          });
       });
       ui.tickerQueryProvider.dataset.bound = "1";
     }
@@ -22477,6 +23913,7 @@
                 collection: "screener_runs",
                 id: runId,
               },
+              published: shouldAutoPublishForType("screener"),
             }).catch(() => {});
           }
           state.aiUsageToday = Number(state.aiUsageToday || 0) + 1;
@@ -23067,12 +24504,10 @@
             state.user = null;
             state.earningsCalendar.followsUid = "anon";
             state.earningsCalendar.follows = readLocalEarningsFollows();
-            if (isPanelVisible("events-calendar")) {
-              renderEarningsCalendar();
-            }
             state.tickerContext.tickerHistory = readTickerHistory();
             renderTickerHistory();
             setAuthUi(null);
+            state.publishPrefs = { ...DEFAULT_AUTO_PUBLISH_PREFS };
             setUserId(null);
             if (!state.anonymousBootstrapInFlight) {
               state.anonymousBootstrapInFlight = true;
@@ -23118,9 +24553,6 @@
             return;
           }
             await loadEarningsFollowSet({ force: true }).catch(() => {});
-            if (isPanelVisible("events-calendar")) {
-              renderEarningsCalendar();
-            }
             await linkPendingCredentialIfPresent({ silent: true }).catch(() => {});
             state.tickerContext.tickerHistory = readTickerHistory();
             renderTickerHistory();
@@ -23139,6 +24571,11 @@
               }
             }
 
+            await ensureUserProfile(db, user);
+            await loadUserProfile(db, user);
+            setProfileStatus("Profile is used when publishing AI agents in Explore.");
+            setAuthUi(user);
+
 			      if (!hasFullAccount(user)) {
 		        state.userHasPaidPlan = false;
             state.userSubscriptionTier = "free";
@@ -23148,14 +24585,11 @@
             state.pendingCollabInviteCount = 0;
             applyAdFreeExperience();
 		        renderOrderList([], ui.userOrders);
-            renderRequestList([], ui.userForecasts, "No forecast requests yet.");
             renderRequestList([], ui.autopilotOutput, "No autopilot requests yet.");
             renderRequestList([], ui.predictionsOutput, "No uploads yet.");
 		        if (ui.watchlistList) ui.watchlistList.textContent = "Sign in to manage your watchlist.";
 		        if (ui.alertsList) ui.alertsList.textContent = "Sign in to manage your alerts.";
 	        if (ui.alertsStatus) ui.alertsStatus.textContent = "";
-	        if (ui.collabInvitesList) ui.collabInvitesList.textContent = "Sign in to view invites.";
-	        if (ui.collabCollaboratorsList) ui.collabCollaboratorsList.textContent = "Sign in to manage collaborators.";
 		        ui.adminSection?.classList.add("hidden");
 		        ui.navAdmin?.classList.add("hidden");
                 setFeatureVoteSummaryPolling(functions, false);
@@ -23218,10 +24652,6 @@
             state.aiFollowSet = new Set();
             state.aiLikeSet = new Set();
             state.aiDefaultsSeededWorkspaceId = "";
-            state.myRequests = [];
-            state.myRequestsById = {};
-            state.myRequestsLoading = false;
-            state.myRequestsLoadedAt = 0;
 			        state.sharedWorkspaces = [];
 	            state.sharedScreenerView = null;
             state.tickerContext.forecastDoc = null;
@@ -23229,25 +24659,19 @@
             state.tickerContext.forecastTablePage = 0;
             state.tickerContext.forecastAiSummary = null;
             state.tickerContext.forecastCacheMeta = null;
-			        setActiveWorkspaceId("");
-            state.userProfile = {
-              username: "",
-              socialLinks: cloneDefaultProfileSocialLinks(),
-              avatar: "bull",
-              bio: "",
-              publicProfile: false,
-              publicScreenerSharing: false,
-              publicEmailOptIn: false,
-              stripeConnectAccountId: "",
-            };
-            renderProfileForm(state.userProfile, null);
-		        renderWorkspaceSelect(null);
+            const activeWorkspaceId = resolveActiveWorkspaceId(user);
+			        setActiveWorkspaceId(activeWorkspaceId);
+		        renderWorkspaceSelect(user);
+            startUserForecasts(db, activeWorkspaceId);
+            startScreenerRuns(db, activeWorkspaceId);
 		        if (ui.productivityBoard) ui.productivityBoard.innerHTML = "";
 		        if (ui.tasksCalendar) ui.tasksCalendar.textContent = "Tasks with due dates will appear here.";
             if (ui.screenerLoadSelect) ui.screenerLoadSelect.innerHTML = `<option value="">Select a run</option>`;
             if (ui.screenerLoadStatus) ui.screenerLoadStatus.textContent = "";
             if (ui.screenerOutput && !ui.screenerOutput.dataset.loading) ui.screenerOutput.textContent = "Sign in to generate an AI Portfolio.";
+            await fetchMyRequestsList({ force: true }).catch(() => []);
             renderMyRequestsPanels();
+            refreshCollaboration(functions);
             refreshScreenerModelUi();
             refreshScreenerCreditsUi();
             state.predictionsContext.uploadId = "";
@@ -23278,9 +24702,6 @@
 			        return;
 			      }
 
-	      await ensureUserProfile(db, user);
-        await loadUserProfile(db, user);
-        setProfileStatus("Profile is used when publishing AI agents in Explore.");
 	      startUserOrders(db, user);
 	      subscribeSharedWorkspaces(db, user);
 		      const activeWorkspaceId = resolveActiveWorkspaceId(user);
