@@ -23,7 +23,9 @@ def test_pages_exist():
 
 
 def test_manifest_and_robots():
-    manifest = PUBLIC / "manifest.json"
+    manifest = PUBLIC / "site.webmanifest"
+    if not manifest.exists():
+        manifest = PUBLIC / "manifest.json"
     robots = PUBLIC / "robots.txt"
     sitemap = PUBLIC / "sitemap.xml"
     messaging_sw = PUBLIC / "firebase-messaging-sw.js"
@@ -50,6 +52,6 @@ def test_pages_include_analytics():
         html = (PAGES / name).read_text()
         assert "firebase-analytics-compat" in html
         assert "app.js" in html
-        assert "manifest.json" in html
+        assert "site.webmanifest" in html or "manifest.json" in html
     dashboard_html = (PAGES / "dashboard.html").read_text()
     assert "firebase-messaging-compat" in dashboard_html
