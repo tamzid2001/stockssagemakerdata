@@ -974,6 +974,227 @@ async function fetchFmpTickerLogoMap(
   return out;
 }
 
+async function fetchFmpRows(urls: string[], timeoutMs = 7000): Promise<Array<Record<string, unknown>>> {
+  for (const url of urls) {
+    const payloadRaw = await fetchJsonWithTimeout(url, timeoutMs).catch(() => null);
+    const rows = Array.isArray(payloadRaw)
+      ? (payloadRaw as Array<Record<string, unknown>>)
+      : payloadRaw && typeof payloadRaw === "object"
+        ? [payloadRaw as Record<string, unknown>]
+        : [];
+    if (rows.length) return rows;
+  }
+  return [];
+}
+
+function parseFmpRangeEdge(rangeText: unknown, index: 0 | 1): number | null {
+  const raw = sanitizeText(rangeText, 80);
+  if (!raw.includes("-")) return null;
+  const values = raw.split("-").map((part) => Number(String(part).trim()));
+  const value = values[index];
+  return Number.isFinite(value) ? value : null;
+}
+
+function normalizeDividendYield(value: unknown): number | null {
+  const num = asFinite(value, NaN);
+  if (!Number.isFinite(num) || num < 0) return null;
+  return num > 1 ? num / 100 : num;
+}
+
+async function fetchFmpTickerIntelFallback(ticker: string): Promise<Record<string, unknown> | null> {
+  if (!FMP_API_KEY) return null;
+  const cleanTicker = normalizeTicker(ticker);
+  if (!cleanTicker) return null;
+
+  const profileRows = await fetchFmpRows([
+    `https://financialmodelingprep.com/stable/profile?symbol=${encodeURIComponent(cleanTicker)}&apikey=${encodeURIComponent(FMP_API_KEY)}`,
+    `https://financialmodelingprep.com/api/v3/profile/${encodeURIComponent(cleanTicker)}?apikey=${encodeURIComponent(FMP_API_KEY)}`,
+  ]);
+  const quoteRows = await fetchFmpRows([
+    `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(cleanTicker)}&apikey=${encodeURIComponent(FMP_API_KEY)}`,
+    `https://financialmodelingprep.com/api/v3/quote/${encodeURIComponent(cleanTicker)}?apikey=${encodeURIComponent(FMP_API_KEY)}`,
+  ]);
+
+  const profileRow = profileRows.find((row) => normalizeTicker(row.symbol || row.ticker) === cleanTicker) || profileRows[0] || {};
+  const quoteRow = quoteRows.find((row) => normalizeTicker(row.symbol || row.ticker) === cleanTicker) || quoteRows[0] || {};
+  if (!Object.keys(profileRow).length && !Object.keys(quoteRow).length) return null;
+
+  const website = sanitizeText(profileRow.website, 280);
+  const logoUrl =
+    normalizeRemoteLogoUrl(profileRow.image) ||
+    normalizeRemoteLogoUrl(profileRow.logoUrl) ||
+    normalizeRemoteLogoUrl(profileRow.logo_url) ||
+    normalizeRemoteLogoUrl(profileRow.logo) ||
+    buildLogoUrlFromWebsite(website);
+  const companyName =
+    sanitizeText(profileRow.companyName || profileRow.name || quoteRow.name || quoteRow.companyName || "", 180) || cleanTicker;
+  const marketCapRaw = asFinite(quoteRow.marketCap ?? profileRow.mktCap ?? profileRow.marketCap, NaN);
+  const marketCap = Number.isFinite(marketCapRaw) ? marketCapRaw : null;
+  const lastRaw = asFinite(quoteRow.price ?? profileRow.price, NaN);
+  const last = Number.isFinite(lastRaw) ? lastRaw : null;
+  const prevCloseRaw = asFinite(quoteRow.previousClose ?? quoteRow.previous_close, NaN);
+  const prevClose = Number.isFinite(prevCloseRaw) ? prevCloseRaw : null;
+  const dayLowRaw = asFinite(quoteRow.dayLow ?? quoteRow.low, NaN);
+  const dayLow = Number.isFinite(dayLowRaw) ? dayLowRaw : null;
+  const dayHighRaw = asFinite(quoteRow.dayHigh ?? quoteRow.high, NaN);
+  const dayHigh = Number.isFinite(dayHighRaw) ? dayHighRaw : null;
+  const volumeRaw = asFinite(quoteRow.volume ?? quoteRow.avgVolume, NaN);
+  const volume = Number.isFinite(volumeRaw) ? volumeRaw : null;
+  const avgVolumeRaw = asFinite(quoteRow.avgVolume ?? quoteRow.volume, NaN);
+  const avgVolume = Number.isFinite(avgVolumeRaw) ? avgVolumeRaw : null;
+  const yearLow = (() => {
+    const num = asFinite(quoteRow.yearLow, NaN);
+    if (Number.isFinite(num)) return num;
+    return parseFmpRangeEdge(profileRow.range, 0);
+  })();
+  const yearHigh = (() => {
+    const num = asFinite(quoteRow.yearHigh, NaN);
+    if (Number.isFinite(num)) return num;
+    return parseFmpRangeEdge(profileRow.range, 1);
+  })();
+  const betaRaw = asFinite(quoteRow.beta ?? profileRow.beta, NaN);
+  const beta = Number.isFinite(betaRaw) ? betaRaw : null;
+  const trailingPeRaw = asFinite(quoteRow.pe ?? profileRow.pe, NaN);
+  const trailingPE = Number.isFinite(trailingPeRaw) ? trailingPeRaw : null;
+  const priceToBookRaw = asFinite(profileRow.priceToBookRatio ?? profileRow.priceToBook, NaN);
+  const priceToBook = Number.isFinite(priceToBookRaw) ? priceToBookRaw : null;
+  const sharesOutstandingRaw = asFinite(quoteRow.sharesOutstanding ?? profileRow.sharesOutstanding, NaN);
+  const sharesOutstanding = Number.isFinite(sharesOutstandingRaw) ? sharesOutstandingRaw : null;
+  const dividendRateRaw = asFinite(profileRow.lastDiv ?? quoteRow.lastDiv, NaN);
+  const dividendRate = Number.isFinite(dividendRateRaw) ? dividendRateRaw : null;
+  const dividendYield = normalizeDividendYield(profileRow.dividendYield ?? quoteRow.dividendYield);
+  const currency = sanitizeText(quoteRow.currency || profileRow.currency, 20);
+  const exchange = sanitizeText(profileRow.exchangeShortName || profileRow.exchange || quoteRow.exchange, 120);
+  const sector = sanitizeText(profileRow.sector, 120);
+  const industry = sanitizeText(profileRow.industry, 120);
+  const country = sanitizeText(profileRow.country, 120);
+  const summary = sanitizeText(profileRow.description || profileRow.descriptionShort || "", 2000);
+
+  return {
+    ticker: cleanTicker,
+    source: "fmp_quote_profile_fallback",
+    fetchedAt: new Date().toISOString(),
+    price: {
+      last,
+      prevClose,
+      dayLow,
+      dayHigh,
+      volume,
+      currency,
+    },
+    logoUrl,
+    logo_url: logoUrl,
+    profile: {
+      name: companyName,
+      sector,
+      industry,
+      exchange,
+      currency,
+      website,
+      summary,
+      marketCap,
+      fiftyTwoWeekLow: yearLow,
+      fiftyTwoWeekHigh: yearHigh,
+      trailingPE,
+      forwardPE: null,
+      beta,
+      dividendYield,
+      logoUrl,
+      logo_url: logoUrl,
+    },
+    profileDetails: {
+      longName: companyName,
+      sector,
+      industry,
+      country,
+      website,
+      longBusinessSummary: summary,
+      logoUrl,
+      logo_url: logoUrl,
+    },
+    valuation: {
+      marketCap,
+      trailingPE,
+      forwardPE: null,
+      priceToBook,
+      enterpriseValue: null,
+    },
+    fundamentals: {
+      revenueTTM: null,
+      grossMargins: null,
+      profitMargins: null,
+      operatingMargins: null,
+      ebitdaMargins: null,
+      returnOnAssets: null,
+      returnOnEquity: null,
+    },
+    risk: {
+      beta,
+      shortRatio: null,
+    },
+    dividends: {
+      dividendRate,
+      dividendYield,
+      payoutRatio: null,
+      exDividendDate: "",
+    },
+    trading: {
+      beta,
+      fiftyTwoWeekLow: yearLow,
+      fiftyTwoWeekHigh: yearHigh,
+      avgVolume,
+      sharesOutstanding,
+    },
+    events: [],
+    analyst: {
+      recommendationKey: "",
+      recommendationMean: null,
+      analystOpinions: null,
+      targetMeanPrice: null,
+      targetLowPrice: null,
+      targetHighPrice: null,
+    },
+    recommendationTrend: [],
+    executiveSummary: {
+      ticker: cleanTicker,
+      exchange,
+      sector,
+      priceTarget12m: null,
+    },
+    fundamentalDeepDive: {
+      revenueMechanics: {
+        totalRevenue: null,
+        grossProfit: null,
+        segmentBreakdown: "Detailed segment data was unavailable in the fallback market data source.",
+      },
+      profitability: {
+        netMargin: null,
+        roi: null,
+      },
+      capitalAllocation: {
+        dividendPolicy: dividendRate === null ? "No dividend policy reported in the fallback source." : `Recent dividend rate reported: ${dividendRate}`,
+        shareBuybacks: "Buyback detail was unavailable in the fallback market data source.",
+      },
+    },
+    riskAndEsg: {
+      riskMitigation: "Fallback profile sourced from FMP because Yahoo quote summary was unavailable.",
+      liquidity: {
+        totalCash: null,
+        totalDebt: null,
+        currentRatio: null,
+      },
+      esg: {
+        environmental: null,
+        social: null,
+        governance: null,
+        overall: null,
+      },
+    },
+    balanceSheetHeatmap: [],
+    peerComparison: [],
+  };
+}
+
 async function fetchJsonWithTimeout(url: string, timeoutMs = 7500): Promise<unknown> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -983,7 +1204,12 @@ async function fetchJsonWithTimeout(url: string, timeoutMs = 7500): Promise<unkn
       signal: controller.signal,
       headers: {
         Accept: "application/json",
-        "User-Agent": "quantura-explore-api/1.0",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Cache-Control": "no-cache",
+        Pragma: "no-cache",
+        Referer: "https://quantura.studio/",
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 QuanturaExploreApi/1.0",
       },
     });
     if (!response.ok) {
@@ -4767,6 +4993,15 @@ ROUTES.get("/ticker/intel", async (req, res) => {
       (((quotePayload.quoteResponse as any)?.result as Array<Record<string, unknown>> | undefined) || [])[0] || {};
 
     if (!Object.keys(summaryRoot).length && !Object.keys(quoteRow).length) {
+      const fallbackPayload = await fetchFmpTickerIntelFallback(ticker);
+      if (fallbackPayload) {
+        setTickerIntelCache(ticker, fallbackPayload);
+        res.status(200).json({
+          ...fallbackPayload,
+          cached: false,
+        });
+        return;
+      }
       res.status(502).json({ error: "ticker_intel_upstream_empty", ticker });
       return;
     }
