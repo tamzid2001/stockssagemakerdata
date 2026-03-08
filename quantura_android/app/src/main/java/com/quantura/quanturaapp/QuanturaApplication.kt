@@ -1,16 +1,13 @@
 package com.quantura.quanturaapp
 
 import android.app.Application
-import android.content.pm.ApplicationInfo
 import android.os.Build
 import android.util.Log
-import com.google.android.gms.ads.AdRequest
 import com.quantura.quanturaapp.di.AppContainer
-import com.google.android.gms.ads.MobileAds
-import com.google.android.gms.ads.RequestConfiguration
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
 import com.google.firebase.FirebaseApp
+import com.quantura.quanturaapp.ads.MobileAdsBootstrap
 import com.quantura.quanturaapp.auth.AuthSessionManager
 
 class QuanturaApplication : Application() {
@@ -29,26 +26,16 @@ class QuanturaApplication : Application() {
         if (!firebaseReady) {
             Log.w("QuanturaApplication", "Firebase disabled: missing google-services.json for local build.")
         }
-        val isDebuggable = (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
         val isEmulator = detectEmulator()
         logGooglePlayServicesHealth(isEmulator = isEmulator)
-        try {
-            if (isDebuggable || isEmulator) {
-                MobileAds.setRequestConfiguration(
-                    RequestConfiguration.Builder()
-                        .setTestDeviceIds(listOf(AdRequest.DEVICE_ID_EMULATOR))
-                        .build()
-                )
-            }
-            MobileAds.initialize(this) { status ->
-                Log.i("QuanturaApplication", "Mobile Ads initialized adapters=${status.adapterStatusMap.size}")
-            }
-        } catch (_: Exception) {
-            Log.w("QuanturaApplication", "Google Mobile Ads init skipped for this build.")
-        }
         container = AppContainer(this, firebaseReady)
         AuthSessionManager.start(firebaseReady)
         container.appOpenAdManager.start()
+        try {
+            MobileAdsBootstrap.initialize(this)
+        } catch (_: Exception) {
+            Log.w("QuanturaApplication", "Google Mobile Ads init skipped for this build.")
+        }
     }
 
     private fun detectEmulator(): Boolean {

@@ -2,6 +2,7 @@ import React from "react";
 import { createRoot, Root } from "react-dom/client";
 import { AppRegistry } from "react-native";
 
+import { isNativeRuntime } from "./bridge";
 import InjectedPanel from "./components/InjectedPanel.web";
 
 const APP_NAME = "QuanturaRNWInject";
@@ -30,6 +31,18 @@ const ensureStyles = () => {
 };
 
 const mountElement = (el: HTMLElement) => {
+  const shell = el.closest(".quantura-rn-injection-shell");
+  if (!isNativeRuntime()) {
+    if (shell instanceof HTMLElement) shell.hidden = true;
+    const existingRoot = roots.get(el);
+    if (existingRoot) {
+      existingRoot.unmount();
+      roots.delete(el);
+    }
+    return;
+  }
+  if (shell instanceof HTMLElement) shell.hidden = false;
+
   const data = (el.dataset || {}) as MountDataset;
   const slotId = String(data.rnSlotId || el.id || `rn-slot-${Math.random().toString(36).slice(2, 8)}`).trim();
   const placement = String(data.rnPlacement || "rnw_inline").trim();

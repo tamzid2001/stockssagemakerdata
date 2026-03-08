@@ -5942,7 +5942,7 @@
   };
 
   const getNativeInlineAdRules = () => {
-    const defaults = { feedStart: 6, feedInterval: 8, pageMidpoint: 0.55 };
+    const defaults = { feedStart: 4, feedInterval: 5, pageMidpoint: 0.45 };
     const raw = window.__QUANTURA_NATIVE_AD_RULES__ && typeof window.__QUANTURA_NATIVE_AD_RULES__ === "object"
       ? window.__QUANTURA_NATIVE_AD_RULES__
       : {};
@@ -6106,6 +6106,52 @@
       </div>
     `;
     return node;
+  };
+
+  const getNativeInlineAdSlotNodes = (container) =>
+    Array.from(container?.children || []).filter(
+      (child) => child instanceof HTMLElement && child.matches("[data-native-inline-ad-slot]")
+    );
+
+  const clearNativeInlineAdSlots = (container) => {
+    getNativeInlineAdSlotNodes(container).forEach((node) => node.remove());
+  };
+
+  const isNativeInlineAdVisibleChild = (child) => {
+    if (!(child instanceof HTMLElement)) return false;
+    if (child.matches("[data-native-inline-ad-slot], script, style, template, noscript")) return false;
+    if (child.hidden) return false;
+    if (child.classList.contains("hidden")) return false;
+    if (String(child.getAttribute("aria-hidden") || "").trim().toLowerCase() === "true") return false;
+    if (String(child.dataset.loading || "").trim().toLowerCase() === "true") return false;
+    try {
+      const styles = window.getComputedStyle?.(child);
+      if (styles && (styles.display === "none" || styles.visibility === "hidden")) return false;
+    } catch (_error) {
+      // Ignore visibility probing errors and treat the element as visible.
+    }
+    return true;
+  };
+
+  const toNativeInlinePlacementToken = (value, fallback = "panel") => {
+    const normalized = String(value || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+    return normalized || fallback;
+  };
+
+  const resolveNativeInlinePlacementBase = (container) => {
+    const explicit =
+      String(container?.dataset?.panel || "").trim() ||
+      String(container?.dataset?.panelTarget || "").trim() ||
+      String(container?.id || "").trim();
+    if (explicit) return `section_${toNativeInlinePlacementToken(explicit)}`;
+    const classToken = Array.from(container?.classList || []).find((token) =>
+      /(hero|grid|section|panel|list|layout|container)/i.test(String(token || ""))
+    );
+    return `section_${toNativeInlinePlacementToken(classToken || container?.tagName || "panel")}`;
   };
 
   const hydrateNativeInlineAdSlot = (slotNode, detail = {}) => {
@@ -6309,7 +6355,27 @@
       const node = document.getElementById(id);
       if (node) set.add(node);
     });
-    document.querySelectorAll(".panel-output, .order-list, .news-stream").forEach((node) => {
+    const selectorList = [
+      "main",
+      "main > section",
+      "main section > .container",
+      "main section > .shop-container",
+      "main .app-main",
+      "main .hero-grid",
+      "main .content-grid",
+      "main .dashboard-grid",
+      "main .insight-grid",
+      "main .feature-grid",
+      "main .results-grid",
+      "main .layout",
+      ".panel-output",
+      ".order-list",
+      ".news-stream",
+    ];
+    document.querySelectorAll(selectorList.join(", ")).forEach((node) => {
+      if (!(node instanceof HTMLElement)) return;
+      if (node.closest("header, footer, nav, aside, dialog, .modal, .sidebar")) return;
+      if (node.matches(".quantura-rn-root, .quantura-rn-injection-shell")) return;
       if (node?.id === "profile-status" || node?.id === "auth-email-message") return;
       set.add(node);
     });
@@ -6319,7 +6385,7 @@
   const getNativeInlineAdAnchorIndexes = (childrenCount, rules) => {
     if (!Number.isFinite(childrenCount) || childrenCount < 2) return [];
     const indexes = new Set();
-    const midpointIndex = Math.max(0, Math.min(childrenCount - 1, Math.floor(childrenCount * rules.pageMidpoint)));
+    const midpointIndex = Math.max(0, Math.min(childrenCount - 1, Math.floor((childrenCount - 1) * rules.pageMidpoint)));
     indexes.add(midpointIndex);
     if (childrenCount >= rules.feedStart) {
       for (let position = rules.feedStart; position <= childrenCount; position += rules.feedInterval) {
@@ -6332,18 +6398,28 @@
   const maybeInjectNativeInlineAd = (container) => {
     if (!container) return;
     if (!isNativeInlineAdEligible()) {
-      container.querySelectorAll("[data-native-inline-ad-slot]").forEach((node) => node.remove());
+      clearNativeInlineAdSlots(container);
       return;
     }
-    if (container.closest("form, .auth-card, .checkout-shell, .purchase-panel")) return;
-    if (container.classList.contains("hidden")) return;
-    if (String(container.dataset.loading || "") === "true") return;
+    if (container.closest("form, .auth-card, .checkout-shell, .purchase-panel, .auth-section, #auth")) {
+      clearNativeInlineAdSlots(container);
+      return;
+    }
+    if (
+      container.hidden ||
+      container.classList.contains("hidden") ||
+      String(container.getAttribute("aria-hidden") || "").trim().toLowerCase() === "true" ||
+      String(container.dataset.loading || "").trim().toLowerCase() === "true"
+    ) {
+      clearNativeInlineAdSlots(container);
+      return;
+    }
 
-    const children = Array.from(container.children).filter((child) => !child.matches("[data-native-inline-ad-slot]"));
-    const existingSlots = Array.from(container.querySelectorAll("[data-native-inline-ad-slot]"));
+    const children = Array.from(container.children).filter(isNativeInlineAdVisibleChild);
+    const existingSlots = getNativeInlineAdSlotNodes(container);
     const textLength = children.map((child) => String(child.textContent || "")).join(" ").trim().length;
     if (children.length < 2 && textLength < 240) {
-      existingSlots.forEach((slotNode) => slotNode.remove());
+      clearNativeInlineAdSlots(container);
       return;
     }
 
@@ -6358,7 +6434,7 @@
     });
 
     desiredAnchorIndexes.forEach((anchorIndex) => {
-      const existingSlot = Array.from(container.querySelectorAll("[data-native-inline-ad-slot]")).find(
+      const existingSlot = getNativeInlineAdSlotNodes(container).find(
         (node) => Number(node.dataset.anchorIndex) === anchorIndex
       );
       if (existingSlot) return;
@@ -6368,7 +6444,7 @@
 
       nativeInlineAdState.sequence += 1;
       const slotId = `inline-${Date.now()}-${nativeInlineAdState.sequence}`;
-      const placementBase = container.id ? `section_${container.id}` : "section_panel";
+      const placementBase = resolveNativeInlinePlacementBase(container);
       const slotNode = buildNativeInlineAdSlot(slotId, `${placementBase}_${anchorIndex + 1}`);
       slotNode.dataset.anchorIndex = String(anchorIndex);
 
@@ -6392,7 +6468,12 @@
         maybeInjectNativeInlineAd(container);
       }, 180);
     });
-    observer.observe(container, { childList: true, subtree: false });
+    observer.observe(container, {
+      childList: true,
+      subtree: false,
+      attributes: true,
+      attributeFilter: ["class", "hidden", "style", "aria-hidden", "data-loading"],
+    });
     nativeInlineAdState.observerMap.set(container, observer);
   };
 

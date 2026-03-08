@@ -99,9 +99,9 @@ class RemoteConfigManager(
                     "play_integrity_enabled" to true,
                     "play_integrity_required" to false,
                     "play_integrity_cloud_project_number" to "",
-                    "native_feed_ad_start" to 6,
-                    "native_feed_ad_interval" to 8,
-                    "native_page_ad_midpoint" to 0.55,
+                    "native_feed_ad_start" to 4,
+                    "native_feed_ad_interval" to 5,
+                    "native_page_ad_midpoint" to 0.45,
                     "feature_flags" to DEFAULT_FEATURE_FLAGS_JSON,
                 )
             )
@@ -273,17 +273,17 @@ class RemoteConfigManager(
     }
 
     fun nativeFeedAdStart(): Int {
-        val value = remoteConfig?.getLong("native_feed_ad_start") ?: 6L
+        val value = remoteConfig?.getLong("native_feed_ad_start") ?: 4L
         return value.toInt().coerceIn(3, 20)
     }
 
     fun nativeFeedAdInterval(): Int {
-        val value = remoteConfig?.getLong("native_feed_ad_interval") ?: 8L
+        val value = remoteConfig?.getLong("native_feed_ad_interval") ?: 5L
         return value.toInt().coerceIn(3, 20)
     }
 
     fun nativePageAdMidpoint(): Double {
-        val value = remoteConfig?.getDouble("native_page_ad_midpoint") ?: 0.55
+        val value = remoteConfig?.getDouble("native_page_ad_midpoint") ?: 0.45
         return value.coerceIn(0.2, 0.9)
     }
 
