@@ -19,6 +19,7 @@ class QuanturaJavascriptBridge(
     private val adManager: AdManager,
     private val onNativeAuthMessage: (type: String, payload: JSONObject) -> Unit,
     private val isAuthGateVisible: () -> Boolean = { false },
+    private val onOpenAdInspector: (payload: JSONObject) -> Unit = {},
     private val onBridgeEvent: (eventName: String, payload: JSONObject) -> Unit = { _, _ -> },
 ) {
     private val tag = "QuanturaJsBridge"
@@ -48,6 +49,7 @@ class QuanturaJavascriptBridge(
                     JSONObject().put("provider", payload.optString("provider"))
                 )
                 "authSignOut" -> onNativeAuthMessage("SIGN_OUT", JSONObject())
+                "openAdInspector" -> onOpenAdInspector(payload)
                 "startNativePurchase" -> onNativeAuthMessage("NATIVE_PURCHASE", payload)
                 "openNativeSubscriptionManager" -> onNativeAuthMessage("OPEN_NATIVE_SUBSCRIPTIONS", payload)
                 "requestNativeFeedAd" -> handleNativeFeedAdRequest(payload)
@@ -72,10 +74,24 @@ class QuanturaJavascriptBridge(
         val normalized = url.trim()
         if (!normalized.startsWith("http")) return
         Log.d(tag, "News link trigger interstitial url=$normalized")
-        showInterstitialIfAllowed(JSONObject())
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(normalized))
-        if (intent.resolveActivity(activity.packageManager) != null) {
-            activity.startActivity(intent)
+        var opened = false
+        fun openExternalUrlOnce() {
+            if (opened) return
+            opened = true
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(normalized))
+            if (intent.resolveActivity(activity.packageManager) != null) {
+                activity.startActivity(intent)
+            }
+        }
+        showInterstitialIfAllowed(JSONObject()) { result ->
+            when (result.optString("status").trim().lowercase()) {
+                "shown", "queued" -> Unit
+                "dismissed", "failed", "skipped:not_ready", "skipped:ads_disabled",
+                "skipped:format_off", "skipped:auth_gate", "skipped:fullscreen_visible" -> openExternalUrlOnce()
+                else -> if (result.optString("status").trim().lowercase().startsWith("failed")) {
+                    openExternalUrlOnce()
+                }
+            }
         }
     }
 
@@ -88,16 +104,24 @@ class QuanturaJavascriptBridge(
         )
     }
 
-    private fun showInterstitialIfAllowed(payload: JSONObject) {
+    private fun showInterstitialIfAllowed(payload: JSONObject, onResult: (JSONObject) -> Unit = {}) {
         val requestId = payload.optString("requestId").trim()
+        val reason = payload.optString("reason").trim().ifEmpty { "unspecified" }
+        Log.d(tag, "Interstitial request reason=$reason requestId=$requestId")
         if (isAuthGateVisible()) {
             Log.d(tag, "Interstitial skipped; auth gate visible.")
+            val result = JSONObject()
+                .put("requestId", requestId)
+                .put("adFormat", "interstitial")
+                .put("status", "skipped:auth_gate")
+                .put("message", "Auth gate is visible.")
             emitAdResult(
                 requestId = requestId,
                 adFormat = "interstitial",
                 status = "skipped:auth_gate",
                 message = "Auth gate is visible."
             )
+            onResult(result)
             return
         }
         adManager.showInterstitial(activity, requestId = requestId) { result ->
@@ -113,11 +137,17 @@ class QuanturaJavascriptBridge(
                     Double.NaN
                 }
             )
+            onResult(result)
         }
     }
 
     private fun showRewardedIfAllowed(payload: JSONObject, preferRewardedInterstitial: Boolean) {
         val requestId = payload.optString("requestId").trim()
+        val reason = payload.optString("reason").trim().ifEmpty { "unspecified" }
+        Log.d(
+            tag,
+            "Rewarded request reason=$reason requestId=$requestId preferRewardedInterstitial=$preferRewardedInterstitial"
+        )
         if (isAuthGateVisible()) {
             Log.d(tag, "Rewarded skipped; auth gate visible.")
             emitAdResult(

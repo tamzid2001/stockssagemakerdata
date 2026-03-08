@@ -26,7 +26,7 @@ enum EmailAuthMode: Hashable {
 
 @MainActor
 final class AuthGateViewModel: ObservableObject {
-    @Published var isGateVisible: Bool = true
+    @Published var isGateVisible: Bool = false
     @Published var isBusy: Bool = false
     @Published var errorText: String = ""
     @Published var emailAuthMode: EmailAuthMode = .signIn
@@ -41,15 +41,53 @@ final class AuthGateViewModel: ObservableObject {
     private var hasStarted = false
     private var bootstrapInFlight = false
     private var requiresBridgeSync = false
-    private var skipForCurrentSession = false
+    private var skipForCurrentSession = true
     private var lastObservedUID: String = ""
 #endif
+
+    var emailInlineError: String? {
+        let trimmed = emailAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+        let touched = !trimmed.isEmpty || !emailPassword.isEmpty || emailAuthMode == .signUp
+        return touched && trimmed.isEmpty ? "Email is required." : nil
+    }
+
+    var usernameInlineError: String? {
+        guard emailAuthMode == .signUp else { return nil }
+        let trimmed = emailUsername.trimmingCharacters(in: .whitespacesAndNewlines)
+        let touched = !trimmed.isEmpty || !emailConfirmPassword.isEmpty || !emailPassword.isEmpty
+        if !touched { return nil }
+        if trimmed.isEmpty { return "Username is required." }
+        if trimmed.count < 3 { return "Username must be at least 3 characters." }
+        return nil
+    }
+
+    var passwordInlineError: String? {
+        let touched = !emailPassword.isEmpty || emailAuthMode == .signUp
+        if !touched { return nil }
+        if emailPassword.isEmpty { return "Password is required." }
+        if emailAuthMode == .signUp && emailPassword.count < 8 {
+            return "Password must be at least 8 characters."
+        }
+        return nil
+    }
+
+    var confirmPasswordInlineError: String? {
+        guard emailAuthMode == .signUp else { return nil }
+        let touched = !emailConfirmPassword.isEmpty || !emailPassword.isEmpty
+        if !touched { return nil }
+        if emailConfirmPassword.isEmpty { return "Confirm your password." }
+        if !emailPassword.isEmpty && emailConfirmPassword != emailPassword {
+            return "Passwords do not match."
+        }
+        return nil
+    }
 
     func start() {
 #if canImport(FirebaseAuth)
         guard FirebaseApp.app() != nil else {
             print("[AuthGate][iOS] Firebase missing; gate stays visible.")
             isGateVisible = true
+            NativeAuthWebBridge.shared.pushAuthGateState(visible: true, reason: "firebase_unavailable")
             return
         }
         guard !hasStarted else { return }
@@ -58,11 +96,12 @@ final class AuthGateViewModel: ObservableObject {
 
         let auth = Auth.auth()
         if let currentUser = auth.currentUser {
-            isGateVisible = currentUser.isAnonymous
+            isGateVisible = currentUser.isAnonymous ? !skipForCurrentSession : false
             NativeAuthWebBridge.shared.pushAuthState(user: currentUser)
         } else {
-            isGateVisible = true
+            isGateVisible = false
         }
+        NativeAuthWebBridge.shared.pushAuthGateState(visible: isGateVisible, reason: "start")
 
         authStateHandle = auth.addStateDidChangeListener { [weak self] _, user in
             Task { @MainActor [weak self] in
@@ -83,6 +122,7 @@ final class AuthGateViewModel: ObservableObject {
 #endif
         errorText = ""
         isGateVisible = true
+        NativeAuthWebBridge.shared.pushAuthGateState(visible: true, reason: trigger)
     }
 
     func continueAnonymouslyForNow() {
@@ -93,6 +133,12 @@ final class AuthGateViewModel: ObservableObject {
 #endif
         errorText = ""
         isGateVisible = false
+        NativeAuthWebBridge.shared.pushAuthGateState(visible: false, reason: "continue_anonymous")
+        NativeAuthWebBridge.shared.pushAuthSyncState(
+            status: "sync_failed",
+            message: "Sign-in was dismissed.",
+            source: "continue_anonymous"
+        )
     }
 
     func openEmailSheet() {
@@ -103,6 +149,17 @@ final class AuthGateViewModel: ObservableObject {
         emailConfirmPassword = ""
         errorText = ""
         isEmailSheetVisible = true
+    }
+
+    func dismissEmailSheet() {
+        guard !isBusy else { return }
+        isEmailSheetVisible = false
+        errorText = "Email sign-in was dismissed."
+        NativeAuthWebBridge.shared.pushAuthSyncState(
+            status: "sync_failed",
+            message: "Email sign-in was dismissed.",
+            source: "email_sheet_dismissed"
+        )
     }
 
     func submitEmailAuth() {
@@ -363,13 +420,14 @@ final class AuthGateViewModel: ObservableObject {
 #if canImport(GoogleSignIn)
         GIDSignIn.sharedInstance.signOut()
 #endif
-        skipForCurrentSession = false
         requiresBridgeSync = false
         lastObservedUID = ""
-        isGateVisible = true
+        skipForCurrentSession = true
+        isGateVisible = false
         errorText = ""
         ensureAnonymousIfNeeded()
         NativeAuthWebBridge.shared.pushCurrentAuthState()
+        NativeAuthWebBridge.shared.pushAuthGateState(visible: false, reason: "sign_out_to_anonymous")
 #endif
     }
 }
@@ -388,20 +446,26 @@ private extension AuthGateViewModel {
             NativeAuthWebBridge.shared.pushAuthState(user: user)
             if user.isAnonymous {
                 isGateVisible = !skipForCurrentSession
+                NativeAuthWebBridge.shared.pushAuthGateState(visible: isGateVisible, reason: "anonymous_state")
                 return
             }
 
             if requiresBridgeSync {
                 print("[AuthGate][iOS] Waiting for native->web token sync before dismissing gate.")
                 isGateVisible = true
+                NativeAuthWebBridge.shared.pushAuthGateState(visible: true, reason: "bridge_sync_required")
                 return
             }
 
             isGateVisible = false
+            NativeAuthWebBridge.shared.pushAuthGateState(visible: false, reason: "authenticated")
             if !isBusy {
                 Task {
                     do {
-                        try await NativeAuthWebBridge.shared.syncWebSessionFromCurrentUser(forceRefresh: false)
+                        try await NativeAuthWebBridge.shared.syncWebSessionFromCurrentUser(
+                            forceRefresh: false,
+                            source: "auth_state_observer"
+                        )
                     } catch {
                         print("[AuthGate][iOS] Silent web sync skipped: \(error.localizedDescription)")
                     }
@@ -412,6 +476,7 @@ private extension AuthGateViewModel {
 
         print("[AuthGate][iOS] No authenticated user; ensuring anonymous bootstrap.")
         isGateVisible = !skipForCurrentSession
+        NativeAuthWebBridge.shared.pushAuthGateState(visible: isGateVisible, reason: "no_user")
         ensureAnonymousIfNeeded()
     }
 
@@ -439,6 +504,13 @@ private extension AuthGateViewModel {
         isBusy = true
         errorText = ""
         isGateVisible = true
+        NativeAuthWebBridge.shared.pushAuthGateState(visible: true, reason: "interactive_\(provider)")
+        NativeAuthWebBridge.shared.pushAuthSyncState(
+            status: "request_started",
+            message: "Native auth request started.",
+            provider: provider,
+            source: "interactive_start"
+        )
     }
 
     func signInOrLink(
@@ -497,7 +569,10 @@ private extension AuthGateViewModel {
         print("[AuthGate][iOS] Native sign-in completed uid=\(user.uid); exchanging custom token.")
         Task {
             do {
-                try await NativeAuthWebBridge.shared.syncWebSessionFromCurrentUser(forceRefresh: true)
+                try await NativeAuthWebBridge.shared.syncWebSessionFromCurrentUser(
+                    forceRefresh: true,
+                    source: "interactive_sign_in"
+                )
                 requiresBridgeSync = false
                 isBusy = false
                 errorText = ""
@@ -508,6 +583,7 @@ private extension AuthGateViewModel {
                 emailPassword = ""
                 emailConfirmPassword = ""
                 isGateVisible = false
+                NativeAuthWebBridge.shared.pushAuthGateState(visible: false, reason: "interactive_success")
                 print("[AuthGate][iOS] Web session sync succeeded uid=\(user.uid).")
             } catch {
                 finishError("Signed in, but web sync failed: \(error.localizedDescription)")
@@ -593,6 +669,12 @@ private extension AuthGateViewModel {
         isBusy = false
         isGateVisible = true
         errorText = message
+        NativeAuthWebBridge.shared.pushAuthGateState(visible: true, reason: "interactive_error")
+        NativeAuthWebBridge.shared.pushAuthSyncState(
+            status: "sync_failed",
+            message: message,
+            source: "interactive_error"
+        )
     }
 
     func resolveCollisionCredential(error: Error?, fallback: AuthCredential) -> AuthCredential? {

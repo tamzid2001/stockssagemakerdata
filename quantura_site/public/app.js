@@ -2514,6 +2514,10 @@
     pending: new Map(),
   };
 
+  const nativeTransitionInterstitialState = {
+    busy: false,
+  };
+
   const ensureNativeAdActionListener = () => {
     if (nativeAdActionState.bound) return;
     nativeAdActionState.bound = true;
@@ -3026,15 +3030,20 @@
 		    buttons.forEach((btn) => {
 		      btn.addEventListener("click", async (event) => {
 		        event.preventDefault?.();
+            if (nativeTransitionInterstitialState.busy) return;
             triggerSubtleHaptic();
             const targetPanel = String(btn.dataset.panelTarget || "").trim();
-            const proceed = await maybeShowNativeRewardGate({
-              reason: "nav",
-              title: "Watch an ad before navigating?",
-              message: "Navigation inside the native app can trigger a rewarded interstitial.",
-            });
-            if (!proceed) return;
-		        setActive(targetPanel);
+            nativeTransitionInterstitialState.busy = true;
+            try {
+              const proceed = await maybeShowNativeInterstitialGate({
+                reason: "nav_panel",
+                fallbackMessage: "",
+              });
+              if (!proceed) return;
+		          setActive(targetPanel);
+            } finally {
+              nativeTransitionInterstitialState.busy = false;
+            }
 		      });
 		    });
 
@@ -3400,16 +3409,17 @@
     window.__quanturaMobileBottomNavSync = syncVisibility;
   };
 
-  const bindNativeRewardedNavigationAds = () => {
+  const bindNativeTransitionInterstitials = () => {
     if (!isNativeApp()) return;
-    if (document.body.dataset.nativeNavRewardBound === "1") return;
-    document.body.dataset.nativeNavRewardBound = "1";
+    if (document.body.dataset.nativeNavInterstitialBound === "1") return;
+    document.body.dataset.nativeNavInterstitialBound = "1";
 
     document.addEventListener("click", async (event) => {
       const link = event.target.closest("a[href]");
       if (!link) return;
       if (link.dataset.panelTarget) return;
       if (link.dataset.skipRewardGate === "1") return;
+      if (link.dataset.skipInterstitialGate === "1") return;
       if (event.defaultPrevented) return;
       if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       const target = String(link.getAttribute("target") || "").trim().toLowerCase();
@@ -3420,22 +3430,19 @@
       if (/^https?:\/\//i.test(href)) return;
       if (!href.startsWith("/")) return;
 
-      const proceed = await maybeShowNativeRewardGate({
-        reason: "nav",
-        title: "Watch an ad before opening this section?",
-        message: "Navigation inside the native app can trigger a rewarded interstitial.",
-      });
-      if (!proceed) {
-        event.preventDefault();
-        return;
+      event.preventDefault();
+      if (nativeTransitionInterstitialState.busy) return;
+      nativeTransitionInterstitialState.busy = true;
+      try {
+        const proceed = await maybeShowNativeInterstitialGate({
+          reason: "nav_link",
+          fallbackMessage: "",
+        });
+        if (!proceed) return;
+        window.location.assign(href);
+      } finally {
+        nativeTransitionInterstitialState.busy = false;
       }
-
-      sendNativeBridgeMessage({
-        action: "showRewardedInterstitial",
-        reason: "nav",
-        href,
-        ts: Date.now(),
-      });
     });
   };
 
@@ -20726,7 +20733,7 @@
       bindMobileSidebarDrawer();
       bindMobileBottomNav();
       bindMarketingBottomNav();
-      bindNativeRewardedNavigationAds();
+      bindNativeTransitionInterstitials();
       registerLegacyNativeAdInjectionHook();
       scheduleNativeInlineAdsRefresh();
       window.setInterval(scheduleNativeInlineAdsRefresh, 3500);

@@ -37,11 +37,33 @@ data class AdFeatureFlags(
     val adsEnabled: Boolean,
 )
 
+data class AdFormatToggles(
+    val appOpen: Boolean,
+    val banner: Boolean,
+    val interstitial: Boolean,
+    val rewarded: Boolean,
+    val rewardedInterstitial: Boolean,
+    val native: Boolean,
+) {
+    fun isEnabled(format: AdFormat): Boolean {
+        return when (format) {
+            AdFormat.APP_OPEN -> appOpen
+            AdFormat.BANNER -> banner
+            AdFormat.INTERSTITIAL -> interstitial
+            AdFormat.REWARDED -> rewarded
+            AdFormat.REWARDED_INTERSTITIAL -> rewardedInterstitial
+            AdFormat.NATIVE -> native
+        }
+    }
+}
+
 data class AdsRemoteConfigState(
     val adsEnabled: Boolean,
     val adsUseRealIos: Boolean,
     val adsUseRealAndroid: Boolean,
     val featureFlags: AdFeatureFlags,
+    val iosFormatToggles: AdFormatToggles,
+    val androidFormatToggles: AdFormatToggles,
     val ios: AdUnitIds,
     val android: AdUnitIds,
 )
@@ -95,6 +117,19 @@ class RemoteConfigManager(
                     "ads_enabled" to true,
                     "ads_use_real_android" to true,
                     "ads_use_real_ios" to true,
+                    "ads_ad_inspector_enabled" to false,
+                    adFormatEnabledKey(AdPlatform.ANDROID, AdFormat.APP_OPEN) to true,
+                    adFormatEnabledKey(AdPlatform.ANDROID, AdFormat.BANNER) to true,
+                    adFormatEnabledKey(AdPlatform.ANDROID, AdFormat.INTERSTITIAL) to true,
+                    adFormatEnabledKey(AdPlatform.ANDROID, AdFormat.REWARDED) to true,
+                    adFormatEnabledKey(AdPlatform.ANDROID, AdFormat.REWARDED_INTERSTITIAL) to true,
+                    adFormatEnabledKey(AdPlatform.ANDROID, AdFormat.NATIVE) to true,
+                    adFormatEnabledKey(AdPlatform.IOS, AdFormat.APP_OPEN) to true,
+                    adFormatEnabledKey(AdPlatform.IOS, AdFormat.BANNER) to true,
+                    adFormatEnabledKey(AdPlatform.IOS, AdFormat.INTERSTITIAL) to true,
+                    adFormatEnabledKey(AdPlatform.IOS, AdFormat.REWARDED) to true,
+                    adFormatEnabledKey(AdPlatform.IOS, AdFormat.REWARDED_INTERSTITIAL) to true,
+                    adFormatEnabledKey(AdPlatform.IOS, AdFormat.NATIVE) to true,
                     "ad_unit_ids" to defaultAdUnitIdsPayload(),
                     "play_integrity_enabled" to true,
                     "play_integrity_required" to false,
@@ -130,7 +165,22 @@ class RemoteConfigManager(
 
     fun areAdsEnabled(): Boolean = getEffectiveAdsConfig().adsEnabled
 
+    fun isAdFormatEnabled(
+        platform: AdPlatform = AdPlatform.ANDROID,
+        format: AdFormat,
+        remoteConfigState: AdsRemoteConfigState = currentRemoteConfigState(),
+    ): Boolean {
+        val adsEnabled = remoteConfigState.adsEnabled && remoteConfigState.featureFlags.adsEnabled
+        val formatEnabled = when (platform) {
+            AdPlatform.IOS -> remoteConfigState.iosFormatToggles.isEnabled(format)
+            AdPlatform.ANDROID -> remoteConfigState.androidFormatToggles.isEnabled(format)
+        }
+        return adsEnabled && formatEnabled
+    }
+
     fun isUsingTestAds(): Boolean = getEffectiveAdsConfig().usingTestAds
+
+    fun isAdInspectorEnabled(): Boolean = remoteConfig?.getBoolean("ads_ad_inspector_enabled") ?: false
 
     fun getAdsEnvironment(): AdsEnvironment =
         AdsEnvironment(
@@ -224,6 +274,10 @@ class RemoteConfigManager(
             AdPlatform.IOS -> remoteConfigState.adsUseRealIos
             AdPlatform.ANDROID -> remoteConfigState.adsUseRealAndroid
         }
+        val formatEnabled = when (platform) {
+            AdPlatform.IOS -> remoteConfigState.iosFormatToggles.isEnabled(format)
+            AdPlatform.ANDROID -> remoteConfigState.androidFormatToggles.isEnabled(format)
+        }
         val useRealAds = adsEnabled && platformWantsRealAds
         val selected = when (platform) {
             AdPlatform.IOS -> if (useRealAds) remoteConfigState.ios else TEST_IOS_IDS
@@ -242,7 +296,7 @@ class RemoteConfigManager(
             Log.i(
                 tag,
                 "[Ads][Android] Selected ad unit for ${format.name.lowercase()} = $resolved " +
-                    "useReal=$useRealAds adsEnabled=$adsEnabled platformRealFlag=$platformWantsRealAds " +
+                    "useReal=$useRealAds adsEnabled=$adsEnabled formatEnabled=$formatEnabled platformRealFlag=$platformWantsRealAds " +
                     "debug=${environment.isDebugBuild} emulator=${environment.isSimulatorOrEmulator}"
             )
         }
@@ -292,6 +346,8 @@ class RemoteConfigManager(
         val adsUseRealIos = remoteConfig?.getBoolean("ads_use_real_ios") ?: true
         val adsUseRealAndroid = remoteConfig?.getBoolean("ads_use_real_android") ?: true
         val featureFlags = parseFeatureFlags()
+        val iosFormatToggles = parseAdFormatToggles(AdPlatform.IOS)
+        val androidFormatToggles = parseAdFormatToggles(AdPlatform.ANDROID)
         val payload = parseAdUnitPayload(remoteConfig?.getString("ad_unit_ids").orEmpty())
         val ios = sanitizeLiveOverrides(
             parsed = parsePlatformUnitIds(
@@ -316,8 +372,23 @@ class RemoteConfigManager(
             adsUseRealIos = adsUseRealIos,
             adsUseRealAndroid = adsUseRealAndroid,
             featureFlags = featureFlags,
+            iosFormatToggles = iosFormatToggles,
+            androidFormatToggles = androidFormatToggles,
             ios = ios,
             android = android
+        )
+    }
+
+    private fun parseAdFormatToggles(platform: AdPlatform): AdFormatToggles {
+        return AdFormatToggles(
+            appOpen = remoteConfig?.getBoolean(adFormatEnabledKey(platform, AdFormat.APP_OPEN)) ?: true,
+            banner = remoteConfig?.getBoolean(adFormatEnabledKey(platform, AdFormat.BANNER)) ?: true,
+            interstitial = remoteConfig?.getBoolean(adFormatEnabledKey(platform, AdFormat.INTERSTITIAL)) ?: true,
+            rewarded = remoteConfig?.getBoolean(adFormatEnabledKey(platform, AdFormat.REWARDED)) ?: true,
+            rewardedInterstitial = remoteConfig?.getBoolean(
+                adFormatEnabledKey(platform, AdFormat.REWARDED_INTERSTITIAL)
+            ) ?: true,
+            native = remoteConfig?.getBoolean(adFormatEnabledKey(platform, AdFormat.NATIVE)) ?: true,
         )
     }
 
@@ -443,6 +514,14 @@ class RemoteConfigManager(
         return startsWith("ca-app-pub-3940256099942544/")
     }
 
+    private fun adFormatEnabledKey(platform: AdPlatform, format: AdFormat): String {
+        val platformKey = when (platform) {
+            AdPlatform.IOS -> "ios"
+            AdPlatform.ANDROID -> "android"
+        }
+        return "ads_${platformKey}_${format.name.lowercase()}_enabled"
+    }
+
     private fun defaultAdUnitIdsPayload(): String {
         return JSONObject()
             .put("ios", toPayload(LIVE_IOS_IDS))
@@ -467,7 +546,8 @@ class RemoteConfigManager(
             "[Ads][Android] Final ad config adsEnabled=${effective.adsEnabled} " +
                 "topLevel=${effective.adsEnabledTopLevel} featureFlag=${effective.featureFlags.adsEnabled} " +
                 "useRealAndroid=${effective.adsUseRealAndroid} debug=${effective.environment.isDebugBuild} " +
-                "emulator=${effective.environment.isSimulatorOrEmulator} usingTest=${effective.usingTestAds}"
+                "emulator=${effective.environment.isSimulatorOrEmulator} usingTest=${effective.usingTestAds} " +
+                "adInspectorEnabled=${isAdInspectorEnabled()}"
         )
     }
 

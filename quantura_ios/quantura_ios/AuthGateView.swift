@@ -347,6 +347,12 @@ private struct EmailAuthSheet: View {
                     .keyboardType(.emailAddress)
                     .padding(12)
                     .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
+                if let error = viewModel.emailInlineError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
 
                 if viewModel.emailAuthMode == .signUp {
                     TextField("Username", text: $viewModel.emailUsername)
@@ -354,6 +360,12 @@ private struct EmailAuthSheet: View {
                         .autocorrectionDisabled(true)
                         .padding(12)
                         .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
+                    if let error = viewModel.usernameInlineError {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
 
                 SecureField("Password", text: $viewModel.emailPassword)
@@ -361,6 +373,12 @@ private struct EmailAuthSheet: View {
                     .autocorrectionDisabled(true)
                     .padding(12)
                     .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
+                if let error = viewModel.passwordInlineError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
 
                 if viewModel.emailAuthMode == .signUp {
                     SecureField("Confirm password", text: $viewModel.emailConfirmPassword)
@@ -368,6 +386,19 @@ private struct EmailAuthSheet: View {
                         .autocorrectionDisabled(true)
                         .padding(12)
                         .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
+                    if let error = viewModel.confirmPasswordInlineError {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+
+                if !viewModel.errorText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(viewModel.errorText)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.red)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
                 Button(viewModel.emailAuthMode == .signUp ? "Create account" : "Continue") {
@@ -393,6 +424,7 @@ private struct EmailAuthSheet: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Close") {
+                        viewModel.dismissEmailSheet()
                         dismiss()
                     }
                 }

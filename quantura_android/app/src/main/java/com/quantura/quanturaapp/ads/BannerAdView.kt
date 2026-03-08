@@ -45,6 +45,12 @@ class BannerAdView @JvmOverloads constructor(
             hideAd()
             return
         }
+        if (!manager.isAdFormatEnabled(platform = AdPlatform.ANDROID, format = AdFormat.BANNER)) {
+            Log.d(tag, "Banner hidden because banner format flag is disabled.")
+            AdDebugStatusRegistry.updateLoad("banner", "disabled:format_off")
+            hideAd()
+            return
+        }
         if (!MobileAdsBootstrap.isInitialized()) {
             AdDebugStatusRegistry.updateLoad("banner", "waiting:sdk_init")
             minimumHeight = minReservedHeightPx
@@ -129,7 +135,7 @@ class BannerAdView @JvmOverloads constructor(
 
     fun refreshAdVisibility() {
         val manager = remoteConfigManager ?: return
-        if (!manager.areAdsEnabled()) {
+        if (!manager.areAdsEnabled() || !manager.isAdFormatEnabled(platform = AdPlatform.ANDROID, format = AdFormat.BANNER)) {
             hideAd()
             return
         }

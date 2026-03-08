@@ -24,6 +24,13 @@ final class AppOpenAdManager: NSObject, FullScreenContentDelegate {
             AdDebugStatusStore.shared.updateLoad(format: "app_open", status: "disabled")
             return
         }
+        guard remoteConfigManager.isAdFormatEnabled(format: .appOpen) else {
+            print("[Ads][iOS][AppOpen] App open disabled by format flag.")
+            AdDebugStatusStore.shared.updateLoad(format: "app_open", status: "disabled:format_off")
+            appOpenAd = nil
+            loadedAt = nil
+            return
+        }
         guard !isLoading else { return }
         guard !isAdFresh else { return }
         loadAd()
@@ -72,6 +79,10 @@ final class AppOpenAdManager: NSObject, FullScreenContentDelegate {
 
     private func showIfAvailable() {
         guard remoteConfigManager.areAdsEnabled() else { return }
+        guard remoteConfigManager.isAdFormatEnabled(format: .appOpen) else {
+            AdDebugStatusStore.shared.updateShow(format: "app_open", status: "skipped:format_off")
+            return
+        }
         guard !isShowing else { return }
         guard !presentationBlockedByAuthGate else {
             print("[Ads][iOS][AppOpen] Skipping show; auth gate is visible.")

@@ -39,9 +39,15 @@ class AppOpenAdManager(
     @Volatile
     private var currentActivity: Activity? = null
     @Volatile
+    private var currentActivityResumed = false
+    @Volatile
     private var presentationBlockedByAuthGate = false
     @Volatile
     private var failOpenTimeoutRunnable: Runnable? = null
+    @Volatile
+    private var waitingForShowCallback = false
+    @Volatile
+    private var canPresentInCurrentForeground = true
 
     fun start() {
         application.registerActivityLifecycleCallbacks(this)
@@ -49,13 +55,18 @@ class AppOpenAdManager(
     }
 
     override fun onStart(owner: LifecycleOwner) {
+        canPresentInCurrentForeground = true
         showAdIfAvailable()
+    }
+
+    override fun onStop(owner: LifecycleOwner) {
+        canPresentInCurrentForeground = true
     }
 
     fun setPresentationBlockedByAuthGate(blocked: Boolean) {
         presentationBlockedByAuthGate = blocked
         if (blocked) {
-            Log.d(tag, "App open ad presentation blocked by auth gate.")
+            Log.d(tag, "Auth gate is visible; app open presentation is deferred.")
         }
     }
 
@@ -63,6 +74,13 @@ class AppOpenAdManager(
         if (!remoteConfigManager.areAdsEnabled()) {
             Log.d(tag, "App open ads disabled by feature flag.")
             AdDebugStatusRegistry.updateLoad("app_open", "disabled")
+            return
+        }
+        if (!remoteConfigManager.isAdFormatEnabled(platform = AdPlatform.ANDROID, format = AdFormat.APP_OPEN)) {
+            Log.d(tag, "App open ads disabled by format flag.")
+            AdDebugStatusRegistry.updateLoad("app_open", "disabled:format_off")
+            appOpenAd = null
+            loadedAtMs = 0L
             return
         }
         if (!MobileAdsBootstrap.isInitialized()) {
@@ -113,6 +131,16 @@ class AppOpenAdManager(
     fun showAdIfAvailable() {
         if (!remoteConfigManager.areAdsEnabled()) return
         if (isShowingAd) return
+        if (!remoteConfigManager.isAdFormatEnabled(platform = AdPlatform.ANDROID, format = AdFormat.APP_OPEN)) {
+            Log.d(tag, "Skipping app open show; format flag is disabled.")
+            AdDebugStatusRegistry.updateShow("app_open", "skipped:format_off")
+            return
+        }
+        if (!canPresentInCurrentForeground) {
+            Log.d(tag, "Skipping app open show; already presented in current foreground.")
+            AdDebugStatusRegistry.updateShow("app_open", "skipped:already_presented")
+            return
+        }
         if (presentationBlockedByAuthGate) {
             Log.d(tag, "Skipping app open show; auth gate is visible.")
             AdDebugStatusRegistry.updateShow("app_open", "skipped:auth_gate")
@@ -141,8 +169,12 @@ class AppOpenAdManager(
         }
 
         isShowingAd = true
+        waitingForShowCallback = true
+        canPresentInCurrentForeground = false
         cached.fullScreenContentCallback = object : FullScreenContentCallback() {
             override fun onAdShowedFullScreenContent() {
+                clearFailOpenTimeout()
+                waitingForShowCallback = false
                 Log.d(tag, "App open ad shown.")
                 Log.i(tag, "[Ads][Android] Show success for app_open")
                 AdDebugStatusRegistry.updateShow("app_open", "shown")
@@ -163,8 +195,10 @@ class AppOpenAdManager(
 
             override fun onAdFailedToShowFullScreenContent(adError: com.google.android.gms.ads.AdError) {
                 clearFailOpenTimeout()
+                waitingForShowCallback = false
                 Log.w(tag, "App open ad failed to show: ${adError.message}")
                 isShowingAd = false
+                canPresentInCurrentForeground = true
                 appOpenAd = null
                 loadedAtMs = 0L
                 AdDebugStatusRegistry.updateShow("app_open", "failed:${adError.message}")
@@ -173,6 +207,7 @@ class AppOpenAdManager(
 
             override fun onAdDismissedFullScreenContent() {
                 clearFailOpenTimeout()
+                waitingForShowCallback = false
                 Log.d(tag, "App open ad dismissed.")
                 isShowingAd = false
                 appOpenAd = null
@@ -187,7 +222,9 @@ class AppOpenAdManager(
             cached.show(presenterActivity)
         } catch (error: Exception) {
             clearFailOpenTimeout()
+            waitingForShowCallback = false
             isShowingAd = false
+            canPresentInCurrentForeground = true
             appOpenAd = null
             loadedAtMs = 0L
             Log.w(tag, "App open ad show threw exception: ${error.message}")
@@ -210,6 +247,7 @@ class AppOpenAdManager(
         if (activity == null) return false
         if (activity !is MainActivity) return false
         if (activity.isFinishing || activity.isDestroyed) return false
+        if (!currentActivityResumed) return false
         return true
     }
 
@@ -217,16 +255,21 @@ class AppOpenAdManager(
 
     override fun onActivityStarted(activity: Activity) {
         currentActivity = activity
+    }
+
+    override fun onActivityResumed(activity: Activity) {
+        currentActivity = activity
+        currentActivityResumed = true
         if (activity is MainActivity) {
             showAdIfAvailable()
         }
     }
 
-    override fun onActivityResumed(activity: Activity) {
-        currentActivity = activity
+    override fun onActivityPaused(activity: Activity) {
+        if (currentActivity === activity) {
+            currentActivityResumed = false
+        }
     }
-
-    override fun onActivityPaused(activity: Activity) {}
 
     override fun onActivityStopped(activity: Activity) {}
 
@@ -235,7 +278,9 @@ class AppOpenAdManager(
     override fun onActivityDestroyed(activity: Activity) {
         if (currentActivity === activity) {
             currentActivity = null
+            currentActivityResumed = false
             clearFailOpenTimeout()
+            waitingForShowCallback = false
             isShowingAd = false
         }
     }
@@ -243,8 +288,9 @@ class AppOpenAdManager(
     private fun startFailOpenTimeout() {
         clearFailOpenTimeout()
         failOpenTimeoutRunnable = Runnable {
-            if (!isShowingAd) return@Runnable
+            if (!isShowingAd || !waitingForShowCallback) return@Runnable
             Log.w(tag, "App open ad timeout reached; fail-open and continue app flow.")
+            waitingForShowCallback = false
             isShowingAd = false
             appOpenAd = null
             loadedAtMs = 0L
