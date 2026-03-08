@@ -4,6 +4,8 @@ import android.app.Application
 import android.os.Build
 import android.util.Log
 import com.quantura.quanturaapp.di.AppContainer
+import com.google.android.gms.ads.MobileAds
+import com.google.android.gms.ads.RequestConfiguration
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
 import com.google.firebase.FirebaseApp
@@ -28,9 +30,6 @@ class QuanturaApplication : Application() {
         }
         val isEmulator = detectEmulator()
         logGooglePlayServicesHealth(isEmulator = isEmulator)
-        container = AppContainer(this, firebaseReady)
-        AuthSessionManager.start(firebaseReady)
-        container.appOpenAdManager.start()
         try {
             MobileAdsBootstrap.initialize(this)
         } catch (_: Exception) {

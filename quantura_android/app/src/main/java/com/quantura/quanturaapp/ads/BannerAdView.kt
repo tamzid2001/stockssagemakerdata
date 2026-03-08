@@ -44,18 +44,6 @@ class BannerAdView @JvmOverloads constructor(
             hideAd()
             return
         }
-        if (!MobileAdsBootstrap.isInitialized()) {
-            Log.d(tag, "Banner load deferred until Mobile Ads finishes initializing.")
-            AdDebugStatusRegistry.updateLoad("banner", "waiting:sdk_init")
-            MobileAdsBootstrap.runWhenInitialized {
-                post {
-                    if (remoteConfigManager === manager) {
-                        loadAd(manager)
-                    }
-                }
-            }
-            return
-        }
         if (width <= 0) {
             deferLoadUntilMeasured(manager)
             return
