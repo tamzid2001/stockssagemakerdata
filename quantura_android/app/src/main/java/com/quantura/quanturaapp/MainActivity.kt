@@ -206,13 +206,9 @@ class MainActivity : ComponentActivity() {
 
         lifecycleScope.launch {
             appContainer.remoteConfigManager.fetchAndActivate()
-            MobileAdsBootstrap.runWhenInitialized {
-                runOnUiThread {
-                    appContainer.adManager.primeAds(this@MainActivity)
-                    appContainer.appOpenAdManager.loadAdIfNeeded()
-                    refreshBannerAdVisibility()
-                }
-            }
+            appContainer.adManager.primeAds(this@MainActivity)
+            appContainer.appOpenAdManager.loadAdIfNeeded()
+            refreshBannerAdVisibility()
         }
 
         val deepLinkUrl = intent?.getStringExtra(QuanturaMessagingService.EXTRA_DEEP_LINK_URL)

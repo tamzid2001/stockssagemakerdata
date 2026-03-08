@@ -548,7 +548,6 @@ class AdManager(
 
     private fun preloadNative(context: Context) {
         if (!remoteConfigManager.areAdsEnabled()) return
-        if (!MobileAdsBootstrap.isInitialized()) return
         if (nativePreloadInFlight || preloadedNativePayload != null) return
 
         val adUnitId = remoteConfigManager.resolveAdUnitId(

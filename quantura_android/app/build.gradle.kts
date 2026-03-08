@@ -80,11 +80,11 @@ dependencies {
 
     implementation("com.google.android.gms:play-services-ads:24.9.0")
     implementation("com.google.ads.mediation:facebook:6.21.0.1")
-    implementation("com.google.android.gms:play-services-auth:21.5.1")
-    implementation("com.google.android.play:integrity:1.6.0")
+    implementation("com.google.android.gms:play-services-auth:21.2.0")
+    implementation("com.google.android.play:integrity:1.4.0")
     implementation("com.android.billingclient:billing:8.3.0")
     implementation("com.android.billingclient:billing-ktx:8.3.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
