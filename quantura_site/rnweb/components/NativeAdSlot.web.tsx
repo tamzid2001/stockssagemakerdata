@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { isNativeRuntime, reportNativeFeedEvent, requestNativeFeedAd } from "../bridge";
@@ -25,7 +25,6 @@ export default function NativeAdSlot({
   placement,
   title,
   body,
-  showPlaceholderOnWeb = true,
 }: NativeAdSlotProps) {
   const native = isNativeRuntime();
   const [status, setStatus] = useState<SlotStatus>(native ? "loading" : "idle");
@@ -95,19 +94,7 @@ export default function NativeAdSlot({
     return () => observer.disconnect();
   }, [adUnitId, native, placement, slotId, status]);
 
-  const webPlaceholder = useMemo(() => {
-    if (!showPlaceholderOnWeb || native) return null;
-    return (
-      <View style={[styles.shell, styles.placeholderShell]}>
-        <Text accessibilityRole="text" style={styles.placeholderLabel}>
-          Native app slot
-        </Text>
-        <Text style={styles.placeholderBody}>This sponsored slot appears only in Quantura iOS and Android builds.</Text>
-      </View>
-    );
-  }, [native, showPlaceholderOnWeb]);
-
-  if (!native) return webPlaceholder;
+  if (!native) return null;
 
   if (status === "loading") {
     return (
@@ -182,18 +169,6 @@ const styles = StyleSheet.create({
   },
   placeholderShell: {
     backgroundColor: "rgba(241, 245, 249, 0.88)",
-  },
-  placeholderLabel: {
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 0.4,
-    textTransform: "uppercase",
-    color: "#64748b",
-  },
-  placeholderBody: {
-    fontSize: 13,
-    lineHeight: 19,
-    color: "#334155",
   },
   failedShell: {
     borderColor: "rgba(248, 113, 113, 0.4)",

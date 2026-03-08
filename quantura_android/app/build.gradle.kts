@@ -78,7 +78,7 @@ dependencies {
     implementation("com.google.firebase:firebase-messaging")
     implementation("com.google.firebase:firebase-functions")
 
-    implementation("com.google.android.gms:play-services-ads:25.0.0")
+    implementation("com.google.android.gms:play-services-ads:24.9.0")
     implementation("com.google.ads.mediation:facebook:6.21.0.1")
     implementation("com.google.android.gms:play-services-auth:21.5.1")
     implementation("com.google.android.play:integrity:1.6.0")

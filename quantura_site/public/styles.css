@@ -6276,6 +6276,10 @@ form[data-provider-accent="amazon_nova"] #screener-generate-button {
   margin-bottom: 4px;
 }
 
+body:not(.native-runtime) .quantura-rn-injection-shell {
+  display: none;
+}
+
 .quantura-rn-root {
   width: 100%;
 }

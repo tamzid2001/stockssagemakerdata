@@ -80,6 +80,7 @@ import com.google.firebase.messaging.FirebaseMessaging
 import com.quantura.quanturaapp.ads.AdFormatStatusSnapshot
 import com.quantura.quanturaapp.ads.AdManager
 import com.quantura.quanturaapp.ads.BannerAdView
+import com.quantura.quanturaapp.ads.MobileAdsBootstrap
 import com.quantura.quanturaapp.auth.PlayIntegrityClient
 import com.quantura.quanturaapp.config.AdFormat
 import com.quantura.quanturaapp.config.AdPlatform
@@ -205,9 +206,13 @@ class MainActivity : ComponentActivity() {
 
         lifecycleScope.launch {
             appContainer.remoteConfigManager.fetchAndActivate()
-            appContainer.adManager.primeAds(this@MainActivity)
-            appContainer.appOpenAdManager.loadAdIfNeeded()
-            refreshBannerAdVisibility()
+            MobileAdsBootstrap.runWhenInitialized {
+                runOnUiThread {
+                    appContainer.adManager.primeAds(this@MainActivity)
+                    appContainer.appOpenAdManager.loadAdIfNeeded()
+                    refreshBannerAdVisibility()
+                }
+            }
         }
 
         val deepLinkUrl = intent?.getStringExtra(QuanturaMessagingService.EXTRA_DEEP_LINK_URL)
