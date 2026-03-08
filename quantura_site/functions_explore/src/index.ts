@@ -2086,10 +2086,7 @@ async function upsertExplorePostFromMyRequest(
   const sourceRef = asPlainObject(requestData.sourceRef);
   const ticker = firstTickerFromRequest(input, sourceRef, outputsMeta);
   const title = sanitizeText(requestData.title, 180) || defaultMyRequestTitle(type, input);
-  const caption = sanitizeText(
-    outputsMeta.summary || input.question || input.notes || outputsMeta.answer || "",
-    400
-  );
+  const caption = buildMyRequestExploreCaption(type, title, input, outputsMeta, ticker);
   const postId = deriveMyRequestExplorePostId(requestId, requestData);
   const postType = requestPostType(type);
   const topSymbols = Array.isArray(outputsMeta.topSymbols) ? outputsMeta.topSymbols : [];
@@ -2113,12 +2110,16 @@ async function upsertExplorePostFromMyRequest(
   const createdAt = existingData.createdAt || publishTimestamp;
   const updatedAt = publishTimestamp;
   const createdAtMsForScore = existingData.createdAt ? getTimestampMs(existingData.createdAt) : Date.now();
+  const mergedPreviewMetrics = {
+    ...buildMyRequestPreviewMetrics({ ...input, ...outputsMeta }, postType),
+    ...compactPreviewMetrics(asPlainObject(outputsMeta.metrics)),
+  };
   const preview = extractPreview(
     {
       ...input,
       ...outputsMeta,
-      metrics: outputsMeta.metrics,
-      summary: outputsMeta.summary || outputsMeta.answer || input.question || "",
+      metrics: Object.keys(mergedPreviewMetrics).length ? mergedPreviewMetrics : outputsMeta.metrics,
+      summary: caption,
     },
     postType
   );
@@ -2345,6 +2346,85 @@ function extractTickers(payload: Record<string, unknown>): string[] {
   return Array.from(tickers).slice(0, 8);
 }
 
+function compactPreviewMetrics(source: Record<string, unknown>): Record<string, string | number> {
+  const metrics: Record<string, string | number> = {};
+  Object.entries(source || {})
+    .slice(0, 6)
+    .forEach(([key, value]) => {
+      const cleanKey = sanitizeText(key, 40);
+      if (!cleanKey) return;
+      if (typeof value === "number" && Number.isFinite(value)) {
+        metrics[cleanKey] = value;
+        return;
+      }
+      const text = sanitizeText(value, 120);
+      if (text) metrics[cleanKey] = text;
+    });
+  return metrics;
+}
+
+function buildMyRequestPreviewMetrics(payload: Record<string, unknown>, postType: PostType): Record<string, string | number> {
+  const fallback: Record<string, unknown> = {};
+  if (postType === "screener") {
+    const count = Array.isArray(payload.results) ? payload.results.length : asFinite(payload.resultsCount || payload.resultsFound, 0);
+    if (count > 0) fallback.Results = Math.floor(count);
+    const topSymbols = Array.isArray(payload.topSymbols)
+      ? payload.topSymbols.map((value) => normalizeTicker(value)).filter(Boolean).slice(0, 3)
+      : [];
+    if (topSymbols.length) fallback.Top = topSymbols.join(", ");
+    const modelUsed = sanitizeText(payload.modelUsed || payload.model, 80);
+    if (modelUsed) fallback.Model = modelUsed;
+  } else if (postType === "agent") {
+    const provider = sanitizeText(payload.provider, 80);
+    if (provider) fallback.Provider = provider;
+    const model = sanitizeText(payload.model, 80);
+    if (model) fallback.Model = model;
+    const prediction = sanitizeText(payload.prediction || payload.direction, 80);
+    if (prediction) fallback.Direction = prediction;
+    const target = sanitizeText(payload.targetPrice || payload.target || payload.Target, 80);
+    if (target) fallback.Target = target;
+    const confidence = sanitizeText(payload.confidence || payload.Confidence, 80);
+    if (confidence) fallback.Confidence = confidence;
+    const latencyMs = asFinite(payload.latencyMs, NaN);
+    if (Number.isFinite(latencyMs) && latencyMs > 0) {
+      fallback.Latency = `${Math.max(1, Math.round(latencyMs / 1000))}s`;
+    }
+  }
+  return compactPreviewMetrics(fallback);
+}
+
+function buildMyRequestExploreCaption(
+  type: MyRequestType,
+  title: string,
+  input: Record<string, unknown>,
+  outputsMeta: Record<string, unknown>,
+  ticker: string
+): string {
+  const summary = sanitizeText(outputsMeta.summary || outputsMeta.answer || input.question || input.notes, 400);
+  if (summary) return summary;
+  if (type === "screener") {
+    const count = asFinite(outputsMeta.resultsCount || outputsMeta.resultsFound, 0);
+    const topSymbols = Array.isArray(outputsMeta.topSymbols)
+      ? outputsMeta.topSymbols.map((value) => normalizeTicker(value)).filter(Boolean).slice(0, 4)
+      : [];
+    return sanitizeText(
+      `${title} surfaced ${Math.max(0, Math.floor(count))} ranked candidates.${topSymbols.length ? ` Top names: ${topSymbols.join(", ")}.` : ""}`,
+      400
+    );
+  }
+  if (type === "indicator") {
+    const direction = sanitizeText(outputsMeta.prediction, 80);
+    return sanitizeText(
+      `${ticker || title} indicator analysis is ready${direction ? ` with a ${direction} bias.` : "."}`,
+      400
+    );
+  }
+  if (type === "modelCouncil") {
+    return sanitizeText(`${ticker || title} Model Council response is ready for review.`, 400);
+  }
+  return sanitizeText(title, 400);
+}
+
 function extractPreview(payload: Record<string, unknown>, postType: PostType): PostDoc["preview"] {
   const imageUrl = sanitizeText(payload.imageUrl || payload.chartUrl || payload.previewImage || payload.thumbnailUrl, 1000);
   const metricsSource = payload.metrics && typeof payload.metrics === "object"
@@ -2353,25 +2433,15 @@ function extractPreview(payload: Record<string, unknown>, postType: PostType): P
     ? (payload.summary as Record<string, unknown>)
     : null;
 
-  const metrics: Record<string, string | number> = {};
-  if (metricsSource) {
-    Object.entries(metricsSource)
-      .slice(0, 6)
-      .forEach(([key, value]) => {
-        const cleanKey = sanitizeText(key, 40);
-        if (!cleanKey) return;
-        if (typeof value === "number" && Number.isFinite(value)) {
-          metrics[cleanKey] = value;
-        } else {
-          const text = sanitizeText(value, 120);
-          if (text) metrics[cleanKey] = text;
-        }
-      });
-  }
+  const metrics: Record<string, string | number> = metricsSource ? compactPreviewMetrics(metricsSource) : {};
 
   if (postType === "screener" && !Object.keys(metrics).length) {
     const count = Array.isArray(payload.results) ? payload.results.length : asFinite(payload.resultsFound, 0);
     if (count > 0) metrics.results = Math.floor(count);
+  }
+
+  if (!Object.keys(metrics).length) {
+    Object.assign(metrics, buildMyRequestPreviewMetrics(payload, postType));
   }
 
   if (imageUrl) {
