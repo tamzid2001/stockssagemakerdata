@@ -9813,19 +9813,9 @@
     }));
   };
 
-  const resolveTradingViewInterval = (interval, rangePreset) => {
-    const base = String(interval || "").toLowerCase() === "1h" ? "60" : "D";
-    if (base === "60") return "60";
-    const range = String(rangePreset || "max").toLowerCase();
-    if (range === "1d") return "5";
-    if (range === "5d") return "30";
-    if (range === "1m") return "60";
-    if (range === "3m") return "240";
-    if (range === "5y") return "W";
-    return "D";
-  };
+  const resolveTradingViewInterval = (interval) => (String(interval || "").toLowerCase() === "1h" ? "60" : "D");
 
-  const resolveTradingViewStyle = () => (state.chartViewMode === "line" ? "3" : "1");
+  const resolveTradingViewStyle = () => "1";
 
   const setTradingViewStatus = (text) => {
     if (!ui.tradingViewStatus) return;
@@ -9882,7 +9872,7 @@
     const activeTicker = normalizeTicker(ticker) || getDefaultPopularTicker();
     const symbol = normalizeTradingViewSymbol(activeTicker);
     const theme = resolveTradingViewTheme();
-    const tvInterval = resolveTradingViewInterval(interval, state.chartRangePreset);
+    const tvInterval = resolveTradingViewInterval(interval);
     const style = resolveTradingViewStyle();
     const nonce = Date.now();
     state.tradingViewRenderNonce = nonce;
@@ -9944,7 +9934,7 @@
       src: buildTradingViewWidgetSrc("https://www.tradingview.com/widgetembed/?hideideas=1&locale=en", {
         symbol,
         interval: tvInterval,
-        allow_symbol_change: "1",
+        allow_symbol_change: "0",
         hide_side_toolbar: "0",
         save_image: "1",
         style,
@@ -15449,7 +15439,7 @@
       .filter((value) => value !== null)
       .sort((a, b) => a - b);
     const hasOhlc = ["Open", "High", "Low", "Close"].every((key) => key in (rows[0] || {}));
-    const drawCandles = hasOhlc && state.chartViewMode !== "line";
+    const drawCandles = hasOhlc;
 
     const baseTraces = drawCandles
       ? [
@@ -15512,13 +15502,7 @@
           xanchor: "left",
         },
     };
-    const manualRange = computeChartRange(x, state.chartRangePreset);
-    if (manualRange && manualRange.length === 2) {
-      layout.xaxis.range = manualRange;
-      layout.xaxis.autorange = false;
-    } else {
-      layout.xaxis.autorange = true;
-    }
+    layout.xaxis.autorange = true;
 
     await Plotly.react(ui.tickerChart, [...baseTraces, ...overlays], layout, {
       responsive: true,
@@ -18777,7 +18761,8 @@
 
   const renderForecastDetails = (forecastDoc) => {
     if (!ui.forecastOutput || !forecastDoc) return;
-    const rows = Array.isArray(forecastDoc.forecastRows) ? forecastDoc.forecastRows : [];
+    const rows = normalizeForecastSeriesRows(forecastDoc.forecastRows || forecastDoc.forecastPreview || []);
+    const quantKeys = extractQuantileKeys(rows);
     if (!rows.length) {
       setOutputReady(ui.forecastOutput);
       const source = String(forecastDoc.chartSeriesSource || "").trim();
@@ -18794,7 +18779,6 @@
       return;
     }
 
-    const quantKeys = extractQuantileKeys(rows);
     const headers = ["ds", ...quantKeys];
 
     const pageSize = 25;
@@ -18807,9 +18791,9 @@
     const end = Math.min(total, start + pageSize);
     const slice = rows.slice(start, end);
 
-    const quantileLabel = Array.isArray(forecastDoc.quantiles)
+    const quantileLabel = Array.isArray(forecastDoc.quantiles) && forecastDoc.quantiles.length
       ? forecastDoc.quantiles.map((q) => `P${Math.round(Number(q) * 100)}`).filter(Boolean).join(", ")
-      : "";
+      : quantKeys.map((key) => `P${String(key).replace(/^q/, "")}`).join(", ");
     const metrics = forecastDoc.metrics && typeof forecastDoc.metrics === "object" ? forecastDoc.metrics : {};
     const interval = String(forecastDoc.interval || state.tickerContext.interval || "1d");
 
@@ -19057,6 +19041,18 @@
       setTerminalStatus(`Plotted forecast ${forecastId}.`);
     }
     renderForecastDetails(doc);
+    const currentSummary = state.tickerContext.forecastAiSummary && typeof state.tickerContext.forecastAiSummary === "object"
+      ? state.tickerContext.forecastAiSummary
+      : null;
+    const shouldRequestSummary =
+      Array.isArray(doc.forecastRows) &&
+      doc.forecastRows.length > 0 &&
+      (!currentSummary ||
+        String(currentSummary.requestId || "").trim() !== String(forecastId || "").trim() ||
+        (!currentSummary.loading && !String(currentSummary.text || "").trim() && !String(currentSummary.error || "").trim()));
+    if (shouldRequestSummary) {
+      runForecastAutoSummary({ forecastDoc: doc, requestId: forecastId, notify: false }).catch(() => {});
+    }
     return doc;
   };
 

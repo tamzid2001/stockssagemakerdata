@@ -124,6 +124,8 @@
       { "source": "/api/model-council/share/**", "function": "api_model_council_share" },
       { "source": "/api/ticker/intel", "function": "quanturaExploreApi" },
       { "source": "/api/ticker/trending", "function": "quanturaExploreApi" },
+      { "source": "/api/market-headlines", "function": "quanturaExploreApi" },
+      { "source": "/api/market-headlines/**", "function": "quanturaExploreApi" },
       { "source": "/api/ticker/modules", "function": "api_ticker_modules" },
       { "source": "/api/chat", "function": "api_chat" },
       { "source": "/", "function": "ssr" },
