@@ -1004,7 +1004,12 @@ async function fetchTextWithTimeout(url: string, timeoutMs = MARKET_HEADLINE_FET
       signal: controller.signal,
       headers: {
         Accept: "application/rss+xml, application/xml;q=0.9, text/xml;q=0.8, text/html;q=0.3, */*;q=0.2",
-        "User-Agent": "quantura-market-headlines/1.0",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Cache-Control": "no-cache",
+        Pragma: "no-cache",
+        Referer: "https://quantura.studio/market-headlines",
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 QuanturaMarketHeadlines/1.0",
       },
     });
     if (!response.ok) {
@@ -4830,6 +4835,15 @@ ROUTES.get("/ticker/intel", async (req, res) => {
       logo_url: logoUrl,
     };
 
+    const price = {
+      last: extractYahooNumber(quoteRow.regularMarketPrice),
+      prevClose: extractYahooNumber(quoteRow.regularMarketPreviousClose),
+      dayLow: extractYahooNumber(quoteRow.regularMarketDayLow),
+      dayHigh: extractYahooNumber(quoteRow.regularMarketDayHigh),
+      volume: extractYahooNumber(quoteRow.regularMarketVolume),
+      currency: extractYahooText(quoteRow.currency, 20),
+    };
+
     const profileDetails = {
       longName: extractYahooText(quoteRow.longName || quoteRow.shortName, 180) || profile.name,
       sector: profile.sector,
@@ -4901,7 +4915,10 @@ ROUTES.get("/ticker/intel", async (req, res) => {
 
     const totalRevenue = extractYahooNumber(financialData.totalRevenue);
     const grossProfits = extractYahooNumber(financialData.grossProfits);
+    const grossMargins = extractYahooNumber(financialData.grossMargins);
     const profitMargin = extractYahooNumber(financialData.profitMargins);
+    const operatingMargins = extractYahooNumber(financialData.operatingMargins);
+    const ebitdaMargins = extractYahooNumber(financialData.ebitdaMargins);
     const roe = extractYahooNumber(financialData.returnOnEquity);
     const roa = extractYahooNumber(financialData.returnOnAssets);
     const totalCash = extractYahooNumber(financialData.totalCash);
@@ -4944,11 +4961,31 @@ ROUTES.get("/ticker/intel", async (req, res) => {
       ticker,
       source: "yahoo_quote_summary",
       fetchedAt: new Date().toISOString(),
+      price,
       logoUrl,
       logo_url: logoUrl,
       profile,
       profileDetails,
       valuation,
+      fundamentals: {
+        revenueTTM: totalRevenue,
+        grossMargins,
+        profitMargins: profitMargin,
+        operatingMargins,
+        ebitdaMargins,
+        returnOnAssets: roa,
+        returnOnEquity: roe,
+      },
+      risk: {
+        beta,
+        shortRatio: extractYahooNumber(defaultStats.shortRatio) ?? extractYahooNumber(quoteRow.shortRatio),
+      },
+      dividends: {
+        dividendRate: extractYahooNumber(summaryDetail.dividendRate),
+        dividendYield: extractYahooNumber(summaryDetail.dividendYield),
+        payoutRatio: extractYahooNumber(summaryDetail.payoutRatio),
+        exDividendDate: extractYahooText(summaryDetail.exDividendDate, 60),
+      },
       trading,
       events,
       analyst,

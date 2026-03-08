@@ -4,6 +4,21 @@
 
   const STORAGE_BASE_KEY = "quantura_market_data_base_v1";
   const STORAGE_LAST_SYMBOL = "quantura_ticker_details_symbol_v1";
+  const STORAGE_SESSION_SYMBOL = "quantura_ticker_details_session_symbol_v1";
+  const POPULAR_TICKERS = Object.freeze([
+    "AAPL",
+    "MSFT",
+    "NVDA",
+    "AMZN",
+    "META",
+    "GOOGL",
+    "TSLA",
+    "PLTR",
+    "AMD",
+    "AVGO",
+    "NFLX",
+    "JPM",
+  ]);
 
   const form = document.getElementById("ticker-form");
   const symbolInput = document.getElementById("ticker-symbol-input");
@@ -77,11 +92,18 @@
   const getApiBase = () => {
     const explicit = String(window.__QUANTURA_MARKET_DATA_BASE__ || "").trim();
     const saved = String(localStorage.getItem(STORAGE_BASE_KEY) || "").trim();
-    const fallback = "http://127.0.0.1:8090";
-    return (explicit || saved || fallback).replace(/\/$/, "");
+    return (explicit || saved).replace(/\/$/, "");
   };
 
   const normalizeSymbol = (input) => String(input || "").trim().toUpperCase().replace(/[^A-Z0-9.^\-=]/g, "");
+
+  const getSessionDefaultSymbol = () => {
+    const cached = normalizeSymbol(sessionStorage.getItem(STORAGE_SESSION_SYMBOL) || "");
+    if (cached) return cached;
+    const next = POPULAR_TICKERS[Math.floor(Math.random() * POPULAR_TICKERS.length)] || "AAPL";
+    sessionStorage.setItem(STORAGE_SESSION_SYMBOL, next);
+    return next;
+  };
 
   const parseSymbolFromUrl = () => {
     const pathParts = window.location.pathname.split("/").filter(Boolean);
@@ -367,24 +389,113 @@
   };
 
   const fetchTicker = async (symbol) => {
-    const base = getApiBase();
-    const url = new URL(`${base}/stocks/quote`);
-    url.searchParams.set("tickers", symbol);
-    url.searchParams.set("mode", "full");
+    const normalizeIntelEventValue = (events, label) => {
+      const event = Array.isArray(events)
+        ? events.find((item) => String(item?.label || "").trim().toLowerCase() === String(label || "").trim().toLowerCase())
+        : null;
+      return String(event?.value || "").trim();
+    };
 
-    const response = await fetch(url.toString(), {
-      method: "GET",
-      headers: { Accept: "application/json" },
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(String(payload?.detail || `HTTP ${response.status}`));
+    const buildIntelFallbackRecord = (payload) => {
+      const profile = payload?.profile && typeof payload.profile === "object" ? payload.profile : {};
+      const profileDetails = payload?.profileDetails && typeof payload.profileDetails === "object" ? payload.profileDetails : {};
+      const valuation = payload?.valuation && typeof payload.valuation === "object" ? payload.valuation : {};
+      const trading = payload?.trading && typeof payload.trading === "object" ? payload.trading : {};
+      const price = payload?.price && typeof payload.price === "object" ? payload.price : {};
+      const fundamentals = payload?.fundamentals && typeof payload.fundamentals === "object" ? payload.fundamentals : {};
+      const dividends = payload?.dividends && typeof payload.dividends === "object" ? payload.dividends : {};
+      const risk = payload?.risk && typeof payload.risk === "object" ? payload.risk : {};
+      const events = Array.isArray(payload?.events) ? payload.events : [];
+      return {
+        symbol,
+        price: {
+          last: Number(price.last),
+          prevClose: Number(price.prevClose),
+          dayLow: Number(price.dayLow),
+          dayHigh: Number(price.dayHigh),
+          volume: Number(price.volume),
+          currency: String(price.currency || profile.currency || "USD"),
+        },
+        profile: {
+          longName: String(profileDetails.longName || profile.name || symbol),
+          sector: String(profileDetails.sector || profile.sector || ""),
+          industry: String(profileDetails.industry || profile.industry || ""),
+          country: String(profileDetails.country || ""),
+          website: String(profileDetails.website || profile.website || ""),
+          longBusinessSummary: String(profileDetails.longBusinessSummary || profile.summary || ""),
+        },
+        valuation: {
+          marketCap: valuation.marketCap,
+          trailingPE: valuation.trailingPE,
+          forwardPE: valuation.forwardPE,
+          priceToBook: valuation.priceToBook,
+          enterpriseValue: valuation.enterpriseValue,
+          sharesOutstanding: trading.sharesOutstanding,
+        },
+        fundamentals: {
+          revenueTTM: fundamentals.revenueTTM,
+          grossMargins: fundamentals.grossMargins,
+          profitMargins: fundamentals.profitMargins,
+          operatingMargins: fundamentals.operatingMargins,
+          ebitdaMargins: fundamentals.ebitdaMargins,
+          returnOnAssets: fundamentals.returnOnAssets,
+          returnOnEquity: fundamentals.returnOnEquity,
+        },
+        risk: {
+          beta: risk.beta ?? trading.beta,
+          shortRatio: risk.shortRatio,
+        },
+        dividends: {
+          dividendRate: dividends.dividendRate || normalizeIntelEventValue(events, "Dividend rate"),
+          dividendYield: dividends.dividendYield ?? profile.dividendYield,
+          payoutRatio: dividends.payoutRatio,
+          exDividendDate: dividends.exDividendDate || normalizeIntelEventValue(events, "Ex-dividend date"),
+        },
+        raw: payload,
+        asOf: String(payload?.fetchedAt || ""),
+      };
+    };
+
+    const fetchFromQuanturaApi = async () => {
+      const response = await fetch(`/api/ticker/intel?ticker=${encodeURIComponent(symbol)}`, {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        credentials: "same-origin",
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(String(payload?.detail || payload?.error || `HTTP ${response.status}`));
+      }
+      return {
+        payload,
+        record: buildIntelFallbackRecord(payload),
+      };
+    };
+
+    const base = getApiBase();
+    if (base) {
+      try {
+        const url = new URL(`${base}/stocks/quote`);
+        url.searchParams.set("tickers", symbol);
+        url.searchParams.set("mode", "full");
+        const response = await fetch(url.toString(), {
+          method: "GET",
+          headers: { Accept: "application/json" },
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(String(payload?.detail || `HTTP ${response.status}`));
+        }
+        const record = Array.isArray(payload?.items) ? payload.items[0] : null;
+        if (record && typeof record === "object") {
+          return { payload, record };
+        }
+      } catch (error) {
+        // Fall back to the site API so the page still works without a local market-data bridge.
+      }
     }
-    const record = Array.isArray(payload?.items) ? payload.items[0] : null;
-    if (!record || typeof record !== "object") {
-      throw new Error("No quote data returned for symbol.");
-    }
-    return { payload, record };
+
+    return fetchFromQuanturaApi();
   };
 
   const activateTab = (tabName) => {
@@ -488,7 +599,7 @@
 
   activateTab("overview");
 
-  const initial = parseSymbolFromUrl() || normalizeSymbol(localStorage.getItem(STORAGE_LAST_SYMBOL) || "") || "AAPL";
+  const initial = parseSymbolFromUrl() || normalizeSymbol(localStorage.getItem(STORAGE_LAST_SYMBOL) || "") || getSessionDefaultSymbol();
   symbolInput.value = initial;
   loadSymbol(initial);
 })();
