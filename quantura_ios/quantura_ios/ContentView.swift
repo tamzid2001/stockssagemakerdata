@@ -383,9 +383,9 @@ final class RemoteConfigManager {
             "ads_use_real_ios": true as NSObject,
             "ads_use_real_android": true as NSObject,
             "ad_unit_ids": RemoteConfigManager.defaultAdUnitIdsSeedPayload as NSObject,
-            "native_feed_ad_start": 6 as NSObject,
-            "native_feed_ad_interval": 8 as NSObject,
-            "native_page_ad_midpoint": 0.55 as NSObject,
+            "native_feed_ad_start": 4 as NSObject,
+            "native_feed_ad_interval": 5 as NSObject,
+            "native_page_ad_midpoint": 0.45 as NSObject,
             "feature_flags": """
             {"native_bridge_enabled":true,"ads_enabled":true}
             """ as NSObject,
@@ -435,10 +435,7 @@ final class RemoteConfigManager {
         let state = currentRemoteConfigState()
         let environment = adsEnvironment()
         let adsEnabled = state.adsEnabled && state.featureFlags.adsEnabled
-        let usingRealAds = adsEnabled &&
-            state.adsUseRealIos &&
-            environment.isReleaseBuild &&
-            !environment.isSimulatorOrEmulator
+        let usingRealAds = adsEnabled && state.adsUseRealIos
         let selectedUnits = usingRealAds ? state.iosUnits : testIOSIDs
         let effective = EffectiveAdsConfig(
             adsEnabled: adsEnabled,
@@ -483,10 +480,7 @@ final class RemoteConfigManager {
         let state = remoteConfigState ?? currentRemoteConfigState()
         let adsEnabled = state.adsEnabled && state.featureFlags.adsEnabled
         let platformUseRealAds = (platform == .ios) ? state.adsUseRealIos : state.adsUseRealAndroid
-        let useRealAds = adsEnabled &&
-            platformUseRealAds &&
-            resolvedEnvironment.isReleaseBuild &&
-            !resolvedEnvironment.isSimulatorOrEmulator
+        let useRealAds = adsEnabled && platformUseRealAds
         let selected: AdUnitIDs
         switch platform {
         case .ios:
@@ -511,7 +505,11 @@ final class RemoteConfigManager {
             adUnitId = selected.nativeAdvanced
         }
         if platform == .ios {
-            print("\(tag) Selected ad unit for \(format.rawValue) = \(adUnitId)")
+            print(
+                "\(tag) Selected ad unit for \(format.rawValue) = \(adUnitId) " +
+                    "useReal=\(useRealAds) adsEnabled=\(adsEnabled) platformRealFlag=\(platformUseRealAds) " +
+                    "debug=\(resolvedEnvironment.isDebugBuild) simulator=\(resolvedEnvironment.isSimulatorOrEmulator)"
+            )
         }
         return adUnitId
     }
@@ -529,17 +527,17 @@ final class RemoteConfigManager {
     }
 
     func nativeFeedAdStart() -> Int {
-        let value = Int(remoteConfig?["native_feed_ad_start"].numberValue.intValue ?? 6)
+        let value = Int(remoteConfig?["native_feed_ad_start"].numberValue.intValue ?? 4)
         return max(3, min(20, value))
     }
 
     func nativeFeedAdInterval() -> Int {
-        let value = Int(remoteConfig?["native_feed_ad_interval"].numberValue.intValue ?? 8)
+        let value = Int(remoteConfig?["native_feed_ad_interval"].numberValue.intValue ?? 5)
         return max(3, min(20, value))
     }
 
     func nativePageAdMidpoint() -> Double {
-        let value = remoteConfig?["native_page_ad_midpoint"].numberValue.doubleValue ?? 0.55
+        let value = remoteConfig?["native_page_ad_midpoint"].numberValue.doubleValue ?? 0.45
         return max(0.2, min(0.9, value))
     }
 

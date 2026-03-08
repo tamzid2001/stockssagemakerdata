@@ -74,6 +74,10 @@ class AdManager(
             Log.i(tag, "[Ads][Android] Prime skipped because ads are disabled.")
             return
         }
+        if (!MobileAdsBootstrap.isInitialized()) {
+            Log.i(tag, "[Ads][Android] Prime deferred until Mobile Ads finishes initializing.")
+            return
+        }
         Log.i(
             tag,
             "[Ads][Android] Prime begin usingTestAds=${remoteConfigManager.isUsingTestAds()} " +
@@ -648,6 +652,10 @@ class AdManager(
     }
 
     private fun loadInterstitial(context: Context) {
+        if (!MobileAdsBootstrap.isInitialized()) {
+            Log.i(tag, "[Ads][Android] Interstitial load deferred until Mobile Ads finishes initializing.")
+            return
+        }
         val adUnitId = remoteConfigManager.resolveAdUnitId(
             platform = AdPlatform.ANDROID,
             format = AdFormat.INTERSTITIAL
@@ -677,6 +685,10 @@ class AdManager(
     }
 
     private fun loadRewarded(context: Context) {
+        if (!MobileAdsBootstrap.isInitialized()) {
+            Log.i(tag, "[Ads][Android] Rewarded load deferred until Mobile Ads finishes initializing.")
+            return
+        }
         val adUnitId = remoteConfigManager.resolveAdUnitId(
             platform = AdPlatform.ANDROID,
             format = AdFormat.REWARDED
@@ -707,6 +719,13 @@ class AdManager(
     }
 
     private fun loadRewardedInterstitial(context: Context) {
+        if (!MobileAdsBootstrap.isInitialized()) {
+            Log.i(
+                tag,
+                "[Ads][Android] Rewarded interstitial load deferred until Mobile Ads finishes initializing."
+            )
+            return
+        }
         val adUnitId = remoteConfigManager.resolveAdUnitId(
             platform = AdPlatform.ANDROID,
             format = AdFormat.REWARDED_INTERSTITIAL

@@ -219,6 +219,28 @@ type FxRateCacheEntry = {
   };
 };
 
+type MarketHeadlineFeedConfig = {
+  id: string;
+  providerId: string;
+  providerLabel: string;
+  feedLabel: string;
+  url: string;
+  sourceUrl: string;
+  directoryUrl?: string;
+  termsUrl?: string;
+  attributionNote?: string;
+};
+
+type MarketHeadlineArticle = {
+  title: string;
+  summary: string;
+  link: string;
+  publisher: string;
+  sourceLabel: string;
+  publishedAt: string;
+  thumbnailUrl?: string;
+};
+
 type TickerIntelCacheEntry = {
   expiresAtMs: number;
   value: Record<string, unknown>;
@@ -263,6 +285,264 @@ const polymarketCache = new Map<string, PolymarketCacheEntry>();
 const tickerIntelCache = new Map<string, TickerIntelCacheEntry>();
 const tickerTrendingCache = new Map<string, TickerTrendingCacheEntry>();
 const fxRateCache = new Map<string, FxRateCacheEntry>();
+const MARKET_HEADLINE_DEFAULT_FEED_ID = "cnn_topstories";
+const MARKET_HEADLINE_FETCH_TIMEOUT_MS = 12000;
+const MARKET_HEADLINE_PROVIDER_DEFAULTS = {
+  cnn: "cnn_topstories",
+  spglobal: "spglobal_research",
+  mql5: "mql5_blogs",
+  cnbc: "cnbc_market_insider",
+  economictimes: "economictimes_stocks",
+  investing: "investing_markets",
+  seekingalpha: "seekingalpha_top",
+  marketwatch: "marketwatch_topstories",
+} as const;
+const MARKET_HEADLINE_FEEDS: Record<string, MarketHeadlineFeedConfig> = {
+  cnn_topstories: {
+    id: "cnn_topstories",
+    providerId: "cnn",
+    providerLabel: "CNN RSS",
+    feedLabel: "Top Stories",
+    url: "http://rss.cnn.com/rss/cnn_topstories.rss",
+    sourceUrl: "http://rss.cnn.com/rss/cnn_topstories.rss",
+    directoryUrl: "http://www.cnn.com/services/rss/",
+    termsUrl: "https://www.cnn.com/terms",
+    attributionNote: "CNN RSS feed access is subject to CNN terms of use.",
+  },
+  cnn_world: {
+    id: "cnn_world",
+    providerId: "cnn",
+    providerLabel: "CNN RSS",
+    feedLabel: "World",
+    url: "http://rss.cnn.com/rss/cnn_world.rss",
+    sourceUrl: "http://rss.cnn.com/rss/cnn_world.rss",
+    directoryUrl: "http://www.cnn.com/services/rss/",
+    termsUrl: "https://www.cnn.com/terms",
+    attributionNote: "CNN RSS feed access is subject to CNN terms of use.",
+  },
+  cnn_us: {
+    id: "cnn_us",
+    providerId: "cnn",
+    providerLabel: "CNN RSS",
+    feedLabel: "U.S.",
+    url: "http://rss.cnn.com/rss/cnn_us.rss",
+    sourceUrl: "http://rss.cnn.com/rss/cnn_us.rss",
+    directoryUrl: "http://www.cnn.com/services/rss/",
+    termsUrl: "https://www.cnn.com/terms",
+    attributionNote: "CNN RSS feed access is subject to CNN terms of use.",
+  },
+  cnn_business: {
+    id: "cnn_business",
+    providerId: "cnn",
+    providerLabel: "CNN RSS",
+    feedLabel: "Business",
+    url: "http://rss.cnn.com/rss/money_latest.rss",
+    sourceUrl: "http://rss.cnn.com/rss/money_latest.rss",
+    directoryUrl: "http://www.cnn.com/services/rss/",
+    termsUrl: "https://www.cnn.com/terms",
+    attributionNote: "CNN RSS feed access is subject to CNN terms of use.",
+  },
+  cnn_politics: {
+    id: "cnn_politics",
+    providerId: "cnn",
+    providerLabel: "CNN RSS",
+    feedLabel: "Politics",
+    url: "http://rss.cnn.com/rss/cnn_allpolitics.rss",
+    sourceUrl: "http://rss.cnn.com/rss/cnn_allpolitics.rss",
+    directoryUrl: "http://www.cnn.com/services/rss/",
+    termsUrl: "https://www.cnn.com/terms",
+    attributionNote: "CNN RSS feed access is subject to CNN terms of use.",
+  },
+  cnn_technology: {
+    id: "cnn_technology",
+    providerId: "cnn",
+    providerLabel: "CNN RSS",
+    feedLabel: "Technology",
+    url: "http://rss.cnn.com/rss/cnn_tech.rss",
+    sourceUrl: "http://rss.cnn.com/rss/cnn_tech.rss",
+    directoryUrl: "http://www.cnn.com/services/rss/",
+    termsUrl: "https://www.cnn.com/terms",
+    attributionNote: "CNN RSS feed access is subject to CNN terms of use.",
+  },
+  cnn_health: {
+    id: "cnn_health",
+    providerId: "cnn",
+    providerLabel: "CNN RSS",
+    feedLabel: "Health",
+    url: "http://rss.cnn.com/rss/cnn_health.rss",
+    sourceUrl: "http://rss.cnn.com/rss/cnn_health.rss",
+    directoryUrl: "http://www.cnn.com/services/rss/",
+    termsUrl: "https://www.cnn.com/terms",
+    attributionNote: "CNN RSS feed access is subject to CNN terms of use.",
+  },
+  cnn_entertainment: {
+    id: "cnn_entertainment",
+    providerId: "cnn",
+    providerLabel: "CNN RSS",
+    feedLabel: "Entertainment",
+    url: "http://rss.cnn.com/rss/cnn_showbiz.rss",
+    sourceUrl: "http://rss.cnn.com/rss/cnn_showbiz.rss",
+    directoryUrl: "http://www.cnn.com/services/rss/",
+    termsUrl: "https://www.cnn.com/terms",
+    attributionNote: "CNN RSS feed access is subject to CNN terms of use.",
+  },
+  cnn_travel: {
+    id: "cnn_travel",
+    providerId: "cnn",
+    providerLabel: "CNN RSS",
+    feedLabel: "Travel",
+    url: "http://rss.cnn.com/rss/cnn_travel.rss",
+    sourceUrl: "http://rss.cnn.com/rss/cnn_travel.rss",
+    directoryUrl: "http://www.cnn.com/services/rss/",
+    termsUrl: "https://www.cnn.com/terms",
+    attributionNote: "CNN RSS feed access is subject to CNN terms of use.",
+  },
+  cnn_video: {
+    id: "cnn_video",
+    providerId: "cnn",
+    providerLabel: "CNN RSS",
+    feedLabel: "Video",
+    url: "http://rss.cnn.com/rss/cnn_freevideo.rss",
+    sourceUrl: "http://rss.cnn.com/rss/cnn_freevideo.rss",
+    directoryUrl: "http://www.cnn.com/services/rss/",
+    termsUrl: "https://www.cnn.com/terms",
+    attributionNote: "CNN RSS feed access is subject to CNN terms of use.",
+  },
+  cnn10: {
+    id: "cnn10",
+    providerId: "cnn",
+    providerLabel: "CNN RSS",
+    feedLabel: "CNN 10",
+    url: "http://rss.cnn.com/services/podcasting/cnn10/rss.xml",
+    sourceUrl: "http://rss.cnn.com/services/podcasting/cnn10/rss.xml",
+    directoryUrl: "http://www.cnn.com/services/rss/",
+    termsUrl: "https://www.cnn.com/terms",
+    attributionNote: "CNN RSS feed access is subject to CNN terms of use.",
+  },
+  cnn_latest: {
+    id: "cnn_latest",
+    providerId: "cnn",
+    providerLabel: "CNN RSS",
+    feedLabel: "Most Recent",
+    url: "http://rss.cnn.com/rss/cnn_latest.rss",
+    sourceUrl: "http://rss.cnn.com/rss/cnn_latest.rss",
+    directoryUrl: "http://www.cnn.com/services/rss/",
+    termsUrl: "https://www.cnn.com/terms",
+    attributionNote: "CNN RSS feed access is subject to CNN terms of use.",
+  },
+  cnn_underscored: {
+    id: "cnn_underscored",
+    providerId: "cnn",
+    providerLabel: "CNN RSS",
+    feedLabel: "CNN Underscored",
+    url: "http://rss.cnn.com/cnn-underscored.rss",
+    sourceUrl: "http://rss.cnn.com/cnn-underscored.rss",
+    directoryUrl: "http://www.cnn.com/services/rss/",
+    termsUrl: "https://www.cnn.com/terms",
+    attributionNote: "CNN RSS feed access is subject to CNN terms of use.",
+  },
+  spglobal_research: {
+    id: "spglobal_research",
+    providerId: "spglobal",
+    providerLabel: "S&P DJI RSS",
+    feedLabel: "Research",
+    url: "https://www.spglobal.com/spdji/en/rss/rss-details/?rssFeedName=research",
+    sourceUrl: "https://www.spglobal.com/spdji/en/rss/rss-details/?rssFeedName=research",
+    directoryUrl: "https://www.spglobal.com/spdji/en/rss/",
+    attributionNote: "S&P DJI may block automated access for some RSS endpoints.",
+  },
+  spglobal_commentary: {
+    id: "spglobal_commentary",
+    providerId: "spglobal",
+    providerLabel: "S&P DJI RSS",
+    feedLabel: "Commentary",
+    url: "https://www.spglobal.com/spdji/en/rss/rss-details/?rssFeedName=commentary",
+    sourceUrl: "https://www.spglobal.com/spdji/en/rss/rss-details/?rssFeedName=commentary",
+    directoryUrl: "https://www.spglobal.com/spdji/en/rss/",
+    attributionNote: "S&P DJI may block automated access for some RSS endpoints.",
+  },
+  spglobal_index_launches: {
+    id: "spglobal_index_launches",
+    providerId: "spglobal",
+    providerLabel: "S&P DJI RSS",
+    feedLabel: "Index launches",
+    url: "https://www.spglobal.com/spdji/en/rss/rss-details/?rssFeedName=index-launches",
+    sourceUrl: "https://www.spglobal.com/spdji/en/rss/rss-details/?rssFeedName=index-launches",
+    directoryUrl: "https://www.spglobal.com/spdji/en/rss/",
+    attributionNote: "S&P DJI may block automated access for some RSS endpoints.",
+  },
+  spglobal_index_announcements: {
+    id: "spglobal_index_announcements",
+    providerId: "spglobal",
+    providerLabel: "S&P DJI RSS",
+    feedLabel: "Index announcements",
+    url: "https://www.spglobal.com/spdji/en/rss/rss-details/?rssFeedName=index-announcements",
+    sourceUrl: "https://www.spglobal.com/spdji/en/rss/rss-details/?rssFeedName=index-announcements",
+    directoryUrl: "https://www.spglobal.com/spdji/en/rss/",
+    attributionNote: "S&P DJI may block automated access for some RSS endpoints.",
+  },
+  spglobal_consultations: {
+    id: "spglobal_consultations",
+    providerId: "spglobal",
+    providerLabel: "S&P DJI RSS",
+    feedLabel: "Consultations",
+    url: "https://www.spglobal.com/spdji/en/rss/rss-details/?rssFeedName=consultations",
+    sourceUrl: "https://www.spglobal.com/spdji/en/rss/rss-details/?rssFeedName=consultations",
+    directoryUrl: "https://www.spglobal.com/spdji/en/rss/",
+    attributionNote: "S&P DJI may block automated access for some RSS endpoints.",
+  },
+  mql5_blogs: {
+    id: "mql5_blogs",
+    providerId: "mql5",
+    providerLabel: "MQL5 Blogs RSS",
+    feedLabel: "Latest blogs",
+    url: "https://www.mql5.com/en/blogs/rss",
+    sourceUrl: "https://www.mql5.com/en/blogs/rss",
+    attributionNote: "MQL5 may restrict automated RSS access from some environments.",
+  },
+  cnbc_market_insider: {
+    id: "cnbc_market_insider",
+    providerId: "cnbc",
+    providerLabel: "CNBC Market Insider",
+    feedLabel: "Market Insider",
+    url: "https://www.cnbc.com/id/20409666/device/rss/rss.html?x=1",
+    sourceUrl: "https://www.cnbc.com/id/20409666/device/rss/rss.html?x=1",
+    attributionNote: "CNBC Market Insider feed provided through CNBC RSS.",
+  },
+  economictimes_stocks: {
+    id: "economictimes_stocks",
+    providerId: "economictimes",
+    providerLabel: "Economic Times Stocks",
+    feedLabel: "Stocks",
+    url: "https://economictimes.indiatimes.com/markets/stocks/rssfeeds/2146842.cms",
+    sourceUrl: "https://economictimes.indiatimes.com/markets/stocks/rssfeeds/2146842.cms",
+  },
+  investing_markets: {
+    id: "investing_markets",
+    providerId: "investing",
+    providerLabel: "Investing.com Markets",
+    feedLabel: "Market news",
+    url: "https://www.investing.com/rss/news_25.rss",
+    sourceUrl: "https://www.investing.com/rss/news_25.rss",
+  },
+  seekingalpha_top: {
+    id: "seekingalpha_top",
+    providerId: "seekingalpha",
+    providerLabel: "Seeking Alpha",
+    feedLabel: "Top feed",
+    url: "https://seekingalpha.com/feed.xml",
+    sourceUrl: "https://seekingalpha.com/feed.xml",
+  },
+  marketwatch_topstories: {
+    id: "marketwatch_topstories",
+    providerId: "marketwatch",
+    providerLabel: "MarketWatch Top Stories",
+    feedLabel: "Top stories",
+    url: "https://feeds.content.dowjones.io/public/rss/mw_topstories",
+    sourceUrl: "https://feeds.content.dowjones.io/public/rss/mw_topstories",
+    attributionNote: "MarketWatch top stories are distributed through the Dow Jones public RSS feed.",
+  },
+};
 const PLAY_INTEGRITY_AUTH = new GoogleAuth({
   scopes: ["https://www.googleapis.com/auth/playintegrity"],
 });
@@ -707,6 +987,168 @@ async function fetchJsonWithTimeout(url: string, timeoutMs = 7500): Promise<unkn
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function fetchTextWithTimeout(url: string, timeoutMs = MARKET_HEADLINE_FETCH_TIMEOUT_MS): Promise<string> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      signal: controller.signal,
+      headers: {
+        Accept: "application/rss+xml, application/xml;q=0.9, text/xml;q=0.8, text/html;q=0.3, */*;q=0.2",
+        "User-Agent": "quantura-market-headlines/1.0",
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`upstream_http_${response.status}`);
+    }
+    return await response.text();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function decodeXmlEntities(value: string): string {
+  const withCdata = value.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1");
+  const named: Record<string, string> = {
+    amp: "&",
+    lt: "<",
+    gt: ">",
+    quot: '"',
+    apos: "'",
+  };
+  return withCdata
+    .replace(/&#x([0-9a-f]+);/gi, (_match, hex: string) => {
+      const code = Number.parseInt(hex, 16);
+      return Number.isFinite(code) ? String.fromCodePoint(code) : "";
+    })
+    .replace(/&#([0-9]+);/g, (_match, num: string) => {
+      const code = Number.parseInt(num, 10);
+      return Number.isFinite(code) ? String.fromCodePoint(code) : "";
+    })
+    .replace(/&([a-z]+);/gi, (match, name: string) => named[name.toLowerCase()] || match);
+}
+
+function stripFeedMarkup(value: string, maxLen = 420): string {
+  const raw = decodeXmlEntities(value).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  return raw.slice(0, maxLen);
+}
+
+function extractXmlTagText(block: string, tagNames: readonly string[]): string {
+  for (const tagName of tagNames) {
+    const pattern = new RegExp(`<${escapeRegExp(tagName)}(?:\\s[^>]*)?>([\\s\\S]*?)</${escapeRegExp(tagName)}>`, "i");
+    const match = block.match(pattern);
+    if (match && match[1]) return match[1];
+  }
+  return "";
+}
+
+function extractXmlAttribute(block: string, tagName: string, attributeName: string): string {
+  const pattern = new RegExp(
+    `<${escapeRegExp(tagName)}\\b[^>]*\\b${escapeRegExp(attributeName)}=["']([^"']+)["'][^>]*>`,
+    "i"
+  );
+  const match = block.match(pattern);
+  return match && match[1] ? decodeXmlEntities(match[1]).trim() : "";
+}
+
+function normalizeExternalUrl(value: string): string {
+  const text = decodeXmlEntities(asString(value)).trim();
+  return /^https?:\/\//i.test(text) ? text.slice(0, 1000) : "";
+}
+
+function extractFeedImageUrl(block: string): string {
+  const mediaThumb = normalizeExternalUrl(extractXmlAttribute(block, "media:thumbnail", "url"));
+  if (mediaThumb) return mediaThumb;
+  const mediaContent = normalizeExternalUrl(extractXmlAttribute(block, "media:content", "url"));
+  if (mediaContent) return mediaContent;
+  const enclosureUrl = normalizeExternalUrl(extractXmlAttribute(block, "enclosure", "url"));
+  const enclosureType = extractXmlAttribute(block, "enclosure", "type").toLowerCase();
+  if (enclosureUrl && enclosureType.startsWith("image/")) return enclosureUrl;
+  const summaryMatch = decodeXmlEntities(block).match(/<img[^>]+src=["']([^"']+)["']/i);
+  return summaryMatch && summaryMatch[1] ? normalizeExternalUrl(summaryMatch[1]) : "";
+}
+
+function toPublishedIso(value: string): string {
+  const parsed = Date.parse(decodeXmlEntities(value).trim());
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : "";
+}
+
+function parseMarketHeadlineFeedXml(
+  xml: string,
+  feedConfig: MarketHeadlineFeedConfig
+): { feedTitle: string; headlines: MarketHeadlineArticle[] } {
+  const feedTitle = stripFeedMarkup(
+    extractXmlTagText(xml, ["channel:title", "title"]).replace(/^.*?<title(?:\s[^>]*)?>/i, ""),
+    180
+  );
+  const itemBlocks = xml.match(/<item\b[\s\S]*?<\/item>/gi) || xml.match(/<entry\b[\s\S]*?<\/entry>/gi) || [];
+  const seen = new Set<string>();
+  const headlines: MarketHeadlineArticle[] = [];
+  for (const block of itemBlocks) {
+    const title = stripFeedMarkup(extractXmlTagText(block, ["title"]), 220);
+    const link = normalizeExternalUrl(extractXmlAttribute(block, "link", "href") || extractXmlTagText(block, ["link", "id"]));
+    if (!title || !link) continue;
+    const dedupeKey = `${title.toLowerCase()}__${link.toLowerCase()}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    const summary = stripFeedMarkup(
+      extractXmlTagText(block, ["description", "summary", "content:encoded", "content"]),
+      420
+    );
+    const sourceText = stripFeedMarkup(extractXmlTagText(block, ["source"]), 140);
+    const authorText = stripFeedMarkup(extractXmlTagText(block, ["dc:creator", "creator", "author"]), 140);
+    const publisher = sanitizeText(sourceText || authorText || feedTitle || feedConfig.providerLabel, 140) || feedConfig.providerLabel;
+    const publishedAt = toPublishedIso(extractXmlTagText(block, ["pubDate", "published", "updated", "dc:date"]));
+    const thumbnailUrl = extractFeedImageUrl(block);
+    headlines.push({
+      title,
+      summary,
+      link,
+      publisher,
+      sourceLabel: `${feedConfig.providerLabel} · ${feedConfig.feedLabel}`,
+      publishedAt,
+      thumbnailUrl: thumbnailUrl || undefined,
+    });
+  }
+  headlines.sort((left, right) => {
+    const leftMs = left.publishedAt ? Date.parse(left.publishedAt) : 0;
+    const rightMs = right.publishedAt ? Date.parse(right.publishedAt) : 0;
+    return (Number.isFinite(rightMs) ? rightMs : 0) - (Number.isFinite(leftMs) ? leftMs : 0);
+  });
+  return {
+    feedTitle: feedTitle || feedConfig.feedLabel,
+    headlines,
+  };
+}
+
+function resolveMarketHeadlineFeedConfig(providerIdRaw: unknown, feedIdRaw: unknown): MarketHeadlineFeedConfig {
+  const providerId = sanitizeText(providerIdRaw, 80).toLowerCase();
+  const feedId = sanitizeText(feedIdRaw, 80).toLowerCase();
+  const exact = MARKET_HEADLINE_FEEDS[feedId];
+  if (exact && (!providerId || exact.providerId === providerId)) return exact;
+  const fallbackId = MARKET_HEADLINE_PROVIDER_DEFAULTS[providerId as keyof typeof MARKET_HEADLINE_PROVIDER_DEFAULTS];
+  return MARKET_HEADLINE_FEEDS[fallbackId || MARKET_HEADLINE_DEFAULT_FEED_ID];
+}
+
+function describeMarketHeadlineFetchError(feedConfig: MarketHeadlineFeedConfig, error: unknown): string {
+  const detail = sanitizeText((error as Error | null)?.message || error, 180).toLowerCase();
+  if (detail.includes("403")) {
+    return `${feedConfig.providerLabel} blocked automated access for ${feedConfig.feedLabel} right now.`;
+  }
+  if (detail.includes("404")) {
+    return `${feedConfig.providerLabel} returned not found for ${feedConfig.feedLabel}.`;
+  }
+  if (detail.includes("abort")) {
+    return `${feedConfig.providerLabel} timed out while loading ${feedConfig.feedLabel}.`;
+  }
+  return `Unable to fetch ${feedConfig.providerLabel} for ${feedConfig.feedLabel} right now.`;
 }
 
 function normalizeHandle(value: unknown): string {
@@ -1345,6 +1787,164 @@ async function readMyRequestForOwner(uid: string, requestId: string): Promise<{ 
   const data = (snap.data() || {}) as Record<string, unknown>;
   if (asString(data.ownerUid) && asString(data.ownerUid) !== cleanUid) return null;
   return { id: snap.id, data };
+}
+
+function requestPostType(type: MyRequestType): PostType {
+  if (type === "forecast") return "forecast";
+  if (type === "screener") return "screener";
+  return "agent";
+}
+
+function deriveMyRequestExplorePostId(requestId: string, data: Record<string, unknown>): string {
+  const existing = sanitizeText(data.explorePostId, 220);
+  if (existing) return existing;
+
+  const type = normalizeMyRequestType(data.type) || "forecast";
+  const sourceRef = asPlainObject(data.sourceRef);
+  const sourceCollection = sanitizeText(sourceRef.collection, 80);
+  const sourceId = sanitizeText(sourceRef.id, 220);
+  if (type === "forecast" && sourceCollection === "forecast_requests" && sourceId) return `forecast_${sourceId}`;
+  if (type === "screener" && sourceCollection === "screener_runs" && sourceId) return `screener_${sourceId}`;
+  if (type === "modelCouncil" && sourceId) return `model_council_${sourceId}`;
+  if (type === "indicator" && sourceId) return `indicator_${sourceId}`;
+  return `request_${normalizeMyRequestId(requestId)}`;
+}
+
+function buildMyRequestTargetUrl(requestId: string, data: Record<string, unknown>): string {
+  const type = normalizeMyRequestType(data.type) || "forecast";
+  const sourceRef = asPlainObject(data.sourceRef);
+  const sourceCollection = sanitizeText(sourceRef.collection, 80);
+  const sourceId = sanitizeText(sourceRef.id, 220);
+
+  if (type === "forecast") {
+    if (sourceCollection === "forecast_requests" && sourceId) {
+      return `/forecasting?forecastId=${encodeURIComponent(sourceId)}`;
+    }
+    return `/forecasting?requestId=${encodeURIComponent(requestId)}`;
+  }
+  if (type === "screener") {
+    if (sourceCollection === "screener_runs" && sourceId) {
+      return `/screener?runId=${encodeURIComponent(sourceId)}`;
+    }
+    return `/screener?requestId=${encodeURIComponent(requestId)}`;
+  }
+  if (type === "indicator") {
+    return `/indicators?requestId=${encodeURIComponent(requestId)}`;
+  }
+  if (sourceCollection === MODEL_COUNCIL_RESPONSE_COLLECTION && sourceId) {
+    return `/model-council?responseId=${encodeURIComponent(sourceId)}`;
+  }
+  return `/model-council?requestId=${encodeURIComponent(requestId)}`;
+}
+
+async function upsertExplorePostFromMyRequest(
+  ownerUid: string,
+  requestId: string,
+  requestData: Record<string, unknown>,
+  visibility: Visibility
+): Promise<string> {
+  const type = normalizeMyRequestType(requestData.type) || "forecast";
+  const input = normalizeMyRequestInput(requestData.input);
+  const outputsMeta = trimOutputsMeta(requestData.outputsMeta);
+  const sourceRef = asPlainObject(requestData.sourceRef);
+  const ticker = firstTickerFromRequest(input, sourceRef, outputsMeta);
+  const title = sanitizeText(requestData.title, 180) || defaultMyRequestTitle(type, input);
+  const caption = sanitizeText(
+    outputsMeta.summary || input.question || input.notes || outputsMeta.answer || "",
+    400
+  );
+  const postId = deriveMyRequestExplorePostId(requestId, requestData);
+  const postType = requestPostType(type);
+  const topSymbols = Array.isArray(outputsMeta.topSymbols) ? outputsMeta.topSymbols : [];
+  const tickers = Array.from(
+    new Set(
+      [ticker, ...topSymbols.map((item) => normalizeTicker(item))]
+        .map((item) => normalizeTicker(item))
+        .filter(Boolean)
+    )
+  ).slice(0, 8) as string[];
+  const tags = Array.from(new Set([type.toLowerCase(), ...tickers.map((item) => item.toLowerCase())]))
+    .filter(Boolean)
+    .slice(0, 12);
+  const targetUrl = buildMyRequestTargetUrl(requestId, requestData);
+  const { handle, photoURL } = await readAuthorProfile(ownerUid);
+  const postRef = db.collection("posts").doc(postId);
+  const existingSnap = await postRef.get();
+  const existingData = existingSnap.exists ? ((existingSnap.data() || {}) as Record<string, unknown>) : {};
+  const existingCounts = normalizeCounts(existingData.counts);
+  const publishTimestamp = admin.firestore.FieldValue.serverTimestamp();
+  const createdAt = existingData.createdAt || publishTimestamp;
+  const updatedAt = publishTimestamp;
+  const createdAtMsForScore = existingData.createdAt ? getTimestampMs(existingData.createdAt) : Date.now();
+  const preview = extractPreview(
+    {
+      ...input,
+      ...outputsMeta,
+      metrics: outputsMeta.metrics,
+      summary: outputsMeta.summary || outputsMeta.answer || input.question || "",
+    },
+    postType
+  );
+
+  await postRef.set(
+    {
+      id: postId,
+      type: postType,
+      authorUid: ownerUid,
+      authorHandle: handle,
+      authorPhotoURL: photoURL,
+      title,
+      caption,
+      tickers,
+      tags,
+      preview,
+      targetUrl,
+      visibility,
+      updatedAt,
+      createdAt,
+      counts: existingCounts,
+      score: Number.isFinite(asFinite(existingData.score, NaN))
+        ? asFinite(existingData.score, 0)
+        : computeScore(existingCounts, createdAtMsForScore),
+      lastEngagedAt: publishTimestamp,
+    },
+    { merge: true }
+  );
+
+  return postId;
+}
+
+async function ensurePublishedMyRequestExplorePost(
+  ownerUid: string,
+  requestId: string,
+  requestData: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const published = asBoolean(requestData.published, false);
+  const explorePostId = sanitizeText(requestData.explorePostId, 220);
+  const visibility = normalizeMyRequestVisibility(requestData.visibility, "private");
+  if (!published || (explorePostId && visibility === "public")) {
+    return requestData;
+  }
+
+  const postId = await upsertExplorePostFromMyRequest(
+    ownerUid,
+    requestId,
+    { ...requestData, visibility: "public" },
+    "public"
+  );
+  const requestRef = db.collection("users").doc(ownerUid).collection("requests").doc(requestId);
+  await requestRef.set(
+    {
+      published: true,
+      publishedAt: requestData.publishedAt || admin.firestore.FieldValue.serverTimestamp(),
+      explorePostId: postId,
+      visibility: "public",
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+  const refreshed = await requestRef.get();
+  return (refreshed.data() || requestData) as Record<string, unknown>;
 }
 
 function computeDecay(recencyHours: number): number {
@@ -2185,6 +2785,30 @@ type LlmProviderPolicy = {
   premiumModels: string[];
 };
 
+type ModelCouncilProviderConfig = {
+  id: LlmProviderId;
+  label: string;
+  envName: string;
+  supportsModelList: boolean;
+  isConfigured: () => boolean;
+};
+
+type ModelCouncilProviderView = {
+  id: LlmProviderId;
+  label: string;
+  displayName: string;
+  available: boolean;
+  supportsModelList: boolean;
+};
+
+type ModelCouncilModelView = {
+  id: string;
+  label: string;
+  provider: LlmProviderId;
+  group: string;
+  hint: string;
+};
+
 const LLM_PROVIDER_POLICY: Record<LlmProviderId, LlmProviderPolicy> = {
   openai: {
     freeModels: ["gpt-5-nano", "gpt-5-mini", "gpt-4o-mini"],
@@ -2223,6 +2847,148 @@ const LLM_PROVIDER_POLICY: Record<LlmProviderId, LlmProviderPolicy> = {
     premiumModels: ["*"],
   },
 };
+
+const MODEL_COUNCIL_PROVIDER_REGISTRY: ModelCouncilProviderConfig[] = [
+  {
+    id: "openai",
+    label: "ChatGPT",
+    envName: "OPENAI_API_KEY",
+    supportsModelList: true,
+    isConfigured: () => Boolean(OPENAI_API_KEY),
+  },
+  {
+    id: "claude",
+    label: "Claude",
+    envName: "CLAUDE_API_KEY",
+    supportsModelList: true,
+    isConfigured: () => Boolean(CLAUDE_API_KEY),
+  },
+  {
+    id: "gemini",
+    label: "Gemini",
+    envName: "GEMINI_API_KEY",
+    supportsModelList: true,
+    isConfigured: () => Boolean(GEMINI_API_KEY),
+  },
+  {
+    id: "deepseek",
+    label: "DeepSeek",
+    envName: "DEEPSEEK_API_KEY",
+    supportsModelList: true,
+    isConfigured: () => Boolean(DEEPSEEK_API_KEY),
+  },
+  {
+    id: "mistral",
+    label: "Mistral",
+    envName: "MISTRAL_API_KEY",
+    supportsModelList: true,
+    isConfigured: () => Boolean(MISTRAL_API_KEY),
+  },
+  {
+    id: "perplexity",
+    label: "Perplexity Sonar",
+    envName: "PERPLEXITY_API_KEY",
+    supportsModelList: true,
+    isConfigured: () => Boolean(PERPLEXITY_API_KEY),
+  },
+  {
+    id: "qwen",
+    label: "Qwen",
+    envName: "QWEN_API_KEY",
+    supportsModelList: true,
+    isConfigured: () => Boolean(QWEN_API_KEY),
+  },
+  {
+    id: "amazon_nova",
+    label: "Amazon Nova",
+    envName: "AMAZON_NOVA_API_KEY + AMAZON_NOVA_BASE_URL",
+    supportsModelList: true,
+    isConfigured: () => Boolean(AMAZON_NOVA_API_KEY && AMAZON_NOVA_BASE_URL),
+  },
+  {
+    id: "other",
+    label: "Other",
+    envName: "MODEL_COUNCIL_OTHER_API_KEY + MODEL_COUNCIL_OTHER_BASE_URL",
+    supportsModelList: true,
+    isConfigured: () => Boolean(MODEL_COUNCIL_OTHER_API_KEY && MODEL_COUNCIL_OTHER_BASE_URL),
+  },
+];
+
+const MODEL_COUNCIL_MODELS: Record<LlmProviderId, ModelCouncilModelView[]> = {
+  openai: [
+    { id: "gpt-5-nano", label: "GPT-5 Nano", provider: "openai", group: "Fast", hint: "Lowest latency for quick triage." },
+    { id: "gpt-5-mini", label: "GPT-5 Mini", provider: "openai", group: "Balanced", hint: "Best default for most prompts." },
+    { id: "gpt-5", label: "GPT-5", provider: "openai", group: "Reasoning", hint: "High-depth reasoning and synthesis." },
+    { id: "gpt-5.4", label: "GPT-5.4", provider: "openai", group: "Research", hint: "Premium research-grade analysis." },
+  ],
+  claude: [
+    { id: "claude-haiku-4-5", label: "Claude Haiku 4.5", provider: "claude", group: "Fast", hint: "Lower-latency Claude path." },
+    { id: "claude-sonnet-4-5", label: "Claude Sonnet 4.5", provider: "claude", group: "Balanced", hint: "Strong synthesis for council runs." },
+    { id: "claude-opus-4-5", label: "Claude Opus 4.5", provider: "claude", group: "Research", hint: "Premium long-form research model." },
+  ],
+  gemini: [
+    { id: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash-Lite", provider: "gemini", group: "Fast", hint: "Lowest-cost Gemini path." },
+    { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash", provider: "gemini", group: "Balanced", hint: "Fast and balanced Gemini path." },
+    { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro", provider: "gemini", group: "Research", hint: "Higher-depth Gemini analysis." },
+  ],
+  deepseek: [
+    { id: "deepseek-chat", label: "DeepSeek Chat", provider: "deepseek", group: "Balanced", hint: "Cost-efficient baseline analysis." },
+    { id: "deepseek-reasoner", label: "DeepSeek Reasoner", provider: "deepseek", group: "Reasoning", hint: "Higher-depth reasoning path." },
+  ],
+  mistral: [
+    { id: "mistral-small-latest", label: "Mistral Small", provider: "mistral", group: "Fast", hint: "Low-latency Mistral route." },
+    { id: "mistral-large-latest", label: "Mistral Large", provider: "mistral", group: "Reasoning", hint: "Higher-depth Mistral reasoning." },
+  ],
+  perplexity: [
+    { id: "sonar", label: "Sonar", provider: "perplexity", group: "Research", hint: "Web-grounded baseline research path." },
+    { id: "sonar-pro", label: "Sonar Pro", provider: "perplexity", group: "Research", hint: "Higher-depth fresh web research." },
+    { id: "sonar-deep-research", label: "Sonar Deep Research", provider: "perplexity", group: "Research", hint: "Deep current-events analysis." },
+  ],
+  qwen: [
+    { id: "qwen-flash", label: "Qwen Flash", provider: "qwen", group: "Fast", hint: "Low-latency Qwen path." },
+    { id: "qwen-plus", label: "Qwen Plus", provider: "qwen", group: "Balanced", hint: "Balanced Qwen reasoning path." },
+    { id: "qwen-max", label: "Qwen Max", provider: "qwen", group: "Reasoning", hint: "Premium Qwen reasoning path." },
+  ],
+  amazon_nova: [
+    { id: "amazon.nova-lite-v1:0", label: "Nova Lite", provider: "amazon_nova", group: "Balanced", hint: "Amazon Nova lightweight route." },
+    { id: "amazon.nova-pro-v1:0", label: "Nova Pro", provider: "amazon_nova", group: "Reasoning", hint: "Amazon Nova high-depth route." },
+  ],
+  other: [
+    { id: DEFAULT_LLM_MODEL, label: DEFAULT_LLM_MODEL, provider: "other", group: "Custom", hint: "Custom provider model from backend config." },
+  ],
+};
+
+function listModelCouncilProviders(opts: { includeUnavailable?: boolean } = {}): ModelCouncilProviderView[] {
+  const includeUnavailable = Boolean(opts.includeUnavailable);
+  const rows = MODEL_COUNCIL_PROVIDER_REGISTRY.map((provider) => {
+    const available = provider.isConfigured();
+    return {
+      id: provider.id,
+      label: provider.label,
+      displayName: provider.label,
+      available,
+      supportsModelList: provider.supportsModelList,
+    };
+  });
+  if (includeUnavailable) return rows;
+  return rows.filter((row) => row.available);
+}
+
+function listModelCouncilModels(provider: LlmProviderId): ModelCouncilModelView[] {
+  const seeded = Array.isArray(MODEL_COUNCIL_MODELS[provider]) ? MODEL_COUNCIL_MODELS[provider] : [];
+  if (seeded.length) return seeded;
+  const policy = LLM_PROVIDER_POLICY[provider] || LLM_PROVIDER_POLICY.openai;
+  const ids = [...policy.freeModels, ...policy.premiumModels]
+    .map((id) => sanitizeText(id, 120))
+    .filter((id) => id && !id.includes("*"));
+  return Array.from(new Set(ids)).map((id) => ({
+    id,
+    label: id,
+    provider,
+    group: "Balanced",
+    hint: "Server-side model routing path.",
+  }));
+}
 
 function normalizeProvider(raw: unknown): LlmProviderId {
   const value = asString(raw).trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
@@ -4278,6 +5044,50 @@ ROUTES.get("/fx/convert", async (req, res) => {
   await handleFxConvert(req, res);
 });
 
+ROUTES.get("/market-headlines", async (req, res) => {
+  const feedConfig = resolveMarketHeadlineFeedConfig(req.query.provider, req.query.feed);
+  const limitRaw = asFinite(req.query.limit, 18);
+  const limit = Number.isFinite(limitRaw) ? Math.max(5, Math.min(40, Math.floor(limitRaw))) : 18;
+  const warnings: string[] = [];
+  let headlines: MarketHeadlineArticle[] = [];
+  let detectedTitle = feedConfig.feedLabel;
+
+  try {
+    const xml = await fetchTextWithTimeout(feedConfig.url, MARKET_HEADLINE_FETCH_TIMEOUT_MS);
+    const parsed = parseMarketHeadlineFeedXml(xml, feedConfig);
+    detectedTitle = parsed.feedTitle || detectedTitle;
+    headlines = parsed.headlines.slice(0, limit);
+    if (!headlines.length) {
+      warnings.push(`${feedConfig.providerLabel} returned a response but no readable headlines were parsed.`);
+    }
+  } catch (error) {
+    warnings.push(describeMarketHeadlineFetchError(feedConfig, error));
+  }
+
+  res.status(200).json({
+    provider: {
+      id: feedConfig.providerId,
+      label: feedConfig.providerLabel,
+      sourceUrl: feedConfig.sourceUrl,
+      directoryUrl: feedConfig.directoryUrl || "",
+      termsUrl: feedConfig.termsUrl || "",
+    },
+    feed: {
+      id: feedConfig.id,
+      label: feedConfig.feedLabel,
+      detectedTitle,
+      url: feedConfig.sourceUrl,
+    },
+    attribution: {
+      note: feedConfig.attributionNote || "",
+    },
+    fetchedAt: new Date().toISOString(),
+    count: headlines.length,
+    headlines,
+    warnings,
+  });
+});
+
 ROUTES.post("/indicators/analyze", async (req, res) => {
   try {
     const payload = asPlainObject(req.body);
@@ -4302,6 +5112,74 @@ ROUTES.post("/indicators/analyze", async (req, res) => {
       return;
     }
     res.status(500).json({ error: "indicator_analysis_failed", detail });
+  }
+});
+
+ROUTES.get("/model-council/providers", async (_req, res) => {
+  try {
+    const available = listModelCouncilProviders();
+    const all = listModelCouncilProviders({ includeUnavailable: true });
+    console.info(
+      "[ModelCouncil] provider availability",
+      all.map((item) => `${item.id}:${item.available ? "ready" : "missing"}`).join(", ")
+    );
+    if (!available.length) {
+      res.status(200).json({
+        providers: all,
+        defaultProvider: "openai",
+        warning: "no_provider_secrets_configured",
+      });
+      return;
+    }
+    res.status(200).json({
+      providers: available,
+      defaultProvider: available[0].id,
+      fetchedAt: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    const detail = sanitizeText(error?.message || error, 220) || "provider_lookup_failed";
+    res.status(500).json({
+      providers: [],
+      defaultProvider: "openai",
+      error: "provider_lookup_failed",
+      detail,
+    });
+  }
+});
+
+ROUTES.get("/model-council/models", async (req, res) => {
+  try {
+    const availableProviders = listModelCouncilProviders();
+    const allProviders = listModelCouncilProviders({ includeUnavailable: true });
+    const requestedProvider = normalizeProvider(req.query.provider || req.query.providerId || "openai");
+    const availableSet = new Set(availableProviders.map((item) => item.id));
+    const provider: LlmProviderId =
+      availableSet.has(requestedProvider) ? requestedProvider : (availableProviders[0]?.id as LlmProviderId) || "openai";
+    const models = listModelCouncilModels(provider);
+    if (!models.length) {
+      res.status(200).json({
+        provider,
+        providers: availableProviders.length ? availableProviders : allProviders,
+        models: [],
+        warning: "model_catalog_empty",
+      });
+      return;
+    }
+    res.status(200).json({
+      provider,
+      providers: availableProviders.length ? availableProviders : allProviders,
+      models,
+      fetchedAt: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    const detail = sanitizeText(error?.message || error, 220) || "model_lookup_failed";
+    res.status(500).json({
+      provider: "openai",
+      providers: [],
+      models: [],
+      error: "model_lookup_failed",
+      detail,
+    });
   }
 });
 
@@ -7246,8 +8124,16 @@ ROUTES.get("/my-requests", async (req, res) => {
       .limit(Math.max(limit * 4, 140))
       .get();
 
-    const rows = snap.docs
-      .map((doc) => toMyRequestResponse(doc.id, (doc.data() || {}) as Record<string, unknown>, { includePayload: true }))
+    const requestDocs = await Promise.all(
+      snap.docs.map(async (doc) => {
+        const data = (doc.data() || {}) as Record<string, unknown>;
+        const repaired = await ensurePublishedMyRequestExplorePost(viewer.uid, doc.id, data);
+        return { id: doc.id, data: repaired };
+      })
+    );
+
+    const rows = requestDocs
+      .map((doc) => toMyRequestResponse(doc.id, doc.data, { includePayload: true }))
       .filter((item) => !asBoolean(item.deleted, false))
       .filter((item) => {
         const itemType = normalizeMyRequestType(item.type);
@@ -7325,6 +8211,12 @@ ROUTES.post("/my-requests", async (req, res) => {
       createdAt: shareExisting.createdAt || shareRequested.createdAt || null,
     };
     const ticker = firstTickerFromRequest(input, { collection: sourceCollection, id: sourceId }, outputsMeta);
+    const nextPublished = asBoolean(body.published, asBoolean(existing.published, false));
+    const requestedVisibility = normalizeMyRequestVisibility(
+      body.visibility,
+      normalizeMyRequestVisibility(existing.visibility, share.visibility as MyRequestShareVisibility)
+    );
+    const effectiveVisibility = nextPublished ? "public" : requestedVisibility;
 
     const payload: Record<string, unknown> = {
       type,
@@ -7338,17 +8230,31 @@ ROUTES.post("/my-requests", async (req, res) => {
         id: sourceId,
       },
       searchText: buildMyRequestSearchText(title, type, ticker, input, outputsMeta),
-      published: asBoolean(body.published, asBoolean(existing.published, false)),
-      publishedAt: existing.publishedAt || null,
-      explorePostId: sanitizeText(body.explorePostId || existing.explorePostId, 220),
+      published: nextPublished,
+      publishedAt: nextPublished ? existing.publishedAt || admin.firestore.FieldValue.serverTimestamp() : null,
+      explorePostId: nextPublished ? sanitizeText(body.explorePostId || existing.explorePostId, 220) : "",
       deleted: false,
       share,
-      visibility: normalizeMyRequestVisibility(body.visibility, normalizeMyRequestVisibility(existing.visibility, share.visibility as MyRequestShareVisibility)),
+      visibility: effectiveVisibility,
       createdAt: existing.createdAt || admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
 
     await requestRef.set(payload, { merge: true });
+    if (nextPublished) {
+      const merged = { ...existing, ...payload };
+      const postId = await upsertExplorePostFromMyRequest(viewer.uid, requestId, merged, "public");
+      await requestRef.set(
+        {
+          published: true,
+          publishedAt: existing.publishedAt || admin.firestore.FieldValue.serverTimestamp(),
+          explorePostId: postId,
+          visibility: "public",
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    }
     const refreshed = await requestRef.get();
     res.status(200).json({
       ok: true,
@@ -7382,8 +8288,9 @@ ROUTES.get("/my-requests/:requestId", async (req, res) => {
       res.status(404).json({ error: "request_not_found" });
       return;
     }
+    const repaired = await ensurePublishedMyRequestExplorePost(viewer.uid, item.id, item.data);
     res.status(200).json({
-      request: toMyRequestResponse(item.id, item.data, { includePayload: true }),
+      request: toMyRequestResponse(item.id, repaired, { includePayload: true }),
     });
   } catch (error: any) {
     const code = String(error?.message || "");
@@ -7595,6 +8502,66 @@ ROUTES.post("/my-requests/:requestId/share", async (req, res) => {
   }
 });
 
+ROUTES.post("/my-requests/:requestId/publish", async (req, res) => {
+  try {
+    const viewer = await verifyRequestUser(req, true);
+    if (!viewer) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const requestId = normalizeMyRequestId(req.params.requestId);
+    if (!requestId) {
+      res.status(400).json({ error: "invalid_request_id" });
+      return;
+    }
+    const requestRef = db.collection("users").doc(viewer.uid).collection("requests").doc(requestId);
+    const snap = await requestRef.get();
+    if (!snap.exists) {
+      res.status(404).json({ error: "request_not_found" });
+      return;
+    }
+    const existing = (snap.data() || {}) as Record<string, unknown>;
+    if (asBoolean(existing.deleted, false)) {
+      res.status(404).json({ error: "request_not_found" });
+      return;
+    }
+
+    const body = asPlainObject(req.body);
+    const requestedVisibility = normalizeMyRequestVisibility(body.visibility, "public");
+    const visibility = requestedVisibility === "public" ? "public" : "unlisted";
+    const postId = await upsertExplorePostFromMyRequest(viewer.uid, requestId, existing, visibility);
+
+    await requestRef.set(
+      {
+        published: true,
+        publishedAt: admin.firestore.FieldValue.serverTimestamp(),
+        explorePostId: postId,
+        visibility: requestedVisibility === "private" ? "unlisted" : requestedVisibility,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    const refreshed = await requestRef.get();
+    res.status(200).json({
+      ok: true,
+      request: toMyRequestResponse(refreshed.id, (refreshed.data() || {}) as Record<string, unknown>, { includePayload: true }),
+      post: {
+        id: postId,
+        visibility,
+      },
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Explore] publish my request failed", error);
+    res.status(500).json({ error: "my_request_publish_failed" });
+  }
+});
+
 ROUTES.post("/my-requests/:requestId/unpublish", async (req, res) => {
   try {
     const viewer = await verifyRequestUser(req, true);
@@ -7625,6 +8592,7 @@ ROUTES.post("/my-requests/:requestId/unpublish", async (req, res) => {
     const type = normalizeMyRequestType(existing.type) || "forecast";
     const candidatePostIds = [
       sanitizeText(existing.explorePostId, 220),
+      deriveMyRequestExplorePostId(requestId, existing),
       type === "forecast" && sourceCollection === "forecast_requests" ? `forecast_${sourceId}` : "",
       type === "screener" && sourceCollection === "screener_runs" ? `screener_${sourceId}` : "",
     ]

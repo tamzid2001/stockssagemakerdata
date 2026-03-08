@@ -99,9 +99,9 @@ class RemoteConfigManager(
                     "play_integrity_enabled" to true,
                     "play_integrity_required" to false,
                     "play_integrity_cloud_project_number" to "",
-                    "native_feed_ad_start" to 6,
-                    "native_feed_ad_interval" to 8,
-                    "native_page_ad_midpoint" to 0.55,
+                    "native_feed_ad_start" to 4,
+                    "native_feed_ad_interval" to 5,
+                    "native_page_ad_midpoint" to 0.45,
                     "feature_flags" to DEFAULT_FEATURE_FLAGS_JSON,
                 )
             )
@@ -143,15 +143,8 @@ class RemoteConfigManager(
         val cached = lastEffectiveConfig
         val state = currentRemoteConfigState()
         val environment = getAdsEnvironment()
-        val adsEnabled = if (environment.isDebugBuild || environment.isSimulatorOrEmulator) {
-            true
-        } else {
-            state.adsEnabled && state.featureFlags.adsEnabled
-        }
-        val usingRealAds = adsEnabled &&
-            state.adsUseRealAndroid &&
-            environment.isReleaseBuild &&
-            !environment.isSimulatorOrEmulator
+        val adsEnabled = state.adsEnabled && state.featureFlags.adsEnabled
+        val usingRealAds = adsEnabled && state.adsUseRealAndroid
         val selectedUnits = if (usingRealAds) state.android else TEST_ANDROID_IDS
         val effective = EffectiveAdsConfig(
             adsEnabled = adsEnabled,
@@ -231,10 +224,7 @@ class RemoteConfigManager(
             AdPlatform.IOS -> remoteConfigState.adsUseRealIos
             AdPlatform.ANDROID -> remoteConfigState.adsUseRealAndroid
         }
-        val useRealAds = adsEnabled &&
-            platformWantsRealAds &&
-            environment.isReleaseBuild &&
-            !environment.isSimulatorOrEmulator
+        val useRealAds = adsEnabled && platformWantsRealAds
         val selected = when (platform) {
             AdPlatform.IOS -> if (useRealAds) remoteConfigState.ios else TEST_IOS_IDS
             AdPlatform.ANDROID -> if (useRealAds) remoteConfigState.android else TEST_ANDROID_IDS
@@ -283,17 +273,17 @@ class RemoteConfigManager(
     }
 
     fun nativeFeedAdStart(): Int {
-        val value = remoteConfig?.getLong("native_feed_ad_start") ?: 6L
+        val value = remoteConfig?.getLong("native_feed_ad_start") ?: 4L
         return value.toInt().coerceIn(3, 20)
     }
 
     fun nativeFeedAdInterval(): Int {
-        val value = remoteConfig?.getLong("native_feed_ad_interval") ?: 8L
+        val value = remoteConfig?.getLong("native_feed_ad_interval") ?: 5L
         return value.toInt().coerceIn(3, 20)
     }
 
     fun nativePageAdMidpoint(): Double {
-        val value = remoteConfig?.getDouble("native_page_ad_midpoint") ?: 0.55
+        val value = remoteConfig?.getDouble("native_page_ad_midpoint") ?: 0.45
         return value.coerceIn(0.2, 0.9)
     }
 
