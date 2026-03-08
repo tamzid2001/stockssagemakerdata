@@ -38,6 +38,7 @@
 	    <script defer src="/__/firebase/12.9.0/firebase-analytics-compat.js"></script>
 	    <script defer src="/__/firebase/init.js?useEmulator=false"></script>
 	    <script defer src="/app.js"></script>
+    <script defer src="/assets/rnweb/quantura-rnw.js"></script>
     <script defer src="/marketing-carousel.js"></script>
 
     <script type="application/ld+json">
@@ -196,7 +197,23 @@
             </div>
           </div>
         </div>
-	      </section>
+		      </section>
+
+      <section class="section section-compact quantura-rn-injection-shell">
+        <div class="container">
+          <div
+            id="quantura-rn-home"
+            class="quantura-rn-root"
+            data-quantura-rn-root
+            data-rn-slot-id="home-native-slot-1"
+            data-rn-placement="home_surface"
+            data-rn-context="home"
+            data-rn-title="Unified RN surface in the web shell"
+            data-rn-body="This component is rendered with React Native for Web. Native ad inventory appears only in installed iOS/Android builds."
+            data-rn-placeholder="true"
+          ></div>
+        </div>
+      </section>
 
       <section class="section section-compact">
         <div class="container">

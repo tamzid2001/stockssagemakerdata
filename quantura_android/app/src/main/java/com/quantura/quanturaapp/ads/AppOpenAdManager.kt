@@ -2,6 +2,8 @@ package com.quantura.quanturaapp.ads
 
 import android.app.Activity
 import android.app.Application
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
 import androidx.lifecycle.DefaultLifecycleObserver
@@ -23,6 +25,8 @@ class AppOpenAdManager(
 ) : Application.ActivityLifecycleCallbacks, DefaultLifecycleObserver {
     private val tag = "AppOpenAdManager"
     private val maxCacheAgeMs = 4 * 60 * 60 * 1000L
+    private val showTimeoutMs = 12_000L
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     @Volatile
     private var appOpenAd: AppOpenAd? = null
@@ -36,6 +40,8 @@ class AppOpenAdManager(
     private var currentActivity: Activity? = null
     @Volatile
     private var presentationBlockedByAuthGate = false
+    @Volatile
+    private var failOpenTimeoutRunnable: Runnable? = null
 
     fun start() {
         application.registerActivityLifecycleCallbacks(this)
@@ -87,6 +93,7 @@ class AppOpenAdManager(
                     isLoadingAd = false
                     appOpenAd = null
                     loadedAtMs = 0L
+                    clearFailOpenTimeout()
                     Log.w(tag, "App open ad load failed: ${loadAdError.message}")
                     Log.w(tag, "[Ads][Android] Load fail for app_open: ${loadAdError.message}")
                     AdDebugStatusRegistry.updateLoad("app_open", "failed:${loadAdError.message}")
@@ -115,6 +122,7 @@ class AppOpenAdManager(
             AdDebugStatusRegistry.updateShow("app_open", "skipped:activity_not_ready")
             return
         }
+        val presenterActivity = activity ?: return
 
         val cached = appOpenAd
         if (!isAdAvailable() || cached == null) {
@@ -146,6 +154,7 @@ class AppOpenAdManager(
             }
 
             override fun onAdFailedToShowFullScreenContent(adError: com.google.android.gms.ads.AdError) {
+                clearFailOpenTimeout()
                 Log.w(tag, "App open ad failed to show: ${adError.message}")
                 isShowingAd = false
                 appOpenAd = null
@@ -155,6 +164,7 @@ class AppOpenAdManager(
             }
 
             override fun onAdDismissedFullScreenContent() {
+                clearFailOpenTimeout()
                 Log.d(tag, "App open ad dismissed.")
                 isShowingAd = false
                 appOpenAd = null
@@ -164,7 +174,18 @@ class AppOpenAdManager(
             }
         }
         Log.d(tag, "Presenting app open ad.")
-        cached.show(activity!!)
+        startFailOpenTimeout()
+        try {
+            cached.show(presenterActivity)
+        } catch (error: Exception) {
+            clearFailOpenTimeout()
+            isShowingAd = false
+            appOpenAd = null
+            loadedAtMs = 0L
+            Log.w(tag, "App open ad show threw exception: ${error.message}")
+            AdDebugStatusRegistry.updateShow("app_open", "failed:${error.message}")
+            loadAdIfNeeded()
+        }
     }
 
     fun debugState(): AdFormatStatusSnapshot {
@@ -206,6 +227,28 @@ class AppOpenAdManager(
     override fun onActivityDestroyed(activity: Activity) {
         if (currentActivity === activity) {
             currentActivity = null
+            clearFailOpenTimeout()
+            isShowingAd = false
         }
+    }
+
+    private fun startFailOpenTimeout() {
+        clearFailOpenTimeout()
+        failOpenTimeoutRunnable = Runnable {
+            if (!isShowingAd) return@Runnable
+            Log.w(tag, "App open ad timeout reached; fail-open and continue app flow.")
+            isShowingAd = false
+            appOpenAd = null
+            loadedAtMs = 0L
+            AdDebugStatusRegistry.updateShow("app_open", "timeout_fail_open")
+            loadAdIfNeeded()
+        }.also { runnable ->
+            mainHandler.postDelayed(runnable, showTimeoutMs)
+        }
+    }
+
+    private fun clearFailOpenTimeout() {
+        failOpenTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
+        failOpenTimeoutRunnable = null
     }
 }

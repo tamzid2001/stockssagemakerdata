@@ -6,6 +6,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
+import android.net.Uri
 import android.os.SystemClock
 import android.os.Bundle
 import android.util.Base64
@@ -57,6 +58,16 @@ class AdManager(
     @Volatile
     private var isShowingFullScreenAdInternal = false
     private var lastNavigationInterstitialAt = 0L
+    private var lastNavigationInterstitialRoute = ""
+
+    @Volatile
+    private var nativePreloadInFlight = false
+
+    @Volatile
+    private var preloadedNativePayload: JSONObject? = null
+
+    @Volatile
+    private var preloadedNativeAdUnitId: String = ""
 
     fun primeAds(context: Context) {
         if (!remoteConfigManager.areAdsEnabled()) {
@@ -73,6 +84,7 @@ class AdManager(
         loadInterstitial(context)
         loadRewarded(context)
         loadRewardedInterstitial(context)
+        preloadNative(context)
     }
 
     fun preloadAllFormatsForQa(activity: Activity) {
@@ -395,10 +407,18 @@ class AdManager(
     fun onPrimaryNavigation(activity: Activity, url: String) {
         val normalized = url.trim()
         if (normalized.isEmpty()) return
+        val uri = runCatching { Uri.parse(normalized) }.getOrNull() ?: return
+        if (!shouldTriggerPassiveInterstitial(uri)) return
         val now = SystemClock.elapsedRealtime()
-        if (now - lastNavigationInterstitialAt < 3_000L) return
+        val routeKey = buildString {
+            append(uri.host?.lowercase().orEmpty())
+            append(uri.path.orEmpty().lowercase())
+        }
+        if (routeKey == lastNavigationInterstitialRoute && now - lastNavigationInterstitialAt < 20_000L) return
+        if (now - lastNavigationInterstitialAt < PASSIVE_INTERSTITIAL_COOLDOWN_MS) return
         lastNavigationInterstitialAt = now
-        Log.d(tag, "Navigation trigger for interstitial url=$normalized")
+        lastNavigationInterstitialRoute = routeKey
+        Log.d(tag, "Passive navigation trigger for interstitial url=$normalized")
         showInterstitial(activity)
     }
 
@@ -431,6 +451,22 @@ class AdManager(
         if (!remoteConfigManager.areAdsEnabled()) {
             AdDebugStatusRegistry.updateLoad("native", "failed:ads_disabled")
             callback(buildNativeAdError(trimmedSlotId, normalizedPlacement, "ads_disabled"))
+            return
+        }
+
+        val cachedPayload = preloadedNativePayload
+        if (cachedPayload != null) {
+            preloadedNativePayload = null
+            Log.i(tag, "[Ads][Android] Served native ad from preload cache slot=$trimmedSlotId")
+            callback(
+                JSONObject()
+                    .put("ok", true)
+                    .put("slotId", trimmedSlotId)
+                    .put("placement", normalizedPlacement)
+                    .put("adUnitId", preloadedNativeAdUnitId)
+                    .put("ad", cachedPayload)
+            )
+            preloadNative(activity.applicationContext)
             return
         }
 
@@ -504,6 +540,60 @@ class AdManager(
             AdDebugStatusRegistry.updateLoad("native", "failed:$reason")
             callback(buildNativeAdError(trimmedSlotId, normalizedPlacement, reason))
         }
+    }
+
+    private fun preloadNative(context: Context) {
+        if (!remoteConfigManager.areAdsEnabled()) return
+        if (nativePreloadInFlight || preloadedNativePayload != null) return
+
+        val adUnitId = remoteConfigManager.resolveAdUnitId(
+            platform = AdPlatform.ANDROID,
+            format = AdFormat.NATIVE
+        )
+        nativePreloadInFlight = true
+        Log.d(tag, "Preloading native ad unit=$adUnitId")
+        AdDebugStatusRegistry.updateLoad("native", "loading")
+        try {
+            AdLoader.Builder(context, adUnitId)
+                .forNativeAd { nativeAd ->
+                    preloadedNativePayload = serializeNativeAd(nativeAd, adUnitId)
+                    preloadedNativeAdUnitId = adUnitId
+                    nativePreloadInFlight = false
+                    Log.i(tag, "[Ads][Android] Load success for native preload")
+                    AdDebugStatusRegistry.updateLoad("native", "loaded")
+                    nativeAd.destroy()
+                }
+                .withAdListener(object : AdListener() {
+                    override fun onAdFailedToLoad(loadAdError: LoadAdError) {
+                        nativePreloadInFlight = false
+                        val reason = loadAdError.message.ifBlank { "native_preload_failed" }
+                        Log.w(tag, "[Ads][Android] Load fail for native preload: $reason")
+                        AdDebugStatusRegistry.updateLoad("native", "failed:$reason")
+                    }
+                })
+                .build()
+                .loadAd(AdRequest.Builder().build())
+        } catch (error: Exception) {
+            nativePreloadInFlight = false
+            val reason = error.message?.trim().orEmpty().ifEmpty { "native_preload_exception" }
+            Log.w(tag, "[Ads][Android] Native preload failed: $reason")
+            AdDebugStatusRegistry.updateLoad("native", "failed:$reason")
+        }
+    }
+
+    private fun shouldTriggerPassiveInterstitial(uri: Uri): Boolean {
+        val host = uri.host?.lowercase().orEmpty()
+        if (host.isNotEmpty() && host != "quantura.studio" && host != "www.quantura.studio") {
+            return false
+        }
+        val path = uri.path.orEmpty().lowercase()
+        if (path.isBlank()) return false
+        return path.startsWith("/blog") ||
+            path.startsWith("/news") ||
+            path.startsWith("/research") ||
+            path.startsWith("/terminal/fx") ||
+            path.startsWith("/currency") ||
+            path.startsWith("/terminal/currency")
     }
 
     fun reportNativeFeedAdImpression(
@@ -774,5 +864,9 @@ class AdManager(
                     .put("rewardAmount", rewardAmount ?: JSONObject.NULL)
             )
         }
+    }
+
+    companion object {
+        private const val PASSIVE_INTERSTITIAL_COOLDOWN_MS = 45_000L
     }
 }

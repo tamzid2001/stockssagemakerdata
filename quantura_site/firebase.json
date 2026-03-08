@@ -60,8 +60,10 @@
       { "source": "/leaderboard", "destination": "/explore", "type": 302 },
       { "source": "/ai-agent-leaderboard", "destination": "/explore", "type": 302 },
       { "source": "/blogs", "destination": "/blog", "type": 301 },
-      { "source": "/fx", "destination": "/tools/fx", "type": 302 },
-      { "source": "/terminal/fx", "destination": "/tools/fx", "type": 302 }
+      { "source": "/events-calendar", "destination": "/events", "type": 302 },
+      { "source": "/fx", "destination": "/forecasting?panel=fx", "type": 302 },
+      { "source": "/terminal/fx", "destination": "/forecasting?panel=fx", "type": 302 },
+      { "source": "/tools/fx", "destination": "/forecasting?panel=fx", "type": 302 }
     ],
     "rewrites": [
       { "source": "/blog", "destination": "/blog/index.html" },
@@ -113,7 +115,8 @@
       { "source": "/api/email/send-newsletter-weekly", "function": "send_newsletter_daily_http" },
       { "source": "/email/unsubscribe", "function": "email_unsubscribe_http" },
       { "source": "/api/openai/models", "function": "api_openai_models" },
-      { "source": "/api/model-council/models", "function": "api_model_council_models" },
+      { "source": "/api/model-council/providers", "function": "quanturaExploreApi" },
+      { "source": "/api/model-council/models", "function": "quanturaExploreApi" },
       { "source": "/api/model-council/query", "function": "api_model_council_query" },
       { "source": "/api/model-council/improve-prompt", "function": "api_model_council_improve_prompt" },
       { "source": "/api/model-council/feedback", "function": "api_model_council_feedback" },
@@ -132,7 +135,6 @@
       { "source": "/indicators", "function": "ssr" },
       { "source": "/trending", "function": "ssr" },
       { "source": "/news", "function": "ssr" },
-      { "source": "/events-calendar", "function": "ssr" },
       { "source": "/market-headlines", "function": "ssr" },
       { "source": "/model-council", "function": "ssr" },
       { "source": "/ticker-query", "function": "ssr" },

@@ -7,6 +7,7 @@ import {
   getCatalogBySku,
   getCatalogPublicItems,
   getCatalogSize,
+  getCatalogVisibilityDefaults,
   getShippingPolicyForCheckout,
   resolveShippingCost,
 } from "./shopCatalog";
@@ -158,6 +159,7 @@ app.get("/api/shop/catalog", (_req, res) => {
   res.status(200).json({
     currency: "usd",
     products: getCatalogPublicItems(),
+    visibilityConfig: getCatalogVisibilityDefaults(),
     shippingPolicy: {
       pod: {
         flatRateCents: SHOP_SHIPPING_POLICY.pod.flatRateCents,

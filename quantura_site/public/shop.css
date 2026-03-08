@@ -223,6 +223,16 @@ a {
   box-shadow: var(--shadow-soft);
 }
 
+.product-card-coming-soon {
+  border-style: dashed;
+  border-color: #c7cfdd;
+  background: linear-gradient(170deg, #fafbfe 0%, #f2f4f9 100%);
+}
+
+.product-card-coming-soon .product-image {
+  filter: saturate(0.5) contrast(0.95);
+}
+
 .product-image {
   display: block;
   width: 100%;
@@ -272,6 +282,20 @@ a {
   margin: 0;
   font-size: 0.82rem;
   color: #42506e;
+}
+
+.coming-soon-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-start;
+  border-radius: 999px;
+  border: 1px solid #ccd3df;
+  background: rgba(255, 255, 255, 0.9);
+  color: #4b546a;
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 4px 10px;
 }
 
 .card-actions {
@@ -445,6 +469,26 @@ a {
   background: #eff4fd;
   color: #1f3d74;
   padding: 10px 12px;
+}
+
+.shop-coming-soon-card {
+  grid-column: 1 / -1;
+  border: 1px dashed #bcc7de;
+  border-radius: 14px;
+  background: linear-gradient(140deg, #f7f9ff 0%, #eef2fb 100%);
+  box-shadow: var(--shadow-soft);
+  padding: 22px 20px;
+}
+
+.shop-coming-soon-card h2 {
+  margin: 4px 0 10px;
+  font-size: 1.4rem;
+}
+
+.shop-coming-soon-card p {
+  margin: 0;
+  color: #485673;
+  max-width: 56ch;
 }
 
 .shop-message.warn {

@@ -41,6 +41,17 @@
   - iOS: `[Ads][iOS]` / `[Ads][iOS][Banner]`
   - Android: `AdManager`, `BannerAdView`, `AppOpenAdManager`
 
+## Android emulator Play services and banner sizing checks
+- If logs show `Google Play services out of date`, ad testing can be unreliable on that emulator.
+- App now logs this as:
+  - `[Ads][Android] Google Play services issue code=...`
+- Recommended QA path:
+  - Use an emulator image with Google Play and update Play services from Play Store.
+  - Validate once on a physical Android device before production rollout.
+- Banner sizing diagnostics are logged as:
+  - `[Ads][Android] Banner sizing rawPx=... density=... widthDp=...`
+- If banner load fails with `Ad size will not fit on screen`, confirm width is being measured from the mounted container and converted to dp.
+
 ## Remote Config keys to set in Firebase Console
 - Ads rollout (test -> production):
   - `ads_use_real_ios` (`true` to use production iOS IDs, `false` for test IDs)

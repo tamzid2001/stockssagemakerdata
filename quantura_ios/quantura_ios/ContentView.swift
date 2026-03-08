@@ -435,10 +435,7 @@ final class RemoteConfigManager {
         let state = currentRemoteConfigState()
         let environment = adsEnvironment()
         let adsEnabled = state.adsEnabled && state.featureFlags.adsEnabled
-        let usingRealAds = adsEnabled &&
-            state.adsUseRealIos &&
-            environment.isReleaseBuild &&
-            !environment.isSimulatorOrEmulator
+        let usingRealAds = adsEnabled && state.adsUseRealIos
         let selectedUnits = usingRealAds ? state.iosUnits : testIOSIDs
         let effective = EffectiveAdsConfig(
             adsEnabled: adsEnabled,
@@ -483,10 +480,7 @@ final class RemoteConfigManager {
         let state = remoteConfigState ?? currentRemoteConfigState()
         let adsEnabled = state.adsEnabled && state.featureFlags.adsEnabled
         let platformUseRealAds = (platform == .ios) ? state.adsUseRealIos : state.adsUseRealAndroid
-        let useRealAds = adsEnabled &&
-            platformUseRealAds &&
-            resolvedEnvironment.isReleaseBuild &&
-            !resolvedEnvironment.isSimulatorOrEmulator
+        let useRealAds = adsEnabled && platformUseRealAds
         let selected: AdUnitIDs
         switch platform {
         case .ios:
@@ -511,7 +505,11 @@ final class RemoteConfigManager {
             adUnitId = selected.nativeAdvanced
         }
         if platform == .ios {
-            print("\(tag) Selected ad unit for \(format.rawValue) = \(adUnitId)")
+            print(
+                "\(tag) Selected ad unit for \(format.rawValue) = \(adUnitId) " +
+                    "useReal=\(useRealAds) adsEnabled=\(adsEnabled) platformRealFlag=\(platformUseRealAds) " +
+                    "debug=\(resolvedEnvironment.isDebugBuild) simulator=\(resolvedEnvironment.isSimulatorOrEmulator)"
+            )
         }
         return adUnitId
     }

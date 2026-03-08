@@ -38,6 +38,7 @@
     <script defer src="/__/firebase/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
     <script defer src="/app.js"></script>
+    <script defer src="/assets/rnweb/quantura-rnw.js"></script>
   </head>
   <body class="research-page">
     <header class="header">
@@ -67,6 +68,18 @@
               Use the note cards to jump to internal pages and keep your implementation decisions consistent across teams.
             </p>
           </div>
+
+          <div
+            id="quantura-rn-research"
+            class="quantura-rn-root"
+            data-quantura-rn-root
+            data-rn-slot-id="research-native-slot-1"
+            data-rn-placement="research_surface"
+            data-rn-context="research"
+            data-rn-title="Research surface: RNW injection"
+            data-rn-body="Shared React Native UI is mounted here. Native ad requests are runtime-gated to iOS/Android app shells."
+            data-rn-placeholder="true"
+          ></div>
 
           <div class="research-pillars" aria-label="Research pillars">
             <article class="card research-pillar">
