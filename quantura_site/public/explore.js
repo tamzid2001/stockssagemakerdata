@@ -110,10 +110,8 @@ function ensureNativeAdImpressionObserver() {
 
 function shouldInsertNativeFeedAd(position, config, totalCount) {
   if (!Number.isFinite(position) || position <= 0) return false;
-  if (!Number.isFinite(totalCount) || totalCount < config.feedStart) return false;
-  if (position === config.feedStart) return true;
-  if (position < config.feedStart) return false;
-  return (position - config.feedStart) % config.feedInterval === 0;
+  if (!Number.isFinite(totalCount) || totalCount < 2) return false;
+  return position < totalCount;
 }
 
 function createNativeAdSlotNode(slotId, placement) {

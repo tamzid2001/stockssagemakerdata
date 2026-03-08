@@ -293,8 +293,9 @@
   };
 
   const requestNativeBridgeSignOut = () => sendNativeAuthMessage({ type: "SIGN_OUT" });
+  const requestNativeAdInspector = () => sendNativeBridgeMessage({ action: "openAdInspector" });
 
-  const waitForNativeAuthCompletion = (auth, timeoutMs = 90000) =>
+  const waitForNativeAuthCompletion = (auth, timeoutMs = 90000, opts = {}) =>
     new Promise((resolve, reject) => {
       if (!auth) {
         reject(new Error("Firebase Auth is unavailable."));
@@ -304,24 +305,97 @@
         resolve(auth.currentUser);
         return;
       }
+      const requestId = String(opts?.requestId || "").trim();
+      const provider = String(opts?.provider || "native").trim().toLowerCase() || "native";
       let settled = false;
-      const timer = setTimeout(() => {
-        if (settled) return;
-        settled = true;
+      let unsubscribe = null;
+      const cleanup = () => {
         try {
           unsubscribe?.();
         } catch (_) {
           // no-op
         }
+        window.removeEventListener("quantura:native-auth-result", handleNativeAuthResult);
+        window.removeEventListener("quantura:native-custom-token-consumed", handleCustomTokenConsumed);
+        window.removeEventListener("quantura:native-auth-sync", handleNativeAuthSync);
+      };
+      const finalizeResolve = (user) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        cleanup();
+        resolve(user);
+      };
+      const finalizeReject = (message) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        cleanup();
+        reject(new Error(String(message || "Native sign-in failed.")));
+      };
+      const consumeNativeIdToken = async (idToken, method = provider) => {
+        const nativeIdToken = String(idToken || "").trim();
+        if (!nativeIdToken) return;
+        console.info("[Auth][WebNative] Auth response received.", { provider: method, requestId });
+        try {
+          const customToken = await exchangeNativeIdTokenForCustomToken(nativeIdToken);
+          console.info("[Auth][WebNative] Token exchange succeeded.", { provider: method, requestId });
+          await auth.signInWithCustomToken(customToken);
+          const signedInUser = auth.currentUser;
+          if (signedInUser && !signedInUser.isAnonymous) {
+            finalizeResolve(signedInUser);
+            return;
+          }
+        } catch (error) {
+          console.warn("[Auth][WebNative] Token exchange failed.", {
+            provider: method,
+            requestId,
+            error: error?.message || String(error || "unknown_error"),
+          });
+          finalizeReject(error?.message || "Unable to sync native auth session.");
+        }
+      };
+      const handleNativeAuthResult = (event) => {
+        const detail = event?.detail && typeof event.detail === "object" ? event.detail : {};
+        const detailRequestId = String(detail.requestId || "").trim();
+        if (requestId && detailRequestId && detailRequestId !== requestId) return;
+        if (detail.ok === false) {
+          finalizeReject(detail.error || "Native sign-in failed.");
+          return;
+        }
+        const idToken = String(detail.idToken || "").trim();
+        if (idToken) {
+          void consumeNativeIdToken(idToken, String(detail.provider || provider || "native").trim().toLowerCase());
+        }
+      };
+      const handleCustomTokenConsumed = (event) => {
+        const detail = event?.detail && typeof event.detail === "object" ? event.detail : {};
+        if (detail.ok === false) {
+          finalizeReject(detail.error || "Native custom token sign-in failed.");
+        }
+      };
+      const handleNativeAuthSync = (event) => {
+        const detail = event?.detail && typeof event.detail === "object" ? event.detail : {};
+        const status = String(detail.status || "").trim().toLowerCase();
+        const detailRequestId = String(detail.requestId || "").trim();
+        if (requestId && detailRequestId && detailRequestId !== requestId) return;
+        if (status.startsWith("exchange_failed") || status.startsWith("sync_failed")) {
+          finalizeReject(detail.message || "Native auth sync failed.");
+        }
+      };
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        cleanup();
         reject(new Error("Native sign-in timed out."));
       }, timeoutMs);
-      const unsubscribe = auth.onAuthStateChanged((user) => {
+      window.addEventListener("quantura:native-auth-result", handleNativeAuthResult);
+      window.addEventListener("quantura:native-custom-token-consumed", handleCustomTokenConsumed);
+      window.addEventListener("quantura:native-auth-sync", handleNativeAuthSync);
+      unsubscribe = auth.onAuthStateChanged((user) => {
         if (settled) return;
         if (user && !user.isAnonymous) {
-          settled = true;
-          clearTimeout(timer);
-          unsubscribe();
-          resolve(user);
+          finalizeResolve(user);
         }
       });
     });
@@ -2094,6 +2168,8 @@
       anonymousBootstrapInFlight: false,
       nativeAuthPromptRequested: false,
       nativeAuthState: null,
+      nativeAuthSync: null,
+      authGateVisible: false,
     intelActiveTab: "intelligence",
     tickerContext: {
 	      ticker: "",
@@ -2349,6 +2425,7 @@
     String(user?.email || "").trim().toLowerCase() === String(ADMIN_EMAIL).trim().toLowerCase();
   const requestNativeAuthGate = ({ reason = "sign_in_required", message = "Sign in to continue." } = {}) => {
     if (!isNativeApp()) return false;
+    state.authGateVisible = true;
     const branding = {
       name: "Quantura",
       logoUrl: `${window.location.origin}/assets/logo.png`,
@@ -2582,6 +2659,36 @@
     return false;
   };
 
+  const maybeShowNativeInterstitialGate = async ({
+    reason = "nav",
+    fallbackMessage = "Opening link while the interstitial finishes loading.",
+  } = {}) => {
+    if (!isNativeApp()) return true;
+    const normalizedReason = String(reason || "nav").trim() || "nav";
+    let interstitialResult = await runNativeAdAction({
+      action: "showInterstitial",
+      reason: normalizedReason,
+      successStatuses: ["shown", "dismissed"],
+    });
+    if (!interstitialResult.ok && String(interstitialResult.status || "").includes("not_ready")) {
+      await new Promise((resolve) => window.setTimeout(resolve, 1400));
+      interstitialResult = await runNativeAdAction({
+        action: "showInterstitial",
+        reason: `${normalizedReason}_retry`,
+        successStatuses: ["shown", "dismissed"],
+      });
+    }
+    if (interstitialResult.ok) return true;
+    sendNativeBridgeMessage({
+      action: "showInterstitialAd",
+      reason: `${normalizedReason}_fallback`,
+      mode: "fallback",
+      ts: Date.now(),
+    });
+    if (fallbackMessage) showToast(String(fallbackMessage).trim(), "warn");
+    return true;
+  };
+
   const runNativeRewardUnlock = async ({ reason = "shop_bundle" } = {}) => {
     if (!isNativeApp()) {
       return { ok: false, status: "native_unavailable", message: "Native runtime unavailable." };
@@ -2653,15 +2760,172 @@
 	  const setOutputLoading = (el, label = "Loading...") => {
 	    if (!el) return;
 	    el.setAttribute("aria-busy", "true");
-	    el.innerHTML = `<div data-skeleton>${skeletonHtml()}<div class="small muted" style="margin-top:10px;">${label}</div></div>`;
+      el.dataset.loading = "true";
+	    el.innerHTML = `
+        <div data-skeleton class="output-loading-stack">
+          <div class="output-loading-indicator">
+            <span class="spinner-ring" aria-hidden="true"></span>
+            <div class="output-loading-copy">
+              <strong class="output-loading-title">Quantura is working</strong>
+              <div class="small muted">${escapeHtml(String(label || "Loading...").trim() || "Loading...")}</div>
+            </div>
+          </div>
+          ${skeletonHtml()}
+        </div>
+      `;
 	  };
 
 		  const setOutputReady = (el) => {
 		    if (!el) return;
 		    el.removeAttribute("aria-busy");
+        delete el.dataset.loading;
         const skeleton = el.querySelector?.("[data-skeleton]");
         if (skeleton) skeleton.remove();
 		  };
+
+      const compactMetricMap = (input = {}) => {
+        const out = {};
+        Object.entries(input || {}).forEach(([key, value]) => {
+          const cleanKey = String(key || "").trim();
+          if (!cleanKey) return;
+          if (typeof value === "number" && Number.isFinite(value)) {
+            out[cleanKey] = value;
+            return;
+          }
+          const text = String(value ?? "").trim();
+          if (text) out[cleanKey] = text;
+        });
+        return out;
+      };
+
+      const titleCaseLabel = (value = "") =>
+        String(value || "")
+          .trim()
+          .replace(/[_-]+/g, " ")
+          .replace(/\s+/g, " ")
+          .replace(/\b\w/g, (char) => char.toUpperCase());
+
+      const screenerUniverseLabel = (value = "") => {
+        const clean = String(value || "").trim().toLowerCase();
+        if (clean === "large-cap") return "Large Cap";
+        if (clean === "mid-cap") return "Mid Cap";
+        if (clean === "small-cap") return "Small Cap";
+        if (clean === "trending") return "Trending";
+        return titleCaseLabel(clean || "Market");
+      };
+
+      const screenerMarketLabel = (value = "") => {
+        const clean = String(value || "").trim().toLowerCase();
+        if (clean === "us") return "U.S.";
+        if (clean === "global") return "Global";
+        return titleCaseLabel(clean || "Market");
+      };
+
+      const buildModelCouncilPublishMeta = ({
+        symbol = "",
+        answer = "",
+        provider = "",
+        model = "",
+        latencyMs = 0,
+        selectedModules = [],
+      } = {}) => {
+        const cleanSymbol = normalizeTicker(symbol || "");
+        const providerLabel = titleCaseLabel(provider || "Model Council");
+        const modelLabel = String(getModelMeta(model)?.label || model || "Quantura model").trim();
+        const moduleCount = Array.isArray(selectedModules) ? selectedModules.filter(Boolean).length : 0;
+        const cleanAnswer = String(answer || "").replace(/\s+/g, " ").trim();
+        const summary = cleanAnswer
+          ? `${cleanSymbol ? `${cleanSymbol}: ` : ""}${cleanAnswer}`.slice(0, 480)
+          : `${providerLabel} reviewed ${cleanSymbol || "the active ticker"} across ${Math.max(moduleCount, 1)} research module${
+              Math.max(moduleCount, 1) === 1 ? "" : "s"
+            }.`;
+        return {
+          summary,
+          metrics: compactMetricMap({
+            Provider: providerLabel,
+            Model: modelLabel,
+            Latency:
+              Number.isFinite(Number(latencyMs)) && Number(latencyMs) > 0
+                ? `${Math.max(1, Math.round(Number(latencyMs) / 1000))}s`
+                : "",
+            Modules: moduleCount || "",
+          }),
+        };
+      };
+
+      const buildIndicatorPublishMeta = ({
+        ticker = "",
+        analysis = {},
+        prediction = {},
+        rows = [],
+        selectedIndicators = [],
+        targetPrice = NaN,
+        upsidePct = null,
+      } = {}) => {
+        const cleanTicker = normalizeTicker(ticker || "");
+        const summaryText = String(analysis?.summary || "").replace(/\s+/g, " ").trim();
+        const direction = String(prediction?.direction || "neutral").trim();
+        const confidence = String(prediction?.confidence || "medium").trim();
+        const timeline = String(prediction?.timeline || "").trim();
+        const signalList = Array.isArray(selectedIndicators)
+          ? selectedIndicators.map((entry) => String(entry || "").trim().toUpperCase()).filter(Boolean)
+          : [];
+        const fallbackSummary = cleanTicker
+          ? `${cleanTicker} indicator stack points ${direction || "neutral"} with ${confidence || "moderate"} confidence${
+              Number.isFinite(targetPrice) ? ` and a target near ${formatUsd(targetPrice, 2)}.` : "."
+            }`
+          : "Indicator stack completed.";
+        return {
+          summary: (summaryText || fallbackSummary).slice(0, 480),
+          metrics: compactMetricMap({
+            Direction: direction,
+            Target: Number.isFinite(targetPrice) ? formatUsd(targetPrice, 2) : "",
+            Confidence: confidence,
+            Timeline: timeline,
+            Move: Number.isFinite(upsidePct) ? formatPercent(upsidePct, { signed: true, digits: 2 }) : "",
+            Signals: signalList.slice(0, 4).join(", "),
+            Rows: Array.isArray(rows) ? rows.length : 0,
+          }),
+        };
+      };
+
+      const buildScreenerPublishMeta = ({
+        payload = {},
+        rows = [],
+        runTitle = "",
+        resultsFound = 0,
+      } = {}) => {
+        const topSymbols = Array.isArray(rows)
+          ? rows
+              .slice(0, 5)
+              .map((row) => normalizeTicker(row?.symbol || ""))
+              .filter(Boolean)
+          : [];
+        const modelId = String(payload?.model || "").trim();
+        const modelLabel = String(getModelMeta(modelId)?.label || modelId || "Quantura Horizon").trim();
+        const universeLabel = screenerUniverseLabel(payload?.universe || "");
+        const marketLabel = screenerMarketLabel(payload?.market || "");
+        const resultCount = Number.isFinite(Number(resultsFound)) ? Number(resultsFound) : Array.isArray(rows) ? rows.length : 0;
+        const summary = [
+          `${runTitle || "AI portfolio"} ranked ${resultCount} candidate${resultCount === 1 ? "" : "s"} across ${marketLabel} ${universeLabel} filters.`,
+          topSymbols.length ? `Top ideas: ${topSymbols.join(", ")}.` : "",
+          modelLabel ? `Powered by ${modelLabel}.` : "",
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .slice(0, 480);
+        return {
+          summary,
+          topSymbols,
+          metrics: compactMetricMap({
+            Results: resultCount,
+            Universe: universeLabel,
+            Market: marketLabel,
+            Model: modelLabel,
+            Top: topSymbols.slice(0, 3).join(", "),
+          }),
+        };
+      };
 
 		  const bindPanelNavigation = () => {
 		    const panelsRoot = document.querySelector("[data-panels]");
@@ -4250,27 +4514,52 @@
     };
   };
 
-  const exchangeNativeIdTokenForCustomToken = async (idToken) => {
-    const token = String(idToken || "").trim();
-    if (!token) throw new Error("Native ID token is missing.");
-    const response = await fetch("/api/auth/exchange", {
+  const postNativeAuthExchange = async (path, idToken, payload = {}) => {
+    const response = await fetch(path, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${idToken}`,
       },
-      body: JSON.stringify({}),
+      body: JSON.stringify(payload),
     });
-    let payload = null;
+    let parsed = null;
     try {
-      payload = await response.json();
+      parsed = await response.json();
     } catch (error) {
-      payload = null;
+      parsed = null;
     }
-    if (!response.ok || !payload?.customToken) {
-      throw new Error(String(payload?.error || "Unable to sync native auth session."));
+    if (!response.ok || !parsed?.customToken) {
+      const nextError = new Error(String(parsed?.error || parsed?.message || "Unable to sync native auth session."));
+      nextError.status = Number(response.status || 0);
+      throw nextError;
     }
-    return String(payload.customToken);
+    return String(parsed.customToken || "").trim();
+  };
+
+  const exchangeNativeIdTokenForCustomToken = async (idToken) => {
+    const token = String(idToken || "").trim();
+    if (!token) throw new Error("Native ID token is missing.");
+    const nativePlatform = String(getNativePlatform() || "").trim().toLowerCase();
+    try {
+      console.info("[Auth][WebNative] Token exchange request started.", {
+        endpoint: "/api/mobile/auth/exchange",
+        nativePlatform,
+      });
+      return await postNativeAuthExchange("/api/mobile/auth/exchange", token, {
+        platform: nativePlatform || "web",
+      });
+    } catch (error) {
+      const status = Number(error?.status || 0);
+      if (![400, 401, 403, 404, 405, 422, 501].includes(status)) {
+        throw error;
+      }
+      console.warn("[Auth][WebNative] Mobile auth exchange unavailable, falling back.", {
+        status,
+        nativePlatform,
+      });
+      return postNativeAuthExchange("/api/auth/exchange", token, {});
+    }
   };
 
   const installNativeAuthBridge = (auth) => {
@@ -4289,6 +4578,7 @@
       const cleanToken = String(token || "").trim();
       if (!cleanToken) return false;
       try {
+        console.info("[Auth][WebNative] Custom token received from native bridge.");
         await auth.signInWithCustomToken(cleanToken);
         window.dispatchEvent(new CustomEvent("quantura:native-custom-token-consumed", { detail: { ok: true } }));
         return true;
@@ -4301,16 +4591,41 @@
     bridge.onNativeAuthState = (authState) => {
       const nextState = authState && typeof authState === "object" ? authState : {};
       state.nativeAuthState = nextState;
+      console.info("[Auth][WebNative] Native auth state received.", {
+        uid: String(nextState.uid || "").trim(),
+        anonymous: Boolean(nextState.isAnonymous),
+      });
       applyRuntimeBodyClasses();
       window.dispatchEvent(new CustomEvent("quantura:native-auth-state-bridge", { detail: nextState }));
       return nextState;
     };
 
-    bridge.requestSignIn = (provider = "") =>
-      sendNativeAuthMessage({
+    bridge.onNativeAuthGateState = (gateState) => {
+      const detail = gateState && typeof gateState === "object" ? gateState : { visible: Boolean(gateState) };
+      state.authGateVisible = Boolean(detail.visible);
+      return state.authGateVisible;
+    };
+
+    bridge.onNativeAuthSync = (authSyncState) => {
+      const detail = authSyncState && typeof authSyncState === "object" ? authSyncState : {};
+      state.nativeAuthSync = detail;
+      return detail;
+    };
+
+    bridge.requestSignIn = (provider = "") => {
+      const requestId = `native_auth_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const sent = sendNativeAuthMessage({
         type: "REQUEST_SIGN_IN",
+        requestId,
         provider: String(provider || "").trim().toLowerCase(),
       });
+      console.info("[Auth][WebNative] Auth request started.", {
+        provider: String(provider || "").trim().toLowerCase() || "native",
+        requestId,
+        sent,
+      });
+      return { sent, requestId };
+    };
 
     bridge.requestAuthState = () => sendNativeAuthMessage({ type: "GET_AUTH_STATE" });
     bridge.signOut = () => sendNativeAuthMessage({ type: "SIGN_OUT" });
@@ -4332,6 +4647,20 @@
       }
     } catch (error) {
       // Ignore stale pending token errors.
+    }
+    try {
+      if (window.__QUANTURA_PENDING_AUTH_GATE_STATE__) {
+        bridge.onNativeAuthGateState(window.__QUANTURA_PENDING_AUTH_GATE_STATE__);
+      }
+    } catch (error) {
+      // Ignore stale pending auth gate state errors.
+    }
+    try {
+      if (window.__QUANTURA_PENDING_AUTH_SYNC__) {
+        bridge.onNativeAuthSync(window.__QUANTURA_PENDING_AUTH_SYNC__);
+      }
+    } catch (error) {
+      // Ignore stale pending auth sync errors.
     }
 
     bridge.requestAuthState();
@@ -5930,8 +6259,8 @@
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
         const request = String(input.value || "").trim();
-        const tickerFallback = getActiveTicker() || normalizeTicker(safeLocalStorageGet(LAST_TICKER_KEY) || "") || "SPY";
-        const ticker = normalizeTicker(tickerInput.value || tickerFallback) || "SPY";
+        const tickerFallback = resolveActiveOrDefaultTicker();
+        const ticker = normalizeTicker(tickerInput.value || tickerFallback) || tickerFallback;
         if (!request) {
           status.textContent = "Tell us what you need so AI can help.";
           return;
@@ -5985,7 +6314,7 @@
       });
     }
 
-    const fallbackTicker = getActiveTicker() || normalizeTicker(safeLocalStorageGet(LAST_TICKER_KEY) || "") || "SPY";
+    const fallbackTicker = resolveActiveOrDefaultTicker();
     if (!String(tickerInput.value || "").trim()) tickerInput.value = fallbackTicker;
     if (prefillPrompt && !String(input.value || "").trim()) input.value = String(prefillPrompt || "").trim();
     status.textContent = "";
@@ -6705,7 +7034,21 @@
       if (node?.id === "profile-status" || node?.id === "auth-email-message") return;
       set.add(node);
     });
-    return Array.from(set);
+    const candidates = Array.from(set).filter((node) => node instanceof HTMLElement);
+    const isGenericContainer = (node) =>
+      node.matches(
+        "main, main > section, main section > .container, main section > .shop-container, main .app-main, main .hero-grid, main .content-grid, main .dashboard-grid, main .insight-grid, main .feature-grid, main .results-grid, main .layout"
+      );
+    return candidates.filter((container) => {
+      if (!isGenericContainer(container)) return true;
+      return !candidates.some(
+        (other) =>
+          other !== container &&
+          container.contains(other) &&
+          !isGenericContainer(other) &&
+          other.offsetParent !== null
+      );
+    });
   };
 
   const isDenseNativeInlineAdContainer = (container, children) => {
@@ -6738,10 +7081,33 @@
     return false;
   };
 
+  const getStructuredNativeInlineAdRule = (container, children) => {
+    if (!(container instanceof HTMLElement)) return null;
+    if (!Array.isArray(children) || children.length < 3) return null;
+    if (children.every((child) => child.matches(".order-card"))) {
+      return { start: 3, interval: 3 };
+    }
+    if (children.every((child) => child.matches(".results-panel"))) {
+      return { start: 3, interval: 3 };
+    }
+    if (children.every((child) => child.matches(".news-card"))) {
+      return { start: 2, interval: 2 };
+    }
+    return null;
+  };
+
   const getNativeInlineAdAnchorIndexes = (childrenCount, rules, container, children) => {
     if (!Number.isFinite(childrenCount) || childrenCount < 2) return [];
     if (isDenseNativeInlineAdContainer(container, children)) {
       return Array.from({ length: Math.max(0, childrenCount - 1) }, (_value, index) => index);
+    }
+    const structuredRule = getStructuredNativeInlineAdRule(container, children);
+    if (structuredRule) {
+      const indexes = new Set();
+      for (let position = structuredRule.start; position <= childrenCount; position += structuredRule.interval) {
+        indexes.add(Math.max(0, Math.min(childrenCount - 1, position - 1)));
+      }
+      return Array.from(indexes).sort((left, right) => left - right);
     }
     const indexes = new Set();
     const midpointIndex = Math.max(0, Math.min(childrenCount - 1, Math.floor((childrenCount - 1) * rules.pageMidpoint)));
@@ -9791,6 +10157,21 @@
 
   const getDefaultPopularTicker = () => normalizeTicker(SESSION_DEFAULT_TICKER) || "AAPL";
 
+  const resolveActiveOrDefaultTicker = (...candidates) => {
+    const ordered = [
+      ...candidates,
+      getActiveTicker(),
+      normalizeTicker(state.tickerContext.ticker || ""),
+      normalizeTicker(safeLocalStorageGet(LAST_TICKER_KEY) || ""),
+      getDefaultPopularTicker(),
+    ];
+    for (const candidate of ordered) {
+      const clean = normalizeTicker(candidate);
+      if (clean) return clean;
+    }
+    return getDefaultPopularTicker();
+  };
+
   const resolveTradingViewExchangeSymbol = (ticker) => {
     const clean = normalizeTicker(ticker);
     if (!clean) return TRADINGVIEW_EXCHANGE_OVERRIDES[getDefaultPopularTicker()] || "NASDAQ:AAPL";
@@ -11665,12 +12046,11 @@
       return;
     }
     if (isNativeApp()) {
-      const rewardApproved = await maybeShowNativeRewardGate({
+      const interstitialApproved = await maybeShowNativeInterstitialGate({
         reason: "market_headlines_link",
-        title: "Watch an ad before opening this article?",
-        message: "Opening publisher links from Market headlines can trigger a rewarded interstitial.",
+        fallbackMessage: "Opening article while the interstitial finishes loading.",
       });
-      if (!rewardApproved) return;
+      if (!interstitialApproved) return;
       window.open(cleanUrl, "_blank", "noopener,noreferrer");
       return;
     }
@@ -15072,7 +15452,14 @@
 	            : selectedModules,
 	        },
 	        outputsMeta: {
-	          summary: String(responsePayload.answer || "").trim().slice(0, 480),
+            ...buildModelCouncilPublishMeta({
+              symbol,
+              answer: responsePayload.answer || "",
+              provider: responsePayload.provider || selectedProvider,
+              model: responsePayload.model || selectedModel,
+              latencyMs,
+              selectedModules: responsePayload.selectedModules || selectedModules,
+            }),
 	          answer: String(responsePayload.answer || "").trim().slice(0, 4000),
 	          provider: responsePayload.provider || selectedProvider,
 	          model: responsePayload.model || selectedModel,
@@ -15112,7 +15499,7 @@
 
   const autoloadOptionsChain = async (functions, { force = false } = {}) => {
     if (!functions || !ui.optionsForm || !ui.optionsOutput) return;
-    const symbol = normalizeTicker(state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "");
+    const symbol = resolveActiveOrDefaultTicker(state.tickerContext.ticker || "");
     if (!symbol) return;
 
     const tickerInput = document.getElementById("options-ticker");
@@ -20229,7 +20616,7 @@
           if (ui.tickerIntelligenceOutput) {
             ui.tickerIntelligenceOutput.classList.remove("hidden");
           }
-          const activeTicker = getActiveTicker() || normalizeTicker(safeLocalStorageGet(LAST_TICKER_KEY) || "");
+          const activeTicker = resolveActiveOrDefaultTicker();
           if (activeTicker) {
             syncTickerInputs(activeTicker, { source: "panel_open_ticker", skipHistory: true });
             refreshTradingViewForTicker(activeTicker);
@@ -20252,7 +20639,7 @@
         }
 
         if (next === "predictions") {
-          const activeTicker = getActiveTicker() || normalizeTicker(safeLocalStorageGet(LAST_TICKER_KEY) || "");
+          const activeTicker = resolveActiveOrDefaultTicker();
           if (activeTicker) {
             syncTickerInputs(activeTicker, { source: "panel_open_predictions", skipHistory: true });
           }
@@ -20273,7 +20660,7 @@
         }
 
         if (next === "news") {
-          const ticker = getActiveTicker() || normalizeTicker(safeLocalStorageGet(LAST_TICKER_KEY) || "");
+          const ticker = resolveActiveOrDefaultTicker();
           if (!ticker) return;
           scheduleSideDataRefresh(ticker, { force: !state.panelAutoloaded.news });
           state.panelAutoloaded.news = true;
@@ -20292,7 +20679,7 @@
         }
 
         if (next === "ticker-query") {
-          const ticker = getActiveTicker() || normalizeTicker(safeLocalStorageGet(LAST_TICKER_KEY) || "");
+          const ticker = resolveActiveOrDefaultTicker();
           if (ticker && ui.tickerQueryTicker && !String(ui.tickerQueryTicker.value || "").trim()) {
             ui.tickerQueryTicker.value = ticker;
           }
@@ -20306,7 +20693,7 @@
         }
 
         if (next === "options") {
-          const ticker = getActiveTicker() || normalizeTicker(safeLocalStorageGet(LAST_TICKER_KEY) || "");
+          const ticker = resolveActiveOrDefaultTicker();
           if (!ticker) return;
           const first = !state.panelAutoloaded.options;
           state.panelAutoloaded.options = true;
@@ -22661,9 +23048,13 @@
         await persistenceReady;
         if (isNativeApp() && supportsNativeBridge) {
           const bridge = installNativeAuthBridge(auth);
-          const requested = Boolean(bridge?.requestSignIn?.(normalizedMethod));
+          const nativeRequest = bridge?.requestSignIn?.(normalizedMethod);
+          const requested = Boolean(nativeRequest?.sent);
           if (!requested) throw new Error("Native sign-in bridge is unavailable.");
-          await waitForNativeAuthCompletion(auth, 90000);
+          await waitForNativeAuthCompletion(auth, 90000, {
+            requestId: nativeRequest?.requestId,
+            provider: normalizedMethod,
+          });
           await linkPendingCredentialIfPresent({ silent: true });
           showToast(successMessage);
           logEvent("login", { method: normalizedMethod, runtime, source: "native_bridge" });
@@ -23402,18 +23793,15 @@
             indicators: Array.isArray(indicators) ? indicators.map((entry) => String(entry || "").trim().toUpperCase()) : [],
           },
           outputsMeta: {
-            summary:
-              (() => {
-                const narrative = String(analysis?.summary || "").trim();
-                if (narrative) return narrative.slice(0, 320);
-                if (Array.isArray(rows) && rows.length) {
-                  return rows
-                    .slice(0, 4)
-                    .map((row) => `${row?.name}: ${row?.display ?? row?.value}`)
-                    .join(" • ");
-                }
-                return "Indicator request saved.";
-              })(),
+            ...buildIndicatorPublishMeta({
+              ticker: payload.ticker,
+              analysis,
+              prediction,
+              rows,
+              selectedIndicators: indicators,
+              targetPrice,
+              upsidePct,
+            }),
             latestCount: Array.isArray(rows) ? rows.length : 0,
             prediction: prediction?.direction ? String(prediction.direction) : "",
           },
@@ -23455,7 +23843,7 @@
       if (!rewardApproved) return;
       const formData = new FormData(ui.downloadForm);
       const ticker =
-        normalizeTicker(formData.get("ticker")) || state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "";
+        resolveActiveOrDefaultTicker(formData.get("ticker"), state.tickerContext.ticker);
       if (!ticker) {
         showToast("Load a ticker first.", "warn");
         return;
@@ -24095,6 +24483,12 @@
             createdAt: new Date().toISOString(),
           });
           if (runId) {
+            const screenerPublishMeta = buildScreenerPublishMeta({
+              payload,
+              rows,
+              runTitle: runTitle || `${payload.universe || "AI Portfolio"} run`,
+              resultsFound,
+            });
             upsertMyRequest({
               type: "screener",
               requestId: `screener__${runId}`,
@@ -24108,12 +24502,11 @@
                 filters: payload.filters && typeof payload.filters === "object" ? payload.filters : {},
               },
               outputsMeta: {
-                summary: String(payload.notes || "").trim(),
+                summary: screenerPublishMeta.summary,
                 resultsCount: Number.isFinite(resultsFound) ? resultsFound : rows.length,
-                topSymbols: Array.isArray(rows)
-                  ? rows.slice(0, 12).map((row) => normalizeTicker(row?.symbol || "")).filter(Boolean)
-                  : [],
+                topSymbols: screenerPublishMeta.topSymbols,
                 modelUsed: String(payload.model || ""),
+                metrics: screenerPublishMeta.metrics,
               },
               sourceRef: {
                 collection: "screener_runs",
@@ -24729,11 +25122,7 @@
               }
             }
             if (isNativeApp()) {
-              const bridge = installNativeAuthBridge(auth);
-              if (!state.nativeAuthPromptRequested) {
-                state.nativeAuthPromptRequested = true;
-                bridge?.requestSignIn?.();
-              }
+              installNativeAuthBridge(auth);
             }
             return;
           }
@@ -24768,14 +25157,6 @@
             await pingNotificationSession().catch(() => undefined);
             if (isNativeApp()) {
               installNativeAuthBridge(auth);
-              if (user.isAnonymous) {
-                if (!state.nativeAuthPromptRequested) {
-                  state.nativeAuthPromptRequested = true;
-                  window.__quanturaAuthBridge?.requestSignIn?.();
-                }
-              } else {
-                state.nativeAuthPromptRequested = false;
-              }
             }
 
             await ensureUserProfile(db, user);

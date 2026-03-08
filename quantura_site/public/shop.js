@@ -347,15 +347,15 @@
     }
     if (ui.visibilitySummary) {
       if (!state.shopEnabled) {
-        ui.visibilitySummary.textContent = "Shop is currently hidden by Firebase Remote Config.";
+        ui.visibilitySummary.textContent = "The storefront is temporarily unavailable while inventory is refreshed.";
       } else {
-        ui.visibilitySummary.textContent = `${totalVisible} live listings are currently enabled by Firebase Remote Config.`;
+        ui.visibilitySummary.textContent = `${totalVisible} live listings are currently available across products and bundle unlocks.`;
       }
     }
     if (ui.catalogSummary) {
       if (!state.shopEnabled) {
         ui.catalogSummary.textContent =
-          "The shop is disabled right now. Flip the Firebase Remote Config shop flag back on to restore the catalog.";
+          "The shop is temporarily paused right now. Check back shortly for the live catalog and reward bundles.";
       } else {
         ui.catalogSummary.textContent = `${filteredProducts.length} product results and ${filteredBundles.length} bundle results match the active view.`;
       }
@@ -391,7 +391,7 @@
     if (!state.shopEnabled) {
       ui.shopGrid.innerHTML = renderEmptyCard(
         "Shop disabled",
-        "Firebase Remote Config currently has the shop turned off. Set the shop flag back to true to show products again."
+        "The storefront is temporarily unavailable. Check back shortly for live products and bundle unlocks."
       );
       return;
     }
@@ -415,7 +415,7 @@
     if (!state.shopEnabled) {
       ui.bundleGrid.innerHTML = renderEmptyCard(
         "Bundles paused",
-        "Reward bundles are hidden while the shop is disabled from Firebase Remote Config."
+        "Reward bundles are temporarily unavailable while the storefront is paused."
       );
       return;
     }

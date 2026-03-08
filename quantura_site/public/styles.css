@@ -2897,6 +2897,41 @@ textarea {
   gap: 10px;
 }
 
+.output-loading-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.output-loading-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(18, 24, 42, 0.1);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.output-loading-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.output-loading-title {
+  font-size: 0.86rem;
+  line-height: 1.2;
+}
+
+.spinner-ring {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 2px solid rgba(11, 77, 122, 0.18);
+  border-top-color: #0b4d7a;
+  animation: quantura-spin 0.8s linear infinite;
+  flex: 0 0 auto;
+}
+
 .skeleton-line {
   height: 12px;
   border-radius: 999px;
@@ -3030,6 +3065,11 @@ textarea {
 @keyframes shimmer {
   0% { background-position: 0% 50%; }
   100% { background-position: 200% 50%; }
+}
+
+@keyframes quantura-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .data-table {
@@ -4656,6 +4696,17 @@ body.prediction-interstitial-open {
   margin-bottom: 12px;
 }
 
+.screener-panel-header {
+  gap: 4px;
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.screener-panel-header h2,
+.screener-panel-header p {
+  margin-top: 0;
+}
+
 .learn-more {
   margin-top: 14px;
 }
@@ -5422,6 +5473,16 @@ body.modal-open {
   background: linear-gradient(135deg, rgba(18, 24, 42, 0.96) 0%, rgba(25, 35, 58, 0.9) 100%);
   border-color: rgba(233, 237, 247, 0.24);
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.35);
+}
+
+[data-theme="dark"] .output-loading-indicator {
+  background: rgba(18, 24, 42, 0.72);
+  border-color: rgba(233, 237, 247, 0.14);
+}
+
+[data-theme="dark"] .spinner-ring {
+  border-color: rgba(166, 209, 255, 0.18);
+  border-top-color: #8ac8ff;
 }
 
 [data-theme="dark"] .cta.secondary.success {
