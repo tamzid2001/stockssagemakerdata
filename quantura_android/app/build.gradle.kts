@@ -17,8 +17,8 @@ android {
         applicationId = "com.quantura.quanturaapp"
         minSdk = 24
         targetSdk = 36
-        versionCode = 4
-        versionName = "1.3"
+        versionCode = 5
+        versionName = "1.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -78,8 +78,7 @@ dependencies {
     implementation("com.google.firebase:firebase-messaging")
     implementation("com.google.firebase:firebase-functions")
 
-    implementation("com.google.android.gms:play-services-ads:24.7.0")
-    implementation("com.google.ads.mediation:facebook:6.21.0.0")
+    implementation("com.google.android.gms:play-services-ads:25.0.0")
     implementation("com.google.android.gms:play-services-auth:21.2.0")
     implementation("com.google.android.play:integrity:1.4.0")
     implementation("com.android.billingclient:billing:8.3.0")

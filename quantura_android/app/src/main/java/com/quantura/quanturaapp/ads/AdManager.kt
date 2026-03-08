@@ -32,6 +32,7 @@ import com.google.firebase.analytics.FirebaseAnalytics
 import com.google.firebase.auth.FirebaseAuth
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
+import java.lang.ref.WeakReference
 
 class AdManager(
     private val remoteConfigManager: RemoteConfigManager,
@@ -68,6 +69,39 @@ class AdManager(
 
     @Volatile
     private var preloadedNativeAdUnitId: String = ""
+
+    @Volatile
+    private var interstitialLoadInFlight = false
+
+    @Volatile
+    private var rewardedLoadInFlight = false
+
+    @Volatile
+    private var rewardedInterstitialLoadInFlight = false
+
+    private data class PendingInterstitialRequest(
+        val activityRef: WeakReference<Activity>,
+        val requestId: String,
+        val callback: (JSONObject) -> Unit,
+    )
+
+    private data class PendingRewardedRequest(
+        val activityRef: WeakReference<Activity>,
+        val requestId: String,
+        val preferRewardedInterstitial: Boolean,
+        val onReward: (RewardItem) -> Unit,
+        val callback: (JSONObject) -> Unit,
+    )
+
+    @Volatile
+    private var pendingInterstitialRequest: PendingInterstitialRequest? = null
+
+    @Volatile
+    private var pendingRewardedRequest: PendingRewardedRequest? = null
+
+    private fun isFormatEnabled(format: AdFormat): Boolean {
+        return remoteConfigManager.isAdFormatEnabled(platform = AdPlatform.ANDROID, format = format)
+    }
 
     fun primeAds(context: Context) {
         if (!remoteConfigManager.areAdsEnabled()) {
@@ -122,6 +156,16 @@ class AdManager(
         requestId: String = "",
         callback: (JSONObject) -> Unit = {},
     ) {
+        if (!isFormatEnabled(AdFormat.INTERSTITIAL)) {
+            emitAdActionResult(
+                callback = callback,
+                requestId = requestId,
+                adFormat = "interstitial",
+                status = "skipped:format_off",
+                message = "Interstitial ads are disabled."
+            )
+            return
+        }
         if (!remoteConfigManager.areAdsEnabled()) {
             emitAdActionResult(
                 callback = callback,
@@ -146,13 +190,18 @@ class AdManager(
         }
         val cachedAd = interstitialAd
         if (cachedAd == null) {
-            Log.d(tag, "Interstitial unavailable; loading.")
-            AdDebugStatusRegistry.updateShow("interstitial", "skipped:not_ready")
+            Log.d(tag, "Interstitial unavailable; queueing request until load completes.")
+            pendingInterstitialRequest = PendingInterstitialRequest(
+                activityRef = WeakReference(activity),
+                requestId = requestId,
+                callback = callback
+            )
+            AdDebugStatusRegistry.updateShow("interstitial", "queued:not_ready")
             emitAdActionResult(
                 callback = callback,
                 requestId = requestId,
                 adFormat = "interstitial",
-                status = "skipped:not_ready",
+                status = "queued",
                 message = "Interstitial ad is still loading."
             )
             loadInterstitial(activity)
@@ -227,6 +276,18 @@ class AdManager(
         onReward: (RewardItem) -> Unit = {},
         callback: (JSONObject) -> Unit = {},
     ) {
+        val rewardedEnabled = isFormatEnabled(AdFormat.REWARDED)
+        val rewardedInterstitialEnabled = isFormatEnabled(AdFormat.REWARDED_INTERSTITIAL)
+        if (!rewardedEnabled && !rewardedInterstitialEnabled) {
+            emitAdActionResult(
+                callback = callback,
+                requestId = requestId,
+                adFormat = if (preferRewardedInterstitial) "rewarded_interstitial" else "rewarded",
+                status = "skipped:format_off",
+                message = "Rewarded ads are disabled."
+            )
+            return
+        }
         if (!remoteConfigManager.areAdsEnabled()) {
             emitAdActionResult(
                 callback = callback,
@@ -250,7 +311,12 @@ class AdManager(
             )
             return
         }
-        val rewardedInterstitial = if (preferRewardedInterstitial) rewardedInterstitialAd else null
+        val useRewardedInterstitial = if (preferRewardedInterstitial) {
+            rewardedInterstitialEnabled
+        } else {
+            !rewardedEnabled && rewardedInterstitialEnabled
+        }
+        val rewardedInterstitial = if (useRewardedInterstitial) rewardedInterstitialAd else null
         if (rewardedInterstitial != null) {
             rewardedInterstitial.fullScreenContentCallback = object : FullScreenContentCallback() {
                 override fun onAdShowedFullScreenContent() {
@@ -325,14 +391,31 @@ class AdManager(
         }
 
         val cachedAd = rewardedAd
-        if (cachedAd == null) {
-            Log.d(tag, "Rewarded unavailable; loading.")
-            AdDebugStatusRegistry.updateShow("rewarded", "skipped:not_ready")
+        if (!rewardedEnabled) {
             emitAdActionResult(
                 callback = callback,
                 requestId = requestId,
                 adFormat = "rewarded",
-                status = "skipped:not_ready",
+                status = "skipped:format_off",
+                message = "Rewarded ads are disabled."
+            )
+            return
+        }
+        if (cachedAd == null) {
+            Log.d(tag, "Rewarded unavailable; queueing request until load completes.")
+            pendingRewardedRequest = PendingRewardedRequest(
+                activityRef = WeakReference(activity),
+                requestId = requestId,
+                preferRewardedInterstitial = preferRewardedInterstitial,
+                onReward = onReward,
+                callback = callback
+            )
+            AdDebugStatusRegistry.updateShow("rewarded", "queued:not_ready")
+            emitAdActionResult(
+                callback = callback,
+                requestId = requestId,
+                adFormat = "rewarded",
+                status = "queued",
                 message = "Rewarded ad is still loading."
             )
             loadRewarded(activity)
@@ -460,6 +543,11 @@ class AdManager(
             callback(buildNativeAdError(trimmedSlotId, normalizedPlacement, "ads_disabled"))
             return
         }
+        if (!isFormatEnabled(AdFormat.NATIVE)) {
+            AdDebugStatusRegistry.updateLoad("native", "failed:format_off")
+            callback(buildNativeAdError(trimmedSlotId, normalizedPlacement, "format_off"))
+            return
+        }
         if (!MobileAdsBootstrap.isInitialized()) {
             AdDebugStatusRegistry.updateLoad("native", "waiting:sdk_init")
             MobileAdsBootstrap.runWhenInitialized {
@@ -561,6 +649,13 @@ class AdManager(
 
     private fun preloadNative(context: Context) {
         if (!remoteConfigManager.areAdsEnabled()) return
+        if (!isFormatEnabled(AdFormat.NATIVE)) {
+            AdDebugStatusRegistry.updateLoad("native", "disabled:format_off")
+            preloadedNativePayload = null
+            preloadedNativeAdUnitId = ""
+            nativePreloadInFlight = false
+            return
+        }
         if (nativePreloadInFlight || preloadedNativePayload != null) return
         if (!MobileAdsBootstrap.isInitialized()) {
             AdDebugStatusRegistry.updateLoad("native", "waiting:sdk_init")
@@ -672,6 +767,13 @@ class AdManager(
     }
 
     private fun loadInterstitial(context: Context) {
+        if (!isFormatEnabled(AdFormat.INTERSTITIAL)) {
+            interstitialAd = null
+            interstitialLoadInFlight = false
+            AdDebugStatusRegistry.updateLoad("interstitial", "disabled:format_off")
+            return
+        }
+        if (interstitialLoadInFlight) return
         if (!MobileAdsBootstrap.isInitialized()) {
             Log.i(tag, "[Ads][Android] Interstitial load deferred until Mobile Ads finishes initializing.")
             AdDebugStatusRegistry.updateLoad("interstitial", "waiting:sdk_init")
@@ -680,6 +782,7 @@ class AdManager(
             }
             return
         }
+        interstitialLoadInFlight = true
         val adUnitId = remoteConfigManager.resolveAdUnitId(
             platform = AdPlatform.ANDROID,
             format = AdFormat.INTERSTITIAL
@@ -692,23 +795,34 @@ class AdManager(
             AdRequest.Builder().build(),
             object : InterstitialAdLoadCallback() {
                 override fun onAdLoaded(ad: InterstitialAd) {
+                    interstitialLoadInFlight = false
                     interstitialAd = ad
                     Log.d(tag, "Interstitial load succeeded.")
                     Log.i(tag, "[Ads][Android] Load success for interstitial")
                     AdDebugStatusRegistry.updateLoad("interstitial", "loaded")
+                    drainPendingInterstitialRequest()
                 }
 
                 override fun onAdFailedToLoad(loadAdError: LoadAdError) {
+                    interstitialLoadInFlight = false
                     interstitialAd = null
                     Log.w(tag, "Interstitial load failed: ${loadAdError.message}")
                     Log.w(tag, "[Ads][Android] Load fail for interstitial: ${loadAdError.message}")
                     AdDebugStatusRegistry.updateLoad("interstitial", "failed:${loadAdError.message}")
+                    failPendingInterstitialRequest(loadAdError.message)
                 }
             }
         )
     }
 
     private fun loadRewarded(context: Context) {
+        if (!isFormatEnabled(AdFormat.REWARDED)) {
+            rewardedAd = null
+            rewardedLoadInFlight = false
+            AdDebugStatusRegistry.updateLoad("rewarded", "disabled:format_off")
+            return
+        }
+        if (rewardedLoadInFlight) return
         if (!MobileAdsBootstrap.isInitialized()) {
             Log.i(tag, "[Ads][Android] Rewarded load deferred until Mobile Ads finishes initializing.")
             AdDebugStatusRegistry.updateLoad("rewarded", "waiting:sdk_init")
@@ -717,6 +831,7 @@ class AdManager(
             }
             return
         }
+        rewardedLoadInFlight = true
         val adUnitId = remoteConfigManager.resolveAdUnitId(
             platform = AdPlatform.ANDROID,
             format = AdFormat.REWARDED
@@ -729,24 +844,35 @@ class AdManager(
             AdRequest.Builder().build(),
             object : RewardedAdLoadCallback() {
                 override fun onAdLoaded(ad: RewardedAd) {
+                    rewardedLoadInFlight = false
                     rewardedAd = ad
                     configureRewardedSsv(ad, "rewarded")
                     Log.d(tag, "Rewarded load succeeded.")
                     Log.i(tag, "[Ads][Android] Load success for rewarded")
                     AdDebugStatusRegistry.updateLoad("rewarded", "loaded")
+                    drainPendingRewardedRequest()
                 }
 
                 override fun onAdFailedToLoad(loadAdError: LoadAdError) {
+                    rewardedLoadInFlight = false
                     rewardedAd = null
                     Log.w(tag, "Rewarded load failed: ${loadAdError.message}")
                     Log.w(tag, "[Ads][Android] Load fail for rewarded: ${loadAdError.message}")
                     AdDebugStatusRegistry.updateLoad("rewarded", "failed:${loadAdError.message}")
+                    maybeFailPendingRewardedRequest(loadAdError.message)
                 }
             }
         )
     }
 
     private fun loadRewardedInterstitial(context: Context) {
+        if (!isFormatEnabled(AdFormat.REWARDED_INTERSTITIAL)) {
+            rewardedInterstitialAd = null
+            rewardedInterstitialLoadInFlight = false
+            AdDebugStatusRegistry.updateLoad("rewarded_interstitial", "disabled:format_off")
+            return
+        }
+        if (rewardedInterstitialLoadInFlight) return
         if (!MobileAdsBootstrap.isInitialized()) {
             Log.i(
                 tag,
@@ -758,6 +884,7 @@ class AdManager(
             }
             return
         }
+        rewardedInterstitialLoadInFlight = true
         val adUnitId = remoteConfigManager.resolveAdUnitId(
             platform = AdPlatform.ANDROID,
             format = AdFormat.REWARDED_INTERSTITIAL
@@ -770,14 +897,17 @@ class AdManager(
             AdRequest.Builder().build(),
             object : RewardedInterstitialAdLoadCallback() {
                 override fun onAdLoaded(ad: RewardedInterstitialAd) {
+                    rewardedInterstitialLoadInFlight = false
                     rewardedInterstitialAd = ad
                     configureRewardedInterstitialSsv(ad, "rewarded_interstitial")
                     Log.d(tag, "Rewarded interstitial load succeeded.")
                     Log.i(tag, "[Ads][Android] Load success for rewarded_interstitial")
                     AdDebugStatusRegistry.updateLoad("rewarded_interstitial", "loaded")
+                    drainPendingRewardedRequest()
                 }
 
                 override fun onAdFailedToLoad(loadAdError: LoadAdError) {
+                    rewardedInterstitialLoadInFlight = false
                     rewardedInterstitialAd = null
                     Log.w(tag, "Rewarded interstitial load failed: ${loadAdError.message}")
                     Log.w(
@@ -788,8 +918,99 @@ class AdManager(
                         "rewarded_interstitial",
                         "failed:${loadAdError.message}"
                     )
+                    maybeFailPendingRewardedRequest(loadAdError.message)
                 }
             }
+        )
+    }
+
+    private fun drainPendingInterstitialRequest() {
+        val pending = pendingInterstitialRequest ?: return
+        val activity = pending.activityRef.get()
+        if (activity == null || activity.isFinishing || activity.isDestroyed) {
+            pendingInterstitialRequest = null
+            return
+        }
+        if (interstitialAd == null || isShowingFullScreenAdInternal) return
+        pendingInterstitialRequest = null
+        showInterstitial(
+            activity = activity,
+            requestId = pending.requestId,
+            callback = pending.callback
+        )
+    }
+
+    private fun failPendingInterstitialRequest(message: String) {
+        val pending = pendingInterstitialRequest ?: return
+        pendingInterstitialRequest = null
+        emitAdActionResult(
+            callback = pending.callback,
+            requestId = pending.requestId,
+            adFormat = "interstitial",
+            status = "failed",
+            message = message
+        )
+    }
+
+    private fun drainPendingRewardedRequest() {
+        val pending = pendingRewardedRequest ?: return
+        val activity = pending.activityRef.get()
+        if (activity == null || activity.isFinishing || activity.isDestroyed) {
+            pendingRewardedRequest = null
+            return
+        }
+        if (isShowingFullScreenAdInternal) return
+
+        val rewardedEnabled = isFormatEnabled(AdFormat.REWARDED)
+        val rewardedInterstitialEnabled = isFormatEnabled(AdFormat.REWARDED_INTERSTITIAL)
+        val canShowRewardedInterstitial = pending.preferRewardedInterstitial &&
+            rewardedInterstitialEnabled &&
+            rewardedInterstitialAd != null
+        val canShowRewarded = rewardedEnabled && rewardedAd != null
+        val shouldFallbackToRewarded = canShowRewarded &&
+            (!pending.preferRewardedInterstitial || !rewardedInterstitialEnabled || !rewardedInterstitialLoadInFlight)
+
+        when {
+            canShowRewardedInterstitial -> {
+                pendingRewardedRequest = null
+                showRewarded(
+                    activity = activity,
+                    requestId = pending.requestId,
+                    preferRewardedInterstitial = true,
+                    onReward = pending.onReward,
+                    callback = pending.callback
+                )
+            }
+
+            shouldFallbackToRewarded -> {
+                pendingRewardedRequest = null
+                showRewarded(
+                    activity = activity,
+                    requestId = pending.requestId,
+                    preferRewardedInterstitial = false,
+                    onReward = pending.onReward,
+                    callback = pending.callback
+                )
+            }
+        }
+    }
+
+    private fun maybeFailPendingRewardedRequest(message: String) {
+        val pending = pendingRewardedRequest ?: return
+        if (rewardedInterstitialLoadInFlight || rewardedLoadInFlight) return
+        if ((isFormatEnabled(AdFormat.REWARDED_INTERSTITIAL) && rewardedInterstitialAd != null) ||
+            (isFormatEnabled(AdFormat.REWARDED) && rewardedAd != null)
+        ) {
+            drainPendingRewardedRequest()
+            return
+        }
+        pendingRewardedRequest = null
+        emitAdActionResult(
+            callback = pending.callback,
+            requestId = pending.requestId,
+            adFormat = if (pending.preferRewardedInterstitial) "rewarded_interstitial" else "rewarded",
+            status = "failed",
+            message = message
         )
     }
 

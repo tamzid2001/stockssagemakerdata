@@ -42,6 +42,45 @@ final class NativeAuthWebBridge {
 #endif
     }
 
+    func pushAuthGateState(visible: Bool, reason: String = "state_change") {
+        let payload: [String: Any] = [
+            "visible": visible,
+            "reason": reason,
+        ]
+        evaluateBridgeEventJavaScript(
+            eventName: "quantura:native-auth-gate",
+            bridgeMethod: "onNativeAuthGateState",
+            pendingGlobal: "__QUANTURA_PENDING_AUTH_GATE_STATE__",
+            payload: payload,
+            reason: "auth-gate"
+        )
+    }
+
+    func pushAuthSyncState(
+        status: String,
+        message: String = "",
+        uid: String = "",
+        requestId: String = "",
+        provider: String = "",
+        source: String = ""
+    ) {
+        let payload: [String: Any] = [
+            "status": status,
+            "message": message,
+            "uid": uid,
+            "requestId": requestId,
+            "provider": provider,
+            "source": source,
+        ]
+        evaluateBridgeEventJavaScript(
+            eventName: "quantura:native-auth-sync",
+            bridgeMethod: "onNativeAuthSync",
+            pendingGlobal: "__QUANTURA_PENDING_AUTH_SYNC__",
+            payload: payload,
+            reason: "auth-sync"
+        )
+    }
+
 #if canImport(FirebaseAuth)
     func pushAuthState(user: FirebaseAuth.User?, idTokenFresh: Bool = false) {
         var providers = user?.providerData.map { $0.providerID }.filter { !$0.isEmpty } ?? []
@@ -59,14 +98,47 @@ final class NativeAuthWebBridge {
         evaluateAuthJavaScript(for: payload)
     }
 
-    func syncWebSessionFromCurrentUser(forceRefresh: Bool) async throws {
+    func syncWebSessionFromCurrentUser(
+        forceRefresh: Bool,
+        requestId: String = "",
+        provider: String = "",
+        source: String = "native"
+    ) async throws {
         guard let user = Auth.auth().currentUser else {
             throw NativeAuthBridgeError.userUnavailable
         }
-        let nativeIdToken = try await user.nativeIDToken(forceRefresh: forceRefresh)
-        let customToken = try await exchangeNativeIdTokenForCustomToken(nativeIdToken)
-        pushAuthState(user: user, idTokenFresh: forceRefresh)
-        injectCustomToken(customToken)
+        pushAuthSyncState(
+            status: "exchange_started",
+            message: "Native auth exchange started.",
+            uid: user.uid,
+            requestId: requestId,
+            provider: provider,
+            source: source
+        )
+        do {
+            let nativeIdToken = try await user.nativeIDToken(forceRefresh: forceRefresh)
+            let customToken = try await exchangeNativeIdTokenForCustomToken(nativeIdToken)
+            pushAuthState(user: user, idTokenFresh: forceRefresh)
+            injectCustomToken(customToken)
+            pushAuthSyncState(
+                status: "exchange_succeeded",
+                message: "Native auth exchange succeeded.",
+                uid: user.uid,
+                requestId: requestId,
+                provider: provider,
+                source: source
+            )
+        } catch {
+            pushAuthSyncState(
+                status: "exchange_failed",
+                message: error.localizedDescription,
+                uid: user.uid,
+                requestId: requestId,
+                provider: provider,
+                source: source
+            )
+            throw error
+        }
     }
 #else
     func pushAuthState(user: Any?, idTokenFresh: Bool = false) {
@@ -81,8 +153,16 @@ final class NativeAuthWebBridge {
         evaluateAuthJavaScript(for: payload)
     }
 
-    func syncWebSessionFromCurrentUser(forceRefresh: Bool) async throws {
+    func syncWebSessionFromCurrentUser(
+        forceRefresh: Bool,
+        requestId: String = "",
+        provider: String = "",
+        source: String = "native"
+    ) async throws {
         _ = forceRefresh
+        _ = requestId
+        _ = provider
+        _ = source
         throw NativeAuthBridgeError.firebaseUnavailable
     }
 #endif
@@ -102,6 +182,22 @@ final class NativeAuthWebBridge {
     }
 
     private func evaluateAuthJavaScript(for payload: [String: Any]) {
+        evaluateBridgeEventJavaScript(
+            eventName: "quantura:native-auth-state",
+            bridgeMethod: "onNativeAuthState",
+            pendingGlobal: "__QUANTURA_PENDING_AUTH_STATE__",
+            payload: payload,
+            reason: "auth-state"
+        )
+    }
+
+    private func evaluateBridgeEventJavaScript(
+        eventName: String,
+        bridgeMethod: String,
+        pendingGlobal: String,
+        payload: [String: Any],
+        reason: String
+    ) {
         guard
             let data = try? JSONSerialization.data(withJSONObject: payload, options: []),
             let json = String(data: data, encoding: .utf8)
@@ -109,13 +205,13 @@ final class NativeAuthWebBridge {
             return
         }
         let script = """
-            window.__QUANTURA_PENDING_AUTH_STATE__=\(json);
-            if (window.__quanturaAuthBridge?.onNativeAuthState) {
-                window.__quanturaAuthBridge.onNativeAuthState(\(json));
+            window.\(pendingGlobal)=\(json);
+            if (window.__quanturaAuthBridge?.\(bridgeMethod)) {
+                window.__quanturaAuthBridge.\(bridgeMethod)(\(json));
             }
-            window.dispatchEvent(new CustomEvent('quantura:native-auth-state', { detail: \(json) }));
+            window.dispatchEvent(new CustomEvent('\(eventName)', { detail: \(json) }));
         """
-        evaluateJavaScript(script, reason: "auth-state")
+        evaluateJavaScript(script, reason: reason)
     }
 
     private func evaluateJavaScript(_ script: String, reason: String) {
