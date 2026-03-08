@@ -3,14 +3,11 @@ package com.quantura.quanturaapp
 import android.app.Application
 import android.os.Build
 import android.util.Log
-import com.quantura.quanturaapp.di.AppContainer
-import com.google.android.gms.ads.MobileAds
-import com.google.android.gms.ads.RequestConfiguration
-import com.google.android.gms.common.ConnectionResult
-import com.google.android.gms.common.GoogleApiAvailability
 import com.google.firebase.FirebaseApp
 import com.quantura.quanturaapp.ads.MobileAdsBootstrap
-import com.quantura.quanturaapp.auth.AuthSessionManager
+import com.quantura.quanturaapp.di.AppContainer
+import com.google.android.gms.common.ConnectionResult
+import com.google.android.gms.common.GoogleApiAvailability
 
 class QuanturaApplication : Application() {
     lateinit var container: AppContainer
@@ -27,6 +24,12 @@ class QuanturaApplication : Application() {
         }
         if (!firebaseReady) {
             Log.w("QuanturaApplication", "Firebase disabled: missing google-services.json for local build.")
+        }
+        container = AppContainer(
+            application = this,
+            firebaseReady = firebaseReady,
+        ).also { appContainer ->
+            appContainer.appOpenAdManager.start()
         }
         val isEmulator = detectEmulator()
         logGooglePlayServicesHealth(isEmulator = isEmulator)

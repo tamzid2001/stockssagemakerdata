@@ -18,6 +18,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
@@ -30,7 +32,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -49,13 +53,20 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -80,7 +91,6 @@ import com.google.firebase.messaging.FirebaseMessaging
 import com.quantura.quanturaapp.ads.AdFormatStatusSnapshot
 import com.quantura.quanturaapp.ads.AdManager
 import com.quantura.quanturaapp.ads.BannerAdView
-import com.quantura.quanturaapp.ads.MobileAdsBootstrap
 import com.quantura.quanturaapp.auth.PlayIntegrityClient
 import com.quantura.quanturaapp.config.AdFormat
 import com.quantura.quanturaapp.config.AdPlatform
@@ -110,6 +120,15 @@ private val BANNER_RESERVED_HEIGHT: Dp = 72.dp
 private enum class EmailDialogMode {
     SIGN_IN,
     SIGN_UP,
+}
+
+private enum class AuthProviderMarkKind {
+    GOOGLE,
+    GITHUB,
+    X,
+    YAHOO,
+    MICROSOFT,
+    EMAIL,
 }
 
 private data class AdsQaFormatRow(
@@ -222,42 +241,24 @@ class MainActivity : ComponentActivity() {
                             .fillMaxSize()
                             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
                     ) {
-                        Column(modifier = Modifier.fillMaxSize()) {
-                            QuanturaWebViewScreen(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxWidth(),
-                                activity = this@MainActivity,
-                                startUrl = startUrl,
-                                adManager = appContainer.adManager,
-                                remoteConfigManager = appContainer.remoteConfigManager,
-                                isAuthGateVisible = { authGateVisible },
-                                onNativeAuthMessage = { type, payload ->
-                                    handleNativeAuthMessage(type, payload)
-                                },
-                                onReady = { webView ->
-                                    webViewRef = webView
-                                    appContainer.appOpenAdManager.setPresentationBlockedByAuthGate(authGateVisible)
-                                    emitAuthStateToWeb(currentFirebaseUser(), idTokenFresh = false)
-                                },
-                            )
-                            AndroidView(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(BANNER_RESERVED_HEIGHT)
-                                    .navigationBarsPadding(),
-                                factory = { ctx ->
-                                    BannerAdView(ctx).apply {
-                                        bannerAdViewRef = this
-                                        loadAd(appContainer.remoteConfigManager)
-                                    }
-                                },
-                                update = { banner ->
-                                    bannerAdViewRef = banner
-                                    banner.refreshAdVisibility()
-                                },
-                            )
-                        }
+                        QuanturaWebViewScreen(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(bottom = BANNER_RESERVED_HEIGHT),
+                            activity = this@MainActivity,
+                            startUrl = startUrl,
+                            adManager = appContainer.adManager,
+                            remoteConfigManager = appContainer.remoteConfigManager,
+                            isAuthGateVisible = { authGateVisible },
+                            onNativeAuthMessage = { type, payload ->
+                                handleNativeAuthMessage(type, payload)
+                            },
+                            onReady = { webView ->
+                                webViewRef = webView
+                                appContainer.appOpenAdManager.setPresentationBlockedByAuthGate(authGateVisible)
+                                emitAuthStateToWeb(currentFirebaseUser(), idTokenFresh = false)
+                            },
+                        )
 
                         if (authGateVisible) {
                             NativeAuthGate(
@@ -278,6 +279,24 @@ class MainActivity : ComponentActivity() {
                                 onNotNow = { continueAnonymouslyForNow() },
                             )
                         }
+
+                        AndroidView(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .height(BANNER_RESERVED_HEIGHT)
+                                .navigationBarsPadding(),
+                            factory = { ctx ->
+                                BannerAdView(ctx).apply {
+                                    bannerAdViewRef = this
+                                    loadAd(appContainer.remoteConfigManager)
+                                }
+                            },
+                            update = { banner ->
+                                bannerAdViewRef = banner
+                                banner.refreshAdVisibility()
+                            },
+                        )
 
                         if (emailDialogVisible) {
                             EmailSignInDialog(
@@ -1524,15 +1543,20 @@ private fun NativeAuthGate(
     onEmail: () -> Unit,
     onNotNow: () -> Unit,
 ) {
+    val quanturaInk = Color(0xFF0C1B3D)
+    val quanturaAqua = Color(0xFF8CD9DB)
+    val quanturaMist = Color(0xFFE8F7F7)
+    val quanturaSand = Color(0xFFF6F1E7)
+    val quanturaOrange = Color(0xFFFF7A1A)
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
-                        Color(0xFF081B4A),
-                        Color(0xFF103571),
-                        Color(0xFF07163B),
+                        quanturaSand,
+                        quanturaMist,
+                        Color(0xFFF7FBFB),
                     )
                 )
             )
@@ -1541,21 +1565,48 @@ private fun NativeAuthGate(
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Text(
-                text = "Sign in to Quantura",
-                color = Color.White,
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
+            Box(
+                modifier = Modifier
+                    .background(Color.White.copy(alpha = 0.92f), RoundedCornerShape(26.dp))
+                    .padding(horizontal = 22.dp, vertical = 18.dp),
             )
-            Text(
-                text = "Sync forecasts and unlock personalized alerts.",
-                color = Color.White.copy(alpha = 0.86f),
-                textAlign = TextAlign.Center,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(horizontal = 8.dp),
-            )
+            {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    Image(
+                        painter = painterResource(id = R.mipmap.ic_launcher),
+                        contentDescription = "Quantura",
+                        modifier = Modifier
+                            .size(68.dp)
+                            .background(Color.White, CircleShape)
+                            .padding(4.dp),
+                        contentScale = ContentScale.Fit,
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = "QUANTURA",
+                            color = quanturaInk,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Black,
+                        )
+                        Text(
+                            text = "Sign in to Quantura",
+                            color = quanturaInk,
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            text = "Sync forecasts, alerts, and portfolio workflows in one native session.",
+                            color = quanturaInk.copy(alpha = 0.72f),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -1566,10 +1617,16 @@ private fun NativeAuthGate(
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color.White,
-                    contentColor = Color(0xFF111827),
+                    contentColor = quanturaInk,
                 ),
             ) {
-                Text("Continue with Google", fontWeight = FontWeight.SemiBold)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    AuthProviderMark(kind = AuthProviderMarkKind.GOOGLE)
+                    Text("Continue with Google", fontWeight = FontWeight.SemiBold)
+                }
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
@@ -1578,18 +1635,36 @@ private fun NativeAuthGate(
                     enabled = !isBusy,
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = quanturaInk.copy(alpha = 0.06f),
+                        contentColor = quanturaInk,
+                    ),
                 ) {
-                    Text("GitHub", fontWeight = FontWeight.SemiBold)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        AuthProviderMark(kind = AuthProviderMarkKind.GITHUB)
+                        Text("GitHub", fontWeight = FontWeight.SemiBold)
+                    }
                 }
                 OutlinedButton(
                     onClick = onTwitter,
                     enabled = !isBusy,
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = quanturaInk.copy(alpha = 0.06f),
+                        contentColor = quanturaInk,
+                    ),
                 ) {
-                    Text("Twitter/X", fontWeight = FontWeight.SemiBold)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        AuthProviderMark(kind = AuthProviderMarkKind.X)
+                        Text("Twitter/X", fontWeight = FontWeight.SemiBold)
+                    }
                 }
             }
 
@@ -1599,18 +1674,36 @@ private fun NativeAuthGate(
                     enabled = !isBusy,
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = quanturaInk.copy(alpha = 0.06f),
+                        contentColor = quanturaInk,
+                    ),
                 ) {
-                    Text("Yahoo", fontWeight = FontWeight.SemiBold)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        AuthProviderMark(kind = AuthProviderMarkKind.YAHOO)
+                        Text("Yahoo", fontWeight = FontWeight.SemiBold)
+                    }
                 }
                 OutlinedButton(
                     onClick = onMicrosoft,
                     enabled = !isBusy,
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = quanturaInk.copy(alpha = 0.06f),
+                        contentColor = quanturaInk,
+                    ),
                 ) {
-                    Text("Microsoft", fontWeight = FontWeight.SemiBold)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        AuthProviderMark(kind = AuthProviderMarkKind.MICROSOFT)
+                        Text("Microsoft", fontWeight = FontWeight.SemiBold)
+                    }
                 }
             }
 
@@ -1620,19 +1713,28 @@ private fun NativeAuthGate(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 border = ButtonDefaults.outlinedButtonBorder.copy(width = 1.dp),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = Color.White.copy(alpha = 0.7f),
+                    contentColor = quanturaInk,
+                ),
             ) {
-                Text("Continue with Email", fontWeight = FontWeight.SemiBold)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    AuthProviderMark(kind = AuthProviderMarkKind.EMAIL)
+                    Text("Continue with Email", fontWeight = FontWeight.SemiBold)
+                }
             }
 
             TextButton(onClick = onNotNow, enabled = !isBusy) {
-                Text("Not now", color = Color.White.copy(alpha = 0.92f))
+                Text("Not now", color = quanturaInk.copy(alpha = 0.88f))
             }
 
             if (errorText.isNotBlank()) {
                 Text(
                     text = errorText,
-                    color = Color(0xFFFFCDD2),
+                    color = Color(0xFFB3261E),
                     textAlign = TextAlign.Center,
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -1640,9 +1742,134 @@ private fun NativeAuthGate(
 
             if (isBusy) {
                 Spacer(modifier = Modifier.height(4.dp))
-                CircularProgressIndicator(color = Color.White)
+                CircularProgressIndicator(color = quanturaInk)
             }
         }
+    }
+}
+
+@Composable
+private fun AuthProviderMark(kind: AuthProviderMarkKind) {
+    when (kind) {
+        AuthProviderMarkKind.GOOGLE -> GoogleProviderMark()
+        AuthProviderMarkKind.MICROSOFT -> MicrosoftProviderMark()
+        AuthProviderMarkKind.GITHUB -> SimpleProviderMark(label = "GH", background = Color(0xFF111827), foreground = Color.White)
+        AuthProviderMarkKind.X -> SimpleProviderMark(label = "X", background = Color(0xFF111111), foreground = Color.White)
+        AuthProviderMarkKind.YAHOO -> SimpleProviderMark(label = "Y!", background = Color(0xFF5F01D1), foreground = Color.White)
+        AuthProviderMarkKind.EMAIL -> SimpleProviderMark(label = "@", background = Color(0xFFFF7A1A), foreground = Color.White)
+    }
+}
+
+@Composable
+private fun GoogleProviderMark() {
+    Box(
+        modifier = Modifier
+            .size(24.dp)
+            .background(Color.White, CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(modifier = Modifier.size(16.dp)) {
+            val stroke = size.minDimension * 0.18f
+            val arcSize = Size(size.width, size.height)
+            drawArc(
+                color = Color(0xFF4285F4),
+                startAngle = -38f,
+                sweepAngle = 92f,
+                useCenter = false,
+                size = arcSize,
+                style = Stroke(width = stroke, cap = StrokeCap.Round)
+            )
+            drawArc(
+                color = Color(0xFFEA4335),
+                startAngle = 56f,
+                sweepAngle = 78f,
+                useCenter = false,
+                size = arcSize,
+                style = Stroke(width = stroke, cap = StrokeCap.Round)
+            )
+            drawArc(
+                color = Color(0xFFFBBC05),
+                startAngle = 136f,
+                sweepAngle = 94f,
+                useCenter = false,
+                size = arcSize,
+                style = Stroke(width = stroke, cap = StrokeCap.Round)
+            )
+            drawArc(
+                color = Color(0xFF34A853),
+                startAngle = 230f,
+                sweepAngle = 96f,
+                useCenter = false,
+                size = arcSize,
+                style = Stroke(width = stroke, cap = StrokeCap.Round)
+            )
+            drawLine(
+                color = Color(0xFF4285F4),
+                start = Offset(size.width * 0.55f, size.height * 0.52f),
+                end = Offset(size.width * 0.94f, size.height * 0.52f),
+                strokeWidth = stroke,
+                cap = StrokeCap.Round
+            )
+        }
+    }
+}
+
+@Composable
+private fun MicrosoftProviderMark() {
+    Box(
+        modifier = Modifier
+            .size(24.dp)
+            .background(Color.White, CircleShape)
+            .padding(4.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .background(Color(0xFFF25022), RoundedCornerShape(1.dp))
+                )
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .background(Color(0xFF7FBA00), RoundedCornerShape(1.dp))
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .background(Color(0xFF00A4EF), RoundedCornerShape(1.dp))
+                )
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .background(Color(0xFFFFB900), RoundedCornerShape(1.dp))
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SimpleProviderMark(
+    label: String,
+    background: Color,
+    foreground: Color,
+) {
+    Box(
+        modifier = Modifier
+            .size(24.dp)
+            .background(background, CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            color = foreground,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+        )
     }
 }
 

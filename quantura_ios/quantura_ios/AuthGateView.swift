@@ -7,12 +7,17 @@ struct AuthGateView: View {
     @ObservedObject var viewModel: AuthGateViewModel
 
     var body: some View {
+        let quanturaInk = Color(red: 0.05, green: 0.11, blue: 0.24)
+        let quanturaAqua = Color(red: 0.55, green: 0.84, blue: 0.86)
+        let quanturaMist = Color(red: 0.91, green: 0.97, blue: 0.97)
+        let quanturaSand = Color(red: 0.97, green: 0.95, blue: 0.90)
+        let quanturaOrange = Color(red: 1.0, green: 0.48, blue: 0.10)
         ZStack {
             LinearGradient(
                 colors: [
-                    Color(red: 0.04, green: 0.10, blue: 0.26),
-                    Color(red: 0.06, green: 0.19, blue: 0.40),
-                    Color(red: 0.02, green: 0.08, blue: 0.20),
+                    quanturaSand,
+                    quanturaMist,
+                    Color.white,
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
@@ -22,22 +27,32 @@ struct AuthGateView: View {
             VStack(spacing: 22) {
                 Spacer()
 
-                VStack(spacing: 12) {
-                    Image(systemName: "chart.line.uptrend.xyaxis.circle.fill")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 76, height: 76)
-                        .foregroundStyle(.white, Color(red: 0.56, green: 0.83, blue: 0.98))
+                VStack(spacing: 14) {
+                    HStack(spacing: 14) {
+                        Image("AppLogo")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 68, height: 68)
+                            .padding(6)
+                            .background(Color.white.opacity(0.92), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
 
-                    Text("Sign in to Quantura")
-                        .font(.system(size: 30, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
-
-                    Text("Sync forecasts and unlock personalized alerts.")
-                        .font(.system(size: 15, weight: .medium))
-                        .multilineTextAlignment(.center)
-                        .foregroundStyle(.white.opacity(0.84))
-                        .padding(.horizontal, 28)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("QUANTURA")
+                                .font(.system(size: 12, weight: .black, design: .rounded))
+                                .tracking(1.8)
+                                .foregroundStyle(quanturaInk)
+                            Text("Sign in to Quantura")
+                                .font(.system(size: 30, weight: .bold, design: .rounded))
+                                .foregroundStyle(quanturaInk)
+                            Text("Sync forecasts, alerts, and portfolio workflows in one native session.")
+                                .font(.system(size: 15, weight: .medium))
+                                .multilineTextAlignment(.leading)
+                                .foregroundStyle(quanturaInk.opacity(0.74))
+                        }
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 18)
+                    .background(Color.white.opacity(0.88), in: RoundedRectangle(cornerRadius: 28, style: .continuous))
                 }
 
                 VStack(spacing: 12) {
@@ -49,7 +64,7 @@ struct AuthGateView: View {
                         viewModel.signInWithGoogle(presenter: presenter)
                     } label: {
                         HStack(spacing: 10) {
-                            Image(systemName: "globe")
+                            AuthProviderMark(kind: .google)
                             Text("Continue with Google")
                                 .fontWeight(.semibold)
                         }
@@ -57,7 +72,7 @@ struct AuthGateView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(Color.white)
-                    .foregroundStyle(Color.black)
+                    .foregroundStyle(quanturaInk)
                     .disabled(viewModel.isBusy)
 
                     HStack(spacing: 8) {
@@ -65,7 +80,7 @@ struct AuthGateView: View {
                             viewModel.signInWithGitHub()
                         } label: {
                             HStack(spacing: 6) {
-                                Image(systemName: "chevron.left.forwardslash.chevron.right")
+                                AuthProviderMark(kind: .github)
                                 Text("GitHub")
                                     .fontWeight(.semibold)
                             }
@@ -80,7 +95,7 @@ struct AuthGateView: View {
                             viewModel.signInWithTwitter()
                         } label: {
                             HStack(spacing: 6) {
-                                Image(systemName: "at")
+                                AuthProviderMark(kind: .x)
                                 Text("Twitter/X")
                                     .fontWeight(.semibold)
                             }
@@ -97,7 +112,7 @@ struct AuthGateView: View {
                             viewModel.signInWithYahoo()
                         } label: {
                             HStack(spacing: 6) {
-                                Image(systemName: "y.circle")
+                                AuthProviderMark(kind: .yahoo)
                                 Text("Yahoo")
                                     .fontWeight(.semibold)
                             }
@@ -112,7 +127,7 @@ struct AuthGateView: View {
                             viewModel.signInWithMicrosoft()
                         } label: {
                             HStack(spacing: 6) {
-                                Image(systemName: "square.grid.2x2")
+                                AuthProviderMark(kind: .microsoft)
                                 Text("Microsoft")
                                     .fontWeight(.semibold)
                             }
@@ -144,7 +159,7 @@ struct AuthGateView: View {
                         viewModel.openEmailSheet()
                     } label: {
                         HStack(spacing: 10) {
-                            Image(systemName: "envelope.fill")
+                            AuthProviderMark(kind: .email)
                             Text("Continue with Email")
                                 .fontWeight(.semibold)
                         }
@@ -159,7 +174,7 @@ struct AuthGateView: View {
 
                 Text("Your data stays encrypted in transit. Quantura does not sell personal data.")
                     .font(.footnote)
-                    .foregroundStyle(.white.opacity(0.75))
+                    .foregroundStyle(quanturaInk.opacity(0.72))
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 30)
 
@@ -167,14 +182,14 @@ struct AuthGateView: View {
                     viewModel.continueAnonymouslyForNow()
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.white.opacity(0.88))
+                .foregroundStyle(quanturaInk.opacity(0.88))
                 .font(.system(size: 15, weight: .medium))
                 .disabled(viewModel.isBusy)
 
                 if !viewModel.errorText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text(viewModel.errorText)
                         .font(.footnote)
-                        .foregroundStyle(Color(red: 1.0, green: 0.75, blue: 0.75))
+                        .foregroundStyle(Color(red: 0.70, green: 0.15, blue: 0.12))
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 24)
                 }
@@ -195,6 +210,117 @@ struct AuthGateView: View {
         .sheet(isPresented: $viewModel.isEmailSheetVisible) {
             EmailAuthSheet(viewModel: viewModel)
                 .presentationDetents([.medium])
+        }
+    }
+}
+
+private enum AuthProviderMarkKind {
+    case google
+    case github
+    case x
+    case yahoo
+    case microsoft
+    case email
+}
+
+private struct AuthProviderMark: View {
+    let kind: AuthProviderMarkKind
+
+    var body: some View {
+        switch kind {
+        case .google:
+            GoogleProviderMark()
+        case .microsoft:
+            MicrosoftProviderMark()
+        case .github:
+            SimpleProviderMark(label: "GH", background: Color(red: 0.07, green: 0.10, blue: 0.16), foreground: .white)
+        case .x:
+            SimpleProviderMark(label: "X", background: .black, foreground: .white)
+        case .yahoo:
+            SimpleProviderMark(label: "Y!", background: Color(red: 0.37, green: 0.00, blue: 0.82), foreground: .white)
+        case .email:
+            SimpleProviderMark(label: "@", background: Color(red: 1.0, green: 0.48, blue: 0.10), foreground: .white)
+        }
+    }
+}
+
+private struct GoogleProviderMark: View {
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(.white)
+                .frame(width: 24, height: 24)
+
+            ZStack {
+                Circle()
+                    .trim(from: 0.84, to: 1.0)
+                    .stroke(Color(red: 0.26, green: 0.52, blue: 0.96), style: StrokeStyle(lineWidth: 3.0, lineCap: .round))
+                    .rotationEffect(.degrees(16))
+                Circle()
+                    .trim(from: 0.03, to: 0.18)
+                    .stroke(Color(red: 0.92, green: 0.26, blue: 0.21), style: StrokeStyle(lineWidth: 3.0, lineCap: .round))
+                    .rotationEffect(.degrees(16))
+                Circle()
+                    .trim(from: 0.18, to: 0.41)
+                    .stroke(Color(red: 0.98, green: 0.74, blue: 0.02), style: StrokeStyle(lineWidth: 3.0, lineCap: .round))
+                    .rotationEffect(.degrees(16))
+                Circle()
+                    .trim(from: 0.41, to: 0.74)
+                    .stroke(Color(red: 0.20, green: 0.66, blue: 0.33), style: StrokeStyle(lineWidth: 3.0, lineCap: .round))
+                    .rotationEffect(.degrees(16))
+
+                Rectangle()
+                    .fill(Color(red: 0.26, green: 0.52, blue: 0.96))
+                    .frame(width: 7, height: 3)
+                    .offset(x: 3.5, y: 0.4)
+            }
+            .frame(width: 16, height: 16)
+        }
+    }
+}
+
+private struct MicrosoftProviderMark: View {
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(.white)
+                .frame(width: 24, height: 24)
+
+            VStack(spacing: 2) {
+                HStack(spacing: 2) {
+                    RoundedRectangle(cornerRadius: 1)
+                        .fill(Color(red: 0.95, green: 0.31, blue: 0.13))
+                        .frame(width: 6, height: 6)
+                    RoundedRectangle(cornerRadius: 1)
+                        .fill(Color(red: 0.50, green: 0.73, blue: 0.00))
+                        .frame(width: 6, height: 6)
+                }
+                HStack(spacing: 2) {
+                    RoundedRectangle(cornerRadius: 1)
+                        .fill(Color(red: 0.00, green: 0.64, blue: 0.94))
+                        .frame(width: 6, height: 6)
+                    RoundedRectangle(cornerRadius: 1)
+                        .fill(Color(red: 1.00, green: 0.73, blue: 0.00))
+                        .frame(width: 6, height: 6)
+                }
+            }
+        }
+    }
+}
+
+private struct SimpleProviderMark: View {
+    let label: String
+    let background: Color
+    let foreground: Color
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(background)
+                .frame(width: 24, height: 24)
+            Text(label)
+                .font(.system(size: 10, weight: .bold, design: .rounded))
+                .foregroundStyle(foreground)
         }
     }
 }

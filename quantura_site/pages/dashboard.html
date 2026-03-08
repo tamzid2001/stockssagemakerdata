@@ -163,9 +163,25 @@
                 <input id="auth-email" type="email" placeholder="you@domain.com" required />
                 <label class="label" for="auth-password">Password</label>
                 <input id="auth-password" type="password" minlength="6" placeholder="Minimum 6 characters" required />
+                <div id="auth-create-fields" class="hidden" aria-hidden="true">
+                  <label class="label" for="auth-username">Username</label>
+                  <input id="auth-username" type="text" maxlength="32" placeholder="quantura_alpha" autocomplete="username" />
+                  <label class="label" for="auth-confirm-password">Confirm password</label>
+                  <input
+                    id="auth-confirm-password"
+                    type="password"
+                    minlength="6"
+                    placeholder="Re-enter your password"
+                    autocomplete="new-password"
+                  />
+                </div>
                 <div class="auth-inline">
                   <button class="link-button auth-link" id="auth-forgot-password" type="button">Forgot password?</button>
+                  <button class="link-button auth-link hidden" id="auth-back-to-signin" type="button">Back to sign in</button>
                 </div>
+                <p class="small muted hidden" id="auth-create-hint">
+                  Create your Quantura account with a username, email, password, and matching password confirmation.
+                </p>
                 <div class="auth-actions">
                   <button class="cta" id="email-signin" type="submit">Sign in</button>
                   <button class="cta secondary" id="email-create" type="button">Create account</button>

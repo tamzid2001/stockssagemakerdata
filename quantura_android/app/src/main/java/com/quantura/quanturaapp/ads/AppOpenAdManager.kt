@@ -68,6 +68,9 @@ class AppOpenAdManager(
         if (!MobileAdsBootstrap.isInitialized()) {
             Log.d(tag, "App open load deferred until Mobile Ads finishes initializing.")
             AdDebugStatusRegistry.updateLoad("app_open", "waiting:sdk_init")
+            MobileAdsBootstrap.runWhenInitialized {
+                mainHandler.post { loadAdIfNeeded() }
+            }
             return
         }
         if (isLoadingAd || isAdAvailable()) return
