@@ -547,8 +547,16 @@ final class RemoteConfigManager {
         let adsUseRealAndroid = remoteConfig?.configValue(forKey: "ads_use_real_android").boolValue ?? true
         let featureFlags = parseFeatureFlags()
         let payload = parseAdUnitPayload(remoteConfig?["ad_unit_ids"].stringValue ?? "")
-        let iosUnits = parsePlatformUnitIDs(payload: payload, platform: .ios, seed: liveIOSIDs)
-        let androidUnits = parsePlatformUnitIDs(payload: payload, platform: .android, seed: liveAndroidIDs)
+        let iosUnits = sanitizeLiveOverrides(
+            parsePlatformUnitIDs(payload: payload, platform: .ios, seed: liveIOSIDs),
+            bundled: liveIOSIDs,
+            platform: .ios
+        )
+        let androidUnits = sanitizeLiveOverrides(
+            parsePlatformUnitIDs(payload: payload, platform: .android, seed: liveAndroidIDs),
+            bundled: liveAndroidIDs,
+            platform: .android
+        )
         return AdsRemoteConfigState(
             adsEnabled: adsEnabled,
             adsUseRealIos: adsUseRealIos,
@@ -621,6 +629,31 @@ final class RemoteConfigManager {
             rewardedInterstitial: ((nested["rewardedInterstitial"] as? String) ?? seed.rewardedInterstitial).trimmingCharacters(in: .whitespacesAndNewlines).ifEmpty(replacement: seed.rewardedInterstitial),
             nativeAdvanced: native,
             nativeVideo: nativeVideo
+        )
+    }
+
+    private func sanitizeLiveOverrides(
+        _ parsed: AdUnitIDs,
+        bundled: AdUnitIDs,
+        platform: AdPlatform
+    ) -> AdUnitIDs {
+        func select(_ candidate: String, fallback: String, format: String) -> String {
+            if !candidate.isGoogleSampleAdUnit { return candidate }
+            if fallback.isGoogleSampleAdUnit { return candidate }
+            let platformName = platform == .ios ? "ios" : "android"
+            print("\(tag) Ignoring sample ad unit override for \(platformName):\(format) and using bundled live unit instead.")
+            return fallback
+        }
+
+        return AdUnitIDs(
+            appOpen: select(parsed.appOpen, fallback: bundled.appOpen, format: "app_open"),
+            adaptiveBanner: select(parsed.adaptiveBanner, fallback: bundled.adaptiveBanner, format: "banner"),
+            fixedBanner: select(parsed.fixedBanner, fallback: bundled.fixedBanner, format: "fixed_banner"),
+            interstitial: select(parsed.interstitial, fallback: bundled.interstitial, format: "interstitial"),
+            rewarded: select(parsed.rewarded, fallback: bundled.rewarded, format: "rewarded"),
+            rewardedInterstitial: select(parsed.rewardedInterstitial, fallback: bundled.rewardedInterstitial, format: "rewarded_interstitial"),
+            nativeAdvanced: select(parsed.nativeAdvanced, fallback: bundled.nativeAdvanced, format: "native"),
+            nativeVideo: select(parsed.nativeVideo, fallback: bundled.nativeVideo, format: "native_video")
         )
     }
 
@@ -2469,6 +2502,10 @@ private struct AdsQaPanelView: View {
 }
 
 private extension String {
+    var isGoogleSampleAdUnit: Bool {
+        hasPrefix("ca-app-pub-3940256099942544/")
+    }
+
     func ifEmpty(replacement: String) -> String {
         isEmpty ? replacement : self
     }

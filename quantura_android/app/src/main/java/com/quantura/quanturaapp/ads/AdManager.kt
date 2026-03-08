@@ -76,6 +76,9 @@ class AdManager(
         }
         if (!MobileAdsBootstrap.isInitialized()) {
             Log.i(tag, "[Ads][Android] Prime deferred until Mobile Ads finishes initializing.")
+            MobileAdsBootstrap.runWhenInitialized {
+                primeAds(context.applicationContext)
+            }
             return
         }
         Log.i(
@@ -457,6 +460,16 @@ class AdManager(
             callback(buildNativeAdError(trimmedSlotId, normalizedPlacement, "ads_disabled"))
             return
         }
+        if (!MobileAdsBootstrap.isInitialized()) {
+            AdDebugStatusRegistry.updateLoad("native", "waiting:sdk_init")
+            MobileAdsBootstrap.runWhenInitialized {
+                activity.runOnUiThread {
+                    if (activity.isFinishing || activity.isDestroyed) return@runOnUiThread
+                    requestNativeFeedAd(activity, trimmedSlotId, normalizedPlacement, variant, callback)
+                }
+            }
+            return
+        }
 
         val cachedPayload = preloadedNativePayload
         if (cachedPayload != null) {
@@ -549,6 +562,13 @@ class AdManager(
     private fun preloadNative(context: Context) {
         if (!remoteConfigManager.areAdsEnabled()) return
         if (nativePreloadInFlight || preloadedNativePayload != null) return
+        if (!MobileAdsBootstrap.isInitialized()) {
+            AdDebugStatusRegistry.updateLoad("native", "waiting:sdk_init")
+            MobileAdsBootstrap.runWhenInitialized {
+                preloadNative(context.applicationContext)
+            }
+            return
+        }
 
         val adUnitId = remoteConfigManager.resolveAdUnitId(
             platform = AdPlatform.ANDROID,
@@ -654,6 +674,10 @@ class AdManager(
     private fun loadInterstitial(context: Context) {
         if (!MobileAdsBootstrap.isInitialized()) {
             Log.i(tag, "[Ads][Android] Interstitial load deferred until Mobile Ads finishes initializing.")
+            AdDebugStatusRegistry.updateLoad("interstitial", "waiting:sdk_init")
+            MobileAdsBootstrap.runWhenInitialized {
+                loadInterstitial(context.applicationContext)
+            }
             return
         }
         val adUnitId = remoteConfigManager.resolveAdUnitId(
@@ -687,6 +711,10 @@ class AdManager(
     private fun loadRewarded(context: Context) {
         if (!MobileAdsBootstrap.isInitialized()) {
             Log.i(tag, "[Ads][Android] Rewarded load deferred until Mobile Ads finishes initializing.")
+            AdDebugStatusRegistry.updateLoad("rewarded", "waiting:sdk_init")
+            MobileAdsBootstrap.runWhenInitialized {
+                loadRewarded(context.applicationContext)
+            }
             return
         }
         val adUnitId = remoteConfigManager.resolveAdUnitId(
@@ -724,6 +752,10 @@ class AdManager(
                 tag,
                 "[Ads][Android] Rewarded interstitial load deferred until Mobile Ads finishes initializing."
             )
+            AdDebugStatusRegistry.updateLoad("rewarded_interstitial", "waiting:sdk_init")
+            MobileAdsBootstrap.runWhenInitialized {
+                loadRewardedInterstitial(context.applicationContext)
+            }
             return
         }
         val adUnitId = remoteConfigManager.resolveAdUnitId(

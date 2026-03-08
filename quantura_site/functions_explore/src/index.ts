@@ -155,6 +155,8 @@ type PolymarketMarketRecord = {
   id: string;
   question: string;
   slug?: string;
+  groupItemTitle?: string;
+  description?: string;
   endDate?: string;
   category?: string;
   image?: string;
@@ -163,6 +165,7 @@ type PolymarketMarketRecord = {
   liquidityUsd?: number;
   outcomes: string[];
   outcomePrices: number[];
+  clobTokenIds: string[];
   isBinary: boolean;
   yesProb?: number;
   topOutcomes: PolymarketTopOutcome[];
@@ -191,12 +194,15 @@ type PolymarketPriceRecord = {
   id: string;
   question: string;
   slug?: string;
+  groupItemTitle?: string;
+  description?: string;
   category?: string;
   endDate?: string;
   volumeUsd?: number;
   liquidityUsd?: number;
   outcomes: string[];
   outcomePrices: number[];
+  clobTokenIds: string[];
   isBinary: boolean;
   yesProb?: number;
   topOutcomes: PolymarketTopOutcome[];
@@ -2369,6 +2375,13 @@ function parsePolymarketOutcomePrices(raw: unknown): number[] {
     .slice(0, 16);
 }
 
+function parsePolymarketClobTokenIds(raw: unknown): string[] {
+  return parseGammaArray(raw)
+    .map((value) => sanitizeText(value, 180))
+    .filter(Boolean)
+    .slice(0, 16);
+}
+
 function polymarketUrlFromSlug(slug: unknown): string {
   const clean = sanitizeText(slug, 240).replace(/^\/+|\/+$/g, "");
   if (!clean) return "";
@@ -2383,9 +2396,11 @@ function normalizePolymarketMarket(raw: unknown, event: Record<string, unknown>)
 
   const parsedOutcomes = parsePolymarketOutcomes(market.outcomes);
   const parsedPrices = parsePolymarketOutcomePrices(market.outcomePrices);
+  const parsedTokenIds = parsePolymarketClobTokenIds(market.clobTokenIds);
   const alignedLength = Math.min(parsedOutcomes.length, parsedPrices.length);
   const outcomes = alignedLength > 0 ? parsedOutcomes.slice(0, alignedLength) : [];
   const outcomePrices = alignedLength > 0 ? parsedPrices.slice(0, alignedLength) : [];
+  const clobTokenIds = alignedLength > 0 ? parsedTokenIds.slice(0, alignedLength) : [];
 
   const topOutcomes = outcomes
     .map((label, index) => ({ label, prob: outcomePrices[index] }))
@@ -2410,6 +2425,8 @@ function normalizePolymarketMarket(raw: unknown, event: Record<string, unknown>)
     id,
     question,
     slug: sanitizeText(market.slug, 220) || undefined,
+    groupItemTitle: sanitizeText(market.groupItemTitle || market.group_item_title || market.targetLabel, 160) || undefined,
+    description: sanitizeText(market.description || market.subtitle, 500) || undefined,
     endDate: sanitizeText(market.endDate || market.end_date, 40) || undefined,
     category: sanitizeText(market.category || event.category, 80) || undefined,
     image: sanitizeText(market.image, 600) || undefined,
@@ -2418,6 +2435,7 @@ function normalizePolymarketMarket(raw: unknown, event: Record<string, unknown>)
     liquidityUsd: parseUsdNumber(market.liquidity),
     outcomes,
     outcomePrices,
+    clobTokenIds,
     isBinary: outcomes.length === 2,
     yesProb,
     topOutcomes,
@@ -2496,12 +2514,15 @@ function flattenPolymarketMarkets(
         id: marketId,
         question: sanitizeText(market.question, 320),
         slug: marketSlug || undefined,
+        groupItemTitle: sanitizeText(market.groupItemTitle, 160) || undefined,
+        description: sanitizeText(market.description, 500) || undefined,
         category: sanitizeText(market.category, 80) || undefined,
         endDate: sanitizeText(market.endDate, 40) || undefined,
         volumeUsd: market.volumeUsd,
         liquidityUsd: market.liquidityUsd,
         outcomes: Array.isArray(market.outcomes) ? market.outcomes : [],
         outcomePrices: Array.isArray(market.outcomePrices) ? market.outcomePrices : [],
+        clobTokenIds: Array.isArray(market.clobTokenIds) ? market.clobTokenIds : [],
         isBinary: Boolean(market.isBinary),
         yesProb: typeof market.yesProb === "number" ? market.yesProb : undefined,
         topOutcomes: Array.isArray(market.topOutcomes) ? market.topOutcomes : [],

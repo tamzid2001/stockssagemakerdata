@@ -16,7 +16,7 @@ import com.quantura.quanturaapp.config.RemoteConfigManager
 
 /**
  * Adaptive banner ad view. Shown when ads_enabled feature flag is true.
- * Uses demo ad unit ID from Remote Config (or default test ID).
+ * Respects the bundled live IDs plus Remote Config overrides.
  */
 class BannerAdView @JvmOverloads constructor(
     context: Context,
@@ -31,6 +31,7 @@ class BannerAdView @JvmOverloads constructor(
     private var remoteConfigManager: RemoteConfigManager? = null
     private var waitingForLayout = false
     private var pendingRetry: Runnable? = null
+    private var waitingForSdkInit = false
 
     fun setRemoteConfigManager(manager: RemoteConfigManager?) {
         remoteConfigManager = manager
@@ -44,10 +45,27 @@ class BannerAdView @JvmOverloads constructor(
             hideAd()
             return
         }
+        if (!MobileAdsBootstrap.isInitialized()) {
+            AdDebugStatusRegistry.updateLoad("banner", "waiting:sdk_init")
+            minimumHeight = minReservedHeightPx
+            visibility = VISIBLE
+            if (!waitingForSdkInit) {
+                waitingForSdkInit = true
+                MobileAdsBootstrap.runWhenInitialized {
+                    post {
+                        waitingForSdkInit = false
+                        if (!isAttachedToWindow) return@post
+                        loadAd(manager)
+                    }
+                }
+            }
+            return
+        }
         if (width <= 0) {
             deferLoadUntilMeasured(manager)
             return
         }
+        waitingForSdkInit = false
         pendingRetry?.let { removeCallbacks(it) }
         pendingRetry = null
         val adUnitId = manager.resolveAdUnitId(
@@ -127,6 +145,7 @@ class BannerAdView @JvmOverloads constructor(
         adView?.destroy()
         adView = null
         minimumHeight = minReservedHeightPx
+        waitingForSdkInit = false
         visibility = INVISIBLE
     }
 

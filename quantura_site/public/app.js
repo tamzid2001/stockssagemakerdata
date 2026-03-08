@@ -13,6 +13,7 @@
   const PROMO_FORECAST_COUNT_KEY = "quantura_promo_forecast_count_v1";
   const PROMO_LAST_SESSION_KEY = "quantura_promo_last_session_v1";
   const AUTH_PENDING_CREDENTIAL_KEY = "quantura_auth_pending_credential_v1";
+  const AUTH_PENDING_PROFILE_KEY = "quantura_auth_pending_profile_v1";
   const AUTH_POST_SIGNIN_REFRESH_KEY = "quantura_auth_post_signin_refresh_v1";
   const NATIVE_IAP_PENDING_EVENTS_KEY = "quantura_native_iap_pending_events_v1";
   const NOTIFICATION_PRIVACY_CACHE_KEY = "quantura_notification_privacy_v1";
@@ -1690,7 +1691,13 @@
     emailForm: document.getElementById("email-auth-form"),
     emailInput: document.getElementById("auth-email"),
     passwordInput: document.getElementById("auth-password"),
+    usernameInput: document.getElementById("auth-username"),
+    confirmPasswordInput: document.getElementById("auth-confirm-password"),
+    authCreateFields: document.getElementById("auth-create-fields"),
     authForgotPassword: document.getElementById("auth-forgot-password"),
+    authBackToSignin: document.getElementById("auth-back-to-signin"),
+    authCreateHint: document.getElementById("auth-create-hint"),
+    emailSignin: document.getElementById("email-signin"),
     emailCreate: document.getElementById("email-create"),
     emailMessage: document.getElementById("auth-email-message"),
     googleSignin: document.getElementById("google-signin"),
@@ -2082,6 +2089,8 @@
 		    initialPageViewSent: false,
 	    authResolved: false,
 	      authInFlight: false,
+      authEmailMode: "signin",
+      pendingSignupProfile: null,
       anonymousBootstrapInFlight: false,
       nativeAuthPromptRequested: false,
       nativeAuthState: null,
@@ -4695,6 +4704,111 @@
     }
   }
 
+  const normalizePendingSignupProfile = (input = {}) => {
+    const email = String(input?.email || "")
+      .trim()
+      .toLowerCase()
+      .slice(0, 160);
+    const username = String(input?.username || "").trim().slice(0, 64);
+    const createdAtMs = Number(input?.createdAtMs || Date.now());
+    if (!email || !username) return null;
+    if (!Number.isFinite(createdAtMs) || createdAtMs <= 0) return null;
+    return { email, username, createdAtMs };
+  };
+
+  const readPendingSignupProfile = () => {
+    const inMemory = normalizePendingSignupProfile(state.pendingSignupProfile || {});
+    if (inMemory && Date.now() - inMemory.createdAtMs <= 15 * 60 * 1000) {
+      state.pendingSignupProfile = inMemory;
+      return inMemory;
+    }
+    const raw = String(safeLocalStorageGet(AUTH_PENDING_PROFILE_KEY) || "").trim();
+    if (!raw) {
+      state.pendingSignupProfile = null;
+      return null;
+    }
+    try {
+      const parsed = normalizePendingSignupProfile(JSON.parse(raw));
+      if (!parsed || Date.now() - parsed.createdAtMs > 15 * 60 * 1000) {
+        safeLocalStorageRemove(AUTH_PENDING_PROFILE_KEY);
+        state.pendingSignupProfile = null;
+        return null;
+      }
+      state.pendingSignupProfile = parsed;
+      return parsed;
+    } catch (error) {
+      safeLocalStorageRemove(AUTH_PENDING_PROFILE_KEY);
+      state.pendingSignupProfile = null;
+      return null;
+    }
+  };
+
+  const writePendingSignupProfile = ({ email = "", username = "" } = {}) => {
+    const next = normalizePendingSignupProfile({
+      email,
+      username,
+      createdAtMs: Date.now(),
+    });
+    state.pendingSignupProfile = next;
+    if (!next) {
+      safeLocalStorageRemove(AUTH_PENDING_PROFILE_KEY);
+      return null;
+    }
+    safeLocalStorageSet(AUTH_PENDING_PROFILE_KEY, JSON.stringify(next));
+    return next;
+  };
+
+  const clearPendingSignupProfile = () => {
+    state.pendingSignupProfile = null;
+    safeLocalStorageRemove(AUTH_PENDING_PROFILE_KEY);
+  };
+
+  const setEmailAuthMode = (mode = "signin") => {
+    const nextMode = mode === "signup" ? "signup" : "signin";
+    const isSignup = nextMode === "signup";
+    state.authEmailMode = nextMode;
+    if (ui.emailForm) ui.emailForm.dataset.mode = nextMode;
+    if (ui.authCreateFields) {
+      ui.authCreateFields.classList.toggle("hidden", !isSignup);
+      ui.authCreateFields.setAttribute("aria-hidden", isSignup ? "false" : "true");
+    }
+    if (ui.usernameInput) ui.usernameInput.disabled = !isSignup;
+    if (ui.confirmPasswordInput) ui.confirmPasswordInput.disabled = !isSignup;
+    if (ui.authForgotPassword) ui.authForgotPassword.classList.toggle("hidden", isSignup);
+    if (ui.authBackToSignin) ui.authBackToSignin.classList.toggle("hidden", !isSignup);
+    if (ui.authCreateHint) ui.authCreateHint.classList.toggle("hidden", !isSignup);
+    if (ui.emailSignin) ui.emailSignin.textContent = isSignup ? "Create account" : "Sign in";
+    if (ui.emailCreate) ui.emailCreate.textContent = isSignup ? "Back to sign in" : "Create account";
+  };
+
+  const applyPendingSignupProfile = async (db, user) => {
+    if (!db || !hasFullAccount(user)) return false;
+    const pending = readPendingSignupProfile();
+    if (!pending) return false;
+    const userEmail = String(user?.email || "")
+      .trim()
+      .toLowerCase();
+    if (!userEmail || userEmail !== pending.email) return false;
+    const username = sanitizeProfileUsername(pending.username, user);
+    if (!username) {
+      clearPendingSignupProfile();
+      return false;
+    }
+    if (String(user?.displayName || "").trim() !== username) {
+      await user.updateProfile({ displayName: username });
+    }
+    await db.collection("users").doc(user.uid).set(
+      {
+        name: username,
+        profile: { username },
+        metadata: buildMeta(),
+      },
+      { merge: true }
+    );
+    clearPendingSignupProfile();
+    return true;
+  };
+
   let forecastCacheDbPromise = null;
 
   const computeFastHash = (input) => {
@@ -6781,6 +6895,9 @@
     const sessionAuthed = Boolean(user);
     const guestSession = isAnonymousUser(user);
     const authLabel = accountAuthed ? "Logged In" : guestSession ? "Guest Session" : "Logged Out";
+    if (!sessionAuthed || accountAuthed) {
+      setEmailAuthMode("signin");
+    }
     ensureProfileFeedbackButtons();
     ensureHeaderNotificationsCta();
     if (ui.headerAuth) {
@@ -6861,6 +6978,8 @@
     setAdminOnlyFeaturePanels(user);
     applyUiTranslations(state.preferredLanguage || "en");
   };
+
+  setEmailAuthMode("signin");
 
   const setAdminOnlyFeaturePanels = (user = state.user) => {
     const allowAdminTools = hasFullAccount(user) && isAdminUser(user);
@@ -10809,6 +10928,8 @@
       id: String(market.id || market.marketId || market.conditionId || market.market_id || "").trim(),
       question: String(market.question || market.title || "").trim(),
       slug: String(market.slug || "").trim(),
+      groupItemTitle: String(market.groupItemTitle || market.group_item_title || market.targetLabel || "").trim(),
+      description: String(market.description || market.subtitle || "").trim(),
       endDate: String(market.endDate || market.end_date || "").trim(),
       category: String(market.category || "").trim(),
       image: String(market.image || "").trim(),
@@ -10978,24 +11099,59 @@
     };
   };
 
-  const extractPredictionTargetLabel = (question, index = 0) => {
-    const text = String(question || "").trim();
-    if (!text) return `Target ${index + 1}`;
-    const dollarMatch = text.match(/\$\s?\d+(?:\.\d+)?/);
+  const normalizePredictionTargetLabelCandidate = (value, { allowShortText = true } = {}) => {
+    const text = String(value || "").trim();
+    if (!text) return "";
+    const dollarMatch = text.match(/\$\s?-?\d+(?:\.\d+)?/);
     if (dollarMatch) {
       return dollarMatch[0].replace(/\s+/g, "");
     }
-    const thresholdMatch = text.match(/\b(?:above|below|over|under|at)\s+([0-9]+(?:\.[0-9]+)?)/i);
+    const thresholdMatch = text.match(/\b(?:above|below|over|under|at|strike)\s+\$?\s?(-?\d+(?:\.\d+)?)/i);
     if (thresholdMatch) {
       return `$${thresholdMatch[1]}`;
     }
-    return text.length <= 26 ? text : `Target ${index + 1}`;
+    const numericOnlyMatch = text.match(/^\$?\s*(-?\d+(?:\.\d+)?)$/);
+    if (numericOnlyMatch) {
+      return `$${numericOnlyMatch[1]}`;
+    }
+    if (allowShortText && text.length <= 26) {
+      return text;
+    }
+    return "";
+  };
+
+  const extractPredictionTargetLabel = (market, index = 0) => {
+    const candidateFields = [
+      market?.targetPrice,
+      market?.target,
+      market?.price,
+      market?.strike,
+      market?.threshold,
+      market?.groupItemTitle,
+      market?.question,
+      market?.description,
+    ];
+    for (const value of candidateFields) {
+      const label = normalizePredictionTargetLabelCandidate(value);
+      if (label) return label;
+    }
+    const slug = String(market?.slug || "").trim();
+    if (slug) {
+      const normalizedSlug = slug.replace(/[_-]+/g, " ");
+      const slugLabel =
+        normalizePredictionTargetLabelCandidate(normalizedSlug, { allowShortText: false }) ||
+        normalizePredictionTargetLabelCandidate(normalizedSlug, { allowShortText: true });
+      if (slugLabel) return slugLabel;
+    }
+    return `Target ${index + 1}`;
   };
 
   const parsePredictionTargetValue = (label) => {
-    const match = String(label || "").match(/-?\d+(?:\.\d+)?/);
+    const match = String(label || "")
+      .trim()
+      .match(/^\$?\s*(-?\d+(?:\.\d+)?)$/);
     if (!match) return null;
-    const parsed = Number(match[0]);
+    const parsed = Number(match[1]);
     return Number.isFinite(parsed) ? parsed : null;
   };
 
@@ -11053,7 +11209,7 @@
     (Array.isArray(event?.markets) ? event.markets : [])
       .map((market, index) => {
         const { yesProb, noProb, yesTokenId, noTokenId } = getPredictionBinaryPrices(market);
-        const targetLabel = extractPredictionTargetLabel(market.question, index);
+        const targetLabel = extractPredictionTargetLabel(market, index);
         return {
           market,
           targetLabel,
@@ -22334,28 +22490,76 @@
         try {
           await current.linkWithCredential(credential);
           await linkPendingCredentialIfPresent({ silent: true });
-          return;
+          return auth.currentUser || current;
         } catch (linkError) {
           if (await recoverFromAuthCollision(linkError, { methodHint })) {
-            return;
+            return auth.currentUser || null;
           }
           if (isAuthCollision(linkError?.code)) {
-            await fallbackSignIn();
+            const result = await fallbackSignIn();
             await linkPendingCredentialIfPresent({ silent: true });
-            return;
+            return result?.user || auth.currentUser || null;
           }
           throw linkError;
         }
       }
       try {
-        await fallbackSignIn();
+        const result = await fallbackSignIn();
         await linkPendingCredentialIfPresent({ silent: true });
+        return result?.user || auth.currentUser || null;
       } catch (fallbackError) {
-        if (await recoverFromAuthCollision(fallbackError, { methodHint })) return;
+        if (await recoverFromAuthCollision(fallbackError, { methodHint })) return auth.currentUser || null;
         throw fallbackError;
       }
-      if (email && ui.emailInput && !String(ui.emailInput.value || "").trim()) {
-        ui.emailInput.value = email;
+    };
+
+    const createEmailPasswordAccount = async () => {
+      await persistenceReady;
+      const email = String(ui.emailInput?.value || "").trim();
+      const password = String(ui.passwordInput?.value || "");
+      const confirmPassword = String(ui.confirmPasswordInput?.value || "");
+      const username = sanitizeProfileUsername(ui.usernameInput?.value || "", null);
+      if (!email) {
+        throw new Error("Enter your email to create an account.");
+      }
+      if (!username) {
+        throw new Error("Enter a username to create your account.");
+      }
+      if (password.length < 6) {
+        throw new Error("Password must be at least 6 characters.");
+      }
+      if (password !== confirmPassword) {
+        throw new Error("Password and confirm password must match.");
+      }
+      writePendingSignupProfile({ email, username });
+      try {
+        const credential = firebase.auth.EmailAuthProvider.credential(email, password);
+        const user =
+          (await linkOrSignInWithCredential(credential, () => auth.createUserWithEmailAndPassword(email, password), {
+            methodHint: "password",
+            email,
+          })) || auth.currentUser;
+        if (user) {
+          if (String(user.displayName || "").trim() !== username) {
+            await user.updateProfile({ displayName: username });
+          }
+          if (db) {
+            await db.collection("users").doc(user.uid).set(
+              {
+                name: username,
+                profile: { username },
+                metadata: buildMeta(),
+              },
+              { merge: true }
+            );
+          }
+        }
+        showToast("Account created.");
+        logEvent("sign_up", { method: "password" });
+        setEmailAuthMode("signin");
+      } catch (error) {
+        clearPendingSignupProfile();
+        throw error;
       }
     };
 
@@ -22363,16 +22567,20 @@
       event.preventDefault();
       if (ui.emailMessage) ui.emailMessage.textContent = "";
       try {
-        await persistenceReady;
-        const email = String(ui.emailInput?.value || "").trim();
-        const password = String(ui.passwordInput?.value || "");
-        const credential = firebase.auth.EmailAuthProvider.credential(email, password);
-        await linkOrSignInWithCredential(credential, () => auth.signInWithEmailAndPassword(email, password), {
-          methodHint: "password",
-          email,
-        });
-        showToast("Signed in successfully.");
-        logEvent("login", { method: "password" });
+        if (state.authEmailMode === "signup") {
+          await createEmailPasswordAccount();
+        } else {
+          await persistenceReady;
+          const email = String(ui.emailInput?.value || "").trim();
+          const password = String(ui.passwordInput?.value || "");
+          const credential = firebase.auth.EmailAuthProvider.credential(email, password);
+          await linkOrSignInWithCredential(credential, () => auth.signInWithEmailAndPassword(email, password), {
+            methodHint: "password",
+            email,
+          });
+          showToast("Signed in successfully.");
+          logEvent("login", { method: "password" });
+        }
       } catch (error) {
         if (ui.emailMessage) ui.emailMessage.textContent = error.message;
       }
@@ -22380,20 +22588,22 @@
 
     ui.emailCreate?.addEventListener("click", async () => {
       if (ui.emailMessage) ui.emailMessage.textContent = "";
-      try {
-        await persistenceReady;
-        const email = String(ui.emailInput?.value || "").trim();
-        const password = String(ui.passwordInput?.value || "");
-        const credential = firebase.auth.EmailAuthProvider.credential(email, password);
-        await linkOrSignInWithCredential(credential, () => auth.createUserWithEmailAndPassword(email, password), {
-          methodHint: "password",
-          email,
-        });
-        showToast("Account created.");
-        logEvent("sign_up", { method: "password" });
-      } catch (error) {
-        if (ui.emailMessage) ui.emailMessage.textContent = error.message;
+      if (state.authEmailMode !== "signup") {
+        setEmailAuthMode("signup");
+        if (ui.emailMessage) {
+          ui.emailMessage.textContent = "Add a username and confirm your password to create your Quantura account.";
+        }
+        ui.usernameInput?.focus();
+        return;
       }
+      setEmailAuthMode("signin");
+      if (ui.emailMessage) ui.emailMessage.textContent = "";
+    });
+
+    ui.authBackToSignin?.addEventListener("click", (event) => {
+      event.preventDefault();
+      setEmailAuthMode("signin");
+      if (ui.emailMessage) ui.emailMessage.textContent = "";
     });
 
     ui.authForgotPassword?.addEventListener("click", async () => {
@@ -24537,6 +24747,7 @@
           if (previousWasAnonymous && hasFullAccount(user) && previousUid && nextUid && previousUid !== nextUid) {
             await mergeAnonymousSessionData(previousUid, nextUid).catch(() => undefined);
           }
+          await applyPendingSignupProfile(db, user).catch(() => undefined);
           await flushPendingNativeIapEvents().catch(() => undefined);
           const shouldRefreshAfterSignIn =
             !isFirstAuthEvent &&

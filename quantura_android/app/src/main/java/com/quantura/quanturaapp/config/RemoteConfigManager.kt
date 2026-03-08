@@ -293,15 +293,23 @@ class RemoteConfigManager(
         val adsUseRealAndroid = remoteConfig?.getBoolean("ads_use_real_android") ?: true
         val featureFlags = parseFeatureFlags()
         val payload = parseAdUnitPayload(remoteConfig?.getString("ad_unit_ids").orEmpty())
-        val ios = parsePlatformUnitIds(
-            payload = payload,
-            platform = AdPlatform.IOS,
-            seed = LIVE_IOS_IDS
+        val ios = sanitizeLiveOverrides(
+            parsed = parsePlatformUnitIds(
+                payload = payload,
+                platform = AdPlatform.IOS,
+                seed = LIVE_IOS_IDS
+            ),
+            bundled = LIVE_IOS_IDS,
+            platform = AdPlatform.IOS
         )
-        val android = parsePlatformUnitIds(
-            payload = payload,
-            platform = AdPlatform.ANDROID,
-            seed = LIVE_ANDROID_IDS
+        val android = sanitizeLiveOverrides(
+            parsed = parsePlatformUnitIds(
+                payload = payload,
+                platform = AdPlatform.ANDROID,
+                seed = LIVE_ANDROID_IDS
+            ),
+            bundled = LIVE_ANDROID_IDS,
+            platform = AdPlatform.ANDROID
         )
         return AdsRemoteConfigState(
             adsEnabled = adsEnabled,
@@ -398,6 +406,41 @@ class RemoteConfigManager(
             nativeAdvanced = native,
             nativeVideo = nativeVideo
         )
+    }
+
+    private fun sanitizeLiveOverrides(
+        parsed: AdUnitIds,
+        bundled: AdUnitIds,
+        platform: AdPlatform,
+    ): AdUnitIds {
+        fun select(candidate: String, fallback: String, format: String): String {
+            if (!candidate.isGoogleSampleAdUnit()) return candidate
+            if (fallback.isGoogleSampleAdUnit()) return candidate
+            Log.w(
+                tag,
+                "[Ads][Android] Ignoring sample ad unit override for ${platform.name.lowercase()}:$format and using bundled live unit instead."
+            )
+            return fallback
+        }
+
+        return AdUnitIds(
+            appOpen = select(parsed.appOpen, bundled.appOpen, "app_open"),
+            adaptiveBanner = select(parsed.adaptiveBanner, bundled.adaptiveBanner, "banner"),
+            fixedBanner = select(parsed.fixedBanner, bundled.fixedBanner, "fixed_banner"),
+            interstitial = select(parsed.interstitial, bundled.interstitial, "interstitial"),
+            rewarded = select(parsed.rewarded, bundled.rewarded, "rewarded"),
+            rewardedInterstitial = select(
+                parsed.rewardedInterstitial,
+                bundled.rewardedInterstitial,
+                "rewarded_interstitial"
+            ),
+            nativeAdvanced = select(parsed.nativeAdvanced, bundled.nativeAdvanced, "native"),
+            nativeVideo = select(parsed.nativeVideo, bundled.nativeVideo, "native_video")
+        )
+    }
+
+    private fun String.isGoogleSampleAdUnit(): Boolean {
+        return startsWith("ca-app-pub-3940256099942544/")
     }
 
     private fun defaultAdUnitIdsPayload(): String {
