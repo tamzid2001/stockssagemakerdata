@@ -203,6 +203,10 @@ const CATALOG: ShopCatalogItem[] = [
 const CATALOG_BY_SKU = new Map<string, ShopCatalogItem>();
 CATALOG.forEach((item) => CATALOG_BY_SKU.set(item.sku, item));
 
+const CATALOG_VISIBILITY_DEFAULTS = Object.freeze(
+  Object.fromEntries(CATALOG.map((item) => [item.sku, true] as const))
+) as Readonly<Record<string, boolean>>;
+
 function sanitizeSku(value: unknown): string {
   return String(value || "")
     .trim()
@@ -235,6 +239,13 @@ export function getCatalogPublicItems(): Array<Record<string, unknown>> {
     tab: item.tab,
     shippingClass: item.shippingClass,
   }));
+}
+
+export function getCatalogVisibilityDefaults(): { enabled: boolean; items: Record<string, boolean> } {
+  return {
+    enabled: true,
+    items: { ...CATALOG_VISIBILITY_DEFAULTS },
+  };
 }
 
 export function resolveShippingCost(subtotalCents: number, hasHardwareOrPrivacy: boolean): number {

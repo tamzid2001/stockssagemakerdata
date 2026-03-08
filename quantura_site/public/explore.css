@@ -111,6 +111,14 @@ button:hover,
   margin-bottom: 18px;
 }
 
+.quantura-rn-explore-shell {
+  margin-bottom: 16px;
+}
+
+.quantura-rn-root {
+  width: 100%;
+}
+
 .search-wrap {
   display: grid;
   grid-template-columns: 1fr auto;

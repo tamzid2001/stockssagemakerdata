@@ -143,15 +143,8 @@ class RemoteConfigManager(
         val cached = lastEffectiveConfig
         val state = currentRemoteConfigState()
         val environment = getAdsEnvironment()
-        val adsEnabled = if (environment.isDebugBuild || environment.isSimulatorOrEmulator) {
-            true
-        } else {
-            state.adsEnabled && state.featureFlags.adsEnabled
-        }
-        val usingRealAds = adsEnabled &&
-            state.adsUseRealAndroid &&
-            environment.isReleaseBuild &&
-            !environment.isSimulatorOrEmulator
+        val adsEnabled = state.adsEnabled && state.featureFlags.adsEnabled
+        val usingRealAds = adsEnabled && state.adsUseRealAndroid
         val selectedUnits = if (usingRealAds) state.android else TEST_ANDROID_IDS
         val effective = EffectiveAdsConfig(
             adsEnabled = adsEnabled,
@@ -231,10 +224,7 @@ class RemoteConfigManager(
             AdPlatform.IOS -> remoteConfigState.adsUseRealIos
             AdPlatform.ANDROID -> remoteConfigState.adsUseRealAndroid
         }
-        val useRealAds = adsEnabled &&
-            platformWantsRealAds &&
-            environment.isReleaseBuild &&
-            !environment.isSimulatorOrEmulator
+        val useRealAds = adsEnabled && platformWantsRealAds
         val selected = when (platform) {
             AdPlatform.IOS -> if (useRealAds) remoteConfigState.ios else TEST_IOS_IDS
             AdPlatform.ANDROID -> if (useRealAds) remoteConfigState.android else TEST_ANDROID_IDS
@@ -249,7 +239,12 @@ class RemoteConfigManager(
             AdFormat.NATIVE -> selected.nativeAdvanced
         }
         if (platform == AdPlatform.ANDROID) {
-            Log.i(tag, "[Ads][Android] Selected ad unit for ${format.name.lowercase()} = $resolved")
+            Log.i(
+                tag,
+                "[Ads][Android] Selected ad unit for ${format.name.lowercase()} = $resolved " +
+                    "useReal=$useRealAds adsEnabled=$adsEnabled platformRealFlag=$platformWantsRealAds " +
+                    "debug=${environment.isDebugBuild} emulator=${environment.isSimulatorOrEmulator}"
+            )
         }
         return resolved
     }

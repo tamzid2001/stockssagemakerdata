@@ -331,6 +331,55 @@
     "COST", "WMT", "NKE", "PLTR",
   ];
   const FEATURE_VOTE_KEYS = new Set(["uploads", "autopilot"]);
+  const DEFAULT_AUTO_PUBLISH_PREFS = Object.freeze({
+    autoPublishForecasts: true,
+    autoPublishIndicators: true,
+    autoPublishModelCouncilConvos: true,
+  });
+  const ANON_USERNAME_ADJECTIVES = Object.freeze([
+    "alpha",
+    "amber",
+    "arc",
+    "blue",
+    "clear",
+    "delta",
+    "eager",
+    "ember",
+    "focal",
+    "keen",
+    "lunar",
+    "mint",
+    "nova",
+    "polar",
+    "prime",
+    "rapid",
+    "smart",
+    "steady",
+    "swift",
+    "vivid",
+  ]);
+  const ANON_USERNAME_NOUNS = Object.freeze([
+    "analyst",
+    "atlas",
+    "beacon",
+    "bull",
+    "chartist",
+    "cipher",
+    "desk",
+    "falcon",
+    "fox",
+    "grid",
+    "harbor",
+    "hedge",
+    "matrix",
+    "pilot",
+    "pulse",
+    "ranger",
+    "signal",
+    "trader",
+    "vector",
+    "wave",
+  ]);
   const FEATURE_VOTE_LABELS = Object.freeze({
     uploads: "Upload predictions CSV",
     autopilot: "Weekly Brief Autopilot",
@@ -391,6 +440,24 @@
       pricing: { input: 1.75, cached_input: 0.175, output: 14.0 },
     },
     {
+      id: "claude-sonnet-4-5",
+      provider: "claude",
+      tier: "Council",
+      label: "Claude Sonnet 4.5",
+      personality: "balanced",
+      helper: "Strong reasoning and synthesis for model council.",
+      pricing: { input: null, cached_input: null, output: null },
+    },
+    {
+      id: "claude-opus-4-5",
+      provider: "claude",
+      tier: "Council",
+      label: "Claude Opus 4.5",
+      personality: "deep_research",
+      helper: "High-depth long-form synthesis for premium analysis.",
+      pricing: { input: null, cached_input: null, output: null },
+    },
+    {
       id: "amazon.nova-lite-v1:0",
       provider: "amazon_nova",
       tier: "Nova",
@@ -418,6 +485,24 @@
       pricing: { input: null, cached_input: null, output: null },
     },
     {
+      id: "deepseek-chat",
+      provider: "deepseek",
+      tier: "Council",
+      label: "DeepSeek Chat",
+      personality: "balanced",
+      helper: "DeepSeek baseline analysis path.",
+      pricing: { input: null, cached_input: null, output: null },
+    },
+    {
+      id: "qwen-plus",
+      provider: "qwen",
+      tier: "Council",
+      label: "Qwen Plus",
+      personality: "balanced",
+      helper: "Qwen balanced analysis path.",
+      pricing: { input: null, cached_input: null, output: null },
+    },
+    {
       id: "mistral-small-latest",
       provider: "mistral",
       tier: "Council",
@@ -436,7 +521,15 @@
       pricing: { input: null, cached_input: null, output: null },
     },
   ];
-  const DEFAULT_LLM_ALLOWED_MODELS = ["gpt-5-nano", "gpt-5-mini", "gpt-5", "gpt-5.1", "gpt-5.2"];
+  const DEFAULT_LLM_ALLOWED_MODELS = [
+    "gpt-5-nano",
+    "gpt-5-mini",
+    "gpt-5",
+    "gpt-5.1",
+    "gpt-5.2",
+    "claude-sonnet-4-5",
+    "claude-opus-4-5",
+  ];
   const AI_USAGE_TIER_DEFAULTS = {
     free: {
       allowed_models: ["gpt-5-nano", "gpt-5-mini"],
@@ -455,7 +548,7 @@
       ad_free: true,
     },
     plus: {
-      allowed_models: ["gpt-5-mini", "gpt-5"],
+      allowed_models: ["gpt-5-mini", "gpt-5", "claude-sonnet-4-5"],
       weekly_limit: 25,
       daily_limit: 25,
       volatility_alerts: true,
@@ -463,7 +556,7 @@
       ad_free: true,
     },
     pro: {
-      allowed_models: ["gpt-5-mini", "gpt-5", "gpt-5.1"],
+      allowed_models: ["gpt-5-mini", "gpt-5", "gpt-5.1", "claude-sonnet-4-5"],
       weekly_limit: 60,
       daily_limit: 60,
       volatility_alerts: true,
@@ -471,7 +564,17 @@
       ad_free: true,
     },
     business: {
-      allowed_models: ["gpt-5-nano", "gpt-5-mini", "gpt-5", "gpt-5.1", "gpt-5.2", "amazon.nova-lite-v1:0", "amazon.nova-pro-v1:0"],
+      allowed_models: [
+        "gpt-5-nano",
+        "gpt-5-mini",
+        "gpt-5",
+        "gpt-5.1",
+        "gpt-5.2",
+        "claude-sonnet-4-5",
+        "claude-opus-4-5",
+        "amazon.nova-lite-v1:0",
+        "amazon.nova-pro-v1:0",
+      ],
       weekly_limit: 150,
       daily_limit: 150,
       volatility_alerts: true,
@@ -479,7 +582,7 @@
       ad_free: true,
     },
     desk: {
-      allowed_models: ["gpt-5-nano", "gpt-5-mini", "gpt-5", "gpt-5.1", "gpt-5.2"],
+      allowed_models: ["gpt-5-nano", "gpt-5-mini", "gpt-5", "gpt-5.1", "gpt-5.2", "claude-sonnet-4-5", "claude-opus-4-5"],
       weekly_limit: 150,
       daily_limit: 150,
       volatility_alerts: true,
@@ -516,11 +619,14 @@
     }),
   });
   const MODEL_PROVIDER_LABEL = {
-    openai: "OpenAI",
+    openai: "ChatGPT",
+    claude: "Claude",
     amazon_nova: "Amazon Nova",
     gemini: "Gemini",
+    deepseek: "DeepSeek",
     mistral: "Mistral",
     perplexity: "Perplexity Sonar",
+    qwen: "Qwen",
     other: "Other",
   };
   const MODEL_COUNCIL_MODULE_CATALOG = Object.freeze([
@@ -946,7 +1052,6 @@
     sidebar_indicators: ['[data-panel-target="indicators"] span'],
     sidebar_trending: ['[data-panel-target="trending"] span'],
     sidebar_news_data: ['[data-panel-target="news"] span'],
-    sidebar_corporate_events: ['[data-panel-target="events-calendar"] span'],
     sidebar_market_headlines: ['[data-panel-target="market-headlines"] span'],
     sidebar_ask_gpt5: ['[data-panel-target="ticker-query"] span'],
     sidebar_options: ['[data-panel-target="options"] span'],
@@ -1427,7 +1532,7 @@
 
     const fxSidebarLink = document.querySelector('[data-panel-target="fx"]');
     if (fxSidebarLink) {
-      fxSidebarLink.setAttribute("href", "/tools/fx");
+      fxSidebarLink.setAttribute("href", "/terminal/fx");
     }
 
     if (panelColumn.querySelector('[data-panel="fx"]')) return;
@@ -1844,9 +1949,10 @@
     tickerContext: {
 	      ticker: "",
       activeTicker: "",
-	      interval: "1d",
-	      rows: [],
+      interval: "1d",
+      rows: [],
       forecastId: "",
+      forecastRequestId: "",
       forecastDoc: null,
 	      indicatorOverlays: [],
 	      forecastTablePage: 0,
@@ -1879,6 +1985,8 @@
       tickerQueryFeedback: "",
       tickerQueryPromptDeck: [],
       tickerQueryPromptCursor: 0,
+      tickerQueryRequestId: "",
+      indicatorRequestId: "",
     },
     predictionsContext: {
       uploadId: "",
@@ -2052,6 +2160,7 @@
     myRequestsLoading: false,
     myRequestsLoadedAt: 0,
     myRequestsPanelState: {},
+    publishPrefs: { ...DEFAULT_AUTO_PUBLISH_PREFS },
     sharedWorkspaces: [],
     unsubscribeSharedWorkspaces: null,
     authStateBootstrapped: false,
@@ -2600,7 +2709,6 @@
           "/indicators",
           "/trending",
           "/news",
-          "/events-calendar",
           "/market-headlines",
           "/model-council",
           "/options",
@@ -2686,7 +2794,7 @@
         "ticker-query",
         "/model-council",
         "fx",
-        "/tools/fx",
+        "/terminal/fx",
       ],
       dashboard: ["orders", "profile", "watchlist", "collaboration", "notifications", "/explore"],
     };
@@ -5456,6 +5564,7 @@
     const modal = document.getElementById("solve-now-modal");
     if (!modal) return;
     modal.classList.add("hidden");
+    document.body.classList.remove("modal-open");
     if (window.location.hash === "#solve-now" && window.history?.replaceState) {
       window.history.replaceState({}, "", `${window.location.pathname}${window.location.search}`);
     }
@@ -5474,16 +5583,16 @@
     output.innerHTML = `
       <article class="solve-now-response">
         <h4>Summary</h4>
-        <p>${escapeHtml(summaryParagraph || "No summary was returned.")}</p>
+        <div class="markdown-output">${renderMarkdown(summaryParagraph || "No summary was returned.", { fallback: "No summary was returned." })}</div>
         <h4>Suggested next steps</h4>
         <ol>
           ${steps.length ? steps.map((step) => `<li>${escapeHtml(step)}</li>`).join("") : "<li>Refine your request with ticker, timeframe, and risk limits.</li>"}
         </ol>
         <details>
           <summary>Full AI output</summary>
-          <pre class="small">${escapeHtml(cleanAnswer || "No output returned.")}</pre>
+          <div class="markdown-output">${renderMarkdown(cleanAnswer || "No output returned.", { fallback: "No output returned." })}</div>
         </details>
-        <div class="small muted solve-now-meta">Context ticker: ${escapeHtml(ticker)} · Provider: ${escapeHtml(provider || "openai")}</div>
+        <div class="small muted solve-now-meta">Context ticker: ${escapeHtml(ticker)}</div>
         <p class="small muted solve-now-disclaimer">LLMs can sometimes make mistakes.</p>
       </article>
     `;
@@ -5576,6 +5685,7 @@
     if (prefillPrompt && !String(input.value || "").trim()) input.value = String(prefillPrompt || "").trim();
     status.textContent = "";
     modal.classList.remove("hidden");
+    document.body.classList.add("modal-open");
     if (window.history?.replaceState) {
       window.history.replaceState({}, "", `${window.location.pathname}${window.location.search}#solve-now`);
     }
@@ -6206,6 +6316,19 @@
     return Array.from(set);
   };
 
+  const getNativeInlineAdAnchorIndexes = (childrenCount, rules) => {
+    if (!Number.isFinite(childrenCount) || childrenCount < 2) return [];
+    const indexes = new Set();
+    const midpointIndex = Math.max(0, Math.min(childrenCount - 1, Math.floor(childrenCount * rules.pageMidpoint)));
+    indexes.add(midpointIndex);
+    if (childrenCount >= rules.feedStart) {
+      for (let position = rules.feedStart; position <= childrenCount; position += rules.feedInterval) {
+        indexes.add(Math.max(0, Math.min(childrenCount - 1, position - 1)));
+      }
+    }
+    return Array.from(indexes).sort((left, right) => left - right);
+  };
+
   const maybeInjectNativeInlineAd = (container) => {
     if (!container) return;
     if (!isNativeInlineAdEligible()) {
@@ -6213,29 +6336,49 @@
       return;
     }
     if (container.closest("form, .auth-card, .checkout-shell, .purchase-panel")) return;
-    if (container.querySelector("[data-native-inline-ad-slot]")) return;
     if (container.classList.contains("hidden")) return;
     if (String(container.dataset.loading || "") === "true") return;
 
     const children = Array.from(container.children).filter((child) => !child.matches("[data-native-inline-ad-slot]"));
-    const textLength = String(container.textContent || "").trim().length;
-    if (children.length < 2 && textLength < 240) return;
-
-    nativeInlineAdState.sequence += 1;
-    const slotId = `inline-${Date.now()}-${nativeInlineAdState.sequence}`;
-    const placement = container.id ? `section_${container.id}` : "section_panel";
-    const slotNode = buildNativeInlineAdSlot(slotId, placement);
-    const rules = getNativeInlineAdRules();
-    const index = Math.max(0, Math.min(children.length - 1, Math.floor(children.length * rules.pageMidpoint)));
-    const anchor = children[index] || null;
-    if (anchor && anchor.parentElement === container && anchor.nextSibling) {
-      container.insertBefore(slotNode, anchor.nextSibling);
-    } else if (anchor && anchor.parentElement === container) {
-      container.appendChild(slotNode);
-    } else {
-      container.appendChild(slotNode);
+    const existingSlots = Array.from(container.querySelectorAll("[data-native-inline-ad-slot]"));
+    const textLength = children.map((child) => String(child.textContent || "")).join(" ").trim().length;
+    if (children.length < 2 && textLength < 240) {
+      existingSlots.forEach((slotNode) => slotNode.remove());
+      return;
     }
-    loadNativeInlineAdSlot(slotNode).catch(() => undefined);
+
+    const rules = getNativeInlineAdRules();
+    const desiredAnchorIndexes = getNativeInlineAdAnchorIndexes(children.length, rules);
+    const desiredAnchorIndexSet = new Set(desiredAnchorIndexes);
+
+    existingSlots.forEach((slotNode) => {
+      const anchorIndex = Number(slotNode.dataset.anchorIndex);
+      if (!Number.isFinite(anchorIndex) || desiredAnchorIndexSet.has(anchorIndex)) return;
+      slotNode.remove();
+    });
+
+    desiredAnchorIndexes.forEach((anchorIndex) => {
+      const existingSlot = Array.from(container.querySelectorAll("[data-native-inline-ad-slot]")).find(
+        (node) => Number(node.dataset.anchorIndex) === anchorIndex
+      );
+      if (existingSlot) return;
+
+      const anchor = children[anchorIndex] || null;
+      if (!anchor || anchor.parentElement !== container) return;
+
+      nativeInlineAdState.sequence += 1;
+      const slotId = `inline-${Date.now()}-${nativeInlineAdState.sequence}`;
+      const placementBase = container.id ? `section_${container.id}` : "section_panel";
+      const slotNode = buildNativeInlineAdSlot(slotId, `${placementBase}_${anchorIndex + 1}`);
+      slotNode.dataset.anchorIndex = String(anchorIndex);
+
+      if (anchor.nextSibling) {
+        container.insertBefore(slotNode, anchor.nextSibling);
+      } else {
+        container.appendChild(slotNode);
+      }
+      loadNativeInlineAdSlot(slotNode).catch(() => undefined);
+    });
   };
 
   const observeNativeInlineAdContainer = (container) => {
@@ -6338,8 +6481,12 @@
       ui.headerUserStatus.classList.toggle("pill", true);
     }
 
-    if (ui.userEmail) ui.userEmail.textContent = accountAuthed ? user?.email || "Not signed in" : guestSession ? "Guest session" : "Not signed in";
-    if (ui.userProvider) ui.userProvider.textContent = accountAuthed ? user?.providerData?.[0]?.providerId || "—" : guestSession ? "anonymous" : "—";
+    const guestHandle = sanitizeProfileUsername(
+      state.userProfile?.username || getDefaultProfileUsername(user),
+      user
+    );
+    if (ui.userEmail) ui.userEmail.textContent = accountAuthed ? user?.email || "Not signed in" : guestSession ? `@${guestHandle}` : "Not signed in";
+    if (ui.userProvider) ui.userProvider.textContent = accountAuthed ? user?.providerData?.[0]?.providerId || "—" : guestSession ? "guest" : "—";
     if (ui.userStatus) {
       ui.userStatus.textContent = authLabel;
       ui.userStatus.classList.toggle("pill", true);
@@ -7989,6 +8136,51 @@
 
   const cloneDefaultProfileSocialLinks = () => ({ ...DEFAULT_PROFILE_SOCIAL_LINKS });
 
+  const normalizeAutoPublishPrefs = (source = null) => {
+    const raw = source && typeof source === "object" ? source : {};
+    return {
+      autoPublishForecasts:
+        raw.autoPublishForecasts !== undefined
+          ? Boolean(raw.autoPublishForecasts)
+          : DEFAULT_AUTO_PUBLISH_PREFS.autoPublishForecasts,
+      autoPublishIndicators:
+        raw.autoPublishIndicators !== undefined
+          ? Boolean(raw.autoPublishIndicators)
+          : DEFAULT_AUTO_PUBLISH_PREFS.autoPublishIndicators,
+      autoPublishModelCouncilConvos:
+        raw.autoPublishModelCouncilConvos !== undefined
+          ? Boolean(raw.autoPublishModelCouncilConvos)
+          : DEFAULT_AUTO_PUBLISH_PREFS.autoPublishModelCouncilConvos,
+    };
+  };
+
+  const shouldAutoPublishForType = (requestType) => {
+    const type = normalizeMyRequestType(requestType);
+    if (type === "forecast") return Boolean(state.publishPrefs?.autoPublishForecasts);
+    if (type === "indicator") return Boolean(state.publishPrefs?.autoPublishIndicators);
+    if (type === "modelCouncil") return Boolean(state.publishPrefs?.autoPublishModelCouncilConvos);
+    return false;
+  };
+
+  const hashStringToInt = (value) => {
+    const source = String(value || "");
+    let hash = 0;
+    for (let i = 0; i < source.length; i += 1) {
+      hash = (hash << 5) - hash + source.charCodeAt(i);
+      hash |= 0;
+    }
+    return Math.abs(hash);
+  };
+
+  const buildAnonymousUsername = (user = null) => {
+    const uid = String(user?.uid || "").trim() || String(Date.now());
+    const hash = hashStringToInt(uid);
+    const adjective = ANON_USERNAME_ADJECTIVES[hash % ANON_USERNAME_ADJECTIVES.length];
+    const noun = ANON_USERNAME_NOUNS[Math.floor(hash / 13) % ANON_USERNAME_NOUNS.length];
+    const suffix = String(100 + (hash % 900));
+    return `${adjective}_${noun}_${suffix}`;
+  };
+
   const normalizeProfileAvatar = (raw) => {
     const value = String(raw || "").trim().toLowerCase();
     if (value && PROFILE_AVATAR_OPTIONS[value]) return value;
@@ -8003,6 +8195,9 @@
   };
 
   const getDefaultProfileUsername = (user) => {
+    if (isAnonymousUser(user)) {
+      return buildAnonymousUsername(user);
+    }
     const display = String(user?.displayName || "").trim();
     const emailLocal = String(user?.email || "")
       .trim()
@@ -8140,6 +8335,7 @@
 
   const loadUserProfile = async (db, user) => {
     if (!db || !user) {
+      state.publishPrefs = normalizeAutoPublishPrefs(null);
       state.userProfile = {
         username: "",
         socialLinks: cloneDefaultProfileSocialLinks(),
@@ -8156,12 +8352,14 @@
     try {
       const snap = await db.collection("users").doc(user.uid).get();
       const doc = snap.exists ? snap.data() || {} : {};
+      state.publishPrefs = normalizeAutoPublishPrefs(doc);
       const rawProfile = doc.profile && typeof doc.profile === "object" ? doc.profile : {};
       if (!rawProfile.stripeConnectAccountId && doc?.stripeConnectAccountId) {
         rawProfile.stripeConnectAccountId = doc.stripeConnectAccountId;
       }
       renderProfileForm(rawProfile, user);
     } catch (error) {
+      state.publishPrefs = normalizeAutoPublishPrefs(null);
       renderProfileForm({ username: getDefaultProfileUsername(user) }, user);
     }
   };
@@ -8183,18 +8381,13 @@
     const stripeConnectAccountId = String(
       existingProfile.stripeConnectAccountId || existing?.stripeConnectAccountId || ""
     ).trim();
-    const autopublishDefaults = {
-      autoPublishForecasts: existing?.autoPublishForecasts !== undefined ? Boolean(existing.autoPublishForecasts) : true,
-      autoPublishIndicators: existing?.autoPublishIndicators !== undefined ? Boolean(existing.autoPublishIndicators) : true,
-      autoPublishModelCouncilConvos:
-        existing?.autoPublishModelCouncilConvos !== undefined ? Boolean(existing.autoPublishModelCouncilConvos) : true,
-    };
+    const autopublishDefaults = normalizeAutoPublishPrefs(existing);
 
     await userRef.set(
       {
         email: user.email,
         name: user.displayName || "",
-        provider: user.providerData?.[0]?.providerId || "email",
+        provider: user.providerData?.[0]?.providerId || (user.isAnonymous ? "anonymous" : "email"),
         photoURL: user.photoURL || "",
         lastLoginAt: firebase.firestore.FieldValue.serverTimestamp(),
         createdAt,
@@ -8359,6 +8552,117 @@
 
   const icon = (name) => `<i class="iconoir-${name}" aria-hidden="true"></i>`;
 
+  const MARKED_SCRIPT_URL = "https://cdn.jsdelivr.net/npm/marked/marked.min.js";
+  const MARKDOWN_ALLOWED_TAGS = new Set([
+    "p",
+    "br",
+    "hr",
+    "strong",
+    "em",
+    "b",
+    "i",
+    "u",
+    "s",
+    "ul",
+    "ol",
+    "li",
+    "blockquote",
+    "code",
+    "pre",
+    "a",
+    "table",
+    "thead",
+    "tbody",
+    "tr",
+    "th",
+    "td",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+  ]);
+  const MARKDOWN_ALLOWED_ATTRS = new Set(["href", "target", "rel", "title", "colspan", "rowspan"]);
+  let markedLoaderPromise = null;
+
+  const ensureMarkedLibrary = () => {
+    if (window.marked?.parse) return Promise.resolve(window.marked);
+    if (markedLoaderPromise) return markedLoaderPromise;
+    markedLoaderPromise = new Promise((resolve) => {
+      const existing = document.querySelector('script[data-quantura-marked="1"]');
+      if (existing) {
+        existing.addEventListener("load", () => resolve(window.marked || null), { once: true });
+        existing.addEventListener("error", () => resolve(null), { once: true });
+        return;
+      }
+      const script = document.createElement("script");
+      script.src = MARKED_SCRIPT_URL;
+      script.async = true;
+      script.defer = true;
+      script.dataset.quanturaMarked = "1";
+      script.addEventListener("load", () => resolve(window.marked || null), { once: true });
+      script.addEventListener("error", () => resolve(null), { once: true });
+      document.head.appendChild(script);
+    });
+    return markedLoaderPromise;
+  };
+
+  const sanitizeMarkdownHtml = (rawHtml) => {
+    const html = String(rawHtml || "").trim();
+    if (!html) return "";
+    const template = document.createElement("template");
+    template.innerHTML = html;
+    Array.from(template.content.querySelectorAll("*")).forEach((node) => {
+      const tag = String(node.tagName || "").toLowerCase();
+      if (!MARKDOWN_ALLOWED_TAGS.has(tag)) {
+        const replacement = document.createTextNode(node.textContent || "");
+        node.replaceWith(replacement);
+        return;
+      }
+      Array.from(node.attributes || []).forEach((attr) => {
+        const attrName = String(attr.name || "").toLowerCase();
+        const attrValue = String(attr.value || "");
+        if (!MARKDOWN_ALLOWED_ATTRS.has(attrName)) {
+          node.removeAttribute(attr.name);
+          return;
+        }
+        if (attrName === "href") {
+          const safeHref = attrValue.trim();
+          if (!/^(https?:|mailto:|tel:)/i.test(safeHref)) {
+            node.removeAttribute(attr.name);
+          }
+        }
+      });
+      if (tag === "a") {
+        node.setAttribute("target", "_blank");
+        node.setAttribute("rel", "noopener noreferrer");
+      }
+    });
+    return template.innerHTML;
+  };
+
+  const renderMarkdown = (text, { fallback = "No output returned." } = {}) => {
+    const source = String(text || "").trim();
+    if (!source) return `<p>${escapeHtml(fallback)}</p>`;
+    try {
+      if (window.marked?.parse) {
+        const parsed = window.marked.parse(source, {
+          gfm: true,
+          breaks: true,
+          mangle: false,
+          headerIds: false,
+        });
+        return sanitizeMarkdownHtml(parsed);
+      }
+    } catch (_error) {
+      // Fall back to escaped text.
+    }
+    return `<p>${escapeHtml(source).replace(/\n/g, "<br>")}</p>`;
+  };
+
+  ensureMarkedLibrary().catch(() => null);
+
   const toPrettyJson = (value) => `<pre class="small">${escapeHtml(JSON.stringify(value, null, 2))}</pre>`;
 
   const normalizePath = (rawPath = "/") => {
@@ -8377,11 +8681,10 @@
         indicators: "/indicators",
         trending: "/trending",
         news: "/news",
-        "events-calendar": "/events-calendar",
         "market-headlines": "/market-headlines",
         "ticker-query": "/model-council",
         options: "/options",
-        fx: "/tools/fx",
+        fx: "/terminal/fx",
         learn: "/studio",
       },
       pathAliases: {
@@ -12067,17 +12370,23 @@
   const normalizeModelCouncilProviderId = (provider) => {
     const value = String(provider || "").trim().toLowerCase();
     if (!value) return "";
+    if (value === "chatgpt") return "openai";
     if (value === "amazon_nova") return "amazon_nova";
     if (value === "perplexity_sonar") return "perplexity";
+    if (value === "anthropic") return "claude";
+    if (value === "amazon-nova") return "amazon_nova";
     return value;
   };
 
   const modelCouncilProviderFromModel = (modelId) => {
     const id = normalizeAiModelId(modelId || "").toLowerCase();
     if (!id) return "openai";
+    if (id.startsWith("claude")) return "claude";
+    if (id.startsWith("deepseek")) return "deepseek";
     if (id.startsWith("amazon.nova")) return "amazon_nova";
     if (id.startsWith("gemini")) return "gemini";
     if (id.startsWith("mistral")) return "mistral";
+    if (id.startsWith("qwen")) return "qwen";
     if (id.startsWith("sonar")) return "perplexity";
     if (id.startsWith("other/")) return "other";
     return "openai";
@@ -12271,13 +12580,36 @@
     ui.tickerQueryModulesOutput.classList.remove("hidden");
   };
 
+  const renderOutputPublishControlsMarkup = ({ requestId = "", requestType = "" } = {}) => {
+    const id = String(requestId || "").trim();
+    const type = String(requestType || "").trim();
+    if (!id) {
+      return `<div class="small muted">Save this output to publish it to Explore.</div>`;
+    }
+    const request = typeof getMyRequestById === "function" ? getMyRequestById(id) : null;
+    const published = Boolean(request?.published);
+    const stateLabel = published ? "Published to Explore" : "Not published to Explore";
+    return `
+      <div class="task-chip-row" data-output-publish-controls data-request-id="${escapeHtml(id)}" data-request-type="${escapeHtml(type)}">
+        <span class="status status-icon-only ${published ? "fulfilled" : "pending"}" role="img" aria-label="${escapeHtml(stateLabel)}" title="${escapeHtml(stateLabel)}">
+          ${icon(published ? "eye" : "eye-off")}
+        </span>
+        ${
+          published
+            ? `<button class="task-chip" type="button" data-action="output-unpublish" data-request-id="${escapeHtml(id)}" data-request-type="${escapeHtml(type)}">${icon(
+                "eye-off"
+              )}<span>Unpublish</span></button>`
+            : `<button class="task-chip" type="button" data-action="output-publish" data-request-id="${escapeHtml(id)}" data-request-type="${escapeHtml(type)}">${icon(
+                "send"
+              )}<span>Publish to Explore</span></button>`
+        }
+      </div>
+    `;
+  };
+
   const renderTickerQueryResult = (payload) => {
     if (!ui.tickerQueryOutput) return;
-    const answer = escapeHtml(String(payload?.answer || "").trim() || "No answer returned.");
-    const modelRaw = String(payload?.model || "gpt-5-mini");
-    const providerRaw = normalizeModelCouncilProviderId(payload?.provider || modelCouncilProviderFromModel(modelRaw) || "openai");
-    const model = escapeHtml(modelRaw);
-    const provider = escapeHtml(MODEL_PROVIDER_LABEL[providerRaw] || providerRaw || "OpenAI");
+    const answerText = String(payload?.answer || "").trim() || "No answer returned.";
     const context = payload?.context && typeof payload.context === "object" ? payload.context : {};
     const logoUrlRaw = String(context.logoUrl || context.logo_url || "").trim();
     const logoUrl = /^https?:\/\//i.test(logoUrlRaw) ? logoUrlRaw : "";
@@ -12289,18 +12621,20 @@
     const responseId = String(payload?.responseId || state.tickerContext.tickerQueryLastResponseId || "").trim();
     const feedbackState = String(payload?.feedback || state.tickerContext.tickerQueryFeedback || "").trim().toLowerCase();
     const shareUrl = String(payload?.shareUrl || state.tickerContext.tickerQueryShareUrl || "").trim();
+    const requestDocId = String(payload?.requestDocId || state.tickerContext.tickerQueryRequestId || "").trim();
 
     ui.tickerQueryOutput.innerHTML = `
       <div class="small muted" style="display:flex; align-items:center; gap:10px;">
         ${logoUrl ? `<img src="${escapeHtml(logoUrl)}" alt="" loading="lazy" style="width:20px; height:20px; border-radius:50%; object-fit:cover;" />` : ""}
-        <span>Provider: ${provider} · Model: ${model}</span>
+        <span>Model Council response</span>
       </div>
-      <div class="small" style="margin-top:10px; white-space:pre-wrap;">${answer}</div>
+      <div class="small markdown-output" style="margin-top:10px;">${renderMarkdown(answerText, { fallback: "No answer returned." })}</div>
       <div class="model-council-actions">
         <button class="task-chip${feedbackState === "like" ? " active" : ""}" type="button" data-action="model-council-like" data-response-id="${escapeHtml(responseId)}">Like</button>
         <button class="task-chip${feedbackState === "dislike" ? " active" : ""}" type="button" data-action="model-council-dislike" data-response-id="${escapeHtml(responseId)}">Dislike</button>
         <button class="task-chip" type="button" data-action="model-council-share" data-response-id="${escapeHtml(responseId)}" ${responseId ? "" : "disabled"}>${icon("share-ios")}<span>Share link</span></button>
       </div>
+      ${renderOutputPublishControlsMarkup({ requestId: requestDocId, requestType: "modelCouncil" })}
       ${shareUrl ? `<div class="small muted">Shared: <a href="${escapeHtml(shareUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(shareUrl)}</a></div>` : ""}
       <p class="small muted solve-now-disclaimer">${escapeHtml(MODEL_COUNCIL_OUTPUT_DISCLAIMER)}</p>
       <div class="small muted" style="margin-top:10px;">
@@ -12636,7 +12970,7 @@
   };
 
   const fetchMyRequestsList = async ({ force = false, notify = false } = {}) => {
-    if (!hasFullAccount()) {
+    if (!hasSessionUser()) {
       state.myRequests = [];
       state.myRequestsById = {};
       state.myRequestsLoadedAt = 0;
@@ -12707,6 +13041,7 @@
         const createdAt = escapeHtml(formatTimestamp(item?.createdAt || item?.createdAtMs));
         const updatedAt = escapeHtml(formatTimestamp(item?.updatedAt || item?.updatedAtMs));
         const published = Boolean(item?.published);
+        const publishStateLabel = published ? "Published to Explore" : "Not published to Explore";
         const share = item?.share && typeof item.share === "object" ? item.share : {};
         const shareVisibility = escapeHtml(String(share?.visibility || "private").toLowerCase());
         const summary = escapeHtml(String((item?.outputsMeta || {})?.summary || ""));
@@ -12717,7 +13052,9 @@
                 <div class="order-title">${title}</div>
                 <div class="small">ID: ${id}</div>
               </div>
-              <span class="status ${published ? "fulfilled" : "pending"}">${published ? "published" : "unpublished"}</span>
+              <span class="status status-icon-only ${published ? "fulfilled" : "pending"}" role="img" aria-label="${escapeHtml(
+                publishStateLabel
+              )}" title="${escapeHtml(publishStateLabel)}">${icon(published ? "eye" : "eye-off")}</span>
             </div>
             <div class="order-meta">
               <div><strong>Type</strong> ${typeLabel}</div>
@@ -12732,7 +13069,11 @@
               <button class="cta secondary small" type="button" data-action="my-request-share" data-request-id="${id}">${icon("share-ios")}<span>Share</span></button>
               <button class="cta secondary small" type="button" data-action="my-request-rename" data-request-id="${id}">${icon("edit-pencil")}<span>Rename</span></button>
               <button class="cta secondary small" type="button" data-action="my-request-duplicate" data-request-id="${id}">${icon("copy")}<span>Duplicate</span></button>
-              ${published ? `<button class="cta secondary small" type="button" data-action="my-request-unpublish" data-request-id="${id}">${icon("eye-off")}<span>Unpublish</span></button>` : ""}
+              ${
+                published
+                  ? `<button class="cta secondary small" type="button" data-action="my-request-unpublish" data-request-id="${id}">${icon("eye-off")}<span>Unpublish</span></button>`
+                  : `<button class="cta secondary small" type="button" data-action="my-request-publish" data-request-id="${id}">${icon("send")}<span>Publish</span></button>`
+              }
               <button class="cta secondary small danger" type="button" data-action="my-request-delete" data-request-id="${id}">${icon("trash")}<span>Delete</span></button>
             </div>
           </div>
@@ -12771,7 +13112,7 @@
         return haystack.includes(searchText);
       });
 
-      if (!hasFullAccount()) {
+      if (!hasSessionUser()) {
         controls.status.textContent = "Sign in to manage requests.";
         controls.list.innerHTML = `<div class="small muted">Sign in to load your requests.</div>`;
         return;
@@ -12827,7 +13168,7 @@
   };
 
   const upsertMyRequest = async (payload = {}) => {
-    if (!hasFullAccount()) return null;
+    if (!hasSessionUser()) return null;
     const type = normalizeMyRequestType(payload.type);
     if (!type || !MY_REQUEST_TYPES.has(type)) return null;
     const headers = await buildApiAuthHeaders({ includeJson: true });
@@ -12871,6 +13212,21 @@
     const request = body?.request && typeof body.request === "object" ? body.request : null;
     if (request) {
       upsertMyRequestInState(request);
+    } else if (target.endsWith("/publish") || target.endsWith("/unpublish")) {
+      const existing = getMyRequestById(id);
+      if (existing) {
+        const nextPublished = target.endsWith("/publish");
+        upsertMyRequestInState({
+          ...existing,
+          published: nextPublished,
+          publishedAtMs: nextPublished ? Date.now() : null,
+          explorePostId: nextPublished
+            ? String(body?.post?.id || body?.explorePostId || existing.explorePostId || "").trim()
+            : "",
+          updatedAtMs: Date.now(),
+          updatedAt: new Date().toISOString(),
+        });
+      }
     } else if (method === "DELETE" || body?.deleted) {
       removeMyRequestFromState(id);
     }
@@ -13071,14 +13427,14 @@
       : [];
     const source = rows.length ? rows.filter((row) => row?.available !== false) : fallbackRows;
     if (!source.length) {
-      ui.tickerQueryProvider.innerHTML = `<option value="openai">OpenAI</option>`;
+      ui.tickerQueryProvider.innerHTML = `<option value="openai">ChatGPT</option>`;
       applyTickerQueryModelSelection("gpt-5-mini", "openai");
       return;
     }
     ui.tickerQueryProvider.innerHTML = source
       .map((row) => {
         const id = normalizeModelCouncilProviderId(row?.id || "");
-        const label = String(row?.displayName || MODEL_PROVIDER_LABEL[id] || id || "").trim();
+        const label = String(row?.displayName || row?.label || MODEL_PROVIDER_LABEL[id] || id || "").trim();
         return `<option value="${escapeHtml(id)}">${escapeHtml(label)}</option>`;
       })
       .join("");
@@ -13095,14 +13451,18 @@
     renderTickerQueryModels(models, { provider: selectedProvider });
   };
 
-  const loadTickerQueryModels = async ({ force = false } = {}) => {
+  let tickerQueryModelsController = null;
+  let tickerQueryModelsNonce = 0;
+
+  const loadTickerQueryModels = async ({ force = false, providerOverride = "" } = {}) => {
     if (!ui.tickerQueryModel) return;
-    if (!force && state.tickerContext.tickerQueryModelsLoaded && state.tickerContext.tickerQueryModels.length) {
+    const requestedProvider = normalizeModelCouncilProviderId(providerOverride || "");
+    if (!force && !requestedProvider && state.tickerContext.tickerQueryModelsLoaded && state.tickerContext.tickerQueryModels.length) {
       renderTickerQueryProviderOptions(state.tickerContext.tickerQueryProviders || [], state.tickerContext.tickerQueryModels);
       return;
     }
 
-    const fallback = () => {
+    const fallback = (preferredProvider = "") => {
       const localModels = AI_MODEL_CATALOG.map((model) => ({
         id: normalizeAiModelId(model.id),
         provider: normalizeModelCouncilProviderId(model.provider || modelCouncilProviderFromModel(model.id)),
@@ -13117,18 +13477,65 @@
         ).values()
       );
       state.tickerContext.tickerQueryModelsLoaded = true;
+      if (ui.tickerQueryProviderHint) {
+        ui.tickerQueryProviderHint.textContent = "Provider list fallback is active (local catalog).";
+      }
+      if (ui.tickerQueryModelHint) {
+        ui.tickerQueryModelHint.textContent = "Model list fallback is active. Some remote providers may be temporarily unavailable.";
+      }
       renderTickerQueryProviderOptions(state.tickerContext.tickerQueryProviders, localModels);
+      if (preferredProvider) {
+        renderTickerQueryModels(localModels, { provider: preferredProvider });
+      }
     };
+
+    tickerQueryModelsNonce += 1;
+    const requestNonce = tickerQueryModelsNonce;
+    if (tickerQueryModelsController?.abort) tickerQueryModelsController.abort();
+    tickerQueryModelsController = typeof AbortController !== "undefined" ? new AbortController() : null;
+
+    if (ui.tickerQueryProvider && (!ui.tickerQueryProvider.options || !ui.tickerQueryProvider.options.length)) {
+      ui.tickerQueryProvider.innerHTML = `<option value="openai">Loading providers...</option>`;
+    }
+    ui.tickerQueryModel.innerHTML = `<option value="">Loading models...</option>`;
 
     try {
       const headers = await buildApiAuthHeaders();
-      const response = await fetch("/api/model-council/models", {
+      const providerResponse = await fetch("/api/model-council/providers", {
         method: "GET",
         headers,
         credentials: "same-origin",
+        signal: tickerQueryModelsController?.signal,
+      });
+      const providerPayload = await providerResponse.json().catch(() => ({}));
+      if (!providerResponse.ok) throw new Error(String(providerPayload?.error || "Provider list unavailable.").trim());
+      const providerRows = Array.isArray(providerPayload?.providers) ? providerPayload.providers : [];
+      const availableProviders = providerRows
+        .map((row) => ({
+          id: normalizeModelCouncilProviderId(row?.id || ""),
+          label: String(row?.label || row?.displayName || "").trim(),
+          displayName: String(row?.displayName || row?.label || "").trim(),
+          available: row?.available !== false,
+        }))
+        .filter((row) => row.id && row.available !== false);
+
+      const persistedProvider = normalizeModelCouncilProviderId(
+        requestedProvider || state.tickerContext.tickerQueryProvider || safeLocalStorageGet(TICKER_QUERY_PROVIDER_KEY) || ""
+      );
+      const availableSet = new Set(availableProviders.map((row) => row.id));
+      const activeProvider = availableSet.has(persistedProvider)
+        ? persistedProvider
+        : normalizeModelCouncilProviderId(providerPayload?.defaultProvider || availableProviders[0]?.id || "openai");
+
+      const response = await fetch(`/api/model-council/models?provider=${encodeURIComponent(activeProvider || "openai")}`, {
+        method: "GET",
+        headers,
+        credentials: "same-origin",
+        signal: tickerQueryModelsController?.signal,
       });
       if (!response.ok) throw new Error("Model list unavailable.");
       const payload = await response.json();
+      if (requestNonce !== tickerQueryModelsNonce) return;
       const remoteModels = Array.isArray(payload?.models) ? payload.models : [];
       const models = remoteModels
         .map((row) => {
@@ -13144,14 +13551,37 @@
           };
         })
         .filter(Boolean);
-      if (!models.length) throw new Error("No compatible models returned.");
-      const providers = Array.isArray(payload?.providers) ? payload.providers : [];
-      state.tickerContext.tickerQueryModels = models;
+      const localModels = AI_MODEL_CATALOG.map((row) => {
+        const id = normalizeAiModelId(row?.id || "");
+        if (!id) return null;
+        const provider = normalizeModelCouncilProviderId(row?.provider || modelCouncilProviderFromModel(id));
+        return {
+          id,
+          provider,
+          label: String(row?.label || id),
+          group: String(row?.group || tickerQueryModelGroup(id, provider)),
+          hint: String(row?.hint || tickerQueryModelHint(id, provider)),
+        };
+        }).filter(Boolean);
+      const mergedMap = new Map();
+      localModels.forEach((row) => mergedMap.set(row.id, row));
+      models.forEach((row) => mergedMap.set(row.id, row));
+      const mergedModels = Array.from(mergedMap.values());
+      if (!mergedModels.length) throw new Error("No compatible models returned.");
+      const providers = availableProviders.length ? availableProviders : (Array.isArray(payload?.providers) ? payload.providers : []);
+      state.tickerContext.tickerQueryModels = mergedModels;
       state.tickerContext.tickerQueryProviders = providers;
       state.tickerContext.tickerQueryModelsLoaded = true;
-      renderTickerQueryProviderOptions(providers, models);
+      renderTickerQueryProviderOptions(providers, mergedModels);
+      renderTickerQueryModels(mergedModels, { provider: activeProvider });
     } catch (error) {
-      fallback();
+      if (error?.name === "AbortError") return;
+      fallback(requestedProvider);
+      showToast("Failed to load models. Using fallback catalog.", "warn");
+    } finally {
+      if (requestNonce === tickerQueryModelsNonce) {
+        tickerQueryModelsController = null;
+      }
     }
   };
 
@@ -13568,6 +13998,7 @@
       applyTickerQueryModelSelection(selectedModel, selectedProvider);
       setTickerQueryModulesSelection(selectedModules, { persist: true });
       renderTickerQueryCacheStats(null, { visible: false });
+      state.tickerContext.tickerQueryRequestId = "";
       renderTickerQueryResult({
         answer: "",
         model: selectedModel,
@@ -13616,8 +14047,12 @@
 	        completion_tokens: Number(usage?.completion_tokens || 0),
 	        cached_tokens: Number(usage?.cached_tokens || 0),
 	      });
-	      upsertMyRequest({
+        const requestDocId = String(responsePayload.responseId || "").trim()
+          ? `modelCouncil__${String(responsePayload.responseId || "").trim()}`
+          : `modelCouncil__${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        const savedRequest = await upsertMyRequest({
 	        type: "modelCouncil",
+          requestId: requestDocId,
 	        title: `${symbol} Model Council`,
 	        input: {
 	          ticker: symbol,
@@ -13640,7 +14075,17 @@
 	          collection: "model_council_responses",
 	          id: String(responsePayload.responseId || "").trim(),
 	        },
-	      }).catch(() => {});
+          published: shouldAutoPublishForType("modelCouncil"),
+	      }).catch(() => null);
+        state.tickerContext.tickerQueryRequestId = String(savedRequest?.id || requestDocId).trim();
+        renderTickerQueryResult({
+          ...(state.tickerContext.tickerQueryLastResponse || responsePayload),
+          answer: responsePayload.answer || "No answer returned.",
+          context: responsePayload.context || {},
+          responseId: responsePayload.responseId || "",
+          citations: responsePayload.citations || [],
+          requestDocId: state.tickerContext.tickerQueryRequestId,
+        });
 	    } catch (error) {
 	      setOutputReady(ui.tickerQueryOutput);
 	      renderTickerQueryErrorState({
@@ -15209,7 +15654,7 @@
       : DEFAULT_LLM_ALLOWED_MODELS;
     const globalAllowed = rawGlobalAllowed
       .map((x) => normalizeAiModelId(String(x).trim()))
-      .filter((modelId) => modelId && (modelId.startsWith("gpt-5") || modelId.startsWith("amazon.nova")));
+      .filter(Boolean);
     const globalSet = new Set(globalAllowed);
     const tiers = state.remoteFlags.aiUsageTiers && typeof state.remoteFlags.aiUsageTiers === "object"
       ? state.remoteFlags.aiUsageTiers
@@ -15224,11 +15669,11 @@
     const rawAllowed = Array.isArray(config.allowed_models) ? config.allowed_models : [];
     const allowedModels = rawAllowed
       .map((x) => normalizeAiModelId(String(x).trim()))
-      .filter((modelId) => modelId && (modelId.startsWith("gpt-5") || modelId.startsWith("amazon.nova")))
+      .filter(Boolean)
       .filter((modelId) => !globalSet.size || globalSet.has(modelId));
     const fallbackAllowed = (AI_USAGE_TIER_DEFAULTS[normalizedKey]?.allowed_models || AI_USAGE_TIER_DEFAULTS[key]?.allowed_models || AI_USAGE_TIER_DEFAULTS.free.allowed_models)
       .map((x) => normalizeAiModelId(String(x).trim()))
-      .filter((modelId) => modelId && (modelId.startsWith("gpt-5") || modelId.startsWith("amazon.nova")))
+      .filter(Boolean)
       .filter((modelId) => !globalSet.size || globalSet.has(modelId));
     const weeklyLimitRaw = Number(config.weekly_limit ?? config.daily_limit ?? AI_USAGE_TIER_DEFAULTS[normalizedKey]?.weekly_limit ?? AI_USAGE_TIER_DEFAULTS[key]?.weekly_limit ?? 3);
     const weeklyLimit = Number.isFinite(weeklyLimitRaw) ? Math.max(1, weeklyLimitRaw) : 3;
@@ -17255,12 +17700,11 @@
 
   const renderForecastAiSummaryMarkup = (forecastDoc) => {
     const forecastId = String(forecastDoc?.id || state.tickerContext.forecastId || "").trim();
+    const requestDocId = forecastId ? `forecast__${forecastId}` : "";
     const summary = state.tickerContext.forecastAiSummary && typeof state.tickerContext.forecastAiSummary === "object"
       ? state.tickerContext.forecastAiSummary
       : null;
     const isCurrent = summary && String(summary.requestId || "").trim() === forecastId;
-    const model = String(isCurrent ? summary?.model || "" : "").trim();
-    const provider = String(isCurrent ? summary?.provider || "" : "").trim();
     const latencyMs = Number(isCurrent ? summary?.latencyMs : NaN);
     const responseId = String(isCurrent ? summary?.responseId || "" : "").trim();
     const shareUrl = String(isCurrent ? summary?.shareUrl || "" : "").trim();
@@ -17274,9 +17718,7 @@
       : error
         ? error
         : answer
-          ? `${model || "Model"}${provider ? ` · ${provider}` : ""}${
-              Number.isFinite(latencyMs) && latencyMs >= 0 ? ` · ${Math.round(latencyMs)}ms` : ""
-            }`
+          ? `Summary ready${Number.isFinite(latencyMs) && latencyMs >= 0 ? ` · ${Math.round(latencyMs)}ms` : ""}`
           : "Run a forecast to generate an automatic AI narrative.";
     return `
       <div class="results-panel forecast-ai-summary-panel">
@@ -17289,7 +17731,7 @@
               : error
                 ? `<div class="small muted">${escapeHtml(error)}</div>`
                 : answer
-                  ? `<div>${escapeHtml(answer).replace(/\n/g, "<br>")}</div>`
+                  ? `<div class="markdown-output">${renderMarkdown(answer, { fallback: "No AI narrative generated yet." })}</div>`
                   : `<div class="small muted">No AI narrative generated yet.</div>`
           }
         </div>
@@ -17304,6 +17746,7 @@
             forecastId
           )}" data-response-id="${escapeHtml(responseId)}" ${disabled || (!answer && !shareUrl) ? "disabled" : ""}>${icon("share-ios")}<span>Share link</span></button>
         </div>
+        ${renderOutputPublishControlsMarkup({ requestId: requestDocId, requestType: "forecast" })}
         ${
           shareUrl
             ? `<div class="small muted" style="margin-top:8px;">Shared: <a href="${escapeHtml(shareUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(
@@ -17610,7 +18053,7 @@
   };
 
   const loadMyRequestIntoUi = async ({ requestId = "", request = null, db, functions, notify = true } = {}) => {
-    if (!hasFullAccount()) {
+    if (!hasSessionUser()) {
       throw new Error("Sign in to load saved requests.");
     }
     const id = String(requestId || request?.id || "").trim();
@@ -17666,7 +18109,7 @@
         const summary = String(outputsMeta.summary || "").trim();
         ui.technicalsOutput.innerHTML = `<div class="small muted">${
           summary ? escapeHtml(summary) : "Indicator inputs restored. Run indicators to refresh values."
-        }</div>`;
+        }</div>${renderOutputPublishControlsMarkup({ requestId: String(item.id || "").trim(), requestType: "indicator" })}`;
       }
       if (notify) showToast("Indicator request loaded.");
       return item;
@@ -17693,6 +18136,7 @@
       const answer = String(outputsMeta.answer || outputsMeta.summary || "").trim();
       if (answer) {
         const responseId = sourceId || String(item.id || "").trim();
+        state.tickerContext.tickerQueryRequestId = String(item.id || "").trim();
         state.tickerContext.tickerQueryLastResponseId = responseId;
         const responsePayload = {
           answer,
@@ -17704,6 +18148,7 @@
           selectedModules: Array.isArray(input.modules) ? input.modules : [],
           responseId,
           citations: [],
+          requestDocId: String(item.id || "").trim(),
         };
         state.tickerContext.tickerQueryLastResponse = responsePayload;
         renderTickerQueryResult(responsePayload);
@@ -18817,12 +19262,6 @@
           state.panelAutoloaded.news = true;
         }
 
-        if (next === "events-calendar") {
-          const first = !state.panelAutoloaded.eventsCalendar;
-          state.panelAutoloaded.eventsCalendar = true;
-          loadEarningsCalendar({ force: first, notify: false });
-        }
-
         if (next === "market-headlines") {
           const first = !state.panelAutoloaded.marketHeadlines;
           state.panelAutoloaded.marketHeadlines = true;
@@ -19405,8 +19844,26 @@
                 {},
                 { method: "POST", path: `/api/my-requests/${encodeURIComponent(requestId)}/unpublish` }
               );
+              await fetchMyRequestsList({ force: true });
+              renderMyRequestsPanels();
               showToast("Request unpublished from Explore.");
               logEvent("my_request_unpublished", {
+                request_id: requestId,
+                type: normalizeMyRequestType(request?.type || ""),
+              });
+              return;
+            }
+
+            if (action === "my-request-publish") {
+              await updateMyRequest(
+                requestId,
+                {},
+                { method: "POST", path: `/api/my-requests/${encodeURIComponent(requestId)}/publish` }
+              );
+              await fetchMyRequestsList({ force: true });
+              renderMyRequestsPanels();
+              showToast("Request published to Explore.");
+              logEvent("my_request_published", {
                 request_id: requestId,
                 type: normalizeMyRequestType(request?.type || ""),
               });
@@ -19433,6 +19890,70 @@
             showToast(error.message || "Unable to update request.", "warn");
           } finally {
             button.disabled = previousDisabled;
+          }
+        });
+
+        document.addEventListener("click", async (event) => {
+          const publishBtn = event.target.closest('[data-action="output-publish"], [data-action="output-unpublish"]');
+          if (!publishBtn) return;
+          event.preventDefault();
+          const requestId = String(publishBtn.dataset.requestId || "").trim();
+          const requestType = normalizeMyRequestType(publishBtn.dataset.requestType || "");
+          if (!requestId) return;
+
+          try {
+            await ensureSessionUser({
+              reason: "output_publish_requires_session",
+              message: "Sign in to publish outputs to Explore.",
+            });
+          } catch (error) {
+            showToast(error?.message || "Unable to start guest session.", "warn");
+            return;
+          }
+
+          publishBtn.disabled = true;
+          try {
+            const nextPublished = publishBtn.dataset.action === "output-publish";
+            const body = await updateMyRequest(
+              requestId,
+              {},
+              {
+                method: "POST",
+                path: `/api/my-requests/${encodeURIComponent(requestId)}/${nextPublished ? "publish" : "unpublish"}`,
+              }
+            );
+            const refreshedRequest =
+              body?.request && typeof body.request === "object"
+                ? body.request
+                : getMyRequestById(requestId);
+            if (refreshedRequest && typeof refreshedRequest === "object") {
+              upsertMyRequestInState(refreshedRequest);
+            }
+            const host = publishBtn.closest("[data-output-publish-controls]");
+            if (host) {
+              host.outerHTML = renderOutputPublishControlsMarkup({ requestId, requestType });
+            }
+            if (requestType === "forecast" && state.tickerContext.forecastDoc) {
+              renderForecastDetails(state.tickerContext.forecastDoc);
+            } else if (requestType === "modelCouncil") {
+              renderTickerQueryResult({
+                ...(state.tickerContext.tickerQueryLastResponse || {}),
+                requestDocId: requestId,
+              });
+            } else if (requestType === "indicator" && ui.technicalsOutput) {
+              const indicatorHost = ui.technicalsOutput.querySelector("[data-output-publish-controls]");
+              if (indicatorHost) {
+                indicatorHost.outerHTML = renderOutputPublishControlsMarkup({
+                  requestId,
+                  requestType: "indicator",
+                });
+              }
+            }
+            showToast(nextPublished ? "Published to Explore." : "Unpublished from Explore.");
+          } catch (error) {
+            showToast(error?.message || "Unable to update publish status.", "warn");
+          } finally {
+            publishBtn.disabled = false;
           }
         });
 
@@ -21469,7 +21990,7 @@
 				        logEvent("forecast_request", { ticker: payload.ticker, interval: payload.interval, service: payload.service });
 				        showToast("Forecast saved.");
 	            recordPromoForecastUsage();
-	            upsertMyRequest({
+              const savedForecastRequest = await upsertMyRequest({
               type: "forecast",
               requestId: `forecast__${requestId}`,
               title: `${normalizeTicker(payload.ticker || "") || "Ticker"} forecast`,
@@ -21489,11 +22010,13 @@
                   chartParamsHash: String(cacheMeta?.paramsHash || "").trim(),
                   chartRows: Number(cacheMeta?.rowCount || 0) || 0,
 	              },
-	              sourceRef: {
-	                collection: "forecast_requests",
-	                id: requestId,
-	              },
-	            }).catch(() => {});
+              sourceRef: {
+                collection: "forecast_requests",
+                id: requestId,
+              },
+              published: shouldAutoPublishForType("forecast"),
+	            }).catch(() => null);
+              state.tickerContext.forecastRequestId = String(savedForecastRequest?.id || `forecast__${requestId}`).trim();
 
 				        try {
 			          if (ui.tickerChart) {
@@ -21697,6 +22220,8 @@
 	        const rows = data.latest || [];
           const analysis = data.analysis && typeof data.analysis === "object" ? data.analysis : {};
           const prediction = analysis.prediction && typeof analysis.prediction === "object" ? analysis.prediction : {};
+          const indicatorRequestId = `indicator__${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+          const indicatorAutoPublish = shouldAutoPublishForType("indicator");
 	        if (ui.technicalsOutput) {
 	          setOutputReady(ui.technicalsOutput);
 		          if (!rows.length) {
@@ -21709,8 +22234,8 @@
                     ? ((targetPrice - lastClose) / lastClose) * 100
                     : null;
                 const keySignals = Array.isArray(analysis.keySignals) ? analysis.keySignals.slice(0, 6) : [];
-                const summaryText = escapeHtml(String(analysis.summary || "").trim());
-                const narrativeText = escapeHtml(String(analysis.text || "").trim());
+                const summaryText = String(analysis.summary || "").trim();
+                const narrativeText = String(analysis.text || "").trim();
 		            ui.technicalsOutput.innerHTML = `
                   <div class="table-wrap">
 		                <table class="data-table">
@@ -21730,10 +22255,7 @@
                     summaryText || narrativeText
                       ? `<div class="results-panel" style="margin-top: 12px;">
                           <h3>AI indicator analysis</h3>
-                          <div class="small muted">Provider: ${escapeHtml(String(analysis.provider || "openai"))} · Model: ${escapeHtml(
-                          String(analysis.model || "")
-                        )}</div>
-                          ${summaryText ? `<div class="small" style="margin-top:8px;">${summaryText}</div>` : ""}
+                          ${summaryText ? `<div class="small markdown-output" style="margin-top:8px;">${renderMarkdown(summaryText, { fallback: "" })}</div>` : ""}
                           <div class="form-grid" style="margin-top:10px;">
                             <div class="profile-item"><span class="label">Direction</span><span class="value">${escapeHtml(
                               String(prediction.direction || "neutral")
@@ -21758,7 +22280,11 @@
                                   .join("")}</ul>`
                               : ""
                           }
-                          ${narrativeText ? `<div class="small" style="margin-top:10px; white-space:pre-wrap;">${narrativeText}</div>` : ""}
+                          ${narrativeText ? `<div class="small markdown-output" style="margin-top:10px;">${renderMarkdown(narrativeText, { fallback: "" })}</div>` : ""}
+                          ${renderOutputPublishControlsMarkup({
+                            requestId: indicatorRequestId,
+                            requestType: "indicator",
+                          })}
                           <p class="small muted solve-now-disclaimer" style="margin-top:10px;">${escapeHtml(
                             String(analysis.disclaimer || MODEL_COUNCIL_OUTPUT_DISCLAIMER)
                           )}</p>
@@ -21785,8 +22311,9 @@
           }
         }
 	        logEvent("technicals_request", { ticker: payload.ticker });
-        upsertMyRequest({
+        const savedIndicatorRequest = await upsertMyRequest({
           type: "indicator",
+          requestId: indicatorRequestId,
           title: `${normalizeTicker(payload.ticker || "") || "Ticker"} indicators`,
           input: {
             ticker: normalizeTicker(payload.ticker || ""),
@@ -21814,7 +22341,16 @@
             collection: "indicator_requests",
             id: `ind_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
           },
-        }).catch(() => {});
+          published: indicatorAutoPublish,
+        }).catch(() => null);
+        state.tickerContext.indicatorRequestId = String(savedIndicatorRequest?.id || indicatorRequestId).trim();
+        const indicatorPublishHost = ui.technicalsOutput?.querySelector?.("[data-output-publish-controls]");
+        if (indicatorPublishHost) {
+          indicatorPublishHost.outerHTML = renderOutputPublishControlsMarkup({
+            requestId: state.tickerContext.indicatorRequestId,
+            requestType: "indicator",
+          });
+        }
 	      } catch (error) {
 	        showToast(error.message || "Unable to run indicators.", "warn");
 	      }
@@ -22080,7 +22616,10 @@
         const providerId = normalizeModelCouncilProviderId(ui.tickerQueryProvider?.value || "openai");
         state.tickerContext.tickerQueryProvider = providerId;
         safeLocalStorageSet(TICKER_QUERY_PROVIDER_KEY, providerId);
-        renderTickerQueryModels(state.tickerContext.tickerQueryModels || [], { provider: providerId });
+        loadTickerQueryModels({ force: true, providerOverride: providerId })
+          .catch(() => {
+            renderTickerQueryModels(state.tickerContext.tickerQueryModels || [], { provider: providerId });
+          });
       });
       ui.tickerQueryProvider.dataset.bound = "1";
     }
@@ -23067,12 +23606,10 @@
             state.user = null;
             state.earningsCalendar.followsUid = "anon";
             state.earningsCalendar.follows = readLocalEarningsFollows();
-            if (isPanelVisible("events-calendar")) {
-              renderEarningsCalendar();
-            }
             state.tickerContext.tickerHistory = readTickerHistory();
             renderTickerHistory();
             setAuthUi(null);
+            state.publishPrefs = { ...DEFAULT_AUTO_PUBLISH_PREFS };
             setUserId(null);
             if (!state.anonymousBootstrapInFlight) {
               state.anonymousBootstrapInFlight = true;
@@ -23118,9 +23655,6 @@
             return;
           }
             await loadEarningsFollowSet({ force: true }).catch(() => {});
-            if (isPanelVisible("events-calendar")) {
-              renderEarningsCalendar();
-            }
             await linkPendingCredentialIfPresent({ silent: true }).catch(() => {});
             state.tickerContext.tickerHistory = readTickerHistory();
             renderTickerHistory();
@@ -23138,6 +23672,11 @@
                 state.nativeAuthPromptRequested = false;
               }
             }
+
+            await ensureUserProfile(db, user);
+            await loadUserProfile(db, user);
+            setProfileStatus("Profile is used when publishing AI agents in Explore.");
+            setAuthUi(user);
 
 			      if (!hasFullAccount(user)) {
 		        state.userHasPaidPlan = false;
@@ -23218,10 +23757,6 @@
             state.aiFollowSet = new Set();
             state.aiLikeSet = new Set();
             state.aiDefaultsSeededWorkspaceId = "";
-            state.myRequests = [];
-            state.myRequestsById = {};
-            state.myRequestsLoading = false;
-            state.myRequestsLoadedAt = 0;
 			        state.sharedWorkspaces = [];
 	            state.sharedScreenerView = null;
             state.tickerContext.forecastDoc = null;
@@ -23230,23 +23765,13 @@
             state.tickerContext.forecastAiSummary = null;
             state.tickerContext.forecastCacheMeta = null;
 			        setActiveWorkspaceId("");
-            state.userProfile = {
-              username: "",
-              socialLinks: cloneDefaultProfileSocialLinks(),
-              avatar: "bull",
-              bio: "",
-              publicProfile: false,
-              publicScreenerSharing: false,
-              publicEmailOptIn: false,
-              stripeConnectAccountId: "",
-            };
-            renderProfileForm(state.userProfile, null);
 		        renderWorkspaceSelect(null);
 		        if (ui.productivityBoard) ui.productivityBoard.innerHTML = "";
 		        if (ui.tasksCalendar) ui.tasksCalendar.textContent = "Tasks with due dates will appear here.";
             if (ui.screenerLoadSelect) ui.screenerLoadSelect.innerHTML = `<option value="">Select a run</option>`;
             if (ui.screenerLoadStatus) ui.screenerLoadStatus.textContent = "";
             if (ui.screenerOutput && !ui.screenerOutput.dataset.loading) ui.screenerOutput.textContent = "Sign in to generate an AI Portfolio.";
+            await fetchMyRequestsList({ force: true }).catch(() => []);
             renderMyRequestsPanels();
             refreshScreenerModelUi();
             refreshScreenerCreditsUi();
@@ -23278,9 +23803,6 @@
 			        return;
 			      }
 
-	      await ensureUserProfile(db, user);
-        await loadUserProfile(db, user);
-        setProfileStatus("Profile is used when publishing AI agents in Explore.");
 	      startUserOrders(db, user);
 	      subscribeSharedWorkspaces(db, user);
 		      const activeWorkspaceId = resolveActiveWorkspaceId(user);

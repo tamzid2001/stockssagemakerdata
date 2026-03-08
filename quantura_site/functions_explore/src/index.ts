@@ -1347,6 +1347,131 @@ async function readMyRequestForOwner(uid: string, requestId: string): Promise<{ 
   return { id: snap.id, data };
 }
 
+function requestPostType(type: MyRequestType): PostType {
+  if (type === "forecast") return "forecast";
+  if (type === "screener") return "screener";
+  return "agent";
+}
+
+function deriveMyRequestExplorePostId(requestId: string, data: Record<string, unknown>): string {
+  const existing = sanitizeText(data.explorePostId, 220);
+  if (existing) return existing;
+
+  const type = normalizeMyRequestType(data.type) || "forecast";
+  const sourceRef = asPlainObject(data.sourceRef);
+  const sourceCollection = sanitizeText(sourceRef.collection, 80);
+  const sourceId = sanitizeText(sourceRef.id, 220);
+  if (type === "forecast" && sourceCollection === "forecast_requests" && sourceId) return `forecast_${sourceId}`;
+  if (type === "screener" && sourceCollection === "screener_runs" && sourceId) return `screener_${sourceId}`;
+  if (type === "modelCouncil" && sourceId) return `model_council_${sourceId}`;
+  if (type === "indicator" && sourceId) return `indicator_${sourceId}`;
+  return `request_${normalizeMyRequestId(requestId)}`;
+}
+
+function buildMyRequestTargetUrl(requestId: string, data: Record<string, unknown>): string {
+  const type = normalizeMyRequestType(data.type) || "forecast";
+  const sourceRef = asPlainObject(data.sourceRef);
+  const sourceCollection = sanitizeText(sourceRef.collection, 80);
+  const sourceId = sanitizeText(sourceRef.id, 220);
+
+  if (type === "forecast") {
+    if (sourceCollection === "forecast_requests" && sourceId) {
+      return `/forecasting?forecastId=${encodeURIComponent(sourceId)}`;
+    }
+    return `/forecasting?requestId=${encodeURIComponent(requestId)}`;
+  }
+  if (type === "screener") {
+    if (sourceCollection === "screener_runs" && sourceId) {
+      return `/screener?runId=${encodeURIComponent(sourceId)}`;
+    }
+    return `/screener?requestId=${encodeURIComponent(requestId)}`;
+  }
+  if (type === "indicator") {
+    return `/indicators?requestId=${encodeURIComponent(requestId)}`;
+  }
+  if (sourceCollection === MODEL_COUNCIL_RESPONSE_COLLECTION && sourceId) {
+    return `/model-council?responseId=${encodeURIComponent(sourceId)}`;
+  }
+  return `/model-council?requestId=${encodeURIComponent(requestId)}`;
+}
+
+async function upsertExplorePostFromMyRequest(
+  ownerUid: string,
+  requestId: string,
+  requestData: Record<string, unknown>,
+  visibility: Visibility
+): Promise<string> {
+  const type = normalizeMyRequestType(requestData.type) || "forecast";
+  const input = normalizeMyRequestInput(requestData.input);
+  const outputsMeta = trimOutputsMeta(requestData.outputsMeta);
+  const sourceRef = asPlainObject(requestData.sourceRef);
+  const ticker = firstTickerFromRequest(input, sourceRef, outputsMeta);
+  const title = sanitizeText(requestData.title, 180) || defaultMyRequestTitle(type, input);
+  const caption = sanitizeText(
+    outputsMeta.summary || input.question || input.notes || outputsMeta.answer || "",
+    400
+  );
+  const postId = deriveMyRequestExplorePostId(requestId, requestData);
+  const postType = requestPostType(type);
+  const topSymbols = Array.isArray(outputsMeta.topSymbols) ? outputsMeta.topSymbols : [];
+  const tickers = Array.from(
+    new Set(
+      [ticker, ...topSymbols.map((item) => normalizeTicker(item))]
+        .map((item) => normalizeTicker(item))
+        .filter(Boolean)
+    )
+  ).slice(0, 8) as string[];
+  const tags = Array.from(new Set([type.toLowerCase(), ...tickers.map((item) => item.toLowerCase())]))
+    .filter(Boolean)
+    .slice(0, 12);
+  const targetUrl = buildMyRequestTargetUrl(requestId, requestData);
+  const { handle, photoURL } = await readAuthorProfile(ownerUid);
+  const postRef = db.collection("posts").doc(postId);
+  const existingSnap = await postRef.get();
+  const existingData = existingSnap.exists ? ((existingSnap.data() || {}) as Record<string, unknown>) : {};
+  const existingCounts = normalizeCounts(existingData.counts);
+  const publishTimestamp = admin.firestore.FieldValue.serverTimestamp();
+  const createdAt = existingData.createdAt || publishTimestamp;
+  const updatedAt = publishTimestamp;
+  const createdAtMsForScore = existingData.createdAt ? getTimestampMs(existingData.createdAt) : Date.now();
+  const preview = extractPreview(
+    {
+      ...input,
+      ...outputsMeta,
+      metrics: outputsMeta.metrics,
+      summary: outputsMeta.summary || outputsMeta.answer || input.question || "",
+    },
+    postType
+  );
+
+  await postRef.set(
+    {
+      id: postId,
+      type: postType,
+      authorUid: ownerUid,
+      authorHandle: handle,
+      authorPhotoURL: photoURL,
+      title,
+      caption,
+      tickers,
+      tags,
+      preview,
+      targetUrl,
+      visibility,
+      updatedAt,
+      createdAt,
+      counts: existingCounts,
+      score: Number.isFinite(asFinite(existingData.score, NaN))
+        ? asFinite(existingData.score, 0)
+        : computeScore(existingCounts, createdAtMsForScore),
+      lastEngagedAt: publishTimestamp,
+    },
+    { merge: true }
+  );
+
+  return postId;
+}
+
 function computeDecay(recencyHours: number): number {
   const safe = Math.max(0, recencyHours);
   return Math.max(0.05, Math.exp(-safe / 48));
@@ -2185,6 +2310,30 @@ type LlmProviderPolicy = {
   premiumModels: string[];
 };
 
+type ModelCouncilProviderConfig = {
+  id: LlmProviderId;
+  label: string;
+  envName: string;
+  supportsModelList: boolean;
+  isConfigured: () => boolean;
+};
+
+type ModelCouncilProviderView = {
+  id: LlmProviderId;
+  label: string;
+  displayName: string;
+  available: boolean;
+  supportsModelList: boolean;
+};
+
+type ModelCouncilModelView = {
+  id: string;
+  label: string;
+  provider: LlmProviderId;
+  group: string;
+  hint: string;
+};
+
 const LLM_PROVIDER_POLICY: Record<LlmProviderId, LlmProviderPolicy> = {
   openai: {
     freeModels: ["gpt-5-nano", "gpt-5-mini", "gpt-4o-mini"],
@@ -2223,6 +2372,148 @@ const LLM_PROVIDER_POLICY: Record<LlmProviderId, LlmProviderPolicy> = {
     premiumModels: ["*"],
   },
 };
+
+const MODEL_COUNCIL_PROVIDER_REGISTRY: ModelCouncilProviderConfig[] = [
+  {
+    id: "openai",
+    label: "ChatGPT",
+    envName: "OPENAI_API_KEY",
+    supportsModelList: true,
+    isConfigured: () => Boolean(OPENAI_API_KEY),
+  },
+  {
+    id: "claude",
+    label: "Claude",
+    envName: "CLAUDE_API_KEY",
+    supportsModelList: true,
+    isConfigured: () => Boolean(CLAUDE_API_KEY),
+  },
+  {
+    id: "gemini",
+    label: "Gemini",
+    envName: "GEMINI_API_KEY",
+    supportsModelList: true,
+    isConfigured: () => Boolean(GEMINI_API_KEY),
+  },
+  {
+    id: "deepseek",
+    label: "DeepSeek",
+    envName: "DEEPSEEK_API_KEY",
+    supportsModelList: true,
+    isConfigured: () => Boolean(DEEPSEEK_API_KEY),
+  },
+  {
+    id: "mistral",
+    label: "Mistral",
+    envName: "MISTRAL_API_KEY",
+    supportsModelList: true,
+    isConfigured: () => Boolean(MISTRAL_API_KEY),
+  },
+  {
+    id: "perplexity",
+    label: "Perplexity Sonar",
+    envName: "PERPLEXITY_API_KEY",
+    supportsModelList: true,
+    isConfigured: () => Boolean(PERPLEXITY_API_KEY),
+  },
+  {
+    id: "qwen",
+    label: "Qwen",
+    envName: "QWEN_API_KEY",
+    supportsModelList: true,
+    isConfigured: () => Boolean(QWEN_API_KEY),
+  },
+  {
+    id: "amazon_nova",
+    label: "Amazon Nova",
+    envName: "AMAZON_NOVA_API_KEY + AMAZON_NOVA_BASE_URL",
+    supportsModelList: true,
+    isConfigured: () => Boolean(AMAZON_NOVA_API_KEY && AMAZON_NOVA_BASE_URL),
+  },
+  {
+    id: "other",
+    label: "Other",
+    envName: "MODEL_COUNCIL_OTHER_API_KEY + MODEL_COUNCIL_OTHER_BASE_URL",
+    supportsModelList: true,
+    isConfigured: () => Boolean(MODEL_COUNCIL_OTHER_API_KEY && MODEL_COUNCIL_OTHER_BASE_URL),
+  },
+];
+
+const MODEL_COUNCIL_MODELS: Record<LlmProviderId, ModelCouncilModelView[]> = {
+  openai: [
+    { id: "gpt-5-nano", label: "GPT-5 Nano", provider: "openai", group: "Fast", hint: "Lowest latency for quick triage." },
+    { id: "gpt-5-mini", label: "GPT-5 Mini", provider: "openai", group: "Balanced", hint: "Best default for most prompts." },
+    { id: "gpt-5", label: "GPT-5", provider: "openai", group: "Reasoning", hint: "High-depth reasoning and synthesis." },
+    { id: "gpt-5.4", label: "GPT-5.4", provider: "openai", group: "Research", hint: "Premium research-grade analysis." },
+  ],
+  claude: [
+    { id: "claude-haiku-4-5", label: "Claude Haiku 4.5", provider: "claude", group: "Fast", hint: "Lower-latency Claude path." },
+    { id: "claude-sonnet-4-5", label: "Claude Sonnet 4.5", provider: "claude", group: "Balanced", hint: "Strong synthesis for council runs." },
+    { id: "claude-opus-4-5", label: "Claude Opus 4.5", provider: "claude", group: "Research", hint: "Premium long-form research model." },
+  ],
+  gemini: [
+    { id: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash-Lite", provider: "gemini", group: "Fast", hint: "Lowest-cost Gemini path." },
+    { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash", provider: "gemini", group: "Balanced", hint: "Fast and balanced Gemini path." },
+    { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro", provider: "gemini", group: "Research", hint: "Higher-depth Gemini analysis." },
+  ],
+  deepseek: [
+    { id: "deepseek-chat", label: "DeepSeek Chat", provider: "deepseek", group: "Balanced", hint: "Cost-efficient baseline analysis." },
+    { id: "deepseek-reasoner", label: "DeepSeek Reasoner", provider: "deepseek", group: "Reasoning", hint: "Higher-depth reasoning path." },
+  ],
+  mistral: [
+    { id: "mistral-small-latest", label: "Mistral Small", provider: "mistral", group: "Fast", hint: "Low-latency Mistral route." },
+    { id: "mistral-large-latest", label: "Mistral Large", provider: "mistral", group: "Reasoning", hint: "Higher-depth Mistral reasoning." },
+  ],
+  perplexity: [
+    { id: "sonar", label: "Sonar", provider: "perplexity", group: "Research", hint: "Web-grounded baseline research path." },
+    { id: "sonar-pro", label: "Sonar Pro", provider: "perplexity", group: "Research", hint: "Higher-depth fresh web research." },
+    { id: "sonar-deep-research", label: "Sonar Deep Research", provider: "perplexity", group: "Research", hint: "Deep current-events analysis." },
+  ],
+  qwen: [
+    { id: "qwen-flash", label: "Qwen Flash", provider: "qwen", group: "Fast", hint: "Low-latency Qwen path." },
+    { id: "qwen-plus", label: "Qwen Plus", provider: "qwen", group: "Balanced", hint: "Balanced Qwen reasoning path." },
+    { id: "qwen-max", label: "Qwen Max", provider: "qwen", group: "Reasoning", hint: "Premium Qwen reasoning path." },
+  ],
+  amazon_nova: [
+    { id: "amazon.nova-lite-v1:0", label: "Nova Lite", provider: "amazon_nova", group: "Balanced", hint: "Amazon Nova lightweight route." },
+    { id: "amazon.nova-pro-v1:0", label: "Nova Pro", provider: "amazon_nova", group: "Reasoning", hint: "Amazon Nova high-depth route." },
+  ],
+  other: [
+    { id: DEFAULT_LLM_MODEL, label: DEFAULT_LLM_MODEL, provider: "other", group: "Custom", hint: "Custom provider model from backend config." },
+  ],
+};
+
+function listModelCouncilProviders(opts: { includeUnavailable?: boolean } = {}): ModelCouncilProviderView[] {
+  const includeUnavailable = Boolean(opts.includeUnavailable);
+  const rows = MODEL_COUNCIL_PROVIDER_REGISTRY.map((provider) => {
+    const available = provider.isConfigured();
+    return {
+      id: provider.id,
+      label: provider.label,
+      displayName: provider.label,
+      available,
+      supportsModelList: provider.supportsModelList,
+    };
+  });
+  if (includeUnavailable) return rows;
+  return rows.filter((row) => row.available);
+}
+
+function listModelCouncilModels(provider: LlmProviderId): ModelCouncilModelView[] {
+  const seeded = Array.isArray(MODEL_COUNCIL_MODELS[provider]) ? MODEL_COUNCIL_MODELS[provider] : [];
+  if (seeded.length) return seeded;
+  const policy = LLM_PROVIDER_POLICY[provider] || LLM_PROVIDER_POLICY.openai;
+  const ids = [...policy.freeModels, ...policy.premiumModels]
+    .map((id) => sanitizeText(id, 120))
+    .filter((id) => id && !id.includes("*"));
+  return Array.from(new Set(ids)).map((id) => ({
+    id,
+    label: id,
+    provider,
+    group: "Balanced",
+    hint: "Server-side model routing path.",
+  }));
+}
 
 function normalizeProvider(raw: unknown): LlmProviderId {
   const value = asString(raw).trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
@@ -4302,6 +4593,74 @@ ROUTES.post("/indicators/analyze", async (req, res) => {
       return;
     }
     res.status(500).json({ error: "indicator_analysis_failed", detail });
+  }
+});
+
+ROUTES.get("/model-council/providers", async (_req, res) => {
+  try {
+    const available = listModelCouncilProviders();
+    const all = listModelCouncilProviders({ includeUnavailable: true });
+    console.info(
+      "[ModelCouncil] provider availability",
+      all.map((item) => `${item.id}:${item.available ? "ready" : "missing"}`).join(", ")
+    );
+    if (!available.length) {
+      res.status(200).json({
+        providers: all,
+        defaultProvider: "openai",
+        warning: "no_provider_secrets_configured",
+      });
+      return;
+    }
+    res.status(200).json({
+      providers: available,
+      defaultProvider: available[0].id,
+      fetchedAt: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    const detail = sanitizeText(error?.message || error, 220) || "provider_lookup_failed";
+    res.status(500).json({
+      providers: [],
+      defaultProvider: "openai",
+      error: "provider_lookup_failed",
+      detail,
+    });
+  }
+});
+
+ROUTES.get("/model-council/models", async (req, res) => {
+  try {
+    const availableProviders = listModelCouncilProviders();
+    const allProviders = listModelCouncilProviders({ includeUnavailable: true });
+    const requestedProvider = normalizeProvider(req.query.provider || req.query.providerId || "openai");
+    const availableSet = new Set(availableProviders.map((item) => item.id));
+    const provider: LlmProviderId =
+      availableSet.has(requestedProvider) ? requestedProvider : (availableProviders[0]?.id as LlmProviderId) || "openai";
+    const models = listModelCouncilModels(provider);
+    if (!models.length) {
+      res.status(200).json({
+        provider,
+        providers: availableProviders.length ? availableProviders : allProviders,
+        models: [],
+        warning: "model_catalog_empty",
+      });
+      return;
+    }
+    res.status(200).json({
+      provider,
+      providers: availableProviders.length ? availableProviders : allProviders,
+      models,
+      fetchedAt: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    const detail = sanitizeText(error?.message || error, 220) || "model_lookup_failed";
+    res.status(500).json({
+      provider: "openai",
+      providers: [],
+      models: [],
+      error: "model_lookup_failed",
+      detail,
+    });
   }
 });
 
@@ -7595,6 +7954,66 @@ ROUTES.post("/my-requests/:requestId/share", async (req, res) => {
   }
 });
 
+ROUTES.post("/my-requests/:requestId/publish", async (req, res) => {
+  try {
+    const viewer = await verifyRequestUser(req, true);
+    if (!viewer) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const requestId = normalizeMyRequestId(req.params.requestId);
+    if (!requestId) {
+      res.status(400).json({ error: "invalid_request_id" });
+      return;
+    }
+    const requestRef = db.collection("users").doc(viewer.uid).collection("requests").doc(requestId);
+    const snap = await requestRef.get();
+    if (!snap.exists) {
+      res.status(404).json({ error: "request_not_found" });
+      return;
+    }
+    const existing = (snap.data() || {}) as Record<string, unknown>;
+    if (asBoolean(existing.deleted, false)) {
+      res.status(404).json({ error: "request_not_found" });
+      return;
+    }
+
+    const body = asPlainObject(req.body);
+    const requestedVisibility = normalizeMyRequestVisibility(body.visibility, "public");
+    const visibility = requestedVisibility === "public" ? "public" : "unlisted";
+    const postId = await upsertExplorePostFromMyRequest(viewer.uid, requestId, existing, visibility);
+
+    await requestRef.set(
+      {
+        published: true,
+        publishedAt: admin.firestore.FieldValue.serverTimestamp(),
+        explorePostId: postId,
+        visibility: requestedVisibility === "private" ? "unlisted" : requestedVisibility,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    const refreshed = await requestRef.get();
+    res.status(200).json({
+      ok: true,
+      request: toMyRequestResponse(refreshed.id, (refreshed.data() || {}) as Record<string, unknown>, { includePayload: true }),
+      post: {
+        id: postId,
+        visibility,
+      },
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Explore] publish my request failed", error);
+    res.status(500).json({ error: "my_request_publish_failed" });
+  }
+});
+
 ROUTES.post("/my-requests/:requestId/unpublish", async (req, res) => {
   try {
     const viewer = await verifyRequestUser(req, true);
@@ -7625,6 +8044,7 @@ ROUTES.post("/my-requests/:requestId/unpublish", async (req, res) => {
     const type = normalizeMyRequestType(existing.type) || "forecast";
     const candidatePostIds = [
       sanitizeText(existing.explorePostId, 220),
+      deriveMyRequestExplorePostId(requestId, existing),
       type === "forecast" && sourceCollection === "forecast_requests" ? `forecast_${sourceId}` : "",
       type === "screener" && sourceCollection === "screener_runs" ? `screener_${sourceId}` : "",
     ]

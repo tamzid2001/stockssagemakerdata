@@ -39,6 +39,7 @@
     <script defer src="/__/firebase/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
     <script defer src="/app.js"></script>
+    <script defer src="/assets/rnweb/quantura-rnw.js"></script>
   
     <script>
       window.__QUANTURA_RC_TEMPLATE_ID__ = "firebase-server";
@@ -57,7 +58,7 @@
           <a href="/explore" data-analytics="nav_explore"><i class="iconoir-binocular" aria-hidden="true"></i><span>Explore</span></a>
           <a href="/blog" data-analytics="nav_blog"><i class="iconoir-page" aria-hidden="true"></i><span>Blog</span></a>
           <a href="/research" data-analytics="nav_research"><i class="iconoir-bookmark-book" aria-hidden="true"></i><span>Research</span></a>
-          <a href="/events-calendar" data-analytics="nav_events"><i class="iconoir-calendar" aria-hidden="true"></i><span>Events</span></a>
+          <a href="/events" data-analytics="nav_events"><i class="iconoir-calendar" aria-hidden="true"></i><span>Events</span></a>
           <a href="/shop" data-analytics="nav_shop"><i class="iconoir-shop" aria-hidden="true"></i><span>Shop</span></a>
           <a href="/about" data-analytics="nav_about"><i class="iconoir-info-circle" aria-hidden="true"></i><span>About</span></a>
           <a href="/pricing" data-analytics="nav_pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>Pricing</span></a>
@@ -94,22 +95,34 @@
 	            <a class="sidebar-link" href="/indicators" data-panel-target="indicators"><i class="iconoir-sigma-function" aria-hidden="true"></i><span>Indicators</span></a>
               <a class="sidebar-link" href="/trending" data-panel-target="trending"><i class="iconoir-fire-flame" aria-hidden="true"></i><span>Trending</span></a>
 	            <a class="sidebar-link" href="/news" data-panel-target="news"><i class="iconoir-journal-page" aria-hidden="true"></i><span>Historical Data Download</span></a>
-              <a class="sidebar-link" href="/events-calendar" data-panel-target="events-calendar"><i class="iconoir-calendar" aria-hidden="true"></i><span>Earnings calendar</span></a>
               <a class="sidebar-link" href="/market-headlines" data-panel-target="market-headlines"><i class="iconoir-globe" aria-hidden="true"></i><span>Market headlines</span></a>
               <a class="sidebar-link" href="/forecasting" data-panel-target="macro"><i class="iconoir-database" aria-hidden="true"></i><span>Macro Dashboard</span></a>
               <a class="sidebar-link" href="/model-council" data-panel-target="ticker-query"><i class="iconoir-brain" aria-hidden="true"></i><span>Model Council</span></a>
               <a class="sidebar-link" href="/options" data-panel-target="options"><i class="iconoir-numbered-list-left" aria-hidden="true"></i><span>Options</span></a>
-              <a class="sidebar-link" href="/tools/fx" data-panel-target="fx"><i class="iconoir-coins-swap" aria-hidden="true"></i><span>Currency conversion</span></a>
+              <a class="sidebar-link" href="/terminal/fx" data-panel-target="fx"><i class="iconoir-coins-swap" aria-hidden="true"></i><span>Currency conversion</span></a>
               <a class="sidebar-link" href="/studio" data-panel-target="learn"><i class="iconoir-info-circle" aria-hidden="true"></i><span>Learn more</span></a>
 	            <a class="sidebar-link" href="/screener"><i class="iconoir-search" aria-hidden="true"></i><span>Screener</span></a>
               <a class="sidebar-link" href="/explore"><i class="iconoir-binocular" aria-hidden="true"></i><span>Explore</span></a>
 	            <a class="sidebar-link" href="/watchlist"><i class="iconoir-bell-notification" aria-hidden="true"></i><span>Watchlist and alerts</span></a>
 	          </nav>
-        </aside>
+	        </aside>
 
-        <div class="app-main">
-          <section class="section studio-section" id="terminal">
-            <div class="container">
+	        <div class="app-main">
+          <div class="container quantura-rn-injection-shell">
+            <div
+              id="quantura-rn-terminal"
+              class="quantura-rn-root"
+              data-quantura-rn-root
+              data-rn-slot-id="terminal-native-slot-1"
+              data-rn-placement="terminal_surface"
+              data-rn-context="forecasting"
+              data-rn-title="Terminal injected RN surface"
+              data-rn-body="React Native for Web mounts this shared panel. Native ad inventory appears only in installed iOS/Android builds."
+              data-rn-placeholder="true"
+            ></div>
+          </div>
+	          <section class="section studio-section" id="terminal">
+	            <div class="container">
 	              <div class="studio-layout" data-panels data-panel-router="terminal">
                 <div class="studio-main">
                   <div class="chart-shell studio-chart">
@@ -463,60 +476,6 @@
                     <div class="notice" style="margin-top: 16px;">
                       TradingView widgets and the ticker chart are available only in the Ticker panel for the active symbol.
                       <a class="news-link" href="/ticker-intelligence">Open Ticker</a>.
-                    </div>
-                  </section>
-
-                  <section class="panel hidden" data-panel="events-calendar">
-                    <div class="panel-header">
-                      <h2>Earnings Calendar</h2>
-                      <p class="small">Date-based earnings across all tickers for the selected range.</p>
-                    </div>
-                    <div class="card earnings-calendar-shell">
-                      <div class="earnings-calendar-topbar">
-                        <div class="earnings-calendar-range-controls">
-                          <button
-                            class="cta secondary icon-only small"
-                            id="events-calendar-prev"
-                            type="button"
-                            aria-label="Previous range"
-                            title="Previous range"
-                          >
-                            <i class="iconoir-nav-arrow-left" aria-hidden="true"></i>
-                          </button>
-                          <div class="field earnings-calendar-range-field">
-                            <label class="label" for="events-calendar-preset">Range</label>
-                            <select id="events-calendar-preset" name="preset">
-                              <option value="this-week">This Week</option>
-                              <option value="next-week">Next Week</option>
-                              <option value="last-week">Last Week</option>
-                              <option value="next-30-days">Next 30 Days</option>
-                            </select>
-                          </div>
-                          <button
-                            class="cta secondary icon-only small"
-                            id="events-calendar-next"
-                            type="button"
-                            aria-label="Next range"
-                            title="Next range"
-                          >
-                            <i class="iconoir-nav-arrow-right" aria-hidden="true"></i>
-                          </button>
-                        </div>
-                        <div class="small muted earnings-calendar-range-label" id="events-calendar-range-label">—</div>
-                        <div class="field earnings-calendar-search-field">
-                          <label class="label" for="events-calendar-search">Search</label>
-                          <div class="earnings-calendar-search-wrap">
-                            <input id="events-calendar-search" type="search" placeholder="Find earnings for symbols or companies" />
-                            <button class="cta secondary small" id="events-calendar-search-clear" type="button">Clear</button>
-                          </div>
-                        </div>
-                      </div>
-                      <div id="events-calendar-day-strip" class="earnings-day-strip" role="tablist" aria-label="Earnings by day"></div>
-                      <p class="small muted" id="events-calendar-status"></p>
-                    </div>
-                    <div class="results-panel">
-                      <h3 id="events-calendar-selected-day-title">Earnings on —</h3>
-                      <div id="events-calendar-output" class="panel-output small">Load earnings to see all reporting tickers by day.</div>
                     </div>
                   </section>
 

@@ -38,6 +38,7 @@
     <script defer src="/__/firebase/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
     <script defer src="/app.js"></script>
+    <script defer src="/assets/rnweb/quantura-rnw.js"></script>
     <script defer src="/screener-plus.js"></script>
   
     <script>
@@ -74,7 +75,7 @@
             <a class="sidebar-link" href="/indicators"><i class="iconoir-sigma-function" aria-hidden="true"></i><span>Indicators</span></a>
             <a class="sidebar-link" href="/trending"><i class="iconoir-fire-flame" aria-hidden="true"></i><span>Trending</span></a>
             <a class="sidebar-link" href="/news"><i class="iconoir-journal-page" aria-hidden="true"></i><span>Historical Data Download</span></a>
-            <a class="sidebar-link" href="/events-calendar"><i class="iconoir-calendar" aria-hidden="true"></i><span>Earnings calendar</span></a>
+            <a class="sidebar-link" href="/events"><i class="iconoir-calendar" aria-hidden="true"></i><span>Events</span></a>
             <a class="sidebar-link" href="/market-headlines"><i class="iconoir-globe" aria-hidden="true"></i><span>Market headlines</span></a>
             <a class="sidebar-link" href="/forecasting?panel=macro"><i class="iconoir-database" aria-hidden="true"></i><span>Macro Dashboard</span></a>
             <a class="sidebar-link" href="/model-council"><i class="iconoir-brain" aria-hidden="true"></i><span>Model Council</span></a>
@@ -87,8 +88,21 @@
           </nav>
         </aside>
 
-        <div class="app-main">
-      <section class="section" id="screener">
+	        <div class="app-main">
+          <div class="container quantura-rn-injection-shell">
+            <div
+              id="quantura-rn-screener"
+              class="quantura-rn-root"
+              data-quantura-rn-root
+              data-rn-slot-id="screener-native-slot-1"
+              data-rn-placement="screener_surface"
+              data-rn-context="screener"
+              data-rn-title="Screener injected RN surface"
+              data-rn-body="Shared RN component mount for screeners. Native ads only resolve in installed iOS/Android builds."
+              data-rn-placeholder="true"
+            ></div>
+          </div>
+	      <section class="section" id="screener">
         <div class="container">
           <div class="section-title">
             <h2>AI Portfolio Generator</h2>

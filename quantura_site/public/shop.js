@@ -25,13 +25,19 @@
   if (!dom.grid) return;
 
   const state = {
+    catalogProducts: [],
     products: [],
+    hiddenProducts: [],
     shippingPolicy: null,
     filter: "all",
     query: "",
     loading: true,
     cart: readStoredCart(),
     email: readStoredEmail(),
+    visibilityConfig: {
+      enabled: true,
+      items: {},
+    },
   };
 
   const money = (cents, currency = "USD") => {
@@ -95,6 +101,17 @@
     });
   }
 
+  function filteredHiddenProducts() {
+    if (!state.visibilityConfig.enabled) return [];
+    const query = String(state.query || "").trim().toLowerCase();
+    return state.hiddenProducts.filter((product) => {
+      if (state.filter !== "all" && product.tab !== state.filter) return false;
+      if (!query) return true;
+      const haystack = `${product.name} ${product.description}`.toLowerCase();
+      return haystack.includes(query);
+    });
+  }
+
   function productBySku(sku) {
     return state.products.find((item) => item.sku === sku) || null;
   }
@@ -125,17 +142,174 @@
     };
   }
 
+  function buildDefaultVisibility(products, explicitDefault) {
+    const items = {};
+    (Array.isArray(products) ? products : []).forEach((product) => {
+      if (!product?.sku) return;
+      items[String(product.sku)] = true;
+    });
+    if (explicitDefault && typeof explicitDefault === "object" && explicitDefault.items && typeof explicitDefault.items === "object") {
+      Object.entries(explicitDefault.items).forEach(([sku, value]) => {
+        if (typeof value !== "boolean") return;
+        items[String(sku)] = value;
+      });
+    }
+    const enabledDefault =
+      explicitDefault && typeof explicitDefault === "object" && typeof explicitDefault.enabled === "boolean"
+        ? explicitDefault.enabled
+        : true;
+    return {
+      enabled: enabledDefault,
+      items,
+    };
+  }
+
+  function normalizeVisibilityConfig(raw, fallback) {
+    const base = {
+      enabled: typeof fallback?.enabled === "boolean" ? fallback.enabled : true,
+      items: { ...(fallback?.items || {}) },
+    };
+
+    if (raw == null) return base;
+
+    let candidate = raw;
+    if (typeof candidate === "string") {
+      const trimmed = candidate.trim();
+      if (!trimmed) return base;
+      try {
+        candidate = JSON.parse(trimmed);
+      } catch (error) {
+        console.warn("[Shop][RC] Invalid JSON in shop_visibility_config. Falling back to defaults.");
+        return base;
+      }
+    }
+
+    if (!candidate || typeof candidate !== "object") return base;
+
+    if (typeof candidate.enabled === "boolean") {
+      base.enabled = candidate.enabled;
+    }
+
+    if (candidate.items && typeof candidate.items === "object") {
+      Object.entries(candidate.items).forEach(([sku, value]) => {
+        if (typeof value === "boolean") {
+          base.items[String(sku)] = value;
+        }
+      });
+    }
+
+    return base;
+  }
+
+  async function resolveShopVisibility(defaultConfig) {
+    const fallback = normalizeVisibilityConfig(defaultConfig, defaultConfig);
+    const firebase = window.firebase;
+
+    if (!firebase?.remoteConfig) {
+      console.info("[Shop][RC] Firebase Remote Config unavailable. Using fallback visibility config.");
+      return fallback;
+    }
+
+    try {
+      firebase.app();
+    } catch (_error) {
+      console.info("[Shop][RC] Firebase app unavailable. Using fallback visibility config.");
+      return fallback;
+    }
+
+    try {
+      const rc = firebase.remoteConfig();
+      if (!rc) return fallback;
+
+      const isDevelopmentHost =
+        window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1" ||
+        window.location.hostname.endsWith(".web.app") ||
+        window.location.hostname.endsWith(".firebaseapp.com");
+
+      rc.settings = {
+        ...(rc.settings || {}),
+        minimumFetchIntervalMillis: isDevelopmentHost ? 60 * 1000 : 15 * 60 * 1000,
+        fetchTimeoutMillis: 10000,
+      };
+      rc.defaultConfig = {
+        ...(rc.defaultConfig || {}),
+        shop_visibility_config: JSON.stringify(fallback),
+      };
+
+      console.info("[Shop][RC] Fetching Remote Config visibility...");
+      const activated = await rc.fetchAndActivate();
+      const value = rc.getValue("shop_visibility_config");
+      const rawValue = typeof value?.asString === "function" ? value.asString() : "";
+      const normalized = normalizeVisibilityConfig(rawValue, fallback);
+      const hiddenCount = Object.values(normalized.items || {}).filter((flag) => flag === false).length;
+      console.info("[Shop][RC] Visibility fetched", {
+        activated: Boolean(activated),
+        enabled: normalized.enabled,
+        hiddenCount,
+      });
+      return normalized;
+    } catch (error) {
+      console.warn("[Shop][RC] Failed to fetch visibility config. Using fallback.", error);
+      return fallback;
+    }
+  }
+
+  function applyVisibilityConfig(config) {
+    const normalized = normalizeVisibilityConfig(config, buildDefaultVisibility(state.catalogProducts));
+    state.visibilityConfig = normalized;
+
+    if (!normalized.enabled) {
+      state.products = [];
+      state.hiddenProducts = Array.isArray(state.catalogProducts) ? [...state.catalogProducts] : [];
+    } else {
+      state.products = state.catalogProducts.filter((product) => normalized.items[String(product.sku)] !== false);
+      state.hiddenProducts = state.catalogProducts.filter((product) => normalized.items[String(product.sku)] === false);
+    }
+
+    const visibleSkus = new Set(state.products.map((product) => String(product.sku)));
+    let removedCount = 0;
+    Object.keys(state.cart).forEach((sku) => {
+      if (!visibleSkus.has(String(sku))) {
+        delete state.cart[sku];
+        removedCount += 1;
+      }
+    });
+    if (removedCount > 0) {
+      persistCart();
+      showMessage("Some unavailable items were removed from your cart.", "warn");
+    }
+
+    console.info("[Shop] Visibility applied", {
+      enabled: normalized.enabled,
+      visibleCount: state.products.length,
+      hiddenCount: state.hiddenProducts.length,
+    });
+  }
+
   function renderProducts() {
     if (state.loading) return;
 
     const rows = filteredProducts();
-    if (!rows.length) {
+    const hiddenRows = filteredHiddenProducts();
+
+    if (!state.visibilityConfig.enabled) {
+      dom.grid.innerHTML = `
+        <article class="shop-coming-soon-card" role="status" aria-live="polite">
+          <p class="eyebrow">Quantura Shop</p>
+          <h2>Coming soon</h2>
+          <p>We’re preparing the next drop for Quantura Shop. Check back shortly for new inventory.</p>
+        </article>
+      `;
+      return;
+    }
+
+    if (!rows.length && !hiddenRows.length) {
       dom.grid.innerHTML = '<div class="shop-message">No matching products for this filter.</div>';
       return;
     }
 
-    dom.grid.innerHTML = rows
-      .map((product) => {
+    const visibleMarkup = rows.map((product) => {
         const fullStars = Math.floor(Number(product.rating?.value || 0));
         const stars = "★".repeat(Math.max(0, Math.min(5, fullStars))).padEnd(5, "☆");
         return `
@@ -162,8 +336,38 @@
             </div>
           </article>
         `;
-      })
-      .join("");
+      });
+
+    const hiddenMarkup = hiddenRows.map((product) => {
+      const fullStars = Math.floor(Number(product.rating?.value || 0));
+      const stars = "★".repeat(Math.max(0, Math.min(5, fullStars))).padEnd(5, "☆");
+      return `
+        <article class="product-card product-card-coming-soon" data-sku="${escapeHtml(product.sku)}">
+          <img
+            class="product-image"
+            src="${escapeHtml(product.imageUrl)}"
+            alt="${escapeHtml(product.name)}"
+            loading="lazy"
+            onerror="this.onerror=null;this.src='${escapeHtml(product.placeholderImageUrl || "/assets/shop/placeholder.png")}';"
+          />
+          <div class="product-body">
+            <h2 class="product-name">${escapeHtml(product.name)}</h2>
+            <p class="product-desc">${escapeHtml(product.description)}</p>
+            <div class="product-rating">
+              <span class="product-stars" aria-hidden="true">${stars}</span>
+              <span>${Number(product.rating?.value || 0).toFixed(1)} (${Number(product.rating?.count || 0)})</span>
+            </div>
+            <div class="coming-soon-pill">Coming soon</div>
+            <p class="product-shipping">This product is temporarily unavailable.</p>
+            <div class="card-actions">
+              <button type="button" class="cta secondary" disabled>Coming soon</button>
+            </div>
+          </div>
+        </article>
+      `;
+    });
+
+    dom.grid.innerHTML = visibleMarkup.concat(hiddenMarkup).join("");
   }
 
   function renderCart() {
@@ -255,6 +459,10 @@
   }
 
   function addToCart(sku) {
+    if (!productBySku(sku)) {
+      showMessage("This product is not available right now.", "warn");
+      return;
+    }
     const existing = Number(state.cart[sku] || 0);
     updateCartSku(sku, Math.min(10, existing + 1));
     showMessage("Added to cart.", "success");
@@ -274,8 +482,11 @@
       if (!response.ok) throw new Error("Unable to load products.");
 
       const payload = await response.json();
-      state.products = Array.isArray(payload.products) ? payload.products : [];
+      state.catalogProducts = Array.isArray(payload.products) ? payload.products : [];
       state.shippingPolicy = payload.shippingPolicy || null;
+      const defaultVisibility = buildDefaultVisibility(state.catalogProducts, payload.visibilityConfig || null);
+      const remoteVisibility = await resolveShopVisibility(defaultVisibility);
+      applyVisibilityConfig(remoteVisibility);
       state.loading = false;
       renderProducts();
       renderCart();

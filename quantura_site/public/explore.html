@@ -32,6 +32,7 @@
     <script defer src="/__/firebase/12.9.0/firebase-firestore-compat.js"></script>
     <script defer src="/__/firebase/12.9.0/firebase-messaging-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
+    <script defer src="/assets/rnweb/quantura-rnw.js"></script>
     <script type="module" src="/explore.js"></script>
   </head>
   <body>
@@ -66,6 +67,20 @@
           <button id="ticker-filter-apply" type="button">Apply</button>
         </div>
       </section>
+
+      <div class="quantura-rn-explore-shell">
+        <div
+          id="quantura-rn-explore"
+          class="quantura-rn-root"
+          data-quantura-rn-root
+          data-rn-slot-id="explore-native-slot-1"
+          data-rn-placement="explore_feed"
+          data-rn-context="explore"
+          data-rn-title="Explore injected RN panel"
+          data-rn-body="The panel is shared RNW UI. Native ad requests resolve only when running inside Quantura iOS/Android shells."
+          data-rn-placeholder="true"
+        ></div>
+      </div>
 
       <section id="explore-grid" class="explore-grid" aria-live="polite"></section>
       <div id="explore-empty" class="empty-state hidden">No posts found for this filter.</div>

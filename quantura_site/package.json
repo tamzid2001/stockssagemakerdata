@@ -4,7 +4,15 @@
   "private": true,
   "description": "Quantura Firebase Hosting (static).",
   "scripts": {
-    "build": "node -e \"console.log('Quantura: static hosting, no build step required.')\""
+    "build": "npm run build:rnweb",
+    "build:rnweb": "node ./rnweb/build-rnw.mjs"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-native-web": "^0.21.2"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.9"
   }
 }
-
