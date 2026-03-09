@@ -397,7 +397,7 @@ enum FirebaseBootstrap {
             return true
         }
 
-        let options = optionsFromInfoPlist()
+        let options = optionsFromBundlePlist() ?? optionsFromInfoPlist()
 
         guard let options else {
             print("[Firebase][iOS] Firebase disabled: missing valid Firebase keys in app Info.plist.")
@@ -414,10 +414,38 @@ enum FirebaseBootstrap {
         return FirebaseApp.app() != nil
     }
 
+    private static func optionsFromBundlePlist() -> FirebaseOptions? {
+        let candidateResourceNames = [
+            "GoogleService-Info",
+            "quantura-ios-Info",
+        ]
+        for resourceName in candidateResourceNames {
+            guard let path = Bundle.main.path(forResource: resourceName, ofType: "plist") else {
+                continue
+            }
+            guard
+                let raw = NSDictionary(contentsOfFile: path) as? [String: Any]
+            else {
+                print("[Firebase][iOS] Failed to read bundled plist \(resourceName).plist.")
+                continue
+            }
+            if let options = optionsFromDictionary(raw) {
+                print("[Firebase][iOS] Loaded Firebase options from bundled plist \(resourceName).plist.")
+                return options
+            }
+            print("[Firebase][iOS] Bundled plist \(resourceName).plist is missing required Firebase keys.")
+        }
+        return nil
+    }
+
     private static func optionsFromInfoPlist() -> FirebaseOptions? {
         guard let info = Bundle.main.infoDictionary else {
             return nil
         }
+        return optionsFromDictionary(info)
+    }
+
+    private static func optionsFromDictionary(_ info: [String: Any]) -> FirebaseOptions? {
         func value(_ key: String) -> String {
             (info[key] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         }
@@ -444,9 +472,8 @@ enum FirebaseBootstrap {
 
     private static func validate(_ options: FirebaseOptions, source: String) -> Bool {
         let apiKey = (options.apiKey ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let apiKeyRegex = #"^A[0-9A-Za-z_-]{38}$"#
-        guard apiKey.range(of: apiKeyRegex, options: .regularExpression) != nil else {
-            print("[Firebase][iOS] Invalid API_KEY in \(source): expected 39 chars and prefix 'A'.")
+        guard !apiKey.isEmpty, !apiKey.contains("REPLACE_WITH_") else {
+            print("[Firebase][iOS] Invalid API_KEY in \(source).")
             return false
         }
 

@@ -491,7 +491,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "quantura-ios-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Quantura AI";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
@@ -538,7 +538,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "quantura-ios-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Quantura AI";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
