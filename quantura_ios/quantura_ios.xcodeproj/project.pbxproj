@@ -492,7 +492,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = "quantura-ios-Info.plist";
+				INFOPLIST_FILE = "quantura_ios/quantura-ios-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Quantura AI";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
@@ -539,7 +539,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = "quantura-ios-Info.plist";
+				INFOPLIST_FILE = "quantura_ios/quantura-ios-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Quantura AI";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
