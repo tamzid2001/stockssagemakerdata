@@ -625,12 +625,12 @@ extension AppDelegate: UNUserNotificationCenterDelegate, MessagingDelegate {
 
 @main
 struct quantura_iosApp: App {
-#if canImport(UIKit)
-    @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
-#else
     init() {
         _ = FirebaseBootstrap.configureIfAvailable()
     }
+
+#if canImport(UIKit)
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
 #endif
 
     var body: some Scene {
