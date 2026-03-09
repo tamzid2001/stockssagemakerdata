@@ -9637,6 +9637,16 @@
       `,
     },
     {
+      key: "youtube",
+      label: "YouTube",
+      href: "https://www.youtube.com/channel/UCDLV4L-W5rslagltzkEx1cw",
+      svg: `
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M23.5 6.2a3 3 0 0 0-2.11-2.12C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.39.58A3 3 0 0 0 .5 6.2 31.4 31.4 0 0 0 0 12a31.4 31.4 0 0 0 .5 5.8 3 3 0 0 0 2.11 2.12C4.5 20.5 12 20.5 12 20.5s7.5 0 9.39-.58a3 3 0 0 0 2.11-2.12A31.4 31.4 0 0 0 24 12a31.4 31.4 0 0 0-.5-5.8ZM9.6 15.7V8.3l6.4 3.7-6.4 3.7Z"/>
+        </svg>
+      `,
+    },
+    {
       key: "facebook",
       label: "Facebook",
       href: "https://www.facebook.com/quanturaai/",
