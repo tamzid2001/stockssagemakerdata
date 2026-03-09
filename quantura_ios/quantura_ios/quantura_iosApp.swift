@@ -507,9 +507,6 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     ) -> Bool {
         let firebaseReady = FirebaseBootstrap.configureIfAvailable()
 #if canImport(GoogleMobileAds)
-        #if DEBUG || targetEnvironment(simulator)
-        MobileAds.shared.requestConfiguration.testDeviceIdentifiers = ["SIMULATOR"]
-        #endif
 #if canImport(FBAudienceNetwork)
         if #available(iOS 14, *) {
             // Meta Audience Network guidance: explicitly opt into advertiser tracking when policy permits.
