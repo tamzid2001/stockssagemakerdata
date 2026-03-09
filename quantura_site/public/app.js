@@ -10179,6 +10179,18 @@
     return getDefaultPopularTicker();
   };
 
+  const resolveTradingViewRenderTicker = (...candidates) =>
+    resolveActiveOrDefaultTicker(
+      ...candidates,
+      ui.terminalTicker?.value,
+      ui.intelTicker?.value,
+      ui.newsTicker?.value,
+      ui.predictionsTicker?.value,
+      state.tickerContext.predictionsTicker || "",
+      state.tickerContext.intelTicker || "",
+      state.tickerContext.newsTicker || ""
+    );
+
   const resolveTradingViewExchangeSymbol = (ticker) => {
     const clean = normalizeTicker(ticker);
     if (!clean) return TRADINGVIEW_EXCHANGE_OVERRIDES[getDefaultPopularTicker()] || "NASDAQ:AAPL";
@@ -10257,7 +10269,7 @@
 
   const renderTradingViewTerminal = ({ ticker, interval, onFallback = null }) => {
     if (!ui.tradingViewRoot || !ui.tradingViewAdvanced) return false;
-    const activeTicker = normalizeTicker(ticker) || getDefaultPopularTicker();
+    const activeTicker = resolveTradingViewRenderTicker(ticker);
     const symbol = normalizeTradingViewSymbol(activeTicker);
     const theme = resolveTradingViewTheme();
     const tvInterval = resolveTradingViewInterval(interval);
@@ -10388,6 +10400,7 @@
       container: ui.tradingViewTopStories,
       src: buildTradingViewWidgetSrc("https://www.tradingview-widget.com/embed-widget/timeline/?locale=en", {
         symbol,
+        feedMode: "symbol",
         colorTheme: theme,
         isTransparent: true,
         displayMode: "regular",
@@ -10781,7 +10794,7 @@
   };
 
   const refreshTradingViewForTicker = (ticker) => {
-    const clean = normalizeTicker(ticker);
+    const clean = resolveTradingViewRenderTicker(ticker);
     if (!clean || !isPanelVisible("ticker")) return;
     const interval = String(ui.terminalInterval?.value || state.tickerContext.interval || "1d");
     const rendered = renderTradingViewTerminal({ ticker: clean, interval });
@@ -10807,8 +10820,9 @@
       }
     });
 
+    refreshTradingViewForTicker(clean);
+
     if (previous !== clean) {
-      refreshTradingViewForTicker(clean);
       scheduleSideDataRefresh(clean, { force: false });
       if (emitAnalytics) {
         logEvent("active_ticker_changed", { ticker: clean, source });
@@ -10830,6 +10844,10 @@
       };
       el.addEventListener("change", commitTicker);
       el.addEventListener("blur", commitTicker);
+      el.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        commitTicker();
+      });
     });
   };
 
