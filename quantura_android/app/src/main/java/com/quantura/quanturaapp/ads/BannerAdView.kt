@@ -32,6 +32,7 @@ class BannerAdView @JvmOverloads constructor(
     private var waitingForLayout = false
     private var pendingRetry: Runnable? = null
     private var waitingForSdkInit = false
+    private var loadedAdUnitId: String? = null
 
     fun setRemoteConfigManager(manager: RemoteConfigManager?) {
         remoteConfigManager = manager
@@ -126,6 +127,7 @@ class BannerAdView @JvmOverloads constructor(
                 }
             }
         }
+        loadedAdUnitId = adUnitId
         addView(adView)
         Log.d(tag, "Loading banner unit=$adUnitId")
         AdDebugStatusRegistry.updateLoad("banner", "loading")
@@ -139,7 +141,16 @@ class BannerAdView @JvmOverloads constructor(
             hideAd()
             return
         }
-        if (adView == null) {
+        val desiredAdUnitId = manager.resolveAdUnitId(
+            platform = AdPlatform.ANDROID,
+            format = AdFormat.BANNER
+        )
+        val currentAdUnitId = loadedAdUnitId?.takeIf { it.isNotBlank() }
+        if (adView == null || currentAdUnitId != desiredAdUnitId) {
+            Log.i(
+                tag,
+                "[Ads][Android] Reloading banner after config refresh currentUnit=${currentAdUnitId ?: "(none)"} desiredUnit=$desiredAdUnitId"
+            )
             loadAd(manager)
         } else {
             visibility = VISIBLE
@@ -150,6 +161,7 @@ class BannerAdView @JvmOverloads constructor(
         removeAllViews()
         adView?.destroy()
         adView = null
+        loadedAdUnitId = null
         minimumHeight = minReservedHeightPx
         waitingForSdkInit = false
         visibility = INVISIBLE
@@ -160,6 +172,7 @@ class BannerAdView @JvmOverloads constructor(
         pendingRetry = null
         adView?.destroy()
         adView = null
+        loadedAdUnitId = null
         super.onDetachedFromWindow()
     }
 
