@@ -273,6 +273,8 @@ class MainActivity : ComponentActivity() {
 
         lifecycleScope.launch {
             appContainer.remoteConfigManager.fetchAndActivate()
+            appContainer.adManager.refreshForRemoteConfigChange(this@MainActivity)
+            appContainer.appOpenAdManager.refreshForRemoteConfigChange()
             appContainer.adManager.primeAds(this@MainActivity)
             appContainer.appOpenAdManager.loadAdIfNeeded()
             refreshBannerAdVisibility()
@@ -1576,6 +1578,7 @@ class MainActivity : ComponentActivity() {
         webViewRef?.onResume()
         webViewRef?.resumeTimers()
         appContainer.adManager.onResume(this)
+        appContainer.appOpenAdManager.refreshForRemoteConfigChange()
         InactivityNotificationScheduler.reschedule(this)
         syncNotificationSession(forcePing = true)
         refreshBannerAdVisibility()

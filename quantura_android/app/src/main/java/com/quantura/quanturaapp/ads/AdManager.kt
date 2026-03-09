@@ -49,12 +49,18 @@ class AdManager(
 
     @Volatile
     private var interstitialAd: InterstitialAd? = null
+    @Volatile
+    private var interstitialAdUnitId: String = ""
 
     @Volatile
     private var rewardedAd: RewardedAd? = null
+    @Volatile
+    private var rewardedAdUnitId: String = ""
 
     @Volatile
     private var rewardedInterstitialAd: RewardedInterstitialAd? = null
+    @Volatile
+    private var rewardedInterstitialAdUnitId: String = ""
 
     @Volatile
     private var isShowingFullScreenAdInternal = false
@@ -519,8 +525,79 @@ class AdManager(
     }
 
     fun onResume(context: Context) {
+        refreshForRemoteConfigChange(context)
         if (interstitialAd == null || rewardedAd == null || rewardedInterstitialAd == null) {
             primeAds(context)
+        }
+    }
+
+    fun refreshForRemoteConfigChange(context: Context) {
+        if (!remoteConfigManager.areAdsEnabled()) {
+            interstitialAd = null
+            interstitialAdUnitId = ""
+            rewardedAd = null
+            rewardedAdUnitId = ""
+            rewardedInterstitialAd = null
+            rewardedInterstitialAdUnitId = ""
+            preloadedNativePayload = null
+            preloadedNativeAdUnitId = ""
+            nativePreloadInFlight = false
+            return
+        }
+
+        val desiredInterstitialUnitId = remoteConfigManager.resolveAdUnitId(
+            platform = AdPlatform.ANDROID,
+            format = AdFormat.INTERSTITIAL
+        )
+        if (interstitialAd != null && interstitialAdUnitId != desiredInterstitialUnitId) {
+            Log.i(
+                tag,
+                "[Ads][Android] Clearing cached interstitial after RC change oldUnit=$interstitialAdUnitId newUnit=$desiredInterstitialUnitId"
+            )
+            interstitialAd = null
+            interstitialAdUnitId = ""
+        }
+
+        val desiredRewardedUnitId = remoteConfigManager.resolveAdUnitId(
+            platform = AdPlatform.ANDROID,
+            format = AdFormat.REWARDED
+        )
+        if (rewardedAd != null && rewardedAdUnitId != desiredRewardedUnitId) {
+            Log.i(
+                tag,
+                "[Ads][Android] Clearing cached rewarded after RC change oldUnit=$rewardedAdUnitId newUnit=$desiredRewardedUnitId"
+            )
+            rewardedAd = null
+            rewardedAdUnitId = ""
+        }
+
+        val desiredRewardedInterstitialUnitId = remoteConfigManager.resolveAdUnitId(
+            platform = AdPlatform.ANDROID,
+            format = AdFormat.REWARDED_INTERSTITIAL
+        )
+        if (
+            rewardedInterstitialAd != null &&
+            rewardedInterstitialAdUnitId != desiredRewardedInterstitialUnitId
+        ) {
+            Log.i(
+                tag,
+                "[Ads][Android] Clearing cached rewarded interstitial after RC change oldUnit=$rewardedInterstitialAdUnitId newUnit=$desiredRewardedInterstitialUnitId"
+            )
+            rewardedInterstitialAd = null
+            rewardedInterstitialAdUnitId = ""
+        }
+
+        val desiredNativeUnitId = remoteConfigManager.resolveAdUnitId(
+            platform = AdPlatform.ANDROID,
+            format = AdFormat.NATIVE
+        )
+        if (preloadedNativePayload != null && preloadedNativeAdUnitId != desiredNativeUnitId) {
+            Log.i(
+                tag,
+                "[Ads][Android] Dropping stale preloaded native after RC change oldUnit=$preloadedNativeAdUnitId newUnit=$desiredNativeUnitId"
+            )
+            preloadedNativePayload = null
+            preloadedNativeAdUnitId = ""
         }
     }
 
@@ -560,7 +637,7 @@ class AdManager(
         }
 
         val cachedPayload = preloadedNativePayload
-        if (cachedPayload != null) {
+        if (cachedPayload != null && preloadedNativeAdUnitId == adUnitIdForVariant(variant)) {
             preloadedNativePayload = null
             Log.i(tag, "[Ads][Android] Served native ad from preload cache slot=$trimmedSlotId")
             callback(
@@ -575,14 +652,7 @@ class AdManager(
             return
         }
 
-        val adUnitId = if (variant.trim().equals("nativeVideo", ignoreCase = true)) {
-            remoteConfigManager.getAdUnitIds().nativeVideo
-        } else {
-            remoteConfigManager.resolveAdUnitId(
-                platform = AdPlatform.ANDROID,
-                format = AdFormat.NATIVE
-            )
-        }
+        val adUnitId = adUnitIdForVariant(variant)
 
         logNativeAdEvent(
             context = activity,
@@ -675,6 +745,16 @@ class AdManager(
         try {
             AdLoader.Builder(context, adUnitId)
                 .forNativeAd { nativeAd ->
+                    if (adUnitId != remoteConfigManager.resolveAdUnitId(
+                            platform = AdPlatform.ANDROID,
+                            format = AdFormat.NATIVE
+                        )
+                    ) {
+                        nativePreloadInFlight = false
+                        nativeAd.destroy()
+                        preloadNative(context.applicationContext)
+                        return@forNativeAd
+                    }
                     preloadedNativePayload = serializeNativeAd(nativeAd, adUnitId)
                     preloadedNativeAdUnitId = adUnitId
                     nativePreloadInFlight = false
@@ -796,7 +876,22 @@ class AdManager(
             object : InterstitialAdLoadCallback() {
                 override fun onAdLoaded(ad: InterstitialAd) {
                     interstitialLoadInFlight = false
+                    val desiredUnitId = remoteConfigManager.resolveAdUnitId(
+                        platform = AdPlatform.ANDROID,
+                        format = AdFormat.INTERSTITIAL
+                    )
+                    if (adUnitId != desiredUnitId) {
+                        interstitialAd = null
+                        interstitialAdUnitId = ""
+                        Log.i(
+                            tag,
+                            "[Ads][Android] Discarding stale interstitial load oldUnit=$adUnitId newUnit=$desiredUnitId"
+                        )
+                        loadInterstitial(context.applicationContext)
+                        return
+                    }
                     interstitialAd = ad
+                    interstitialAdUnitId = adUnitId
                     Log.d(tag, "Interstitial load succeeded.")
                     Log.i(tag, "[Ads][Android] Load success for interstitial")
                     AdDebugStatusRegistry.updateLoad("interstitial", "loaded")
@@ -806,6 +901,7 @@ class AdManager(
                 override fun onAdFailedToLoad(loadAdError: LoadAdError) {
                     interstitialLoadInFlight = false
                     interstitialAd = null
+                    interstitialAdUnitId = ""
                     Log.w(tag, "Interstitial load failed: ${loadAdError.message}")
                     Log.w(tag, "[Ads][Android] Load fail for interstitial: ${loadAdError.message}")
                     AdDebugStatusRegistry.updateLoad("interstitial", "failed:${loadAdError.message}")
@@ -845,7 +941,22 @@ class AdManager(
             object : RewardedAdLoadCallback() {
                 override fun onAdLoaded(ad: RewardedAd) {
                     rewardedLoadInFlight = false
+                    val desiredUnitId = remoteConfigManager.resolveAdUnitId(
+                        platform = AdPlatform.ANDROID,
+                        format = AdFormat.REWARDED
+                    )
+                    if (adUnitId != desiredUnitId) {
+                        rewardedAd = null
+                        rewardedAdUnitId = ""
+                        Log.i(
+                            tag,
+                            "[Ads][Android] Discarding stale rewarded load oldUnit=$adUnitId newUnit=$desiredUnitId"
+                        )
+                        loadRewarded(context.applicationContext)
+                        return
+                    }
                     rewardedAd = ad
+                    rewardedAdUnitId = adUnitId
                     configureRewardedSsv(ad, "rewarded")
                     Log.d(tag, "Rewarded load succeeded.")
                     Log.i(tag, "[Ads][Android] Load success for rewarded")
@@ -856,6 +967,7 @@ class AdManager(
                 override fun onAdFailedToLoad(loadAdError: LoadAdError) {
                     rewardedLoadInFlight = false
                     rewardedAd = null
+                    rewardedAdUnitId = ""
                     Log.w(tag, "Rewarded load failed: ${loadAdError.message}")
                     Log.w(tag, "[Ads][Android] Load fail for rewarded: ${loadAdError.message}")
                     AdDebugStatusRegistry.updateLoad("rewarded", "failed:${loadAdError.message}")
@@ -898,7 +1010,22 @@ class AdManager(
             object : RewardedInterstitialAdLoadCallback() {
                 override fun onAdLoaded(ad: RewardedInterstitialAd) {
                     rewardedInterstitialLoadInFlight = false
+                    val desiredUnitId = remoteConfigManager.resolveAdUnitId(
+                        platform = AdPlatform.ANDROID,
+                        format = AdFormat.REWARDED_INTERSTITIAL
+                    )
+                    if (adUnitId != desiredUnitId) {
+                        rewardedInterstitialAd = null
+                        rewardedInterstitialAdUnitId = ""
+                        Log.i(
+                            tag,
+                            "[Ads][Android] Discarding stale rewarded interstitial load oldUnit=$adUnitId newUnit=$desiredUnitId"
+                        )
+                        loadRewardedInterstitial(context.applicationContext)
+                        return
+                    }
                     rewardedInterstitialAd = ad
+                    rewardedInterstitialAdUnitId = adUnitId
                     configureRewardedInterstitialSsv(ad, "rewarded_interstitial")
                     Log.d(tag, "Rewarded interstitial load succeeded.")
                     Log.i(tag, "[Ads][Android] Load success for rewarded_interstitial")
@@ -909,6 +1036,7 @@ class AdManager(
                 override fun onAdFailedToLoad(loadAdError: LoadAdError) {
                     rewardedInterstitialLoadInFlight = false
                     rewardedInterstitialAd = null
+                    rewardedInterstitialAdUnitId = ""
                     Log.w(tag, "Rewarded interstitial load failed: ${loadAdError.message}")
                     Log.w(
                         tag,
@@ -950,6 +1078,17 @@ class AdManager(
             status = "failed",
             message = message
         )
+    }
+
+    private fun adUnitIdForVariant(variant: String): String {
+        return if (variant.trim().equals("nativeVideo", ignoreCase = true)) {
+            remoteConfigManager.getAdUnitIds().nativeVideo
+        } else {
+            remoteConfigManager.resolveAdUnitId(
+                platform = AdPlatform.ANDROID,
+                format = AdFormat.NATIVE
+            )
+        }
     }
 
     private fun drainPendingRewardedRequest() {

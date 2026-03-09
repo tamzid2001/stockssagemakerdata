@@ -2974,7 +2974,11 @@ struct ContentView: View {
                     .zIndex(999)
             }
 
-            if container.remoteConfigManager.adsEnvironment().isDebugBuild || container.remoteConfigManager.adsEnvironment().isSimulatorOrEmulator {
+            if container.remoteConfigManager.isAdInspectorEnabled() &&
+                (
+                    container.remoteConfigManager.adsEnvironment().isDebugBuild ||
+                        container.remoteConfigManager.adsEnvironment().isSimulatorOrEmulator
+                ) {
                 VStack {
                     Spacer()
                     HStack {

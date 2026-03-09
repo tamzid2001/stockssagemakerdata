@@ -30,6 +30,8 @@ class AppOpenAdManager(
     @Volatile
     private var appOpenAd: AppOpenAd? = null
     @Volatile
+    private var loadedAdUnitId: String = ""
+    @Volatile
     private var isLoadingAd = false
     @Volatile
     private var isShowingAd = false
@@ -75,6 +77,7 @@ class AppOpenAdManager(
             Log.d(tag, "App open ads disabled by format flag.")
             AdDebugStatusRegistry.updateLoad("app_open", "disabled:format_off")
             appOpenAd = null
+            loadedAdUnitId = ""
             loadedAtMs = 0L
             return
         }
@@ -101,7 +104,23 @@ class AppOpenAdManager(
             object : AppOpenAd.AppOpenAdLoadCallback() {
                 override fun onAdLoaded(ad: AppOpenAd) {
                     isLoadingAd = false
+                    val desiredUnitId = remoteConfigManager.resolveAdUnitId(
+                        platform = AdPlatform.ANDROID,
+                        format = AdFormat.APP_OPEN
+                    )
+                    if (unitId != desiredUnitId) {
+                        appOpenAd = null
+                        loadedAdUnitId = ""
+                        loadedAtMs = 0L
+                        Log.i(
+                            tag,
+                            "[Ads][Android] Discarding stale app open load oldUnit=$unitId newUnit=$desiredUnitId"
+                        )
+                        loadAdIfNeeded()
+                        return
+                    }
                     appOpenAd = ad
+                    loadedAdUnitId = unitId
                     loadedAtMs = SystemClock.elapsedRealtime()
                     Log.d(tag, "App open ad load succeeded.")
                     Log.i(tag, "[Ads][Android] Load success for app_open")
@@ -113,6 +132,7 @@ class AppOpenAdManager(
                 override fun onAdFailedToLoad(loadAdError: LoadAdError) {
                     isLoadingAd = false
                     appOpenAd = null
+                    loadedAdUnitId = ""
                     loadedAtMs = 0L
                     Log.w(tag, "App open ad load failed: ${loadAdError.message}")
                     Log.w(tag, "[Ads][Android] Load fail for app_open: ${loadAdError.message}")
@@ -214,6 +234,32 @@ class AppOpenAdManager(
             Log.w(tag, "App open ad show threw exception: ${error.message}")
             AdDebugStatusRegistry.updateShow("app_open", "failed:${error.message}")
             loadAdIfNeeded()
+        }
+    }
+
+    fun refreshForRemoteConfigChange() {
+        if (!remoteConfigManager.areAdsEnabled() || !remoteConfigManager.isAdFormatEnabled(
+                platform = AdPlatform.ANDROID,
+                format = AdFormat.APP_OPEN
+            )
+        ) {
+            appOpenAd = null
+            loadedAdUnitId = ""
+            loadedAtMs = 0L
+            return
+        }
+        val desiredUnitId = remoteConfigManager.resolveAdUnitId(
+            platform = AdPlatform.ANDROID,
+            format = AdFormat.APP_OPEN
+        )
+        if (appOpenAd != null && loadedAdUnitId != desiredUnitId) {
+            Log.i(
+                tag,
+                "[Ads][Android] Clearing cached app open after RC change oldUnit=$loadedAdUnitId newUnit=$desiredUnitId"
+            )
+            appOpenAd = null
+            loadedAdUnitId = ""
+            loadedAtMs = 0L
         }
     }
 
