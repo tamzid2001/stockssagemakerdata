@@ -13,4 +13,10 @@
         <item name="android:statusBarColor">?attr/colorPrimaryVariant</item>
         <!-- Customize your theme here. -->
     </style>
+
+    <style name="Theme.Quantura_android.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/quantura_splash_background_dark</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/quantura_auth_logo</item>
+        <item name="postSplashScreenTheme">@style/Theme.Quantura_android</item>
+    </style>
 </resources>
