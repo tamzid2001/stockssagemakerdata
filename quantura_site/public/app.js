@@ -10207,6 +10207,19 @@
     return TRADINGVIEW_EXCHANGE_OVERRIDES[clean] || `NASDAQ:${clean}`;
   };
 
+  const normalizeTradingViewQueryTicker = (value) => {
+    const raw = String(value || "").trim().toUpperCase();
+    if (!raw) return "";
+    if (!raw.includes(":")) return normalizeTicker(raw);
+    const [, symbolPartRaw = ""] = raw.split(":", 2);
+    const symbolPart = String(symbolPartRaw || "").trim().toUpperCase();
+    if (!symbolPart) return "";
+    if (symbolPart === "BTCUSD") return "BTC-USD";
+    if (symbolPart === "ETHUSD") return "ETH-USD";
+    if (symbolPart === "SOLUSD") return "SOL-USD";
+    return normalizeTicker(symbolPart);
+  };
+
   const normalizeTradingViewSymbol = (ticker) => {
     const raw = String(ticker || "").trim().toUpperCase();
     if (!raw) return resolveTradingViewExchangeSymbol(getDefaultPopularTicker());
@@ -10260,6 +10273,30 @@
     return `${baseUrl}#${payload}`;
   };
 
+  const buildTradingViewSingleSymbolWidgetSrc = (baseUrl, symbol, config) => {
+    const url = new URL(baseUrl, window.location.origin);
+    url.searchParams.set("tvwidgetsymbol", normalizeTradingViewSymbol(symbol));
+    return buildTradingViewWidgetSrc(url.toString(), config);
+  };
+
+  const syncTradingViewUrlState = (ticker, symbol) => {
+    try {
+      const url = new URL(window.location.href);
+      const cleanTicker = normalizeTicker(ticker);
+      const cleanSymbol = normalizeTradingViewSymbol(symbol || cleanTicker);
+      if (!cleanTicker || !cleanSymbol) return;
+      url.searchParams.set("ticker", cleanTicker);
+      url.searchParams.set("tvwidgetsymbol", cleanSymbol);
+      const next = `${url.pathname}${url.search}${url.hash}`;
+      const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      if (next !== current) {
+        window.history.replaceState(window.history.state, "", next);
+      }
+    } catch (error) {
+      // Ignore URL sync issues in embedded contexts.
+    }
+  };
+
   const mountTradingViewIframe = ({ container, src, title, onload, onerror }) => {
     if (!container) return null;
     const frame = document.createElement("iframe");
@@ -10293,6 +10330,7 @@
     }
     ui.tradingViewFallback?.classList.add("hidden");
     setTradingViewStatus(`TradingView · ${symbol}`);
+    syncTradingViewUrlState(activeTicker, symbol);
 
     const shared = {
       symbol,
@@ -10331,7 +10369,7 @@
 
     mountTradingViewIframe({
       container: ui.tradingViewSymbolInfo,
-      src: buildTradingViewWidgetSrc("https://www.tradingview-widget.com/embed-widget/symbol-info/?locale=en", {
+      src: buildTradingViewSingleSymbolWidgetSrc("https://www.tradingview-widget.com/embed-widget/symbol-info/?locale=en", symbol, {
         ...shared,
         width: "100%",
         height: 255,
@@ -10341,7 +10379,7 @@
 
     mountTradingViewIframe({
       container: ui.tradingViewAdvanced,
-      src: buildTradingViewWidgetSrc("https://www.tradingview.com/widgetembed/?hideideas=1&locale=en", {
+      src: buildTradingViewSingleSymbolWidgetSrc("https://www.tradingview.com/widgetembed/?hideideas=1&locale=en", symbol, {
         symbol,
         interval: tvInterval,
         allow_symbol_change: "0",
@@ -10370,7 +10408,7 @@
 
     mountTradingViewIframe({
       container: ui.tradingViewCompanyProfile,
-      src: buildTradingViewWidgetSrc("https://www.tradingview-widget.com/embed-widget/symbol-profile/?locale=en", {
+      src: buildTradingViewSingleSymbolWidgetSrc("https://www.tradingview-widget.com/embed-widget/symbol-profile/?locale=en", symbol, {
         ...shared,
         width: "100%",
         height: "100%",
@@ -10380,7 +10418,7 @@
 
     mountTradingViewIframe({
       container: ui.tradingViewFundamentalData,
-      src: buildTradingViewWidgetSrc("https://www.tradingview-widget.com/embed-widget/financials/?locale=en", {
+      src: buildTradingViewSingleSymbolWidgetSrc("https://www.tradingview-widget.com/embed-widget/financials/?locale=en", symbol, {
         symbol,
         colorTheme: theme,
         isTransparent: true,
@@ -10393,7 +10431,7 @@
 
     mountTradingViewIframe({
       container: ui.tradingViewTechnicalAnalysis,
-      src: buildTradingViewWidgetSrc("https://www.tradingview-widget.com/embed-widget/technical-analysis/?locale=en", {
+      src: buildTradingViewSingleSymbolWidgetSrc("https://www.tradingview-widget.com/embed-widget/technical-analysis/?locale=en", symbol, {
         interval: "15m",
         width: "100%",
         height: "100%",
@@ -10408,7 +10446,7 @@
 
     mountTradingViewIframe({
       container: ui.tradingViewTopStories,
-      src: buildTradingViewWidgetSrc("https://www.tradingview-widget.com/embed-widget/timeline/?locale=en", {
+      src: buildTradingViewSingleSymbolWidgetSrc("https://www.tradingview-widget.com/embed-widget/timeline/?locale=en", symbol, {
         symbol,
         feedMode: "symbol",
         colorTheme: theme,
@@ -23179,6 +23217,7 @@
       const initialTicker =
         normalizeTicker(getQueryParam("ticker")) ||
         normalizeTicker(getQueryParam("symbol")) ||
+        normalizeTradingViewQueryTicker(getQueryParam("tvwidgetsymbol")) ||
         normalizeTicker(safeLocalStorageGet(LAST_TICKER_KEY)) ||
         normalizeTicker(ui.terminalTicker.value) ||
         getDefaultPopularTicker();
