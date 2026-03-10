@@ -1,9 +1,0 @@
-.git
-.gitignore
-__pycache__
-*.pyc
-*.pyo
-venv
-venv/**
-.env
-serviceAccountKey*.json
