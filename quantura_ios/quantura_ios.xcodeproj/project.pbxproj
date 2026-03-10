@@ -130,6 +130,28 @@
 		};
 /* End PBXFrameworksBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		63BB00012F90000100FACE01 /* Generate Embedded Framework dSYMs */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(TARGET_BUILD_DIR)/$(FRAMEWORKS_FOLDER_PATH)",
+			);
+			name = "Generate Embedded Framework dSYMs";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ \"$CONFIGURATION\" != \"Release\" ] && [ \"$ACTION\" != \"install\" ]; then\n  echo \"Skipping embedded framework dSYM generation for CONFIGURATION=$CONFIGURATION ACTION=$ACTION\"\n  exit 0\nfi\n\nframeworks_dir=\"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}\"\nif [ ! -d \"$frameworks_dir\" ]; then\n  echo \"Skipping embedded framework dSYM generation: missing frameworks dir at $frameworks_dir\"\n  exit 0\nfi\n\nmkdir -p \"${DWARF_DSYM_FOLDER_PATH}\"\narchive_dsyms_path=\"${ARCHIVE_DSYMS_PATH:-}\"\n\nfind \"$frameworks_dir\" -maxdepth 1 -type d -name '*.framework' | sort | while IFS= read -r framework; do\n  framework_name=\"$(basename \"$framework\")\"\n  binary_name=\"${framework_name%.framework}\"\n  binary_path=\"${framework}/${binary_name}\"\n  dsym_path=\"${DWARF_DSYM_FOLDER_PATH}/${framework_name}.dSYM\"\n\n  if [ ! -f \"$binary_path\" ]; then\n    echo \"Skipping ${framework_name}: missing binary at $binary_path\"\n    continue\n  fi\n\n  rm -rf \"$dsym_path\"\n  echo \"Generating embedded framework dSYM for ${framework_name}\"\n  xcrun dsymutil \"$binary_path\" -o \"$dsym_path\" || exit 1\n\n  if [ -n \"$archive_dsyms_path\" ] && [ -d \"$archive_dsyms_path\" ]; then\n    archive_dsym_path=\"${archive_dsyms_path}/${framework_name}.dSYM\"\n    rm -rf \"$archive_dsym_path\"\n    cp -R \"$dsym_path\" \"$archive_dsym_path\"\n  fi\ndone\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXGroup section */
 		633A6A4C2F43B6D3000C732E = {
 			isa = PBXGroup;
@@ -161,6 +183,7 @@
 				633A6A512F43B6D3000C732E /* Sources */,
 				633A6A522F43B6D3000C732E /* Frameworks */,
 				633A6A532F43B6D3000C732E /* Resources */,
+				63BB00012F90000100FACE01 /* Generate Embedded Framework dSYMs */,
 			);
 			buildRules = (
 			);
@@ -557,6 +580,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MARKETING_VERSION = 1.0;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				PRODUCT_BUNDLE_IDENTIFIER = "Tamzid-Ullah.quantura-ios";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
