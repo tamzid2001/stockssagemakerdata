@@ -23,6 +23,11 @@ class BannerAdView @JvmOverloads constructor(
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0,
 ) : FrameLayout(context, attrs, defStyleAttr) {
+    enum class BannerSlot {
+        TOP,
+        BOTTOM,
+    }
+
     private val tag = "BannerAdView"
     private val retryDelayMs = 30_000L
     private val minReservedHeightPx = (56f * resources.displayMetrics.density).toInt()
@@ -33,9 +38,20 @@ class BannerAdView @JvmOverloads constructor(
     private var pendingRetry: Runnable? = null
     private var waitingForSdkInit = false
     private var loadedAdUnitId: String? = null
+    private var onAdHeightChanged: ((Int) -> Unit)? = null
+    private var bannerSlot: BannerSlot = BannerSlot.TOP
 
     fun setRemoteConfigManager(manager: RemoteConfigManager?) {
         remoteConfigManager = manager
+    }
+
+    fun setBannerSlot(slot: BannerSlot) {
+        bannerSlot = slot
+    }
+
+    fun setOnAdHeightChanged(listener: ((Int) -> Unit)?) {
+        onAdHeightChanged = listener
+        notifyAdHeightChanged(currentContainerHeightPx())
     }
 
     fun loadAd(manager: RemoteConfigManager) {
@@ -56,6 +72,7 @@ class BannerAdView @JvmOverloads constructor(
             AdDebugStatusRegistry.updateLoad("banner", "waiting:sdk_init")
             minimumHeight = minReservedHeightPx
             visibility = VISIBLE
+            notifyAdHeightChanged(minReservedHeightPx)
             if (!waitingForSdkInit) {
                 waitingForSdkInit = true
                 MobileAdsBootstrap.runWhenInitialized {
@@ -69,16 +86,22 @@ class BannerAdView @JvmOverloads constructor(
             return
         }
         if (width <= 0) {
+            minimumHeight = minReservedHeightPx
+            visibility = VISIBLE
+            notifyAdHeightChanged(minReservedHeightPx)
             deferLoadUntilMeasured(manager)
             return
         }
         waitingForSdkInit = false
         pendingRetry?.let { removeCallbacks(it) }
         pendingRetry = null
-        val adUnitId = manager.resolveAdUnitId(
-            platform = AdPlatform.ANDROID,
-            format = AdFormat.BANNER
-        )
+        val adUnitId = when (bannerSlot) {
+            BannerSlot.TOP -> manager.resolveAdUnitId(
+                platform = AdPlatform.ANDROID,
+                format = AdFormat.BANNER
+            )
+            BannerSlot.BOTTOM -> manager.resolveAndroidBottomBannerAdUnitId()
+        }
         val metrics = resources.displayMetrics
         val rawWidthPx = width.coerceAtLeast(1)
         val density = metrics.density.coerceAtLeast(1f)
@@ -94,6 +117,8 @@ class BannerAdView @JvmOverloads constructor(
             width = LayoutParams.MATCH_PARENT
             height = requestedHeightPx
         }
+        minimumHeight = requestedHeightPx
+        notifyAdHeightChanged(requestedHeightPx)
         removeAllViews()
         adView?.destroy()
         adView = AdView(context).apply {
@@ -106,6 +131,7 @@ class BannerAdView @JvmOverloads constructor(
                     Log.i(this@BannerAdView.tag, "[Ads][Android] Load success for banner")
                     AdDebugStatusRegistry.updateLoad("banner", "loaded")
                     visibility = VISIBLE
+                    notifyAdHeightChanged(currentContainerHeightPx())
                 }
 
                 override fun onAdFailedToLoad(error: LoadAdError) {
@@ -122,7 +148,7 @@ class BannerAdView @JvmOverloads constructor(
                         context = context,
                         adFormat = "banner",
                         adUnitId = adUnitId,
-                        placement = "bottom_banner"
+                        placement = if (bannerSlot == BannerSlot.BOTTOM) "bottom_banner" else "top_banner"
                     )
                 }
             }
@@ -141,10 +167,13 @@ class BannerAdView @JvmOverloads constructor(
             hideAd()
             return
         }
-        val desiredAdUnitId = manager.resolveAdUnitId(
-            platform = AdPlatform.ANDROID,
-            format = AdFormat.BANNER
-        )
+        val desiredAdUnitId = when (bannerSlot) {
+            BannerSlot.TOP -> manager.resolveAdUnitId(
+                platform = AdPlatform.ANDROID,
+                format = AdFormat.BANNER
+            )
+            BannerSlot.BOTTOM -> manager.resolveAndroidBottomBannerAdUnitId()
+        }
         val currentAdUnitId = loadedAdUnitId?.takeIf { it.isNotBlank() }
         if (adView == null || currentAdUnitId != desiredAdUnitId) {
             Log.i(
@@ -162,9 +191,10 @@ class BannerAdView @JvmOverloads constructor(
         adView?.destroy()
         adView = null
         loadedAdUnitId = null
-        minimumHeight = minReservedHeightPx
+        minimumHeight = 0
         waitingForSdkInit = false
-        visibility = INVISIBLE
+        visibility = GONE
+        notifyAdHeightChanged(0)
     }
 
     override fun onDetachedFromWindow() {
@@ -173,6 +203,7 @@ class BannerAdView @JvmOverloads constructor(
         adView?.destroy()
         adView = null
         loadedAdUnitId = null
+        notifyAdHeightChanged(0)
         super.onDetachedFromWindow()
     }
 
@@ -209,5 +240,20 @@ class BannerAdView @JvmOverloads constructor(
             Log.w(tag, "[Ads][Android] Banner width not measured yet; retrying after layout.")
             scheduleRetry()
         }, 1000L)
+    }
+
+    private fun currentContainerHeightPx(): Int {
+        val layoutHeight = layoutParams?.height ?: 0
+        return when {
+            visibility != VISIBLE -> 0
+            layoutHeight > 0 -> layoutHeight
+            height > 0 -> height
+            minimumHeight > 0 -> minimumHeight
+            else -> minReservedHeightPx
+        }
+    }
+
+    private fun notifyAdHeightChanged(heightPx: Int) {
+        onAdHeightChanged?.invoke(heightPx.coerceAtLeast(0))
     }
 }

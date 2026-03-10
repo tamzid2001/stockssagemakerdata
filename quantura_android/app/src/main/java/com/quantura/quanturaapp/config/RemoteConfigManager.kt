@@ -263,6 +263,26 @@ class RemoteConfigManager(
         )
     }
 
+    fun resolveAndroidBottomBannerAdUnitId(): String {
+        val state = currentRemoteConfigState()
+        val environment = getAdsEnvironment()
+        val adsEnabled = state.adsEnabled && state.featureFlags.adsEnabled
+        val formatEnabled = state.androidFormatToggles.isEnabled(AdFormat.BANNER)
+        val useRealAds = adsEnabled && state.adsUseRealAndroid
+        val resolved = if (useRealAds) {
+            resolveBundledOrRemoteBottomBannerLiveId()
+        } else {
+            TEST_ANDROID_IDS.adaptiveBanner
+        }
+        Log.i(
+            tag,
+            "[Ads][Android] Selected ad unit for bottom_banner = $resolved " +
+                "useReal=$useRealAds adsEnabled=$adsEnabled formatEnabled=$formatEnabled platformRealFlag=${state.adsUseRealAndroid} " +
+                "debug=${environment.isDebugBuild} emulator=${environment.isSimulatorOrEmulator}"
+        )
+        return resolved
+    }
+
     fun resolveAdUnitId(
         platform: AdPlatform,
         format: AdFormat,
@@ -508,6 +528,35 @@ class RemoteConfigManager(
         )
     }
 
+    private fun resolveBundledOrRemoteBottomBannerLiveId(): String {
+        val payload = parseAdUnitPayload(remoteString("ad_unit_ids", defaultAdUnitIdsPayload()))
+        val platformJson = payload?.optJSONObject("android")
+        val candidate = listOfNotNull(
+            platformJson?.optString("bottomBanner"),
+            platformJson?.optString("secondaryBanner"),
+            platformJson?.optString("bannerBottom"),
+            platformJson?.optString("bottom_banner"),
+            payload?.optString("bottomBanner"),
+            payload?.optString("secondaryBanner"),
+            payload?.optString("bannerBottom"),
+            payload?.optString("bottom_banner"),
+        )
+            .map { it.trim() }
+            .firstOrNull { it.isNotEmpty() }
+
+        if (candidate.isNullOrEmpty()) {
+            return LIVE_ANDROID_BOTTOM_BANNER_ID
+        }
+        if (candidate.isGoogleSampleAdUnit()) {
+            Log.w(
+                tag,
+                "[Ads][Android] Ignoring sample ad unit override for android:bottom_banner and using bundled live unit instead."
+            )
+            return LIVE_ANDROID_BOTTOM_BANNER_ID
+        }
+        return candidate
+    }
+
     private fun String.isGoogleSampleAdUnit(): Boolean {
         return startsWith("ca-app-pub-3940256099942544/")
     }
@@ -619,6 +668,8 @@ class RemoteConfigManager(
             nativeAdvanced = "ca-app-pub-5322412772082850/1144501483",
             nativeVideo = "ca-app-pub-5322412772082850/1144501483",
         )
+
+        private const val LIVE_ANDROID_BOTTOM_BANNER_ID = "ca-app-pub-5322412772082850/3154147762"
 
         private val LIVE_IOS_IDS = AdUnitIds(
             appOpen = "ca-app-pub-5322412772082850/9489895363",

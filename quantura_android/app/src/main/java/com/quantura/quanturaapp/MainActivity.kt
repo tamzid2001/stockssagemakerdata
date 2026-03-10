@@ -187,7 +187,8 @@ class MainActivity : ComponentActivity() {
     private val playIntegrityClient by lazy { PlayIntegrityClient(applicationContext) }
 
     private var webViewRef: WebView? = null
-    private var bannerAdViewRef: BannerAdView? = null
+    private var topBannerAdViewRef: BannerAdView? = null
+    private var bottomBannerAdViewRef: BannerAdView? = null
     private var googleSignInClient: GoogleSignInClient? = null
     private var authStateListener: FirebaseAuth.AuthStateListener? = null
 
@@ -287,81 +288,130 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    val bannerSafeInset = WindowInsets.safeDrawing
-                        .only(WindowInsetsSides.Bottom)
-                        .asPaddingValues()
-                        .calculateBottomPadding()
-                    val bottomChromeHeight = BANNER_RESERVED_HEIGHT + bannerSafeInset
+                    var topBannerHeightDp by androidx.compose.runtime.remember {
+                        mutableStateOf(0.dp)
+                    }
+                    var bottomBannerHeightDp by androidx.compose.runtime.remember {
+                        mutableStateOf(0.dp)
+                    }
+                    val density = resources.displayMetrics.density.coerceAtLeast(1f)
+                    val updateTopBannerHeight: (Int) -> Unit = { heightPx ->
+                        topBannerHeightDp = if (heightPx <= 0) {
+                            0.dp
+                        } else {
+                            (heightPx.toFloat() / density).dp
+                        }
+                    }
+                    val updateBottomBannerHeight: (Int) -> Unit = { heightPx ->
+                        bottomBannerHeightDp = if (heightPx <= 0) {
+                            0.dp
+                        } else {
+                            (heightPx.toFloat() / density).dp
+                        }
+                    }
 
-                    Box(
+                    Column(
                         modifier = Modifier
                             .fillMaxSize()
                             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
                     ) {
-                        QuanturaWebViewScreen(
+                        Box(
                             modifier = Modifier
-                                .fillMaxSize()
-                                .padding(bottom = bottomChromeHeight),
-                            activity = this@MainActivity,
-                            startUrl = startUrl,
-                            adManager = appContainer.adManager,
-                            remoteConfigManager = appContainer.remoteConfigManager,
-                            isAuthGateVisible = { authGateVisible },
-                            onNativeAuthMessage = { type, payload ->
-                                handleNativeAuthMessage(type, payload)
-                            },
-                            onOpenAdInspector = {
-                                openAdInspector(trigger = "bridge")
-                            },
-                            onReady = { webView ->
-                                webViewRef = webView
-                                appContainer.appOpenAdManager.setPresentationBlockedByAuthGate(authGateVisible)
-                                emitAuthStateToWeb(currentFirebaseUser(), idTokenFresh = false)
-                                emitAuthGateStateToWeb(authGateVisible, reason = "webview_attached")
-                            },
-                            onPageReady = { webView, url ->
-                                handleTrustedWebPageReady(webView, url)
-                            },
-                        )
-
-                        if (authGateVisible) {
-                            NativeAuthGate(
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.96f))
+                        ) {
+                            AndroidView(
                                 modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(bottom = bottomChromeHeight),
-                                isBusy = authBusy,
-                                errorText = authErrorText,
-                                onGoogle = { startGoogleSignInFlow(trigger = "auth_gate") },
-                                onGithub = { startOAuthProviderSignIn(providerId = "github.com", trigger = "auth_gate_github") },
-                                onTwitter = { startOAuthProviderSignIn(providerId = "twitter.com", trigger = "auth_gate_twitter") },
-                                onYahoo = { startOAuthProviderSignIn(providerId = "yahoo.com", trigger = "auth_gate_yahoo") },
-                                onMicrosoft = { startOAuthProviderSignIn(providerId = "microsoft.com", trigger = "auth_gate_microsoft") },
-                                onEmail = {
-                                    authErrorText = ""
-                                    openEmailDialog(EmailDialogMode.SIGN_IN)
+                                    .fillMaxWidth()
+                                    .height(topBannerHeightDp),
+                                factory = { ctx ->
+                                    BannerAdView(ctx).apply {
+                                        setBannerSlot(BannerAdView.BannerSlot.TOP)
+                                        topBannerAdViewRef = this
+                                        setOnAdHeightChanged(updateTopBannerHeight)
+                                        loadAd(appContainer.remoteConfigManager)
+                                    }
                                 },
-                                onNotNow = { continueAnonymouslyForNow() },
+                                update = { banner ->
+                                    banner.setBannerSlot(BannerAdView.BannerSlot.TOP)
+                                    topBannerAdViewRef = banner
+                                    banner.setOnAdHeightChanged(updateTopBannerHeight)
+                                    banner.refreshAdVisibility()
+                                },
                             )
                         }
 
                         Box(
                             modifier = Modifier
-                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .weight(1f)
+                        ) {
+                            QuanturaWebViewScreen(
+                                modifier = Modifier
+                                    .fillMaxSize(),
+                                activity = this@MainActivity,
+                                startUrl = startUrl,
+                                adManager = appContainer.adManager,
+                                remoteConfigManager = appContainer.remoteConfigManager,
+                                isAuthGateVisible = { authGateVisible },
+                                onNativeAuthMessage = { type, payload ->
+                                    handleNativeAuthMessage(type, payload)
+                                },
+                                onOpenAdInspector = {
+                                    openAdInspector(trigger = "bridge")
+                                },
+                                onReady = { webView ->
+                                    webViewRef = webView
+                                    appContainer.appOpenAdManager.setPresentationBlockedByAuthGate(authGateVisible)
+                                    emitAuthStateToWeb(currentFirebaseUser(), idTokenFresh = false)
+                                    emitAuthGateStateToWeb(authGateVisible, reason = "webview_attached")
+                                },
+                                onPageReady = { webView, url ->
+                                    handleTrustedWebPageReady(webView, url)
+                                },
+                            )
+
+                            if (authGateVisible) {
+                                NativeAuthGate(
+                                    modifier = Modifier.fillMaxSize(),
+                                    isBusy = authBusy,
+                                    errorText = authErrorText,
+                                    onGoogle = { startGoogleSignInFlow(trigger = "auth_gate") },
+                                    onGithub = { startOAuthProviderSignIn(providerId = "github.com", trigger = "auth_gate_github") },
+                                    onTwitter = { startOAuthProviderSignIn(providerId = "twitter.com", trigger = "auth_gate_twitter") },
+                                    onYahoo = { startOAuthProviderSignIn(providerId = "yahoo.com", trigger = "auth_gate_yahoo") },
+                                    onMicrosoft = { startOAuthProviderSignIn(providerId = "microsoft.com", trigger = "auth_gate_microsoft") },
+                                    onEmail = {
+                                        authErrorText = ""
+                                        openEmailDialog(EmailDialogMode.SIGN_IN)
+                                    },
+                                    onNotNow = { continueAnonymouslyForNow() },
+                                )
+                            }
+                        }
+
+                        Box(
+                            modifier = Modifier
                                 .fillMaxWidth()
                                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+                                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.96f))
                         ) {
                             AndroidView(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(BANNER_RESERVED_HEIGHT),
+                                    .height(bottomBannerHeightDp),
                                 factory = { ctx ->
                                     BannerAdView(ctx).apply {
-                                        bannerAdViewRef = this
+                                        setBannerSlot(BannerAdView.BannerSlot.BOTTOM)
+                                        bottomBannerAdViewRef = this
+                                        setOnAdHeightChanged(updateBottomBannerHeight)
                                         loadAd(appContainer.remoteConfigManager)
                                     }
                                 },
                                 update = { banner ->
-                                    bannerAdViewRef = banner
+                                    banner.setBannerSlot(BannerAdView.BannerSlot.BOTTOM)
+                                    bottomBannerAdViewRef = banner
+                                    banner.setOnAdHeightChanged(updateBottomBannerHeight)
                                     banner.refreshAdVisibility()
                                 },
                             )
@@ -1424,7 +1474,8 @@ class MainActivity : ComponentActivity() {
 
     private fun refreshBannerAdVisibility() {
         runOnUiThread {
-            bannerAdViewRef?.refreshAdVisibility()
+            topBannerAdViewRef?.refreshAdVisibility()
+            bottomBannerAdViewRef?.refreshAdVisibility()
         }
     }
 
@@ -1487,7 +1538,8 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             appContainer.adManager.preloadAllFormatsForQa(this@MainActivity)
             appContainer.appOpenAdManager.loadAdIfNeeded()
-            bannerAdViewRef?.loadAd(appContainer.remoteConfigManager)
+            topBannerAdViewRef?.loadAd(appContainer.remoteConfigManager)
+            bottomBannerAdViewRef?.loadAd(appContainer.remoteConfigManager)
             delay(600)
             refreshAdsQaSnapshot()
         }
