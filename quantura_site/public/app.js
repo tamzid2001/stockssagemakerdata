@@ -7404,12 +7404,20 @@
 
   const setAdminOnlyFeaturePanels = (user = state.user) => {
     const allowAdminTools = hasFullAccount(user) && isAdminUser(user);
-    ui.uploadsAdminBlock?.classList.toggle("hidden", !allowAdminTools);
+    ui.uploadsAdminBlock?.classList.remove("hidden");
     ui.autopilotAdminBlock?.classList.toggle("hidden", !allowAdminTools);
-    ui.uploadsVoteBlock?.classList.toggle("hidden", allowAdminTools);
+    ui.uploadsVoteBlock?.classList.add("hidden");
     ui.autopilotVoteBlock?.classList.toggle("hidden", allowAdminTools);
+    if (ui.predictionsStatus) {
+      if (!hasSessionUser()) {
+        ui.predictionsStatus.textContent = "Uploads can start in a guest session.";
+      } else if (hasFullAccount(user)) {
+        ui.predictionsStatus.textContent = "";
+      } else {
+        ui.predictionsStatus.textContent = "Guest uploads stay linked to this session until you create an account.";
+      }
+    }
     if (!allowAdminTools) {
-      if (ui.predictionsStatus) ui.predictionsStatus.textContent = "Admin-only capability.";
       if (ui.autopilotStatus) ui.autopilotStatus.textContent = "Admin-only capability.";
     }
   };
@@ -8972,9 +8980,9 @@
 
   const startPredictionsUploads = (db, user) => {
     if (state.unsubscribePredictions) state.unsubscribePredictions();
-    if (!user || !ui.predictionsOutput) return;
-    if (!isAdminUser(user)) {
-      renderRequestList([], ui.predictionsOutput, "Prediction uploads are currently admin-only.");
+    if (!ui.predictionsOutput) return;
+    if (!user) {
+      renderRequestList([], ui.predictionsOutput, "Uploads will appear here once submitted.");
       return;
     }
 
@@ -22270,7 +22278,6 @@
 	          const plotUpload = event.target.closest('[data-action="plot-upload"]');
 	          if (plotUpload) {
 	            event.preventDefault();
-	            if (!requireAdminAccess("Prediction uploads are currently admin-only.")) return;
 	            const uploadId = String(plotUpload.dataset.uploadId || "").trim();
 	            if (!uploadId) return;
             try {
@@ -22285,7 +22292,6 @@
 	          const downloadUpload = event.target.closest('[data-action="download-upload"]');
 	          if (downloadUpload) {
 	            event.preventDefault();
-	            if (!requireAdminAccess("Prediction uploads are currently admin-only.")) return;
 	            const uploadId = String(downloadUpload.dataset.uploadId || "").trim();
 	            if (!uploadId) return;
 
@@ -22311,7 +22317,6 @@
 	          const renameUpload = event.target.closest('[data-action="rename-upload"]');
 	          if (renameUpload) {
 	            event.preventDefault();
-	            if (!requireAdminAccess("Prediction uploads are currently admin-only.")) return;
 	            const uploadId = String(renameUpload.dataset.uploadId || "").trim();
 	            if (!uploadId) return;
 	            let currentTitle = "";
@@ -22333,8 +22338,14 @@
 
             renameUpload.disabled = true;
             try {
-              const rename = functions.httpsCallable("rename_prediction_upload");
-              await rename({ uploadId, title: nextTitle, meta: buildMeta() });
+              await db.collection("prediction_uploads").doc(uploadId).set(
+                {
+                  title: nextTitle,
+                  updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                  meta: buildMeta(),
+                },
+                { merge: true }
+              );
               showToast("Upload renamed.");
               logEvent("predictions_renamed", { upload_id: uploadId });
             } catch (error) {
@@ -22348,7 +22359,6 @@
 	          const shareUpload = event.target.closest('[data-action="share-upload"]');
 	          if (shareUpload) {
 	            event.preventDefault();
-	            if (!requireAdminAccess("Prediction uploads are currently admin-only.")) return;
 	            const uploadId = String(shareUpload.dataset.uploadId || "").trim();
 	            if (!uploadId) return;
 
@@ -22377,7 +22387,6 @@
 	          const deleteUpload = event.target.closest('[data-action="delete-upload"]');
 	          if (deleteUpload) {
 	            event.preventDefault();
-	            if (!requireAdminAccess("Prediction uploads are currently admin-only.")) return;
 	            const uploadId = String(deleteUpload.dataset.uploadId || "").trim();
 	            if (!uploadId) return;
 	            const ok = await openConfirmModal({
@@ -22390,8 +22399,19 @@
 
             deleteUpload.disabled = true;
             try {
-              const del = functions.httpsCallable("delete_prediction_upload");
-              await del({ uploadId, meta: buildMeta() });
+              const snap = await db.collection("prediction_uploads").doc(uploadId).get();
+              if (snap.exists) {
+                const uploadDoc = snap.data() || {};
+                const filePath = String(uploadDoc.filePath || "").trim();
+                if (storage && filePath) {
+                  try {
+                    await storage.ref().child(filePath).delete();
+                  } catch (storageError) {
+                    console.warn("[Predictions] Unable to delete storage object", storageError);
+                  }
+                }
+              }
+              await db.collection("prediction_uploads").doc(uploadId).delete();
               showToast("Upload deleted.");
               logEvent("predictions_deleted", { upload_id: uploadId });
               if (state.predictionsContext.uploadId === uploadId) {
@@ -25252,16 +25272,16 @@
 
     ui.predictionsForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
+      let sessionUser = null;
       try {
-        await ensureSessionUser({
+        sessionUser = await ensureSessionUser({
           reason: "predictions_upload_requires_session",
-          message: "Sign in to sync prediction uploads.",
+          message: "Starting a guest session for prediction uploads.",
         });
       } catch (error) {
         showToast(error?.message || "Unable to start guest session.", "warn");
         return;
       }
-      if (!requireAdminAccess("Upload predictions is currently admin-only.")) return;
       if (!storage) {
         showToast("File uploads are not available.", "warn");
         return;
@@ -25285,14 +25305,16 @@
       ui.predictionsStatus.textContent = "Uploading...";
 
       try {
-        const path = `predictions/${state.user.uid}/${Date.now()}_${file.name}`;
+        const ownerUid = String(sessionUser?.uid || state.user?.uid || "").trim();
+        if (!ownerUid) throw new Error("Unable to resolve the current session user.");
+        const path = `predictions/${ownerUid}/${Date.now()}_${file.name}`;
         const storageRef = storage.ref().child(path);
         const snapshot = await storageRef.put(file, {
           contentType: file.type || "text/csv",
         });
         const url = await snapshot.ref.getDownloadURL();
         const doc = {
-          userId: state.user.uid,
+          userId: ownerUid,
           title: file.name,
           status: "uploaded",
           notes: notesInput?.value || "",
@@ -25316,16 +25338,16 @@
     });
 
     ui.predictionsAgentButton?.addEventListener("click", async () => {
+      let sessionUser = null;
       try {
-        await ensureSessionUser({
+        sessionUser = await ensureSessionUser({
           reason: "predictions_agent_requires_session",
-          message: "Sign in to sync prediction agent runs.",
+          message: "Starting a guest session for prediction analysis.",
         });
       } catch (error) {
         showToast(error?.message || "Unable to start guest session.", "warn");
         return;
       }
-      if (!requireAdminAccess("OpenAI CSV Agent is currently admin-only.")) return;
       if (!functions) {
         showToast("Functions client is not ready.", "warn");
         return;
@@ -25345,9 +25367,9 @@
 	            const agent = agentRes?.data || {};
 	            const agentText = String(agent.analysis || "").trim();
 	            const modelUsed = normalizeAiModelId(agent.model || "gpt-5-mini") || "gpt-5-mini";
-              if (db && state.user && agentText) {
+              if (db && sessionUser && agentText) {
                 await db.collection("agent_runs").add({
-                  userId: state.user.uid,
+                  userId: sessionUser.uid,
                   uploadId: mappingResult.uploadId,
                   ticker: normalizeTicker(mappingResult.ticker || ""),
                   model: modelUsed,

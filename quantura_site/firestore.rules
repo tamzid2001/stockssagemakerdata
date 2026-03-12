@@ -109,7 +109,10 @@ service cloud.firestore {
     }
 
     match /prediction_uploads/{uploadId} {
-      allow read, write: if isAdmin();
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.userId);
+      allow update, delete: if isAdmin()
+        || (isSignedIn() && request.auth.uid == resource.data.userId);
     }
 
     match /agent_runs/{runId} {
