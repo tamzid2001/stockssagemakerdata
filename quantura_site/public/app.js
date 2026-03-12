@@ -17160,25 +17160,61 @@
     return String(uploadDoc?.fileUrl || "").trim();
   };
 
+  const fetchUploadCsvViaApi = async ({ uploadId, maxBytes = 2_000_000 }) => {
+    const cleanId = String(uploadId || "").trim();
+    if (!cleanId) throw new Error("Upload ID is required.");
+    const headers = await buildApiAuthHeaders();
+    if (!headers.Authorization) {
+      throw new Error("Sign in before accessing prediction uploads.");
+    }
+    const response = await fetch(
+      `/api/prediction-uploads/${encodeURIComponent(cleanId)}/csv?maxBytes=${encodeURIComponent(String(maxBytes))}`,
+      {
+        method: "GET",
+        headers,
+        credentials: "same-origin",
+        cache: "no-store",
+      }
+    );
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const message = String(payload?.error || "Unable to download CSV.");
+      throw new Error(message);
+    }
+    const text = String(payload?.csv || "");
+    if (!text) throw new Error("CSV file was empty.");
+    return {
+      text,
+      truncated: Boolean(payload?.truncated),
+      source: "api",
+    };
+  };
+
   const fetchUploadCsvText = async ({ uploadId, url, maxBytes = 2_000_000 }) => {
-    if (!url) throw new Error("Upload is missing a downloadable URL.");
     try {
-      const resp = await fetch(url, { cache: "no-store" });
-      if (!resp.ok) throw new Error("Unable to download CSV.");
-      const text = await resp.text();
-      return { text, truncated: false, source: "direct" };
-    } catch (error) {
-      const functions = state.clients?.functions;
-      if (!functions) throw error;
-      const callable = functions.httpsCallable("get_prediction_upload_csv");
-      const result = await callable({ uploadId, maxBytes, meta: buildMeta() });
-      const text = String(result.data?.csv || "");
-      if (!text) throw new Error("Unable to download CSV.");
-      return {
-        text,
-        truncated: Boolean(result.data?.truncated),
-        source: "function",
-      };
+      return await fetchUploadCsvViaApi({ uploadId, maxBytes });
+    } catch (apiError) {
+      if (url) {
+        try {
+          const resp = await fetch(url, { cache: "no-store" });
+          if (!resp.ok) throw new Error("Unable to download CSV.");
+          const text = await resp.text();
+          return { text, truncated: false, source: "direct" };
+        } catch (error) {
+          const functions = state.clients?.functions;
+          if (!functions) throw apiError;
+          const callable = functions.httpsCallable("get_prediction_upload_csv");
+          const result = await callable({ uploadId, maxBytes, meta: buildMeta() });
+          const text = String(result.data?.csv || "");
+          if (!text) throw apiError;
+          return {
+            text,
+            truncated: Boolean(result.data?.truncated),
+            source: "function",
+          };
+        }
+      }
+      throw apiError;
     }
   };
 
@@ -17197,7 +17233,6 @@
     const doc = { id: snap.id, ...(snap.data() || {}) };
 
     const url = await resolveUploadCsvUrl(storage, doc);
-    if (!url) throw new Error("Upload is missing a downloadable URL.");
     const { text, truncated, source } = await fetchUploadCsvText({ uploadId: cleanId, url, maxBytes: 5_000_000 });
 
     const table = parseCsvTable(text, { maxRows: 20000 });

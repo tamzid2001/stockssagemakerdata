@@ -2671,6 +2671,10 @@ async function verifyRequestUser(req: Request, required = false): Promise<admin.
   }
 }
 
+function isAdminDecodedUser(user: admin.auth.DecodedIdToken | null | undefined): boolean {
+  return asString(user?.email).trim().toLowerCase() === ADMIN_EMAIL;
+}
+
 function getBearerToken(req: Request): string {
   const authHeader = asString(req.headers["authorization"] || (req.headers as any)["Authorization"]).trim();
   if (!authHeader) return "";
@@ -5982,6 +5986,97 @@ ROUTES.post("/analytics/ad-impression", async (req, res) => {
   } catch (error) {
     console.error("[Ads] ad impression callback failed", error);
     res.status(500).json({ error: "ad_impression_failed" });
+  }
+});
+
+ROUTES.get("/prediction-uploads/:uploadId/csv", async (req, res) => {
+  try {
+    const user = await verifyRequestUser(req, true);
+    const uploadId = sanitizeText(req.params.uploadId, 180);
+    const maxBytes = Math.max(1000, Math.min(10_000_000, Math.floor(asFinite(req.query.maxBytes, 5_000_000))));
+    if (!uploadId) {
+      res.status(400).json({ error: "invalid_upload_id" });
+      return;
+    }
+
+    const snap = await db.collection("prediction_uploads").doc(uploadId).get();
+    if (!snap.exists) {
+      res.status(404).json({ error: "upload_not_found" });
+      return;
+    }
+
+    const data = asPlainObject(snap.data());
+    const ownerUid = asString(data.userId).trim();
+    const filePath = asString(data.filePath).trim();
+    if (!ownerUid) {
+      res.status(400).json({ error: "upload_owner_missing" });
+      return;
+    }
+    if (!isAdminDecodedUser(user) && user?.uid !== ownerUid) {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
+    if (!filePath || !filePath.startsWith(`predictions/${ownerUid}/`)) {
+      res.status(400).json({ error: "invalid_storage_path" });
+      return;
+    }
+
+    const projectId = asString(admin.app().options.projectId || process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT, "quantura-e2e3d")
+      .trim();
+    const bucketCandidates = Array.from(
+      new Set(
+        [
+          asString(admin.app().options.storageBucket).trim(),
+          asString(process.env.FIREBASE_STORAGE_BUCKET).trim(),
+          `${projectId}.firebasestorage.app`,
+          `${projectId}.appspot.com`,
+        ].filter(Boolean)
+      )
+    );
+
+    let csvBuffer: Buffer | null = null;
+    let bucketName = "";
+    let fileSize = 0;
+    for (const candidate of bucketCandidates) {
+      try {
+        const file = admin.storage().bucket(candidate).file(filePath);
+        const [exists] = await file.exists();
+        if (!exists) continue;
+        bucketName = candidate;
+        const [contents] = await file.download();
+        csvBuffer = contents;
+        fileSize = contents.length;
+        break;
+      } catch (error) {
+        continue;
+      }
+    }
+
+    if (!csvBuffer) {
+      res.status(404).json({ error: "csv_not_found_in_storage" });
+      return;
+    }
+
+    const truncated = csvBuffer.length > maxBytes;
+    const payload = truncated ? csvBuffer.subarray(0, maxBytes).toString("utf8") : csvBuffer.toString("utf8");
+
+    res.status(200).json({
+      ok: true,
+      uploadId,
+      bucket: bucketName,
+      filePath,
+      sizeBytes: fileSize,
+      truncated,
+      csv: payload,
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[PredictionUpload] csv fetch failed", error);
+    res.status(500).json({ error: "prediction_upload_csv_failed" });
   }
 });
 
