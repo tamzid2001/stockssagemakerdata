@@ -404,39 +404,66 @@
                   <section class="panel hidden" data-panel="news">
                     <div class="panel-header">
                       <h2>Historical Data Download</h2>
-                      <p class="small">Company context and headlines update automatically and render below your chart.</p>
+                      <p class="small">Export daily, hourly, or minute history for the active ticker, paginate large intraday sets, and calculate forward timestamps from any starting point.</p>
                     </div>
                     <div class="content-grid">
                       <form id="download-form" class="card">
                         <h3>Download price history</h3>
                         <input id="download-ticker" name="ticker" type="hidden" />
-                        <div class="small muted" style="margin-bottom: 12px;">Uses the ticker from your chart context.</div>
+                        <div class="small muted" style="margin-bottom: 12px;">Uses the ticker from your chart context and paginates through Yahoo's intraday limits for you.</div>
                         <div class="form-grid">
                           <div class="field">
                             <label class="label" for="download-interval">Interval</label>
                             <select id="download-interval" name="interval">
                               <option value="1d">Daily</option>
                               <option value="1h">Hourly</option>
+                              <option value="1m">1 minute</option>
                             </select>
+                          </div>
+                          <div class="field">
+                            <label class="label" for="download-lookback-days">Lookback window (days)</label>
+                            <input id="download-lookback-days" name="lookbackDays" type="number" min="1" max="5000" value="365" />
                           </div>
                           <div class="field">
                             <label class="label" for="download-end">End date</label>
                             <input id="download-end" name="end" type="date" />
                           </div>
                         </div>
+                        <label class="small muted hidden" id="download-all-available-wrap" style="display:block; margin-top: 10px;">
+                          <input id="download-all-available" name="allAvailable" type="checkbox" />
+                          <span>Download as many 1-minute rows as Yahoo currently exposes.</span>
+                        </label>
                         <button class="cta" type="submit" data-analytics="download_prices">Download CSV</button>
                         <p class="small" id="download-status"></p>
                       </form>
                       <div class="card">
-                        <h3>Export guidance</h3>
-                        <p class="small">
-                          Use daily exports for longer-horizon strategy analysis and hourly exports to inspect short-term regime shifts.
-                          Quantura keeps your terminal context consistent so you can pull data without re-entering symbols.
-                        </p>
+                        <h3>Future time calculator</h3>
+                        <form id="future-date-form">
+                          <div class="form-grid">
+                            <div class="field">
+                              <label class="label" for="future-date-start">Starting date &amp; time</label>
+                              <input id="future-date-start" name="start" type="datetime-local" />
+                            </div>
+                            <div class="field">
+                              <label class="label" for="future-date-amount">Amount</label>
+                              <input id="future-date-amount" name="amount" type="number" min="1" step="1" value="5" />
+                            </div>
+                            <div class="field">
+                              <label class="label" for="future-date-unit">Unit</label>
+                              <select id="future-date-unit" name="unit">
+                                <option value="minutes">Minutes</option>
+                                <option value="hours">Hours</option>
+                                <option value="days" selected>Days</option>
+                              </select>
+                            </div>
+                          </div>
+                          <button class="cta secondary" type="submit">Calculate future time</button>
+                          <p class="small" id="future-date-output" style="margin-top: 12px;">Enter a starting date to calculate a future timestamp.</p>
+                        </form>
                         <details class="learn-more">
                           <summary>Learn more</summary>
                           <p class="small">
-                            If you're building your own dashboard, export the same interval you used to generate forecasts so the timestamps align cleanly in downstream tooling.
+                            Use daily exports for longer horizons, hourly exports for exact :00 bars including any extended-hours rows Yahoo returns, and 1-minute exports for the maximum recent intraday detail available.
                           </p>
                         </details>
                       </div>

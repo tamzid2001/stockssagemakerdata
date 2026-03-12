@@ -1836,8 +1836,16 @@
     technicalsForm: document.getElementById("technicals-form"),
     technicalsOutput: document.getElementById("technicals-output"),
     downloadForm: document.getElementById("download-form"),
+    downloadInterval: document.getElementById("download-interval"),
+    downloadLookbackDays: document.getElementById("download-lookback-days"),
+    downloadAllAvailable: document.getElementById("download-all-available"),
     downloadStatus: document.getElementById("download-status"),
     downloadPreview: document.getElementById("download-preview"),
+    futureDateForm: document.getElementById("future-date-form"),
+    futureDateStart: document.getElementById("future-date-start"),
+    futureDateAmount: document.getElementById("future-date-amount"),
+    futureDateUnit: document.getElementById("future-date-unit"),
+    futureDateOutput: document.getElementById("future-date-output"),
     trendingButton: document.getElementById("load-trending"),
     trendingList: document.getElementById("trending-list"),
     intelOutput: document.getElementById("intel-output"),
@@ -2219,6 +2227,15 @@
       table: null,
       previewPage: 0,
       previewPageSize: 25,
+    },
+    downloadContext: {
+      rows: [],
+      ticker: "",
+      interval: "1d",
+      page: 0,
+      pageSize: 120,
+      csvText: "",
+      filename: "",
     },
     aiLeaderboardHorizon: AI_LEADERBOARD_DEFAULT_HORIZON,
     aiModelFilter: "all",
@@ -2871,6 +2888,10 @@
         const direction = String(prediction?.direction || "neutral").trim();
         const confidence = String(prediction?.confidence || "medium").trim();
         const timeline = String(prediction?.timeline || "").trim();
+        const providerLabel = String(
+          MODEL_PROVIDER_LABEL[normalizeModelCouncilProviderId(analysis?.provider || "")] || analysis?.provider || ""
+        ).trim();
+        const modelLabel = String(getModelMeta(analysis?.model || "")?.label || analysis?.model || "").trim();
         const signalList = Array.isArray(selectedIndicators)
           ? selectedIndicators.map((entry) => String(entry || "").trim().toUpperCase()).filter(Boolean)
           : [];
@@ -2887,6 +2908,8 @@
             Confidence: confidence,
             Timeline: timeline,
             Move: Number.isFinite(upsidePct) ? formatPercent(upsidePct, { signed: true, digits: 2 }) : "",
+            Provider: providerLabel,
+            Model: modelLabel,
             Signals: signalList.slice(0, 4).join(", "),
             Rows: Array.isArray(rows) ? rows.length : 0,
           }),
@@ -5235,6 +5258,30 @@
 
   const normalizeForecastSeriesRows = (rows) => {
     if (!Array.isArray(rows)) return [];
+    const normalizeQuantileKey = (rawKey) => {
+      const key = String(rawKey || "").trim();
+      if (!key) return "";
+      const lower = key.toLowerCase().replace(/[^a-z0-9.]/g, "");
+      if (/^q\d{1,3}$/.test(lower)) return lower;
+      if (/^p\d{1,3}$/.test(lower)) return `q${lower.slice(1)}`;
+      const decimalMatch =
+        lower.match(/^(?:q|p)(0?\.\d+)$/) ||
+        lower.match(/^quantile(0?\.\d+)$/) ||
+        lower.match(/^quantile(\d{1,3})$/);
+      if (decimalMatch) {
+        const numeric = Number(decimalMatch[1]);
+        if (!Number.isFinite(numeric)) return "";
+        const pct = numeric > 1 ? numeric : numeric * 100;
+        if (pct <= 0 || pct >= 100) return "";
+        return `q${Math.round(pct)}`;
+      }
+      if (lower === "median" || lower === "yhat" || lower === "forecast" || lower === "prediction" || lower === "mid") {
+        return "q50";
+      }
+      if (lower === "yhatlower" || lower === "lower" || lower === "lowerband") return "q10";
+      if (lower === "yhathigher" || lower === "yhatupper" || lower === "upper" || lower === "upperband") return "q90";
+      return "";
+    };
     return rows
       .map((rawRow) => {
         if (!rawRow || typeof rawRow !== "object") return null;
@@ -5243,10 +5290,11 @@
         if (!rawDs) return null;
         const normalized = { ds: rawDs };
         Object.entries(row).forEach(([key, value]) => {
-          if (!/^q\d{1,3}$/.test(String(key || ""))) return;
+          const quantileKey = normalizeQuantileKey(key);
+          if (!quantileKey) return;
           const numeric = Number(value);
           if (!Number.isFinite(numeric)) return;
-          normalized[key] = Number(numeric.toFixed(6));
+          normalized[quantileKey] = Number(numeric.toFixed(6));
         });
         if (Object.keys(normalized).length <= 1) return null;
         return normalized;
@@ -15115,6 +15163,8 @@
 
   const streamTickerQueryInsight = async ({ ticker, prompt, language, model, provider, modules = [], technicalContext = null } = {}) => {
     const headers = await buildApiAuthHeaders({ includeJson: true });
+    const requestedProvider = normalizeModelCouncilProviderId(provider || "openai") || "openai";
+    const requestedModel = normalizeAiModelId(model || "") || String(model || "gpt-5-mini").trim() || "gpt-5-mini";
 
     // Primary path keeps response persistence + share/feedback IDs.
     try {
@@ -15126,8 +15176,8 @@
           ticker,
           question: prompt,
           language,
-          model,
-          provider,
+          model: requestedModel,
+          provider: requestedProvider,
           modules,
           technicalContext: technicalContext && typeof technicalContext === "object" ? technicalContext : undefined,
           messages: [{ role: "user", content: prompt }],
@@ -15140,18 +15190,22 @@
         if (!answerText) {
           throw new Error("Empty Model Council response.");
         }
-        return {
-          answer: answerText,
-          model: normalizeAiModelId(payload?.model || model) || model,
-          provider: normalizeModelCouncilProviderId(payload?.provider || provider || "openai"),
-          usage: payload?.usage && typeof payload.usage === "object" ? payload.usage : {},
-          latencyMs: Number.isFinite(Number(payload?.latencyMs)) ? Number(payload.latencyMs) : null,
-          context: payload?.context && typeof payload.context === "object" ? payload.context : {},
-          moduleData: payload?.moduleData && typeof payload.moduleData === "object" ? payload.moduleData : {},
-          selectedModules: Array.isArray(payload?.selectedModules) ? payload.selectedModules : modules,
-          responseId: String(payload?.responseId || "").trim(),
-          citations: Array.isArray(payload?.citations) ? payload.citations : [],
-        };
+        const responseProvider = normalizeModelCouncilProviderId(payload?.provider || requestedProvider);
+        const responseModel = normalizeAiModelId(payload?.model || requestedModel) || requestedModel;
+        if (responseProvider === requestedProvider && responseModel === requestedModel) {
+          return {
+            answer: answerText,
+            model: responseModel,
+            provider: responseProvider,
+            usage: payload?.usage && typeof payload.usage === "object" ? payload.usage : {},
+            latencyMs: Number.isFinite(Number(payload?.latencyMs)) ? Number(payload.latencyMs) : null,
+            context: payload?.context && typeof payload.context === "object" ? payload.context : {},
+            moduleData: payload?.moduleData && typeof payload.moduleData === "object" ? payload.moduleData : {},
+            selectedModules: Array.isArray(payload?.selectedModules) ? payload.selectedModules : modules,
+            responseId: String(payload?.responseId || "").trim(),
+            citations: Array.isArray(payload?.citations) ? payload.citations : [],
+          };
+        }
       }
     } catch (error) {
       // Fall through to /api/llm/:provider fallback.
@@ -15165,15 +15219,14 @@
       moduleContext,
       technicalContext,
     });
-    const providerPath = normalizeModelCouncilProviderId(provider || "openai") || "openai";
+    const providerPath = requestedProvider;
     const fallbackResponse = await fetch(`/api/llm/${encodeURIComponent(providerPath)}`, {
       method: "POST",
       headers,
       credentials: "same-origin",
       body: JSON.stringify({
         provider: providerPath,
-        model,
-        fallbackProviders: ["openai", "claude", "gemini", "deepseek", "mistral", "perplexity", "qwen", "amazon_nova", "other"],
+        model: requestedModel,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: String(prompt || "").trim() },
@@ -15205,8 +15258,8 @@
     }
     return {
       answer: fallbackAnswer,
-      model: normalizeAiModelId(payload?.model || model) || model,
-      provider: normalizeModelCouncilProviderId(payload?.provider || provider || "openai"),
+      model: normalizeAiModelId(payload?.model || requestedModel) || requestedModel,
+      provider: normalizeModelCouncilProviderId(payload?.provider || requestedProvider || "openai"),
       usage: payload?.usage && typeof payload.usage === "object" ? payload.usage : {},
       latencyMs: Number.isFinite(Number(payload?.latencyMs)) ? Number(payload.latencyMs) : null,
       context: {
@@ -15533,7 +15586,8 @@
               latencyMs,
               selectedModules: responsePayload.selectedModules || selectedModules,
             }),
-	          answer: String(responsePayload.answer || "").trim().slice(0, 4000),
+	          answer: String(responsePayload.answer || "").trim().slice(0, 12000),
+            fullText: String(responsePayload.answer || "").trim().slice(0, 12000),
 	          provider: responsePayload.provider || selectedProvider,
 	          model: responsePayload.model || selectedModel,
 	          latencyMs,
@@ -16249,6 +16303,9 @@
   };
 
   const resolveDownloadPriceDigits = (ticker) => (isLikelyFxTicker(ticker) ? 6 : 2);
+  const HISTORY_DOWNLOAD_PAGE_SIZES = Object.freeze([60, 120, 240, 480]);
+  const MINUTE_HISTORY_WINDOW_DAYS = 7;
+  const MAX_MINUTE_HISTORY_DAYS = 30;
 
   const formatDownloadPriceValue = (value, digits) => {
     const raw = String(value ?? "").trim();
@@ -16268,6 +16325,76 @@
       compact: formatCompactNumber(rounded),
       full: rounded.toLocaleString(),
     };
+  };
+
+  const formatHistoricalDownloadDate = (dt, interval, rawText = "") => {
+    if (!(dt instanceof Date) || Number.isNaN(dt.getTime())) return String(rawText || "").trim();
+    if (interval === "1d") return dateToYmd(dt);
+    return `${dateToYmd(dt)} ${pad2(dt.getHours())}:${pad2(dt.getMinutes())}`;
+  };
+
+  const dedupeHistoricalDownloadRows = (rows) => {
+    const seen = new Set();
+    return (Array.isArray(rows) ? rows : []).filter((row) => {
+      const key = String(row?.dateText || row?.date || "").trim();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+
+  const normalizeHistoricalDownloadRows = (rows, { interval = "1d" } = {}) => {
+    const normalized = (Array.isArray(rows) ? rows : [])
+      .map((row) => {
+        const rawDate = row?.Datetime ?? row?.Date ?? row?.date ?? row?.datetime ?? row?.ds ?? row?.timestamp ?? "";
+        const dateTextRaw = String(rawDate || "").trim();
+        const dt = parseDateCell(dateTextRaw);
+        if (!dateTextRaw || !dt) return null;
+        return {
+          dateText: formatHistoricalDownloadDate(dt, interval, dateTextRaw),
+          ts: dt.getTime(),
+          open: row?.Open ?? row?.open ?? "",
+          high: row?.High ?? row?.high ?? "",
+          low: row?.Low ?? row?.low ?? "",
+          close: row?.Close ?? row?.close ?? row?.AdjClose ?? row?.adjClose ?? "",
+          volume: row?.Volume ?? row?.volume ?? "",
+        };
+      })
+      .filter(Boolean);
+
+    const sorted = normalized.sort((a, b) => a.ts - b.ts);
+    const deduped = dedupeHistoricalDownloadRows(sorted);
+    if (interval !== "1h") return deduped;
+
+    const exactHourRows = deduped.filter((row) => {
+      const dt = new Date(row.ts);
+      return dt.getMinutes() === 0;
+    });
+    return exactHourRows.length ? exactHourRows : deduped;
+  };
+
+  const buildHistoricalDownloadCsv = (rows) =>
+    buildCsv(
+      (Array.isArray(rows) ? rows : []).map((row) => ({
+        Date: String(row?.dateText || "").trim(),
+        Open: row?.open ?? "",
+        High: row?.high ?? "",
+        Low: row?.low ?? "",
+        Close: row?.close ?? "",
+        Volume: row?.volume ?? "",
+      })),
+      ["Date", "Open", "High", "Low", "Close", "Volume"]
+    );
+
+  const setDownloadContext = ({ rows = [], ticker = "", interval = "1d", filename = "" } = {}) => {
+    const cleanRows = Array.isArray(rows) ? rows : [];
+    const cleanInterval = String(interval || "1d").trim() || "1d";
+    state.downloadContext.rows = cleanRows;
+    state.downloadContext.ticker = normalizeTicker(ticker || "");
+    state.downloadContext.interval = cleanInterval;
+    state.downloadContext.page = 0;
+    state.downloadContext.filename = String(filename || "").trim();
+    state.downloadContext.csvText = buildHistoricalDownloadCsv(cleanRows);
   };
 
   const renderDownloadHistoryPreview = (csvText, { ticker = "", maxRows = 30 } = {}) => {
@@ -16376,6 +16503,95 @@
     `;
   };
 
+  const renderDownloadHistoryPreviewFromState = () => {
+    if (!ui.downloadPreview) return;
+    const rows = Array.isArray(state.downloadContext?.rows) ? state.downloadContext.rows : [];
+    const ticker = normalizeTicker(state.downloadContext?.ticker || "");
+    const interval = String(state.downloadContext?.interval || "1d").trim() || "1d";
+    if (!rows.length) {
+      ui.downloadPreview.innerHTML = `<div class="small muted">Run a download to preview Date, Close, Open, High, Low, and Volume.</div>`;
+      return;
+    }
+
+    const priceDigits = resolveDownloadPriceDigits(ticker);
+    const pageSizeRaw = Number(state.downloadContext?.pageSize || HISTORY_DOWNLOAD_PAGE_SIZES[1]);
+    const pageSize = HISTORY_DOWNLOAD_PAGE_SIZES.includes(pageSizeRaw) ? pageSizeRaw : HISTORY_DOWNLOAD_PAGE_SIZES[1];
+    const newestFirst = [...rows].reverse();
+    const totalPages = Math.max(1, Math.ceil(newestFirst.length / pageSize));
+    const pageRaw = Number(state.downloadContext?.page || 0);
+    const page = Math.max(0, Math.min(totalPages - 1, Number.isFinite(pageRaw) ? pageRaw : 0));
+    const start = page * pageSize;
+    const end = Math.min(newestFirst.length, start + pageSize);
+    const slice = newestFirst.slice(start, end);
+
+    state.downloadContext.page = page;
+    state.downloadContext.pageSize = pageSize;
+
+    const controlsMarkup = `
+      <div class="csv-controls csv-toolbar" aria-label="Historical data preview pagination">
+        <div class="csv-group">
+          <span class="small csv-footnote">Rows per page</span>
+          ${HISTORY_DOWNLOAD_PAGE_SIZES.map(
+            (size) =>
+              `<button class="task-chip" type="button" data-action="history-page-size" data-size="${size}" aria-pressed="${
+                size === pageSize ? "true" : "false"
+              }">${size}</button>`
+          ).join("")}
+        </div>
+        <div class="csv-group">
+          <button class="task-chip" type="button" data-action="history-page" data-dir="-1" ${page === 0 ? "disabled" : ""}>Prev</button>
+          <span class="small csv-footnote">Page ${page + 1} of ${totalPages}</span>
+          <button class="task-chip" type="button" data-action="history-page" data-dir="1" ${
+            page >= totalPages - 1 ? "disabled" : ""
+          }>Next</button>
+          <button class="task-chip" type="button" data-action="history-download-csv">Download CSV</button>
+        </div>
+      </div>
+    `;
+
+    ui.downloadPreview.innerHTML = `
+      <div class="small muted" style="margin-bottom:10px;">
+        Showing newest ${slice.length} of ${newestFirst.length.toLocaleString()} ${escapeHtml(interval)} row(s) for ${escapeHtml(
+          ticker || "the active ticker"
+        )}.
+      </div>
+      ${controlsMarkup}
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Close</th>
+              <th>Open</th>
+              <th>High</th>
+              <th>Low</th>
+              <th>Volume</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${slice
+              .map((row) => {
+                const volume = formatDownloadVolumeValue(row.volume);
+                const volumeTitle = volume.full ? ` title="${escapeHtml(volume.full)}"` : "";
+                return `
+                  <tr>
+                    <td>${escapeHtml(row.dateText)}</td>
+                    <td>${escapeHtml(formatDownloadPriceValue(row.close, priceDigits))}</td>
+                    <td>${escapeHtml(formatDownloadPriceValue(row.open, priceDigits))}</td>
+                    <td>${escapeHtml(formatDownloadPriceValue(row.high, priceDigits))}</td>
+                    <td>${escapeHtml(formatDownloadPriceValue(row.low, priceDigits))}</td>
+                    <td${volumeTitle}>${escapeHtml(volume.compact)}</td>
+                  </tr>
+                `;
+              })
+              .join("")}
+          </tbody>
+        </table>
+      </div>
+      ${controlsMarkup}
+    `;
+  };
+
   const pad2 = (value) => String(value).padStart(2, "0");
 
   const parseDateCell = (raw) => {
@@ -16451,6 +16667,128 @@
     if (!base) return ymd;
     base.setDate(base.getDate() + Number(deltaDays || 0));
     return dateToYmd(base);
+  };
+
+  const computeHistoricalLookbackDays = ({ interval = "1d", lookbackDays = 0, allAvailable = false } = {}) => {
+    const cleanInterval = String(interval || "1d").trim() || "1d";
+    if (cleanInterval === "1m") {
+      if (allAvailable) return MAX_MINUTE_HISTORY_DAYS;
+      return Math.max(1, Math.min(MAX_MINUTE_HISTORY_DAYS, Math.floor(Number(lookbackDays || 7)) || 7));
+    }
+    if (cleanInterval === "1h") {
+      return Math.max(1, Math.min(730, Math.floor(Number(lookbackDays || 180)) || 180));
+    }
+    return Math.max(1, Math.min(5000, Math.floor(Number(lookbackDays || 365)) || 365));
+  };
+
+  const buildHistoricalWindowRanges = ({ interval = "1d", end = "", lookbackDays = 0, allAvailable = false } = {}) => {
+    const cleanInterval = String(interval || "1d").trim() || "1d";
+    const totalDays = computeHistoricalLookbackDays({ interval: cleanInterval, lookbackDays, allAvailable });
+    const endDate = parseDateCell(end) || new Date();
+    endDate.setHours(23, 59, 59, 999);
+    if (cleanInterval !== "1m") {
+      const startDate = new Date(endDate);
+      startDate.setDate(startDate.getDate() - Math.max(0, totalDays - 1));
+      startDate.setHours(0, 0, 0, 0);
+      return [
+        {
+          start: dateToYmd(startDate),
+          end: dateToYmd(endDate),
+        },
+      ];
+    }
+
+    const windows = [];
+    let remaining = totalDays;
+    let cursorEnd = new Date(endDate);
+    while (remaining > 0) {
+      const windowDays = Math.min(MINUTE_HISTORY_WINDOW_DAYS, remaining);
+      const startDate = new Date(cursorEnd);
+      startDate.setDate(startDate.getDate() - Math.max(0, windowDays - 1));
+      startDate.setHours(0, 0, 0, 0);
+      windows.unshift({
+        start: dateToYmd(startDate),
+        end: dateToYmd(cursorEnd),
+      });
+      cursorEnd = new Date(startDate);
+      cursorEnd.setDate(cursorEnd.getDate() - 1);
+      cursorEnd.setHours(23, 59, 59, 999);
+      remaining -= windowDays;
+    }
+    return windows;
+  };
+
+  const fetchHistoricalWindowRows = async (functions, { ticker = "", interval = "1d", start = "", end = "" } = {}) => {
+    const getHistory = functions.httpsCallable("get_ticker_history");
+    const result = await getHistory({
+      ticker,
+      interval,
+      start,
+      end,
+      meta: buildMeta(),
+    });
+    return Array.isArray(result.data?.rows) ? result.data.rows : [];
+  };
+
+  const fetchHistoricalDownloadRows = async (
+    functions,
+    { ticker = "", interval = "1d", end = "", lookbackDays = 0, allAvailable = false } = {}
+  ) => {
+    const cleanTicker = normalizeTicker(ticker || "");
+    const cleanInterval = String(interval || "1d").trim() || "1d";
+    if (!cleanTicker) return [];
+    const windows = buildHistoricalWindowRanges({
+      interval: cleanInterval,
+      end,
+      lookbackDays,
+      allAvailable,
+    });
+    const collected = [];
+    for (const window of windows) {
+      const rows = await fetchHistoricalWindowRows(functions, {
+        ticker: cleanTicker,
+        interval: cleanInterval,
+        start: window.start,
+        end: window.end,
+      });
+      collected.push(...rows);
+    }
+    return normalizeHistoricalDownloadRows(collected, { interval: cleanInterval });
+  };
+
+  const syncDownloadFormUi = () => {
+    const interval = String(ui.downloadInterval?.value || "1d").trim() || "1d";
+    const isMinute = interval === "1m";
+    const isHourly = interval === "1h";
+    const defaultLookback = isMinute ? 7 : isHourly ? 180 : 365;
+    const maxLookback = isMinute ? MAX_MINUTE_HISTORY_DAYS : isHourly ? 730 : 5000;
+    if (ui.downloadLookbackDays) {
+      const currentValue = Math.floor(Number(ui.downloadLookbackDays.value || 0));
+      const nextValue =
+        Number.isFinite(currentValue) && currentValue > 0
+          ? Math.min(maxLookback, currentValue)
+          : defaultLookback;
+      ui.downloadLookbackDays.value = String(nextValue);
+      ui.downloadLookbackDays.max = String(maxLookback);
+      ui.downloadLookbackDays.min = "1";
+      ui.downloadLookbackDays.disabled = Boolean(isMinute && ui.downloadAllAvailable?.checked);
+    }
+    const minuteToggleWrap = document.getElementById("download-all-available-wrap");
+    if (minuteToggleWrap) {
+      minuteToggleWrap.classList.toggle("hidden", !isMinute);
+    }
+  };
+
+  const calculateFutureDateTime = ({ start = "", amount = 0, unit = "days" } = {}) => {
+    const dt = start ? new Date(start) : new Date();
+    if (Number.isNaN(dt.getTime())) return null;
+    const delta = Number(amount || 0);
+    if (!Number.isFinite(delta)) return null;
+    const next = new Date(dt);
+    if (unit === "minutes") next.setMinutes(next.getMinutes() + delta);
+    else if (unit === "hours") next.setHours(next.getHours() + delta);
+    else next.setDate(next.getDate() + delta);
+    return next;
   };
 
   const fetchTickerHighNearDate = async (functions, ticker, ymd) => {
@@ -19027,7 +19365,8 @@
     const outputsMeta = existing.outputsMeta && typeof existing.outputsMeta === "object" ? existing.outputsMeta : {};
     const nextOutputsMeta = {
       ...outputsMeta,
-      aiSummary: String(summary?.text || "").trim().slice(0, 1600),
+      aiSummary: String(summary?.text || "").trim().slice(0, 12000),
+      fullText: String(summary?.text || "").trim().slice(0, 12000),
       aiProvider: String(summary?.provider || "").trim(),
       aiModel: String(summary?.model || "").trim(),
       aiLatencyMs: Number(summary?.latencyMs || 0) || 0,
@@ -19084,7 +19423,6 @@
         body: JSON.stringify({
           provider: providerPath,
           model,
-          fallbackProviders: ["openai", "claude", "gemini", "deepseek", "mistral", "perplexity", "qwen", "amazon_nova", "other"],
           messages: [
             {
               role: "system",
@@ -23479,12 +23817,14 @@
                 String(state.tickerContext.interval || "1d") === String(payload.interval || "1d")
                   ? state.tickerContext.rows
                   : await loadTickerHistory(functions, ticker, String(payload.interval || "1d"));
+              const previewRows = normalizeForecastSeriesRows(data.forecastPreview || []);
               const alignedRows = alignForecastRowsWithHistory({
-                forecastRows: responseRows,
+                forecastRows: responseRows.length ? responseRows : previewRows,
                 historyRows,
                 interval: String(payload.interval || "1d"),
-                horizon: Number(payload.horizon || 0) || responseRows.length,
+                horizon: Number(payload.horizon || 0) || responseRows.length || previewRows.length,
               });
+              const storedForecastRows = alignedRows.length ? alignedRows : previewRows;
               const cacheMeta = await saveForecastSeriesToClientCache({
                 requestId,
                 ticker,
@@ -23493,22 +23833,22 @@
                 service: String(payload.service || "prophet"),
                 quantiles: Array.isArray(payload.quantiles) ? payload.quantiles : [],
                 start: String(payload.start || ""),
-                forecastRows: alignedRows,
+                forecastRows: storedForecastRows,
                 historicalRows: historyRows,
                 chartConfig: {
-                  quantileKeys: extractQuantileKeys(alignedRows),
+                  quantileKeys: extractQuantileKeys(storedForecastRows),
                   interval: String(payload.interval || "1d"),
                 },
                 metrics: data.metrics && typeof data.metrics === "object" ? data.metrics : {},
               });
               state.tickerContext.forecastCacheMeta = cacheMeta;
-              const localKeyLevels = extractForecastKeyLevels(alignedRows);
+              const localKeyLevels = extractForecastKeyLevels(storedForecastRows);
 
               const forecastDocLocal = {
                 id: requestId,
                 ticker,
                 interval: String(payload.interval || "1d"),
-                horizon: Number(payload.horizon || 0) || alignedRows.length,
+                horizon: Number(payload.horizon || 0) || storedForecastRows.length,
                 start: String(payload.start || ""),
                 quantiles: Array.isArray(payload.quantiles) ? payload.quantiles : [],
                 service: String(payload.service || "prophet"),
@@ -23524,8 +23864,8 @@
                         coverage10_90: data.coverage10_90,
                         medianEnd: localKeyLevels.median,
                       },
-                forecastPreview: Array.isArray(data.forecastPreview) ? data.forecastPreview : alignedRows.slice(0, 12),
-                forecastRows: alignedRows,
+                forecastPreview: previewRows.length ? previewRows : storedForecastRows.slice(0, 12),
+                forecastRows: storedForecastRows,
                 forecastQuantilesEnd: data.forecastQuantilesEnd && typeof data.forecastQuantilesEnd === "object" ? data.forecastQuantilesEnd : {},
                 tradeRationale: String(data.tradeRationale || "").trim(),
                 chartSeriesSource: "client_cache",
@@ -23548,6 +23888,7 @@
               },
 	              outputsMeta: {
 	                summary: String(data?.serviceMessage || "").trim(),
+                  fullText: String(data?.serviceMessage || "").trim().slice(0, 12000),
 	                service: String(payload.service || ""),
 	                interval: String(payload.interval || ""),
                   chartStorage: "client_only",
@@ -23722,12 +24063,159 @@
           ui.forecastOutput.dataset.bound = "1";
         }
 
+    const extractJsonObjectFromText = (text) => {
+      const source = String(text || "").trim();
+      if (!source) return null;
+      const fenced = source.match(/```(?:json)?\s*([\s\S]*?)```/i);
+      const candidates = [fenced?.[1] || "", source];
+      for (const candidate of candidates) {
+        const clean = String(candidate || "").trim();
+        if (!clean) continue;
+        try {
+          return JSON.parse(clean);
+        } catch (_error) {
+          const firstBrace = clean.indexOf("{");
+          const lastBrace = clean.lastIndexOf("}");
+          if (firstBrace >= 0 && lastBrace > firstBrace) {
+            try {
+              return JSON.parse(clean.slice(firstBrace, lastBrace + 1));
+            } catch (_nestedError) {
+              // Ignore and continue.
+            }
+          }
+        }
+      }
+      return null;
+    };
+
+    const buildIndicatorNarrativePromptContext = ({
+      ticker = "",
+      interval = "1d",
+      lookback = 0,
+      selectedIndicators = [],
+      rows = [],
+      analysis = {},
+      meta = {},
+    } = {}) => ({
+      ticker: normalizeTicker(ticker || ""),
+      interval: String(interval || "1d"),
+      lookbackDays: Number(lookback || 0) || 0,
+      selectedIndicators: Array.isArray(selectedIndicators)
+        ? selectedIndicators.map((entry) => String(entry || "").trim().toUpperCase()).filter(Boolean)
+        : [],
+      latestIndicators: (Array.isArray(rows) ? rows : []).slice(0, 20).map((row) => ({
+        name: String(row?.name || "").trim(),
+        value: String(row?.display ?? row?.value ?? "").trim(),
+      })),
+      baseAnalysis: {
+        summary: String(analysis?.summary || "").trim(),
+        keySignals: Array.isArray(analysis?.keySignals)
+          ? analysis.keySignals.map((entry) => String(entry || "").trim()).filter(Boolean).slice(0, 8)
+          : [],
+        prediction: analysis?.prediction && typeof analysis.prediction === "object" ? analysis.prediction : {},
+      },
+      meta: {
+        lastClose: Number(meta?.lastClose),
+        previousClose: Number(meta?.previousClose),
+        asOf: String(meta?.asOf || "").trim(),
+        source: String(meta?.source || "").trim(),
+      },
+    });
+
+    const generateIndicatorNarrativeWithSelectedModel = async ({
+      ticker = "",
+      interval = "1d",
+      lookback = 0,
+      selectedIndicators = [],
+      rows = [],
+      analysis = {},
+      meta = {},
+      provider = "openai",
+      model = "gpt-5-mini",
+    } = {}) => {
+      const requestedProvider = normalizeModelCouncilProviderId(provider || "openai") || "openai";
+      const requestedModel = normalizeAiModelId(model || "") || String(model || "gpt-5-mini").trim() || "gpt-5-mini";
+      const headers = await buildApiAuthHeaders({ includeJson: true });
+      const promptContext = buildIndicatorNarrativePromptContext({
+        ticker,
+        interval,
+        lookback,
+        selectedIndicators,
+        rows,
+        analysis,
+        meta,
+      });
+      const response = await fetch(`/api/llm/${encodeURIComponent(requestedProvider)}`, {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: JSON.stringify({
+          provider: requestedProvider,
+          model: requestedModel,
+          messages: [
+            {
+              role: "system",
+              content:
+                "You are Quantura Indicator Council. Respond with valid JSON only using this schema: {\"summary\":\"string\",\"text\":\"string\",\"keySignals\":[\"string\"],\"prediction\":{\"direction\":\"bullish|bearish|neutral\",\"targetPrice\":number|null,\"timeline\":\"string\",\"timelineDays\":number,\"confidence\":\"low|medium|high\"},\"disclaimer\":\"string\"}. Keep the analysis professional, concise, and market-focused.",
+            },
+            {
+              role: "user",
+              content: `Indicator context (JSON):\n${JSON.stringify(promptContext)}\n\nUse the supplied data only. If a target price cannot be justified, return null.`,
+            },
+          ],
+          params: {
+            temperature: 0.2,
+            maxTokens: 700,
+            webSearch: false,
+            stream: false,
+            background: false,
+          },
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(String(payload?.error || payload?.message || "Unable to generate selected-model indicator analysis.").trim());
+      }
+      const rawText = String(payload?.text || "").trim();
+      const parsed = extractJsonObjectFromText(rawText) || {};
+      const existingPrediction = analysis?.prediction && typeof analysis.prediction === "object" ? analysis.prediction : {};
+      const nextPrediction = parsed?.prediction && typeof parsed.prediction === "object" ? parsed.prediction : {};
+      const normalizedPrediction = {
+        direction: String(nextPrediction.direction || existingPrediction.direction || "neutral").trim().toLowerCase() || "neutral",
+        targetPrice: Number.isFinite(Number(nextPrediction.targetPrice))
+          ? Number(nextPrediction.targetPrice)
+          : Number.isFinite(Number(existingPrediction.targetPrice))
+            ? Number(existingPrediction.targetPrice)
+            : null,
+        timeline: String(nextPrediction.timeline || existingPrediction.timeline || "").trim(),
+        timelineDays: Number.isFinite(Number(nextPrediction.timelineDays))
+          ? Number(nextPrediction.timelineDays)
+          : Number.isFinite(Number(existingPrediction.timelineDays))
+            ? Number(existingPrediction.timelineDays)
+            : 0,
+        confidence: String(nextPrediction.confidence || existingPrediction.confidence || "medium").trim().toLowerCase() || "medium",
+      };
+      return {
+        summary: String(parsed?.summary || rawText || analysis?.summary || "").trim(),
+        text: String(parsed?.text || rawText || analysis?.text || "").trim(),
+        keySignals: Array.isArray(parsed?.keySignals)
+          ? parsed.keySignals.map((entry) => String(entry || "").trim()).filter(Boolean).slice(0, 8)
+          : Array.isArray(analysis?.keySignals)
+            ? analysis.keySignals.map((entry) => String(entry || "").trim()).filter(Boolean).slice(0, 8)
+            : [],
+        prediction: normalizedPrediction,
+        disclaimer: String(parsed?.disclaimer || analysis?.disclaimer || MODEL_COUNCIL_OUTPUT_DISCLAIMER).trim(),
+        provider: normalizeModelCouncilProviderId(payload?.provider || requestedProvider) || requestedProvider,
+        model: normalizeAiModelId(payload?.model || requestedModel) || requestedModel,
+      };
+    };
+
 	    ui.technicalsForm?.addEventListener("submit", async (event) => {
 	      event.preventDefault();
 	      const formData = new FormData(ui.technicalsForm);
 	      const indicators = formData.getAll("indicators");
 	      const includeSeries = Boolean(ui.indicatorChart || ui.tickerChart);
-      const payload = {
+	      const payload = {
         ticker: formData.get("ticker"),
         interval: formData.get("interval"),
         lookback: Number(formData.get("lookback")),
@@ -23763,7 +24251,42 @@
             throw new Error(detail || "indicator_analysis_failed");
           }
 	        const rows = data.latest || [];
-          const analysis = data.analysis && typeof data.analysis === "object" ? data.analysis : {};
+          const selectedProvider =
+            normalizeModelCouncilProviderId(ui.tickerQueryProvider?.value || state.tickerContext.tickerQueryProvider || "openai") || "openai";
+          const selectedModel =
+            normalizeAiModelId(ui.tickerQueryModel?.value || state.tickerContext.tickerQueryModel || "gpt-5-mini") || "gpt-5-mini";
+          const serverAnalysis = data.analysis && typeof data.analysis === "object" ? data.analysis : {};
+          const serverProvider = normalizeModelCouncilProviderId(serverAnalysis?.provider || "");
+          const serverModel = normalizeAiModelId(serverAnalysis?.model || "");
+          let analysis = serverAnalysis;
+          if (selectedProvider && selectedModel && (serverProvider !== selectedProvider || serverModel !== selectedModel)) {
+            try {
+              analysis = await generateIndicatorNarrativeWithSelectedModel({
+                ticker: payload.ticker,
+                interval: payload.interval,
+                lookback: payload.lookback,
+                selectedIndicators: indicators,
+                rows,
+                analysis: serverAnalysis,
+                meta: data?.meta || {},
+                provider: selectedProvider,
+                model: selectedModel,
+              });
+            } catch (llmError) {
+              console.warn("[Indicators] selected-model narrative fallback failed", llmError);
+              analysis = {
+                ...serverAnalysis,
+                provider: selectedProvider,
+                model: selectedModel,
+              };
+            }
+          } else {
+            analysis = {
+              ...serverAnalysis,
+              provider: serverProvider || selectedProvider,
+              model: serverModel || selectedModel,
+            };
+          }
           const prediction = analysis.prediction && typeof analysis.prediction === "object" ? analysis.prediction : {};
           const indicatorRequestId = `indicator__${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
           const indicatorAutoPublish = shouldAutoPublishForType("indicator");
@@ -23813,6 +24336,12 @@
                             )}</span></div>
                             <div class="profile-item"><span class="label">Confidence</span><span class="value">${escapeHtml(
                               String(prediction.confidence || "medium")
+                            )}</span></div>
+                            <div class="profile-item"><span class="label">Provider</span><span class="value">${escapeHtml(
+                              String(MODEL_PROVIDER_LABEL[normalizeModelCouncilProviderId(analysis?.provider || "")] || analysis?.provider || "—")
+                            )}</span></div>
+                            <div class="profile-item"><span class="label">Model</span><span class="value">${escapeHtml(
+                              String(getModelMeta(analysis?.model || "")?.label || analysis?.model || "—")
                             )}</span></div>
                             <div class="profile-item"><span class="label">Implied move</span><span class="value">${
                               Number.isFinite(upsidePct) ? formatPercent(upsidePct, { signed: true, digits: 2 }) : "—"
@@ -23876,6 +24405,14 @@
               targetPrice,
               upsidePct,
             }),
+            analysisSummary: String(analysis?.summary || "").trim().slice(0, 12000),
+            analysisText: String(analysis?.text || "").trim().slice(0, 12000),
+            fullText: String(analysis?.text || analysis?.summary || "").trim().slice(0, 12000),
+            keySignals: Array.isArray(analysis?.keySignals)
+              ? analysis.keySignals.map((entry) => String(entry || "").trim()).filter(Boolean).slice(0, 12)
+              : [],
+            provider: String(analysis?.provider || selectedProvider || "").trim(),
+            model: String(analysis?.model || selectedModel || "").trim(),
             latestCount: Array.isArray(rows) ? rows.length : 0,
             prediction: prediction?.direction ? String(prediction.direction) : "",
           },
@@ -23897,6 +24434,73 @@
 	        showToast(error.message || "Unable to run indicators.", "warn");
 	      }
 	    });
+
+    syncDownloadFormUi();
+    ui.downloadInterval?.addEventListener("change", () => {
+      syncDownloadFormUi();
+    });
+    ui.downloadAllAvailable?.addEventListener("change", () => {
+      syncDownloadFormUi();
+    });
+    if (ui.futureDateStart && !String(ui.futureDateStart.value || "").trim()) {
+      const now = new Date();
+      ui.futureDateStart.value = `${dateToYmd(now)}T${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
+    }
+    if (ui.downloadPreview && ui.downloadPreview.dataset.bound !== "1") {
+      ui.downloadPreview.dataset.bound = "1";
+      ui.downloadPreview.addEventListener("click", (event) => {
+        const target = event.target instanceof Element ? event.target : null;
+        if (!target) return;
+        const pageBtn = target.closest('[data-action="history-page"]');
+        if (pageBtn) {
+          event.preventDefault();
+          const delta = Number(pageBtn.dataset.dir || 0);
+          if (Number.isFinite(delta) && delta) {
+            state.downloadContext.page = Math.max(0, Number(state.downloadContext.page || 0) + delta);
+            renderDownloadHistoryPreviewFromState();
+          }
+          return;
+        }
+        const sizeBtn = target.closest('[data-action="history-page-size"]');
+        if (sizeBtn) {
+          event.preventDefault();
+          const nextSize = Number(sizeBtn.dataset.size || 0);
+          if (HISTORY_DOWNLOAD_PAGE_SIZES.includes(nextSize)) {
+            state.downloadContext.pageSize = nextSize;
+            state.downloadContext.page = 0;
+            renderDownloadHistoryPreviewFromState();
+          }
+          return;
+        }
+        const downloadBtn = target.closest('[data-action="history-download-csv"]');
+        if (downloadBtn) {
+          event.preventDefault();
+          const filename = String(state.downloadContext.filename || "quantura_history.csv").trim() || "quantura_history.csv";
+          const csvText = String(state.downloadContext.csvText || "").trim();
+          if (!csvText) {
+            showToast("No historical data is loaded yet.", "warn");
+            return;
+          }
+          triggerDownload(filename, csvText, { mimeType: "text/csv;charset=utf-8;" });
+        }
+      });
+    }
+
+    ui.futureDateForm?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const start = String(ui.futureDateStart?.value || "").trim();
+      const amount = Number(ui.futureDateAmount?.value || 0);
+      const unit = String(ui.futureDateUnit?.value || "days").trim() || "days";
+      const next = calculateFutureDateTime({ start, amount, unit });
+      if (!ui.futureDateOutput) return;
+      if (!next) {
+        ui.futureDateOutput.textContent = "Enter a valid start date and offset.";
+        return;
+      }
+      ui.futureDateOutput.textContent = `Future ${unit.replace(/s$/, "")} result: ${dateToYmd(next)} ${pad2(next.getHours())}:${pad2(
+        next.getMinutes()
+      )}`;
+    });
 
     ui.downloadForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -23923,45 +24527,48 @@
         return;
       }
       const interval = String(formData.get("interval") || "1d");
+      const allAvailable = Boolean(ui.downloadAllAvailable?.checked) && interval === "1m";
+      const lookbackDays = computeHistoricalLookbackDays({
+        interval,
+        lookbackDays: Number(formData.get("lookbackDays") || ui.downloadLookbackDays?.value || 0),
+        allAvailable,
+      });
       const today = new Date();
       const end = String(formData.get("end") || "").trim() || today.toISOString().slice(0, 10);
-      const start =
-        interval === "1h"
-          ? (() => {
-              const dt = new Date();
-              dt.setDate(dt.getDate() - 729);
-              return dt.toISOString().slice(0, 10);
-            })()
-          : "1900-01-01";
-      const payload = {
-        ticker,
-        start,
-        end,
-        interval,
-        meta: buildMeta(),
-      };
 
       try {
-        ui.downloadStatus.textContent = "Fetching data...";
+        ui.downloadStatus.textContent =
+          interval === "1m"
+            ? allAvailable
+              ? "Fetching every minute row Yahoo still exposes..."
+              : "Fetching minute history..."
+            : "Fetching data...";
         if (ui.downloadPreview) {
           ui.downloadPreview.innerHTML = `<div class="small muted">Preparing preview...</div>`;
         }
-        const getDownload = functions.httpsCallable("download_price_csv");
-        const result = await getDownload(payload);
-        const data = result.data || {};
-        const csvText = String(data.csv || "");
-        if (!csvText.trim()) {
+        const rows = await fetchHistoricalDownloadRows(functions, {
+          ticker,
+          interval,
+          end,
+          lookbackDays,
+          allAvailable,
+        });
+        if (!rows.length) {
           ui.downloadStatus.textContent = "No data returned.";
           if (ui.downloadPreview) {
             ui.downloadPreview.innerHTML = `<div class="small muted">No history rows returned for ${escapeHtml(ticker)}.</div>`;
           }
           return;
         }
-        const filename = String(data.filename || `${ticker}_${start}_${end}.csv`);
-        renderDownloadHistoryPreview(csvText, { ticker });
-        triggerDownload(filename, csvText);
-        const rowCount = Number(data.rowCount || 0);
-        ui.downloadStatus.textContent = rowCount ? `Download ready (${rowCount} rows).` : "Download ready.";
+        const windows = buildHistoricalWindowRanges({ interval, end, lookbackDays, allAvailable });
+        const filename = `${ticker}_${interval}_${windows[0]?.start || end}_${end}.csv`;
+        setDownloadContext({ rows, ticker, interval, filename });
+        renderDownloadHistoryPreviewFromState();
+        triggerDownload(filename, state.downloadContext.csvText, { mimeType: "text/csv;charset=utf-8;" });
+        ui.downloadStatus.textContent =
+          interval === "1h"
+            ? `Download ready (${rows.length.toLocaleString()} exact-hour rows, including extended-hours rows when available).`
+            : `Download ready (${rows.length.toLocaleString()} rows).`;
         logEvent("download_history", { ticker, interval });
       } catch (error) {
         ui.downloadStatus.textContent = "Download failed.";

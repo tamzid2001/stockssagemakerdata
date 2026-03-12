@@ -261,6 +261,15 @@ function getEngagementMarkup(post) {
   `;
 }
 
+function formatBodyMarkup(text) {
+  const clean = String(text || "").trim();
+  if (!clean) return `<p>${escapeHtml("No long-form response was published for this post.")}</p>`;
+  return clean
+    .split(/\n{2,}/)
+    .map((block) => `<p>${escapeHtml(block).replace(/\n/g, "<br />")}</p>`)
+    .join("");
+}
+
 function renderCard(post) {
   const fragment = refs.cardTemplate?.content?.firstElementChild?.cloneNode(true);
   if (!fragment) return null;
@@ -268,7 +277,9 @@ function renderCard(post) {
   fragment.dataset.postId = post.id;
   fragment.querySelector(".post-preview").innerHTML = getPreviewMarkup(post);
   fragment.querySelector(".post-title").textContent = post.title || "Untitled";
-  fragment.querySelector(".post-caption").textContent = post.caption || "";
+  const previewText = String(post.bodyText || post.caption || "").trim();
+  fragment.querySelector(".post-caption").textContent =
+    previewText.length > 720 ? `${previewText.slice(0, 720).trim()}…` : previewText;
   fragment.querySelector(".chip-row").innerHTML = (post.tickers || [])
     .slice(0, 4)
     .map((ticker) => `<span class="chip">${escapeHtml(ticker)}</span>`)
@@ -497,6 +508,7 @@ function openReportModal(postId) {
 
 function renderModal(post, comments) {
   if (!refs.postModalBody) return;
+  const bodyText = String(post.bodyText || post.caption || "").trim();
   const commentsHtml = (comments || [])
     .map(
       (item) => `
@@ -513,7 +525,7 @@ function renderModal(post, comments) {
     <div class="post-preview">${getPreviewMarkup(post)}</div>
     <h2 id="post-modal-title">${escapeHtml(post.title || "")}</h2>
     <p class="muted">@${escapeHtml(post.authorHandle || "quantura")} • ${formatRelativeTime(post.createdAtMs)}</p>
-    <p>${escapeHtml(post.caption || "")}</p>
+    <div class="post-long-body">${formatBodyMarkup(bodyText)}</div>
     <div class="chip-row">${(post.tickers || []).map((ticker) => `<span class="chip">${escapeHtml(ticker)}</span>`).join("")}</div>
     <div class="engagement-row">${getEngagementMarkup(post)}</div>
 

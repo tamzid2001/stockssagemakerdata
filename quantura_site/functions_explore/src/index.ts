@@ -40,6 +40,7 @@ type PostDoc = {
   authorPhotoURL: string;
   title: string;
   caption: string;
+  bodyText?: string;
   tickers: string[];
   tags: string[];
   preview: {
@@ -1600,7 +1601,7 @@ function trimOutputsMeta(input: unknown): Record<string, unknown> {
       const cleanKey = sanitizeText(key, 60);
       if (!cleanKey) return;
       if (typeof value === "string") {
-        out[cleanKey] = sanitizeText(value, 2400);
+        out[cleanKey] = sanitizeText(value, 12000);
         return;
       }
       if (typeof value === "number" || typeof value === "boolean") {
@@ -1626,7 +1627,7 @@ function trimOutputsMeta(input: unknown): Record<string, unknown> {
               return;
             }
             if (typeof childValue === "string") {
-              childOut[cleanChildKey] = sanitizeText(childValue, 220);
+              childOut[cleanChildKey] = sanitizeText(childValue, 4000);
             }
           });
         if (Object.keys(childOut).length) out[cleanKey] = childOut;
@@ -2082,11 +2083,13 @@ async function upsertExplorePostFromMyRequest(
 ): Promise<string> {
   const type = normalizeMyRequestType(requestData.type) || "forecast";
   const input = normalizeMyRequestInput(requestData.input);
-  const outputsMeta = trimOutputsMeta(requestData.outputsMeta);
+  const rawOutputsMeta = asPlainObject(requestData.outputsMeta);
+  const outputsMeta = trimOutputsMeta(rawOutputsMeta);
   const sourceRef = asPlainObject(requestData.sourceRef);
   const ticker = firstTickerFromRequest(input, sourceRef, outputsMeta);
   const title = sanitizeText(requestData.title, 180) || defaultMyRequestTitle(type, input);
   const caption = buildMyRequestExploreCaption(type, title, input, outputsMeta, ticker);
+  const bodyText = buildMyRequestExploreBody(type, title, input, rawOutputsMeta, ticker);
   const postId = deriveMyRequestExplorePostId(requestId, requestData);
   const postType = requestPostType(type);
   const topSymbols = Array.isArray(outputsMeta.topSymbols) ? outputsMeta.topSymbols : [];
@@ -2133,6 +2136,7 @@ async function upsertExplorePostFromMyRequest(
       authorPhotoURL: photoURL,
       title,
       caption,
+      bodyText,
       tickers,
       tags,
       preview,
@@ -2423,6 +2427,70 @@ function buildMyRequestExploreCaption(
     return sanitizeText(`${ticker || title} Model Council response is ready for review.`, 400);
   }
   return sanitizeText(title, 400);
+}
+
+function buildMyRequestExploreBody(
+  type: MyRequestType,
+  title: string,
+  input: Record<string, unknown>,
+  outputsMeta: Record<string, unknown>,
+  ticker: string
+): string {
+  const cleanTicker = normalizeTicker(ticker);
+  const joinBlocks = (...parts: unknown[]): string =>
+    parts
+      .map((part) => sanitizeText(part, 16000))
+      .filter(Boolean)
+      .join("\n\n")
+      .trim();
+
+  if (type === "modelCouncil") {
+    return joinBlocks(
+      outputsMeta.answer,
+      outputsMeta.fullText,
+      outputsMeta.summary,
+      input.question ? `Question: ${input.question}` : ""
+    );
+  }
+
+  if (type === "indicator") {
+    const keySignals = Array.isArray(outputsMeta.keySignals)
+      ? outputsMeta.keySignals.map((item) => sanitizeText(item, 220)).filter(Boolean)
+      : [];
+    return joinBlocks(
+      outputsMeta.analysisText,
+      outputsMeta.fullText,
+      outputsMeta.summary,
+      keySignals.length ? `Key signals:\n- ${keySignals.join("\n- ")}` : "",
+      outputsMeta.prediction ? `Directional bias: ${outputsMeta.prediction}` : "",
+      cleanTicker ? `Ticker: ${cleanTicker}` : ""
+    );
+  }
+
+  if (type === "forecast") {
+    return joinBlocks(
+      outputsMeta.aiSummary,
+      outputsMeta.fullText,
+      outputsMeta.serviceMessage,
+      outputsMeta.summary,
+      cleanTicker ? `${cleanTicker} forecast saved to Quantura Horizon.` : "",
+      input.quantiles ? `Quantiles: ${Array.isArray(input.quantiles) ? input.quantiles.join(", ") : sanitizeText(input.quantiles, 240)}` : ""
+    );
+  }
+
+  if (type === "screener") {
+    const topSymbols = Array.isArray(outputsMeta.topSymbols)
+      ? outputsMeta.topSymbols.map((item) => normalizeTicker(item)).filter(Boolean).slice(0, 8)
+      : [];
+    return joinBlocks(
+      outputsMeta.fullText,
+      outputsMeta.summary,
+      topSymbols.length ? `Top ranked symbols: ${topSymbols.join(", ")}` : "",
+      input.notes
+    );
+  }
+
+  return joinBlocks(outputsMeta.fullText, outputsMeta.summary, title);
 }
 
 function extractPreview(payload: Record<string, unknown>, postType: PostType): PostDoc["preview"] {
@@ -4243,6 +4311,7 @@ function toPostResponse(
     authorPhotoURL: asString(data.authorPhotoURL),
     title: asString(data.title),
     caption: asString(data.caption),
+    bodyText: asString(data.bodyText),
     tickers: Array.isArray(data.tickers) ? data.tickers : [],
     tags: Array.isArray(data.tags) ? data.tags : [],
     preview: data.preview || { kind: "summary" },
