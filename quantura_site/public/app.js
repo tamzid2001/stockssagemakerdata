@@ -16516,6 +16516,74 @@
       return headers.findIndex((header) => targets.has(String(header || "").trim().toLowerCase()));
     };
 
+    const idxItemId = findIndex("item_id", "itemid", "ticker", "symbol");
+    const idxTimestamp = findIndex("timestamp", "datetime", "date", "time");
+    const idxClosingPrice = findIndex("closing_price", "closingprice", "close", "price");
+    if (idxItemId >= 0 && idxTimestamp >= 0 && idxClosingPrice >= 0) {
+      const normalizedRows = rows
+        .map((row) => {
+          const timestamp = String(row[idxTimestamp] ?? "").trim();
+          const itemId = normalizeTicker(row[idxItemId] ?? ticker);
+          const dt = parseDateCell(timestamp);
+          return {
+            itemId,
+            timestamp,
+            ts: dt ? dt.getTime() : Number.NaN,
+            closingPrice: row[idxClosingPrice],
+          };
+        })
+        .filter((row) => row.itemId && row.timestamp);
+
+      if (!normalizedRows.length) {
+        ui.downloadPreview.innerHTML = `<div class="small muted">No rows available for preview.</div>`;
+        return;
+      }
+
+      normalizedRows.sort((a, b) => {
+        const aFinite = Number.isFinite(a.ts);
+        const bFinite = Number.isFinite(b.ts);
+        if (aFinite && bFinite) return b.ts - a.ts;
+        if (aFinite) return -1;
+        if (bFinite) return 1;
+        return String(b.timestamp).localeCompare(String(a.timestamp));
+      });
+
+      const previewRows = normalizedRows.slice(0, Math.max(1, maxRows));
+      const priceDigits = resolveDownloadPriceDigits(
+        ticker || previewRows[0]?.itemId || normalizedRows[0]?.itemId || ""
+      );
+      ui.downloadPreview.innerHTML = `
+        <div class="small muted" style="margin-bottom:10px;">
+          Showing newest ${previewRows.length} of ${normalizedRows.length.toLocaleString()} canonical row(s).
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>item_id</th>
+                <th>timestamp</th>
+                <th>closing_price</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${previewRows
+                .map(
+                  (row) => `
+                    <tr>
+                      <td>${escapeHtml(row.itemId)}</td>
+                      <td>${escapeHtml(row.timestamp)}</td>
+                      <td>${escapeHtml(formatDownloadPriceValue(row.closingPrice, priceDigits))}</td>
+                    </tr>
+                  `
+                )
+                .join("")}
+            </tbody>
+          </table>
+        </div>
+      `;
+      return;
+    }
+
     const idxDate = findIndex("date", "datetime");
     const idxClose = findIndex("price", "close");
     const idxOpen = findIndex("open");
@@ -16606,6 +16674,10 @@
     if (!text) return null;
     if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
       const parsed = new Date(`${text}T12:00:00`);
+      return Number.isFinite(parsed.getTime()) ? parsed : null;
+    }
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(text)) {
+      const parsed = new Date(text.replace(" ", "T") + "Z");
       return Number.isFinite(parsed.getTime()) ? parsed : null;
     }
     const parsed = new Date(text);
@@ -24883,7 +24955,7 @@
       const ticker =
         resolveActiveOrDefaultTicker(formData.get("ticker"), state.tickerContext.ticker);
       if (!ticker) {
-        showToast("Load a ticker first.", "warn");
+        showToast("Enter or load a ticker first.", "warn");
         return;
       }
       const interval = String(formData.get("interval") || "1d");

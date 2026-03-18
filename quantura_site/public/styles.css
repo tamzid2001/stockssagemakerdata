@@ -6760,6 +6760,52 @@ form[data-provider-accent="amazon_nova"] #screener-generate-button {
   grid-template-columns: minmax(340px, 0.85fr) minmax(300px, 1fr);
 }
 
+.download-form-card .card-head {
+  margin-bottom: 14px;
+}
+
+.download-form-subcopy {
+  margin: 6px 0 0;
+  line-height: 1.45;
+}
+
+.download-form-grid {
+  grid-template-columns: minmax(0, 1.1fr) repeat(2, minmax(0, 0.9fr));
+}
+
+.download-history-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.download-history-note {
+  margin-top: 8px;
+  line-height: 1.45;
+}
+
+.download-form-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.download-form-actions #download-status {
+  margin: 0;
+}
+
+.download-guidance-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.download-guidance-card #download-preview {
+  min-height: 230px;
+}
+
 .panel[data-panel="options"] .results-panel {
   width: 100%;
 }
@@ -6853,6 +6899,15 @@ form[data-provider-accent="amazon_nova"] #screener-generate-button {
 
   .panel[data-panel="news"] .content-grid {
     grid-template-columns: 1fr;
+  }
+
+  .download-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .download-form-actions {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .intel-institutional-grid {
