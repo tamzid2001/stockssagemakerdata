@@ -5579,7 +5579,7 @@
     }
     if (ui.dashboardAuthLink) {
       const linkSpan = ui.dashboardAuthLink.querySelector("span");
-      const linkLabel = sessionAuthed ? (pack.sign_out || fallback.sign_out || "Sign out") : (pack.sign_in || fallback.sign_in || "Sign in");
+      const linkLabel = accountAuthed ? (pack.sign_out || fallback.sign_out || "Sign out") : (pack.sign_in || fallback.sign_in || "Sign in");
       if (linkSpan) setLocalizedText(linkSpan, linkLabel);
       setLocalizedAttribute(ui.dashboardAuthLink, "aria-label", linkLabel);
     }
@@ -7408,11 +7408,11 @@
     }
 
     if (ui.dashboardAuthLink) {
-      ui.dashboardAuthLink.innerHTML = sessionAuthed
+      ui.dashboardAuthLink.innerHTML = accountAuthed
         ? `${icon("log-out")}<span>Sign out</span>`
         : `${icon("log-in")}<span>Sign in</span>`;
-      ui.dashboardAuthLink.setAttribute("href", sessionAuthed ? "#" : "/account");
-      ui.dashboardAuthLink.setAttribute("aria-label", sessionAuthed ? "Sign out" : "Sign in");
+      ui.dashboardAuthLink.setAttribute("href", accountAuthed ? "#" : "/account");
+      ui.dashboardAuthLink.setAttribute("aria-label", accountAuthed ? "Sign out" : "Sign in");
     }
 
     setPurchaseState(user);
@@ -23576,7 +23576,7 @@
       });
 
       ui.dashboardAuthLink?.addEventListener("click", async (event) => {
-        if (!state.user) return;
+        if (!hasFullAccount()) return;
         event.preventDefault?.();
         await performSignOut();
       });
