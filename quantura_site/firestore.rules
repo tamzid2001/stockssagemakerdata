@@ -1,0 +1,230 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.email == "tamzid257@gmail.com";
+    }
+
+    function isWorkspaceCollaborator(ownerId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(ownerId)/collaborators/$(request.auth.uid));
+    }
+
+    function collaboratorRole(ownerId) {
+      return get(/databases/$(database)/documents/users/$(ownerId)/collaborators/$(request.auth.uid)).data.role;
+    }
+
+    function canEditWorkspace(ownerId) {
+      return isSignedIn()
+        && (request.auth.uid == ownerId || (isWorkspaceCollaborator(ownerId) && collaboratorRole(ownerId) == "editor"));
+    }
+
+    match /users/{userId} {
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
+      allow create, update: if isSignedIn() && request.auth.uid == userId;
+      allow delete: if isAdmin();
+    }
+
+    match /users/{userId}/collaborators/{collabId} {
+      allow read: if isAdmin() || (isSignedIn() && (request.auth.uid == userId || request.auth.uid == collabId));
+      allow write: if false;
+    }
+
+    match /users/{userId}/shared_workspaces/{workspaceId} {
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
+      allow write: if false;
+    }
+
+    match /users/{userId}/tasks/{taskId} {
+      allow read: if isAdmin()
+        || (isSignedIn() && (request.auth.uid == userId || isWorkspaceCollaborator(userId)));
+      allow create, update, delete: if isAdmin() || canEditWorkspace(userId);
+    }
+
+    match /users/{userId}/watchlist/{tickerId} {
+      allow read: if isAdmin()
+        || (isSignedIn() && (request.auth.uid == userId || isWorkspaceCollaborator(userId)));
+      allow create, update, delete: if isAdmin() || canEditWorkspace(userId);
+    }
+
+    match /users/{userId}/price_alerts/{alertId} {
+      allow read: if isAdmin()
+        || (isSignedIn() && (request.auth.uid == userId || isWorkspaceCollaborator(userId)));
+      allow create, update, delete: if isAdmin() || canEditWorkspace(userId);
+    }
+
+    match /users/{userId}/ai_agents/{agentId} {
+      allow read: if isAdmin()
+        || (isSignedIn() && (request.auth.uid == userId || isWorkspaceCollaborator(userId)));
+      allow create, update, delete: if isAdmin() || canEditWorkspace(userId);
+    }
+
+    match /users/{userId}/ai_agent_followers/{docId} {
+      allow read, create, update, delete: if isAdmin()
+        || (isSignedIn() && (request.auth.uid == userId || isWorkspaceCollaborator(userId)));
+    }
+
+    match /users/{userId}/ai_agent_likes/{docId} {
+      allow read, create, update, delete: if isAdmin()
+        || (isSignedIn() && (request.auth.uid == userId || isWorkspaceCollaborator(userId)));
+    }
+
+    match /collab_invites/{inviteId} {
+      allow read, write: if false;
+    }
+
+    match /orders/{orderId} {
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.userId);
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /contacts/{contactId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /forecast_requests/{requestId} {
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow read: if isAdmin()
+        || (isSignedIn() && (request.auth.uid == resource.data.userId || isWorkspaceCollaborator(resource.data.userId)));
+      allow update, delete: if isAdmin();
+    }
+
+    match /screener_runs/{runId} {
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow read: if isAdmin()
+        || (isSignedIn() && (request.auth.uid == resource.data.userId || isWorkspaceCollaborator(resource.data.userId)));
+      allow update, delete: if isAdmin();
+    }
+
+    match /autopilot_requests/{requestId} {
+      allow create: if isAdmin()
+        || (isSignedIn() && request.resource.data.userId == request.auth.uid);
+      allow read: if isAdmin()
+        || (isSignedIn() && request.auth.uid == resource.data.userId);
+      allow update, delete: if isAdmin()
+        || (isSignedIn() && request.auth.uid == resource.data.userId);
+    }
+
+    match /prediction_uploads/{uploadId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /agent_runs/{runId} {
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.userId);
+      allow update, delete: if isAdmin();
+    }
+
+    match /feature_votes/{voteId} {
+      allow create, update: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.userId);
+      allow delete: if isAdmin();
+    }
+
+    match /feature_vote_totals/{featureKey} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /backtests/{backtestId} {
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.userId);
+      allow update, delete: if isAdmin();
+    }
+
+    match /alpaca_orders/{orderId} {
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.userId);
+      allow update, delete: if isAdmin();
+    }
+
+    match /social_campaigns/{campaignId} {
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.userId);
+      allow update, delete: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.userId);
+    }
+
+    match /social_queue/{queueId} {
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.userId);
+      allow write: if false;
+    }
+
+    match /social_dispatch_logs/{logId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /posts/{postId} {
+      allow read: if resource.data.visibility == "public"
+        || (isSignedIn() && request.auth.uid == resource.data.authorUid);
+      allow create: if isSignedIn() && request.resource.data.authorUid == request.auth.uid;
+      allow update, delete: if isSignedIn() && request.auth.uid == resource.data.authorUid;
+    }
+
+    match /posts/{postId}/comments/{commentId} {
+      allow read: if exists(/databases/$(database)/documents/posts/$(postId))
+        && (
+          get(/databases/$(database)/documents/posts/$(postId)).data.visibility == "public"
+          || (isSignedIn() && request.auth.uid == get(/databases/$(database)/documents/posts/$(postId)).data.authorUid)
+        );
+      allow create: if isSignedIn() && request.resource.data.authorUid == request.auth.uid;
+      allow delete: if isSignedIn() && request.auth.uid == resource.data.authorUid;
+      allow update: if false;
+    }
+
+    match /postLikes/{postId}/users/{uid} {
+      allow read: if isSignedIn();
+      allow create, delete: if isSignedIn() && request.auth.uid == uid;
+      allow update: if false;
+    }
+
+    match /postReposts/{postId}/users/{uid} {
+      allow read: if isSignedIn();
+      allow create, delete: if isSignedIn() && request.auth.uid == uid;
+      allow update: if false;
+    }
+
+    match /reports/{reportId} {
+      allow create: if isSignedIn() && request.resource.data.reporterUid == request.auth.uid;
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /users/{userId}/follows/{authorUid} {
+      allow read, create, update, delete: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /users/{userId}/watchTickers/{ticker} {
+      allow read, create, update, delete: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /users/{userId}/fcmTokens/{token} {
+      allow read, create, update, delete: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /users/{userId}/requests/{requestId} {
+      allow read: if isAdmin()
+        || (isSignedIn() && request.auth.uid == userId)
+        || resource.data.share.visibility == "public";
+      allow create, update, delete: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /request_shares/{slug} {
+      allow read: if resource.data.visibility == "public"
+        || resource.data.visibility == "unlisted"
+        || (isSignedIn() && request.auth.uid == resource.data.ownerUid)
+        || isAdmin();
+      allow create: if isAdmin()
+        || (isSignedIn() && request.auth.uid == request.resource.data.ownerUid);
+      allow update, delete: if isAdmin()
+        || (isSignedIn() && request.auth.uid == resource.data.ownerUid);
+    }
+  }
+}
