@@ -498,7 +498,40 @@
   ]);
   const FEATURE_VOTE_LABELS = Object.freeze({
     uploads: "Upload predictions CSV",
-    autopilot: "Weekly Brief Autopilot",
+    autopilot: "Forecast Foundry",
+  });
+  const FOUNDRY_MAX_CONCURRENT_INSTANCES = 2;
+  const FOUNDRY_HORIZON_PRESETS = Object.freeze([
+    { key: "3d", label: "3 Days" },
+    { key: "1w", label: "Week Ending Friday" },
+    { key: "2w", label: "2 Weeks" },
+    { key: "3w", label: "3 Weeks" },
+    { key: "1m", label: "1 Month" },
+    { key: "3m", label: "3 Months" },
+    { key: "6m", label: "6 Months" },
+    { key: "1y", label: "1 Year" },
+  ]);
+  const FOUNDRY_HORIZON_STEPS = Object.freeze({
+    "1d": Object.freeze({
+      "3d": 3,
+      "1w": 5,
+      "2w": 10,
+      "3w": 15,
+      "1m": 22,
+      "3m": 66,
+      "6m": 132,
+      "1y": 252,
+    }),
+    "1h": Object.freeze({
+      "3d": 21,
+      "1w": 35,
+      "2w": 70,
+      "3w": 105,
+      "1m": 154,
+      "3m": 462,
+      "6m": 924,
+      "1y": 1764,
+    }),
   });
   const FISCALDATA_DEFAULT_PREFERRED_COLUMNS = Object.freeze([
     "record_date",
@@ -1836,6 +1869,8 @@
     technicalsForm: document.getElementById("technicals-form"),
     technicalsOutput: document.getElementById("technicals-output"),
     downloadForm: document.getElementById("download-form"),
+    downloadEnd: document.getElementById("download-end"),
+    downloadUseAllHistory: document.getElementById("download-use-all-history"),
     downloadStatus: document.getElementById("download-status"),
     downloadPreview: document.getElementById("download-preview"),
     trendingButton: document.getElementById("load-trending"),
@@ -1929,6 +1964,30 @@
     uploadsAdminBlock: document.getElementById("uploads-admin-block"),
     featureVoteUploadsForm: document.getElementById("feature-vote-uploads-form"),
     featureVoteUploadsStatus: document.getElementById("feature-vote-uploads-status"),
+    foundrySourceForm: document.getElementById("foundry-source-form"),
+    foundrySourceKind: document.getElementById("foundry-source-kind"),
+    foundryTicker: document.getElementById("foundry-ticker"),
+    foundryInterval: document.getElementById("foundry-interval"),
+    foundryTitle: document.getElementById("foundry-title"),
+    foundryStart: document.getElementById("foundry-start"),
+    foundryEnd: document.getElementById("foundry-end"),
+    foundryUseAllHistory: document.getElementById("foundry-use-all-history"),
+    foundryFile: document.getElementById("foundry-file"),
+    foundryNotes: document.getElementById("foundry-notes"),
+    foundryHistoryFields: document.getElementById("foundry-history-fields"),
+    foundryFileField: document.getElementById("foundry-file-field"),
+    foundryHorizon: document.getElementById("foundry-horizon"),
+    foundryQuantiles: document.getElementById("foundry-quantiles"),
+    foundryPrepareButton: document.getElementById("foundry-prepare-button"),
+    foundryRunButton: document.getElementById("foundry-run-button"),
+    foundryAnalyzeButton: document.getElementById("foundry-analyze-button"),
+    foundryRefreshList: document.getElementById("foundry-refresh-list"),
+    foundryRefreshButton: document.getElementById("foundry-refresh-button"),
+    foundryShareButton: document.getElementById("foundry-share-button"),
+    foundryRunMeta: document.getElementById("foundry-run-meta"),
+    foundryPublishHost: document.getElementById("foundry-publish-host"),
+    foundryInstanceLimit: document.getElementById("foundry-instance-limit"),
+    foundryAccessNote: document.getElementById("foundry-access-note"),
     autopilotForm: document.getElementById("autopilot-form"),
     autopilotOutput: document.getElementById("autopilot-output"),
     autopilotStatus: document.getElementById("autopilot-status"),
@@ -2219,6 +2278,16 @@
       table: null,
       previewPage: 0,
       previewPageSize: 25,
+    },
+    foundryContext: {
+      runs: [],
+      loaded: false,
+      activeRunId: "",
+      activeRun: null,
+      pendingPreparedRunId: "",
+      loadingRunId: "",
+      activeConcurrentRuns: 0,
+      maxConcurrentRuns: FOUNDRY_MAX_CONCURRENT_INSTANCES,
     },
     aiLeaderboardHorizon: AI_LEADERBOARD_DEFAULT_HORIZON,
     aiModelFilter: "all",
@@ -7360,9 +7429,13 @@
     ui.autopilotAdminBlock?.classList.toggle("hidden", !allowAdminTools);
     ui.uploadsVoteBlock?.classList.toggle("hidden", allowAdminTools);
     ui.autopilotVoteBlock?.classList.toggle("hidden", allowAdminTools);
-    if (!allowAdminTools) {
-      if (ui.predictionsStatus) ui.predictionsStatus.textContent = "Admin-only capability.";
-      if (ui.autopilotStatus) ui.autopilotStatus.textContent = "Admin-only capability.";
+    if (!hasFullAccount(user)) {
+      if (ui.autopilotStatus && !String(ui.autopilotStatus.textContent || "").trim()) {
+        ui.autopilotStatus.textContent = "Sign in with a full account to use Forecast Foundry.";
+      }
+      if (ui.foundryAccessNote) ui.foundryAccessNote.classList.remove("hidden");
+    } else if (ui.foundryAccessNote) {
+      ui.foundryAccessNote.classList.remove("hidden");
     }
   };
 
@@ -9554,7 +9627,6 @@
         watchlist: "/watchlist",
         productivity: "/productivity",
         collaboration: "/collaboration",
-        uploads: "/uploads",
         autopilot: "/autopilot",
         notifications: "/notifications",
         auth: "/account",
@@ -9565,7 +9637,8 @@
         "/dashboard/watchlist": "watchlist",
         "/dashboard/productivity": "productivity",
         "/dashboard/collaboration": "collaboration",
-        "/dashboard/uploads": "uploads",
+        "/dashboard/uploads": "autopilot",
+        "/uploads": "autopilot",
       },
     },
   });
@@ -10609,6 +10682,113 @@
     return values;
   };
 
+  const parseFoundryQuantileToken = (raw) => {
+    const trimmed = String(raw || "").trim().toLowerCase();
+    if (!trimmed) return null;
+    let percent = Number.NaN;
+    let match = trimmed.match(/^(?:p|q)(\d{1,2})$/);
+    if (match) {
+      percent = Number(match[1]);
+    } else {
+      const numeric = Number(trimmed);
+      if (!Number.isFinite(numeric)) {
+        throw new Error(`Invalid Forecast Foundry quantile: ${trimmed}`);
+      }
+      percent = numeric > 1 ? numeric : numeric * 100;
+    }
+    if (!Number.isFinite(percent) || !(percent > 0 && percent < 100)) {
+      throw new Error("Forecast Foundry quantiles must be between P1 and P99.");
+    }
+    if (Math.abs(percent - Math.round(percent)) > 1e-6) {
+      throw new Error("Forecast Foundry quantiles must use whole-percent steps such as P10, P25, P50, P75, or P90.");
+    }
+    return `p${Math.round(percent)}`;
+  };
+
+  const formatFoundryQuantileLabel = (value) => {
+    const numeric = Number(String(value || "").replace(/^p/i, ""));
+    return Number.isFinite(numeric) ? `P${Math.round(numeric)}` : String(value || "").toUpperCase();
+  };
+
+  const parseFoundryQuantilesInput = (raw) => {
+    const parts = Array.isArray(raw) ? raw : String(raw || "").split(/[,\s]+/);
+    const values = [];
+    const seen = new Set();
+    for (const part of parts) {
+      const normalized = parseFoundryQuantileToken(part);
+      if (!normalized) continue;
+      if (seen.has(normalized)) continue;
+      seen.add(normalized);
+      values.push(normalized);
+    }
+    if (values.length < 3) {
+      throw new Error("Forecast Foundry requires at least 3 quantiles. Start with P10, P50, and P90.");
+    }
+    if (values.length > 5) {
+      throw new Error("Forecast Foundry supports up to 5 quantiles.");
+    }
+    if (values.length % 2 === 0) {
+      throw new Error("Forecast Foundry quantiles must use an odd count so a middle median quantile exists.");
+    }
+    if (!values.includes("p50")) {
+      throw new Error("Forecast Foundry quantiles must include P50.");
+    }
+    return values
+      .map((entry) => ({ entry, numeric: Number(entry.replace(/^p/i, "")) }))
+      .sort((left, right) => left.numeric - right.numeric)
+      .map((entry) => entry.entry);
+  };
+
+  const normalizeFoundryHorizonPresetKey = (raw) => {
+    const value = String(raw || "").trim().toLowerCase();
+    return FOUNDRY_HORIZON_PRESETS.some((preset) => preset.key === value) ? value : "1m";
+  };
+
+  const normalizeFoundryHorizonInterval = (raw) => {
+    const value = String(raw || "").trim().toLowerCase();
+    return value === "1h" || value === "1d" ? value : "1d";
+  };
+
+  const getFoundryHorizonPresetLabel = (presetKey) =>
+    FOUNDRY_HORIZON_PRESETS.find((preset) => preset.key === normalizeFoundryHorizonPresetKey(presetKey))?.label || "1 Month";
+
+  const getFoundryHorizonSteps = ({ presetKey = "1m", interval = "1d" } = {}) => {
+    const normalizedInterval = normalizeFoundryHorizonInterval(interval);
+    const normalizedPresetKey = normalizeFoundryHorizonPresetKey(presetKey);
+    return Number(
+      FOUNDRY_HORIZON_STEPS[normalizedInterval]?.[normalizedPresetKey] ||
+        FOUNDRY_HORIZON_STEPS["1d"][normalizedPresetKey] ||
+        FOUNDRY_HORIZON_STEPS["1d"]["1m"]
+    );
+  };
+
+  const formatFoundryHorizonSummary = ({ forecastHorizon = 0, forecastFrequency = "", interval = "" } = {}) => {
+    const intervalText = String(interval || "").trim().toLowerCase();
+    const normalizedInterval =
+      intervalText === "1h" || intervalText === "1d"
+        ? intervalText
+        : String(forecastFrequency || "").trim().toUpperCase() === "1H"
+          ? "1h"
+          : "1d";
+    const horizonSteps = Math.max(0, Math.floor(Number(forecastHorizon || 0)));
+    if (!horizonSteps) return "";
+    const exactPreset = FOUNDRY_HORIZON_PRESETS.find(
+      (preset) => getFoundryHorizonSteps({ presetKey: preset.key, interval: normalizedInterval }) === horizonSteps
+    );
+    const stepUnit =
+      normalizedInterval === "1h"
+        ? horizonSteps === 1
+          ? "trading hour"
+          : "trading hours"
+        : horizonSteps === 1
+          ? "trading day"
+          : "trading days";
+    if (exactPreset) {
+      return `${exactPreset.label} (${horizonSteps} ${stepUnit})`;
+    }
+    return `${horizonSteps} ${stepUnit}`;
+  };
+
   const setTerminalStatus = (text) => {
     if (!ui.terminalStatus) return;
     ui.terminalStatus.textContent = text || "";
@@ -10708,7 +10888,7 @@
       } else if (kind === "screener") {
         window.location.href = `/screener?runId=${encodeURIComponent(importedId)}`;
       } else if (kind === "upload") {
-        window.location.href = `/uploads?uploadId=${encodeURIComponent(importedId)}`;
+        window.location.href = `/autopilot?uploadId=${encodeURIComponent(importedId)}`;
       }
     }
     return { kind, importedId };
@@ -10737,7 +10917,7 @@
         return { kind, importedId };
       }
       if (kind === "upload") {
-        window.location.href = `/uploads?uploadId=${encodeURIComponent(importedId)}`;
+        window.location.href = `/autopilot?uploadId=${encodeURIComponent(importedId)}`;
         return { kind, importedId };
       }
 
@@ -12112,43 +12292,13 @@
     }
   };
 
-  const openMarketHeadlinesInterstitial = async ({ url = "", title = "", source = "", feedLabel = "" } = {}) => {
+  const openMarketHeadlinesInterstitial = ({ url = "" } = {}) => {
     const cleanUrl = String(url || "").trim();
     if (!cleanUrl) {
       showToast("Article link unavailable for this headline.", "warn");
       return;
     }
-    if (isNativeApp()) {
-      const interstitialApproved = await maybeShowNativeInterstitialGate({
-        reason: "market_headlines_link",
-        fallbackMessage: "Opening article while the interstitial finishes loading.",
-      });
-      if (!interstitialApproved) return;
-      window.open(cleanUrl, "_blank", "noopener,noreferrer");
-      return;
-    }
-    const overlay = ensureMarketHeadlinesInterstitialOverlay();
-    marketHeadlinesInterstitialState.url = cleanUrl;
-    marketHeadlinesInterstitialState.title = String(title || "Selected article").trim();
-    marketHeadlinesInterstitialState.source = String(source || "Selected source").trim();
-    marketHeadlinesInterstitialState.feedLabel = String(feedLabel || "RSS feed").trim();
-    marketHeadlinesInterstitialState.unlockAtMs = Date.now() + 5000;
-    updateMarketHeadlinesInterstitialOverlay();
-    overlay.classList.remove("hidden");
-    overlay.setAttribute("aria-hidden", "false");
-    document.body.classList.add("prediction-interstitial-open");
-    if (marketHeadlinesInterstitialState.tickTimer) {
-      window.clearInterval(marketHeadlinesInterstitialState.tickTimer);
-    }
-    marketHeadlinesInterstitialState.tickTimer = window.setInterval(() => {
-      updateMarketHeadlinesInterstitialOverlay();
-    }, 1000);
-    if (marketHeadlinesInterstitialState.autoOpenTimer) {
-      window.clearTimeout(marketHeadlinesInterstitialState.autoOpenTimer);
-    }
-    marketHeadlinesInterstitialState.autoOpenTimer = window.setTimeout(() => {
-      finalizeMarketHeadlinesInterstitial(true);
-    }, 5000);
+    window.open(cleanUrl, "_blank", "noopener,noreferrer");
   };
 
   const fetchTickerPredictionsPayload = async ({ mode, query, includeClosed, signal }) => {
@@ -12572,6 +12722,49 @@
     }
   };
 
+  const buildNewsThumbFallbackUrl = ({ title = "", source = "" } = {}) => {
+    const sourceText = String(source || "News").trim() || "News";
+    const initials = sourceText
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part.charAt(0))
+      .join("")
+      .toUpperCase() || "N";
+    const titleText = String(title || "").trim().slice(0, 54);
+    const svg = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="176" height="176" viewBox="0 0 176 176">
+        <defs>
+          <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#0f172a" />
+            <stop offset="100%" stop-color="#1d5ed8" />
+          </linearGradient>
+        </defs>
+        <rect width="176" height="176" rx="28" fill="url(#g)" />
+        <rect x="12" y="12" width="152" height="152" rx="22" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.16)" />
+        <text x="24" y="58" fill="#f8fafc" font-family="Manrope, Arial, sans-serif" font-size="28" font-weight="700">${sourceText
+          .slice(0, 20)
+          .replace(/[&<>"]/g, "")}</text>
+        <text x="24" y="104" fill="rgba(248,250,252,0.88)" font-family="Manrope, Arial, sans-serif" font-size="50" font-weight="800">${initials}</text>
+        <text x="24" y="140" fill="rgba(248,250,252,0.82)" font-family="Manrope, Arial, sans-serif" font-size="12">${titleText
+          .replace(/[&<>"]/g, "")}</text>
+      </svg>
+    `.trim();
+    return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+  };
+
+  const buildNewsThumbnailMarkup = ({ thumbnailUrl = "", title = "", source = "" } = {}) => {
+    const fallbackUrl = buildNewsThumbFallbackUrl({ title, source });
+    const primaryUrl = String(thumbnailUrl || "").trim() || fallbackUrl;
+    const onError =
+      "if(this.dataset.fallbackSrc&&this.src!==this.dataset.fallbackSrc){this.src=this.dataset.fallbackSrc;this.classList.add('news-thumb--fallback');}else{var card=this.closest('.news-card');if(card){card.classList.remove('news-card--with-thumb');}this.remove();}";
+    return `<img class="news-thumb${primaryUrl === fallbackUrl ? " news-thumb--fallback" : ""}" src="${escapeHtml(
+      primaryUrl
+    )}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-fallback-src="${escapeHtml(
+      fallbackUrl
+    )}" onerror="${escapeHtml(onError)}" />`;
+  };
+
   const renderTickerNews = (items, ticker) => {
     if (!ui.newsOutput) return;
     const list = Array.isArray(items) ? items : [];
@@ -12596,7 +12789,7 @@
         const meta = [publisher, published].filter(Boolean).join(" · ");
         return `
           <article class="news-card${thumb ? " news-card--with-thumb" : ""}">
-            ${thumb ? `<img class="news-thumb" src="${thumb}" alt="" loading="lazy" />` : ""}
+            ${thumb ? buildNewsThumbnailMarkup({ thumbnailUrl: thumb, title: item.title || "", source: item.publisher || symbol || "News" }) : ""}
             <div class="news-body">
               <div class="news-title">${title}</div>
               <div class="news-meta small">${meta}</div>
@@ -13732,7 +13925,15 @@
           const source = escapeHtml(String(item?.sourceLabel || providerLabel).trim() || providerLabel);
           return `
             <article class="news-card${thumb ? " news-card--with-thumb" : ""}">
-              ${thumb ? `<img class="news-thumb" src="${thumb}" alt="" loading="lazy" />` : ""}
+              ${
+                thumb
+                  ? buildNewsThumbnailMarkup({
+                      thumbnailUrl: thumb,
+                      title: String(item?.title || ""),
+                      source: String(item?.sourceLabel || item?.publisher || providerLabel),
+                    })
+                  : ""
+              }
               <div class="news-body">
                 <div class="news-title">${title}</div>
                 <div class="news-meta small">${publisher}${when ? ` · ${when}` : ""} · ${source}</div>
@@ -15533,7 +15734,8 @@
               latencyMs,
               selectedModules: responsePayload.selectedModules || selectedModules,
             }),
-	          answer: String(responsePayload.answer || "").trim().slice(0, 4000),
+	          answer: String(responsePayload.answer || "").trim().slice(0, 12000),
+	          bodyMarkdown: String(responsePayload.answer || "").trim().slice(0, 12000),
 	          provider: responsePayload.provider || selectedProvider,
 	          model: responsePayload.model || selectedModel,
 	          latencyMs,
@@ -16885,6 +17087,659 @@
       }
     }
     logEvent("predictions_plotted", { upload_id: cleanId, source });
+  };
+
+  const callFoundryApi = async (method, path, body = null) => {
+    const headers = await buildApiAuthHeaders({ includeJson: method !== "GET" });
+    const response = await fetch(path, {
+      method,
+      headers,
+      credentials: "same-origin",
+      body: method === "GET" ? undefined : JSON.stringify(body || {}),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const detail = String(payload?.detail || payload?.error || "Forecast Foundry request failed.").trim();
+      const error = new Error(detail);
+      error.status = response.status;
+      error.payload = payload;
+      throw error;
+    }
+    return payload;
+  };
+
+  const setFoundryStatus = (message, variant = "") => {
+    if (!ui.autopilotStatus) return;
+    ui.autopilotStatus.textContent = String(message || "");
+    ui.autopilotStatus.dataset.variant = String(variant || "").trim();
+  };
+
+  const syncFoundryDateDefaults = ({ force = false } = {}) => {
+    const interval = String(ui.foundryInterval?.value || "1d").trim();
+    const useAllHistory = Boolean(ui.foundryUseAllHistory?.checked);
+    const today = new Date();
+    const endValue = today.toISOString().slice(0, 10);
+    const startDate = new Date(today);
+    if (interval === "1m") {
+      startDate.setDate(startDate.getDate() - 29);
+    } else if (interval === "1h") {
+      startDate.setDate(startDate.getDate() - 729);
+    } else {
+      startDate.setFullYear(startDate.getFullYear() - 5);
+    }
+    const startValue = startDate.toISOString().slice(0, 10);
+    if (ui.foundryEnd && (force || !String(ui.foundryEnd.value || "").trim())) {
+      ui.foundryEnd.value = endValue;
+    }
+    if (ui.foundryStart) {
+      ui.foundryStart.disabled = useAllHistory;
+      if (useAllHistory) {
+        ui.foundryStart.value = "";
+      } else if (force || !String(ui.foundryStart.value || "").trim()) {
+        ui.foundryStart.value = startValue;
+      }
+    }
+  };
+
+  const syncFoundrySourceFields = () => {
+    const sourceKind = String(ui.foundrySourceKind?.value || "history").trim();
+    const historyMode = sourceKind === "history";
+    const fileMode = sourceKind === "historical_csv" || sourceKind === "prediction_csv";
+    ui.foundryHistoryFields?.classList.toggle("hidden", !historyMode);
+    ui.foundryFileField?.classList.toggle("hidden", !fileMode);
+    if (ui.foundryAnalyzeButton) {
+      ui.foundryAnalyzeButton.disabled = false;
+    }
+    if (historyMode) syncFoundryDateDefaults();
+    updateFoundryInstanceLimitUi();
+  };
+
+  const getFoundryRequestId = (run) => String(run?.exploreRequestId || "").trim();
+
+  const updateFoundryRunInState = (run) => {
+    if (!run || typeof run !== "object") return;
+    const next = Array.isArray(state.foundryContext.runs) ? state.foundryContext.runs.slice() : [];
+    const idx = next.findIndex((item) => String(item?.id || "").trim() === String(run.id || "").trim());
+    if (idx >= 0) next[idx] = run;
+    else next.unshift(run);
+    state.foundryContext.runs = next;
+  };
+
+  const isFoundryRunActive = (run) => {
+    const status = String(run?.status || "").trim().toLowerCase();
+    return status === "queued" || status === "running" || status === "transforming";
+  };
+
+  const countActiveFoundryRuns = (runs = []) =>
+    (Array.isArray(runs) ? runs : []).filter((item) => isFoundryRunActive(item)).length;
+
+  const updateFoundryInstanceLimitUi = () => {
+    const maxConcurrentRuns = Number(state.foundryContext.maxConcurrentRuns || FOUNDRY_MAX_CONCURRENT_INSTANCES) || FOUNDRY_MAX_CONCURRENT_INSTANCES;
+    const activeConcurrentRuns = countActiveFoundryRuns(state.foundryContext.runs || []);
+    state.foundryContext.activeConcurrentRuns = activeConcurrentRuns;
+    if (ui.foundryInstanceLimit) {
+      if (!hasFullAccount()) {
+        ui.foundryInstanceLimit.textContent = `Concurrent instance limit: 2 active runs max after sign-in.`;
+      } else if (activeConcurrentRuns >= maxConcurrentRuns) {
+        ui.foundryInstanceLimit.textContent = `Concurrent instance limit: ${activeConcurrentRuns} of ${maxConcurrentRuns} active. Wait for one run to finish before starting another.`;
+      } else {
+        ui.foundryInstanceLimit.textContent = `Concurrent instance limit: ${activeConcurrentRuns} of ${maxConcurrentRuns} active.`;
+      }
+    }
+    if (ui.foundryRunButton) {
+      const sourceKind = String(ui.foundrySourceKind?.value || "history").trim();
+      const requiresFullAccount = !hasFullAccount();
+      const limitReached = hasFullAccount() && activeConcurrentRuns >= maxConcurrentRuns;
+      ui.foundryRunButton.disabled = requiresFullAccount || sourceKind === "prediction_csv" || limitReached;
+      ui.foundryRunButton.title = requiresFullAccount
+        ? "Sign in with a full account to use Forecast Foundry."
+        : limitReached
+          ? `Forecast Foundry allows ${maxConcurrentRuns} active runs at a time.`
+          : "";
+    }
+  };
+
+  const renderFoundryRuns = (items = []) => {
+    state.foundryContext.runs = Array.isArray(items) ? items.slice() : [];
+    updateFoundryInstanceLimitUi();
+    if (!ui.autopilotOutput) return;
+    if (!hasFullAccount()) {
+      ui.autopilotOutput.innerHTML = `<div class="small muted">Sign in with a full account to load Forecast Foundry.</div>`;
+      return;
+    }
+    if (!Array.isArray(items) || !items.length) {
+      ui.autopilotOutput.innerHTML = `<div class="small muted">No Forecast Foundry runs yet. Prepare a source to create one.</div>`;
+      return;
+    }
+    ui.autopilotOutput.innerHTML = items
+      .map((item) => {
+        const active = String(item?.id || "") === String(state.foundryContext.activeRunId || "");
+        const dataset = item?.dataset && typeof item.dataset === "object" ? item.dataset : {};
+        const analysis = item?.analysis && typeof item.analysis === "object" ? item.analysis : {};
+        const autopilot = item?.autopilot && typeof item.autopilot === "object" ? item.autopilot : {};
+        const status = escapeHtml(String(item?.status || "unknown").trim() || "unknown");
+        const title = escapeHtml(String(item?.title || "Forecast Foundry run").trim());
+        const ticker = escapeHtml(String(dataset?.ticker || "").trim() || "Ticker");
+        const interval = escapeHtml(String(dataset?.interval || "").trim() || "n/a");
+        const sourceType = escapeHtml(String(item?.sourceType || "").trim() || "source");
+        const rowCount = Number(dataset?.rowCount || 0);
+        const createdAt = escapeHtml(String(item?.createdAt || "").trim());
+        const metricName = escapeHtml(String(autopilot?.objectiveMetric?.name || "").trim());
+        const metricValue = Number(autopilot?.objectiveMetric?.value);
+        const analysisSummary = escapeHtml(String(analysis?.summary || "").trim().slice(0, 180));
+        return `
+          <article class="task-item${active ? " active" : ""}" data-foundry-run-card="${escapeHtml(String(item?.id || ""))}">
+            <div class="task-item-main">
+              <div class="small muted">${sourceType} · ${ticker} · ${interval}</div>
+              <strong>${title}</strong>
+              <div class="small">${status}${rowCount ? ` · ${rowCount.toLocaleString()} row(s)` : ""}${createdAt ? ` · ${createdAt.slice(0, 10)}` : ""}</div>
+              ${
+                metricName && Number.isFinite(metricValue)
+                  ? `<div class="small muted">${metricName}: ${escapeHtml(metricValue.toFixed(6))}</div>`
+                  : analysisSummary
+                    ? `<div class="small muted">${analysisSummary}</div>`
+                    : ""
+              }
+            </div>
+            <div class="task-chip-row" style="margin-top:10px;">
+              <button class="task-chip" type="button" data-action="foundry-select-run" data-run-id="${escapeHtml(String(item?.id || ""))}">${icon("eye")}<span>Open</span></button>
+              <button class="task-chip" type="button" data-action="foundry-refresh-run" data-run-id="${escapeHtml(String(item?.id || ""))}">${icon("refresh")}<span>Refresh</span></button>
+              <button class="task-chip" type="button" data-action="foundry-analyze-run" data-run-id="${escapeHtml(String(item?.id || ""))}">${icon("sparks")}<span>Analyze</span></button>
+            </div>
+          </article>
+        `;
+      })
+      .join("");
+  };
+
+  const renderFoundryPreviewTableFromObjects = (rows = []) => {
+    if (!ui.predictionsPreview) return;
+    if (!Array.isArray(rows) || !rows.length) {
+      ui.predictionsPreview.innerHTML = `<div class="small muted">No preview rows are available.</div>`;
+      return;
+    }
+    const headers = Object.keys(rows[0] || {});
+    ui.predictionsPreview.innerHTML = `
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr>
+          </thead>
+          <tbody>
+            ${rows
+              .slice(0, 20)
+              .map(
+                (row) =>
+                  `<tr>${headers
+                    .map((header) => `<td>${escapeHtml(row?.[header] ?? "")}</td>`)
+                    .join("")}</tr>`
+              )
+              .join("")}
+          </tbody>
+        </table>
+      </div>
+    `;
+  };
+
+  const loadFoundryCsvIntoPreview = async (run) => {
+    const files = run?.files && typeof run.files === "object" ? run.files : {};
+    const dataset = run?.dataset && typeof run.dataset === "object" ? run.dataset : {};
+    const orderedFiles = [
+      files.predictionsCsv,
+      files.uploadedCsv,
+      files.datasetCsv,
+      files.analysisJson,
+    ].filter((entry) => entry && typeof entry === "object");
+    const targetFile = orderedFiles.find((entry) => String(entry?.downloadUrl || "").trim());
+
+    if (!targetFile) {
+      if (ui.predictionsPlotMeta) {
+        ui.predictionsPlotMeta.textContent = "Signed download URL is unavailable for this run. Showing stored preview rows only.";
+      }
+      renderFoundryPreviewTableFromObjects(Array.isArray(dataset?.previewRows) ? dataset.previewRows : []);
+      if (ui.predictionsChart) {
+        ui.predictionsChart.innerHTML = `<div class="small muted">Chart rendering needs a downloadable CSV artifact.</div>`;
+      }
+      return;
+    }
+
+    if (ui.predictionsPlotMeta) {
+      ui.predictionsPlotMeta.textContent = `${String(targetFile.fileName || "dataset.csv").trim()} · loading CSV preview...`;
+    }
+    setOutputLoading(ui.predictionsPreview, "Loading CSV preview...");
+    setOutputLoading(ui.predictionsChart, "Loading chart...");
+    const response = await fetch(String(targetFile.downloadUrl), { cache: "no-store" });
+    if (!response.ok) throw new Error("Unable to fetch the stored CSV artifact.");
+    const csvText = await response.text();
+    const table = parseCsvTable(csvText, { maxRows: 20000 });
+    state.predictionsContext.table = table;
+    state.predictionsContext.previewPage = 0;
+    state.predictionsContext.previewPageSize = 25;
+    renderCsvPreview(table);
+    setOutputReady(ui.predictionsPreview);
+    await renderPredictionsChart(table, { title: String(run?.title || "Forecast Foundry CSV") });
+    setOutputReady(ui.predictionsChart);
+    if (ui.predictionsPlotMeta) {
+      ui.predictionsPlotMeta.textContent = `${String(targetFile.fileName || "dataset.csv").trim()} · ${table.rows.length.toLocaleString()} rows · ${table.headers.length} columns`;
+    }
+  };
+
+  const renderFoundryRunDetail = async (run, { request = null, shareUrl = "" } = {}) => {
+    state.foundryContext.activeRunId = String(run?.id || "").trim();
+    state.foundryContext.activeRun = run && typeof run === "object" ? run : null;
+    renderFoundryRuns(state.foundryContext.runs || []);
+    if (!ui.foundryRunMeta) return;
+    if (!run || typeof run !== "object") {
+      ui.foundryRunMeta.innerHTML = `<div class="small muted">Select a foundry run to inspect it.</div>`;
+      if (ui.foundryPublishHost) ui.foundryPublishHost.innerHTML = `<div class="small muted">Private Explore sync and publish controls appear here after a source is prepared.</div>`;
+      return;
+    }
+    const dataset = run.dataset && typeof run.dataset === "object" ? run.dataset : {};
+    const autopilot = run.autopilot && typeof run.autopilot === "object" ? run.autopilot : {};
+    const analysis = run.analysis && typeof run.analysis === "object" ? run.analysis : {};
+    const files = run.files && typeof run.files === "object" ? run.files : {};
+    const requestId = getFoundryRequestId(run);
+    const requestRecord = request && typeof request === "object" ? request : requestId ? getMyRequestById(requestId) : null;
+    const effectiveShareUrl = String(shareUrl || requestRecord?.share?.shareUrl || "").trim();
+    const horizonSummary = formatFoundryHorizonSummary({
+      forecastHorizon: autopilot?.forecastHorizon,
+      forecastFrequency: autopilot?.forecastFrequency,
+      interval: dataset?.interval,
+    });
+    if (ui.foundryShareButton) ui.foundryShareButton.disabled = !requestId;
+    ui.foundryRunMeta.innerHTML = `
+      <div class="small muted">Forecast Foundry run</div>
+      <h3 style="margin-top:6px;">${escapeHtml(String(run.title || "Forecast Foundry run"))}</h3>
+      <div class="small" style="margin-top:8px;">
+        <strong>Status:</strong> ${escapeHtml(String(run.status || "unknown"))}
+        ${dataset?.ticker ? ` · <strong>Ticker:</strong> ${escapeHtml(String(dataset.ticker))}` : ""}
+        ${dataset?.interval ? ` · <strong>Interval:</strong> ${escapeHtml(String(dataset.interval))}` : ""}
+        ${dataset?.rowCount ? ` · <strong>Rows:</strong> ${Number(dataset.rowCount).toLocaleString()}` : ""}
+      </div>
+      <div class="small" style="margin-top:8px;">
+        <strong>Source:</strong> ${escapeHtml(String(run.sourceType || "source"))}
+        ${autopilot?.forecastFrequency ? ` · <strong>Forecast frequency:</strong> ${escapeHtml(String(autopilot.forecastFrequency))}` : ""}
+        ${horizonSummary ? ` · <strong>Horizon:</strong> ${escapeHtml(horizonSummary)}` : ""}
+        ${Array.isArray(autopilot?.quantiles) && autopilot.quantiles.length ? ` · <strong>Quantiles:</strong> ${escapeHtml(autopilot.quantiles.map((entry) => formatFoundryQuantileLabel(entry)).join(", "))}` : ""}
+      </div>
+      ${
+        dataset?.useAllHistory || dataset?.start || dataset?.end
+          ? `<div class="small" style="margin-top:8px;"><strong>History window:</strong> ${
+              dataset?.useAllHistory
+                ? `All available history${dataset?.end ? ` through ${escapeHtml(String(dataset.end))}` : ""}`
+                : `${dataset?.start ? escapeHtml(String(dataset.start)) : "n/a"} to ${dataset?.end ? escapeHtml(String(dataset.end)) : "n/a"}`
+            }</div>`
+          : ""
+      }
+      ${
+        autopilot?.objectiveMetric?.name
+          ? `<div class="small" style="margin-top:8px;"><strong>Objective:</strong> ${escapeHtml(String(autopilot.objectiveMetric.name))}${
+              Number.isFinite(Number(autopilot?.objectiveMetric?.value))
+                ? ` (${escapeHtml(Number(autopilot.objectiveMetric.value).toFixed(6))})`
+                : ""
+            }</div>`
+          : ""
+      }
+      ${
+        autopilot?.bestCandidate?.candidateName
+          ? `<div class="small" style="margin-top:8px;"><strong>Best candidate:</strong> ${escapeHtml(String(autopilot.bestCandidate.candidateName))}</div>`
+          : ""
+      }
+      ${
+        String(run.notes || "").trim()
+          ? `<div class="small" style="margin-top:8px;"><strong>Notes:</strong> ${escapeHtml(String(run.notes || ""))}</div>`
+          : ""
+      }
+      ${
+        Object.keys(files).length
+          ? `<div class="small" style="margin-top:8px;"><strong>Files:</strong> ${Object.values(files)
+              .map((entry) => escapeHtml(String(entry?.fileName || "").trim()))
+              .filter(Boolean)
+              .join(", ")}</div>`
+          : ""
+      }
+    `;
+    if (ui.foundryPublishHost) {
+      const publishMarkup = renderOutputPublishControlsMarkup({ requestId, requestType: "forecast" });
+      ui.foundryPublishHost.innerHTML = `
+        ${publishMarkup}
+        ${
+          effectiveShareUrl
+            ? `<div class="small muted" style="margin-top:10px;">Share link: <a href="${escapeHtml(effectiveShareUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(effectiveShareUrl)}</a></div>`
+            : `<div class="small muted" style="margin-top:10px;">Create an unlisted share link from the Share button when you want a public URL.</div>`
+        }
+      `;
+    }
+    if (ui.predictionsAgentOutput) {
+      if (String(analysis?.markdown || "").trim()) {
+        ui.predictionsAgentOutput.innerHTML = `<div class="small markdown-output">${renderMarkdown(String(analysis.markdown), {
+          fallback: "Analysis is ready.",
+        })}</div>`;
+      } else if (String(analysis?.summary || "").trim()) {
+        ui.predictionsAgentOutput.innerHTML = `<div class="small">${escapeHtml(String(analysis.summary))}</div>`;
+      } else {
+        ui.predictionsAgentOutput.innerHTML = `<div class="small muted">Prediction analysis is not available yet. Use Refresh AWS status or Analyze predictions.</div>`;
+      }
+    }
+    try {
+      await loadFoundryCsvIntoPreview(run);
+    } catch (error) {
+      if (ui.predictionsPlotMeta) ui.predictionsPlotMeta.textContent = error?.message || "Unable to load CSV preview.";
+      if (ui.predictionsPreview) {
+        ui.predictionsPreview.innerHTML = `<div class="small muted">${escapeHtml(error?.message || "Unable to load CSV preview.")}</div>`;
+      }
+      if (ui.predictionsChart) {
+        ui.predictionsChart.innerHTML = `<div class="small muted">Unable to render chart preview.</div>`;
+      }
+    }
+  };
+
+  const loadFoundryRunById = async (runId, { notify = false, preloadedRun = null, replaceUrl = true } = {}) => {
+    const cleanId = String(runId || "").trim();
+    if (!cleanId) throw new Error("Run ID is required.");
+    state.foundryContext.loadingRunId = cleanId;
+    setFoundryStatus("Loading Forecast Foundry run...");
+    const payload =
+      preloadedRun && typeof preloadedRun === "object"
+        ? { run: preloadedRun }
+        : await callFoundryApi("GET", `/api/autopilot/runs/${encodeURIComponent(cleanId)}`);
+    const run = payload?.run && typeof payload.run === "object" ? payload.run : null;
+    if (!run) throw new Error("Forecast Foundry run was not found.");
+    updateFoundryRunInState(run);
+    const requestId = getFoundryRequestId(run);
+    let requestRecord = requestId ? getMyRequestById(requestId) : null;
+    if (requestId && !requestRecord) {
+      requestRecord = await fetchMyRequestById(requestId).catch(() => null);
+      if (requestRecord && typeof requestRecord === "object") upsertMyRequestInState(requestRecord);
+    }
+    await renderFoundryRunDetail(run, { request: requestRecord });
+    if (replaceUrl && typeof history !== "undefined") {
+      try {
+        history.replaceState({}, "", `/autopilot?runId=${encodeURIComponent(cleanId)}`);
+      } catch (error) {
+        // Ignore URL updates.
+      }
+    }
+    setFoundryStatus(String(run?.status || "Run loaded."));
+    if (notify) showToast("Forecast Foundry run loaded.");
+    return run;
+  };
+
+  const loadFoundryRuns = async ({ focusRunId = "", notify = false } = {}) => {
+    if (!hasFullAccount()) {
+      renderFoundryRuns([]);
+      return [];
+    }
+    setFoundryStatus("Loading Forecast Foundry runs...");
+    const payload = await callFoundryApi("GET", "/api/autopilot/runs?limit=60");
+    const limits = payload?.limits && typeof payload.limits === "object" ? payload.limits : {};
+    state.foundryContext.maxConcurrentRuns = Math.max(
+      1,
+      Math.floor(Number(limits?.maxConcurrentRuns || state.foundryContext.maxConcurrentRuns || FOUNDRY_MAX_CONCURRENT_INSTANCES))
+    );
+    const items = Array.isArray(payload?.items) ? payload.items : [];
+    state.foundryContext.loaded = true;
+    renderFoundryRuns(items);
+    const requestedRunId = String(
+      focusRunId || getQueryParam("runId") || ""
+    ).trim();
+    if (requestedRunId) {
+      const match = items.find((item) => String(item?.id || "").trim() === requestedRunId);
+      await loadFoundryRunById(requestedRunId, { notify: false, preloadedRun: match || null, replaceUrl: false });
+    } else if (!state.foundryContext.activeRunId && items.length) {
+      await renderFoundryRunDetail(items[0]);
+    }
+    setFoundryStatus(items.length ? `Loaded ${items.length} Forecast Foundry run${items.length === 1 ? "" : "s"}.` : "No Forecast Foundry runs yet.");
+    if (notify) showToast("Forecast Foundry runs refreshed.");
+    return items;
+  };
+
+  const uploadFoundryFileToStorage = async (file) => {
+    const storage = state.clients?.storage;
+    const user = state.user;
+    if (!storage || !user) throw new Error("File uploads are not available.");
+    const safeName = String(file?.name || "upload.csv").replace(/[^A-Za-z0-9._-]/g, "_");
+    const path = `predictions/${user.uid}/foundry/${Date.now()}_${safeName}`;
+    const snapshot = await storage.ref().child(path).put(file, {
+      contentType: file?.type || "text/csv",
+    });
+    return {
+      path,
+      downloadUrl: await snapshot.ref.getDownloadURL(),
+      name: safeName,
+    };
+  };
+
+  const prepareFoundrySource = async ({ notify = true } = {}) => {
+    if (!hasFullAccount()) {
+      throw new Error("Sign in with a full account to use Forecast Foundry.");
+    }
+    const sourceKind = String(ui.foundrySourceKind?.value || "history").trim();
+    const ticker = normalizeTicker(ui.foundryTicker?.value || "");
+    const interval = String(ui.foundryInterval?.value || "1d").trim();
+    const title = String(ui.foundryTitle?.value || "").trim();
+    const notes = String(ui.foundryNotes?.value || "").trim();
+    const workspaceId = String(state.activeWorkspaceId || state.user?.uid || "").trim();
+
+    setFoundryStatus("Preparing Forecast Foundry source...");
+    let payload = null;
+    if (sourceKind === "history") {
+      const start = String(ui.foundryStart?.value || "").trim();
+      const end = String(ui.foundryEnd?.value || "").trim();
+      const useAllHistory = Boolean(ui.foundryUseAllHistory?.checked);
+      if (!ticker || !end || (!useAllHistory && !start)) {
+        throw new Error(
+          useAllHistory
+            ? "Ticker and end date are required when using all available history."
+            : "Ticker, start date, and end date are required for historical downloader imports."
+        );
+      }
+      payload = await callFoundryApi("POST", "/api/autopilot/datasets/history", {
+        ticker,
+        interval,
+        start,
+        end,
+        useAllHistory,
+        title,
+        notes,
+        workspaceId,
+        persist: true,
+      });
+    } else {
+      const file = ui.foundryFile?.files?.[0];
+      if (!file) throw new Error("Select a CSV file first.");
+      const uploaded = await uploadFoundryFileToStorage(file);
+      payload = await callFoundryApi("POST", "/api/autopilot/datasets/upload", {
+        filePath: uploaded.path,
+        fileName: uploaded.name,
+        ticker,
+        interval,
+        title,
+        notes,
+        workspaceId,
+      });
+      if (ui.foundryFile) ui.foundryFile.value = "";
+    }
+
+    const run = payload?.run && typeof payload.run === "object" ? payload.run : null;
+    if (!run) throw new Error("Forecast Foundry did not return a saved run.");
+    state.foundryContext.pendingPreparedRunId = String(run.id || "").trim();
+    updateFoundryRunInState(run);
+    await renderFoundryRunDetail(run);
+    renderFoundryRuns(state.foundryContext.runs || []);
+    setFoundryStatus(String(run.status || "Source prepared."));
+    if (notify) {
+      showToast(sourceKind === "prediction_csv" ? "Prediction CSV analyzed." : "Forecast Foundry source prepared.");
+    }
+    return run;
+  };
+
+  const ensureFoundryActiveRun = async ({ allowPrepare = true } = {}) => {
+    if (state.foundryContext.activeRun && state.foundryContext.activeRunId) {
+      return state.foundryContext.activeRun;
+    }
+    if (!allowPrepare) throw new Error("Prepare a Forecast Foundry source first.");
+    return prepareFoundrySource({ notify: false });
+  };
+
+  const runFoundryAutopilot = async ({ runId = "" } = {}) => {
+    if (!hasFullAccount()) throw new Error("Sign in with a full account to use Forecast Foundry.");
+    let run = runId ? state.foundryContext.runs.find((item) => String(item?.id || "") === String(runId || "").trim()) : null;
+    if (!run) {
+      run = await ensureFoundryActiveRun({ allowPrepare: true });
+    }
+    if (String(run?.sourceType || "").trim() === "prediction_csv") {
+      throw new Error("Prediction CSV uploads are analysis-only. Use a historical dataset to launch Autopilot.");
+    }
+    if (String(run?.dataset?.interval || "").trim() === "1m") {
+      throw new Error("Minute data can be previewed and analyzed, but SageMaker Autopilot training is limited to hourly and daily datasets.");
+    }
+    const horizonPresetKey = normalizeFoundryHorizonPresetKey(ui.foundryHorizon?.value || "1m");
+    const horizon = getFoundryHorizonSteps({
+      presetKey: horizonPresetKey,
+      interval: String(run?.dataset?.interval || ui.foundryInterval?.value || "1d"),
+    });
+    const quantiles = parseFoundryQuantilesInput(ui.foundryQuantiles?.value || "P10,P50,P90");
+    if (ui.foundryQuantiles) {
+      ui.foundryQuantiles.value = quantiles.map((entry) => formatFoundryQuantileLabel(entry)).join(",");
+    }
+    setFoundryStatus("Starting SageMaker Autopilot...");
+    const payload = await callFoundryApi("POST", "/api/autopilot/runs", {
+      runId: String(run.id || "").trim(),
+      horizon,
+      quantiles,
+    });
+    const nextRun = payload?.run && typeof payload.run === "object" ? payload.run : null;
+    if (!nextRun) throw new Error("Autopilot start did not return an updated run.");
+    updateFoundryRunInState(nextRun);
+    await renderFoundryRunDetail(nextRun);
+    renderFoundryRuns(state.foundryContext.runs || []);
+    setFoundryStatus(`Autopilot started for ${String(nextRun?.dataset?.ticker || "the selected dataset")}.`);
+    showToast("Forecast Foundry Autopilot started.");
+    return nextRun;
+  };
+
+  const refreshFoundryRun = async ({ runId = "", notify = true } = {}) => {
+    if (!hasFullAccount()) throw new Error("Sign in with a full account to use Forecast Foundry.");
+    const activeId = String(runId || state.foundryContext.activeRunId || "").trim();
+    if (!activeId) throw new Error("Select a Forecast Foundry run first.");
+    setFoundryStatus("Refreshing SageMaker status...");
+    const payload = await callFoundryApi("POST", `/api/autopilot/runs/${encodeURIComponent(activeId)}/refresh`, {});
+    const nextRun = payload?.run && typeof payload.run === "object" ? payload.run : null;
+    if (!nextRun) throw new Error("Refresh did not return an updated Forecast Foundry run.");
+    updateFoundryRunInState(nextRun);
+    await renderFoundryRunDetail(nextRun);
+    renderFoundryRuns(state.foundryContext.runs || []);
+    setFoundryStatus(`Run status: ${String(nextRun.status || "unknown")}.`);
+    if (notify) showToast("Forecast Foundry run refreshed.");
+    return nextRun;
+  };
+
+  const analyzeFoundryRun = async ({ runId = "", notify = true } = {}) => {
+    if (!hasFullAccount()) throw new Error("Sign in with a full account to use Forecast Foundry.");
+    let activeId = String(runId || state.foundryContext.activeRunId || "").trim();
+    if (!activeId) {
+      const prepared = await ensureFoundryActiveRun({ allowPrepare: true });
+      activeId = String(prepared?.id || "").trim();
+    }
+    if (!activeId) throw new Error("Prepare a Forecast Foundry source first.");
+    setFoundryStatus("Running prediction analysis...");
+    const payload = await callFoundryApi("POST", `/api/autopilot/runs/${encodeURIComponent(activeId)}/analyze`, {});
+    const nextRun = payload?.run && typeof payload.run === "object" ? payload.run : null;
+    if (!nextRun) throw new Error("Analysis did not return an updated run.");
+    updateFoundryRunInState(nextRun);
+    await renderFoundryRunDetail(nextRun);
+    renderFoundryRuns(state.foundryContext.runs || []);
+    setFoundryStatus("Prediction analysis is ready.");
+    if (notify) showToast("Forecast Foundry analysis completed.");
+    return nextRun;
+  };
+
+  const shareFoundryRun = async () => {
+    if (!hasFullAccount()) throw new Error("Sign in with a full account to share Forecast Foundry runs.");
+    const run = state.foundryContext.activeRun;
+    const requestId = getFoundryRequestId(run);
+    if (!requestId) throw new Error("Prepare a source first so Quantura can create a private Explore record.");
+    const body = await updateMyRequest(
+      requestId,
+      { visibility: "unlisted" },
+      { method: "POST", path: `/api/my-requests/${encodeURIComponent(requestId)}/share` }
+    );
+    const shareUrl = String(body?.share?.shareUrl || body?.request?.share?.shareUrl || "").trim();
+    const refreshedRequest = body?.request && typeof body.request === "object" ? body.request : null;
+    if (refreshedRequest) upsertMyRequestInState(refreshedRequest);
+    if (!shareUrl) throw new Error("Share URL was not returned.");
+    await performShare({
+      url: shareUrl,
+      title: String(run?.title || "Forecast Foundry"),
+      text: "Forecast Foundry result shared from Quantura.",
+    });
+    await renderFoundryRunDetail(run, { request: refreshedRequest, shareUrl });
+    showToast("Share link copied.");
+  };
+
+  const renderSharedFoundryRequest = async (request, shareUrl = "") => {
+    if (!ui.foundryRunMeta) return;
+    const outputsMeta = request?.outputsMeta && typeof request.outputsMeta === "object" ? request.outputsMeta : {};
+    const input = request?.input && typeof request.input === "object" ? request.input : {};
+    const summary = String(outputsMeta.summary || "Shared Forecast Foundry request loaded.").trim();
+    const markdown = String(outputsMeta.analysisMarkdown || "").trim();
+    const pseudoRun = {
+      id: String(request?.sourceRef?.id || request?.id || "").trim(),
+      title: String(request?.title || "Forecast Foundry shared result").trim(),
+      status: String(outputsMeta.analysisStatus || "shared").trim(),
+      sourceType: String(input.sourceType || "shared_request").trim(),
+      dataset: {
+        ticker: String(input.ticker || request?.ticker || "").trim(),
+        interval: String(input.interval || outputsMeta.interval || "").trim(),
+        rowCount: Number(outputsMeta.forecastRowsCount || outputsMeta.resultsCount || 0),
+        previewRows: [],
+      },
+      analysis: {
+        summary,
+        markdown,
+      },
+      exploreRequestId: String(request?.id || "").trim(),
+      files: {},
+    };
+    await renderFoundryRunDetail(pseudoRun, { request, shareUrl });
+    if (ui.predictionsPreview) {
+      ui.predictionsPreview.innerHTML = `<div class="small muted">CSV artifacts are private to the owner workspace. Shared view includes the saved analysis summary only.</div>`;
+    }
+    if (ui.predictionsChart) {
+      ui.predictionsChart.innerHTML = `<div class="small muted">Chart preview is unavailable in shared read-only mode.</div>`;
+    }
+    if (ui.predictionsPlotMeta) {
+      ui.predictionsPlotMeta.textContent = "Shared Forecast Foundry request";
+    }
+  };
+
+  const renderLegacyFoundryUploadCompat = async (db, storage, uploadId, { notify = false } = {}) => {
+    const cleanId = String(uploadId || "").trim();
+    if (!db || !storage || !cleanId) throw new Error("Upload ID is required.");
+    await plotPredictionUploadById(db, storage, cleanId);
+    state.foundryContext.activeRunId = "";
+    state.foundryContext.activeRun = null;
+    renderFoundryRuns(state.foundryContext.runs || []);
+    if (ui.foundryShareButton) ui.foundryShareButton.disabled = true;
+    if (ui.foundryRunMeta) {
+      ui.foundryRunMeta.innerHTML = `
+        <div class="small muted">Legacy upload compatibility view</div>
+        <h3 style="margin-top:6px;">Prediction CSV upload</h3>
+        <div class="small" style="margin-top:8px;">
+          Forecast Foundry now owns new uploads and Autopilot runs. This view keeps older uploaded prediction CSV links readable inside the merged panel.
+        </div>
+      `;
+    }
+    if (ui.foundryPublishHost) {
+      ui.foundryPublishHost.innerHTML = `
+        <div class="small muted">
+          Legacy prediction uploads stay read-only here. Prepare a new Forecast Foundry source to create a private Explore record and publish/share controls.
+        </div>
+      `;
+    }
+    setFoundryStatus("Loaded legacy uploaded prediction CSV.");
+    if (notify) showToast("Legacy upload loaded.");
   };
 
   const buildIndicatorOverlays = (series) => {
@@ -18941,6 +19796,14 @@
     logEvent("screener_loaded_saved", { run_id: doc.id });
   };
 
+  const isAutopilotMyRequest = (request = null) => {
+    const item = request && typeof request === "object" ? request : {};
+    const normalized = normalizeMyRequestType(item.type);
+    if (normalized !== "forecast") return false;
+    const sourceRef = item.sourceRef && typeof item.sourceRef === "object" ? item.sourceRef : {};
+    return String(sourceRef.collection || "").trim() === "autopilot_requests";
+  };
+
   const extractQuantileKeys = (rows) => {
     const list = Array.isArray(rows) ? rows : [];
     const set = new Set();
@@ -19516,8 +20379,9 @@
     return doc;
   };
 
-  const mapMyRequestTypeToPanel = (type) => {
+  const mapMyRequestTypeToPanel = (type, request = null) => {
     const normalized = normalizeMyRequestType(type);
+    if (isAutopilotMyRequest(request)) return "autopilot";
     if (normalized === "screener") return "screener";
     if (normalized === "indicator") return "indicators";
     if (normalized === "modelCouncil") return "ticker-query";
@@ -19534,7 +20398,7 @@
     if (!item) throw new Error("Request not found.");
 
     const type = normalizeMyRequestType(item.type) || "forecast";
-    const panelId = mapMyRequestTypeToPanel(type);
+    const panelId = mapMyRequestTypeToPanel(type, item);
     if (typeof window.__quanturaSetPanel === "function") {
       window.__quanturaSetPanel(panelId, { pushPath: false });
     }
@@ -19547,6 +20411,13 @@
     if (ticker) syncTickerInputs(ticker, { source: "my_request_load" });
 
     if (type === "forecast") {
+      if (isAutopilotMyRequest(item)) {
+        const runId = sourceId || String(id.split("__").slice(1).join("__") || "").trim();
+        if (!runId) throw new Error("Forecast Foundry source is missing.");
+        await loadFoundryRunById(runId, { notify: false, replaceUrl: false });
+        if (notify) showToast("Forecast Foundry request loaded.");
+        return item;
+      }
       const forecastId = sourceId || String(id.split("__").slice(1).join("__") || "").trim();
       if (!forecastId) throw new Error("Forecast source is missing.");
       await plotForecastById(db, functions, forecastId);
@@ -19649,11 +20520,13 @@
       const request = payload?.request && typeof payload.request === "object" ? payload.request : null;
       if (!request) throw new Error("Shared request unavailable.");
       const type = normalizeMyRequestType(request.type) || "forecast";
-      const panelId = mapMyRequestTypeToPanel(type);
+      const panelId = mapMyRequestTypeToPanel(type, request);
       if (setPanel && typeof window.__quanturaSetPanel === "function") {
         window.__quanturaSetPanel(panelId, { pushPath: false });
       }
-      if (type === "modelCouncil" && ui.tickerQueryOutput) {
+      if (isAutopilotMyRequest(request)) {
+        await renderSharedFoundryRequest(request, String(payload?.share?.shareUrl || "").trim());
+      } else if (type === "modelCouncil" && ui.tickerQueryOutput) {
         const outputsMeta = request.outputsMeta && typeof request.outputsMeta === "object" ? request.outputsMeta : {};
         const answer = String(outputsMeta.answer || outputsMeta.summary || "").trim();
         renderTickerQueryResult({
@@ -20765,6 +21638,38 @@
           }
         }
 
+        if (next === "autopilot") {
+          syncFoundrySourceFields();
+          syncFoundryDateDefaults();
+          const firstFoundryLoad = !state.panelAutoloaded.autopilot;
+          state.panelAutoloaded.autopilot = true;
+          const requestShare = String(getQueryParam("requestShare") || "").trim();
+          const focusRunId = String(getQueryParam("runId") || "").trim();
+          const legacyUploadId = String(getQueryParam("uploadId") || "").trim();
+          const shouldLoadFoundryRuns = !state.foundryContext.loaded || firstFoundryLoad || Boolean(focusRunId);
+          if (requestShare) {
+            loadSharedMyRequestFromUrl({ setPanel: false }).catch(() => {});
+          } else {
+            if (!focusRunId && legacyUploadId && db && storage) {
+              const loadRunsPromise =
+                shouldLoadFoundryRuns
+                  ? loadFoundryRuns({ notify: false }).catch((error) => {
+                      setFoundryStatus(error?.message || "Unable to load Forecast Foundry runs.", "warn");
+                    })
+                  : Promise.resolve();
+              loadRunsPromise.finally(() => {
+                renderLegacyFoundryUploadCompat(db, storage, legacyUploadId, { notify: false }).catch((error) => {
+                  setFoundryStatus(error?.message || "Unable to load legacy upload.", "warn");
+                });
+              });
+            } else if (shouldLoadFoundryRuns) {
+              loadFoundryRuns({ focusRunId, notify: false }).catch((error) => {
+                setFoundryStatus(error?.message || "Unable to load Forecast Foundry runs.", "warn");
+              });
+            }
+          }
+        }
+
         if (next === "options") {
           const ticker = resolveActiveOrDefaultTicker();
           if (!ticker) return;
@@ -21480,7 +22385,7 @@
               } else if (result.kind === "forecast") {
                 window.location.href = `/forecasting?forecastId=${encodeURIComponent(result.importedId)}`;
               } else if (result.kind === "upload") {
-                window.location.href = `/uploads?uploadId=${encodeURIComponent(result.importedId)}`;
+                window.location.href = `/autopilot?uploadId=${encodeURIComponent(result.importedId)}`;
               }
             } catch (error) {
               setPendingShareId(shareId);
@@ -23108,6 +24013,7 @@
       state.authInFlight = true;
       const runtime = resolveRuntimeLabel();
       const normalizedMethod = String(method || "").trim().toLowerCase();
+      const upgradingAnonymousSession = Boolean(auth.currentUser?.isAnonymous);
       const supportsNativeBridge = new Set([
         "google",
         "apple",
@@ -23135,23 +24041,25 @@
         }
 
         if (isInstalledPwa() || isMobileBrowser()) {
-          if (auth.currentUser?.isAnonymous) {
-            await auth.currentUser.linkWithRedirect(provider);
-          } else {
-            await auth.signInWithRedirect(provider);
-          }
+          // Do not link guest sessions during social sign-in.
+          // A returning provider account should sign in directly, then the auth-state
+          // listener will merge any anonymous session data into the signed-in account.
+          await auth.signInWithRedirect(provider);
           logEvent("login_redirect_started", { method: normalizedMethod, runtime });
           return;
         }
 
-        if (auth.currentUser?.isAnonymous) {
-          await auth.currentUser.linkWithPopup(provider);
-        } else {
-          await auth.signInWithPopup(provider);
-        }
+        // Do not link guest sessions during social sign-in.
+        // Direct sign-in avoids provider collision errors for returning users.
+        await auth.signInWithPopup(provider);
         await linkPendingCredentialIfPresent({ silent: true });
         showToast(successMessage);
-        logEvent("login", { method: normalizedMethod, runtime, source: "popup" });
+        logEvent("login", {
+          method: normalizedMethod,
+          runtime,
+          source: "popup",
+          guest_upgrade: upgradingAnonymousSession,
+        });
       } catch (error) {
         if (await recoverFromAuthCollision(error, { methodHint: normalizedMethod, preferRuntime: runtime })) {
           return;
@@ -23923,10 +24831,12 @@
         return;
       }
       const interval = String(formData.get("interval") || "1d");
+      const useAllHistory = Boolean(formData.get("useAllHistory"));
       const today = new Date();
       const end = String(formData.get("end") || "").trim() || today.toISOString().slice(0, 10);
-      const start =
-        interval === "1h"
+      const start = useAllHistory
+        ? ""
+        : interval === "1h"
           ? (() => {
               const dt = new Date();
               dt.setDate(dt.getDate() - 729);
@@ -23938,6 +24848,7 @@
         start,
         end,
         interval,
+        useAllHistory,
         meta: buildMeta(),
       };
 
@@ -23946,9 +24857,10 @@
         if (ui.downloadPreview) {
           ui.downloadPreview.innerHTML = `<div class="small muted">Preparing preview...</div>`;
         }
-        const getDownload = functions.httpsCallable("download_price_csv");
-        const result = await getDownload(payload);
-        const data = result.data || {};
+        const data = await callFoundryApi("POST", "/api/autopilot/datasets/history", {
+          ...payload,
+          persist: false,
+        });
         const csvText = String(data.csv || "");
         if (!csvText.trim()) {
           ui.downloadStatus.textContent = "No data returned.";
@@ -23962,7 +24874,7 @@
         triggerDownload(filename, csvText);
         const rowCount = Number(data.rowCount || 0);
         ui.downloadStatus.textContent = rowCount ? `Download ready (${rowCount} rows).` : "Download ready.";
-        logEvent("download_history", { ticker, interval });
+        logEvent("download_history", { ticker, interval, use_all_history: useAllHistory });
       } catch (error) {
         ui.downloadStatus.textContent = "Download failed.";
         showToast(error.message || "Unable to fetch history.", "warn");
@@ -24643,6 +25555,110 @@
       }
     });
 
+    syncFoundrySourceFields();
+    syncFoundryDateDefaults();
+    ui.foundrySourceKind?.addEventListener("change", () => {
+      syncFoundrySourceFields();
+      syncFoundryDateDefaults({ force: true });
+    });
+    ui.foundryInterval?.addEventListener("change", () => {
+      syncFoundryDateDefaults({ force: true });
+    });
+    ui.foundryUseAllHistory?.addEventListener("change", () => {
+      syncFoundryDateDefaults();
+    });
+    ui.foundryQuantiles?.addEventListener("blur", () => {
+      try {
+        const quantiles = parseFoundryQuantilesInput(ui.foundryQuantiles?.value || "P10,P50,P90");
+        ui.foundryQuantiles.value = quantiles.map((entry) => formatFoundryQuantileLabel(entry)).join(",");
+      } catch (_error) {
+        // Keep the raw user input so they can correct it.
+      }
+    });
+    ui.foundrySourceForm?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try {
+        await prepareFoundrySource({ notify: true });
+      } catch (error) {
+        const message = extractErrorMessage(error, "Unable to prepare Forecast Foundry source.");
+        setFoundryStatus(message, "warn");
+        showToast(message, "warn");
+      }
+    });
+    ui.foundryRunButton?.addEventListener("click", async () => {
+      try {
+        await runFoundryAutopilot({});
+      } catch (error) {
+        if (Number(error?.status || 0) === 429 || String(error?.message || "").toLowerCase().includes("concurrent active instances")) {
+          await loadFoundryRuns({ notify: false }).catch(() => {});
+        }
+        const message = extractErrorMessage(error, "Unable to start Forecast Foundry Autopilot.");
+        setFoundryStatus(message, "warn");
+        showToast(message, "warn");
+      }
+    });
+    ui.foundryAnalyzeButton?.addEventListener("click", async () => {
+      try {
+        await analyzeFoundryRun({ notify: true });
+      } catch (error) {
+        const message = extractErrorMessage(error, "Unable to analyze Forecast Foundry output.");
+        setFoundryStatus(message, "warn");
+        showToast(message, "warn");
+      }
+    });
+    ui.foundryRefreshList?.addEventListener("click", async () => {
+      try {
+        await loadFoundryRuns({ notify: true });
+      } catch (error) {
+        const message = extractErrorMessage(error, "Unable to refresh Forecast Foundry runs.");
+        setFoundryStatus(message, "warn");
+        showToast(message, "warn");
+      }
+    });
+    ui.foundryRefreshButton?.addEventListener("click", async () => {
+      try {
+        await refreshFoundryRun({ notify: true });
+      } catch (error) {
+        const message = extractErrorMessage(error, "Unable to refresh Forecast Foundry run.");
+        setFoundryStatus(message, "warn");
+        showToast(message, "warn");
+      }
+    });
+    ui.foundryShareButton?.addEventListener("click", async () => {
+      try {
+        await shareFoundryRun();
+      } catch (error) {
+        const message = extractErrorMessage(error, "Unable to share Forecast Foundry run.");
+        setFoundryStatus(message, "warn");
+        showToast(message, "warn");
+      }
+    });
+    ui.autopilotOutput?.addEventListener("click", async (event) => {
+      const actionButton = event.target.closest("[data-action]");
+      if (!actionButton) return;
+      const action = String(actionButton.dataset.action || "").trim();
+      if (!action.startsWith("foundry-")) return;
+      event.preventDefault();
+      const runId = String(actionButton.dataset.runId || "").trim();
+      try {
+        if (action === "foundry-select-run") {
+          await loadFoundryRunById(runId, { notify: false });
+          return;
+        }
+        if (action === "foundry-refresh-run") {
+          await refreshFoundryRun({ runId, notify: true });
+          return;
+        }
+        if (action === "foundry-analyze-run") {
+          await analyzeFoundryRun({ runId, notify: true });
+        }
+      } catch (error) {
+        const message = extractErrorMessage(error, "Unable to load Forecast Foundry run.");
+        setFoundryStatus(message, "warn");
+        showToast(message, "warn");
+      }
+    });
+
     ui.predictionsForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
       try {
@@ -25238,16 +26254,26 @@
             setProfileStatus("Profile is used when publishing AI agents in Explore.");
             setAuthUi(user);
 
-			      if (!hasFullAccount(user)) {
+		      if (!hasFullAccount(user)) {
 		        state.userHasPaidPlan = false;
             state.userSubscriptionTier = "free";
             state.aiUsageToday = 0;
             state.aiUsageTierKey = "free";
             state.collaboratorCount = 0;
             state.pendingCollabInviteCount = 0;
+            state.foundryContext.runs = [];
+            state.foundryContext.loaded = false;
+            state.foundryContext.activeRunId = "";
+            state.foundryContext.activeRun = null;
+            state.foundryContext.pendingPreparedRunId = "";
+            state.foundryContext.loadingRunId = "";
+            state.foundryContext.activeConcurrentRuns = 0;
+            state.foundryContext.maxConcurrentRuns = FOUNDRY_MAX_CONCURRENT_INSTANCES;
             applyAdFreeExperience();
-		        renderOrderList([], ui.userOrders);
-            renderRequestList([], ui.autopilotOutput, "No autopilot requests yet.");
+            renderOrderList([], ui.userOrders);
+            renderFoundryRuns([]);
+            await renderFoundryRunDetail(null);
+            setFoundryStatus("Sign in with a full account to use Forecast Foundry.");
             renderRequestList([], ui.predictionsOutput, "No uploads yet.");
 		        if (ui.watchlistList) ui.watchlistList.textContent = "Sign in to manage your watchlist.";
 		        if (ui.alertsList) ui.alertsList.textContent = "Sign in to manage your alerts.";
@@ -25381,8 +26407,6 @@
           await seedAdminPresetScreenerRuns(db, activeWorkspaceId).catch(() => {});
           startAIAgents(db, activeWorkspaceId);
           startVolatilityMonitor(db, functions, activeWorkspaceId);
-	      startAutopilotRequests(db, user);
-	      startPredictionsUploads(db, user);
 	      refreshCollaboration(functions);
 
         const pendingShare = String(getPendingShareId() || "").trim();
@@ -25398,6 +26422,13 @@
 
         if (window.location.pathname === "/account" && !String(getPendingShareId() || "").trim()) {
           window.location.href = "/dashboard";
+        }
+
+        if (
+          (window.location.pathname === "/autopilot" || window.location.pathname === "/uploads") &&
+          typeof window.__quanturaPanelActivated === "function"
+        ) {
+          window.__quanturaPanelActivated("autopilot");
         }
 
 	      if (ui.notificationsStatus) {
