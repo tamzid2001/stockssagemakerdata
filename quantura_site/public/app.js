@@ -9751,11 +9751,11 @@
 
   const normalizeTopNavigation = () => {
     const navs = Array.from(document.querySelectorAll(".header .nav-links"));
-    if (!navs.length) return;
+    const navActions = Array.from(document.querySelectorAll(".header .nav-actions"));
+    if (!navs.length && !navActions.length) return;
     navs.forEach((nav) => {
       nav.innerHTML = `
         <a href="/forecasting" data-analytics="nav_terminal">${icon("candlestick-chart")}<span>Terminal</span></a>
-        <a href="/dashboard" data-analytics="nav_dashboard">${icon("dashboard-dots")}<span>Dashboard</span></a>
         <a href="/explore" data-analytics="nav_explore">${icon("binocular")}<span>Explore</span></a>
         <a href="/research" data-analytics="nav_research">${icon("bookmark-book")}<span>Research</span></a>
         <a href="/blog" data-analytics="nav_blog">${icon("page")}<span>Blog</span></a>
@@ -9765,6 +9765,9 @@
         <a href="/pricing" data-analytics="nav_pricing">${icon("wallet")}<span>Pricing</span></a>
         <a href="/contact" data-analytics="nav_contact">${icon("mail")}<span>Contact Us</span></a>
       `;
+    });
+    navActions.forEach((group) => {
+      group.querySelectorAll('a[data-analytics="nav_cta"]').forEach((link) => link.remove());
     });
   };
 
