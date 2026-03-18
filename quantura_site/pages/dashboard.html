@@ -695,6 +695,26 @@
               <div class="notice small" id="foundry-access-note">
                 Minute-level stock data can be imported, previewed, and analyzed here, but SageMaker Autopilot training is limited to hourly and daily datasets.
               </div>
+
+              <div class="card" style="margin-top: 18px;">
+                <div class="card-head">
+                  <h3>Research guide</h3>
+                </div>
+                <div class="small">
+                  <p>
+                    Use the
+                    <a href="https://docs.aws.amazon.com/forecast/latest/dg/metrics.html?utm_source=chatgpt.com" target="_blank" rel="noopener noreferrer">AWS Forecast metrics documentation</a>
+                    to understand how Average wQL, wQL, WAPE, RMSE, MAPE, and MASE are interpreted. Lower error values indicate a stronger forecasting model.
+                  </p>
+                  <p>
+                    In Forecast Foundry, the point-forecast anchor is the middle quantile column, which is usually the median
+                    <code>P50</code> or <code>0.5</code>.
+                  </p>
+                  <p>
+                    For stock prediction analysis, Quantura takes the first actionable business-day median in the forecast window and the last valid business-day median in the forecast output, rounds both to the nearest 10, and compares them. If the last rounded median is below the first rounded median, Quantura selects the upper bound from the last business-day row as the point-side. Otherwise it selects the lower bound.
+                  </p>
+                </div>
+              </div>
             </form>
 
             <div class="results-panel" id="autopilot-result">
