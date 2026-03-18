@@ -407,11 +407,18 @@
                       <p class="small">Company context and headlines update automatically and render below your chart.</p>
                     </div>
                     <div class="content-grid">
-                      <form id="download-form" class="card">
-                        <h3>Download price history</h3>
-                        <input id="download-ticker" name="ticker" type="hidden" />
-                        <div class="small muted" style="margin-bottom: 12px;">Uses the ticker from your chart context.</div>
-                        <div class="form-grid">
+                      <form id="download-form" class="card download-form-card">
+                        <div class="card-head">
+                          <div>
+                            <h3>Download price history</h3>
+                            <p class="small muted download-form-subcopy">Enter a ticker directly or let Quantura prefill it from your active chart.</p>
+                          </div>
+                        </div>
+                        <div class="form-grid download-form-grid">
+                          <div class="field">
+                            <label class="label" for="download-ticker">Ticker</label>
+                            <input id="download-ticker" name="ticker" type="text" placeholder="AAPL" autocomplete="off" />
+                          </div>
                           <div class="field">
                             <label class="label" for="download-interval">Interval</label>
                             <select id="download-interval" name="interval">
@@ -425,32 +432,31 @@
                           </div>
                         </div>
                         <div class="field">
-                          <label class="checkbox" style="display:flex; align-items:center; gap:10px;">
+                          <label class="checkbox download-history-toggle">
                             <input id="download-use-all-history" name="useAllHistory" type="checkbox" />
                             <span>Use all available historical data for this interval</span>
                           </label>
-                          <div class="small muted">Daily requests pull the full available series. Hourly requests ask Yahoo for the maximum history it exposes for that interval.</div>
+                          <div class="small muted download-history-note">Daily downloads export the full available series. Hourly downloads page through Yahoo 1-minute history, keep premarket and after-hours data, and roll each ET clock hour to its last 1-minute close.</div>
                         </div>
-                        <button class="cta" type="submit" data-analytics="download_prices">Download CSV</button>
-                        <p class="small" id="download-status"></p>
+                        <div class="download-form-actions">
+                          <button class="cta" type="submit" data-analytics="download_prices">Download CSV</button>
+                          <p class="small" id="download-status"></p>
+                        </div>
                       </form>
-                      <div class="card">
+                      <div class="card download-guidance-card">
                         <h3>Export guidance</h3>
                         <p class="small">
-                          Use daily exports for longer-horizon strategy analysis and hourly exports to inspect short-term regime shifts.
-                          Quantura keeps your terminal context consistent so you can pull data without re-entering symbols.
+                          Use the ticker field to export a clean canonical dataset with <code>item_id</code>, <code>timestamp</code>, and <code>closing_price</code>.
+                          Hourly exports build ET hourly closes from paginated 1-minute data, so downstream forecasting imports stay aligned to the market session.
                         </p>
                         <details class="learn-more">
                           <summary>Learn more</summary>
                           <p class="small">
-                            If you're building your own dashboard, export the same interval you used to generate forecasts so the timestamps align cleanly in downstream tooling.
+                            If you're building your own dashboard, keep the export interval matched to your modeling interval so the timestamp cadence stays consistent across training and evaluation.
                           </p>
                         </details>
+                        <div id="download-preview" class="panel-output small">Run a download to preview canonical <code>item_id</code>, <code>timestamp</code>, and <code>closing_price</code> rows before exporting.</div>
                       </div>
-                    </div>
-                    <div class="results-panel" style="margin-top: 16px;">
-                      <h3>History preview</h3>
-                      <div id="download-preview" class="panel-output small">Run a download to preview Date, Close, Open, High, Low, and Volume.</div>
                     </div>
                     <div class="notice" style="margin-top: 16px;">
                       TradingView widgets and the ticker chart are available only in the Ticker panel for the active symbol.
