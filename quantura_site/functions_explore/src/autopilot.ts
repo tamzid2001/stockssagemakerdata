@@ -1036,6 +1036,7 @@ export async function analyzePredictionCsv(
     const summary = [
       `${ticker || "Uploaded"} quantile analysis selected the ${branch} branch.`,
       `Rounded median moved from ${firstMedianRounded} on ${firstValidTimestamp} to ${lastMedianRounded} on ${lastValidTimestamp}.`,
+      `Point-side rule: if the last rounded median is below the first rounded median, use the upper bound; otherwise use the lower bound.`,
       Object.keys(returnedValues).length
         ? `Returned last business-day values: ${Object.entries(returnedValues)
             .map(([label, value]) => `${label}=${value}`)
@@ -1072,6 +1073,12 @@ export async function analyzePredictionCsv(
       `Since **${firstMedianRounded.toFixed(0)} ${firstMedianRounded > lastMedianRounded ? ">" : "<="} ${lastMedianRounded.toFixed(
         0
       )}**, the logic selects the **${branch}** branch.`,
+      "",
+      "### Research Context",
+      "AWS Forecast documents how Average wQL, wQL, WAPE, RMSE, MAPE, and MASE should be interpreted for time-series models. Lower values indicate better models. See [AWS Forecast metrics documentation](https://docs.aws.amazon.com/forecast/latest/dg/metrics.html?utm_source=chatgpt.com).",
+      "",
+      `- Point-forecast anchor: **${medianCol.header}** (the middle quantile, usually **P50** / **0.5**)`,
+      `- Decision rule: if the last rounded median is below the first rounded median, use the **upper** bound from the last valid business-day row; otherwise use the **lower** bound.`,
       "",
       "### Quantile Structure",
       `- Ordered quantile columns: **${orderedLabels}**`,
