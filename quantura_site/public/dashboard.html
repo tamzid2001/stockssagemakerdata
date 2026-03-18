@@ -99,46 +99,6 @@
 	        </aside>
 
 	        <div class="app-main" data-panels data-panel-router="dashboard">
-      <section class="page-hero">
-        <div class="container content-grid">
-	          <div>
-	            <div class="eyebrow">Workspace dashboard</div>
-		            <h1>Manage subscription orders, Forecast Foundry runs, and workspace activity.</h1>
-		            <p>
-		              Every forecast, foundry run, and order is stored in your secure workspace. Sign in to unlock your
-		              dashboard and keep a complete audit trail for your research workflow.
-		            </p>
-	          </div>
-          <div class="card">
-            <h3>Account status</h3>
-            <div class="profile-item">
-              <span class="label">Signed in as</span>
-              <span id="user-email" class="value">Not signed in</span>
-            </div>
-            <div class="profile-item">
-              <span class="label">Provider</span>
-              <span id="user-provider" class="value">—</span>
-            </div>
-            <div class="profile-item">
-              <span class="label">Status</span>
-              <span id="user-status" class="pill">Logged Out</span>
-            </div>
-            <div class="billing-panel">
-              <span class="label">Public profile</span>
-              <a class="cta secondary small" href="/dashboard?panel=profile" data-panel-target="profile">Manage profile page</a>
-              <span class="small muted">Set your public profile metadata and sharing visibility in the Profile section.</span>
-            </div>
-            <div class="billing-panel">
-              <span class="label">Billing</span>
-              <a id="billing-portal-link" class="cta secondary small" href="/account" data-analytics="billing_portal_open">Sign in to manage billing</a>
-              <span class="small muted">Manage plan, invoices, and payment method in Stripe.</span>
-            </div>
-            <div class="notice" id="dashboard-cta">
-              Sign in to unlock order tracking and fulfillment updates.
-            </div>
-          </div>
-        </div>
-      </section>
 
       <section class="section auth-section panel hidden" data-panel="auth" id="auth">
         <div class="container">
@@ -247,6 +207,46 @@
 
       <section class="section panel hidden" data-panel="profile" id="profile">
         <div class="container">
+          <section class="page-hero" style="padding-top:0;">
+            <div class="content-grid">
+	            <div>
+	              <div class="eyebrow">Workspace profile</div>
+		              <h1>Manage subscription orders, Forecast Foundry runs, and workspace activity.</h1>
+		              <p>
+		                Every forecast, foundry run, and order is stored in your secure workspace. Sign in to unlock your
+		                dashboard and keep a complete audit trail for your research workflow.
+		              </p>
+	            </div>
+              <div class="card">
+                <h3>Account status</h3>
+                <div class="profile-item">
+                  <span class="label">Signed in as</span>
+                  <span id="user-email" class="value">Not signed in</span>
+                </div>
+                <div class="profile-item">
+                  <span class="label">Provider</span>
+                  <span id="user-provider" class="value">—</span>
+                </div>
+                <div class="profile-item">
+                  <span class="label">Status</span>
+                  <span id="user-status" class="pill">Logged Out</span>
+                </div>
+                <div class="billing-panel">
+                  <span class="label">Public profile</span>
+                  <a class="cta secondary small" href="/dashboard?panel=profile" data-panel-target="profile">Manage profile page</a>
+                  <span class="small muted">Set your public profile metadata and sharing visibility in the Profile section.</span>
+                </div>
+                <div class="billing-panel">
+                  <span class="label">Billing</span>
+                  <a id="billing-portal-link" class="cta secondary small" href="/account" data-analytics="billing_portal_open">Sign in to manage billing</a>
+                  <span class="small muted">Manage plan, invoices, and payment method in Stripe.</span>
+                </div>
+                <div class="notice" id="dashboard-cta">
+                  Sign in to unlock order tracking and fulfillment updates.
+                </div>
+              </div>
+            </div>
+          </section>
           <div class="section-title">
             <h2>Public profile</h2>
             <p class="small">Public profile page fields for Explore attribution and shareable profile URLs.</p>
