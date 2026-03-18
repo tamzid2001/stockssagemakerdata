@@ -1976,6 +1976,10 @@
     foundryNotes: document.getElementById("foundry-notes"),
     foundryHistoryFields: document.getElementById("foundry-history-fields"),
     foundryFileField: document.getElementById("foundry-file-field"),
+    foundryUploadActions: document.getElementById("foundry-upload-actions"),
+    foundryUploadPrepareButton: document.getElementById("foundry-upload-prepare-button"),
+    foundryAutopilotControls: document.getElementById("foundry-autopilot-controls"),
+    foundryPrimaryActions: document.getElementById("foundry-primary-actions"),
     foundryHorizon: document.getElementById("foundry-horizon"),
     foundryQuantiles: document.getElementById("foundry-quantiles"),
     foundryPrepareButton: document.getElementById("foundry-prepare-button"),
@@ -10697,17 +10701,19 @@
       percent = numeric > 1 ? numeric : numeric * 100;
     }
     if (!Number.isFinite(percent) || !(percent > 0 && percent < 100)) {
-      throw new Error("Forecast Foundry quantiles must be between P1 and P99.");
+      throw new Error("Forecast Foundry quantiles must be between 0.01 and 0.99.");
     }
     if (Math.abs(percent - Math.round(percent)) > 1e-6) {
-      throw new Error("Forecast Foundry quantiles must use whole-percent steps such as P10, P25, P50, P75, or P90.");
+      throw new Error("Forecast Foundry quantiles must use 0.01 steps such as 0.1, 0.25, 0.5, 0.75, or 0.9.");
     }
     return `p${Math.round(percent)}`;
   };
 
   const formatFoundryQuantileLabel = (value) => {
     const numeric = Number(String(value || "").replace(/^p/i, ""));
-    return Number.isFinite(numeric) ? `P${Math.round(numeric)}` : String(value || "").toUpperCase();
+    if (!Number.isFinite(numeric)) return String(value || "");
+    const decimal = numeric / 100;
+    return decimal.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
   };
 
   const parseFoundryQuantilesInput = (raw) => {
@@ -10722,7 +10728,7 @@
       values.push(normalized);
     }
     if (values.length < 3) {
-      throw new Error("Forecast Foundry requires at least 3 quantiles. Start with P10, P50, and P90.");
+      throw new Error("Forecast Foundry requires at least 3 quantiles. Start with 0.1, 0.5, and 0.9.");
     }
     if (values.length > 5) {
       throw new Error("Forecast Foundry supports up to 5 quantiles.");
@@ -10731,7 +10737,7 @@
       throw new Error("Forecast Foundry quantiles must use an odd count so a middle median quantile exists.");
     }
     if (!values.includes("p50")) {
-      throw new Error("Forecast Foundry quantiles must include P50.");
+      throw new Error("Forecast Foundry quantiles must include 0.5.");
     }
     return values
       .map((entry) => ({ entry, numeric: Number(entry.replace(/^p/i, "")) }))
@@ -17145,11 +17151,12 @@
     const sourceKind = String(ui.foundrySourceKind?.value || "history").trim();
     const historyMode = sourceKind === "history";
     const fileMode = sourceKind === "historical_csv" || sourceKind === "prediction_csv";
+    const predictionMode = sourceKind === "prediction_csv";
     ui.foundryHistoryFields?.classList.toggle("hidden", !historyMode);
     ui.foundryFileField?.classList.toggle("hidden", !fileMode);
-    if (ui.foundryAnalyzeButton) {
-      ui.foundryAnalyzeButton.disabled = false;
-    }
+    ui.foundryUploadActions?.classList.toggle("hidden", !predictionMode);
+    ui.foundryAutopilotControls?.classList.toggle("hidden", predictionMode);
+    ui.foundryPrimaryActions?.classList.toggle("hidden", predictionMode);
     if (historyMode) syncFoundryDateDefaults();
     updateFoundryInstanceLimitUi();
   };
@@ -17173,6 +17180,18 @@
   const countActiveFoundryRuns = (runs = []) =>
     (Array.isArray(runs) ? runs : []).filter((item) => isFoundryRunActive(item)).length;
 
+  const canAnalyzeFoundryRun = (run) => {
+    if (!run || typeof run !== "object") return false;
+    const sourceType = String(run?.sourceType || "").trim();
+    const status = String(run?.status || "").trim().toLowerCase();
+    const files = run?.files && typeof run.files === "object" ? run.files : {};
+    const analysis = run?.analysis && typeof run.analysis === "object" ? run.analysis : {};
+    if (sourceType === "prediction_csv") return true;
+    if (status === "completed") return true;
+    if (files?.predictionsCsv && typeof files.predictionsCsv === "object") return true;
+    return Boolean(String(analysis?.markdown || analysis?.summary || "").trim());
+  };
+
   const updateFoundryInstanceLimitUi = () => {
     const maxConcurrentRuns = Number(state.foundryContext.maxConcurrentRuns || FOUNDRY_MAX_CONCURRENT_INSTANCES) || FOUNDRY_MAX_CONCURRENT_INSTANCES;
     const activeConcurrentRuns = countActiveFoundryRuns(state.foundryContext.runs || []);
@@ -17186,16 +17205,33 @@
         ui.foundryInstanceLimit.textContent = `Concurrent instance limit: ${activeConcurrentRuns} of ${maxConcurrentRuns} active.`;
       }
     }
+    const sourceKind = String(ui.foundrySourceKind?.value || "history").trim();
+    const predictionMode = sourceKind === "prediction_csv";
+    const requiresFullAccount = !hasFullAccount();
+    const limitReached = hasFullAccount() && activeConcurrentRuns >= maxConcurrentRuns;
     if (ui.foundryRunButton) {
-      const sourceKind = String(ui.foundrySourceKind?.value || "history").trim();
-      const requiresFullAccount = !hasFullAccount();
-      const limitReached = hasFullAccount() && activeConcurrentRuns >= maxConcurrentRuns;
       ui.foundryRunButton.disabled = requiresFullAccount || sourceKind === "prediction_csv" || limitReached;
       ui.foundryRunButton.title = requiresFullAccount
         ? "Sign in with a full account to use Forecast Foundry."
         : limitReached
           ? `Forecast Foundry allows ${maxConcurrentRuns} active runs at a time.`
           : "";
+    }
+    if (ui.foundryPrepareButton) {
+      ui.foundryPrepareButton.disabled = requiresFullAccount;
+      ui.foundryPrepareButton.title = requiresFullAccount ? "Sign in with a full account to use Forecast Foundry." : "";
+    }
+    if (ui.foundryUploadPrepareButton) {
+      ui.foundryUploadPrepareButton.disabled = requiresFullAccount;
+      ui.foundryUploadPrepareButton.title = requiresFullAccount ? "Sign in with a full account to use Forecast Foundry." : "";
+    }
+    if (ui.foundryAnalyzeButton) {
+      ui.foundryAnalyzeButton.disabled = requiresFullAccount || !predictionMode;
+      ui.foundryAnalyzeButton.title = requiresFullAccount
+        ? "Sign in with a full account to use Forecast Foundry."
+        : predictionMode
+          ? ""
+          : "Prediction analysis is available for prediction CSV uploads or completed prediction outputs.";
     }
   };
 
@@ -17227,6 +17263,7 @@
         const metricName = escapeHtml(String(autopilot?.objectiveMetric?.name || "").trim());
         const metricValue = Number(autopilot?.objectiveMetric?.value);
         const analysisSummary = escapeHtml(String(analysis?.summary || "").trim().slice(0, 180));
+        const canAnalyze = canAnalyzeFoundryRun(item);
         return `
           <article class="task-item${active ? " active" : ""}" data-foundry-run-card="${escapeHtml(String(item?.id || ""))}">
             <div class="task-item-main">
@@ -17244,7 +17281,11 @@
             <div class="task-chip-row" style="margin-top:10px;">
               <button class="task-chip" type="button" data-action="foundry-select-run" data-run-id="${escapeHtml(String(item?.id || ""))}">${icon("eye")}<span>Open</span></button>
               <button class="task-chip" type="button" data-action="foundry-refresh-run" data-run-id="${escapeHtml(String(item?.id || ""))}">${icon("refresh")}<span>Refresh</span></button>
-              <button class="task-chip" type="button" data-action="foundry-analyze-run" data-run-id="${escapeHtml(String(item?.id || ""))}">${icon("sparks")}<span>Analyze</span></button>
+              ${
+                canAnalyze
+                  ? `<button class="task-chip" type="button" data-action="foundry-analyze-run" data-run-id="${escapeHtml(String(item?.id || ""))}">${icon("sparks")}<span>Analyze</span></button>`
+                  : ""
+              }
             </div>
           </article>
         `;
@@ -17569,7 +17610,7 @@
     renderFoundryRuns(state.foundryContext.runs || []);
     setFoundryStatus(String(run.status || "Source prepared."));
     if (notify) {
-      showToast(sourceKind === "prediction_csv" ? "Prediction CSV analyzed." : "Forecast Foundry source prepared.");
+      showToast(sourceKind === "prediction_csv" ? "Prediction CSV prepared." : "Forecast Foundry source prepared.");
     }
     return run;
   };
@@ -17599,7 +17640,7 @@
       presetKey: horizonPresetKey,
       interval: String(run?.dataset?.interval || ui.foundryInterval?.value || "1d"),
     });
-    const quantiles = parseFoundryQuantilesInput(ui.foundryQuantiles?.value || "P10,P50,P90");
+    const quantiles = parseFoundryQuantilesInput(ui.foundryQuantiles?.value || "0.1,0.5,0.9");
     if (ui.foundryQuantiles) {
       ui.foundryQuantiles.value = quantiles.map((entry) => formatFoundryQuantileLabel(entry)).join(",");
     }
@@ -25569,7 +25610,7 @@
     });
     ui.foundryQuantiles?.addEventListener("blur", () => {
       try {
-        const quantiles = parseFoundryQuantilesInput(ui.foundryQuantiles?.value || "P10,P50,P90");
+        const quantiles = parseFoundryQuantilesInput(ui.foundryQuantiles?.value || "0.1,0.5,0.9");
         ui.foundryQuantiles.value = quantiles.map((entry) => formatFoundryQuantileLabel(entry)).join(",");
       } catch (_error) {
         // Keep the raw user input so they can correct it.
@@ -25577,6 +25618,15 @@
     });
     ui.foundrySourceForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
+      try {
+        await prepareFoundrySource({ notify: true });
+      } catch (error) {
+        const message = extractErrorMessage(error, "Unable to prepare Forecast Foundry source.");
+        setFoundryStatus(message, "warn");
+        showToast(message, "warn");
+      }
+    });
+    ui.foundryUploadPrepareButton?.addEventListener("click", async () => {
       try {
         await prepareFoundrySource({ notify: true });
       } catch (error) {
