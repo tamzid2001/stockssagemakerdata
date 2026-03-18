@@ -4914,7 +4914,9 @@
       syncNotificationPrivacyControls();
       return;
     }
-    const anchor = ui.notificationsStatus.parentElement || ui.notificationsStatus;
+    const anchor =
+      ui.notificationsToken?.closest(".notice") ||
+      ui.notificationsStatus;
     const wrap = document.createElement("div");
     wrap.id = "notifications-privacy-controls";
     wrap.className = "notice small";
@@ -4939,8 +4941,18 @@
         ${categoryItems}
       </div>
       <div class="notification-consent-grid">
-        <label class="feature" style="align-items:flex-start;"><span></span><input id="notifications-location-optin" type="checkbox" /> <span>Allow coarse location + timezone for notification context</span></label>
-        <label class="feature" style="align-items:flex-start;"><span></span><input id="notifications-ip-optin" type="checkbox" /> <span>Allow IP-derived region lookup/storage</span></label>
+        <label class="notification-consent-item">
+          <input id="notifications-location-optin" type="checkbox" />
+          <span class="notification-consent-copy">
+            <span class="notification-consent-title">Allow coarse location + timezone for notification context</span>
+          </span>
+        </label>
+        <label class="notification-consent-item">
+          <input id="notifications-ip-optin" type="checkbox" />
+          <span class="notification-consent-copy">
+            <span class="notification-consent-title">Allow IP-derived region lookup/storage</span>
+          </span>
+        </label>
       </div>
       <div class="notification-privacy-grid">
         <div class="field">
