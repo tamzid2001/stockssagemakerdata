@@ -202,6 +202,13 @@ function roundTo10(value: number): number {
   return Math.round(value / 10) * 10;
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+const YAHOO_INTRADAY_RETENTION_DAYS = 60;
+const YAHOO_MINUTE_CHUNK_DAYS = 7;
+const US_MARKET_TIMEZONE = "America/New_York";
+const TIME_ZONE_PARTS_FORMATTERS = new Map<string, Intl.DateTimeFormat>();
+const TIME_ZONE_OFFSET_FORMATTERS = new Map<string, Intl.DateTimeFormat>();
+
 function formatDateYmd(date: Date): string {
   return `${date.getUTCFullYear()}-${pad2(date.getUTCMonth() + 1)}-${pad2(date.getUTCDate())}`;
 }
@@ -210,11 +217,126 @@ function formatDateTimeUtc(date: Date): string {
   return `${formatDateYmd(date)} ${pad2(date.getUTCHours())}:${pad2(date.getUTCMinutes())}:${pad2(date.getUTCSeconds())}`;
 }
 
+function toUtcHourStart(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), date.getUTCHours()));
+}
+
+function formatHourlyTimestampUtc(date: Date): string {
+  const aligned = toUtcHourStart(date);
+  return `${formatDateYmd(aligned)} ${pad2(aligned.getUTCHours())}:00:00`;
+}
+
+function getTimeZonePartsFormatter(timeZone: string): Intl.DateTimeFormat {
+  const cached = TIME_ZONE_PARTS_FORMATTERS.get(timeZone);
+  if (cached) return cached;
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  });
+  TIME_ZONE_PARTS_FORMATTERS.set(timeZone, formatter);
+  return formatter;
+}
+
+function getTimeZoneOffsetFormatter(timeZone: string): Intl.DateTimeFormat {
+  const cached = TIME_ZONE_OFFSET_FORMATTERS.get(timeZone);
+  if (cached) return cached;
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    timeZoneName: "shortOffset",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  });
+  TIME_ZONE_OFFSET_FORMATTERS.set(timeZone, formatter);
+  return formatter;
+}
+
+function getTimeZoneParts(date: Date, timeZone: string): Record<string, string> {
+  const parts = getTimeZonePartsFormatter(timeZone).formatToParts(date);
+  const read = (type: string) => parts.find((part) => part.type === type)?.value || "";
+  return {
+    year: read("year"),
+    month: read("month"),
+    day: read("day"),
+    hour: read("hour"),
+    minute: read("minute"),
+    second: read("second"),
+  };
+}
+
+function getTimeZoneOffsetMinutes(date: Date, timeZone: string): number {
+  const parts = getTimeZoneOffsetFormatter(timeZone).formatToParts(date);
+  const label = parts.find((part) => part.type === "timeZoneName")?.value || "GMT+0";
+  const match = label.match(/^GMT([+-])(\d{1,2})(?::?(\d{2}))?$/i);
+  if (!match) return 0;
+  const sign = match[1] === "-" ? -1 : 1;
+  return sign * (Number(match[2]) * 60 + Number(match[3] || 0));
+}
+
+function zonedPartsToUtc(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute: number,
+  second: number,
+  timeZone: string
+): Date {
+  const baseUtcMs = Date.UTC(year, month - 1, day, hour, minute, second);
+  let candidateUtcMs = baseUtcMs;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const offsetMinutes = getTimeZoneOffsetMinutes(new Date(candidateUtcMs), timeZone);
+    const correctedUtcMs = baseUtcMs - offsetMinutes * 60 * 1000;
+    if (correctedUtcMs === candidateUtcMs) break;
+    candidateUtcMs = correctedUtcMs;
+  }
+  return new Date(candidateUtcMs);
+}
+
+function parseDateBoundaryInTimeZone(value: unknown, timeZone: string, boundary: "start" | "endExclusive"): Date | null {
+  const text = asString(value).trim();
+  if (!text) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    const parsed = parseFlexibleDate(text);
+    if (!parsed) return null;
+    const boundaryDate = boundary === "endExclusive" ? addUtcDays(parsed, 1) : parsed;
+    return zonedPartsToUtc(
+      boundaryDate.getUTCFullYear(),
+      boundaryDate.getUTCMonth() + 1,
+      boundaryDate.getUTCDate(),
+      0,
+      0,
+      0,
+      timeZone
+    );
+  }
+  return parseFlexibleDate(text);
+}
+
+function formatTimeZoneHourBucket(date: Date, timeZone: string): string {
+  const parts = getTimeZoneParts(date, timeZone);
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:00:00`;
+}
+
 function parseFlexibleDate(value: unknown): Date | null {
   const text = asString(value).trim();
   if (!text) return null;
   if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
     const parsed = new Date(`${text}T00:00:00Z`);
+    return Number.isFinite(parsed.getTime()) ? parsed : null;
+  }
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(text)) {
+    const parsed = new Date(text.replace(" ", "T") + "Z");
     return Number.isFinite(parsed.getTime()) ? parsed : null;
   }
   const parsed = new Date(text);
@@ -718,7 +840,12 @@ function normalizeHistoricalUpload(parsed: ParsedCsv, tickerHint = "", intervalH
     const interval = normalizeSupportedInterval(intervalHint);
     rows.push({
       item_id: itemId,
-      timestamp: interval === "1d" ? formatDateYmd(parsedDate) : formatDateTimeUtc(parsedDate),
+      timestamp:
+        interval === "1d"
+          ? formatDateYmd(parsedDate)
+          : interval === "1h"
+            ? formatHourlyTimestampUtc(parsedDate)
+            : formatDateTimeUtc(parsedDate),
       closing_price: Number(closingPrice.toFixed(6)),
     });
   });
@@ -738,33 +865,16 @@ function normalizeHistoricalUpload(parsed: ParsedCsv, tickerHint = "", intervalH
   });
 }
 
-export async function downloadHistoricalStockDataset(input: {
+async function fetchYahooHistorySegment(input: {
   ticker: string;
-  interval: unknown;
-  start?: string;
-  end?: string;
-  useAllHistory?: boolean;
-  fetchImpl?: typeof fetch;
-}): Promise<CanonicalDataset> {
-  const ticker = normalizeTicker(input.ticker);
-  const interval = normalizeSupportedInterval(input.interval);
-  if (!ticker) throw new Error("Ticker is required.");
-  const useAllHistory = Boolean(input.useAllHistory);
-  const startDate = useAllHistory ? null : parseFlexibleDate(input.start);
-  const endDate = parseFlexibleDate(input.end) || new Date();
-  if (!endDate || (!useAllHistory && !startDate)) {
-    throw new Error(useAllHistory ? "End date is required." : "Start and end dates are required.");
-  }
-  if (startDate && endDate.getTime() < startDate.getTime()) {
-    throw new Error("End date must be on or after the start date.");
-  }
-
-  const startSeconds = useAllHistory ? 0 : Math.floor((startDate as Date).getTime() / 1000);
-  const endSeconds = Math.floor(endDate.getTime() / 1000) + 24 * 60 * 60;
-  const fetchImpl = input.fetchImpl || fetch;
-  const response = await fetchImpl(
-    `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?period1=${startSeconds}&period2=${endSeconds}&interval=${encodeURIComponent(
-      interval
+  interval: SupportedDatasetInterval;
+  startSeconds: number;
+  endSeconds: number;
+  fetchImpl: typeof fetch;
+}): Promise<CanonicalDatasetRow[]> {
+  const response = await input.fetchImpl(
+    `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(input.ticker)}?period1=${input.startSeconds}&period2=${input.endSeconds}&interval=${encodeURIComponent(
+      input.interval
     )}&includePrePost=false&events=div%2Csplits&corsDomain=finance.yahoo.com`,
     {
       method: "GET",
@@ -789,15 +899,171 @@ export async function downloadHistoricalStockDataset(input: {
     const date = new Date(Number(timestamp) * 1000);
     if (!Number.isFinite(close) || !Number.isFinite(date.getTime())) return;
     rows.push({
-      item_id: ticker,
-      timestamp: interval === "1d" ? formatDateYmd(date) : formatDateTimeUtc(date),
+      item_id: input.ticker,
+      timestamp:
+        input.interval === "1d"
+          ? formatDateYmd(date)
+          : input.interval === "1h"
+            ? formatHourlyTimestampUtc(date)
+            : formatDateTimeUtc(date),
       closing_price: Number(close.toFixed(6)),
     });
   });
+  return rows;
+}
+
+type MinutePricePoint = {
+  timestampMs: number;
+  close: number;
+};
+
+function clipYahooIntradayWindow(start: Date, endExclusive: Date): { start: Date; endExclusive: Date } {
+  if (start.getTime() >= endExclusive.getTime()) {
+    throw new Error("Start and end dates must define a positive range.");
+  }
+  const earliestAllowed = new Date(Date.now() - YAHOO_INTRADAY_RETENTION_DAYS * DAY_MS);
+  if (endExclusive.getTime() <= earliestAllowed.getTime()) {
+    throw new Error(
+      `Hourly history is built from Yahoo 1-minute data and is limited to roughly the last ${YAHOO_INTRADAY_RETENTION_DAYS} days.`
+    );
+  }
+  const clippedStart = start.getTime() < earliestAllowed.getTime() ? earliestAllowed : start;
+  if (clippedStart.getTime() >= endExclusive.getTime()) {
+    throw new Error("Start and end dates must define a positive range after applying Yahoo intraday retention limits.");
+  }
+  return { start: clippedStart, endExclusive };
+}
+
+async function fetchYahooMinuteHistorySegment(input: {
+  ticker: string;
+  startMs: number;
+  endMs: number;
+  fetchImpl: typeof fetch;
+}): Promise<MinutePricePoint[]> {
+  const response = await input.fetchImpl(
+    `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(input.ticker)}?period1=${Math.floor(
+      input.startMs / 1000
+    )}&period2=${Math.floor(input.endMs / 1000)}&interval=1m&includePrePost=true&events=div%2Csplits&corsDomain=finance.yahoo.com`,
+    {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        "User-Agent": "QuanturaForecastFoundry/1.0",
+      },
+    }
+  );
+  if (!response.ok) {
+    throw new Error(`Yahoo minute history request failed (${response.status}).`);
+  }
+  const payload = (await response.json().catch(() => ({}))) as Record<string, any>;
+  const result = Array.isArray(payload?.chart?.result) ? payload.chart.result[0] : null;
+  const timestamps = Array.isArray(result?.timestamp) ? result.timestamp : [];
+  const quote = Array.isArray(result?.indicators?.quote) ? result.indicators.quote[0] || {} : {};
+  const closes = Array.isArray(quote?.close) ? quote.close : [];
+
+  const rows: MinutePricePoint[] = [];
+  timestamps.forEach((timestamp: number, index: number) => {
+    const close = Number(closes[index]);
+    const timestampMs = Number(timestamp) * 1000;
+    if (!Number.isFinite(close) || !Number.isFinite(timestampMs)) return;
+    rows.push({ timestampMs, close: Number(close.toFixed(6)) });
+  });
+  return rows;
+}
+
+function minuteRowsToExtendedHourlyRows(ticker: string, minuteRows: MinutePricePoint[]): CanonicalDatasetRow[] {
+  const dedupedMinutes = new Map<number, number>();
+  minuteRows
+    .slice()
+    .sort((left, right) => left.timestampMs - right.timestampMs)
+    .forEach((row) => {
+      dedupedMinutes.set(row.timestampMs, row.close);
+    });
+
+  const hourlyBuckets = new Map<string, number>();
+  Array.from(dedupedMinutes.entries())
+    .sort((left, right) => left[0] - right[0])
+    .forEach(([timestampMs, close]) => {
+      const bucketTime = new Date(timestampMs);
+      const parts = getTimeZoneParts(bucketTime, US_MARKET_TIMEZONE);
+      const hour = Number(parts.hour);
+      if (!Number.isFinite(hour) || hour < 4 || hour > 19) return;
+      hourlyBuckets.set(formatTimeZoneHourBucket(bucketTime, US_MARKET_TIMEZONE), Number(close.toFixed(6)));
+    });
+
+  return Array.from(hourlyBuckets.entries()).map(([timestamp, close]) => ({
+    item_id: ticker,
+    timestamp,
+    closing_price: close,
+  }));
+}
+
+export async function downloadHistoricalStockDataset(input: {
+  ticker: string;
+  interval: unknown;
+  start?: string;
+  end?: string;
+  useAllHistory?: boolean;
+  fetchImpl?: typeof fetch;
+}): Promise<CanonicalDataset> {
+  const ticker = normalizeTicker(input.ticker);
+  const interval = normalizeSupportedInterval(input.interval);
+  if (!ticker) throw new Error("Ticker is required.");
+  const useAllHistory = Boolean(input.useAllHistory);
+  const startDate =
+    interval === "1h"
+      ? useAllHistory
+        ? null
+        : parseDateBoundaryInTimeZone(input.start, US_MARKET_TIMEZONE, "start")
+      : useAllHistory
+        ? null
+        : parseFlexibleDate(input.start);
+  const endDate =
+    interval === "1h"
+      ? parseDateBoundaryInTimeZone(input.end, US_MARKET_TIMEZONE, "endExclusive") || new Date()
+      : parseFlexibleDate(input.end) || new Date();
+  if (!endDate || (!useAllHistory && !startDate)) {
+    throw new Error(useAllHistory ? "End date is required." : "Start and end dates are required.");
+  }
+  if (startDate && endDate.getTime() < startDate.getTime()) {
+    throw new Error("End date must be on or after the start date.");
+  }
+
+  const fetchImpl = input.fetchImpl || fetch;
+  const endExclusive = interval === "1h" ? endDate : addUtcDays(toUtcMidnight(endDate), 1);
+  let rows: CanonicalDatasetRow[] = [];
+
+  if (interval === "1h") {
+    const requestedStart = useAllHistory ? new Date(Date.now() - YAHOO_INTRADAY_RETENTION_DAYS * DAY_MS) : (startDate as Date);
+    const clippedWindow = clipYahooIntradayWindow(requestedStart, endExclusive);
+    const minuteRows: MinutePricePoint[] = [];
+    for (
+      let cursor = clippedWindow.start.getTime();
+      cursor < clippedWindow.endExclusive.getTime();
+      cursor += YAHOO_MINUTE_CHUNK_DAYS * DAY_MS
+    ) {
+      const chunkRows = await fetchYahooMinuteHistorySegment({
+        ticker,
+        startMs: cursor,
+        endMs: Math.min(clippedWindow.endExclusive.getTime(), cursor + YAHOO_MINUTE_CHUNK_DAYS * DAY_MS),
+        fetchImpl,
+      });
+      minuteRows.push(...chunkRows);
+    }
+    rows = minuteRowsToExtendedHourlyRows(ticker, minuteRows);
+  } else {
+    const chunkRows = await fetchYahooHistorySegment({
+      ticker,
+      interval,
+      startSeconds: useAllHistory ? 0 : Math.floor((startDate as Date).getTime() / 1000),
+      endSeconds: Math.floor(endExclusive.getTime() / 1000),
+      fetchImpl,
+    });
+    rows = chunkRows;
+  }
 
   if (!rows.length) {
-    const detail = sanitizeText(payload?.chart?.error?.description || payload?.chart?.error?.code, 240);
-    throw new Error(detail || `No ${interval} history rows were returned for ${ticker}.`);
+    throw new Error(`No ${interval} history rows were returned for ${ticker}.`);
   }
 
   return buildCanonicalDataset(rows, {
