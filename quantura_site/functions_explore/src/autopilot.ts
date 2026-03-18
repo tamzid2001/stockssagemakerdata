@@ -619,11 +619,11 @@ function normalizeForecastQuantiles(values: unknown): string[] {
       percent = numeric > 1 ? numeric : numeric * 100;
     }
     if (!Number.isFinite(percent) || !(percent > 0 && percent < 100)) {
-      throw new Error("invalid_quantiles: Forecast Foundry quantiles must be between P1 and P99.");
+      throw new Error("invalid_quantiles: Forecast Foundry quantiles must be between 0.01 and 0.99.");
     }
     if (Math.abs(percent - Math.round(percent)) > 1e-6) {
       throw new Error(
-        "invalid_quantiles: Forecast Foundry quantiles must use whole-percent steps such as P10, P25, P50, P75, and P90."
+        "invalid_quantiles: Forecast Foundry quantiles must use 0.01 steps such as 0.1, 0.25, 0.5, 0.75, and 0.9."
       );
     }
     return `p${Math.round(percent)}`;
@@ -644,7 +644,7 @@ function normalizeForecastQuantiles(values: unknown): string[] {
     throw new Error("invalid_quantiles: Forecast Foundry quantiles must use an odd count so a middle median quantile exists.");
   }
   if (!unique.some((entry) => entry.entry === "p50")) {
-    throw new Error("invalid_quantiles: Forecast Foundry quantiles must include P50.");
+    throw new Error("invalid_quantiles: Forecast Foundry quantiles must include 0.5.");
   }
   return unique.map((entry) => entry.entry);
 }

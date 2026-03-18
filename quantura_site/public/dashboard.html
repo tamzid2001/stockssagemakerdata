@@ -629,12 +629,11 @@
                   <input id="foundry-end" name="end" type="date" />
                 </div>
                 <div class="field">
-                  <label class="label" for="foundry-use-all-history">History range</label>
+                  <label class="label" for="foundry-use-all-history">Use all available history</label>
                   <label class="checkbox" style="display:flex; align-items:center; gap:10px; margin-top:8px;">
                     <input id="foundry-use-all-history" name="useAllHistory" type="checkbox" />
                     <span>Use all available historical data for this interval</span>
                   </label>
-                  <div class="small muted">When enabled, Forecast Foundry asks Yahoo for the full available range for the selected interval and uses the nearest available history window.</div>
                 </div>
               </div>
 
@@ -644,13 +643,23 @@
                 <div class="small muted">Historical CSVs must resolve to item/date-close columns. Prediction CSVs should include quantiles such as P10, P50, and P90.</div>
               </div>
 
+              <div class="hero-actions hidden" id="foundry-upload-actions" style="margin-top: 12px; justify-content: flex-start;">
+                <button class="cta" id="foundry-upload-prepare-button" type="button" data-analytics="foundry_prepare_source_upload">
+                  <i class="iconoir-data-transfer-up" aria-hidden="true"></i><span>Prepare source</span>
+                </button>
+                <button class="cta secondary" id="foundry-analyze-button" type="button" data-analytics="foundry_analyze_csv">
+                  <i class="iconoir-sparks" aria-hidden="true"></i><span>Analyze predictions</span>
+                </button>
+              </div>
+
               <div class="field">
                 <label class="label" for="foundry-notes">Notes</label>
                 <textarea id="foundry-notes" name="notes" placeholder="Context, horizon assumptions, special constraints, or what the analysis should emphasize"></textarea>
               </div>
 
-              <h3 style="margin-top: 16px;">Autopilot controls</h3>
-              <div class="form-grid">
+              <div id="foundry-autopilot-controls">
+                <h3 style="margin-top: 16px;">Autopilot controls</h3>
+                <div class="form-grid">
                 <div class="field">
                   <label class="label" for="foundry-horizon">Forecast horizon</label>
                   <select id="foundry-horizon" name="horizon">
@@ -666,21 +675,19 @@
                   <div class="small muted">Pick a market-ready horizon. Forecast Foundry maps it to trading-day or trading-hour steps automatically based on your selected interval.</div>
                 </div>
                 <div class="field">
-                  <label class="label" for="foundry-quantiles">Quantiles</label>
-                  <input id="foundry-quantiles" name="quantiles" placeholder="P10,P50,P90" value="P10,P50,P90" />
-                  <div class="small muted">Enter 3 to 5 quantiles only. Use an odd count and include <code>P50</code>. Example: <code>P10,P50,P90</code> or <code>P10,P25,P50,P75,P90</code>.</div>
+                  <label class="label" for="foundry-quantiles">Quantiles (0-1)</label>
+                  <input id="foundry-quantiles" name="quantiles" placeholder="0.1,0.5,0.9" value="0.1,0.5,0.9" />
+                  <div class="small muted">Enter 3 to 5 quantiles between <code>0.01</code> and <code>0.99</code>. Use an odd count and include <code>0.5</code>. Example: <code>0.1,0.5,0.9</code> or <code>0.1,0.25,0.5,0.75,0.9</code>.</div>
                 </div>
               </div>
+              </div>
 
-              <div class="hero-actions" style="margin-top: 14px; justify-content: flex-start;">
+              <div class="hero-actions" id="foundry-primary-actions" style="margin-top: 14px; justify-content: flex-start;">
                 <button class="cta" id="foundry-prepare-button" type="submit" data-analytics="foundry_prepare_source">
                   <i class="iconoir-data-transfer-up" aria-hidden="true"></i><span>Prepare source</span>
                 </button>
                 <button class="cta secondary" id="foundry-run-button" type="button" data-analytics="foundry_start_autopilot">
                   <i class="iconoir-rocket" aria-hidden="true"></i><span>Start Autopilot</span>
-                </button>
-                <button class="cta secondary" id="foundry-analyze-button" type="button" data-analytics="foundry_analyze_csv">
-                  <i class="iconoir-sparks" aria-hidden="true"></i><span>Analyze predictions</span>
                 </button>
               </div>
               <p class="small" id="autopilot-status">Sign in with a full account to unlock Forecast Foundry.</p>
