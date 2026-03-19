@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security report
+    url: https://github.com/tamzid2001/stockssagemakerdata/blob/main/SECURITY.md
+    about: Do not open public issues for vulnerabilities. Follow the security policy.
+  - name: Quantura contact page
+    url: https://quantura.studio/contact
+    about: Use the website contact page for general product questions.
