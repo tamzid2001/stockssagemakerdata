@@ -731,6 +731,12 @@ def run(args):
 
     for index, ticker in enumerate(tickers, start=1):
         try:
+            tk = yf.Ticker(ticker)
+            market_cap = get_market_cap(tk)
+            if market_cap is not None and market_cap < args.min_market_cap:
+                market_cap_skipped += 1
+                continue
+
             px = get_price_history(
                 ticker=ticker,
                 start_date=args.start_date,
@@ -740,8 +746,8 @@ def run(args):
             if px is None or px.empty:
                 continue
 
-            tk = yf.Ticker(ticker)
-            market_cap = get_market_cap(tk, last_price=float(px["y_usd"].iloc[-1]))
+            if market_cap is None:
+                market_cap = get_market_cap(tk, last_price=float(px["y_usd"].iloc[-1]))
             if market_cap is None or market_cap < args.min_market_cap:
                 market_cap_skipped += 1
                 continue
