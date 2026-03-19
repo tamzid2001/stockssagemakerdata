@@ -199,9 +199,84 @@ def get_fundamentals(ticker: str) -> Optional[dict]:
         return None
 
 
+def clamp_score(value: float) -> int:
+    return max(1, min(10, int(round(value))))
+
+
+def fallback_score_stock(fundamentals: dict, headlines: List[str], error: Optional[Exception] = None) -> dict:
+    ticker = fundamentals.get("ticker", "UNKNOWN")
+    sector = fundamentals.get("sector") or "Unknown"
+    market_cap = fundamentals.get("market_cap")
+    revenue_growth = fundamentals.get("revenue_growth") or 0
+    earnings_growth = fundamentals.get("earnings_growth") or 0
+    profit_margin = fundamentals.get("profit_margin") or 0
+    upside_to_target = fundamentals.get("upside_to_target_pct") or 0
+    pe = fundamentals.get("pe")
+    month_pct_down = fundamentals.get("month_pct_down") or 0
+
+    growth_score = clamp_score(5 + (revenue_growth * 12) + (earnings_growth * 10))
+    upside_score = clamp_score(5 + (upside_to_target / 8) + (month_pct_down / 10))
+
+    value_base = 5
+    if pe is not None:
+        if pe < 20:
+            value_base += 2
+        elif pe > 40:
+            value_base -= 2
+    if profit_margin > 0.2:
+        value_base += 1
+    if market_cap and market_cap > 5e11:
+        value_base += 1
+    value_score = clamp_score(value_base)
+
+    earnings_beat_probability = "Medium"
+    if earnings_growth > 0.12 and profit_margin > 0.12:
+        earnings_beat_probability = "High"
+    elif earnings_growth < 0 or profit_margin < 0:
+        earnings_beat_probability = "Low"
+
+    confidence_level = "Medium"
+    if len(headlines) >= 2 and market_cap and market_cap > MIN_MARKET_CAP:
+        confidence_level = "High"
+    if error is not None:
+        confidence_level = "Low"
+
+    error_suffix = f" Fallback used because model scoring failed: {error}." if error else ""
+    bull_bits = []
+    if revenue_growth > 0:
+        bull_bits.append(f"Revenue growth is running at {revenue_growth * 100:.1f}%")
+    if upside_to_target > 0:
+        bull_bits.append(f"analyst target implies {upside_to_target:.1f}% upside")
+    if not bull_bits:
+        bull_bits.append("market cap and liquidity keep the name institutionally relevant")
+
+    risk_bits = []
+    if pe and pe > 35:
+        risk_bits.append(f"valuation is elevated at roughly {pe:.1f}x earnings")
+    if upside_to_target < 0:
+        risk_bits.append("analyst target sits below the current price")
+    if month_pct_down > 12:
+        risk_bits.append("recent drawdown signals negative momentum")
+    if not risk_bits:
+        risk_bits.append("headline risk and multiple compression can cap near-term upside")
+
+    return {
+        "ticker": ticker,
+        "sector": sector,
+        "market_cap_category": fundamentals.get("market_cap_category") or market_cap_category(market_cap),
+        "value_score": value_score,
+        "growth_score": growth_score,
+        "earnings_beat_probability": earnings_beat_probability,
+        "upside_score": upside_score,
+        "key_bull_thesis": ". ".join(bull_bits[:2]) + "." + error_suffix,
+        "key_risk": ". ".join(risk_bits[:2]) + ".",
+        "confidence_level": confidence_level,
+    }
+
+
 def score_stock_with_agent(fundamentals: dict, headlines: List[str]) -> dict:
     if client is None:
-        raise RuntimeError("OPENAI_API_KEY is required to score stocks with the agent.")
+        return fallback_score_stock(fundamentals, headlines)
 
     schema = {
         "name": "ticker_screening",
@@ -249,17 +324,20 @@ Return JSON only that matches the schema exactly.
         "instructions": "Use concise, actionable phrasing. Keep bull thesis and key risk to 2 sentences max.",
     }
 
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": "Return only valid JSON."},
-            {"role": "user", "content": f"{prompt}\n\n{json.dumps(payload, indent=2, default=str)}"},
-        ],
-        temperature=0.2,
-        response_format={"type": "json_schema", "json_schema": schema},
-    )
-
-    return json.loads(response.choices[0].message.content)
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "Return only valid JSON."},
+                {"role": "user", "content": f"{prompt}\n\n{json.dumps(payload, indent=2, default=str)}"},
+            ],
+            temperature=0.2,
+            response_format={"type": "json_schema", "json_schema": schema},
+        )
+        return json.loads(response.choices[0].message.content)
+    except Exception as exc:
+        print(f"Agent scoring failed for {fundamentals.get('ticker')}: {exc}")
+        return fallback_score_stock(fundamentals, headlines, error=exc)
 
 
 def send_slack_webhook(message: str) -> None:
