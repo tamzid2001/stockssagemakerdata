@@ -14,6 +14,7 @@ from email.mime.text import MIMEText
 from typing import List, Optional
 
 import boto3
+import pandas as pd
 import requests
 import yfinance as yf
 from openai import OpenAI
@@ -35,6 +36,25 @@ SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
 SLACK_CHANNEL = os.getenv("SLACK_CHANNEL")
 
 client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+
+RESULT_FIELDNAMES = [
+    "ticker",
+    "sector",
+    "market_cap_category",
+    "value_score",
+    "growth_score",
+    "earnings_beat_probability",
+    "upside_score",
+    "key_bull_thesis",
+    "key_risk",
+    "confidence_level",
+    "market_cap",
+    "current_price",
+    "analyst_target_price",
+    "upside_to_target_pct",
+    "headlines",
+    "screening_date",
+]
 
 
 def load_tickers() -> List[str]:
@@ -100,44 +120,76 @@ def build_boto3_client(service_name: str):
     return boto3.client(service_name, **kwargs)
 
 
+def flatten_yf_columns(df: pd.DataFrame) -> pd.DataFrame:
+    if isinstance(df.columns, pd.MultiIndex):
+        flattened = []
+        for col in df.columns.to_flat_index():
+            if isinstance(col, tuple):
+                pieces = [str(piece) for piece in col if str(piece)]
+                flattened.append(pieces[0] if pieces else "value")
+            else:
+                flattened.append(str(col))
+        df = df.copy()
+        df.columns = flattened
+    return df
+
+
+def to_scalar(value):
+    if isinstance(value, pd.Series):
+        non_null = value.dropna()
+        if non_null.empty:
+            return None
+        return non_null.iloc[0]
+    if isinstance(value, pd.DataFrame):
+        if value.empty:
+            return None
+        return to_scalar(value.iloc[0])
+    return value
+
+
 def get_fundamentals(ticker: str) -> Optional[dict]:
     try:
         stock = yf.Ticker(ticker)
         info = stock.info
-        current_price = info.get("currentPrice", info.get("regularMarketPrice"))
+        current_price = to_scalar(info.get("currentPrice"))
+        if current_price is None:
+            current_price = to_scalar(info.get("regularMarketPrice"))
 
         today = datetime.date.today()
         month_start = datetime.date(today.year, today.month, 1)
-        hist = yf.download(ticker, start=month_start, end=today, progress=False)
+        hist = yf.download(ticker, start=month_start, end=today, progress=False, auto_adjust=False)
+        hist = flatten_yf_columns(hist)
 
         month_pct_down = None
-        if len(hist) > 0 and current_price:
-            month_open = hist.iloc[0]["Open"]
+        if len(hist) > 0 and current_price is not None and "Open" in hist.columns:
+            month_open = to_scalar(hist.iloc[0]["Open"])
             month_change = ((current_price - month_open) / month_open * 100) if month_open > 0 else None
             month_pct_down = -month_change if month_change and month_change < 0 else None
 
-        analyst_target = info.get("targetMeanPrice")
+        analyst_target = to_scalar(info.get("targetMeanPrice"))
         upside_to_target = None
-        if analyst_target and current_price:
+        if analyst_target is not None and current_price is not None and current_price > 0:
             upside_to_target = ((analyst_target - current_price) / current_price * 100)
+
+        market_cap = to_scalar(info.get("marketCap"))
 
         return {
             "ticker": ticker,
-            "sector": info.get("sector"),
-            "industry": info.get("industry"),
-            "market_cap": info.get("marketCap"),
-            "market_cap_category": market_cap_category(info.get("marketCap")),
+            "sector": to_scalar(info.get("sector")),
+            "industry": to_scalar(info.get("industry")),
+            "market_cap": market_cap,
+            "market_cap_category": market_cap_category(market_cap),
             "current_price": current_price,
-            "pe": info.get("trailingPE"),
-            "forward_pe": info.get("forwardPE"),
-            "peg_ratio": info.get("pegRatio"),
-            "price_to_sales": info.get("priceToSalesTrailing12Months"),
-            "price_to_book": info.get("priceToBook"),
-            "revenue_growth": info.get("revenueGrowth"),
-            "earnings_growth": info.get("earningsGrowth"),
-            "profit_margin": info.get("profitMargins"),
-            "debt_to_equity": info.get("debtToEquity"),
-            "free_cash_flow": info.get("freeCashflow"),
+            "pe": to_scalar(info.get("trailingPE")),
+            "forward_pe": to_scalar(info.get("forwardPE")),
+            "peg_ratio": to_scalar(info.get("pegRatio")),
+            "price_to_sales": to_scalar(info.get("priceToSalesTrailing12Months")),
+            "price_to_book": to_scalar(info.get("priceToBook")),
+            "revenue_growth": to_scalar(info.get("revenueGrowth")),
+            "earnings_growth": to_scalar(info.get("earningsGrowth")),
+            "profit_margin": to_scalar(info.get("profitMargins")),
+            "debt_to_equity": to_scalar(info.get("debtToEquity")),
+            "free_cash_flow": to_scalar(info.get("freeCashflow")),
             "month_pct_down": month_pct_down,
             "analyst_target_price": analyst_target,
             "upside_to_target_pct": upside_to_target,
@@ -344,12 +396,15 @@ def main() -> None:
         print(f"✓ Processed {ticker}")
 
     if not results:
-        print("No results to output")
+        print("No results to output; writing an empty CSV artifact.")
+        with open(OUTPUT_FILE, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=RESULT_FIELDNAMES)
+            writer.writeheader()
         return
 
     results.sort(key=lambda x: x.get("upside_score", 0), reverse=True)
     with open(OUTPUT_FILE, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=results[0].keys())
+        writer = csv.DictWriter(f, fieldnames=RESULT_FIELDNAMES)
         writer.writeheader()
         writer.writerows(results)
 
