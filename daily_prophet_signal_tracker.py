@@ -11,6 +11,7 @@ from typing import Optional, Dict, Any, List
 import numpy as np
 import pandas as pd
 import yfinance as yf
+import exchange_calendars as xcals
 from prophet import Prophet
 from zoneinfo import ZoneInfo
 
@@ -33,6 +34,7 @@ DEFAULT_UNIVERSE = "both"
 DEFAULT_OUTPUT_DIR = "artifacts"
 DEFAULT_STATE_DIR = "state"
 DEFAULT_MIN_MARKET_CAP = 100_000_000_000.0
+XNYS_CAL = xcals.get_calendar("XNYS")
 
 
 def ensure_dir(path: str) -> Path:
@@ -43,6 +45,18 @@ def ensure_dir(path: str) -> Path:
 
 def now_ny() -> pd.Timestamp:
     return pd.Timestamp.now(tz=NY_TZ)
+
+
+def is_nyse_trading_day(ts: pd.Timestamp) -> bool:
+    local_ts = pd.Timestamp(ts)
+    if local_ts.tzinfo is None:
+        local_ts = local_ts.tz_localize(NY_TZ)
+    else:
+        local_ts = local_ts.tz_convert(NY_TZ)
+
+    session_day = local_ts.normalize().tz_localize(None)
+    schedule = XNYS_CAL.schedule.loc[str(session_day.date()):str(session_day.date())]
+    return not schedule.empty
 
 
 def fmt_date(value) -> Optional[str]:
@@ -709,6 +723,10 @@ def run(args):
         print(f"Skipping run. Current New York time is {run_ts}, not in the 5 PM ET window.")
         return
 
+    if args.enforce_trading_day and not is_nyse_trading_day(run_time_ny):
+        print(f"Skipping run. {fmt_date(run_time_ny)} is not an NYSE trading day.")
+        return
+
     out_dir = ensure_dir(args.output_dir)
     state_dir = ensure_dir(args.state_dir)
 
@@ -927,6 +945,7 @@ def parse_args():
     parser.add_argument("--min-tail-delta", type=float, default=None)
     parser.add_argument("--min-market-cap", type=float, default=DEFAULT_MIN_MARKET_CAP)
     parser.add_argument("--enforce-5pm-newyork-window", action="store_true")
+    parser.add_argument("--enforce-trading-day", action="store_true")
     return parser.parse_args()
 
 
