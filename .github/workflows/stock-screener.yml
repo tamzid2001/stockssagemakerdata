@@ -1,0 +1,99 @@
+name: Stock Screener
+
+on:
+  workflow_dispatch:
+    inputs:
+      tickers:
+        description: "Comma or newline separated tickers. Defaults to repo variable SCREENER_TICKERS or tickers.txt."
+        required: false
+      output_file:
+        description: "CSV artifact filename"
+        required: false
+        default: "combined_screening_results.csv"
+      min_market_cap:
+        description: "Minimum market cap in USD"
+        required: false
+        default: "100000000000"
+  schedule:
+    - cron: "30 13 * * 1-5"
+
+permissions:
+  contents: read
+
+jobs:
+  run-screener:
+    runs-on: ubuntu-latest
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      AWS_SNS_TOPIC_ARN: ${{ secrets.AWS_SNS_TOPIC_ARN }}
+      AWS_SES_FROM_EMAIL: ${{ secrets.AWS_SES_FROM_EMAIL }}
+      AWS_SES_TO_EMAILS: ${{ secrets.AWS_SES_TO_EMAILS }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+      SLACK_CHANNEL: ${{ secrets.SLACK_CHANNEL }}
+      SCREENER_TICKERS: ${{ github.event.inputs.tickers || vars.SCREENER_TICKERS }}
+      SCREENING_OUTPUT_FILE: ${{ github.event.inputs.output_file || 'combined_screening_results.csv' }}
+      MIN_MARKET_CAP: ${{ github.event.inputs.min_market_cap || '100000000000' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install screener dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install yfinance pandas requests openai boto3
+
+      - name: Validate screener configuration
+        run: |
+          python - <<'PY'
+          import os
+
+          missing = []
+          if not os.getenv("OPENAI_API_KEY"):
+              missing.append("OPENAI_API_KEY")
+
+          tickers_env = os.getenv("SCREENER_TICKERS", "").strip()
+          tickers_file = os.getenv("TICKERS_FILE", "tickers.txt")
+          if not tickers_env and not os.path.exists(tickers_file):
+              missing.append("SCREENER_TICKERS or tickers.txt")
+
+          if missing:
+              raise SystemExit(f"Missing required configuration: {', '.join(missing)}")
+
+          print("Screener configuration looks good.")
+          PY
+
+      - name: Run stock screener
+        run: python combined_stock_screener.py
+
+      - name: Upload screener CSV
+        uses: actions/upload-artifact@v4
+        with:
+          name: stock-screener-results
+          path: ${{ env.SCREENING_OUTPUT_FILE }}
+          if-no-files-found: error
+
+      - name: Write workflow summary
+        if: always()
+        run: |
+          {
+            echo "## Stock Screener Run"
+            echo
+            echo "- Output file: \`${SCREENING_OUTPUT_FILE}\`"
+            echo "- Minimum market cap: \`${MIN_MARKET_CAP}\`"
+            if [ -n "${SCREENER_TICKERS}" ]; then
+              echo "- Tickers source: \`SCREENER_TICKERS\`"
+            else
+              echo "- Tickers source: \`${TICKERS_FILE:-tickers.txt}\`"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
