@@ -36,7 +36,7 @@ Maintainers may edit, remove, or reject comments, issues, pull requests, or othe
 
 ## Reporting
 
-To report a Code of Conduct issue, email `tamzid257@gmail.com`.
+To report a Code of Conduct issue, email `hello@quantura.studio`.
 
 Please include:
 
