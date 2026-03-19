@@ -216,31 +216,37 @@
               <h3>AWS Forecast metrics and Quantura point forecast update</h3>
               <p>
                 The AWS Forecast metrics guide is a strong reference for reading backtests because it lays out how Forecast
-                scores predictors across backtest windows and how it separates point forecasts from quantile bands.
-                It covers wQL, Average wQL, WAPE, RMSE, MAPE, and MASE, and the practical reading is simple: lower values
+                scores predictors across backtest windows and how it separates quantile forecasts from point-style operating
+                decisions. It covers wQL, Average wQL, WAPE, RMSE, MAPE, and MASE, and the practical reading is simple: lower values
                 indicate better predictors across those reported metrics.
               </p>
               <ul class="research-bullet-list">
                 <li>Average wQL is the mean of the selected quantile losses, with AWS defaulting to 0.10, 0.50, and 0.90.</li>
                 <li>wQL is quantile-specific and useful when underprediction and overprediction have different business costs.</li>
                 <li>WAPE, RMSE, MAPE, and MASE summarize overall error from the backtest windows rather than a single quantile slice.</li>
-                <li>AWS forecast types include a mean forecast plus up to five custom quantiles from 0.01 through 0.99.</li>
+                <li>AWS forecast types can include <code>mean</code> plus up to five custom quantiles from <code>0.01</code> through <code>0.99</code> via the <code>ForecastTypes</code> parameter.</li>
               </ul>
               <div class="research-diagram" role="img" aria-label="AWS Forecast metrics flow">
                 Backtest windows -> Quantile metrics (wQL, Average wQL) + point metrics (WAPE, RMSE, MAPE, MASE) -> forecast type selection -> operating decision
               </div>
               <p>
-                For the official AWS definition, the point forecast is the mean forecast. That is the point estimate used in the
-                service documentation for forecast-type selection and for several aggregate error metrics. In Quantura's stock
-                workflows, however, prediction files often arrive as quantile-only outputs, so the center column, usually P50
-                or 0.5, becomes the decision anchor when no mean column is present.
+                AWS documentation makes two important points: you can request <code>mean</code> as a forecast type, and you can
+                also use a quantile as the effective point forecast when the cost of underpredicting differs from the cost of
+                overpredicting. That is why AWS supports mixed forecast-type selections such as <code>0.01</code>,
+                <code>mean</code>, <code>0.65</code>, and <code>0.99</code>.
               </p>
               <p>
-                The Quantura point forecast update is: take the first actionable business-day median in the forecast round and
-                the last valid business-day median in the forecast, round both, and compare them. If the last rounded median is
-                lower than the first rounded median, use the upper bound as the operative point level. Otherwise use the lower
-                bound. That keeps the decision anchored to the middle forecast while still adapting to the direction implied by
-                the business-day path.
+                In Quantura's SageMaker Canvas stock workflow, the exported prediction files are quantile-first and do not
+                actually expose a separate mean column, so the operative point forecast is the quantile in the middle. In
+                practice that middle column is usually <code>P50</code> or <code>0.5</code>, and it becomes the anchor for the
+                business-day comparison logic.
+              </p>
+              <p>
+                The Quantura point forecast update is: take the first actionable business-day middle quantile in the forecast
+                round and the last valid business-day middle quantile in the forecast, round both, and compare them. If the
+                last rounded middle quantile is lower than the first rounded middle quantile, use the upper bound as the
+                operative point level. Otherwise use the lower bound. That keeps the decision anchored to the middle quantile
+                while still adapting to the direction implied by the business-day path.
               </p>
               <h4>Further Reading</h4>
               <ul class="research-links">
