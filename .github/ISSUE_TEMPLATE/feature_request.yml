@@ -1,0 +1,56 @@
+name: Feature request
+description: Propose a product, workflow, documentation, or tooling improvement.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Website / marketing pages
+        - Dashboard / account
+        - Forecast Foundry / forecasting
+        - Explore / publishing
+        - Notifications
+        - Research / blog
+        - Admin / fulfillment
+        - GitHub Actions / automation
+        - Mobile workspace
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or opportunity
+      description: What problem are you trying to solve?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the change you want.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: User or operator impact
+      description: Who benefits and how?
+
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: Additional context

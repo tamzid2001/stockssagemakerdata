@@ -1,0 +1,75 @@
+name: Bug report
+description: Report a bug, regression, or broken workflow.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of Quantura is affected?
+      options:
+        - Website / marketing pages
+        - Dashboard / account
+        - Forecast Foundry / forecasting
+        - Explore / publishing
+        - Notifications
+        - Research / blog
+        - Admin / fulfillment
+        - GitHub Actions / automation
+        - Mobile workspace
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: route
+    attributes:
+      label: Route, script, or file
+      description: Example: /dashboard, daily_prophet_signal_tracker.py, or a workflow filename
+      placeholder: /dashboard
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe the bug clearly.
+      placeholder: After signing in with Google, the dashboard auth label still says Sign out.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Provide a minimal sequence.
+      placeholder: |
+        1. Go to ...
+        2. Click ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Browser, OS, device, workflow run URL, commit SHA, or anything else relevant.
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs, screenshots, or artifacts
+      description: Paste links or screenshots if they help.
+
+  - type: markdown
+    attributes:
+      value: "Do not use this template for security reports. Follow `SECURITY.md` instead."
