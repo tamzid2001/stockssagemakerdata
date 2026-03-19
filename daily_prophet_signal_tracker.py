@@ -639,6 +639,11 @@ def write_step_summary(
     if not summary_path:
         return
 
+    def render_table(df: pd.DataFrame) -> str:
+        if df is None or df.empty:
+            return "None"
+        return "```text\n" + df.to_string(index=False) + "\n```"
+
     lines = [
         "# Daily Prophet Signal Tracker",
         "",
@@ -671,7 +676,7 @@ def write_step_summary(
             "last_earnings_date",
             "next_earnings_date",
         ]
-        lines.append(curr_signals[show_cols].head(200).to_markdown(index=False))
+        lines.append(render_table(curr_signals[show_cols].head(200)))
         lines.append("")
     else:
         lines.extend(["## Active filtered tickers", "", "None", ""])
@@ -689,7 +694,7 @@ def write_step_summary(
             "prior_p90",
             "new_p90",
         ]
-        lines.append(transitions[show_cols].head(200).to_markdown(index=False))
+        lines.append(render_table(transitions[show_cols].head(200)))
         lines.append("")
 
     with open(summary_path, "a", encoding="utf-8") as handle:
