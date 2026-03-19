@@ -584,7 +584,7 @@
 	        <div class="container">
 	          <div class="section-title">
 	            <h2>Forecast Foundry</h2>
-            <p class="small">Prepare market data, upload prediction CSVs, run SageMaker Autopilot on hourly or daily history, and keep every result private in Explore until you publish it.</p>
+            <p class="small">Prepare market data, upload prediction CSVs, run SageMaker Autopilot on daily history, and keep every result private in Explore until you publish it.</p>
           </div>
 
           <div class="content-grid">
@@ -609,9 +609,8 @@
                   <label class="label" for="foundry-interval">Data interval</label>
                   <select id="foundry-interval" name="interval">
                     <option value="1d">Daily</option>
-                    <option value="1h">Hourly</option>
-                    <option value="1m">Minute (analysis only)</option>
                   </select>
+                  <div class="small muted">Forecast Foundry currently supports daily historical datasets only.</div>
                 </div>
                 <div class="field">
                   <label class="label" for="foundry-title">Run title</label>
@@ -634,7 +633,7 @@
                     <input id="foundry-use-all-history" name="useAllHistory" type="checkbox" />
                     <span>Use all available historical data for this interval</span>
                   </label>
-                  <div class="small muted">Hourly history is built from paginated Yahoo 1-minute data with ET clock-hour closes from 04:00 through 19:00.</div>
+                  <div class="small muted">Foundry history preparation uses daily market data only.</div>
                 </div>
               </div>
 
@@ -694,7 +693,7 @@
               <p class="small" id="autopilot-status">Sign in with a full account to unlock Forecast Foundry.</p>
               <div class="small muted" id="foundry-instance-limit">Concurrent instance limit: 0 of 2 active.</div>
               <div class="notice small" id="foundry-access-note">
-                Minute-level stock data can be imported, previewed, and analyzed here, but SageMaker Autopilot training is limited to hourly and daily datasets.
+                Forecast Foundry currently supports daily historical datasets only. Prediction CSV uploads can still be analyzed here.
               </div>
 
               <div class="card" style="margin-top: 18px;">

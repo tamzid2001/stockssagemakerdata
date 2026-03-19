@@ -831,12 +831,21 @@ function normalizeHistoricalUpload(parsed: ParsedCsv, tickerHint = "", intervalH
 
   const cleanTicker = normalizeTicker(tickerHint);
   const rows: CanonicalDatasetRow[] = [];
+  let containsIntradayTimestamps = false;
   parsed.rows.forEach((values) => {
     const itemId = normalizeTicker(itemIdIndex >= 0 ? values[itemIdIndex] : cleanTicker);
     const parsedDate = parseFlexibleDate(values[timeIndex]);
     const closingPrice = Number(asString(values[valueIndex]).replace(/,/g, ""));
     if (!parsedDate || !Number.isFinite(closingPrice)) return;
     if (!itemId) return;
+    if (
+      parsedDate.getUTCHours() !== 0 ||
+      parsedDate.getUTCMinutes() !== 0 ||
+      parsedDate.getUTCSeconds() !== 0 ||
+      /[T\s]\d{2}:\d{2}/.test(asString(values[timeIndex]).trim())
+    ) {
+      containsIntradayTimestamps = true;
+    }
     const interval = normalizeSupportedInterval(intervalHint);
     rows.push({
       item_id: itemId,
@@ -852,6 +861,10 @@ function normalizeHistoricalUpload(parsed: ParsedCsv, tickerHint = "", intervalH
 
   if (!rows.length) {
     throw new Error("No valid historical rows were found after normalization.");
+  }
+
+  if (containsIntradayTimestamps) {
+    throw new Error("Forecast Foundry currently supports daily historical CSV datasets only.");
   }
 
   const inferredInterval = intervalHint ? normalizeSupportedInterval(intervalHint) : inferIntervalFromRows(rows);
@@ -1009,6 +1022,9 @@ export async function downloadHistoricalStockDataset(input: {
   const ticker = normalizeTicker(input.ticker);
   const interval = normalizeSupportedInterval(input.interval);
   if (!ticker) throw new Error("Ticker is required.");
+  if (interval !== "1d") {
+    throw new Error("Historical downloader currently supports daily data only.");
+  }
   const useAllHistory = Boolean(input.useAllHistory);
   const startDate =
     interval === "1h"
@@ -1567,8 +1583,8 @@ export async function startAutopilotTraining(
   const s3 = createS3Client(config);
   const sagemaker = createSageMakerClient(config);
   const interval = normalizeSupportedInterval(input.interval);
-  if (interval === "1m") {
-    throw new Error("Minute data can be previewed and analyzed, but SageMaker Autopilot training is limited to hourly and daily datasets.");
+  if (interval !== "1d") {
+    throw new Error("Forecast Foundry currently supports daily historical datasets only.");
   }
   const horizon = normalizeHorizon(input.horizon);
   const quantiles = normalizeForecastQuantiles(input.quantiles);
