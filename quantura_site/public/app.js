@@ -4914,7 +4914,9 @@
       syncNotificationPrivacyControls();
       return;
     }
-    const anchor = ui.notificationsStatus.parentElement || ui.notificationsStatus;
+    const anchor =
+      ui.notificationsToken?.closest(".notice") ||
+      ui.notificationsStatus;
     const wrap = document.createElement("div");
     wrap.id = "notifications-privacy-controls";
     wrap.className = "notice small";
@@ -4939,8 +4941,18 @@
         ${categoryItems}
       </div>
       <div class="notification-consent-grid">
-        <label class="feature" style="align-items:flex-start;"><span></span><input id="notifications-location-optin" type="checkbox" /> <span>Allow coarse location + timezone for notification context</span></label>
-        <label class="feature" style="align-items:flex-start;"><span></span><input id="notifications-ip-optin" type="checkbox" /> <span>Allow IP-derived region lookup/storage</span></label>
+        <label class="notification-consent-item">
+          <input id="notifications-location-optin" type="checkbox" />
+          <span class="notification-consent-copy">
+            <span class="notification-consent-title">Allow coarse location + timezone for notification context</span>
+          </span>
+        </label>
+        <label class="notification-consent-item">
+          <input id="notifications-ip-optin" type="checkbox" />
+          <span class="notification-consent-copy">
+            <span class="notification-consent-title">Allow IP-derived region lookup/storage</span>
+          </span>
+        </label>
       </div>
       <div class="notification-privacy-grid">
         <div class="field">
@@ -9751,11 +9763,11 @@
 
   const normalizeTopNavigation = () => {
     const navs = Array.from(document.querySelectorAll(".header .nav-links"));
-    if (!navs.length) return;
+    const navActions = Array.from(document.querySelectorAll(".header .nav-actions"));
+    if (!navs.length && !navActions.length) return;
     navs.forEach((nav) => {
       nav.innerHTML = `
         <a href="/forecasting" data-analytics="nav_terminal">${icon("candlestick-chart")}<span>Terminal</span></a>
-        <a href="/dashboard" data-analytics="nav_dashboard">${icon("dashboard-dots")}<span>Dashboard</span></a>
         <a href="/explore" data-analytics="nav_explore">${icon("binocular")}<span>Explore</span></a>
         <a href="/research" data-analytics="nav_research">${icon("bookmark-book")}<span>Research</span></a>
         <a href="/blog" data-analytics="nav_blog">${icon("page")}<span>Blog</span></a>
@@ -9765,6 +9777,9 @@
         <a href="/pricing" data-analytics="nav_pricing">${icon("wallet")}<span>Pricing</span></a>
         <a href="/contact" data-analytics="nav_contact">${icon("mail")}<span>Contact Us</span></a>
       `;
+    });
+    navActions.forEach((group) => {
+      group.querySelectorAll('a[data-analytics="nav_cta"]').forEach((link) => link.remove());
     });
   };
 
@@ -16501,6 +16516,74 @@
       return headers.findIndex((header) => targets.has(String(header || "").trim().toLowerCase()));
     };
 
+    const idxItemId = findIndex("item_id", "itemid", "ticker", "symbol");
+    const idxTimestamp = findIndex("timestamp", "datetime", "date", "time");
+    const idxClosingPrice = findIndex("closing_price", "closingprice", "close", "price");
+    if (idxItemId >= 0 && idxTimestamp >= 0 && idxClosingPrice >= 0) {
+      const normalizedRows = rows
+        .map((row) => {
+          const timestamp = String(row[idxTimestamp] ?? "").trim();
+          const itemId = normalizeTicker(row[idxItemId] ?? ticker);
+          const dt = parseDateCell(timestamp);
+          return {
+            itemId,
+            timestamp,
+            ts: dt ? dt.getTime() : Number.NaN,
+            closingPrice: row[idxClosingPrice],
+          };
+        })
+        .filter((row) => row.itemId && row.timestamp);
+
+      if (!normalizedRows.length) {
+        ui.downloadPreview.innerHTML = `<div class="small muted">No rows available for preview.</div>`;
+        return;
+      }
+
+      normalizedRows.sort((a, b) => {
+        const aFinite = Number.isFinite(a.ts);
+        const bFinite = Number.isFinite(b.ts);
+        if (aFinite && bFinite) return b.ts - a.ts;
+        if (aFinite) return -1;
+        if (bFinite) return 1;
+        return String(b.timestamp).localeCompare(String(a.timestamp));
+      });
+
+      const previewRows = normalizedRows.slice(0, Math.max(1, maxRows));
+      const priceDigits = resolveDownloadPriceDigits(
+        ticker || previewRows[0]?.itemId || normalizedRows[0]?.itemId || ""
+      );
+      ui.downloadPreview.innerHTML = `
+        <div class="small muted" style="margin-bottom:10px;">
+          Showing newest ${previewRows.length} of ${normalizedRows.length.toLocaleString()} canonical row(s).
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>item_id</th>
+                <th>timestamp</th>
+                <th>closing_price</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${previewRows
+                .map(
+                  (row) => `
+                    <tr>
+                      <td>${escapeHtml(row.itemId)}</td>
+                      <td>${escapeHtml(row.timestamp)}</td>
+                      <td>${escapeHtml(formatDownloadPriceValue(row.closingPrice, priceDigits))}</td>
+                    </tr>
+                  `
+                )
+                .join("")}
+            </tbody>
+          </table>
+        </div>
+      `;
+      return;
+    }
+
     const idxDate = findIndex("date", "datetime");
     const idxClose = findIndex("price", "close");
     const idxOpen = findIndex("open");
@@ -16591,6 +16674,10 @@
     if (!text) return null;
     if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
       const parsed = new Date(`${text}T12:00:00`);
+      return Number.isFinite(parsed.getTime()) ? parsed : null;
+    }
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(text)) {
+      const parsed = new Date(text.replace(" ", "T") + "Z");
       return Number.isFinite(parsed.getTime()) ? parsed : null;
     }
     const parsed = new Date(text);
@@ -17121,18 +17208,11 @@
   };
 
   const syncFoundryDateDefaults = ({ force = false } = {}) => {
-    const interval = String(ui.foundryInterval?.value || "1d").trim();
     const useAllHistory = Boolean(ui.foundryUseAllHistory?.checked);
     const today = new Date();
     const endValue = today.toISOString().slice(0, 10);
     const startDate = new Date(today);
-    if (interval === "1m") {
-      startDate.setDate(startDate.getDate() - 29);
-    } else if (interval === "1h") {
-      startDate.setDate(startDate.getDate() - 729);
-    } else {
-      startDate.setFullYear(startDate.getFullYear() - 5);
-    }
+    startDate.setFullYear(startDate.getFullYear() - 5);
     const startValue = startDate.toISOString().slice(0, 10);
     if (ui.foundryEnd && (force || !String(ui.foundryEnd.value || "").trim())) {
       ui.foundryEnd.value = endValue;
@@ -17557,7 +17637,7 @@
     }
     const sourceKind = String(ui.foundrySourceKind?.value || "history").trim();
     const ticker = normalizeTicker(ui.foundryTicker?.value || "");
-    const interval = String(ui.foundryInterval?.value || "1d").trim();
+    const interval = "1d";
     const title = String(ui.foundryTitle?.value || "").trim();
     const notes = String(ui.foundryNotes?.value || "").trim();
     const workspaceId = String(state.activeWorkspaceId || state.user?.uid || "").trim();
@@ -17632,14 +17712,14 @@
     if (String(run?.sourceType || "").trim() === "prediction_csv") {
       throw new Error("Prediction CSV uploads are analysis-only. Use a historical dataset to launch Autopilot.");
     }
-    if (String(run?.dataset?.interval || "").trim() === "1m") {
-      throw new Error("Minute data can be previewed and analyzed, but SageMaker Autopilot training is limited to hourly and daily datasets.");
+    if (String(run?.dataset?.interval || "1d").trim() !== "1d") {
+      throw new Error("Forecast Foundry currently supports daily historical datasets only.");
     }
-    const horizonPresetKey = normalizeFoundryHorizonPresetKey(ui.foundryHorizon?.value || "1m");
-    const horizon = getFoundryHorizonSteps({
-      presetKey: horizonPresetKey,
-      interval: String(run?.dataset?.interval || ui.foundryInterval?.value || "1d"),
-    });
+      const horizonPresetKey = normalizeFoundryHorizonPresetKey(ui.foundryHorizon?.value || "1m");
+      const horizon = getFoundryHorizonSteps({
+        presetKey: horizonPresetKey,
+        interval: "1d",
+      });
     const quantiles = parseFoundryQuantilesInput(ui.foundryQuantiles?.value || "0.1,0.5,0.9");
     if (ui.foundryQuantiles) {
       ui.foundryQuantiles.value = quantiles.map((entry) => formatFoundryQuantileLabel(entry)).join(",");
@@ -24868,22 +24948,14 @@
       const ticker =
         resolveActiveOrDefaultTicker(formData.get("ticker"), state.tickerContext.ticker);
       if (!ticker) {
-        showToast("Load a ticker first.", "warn");
+        showToast("Enter or load a ticker first.", "warn");
         return;
       }
-      const interval = String(formData.get("interval") || "1d");
+      const interval = "1d";
       const useAllHistory = Boolean(formData.get("useAllHistory"));
       const today = new Date();
       const end = String(formData.get("end") || "").trim() || today.toISOString().slice(0, 10);
-      const start = useAllHistory
-        ? ""
-        : interval === "1h"
-          ? (() => {
-              const dt = new Date();
-              dt.setDate(dt.getDate() - 729);
-              return dt.toISOString().slice(0, 10);
-            })()
-          : "1900-01-01";
+      const start = useAllHistory ? "" : "1900-01-01";
       const payload = {
         ticker,
         start,

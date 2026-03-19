@@ -423,7 +423,6 @@
                             <label class="label" for="download-interval">Interval</label>
                             <select id="download-interval" name="interval">
                               <option value="1d">Daily</option>
-                              <option value="1h">Hourly</option>
                             </select>
                           </div>
                           <div class="field">
@@ -436,7 +435,7 @@
                             <input id="download-use-all-history" name="useAllHistory" type="checkbox" />
                             <span>Use all available historical data for this interval</span>
                           </label>
-                          <div class="small muted download-history-note">Daily downloads export the full available series. Hourly downloads page through Yahoo 1-minute history, keep premarket and after-hours data, and roll each ET clock hour to its last 1-minute close.</div>
+                          <div class="small muted download-history-note">Historical downloader exports daily market data only.</div>
                         </div>
                         <div class="download-form-actions">
                           <button class="cta" type="submit" data-analytics="download_prices">Download CSV</button>
@@ -447,7 +446,7 @@
                         <h3>Export guidance</h3>
                         <p class="small">
                           Use the ticker field to export a clean canonical dataset with <code>item_id</code>, <code>timestamp</code>, and <code>closing_price</code>.
-                          Hourly exports build ET hourly closes from paginated 1-minute data, so downstream forecasting imports stay aligned to the market session.
+                          Daily exports keep the downloader aligned with Forecast Foundry's daily-only historical workflow.
                         </p>
                         <details class="learn-more">
                           <summary>Learn more</summary>

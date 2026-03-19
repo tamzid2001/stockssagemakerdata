@@ -9399,10 +9399,10 @@ ROUTES.post("/autopilot/runs", async (req, res) => {
       res.status(400).json({ error: "run_source_not_trainable" });
       return;
     }
-    if (interval === "1m") {
+    if (interval !== "1d") {
       res.status(400).json({
-        error: "minute_training_not_supported",
-        detail: "Minute data can be previewed and analyzed, but SageMaker Autopilot training is limited to hourly and daily datasets.",
+        error: "daily_training_only",
+        detail: "Forecast Foundry currently supports daily historical datasets only.",
       });
       return;
     }
