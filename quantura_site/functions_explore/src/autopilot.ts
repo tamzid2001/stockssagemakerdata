@@ -1026,18 +1026,8 @@ export async function downloadHistoricalStockDataset(input: {
     throw new Error("Historical downloader currently supports daily data only.");
   }
   const useAllHistory = Boolean(input.useAllHistory);
-  const startDate =
-    interval === "1h"
-      ? useAllHistory
-        ? null
-        : parseDateBoundaryInTimeZone(input.start, US_MARKET_TIMEZONE, "start")
-      : useAllHistory
-        ? null
-        : parseFlexibleDate(input.start);
-  const endDate =
-    interval === "1h"
-      ? parseDateBoundaryInTimeZone(input.end, US_MARKET_TIMEZONE, "endExclusive") || new Date()
-      : parseFlexibleDate(input.end) || new Date();
+  const startDate = useAllHistory ? null : parseFlexibleDate(input.start);
+  const endDate = parseFlexibleDate(input.end) || new Date();
   if (!endDate || (!useAllHistory && !startDate)) {
     throw new Error(useAllHistory ? "End date is required." : "Start and end dates are required.");
   }
@@ -1046,37 +1036,15 @@ export async function downloadHistoricalStockDataset(input: {
   }
 
   const fetchImpl = input.fetchImpl || fetch;
-  const endExclusive = interval === "1h" ? endDate : addUtcDays(toUtcMidnight(endDate), 1);
-  let rows: CanonicalDatasetRow[] = [];
-
-  if (interval === "1h") {
-    const requestedStart = useAllHistory ? new Date(Date.now() - YAHOO_INTRADAY_RETENTION_DAYS * DAY_MS) : (startDate as Date);
-    const clippedWindow = clipYahooIntradayWindow(requestedStart, endExclusive);
-    const minuteRows: MinutePricePoint[] = [];
-    for (
-      let cursor = clippedWindow.start.getTime();
-      cursor < clippedWindow.endExclusive.getTime();
-      cursor += YAHOO_MINUTE_CHUNK_DAYS * DAY_MS
-    ) {
-      const chunkRows = await fetchYahooMinuteHistorySegment({
-        ticker,
-        startMs: cursor,
-        endMs: Math.min(clippedWindow.endExclusive.getTime(), cursor + YAHOO_MINUTE_CHUNK_DAYS * DAY_MS),
-        fetchImpl,
-      });
-      minuteRows.push(...chunkRows);
-    }
-    rows = minuteRowsToExtendedHourlyRows(ticker, minuteRows);
-  } else {
-    const chunkRows = await fetchYahooHistorySegment({
-      ticker,
-      interval,
-      startSeconds: useAllHistory ? 0 : Math.floor((startDate as Date).getTime() / 1000),
-      endSeconds: Math.floor(endExclusive.getTime() / 1000),
-      fetchImpl,
-    });
-    rows = chunkRows;
-  }
+  const endExclusive = addUtcDays(toUtcMidnight(endDate), 1);
+  const chunkRows = await fetchYahooHistorySegment({
+    ticker,
+    interval,
+    startSeconds: useAllHistory ? 0 : Math.floor((startDate as Date).getTime() / 1000),
+    endSeconds: Math.floor(endExclusive.getTime() / 1000),
+    fetchImpl,
+  });
+  const rows: CanonicalDatasetRow[] = chunkRows;
 
   if (!rows.length) {
     throw new Error(`No ${interval} history rows were returned for ${ticker}.`);
