@@ -1208,7 +1208,7 @@ async function runOpenAiIndicatorAnalysis(
     const fallback = buildHeuristicAnalysis(computed);
     return {
       ...fallback,
-      text: outputText || fallback.text,
+      text: hasStructuredIndicatorNarrative(outputText) ? outputText : fallback.text,
       provider: "openai",
       model,
     };
