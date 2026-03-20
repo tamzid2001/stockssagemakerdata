@@ -10448,6 +10448,20 @@
     return buildTradingViewWidgetSrc(url.toString(), config);
   };
 
+  const buildTickerPanelUrl = (ticker) => {
+    const cleanTicker = normalizeTicker(ticker);
+    const params = new URLSearchParams();
+    if (cleanTicker) {
+      params.set("ticker", cleanTicker);
+      const tvSymbol = normalizeTradingViewSymbol(cleanTicker);
+      if (tvSymbol) {
+        params.set("tvwidgetsymbol", tvSymbol);
+      }
+    }
+    const query = params.toString();
+    return `/ticker${query ? `?${query}` : ""}`;
+  };
+
   const syncTradingViewUrlState = (ticker, symbol) => {
     try {
       const url = new URL(window.location.href);
@@ -20475,6 +20489,7 @@
 
     const metricEntries = Object.entries(metrics || {}).filter(([, value]) => value !== null && value !== undefined && value !== "");
     const extraMetrics = metricEntries.filter(([key]) => !displayedKeys.has(key));
+    const forecastTicker = normalizeTicker(forecastDoc.ticker || state.tickerContext.ticker || "");
     const metricsTable = metricEntries.length
       ? `
         <details class="learn-more">
@@ -20495,6 +20510,11 @@
       : "";
 
     const summary = [
+      forecastTicker
+        ? `<div class="small meta-line">${icon("search-engine")}<strong>Ticker:</strong> <button class="link-button" type="button" data-action="pick-ticker" data-ticker="${escapeHtml(
+            forecastTicker
+          )}">${escapeHtml(forecastTicker)}</button></div>`
+        : "",
       `<div class="small meta-line">${icon("hashtag")}<strong>Forecast ID:</strong> ${escapeHtml(forecastDoc.id || "")}</div>`,
       `<div class="small meta-line">${icon("check-circle")}<strong>Status:</strong> ${escapeHtml(
         sanitizeText(forecastDoc.status, 40) || "Forecast ready"
@@ -20522,6 +20542,13 @@
         }
         ${metricsTable}
         <div class="table-controls">
+          ${
+            forecastTicker
+              ? `<button class="cta secondary small" type="button" data-action="pick-ticker" data-ticker="${escapeHtml(
+                  forecastTicker
+                )}">${icon("eye")}<span>Open ticker</span></button>`
+              : ""
+          }
           <button class="cta secondary small" type="button" data-action="forecast-page" data-delta="-1" ${
             page === 0 ? "disabled" : ""
           }>${icon("arrow-left")}<span>Prev</span></button>
@@ -22120,9 +22147,7 @@
 			        ui.terminalTicker.value = ticker;
 			        ui.terminalForm.requestSubmit?.();
 			      } else {
-		        const params = new URLSearchParams();
-		        params.set("ticker", ticker);
-		        window.location.href = `/ticker-intelligence?${params.toString()}`;
+		        window.location.href = buildTickerPanelUrl(ticker);
 		      }
 		    };
 
