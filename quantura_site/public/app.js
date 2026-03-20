@@ -2238,6 +2238,7 @@
 	      ticker: "",
       activeTicker: "",
       interval: "1d",
+      tradingViewSymbols: {},
       rows: [],
       forecastId: "",
       forecastRequestId: "",
@@ -8834,7 +8835,6 @@
       .get();
     if (querySnap.empty) return { checked: 0, triggered: 0 };
 
-    const getHistory = functions.httpsCallable("get_ticker_history");
     const sendTestNotification = functions.httpsCallable("send_test_notification");
     let checked = 0;
     let triggered = 0;
@@ -8853,8 +8853,7 @@
       checked += 1;
 
       try {
-        const historyResult = await getHistory({ ticker, interval: "1d", start: startKey, end: endKey, meta: buildMeta() });
-        const rows = Array.isArray(historyResult.data?.rows) ? historyResult.data.rows : [];
+        const rows = await apiFetchTickerHistory({ ticker, interval: "1d", start: startKey, end: endKey });
         const current = rows.length ? extractCloseFromHistoryRow(rows[rows.length - 1]) : null;
         if (current === null || current <= 0) continue;
 
@@ -10293,9 +10292,87 @@
       state.tickerContext.newsTicker || ""
     );
 
+  const normalizeTradingViewExchangePrefix = (value) => {
+    const raw = String(value || "").trim().toUpperCase();
+    if (!raw) return "";
+    if (raw.includes(":")) {
+      const [prefix = ""] = raw.split(":", 1);
+      return normalizeTradingViewExchangePrefix(prefix);
+    }
+    if (
+      raw === "NASDAQ" ||
+      raw === "NDAQ" ||
+      raw === "NMS" ||
+      raw === "NGM" ||
+      raw === "NCM" ||
+      raw.includes("NASDAQ")
+    ) {
+      return "NASDAQ";
+    }
+    if (
+      raw === "NYSE" ||
+      raw === "NYQ" ||
+      raw === "NYS" ||
+      (raw.includes("NYSE") && !raw.includes("ARCA"))
+    ) {
+      return "NYSE";
+    }
+    if (
+      raw === "AMEX" ||
+      raw === "ASE" ||
+      raw === "ARCA" ||
+      raw === "NYSEARCA" ||
+      raw.includes("NYSE ARCA") ||
+      raw.includes("AMERICAN")
+    ) {
+      return "AMEX";
+    }
+    if (raw === "CBOE" || raw === "BATS" || raw.includes("CBOE") || raw.includes("BATS")) {
+      return "CBOE";
+    }
+    return "";
+  };
+
+  const getTradingViewSymbolCache = () =>
+    state.tickerContext.tradingViewSymbols && typeof state.tickerContext.tradingViewSymbols === "object"
+      ? state.tickerContext.tradingViewSymbols
+      : (state.tickerContext.tradingViewSymbols = {});
+
+  const getCachedTradingViewSymbol = (ticker) => {
+    const clean = normalizeTicker(ticker);
+    if (!clean) return "";
+    const cached = getTradingViewSymbolCache()[clean];
+    return typeof cached === "string" ? String(cached).trim().toUpperCase() : "";
+  };
+
+  const cacheTradingViewSymbol = (ticker, symbol) => {
+    const cleanTicker = normalizeTicker(ticker);
+    const cleanSymbol = String(symbol || "").trim().toUpperCase();
+    if (!cleanTicker || !cleanSymbol) return "";
+    getTradingViewSymbolCache()[cleanTicker] = cleanSymbol;
+    return cleanSymbol;
+  };
+
+  const resolveTradingViewSymbolFromExchange = (ticker, exchangeValue) => {
+    const cleanTicker = normalizeTicker(ticker);
+    if (!cleanTicker) return "";
+    const raw = String(exchangeValue || "").trim().toUpperCase();
+    if (!raw) return "";
+    if (raw.includes(":")) {
+      const [rawPrefix = "", rawSymbol = ""] = raw.split(":", 2);
+      const prefix = normalizeTradingViewExchangePrefix(rawPrefix);
+      const symbol = normalizeTicker(rawSymbol || cleanTicker);
+      if (prefix && symbol) return `${prefix}:${symbol}`;
+    }
+    const prefix = normalizeTradingViewExchangePrefix(raw);
+    return prefix ? `${prefix}:${cleanTicker}` : "";
+  };
+
   const resolveTradingViewExchangeSymbol = (ticker) => {
     const clean = normalizeTicker(ticker);
     if (!clean) return TRADINGVIEW_EXCHANGE_OVERRIDES[getDefaultPopularTicker()] || "NASDAQ:AAPL";
+    const cached = getCachedTradingViewSymbol(clean);
+    if (cached) return cached;
     return TRADINGVIEW_EXCHANGE_OVERRIDES[clean] || `NASDAQ:${clean}`;
   };
 
@@ -11146,6 +11223,15 @@
     const riskAndEsg = data.riskAndEsg && typeof data.riskAndEsg === "object" ? data.riskAndEsg : {};
     const heatmap = Array.isArray(data.balanceSheetHeatmap) ? data.balanceSheetHeatmap : [];
     const peers = Array.isArray(data.peerComparison) ? data.peerComparison : [];
+    const exchangeSource =
+      String(profile.exchange || "").trim() ||
+      String(executiveSummary.exchange || "").trim() ||
+      String(profileDetails.exchange || "").trim();
+    const previousTradingViewSymbol = getCachedTradingViewSymbol(ticker);
+    const resolvedTradingViewSymbol = resolveTradingViewSymbolFromExchange(ticker, exchangeSource);
+    if (resolvedTradingViewSymbol) {
+      cacheTradingViewSymbol(ticker, resolvedTradingViewSymbol);
+    }
 
     const name = escapeHtml(profile.name || ticker || "Ticker");
     const sector = escapeHtml(profile.sector || "");
@@ -11453,6 +11539,16 @@
 
     if (ui.tickerIntelligenceOutput) {
       ui.tickerIntelligenceOutput.innerHTML = institutionalHtml;
+    }
+
+    if (
+      ticker &&
+      ticker === getActiveTicker() &&
+      resolvedTradingViewSymbol &&
+      resolvedTradingViewSymbol !== previousTradingViewSymbol &&
+      isPanelVisible("ticker")
+    ) {
+      refreshTradingViewForTicker(ticker);
     }
   };
 
@@ -14393,6 +14489,55 @@
     return headers;
   };
 
+  const apiRequestJson = async (path, { method = "GET", body = undefined } = {}) => {
+    const includeJson = body !== undefined && body !== null && method !== "GET" && method !== "HEAD";
+    const headers = await buildApiAuthHeaders({ includeJson });
+    const response = await fetch(path, {
+      method,
+      headers,
+      credentials: "same-origin",
+      body: includeJson ? JSON.stringify(body) : undefined,
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const message = String(payload?.detail || payload?.error || payload?.message || `Request failed (${response.status})`).trim();
+      throw new Error(message || `Request failed (${response.status})`);
+    }
+    return payload;
+  };
+
+  const buildSourceRequestId = (type, sourceId) => {
+    const normalizedType = normalizeMyRequestType(type) || "forecast";
+    const normalizedSourceId = String(sourceId || "")
+      .trim()
+      .replace(/[^A-Za-z0-9._:\-]/g, "_")
+      .slice(0, 180);
+    return `${normalizedType}__${normalizedSourceId || "item"}`;
+  };
+
+  const apiFetchTickerHistory = async ({ ticker = "", interval = "1d", start = "", end = "" } = {}) => {
+    const params = new URLSearchParams();
+    params.set("ticker", normalizeTicker(ticker));
+    params.set("interval", String(interval || "1d"));
+    if (start) params.set("start", String(start));
+    if (end) params.set("end", String(end));
+    const payload = await apiRequestJson(`/api/ticker/history?${params.toString()}`, { method: "GET" });
+    return Array.isArray(payload?.rows) ? payload.rows : [];
+  };
+
+  const apiRunForecast = async (payload = {}) => apiRequestJson("/api/forecast/run", { method: "POST", body: payload });
+
+  const apiDeleteForecast = async (forecastId) =>
+    apiRequestJson(`/api/forecast/${encodeURIComponent(String(forecastId || "").trim())}`, { method: "DELETE" });
+
+  const apiRunScreener = async (payload = {}) => apiRequestJson("/api/screener/run", { method: "POST", body: payload });
+
+  const apiUpdateScreenerRun = async (runId, payload = {}) =>
+    apiRequestJson(`/api/screener/${encodeURIComponent(String(runId || "").trim())}`, { method: "PATCH", body: payload });
+
+  const apiDeleteScreenerRun = async (runId) =>
+    apiRequestJson(`/api/screener/${encodeURIComponent(String(runId || "").trim())}`, { method: "DELETE" });
+
   const normalizeFxCode = (value, fallback = "USD") => {
     const normalized = String(value || "")
       .trim()
@@ -16749,13 +16894,11 @@
   };
 
   const fetchTickerHighNearDate = async (functions, ticker, ymd) => {
-    const getHistory = functions.httpsCallable("get_ticker_history");
     const targetDate = parseDateCell(ymd);
     if (!targetDate) throw new Error("Unable to parse target date for price lookup.");
     const start = shiftYmd(ymd, -5);
     const end = shiftYmd(ymd, 6);
-    const result = await getHistory({ ticker, interval: "1d", start, end, meta: buildMeta() });
-    const rows = Array.isArray(result.data?.rows) ? result.data.rows : [];
+    const rows = await apiFetchTickerHistory({ ticker, interval: "1d", start, end });
     if (!rows.length) throw new Error("No price rows found near the selected weekday.");
 
     const targetYmd = dateToYmd(targetDate);
@@ -19061,11 +19204,19 @@
     if (!ui.screenerOutput) return;
     const rows = Array.isArray(runDoc?.results) ? runDoc.results : [];
     setOutputReady(ui.screenerOutput);
+    const requestId = buildSourceRequestId("screener", runDoc?.id || "");
+    const requestRecord = requestId ? getMyRequestById(requestId) : null;
+    const isPublished = Boolean(requestRecord?.published ?? runDoc?.isPublic);
+    const serviceMessage = String(runDoc?.serviceMessage || "").trim();
+    const appliedFilters = Array.isArray(runDoc?.appliedFilters) ? runDoc.appliedFilters.filter(Boolean) : [];
+    const ignoredFilters = Array.isArray(runDoc?.ignoredFilters) ? runDoc.ignoredFilters.filter(Boolean) : [];
 
     if (!rows.length) {
       state.sharedScreenerView = null;
       ui.screenerOutput.innerHTML = `
-        <div class="small muted">No screener rows stored for this run.</div>
+        <div class="small"><strong>Status:</strong> No matches</div>
+        <div class="small muted" style="margin-top:8px;">${escapeHtml(serviceMessage || "No screener rows matched the current criteria.")}</div>
+        ${requestId ? renderOutputPublishControlsMarkup({ requestId, requestType: "screener" }) : ""}
       `;
       return;
     }
@@ -19096,7 +19247,6 @@
     const title = String(runDoc.title || "").trim();
     const portfolioSummary = renderAiPortfolioSummary(runDoc);
     const agentId = escapeHtml(String(runDoc?.aiPortfolio?.agentId || "").trim());
-    const isPublic = Boolean(runDoc?.isPublic);
     const ownerWorkspaceId = String(runDoc?.userId || "").trim();
     const canSupportOwner = Boolean(ownerWorkspaceId) && String(state.user?.uid || "").trim() !== ownerWorkspaceId;
     const ownerUsername = escapeHtml(String(runDoc?.ownerUsername || "").trim());
@@ -19110,9 +19260,6 @@
         `<button class="cta secondary small" type="button" data-action="download-screener" data-run-id="${runId}">Download CSV</button>`,
         `<button class="cta secondary small" type="button" data-action="rename-screener" data-run-id="${runId}">Rename</button>`,
         `<button class="cta secondary small" type="button" data-action="share-screener" data-run-id="${runId}">Share link</button>`,
-        `<button class="cta secondary small" type="button" data-action="toggle-screener-public" data-run-id="${runId}" data-is-public="${
-          isPublic ? "1" : "0"
-        }">${isPublic ? "Make private" : "Publish public"}</button>`,
         `<button class="cta secondary small danger" type="button" data-action="delete-screener" data-run-id="${runId}">Delete</button>`
       );
     } else {
@@ -19152,7 +19299,7 @@
       ${title ? `<div class="small"><strong>Title:</strong> ${escapeHtml(title)}</div>` : ""}
       <div class="small"><strong>Run ID:</strong> ${runId || "—"}</div>
       <div class="small"><strong>Created:</strong> ${createdAt}</div>
-      <div class="small"><strong>Visibility:</strong> ${isPublic ? "Public" : "Private"}</div>
+      <div class="small"><strong>Visibility:</strong> ${isPublished ? "Published to Explore" : "Private"}</div>
       ${sharedNotice}
       ${
         ownerUsername || ownerBio
@@ -19162,9 +19309,27 @@
           : ""
       }
       ${notes ? `<div class="small" style="margin-top:10px;"><strong>Notes:</strong> ${escapeHtml(notes)}</div>` : ""}
+      ${serviceMessage ? `<div class="small muted" style="margin-top:8px;">${escapeHtml(serviceMessage)}</div>` : ""}
+      ${
+        appliedFilters.length || ignoredFilters.length
+          ? `<div class="small muted" style="margin-top:8px;">
+              ${
+                appliedFilters.length
+                  ? `<strong>Applied:</strong> ${escapeHtml(appliedFilters.join(", "))}`
+                  : ""
+              }
+              ${
+                ignoredFilters.length
+                  ? `${appliedFilters.length ? " · " : ""}<strong>Ignored:</strong> ${escapeHtml(ignoredFilters.join(", "))}`
+                  : ""
+              }
+            </div>`
+          : ""
+      }
       <div class="hero-actions" style="margin-top:12px;">
         ${actionButtons.join("")}
       </div>
+      ${renderOutputPublishControlsMarkup({ requestId, requestType: "screener" })}
       <div class="card" style="margin-top:14px;">
         <div class="card-head">
           <h3>AI Portfolio</h3>
@@ -19337,9 +19502,7 @@
     const start = startDate.toISOString().slice(0, 10);
     const end = endDate.toISOString().slice(0, 10);
 
-    const getHistory = functions.httpsCallable("get_ticker_history");
-    const historyResult = await getHistory({ ticker: cleanTicker, interval: "1d", start, end, meta: buildMeta() });
-    const historyRows = Array.isArray(historyResult.data?.rows) ? historyResult.data.rows : [];
+    const historyRows = await apiFetchTickerHistory({ ticker: cleanTicker, interval: "1d", start, end });
     if (!historyRows.length) return null;
 
     const closeSeries = historyRows.map((row) => extractCloseFromHistoryRow(row)).filter((value) => value !== null);
@@ -19347,8 +19510,7 @@
     const currentPrice = closeSeries[closeSeries.length - 1];
     if (currentPrice === null || currentPrice <= 0) return null;
 
-    const runForecast = functions.httpsCallable("run_timeseries_forecast");
-    const forecastResult = await runForecast({
+    const forecastData = await apiRunForecast({
       ticker: cleanTicker,
       horizon: 365,
       interval: "1d",
@@ -19359,7 +19521,6 @@
       start,
       meta: buildMeta(),
     });
-    const forecastData = forecastResult.data && typeof forecastResult.data === "object" ? forecastResult.data : {};
     const forecastRows = normalizeForecastSeriesRows(forecastData.forecastSeries || forecastData.forecastRows || []);
     if (!forecastRows.length) return null;
 
@@ -19907,6 +20068,10 @@
 
     const cleanId = String(runId || "").trim();
     if (!cleanId) throw new Error("Run ID is required.");
+    const requestDocId = buildSourceRequestId("screener", cleanId);
+    if (!getMyRequestById(requestDocId)) {
+      fetchMyRequestById(requestDocId).catch(() => {});
+    }
 
     setOutputLoading(ui.screenerOutput, "Loading saved run...");
     const doc = await db.collection("screener_runs").doc(cleanId).get();
@@ -20214,7 +20379,7 @@
         source === "missing"
           ? "No local fan-chart series found for this run on this device. Re-run the forecast to regenerate chart data."
           : source === "preview_only"
-            ? "Only preview rows are available on this device. Full fan-chart series was kept client-side on the originating device."
+            ? "Only preview rows are available for this older saved run. New forecasts save the full fan-chart series with the source request."
             : "No forecast rows are available for this run.";
       ui.forecastOutput.innerHTML = `
         <div class="small muted">${escapeHtml(message)}</div>
@@ -20342,11 +20507,13 @@
       .join("");
 
     const tradeRationale = String(forecastDoc.tradeRationale || "").trim();
+    const serviceMessage = String(forecastDoc.serviceMessage || "").trim();
 
     setOutputReady(ui.forecastOutput);
     ui.forecastOutput.innerHTML = `
       <div class="output-stack quantura-horizon-widget">
         ${summary}
+        ${serviceMessage ? `<div class="small muted">${escapeHtml(serviceMessage)}</div>` : ""}
         ${metricsStrip}
         ${
           tradeRationale
@@ -20387,7 +20554,7 @@
         <details class="learn-more">
           <summary>Learn more</summary>
           <p class="small">
-            Fan-chart series are stored client-side on this device for fast rendering. Firestore stores only request metadata and compact summaries.
+            Forecast rows are saved with the source run so saved requests can be reloaded across devices. Client cache is still used when available for faster chart rendering.
           </p>
         </details>
         ${renderForecastAiSummaryMarkup(forecastDoc)}
@@ -20396,10 +20563,8 @@
   };
 
   const loadTickerHistory = async (functions, ticker, interval) => {
-    const fetchHistory = functions.httpsCallable("get_ticker_history");
     const start = computeHistoryStart(interval);
-    const result = await fetchHistory({ ticker, interval, start, end: "" });
-    const rows = result.data?.rows || [];
+    const rows = await apiFetchTickerHistory({ ticker, interval, start, end: "" });
     return Array.isArray(rows) ? rows : [];
   };
 
@@ -20450,6 +20615,10 @@
 
   const plotForecastById = async (db, functions, forecastId, { preloadedDoc = null } = {}) => {
     if (!forecastId) return;
+    const requestDocId = buildSourceRequestId("forecast", forecastId);
+    if (!getMyRequestById(requestDocId)) {
+      fetchMyRequestById(requestDocId).catch(() => {});
+    }
     const doc =
       preloadedDoc && typeof preloadedDoc === "object"
         ? { ...preloadedDoc, id: String(preloadedDoc.id || forecastId).trim() }
@@ -20480,7 +20649,7 @@
     if (String(doc.chartSeriesSource || "") === "missing") {
       setTerminalStatus("Forecast metadata loaded. Re-run on this device to regenerate fan chart data.");
     } else if (String(doc.chartSeriesSource || "") === "preview_only") {
-      setTerminalStatus("Forecast preview loaded. Full fan chart data is stored on the originating device.");
+      setTerminalStatus("Forecast preview loaded from an older saved run.");
     } else {
       setTerminalStatus(`Plotted forecast ${forecastId}.`);
     }
@@ -22439,6 +22608,17 @@
             }
             if (requestType === "forecast" && state.tickerContext.forecastDoc) {
               renderForecastDetails(state.tickerContext.forecastDoc);
+            } else if (requestType === "screener" && ui.screenerOutput) {
+              const runId = String(requestId.split("__").slice(1).join("__") || "").trim();
+              if (runId) {
+                db.collection("screener_runs")
+                  .doc(runId)
+                  .get()
+                  .then((snap) => {
+                    if (snap.exists) renderScreenerRunOutput({ id: snap.id, ...(snap.data() || {}) });
+                  })
+                  .catch(() => {});
+              }
             } else if (requestType === "modelCouncil") {
               renderTickerQueryResult({
                 ...(state.tickerContext.tickerQueryLastResponse || {}),
@@ -22526,20 +22706,27 @@
             }
             const forecastId = String(shareForecast.dataset.forecastId || "").trim();
             if (!forecastId) return;
+            const requestId = buildSourceRequestId("forecast", forecastId);
 
             shareForecast.disabled = true;
             try {
-              const createShare = functions.httpsCallable("create_share_link");
-              const result = await createShare({ kind: "forecast", id: forecastId, meta: buildMeta() });
-              const shareId = String(result.data?.shareId || "").trim();
-              const url = String(result.data?.shareUrl || "") || buildShareUrl("forecast", shareId);
-              if (!shareId || !url) throw new Error("Unable to create share link.");
-              await performShare({
-                url,
-                title: "Quantura forecast",
-                text: "Forecast shared from Quantura.",
+              let request = getMyRequestById(requestId);
+              if (!request) {
+                request = await fetchMyRequestById(requestId).catch(() => null);
+              }
+              if (!request) {
+                throw new Error("Saved request is not ready yet. Refresh My Requests and try again.");
+              }
+              await openMyRequestShareModal({
+                request,
+                onSaved: (saved) => {
+                  if (saved && typeof saved === "object") {
+                    upsertMyRequestInState(saved);
+                    renderMyRequestsPanels();
+                  }
+                },
               });
-              showToast("Share link copied.");
+              showToast("Share settings updated.");
               logEvent("forecast_shared", { forecast_id: forecastId });
             } catch (error) {
               showToast(error.message || "Unable to share forecast.", "warn");
@@ -22564,12 +22751,15 @@
 	              confirmLabel: "Delete",
 	              danger: true,
 	            });
-	            if (!ok) return;
+            if (!ok) return;
 
             deleteForecast.disabled = true;
             try {
-              const del = functions.httpsCallable("delete_forecast_request");
-              await del({ forecastId, meta: buildMeta() });
+              await apiDeleteForecast(forecastId);
+              await updateMyRequest(buildSourceRequestId("forecast", forecastId), {}, {
+                method: "DELETE",
+                path: `/api/my-requests/${encodeURIComponent(buildSourceRequestId("forecast", forecastId))}`,
+              }).catch(() => {});
               showToast("Forecast deleted.");
               logEvent("forecast_deleted", { forecast_id: forecastId });
               if (state.tickerContext.forecastId === forecastId) {
@@ -22615,8 +22805,8 @@
 
             renameScreener.disabled = true;
             try {
-              const rename = functions.httpsCallable("rename_screener_run");
-              await rename({ runId, title: nextTitle, meta: buildMeta() });
+              await apiUpdateScreenerRun(runId, { title: nextTitle });
+              await updateMyRequest(buildSourceRequestId("screener", runId), { title: nextTitle }, { method: "PATCH" }).catch(() => {});
               showToast("Screener run renamed.");
               logEvent("screener_renamed", { run_id: runId });
               const fresh = await db.collection("screener_runs").doc(runId).get();
@@ -22638,20 +22828,27 @@
             }
             const runId = String(shareScreener.dataset.runId || "").trim();
             if (!runId) return;
+            const requestId = buildSourceRequestId("screener", runId);
 
             shareScreener.disabled = true;
             try {
-              const createShare = functions.httpsCallable("create_share_link");
-              const result = await createShare({ kind: "screener", id: runId, meta: buildMeta() });
-              const shareId = String(result.data?.shareId || "").trim();
-              const url = String(result.data?.shareUrl || "") || buildShareUrl("screener", shareId);
-              if (!shareId || !url) throw new Error("Unable to create share link.");
-              await performShare({
-                url,
-                title: "Quantura screener",
-                text: "Screener run shared from Quantura.",
+              let request = getMyRequestById(requestId);
+              if (!request) {
+                request = await fetchMyRequestById(requestId).catch(() => null);
+              }
+              if (!request) {
+                throw new Error("Saved request is not ready yet. Refresh My Requests and try again.");
+              }
+              await openMyRequestShareModal({
+                request,
+                onSaved: (saved) => {
+                  if (saved && typeof saved === "object") {
+                    upsertMyRequestInState(saved);
+                    renderMyRequestsPanels();
+                  }
+                },
               });
-              showToast("Share link copied.");
+              showToast("Share settings updated.");
               logEvent("screener_shared", { run_id: runId });
             } catch (error) {
               showToast(error.message || "Unable to share screener run.", "warn");
@@ -22834,12 +23031,17 @@
             }
             const runId = String(toggleScreenerPublic.dataset.runId || "").trim();
             if (!runId) return;
-            const currentlyPublic = String(toggleScreenerPublic.dataset.isPublic || "0").trim() === "1";
+            const requestId = buildSourceRequestId("screener", runId);
+            const request = getMyRequestById(requestId) || (await fetchMyRequestById(requestId).catch(() => null));
+            const currentlyPublic = Boolean(request?.published);
             const nextValue = !currentlyPublic;
             toggleScreenerPublic.disabled = true;
             try {
-              const updateVisibility = functions.httpsCallable("set_screener_public_visibility");
-              await updateVisibility({ runId, isPublic: nextValue, meta: buildMeta() });
+              await updateMyRequest(
+                requestId,
+                {},
+                { method: "POST", path: `/api/my-requests/${encodeURIComponent(requestId)}/${nextValue ? "publish" : "unpublish"}` }
+              );
               const fresh = await db.collection("screener_runs").doc(runId).get();
               if (fresh.exists) {
                 renderScreenerRunOutput({ id: fresh.id, ...(fresh.data() || {}) });
@@ -22910,12 +23112,15 @@
 	              confirmLabel: "Delete",
 	              danger: true,
 	            });
-	            if (!ok) return;
+            if (!ok) return;
 
             deleteScreener.disabled = true;
             try {
-              const del = functions.httpsCallable("delete_screener_run");
-              await del({ runId, meta: buildMeta() });
+              await apiDeleteScreenerRun(runId);
+              await updateMyRequest(buildSourceRequestId("screener", runId), {}, {
+                method: "DELETE",
+                path: `/api/my-requests/${encodeURIComponent(buildSourceRequestId("screener", runId))}`,
+              }).catch(() => {});
               showToast("Screener run deleted.");
               logEvent("screener_deleted", { run_id: runId });
               if (ui.screenerOutput) ui.screenerOutput.innerHTML = `<div class="small muted">Screener run deleted.</div>`;
@@ -24243,6 +24448,7 @@
     }
 
     if (ui.terminalTicker) {
+      const initialTradingViewSymbol = normalizeTradingViewSymbol(getQueryParam("tvwidgetsymbol"));
       const initialTicker =
         normalizeTicker(getQueryParam("ticker")) ||
         normalizeTicker(getQueryParam("symbol")) ||
@@ -24250,6 +24456,13 @@
         normalizeTicker(safeLocalStorageGet(LAST_TICKER_KEY)) ||
         normalizeTicker(ui.terminalTicker.value) ||
         getDefaultPopularTicker();
+      if (
+        initialTicker &&
+        initialTradingViewSymbol &&
+        normalizeTradingViewQueryTicker(initialTradingViewSymbol) === initialTicker
+      ) {
+        cacheTradingViewSymbol(initialTicker, initialTradingViewSymbol);
+      }
       const initialInterval = getQueryParam("interval") || (ui.terminalInterval?.value || "1d");
       ui.terminalTicker.value = initialTicker;
       if (ui.terminalInterval) ui.terminalInterval.value = initialInterval;
@@ -24493,9 +24706,7 @@
                 feedback: "",
                 error: "",
               };
-			        const runForecast = functions.httpsCallable("run_timeseries_forecast");
-			        const result = await runForecast(payload);
-			        const data = result.data || {};
+			        const data = await apiRunForecast(payload);
 			        const requestId = String(data.requestId || "").trim();
 			        if (!requestId) {
 			          throw new Error("Forecast run did not return a request ID.");
@@ -24579,10 +24790,12 @@
 	                summary: String(data?.serviceMessage || "").trim(),
 	                service: String(payload.service || ""),
 	                interval: String(payload.interval || ""),
-                  chartStorage: "client_only",
+                  chartStorage: "source_saved",
                   chartCacheKey: String(cacheMeta?.cacheKey || "").trim(),
                   chartParamsHash: String(cacheMeta?.paramsHash || "").trim(),
                   chartRows: Number(cacheMeta?.rowCount || 0) || 0,
+                  forecastRowsCount: alignedRows.length,
+                  metrics: data.metrics && typeof data.metrics === "object" ? data.metrics : {},
 	              },
               sourceRef: {
                 collection: "forecast_requests",
@@ -25563,12 +25776,11 @@
 
 	      try {
 	        setOutputLoading(ui.screenerOutput, "Running screener and preparing AI Portfolio...");
-	        const runScreener = functions.httpsCallable("run_quick_screener");
-	        const result = await runScreener(payload);
-	        const rows = result.data?.results || [];
-          const runId = String(result.data?.runId || "").trim();
-          const runTitle = String(result.data?.title || "").trim();
-          const resultsFound = Number(result.data?.resultsFound || rows.length || 0);
+	        const result = await apiRunScreener(payload);
+	        const rows = Array.isArray(result?.results) ? result.results : [];
+          const runId = String(result?.runId || "").trim();
+          const runTitle = String(result?.title || "").trim();
+          const resultsFound = Number(result?.resultsFound || rows.length || 0);
           if (ui.screenerResultsCount) {
             ui.screenerResultsCount.textContent = `Results Found: ${Number.isFinite(resultsFound) ? resultsFound : rows.length}`;
           }
@@ -25579,6 +25791,9 @@
             notes: payload.notes,
             modelUsed: payload.model,
             modelTier: tier.key,
+            serviceMessage: String(result?.serviceMessage || "").trim(),
+            appliedFilters: Array.isArray(result?.appliedFilters) ? result.appliedFilters : [],
+            ignoredFilters: Array.isArray(result?.ignoredFilters) ? result.ignoredFilters : [],
             createdAt: new Date().toISOString(),
           });
           if (runId) {
