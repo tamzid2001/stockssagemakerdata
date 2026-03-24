@@ -50,12 +50,13 @@ jobs:
       - name: Prepare screener artifact directories
         run: |
           mkdir -p "${OUTPUT_DIR}" "${STATE_DIR}"
+          printf 'initialized at %s\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" > "${OUTPUT_DIR}/placeholder.txt"
+          printf 'initialized at %s\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" > "${STATE_DIR}/placeholder.txt"
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: "pip"
 
       - name: Install screener dependencies
         run: |
