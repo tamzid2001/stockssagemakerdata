@@ -47,6 +47,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Prepare screener artifact directories
+        run: |
+          mkdir -p "${OUTPUT_DIR}" "${STATE_DIR}"
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -73,6 +77,7 @@ jobs:
 
       - name: Run stock screener
         run: |
+          mkdir -p "${OUTPUT_DIR}" "${STATE_DIR}"
           cmd=(
             python daily_prophet_signal_tracker.py
             --universe "${TRACKER_UNIVERSE}"
@@ -94,16 +99,19 @@ jobs:
             cmd+=(--enforce-5pm-newyork-window --enforce-trading-day)
           fi
 
-          "${cmd[@]}"
+          printf 'Workflow started at %s\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" > "${OUTPUT_DIR}/workflow-run.log"
+          printf 'Command: %s\n\n' "${cmd[*]}" >> "${OUTPUT_DIR}/workflow-run.log"
+          "${cmd[@]}" 2>&1 | tee -a "${OUTPUT_DIR}/workflow-run.log"
 
       - name: Upload screener artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: daily-prophet-signal-tracker
           path: |
             ${{ env.OUTPUT_DIR }}
             ${{ env.STATE_DIR }}
-          if-no-files-found: error
+          if-no-files-found: warn
 
       - name: Write workflow summary
         if: always()
