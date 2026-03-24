@@ -715,20 +715,58 @@ def write_step_summary(
         handle.write("\n".join(lines))
 
 
+def write_run_manifest(
+    out_dir: Path,
+    state_dir: Path,
+    run_ts: str,
+    status: str,
+    reason: Optional[str] = None,
+    extra: Optional[Dict[str, Any]] = None,
+):
+    payload: Dict[str, Any] = {
+        "runTimeNy": run_ts,
+        "status": status,
+        "reason": reason,
+    }
+    if extra:
+        payload.update(extra)
+
+    manifest = json.dumps(payload, indent=2) + "\n"
+    (out_dir / "run_manifest.json").write_text(manifest, encoding="utf-8")
+    (state_dir / "last_run_manifest.json").write_text(manifest, encoding="utf-8")
+
+
 def run(args):
     run_time_ny = now_ny()
     run_ts = fmt_datetime(run_time_ny)
+    out_dir = ensure_dir(args.output_dir)
+    state_dir = ensure_dir(args.state_dir)
 
     if args.enforce_5pm_newyork_window and run_time_ny.hour != 17:
-        print(f"Skipping run. Current New York time is {run_ts}, not in the 5 PM ET window.")
+        reason = f"Current New York time is {run_ts}, not in the 5 PM ET window."
+        print(f"Skipping run. {reason}")
+        write_run_manifest(
+            out_dir,
+            state_dir,
+            run_ts,
+            status="skipped_time_window",
+            reason=reason,
+            extra={"universe": args.universe, "minMarketCap": args.min_market_cap},
+        )
         return
 
     if args.enforce_trading_day and not is_nyse_trading_day(run_time_ny):
-        print(f"Skipping run. {fmt_date(run_time_ny)} is not an NYSE trading day.")
+        reason = f"{fmt_date(run_time_ny)} is not an NYSE trading day."
+        print(f"Skipping run. {reason}")
+        write_run_manifest(
+            out_dir,
+            state_dir,
+            run_ts,
+            status="skipped_market_holiday",
+            reason=reason,
+            extra={"universe": args.universe, "minMarketCap": args.min_market_cap},
+        )
         return
-
-    out_dir = ensure_dir(args.output_dir)
-    state_dir = ensure_dir(args.state_dir)
 
     tickers, membership, sp500, nasdaq = build_universe(args.universe, args.max_tickers)
 
@@ -923,6 +961,23 @@ def run(args):
     print(f"Screened above market-cap floor: {screened_count}")
     print("\n=== SIGNAL LIST ===")
     print(signal_list)
+
+    write_run_manifest(
+        out_dir,
+        state_dir,
+        run_ts,
+        status="completed",
+        extra={
+            "universe": args.universe,
+            "minMarketCap": args.min_market_cap,
+            "activeSignals": int(len(curr_active)),
+            "allLatestRows": int(len(curr_all)),
+            "resolvedTransitions": int(0 if transitions is None else len(transitions)),
+            "errors": int(len(errors)),
+            "screenedCount": int(screened_count),
+            "marketCapSkipped": int(market_cap_skipped),
+        },
+    )
 
 
 def parse_args():
