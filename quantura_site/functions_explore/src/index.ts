@@ -1,6 +1,7 @@
 import cors from "cors";
 import express, { Request, Response } from "express";
 import admin from "firebase-admin";
+import crypto from "crypto";
 import { GoogleAuth } from "google-auth-library";
 import { registerFiscalDataRoutes } from "./fiscaldataProxy";
 import { runScheduledFiscaldataRefresh } from "./schedules/refreshFiscaldata";
@@ -12,7 +13,15 @@ import {
   refreshAutopilotRun,
   startAutopilotTraining,
 } from "./autopilot";
+import {
+  buildForecastFromHistory,
+  DEFAULT_FORECAST_QUANTILES,
+  fetchYahooHistoryBars,
+  runMarketDataScreener,
+} from "./forecastingScreener";
 export { shopApi } from "./shopApi";
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const AdmZip = require("adm-zip");
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -102,6 +111,12 @@ const REQUIRE_PLAY_INTEGRITY = asBoolean(process.env.REQUIRE_PLAY_INTEGRITY, fal
 const IOS_IAP_WEBHOOK_SECRET = asString(process.env.IOS_IAP_WEBHOOK_SECRET).trim();
 const APPLE_NOTIFICATIONS_WEBHOOK_SECRET = asString(process.env.APPLE_NOTIFICATIONS_WEBHOOK_SECRET).trim();
 const ADMOB_SSV_WEBHOOK_SECRET = asString(process.env.ADMOB_SSV_WEBHOOK_SECRET).trim();
+const GITHUB_ACTIONS_TOKEN = resolveEnvSecret(["GITHUB_ACTIONS_TOKEN", "GITHUB_TOKEN", "GH_TOKEN"], /^(GITHUB|GH).*TOKEN$/i);
+const GITHUB_REPO_OWNER = asString(process.env.GITHUB_REPO_OWNER, "tamzid2001").trim() || "tamzid2001";
+const GITHUB_REPO_NAME = asString(process.env.GITHUB_REPO_NAME, "stockssagemakerdata").trim() || "stockssagemakerdata";
+const GITHUB_SCREENER_WORKFLOW = asString(process.env.GITHUB_SCREENER_WORKFLOW, "stock-screener.yml").trim() || "stock-screener.yml";
+const GITHUB_ACTIONS_BRANCH = asString(process.env.GITHUB_ACTIONS_BRANCH, "main").trim() || "main";
+const GITHUB_ACTIONS_API_BASE = `https://api.github.com/repos/${encodeURIComponent(GITHUB_REPO_OWNER)}/${encodeURIComponent(GITHUB_REPO_NAME)}`;
 const DEFAULT_LLM_MODEL = asString(process.env.DEFAULT_LLM_MODEL, "gpt-5-mini").trim();
 const LLM_TIMEOUT_MS = Math.max(5000, Math.min(120000, Math.floor(asFinite(process.env.LLM_TIMEOUT_MS, 30000))));
 const PROMO_ID = asString(process.env.PROMO_ID, "quantura_generic_50_off").trim();
@@ -575,6 +590,39 @@ const MARKET_HEADLINE_FEEDS: Record<string, MarketHeadlineFeedConfig> = {
 const PLAY_INTEGRITY_AUTH = new GoogleAuth({
   scopes: ["https://www.googleapis.com/auth/playintegrity"],
 });
+const GOOGLE_PLAY_PUBLISHER_AUTH = new GoogleAuth({
+  scopes: ["https://www.googleapis.com/auth/androidpublisher"],
+});
+
+const AUTOMATION_PRODUCT_ID = "quantura_automation_unlock";
+const AUTOMATION_MAX_ACTIVE = 2;
+const AUTOMATION_COLLECTION = "mobile_automations";
+const AUTOMATION_ENTITLEMENT_COLLECTION = "mobile_automation_entitlements";
+const AUTOMATION_HISTORY_SUBCOLLECTION = "runs";
+const AUTOMATION_ALLOWED_CADENCES = new Set(["daily"]);
+const AUTOMATION_ALLOWED_HORIZONS = new Set([
+  "3_days",
+  "1_week",
+  "2_weeks",
+  "3_weeks",
+  "1_month",
+  "3_months",
+  "6_months",
+  "1_year",
+]);
+const AUTOMATION_ALLOWED_PROFILES = new Set(["balanced", "avg_wql", "conservative", "aggressive"]);
+const AUTOMATION_ALLOWED_MODELS = new Set(["autopilot", "avg_wql_all_algorithms"]);
+const APPLE_IAP_BUNDLE_ID = asString(process.env.APPLE_IAP_BUNDLE_ID, "com.quantura.quanturaapp").trim();
+const APPLE_IAP_ENVIRONMENT = asString(process.env.APPLE_IAP_ENVIRONMENT, "Production").trim() || "Production";
+const APPLE_IAP_ISSUER_ID = asString(process.env.APPLE_IAP_ISSUER_ID).trim();
+const APPLE_IAP_KEY_ID = asString(process.env.APPLE_IAP_KEY_ID).trim();
+const APPLE_IAP_PRIVATE_KEY = asString(process.env.APPLE_IAP_PRIVATE_KEY)
+  .replace(/\\n/g, "\n")
+  .trim();
+const GOOGLE_PLAY_ANDROID_PACKAGE = asString(process.env.GOOGLE_PLAY_ANDROID_PACKAGE, "com.quantura.quanturaapp").trim();
+const AUTOMATION_EMAIL_FROM = asString(process.env.AUTOMATION_EMAIL_FROM, "hell@quantura.studio").trim() || "hell@quantura.studio";
+const AUTOMATION_EMAIL_REPLY_TO = asString(process.env.AUTOMATION_EMAIL_REPLY_TO, AUTOMATION_EMAIL_FROM).trim() || AUTOMATION_EMAIL_FROM;
+const RESEND_API_KEY = asString(process.env.RESEND_API_KEY).trim();
 
 registerFiscalDataRoutes(ROUTES, { db });
 
@@ -1421,6 +1469,13 @@ function sanitizeText(value: unknown, maxLen = 600): string {
   return raw.slice(0, maxLen);
 }
 
+function normalizeEmail(value: unknown): string {
+  const raw = asString(value).trim().toLowerCase();
+  if (!raw) return "";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) return "";
+  return raw.slice(0, 320);
+}
+
 function sanitizeRichText(value: unknown, maxLen = 20000): string {
   const raw = asString(value).replace(/\r\n?/g, "\n").replace(/\u0000/g, "").trim();
   if (!raw) return "";
@@ -1539,6 +1594,17 @@ function getTimestampMs(value: unknown): number {
     if (Number.isFinite(parsed)) return parsed;
   }
   return Date.now();
+}
+
+function getOptionalTimestampMs(value: unknown): number | null {
+  if (value instanceof admin.firestore.Timestamp) return value.toMillis();
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
 }
 
 function timestampFromMs(ms: number): admin.firestore.Timestamp {
@@ -1844,6 +1910,446 @@ function extractScreenerTopSymbols(resultsRaw: unknown): string[] {
     out.push(symbol);
   });
   return out.slice(0, 12);
+}
+
+function fmtCompactCurrency(value: number): string {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return "";
+  if (numeric >= 1_000_000_000_000) return `$${(numeric / 1_000_000_000_000).toFixed(2)}T`;
+  if (numeric >= 1_000_000_000) return `$${(numeric / 1_000_000_000).toFixed(0)}B`;
+  if (numeric >= 1_000_000) return `$${(numeric / 1_000_000).toFixed(0)}M`;
+  return `$${Math.round(numeric).toLocaleString()}`;
+}
+
+type GithubWorkflowRunRecord = {
+  id: number;
+  htmlUrl: string;
+  status: string;
+  conclusion: string;
+  runNumber: number;
+  createdAt: string;
+  updatedAt: string;
+  displayTitle: string;
+};
+
+type GithubArtifactRecord = {
+  id: number;
+  name: string;
+  sizeInBytes: number;
+  archiveDownloadUrl: string;
+  expired: boolean;
+};
+
+type GithubScreenerArtifactPayload = {
+  manifest: Record<string, unknown>;
+  activeSignals: Array<Record<string, unknown>>;
+  allLatestRows: Array<Record<string, unknown>>;
+  errors: Array<Record<string, unknown>>;
+  workflowLog: string;
+};
+
+function githubActionsConfigured(): boolean {
+  return Boolean(GITHUB_ACTIONS_TOKEN && GITHUB_REPO_OWNER && GITHUB_REPO_NAME && GITHUB_SCREENER_WORKFLOW);
+}
+
+async function githubApiRequest(path: string, init: RequestInit = {}): Promise<Response> {
+  if (!githubActionsConfigured()) {
+    throw new Error("GitHub Actions token is not configured.");
+  }
+  const headers = new Headers(init.headers || {});
+  headers.set("Accept", "application/vnd.github+json");
+  headers.set("Authorization", `Bearer ${GITHUB_ACTIONS_TOKEN}`);
+  headers.set("User-Agent", "quantura-studio");
+  if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  const response = await fetch(`${GITHUB_ACTIONS_API_BASE}${path}`, {
+    ...init,
+    headers,
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(sanitizeText(text || `GitHub API ${response.status}`, 260) || `GitHub API ${response.status}`);
+  }
+  return response;
+}
+
+async function githubApiJson(path: string, init: RequestInit = {}): Promise<Record<string, unknown>> {
+  const response = await githubApiRequest(path, init);
+  return asPlainObject(await response.json().catch(() => ({})));
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function buildScreenerWorkflowRunKey(runId: string): string {
+  const clean = sanitizeText(runId, 80).replace(/[^A-Za-z0-9_-]/g, "");
+  return `quantura_${clean || Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+async function dispatchGithubScreenerWorkflow(input: {
+  runKey: string;
+  minMarketCap: number;
+}): Promise<void> {
+  await githubApiRequest(`/actions/workflows/${encodeURIComponent(GITHUB_SCREENER_WORKFLOW)}/dispatches`, {
+    method: "POST",
+    body: JSON.stringify({
+      ref: GITHUB_ACTIONS_BRANCH,
+      inputs: {
+        run_key: input.runKey,
+        min_market_cap: String(Math.max(0, Math.floor(input.minMarketCap || 0))),
+      },
+    }),
+  });
+}
+
+function normalizeGithubWorkflowRun(raw: unknown): GithubWorkflowRunRecord | null {
+  const record = asPlainObject(raw);
+  const id = Math.floor(asFinite(record.id, 0));
+  if (!id) return null;
+  return {
+    id,
+    htmlUrl: sanitizeText(record.html_url, 600),
+    status: sanitizeText(record.status, 80).toLowerCase(),
+    conclusion: sanitizeText(record.conclusion, 80).toLowerCase(),
+    runNumber: Math.floor(asFinite(record.run_number, 0)),
+    createdAt: sanitizeText(record.created_at, 120),
+    updatedAt: sanitizeText(record.updated_at, 120),
+    displayTitle: sanitizeText(record.display_title || record.name, 240),
+  };
+}
+
+async function findGithubWorkflowRunByKey(runKey: string): Promise<GithubWorkflowRunRecord | null> {
+  const payload = await githubApiJson(
+    `/actions/workflows/${encodeURIComponent(GITHUB_SCREENER_WORKFLOW)}/runs?event=workflow_dispatch&branch=${encodeURIComponent(
+      GITHUB_ACTIONS_BRANCH
+    )}&per_page=25`
+  );
+  const runs = Array.isArray(payload.workflow_runs) ? payload.workflow_runs : [];
+  for (const item of runs) {
+    const normalized = normalizeGithubWorkflowRun(item);
+    if (!normalized) continue;
+    if (normalized.displayTitle.includes(runKey)) return normalized;
+  }
+  return null;
+}
+
+async function waitForGithubWorkflowRun(runKey: string, timeoutMs = 20000): Promise<GithubWorkflowRunRecord | null> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const run = await findGithubWorkflowRunByKey(runKey).catch(() => null);
+    if (run) return run;
+    await delay(1500);
+  }
+  return null;
+}
+
+async function getGithubWorkflowRun(runId: number): Promise<GithubWorkflowRunRecord | null> {
+  if (!runId) return null;
+  const payload = await githubApiJson(`/actions/runs/${encodeURIComponent(String(runId))}`);
+  return normalizeGithubWorkflowRun(payload);
+}
+
+function normalizeGithubArtifact(raw: unknown): GithubArtifactRecord | null {
+  const record = asPlainObject(raw);
+  const id = Math.floor(asFinite(record.id, 0));
+  if (!id) return null;
+  return {
+    id,
+    name: sanitizeText(record.name, 180),
+    sizeInBytes: Math.max(0, Math.floor(asFinite(record.size_in_bytes, 0))),
+    archiveDownloadUrl: sanitizeText(record.archive_download_url, 1000),
+    expired: asBoolean(record.expired, false),
+  };
+}
+
+async function listGithubArtifactsForRun(runId: number): Promise<GithubArtifactRecord[]> {
+  if (!runId) return [];
+  const payload = await githubApiJson(`/actions/runs/${encodeURIComponent(String(runId))}/artifacts?per_page=50`);
+  const artifacts = Array.isArray(payload.artifacts) ? payload.artifacts : [];
+  return artifacts.map((item) => normalizeGithubArtifact(item)).filter((item): item is GithubArtifactRecord => Boolean(item));
+}
+
+function parseCsvLine(line: string): string[] {
+  const cells: string[] = [];
+  let current = "";
+  let inQuotes = false;
+  for (let idx = 0; idx < line.length; idx += 1) {
+    const char = line[idx];
+    if (char === '"') {
+      if (inQuotes && line[idx + 1] === '"') {
+        current += '"';
+        idx += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+    if (char === "," && !inQuotes) {
+      cells.push(current);
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+  cells.push(current);
+  return cells;
+}
+
+function parseCsvRecords(csvText: string): Array<Record<string, unknown>> {
+  const text = String(csvText || "").trim();
+  if (!text) return [];
+  const lines = text.split(/\r?\n/).filter(Boolean);
+  if (!lines.length) return [];
+  const headers = parseCsvLine(lines[0]).map((item) => sanitizeText(item, 80));
+  const rows: Array<Record<string, unknown>> = [];
+  for (const line of lines.slice(1)) {
+    const cells = parseCsvLine(line);
+    const row: Record<string, unknown> = {};
+    headers.forEach((header, index) => {
+      if (!header) return;
+      const raw = String(cells[index] ?? "").trim();
+      if (!raw) {
+        row[header] = "";
+        return;
+      }
+      const numeric = Number(raw);
+      row[header] = Number.isFinite(numeric) && /^-?\d+(\.\d+)?$/.test(raw) ? numeric : raw;
+    });
+    rows.push(row);
+  }
+  return rows;
+}
+
+function readZipEntryText(zip: any, entryName: string): string {
+  const entry = zip.getEntry(entryName);
+  if (!entry) return "";
+  return String(zip.readAsText(entry) || "");
+}
+
+function normalizeWorkflowScreenerRows(rowsRaw: unknown): Array<Record<string, unknown>> {
+  const rows = Array.isArray(rowsRaw) ? rowsRaw : [];
+  return rows
+    .map((item) => {
+      const row = asPlainObject(item);
+      const symbol = normalizeTicker(row.ticker || row.symbol);
+      if (!symbol) return null;
+      const centralLabel = sanitizeText(row.central_delta_label, 80);
+      const tailLabel = sanitizeText(row.tail_delta_label, 80);
+      return {
+        symbol,
+        ticker: symbol,
+        status: sanitizeText(row.status, 60).toLowerCase(),
+        lastClose: roundFinite(asFinite(row.last_price, Number.NaN), 2),
+        gapToBandPct: roundFinite(asFinite(row.gap_to_band_pct, Number.NaN), 2),
+        p1: roundFinite(asFinite(row.p1, Number.NaN), 2),
+        p10: roundFinite(asFinite(row.p10, Number.NaN), 2),
+        p50: roundFinite(asFinite(row.p50, Number.NaN), 2),
+        p90: roundFinite(asFinite(row.p90, Number.NaN), 2),
+        p99: roundFinite(asFinite(row.p99, Number.NaN), 2),
+        centralDelta: roundFinite(asFinite(row.central_delta, Number.NaN), 2),
+        centralDeltaLabel: centralLabel,
+        tailDelta: roundFinite(asFinite(row.tail_delta, Number.NaN), 2),
+        tailDeltaLabel: tailLabel,
+        marketCap: asFinite(row.market_cap, Number.NaN),
+        marketCapLabel: sanitizeText(row.market_cap_fmt, 40),
+        lastEarningsDate: sanitizeText(row.last_earnings_date, 40),
+        lastReportPeriod: sanitizeText(row.last_report_period, 80),
+        nextEarningsDate: sanitizeText(row.next_earnings_date, 40),
+        nextReportPeriod: sanitizeText(row.next_report_period, 80),
+        universe: sanitizeText(row.universe, 80),
+      };
+    })
+    .filter((item): item is Record<string, unknown> => Boolean(item));
+}
+
+async function downloadGithubArtifactPayload(artifact: GithubArtifactRecord): Promise<GithubScreenerArtifactPayload> {
+  const response = await githubApiRequest(`/actions/artifacts/${encodeURIComponent(String(artifact.id))}/zip`, {
+    method: "GET",
+  });
+  const buffer = Buffer.from(await response.arrayBuffer());
+  const zip = new AdmZip(buffer);
+  const manifestText =
+    readZipEntryText(zip, "artifacts/run_manifest.json") || readZipEntryText(zip, "run_manifest.json");
+  const activeSignalsText =
+    readZipEntryText(zip, "artifacts/active_signals.csv") || readZipEntryText(zip, "active_signals.csv");
+  const allLatestRowsText =
+    readZipEntryText(zip, "artifacts/all_latest_rows.csv") || readZipEntryText(zip, "all_latest_rows.csv");
+  const errorsText = readZipEntryText(zip, "artifacts/errors.csv") || readZipEntryText(zip, "errors.csv");
+  const workflowLog =
+    readZipEntryText(zip, "artifacts/workflow-run.log") || readZipEntryText(zip, "workflow-run.log");
+  const manifest = manifestText ? asPlainObject(JSON.parse(manifestText)) : {};
+  return {
+    manifest,
+    activeSignals: parseCsvRecords(activeSignalsText),
+    allLatestRows: parseCsvRecords(allLatestRowsText),
+    errors: parseCsvRecords(errorsText),
+    workflowLog,
+  };
+}
+
+function buildGithubScreenerServiceMessage(manifest: Record<string, unknown>, minMarketCap: number, resultCount: number): string {
+  const status = sanitizeText(manifest.status, 80).toLowerCase();
+  const floorLabel = fmtCompactCurrency(minMarketCap) || `$${Number(minMarketCap || 0).toLocaleString()}`;
+  if (status.startsWith("skipped_")) {
+    return sanitizeText(manifest.reason, 240) || `GitHub Actions skipped this screener run above the ${floorLabel} floor.`;
+  }
+  if (resultCount > 0) {
+    return `GitHub Actions found ${resultCount} active Prophet signal${resultCount === 1 ? "" : "s"} above the ${floorLabel} market-cap floor.`;
+  }
+  return `GitHub Actions completed successfully, but no active Prophet signals cleared the ${floorLabel} market-cap floor.`;
+}
+
+async function syncGithubScreenerRunRecord(runId: string, viewerUid: string): Promise<Record<string, unknown>> {
+  const cleanRunId = sanitizeText(runId, 220);
+  if (!cleanRunId) throw new Error("invalid_run_id");
+  const ref = db.collection("screener_runs").doc(cleanRunId);
+  const snap = await ref.get();
+  if (!snap.exists) throw new Error("screener_not_found");
+  const data = (snap.data() || {}) as Record<string, unknown>;
+  if (sanitizeText(data.userId, 220) !== viewerUid) throw new Error("forbidden");
+  if (sanitizeText(data.source, 80) !== "github_actions") {
+    return { id: snap.id, ...data };
+  }
+
+  const minMarketCap = Math.max(0, asFinite(data.minMarketCap || data.minCap, 100_000_000_000));
+  const runKey = sanitizeText(data.workflowRunKey, 180);
+  let workflowRunId = Math.floor(asFinite(data.workflowRunId, 0));
+  let workflowRun = workflowRunId ? await getGithubWorkflowRun(workflowRunId).catch(() => null) : null;
+  if (!workflowRun && runKey) {
+    workflowRun = await findGithubWorkflowRunByKey(runKey).catch(() => null);
+    workflowRunId = workflowRun?.id || 0;
+  }
+
+  const patch: Record<string, unknown> = {
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+
+  if (workflowRun) {
+    patch.workflowRunId = workflowRun.id;
+    patch.workflowRunUrl = workflowRun.htmlUrl;
+    patch.workflowRunNumber = workflowRun.runNumber || null;
+    patch.workflowStatus = workflowRun.status;
+    patch.workflowConclusion = workflowRun.conclusion || "";
+  }
+
+  if (!workflowRun) {
+    patch.status = sanitizeText(data.status, 40) || "queued";
+    patch.serviceMessage =
+      sanitizeText(data.serviceMessage, 240) ||
+      `Dispatching GitHub Actions stock screener above the ${fmtCompactCurrency(minMarketCap)} floor.`;
+    await ref.set(patch, { merge: true });
+    const refreshed = await ref.get();
+    return { id: refreshed.id, ...(refreshed.data() || {}) };
+  }
+
+  if (workflowRun.status !== "completed") {
+    patch.status = workflowRun.status === "queued" ? "queued" : "running";
+    patch.serviceMessage = `GitHub Actions is ${patch.status} for the ${fmtCompactCurrency(minMarketCap)} market-cap floor.`;
+    await ref.set(patch, { merge: true });
+    const refreshed = await ref.get();
+    return { id: refreshed.id, ...(refreshed.data() || {}) };
+  }
+
+  if (workflowRun.conclusion !== "success") {
+    patch.status = "failed";
+    patch.autoPublishPending = false;
+    patch.serviceMessage = `GitHub Actions finished with ${workflowRun.conclusion || "failure"}.`;
+    await ref.set(patch, { merge: true });
+    const refreshed = await ref.get();
+    await upsertOwnedMyRequestFromSystem(viewerUid, {
+      requestId: buildMyRequestDocId("screener", cleanRunId),
+      type: "screener",
+      title: sanitizeText(refreshed.data()?.title, 180) || "GitHub stock screener",
+      input: {
+        minMarketCap,
+        source: "github_actions",
+        workflow: GITHUB_SCREENER_WORKFLOW,
+      },
+      outputsMeta: {
+        summary: patch.serviceMessage,
+        resultsCount: 0,
+        metrics: {
+          Status: "failed",
+          Floor: fmtCompactCurrency(minMarketCap),
+        },
+      },
+      sourceRef: {
+        collection: "screener_runs",
+        id: cleanRunId,
+      },
+      published: false,
+    });
+    return { id: refreshed.id, ...(refreshed.data() || {}) };
+  }
+
+  const artifacts = await listGithubArtifactsForRun(workflowRun.id).catch(() => []);
+  const artifact = artifacts.find((item) => item.name === "daily-prophet-signal-tracker" && !item.expired) || artifacts[0] || null;
+  if (!artifact) {
+    patch.status = "running";
+    patch.serviceMessage = "GitHub Actions finished, but Quantura is still waiting for artifacts.";
+    await ref.set(patch, { merge: true });
+    const refreshed = await ref.get();
+    return { id: refreshed.id, ...(refreshed.data() || {}) };
+  }
+
+  const artifactPayload = await downloadGithubArtifactPayload(artifact);
+  const results = normalizeWorkflowScreenerRows(artifactPayload.activeSignals);
+  const allLatestRows = normalizeWorkflowScreenerRows(artifactPayload.allLatestRows);
+  const manifest = artifactPayload.manifest;
+  const serviceMessage = buildGithubScreenerServiceMessage(manifest, minMarketCap, results.length);
+  const topSymbols = extractScreenerTopSymbols(results);
+  const shouldAutoPublishNow = asBoolean(data.autoPublishPending, false);
+  patch.status = sanitizeText(manifest.status, 80).toLowerCase().startsWith("skipped_")
+    ? "completed"
+    : "completed";
+  patch.autoPublishPending = false;
+  patch.serviceMessage = serviceMessage;
+  patch.results = results;
+  patch.resultsFound = results.length;
+  patch.topSymbols = topSymbols;
+  patch.appliedFilters = [`Market cap >= ${fmtCompactCurrency(minMarketCap)}`];
+  patch.ignoredFilters = [];
+  patch.workflowArtifactId = artifact.id;
+  patch.workflowArtifactName = artifact.name;
+  patch.workflowArtifactSizeInBytes = artifact.sizeInBytes;
+  patch.workflowManifest = trimOutputsMeta(manifest);
+  patch.workflowLogExcerpt = sanitizeText(artifactPayload.workflowLog.split(/\r?\n/).slice(-20).join(" "), 2400);
+  patch.screenedCount = Math.max(0, Math.floor(asFinite(manifest.screenedCount, allLatestRows.length)));
+  patch.marketCapSkipped = Math.max(0, Math.floor(asFinite(manifest.marketCapSkipped, 0)));
+  patch.allLatestRowsCount = allLatestRows.length;
+
+  await ref.set(patch, { merge: true });
+  const refreshed = await ref.get();
+  const merged = (refreshed.data() || {}) as Record<string, unknown>;
+  await upsertOwnedMyRequestFromSystem(viewerUid, {
+    requestId: buildMyRequestDocId("screener", cleanRunId),
+    type: "screener",
+    title: sanitizeText(merged.title, 180) || "GitHub stock screener",
+    input: {
+      minMarketCap,
+      source: "github_actions",
+      workflow: GITHUB_SCREENER_WORKFLOW,
+      branch: GITHUB_ACTIONS_BRANCH,
+    },
+    outputsMeta: {
+      summary: serviceMessage,
+      resultsCount: results.length,
+      topSymbols,
+      metrics: {
+        Status: "completed",
+        Floor: fmtCompactCurrency(minMarketCap),
+        Matches: results.length,
+        Screened: Math.max(0, Math.floor(asFinite(merged.screenedCount, 0))),
+      },
+    },
+    sourceRef: {
+      collection: "screener_runs",
+      id: cleanRunId,
+    },
+    published: shouldAutoPublishNow,
+  });
+
+  return { id: refreshed.id, ...(refreshed.data() || {}) };
 }
 
 function trimModelCouncilAnswer(answerRaw: unknown): string {
@@ -2453,6 +2959,7 @@ async function upsertOwnedMyRequestFromSystem(
     input: Record<string, unknown>;
     outputsMeta: Record<string, unknown>;
     sourceRef: Record<string, unknown>;
+    published?: boolean;
   }
 ): Promise<string> {
   const requestId = normalizeMyRequestId(seed.requestId);
@@ -2473,7 +2980,8 @@ async function upsertOwnedMyRequestFromSystem(
     id: sanitizeText(seed.sourceRef.id, 220),
   };
   const ticker = firstTickerFromRequest(input, sourceRef, outputsMeta);
-  const published = asBoolean(existing.published, false);
+  const published =
+    typeof seed.published === "boolean" ? asBoolean(seed.published, false) : asBoolean(existing.published, false);
   const visibility = published
     ? "public"
     : normalizeMyRequestVisibility(existing.visibility, normalizeMyRequestVisibility(share.visibility, "private"));
@@ -2706,11 +3214,16 @@ async function reconcileAutopilotRunDocument(
         },
         { merge: true }
       );
+      await syncAutomationRunProjection(runId, {
+        ...existingData,
+        exploreRequestId: requestId,
+      });
       return {
         ...existingData,
         exploreRequestId: requestId,
       };
     }
+    await syncAutomationRunProjection(runId, existingData);
     return existingData;
   }
 
@@ -2777,6 +3290,7 @@ async function reconcileAutopilotRunDocument(
   }
 
   if (!Object.keys(nextPatch).length) {
+    await syncAutomationRunProjection(runId, existingData);
     return existingData;
   }
 
@@ -2793,12 +3307,636 @@ async function reconcileAutopilotRunDocument(
       },
       { merge: true }
     );
+    await syncAutomationRunProjection(runId, {
+      ...refreshedData,
+      exploreRequestId: requestId,
+    });
     return {
       ...refreshedData,
       exploreRequestId: requestId,
     };
   }
+  await syncAutomationRunProjection(runId, refreshedData);
   return refreshedData;
+}
+
+function automationEntitlementRef(ownerUid: string) {
+  return db.collection(AUTOMATION_ENTITLEMENT_COLLECTION).doc(sanitizeText(ownerUid, 220));
+}
+
+function automationRef(automationId?: string) {
+  const cleanId = sanitizeText(automationId, 220);
+  return cleanId ? db.collection(AUTOMATION_COLLECTION).doc(cleanId) : db.collection(AUTOMATION_COLLECTION).doc();
+}
+
+function automationHistoryCollection(automationId: string) {
+  return automationRef(automationId).collection(AUTOMATION_HISTORY_SUBCOLLECTION);
+}
+
+function normalizeAutomationCadence(value: unknown): string {
+  const normalized = sanitizeText(value, 40).toLowerCase() || "daily";
+  return AUTOMATION_ALLOWED_CADENCES.has(normalized) ? normalized : "daily";
+}
+
+function normalizeAutomationHorizon(value: unknown): string {
+  const normalized = sanitizeText(value, 40).toLowerCase() || "1_month";
+  return AUTOMATION_ALLOWED_HORIZONS.has(normalized) ? normalized : "1_month";
+}
+
+function normalizeAutomationProfile(value: unknown): string {
+  const normalized = sanitizeText(value, 40).toLowerCase() || "avg_wql";
+  return AUTOMATION_ALLOWED_PROFILES.has(normalized) ? normalized : "avg_wql";
+}
+
+function normalizeAutomationModel(value: unknown): string {
+  const normalized = sanitizeText(value, 60).toLowerCase() || "avg_wql_all_algorithms";
+  return AUTOMATION_ALLOWED_MODELS.has(normalized) ? normalized : "avg_wql_all_algorithms";
+}
+
+function automationHorizonPeriods(horizon: string): number {
+  switch (normalizeAutomationHorizon(horizon)) {
+    case "3_days":
+      return 3;
+    case "1_week":
+      return 5;
+    case "2_weeks":
+      return 10;
+    case "3_weeks":
+      return 15;
+    case "3_months":
+      return 63;
+    case "6_months":
+      return 126;
+    case "1_year":
+      return 252;
+    case "1_month":
+    default:
+      return 21;
+  }
+}
+
+function nextAutomationRunAtMs(fromMs = Date.now()): number {
+  return fromMs + 24 * 60 * 60 * 1000;
+}
+
+async function countActiveAutomationsForOwner(ownerUid: string, excludeAutomationId = ""): Promise<number> {
+  const cleanOwnerUid = sanitizeText(ownerUid, 220);
+  const cleanExcludeId = sanitizeText(excludeAutomationId, 220);
+  if (!cleanOwnerUid) return 0;
+  const snap = await db
+    .collection(AUTOMATION_COLLECTION)
+    .where("ownerUid", "==", cleanOwnerUid)
+    .where("active", "==", true)
+    .get();
+  return snap.docs.reduce((count, doc) => {
+    if (cleanExcludeId && doc.id === cleanExcludeId) return count;
+    return count + 1;
+  }, 0);
+}
+
+async function readAutomationEntitlement(ownerUid: string): Promise<Record<string, unknown>> {
+  const snap = await automationEntitlementRef(ownerUid).get();
+  return (snap.data() || {}) as Record<string, unknown>;
+}
+
+async function resolveAutomationContactEmail(
+  ownerUid: string,
+  decodedUser: admin.auth.DecodedIdToken,
+  explicitEmail?: unknown
+): Promise<string> {
+  const provided = normalizeEmail(explicitEmail);
+  if (provided) return provided;
+  const tokenEmail = normalizeEmail(decodedUser.email);
+  if (tokenEmail) return tokenEmail;
+  const entitlement = await readAutomationEntitlement(ownerUid);
+  return normalizeEmail(entitlement.contactEmail);
+}
+
+async function sendAutomationUnlockEmail(input: {
+  to: string;
+  ownerUid: string;
+  productId: string;
+  purchaseSource: string;
+  purchaseReference: string;
+}): Promise<boolean> {
+  const to = normalizeEmail(input.to);
+  if (!to) return false;
+  if (!RESEND_API_KEY) {
+    console.warn("[Automation] unlock email skipped: RESEND_API_KEY is not configured", {
+      ownerUid: sanitizeText(input.ownerUid, 220),
+      to,
+    });
+    return false;
+  }
+  const sourceLabel = sanitizeText(input.purchaseSource, 40) || "native store";
+  const productId = sanitizeText(input.productId, 120) || AUTOMATION_PRODUCT_ID;
+  const purchaseReference = sanitizeText(input.purchaseReference, 240);
+  const subject = "Quantura Automation unlocked";
+  const html = `
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1.6;color:#111827;">
+      <h2 style="margin:0 0 12px;">Quantura Automation unlocked</h2>
+      <p style="margin:0 0 12px;">Your native Forecast Foundry automation access is now active.</p>
+      <ul style="margin:0 0 16px 18px;padding:0;">
+        <li>Permanent unlock</li>
+        <li>Up to ${AUTOMATION_MAX_ACTIVE} active automations</li>
+        <li>Daily automation cadence</li>
+        <li>Forecast history and status tracking</li>
+      </ul>
+      <p style="margin:0 0 12px;"><strong>Source:</strong> ${sourceLabel}</p>
+      <p style="margin:0 0 12px;"><strong>Product:</strong> ${productId}</p>
+      ${purchaseReference ? `<p style="margin:0 0 12px;"><strong>Reference:</strong> ${purchaseReference}</p>` : ""}
+      <p style="margin:0;">Open the Quantura mobile app to create or manage your automations.</p>
+    </div>
+  `.trim();
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: AUTOMATION_EMAIL_FROM,
+      to: [to],
+      reply_to: AUTOMATION_EMAIL_REPLY_TO,
+      subject,
+      html,
+    }),
+  });
+  if (!response.ok) {
+    const detail = sanitizeText(await response.text(), 500);
+    throw new Error(`automation_email_send_failed:${response.status}${detail ? `:${detail}` : ""}`);
+  }
+  return true;
+}
+
+function buildAutomationEntitlementResponse(
+  ownerUid: string,
+  entitlement: Record<string, unknown>,
+  activeAutomationCount: number
+): Record<string, unknown> {
+  const unlockedAtMs = getOptionalTimestampMs(entitlement.unlockedAt || entitlement.createdAt);
+  const refreshedAtMs = getOptionalTimestampMs(entitlement.updatedAt || entitlement.unlockedAt || entitlement.createdAt);
+  return {
+    ownerUid: sanitizeText(ownerUid, 220),
+    automationUnlocked: asBoolean(entitlement.automationUnlocked, false),
+    purchaseSource: sanitizeText(entitlement.purchaseSource, 40),
+    unlockedAtMs,
+    unlockedAt: unlockedAtMs != null ? new Date(unlockedAtMs).toISOString() : "",
+    refreshedAtMs,
+    refreshedAt: refreshedAtMs != null ? new Date(refreshedAtMs).toISOString() : "",
+    productId: sanitizeText(entitlement.productId, 120) || AUTOMATION_PRODUCT_ID,
+    maxActiveAutomations: Math.max(1, Math.floor(asFinite(entitlement.maxActiveAutomations, AUTOMATION_MAX_ACTIVE))),
+    activeAutomationCount,
+    purchaseReference: sanitizeText(entitlement.purchaseReference, 240),
+    contactEmail: normalizeEmail(entitlement.contactEmail),
+  };
+}
+
+function buildAutomationResponse(docId: string, data: Record<string, unknown>): Record<string, unknown> {
+  const createdAtMs = getOptionalTimestampMs(data.createdAt);
+  const updatedAtMs = getOptionalTimestampMs(data.updatedAt || data.createdAt);
+  const lastRunAtMs = getOptionalTimestampMs(data.lastRunAt);
+  const nextRunAtMs = getOptionalTimestampMs(data.nextRunAt);
+  return {
+    id: docId,
+    ticker: normalizeTicker(data.ticker),
+    forecastProfile: normalizeAutomationProfile(data.forecastProfile),
+    model: normalizeAutomationModel(data.model),
+    cadence: normalizeAutomationCadence(data.cadence),
+    horizon: normalizeAutomationHorizon(data.horizon),
+    active: asBoolean(data.active, false),
+    createdAtMs,
+    updatedAtMs,
+    lastRunAtMs,
+    nextRunAtMs,
+    createdAt: createdAtMs != null ? new Date(createdAtMs).toISOString() : "",
+    updatedAt: updatedAtMs != null ? new Date(updatedAtMs).toISOString() : "",
+    lastRunAt: lastRunAtMs != null ? new Date(lastRunAtMs).toISOString() : "",
+    nextRunAt: nextRunAtMs != null ? new Date(nextRunAtMs).toISOString() : "",
+    lastStatus: sanitizeText(data.lastStatus, 80),
+    lastRunId: sanitizeText(data.lastRunId, 220),
+    ownerUid: sanitizeText(data.ownerUid, 220),
+  };
+}
+
+async function readAutomationForOwner(
+  ownerUid: string,
+  automationId: string
+): Promise<{ id: string; data: Record<string, unknown> } | null> {
+  const ref = automationRef(automationId);
+  const snap = await ref.get();
+  if (!snap.exists) return null;
+  const data = (snap.data() || {}) as Record<string, unknown>;
+  if (sanitizeText(data.ownerUid, 220) !== sanitizeText(ownerUid, 220)) return null;
+  return {
+    id: snap.id,
+    data,
+  };
+}
+
+function decodeJwtPayloadSegment(input: string): Record<string, unknown> {
+  const parts = asString(input).split(".");
+  if (parts.length < 2) return {};
+  try {
+    const payload = Buffer.from(parts[1].replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
+    const parsed = JSON.parse(payload);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
+}
+
+function base64UrlEncode(input: Buffer | string): string {
+  return Buffer.from(input)
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+function createAppleServerJwt(): string {
+  if (!APPLE_IAP_ISSUER_ID || !APPLE_IAP_KEY_ID || !APPLE_IAP_PRIVATE_KEY) {
+    throw new Error("apple_iap_server_credentials_missing");
+  }
+  const header = {
+    alg: "ES256",
+    kid: APPLE_IAP_KEY_ID,
+    typ: "JWT",
+  };
+  const now = Math.floor(Date.now() / 1000);
+  const claims = {
+    iss: APPLE_IAP_ISSUER_ID,
+    iat: now,
+    exp: now + 300,
+    aud: "appstoreconnect-v1",
+    bid: APPLE_IAP_BUNDLE_ID,
+  };
+  const signingInput = `${base64UrlEncode(JSON.stringify(header))}.${base64UrlEncode(JSON.stringify(claims))}`;
+  const signature = crypto.sign("sha256", Buffer.from(signingInput), crypto.createPrivateKey(APPLE_IAP_PRIVATE_KEY));
+  return `${signingInput}.${base64UrlEncode(signature)}`;
+}
+
+async function verifyAppleAutomationPurchase(input: {
+  transactionId: string;
+  productId: string;
+}): Promise<{
+  productId: string;
+  purchaseReference: string;
+  unlockedAtMs: number;
+  source: "apple";
+}> {
+  const transactionId = sanitizeText(input.transactionId, 220);
+  const requestedProductId = sanitizeText(input.productId, 120) || AUTOMATION_PRODUCT_ID;
+  if (!transactionId) {
+    throw new Error("missing_transaction_id");
+  }
+  if (!APPLE_IAP_ISSUER_ID || !APPLE_IAP_KEY_ID || !APPLE_IAP_PRIVATE_KEY) {
+    throw new Error("apple_iap_server_credentials_missing");
+  }
+  const endpoint =
+    APPLE_IAP_ENVIRONMENT.toLowerCase() === "sandbox"
+      ? `https://api.storekit-sandbox.itunes.apple.com/inApps/v1/transactions/${encodeURIComponent(transactionId)}`
+      : `https://api.storekit.itunes.apple.com/inApps/v1/transactions/${encodeURIComponent(transactionId)}`;
+  const response = await fetch(endpoint, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${createAppleServerJwt()}`,
+      Accept: "application/json",
+    },
+  });
+  if (!response.ok) {
+    throw new Error(`apple_iap_validation_failed:${response.status}`);
+  }
+  const payload = (await response.json()) as Record<string, unknown>;
+  const signedTransactionInfo = asString(payload.signedTransactionInfo);
+  const decoded = decodeJwtPayloadSegment(signedTransactionInfo);
+  const bundleId = sanitizeText(decoded.bundleId, 220);
+  const productId = sanitizeText(decoded.productId, 120);
+  const revocationReason = sanitizeText(decoded.revocationReason, 40);
+  const revocationDate = sanitizeText(decoded.revocationDate, 80);
+  if (bundleId && bundleId !== APPLE_IAP_BUNDLE_ID) {
+    throw new Error("apple_bundle_mismatch");
+  }
+  if (productId !== requestedProductId || productId !== AUTOMATION_PRODUCT_ID) {
+    throw new Error("apple_product_mismatch");
+  }
+  if (revocationReason || revocationDate) {
+    throw new Error("apple_purchase_revoked");
+  }
+  const purchaseDateMs = Math.max(0, Math.floor(asFinite(decoded.purchaseDate, Date.now())));
+  return {
+    productId,
+    purchaseReference: sanitizeText(decoded.originalTransactionId || decoded.transactionId || transactionId, 240) || transactionId,
+    unlockedAtMs: purchaseDateMs || Date.now(),
+    source: "apple",
+  };
+}
+
+async function fetchGooglePlayProductPurchase(input: {
+  packageName: string;
+  productId: string;
+  purchaseToken: string;
+}): Promise<Record<string, unknown>> {
+  const client = await GOOGLE_PLAY_PUBLISHER_AUTH.getClient();
+  const endpoint = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${encodeURIComponent(
+    input.packageName
+  )}/purchases/products/${encodeURIComponent(input.productId)}/tokens/${encodeURIComponent(input.purchaseToken)}`;
+  const response = await client.request({
+    url: endpoint,
+    method: "GET",
+  });
+  return (response.data || {}) as Record<string, unknown>;
+}
+
+async function acknowledgeGooglePlayProductPurchase(input: {
+  packageName: string;
+  productId: string;
+  purchaseToken: string;
+  developerPayload: string;
+}): Promise<void> {
+  const client = await GOOGLE_PLAY_PUBLISHER_AUTH.getClient();
+  const endpoint = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${encodeURIComponent(
+    input.packageName
+  )}/purchases/products/${encodeURIComponent(input.productId)}/tokens/${encodeURIComponent(input.purchaseToken)}:acknowledge`;
+  await client.request({
+    url: endpoint,
+    method: "POST",
+    data: {
+      developerPayload: sanitizeText(input.developerPayload, 220),
+    },
+  });
+}
+
+async function verifyGoogleAutomationPurchase(input: {
+  packageName: string;
+  productId: string;
+  purchaseToken: string;
+  ownerUid: string;
+}): Promise<{
+  productId: string;
+  purchaseReference: string;
+  unlockedAtMs: number;
+  source: "google";
+}> {
+  const productId = sanitizeText(input.productId, 120) || AUTOMATION_PRODUCT_ID;
+  const purchaseToken = sanitizeText(input.purchaseToken, 400);
+  const packageName = sanitizeText(input.packageName, 220) || GOOGLE_PLAY_ANDROID_PACKAGE;
+  if (!purchaseToken) {
+    throw new Error("missing_purchase_token");
+  }
+  const payload = await fetchGooglePlayProductPurchase({
+    packageName,
+    productId,
+    purchaseToken,
+  });
+  const purchaseState = Math.floor(asFinite(payload.purchaseState, NaN));
+  if (!Number.isFinite(purchaseState) || purchaseState !== 0) {
+    throw new Error("google_purchase_not_completed");
+  }
+  const acknowledgementState = Math.floor(asFinite(payload.acknowledgementState, NaN));
+  if (!Number.isFinite(acknowledgementState) || acknowledgementState === 0) {
+    await acknowledgeGooglePlayProductPurchase({
+      packageName,
+      productId,
+      purchaseToken,
+      developerPayload: input.ownerUid,
+    });
+  }
+  return {
+    productId,
+    purchaseReference: sanitizeText(payload.orderId, 240) || purchaseToken,
+    unlockedAtMs: Math.max(0, Math.floor(asFinite(payload.purchaseTimeMillis, Date.now()))),
+    source: "google",
+  };
+}
+
+async function syncAutomationEntitlementState(
+  ownerUid: string,
+  patch: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const activeAutomationCount = await countActiveAutomationsForOwner(ownerUid);
+  await automationEntitlementRef(ownerUid).set(
+    {
+      automationUnlocked: asBoolean(patch.automationUnlocked, false),
+      purchaseSource: sanitizeText(patch.purchaseSource, 40),
+      unlockedAt: patch.unlockedAt || admin.firestore.FieldValue.serverTimestamp(),
+      productId: sanitizeText(patch.productId, 120) || AUTOMATION_PRODUCT_ID,
+      maxActiveAutomations: AUTOMATION_MAX_ACTIVE,
+      activeAutomationCount,
+      purchaseReference: sanitizeText(patch.purchaseReference, 240),
+      contactEmail: normalizeEmail(patch.contactEmail),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+  return readAutomationEntitlement(ownerUid);
+}
+
+async function requireAutomationUnlocked(ownerUid: string): Promise<Record<string, unknown>> {
+  const entitlement = await readAutomationEntitlement(ownerUid);
+  if (!asBoolean(entitlement.automationUnlocked, false)) {
+    throw new Error("automation_locked");
+  }
+  return entitlement;
+}
+
+async function startAutomationForecastRun(
+  ownerUid: string,
+  automationId: string,
+  automationData: Record<string, unknown>,
+  trigger: "manual" | "scheduled" | "activation"
+): Promise<Record<string, unknown>> {
+  await requireAutomationUnlocked(ownerUid);
+  const ticker = normalizeTicker(automationData.ticker);
+  if (!ticker) {
+    throw new Error("invalid_ticker");
+  }
+  const horizonKey = normalizeAutomationHorizon(automationData.horizon);
+  const today = new Date().toISOString().slice(0, 10);
+  const dataset = await downloadHistoricalStockDataset({
+    ticker,
+    interval: "1d",
+    start: "",
+    end: today,
+    useAllHistory: true,
+  });
+  const runRef = db.collection("autopilot_requests").doc();
+  const owner = safePathSegment(ownerUid, 120) || "user";
+  const run = safePathSegment(runRef.id, 120) || "run";
+  const datasetFile = await writeStorageTextArtifact(
+    `predictions/${owner}/automation/${safePathSegment(automationId, 120) || "automation"}/${run}/dataset.csv`,
+    dataset.csvText,
+    "text/csv"
+  );
+  const baseDoc: Record<string, unknown> = {
+    userId: ownerUid,
+    workspaceId: ownerUid,
+    title: `${ticker} Quantura Automation`,
+    notes: "",
+    mode: "mobile_automation_run",
+    sourceType: "mobile_automation",
+    status: "dataset_ready",
+    ticker,
+    dataset: {
+      ticker: dataset.ticker,
+      interval: dataset.interval,
+      rowCount: dataset.rowCount,
+      columns: dataset.columns,
+      previewRows: dataset.previewRows,
+      trainingEligible: dataset.trainingEligible,
+      sourceTimeColumn: dataset.sourceTimeColumn,
+      sourceValueColumn: dataset.sourceValueColumn,
+      sourceItemColumn: dataset.sourceItemColumn,
+      originalHeaders: dataset.columns,
+      start: "",
+      end: today,
+      useAllHistory: true,
+    },
+    autopilot: {},
+    analysis: {},
+    automation: {
+      automationId,
+      trigger,
+      cadence: normalizeAutomationCadence(automationData.cadence),
+      horizon: horizonKey,
+      forecastProfile: normalizeAutomationProfile(automationData.forecastProfile),
+      model: normalizeAutomationModel(automationData.model),
+    },
+    files: {
+      datasetCsv: {
+        ...datasetFile,
+      },
+    },
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+  await runRef.set(baseDoc, { merge: false });
+  const started = await startAutopilotTraining({
+    runId: runRef.id,
+    userId: ownerUid,
+    ticker,
+    interval: "1d",
+    horizon: automationHorizonPeriods(horizonKey),
+    quantiles: ["0.1", "0.5", "0.9"],
+    csvText: dataset.csvText,
+  });
+  const patch: Record<string, unknown> = {
+    status: "running",
+    autopilot: {
+      jobName: started.jobName,
+      jobArn: started.jobArn,
+      inputS3Uri: started.inputS3Uri,
+      outputS3Uri: started.outputS3Uri,
+      forecastFrequency: started.forecastFrequency,
+      forecastHorizon: automationHorizonPeriods(horizonKey),
+      quantiles: started.quantiles,
+      algorithms: started.algorithms,
+      runtimeSeconds: started.runtimeSeconds,
+      objectiveMetric: {
+        name: "AverageWeightedQuantileLoss",
+        value: null,
+      },
+      status: "InProgress",
+    },
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+  await runRef.set(patch, { merge: true });
+  const refreshedSnap = await runRef.get();
+  const refreshedData = (refreshedSnap.data() || { ...baseDoc, ...patch }) as Record<string, unknown>;
+  const requestId = await syncAutopilotMyRequest(ownerUid, runRef.id, refreshedData);
+  await runRef.set(
+    {
+      exploreRequestId: requestId,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+  await automationRef(automationId).collection(AUTOMATION_HISTORY_SUBCOLLECTION).doc(runRef.id).set(
+    {
+      ownerUid,
+      automationId,
+      autopilotRunId: runRef.id,
+      trigger,
+      status: "running",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+  await automationRef(automationId).set(
+    {
+      lastRunAt: admin.firestore.FieldValue.serverTimestamp(),
+      lastRunId: runRef.id,
+      lastStatus: "running",
+      nextRunAt: admin.firestore.Timestamp.fromMillis(nextAutomationRunAtMs()),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+  const finalSnap = await runRef.get();
+  return toAutopilotRunResponse(runRef.id, (finalSnap.data() || refreshedData) as Record<string, unknown>);
+}
+
+async function listAutomationHistoryForOwner(
+  ownerUid: string,
+  automationId: string,
+  limit = 20
+): Promise<Record<string, unknown>[]> {
+  const snap = await automationRef(automationId)
+    .collection(AUTOMATION_HISTORY_SUBCOLLECTION)
+    .orderBy("createdAt", "desc")
+    .limit(Math.max(1, Math.min(limit, 40)))
+    .get();
+  const items = await Promise.all(
+    snap.docs.map(async (doc) => {
+      const data = (doc.data() || {}) as Record<string, unknown>;
+      if (sanitizeText(data.ownerUid, 220) !== sanitizeText(ownerUid, 220)) {
+        return null;
+      }
+      const runId = sanitizeText(data.autopilotRunId || doc.id, 220);
+      const ownedRun = runId ? await readAutopilotRunForOwner(ownerUid, runId) : null;
+      return {
+        id: doc.id,
+        trigger: sanitizeText(data.trigger, 40),
+        status: sanitizeText(asPlainObject(ownedRun?.data || {}).status || data.status, 60),
+        createdAtMs: getTimestampMs(data.createdAt),
+        updatedAtMs: getTimestampMs(data.updatedAt || data.createdAt),
+        autopilotRunId: runId,
+        autopilotRun: ownedRun ? await toAutopilotRunResponse(ownedRun.id, ownedRun.data) : null,
+      };
+    })
+  );
+  return items.filter(Boolean) as Record<string, unknown>[];
+}
+
+async function syncAutomationRunProjection(runId: string, data: Record<string, unknown>): Promise<void> {
+  const automation = asPlainObject(data.automation);
+  const automationId = sanitizeText(automation.automationId, 220);
+  const ownerUid = sanitizeText(data.userId, 220);
+  if (!automationId || !ownerUid) return;
+  const status = sanitizeText(data.status, 60) || sanitizeText(asPlainObject(data.autopilot).status, 60) || "queued";
+  await automationRef(automationId).set(
+    {
+      lastRunId: runId,
+      lastStatus: status,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      ...(status === "completed" || status === "failed"
+        ? {}
+        : { nextRunAt: admin.firestore.Timestamp.fromMillis(nextAutomationRunAtMs()) }),
+    },
+    { merge: true }
+  );
+  await automationHistoryCollection(automationId).doc(runId).set(
+    {
+      ownerUid,
+      automationId,
+      autopilotRunId: runId,
+      trigger: sanitizeText(automation.trigger, 40),
+      status,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
 }
 
 function computeDecay(recencyHours: number): number {
@@ -5611,6 +6749,479 @@ function matchesSearchQuery(item: Record<string, unknown>, query: string): boole
 
 ROUTES.get("/health", (_req, res) => {
   res.status(200).json({ ok: true, service: "quantura-explore-api", ts: new Date().toISOString() });
+});
+
+ROUTES.get("/ticker/history", async (req, res) => {
+  try {
+    const query = asPlainObject(req.query);
+    const ticker = normalizeTicker(query.ticker || query.symbol);
+    if (!ticker) {
+      res.status(400).json({ error: "invalid_ticker" });
+      return;
+    }
+    const payload = await fetchYahooHistoryBars({
+      ticker,
+      interval: query.interval,
+      start: query.start,
+      end: query.end,
+    });
+    res.status(200).json(payload);
+  } catch (error: any) {
+    const detail = sanitizeText(error?.message || error, 260) || "history_lookup_failed";
+    const status = /ticker is required|invalid_ticker|start|end/i.test(detail) ? 400 : 502;
+    res.status(status).json({ error: status === 400 ? "invalid_history_request" : "history_lookup_failed", detail });
+  }
+});
+
+ROUTES.post("/forecast/run", async (req, res) => {
+  try {
+    const user = await verifyRequestUser(req, true);
+    if (!user) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const body = asPlainObject(req.body);
+    const ticker = normalizeTicker(body.ticker);
+    const interval = sanitizeText(body.interval, 10).toLowerCase() === "1h" ? "1h" : "1d";
+    const horizonLimit = interval === "1h" ? 240 : 365;
+    const horizon = Math.max(1, Math.min(horizonLimit, Math.floor(asFinite(body.horizon, 0))));
+    if (!ticker) {
+      res.status(400).json({ error: "invalid_ticker" });
+      return;
+    }
+    if (!horizon) {
+      res.status(400).json({ error: "invalid_horizon" });
+      return;
+    }
+
+    const history = await fetchYahooHistoryBars({
+      ticker,
+      interval,
+      start: body.start,
+      end: body.end,
+    });
+    const forecast = buildForecastFromHistory({
+      ticker,
+      interval,
+      horizon,
+      quantiles: DEFAULT_FORECAST_QUANTILES,
+      historyRows: history.rows,
+    });
+
+    const createdAt = admin.firestore.FieldValue.serverTimestamp();
+    const title = `${ticker} forecast`;
+    const docRef = db.collection("forecast_requests").doc();
+    const payload: Record<string, unknown> = {
+      userId: user.uid,
+      userEmail: sanitizeText((user as any)?.email, 320),
+      workspaceId: sanitizeText(body.workspaceId, 220) || user.uid,
+      ticker,
+      title,
+      interval,
+      horizon,
+      service: "prophet",
+      engine: forecast.engine,
+      status: "completed",
+      quantiles: forecast.quantiles,
+      start: sanitizeText(body.start, 40),
+      end: history.actualEnd,
+      forecastRows: forecast.forecastRows,
+      forecastPreview: forecast.forecastPreview,
+      forecastQuantilesEnd: forecast.forecastQuantilesEnd,
+      metrics: forecast.metrics,
+      serviceMessage: forecast.serviceMessage,
+      tradeRationale: forecast.tradeRationale,
+      createdAt,
+      updatedAt: createdAt,
+      meta: trimOutputsMeta(body.meta),
+    };
+    await docRef.set(payload, { merge: false });
+
+    await upsertOwnedMyRequestFromSystem(user.uid, {
+      requestId: buildMyRequestDocId("forecast", docRef.id),
+      type: "forecast",
+      title,
+      input: {
+        ticker,
+        interval,
+        horizon,
+        service: "prophet",
+        quantiles: forecast.quantiles,
+      },
+      outputsMeta: {
+        summary: forecast.serviceMessage,
+        serviceMessage: forecast.serviceMessage,
+        service: "prophet",
+        interval,
+        forecastRowsCount: forecast.forecastRows.length,
+        metrics: trimOutputsMeta(forecast.metrics),
+        topSymbols: [ticker],
+      },
+      sourceRef: {
+        collection: "forecast_requests",
+        id: docRef.id,
+      },
+    });
+
+    res.status(200).json({
+      ok: true,
+      requestId: docRef.id,
+      ticker,
+      interval,
+      horizon,
+      service: "prophet",
+      engine: forecast.engine,
+      status: "completed",
+      quantiles: forecast.quantiles,
+      forecastRows: forecast.forecastRows,
+      forecastSeries: forecast.forecastRows,
+      forecastPreview: forecast.forecastPreview,
+      forecastQuantilesEnd: forecast.forecastQuantilesEnd,
+      metrics: forecast.metrics,
+      serviceMessage: forecast.serviceMessage,
+      tradeRationale: forecast.tradeRationale,
+    });
+  } catch (error: any) {
+    const detail = sanitizeText(error?.message || error, 260) || "forecast_run_failed";
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (/quantile|required|history|horizon/i.test(detail)) {
+      res.status(400).json({ error: "forecast_run_failed", detail });
+      return;
+    }
+    console.error("[Forecast] run failed", error);
+    res.status(500).json({ error: "forecast_run_failed", detail });
+  }
+});
+
+ROUTES.delete("/forecast/:forecastId", async (req, res) => {
+  try {
+    const user = await verifyRequestUser(req, true);
+    if (!user) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const forecastId = sanitizeText(req.params.forecastId, 220);
+    if (!forecastId) {
+      res.status(400).json({ error: "invalid_forecast_id" });
+      return;
+    }
+    const ref = db.collection("forecast_requests").doc(forecastId);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      res.status(404).json({ error: "forecast_not_found" });
+      return;
+    }
+    const data = (snap.data() || {}) as Record<string, unknown>;
+    if (sanitizeText(data.userId, 220) !== user.uid) {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
+    await ref.delete();
+    res.status(200).json({ ok: true, deleted: true, forecastId });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Forecast] delete failed", error);
+    res.status(500).json({ error: "forecast_delete_failed" });
+  }
+});
+
+ROUTES.post("/screener/run", async (req, res) => {
+  try {
+    const user = await verifyRequestUser(req, true);
+    if (!user) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    if (!githubActionsConfigured()) {
+      res.status(500).json({ error: "screener_workflow_not_configured", detail: "GitHub Actions token is not configured." });
+      return;
+    }
+    const body = asPlainObject(req.body);
+    const minMarketCap = Math.max(0, Math.floor(asFinite(body.minMarketCap || body.minCap ?? asPlainObject(body.marketCapFilter).value, 100_000_000_000)));
+    const autoPublishRequested = asBoolean(body.autoPublish, true);
+    const createdAt = admin.firestore.FieldValue.serverTimestamp();
+    const docRef = db.collection("screener_runs").doc();
+    const runKey = buildScreenerWorkflowRunKey(docRef.id);
+    const payload: Record<string, unknown> = {
+      userId: user.uid,
+      userEmail: sanitizeText((user as any)?.email, 320),
+      workspaceId: sanitizeText(body.workspaceId, 220) || user.uid,
+      source: "github_actions",
+      market: "us",
+      universe: "both",
+      minMarketCap,
+      title: `Stock screener · ${fmtCompactCurrency(minMarketCap) || "$100B"} floor`,
+      notes: "",
+      status: "queued",
+      results: [],
+      resultsFound: 0,
+      serviceMessage: `Queued GitHub Actions stock screener above the ${fmtCompactCurrency(minMarketCap)} floor.`,
+      filters: {},
+      appliedFilters: [`Market cap >= ${fmtCompactCurrency(minMarketCap)}`],
+      ignoredFilters: [],
+      modelUsed: "daily_prophet_signal_tracker",
+      modelProvider: "github_actions",
+      modelTier: "workflow",
+      autoPublishRequested,
+      autoPublishPending: autoPublishRequested,
+      workflowRunKey: runKey,
+      workflowStatus: "queued",
+      workflowConclusion: "",
+      workflowName: GITHUB_SCREENER_WORKFLOW,
+      workflowBranch: GITHUB_ACTIONS_BRANCH,
+      isPublic: false,
+      createdAt,
+      updatedAt: createdAt,
+      meta: trimOutputsMeta(body.meta),
+    };
+    await docRef.set(payload, { merge: false });
+
+    await upsertOwnedMyRequestFromSystem(user.uid, {
+      requestId: buildMyRequestDocId("screener", docRef.id),
+      type: "screener",
+      title: sanitizeText(payload.title, 180) || "GitHub stock screener",
+      input: {
+        minMarketCap,
+        source: "github_actions",
+        workflow: GITHUB_SCREENER_WORKFLOW,
+        branch: GITHUB_ACTIONS_BRANCH,
+      },
+      outputsMeta: {
+        summary: payload.serviceMessage,
+        resultsCount: 0,
+        topSymbols: [],
+        modelUsed: payload.modelUsed,
+        metrics: {
+          Status: "queued",
+          Floor: fmtCompactCurrency(minMarketCap),
+        },
+      },
+      sourceRef: {
+        collection: "screener_runs",
+        id: docRef.id,
+      },
+      published: false,
+    });
+
+    try {
+      await dispatchGithubScreenerWorkflow({ runKey, minMarketCap });
+      const workflowRun = await waitForGithubWorkflowRun(runKey, 12000).catch(() => null);
+      const dispatchPatch: Record<string, unknown> = {
+        status: workflowRun ? "running" : "queued",
+        workflowStatus: workflowRun?.status || "queued",
+        serviceMessage: workflowRun
+          ? `GitHub Actions is running the stock screener above the ${fmtCompactCurrency(minMarketCap)} floor.`
+          : `GitHub Actions dispatch accepted for the ${fmtCompactCurrency(minMarketCap)} floor.`,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      };
+      if (workflowRun) {
+        dispatchPatch.workflowRunId = workflowRun.id;
+        dispatchPatch.workflowRunUrl = workflowRun.htmlUrl;
+        dispatchPatch.workflowRunNumber = workflowRun.runNumber || null;
+      }
+      await docRef.set(dispatchPatch, { merge: true });
+    } catch (dispatchError: any) {
+      const detail = sanitizeText(dispatchError?.message || dispatchError, 260) || "github_workflow_dispatch_failed";
+      await docRef.set(
+        {
+          status: "failed",
+          workflowStatus: "failed",
+          workflowConclusion: "dispatch_failed",
+          serviceMessage: detail,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      res.status(500).json({ error: "screener_run_failed", detail });
+      return;
+    }
+
+    const refreshed = await docRef.get();
+    const result = { id: refreshed.id, ...(refreshed.data() || {}) };
+
+    res.status(200).json({
+      ok: true,
+      runId: result.id,
+      title: result.title,
+      status: result.status,
+      serviceMessage: result.serviceMessage,
+      minMarketCap,
+      workflowRunId: result.workflowRunId || null,
+      workflowRunUrl: result.workflowRunUrl || "",
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    const detail = sanitizeText(error?.message || error, 260) || "screener_run_failed";
+    console.error("[Screener] run failed", error);
+    res.status(500).json({ error: "screener_run_failed", detail });
+  }
+});
+
+ROUTES.get("/screener/:runId", async (req, res) => {
+  try {
+    const user = await verifyRequestUser(req, true);
+    if (!user) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const runId = sanitizeText(req.params.runId, 220);
+    if (!runId) {
+      res.status(400).json({ error: "invalid_run_id" });
+      return;
+    }
+    const runDoc = await syncGithubScreenerRunRecord(runId, user.uid);
+    res.status(200).json({
+      ok: true,
+      run: runDoc,
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "screener_not_found") {
+      res.status(404).json({ error: code });
+      return;
+    }
+    if (code === "forbidden") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    console.error("[Screener] load failed", error);
+    res.status(500).json({ error: "screener_load_failed" });
+  }
+});
+
+ROUTES.patch("/screener/:runId", async (req, res) => {
+  try {
+    const user = await verifyRequestUser(req, true);
+    if (!user) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const runId = sanitizeText(req.params.runId, 220);
+    const nextTitle = sanitizeText(asPlainObject(req.body).title, 180);
+    if (!runId || !nextTitle) {
+      res.status(400).json({ error: "invalid_screener_update" });
+      return;
+    }
+    const ref = db.collection("screener_runs").doc(runId);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      res.status(404).json({ error: "screener_not_found" });
+      return;
+    }
+    const data = (snap.data() || {}) as Record<string, unknown>;
+    if (sanitizeText(data.userId, 220) !== user.uid) {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
+    await ref.set(
+      {
+        title: nextTitle,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    const refreshedSnap = await ref.get();
+    const refreshed = (refreshedSnap.data() || {}) as Record<string, unknown>;
+    await upsertOwnedMyRequestFromSystem(user.uid, {
+      requestId: buildMyRequestDocId("screener", runId),
+      type: "screener",
+      title: nextTitle,
+      input: {
+        universe: sanitizeText(refreshed.universe, 40),
+        market: sanitizeText(refreshed.market, 20),
+        maxNames: asFinite(refreshed.maxNames, 0) || null,
+        notes: sanitizeText(refreshed.notes, 1200),
+        model: sanitizeText(refreshed.modelUsed || refreshed.model, 120),
+        filters: trimOutputsMeta(refreshed.filters),
+      },
+      outputsMeta: {
+        summary: sanitizeText(refreshed.serviceMessage || refreshed.notes, 320),
+        resultsCount: Array.isArray(refreshed.results) ? refreshed.results.length : asFinite(refreshed.resultsFound, 0),
+        topSymbols: extractScreenerTopSymbols(refreshed.results),
+        modelUsed: sanitizeText(refreshed.modelUsed || refreshed.model, 120),
+      },
+      sourceRef: {
+        collection: "screener_runs",
+        id: runId,
+      },
+    });
+    res.status(200).json({ ok: true, runId, title: nextTitle });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Screener] update failed", error);
+    res.status(500).json({ error: "screener_update_failed" });
+  }
+});
+
+ROUTES.delete("/screener/:runId", async (req, res) => {
+  try {
+    const user = await verifyRequestUser(req, true);
+    if (!user) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const runId = sanitizeText(req.params.runId, 220);
+    if (!runId) {
+      res.status(400).json({ error: "invalid_run_id" });
+      return;
+    }
+    const ref = db.collection("screener_runs").doc(runId);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      res.status(404).json({ error: "screener_not_found" });
+      return;
+    }
+    const data = (snap.data() || {}) as Record<string, unknown>;
+    if (sanitizeText(data.userId, 220) !== user.uid) {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
+    await ref.delete();
+    res.status(200).json({ ok: true, deleted: true, runId });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Screener] delete failed", error);
+    res.status(500).json({ error: "screener_delete_failed" });
+  }
+});
+
+ROUTES.post("/stocks/screener", async (req, res) => {
+  try {
+    const body = asPlainObject(req.body);
+    const payload = await runMarketDataScreener({
+      preset: body.preset,
+      size: body.size,
+      query: body.query,
+    });
+    res.status(200).json(payload);
+  } catch (error: any) {
+    const detail = sanitizeText(error?.message || error, 260) || "market_data_screener_failed";
+    res.status(500).json({ error: "market_data_screener_failed", detail });
+  }
 });
 
 ROUTES.get("/ticker/trending", async (req, res) => {
@@ -9677,6 +11288,477 @@ ROUTES.post("/autopilot/runs/:runId/analyze", async (req, res) => {
   }
 });
 
+ROUTES.get("/mobile/automation/entitlement", async (req, res) => {
+  try {
+    const user = await requireFoundryUser(req);
+    const [entitlement, activeAutomationCount] = await Promise.all([
+      readAutomationEntitlement(user.uid),
+      countActiveAutomationsForOwner(user.uid),
+    ]);
+    res.status(200).json({
+      ok: true,
+      entitlement: buildAutomationEntitlementResponse(user.uid, entitlement, activeAutomationCount),
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "full_account_required") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    console.error("[Automation] entitlement read failed", error);
+    res.status(500).json({ error: "automation_entitlement_read_failed", detail: sanitizeText(error?.message, 260) });
+  }
+});
+
+ROUTES.post("/mobile/automation/apple/verify", async (req, res) => {
+  try {
+    const user = await requireFoundryUser(req);
+    const body = asPlainObject(req.body);
+    const contactEmail = await resolveAutomationContactEmail(user.uid, user, body.contactEmail);
+    if (!contactEmail) {
+      res.status(400).json({
+        error: "contact_email_required",
+        detail: "A valid email is required before Quantura Automation can be unlocked.",
+      });
+      return;
+    }
+    const verified = await verifyAppleAutomationPurchase({
+      transactionId: sanitizeText(body.transactionId, 220),
+      productId: sanitizeText(body.productId, 120) || AUTOMATION_PRODUCT_ID,
+    });
+    const entitlement = await syncAutomationEntitlementState(user.uid, {
+      automationUnlocked: true,
+      purchaseSource: verified.source,
+      unlockedAt: admin.firestore.Timestamp.fromMillis(verified.unlockedAtMs),
+      productId: verified.productId,
+      purchaseReference: verified.purchaseReference,
+      contactEmail,
+    });
+    try {
+      await sendAutomationUnlockEmail({
+        to: contactEmail,
+        ownerUid: user.uid,
+        productId: verified.productId,
+        purchaseSource: verified.source,
+        purchaseReference: verified.purchaseReference,
+      });
+    } catch (mailError) {
+      console.error("[Automation] apple unlock email failed", { uid: user.uid, mailError });
+    }
+    const activeAutomationCount = await countActiveAutomationsForOwner(user.uid);
+    res.status(200).json({
+      ok: true,
+      entitlement: buildAutomationEntitlementResponse(user.uid, entitlement, activeAutomationCount),
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "full_account_required") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    if (code === "apple_iap_server_credentials_missing") {
+      res.status(501).json({ error: code, detail: "Apple server-side purchase verification is not configured." });
+      return;
+    }
+    if (
+      code === "contact_email_required" ||
+      code === "missing_transaction_id" ||
+      code === "apple_bundle_mismatch" ||
+      code === "apple_product_mismatch" ||
+      code === "apple_purchase_revoked" ||
+      code.startsWith("apple_iap_validation_failed:")
+    ) {
+      res.status(400).json({ error: code });
+      return;
+    }
+    console.error("[Automation] apple verification failed", error);
+    res.status(500).json({ error: "automation_apple_verify_failed", detail: sanitizeText(error?.message, 260) });
+  }
+});
+
+ROUTES.post("/mobile/automation/google/verify", async (req, res) => {
+  try {
+    const user = await requireFoundryUser(req);
+    const body = asPlainObject(req.body);
+    const contactEmail = await resolveAutomationContactEmail(user.uid, user, body.contactEmail);
+    if (!contactEmail) {
+      res.status(400).json({
+        error: "contact_email_required",
+        detail: "A valid email is required before Quantura Automation can be unlocked.",
+      });
+      return;
+    }
+    const verified = await verifyGoogleAutomationPurchase({
+      packageName: sanitizeText(body.packageName, 220) || GOOGLE_PLAY_ANDROID_PACKAGE,
+      productId: sanitizeText(body.productId, 120) || AUTOMATION_PRODUCT_ID,
+      purchaseToken: sanitizeText(body.purchaseToken, 400),
+      ownerUid: user.uid,
+    });
+    const entitlement = await syncAutomationEntitlementState(user.uid, {
+      automationUnlocked: true,
+      purchaseSource: verified.source,
+      unlockedAt: admin.firestore.Timestamp.fromMillis(verified.unlockedAtMs),
+      productId: verified.productId,
+      purchaseReference: verified.purchaseReference,
+      contactEmail,
+    });
+    try {
+      await sendAutomationUnlockEmail({
+        to: contactEmail,
+        ownerUid: user.uid,
+        productId: verified.productId,
+        purchaseSource: verified.source,
+        purchaseReference: verified.purchaseReference,
+      });
+    } catch (mailError) {
+      console.error("[Automation] google unlock email failed", { uid: user.uid, mailError });
+    }
+    const activeAutomationCount = await countActiveAutomationsForOwner(user.uid);
+    res.status(200).json({
+      ok: true,
+      entitlement: buildAutomationEntitlementResponse(user.uid, entitlement, activeAutomationCount),
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "full_account_required") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    if (code === "contact_email_required" || code === "missing_purchase_token" || code === "google_purchase_not_completed") {
+      res.status(400).json({ error: code });
+      return;
+    }
+    console.error("[Automation] google verification failed", error);
+    res.status(500).json({ error: "automation_google_verify_failed", detail: sanitizeText(error?.message, 260) });
+  }
+});
+
+ROUTES.get("/mobile/automation", async (req, res) => {
+  try {
+    const user = await requireFoundryUser(req);
+    const [entitlement, activeAutomationCount, snap] = await Promise.all([
+      readAutomationEntitlement(user.uid),
+      countActiveAutomationsForOwner(user.uid),
+      db.collection(AUTOMATION_COLLECTION).where("ownerUid", "==", user.uid).get(),
+    ]);
+    const automations = snap.docs
+      .map((doc) => buildAutomationResponse(doc.id, (doc.data() || {}) as Record<string, unknown>))
+      .sort((left, right) => (right.updatedAtMs as number) - (left.updatedAtMs as number));
+    res.status(200).json({
+      ok: true,
+      entitlement: buildAutomationEntitlementResponse(user.uid, entitlement, activeAutomationCount),
+      automations,
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "full_account_required") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    console.error("[Automation] list failed", error);
+    res.status(500).json({ error: "automation_list_failed", detail: sanitizeText(error?.message, 260) });
+  }
+});
+
+ROUTES.post("/mobile/automation", async (req, res) => {
+  try {
+    const user = await requireFoundryUser(req);
+    const body = asPlainObject(req.body);
+    const ticker = normalizeTicker(body.ticker);
+    if (!ticker) {
+      res.status(400).json({ error: "invalid_ticker" });
+      return;
+    }
+    const active = asBoolean(body.active, true);
+    const ref = automationRef();
+    await db.runTransaction(async (transaction) => {
+      const entitlementSnap = await transaction.get(automationEntitlementRef(user.uid));
+      const entitlement = (entitlementSnap.data() || {}) as Record<string, unknown>;
+      if (!asBoolean(entitlement.automationUnlocked, false)) {
+        throw new Error("automation_locked");
+      }
+      const activeSnap = await transaction.get(
+        db.collection(AUTOMATION_COLLECTION).where("ownerUid", "==", user.uid).where("active", "==", true)
+      );
+      const activeCount = activeSnap.size;
+      if (active && activeCount >= AUTOMATION_MAX_ACTIVE) {
+        throw new Error("automation_active_limit_reached");
+      }
+      transaction.set(ref, {
+        ticker,
+        forecastProfile: normalizeAutomationProfile(body.forecastProfile),
+        model: normalizeAutomationModel(body.model),
+        cadence: normalizeAutomationCadence(body.cadence),
+        horizon: normalizeAutomationHorizon(body.horizon),
+        active,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        nextRunAt: active ? admin.firestore.Timestamp.fromMillis(nextAutomationRunAtMs()) : null,
+        lastRunAt: null,
+        lastStatus: active ? "scheduled" : "inactive",
+        lastRunId: "",
+        ownerUid: user.uid,
+      });
+      transaction.set(
+        automationEntitlementRef(user.uid),
+        {
+          maxActiveAutomations: AUTOMATION_MAX_ACTIVE,
+          activeAutomationCount: active ? activeCount + 1 : activeCount,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    });
+    const created = await readAutomationForOwner(user.uid, ref.id);
+    res.status(200).json({
+      ok: true,
+      automation: created ? buildAutomationResponse(created.id, created.data) : null,
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "full_account_required") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    if (code === "automation_locked") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    if (code === "automation_active_limit_reached") {
+      res.status(429).json({
+        error: code,
+        detail: `Quantura Automation allows ${AUTOMATION_MAX_ACTIVE} active automations at a time. Deactivate one first.`,
+      });
+      return;
+    }
+    console.error("[Automation] create failed", error);
+    res.status(500).json({ error: "automation_create_failed", detail: sanitizeText(error?.message, 260) });
+  }
+});
+
+ROUTES.get("/mobile/automation/:automationId", async (req, res) => {
+  try {
+    const user = await requireFoundryUser(req);
+    const owned = await readAutomationForOwner(user.uid, req.params.automationId);
+    if (!owned) {
+      res.status(404).json({ error: "automation_not_found" });
+      return;
+    }
+    res.status(200).json({
+      ok: true,
+      automation: buildAutomationResponse(owned.id, owned.data),
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "full_account_required") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    console.error("[Automation] read failed", error);
+    res.status(500).json({ error: "automation_read_failed", detail: sanitizeText(error?.message, 260) });
+  }
+});
+
+ROUTES.patch("/mobile/automation/:automationId", async (req, res) => {
+  try {
+    const user = await requireFoundryUser(req);
+    const owned = await readAutomationForOwner(user.uid, req.params.automationId);
+    if (!owned) {
+      res.status(404).json({ error: "automation_not_found" });
+      return;
+    }
+    const body = asPlainObject(req.body);
+    const nextTicker = normalizeTicker(body.ticker || owned.data.ticker);
+    if (!nextTicker) {
+      res.status(400).json({ error: "invalid_ticker" });
+      return;
+    }
+    const nextActive =
+      typeof body.active === "boolean" ? asBoolean(body.active, false) : asBoolean(owned.data.active, false);
+    await db.runTransaction(async (transaction) => {
+      const entitlementSnap = await transaction.get(automationEntitlementRef(user.uid));
+      const entitlement = (entitlementSnap.data() || {}) as Record<string, unknown>;
+      if (!asBoolean(entitlement.automationUnlocked, false)) {
+        throw new Error("automation_locked");
+      }
+      const activeSnap = await transaction.get(
+        db.collection(AUTOMATION_COLLECTION).where("ownerUid", "==", user.uid).where("active", "==", true)
+      );
+      const activeIds = new Set(activeSnap.docs.map((doc) => doc.id));
+      const alreadyActive = activeIds.has(owned.id);
+      const activeCountExcludingCurrent = alreadyActive ? Math.max(0, activeSnap.size - 1) : activeSnap.size;
+      if (nextActive && activeCountExcludingCurrent >= AUTOMATION_MAX_ACTIVE) {
+        throw new Error("automation_active_limit_reached");
+      }
+      transaction.set(
+        automationRef(owned.id),
+        {
+          ticker: nextTicker,
+          forecastProfile: normalizeAutomationProfile(body.forecastProfile || owned.data.forecastProfile),
+          model: normalizeAutomationModel(body.model || owned.data.model),
+          cadence: normalizeAutomationCadence(body.cadence || owned.data.cadence),
+          horizon: normalizeAutomationHorizon(body.horizon || owned.data.horizon),
+          active: nextActive,
+          nextRunAt: nextActive
+            ? owned.data.nextRunAt || admin.firestore.Timestamp.fromMillis(nextAutomationRunAtMs())
+            : null,
+          lastStatus: nextActive ? sanitizeText(owned.data.lastStatus, 80) || "scheduled" : "inactive",
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      transaction.set(
+        automationEntitlementRef(user.uid),
+        {
+          maxActiveAutomations: AUTOMATION_MAX_ACTIVE,
+          activeAutomationCount: nextActive ? activeCountExcludingCurrent + 1 : activeCountExcludingCurrent,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    });
+    const updated = await readAutomationForOwner(user.uid, owned.id);
+    res.status(200).json({
+      ok: true,
+      automation: updated ? buildAutomationResponse(updated.id, updated.data) : null,
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "full_account_required") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    if (code === "automation_locked") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    if (code === "automation_active_limit_reached") {
+      res.status(429).json({
+        error: code,
+        detail: `Quantura Automation allows ${AUTOMATION_MAX_ACTIVE} active automations at a time. Deactivate one first.`,
+      });
+      return;
+    }
+    console.error("[Automation] update failed", error);
+    res.status(500).json({ error: "automation_update_failed", detail: sanitizeText(error?.message, 260) });
+  }
+});
+
+ROUTES.get("/mobile/automation/:automationId/history", async (req, res) => {
+  try {
+    const user = await requireFoundryUser(req);
+    const owned = await readAutomationForOwner(user.uid, req.params.automationId);
+    if (!owned) {
+      res.status(404).json({ error: "automation_not_found" });
+      return;
+    }
+    const history = await listAutomationHistoryForOwner(user.uid, owned.id);
+    res.status(200).json({
+      ok: true,
+      automation: buildAutomationResponse(owned.id, owned.data),
+      history,
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "full_account_required") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    console.error("[Automation] history failed", error);
+    res.status(500).json({ error: "automation_history_failed", detail: sanitizeText(error?.message, 260) });
+  }
+});
+
+ROUTES.post("/mobile/automation/:automationId/run", async (req, res) => {
+  try {
+    const user = await requireFoundryUser(req);
+    const owned = await readAutomationForOwner(user.uid, req.params.automationId);
+    if (!owned) {
+      res.status(404).json({ error: "automation_not_found" });
+      return;
+    }
+    if (!asBoolean(owned.data.active, false)) {
+      res.status(400).json({ error: "automation_inactive", detail: "Activate this automation before running it." });
+      return;
+    }
+    const activeAutomationCount = await countActiveAutomationsForOwner(user.uid);
+    if (activeAutomationCount > AUTOMATION_MAX_ACTIVE) {
+      res.status(429).json({
+        error: "automation_active_limit_reached",
+        detail: `Quantura Automation allows ${AUTOMATION_MAX_ACTIVE} active automations at a time. Deactivate one first.`,
+      });
+      return;
+    }
+    const lastRunId = sanitizeText(owned.data.lastRunId, 220);
+    if (lastRunId) {
+      const currentRun = await readAutopilotRunForOwner(user.uid, lastRunId);
+      const currentStatus = sanitizeText(asPlainObject(currentRun?.data || {}).status, 60).toLowerCase();
+      if (ACTIVE_FOUNDRY_STATUSES.has(currentStatus)) {
+        res.status(409).json({ error: "automation_run_already_active" });
+        return;
+      }
+    }
+    const run = await startAutomationForecastRun(user.uid, owned.id, owned.data, "manual");
+    res.status(200).json({ ok: true, run });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "full_account_required") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    if (code === "automation_locked") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    if (code === "invalid_ticker") {
+      res.status(400).json({ error: code });
+      return;
+    }
+    if (code.startsWith("invalid_quantiles:")) {
+      res.status(400).json({ error: "invalid_quantiles", detail: sanitizeText(code.replace(/^invalid_quantiles:\s*/i, ""), 260) });
+      return;
+    }
+    console.error("[Automation] run failed", error);
+    res.status(500).json({ error: "automation_run_failed", detail: sanitizeText(error?.message, 260) });
+  }
+});
+
 ROUTES.get("/my-requests/shared/:slug", async (req, res) => {
   try {
     const slug = normalizeShareId(req.params.slug);
@@ -10910,5 +12992,41 @@ export async function reconcileAutopilotRuns(_cloudEvent: any): Promise<void> {
     }
   } catch (error) {
     console.error("[Autopilot] reconcile job failed", error);
+  }
+}
+
+export async function runAutomationSchedules(_cloudEvent: any): Promise<void> {
+  try {
+    const weekday = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York",
+      weekday: "short",
+    }).format(new Date());
+    if (weekday === "Sat" || weekday === "Sun") {
+      return;
+    }
+    const nowMs = Date.now();
+    const snap = await db.collection(AUTOMATION_COLLECTION).where("active", "==", true).get();
+    for (const doc of snap.docs) {
+      const data = (doc.data() || {}) as Record<string, unknown>;
+      const ownerUid = sanitizeText(data.ownerUid, 220);
+      if (!ownerUid) continue;
+      const nextRunAtMs = getOptionalTimestampMs(data.nextRunAt);
+      if (nextRunAtMs != null && nextRunAtMs > nowMs) continue;
+      try {
+        const entitlement = await readAutomationEntitlement(ownerUid);
+        if (!asBoolean(entitlement.automationUnlocked, false)) continue;
+        const lastRunId = sanitizeText(data.lastRunId, 220);
+        if (lastRunId) {
+          const currentRun = await readAutopilotRunForOwner(ownerUid, lastRunId);
+          const currentStatus = sanitizeText(asPlainObject(currentRun?.data || {}).status, 60).toLowerCase();
+          if (ACTIVE_FOUNDRY_STATUSES.has(currentStatus)) continue;
+        }
+        await startAutomationForecastRun(ownerUid, doc.id, data, "scheduled");
+      } catch (error) {
+        console.error("[Automation] scheduled run failed", { automationId: doc.id, error });
+      }
+    }
+  } catch (error) {
+    console.error("[Automation] scheduler failed", error);
   }
 }

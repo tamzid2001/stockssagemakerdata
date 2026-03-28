@@ -1,8 +1,13 @@
 name: Stock Screener
+run-name: Stock Screener · ${{ github.event.inputs.run_key || 'scheduled' }}
 
 on:
   workflow_dispatch:
     inputs:
+      run_key:
+        description: "Quantura workflow correlation key"
+        required: false
+        default: ""
       universe:
         description: "Universe to scan"
         required: false
