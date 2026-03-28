@@ -1992,6 +1992,12 @@ textarea {
 }
 
 .notification-pref-copy {
+#forecast-output.panel-output {
+  max-height: none;
+  overflow: visible;
+  padding-right: 0;
+}
+
   display: grid;
   gap: 3px;
 }
@@ -2225,6 +2231,51 @@ textarea {
   padding: 7px 12px;
   font: inherit;
   font-size: 0.82rem;
+.forecast-chart-shell {
+  display: grid;
+  gap: 12px;
+  margin-top: 10px;
+  padding: 16px;
+  border: 1px solid rgba(98, 118, 147, 0.18);
+  border-radius: 22px;
+  background: linear-gradient(180deg, rgba(244, 247, 252, 0.96), rgba(235, 241, 248, 0.88));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.forecast-chart-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+[data-theme="dark"] .forecast-chart-shell {
+  border-color: rgba(206, 221, 255, 0.12);
+  background: linear-gradient(180deg, rgba(20, 28, 48, 0.94), rgba(16, 23, 40, 0.92));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.forecast-output-plot {
+  width: 100%;
+  min-height: 650px;
+  border-radius: 18px;
+  overflow: hidden;
+}
+
+.horizon-rationale {
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(240, 180, 41, 0.10);
+  border: 1px solid rgba(240, 180, 41, 0.22);
+}
+
+@media (max-width: 720px) {
+  .forecast-output-plot {
+    min-height: 500px;
+  }
+}
+
   font-weight: 700;
   cursor: pointer;
   transition: all 0.18s ease;
