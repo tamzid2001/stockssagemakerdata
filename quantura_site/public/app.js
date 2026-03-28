@@ -5232,6 +5232,8 @@
   };
 
   let forecastCacheDbPromise = null;
+  const DEFAULT_FORECAST_QUANTILES = Object.freeze([0.01, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99]);
+  const DEFAULT_FORECAST_BAND_SUMMARY = "P01-P99, P10-P90, P25-P75, and the P50 median path";
 
   const computeFastHash = (input) => {
     const text = String(input || "");
@@ -5242,6 +5244,8 @@
     }
     return (hash >>> 0).toString(16).padStart(8, "0");
   };
+
+  const getDefaultForecastQuantiles = () => DEFAULT_FORECAST_QUANTILES.slice();
 
   const buildForecastParamsHash = ({ ticker, interval, horizon, service, quantiles, start } = {}) => {
     const sortedQuantiles = Array.isArray(quantiles)
@@ -5338,6 +5342,12 @@
         return normalized;
       })
       .filter(Boolean);
+  };
+
+  const formatIsoDate = (value) => {
+    const dt = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(dt.getTime())) return "";
+    return dt.toISOString().slice(0, 10);
   };
 
   const openForecastCacheDb = () => {
@@ -9488,7 +9498,23 @@
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#039;");
 
+  const sanitizeText = (value, maxLen = 600) =>
+    String(value ?? "")
+      .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, Math.max(0, Number(maxLen) || 0));
+
   const icon = (name) => `<i class="iconoir-${name}" aria-hidden="true"></i>`;
+
+  const hidePublicationIcon = () => `
+    <svg class="semantic-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+      <circle cx="12" cy="12" r="8"></circle>
+      <path d="M4 12h16"></path>
+      <path d="M12 4c2.2 2 3.5 4.93 3.5 8S14.2 18 12 20c-2.2-2-3.5-4.93-3.5-8S9.8 6 12 4z"></path>
+      <path d="M4 4l16 16"></path>
+    </svg>
+  `.trim();
 
   const MARKED_SCRIPT_URL = "https://cdn.jsdelivr.net/npm/marked/marked.min.js";
   const MARKDOWN_ALLOWED_TAGS = new Set([
@@ -14381,16 +14407,17 @@
     const request = typeof getMyRequestById === "function" ? getMyRequestById(id) : null;
     const published = Boolean(request?.published);
     const stateLabel = published ? "Published to Explore" : "Not published to Explore";
+    const unpublishLabel = "Remove from public Explore";
     return `
       <div class="task-chip-row" data-output-publish-controls data-request-id="${escapeHtml(id)}" data-request-type="${escapeHtml(type)}">
         <span class="status status-icon-only ${published ? "fulfilled" : "pending"}" role="img" aria-label="${escapeHtml(stateLabel)}" title="${escapeHtml(stateLabel)}">
-          ${icon(published ? "eye" : "eye-off")}
+          ${published ? icon("eye") : hidePublicationIcon()}
         </span>
         ${
           published
-            ? `<button class="task-chip" type="button" data-action="output-unpublish" data-request-id="${escapeHtml(id)}" data-request-type="${escapeHtml(type)}">${icon(
-                "eye-off"
-              )}<span>Unpublish</span></button>`
+            ? `<button class="task-chip" type="button" data-action="output-unpublish" data-request-id="${escapeHtml(id)}" data-request-type="${escapeHtml(
+                type
+              )}" aria-label="${escapeHtml(unpublishLabel)}" title="${escapeHtml(unpublishLabel)}">${hidePublicationIcon()}<span>Unpublish</span></button>`
             : `<button class="task-chip" type="button" data-action="output-publish" data-request-id="${escapeHtml(id)}" data-request-type="${escapeHtml(type)}">${icon(
                 "send"
               )}<span>Publish to Explore</span></button>`
@@ -14912,7 +14939,7 @@
               <button class="cta secondary small" type="button" data-action="my-request-duplicate" data-request-id="${id}">${icon("copy")}<span>Duplicate</span></button>
               ${
                 published
-                  ? `<button class="cta secondary small" type="button" data-action="my-request-unpublish" data-request-id="${id}">${icon("eye-off")}<span>Unpublish</span></button>`
+                  ? `<button class="cta secondary small" type="button" data-action="my-request-unpublish" data-request-id="${id}" aria-label="Remove from public Explore" title="Remove from public Explore">${hidePublicationIcon()}<span>Unpublish</span></button>`
                   : `<button class="cta secondary small" type="button" data-action="my-request-publish" data-request-id="${id}">${icon("send")}<span>Publish</span></button>`
               }
               <button class="cta secondary small danger" type="button" data-action="my-request-delete" data-request-id="${id}">${icon("trash")}<span>Delete</span></button>
@@ -19530,7 +19557,7 @@
       interval: "1d",
       service: "prophet",
       dailySeasonality: true,
-      quantiles: [0.1, 0.5, 0.9],
+      quantiles: getDefaultForecastQuantiles(),
       workspaceId,
       start,
       meta: buildMeta(),
@@ -20117,6 +20144,281 @@
     return Array.from(set).sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
   };
 
+  const formatForecastQuantileLabel = (key) => {
+    const raw = String(key || "").trim().toLowerCase();
+    if (!/^q\d{1,3}$/.test(raw)) return raw.toUpperCase();
+    const level = Math.max(0, Math.floor(Number(raw.slice(1)) || 0));
+    return `P${String(level).padStart(level < 100 ? 2 : 3, "0")}`;
+  };
+
+  const resolveForecastQuantileKey = (quantileKeys = [], targetLevel = 50) => {
+    const entries = quantileKeys
+      .map((key) => ({
+        key,
+        level: Number(String(key || "").replace(/^q/i, "")),
+      }))
+      .filter((entry) => Number.isFinite(entry.level))
+      .sort((left, right) => left.level - right.level);
+    if (!entries.length) return "";
+    const exact = entries.find((entry) => entry.level === targetLevel);
+    if (exact) return exact.key;
+    return (
+      entries
+        .slice()
+        .sort((left, right) => Math.abs(left.level - targetLevel) - Math.abs(right.level - targetLevel))[0]?.key || ""
+    );
+  };
+
+  const describeForecastBands = (quantileKeys = []) => {
+    const levels = new Set(
+      quantileKeys
+        .map((key) => Number(String(key || "").replace(/^q/i, "")))
+        .filter((value) => Number.isFinite(value))
+    );
+    if ([1, 10, 25, 50, 75, 90, 99].every((value) => levels.has(value))) {
+      return DEFAULT_FORECAST_BAND_SUMMARY;
+    }
+    return quantileKeys.map((key) => formatForecastQuantileLabel(key)).join(", ");
+  };
+
+  const collectForecastHistoryPoints = (rows = []) =>
+    (Array.isArray(rows) ? rows : [])
+      .map((row) => ({
+        x: extractDateFromHistoryRow(row),
+        y: extractCloseFromHistoryRow(row),
+      }))
+      .filter((point) => point.x instanceof Date && !Number.isNaN(point.x.getTime()) && point.y !== null);
+
+  const renderForecastOutputChart = async (forecastDoc) => {
+    if (!ui.forecastOutput) return;
+    const host = ui.forecastOutput.querySelector("[data-forecast-detail-chart]");
+    if (!host) return;
+
+    const Plotly = getPlotly();
+    if (!Plotly) {
+      host.innerHTML = `<div class="small muted">Interactive chart unavailable right now.</div>`;
+      return;
+    }
+
+    const forecastRows = normalizeForecastSeriesRows(forecastDoc?.forecastRows || forecastDoc?.forecastPreview || []);
+    const quantileKeys = extractQuantileKeys(forecastRows);
+    if (!forecastRows.length || !quantileKeys.length) {
+      host.innerHTML = `<div class="small muted">No forecast series available to plot.</div>`;
+      return;
+    }
+
+    const historicalRows = collectForecastHistoryPoints(forecastDoc?.historicalRows || state.tickerContext.rows || []).sort(
+      (left, right) => left.x.getTime() - right.x.getTime()
+    );
+    const forecastPoints = forecastRows
+      .map((row) => {
+        const parsed = new Date(String(row.ds || "").trim());
+        if (Number.isNaN(parsed.getTime())) return null;
+        return { x: parsed, row };
+      })
+      .filter(Boolean);
+    if (!forecastPoints.length) {
+      host.innerHTML = `<div class="small muted">No forecast dates were available to plot.</div>`;
+      return;
+    }
+
+    const q01Key = resolveForecastQuantileKey(quantileKeys, 1);
+    const q10Key = resolveForecastQuantileKey(quantileKeys, 10);
+    const q25Key = resolveForecastQuantileKey(quantileKeys, 25);
+    const q50Key = resolveForecastQuantileKey(quantileKeys, 50);
+    const q75Key = resolveForecastQuantileKey(quantileKeys, 75);
+    const q90Key = resolveForecastQuantileKey(quantileKeys, 90);
+    const q99Key = resolveForecastQuantileKey(quantileKeys, 99);
+    const medianKey = q50Key || resolveForecastQuantileKey(quantileKeys, 50);
+    const lastActualPoint = historicalRows[historicalRows.length - 1] || null;
+    const firstForecastPoint = forecastPoints[0] || null;
+
+    const buildForecastSeries = (key) => {
+      if (!key) return [];
+      const points = [];
+      if (lastActualPoint) {
+        points.push({ x: lastActualPoint.x, y: lastActualPoint.y });
+      }
+      forecastPoints.forEach((entry) => {
+        const numeric = Number(entry.row?.[key]);
+        if (!Number.isFinite(numeric)) return;
+        points.push({ x: entry.x, y: numeric });
+      });
+      return points;
+    };
+
+    const dark = isDarkMode();
+    const textColor = dark ? "rgba(246, 244, 238, 0.92)" : "#24324a";
+    const gridColor = dark ? "rgba(246, 244, 238, 0.12)" : "rgba(86, 106, 128, 0.16)";
+    const plotBg = dark ? "#121a2f" : "#eaf0f8";
+    const historyColor = dark ? "#7c89ff" : "#6366f1";
+    const forecastColor = dark ? "#ff9a6a" : "#f97316";
+    const band25Color = dark ? "rgba(176, 224, 124, 0.42)" : "rgba(186, 214, 111, 0.45)";
+    const band25Line = dark ? "#b4e179" : "#96b454";
+    const band10Color = dark ? "rgba(113, 190, 255, 0.28)" : "rgba(111, 196, 255, 0.32)";
+    const band10Line = dark ? "#78c4ff" : "#61b6e8";
+    const band01Color = dark ? "rgba(170, 132, 255, 0.22)" : "rgba(168, 122, 255, 0.28)";
+    const band01Line = dark ? "#ae86ff" : "#9f76ff";
+    const isHourlyForecast = String(forecastDoc?.interval || state.tickerContext.interval || "1d").toLowerCase() === "1h";
+    const intervalLabel = isHourlyForecast ? "Timestamp" : "Date";
+    const hoverDateFormat = isHourlyForecast ? "%Y-%m-%d %H:%M" : "%Y-%m-%d";
+    const titleTicker = normalizeTicker(forecastDoc?.ticker || state.tickerContext.ticker || "") || "Ticker";
+    const lastActualDate = lastActualPoint?.x || firstForecastPoint?.x || null;
+    const chartStartDate = (() => {
+      if (!lastActualDate) return historicalRows[0]?.x || firstForecastPoint?.x || null;
+      const lookbackDays = 450;
+      const candidate = new Date(lastActualDate.getTime() - lookbackDays * 24 * 60 * 60 * 1000);
+      const floor = historicalRows[0]?.x || candidate;
+      return candidate < floor ? floor : candidate;
+    })();
+    const chartEndDate = forecastPoints[forecastPoints.length - 1]?.x || lastActualDate || chartStartDate;
+    const chartTitle = `${titleTicker} Quantura Horizon Forecast (Interactive) from ${formatIsoDate(
+      chartStartDate || chartEndDate || new Date()
+    )} with P10-P90 and P25-P75`;
+    const compactLegend = typeof window !== "undefined" && window.innerWidth < 720;
+
+    const traces = [];
+    if (historicalRows.length) {
+      traces.push({
+        type: "scatter",
+        mode: "lines+markers",
+        name: "History",
+        x: historicalRows.map((point) => point.x),
+        y: historicalRows.map((point) => point.y),
+        line: { width: 2.2, color: historyColor },
+        marker: { size: 4, color: historyColor, opacity: 0.82 },
+        hovertemplate: `Actual Close<br>%{x|${hoverDateFormat}}<br>$%{y:.2f}<extra></extra>`,
+      });
+    }
+
+    const addBand = (lowerKey, upperKey, label, fillcolor, lineColor) => {
+      if (!lowerKey || !upperKey || lowerKey === upperKey) return;
+      const upperSeries = buildForecastSeries(upperKey);
+      const lowerSeries = buildForecastSeries(lowerKey);
+      if (upperSeries.length < 2 || lowerSeries.length < 2) return;
+      traces.push({
+        type: "scatter",
+        mode: "lines",
+        name: `${label} upper`,
+        x: upperSeries.map((point) => point.x),
+        y: upperSeries.map((point) => point.y),
+        line: { width: 1.2, color: lineColor },
+        hovertemplate: `${escapeHtml(label)} upper<br>%{x|${hoverDateFormat}}<br>$%{y:.2f}<extra></extra>`,
+        showlegend: false,
+      });
+      traces.push({
+        type: "scatter",
+        mode: "lines",
+        name: label,
+        x: lowerSeries.map((point) => point.x),
+        y: lowerSeries.map((point) => point.y),
+        line: { width: 1.2, color: lineColor },
+        fill: "tonexty",
+        fillcolor,
+        hovertemplate: `${escapeHtml(label)} lower<br>%{x|${hoverDateFormat}}<br>$%{y:.2f}<extra></extra>`,
+      });
+    };
+
+    addBand(q01Key, q99Key, "P01-P99", band01Color, band01Line);
+    addBand(q10Key, q90Key, "P10-P90", band10Color, band10Line);
+    addBand(q25Key, q75Key, "P25-P75", band25Color, band25Line);
+
+    const medianSeries = buildForecastSeries(medianKey);
+    if (medianSeries.length) {
+      traces.push({
+        type: "scatter",
+        mode: "lines",
+        name: "Forecast (yhat)",
+        x: medianSeries.map((point) => point.x),
+        y: medianSeries.map((point) => point.y),
+        line: {
+          width: 2.6,
+          color: forecastColor,
+        },
+        hovertemplate: `Forecast (yhat)<br>%{x|${hoverDateFormat}}<br>$%{y:.2f}<extra></extra>`,
+      });
+    }
+
+    const layout = {
+      font: { family: "Manrope, sans-serif", color: textColor },
+      paper_bgcolor: "rgba(0,0,0,0)",
+      plot_bgcolor: plotBg,
+      margin: { l: 62, r: compactLegend ? 20 : 150, t: 58, b: 78 },
+      title: {
+        text: chartTitle,
+        x: 0.02,
+        xanchor: "left",
+        y: 0.98,
+        yanchor: "top",
+        font: { size: compactLegend ? 15 : 18, color: textColor },
+      },
+      hovermode: "x unified",
+      dragmode: "pan",
+      showlegend: true,
+      legend: compactLegend
+        ? { orientation: "h", y: -0.24, x: 0, font: { size: 11 } }
+        : { orientation: "v", y: 0.98, x: 1.02, xanchor: "left", yanchor: "top", font: { size: 12 } },
+      xaxis: {
+        title: { text: intervalLabel },
+        gridcolor: gridColor,
+        zerolinecolor: gridColor,
+        showspikes: true,
+        spikemode: "across",
+        spikesnap: "cursor",
+        rangeslider: {
+          visible: true,
+          thickness: 0.14,
+          bgcolor: dark ? "rgba(255,255,255,0.03)" : "rgba(255,255,255,0.55)",
+          bordercolor: gridColor,
+        },
+        ...(chartStartDate && chartEndDate ? { range: [chartStartDate, chartEndDate] } : {}),
+      },
+      yaxis: {
+        title: { text: "Price (USD)" },
+        gridcolor: gridColor,
+        zerolinecolor: gridColor,
+        tickprefix: "$",
+      },
+      shapes: lastActualDate
+        ? [
+            {
+              type: "line",
+              x0: lastActualDate,
+              x1: lastActualDate,
+              y0: 0,
+              y1: 1,
+              yref: "paper",
+              line: {
+                color: dark ? "rgba(255,255,255,0.42)" : "rgba(36,50,74,0.42)",
+                width: 2,
+                dash: "dash",
+              },
+            },
+          ]
+        : [],
+      annotations: lastActualDate
+        ? [
+            {
+              x: lastActualDate,
+              y: 1,
+              yref: "paper",
+              text: "Forecast start",
+              showarrow: false,
+              yshift: 16,
+              font: { size: 11, color: dark ? "rgba(246,244,238,0.72)" : "rgba(36,50,74,0.72)" },
+            },
+          ]
+        : [],
+      height: compactLegend ? 520 : 660,
+    };
+
+    await Plotly.react(host, traces, layout, {
+      responsive: true,
+      displaylogo: false,
+      modeBarButtonsToRemove: ["lasso2d", "select2d"],
+    });
+  };
+
   const extractForecastKeyLevels = (rows = []) => {
     const normalizedRows = normalizeForecastSeriesRows(rows);
     if (!normalizedRows.length) {
@@ -20414,9 +20716,7 @@
     const end = Math.min(total, start + pageSize);
     const slice = rows.slice(start, end);
 
-    const quantileLabel = Array.isArray(forecastDoc.quantiles) && forecastDoc.quantiles.length
-      ? forecastDoc.quantiles.map((q) => `P${Math.round(Number(q) * 100)}`).filter(Boolean).join(", ")
-      : quantKeys.map((key) => `P${String(key).replace(/^q/, "")}`).join(", ");
+    const quantileLabel = describeForecastBands(quantKeys);
     const metrics = forecastDoc.metrics && typeof forecastDoc.metrics === "object" ? forecastDoc.metrics : {};
     const interval = String(forecastDoc.interval || state.tickerContext.interval || "1d");
 
@@ -20490,6 +20790,10 @@
     const metricEntries = Object.entries(metrics || {}).filter(([, value]) => value !== null && value !== undefined && value !== "");
     const extraMetrics = metricEntries.filter(([key]) => !displayedKeys.has(key));
     const forecastTicker = normalizeTicker(forecastDoc.ticker || state.tickerContext.ticker || "");
+    const historicalRows = Array.isArray(forecastDoc.historicalRows) && forecastDoc.historicalRows.length
+      ? forecastDoc.historicalRows
+      : state.tickerContext.rows;
+    const historyPoints = collectForecastHistoryPoints(historicalRows);
     const metricsTable = metricEntries.length
       ? `
         <details class="learn-more">
@@ -20521,7 +20825,7 @@
       )}</div>`,
       `<div class="small meta-line">${icon("magic-wand")}<strong>Service:</strong> ${escapeHtml(labelForecastService(forecastDoc.service))}</div>`,
       forecastDoc.engine ? `<div class="small meta-line">${icon("electronics-chip")}<strong>Engine:</strong> ${escapeHtml(forecastDoc.engine)}</div>` : "",
-      quantileLabel ? `<div class="small meta-line">${icon("percentage")}<strong>Quantiles:</strong> ${escapeHtml(quantileLabel)}</div>` : "",
+      quantileLabel ? `<div class="small meta-line">${icon("percentage")}<strong>Bands:</strong> ${escapeHtml(quantileLabel)}</div>` : "",
     ]
       .filter(Boolean)
       .join("");
@@ -20534,6 +20838,17 @@
       <div class="output-stack quantura-horizon-widget">
         ${summary}
         ${serviceMessage ? `<div class="small muted">${escapeHtml(serviceMessage)}</div>` : ""}
+        <div class="forecast-chart-shell">
+          <div class="forecast-chart-head">
+            <div class="small"><strong>Interactive forecast plot</strong></div>
+            <div class="small muted">
+              ${historyPoints.length ? `${historyPoints.length.toLocaleString()} historical points` : "Forecast only"} ·
+              ${rows.length.toLocaleString()} projected points ·
+              Fixed Prophet-style bands
+            </div>
+          </div>
+          <div class="forecast-output-plot" data-forecast-detail-chart aria-label="Interactive forecast chart"></div>
+        </div>
         ${metricsStrip}
         ${
           tradeRationale
@@ -20587,6 +20902,12 @@
         ${renderForecastAiSummaryMarkup(forecastDoc)}
       </div>
     `;
+    renderForecastOutputChart({ ...forecastDoc, historicalRows }).catch((error) => {
+      const host = ui.forecastOutput?.querySelector("[data-forecast-detail-chart]");
+      if (host) {
+        host.innerHTML = `<div class="small muted">${escapeHtml(error?.message || "Unable to render the interactive chart.")}</div>`;
+      }
+    });
   };
 
   const loadTickerHistory = async (functions, ticker, interval) => {
@@ -20611,6 +20932,7 @@
     const cachedRows = normalizeForecastSeriesRows(fromCache?.forecastRows || []);
     if (cachedRows.length) {
       doc.forecastRows = cachedRows;
+      doc.historicalRows = Array.isArray(fromCache?.historicalRows) ? fromCache.historicalRows.slice(-1600) : [];
       doc.chartSeriesSource = "client_cache";
       doc.chartCacheKey = String(fromCache?.id || "").trim();
       return doc;
@@ -20669,6 +20991,7 @@
       state.tickerContext.rows = rows;
       state.tickerContext.interval = interval;
     }
+    doc.historicalRows = Array.isArray(state.tickerContext.rows) ? state.tickerContext.rows.slice(-1600) : [];
 
     const forecastOverlays = buildForecastOverlays(doc.forecastRows || []);
     const overlays = [...forecastOverlays, ...(state.tickerContext.indicatorOverlays || [])];
@@ -24666,18 +24989,7 @@
           });
           if (!rewardApproved) return;
 		      const formData = new FormData(ui.forecastForm);
-		      let quantiles = [];
-		      try {
-		        const raw = formData.getAll("quantiles");
-		        if (raw.length === 1 && String(raw[0]).includes(",")) {
-		          quantiles = parseQuantilesInput(String(raw[0]));
-		        } else {
-		          quantiles = parseQuantilesInput(raw);
-		        }
-		      } catch (error) {
-		        showToast(error.message || "Invalid quantiles.", "warn");
-		        return;
-		      }
+	      const quantiles = getDefaultForecastQuantiles();
           const ticker = normalizeTicker(formData.get("ticker") || state.tickerContext.ticker || ui.terminalTicker?.value || "");
           if (!ticker) {
             showToast("Enter a ticker to forecast.", "warn");
@@ -24791,6 +25103,7 @@
                       },
                 forecastPreview: Array.isArray(data.forecastPreview) ? data.forecastPreview : alignedRows.slice(0, 12),
                 forecastRows: alignedRows,
+                historicalRows: Array.isArray(historyRows) ? historyRows.slice(-1600) : [],
                 forecastQuantilesEnd: data.forecastQuantilesEnd && typeof data.forecastQuantilesEnd === "object" ? data.forecastQuantilesEnd : {},
                 tradeRationale: String(data.tradeRationale || "").trim(),
                 chartSeriesSource: "client_cache",

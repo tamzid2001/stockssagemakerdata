@@ -197,17 +197,19 @@
                         </div>
 	                      </div>
 	                      <div class="field">
-	                        <label class="label" for="forecast-quantiles">Quantiles (comma-delimited)</label>
-	                        <input id="forecast-quantiles" name="quantiles" value="0.1,0.25,0.5,0.75,0.9" placeholder="0.1,0.25,0.5,0.75,0.9" required />
-	                        <div class="small muted">Values must be between 0 and 1 (exclusive). Example: 0.1,0.25,0.5,0.75,0.9</div>
+	                        <label class="label">Forecast bands</label>
+	                        <div class="small muted">
+                            Quantura Horizon always uses fixed bands: <strong>P01-P99</strong>, <strong>P10-P90</strong>, <strong>P25-P75</strong>, plus the
+                            <strong>P50</strong> median path.
+                          </div>
 	                      </div>
 	                      <button class="cta" type="submit" data-analytics="forecast_submit"><i class="iconoir-magic-wand" aria-hidden="true"></i><span>Generate forecast</span></button>
 	                      <details class="learn-more">
 	                        <summary>Learn more</summary>
 	                        <div class="small">
                             <p>
-                              Forecasts are stored to your workspace as quantile bands. Quantiles are probabilities (not targets): for example, <strong>0.1</strong> is a lower band,
-                              <strong>0.5</strong> is the median path, and <strong>0.9</strong> is an upper band. Use them to reason about uncertainty, not to force a single outcome.
+                              Forecasts are stored to your workspace as fixed probability bands. Quantura Horizon saves a <strong>P01-P99</strong> outer range,
+                              a <strong>P10-P90</strong> range, a <strong>P25-P75</strong> range, and the <strong>P50</strong> median path so every saved run renders consistently.
                             </p>
                             <p>
                               <strong>Forecast length</strong> controls how many future timestamps are generated for the selected timeframe. Daily forecasts use trading days (business days).
