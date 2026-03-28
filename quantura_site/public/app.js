@@ -2338,6 +2338,8 @@
     pendingShareId: "",
     pendingShareProcessed: false,
     sharedScreenerView: null,
+    activeScreenerRunId: "",
+    activeScreenerPollToken: "",
     promoStatus: null,
     promoClockOffsetMs: 0,
     promoTimer: null,
@@ -2979,15 +2981,13 @@
               .map((row) => normalizeTicker(row?.symbol || ""))
               .filter(Boolean)
           : [];
-        const modelId = String(payload?.model || "").trim();
-        const modelLabel = String(getModelMeta(modelId)?.label || modelId || "Quantura Horizon").trim();
-        const universeLabel = screenerUniverseLabel(payload?.universe || "");
-        const marketLabel = screenerMarketLabel(payload?.market || "");
+        const minMarketCap = Number(payload?.minMarketCap || payload?.minCap || 100000000000);
         const resultCount = Number.isFinite(Number(resultsFound)) ? Number(resultsFound) : Array.isArray(rows) ? rows.length : 0;
         const summary = [
-          `${runTitle || "AI portfolio"} ranked ${resultCount} candidate${resultCount === 1 ? "" : "s"} across ${marketLabel} ${universeLabel} filters.`,
+          `${runTitle || "GitHub screener"} found ${resultCount} active Prophet signal${resultCount === 1 ? "" : "s"}.`,
+          `Market cap floor: ${Number.isFinite(minMarketCap) ? `$${formatCompactNumber(minMarketCap)}` : "$100B"}.`,
           topSymbols.length ? `Top ideas: ${topSymbols.join(", ")}.` : "",
-          modelLabel ? `Powered by ${modelLabel}.` : "",
+          "Published from the Quantura GitHub Actions tracker.",
         ]
           .filter(Boolean)
           .join(" ")
@@ -2996,10 +2996,9 @@
           summary,
           topSymbols,
           metrics: compactMetricMap({
-            Results: resultCount,
-            Universe: universeLabel,
-            Market: marketLabel,
-            Model: modelLabel,
+            Matches: resultCount,
+            Floor: Number.isFinite(minMarketCap) ? `$${formatCompactNumber(minMarketCap)}` : "$100B",
+            Workflow: "GitHub Actions",
             Top: topSymbols.slice(0, 3).join(", "),
           }),
         };
@@ -8526,6 +8525,12 @@
           (snapshot) => {
             const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
             renderScreenerRunPicker(items);
+            if (state.activeScreenerRunId) {
+              const active = items.find((item) => String(item.id || "").trim() === state.activeScreenerRunId);
+              if (active && !state.sharedScreenerView) {
+                renderScreenerRunOutput(active);
+              }
+            }
 
             const params = new URLSearchParams(window.location.search);
             const urlRunId = String(params.get("screenerRunId") || params.get("runId") || "").trim();
@@ -14573,6 +14578,9 @@
 
   const apiRunScreener = async (payload = {}) => apiRequestJson("/api/screener/run", { method: "POST", body: payload });
 
+  const apiGetScreenerRun = async (runId) =>
+    apiRequestJson(`/api/screener/${encodeURIComponent(String(runId || "").trim())}`, { method: "GET" });
+
   const apiUpdateScreenerRun = async (runId, payload = {}) =>
     apiRequestJson(`/api/screener/${encodeURIComponent(String(runId || "").trim())}`, { method: "PATCH", body: payload });
 
@@ -16508,6 +16516,214 @@
     });
   };
 
+  const buildIndicatorLatestMap = (latest = []) => {
+    const map = {};
+    (Array.isArray(latest) ? latest : []).forEach((entry) => {
+      const key = String(entry?.name || "").trim().toUpperCase();
+      const value = Number(entry?.value);
+      if (!key || !Number.isFinite(value)) return;
+      map[key] = value;
+    });
+    return map;
+  };
+
+  const indicatorUses = (selected = [], code = "") =>
+    (Array.isArray(selected) ? selected : []).map((item) => String(item || "").trim().toUpperCase()).includes(String(code || "").trim().toUpperCase());
+
+  const computeIndicatorHistoryContext = (rows = [], fallbackLastClose = NaN) => {
+    const series = Array.isArray(rows) ? rows : [];
+    const closes = series.map((row) => extractCloseFromHistoryRow(row)).filter((value) => Number.isFinite(value));
+    const highs = series.map((row) => Number(row?.High ?? row?.high ?? row?.Close ?? row?.close)).filter((value) => Number.isFinite(value));
+    const lows = series.map((row) => Number(row?.Low ?? row?.low ?? row?.Close ?? row?.close)).filter((value) => Number.isFinite(value));
+    const lastClose = closes.length ? closes[closes.length - 1] : Number(fallbackLastClose);
+    const recentCloses = closes.slice(-21);
+    const returns = [];
+    for (let idx = 1; idx < recentCloses.length; idx += 1) {
+      const current = recentCloses[idx];
+      const previous = recentCloses[idx - 1];
+      if (!Number.isFinite(current) || !Number.isFinite(previous) || previous <= 0) continue;
+      returns.push(Math.log(current / previous));
+    }
+    const mean = returns.length ? returns.reduce((sum, value) => sum + value, 0) / returns.length : 0;
+    const variance = returns.length
+      ? returns.reduce((sum, value) => sum + (value - mean) ** 2, 0) / returns.length
+      : 0;
+    const realizedVol20 = returns.length ? Math.sqrt(variance) : null;
+    const recentHighs = highs.slice(-20);
+    const recentLows = lows.slice(-20);
+    const recentRangePct20 =
+      Number.isFinite(lastClose) && lastClose > 0 && recentHighs.length && recentLows.length
+        ? (Math.max(...recentHighs) - Math.min(...recentLows)) / lastClose
+        : null;
+    return {
+      lastClose: Number.isFinite(lastClose) ? lastClose : null,
+      realizedVol20,
+      recentRangePct20,
+    };
+  };
+
+  const buildLocalIndicatorAnalysis = async ({ data = {}, payload = {}, functions }) => {
+    const selectedIndicators = Array.isArray(data?.selectedIndicators) && data.selectedIndicators.length
+      ? data.selectedIndicators.map((item) => String(item || "").trim().toUpperCase()).filter(Boolean)
+      : Array.isArray(payload?.indicators)
+        ? payload.indicators.map((item) => String(item || "").trim().toUpperCase()).filter(Boolean)
+        : [];
+    const latestMap = buildIndicatorLatestMap(data?.latest || []);
+    const ticker = normalizeTicker(data?.ticker || payload?.ticker || "");
+    const interval = String(data?.interval || payload?.interval || "1d").trim().toLowerCase() === "1h" ? "1h" : "1d";
+    let historyRows =
+      ticker &&
+      normalizeTicker(state.tickerContext.ticker || "") === ticker &&
+      String(state.tickerContext.interval || "1d").trim().toLowerCase() === interval &&
+      Array.isArray(state.tickerContext.rows) &&
+      state.tickerContext.rows.length
+        ? state.tickerContext.rows
+        : [];
+    if (!historyRows.length && ticker) {
+      historyRows = await loadTickerHistory(functions, ticker, interval).catch(() => []);
+    }
+    const history = computeIndicatorHistoryContext(historyRows, Number(data?.meta?.lastClose));
+    const lastClose = Number.isFinite(Number(data?.meta?.lastClose)) ? Number(data.meta.lastClose) : history.lastClose;
+    const rsi = Number(latestMap.RSI_14);
+    const macdHist = Number(latestMap.MACD_HIST);
+    const macdLine = Number(latestMap.MACD_LINE);
+    const macdSignal = Number(latestMap.MACD_SIGNAL);
+    const atr = Number(latestMap.ATR_14);
+    const adx = Number(latestMap.ADX_14);
+    const plusDi = Number(latestMap.PLUS_DI_14);
+    const minusDi = Number(latestMap.MINUS_DI_14);
+
+    let bullish = 0;
+    let bearish = 0;
+    if (indicatorUses(selectedIndicators, "RSI") && Number.isFinite(rsi)) {
+      if (rsi <= 30) bullish += 1.1;
+      else if (rsi >= 70) bearish += 1.1;
+      else if (rsi < 45) bearish += 0.45;
+      else if (rsi > 55) bullish += 0.45;
+    }
+    if (indicatorUses(selectedIndicators, "MACD") && Number.isFinite(macdHist)) {
+      const histPct = Number.isFinite(lastClose) && lastClose > 0 ? Math.abs(macdHist / lastClose) * 100 : 0;
+      const weight = Math.min(1.8, 0.9 + histPct * 8);
+      if (macdHist > 0) bullish += weight;
+      else if (macdHist < 0) bearish += weight;
+    }
+    if (indicatorUses(selectedIndicators, "ADX") && Number.isFinite(adx) && Number.isFinite(plusDi) && Number.isFinite(minusDi)) {
+      const weight = Math.min(1.2, Math.max(0.3, adx / 30));
+      if (plusDi > minusDi) bullish += weight;
+      else if (minusDi > plusDi) bearish += weight;
+    }
+
+    const total = bullish + bearish;
+    const conviction = total > 0 ? Math.min(1, Math.abs(bullish - bearish) / total) : 0;
+    const direction =
+      conviction < 0.18 ? "neutral" : bullish > bearish ? "bullish" : bearish > bullish ? "bearish" : "neutral";
+    const confidence = conviction >= 0.65 && total >= 2.2 ? "high" : conviction >= 0.32 && total >= 1.2 ? "medium" : "low";
+    const trendSelected = ["EMA", "SMA", "ADX", "BBANDS"].filter((code) => indicatorUses(selectedIndicators, code)).length;
+    const oscillatorSelected = ["RSI", "MACD", "CCI", "MFI", "STOCH", "WILLR", "ROC"].filter((code) => indicatorUses(selectedIndicators, code)).length;
+    let timelineDays = interval === "1h" ? 4 : 9;
+    if (trendSelected > oscillatorSelected) timelineDays += interval === "1h" ? 2 : 4;
+    if (oscillatorSelected > trendSelected) timelineDays -= interval === "1h" ? 1 : 1;
+    if (conviction >= 0.7) timelineDays += interval === "1h" ? 1 : 3;
+    if (conviction <= 0.25) timelineDays -= interval === "1h" ? 1 : 2;
+    timelineDays = Math.max(interval === "1h" ? 1 : 3, Math.min(interval === "1h" ? 10 : 30, Math.round(timelineDays)));
+
+    const atrPct = Number.isFinite(atr) && Number.isFinite(lastClose) && lastClose > 0 ? atr / lastClose : 0;
+    const realizedVol = Number.isFinite(history.realizedVol20) ? Number(history.realizedVol20) : 0;
+    const recentRangePct = Number.isFinite(history.recentRangePct20) ? Number(history.recentRangePct20) : 0;
+    const perStepVolPct = Math.max(atrPct, realizedVol * 1.35, recentRangePct > 0 ? recentRangePct / 10 : 0, interval === "1h" ? 0.0035 : 0.006);
+    const projectedMovePct = Math.max(
+      interval === "1h" ? 0.003 : 0.005,
+      Math.min(interval === "1h" ? 0.12 : 0.2, perStepVolPct * Math.sqrt(Math.max(1, timelineDays)) * (0.9 + conviction * 0.9))
+    );
+    const signedMove =
+      direction === "bullish" ? projectedMovePct : direction === "bearish" ? -projectedMovePct : 0;
+    const targetPrice = Number.isFinite(lastClose) && lastClose > 0 ? Number((lastClose * (1 + signedMove)).toFixed(2)) : null;
+
+    const keySignals = [];
+    if (indicatorUses(selectedIndicators, "RSI") && Number.isFinite(rsi)) {
+      keySignals.push(
+        `RSI(14) ${rsi.toFixed(2)} ${
+          rsi <= 30
+            ? "is oversold and can support a reflex bounce if momentum stabilizes."
+            : rsi >= 70
+              ? "is overbought and vulnerable to mean reversion."
+              : rsi >= 55
+                ? "leans bullish."
+                : rsi <= 45
+                  ? "leans bearish."
+                  : "is neutral."
+        }`
+      );
+    }
+    if (indicatorUses(selectedIndicators, "MACD") && Number.isFinite(macdHist)) {
+      keySignals.push(
+        `MACD histogram ${macdHist.toFixed(4)} while MACD line ${Number.isFinite(macdLine) ? macdLine.toFixed(4) : "—"} vs signal ${
+          Number.isFinite(macdSignal) ? macdSignal.toFixed(4) : "—"
+        } means ${macdHist > 0 ? "momentum is improving above the signal line." : macdHist < 0 ? "momentum remains below the signal line." : "momentum is flat."}`
+      );
+    }
+    if (indicatorUses(selectedIndicators, "ATR") && Number.isFinite(atr)) {
+      keySignals.push(
+        `ATR(14) is ${atr.toFixed(2)}${atrPct > 0 ? `, about ${(atrPct * 100).toFixed(2)}% of price` : ""}, which frames the current swing size.`
+      );
+    }
+    if (indicatorUses(selectedIndicators, "ADX") && Number.isFinite(adx)) {
+      keySignals.push(
+        `ADX(14) is ${adx.toFixed(2)}${
+          Number.isFinite(plusDi) && Number.isFinite(minusDi)
+            ? plusDi > minusDi
+              ? " with +DI above -DI"
+              : minusDi > plusDi
+                ? " with -DI above +DI"
+                : " with DI lines balanced"
+            : ""
+        }, so trend strength is ${adx >= 25 ? "confirmed." : "modest."}`
+      );
+    }
+    if (keySignals.length < 3) {
+      keySignals.push(
+        `Recent price context shows ${
+          Number.isFinite(history.realizedVol20) ? `${(Number(history.realizedVol20) * 100).toFixed(2)}%` : "n/a"
+        } realized 20-bar volatility${
+          Number.isFinite(history.recentRangePct20) ? ` and a ${(Number(history.recentRangePct20) * 100).toFixed(2)}% 20-bar high-low range` : ""
+        }.`
+      );
+    }
+
+    const summary = `Computed ${Array.isArray(data?.latest) ? data.latest.length : 0} indicator values for ${ticker || "the active ticker"}. Selected indicators lean ${direction}, with a ${timelineDays}-day tactical horizon.`;
+    const prediction = {
+      direction,
+      targetPrice,
+      timeline: `${timelineDays} trading days`,
+      timelineDays,
+      confidence,
+    };
+    const text = [
+      `Setup: ${summary}`,
+      Number.isFinite(lastClose) ? `As of ${String(data?.meta?.asOf || new Date().toISOString())}, last close was $${Number(lastClose).toFixed(2)} on the ${interval} interval.` : "",
+      "Signal stack:",
+      ...keySignals.slice(0, 6).map((item) => `- ${item}`),
+      `Path: ${direction} bias toward ${Number.isFinite(targetPrice) ? `$${Number(targetPrice).toFixed(2)}` : "the current price area"} over ${timelineDays} trading days with ${confidence} confidence.`,
+      direction === "bullish"
+        ? "Risk frame: bullish conviction weakens if momentum rolls over or price loses short-term trend support."
+        : direction === "bearish"
+          ? "Risk frame: bearish conviction weakens if momentum turns up or price reclaims short-term trend support."
+          : "Risk frame: signals are mixed, so avoid over-weighting any single indicator reading.",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    return {
+      summary,
+      keySignals: keySignals.slice(0, 6),
+      prediction,
+      text,
+      provider: String(data?.analysis?.provider || "quantura"),
+      model: String(data?.analysis?.model || "indicator_local_repair"),
+      disclaimer: String(data?.analysis?.disclaimer || MODEL_COUNCIL_OUTPUT_DISCLAIMER),
+    };
+  };
+
   const parseCsvTable = (csvText, { maxRows = 5000 } = {}) => {
     const text = String(csvText || "");
     if (!text.trim()) throw new Error("CSV file is empty.");
@@ -18178,11 +18394,17 @@
       ...list.slice(0, 60).map((item) => {
         const id = escapeHtml(item.id || "");
         const title = escapeHtml(String(item.title || "").trim());
-        const universe = escapeHtml(String(item.universe || "trending"));
         const market = escapeHtml(String(item.market || "us"));
-        const count = Array.isArray(item.results) ? item.results.length : Number(item.count || 0) || 0;
+        const count = Number.isFinite(Number(item.resultsFound))
+          ? Number(item.resultsFound)
+          : Array.isArray(item.results)
+          ? item.results.length
+          : Number(item.count || 0) || 0;
+        const floor = Number(item.minMarketCap || item.minCap || 100000000000);
         const when = escapeHtml(formatTimestamp(item.createdAt));
-        const label = `${title || universe} · ${market.toUpperCase()} · ${count} names · ${when}`;
+        const label = `${title || "Screener"} · ${market.toUpperCase()} · ${count} matches · ${
+          Number.isFinite(floor) ? `$${formatCompactNumber(floor)}` : "$100B"
+        } · ${when}`;
         return `<option value="${id}">${label}</option>`;
       }),
     ];
@@ -18315,6 +18537,48 @@
       adFree: Boolean(config.ad_free ?? normalizedKey !== "free"),
       workspaceLimit,
     };
+  };
+
+  const mountGithubActionsScreenerForm = () => {
+    const cleanPath = String(window.location.pathname || "").replace(/\/+$/, "") || "/";
+    if (!ui.screenerForm || cleanPath !== "/screener") return;
+    if (ui.screenerForm.dataset.screenerMode === "github_actions" && ui.screenerForm.dataset.githubMounted === "1") return;
+
+    ui.screenerForm.dataset.screenerMode = "github_actions";
+    ui.screenerForm.dataset.githubMounted = "1";
+    ui.screenerForm.innerHTML = `
+      <h3>Run stock screener</h3>
+      <p class="small muted" style="margin-top:8px;">
+        Quantura dispatches the repository GitHub Action, waits for the uploaded artifact, and keeps the saved run shareable after it lands.
+      </p>
+      <div class="form-grid" style="margin-top:12px;">
+        <div class="field">
+          <label class="label" for="screener-min-market-cap">Minimum market cap (USD)</label>
+          <input
+            id="screener-min-market-cap"
+            name="minMarketCap"
+            type="number"
+            min="0"
+            step="1000000000"
+            inputmode="numeric"
+            value="100000000000"
+            placeholder="100000000000"
+          />
+          <p class="small muted">Default floor is $100B. The GitHub workflow scans the combined S&amp;P 500 + Nasdaq universe above this threshold.</p>
+        </div>
+      </div>
+      <div class="small muted" id="screener-results-count">Matches: —</div>
+      <button class="cta" id="screener-generate-button" type="submit" data-analytics="screener_submit">
+        <i class="iconoir-search" aria-hidden="true"></i><span>Run GitHub Screener</span>
+      </button>
+    `;
+
+    ui.screenerResultsCount = document.getElementById("screener-results-count");
+    ui.screenerGenerateButton = document.getElementById("screener-generate-button");
+    ui.screenerModel = null;
+    ui.screenerModelMeta = null;
+    ui.screenerCreditsText = null;
+    ui.screenerCreditsFill = null;
   };
 
   const syncScreenerProviderAccent = () => {
@@ -19241,26 +19505,217 @@
     }
   };
 
+  const waitForScreenerPollTick = (delayMs = 3500) =>
+    new Promise((resolve) => window.setTimeout(resolve, Math.max(600, Number(delayMs) || 0)));
+
+  const normalizeScreenerRunStatus = (value) => {
+    const normalized = String(value || "").trim().toLowerCase();
+    if (!normalized) return "queued";
+    if (normalized === "in_progress") return "running";
+    return normalized;
+  };
+
+  const isScreenerRunSettled = (runDoc) => {
+    const status = normalizeScreenerRunStatus(runDoc?.status);
+    return status === "completed" || status === "failed" || status === "cancelled";
+  };
+
+  const formatScreenerRunStatus = (value) => {
+    const normalized = normalizeScreenerRunStatus(value);
+    if (normalized === "queued") return "Queued";
+    if (normalized === "running") return "Running";
+    if (normalized === "completed") return "Completed";
+    if (normalized === "failed") return "Failed";
+    if (normalized === "cancelled") return "Cancelled";
+    return normalized ? normalized.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase()) : "Queued";
+  };
+
+  const formatCompactUsd = (value) => {
+    const num = toFiniteOrNull(value);
+    if (num === null || num < 0) return "—";
+    return `$${formatCompactNumber(num)}`;
+  };
+
+  const formatScreenerNumeric = (value, digits = 2) => {
+    const num = toFiniteOrNull(value);
+    if (num === null) return "—";
+    return num.toFixed(digits);
+  };
+
+  const formatScreenerSignedPercent = (value) => {
+    const num = toFiniteOrNull(value);
+    if (num === null) return "—";
+    return formatPercent(num, { signed: true, digits: 2 });
+  };
+
+  const formatScreenerSignalStatus = (value) => {
+    const normalized = String(value || "").trim().toLowerCase();
+    if (normalized === "below_p10") return "Below P10";
+    if (normalized === "above_p90") return "Above P90";
+    return normalized ? normalized.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase()) : "—";
+  };
+
+  const formatScreenerPeriodLabel = (date, period) => {
+    const parts = [String(date || "").trim(), String(period || "").trim()].filter(Boolean);
+    return parts.length ? parts.join(" · ") : "—";
+  };
+
+  const buildScreenerMetricChip = (label, value, iconName) => `
+    <div class="metric-chip">
+      ${icon(iconName)}
+      <span class="metric-label">${escapeHtml(label)}</span>
+      <span class="metric-value">${escapeHtml(value)}</span>
+    </div>
+  `;
+
+  const updateScreenerResultsCount = (runDoc) => {
+    if (!ui.screenerResultsCount) return;
+    const status = normalizeScreenerRunStatus(runDoc?.status);
+    const count = Number.isFinite(Number(runDoc?.resultsFound))
+      ? Number(runDoc.resultsFound)
+      : Array.isArray(runDoc?.results)
+      ? runDoc.results.length
+      : 0;
+    if (status === "queued" || status === "running") {
+      ui.screenerResultsCount.textContent = `Matches: syncing GitHub Actions run...`;
+      return;
+    }
+    if (status === "failed") {
+      ui.screenerResultsCount.textContent = "Matches: 0 · Run failed";
+      return;
+    }
+    ui.screenerResultsCount.textContent = `Matches: ${count}`;
+  };
+
+  const renderWorkflowScreenerTable = (rows) => `
+    <div class="table-wrap" style="margin-top:12px;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Symbol</th>
+            <th>Status</th>
+            <th>Last close</th>
+            <th>Gap to band</th>
+            <th>P10</th>
+            <th>P50</th>
+            <th>P90</th>
+            <th>Central delta</th>
+            <th>Tail delta</th>
+            <th>Market cap</th>
+            <th>Last earnings</th>
+            <th>Next earnings</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows
+            .map((row) => {
+              const symbol = normalizeTicker(row?.symbol || "");
+              return `
+                <tr>
+                  <td>
+                    <button class="link-button" type="button" data-action="pick-ticker" data-ticker="${escapeHtml(symbol)}">${escapeHtml(
+                      symbol || "—"
+                    )}</button>
+                  </td>
+                  <td>${escapeHtml(formatScreenerSignalStatus(row?.status))}</td>
+                  <td>${formatScreenerNumeric(row?.lastClose)}</td>
+                  <td>${escapeHtml(formatScreenerSignedPercent(row?.gapToBandPct))}</td>
+                  <td>${formatScreenerNumeric(row?.p10)}</td>
+                  <td>${formatScreenerNumeric(row?.p50)}</td>
+                  <td>${formatScreenerNumeric(row?.p90)}</td>
+                  <td>${escapeHtml(
+                    `${String(row?.centralDeltaLabel || "central_delta")
+                      .replace(/_/g, " ")
+                      .toUpperCase()}: ${formatScreenerNumeric(row?.centralDelta)}`
+                  )}</td>
+                  <td>${escapeHtml(
+                    `${String(row?.tailDeltaLabel || "tail_delta")
+                      .replace(/_/g, " ")
+                      .toUpperCase()}: ${formatScreenerNumeric(row?.tailDelta)}`
+                  )}</td>
+                  <td>${escapeHtml(String(row?.marketCapLabel || formatCompactUsd(row?.marketCap) || "—"))}</td>
+                  <td>${escapeHtml(formatScreenerPeriodLabel(row?.lastEarningsDate, row?.lastReportPeriod))}</td>
+                  <td>${escapeHtml(formatScreenerPeriodLabel(row?.nextEarningsDate, row?.nextReportPeriod))}</td>
+                </tr>
+              `;
+            })
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  const renderLegacyScreenerTable = (rows) => `
+    <div class="table-wrap" style="margin-top:12px;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Symbol</th>
+            <th>Last close</th>
+            <th>Return 1M</th>
+            <th>Return 3M</th>
+            <th>RSI 14</th>
+            <th>Volatility</th>
+            <th>Score</th>
+            <th>Projected 1Y ROI</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows
+            .map((row) => {
+              const symbol = normalizeTicker(row?.symbol || "");
+              return `
+                <tr>
+                  <td>
+                    <button class="link-button" type="button" data-action="pick-ticker" data-ticker="${escapeHtml(symbol)}">${escapeHtml(
+                      symbol || "—"
+                    )}</button>
+                  </td>
+                  <td>${row?.lastClose ?? "—"}</td>
+                  <td>${row?.return1m ?? "—"}</td>
+                  <td>${row?.return3m ?? "—"}</td>
+                  <td>${row?.rsi14 ?? "—"}</td>
+                  <td>${row?.volatility ?? "—"}</td>
+                  <td>${row?.score ?? "—"}</td>
+                  <td>${formatRoiPercent(toFiniteOrNull(row?.projectedRoi))}</td>
+                </tr>
+              `;
+            })
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  const renderScreenerRowsTable = (rows) => {
+    const list = Array.isArray(rows) ? rows : [];
+    const workflowShape = list.some(
+      (row) => row && (row.status || row.p50 !== undefined || row.p10 !== undefined || row.gapToBandPct !== undefined)
+    );
+    return workflowShape ? renderWorkflowScreenerTable(list) : renderLegacyScreenerTable(list);
+  };
+
   const renderScreenerRunOutput = (runDoc) => {
     if (!ui.screenerOutput) return;
     const rows = Array.isArray(runDoc?.results) ? runDoc.results : [];
+    const status = normalizeScreenerRunStatus(runDoc?.status);
+    const resultsFound = Number.isFinite(Number(runDoc?.resultsFound)) ? Number(runDoc.resultsFound) : rows.length;
+    updateScreenerResultsCount({ ...runDoc, resultsFound, status });
+    state.activeScreenerRunId = String(runDoc?.id || "").trim();
+    if (isScreenerRunSettled(runDoc)) {
+      state.activeScreenerPollToken = "";
+    }
     setOutputReady(ui.screenerOutput);
+
     const requestId = buildSourceRequestId("screener", runDoc?.id || "");
     const requestRecord = requestId ? getMyRequestById(requestId) : null;
     const isPublished = Boolean(requestRecord?.published ?? runDoc?.isPublic);
     const serviceMessage = String(runDoc?.serviceMessage || "").trim();
     const appliedFilters = Array.isArray(runDoc?.appliedFilters) ? runDoc.appliedFilters.filter(Boolean) : [];
-    const ignoredFilters = Array.isArray(runDoc?.ignoredFilters) ? runDoc.ignoredFilters.filter(Boolean) : [];
-
-    if (!rows.length) {
-      state.sharedScreenerView = null;
-      ui.screenerOutput.innerHTML = `
-        <div class="small"><strong>Status:</strong> No matches</div>
-        <div class="small muted" style="margin-top:8px;">${escapeHtml(serviceMessage || "No screener rows matched the current criteria.")}</div>
-        ${requestId ? renderOutputPublishControlsMarkup({ requestId, requestType: "screener" }) : ""}
-      `;
-      return;
-    }
+    const workflowRunUrl = String(runDoc?.workflowRunUrl || "").trim();
+    const workflowRunId = String(runDoc?.workflowRunId || "").trim();
+    const workflowRunNumber = Number.isFinite(Number(runDoc?.workflowRunNumber)) ? Number(runDoc.workflowRunNumber) : null;
+    const minMarketCap = Number(runDoc?.minMarketCap || runDoc?.minCap || 100000000000);
 
     const sharedMeta = runDoc && typeof runDoc.__sharedMeta === "object" ? runDoc.__sharedMeta : null;
     const sharedShareId = String(sharedMeta?.shareId || "").trim();
@@ -19275,27 +19730,24 @@
         shareUrl: sharedShareUrl,
         readOnly: sharedReadOnly,
         canImport: sharedCanImport,
-        runId: String(runDoc.id || "").trim(),
+        runId: String(runDoc?.id || "").trim(),
         rows,
       };
     } else {
       state.sharedScreenerView = null;
     }
 
-    const runId = escapeHtml(runDoc.id || "");
-    const createdAt = escapeHtml(formatTimestamp(runDoc.createdAt));
-    const notes = String(runDoc.notes || "").trim();
-    const title = String(runDoc.title || "").trim();
-    const portfolioSummary = renderAiPortfolioSummary(runDoc);
-    const agentId = escapeHtml(String(runDoc?.aiPortfolio?.agentId || "").trim());
-    const ownerWorkspaceId = String(runDoc?.userId || "").trim();
-    const canSupportOwner = Boolean(ownerWorkspaceId) && String(state.user?.uid || "").trim() !== ownerWorkspaceId;
-    const ownerUsername = escapeHtml(String(runDoc?.ownerUsername || "").trim());
-    const ownerBio = escapeHtml(String(runDoc?.ownerBio || "").trim());
-    const ownerAvatarMeta = getProfileAvatarMeta(String(runDoc?.ownerAvatar || "bull").trim());
+    const runId = escapeHtml(runDoc?.id || "");
+    const title = String(runDoc?.title || "").trim() || "GitHub stock screener";
+    const createdAt = escapeHtml(formatTimestamp(runDoc?.createdAt));
     const canEditRun = !sharedReadOnly;
-
     const actionButtons = [];
+    const visibilityLabel = isPublished
+      ? "Published to Explore"
+      : status === "queued" || status === "running"
+      ? "Private until completion"
+      : "Private";
+
     if (canEditRun) {
       actionButtons.push(
         `<button class="cta secondary small" type="button" data-action="download-screener" data-run-id="${runId}">Download CSV</button>`,
@@ -19319,15 +19771,25 @@
       }
     }
 
-    if (canSupportOwner) {
-      actionButtons.push(
-        `<button class="cta secondary small" type="button" data-action="screener-owner-thanks" data-creator-workspace-id="${escapeHtml(
-          ownerWorkspaceId
-        )}" data-target-id="${runId}">Send thanks</button>`,
-        `<button class="cta secondary small" type="button" data-action="screener-owner-subscribe" data-creator-workspace-id="${escapeHtml(
-          ownerWorkspaceId
-        )}" data-target-id="${runId}">Subscribe</button>`
+    if (workflowRunUrl) {
+      actionButtons.unshift(
+        `<a class="cta secondary small" href="${escapeHtml(workflowRunUrl)}" target="_blank" rel="noopener noreferrer">Open workflow</a>`
       );
+    }
+
+    const statusChips = [
+      buildScreenerMetricChip("Status", formatScreenerRunStatus(status), status === "failed" ? "warning-triangle" : "clock"),
+      buildScreenerMetricChip("Floor", Number.isFinite(minMarketCap) ? `$${formatCompactNumber(minMarketCap)}` : "$100B", "bank"),
+      buildScreenerMetricChip("Matches", String(resultsFound), "search"),
+    ];
+    const screenedCount = Number.isFinite(Number(runDoc?.screenedCount)) ? Number(runDoc.screenedCount) : null;
+    if (screenedCount !== null) {
+      statusChips.push(buildScreenerMetricChip("Screened", formatCompactNumber(screenedCount), "database-check"));
+    }
+    if (workflowRunNumber !== null) {
+      statusChips.push(buildScreenerMetricChip("Workflow", `#${workflowRunNumber}`, "git-branch"));
+    } else if (workflowRunId) {
+      statusChips.push(buildScreenerMetricChip("Workflow", workflowRunId, "git-branch"));
     }
 
     const sharedNotice = isSharedView
@@ -19335,106 +19797,86 @@
           sharedReadOnly ? "Read-only view. Only the owner can edit this run." : "Owner view from shared link."
         }</div>`
       : "";
+    const filterSummary = appliedFilters.length
+      ? `<div class="small muted" style="margin-top:8px;"><strong>Applied:</strong> ${escapeHtml(appliedFilters.join(", "))}</div>`
+      : "";
+    const waitingMessage =
+      status === "queued" || status === "running"
+        ? `<div class="notice" style="margin-top:12px;">
+            <strong>${status === "queued" ? "Queued in GitHub Actions" : "GitHub Actions is still running"}</strong>
+            <div class="small" style="margin-top:6px;">${escapeHtml(
+              serviceMessage || "Quantura is waiting for the workflow artifact so it can publish the saved run to Explore."
+            )}</div>
+          </div>`
+        : "";
+    const emptyMessage =
+      status === "completed" && !rows.length
+        ? `<div class="notice" style="margin-top:12px;">
+            <strong>No active signals cleared the floor.</strong>
+            <div class="small" style="margin-top:6px;">${escapeHtml(
+              serviceMessage || "The GitHub Actions tracker completed, but nothing met the current filter."
+            )}</div>
+          </div>`
+        : "";
+    const failureMessage =
+      status === "failed"
+        ? `<div class="notice" style="margin-top:12px;">
+            <strong>Workflow failed</strong>
+            <div class="small" style="margin-top:6px;">${escapeHtml(
+              serviceMessage || "The GitHub Actions stock screener did not complete successfully."
+            )}</div>
+          </div>`
+        : "";
 
     ui.screenerOutput.innerHTML = `
-      ${title ? `<div class="small"><strong>Title:</strong> ${escapeHtml(title)}</div>` : ""}
+      <div class="small"><strong>Title:</strong> ${escapeHtml(title)}</div>
       <div class="small"><strong>Run ID:</strong> ${runId || "—"}</div>
       <div class="small"><strong>Created:</strong> ${createdAt}</div>
-      <div class="small"><strong>Visibility:</strong> ${isPublished ? "Published to Explore" : "Private"}</div>
+      <div class="small"><strong>Visibility:</strong> ${visibilityLabel}</div>
       ${sharedNotice}
-      ${
-        ownerUsername || ownerBio
-          ? `<div class="small muted"><strong>Owner:</strong> ${escapeHtml(ownerAvatarMeta.emoji || "")} ${
-              ownerUsername ? `@${ownerUsername}` : "workspace member"
-            }${ownerBio ? ` · ${ownerBio}` : ""}</div>`
-          : ""
-      }
-      ${notes ? `<div class="small" style="margin-top:10px;"><strong>Notes:</strong> ${escapeHtml(notes)}</div>` : ""}
-      ${serviceMessage ? `<div class="small muted" style="margin-top:8px;">${escapeHtml(serviceMessage)}</div>` : ""}
-      ${
-        appliedFilters.length || ignoredFilters.length
-          ? `<div class="small muted" style="margin-top:8px;">
-              ${
-                appliedFilters.length
-                  ? `<strong>Applied:</strong> ${escapeHtml(appliedFilters.join(", "))}`
-                  : ""
-              }
-              ${
-                ignoredFilters.length
-                  ? `${appliedFilters.length ? " · " : ""}<strong>Ignored:</strong> ${escapeHtml(ignoredFilters.join(", "))}`
-                  : ""
-              }
-            </div>`
-          : ""
-      }
-      <div class="hero-actions" style="margin-top:12px;">
-        ${actionButtons.join("")}
-      </div>
-      ${renderOutputPublishControlsMarkup({ requestId, requestType: "screener" })}
-      <div class="card" style="margin-top:14px;">
-        <div class="card-head">
-          <h3>AI Portfolio</h3>
-          ${
-            canEditRun
-              ? `<div class="hero-actions" style="margin-top:0;">
-                  <button class="cta secondary small" type="button" data-action="generate-ai-portfolio" data-run-id="${runId}">${icon(
-                    "magic-wand"
-                  )}<span>Generate with Quantura Horizon</span></button>
-                  <button class="cta secondary small" type="button" data-action="rename-ai-agent" data-agent-id="${agentId}" ${
-                    agentId ? "" : "disabled"
-                  }>${icon("edit-pencil")}<span>Rename Agent</span></button>
-                </div>`
-              : `<div class="small muted">AI actions are disabled in read-only mode.</div>`
-          }
-        </div>
-        <div id="ai-portfolio-summary" class="small">${portfolioSummary}</div>
-      </div>
-      <div class="table-wrap" style="margin-top:12px;">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Symbol</th>
-              <th>Last close</th>
-              <th>Return 1M (%)</th>
-              <th>Return 3M (%)</th>
-              <th>RSI 14</th>
-              <th>Volatility</th>
-              <th>Score</th>
-              <th>Projected 1Y ROI</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rows
-              .map(
-                (row) => {
-                  const logoRaw = String(row?.logoUrl || row?.logo_url || "").trim();
-                  const logoUrl = /^https?:\/\//i.test(logoRaw) ? logoRaw : "";
-                  return `
-                  <tr>
-                    <td>
-                      <button class="link-button" type="button" data-action="pick-ticker" data-ticker="${escapeHtml(row.symbol)}" style="display:inline-flex; align-items:center; gap:8px;">
-                        ${logoUrl ? `<img src="${escapeHtml(logoUrl)}" alt="" loading="lazy" style="width:16px; height:16px; border-radius:50%; object-fit:cover;" />` : ""}
-                        ${escapeHtml(row.symbol)}
-                      </button>
-                    </td>
-                    <td>${row.lastClose ?? "—"}</td>
-                    <td>${row.return1m ?? "—"}</td>
-                    <td>${row.return3m ?? "—"}</td>
-                    <td>${row.rsi14 ?? "—"}</td>
-                    <td>${row.volatility ?? "—"}</td>
-                    <td>${row.score ?? "—"}</td>
-                    <td>${formatRoiPercent(toFiniteOrNull(row.projectedRoi))}</td>
-                  </tr>
-                `;
-                }
-              )
-              .join("")}
-          </tbody>
-        </table>
-      </div>
+      <div class="metric-strip" style="margin-top:12px;">${statusChips.join("")}</div>
+      ${serviceMessage && status !== "queued" && status !== "running" && status !== "failed" && !(!rows.length && status === "completed")
+        ? `<div class="small muted" style="margin-top:8px;">${escapeHtml(serviceMessage)}</div>`
+        : ""}
+      ${filterSummary}
+      <div class="hero-actions" style="margin-top:12px;">${actionButtons.join("")}</div>
+      ${requestId ? renderOutputPublishControlsMarkup({ requestId, requestType: "screener" }) : ""}
+      ${waitingMessage}
+      ${failureMessage}
+      ${emptyMessage}
+      ${rows.length ? renderScreenerRowsTable(rows) : ""}
     `;
-    bindAIAgentLeaderboardControls();
-    renderAIAgentLeaderboard(state.aiAgents);
+  };
+
+  const fetchAndRenderScreenerRun = async (runId) => {
+    const body = await apiGetScreenerRun(runId);
+    const runDoc = body?.run && typeof body.run === "object" ? body.run : null;
+    if (!runDoc) throw new Error("Saved screener run is unavailable.");
+    renderScreenerRunOutput(runDoc);
+    return runDoc;
+  };
+
+  const pollScreenerRunUntilSettled = async (runId, { delayMs = 3500, maxAttempts = 36 } = {}) => {
+    const cleanRunId = String(runId || "").trim();
+    if (!cleanRunId) throw new Error("Run ID is required.");
+    const token = `${cleanRunId}:${Date.now()}`;
+    state.activeScreenerPollToken = token;
+    let latestRun = null;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      if (attempt > 0) {
+        await waitForScreenerPollTick(delayMs);
+      }
+      if (state.activeScreenerPollToken !== token) return latestRun;
+      latestRun = await fetchAndRenderScreenerRun(cleanRunId);
+      if (state.activeScreenerPollToken !== token) return latestRun;
+      if (isScreenerRunSettled(latestRun)) {
+        await fetchMyRequestById(buildSourceRequestId("screener", cleanRunId)).catch(() => {});
+        return latestRun;
+      }
+    }
+
+    return latestRun;
   };
 
   const extractCloseFromHistoryRow = (row) => {
@@ -20115,12 +20557,19 @@
     }
 
     setOutputLoading(ui.screenerOutput, "Loading saved run...");
-    const doc = await db.collection("screener_runs").doc(cleanId).get();
-    if (!doc.exists) throw new Error("Run not found.");
-    const data = doc.data() || {};
-    state.sharedScreenerView = null;
-    renderScreenerRunOutput({ id: doc.id, ...data });
-    logEvent("screener_loaded_saved", { run_id: doc.id });
+    let runDoc = null;
+    try {
+      runDoc = await fetchAndRenderScreenerRun(cleanId);
+    } catch (error) {
+      const doc = await db.collection("screener_runs").doc(cleanId).get();
+      if (!doc.exists) throw new Error("Run not found.");
+      runDoc = { id: doc.id, ...(doc.data() || {}) };
+      renderScreenerRunOutput(runDoc);
+    }
+    if (runDoc && !isScreenerRunSettled(runDoc)) {
+      pollScreenerRunUntilSettled(cleanId).catch(() => {});
+    }
+    logEvent("screener_loaded_saved", { run_id: cleanId });
   };
 
   const isAutopilotMyRequest = (request = null) => {
@@ -22959,13 +23408,7 @@
             } else if (requestType === "screener" && ui.screenerOutput) {
               const runId = String(requestId.split("__").slice(1).join("__") || "").trim();
               if (runId) {
-                db.collection("screener_runs")
-                  .doc(runId)
-                  .get()
-                  .then((snap) => {
-                    if (snap.exists) renderScreenerRunOutput({ id: snap.id, ...(snap.data() || {}) });
-                  })
-                  .catch(() => {});
+                fetchAndRenderScreenerRun(runId).catch(() => {});
               }
             } else if (requestType === "modelCouncil") {
               renderTickerQueryResult({
@@ -23157,8 +23600,10 @@
               await updateMyRequest(buildSourceRequestId("screener", runId), { title: nextTitle }, { method: "PATCH" }).catch(() => {});
               showToast("Screener run renamed.");
               logEvent("screener_renamed", { run_id: runId });
-              const fresh = await db.collection("screener_runs").doc(runId).get();
-              if (fresh.exists) renderScreenerRunOutput({ id: fresh.id, ...(fresh.data() || {}) });
+              await fetchAndRenderScreenerRun(runId).catch(async () => {
+                const fresh = await db.collection("screener_runs").doc(runId).get();
+                if (fresh.exists) renderScreenerRunOutput({ id: fresh.id, ...(fresh.data() || {}) });
+              });
             } catch (error) {
               showToast(error.message || "Unable to rename screener run.", "warn");
             } finally {
@@ -23390,10 +23835,10 @@
                 {},
                 { method: "POST", path: `/api/my-requests/${encodeURIComponent(requestId)}/${nextValue ? "publish" : "unpublish"}` }
               );
-              const fresh = await db.collection("screener_runs").doc(runId).get();
-              if (fresh.exists) {
-                renderScreenerRunOutput({ id: fresh.id, ...(fresh.data() || {}) });
-              }
+              await fetchAndRenderScreenerRun(runId).catch(async () => {
+                const fresh = await db.collection("screener_runs").doc(runId).get();
+                if (fresh.exists) renderScreenerRunOutput({ id: fresh.id, ...(fresh.data() || {}) });
+              });
               showToast(nextValue ? "Screener is now public." : "Screener is now private.");
             } catch (error) {
               showToast(error.message || "Unable to update screener visibility.", "warn");
@@ -23469,6 +23914,10 @@
                 method: "DELETE",
                 path: `/api/my-requests/${encodeURIComponent(buildSourceRequestId("screener", runId))}`,
               }).catch(() => {});
+              if (state.activeScreenerRunId === runId) {
+                state.activeScreenerRunId = "";
+                state.activeScreenerPollToken = "";
+              }
               showToast("Screener run deleted.");
               logEvent("screener_deleted", { run_id: runId });
               if (ui.screenerOutput) ui.screenerOutput.innerHTML = `<div class="small muted">Screener run deleted.</div>`;
@@ -25343,7 +25792,11 @@
             throw new Error(detail || "indicator_analysis_failed");
           }
 	        const rows = data.latest || [];
-          const analysis = data.analysis && typeof data.analysis === "object" ? data.analysis : {};
+          const analysis = await buildLocalIndicatorAnalysis({
+            data,
+            payload,
+            functions,
+          });
           const prediction = analysis.prediction && typeof analysis.prediction === "object" ? analysis.prediction : {};
           const indicatorRequestId = `indicator__${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
           const indicatorAutoPublish = shouldAutoPublishForType("indicator");
@@ -26056,6 +26509,7 @@
 	      }
 	    });
 
+      mountGithubActionsScreenerForm();
       ui.screenerModel?.addEventListener("change", () => {
         syncScreenerProviderAccent();
         refreshScreenerCreditsUi();
@@ -26079,114 +26533,62 @@
           return;
         }
 	      const formData = new FormData(ui.screenerForm);
-      const requestedNames = Number(formData.get("maxNames"));
-      const boundedNames = Number.isFinite(requestedNames) ? Math.max(5, Math.min(25, requestedNames)) : 10;
-      const minCapBucket = String(formData.get("minCapBucket") || "any").trim().toLowerCase();
-      const minCapAbs = minCapBucket === "any" ? null : Number(minCapBucket);
-      const selectedModel = normalizeAiModelId(formData.get("model") || state.selectedScreenerModel || "gpt-5-mini");
-      const selectedMeta = getModelMeta(selectedModel) || { personality: "balanced" };
-      const tier = getCurrentAiTierConfig();
-      if (tier.allowedModels.length && !tier.allowedModels.includes(selectedModel)) {
-        await showLimitReachedModal("Selected personality is only available for Pro.");
-        return;
-      }
-      if (Number(state.aiUsageToday || 0) >= Number(tier.weeklyLimit || 3)) {
-        await showLimitReachedModal("You have reached your weekly AI screener credit limit.");
-        return;
-      }
+      const minMarketCap = Math.max(0, Math.floor(asFinite(formData.get("minMarketCap"), 100000000000)));
       const payload = {
-        universe: formData.get("universe"),
-        market: formData.get("market"),
-        minCap: minCapAbs,
-        marketCapFilter: {
-          type: minCapAbs === null ? "any" : "greater_than",
-          value: minCapAbs,
-        },
-        maxNames: boundedNames,
-        notes: formData.get("notes"),
-        agentName: String(formData.get("agentName") || "").trim(),
-        filters: collectScreenerFilters(formData),
-        model: selectedModel,
-        personality: String(selectedMeta.personality || "balanced"),
+        minMarketCap,
+        autoPublish: true,
         workspaceId: state.activeWorkspaceId || sessionUser?.uid || state.user?.uid || "",
         meta: buildMeta(),
       };
 
 	      try {
-	        setOutputLoading(ui.screenerOutput, "Running screener and preparing AI Portfolio...");
+	        setOutputLoading(ui.screenerOutput, "Queueing GitHub Actions screener...");
 	        const result = await apiRunScreener(payload);
-	        const rows = Array.isArray(result?.results) ? result.results : [];
           const runId = String(result?.runId || "").trim();
-          const runTitle = String(result?.title || "").trim();
-          const resultsFound = Number(result?.resultsFound || rows.length || 0);
-          if (ui.screenerResultsCount) {
-            ui.screenerResultsCount.textContent = `Results Found: ${Number.isFinite(resultsFound) ? resultsFound : rows.length}`;
+          if (!runId) {
+            throw new Error("GitHub Actions run did not return a Quantura run ID.");
           }
-          renderScreenerRunOutput({
-            id: runId || "—",
-            title: runTitle || `${payload.universe || "AI Portfolio"} run`,
-            results: rows,
-            notes: payload.notes,
-            modelUsed: payload.model,
-            modelTier: tier.key,
+          const pendingRun = {
+            id: runId,
+            title: String(result?.title || "").trim() || `Stock screener · $${formatCompactNumber(minMarketCap)} floor`,
+            status: String(result?.status || "queued").trim().toLowerCase() || "queued",
+            results: [],
+            resultsFound: Number(result?.resultsFound || 0) || 0,
+            minMarketCap,
+            autoPublishRequested: true,
             serviceMessage: String(result?.serviceMessage || "").trim(),
-            appliedFilters: Array.isArray(result?.appliedFilters) ? result.appliedFilters : [],
-            ignoredFilters: Array.isArray(result?.ignoredFilters) ? result.ignoredFilters : [],
+            workflowRunId: String(result?.workflowRunId || "").trim(),
+            workflowRunUrl: String(result?.workflowRunUrl || "").trim(),
             createdAt: new Date().toISOString(),
-          });
-          if (runId) {
-            const screenerPublishMeta = buildScreenerPublishMeta({
-              payload,
-              rows,
-              runTitle: runTitle || `${payload.universe || "AI Portfolio"} run`,
-              resultsFound,
-            });
-            upsertMyRequest({
-              type: "screener",
-              requestId: `screener__${runId}`,
-              title: runTitle || `${payload.universe || "AI Portfolio"} run`,
-              input: {
-                universe: String(payload.universe || ""),
-                market: String(payload.market || ""),
-                maxNames: Number(payload.maxNames || 0) || null,
-                notes: String(payload.notes || ""),
-                model: String(payload.model || ""),
-                filters: payload.filters && typeof payload.filters === "object" ? payload.filters : {},
-              },
-              outputsMeta: {
-                summary: screenerPublishMeta.summary,
-                resultsCount: Number.isFinite(resultsFound) ? resultsFound : rows.length,
-                topSymbols: screenerPublishMeta.topSymbols,
-                modelUsed: String(payload.model || ""),
-                metrics: screenerPublishMeta.metrics,
-              },
-              sourceRef: {
-                collection: "screener_runs",
-                id: runId,
-              },
-              published: shouldAutoPublishForType("screener"),
-            }).catch(() => {});
-          }
-          state.aiUsageToday = Number(state.aiUsageToday || 0) + 1;
-          refreshScreenerCreditsUi();
-          if (runId) {
-            try {
-              await generateAIPortfolioForRun({
-                db,
-                functions,
-                runId,
-                preferredName: payload.agentName,
-                selectedModel: payload.model,
-              });
-            } catch (portfolioError) {
-              showToast(portfolioError.message || "Portfolio generated from screener, but AI ranking needs retry.", "warn");
+            appliedFilters: [`Market cap >= $${formatCompactNumber(minMarketCap)}`],
+          };
+          renderScreenerRunOutput(pendingRun);
+          fetchMyRequestById(buildSourceRequestId("screener", runId)).catch(() => {});
+          await fetchMyRequestsList({ force: true }).catch(() => {});
+          showToast("GitHub Actions screener queued. Quantura will publish it to Explore when it completes.");
+          logEvent("screener_request", { min_market_cap: minMarketCap, workflow: "github_actions" });
+
+          const finalRun = await pollScreenerRunUntilSettled(runId, { delayMs: 3500, maxAttempts: 40 }).catch(() => null);
+          if (finalRun) {
+            await fetchMyRequestsList({ force: true }).catch(() => {});
+            if (normalizeScreenerRunStatus(finalRun.status) === "completed") {
+              const finalCount = Number.isFinite(Number(finalRun.resultsFound))
+                ? Number(finalRun.resultsFound)
+                : Array.isArray(finalRun.results)
+                ? finalRun.results.length
+                : 0;
+              showToast(
+                finalCount > 0
+                  ? "Screener completed and published to Explore."
+                  : "Screener completed. No active signals cleared the market-cap floor."
+              );
+            } else if (normalizeScreenerRunStatus(finalRun.status) === "failed") {
+              showToast(finalRun.serviceMessage || "GitHub Actions screener failed.", "warn");
             }
           }
-        showToast("AI Portfolio generation started.");
-        logEvent("screener_request", { universe: payload.universe });
       } catch (error) {
-        const message = extractErrorMessage(error, "Unable to generate AI Portfolio.");
-        if (ui.screenerResultsCount) ui.screenerResultsCount.textContent = "Results Found: 0";
+        const message = extractErrorMessage(error, "Unable to run the GitHub Actions screener.");
+        if (ui.screenerResultsCount) ui.screenerResultsCount.textContent = "Matches: 0";
         if (ui.screenerOutput) {
           setOutputReady(ui.screenerOutput);
           ui.screenerOutput.innerHTML = `<div class="small muted">${escapeHtml(message)}</div>`;
