@@ -17384,6 +17384,311 @@
     return mappingResult;
   };
 
+  const computePredictionOptionsEnvelope = (table) => {
+    const headers = Array.isArray(table?.headers) ? table.headers : [];
+    const rows = Array.isArray(table?.rows) ? table.rows : [];
+    const norm = (h) => String(h || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const dateCandidates = new Set(["date", "ds", "datetime", "timestamp", "time"]);
+    const dateIndex = headers.findIndex((h) => dateCandidates.has(norm(h)));
+    if (dateIndex < 0) throw new Error("Could not find a date column in this CSV.");
+
+    const quantileCols = extractQuantileColumns(headers);
+    if (!quantileCols.length) throw new Error("No quantile columns were detected.");
+    const quantilesForRow = (row) =>
+      quantileCols
+        .map((col) => ({ ...col, value: numericCell(row, col.idx) }))
+        .filter((item) => Number.isFinite(item.value));
+
+    const rowsWithDate = rows
+      .map((row, idx) => {
+        const dt = parseDateCell(row?.[dateIndex]);
+        return {
+          idx,
+          row,
+          date: dt,
+          ymd: dt ? dateToYmd(dt) : "",
+          isWeekday: dt ? isWeekday(dt) : false,
+        };
+      })
+      .filter((item) => item.date);
+
+    if (!rowsWithDate.length) throw new Error("No valid dated rows were found in this CSV.");
+
+    const weekdayRows = rowsWithDate.filter((item) => item.isWeekday);
+    const lastUse =
+      [...weekdayRows].reverse().find((item) => quantilesForRow(item.row).length > 0) ||
+      [...rowsWithDate].reverse().find((item) => quantilesForRow(item.row).length > 0);
+    if (!lastUse) throw new Error("Could not find a valid business-day row with quantile values.");
+
+    const lastQuantiles = quantilesForRow(lastUse.row);
+    if (!lastQuantiles.length) throw new Error("The last business-day row is missing quantile values.");
+
+    const nearest = (target) =>
+      lastQuantiles.reduce((best, item) =>
+        Math.abs(item.q - target) < Math.abs(best.q - target) ? item : best
+      , lastQuantiles[0]);
+
+    return {
+      lastWeekdayDate: lastUse.ymd,
+      rowIndex: lastUse.idx,
+      lower: nearest(0.1),
+      median: nearest(0.5),
+      upper: nearest(0.9),
+    };
+  };
+
+  const pickNearestExpiration = (expirations, targetYmd) => {
+    const list = Array.isArray(expirations) ? expirations.map((item) => String(item || "").trim()).filter(Boolean) : [];
+    if (!list.length) return "";
+    const target = parseDateCell(targetYmd) || new Date();
+    const targetTs = target.getTime();
+    const parsed = list
+      .map((value) => ({ value, dt: parseDateCell(value) }))
+      .filter((item) => item.dt);
+    if (!parsed.length) return list[0];
+    const future = parsed.filter((item) => item.dt.getTime() >= targetTs);
+    const pool = future.length ? future : parsed;
+    pool.sort((a, b) => {
+      const da = Math.abs(a.dt.getTime() - targetTs);
+      const db = Math.abs(b.dt.getTime() - targetTs);
+      if (da !== db) return da - db;
+      return a.dt.getTime() - b.dt.getTime();
+    });
+    return pool[0]?.value || list[0];
+  };
+
+  const chooseOptionEntryQuote = (option) => {
+    const ask = Number(option?.ask);
+    const mid = Number(option?.mid);
+    const lastPrice = Number(option?.lastPrice);
+    const bid = Number(option?.bid);
+    if (Number.isFinite(ask) && ask > 0) return { premium: ask, basis: "ask" };
+    if (Number.isFinite(mid) && mid > 0) return { premium: mid, basis: "mid" };
+    if (Number.isFinite(lastPrice) && lastPrice > 0) return { premium: lastPrice, basis: "last" };
+    if (Number.isFinite(bid) && bid > 0) return { premium: bid, basis: "bid" };
+    return { premium: null, basis: "unavailable" };
+  };
+
+  const selectOptionForForecastTarget = (rows, kind, targetPrice) => {
+    const sorted = (Array.isArray(rows) ? rows : [])
+      .map((item) => {
+        const strike = Number(item?.strike);
+        if (!Number.isFinite(strike)) return null;
+        return {
+          ...item,
+          strike,
+          mid:
+            Number.isFinite(Number(item?.mid))
+              ? Number(item.mid)
+              : Number.isFinite(Number(item?.bid)) && Number.isFinite(Number(item?.ask))
+                ? (Number(item.bid) + Number(item.ask)) / 2
+                : null,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.strike - b.strike);
+    if (!sorted.length || !Number.isFinite(Number(targetPrice))) return null;
+    if (kind === "call") {
+      return sorted.find((item) => item.strike >= Number(targetPrice)) || sorted[sorted.length - 1];
+    }
+    return [...sorted].reverse().find((item) => item.strike <= Number(targetPrice)) || sorted[0];
+  };
+
+  const simulateLongOptionOutcome = ({ kind, strike, scenarioPrice, entryCost }) => {
+    const underlying = Number(scenarioPrice);
+    const strikeNum = Number(strike);
+    const premiumPaid = Number(entryCost);
+    if (!Number.isFinite(underlying) || !Number.isFinite(strikeNum)) {
+      return { payoff: null, pnl: null, returnPct: null, intrinsic: null };
+    }
+    const intrinsic = kind === "call" ? Math.max(underlying - strikeNum, 0) : Math.max(strikeNum - underlying, 0);
+    const payoff = intrinsic * 100;
+    const pnl = Number.isFinite(premiumPaid) ? payoff - premiumPaid : null;
+    const returnPct = Number.isFinite(premiumPaid) && premiumPaid > 0 && Number.isFinite(pnl) ? (pnl / premiumPaid) * 100 : null;
+    return { payoff, pnl, returnPct, intrinsic };
+  };
+
+  const removePredictionOptionsSupplement = () => {
+    ui.predictionsAgentOutput?.querySelectorAll("[data-prediction-options-supplement]").forEach((node) => node.remove());
+  };
+
+  const renderPredictionOptionCandidate = (title, candidate, targetLabel) => {
+    if (!candidate) {
+      return `
+        <div class="small muted" style="margin-top:10px;">${escapeHtml(title)}: no listed contract matched ${escapeHtml(targetLabel)}.</div>
+      `;
+    }
+    const entry = chooseOptionEntryQuote(candidate);
+    const entryCost = Number.isFinite(entry.premium) ? entry.premium * 100 : null;
+    const strike = Number(candidate.strike);
+    const breakEven =
+      Number.isFinite(strike) && Number.isFinite(entry.premium)
+        ? candidate.kind === "call" ? strike + entry.premium : strike - entry.premium
+        : null;
+    const fmtMoney = (value) => (Number.isFinite(Number(value)) ? formatUsd(Number(value), 2) : "—");
+    const fmtPct = (value) => (Number.isFinite(Number(value)) ? `${Number(value).toFixed(2)}%` : "—");
+    const fmtPlain = (value, digits = 2) => (Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : "—");
+    return `
+      <div style="margin-top:14px;">
+        <div class="small"><strong>${escapeHtml(title)}</strong></div>
+        <div class="table-wrap" style="margin-top:8px;">
+          <table class="data-table">
+            <tbody>
+              <tr><th>Contract</th><td>${escapeHtml(String(candidate.contractSymbol || "—"))}</td></tr>
+              <tr><th>Expiration</th><td>${escapeHtml(String(candidate.expiration || "—"))}</td></tr>
+              <tr><th>Target rule</th><td>${escapeHtml(targetLabel)} (${fmtMoney(candidate.targetPrice)})</td></tr>
+              <tr><th>Strike</th><td>${fmtMoney(candidate.strike)}</td></tr>
+              <tr><th>Last</th><td>${fmtMoney(candidate.lastPrice)}</td></tr>
+              <tr><th>Bid</th><td>${fmtMoney(candidate.bid)}</td></tr>
+              <tr><th>Ask</th><td>${fmtMoney(candidate.ask)}</td></tr>
+              <tr><th>Mid</th><td>${fmtMoney(candidate.mid)}</td></tr>
+              <tr><th>Entry basis</th><td>${escapeHtml(entry.basis)}</td></tr>
+              <tr><th>Estimated cost (1 contract)</th><td>${fmtMoney(entryCost)}</td></tr>
+              <tr><th>Break-even</th><td>${fmtMoney(breakEven)}</td></tr>
+              <tr><th>IV</th><td>${Number.isFinite(Number(candidate.impliedVolatility)) ? fmtPct(Number(candidate.impliedVolatility) * 100) : "—"}</td></tr>
+              <tr><th>Delta</th><td>${fmtPlain(candidate.delta, 3)}</td></tr>
+              <tr><th>Prob ITM</th><td>${fmtPct(candidate.probabilityITM)}</td></tr>
+              <tr><th>Volume</th><td>${Number.isFinite(Number(candidate.volume)) ? Number(candidate.volume).toLocaleString() : "—"}</td></tr>
+              <tr><th>Open interest</th><td>${Number.isFinite(Number(candidate.openInterest)) ? Number(candidate.openInterest).toLocaleString() : "—"}</td></tr>
+              <tr><th>ITM now</th><td>${candidate.inTheMoney === true ? "Yes" : candidate.inTheMoney === false ? "No" : "—"}</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  };
+
+  const renderPredictionOptionSimulationTable = (scenarios) => {
+    const fmtMoney = (value) => (Number.isFinite(Number(value)) ? formatUsd(Number(value), 2) : "—");
+    const fmtPct = (value) => (Number.isFinite(Number(value)) ? `${Number(value).toFixed(2)}%` : "—");
+    return `
+      <div style="margin-top:14px;">
+        <div class="small"><strong>Simulated Expiry Returns (Default: 1 Contract)</strong></div>
+        <div class="table-wrap" style="margin-top:8px;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Scenario</th>
+                <th>Underlying</th>
+                <th>Call payoff</th>
+                <th>Call P/L</th>
+                <th>Call return</th>
+                <th>Put payoff</th>
+                <th>Put P/L</th>
+                <th>Put return</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${scenarios
+                .map(
+                  (scenario) => `
+                    <tr>
+                      <td>${escapeHtml(String(scenario.label || ""))}</td>
+                      <td>${fmtMoney(scenario.price)}</td>
+                      <td>${fmtMoney(scenario.call?.payoff)}</td>
+                      <td>${fmtMoney(scenario.call?.pnl)}</td>
+                      <td>${fmtPct(scenario.call?.returnPct)}</td>
+                      <td>${fmtMoney(scenario.put?.payoff)}</td>
+                      <td>${fmtMoney(scenario.put?.pnl)}</td>
+                      <td>${fmtPct(scenario.put?.returnPct)}</td>
+                    </tr>
+                  `
+                )
+                .join("")}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  };
+
+  const appendPredictionOptionsSupplement = async (functions, { ticker, envelope, sourceLabel = "Prediction options analysis" } = {}) => {
+    if (!functions || !ui.predictionsAgentOutput) return null;
+    const cleanTicker = normalizeTicker(ticker || "");
+    if (!cleanTicker || !envelope) return null;
+
+    removePredictionOptionsSupplement();
+    const getOptions = functions.httpsCallable("get_options_chain");
+    const seed = await getOptions({ ticker: cleanTicker, expiration: "", limit: 120, meta: buildMeta() });
+    const seedData = seed?.data || {};
+    const expirations = Array.isArray(seedData.expirations) ? seedData.expirations : [];
+    if (!expirations.length) throw new Error(`No listed options expirations were returned for ${cleanTicker}.`);
+
+    const selectedExpiration = pickNearestExpiration(expirations, envelope.lastWeekdayDate || "") || String(seedData.selectedExpiration || "");
+    const chainResponse =
+      selectedExpiration && selectedExpiration !== String(seedData.selectedExpiration || "")
+        ? await getOptions({ ticker: cleanTicker, expiration: selectedExpiration, limit: 200, meta: buildMeta() })
+        : seed;
+    const chain = chainResponse?.data || {};
+    const calls = Array.isArray(chain.calls) ? chain.calls : [];
+    const puts = Array.isArray(chain.puts) ? chain.puts : [];
+    const callCandidate = selectOptionForForecastTarget(calls, "call", envelope.upper?.value);
+    const putCandidate = selectOptionForForecastTarget(puts, "put", envelope.lower?.value);
+    if (callCandidate) {
+      callCandidate.kind = "call";
+      callCandidate.expiration = selectedExpiration || chain.selectedExpiration || "";
+      callCandidate.targetPrice = envelope.upper?.value;
+    }
+    if (putCandidate) {
+      putCandidate.kind = "put";
+      putCandidate.expiration = selectedExpiration || chain.selectedExpiration || "";
+      putCandidate.targetPrice = envelope.lower?.value;
+    }
+    const callEntry = callCandidate ? chooseOptionEntryQuote(callCandidate) : { premium: null, basis: "unavailable" };
+    const putEntry = putCandidate ? chooseOptionEntryQuote(putCandidate) : { premium: null, basis: "unavailable" };
+    const scenarios = [
+      { label: String(envelope.lower?.label || "Lower"), price: envelope.lower?.value },
+      { label: String(envelope.median?.label || "Median"), price: envelope.median?.value },
+      { label: String(envelope.upper?.label || "Upper"), price: envelope.upper?.value },
+    ].filter((item, index, list) => Number.isFinite(Number(item.price)) && list.findIndex((other) => other.label === item.label) === index)
+      .map((item) => ({
+        ...item,
+        call: callCandidate
+          ? simulateLongOptionOutcome({
+              kind: "call",
+              strike: callCandidate.strike,
+              scenarioPrice: item.price,
+              entryCost: Number.isFinite(callEntry.premium) ? callEntry.premium * 100 : null,
+            })
+          : null,
+        put: putCandidate
+          ? simulateLongOptionOutcome({
+              kind: "put",
+              strike: putCandidate.strike,
+              scenarioPrice: item.price,
+              entryCost: Number.isFinite(putEntry.premium) ? putEntry.premium * 100 : null,
+            })
+          : null,
+      }));
+
+    const supplement = document.createElement("div");
+    supplement.dataset.predictionOptionsSupplement = "1";
+    supplement.className = "small";
+    supplement.innerHTML = `
+      <div class="notice" style="margin-top:14px;">
+        <div><strong>${escapeHtml(sourceLabel)}</strong></div>
+        <div class="small" style="margin-top:6px;">
+          Expiry near forecast end: <strong>${escapeHtml(selectedExpiration || String(chain.selectedExpiration || "Auto"))}</strong>
+          · Upper rule: strike at or above <strong>${escapeHtml(String(envelope.upper?.label || "P90").toUpperCase())}</strong>
+          · Lower rule: strike at or below <strong>${escapeHtml(String(envelope.lower?.label || "P10").toUpperCase())}</strong>
+        </div>
+      </div>
+      ${renderPredictionOptionCandidate("Upper-Bound Call Candidate", callCandidate, String(envelope.upper?.label || "P90").toUpperCase())}
+      ${renderPredictionOptionCandidate("Lower-Bound Put Candidate", putCandidate, String(envelope.lower?.label || "P10").toUpperCase())}
+      ${scenarios.length ? renderPredictionOptionSimulationTable(scenarios) : ""}
+      <div class="small muted" style="margin-top:10px;">
+        Simulations assume a long option held through expiry, using the quoted ask/mid/last/bid fallback in that order and one contract by default.
+      </div>
+    `;
+    ui.predictionsAgentOutput.appendChild(supplement);
+    return {
+      selectedExpiration,
+      callCandidate,
+      putCandidate,
+      scenarios,
+    };
+  };
+
   const inferCsvAxes = (table) => {
     const headers = table?.headers || [];
     const rows = table?.rows || [];
@@ -17559,6 +17864,7 @@
     ui.predictionsPlotMeta.textContent = `${doc.title || "predictions.csv"} · ${table.rows.length.toLocaleString()} rows · ${table.headers.length} cols${
       truncated ? " · truncated" : ""
     }`;
+    removePredictionOptionsSupplement();
     if (ui.predictionsAgentOutput) {
       ui.predictionsAgentOutput.innerHTML =
         "Run the OpenAI CSV Agent to compute weekday-aware quantile mapping and return an analyst summary.";
@@ -17849,6 +18155,7 @@
     state.foundryContext.activeRunId = String(run?.id || "").trim();
     state.foundryContext.activeRun = run && typeof run === "object" ? run : null;
     renderFoundryRuns(state.foundryContext.runs || []);
+    removePredictionOptionsSupplement();
     if (!ui.foundryRunMeta) return;
     if (!run || typeof run !== "object") {
       ui.foundryRunMeta.innerHTML = `<div class="small muted">Select a foundry run to inspect it.</div>`;
@@ -17944,7 +18251,25 @@
     }
     try {
       await loadFoundryCsvIntoPreview(run);
+      try {
+        const envelope = computePredictionOptionsEnvelope(state.predictionsContext.table);
+        await appendPredictionOptionsSupplement(state.clients?.functions, {
+          ticker: dataset?.ticker || state.tickerContext?.ticker || "",
+          envelope,
+          sourceLabel: "Options near the Foundry prediction end date",
+        });
+      } catch (optionsError) {
+        removePredictionOptionsSupplement();
+        if (ui.predictionsAgentOutput) {
+          ui.predictionsAgentOutput.innerHTML += `
+            <div class="small muted" style="margin-top:12px;">
+              Options overlay unavailable: ${escapeHtml(optionsError?.message || "Unable to load listed options.")}
+            </div>
+          `;
+        }
+      }
     } catch (error) {
+      removePredictionOptionsSupplement();
       if (ui.predictionsPlotMeta) ui.predictionsPlotMeta.textContent = error?.message || "Unable to load CSV preview.";
       if (ui.predictionsPreview) {
         ui.predictionsPreview.innerHTML = `<div class="small muted">${escapeHtml(error?.message || "Unable to load CSV preview.")}</div>`;
@@ -26819,6 +27144,22 @@
       try {
         setOutputLoading(ui.predictionsAgentOutput, "Analyzing uploaded CSV...");
         const mappingResult = await runPredictionsQuantileMapping(functions);
+        try {
+          const envelope = computePredictionOptionsEnvelope(state.predictionsContext.table);
+          await appendPredictionOptionsSupplement(functions, {
+            ticker: mappingResult?.ticker || ui.predictionsTicker?.value || "",
+            envelope,
+            sourceLabel: "Options near the prediction CSV end date",
+          });
+        } catch (optionsError) {
+          if (ui.predictionsAgentOutput) {
+            ui.predictionsAgentOutput.innerHTML += `
+              <div class="small muted" style="margin-top:12px;">
+                Options overlay unavailable: ${escapeHtml(optionsError?.message || "Unable to load listed options.")}
+              </div>
+            `;
+          }
+        }
         if (mappingResult?.uploadId) {
           try {
             const runAgent = functions.httpsCallable("run_prediction_upload_agent");
