@@ -3,13 +3,17 @@ import Foundation
 import GoogleMobileAds
 import UIKit
 
+@MainActor
 final class AppOpenAdManager: NSObject, FullScreenContentDelegate {
     private let remoteConfigManager: RemoteConfigManager
     private let adManager: AdManager
     private var appOpenAd: AppOpenAd?
     private var isLoading = false
     private var isShowing = false
+    private var wantsForegroundPresentation = false
+    private var waitingForSdkStart = false
     private var presentationBlockedByAuthGate = false
+    private var pendingShowRetryTask: Task<Void, Never>?
     private var loadedAt: Date?
     private let maxCacheAgeSeconds: TimeInterval = 4 * 60 * 60
 
@@ -24,19 +28,45 @@ final class AppOpenAdManager: NSObject, FullScreenContentDelegate {
             AdDebugStatusStore.shared.updateLoad(format: "app_open", status: "disabled")
             return
         }
+        guard remoteConfigManager.isAdFormatEnabled(format: .appOpen) else {
+            print("[Ads][iOS][AppOpen] App open disabled by format flag.")
+            AdDebugStatusStore.shared.updateLoad(format: "app_open", status: "disabled:format_off")
+            appOpenAd = nil
+            loadedAt = nil
+            return
+        }
+        guard MobileAdsBootstrap.shared.isReady else {
+            AdDebugStatusStore.shared.updateLoad(format: "app_open", status: "waiting:sdk_init")
+            guard !waitingForSdkStart else { return }
+            waitingForSdkStart = true
+            MobileAdsBootstrap.shared.whenReady { [weak self] success in
+                guard let self else { return }
+                self.waitingForSdkStart = false
+                guard success else { return }
+                self.preloadAdIfNeeded()
+            }
+            return
+        }
         guard !isLoading else { return }
         guard !isAdFresh else { return }
         loadAd()
     }
 
     func sceneDidBecomeActive() {
+        print("[Ads][iOS][AppOpen] Scene became active; eligible for foreground presentation.")
+        wantsForegroundPresentation = true
+        pendingShowRetryTask?.cancel()
+        pendingShowRetryTask = nil
         showIfAvailable()
     }
 
     func setPresentationBlockedByAuthGate(_ blocked: Bool) {
+        let wasBlocked = presentationBlockedByAuthGate
         presentationBlockedByAuthGate = blocked
         if blocked {
             print("[Ads][iOS][AppOpen] Presentation blocked by auth gate.")
+        } else if wasBlocked {
+            showIfAvailable()
         }
     }
 
@@ -51,27 +81,41 @@ final class AppOpenAdManager: NSObject, FullScreenContentDelegate {
         print("[Ads][iOS][AppOpen] Loading ad unit=\(unitID)")
         AdDebugStatusStore.shared.updateLoad(format: "app_open", status: "loading")
         AppOpenAd.load(with: unitID, request: Request()) { [weak self] ad, error in
-            guard let self else { return }
-            self.isLoading = false
-            if let error {
-                self.appOpenAd = nil
-                self.loadedAt = nil
-                print("[Ads][iOS][AppOpen] Load failed: \(error.localizedDescription)")
-                print("[Ads][iOS] Load fail for app_open: \(error.localizedDescription)")
-                AdDebugStatusStore.shared.updateLoad(format: "app_open", status: "failed:\(error.localizedDescription)")
-                return
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.isLoading = false
+                if let error {
+                    self.appOpenAd = nil
+                    self.loadedAt = nil
+                    print("[Ads][iOS][AppOpen] Load failed: \(error.localizedDescription)")
+                    print("[Ads][iOS] Load fail for app_open: \(error.localizedDescription)")
+                    AdDebugStatusStore.shared.updateLoad(format: "app_open", status: "failed:\(error.localizedDescription)")
+                    return
+                }
+                self.appOpenAd = ad
+                self.loadedAt = Date()
+                self.appOpenAd?.fullScreenContentDelegate = self
+                print("[Ads][iOS][AppOpen] Load succeeded.")
+                print("[Ads][iOS] Load success for app_open")
+                AdDebugStatusStore.shared.updateLoad(format: "app_open", status: "loaded")
+                if self.wantsForegroundPresentation {
+                    self.showIfAvailable()
+                }
             }
-            self.appOpenAd = ad
-            self.loadedAt = Date()
-            self.appOpenAd?.fullScreenContentDelegate = self
-            print("[Ads][iOS][AppOpen] Load succeeded.")
-            print("[Ads][iOS] Load success for app_open")
-            AdDebugStatusStore.shared.updateLoad(format: "app_open", status: "loaded")
         }
     }
 
     private func showIfAvailable() {
         guard remoteConfigManager.areAdsEnabled() else { return }
+        guard remoteConfigManager.isAdFormatEnabled(format: .appOpen) else {
+            AdDebugStatusStore.shared.updateShow(format: "app_open", status: "skipped:format_off")
+            return
+        }
+        guard MobileAdsBootstrap.shared.isReady else {
+            AdDebugStatusStore.shared.updateShow(format: "app_open", status: "waiting:sdk_init")
+            preloadAdIfNeeded()
+            return
+        }
         guard !isShowing else { return }
         guard !presentationBlockedByAuthGate else {
             print("[Ads][iOS][AppOpen] Skipping show; auth gate is visible.")
@@ -93,17 +137,36 @@ final class AppOpenAdManager: NSObject, FullScreenContentDelegate {
 
         guard let presenter = Self.topViewController() else {
             print("[Ads][iOS][AppOpen] No presenter view controller available.")
+            scheduleRetryIfNeeded(reason: "presenter_missing")
+            return
+        }
+        guard UIApplication.shared.applicationState == .active else {
+            print("[Ads][iOS][AppOpen] Skipping show because application is not active.")
             return
         }
         guard !Self.hasPresentedModal() else {
             print("[Ads][iOS][AppOpen] Skipping show because another full-screen/modal UI is already presented.")
+            scheduleRetryIfNeeded(reason: "modal_visible")
             return
         }
 
         isShowing = true
+        wantsForegroundPresentation = false
         ad.fullScreenContentDelegate = self
         print("[Ads][iOS][AppOpen] Presenting app open ad.")
         ad.present(from: presenter)
+    }
+
+    private func scheduleRetryIfNeeded(reason: String) {
+        guard wantsForegroundPresentation else { return }
+        pendingShowRetryTask?.cancel()
+        pendingShowRetryTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(for: .milliseconds(450))
+            guard !Task.isCancelled else { return }
+            print("[Ads][iOS][AppOpen] Retrying show after \(reason).")
+            self.showIfAvailable()
+        }
     }
 
     func adDidRecordImpression(_ ad: FullScreenPresentingAd) {
@@ -124,6 +187,8 @@ final class AppOpenAdManager: NSObject, FullScreenContentDelegate {
 
     func adDidDismissFullScreenContent(_ ad: FullScreenPresentingAd) {
         print("[Ads][iOS][AppOpen] Dismissed.")
+        pendingShowRetryTask?.cancel()
+        pendingShowRetryTask = nil
         isShowing = false
         appOpenAd = nil
         loadedAt = nil
@@ -136,6 +201,8 @@ final class AppOpenAdManager: NSObject, FullScreenContentDelegate {
         didFailToPresentFullScreenContentWithError error: Error
     ) {
         print("[Ads][iOS][AppOpen] Failed to show: \(error.localizedDescription)")
+        pendingShowRetryTask?.cancel()
+        pendingShowRetryTask = nil
         isShowing = false
         appOpenAd = nil
         loadedAt = nil
@@ -143,25 +210,28 @@ final class AppOpenAdManager: NSObject, FullScreenContentDelegate {
         preloadAdIfNeeded()
     }
 
+    @MainActor
     private static func topViewController(
-        base: UIViewController? = UIApplication.shared.connectedScenes
+        base: UIViewController? = nil
+    ) -> UIViewController? {
+        let resolvedBase = base ?? UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
             .flatMap { $0.windows }
             .first { $0.isKeyWindow }?
             .rootViewController
-    ) -> UIViewController? {
-        if let nav = base as? UINavigationController {
+        if let nav = resolvedBase as? UINavigationController {
             return topViewController(base: nav.visibleViewController)
         }
-        if let tab = base as? UITabBarController, let selected = tab.selectedViewController {
+        if let tab = resolvedBase as? UITabBarController, let selected = tab.selectedViewController {
             return topViewController(base: selected)
         }
-        if let presented = base?.presentedViewController {
+        if let presented = resolvedBase?.presentedViewController {
             return topViewController(base: presented)
         }
-        return base
+        return resolvedBase
     }
 
+    @MainActor
     private static func hasPresentedModal() -> Bool {
         let root = UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }

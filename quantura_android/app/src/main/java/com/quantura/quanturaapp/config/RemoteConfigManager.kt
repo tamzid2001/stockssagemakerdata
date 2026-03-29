@@ -37,11 +37,33 @@ data class AdFeatureFlags(
     val adsEnabled: Boolean,
 )
 
+data class AdFormatToggles(
+    val appOpen: Boolean,
+    val banner: Boolean,
+    val interstitial: Boolean,
+    val rewarded: Boolean,
+    val rewardedInterstitial: Boolean,
+    val native: Boolean,
+) {
+    fun isEnabled(format: AdFormat): Boolean {
+        return when (format) {
+            AdFormat.APP_OPEN -> appOpen
+            AdFormat.BANNER -> banner
+            AdFormat.INTERSTITIAL -> interstitial
+            AdFormat.REWARDED -> rewarded
+            AdFormat.REWARDED_INTERSTITIAL -> rewardedInterstitial
+            AdFormat.NATIVE -> native
+        }
+    }
+}
+
 data class AdsRemoteConfigState(
     val adsEnabled: Boolean,
     val adsUseRealIos: Boolean,
     val adsUseRealAndroid: Boolean,
     val featureFlags: AdFeatureFlags,
+    val iosFormatToggles: AdFormatToggles,
+    val androidFormatToggles: AdFormatToggles,
     val ios: AdUnitIds,
     val android: AdUnitIds,
 )
@@ -95,6 +117,19 @@ class RemoteConfigManager(
                     "ads_enabled" to true,
                     "ads_use_real_android" to true,
                     "ads_use_real_ios" to true,
+                    "ads_ad_inspector_enabled" to false,
+                    adFormatEnabledKey(AdPlatform.ANDROID, AdFormat.APP_OPEN) to true,
+                    adFormatEnabledKey(AdPlatform.ANDROID, AdFormat.BANNER) to true,
+                    adFormatEnabledKey(AdPlatform.ANDROID, AdFormat.INTERSTITIAL) to true,
+                    adFormatEnabledKey(AdPlatform.ANDROID, AdFormat.REWARDED) to true,
+                    adFormatEnabledKey(AdPlatform.ANDROID, AdFormat.REWARDED_INTERSTITIAL) to true,
+                    adFormatEnabledKey(AdPlatform.ANDROID, AdFormat.NATIVE) to true,
+                    adFormatEnabledKey(AdPlatform.IOS, AdFormat.APP_OPEN) to true,
+                    adFormatEnabledKey(AdPlatform.IOS, AdFormat.BANNER) to true,
+                    adFormatEnabledKey(AdPlatform.IOS, AdFormat.INTERSTITIAL) to true,
+                    adFormatEnabledKey(AdPlatform.IOS, AdFormat.REWARDED) to true,
+                    adFormatEnabledKey(AdPlatform.IOS, AdFormat.REWARDED_INTERSTITIAL) to true,
+                    adFormatEnabledKey(AdPlatform.IOS, AdFormat.NATIVE) to true,
                     "ad_unit_ids" to defaultAdUnitIdsPayload(),
                     "play_integrity_enabled" to true,
                     "play_integrity_required" to false,
@@ -130,7 +165,22 @@ class RemoteConfigManager(
 
     fun areAdsEnabled(): Boolean = getEffectiveAdsConfig().adsEnabled
 
+    fun isAdFormatEnabled(
+        platform: AdPlatform = AdPlatform.ANDROID,
+        format: AdFormat,
+        remoteConfigState: AdsRemoteConfigState = currentRemoteConfigState(),
+    ): Boolean {
+        val adsEnabled = remoteConfigState.adsEnabled && remoteConfigState.featureFlags.adsEnabled
+        val formatEnabled = when (platform) {
+            AdPlatform.IOS -> remoteConfigState.iosFormatToggles.isEnabled(format)
+            AdPlatform.ANDROID -> remoteConfigState.androidFormatToggles.isEnabled(format)
+        }
+        return adsEnabled && formatEnabled
+    }
+
     fun isUsingTestAds(): Boolean = getEffectiveAdsConfig().usingTestAds
+
+    fun isAdInspectorEnabled(): Boolean = remoteBoolean("ads_ad_inspector_enabled", false)
 
     fun getAdsEnvironment(): AdsEnvironment =
         AdsEnvironment(
@@ -213,6 +263,26 @@ class RemoteConfigManager(
         )
     }
 
+    fun resolveAndroidBottomBannerAdUnitId(): String {
+        val state = currentRemoteConfigState()
+        val environment = getAdsEnvironment()
+        val adsEnabled = state.adsEnabled && state.featureFlags.adsEnabled
+        val formatEnabled = state.androidFormatToggles.isEnabled(AdFormat.BANNER)
+        val useRealAds = adsEnabled && state.adsUseRealAndroid
+        val resolved = if (useRealAds) {
+            resolveBundledOrRemoteBottomBannerLiveId()
+        } else {
+            TEST_ANDROID_IDS.adaptiveBanner
+        }
+        Log.i(
+            tag,
+            "[Ads][Android] Selected ad unit for bottom_banner = $resolved " +
+                "useReal=$useRealAds adsEnabled=$adsEnabled formatEnabled=$formatEnabled platformRealFlag=${state.adsUseRealAndroid} " +
+                "debug=${environment.isDebugBuild} emulator=${environment.isSimulatorOrEmulator}"
+        )
+        return resolved
+    }
+
     fun resolveAdUnitId(
         platform: AdPlatform,
         format: AdFormat,
@@ -223,6 +293,10 @@ class RemoteConfigManager(
         val platformWantsRealAds = when (platform) {
             AdPlatform.IOS -> remoteConfigState.adsUseRealIos
             AdPlatform.ANDROID -> remoteConfigState.adsUseRealAndroid
+        }
+        val formatEnabled = when (platform) {
+            AdPlatform.IOS -> remoteConfigState.iosFormatToggles.isEnabled(format)
+            AdPlatform.ANDROID -> remoteConfigState.androidFormatToggles.isEnabled(format)
         }
         val useRealAds = adsEnabled && platformWantsRealAds
         val selected = when (platform) {
@@ -242,7 +316,7 @@ class RemoteConfigManager(
             Log.i(
                 tag,
                 "[Ads][Android] Selected ad unit for ${format.name.lowercase()} = $resolved " +
-                    "useReal=$useRealAds adsEnabled=$adsEnabled platformRealFlag=$platformWantsRealAds " +
+                    "useReal=$useRealAds adsEnabled=$adsEnabled formatEnabled=$formatEnabled platformRealFlag=$platformWantsRealAds " +
                     "debug=${environment.isDebugBuild} emulator=${environment.isSimulatorOrEmulator}"
             )
         }
@@ -259,15 +333,15 @@ class RemoteConfigManager(
     }
 
     fun isPlayIntegrityEnabled(): Boolean {
-        return remoteConfig?.getBoolean("play_integrity_enabled") ?: true
+        return remoteBoolean("play_integrity_enabled", true)
     }
 
     fun isPlayIntegrityRequired(): Boolean {
-        return remoteConfig?.getBoolean("play_integrity_required") ?: false
+        return remoteBoolean("play_integrity_required", false)
     }
 
     fun playIntegrityCloudProjectNumber(): Long? {
-        val raw = remoteConfig?.getString("play_integrity_cloud_project_number").orEmpty().trim()
+        val raw = remoteString("play_integrity_cloud_project_number").trim()
         if (raw.isBlank()) return null
         return raw.toLongOrNull()
     }
@@ -288,33 +362,56 @@ class RemoteConfigManager(
     }
 
     private fun currentRemoteConfigState(): AdsRemoteConfigState {
-        val adsEnabled = remoteConfig?.getBoolean("ads_enabled") ?: true
-        val adsUseRealIos = remoteConfig?.getBoolean("ads_use_real_ios") ?: true
-        val adsUseRealAndroid = remoteConfig?.getBoolean("ads_use_real_android") ?: true
+        val adsEnabled = remoteBoolean("ads_enabled", true)
+        val adsUseRealIos = remoteBoolean("ads_use_real_ios", true)
+        val adsUseRealAndroid = remoteBoolean("ads_use_real_android", true)
         val featureFlags = parseFeatureFlags()
-        val payload = parseAdUnitPayload(remoteConfig?.getString("ad_unit_ids").orEmpty())
-        val ios = parsePlatformUnitIds(
-            payload = payload,
-            platform = AdPlatform.IOS,
-            seed = LIVE_IOS_IDS
+        val iosFormatToggles = parseAdFormatToggles(AdPlatform.IOS)
+        val androidFormatToggles = parseAdFormatToggles(AdPlatform.ANDROID)
+        val payload = parseAdUnitPayload(remoteString("ad_unit_ids", defaultAdUnitIdsPayload()))
+        val ios = sanitizeLiveOverrides(
+            parsed = parsePlatformUnitIds(
+                payload = payload,
+                platform = AdPlatform.IOS,
+                seed = LIVE_IOS_IDS
+            ),
+            bundled = LIVE_IOS_IDS,
+            platform = AdPlatform.IOS
         )
-        val android = parsePlatformUnitIds(
-            payload = payload,
-            platform = AdPlatform.ANDROID,
-            seed = LIVE_ANDROID_IDS
+        val android = sanitizeLiveOverrides(
+            parsed = parsePlatformUnitIds(
+                payload = payload,
+                platform = AdPlatform.ANDROID,
+                seed = LIVE_ANDROID_IDS
+            ),
+            bundled = LIVE_ANDROID_IDS,
+            platform = AdPlatform.ANDROID
         )
         return AdsRemoteConfigState(
             adsEnabled = adsEnabled,
             adsUseRealIos = adsUseRealIos,
             adsUseRealAndroid = adsUseRealAndroid,
             featureFlags = featureFlags,
+            iosFormatToggles = iosFormatToggles,
+            androidFormatToggles = androidFormatToggles,
             ios = ios,
             android = android
         )
     }
 
+    private fun parseAdFormatToggles(platform: AdPlatform): AdFormatToggles {
+        return AdFormatToggles(
+            appOpen = remoteBoolean(adFormatEnabledKey(platform, AdFormat.APP_OPEN), true),
+            banner = remoteBoolean(adFormatEnabledKey(platform, AdFormat.BANNER), true),
+            interstitial = remoteBoolean(adFormatEnabledKey(platform, AdFormat.INTERSTITIAL), true),
+            rewarded = remoteBoolean(adFormatEnabledKey(platform, AdFormat.REWARDED), true),
+            rewardedInterstitial = remoteBoolean(adFormatEnabledKey(platform, AdFormat.REWARDED_INTERSTITIAL), true),
+            native = remoteBoolean(adFormatEnabledKey(platform, AdFormat.NATIVE), true),
+        )
+    }
+
     private fun parseFeatureFlags(): AdFeatureFlags {
-        val raw = remoteConfig?.getString("feature_flags").orEmpty().ifBlank { DEFAULT_FEATURE_FLAGS_JSON }
+        val raw = remoteString("feature_flags", DEFAULT_FEATURE_FLAGS_JSON).ifBlank { DEFAULT_FEATURE_FLAGS_JSON }
         return try {
             val json = JSONObject(raw)
             AdFeatureFlags(
@@ -400,6 +497,98 @@ class RemoteConfigManager(
         )
     }
 
+    private fun sanitizeLiveOverrides(
+        parsed: AdUnitIds,
+        bundled: AdUnitIds,
+        platform: AdPlatform,
+    ): AdUnitIds {
+        fun select(candidate: String, fallback: String, format: String): String {
+            if (!candidate.isGoogleSampleAdUnit()) return candidate
+            if (fallback.isGoogleSampleAdUnit()) return candidate
+            Log.w(
+                tag,
+                "[Ads][Android] Ignoring sample ad unit override for ${platform.name.lowercase()}:$format and using bundled live unit instead."
+            )
+            return fallback
+        }
+
+        return AdUnitIds(
+            appOpen = select(parsed.appOpen, bundled.appOpen, "app_open"),
+            adaptiveBanner = select(parsed.adaptiveBanner, bundled.adaptiveBanner, "banner"),
+            fixedBanner = select(parsed.fixedBanner, bundled.fixedBanner, "fixed_banner"),
+            interstitial = select(parsed.interstitial, bundled.interstitial, "interstitial"),
+            rewarded = select(parsed.rewarded, bundled.rewarded, "rewarded"),
+            rewardedInterstitial = select(
+                parsed.rewardedInterstitial,
+                bundled.rewardedInterstitial,
+                "rewarded_interstitial"
+            ),
+            nativeAdvanced = select(parsed.nativeAdvanced, bundled.nativeAdvanced, "native"),
+            nativeVideo = select(parsed.nativeVideo, bundled.nativeVideo, "native_video")
+        )
+    }
+
+    private fun resolveBundledOrRemoteBottomBannerLiveId(): String {
+        val payload = parseAdUnitPayload(remoteString("ad_unit_ids", defaultAdUnitIdsPayload()))
+        val platformJson = payload?.optJSONObject("android")
+        val candidate = listOfNotNull(
+            platformJson?.optString("bottomBanner"),
+            platformJson?.optString("secondaryBanner"),
+            platformJson?.optString("bannerBottom"),
+            platformJson?.optString("bottom_banner"),
+            payload?.optString("bottomBanner"),
+            payload?.optString("secondaryBanner"),
+            payload?.optString("bannerBottom"),
+            payload?.optString("bottom_banner"),
+        )
+            .map { it.trim() }
+            .firstOrNull { it.isNotEmpty() }
+
+        if (candidate.isNullOrEmpty()) {
+            return LIVE_ANDROID_BOTTOM_BANNER_ID
+        }
+        if (candidate.isGoogleSampleAdUnit()) {
+            Log.w(
+                tag,
+                "[Ads][Android] Ignoring sample ad unit override for android:bottom_banner and using bundled live unit instead."
+            )
+            return LIVE_ANDROID_BOTTOM_BANNER_ID
+        }
+        return candidate
+    }
+
+    private fun String.isGoogleSampleAdUnit(): Boolean {
+        return startsWith("ca-app-pub-3940256099942544/")
+    }
+
+    private fun remoteBoolean(key: String, fallback: Boolean): Boolean {
+        val config = remoteConfig ?: return fallback
+        val value = config.getValue(key)
+        return when (value.source) {
+            FirebaseRemoteConfig.VALUE_SOURCE_REMOTE,
+            FirebaseRemoteConfig.VALUE_SOURCE_DEFAULT -> value.asBoolean()
+            else -> fallback
+        }
+    }
+
+    private fun remoteString(key: String, fallback: String = ""): String {
+        val config = remoteConfig ?: return fallback
+        val value = config.getValue(key)
+        return when (value.source) {
+            FirebaseRemoteConfig.VALUE_SOURCE_REMOTE,
+            FirebaseRemoteConfig.VALUE_SOURCE_DEFAULT -> value.asString()
+            else -> fallback
+        }
+    }
+
+    private fun adFormatEnabledKey(platform: AdPlatform, format: AdFormat): String {
+        val platformKey = when (platform) {
+            AdPlatform.IOS -> "ios"
+            AdPlatform.ANDROID -> "android"
+        }
+        return "ads_${platformKey}_${format.name.lowercase()}_enabled"
+    }
+
     private fun defaultAdUnitIdsPayload(): String {
         return JSONObject()
             .put("ios", toPayload(LIVE_IOS_IDS))
@@ -424,7 +613,8 @@ class RemoteConfigManager(
             "[Ads][Android] Final ad config adsEnabled=${effective.adsEnabled} " +
                 "topLevel=${effective.adsEnabledTopLevel} featureFlag=${effective.featureFlags.adsEnabled} " +
                 "useRealAndroid=${effective.adsUseRealAndroid} debug=${effective.environment.isDebugBuild} " +
-                "emulator=${effective.environment.isSimulatorOrEmulator} usingTest=${effective.usingTestAds}"
+                "emulator=${effective.environment.isSimulatorOrEmulator} usingTest=${effective.usingTestAds} " +
+                "adInspectorEnabled=${isAdInspectorEnabled()}"
         )
     }
 
@@ -478,6 +668,8 @@ class RemoteConfigManager(
             nativeAdvanced = "ca-app-pub-5322412772082850/1144501483",
             nativeVideo = "ca-app-pub-5322412772082850/1144501483",
         )
+
+        private const val LIVE_ANDROID_BOTTOM_BANNER_ID = "ca-app-pub-5322412772082850/3154147762"
 
         private val LIVE_IOS_IDS = AdUnitIds(
             appOpen = "ca-app-pub-5322412772082850/9489895363",

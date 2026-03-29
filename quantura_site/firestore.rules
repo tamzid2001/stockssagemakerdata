@@ -105,7 +105,12 @@ service cloud.firestore {
     }
 
     match /autopilot_requests/{requestId} {
-      allow read, write: if isAdmin();
+      allow create: if isAdmin()
+        || (isSignedIn() && request.resource.data.userId == request.auth.uid);
+      allow read: if isAdmin()
+        || (isSignedIn() && request.auth.uid == resource.data.userId);
+      allow update, delete: if isAdmin()
+        || (isSignedIn() && request.auth.uid == resource.data.userId);
     }
 
     match /prediction_uploads/{uploadId} {

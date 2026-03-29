@@ -23,6 +23,10 @@ PLAY_INTEGRITY_ANDROID_PACKAGE="${PLAY_INTEGRITY_ANDROID_PACKAGE:-com.quantura.q
 REQUIRE_PLAY_INTEGRITY="${REQUIRE_PLAY_INTEGRITY:-false}"
 AMAZON_NOVA_BASE_URL="${AMAZON_NOVA_BASE_URL:-}"
 FISCALDATA_REFRESH_TOPIC="${FISCALDATA_REFRESH_TOPIC:-fiscaldata-refresh}"
+AUTOPILOT_RECONCILE_TOPIC="${AUTOPILOT_RECONCILE_TOPIC:-quantura-autopilot-reconcile}"
+AUTOPILOT_RECONCILE_JOB="${AUTOPILOT_RECONCILE_JOB:-quantura-autopilot-reconcile}"
+AUTOPILOT_RECONCILE_CRON="${AUTOPILOT_RECONCILE_CRON:-*/15 * * * *}"
+AUTOPILOT_RECONCILE_TIMEZONE="${AUTOPILOT_RECONCILE_TIMEZONE:-America/New_York}"
 NEWSLETTER_TOPIC="${NEWSLETTER_TOPIC:-quantura-newsletter-weekly}"
 NEWSLETTER_SCHEDULER_JOB="${NEWSLETTER_SCHEDULER_JOB:-quantura-newsletter-weekly}"
 SCHEDULER_LOCATION="${SCHEDULER_LOCATION:-us-central1}"
@@ -126,6 +130,7 @@ if [[ -z "${GCLOUD_SET_SECRETS:-}" ]]; then
   # - Billing: STRIPE_SECRET_KEY / STRIPE_PRIVATE_KEY, STRIPE_WEBHOOK_SECRET / STRIPE_WEBHOOK_SECRET_CONNECT
   # - LLM providers: OPENAI_API_KEY, CLAUDE_API_KEY, GEMINI_API_KEY, DEEPSEEK_API_KEY, MISTRAL_API_KEY, PERPLEXITY_API_KEY, QWEN_API_KEY, AMAZON_NOVA_API_KEY
   # - Data providers: FMP_API_KEY
+  # - GitHub workflow bridge: GITHUB_ACTIONS_TOKEN
   # - Webhook security: IOS_IAP_WEBHOOK_SECRET, APPLE_NOTIFICATIONS_WEBHOOK_SECRET, ADMOB_SSV_WEBHOOK_SECRET
   # - Newsletter email pipeline: NEWSLETTER_ADMIN_KEY, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, SES_FROM_EMAIL, SES_CONFIG_SET
   add_secret_binding "STRIPE_SECRET_KEY" "STRIPE_SECRET_KEY" "STRIPE_PRIVATE_KEY" "STRIPE_SECRET" "STRIPE_API_KEY" || true
@@ -142,13 +147,17 @@ if [[ -z "${GCLOUD_SET_SECRETS:-}" ]]; then
   add_secret_binding "QWEN_API_KEY" "QWEN_API_KEY" "QWEN_SECRET_KEY" || true
   add_secret_binding "AMAZON_NOVA_API_KEY" "AMAZON_NOVA_API_KEY" "BEDROCK_API_KEY" || true
   add_secret_binding "MODEL_COUNCIL_OTHER_API_KEY" "MODEL_COUNCIL_OTHER_API_KEY" "MODEL_COUNCIL_OTHER_KEY" || true
+  add_secret_binding "GITHUB_ACTIONS_TOKEN" "GITHUB_ACTIONS_TOKEN" "GITHUB_TOKEN" "GH_TOKEN" || true
   add_secret_binding "IOS_IAP_WEBHOOK_SECRET" "IOS_IAP_WEBHOOK_SECRET" || true
   add_secret_binding "APPLE_NOTIFICATIONS_WEBHOOK_SECRET" "APPLE_NOTIFICATIONS_WEBHOOK_SECRET" || true
   add_secret_binding "ADMOB_SSV_WEBHOOK_SECRET" "ADMOB_SSV_WEBHOOK_SECRET" || true
   add_secret_binding "NEWSLETTER_ADMIN_KEY" "NEWSLETTER_ADMIN_KEY" || true
   add_secret_binding "AWS_ACCESS_KEY_ID" "AWS_ACCESS_KEY_ID" || true
   add_secret_binding "AWS_SECRET_ACCESS_KEY" "AWS_SECRET_ACCESS_KEY" || true
+  add_secret_binding "AWS_SESSION_TOKEN" "AWS_SESSION_TOKEN" || true
   add_secret_binding "AWS_REGION" "AWS_REGION" || true
+  add_secret_binding "AUTOPILOT_ROLE_ARN" "AUTOPILOT_ROLE_ARN" "SAGEMAKER_EXECUTION_ROLE_ARN" || true
+  add_secret_binding "AUTOPILOT_S3_BUCKET" "AUTOPILOT_S3_BUCKET" "SAGEMAKER_AUTOPILOT_S3_BUCKET" || true
   add_secret_binding "SES_FROM_EMAIL" "SES_FROM_EMAIL" || true
   add_secret_binding "SES_CONFIG_SET" "SES_CONFIG_SET" || true
 
@@ -166,6 +175,7 @@ if [[ -z "${GCLOUD_SET_SECRETS:-}" ]]; then
     # - LLM providers: OPENAI_API_KEY, CLAUDE_API_KEY, GEMINI_API_KEY, DEEPSEEK_API_KEY, MISTRAL_API_KEY, PERPLEXITY_API_KEY, QWEN_API_KEY, AMAZON_NOVA_API_KEY
     # - Market data: FMP_API_KEY
     # - Billing/webhooks: STRIPE_SECRET_KEY, STRIPE_PRIVATE_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_WEBHOOK_SECRET_CONNECT
+    # - GitHub workflow bridge: GITHUB_ACTIONS_TOKEN
     # - Native/webhook security: IOS_IAP_WEBHOOK_SECRET, APPLE_NOTIFICATIONS_WEBHOOK_SECRET, ADMOB_SSV_WEBHOOK_SECRET
     # - Newsletter/email: NEWSLETTER_ADMIN_KEY, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, SES_FROM_EMAIL, SES_CONFIG_SET
     echo "==> Auto-discovered Secret Manager bindings for deploy: ${GCLOUD_SET_SECRETS}"
@@ -300,6 +310,21 @@ echo "==> Deploying Pub/Sub trigger: refreshFiscaldataDefaults"
   --trigger-topic="${FISCALDATA_REFRESH_TOPIC}" \
   ${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"}
 
+echo "==> Ensuring Pub/Sub topic exists: ${AUTOPILOT_RECONCILE_TOPIC}"
+"${GCLOUD_BIN}" pubsub topics create "${AUTOPILOT_RECONCILE_TOPIC}" --project="${PROJECT_ID}" >/dev/null 2>&1 || true
+
+echo "==> Deploying Pub/Sub trigger: reconcileAutopilotRuns"
+"${GCLOUD_BIN}" functions deploy reconcileAutopilotRuns \
+  --quiet \
+  --project="${PROJECT_ID}" \
+  --gen2 \
+  --runtime="${FUNCTIONS_RUNTIME}" \
+  --region="${REGION}" \
+  --source="${FUNCTIONS_SRC}" \
+  --entry-point=reconcileAutopilotRuns \
+  --trigger-topic="${AUTOPILOT_RECONCILE_TOPIC}" \
+  ${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"}
+
 echo "==> Deploying newsletter HTTP function: send_newsletter_daily_http"
 "${GCLOUD_BIN}" functions deploy send_newsletter_daily_http \
   --quiet \
@@ -364,6 +389,29 @@ else
     --topic="${NEWSLETTER_TOPIC}" \
     --message-body='{"trigger":"weekly_newsletter"}'; then
     echo "WARNING: Unable to create scheduler job ${NEWSLETTER_SCHEDULER_JOB}. Check Cloud Scheduler permissions/config."
+  fi
+fi
+
+echo "==> Ensuring Cloud Scheduler Autopilot reconcile job"
+if "${GCLOUD_BIN}" scheduler jobs describe "${AUTOPILOT_RECONCILE_JOB}" --location="${SCHEDULER_LOCATION}" --project="${PROJECT_ID}" >/dev/null 2>&1; then
+  if ! "${GCLOUD_BIN}" scheduler jobs update pubsub "${AUTOPILOT_RECONCILE_JOB}" \
+    --project="${PROJECT_ID}" \
+    --location="${SCHEDULER_LOCATION}" \
+    --schedule="${AUTOPILOT_RECONCILE_CRON}" \
+    --time-zone="${AUTOPILOT_RECONCILE_TIMEZONE}" \
+    --topic="${AUTOPILOT_RECONCILE_TOPIC}" \
+    --message-body='{"trigger":"autopilot_reconcile"}'; then
+    echo "WARNING: Unable to update scheduler job ${AUTOPILOT_RECONCILE_JOB}. Check Cloud Scheduler permissions/config."
+  fi
+else
+  if ! "${GCLOUD_BIN}" scheduler jobs create pubsub "${AUTOPILOT_RECONCILE_JOB}" \
+    --project="${PROJECT_ID}" \
+    --location="${SCHEDULER_LOCATION}" \
+    --schedule="${AUTOPILOT_RECONCILE_CRON}" \
+    --time-zone="${AUTOPILOT_RECONCILE_TIMEZONE}" \
+    --topic="${AUTOPILOT_RECONCILE_TOPIC}" \
+    --message-body='{"trigger":"autopilot_reconcile"}'; then
+    echo "WARNING: Unable to create scheduler job ${AUTOPILOT_RECONCILE_JOB}. Check Cloud Scheduler permissions/config."
   fi
 fi
 

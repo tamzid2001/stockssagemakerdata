@@ -57,6 +57,139 @@ const state = {
   adImpressionSeen: new Set(),
 };
 
+const MARKED_SCRIPT_URL = "https://cdn.jsdelivr.net/npm/marked/marked.min.js";
+const MARKDOWN_ALLOWED_TAGS = new Set([
+  "p",
+  "br",
+  "hr",
+  "strong",
+  "em",
+  "b",
+  "i",
+  "u",
+  "s",
+  "ul",
+  "ol",
+  "li",
+  "blockquote",
+  "code",
+  "pre",
+  "a",
+  "table",
+  "thead",
+  "tbody",
+  "tr",
+  "th",
+  "td",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+]);
+const MARKDOWN_ALLOWED_ATTRS = new Set(["href", "target", "rel", "title", "colspan", "rowspan"]);
+let markedLoaderPromise = null;
+
+function ensureMarkedLibrary() {
+  if (window.marked?.parse) return Promise.resolve(window.marked);
+  if (markedLoaderPromise) return markedLoaderPromise;
+  markedLoaderPromise = new Promise((resolve) => {
+    const existing = document.querySelector('script[data-quantura-marked="1"]');
+    if (existing) {
+      existing.addEventListener("load", () => resolve(window.marked || null), { once: true });
+      existing.addEventListener("error", () => resolve(null), { once: true });
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = MARKED_SCRIPT_URL;
+    script.async = true;
+    script.defer = true;
+    script.dataset.quanturaMarked = "1";
+    script.addEventListener("load", () => resolve(window.marked || null), { once: true });
+    script.addEventListener("error", () => resolve(null), { once: true });
+    document.head.appendChild(script);
+  });
+  return markedLoaderPromise;
+}
+
+function sanitizeMarkdownHtml(rawHtml) {
+  const html = String(rawHtml || "").trim();
+  if (!html) return "";
+  const template = document.createElement("template");
+  template.innerHTML = html;
+  Array.from(template.content.querySelectorAll("*")).forEach((node) => {
+    const tag = String(node.tagName || "").toLowerCase();
+    if (!MARKDOWN_ALLOWED_TAGS.has(tag)) {
+      node.replaceWith(document.createTextNode(node.textContent || ""));
+      return;
+    }
+    Array.from(node.attributes || []).forEach((attr) => {
+      const attrName = String(attr.name || "").toLowerCase();
+      const attrValue = String(attr.value || "");
+      if (!MARKDOWN_ALLOWED_ATTRS.has(attrName)) {
+        node.removeAttribute(attr.name);
+        return;
+      }
+      if (attrName === "href" && !/^(https?:|mailto:|tel:)/i.test(attrValue.trim())) {
+        node.removeAttribute(attr.name);
+      }
+    });
+    if (tag === "a") {
+      node.setAttribute("target", "_blank");
+      node.setAttribute("rel", "noopener noreferrer");
+    }
+  });
+  return template.innerHTML;
+}
+
+function normalizeRichTextSource(value = "") {
+  let source = String(value || "").replace(/\r\n?/g, "\n").trim();
+  if (!source) return "";
+  source = source
+    .replace(/([^\n])\s+(\*\*[A-Z][^*\n]{1,80}:\*\*)/g, "$1\n\n$2")
+    .replace(/([^\n])\s+(\*\s+\*\*[A-Z][^*\n]{1,80}:\*\*)/g, "$1\n$2")
+    .replace(/([^\n])\s+(#{1,6}\s)/g, "$1\n\n$2");
+  return source;
+}
+
+function renderRichText(text, { fallback = "No output available." } = {}) {
+  const source = normalizeRichTextSource(text);
+  if (!source) return `<p>${escapeHtml(fallback)}</p>`;
+  try {
+    if (window.marked?.parse) {
+      const parsed = window.marked.parse(source, {
+        gfm: true,
+        breaks: true,
+        mangle: false,
+        headerIds: false,
+      });
+      return sanitizeMarkdownHtml(parsed);
+    }
+  } catch {
+    // Fall back to escaped text.
+  }
+  return `<p>${escapeHtml(source).replace(/\n/g, "<br>")}</p>`;
+}
+
+function toPlainTextPreview(text, maxChars = 260) {
+  const normalized = normalizeRichTextSource(text)
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\[(.*?)\]\((.*?)\)/g, "$1")
+    .replace(/[*_~>#]/g, "")
+    .replace(/\$([^$]+)\$/g, "$1")
+    .replace(/\n+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) return { text: "", truncated: false };
+  if (normalized.length <= maxChars) return { text: normalized, truncated: false };
+  return {
+    text: `${normalized.slice(0, maxChars - 1).trimEnd()}…`,
+    truncated: true,
+  };
+}
+
 function setAuthButton() {
   if (!refs.authToggle) return;
   const user = state.user;
@@ -110,10 +243,8 @@ function ensureNativeAdImpressionObserver() {
 
 function shouldInsertNativeFeedAd(position, config, totalCount) {
   if (!Number.isFinite(position) || position <= 0) return false;
-  if (!Number.isFinite(totalCount) || totalCount < config.feedStart) return false;
-  if (position === config.feedStart) return true;
-  if (position < config.feedStart) return false;
-  return (position - config.feedStart) % config.feedInterval === 0;
+  if (!Number.isFinite(totalCount) || totalCount < 2) return false;
+  return position < totalCount;
 }
 
 function createNativeAdSlotNode(slotId, placement) {
@@ -270,13 +401,26 @@ function renderCard(post) {
   fragment.dataset.postId = post.id;
   fragment.querySelector(".post-preview").innerHTML = getPreviewMarkup(post);
   fragment.querySelector(".post-title").textContent = post.title || "Untitled";
-  fragment.querySelector(".post-caption").textContent = post.caption || "";
+  const captionPreview = toPlainTextPreview(post.caption || "", 260);
+  const captionNode = fragment.querySelector(".post-caption");
+  if (captionNode) {
+    captionNode.textContent = captionPreview.text || "";
+    captionNode.classList.toggle("hidden", !captionPreview.text);
+  }
   fragment.querySelector(".chip-row").innerHTML = (post.tickers || [])
     .slice(0, 4)
     .map((ticker) => `<span class="chip">${escapeHtml(ticker)}</span>`)
     .join("");
   fragment.querySelector(".post-meta").textContent = `@${post.authorHandle || "quantura"} • ${formatRelativeTime(post.createdAtMs)}`;
   fragment.querySelector(".engagement-row").innerHTML = getEngagementMarkup(post);
+  if (post.hasBody || captionPreview.truncated) {
+    fragment.querySelector(".post-body")?.insertAdjacentHTML(
+      "beforeend",
+      `<div class="post-expand-row"><button type="button" class="see-more-btn" data-action="open" data-post-id="${escapeHtml(
+        post.id
+      )}">See more</button></div>`
+    );
+  }
 
   return fragment;
 }
@@ -422,6 +566,10 @@ async function refreshPost(postId) {
 
 async function doPostAction(action, postId) {
   if (!state.api || !postId) return;
+  if (action === "open") {
+    await openPostModal(postId);
+    return;
+  }
   if (action === "comment") {
     await openPostModal(postId);
     return;
@@ -499,33 +647,64 @@ function openReportModal(postId) {
 
 function renderModal(post, comments) {
   if (!refs.postModalBody) return;
+  const summaryText = normalizeRichTextSource(post.caption || "");
+  const fullBody = normalizeRichTextSource(post.body || post.caption || "");
   const commentsHtml = (comments || [])
     .map(
       (item) => `
         <div class="comment-item">
-          <div class="comment-meta">@${escapeHtml(item.authorHandle || "user")} • ${formatRelativeTime(item.createdAtMs)}</div>
-          <div>${escapeHtml(item.text || "")}</div>
-          ${state.user?.uid === item.authorUid ? `<button type="button" data-comment-delete="${escapeHtml(item.id)}" data-post-id="${escapeHtml(post.id)}">Delete</button>` : ""}
+          <div class="comment-item-head">
+            <div class="comment-meta">@${escapeHtml(item.authorHandle || "user")} • ${formatRelativeTime(item.createdAtMs)}</div>
+            ${
+              state.user?.uid === item.authorUid
+                ? `<button type="button" class="comment-delete-btn" data-comment-delete="${escapeHtml(item.id)}" data-post-id="${escapeHtml(post.id)}">Delete</button>`
+                : ""
+            }
+          </div>
+          <div class="comment-text">${escapeHtml(item.text || "").replace(/\n/g, "<br>")}</div>
         </div>
       `
     )
     .join("");
 
   refs.postModalBody.innerHTML = `
-    <div class="post-preview">${getPreviewMarkup(post)}</div>
-    <h2 id="post-modal-title">${escapeHtml(post.title || "")}</h2>
-    <p class="muted">@${escapeHtml(post.authorHandle || "quantura")} • ${formatRelativeTime(post.createdAtMs)}</p>
-    <p>${escapeHtml(post.caption || "")}</p>
-    <div class="chip-row">${(post.tickers || []).map((ticker) => `<span class="chip">${escapeHtml(ticker)}</span>`).join("")}</div>
-    <div class="engagement-row">${getEngagementMarkup(post)}</div>
+    <div class="post-preview post-modal-preview">${getPreviewMarkup(post)}</div>
+    <div class="post-modal-head">
+      <h2 id="post-modal-title">${escapeHtml(post.title || "")}</h2>
+      <p class="muted">@${escapeHtml(post.authorHandle || "quantura")} • ${formatRelativeTime(post.createdAtMs)}</p>
+      <div class="chip-row">${(post.tickers || []).map((ticker) => `<span class="chip">${escapeHtml(ticker)}</span>`).join("")}</div>
+      <div class="engagement-row">${getEngagementMarkup(post)}</div>
+    </div>
 
-    <section>
-      <h3>Comments (${Number(post?.counts?.comments || 0)})</h3>
+    ${
+      summaryText && fullBody && summaryText !== fullBody
+        ? `<section class="post-detail-section"><div class="post-detail-label">Summary</div><div class="post-rich-text markdown-output">${renderRichText(
+            summaryText,
+            {
+              fallback: "No summary available.",
+            }
+          )}</div></section>`
+        : ""
+    }
+
+    <section class="post-detail-section">
+      <div class="post-detail-label">Full response</div>
+      <div class="post-rich-text markdown-output">${renderRichText(fullBody, { fallback: "No response body available." })}</div>
+    </section>
+
+    <section class="comments-panel">
+      <div class="comments-header">
+        <h3>Comments</h3>
+        <span class="comments-count">${Number(post?.counts?.comments || 0)}</span>
+      </div>
       <form class="comment-form" data-comment-form="${escapeHtml(post.id)}">
         <textarea name="comment" maxlength="500" placeholder="Add a comment"></textarea>
-        <button type="submit">Post comment</button>
+        <div class="comment-form-actions">
+          <span class="muted small">Keep it specific and useful.</span>
+          <button type="submit">Post comment</button>
+        </div>
       </form>
-      <div class="comment-list">${commentsHtml || `<div class="muted">No comments yet.</div>`}</div>
+      <div class="comment-list">${commentsHtml || `<div class="comment-empty muted">No comments yet.</div>`}</div>
     </section>
   `;
 }
@@ -539,6 +718,7 @@ async function openPostModal(postId) {
     state.activePostId = postId;
     state.postsById.set(postId, detail.post);
     upsertPost(detail.post);
+    await ensureMarkedLibrary().catch(() => null);
     renderModal(detail.post, detail.comments || []);
     refs.postModal?.classList.remove("hidden");
     refs.postModal?.setAttribute("aria-hidden", "false");
@@ -560,12 +740,6 @@ function bindEvents() {
     } catch (error) {
       window.alert(error.message || "Authentication action failed.");
     }
-  });
-
-  refs.searchForm?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    state.q = String(refs.searchInput?.value || "").trim();
-    await loadPosts(true);
   });
 
   refs.tabs.forEach((tab) => {
@@ -610,15 +784,45 @@ function bindEvents() {
     await openPostModal(card.dataset.postId);
   });
 
-  refs.modalClose?.addEventListener("click", closeModal);
+  refs.modalClose?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    closeModal();
+  });
   refs.postModal?.addEventListener("click", (event) => {
     const closeTrigger = event.target.closest("[data-close-modal='true']");
-    if (closeTrigger) closeModal();
+    if (closeTrigger || event.target === refs.postModal) {
+      event.preventDefault();
+      closeModal();
+    }
   });
-  refs.reportModalClose?.addEventListener("click", closeReportModal);
+  refs.postModal?.querySelector(".modal-panel")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+  });
+  refs.reportModalClose?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    closeReportModal();
+  });
   refs.reportModal?.addEventListener("click", (event) => {
     const closeTrigger = event.target.closest("[data-report-close='true']");
-    if (closeTrigger) closeReportModal();
+    if (closeTrigger || event.target === refs.reportModal) {
+      event.preventDefault();
+      closeReportModal();
+    }
+  });
+  refs.reportModal?.querySelector(".modal-panel")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+  });
+  window.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    if (refs.reportModal && !refs.reportModal.classList.contains("hidden")) {
+      closeReportModal();
+      return;
+    }
+    if (refs.postModal && !refs.postModal.classList.contains("hidden")) {
+      closeModal();
+    }
   });
 
   refs.postModalBody?.addEventListener("click", async (event) => {
@@ -747,7 +951,6 @@ async function bootstrap() {
   state.ticker = normalizeTicker(params.get("ticker") || "");
 
   setTabState();
-  if (refs.searchInput) refs.searchInput.value = state.q;
   if (refs.tickerInput) refs.tickerInput.value = state.ticker;
 
   state.authClient = await initAuth((user) => {
@@ -763,6 +966,7 @@ async function bootstrap() {
   });
 
   state.api = await createApiClient(() => state.authClient.getAuthToken());
+  ensureMarkedLibrary().catch(() => null);
   bindEvents();
   bindMobileBottomNav();
   await refreshPremiumStatus();

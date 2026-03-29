@@ -13,6 +13,7 @@
   const PROMO_FORECAST_COUNT_KEY = "quantura_promo_forecast_count_v1";
   const PROMO_LAST_SESSION_KEY = "quantura_promo_last_session_v1";
   const AUTH_PENDING_CREDENTIAL_KEY = "quantura_auth_pending_credential_v1";
+  const AUTH_PENDING_PROFILE_KEY = "quantura_auth_pending_profile_v1";
   const AUTH_POST_SIGNIN_REFRESH_KEY = "quantura_auth_post_signin_refresh_v1";
   const NATIVE_IAP_PENDING_EVENTS_KEY = "quantura_native_iap_pending_events_v1";
   const NOTIFICATION_PRIVACY_CACHE_KEY = "quantura_notification_privacy_v1";
@@ -292,8 +293,9 @@
   };
 
   const requestNativeBridgeSignOut = () => sendNativeAuthMessage({ type: "SIGN_OUT" });
+  const requestNativeAdInspector = () => sendNativeBridgeMessage({ action: "openAdInspector" });
 
-  const waitForNativeAuthCompletion = (auth, timeoutMs = 90000) =>
+  const waitForNativeAuthCompletion = (auth, timeoutMs = 90000, opts = {}) =>
     new Promise((resolve, reject) => {
       if (!auth) {
         reject(new Error("Firebase Auth is unavailable."));
@@ -303,24 +305,97 @@
         resolve(auth.currentUser);
         return;
       }
+      const requestId = String(opts?.requestId || "").trim();
+      const provider = String(opts?.provider || "native").trim().toLowerCase() || "native";
       let settled = false;
-      const timer = setTimeout(() => {
-        if (settled) return;
-        settled = true;
+      let unsubscribe = null;
+      const cleanup = () => {
         try {
           unsubscribe?.();
         } catch (_) {
           // no-op
         }
+        window.removeEventListener("quantura:native-auth-result", handleNativeAuthResult);
+        window.removeEventListener("quantura:native-custom-token-consumed", handleCustomTokenConsumed);
+        window.removeEventListener("quantura:native-auth-sync", handleNativeAuthSync);
+      };
+      const finalizeResolve = (user) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        cleanup();
+        resolve(user);
+      };
+      const finalizeReject = (message) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        cleanup();
+        reject(new Error(String(message || "Native sign-in failed.")));
+      };
+      const consumeNativeIdToken = async (idToken, method = provider) => {
+        const nativeIdToken = String(idToken || "").trim();
+        if (!nativeIdToken) return;
+        console.info("[Auth][WebNative] Auth response received.", { provider: method, requestId });
+        try {
+          const customToken = await exchangeNativeIdTokenForCustomToken(nativeIdToken);
+          console.info("[Auth][WebNative] Token exchange succeeded.", { provider: method, requestId });
+          await auth.signInWithCustomToken(customToken);
+          const signedInUser = auth.currentUser;
+          if (signedInUser && !signedInUser.isAnonymous) {
+            finalizeResolve(signedInUser);
+            return;
+          }
+        } catch (error) {
+          console.warn("[Auth][WebNative] Token exchange failed.", {
+            provider: method,
+            requestId,
+            error: error?.message || String(error || "unknown_error"),
+          });
+          finalizeReject(error?.message || "Unable to sync native auth session.");
+        }
+      };
+      const handleNativeAuthResult = (event) => {
+        const detail = event?.detail && typeof event.detail === "object" ? event.detail : {};
+        const detailRequestId = String(detail.requestId || "").trim();
+        if (requestId && detailRequestId && detailRequestId !== requestId) return;
+        if (detail.ok === false) {
+          finalizeReject(detail.error || "Native sign-in failed.");
+          return;
+        }
+        const idToken = String(detail.idToken || "").trim();
+        if (idToken) {
+          void consumeNativeIdToken(idToken, String(detail.provider || provider || "native").trim().toLowerCase());
+        }
+      };
+      const handleCustomTokenConsumed = (event) => {
+        const detail = event?.detail && typeof event.detail === "object" ? event.detail : {};
+        if (detail.ok === false) {
+          finalizeReject(detail.error || "Native custom token sign-in failed.");
+        }
+      };
+      const handleNativeAuthSync = (event) => {
+        const detail = event?.detail && typeof event.detail === "object" ? event.detail : {};
+        const status = String(detail.status || "").trim().toLowerCase();
+        const detailRequestId = String(detail.requestId || "").trim();
+        if (requestId && detailRequestId && detailRequestId !== requestId) return;
+        if (status.startsWith("exchange_failed") || status.startsWith("sync_failed")) {
+          finalizeReject(detail.message || "Native auth sync failed.");
+        }
+      };
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        cleanup();
         reject(new Error("Native sign-in timed out."));
       }, timeoutMs);
-      const unsubscribe = auth.onAuthStateChanged((user) => {
+      window.addEventListener("quantura:native-auth-result", handleNativeAuthResult);
+      window.addEventListener("quantura:native-custom-token-consumed", handleCustomTokenConsumed);
+      window.addEventListener("quantura:native-auth-sync", handleNativeAuthSync);
+      unsubscribe = auth.onAuthStateChanged((user) => {
         if (settled) return;
         if (user && !user.isAnonymous) {
-          settled = true;
-          clearTimeout(timer);
-          unsubscribe();
-          resolve(user);
+          finalizeResolve(user);
         }
       });
     });
@@ -423,7 +498,40 @@
   ]);
   const FEATURE_VOTE_LABELS = Object.freeze({
     uploads: "Upload predictions CSV",
-    autopilot: "Weekly Brief Autopilot",
+    autopilot: "Forecast Foundry",
+  });
+  const FOUNDRY_MAX_CONCURRENT_INSTANCES = 2;
+  const FOUNDRY_HORIZON_PRESETS = Object.freeze([
+    { key: "3d", label: "3 Days" },
+    { key: "1w", label: "Week Ending Friday" },
+    { key: "2w", label: "2 Weeks" },
+    { key: "3w", label: "3 Weeks" },
+    { key: "1m", label: "1 Month" },
+    { key: "3m", label: "3 Months" },
+    { key: "6m", label: "6 Months" },
+    { key: "1y", label: "1 Year" },
+  ]);
+  const FOUNDRY_HORIZON_STEPS = Object.freeze({
+    "1d": Object.freeze({
+      "3d": 3,
+      "1w": 5,
+      "2w": 10,
+      "3w": 15,
+      "1m": 22,
+      "3m": 66,
+      "6m": 132,
+      "1y": 252,
+    }),
+    "1h": Object.freeze({
+      "3d": 21,
+      "1w": 35,
+      "2w": 70,
+      "3w": 105,
+      "1m": 154,
+      "3m": 462,
+      "6m": 924,
+      "1y": 1764,
+    }),
   });
   const FISCALDATA_DEFAULT_PREFERRED_COLUMNS = Object.freeze([
     "record_date",
@@ -1690,7 +1798,13 @@
     emailForm: document.getElementById("email-auth-form"),
     emailInput: document.getElementById("auth-email"),
     passwordInput: document.getElementById("auth-password"),
+    usernameInput: document.getElementById("auth-username"),
+    confirmPasswordInput: document.getElementById("auth-confirm-password"),
+    authCreateFields: document.getElementById("auth-create-fields"),
     authForgotPassword: document.getElementById("auth-forgot-password"),
+    authBackToSignin: document.getElementById("auth-back-to-signin"),
+    authCreateHint: document.getElementById("auth-create-hint"),
+    emailSignin: document.getElementById("email-signin"),
     emailCreate: document.getElementById("email-create"),
     emailMessage: document.getElementById("auth-email-message"),
     googleSignin: document.getElementById("google-signin"),
@@ -1755,6 +1869,8 @@
     technicalsForm: document.getElementById("technicals-form"),
     technicalsOutput: document.getElementById("technicals-output"),
     downloadForm: document.getElementById("download-form"),
+    downloadEnd: document.getElementById("download-end"),
+    downloadUseAllHistory: document.getElementById("download-use-all-history"),
     downloadStatus: document.getElementById("download-status"),
     downloadPreview: document.getElementById("download-preview"),
     trendingButton: document.getElementById("load-trending"),
@@ -1823,10 +1939,14 @@
     screenerCreditsText: document.getElementById("screener-credits-text"),
     screenerCreditsFill: document.getElementById("screener-credits-fill"),
     screenerResultsCount: document.getElementById("screener-results-count"),
-    screenerGenerateButton: document.getElementById("screener-generate-button"),
+	    screenerGenerateButton: document.getElementById("screener-generate-button"),
+    screenerDispatchStatus: document.getElementById("screener-dispatch-status"),
 	    screenerLoadSelect: document.getElementById("screener-load-select"),
 	    screenerLoadButton: document.getElementById("screener-load-button"),
 	    screenerLoadStatus: document.getElementById("screener-load-status"),
+    screenerGithubHistoryRefresh: document.getElementById("screener-github-history-refresh"),
+    screenerGithubHistoryStatus: document.getElementById("screener-github-history-status"),
+    screenerGithubHistoryList: document.getElementById("screener-github-history-list"),
     myRequestsPanels: Array.from(document.querySelectorAll("[data-my-requests-panel]")),
 	    watchlistForm: document.getElementById("watchlist-form"),
 	    watchlistTicker: document.getElementById("watchlist-ticker"),
@@ -1848,6 +1968,34 @@
     uploadsAdminBlock: document.getElementById("uploads-admin-block"),
     featureVoteUploadsForm: document.getElementById("feature-vote-uploads-form"),
     featureVoteUploadsStatus: document.getElementById("feature-vote-uploads-status"),
+    foundrySourceForm: document.getElementById("foundry-source-form"),
+    foundrySourceKind: document.getElementById("foundry-source-kind"),
+    foundryTicker: document.getElementById("foundry-ticker"),
+    foundryInterval: document.getElementById("foundry-interval"),
+    foundryTitle: document.getElementById("foundry-title"),
+    foundryStart: document.getElementById("foundry-start"),
+    foundryEnd: document.getElementById("foundry-end"),
+    foundryUseAllHistory: document.getElementById("foundry-use-all-history"),
+    foundryFile: document.getElementById("foundry-file"),
+    foundryNotes: document.getElementById("foundry-notes"),
+    foundryHistoryFields: document.getElementById("foundry-history-fields"),
+    foundryFileField: document.getElementById("foundry-file-field"),
+    foundryUploadActions: document.getElementById("foundry-upload-actions"),
+    foundryUploadPrepareButton: document.getElementById("foundry-upload-prepare-button"),
+    foundryAutopilotControls: document.getElementById("foundry-autopilot-controls"),
+    foundryPrimaryActions: document.getElementById("foundry-primary-actions"),
+    foundryHorizon: document.getElementById("foundry-horizon"),
+    foundryQuantiles: document.getElementById("foundry-quantiles"),
+    foundryPrepareButton: document.getElementById("foundry-prepare-button"),
+    foundryRunButton: document.getElementById("foundry-run-button"),
+    foundryAnalyzeButton: document.getElementById("foundry-analyze-button"),
+    foundryRefreshList: document.getElementById("foundry-refresh-list"),
+    foundryRefreshButton: document.getElementById("foundry-refresh-button"),
+    foundryShareButton: document.getElementById("foundry-share-button"),
+    foundryRunMeta: document.getElementById("foundry-run-meta"),
+    foundryPublishHost: document.getElementById("foundry-publish-host"),
+    foundryInstanceLimit: document.getElementById("foundry-instance-limit"),
+    foundryAccessNote: document.getElementById("foundry-access-note"),
     autopilotForm: document.getElementById("autopilot-form"),
     autopilotOutput: document.getElementById("autopilot-output"),
     autopilotStatus: document.getElementById("autopilot-status"),
@@ -1928,27 +2076,13 @@
   let polymarketInFlightController = null;
   let polymarketInFlightNonce = 0;
   let predictionCountdownTimer = 0;
-  const DEFAULT_MARKET_HEADLINES_PROVIDER = "cnn";
-  const DEFAULT_MARKET_HEADLINES_FEED = "cnn_topstories";
+  const DEFAULT_MARKET_HEADLINES_PROVIDER = "marketwatch";
+  const DEFAULT_MARKET_HEADLINES_FEED = "marketwatch_topstories";
   const MARKET_HEADLINES_SOURCE_CATALOG = Object.freeze({
-    cnn: Object.freeze({
-      id: "cnn",
-      label: "CNN RSS",
-      feedIds: Object.freeze([
-        "cnn_topstories",
-        "cnn_world",
-        "cnn_us",
-        "cnn_business",
-        "cnn_politics",
-        "cnn_technology",
-        "cnn_health",
-        "cnn_entertainment",
-        "cnn_travel",
-        "cnn_video",
-        "cnn10",
-        "cnn_latest",
-        "cnn_underscored",
-      ]),
+    marketwatch: Object.freeze({
+      id: "marketwatch",
+      label: "MarketWatch Top Stories",
+      feedIds: Object.freeze(["marketwatch_topstories"]),
     }),
     spglobal: Object.freeze({
       id: "spglobal",
@@ -1970,11 +2104,6 @@
     }),
     investing: Object.freeze({ id: "investing", label: "Investing.com Markets", feedIds: Object.freeze(["investing_markets"]) }),
     seekingalpha: Object.freeze({ id: "seekingalpha", label: "Seeking Alpha", feedIds: Object.freeze(["seekingalpha_top"]) }),
-    marketwatch: Object.freeze({
-      id: "marketwatch",
-      label: "MarketWatch Top Stories",
-      feedIds: Object.freeze(["marketwatch_topstories"]),
-    }),
   });
   const MARKET_HEADLINES_FEED_CATALOG = Object.freeze({
     cnn_topstories: Object.freeze({ id: "cnn_topstories", provider: "cnn", label: "Top Stories" }),
@@ -2082,14 +2211,19 @@
 		    initialPageViewSent: false,
 	    authResolved: false,
 	      authInFlight: false,
+      authEmailMode: "signin",
+      pendingSignupProfile: null,
       anonymousBootstrapInFlight: false,
       nativeAuthPromptRequested: false,
       nativeAuthState: null,
+      nativeAuthSync: null,
+      authGateVisible: false,
     intelActiveTab: "intelligence",
     tickerContext: {
 	      ticker: "",
       activeTicker: "",
       interval: "1d",
+      tradingViewSymbols: {},
       rows: [],
       forecastId: "",
       forecastRequestId: "",
@@ -2135,6 +2269,16 @@
       previewPage: 0,
       previewPageSize: 25,
     },
+    foundryContext: {
+      runs: [],
+      loaded: false,
+      activeRunId: "",
+      activeRun: null,
+      pendingPreparedRunId: "",
+      loadingRunId: "",
+      activeConcurrentRuns: 0,
+      maxConcurrentRuns: FOUNDRY_MAX_CONCURRENT_INSTANCES,
+    },
     aiLeaderboardHorizon: AI_LEADERBOARD_DEFAULT_HORIZON,
     aiModelFilter: "all",
     aiAgents: [],
@@ -2179,6 +2323,11 @@
     pendingShareId: "",
     pendingShareProcessed: false,
     sharedScreenerView: null,
+    activeScreenerRunId: "",
+    activeScreenerPollToken: "",
+    publicScreenerGithubRuns: [],
+    publicScreenerGithubRunsLoadedAt: 0,
+    publicScreenerGithubRunsLoading: false,
     promoStatus: null,
     promoClockOffsetMs: 0,
     promoTimer: null,
@@ -2205,6 +2354,7 @@
       collaboratorCount: 0,
       pendingCollabInviteCount: 0,
 	    screenerUrlRunLoaded: false,
+      screenerUrlRequestShareLoaded: false,
       uploadUrlLoaded: false,
 	    messagingBound: false,
 	    remoteConfigLoaded: false,
@@ -2340,6 +2490,7 @@
     String(user?.email || "").trim().toLowerCase() === String(ADMIN_EMAIL).trim().toLowerCase();
   const requestNativeAuthGate = ({ reason = "sign_in_required", message = "Sign in to continue." } = {}) => {
     if (!isNativeApp()) return false;
+    state.authGateVisible = true;
     const branding = {
       name: "Quantura",
       logoUrl: `${window.location.origin}/assets/logo.png`,
@@ -2426,6 +2577,10 @@
     bound: false,
     seq: 0,
     pending: new Map(),
+  };
+
+  const nativeTransitionInterstitialState = {
+    busy: false,
   };
 
   const ensureNativeAdActionListener = () => {
@@ -2573,6 +2728,36 @@
     return false;
   };
 
+  const maybeShowNativeInterstitialGate = async ({
+    reason = "nav",
+    fallbackMessage = "Opening link while the interstitial finishes loading.",
+  } = {}) => {
+    if (!isNativeApp()) return true;
+    const normalizedReason = String(reason || "nav").trim() || "nav";
+    let interstitialResult = await runNativeAdAction({
+      action: "showInterstitial",
+      reason: normalizedReason,
+      successStatuses: ["shown", "dismissed"],
+    });
+    if (!interstitialResult.ok && String(interstitialResult.status || "").includes("not_ready")) {
+      await new Promise((resolve) => window.setTimeout(resolve, 1400));
+      interstitialResult = await runNativeAdAction({
+        action: "showInterstitial",
+        reason: `${normalizedReason}_retry`,
+        successStatuses: ["shown", "dismissed"],
+      });
+    }
+    if (interstitialResult.ok) return true;
+    sendNativeBridgeMessage({
+      action: "showInterstitialAd",
+      reason: `${normalizedReason}_fallback`,
+      mode: "fallback",
+      ts: Date.now(),
+    });
+    if (fallbackMessage) showToast(String(fallbackMessage).trim(), "warn");
+    return true;
+  };
+
   const runNativeRewardUnlock = async ({ reason = "shop_bundle" } = {}) => {
     if (!isNativeApp()) {
       return { ok: false, status: "native_unavailable", message: "Native runtime unavailable." };
@@ -2644,15 +2829,177 @@
 	  const setOutputLoading = (el, label = "Loading...") => {
 	    if (!el) return;
 	    el.setAttribute("aria-busy", "true");
-	    el.innerHTML = `<div data-skeleton>${skeletonHtml()}<div class="small muted" style="margin-top:10px;">${label}</div></div>`;
+      el.dataset.loading = "true";
+	    el.innerHTML = `
+        <div data-skeleton class="output-loading-stack">
+          <div class="output-loading-indicator">
+            <span class="spinner-ring" aria-hidden="true"></span>
+            <div class="output-loading-copy">
+              <strong class="output-loading-title">Quantura is working</strong>
+              <div class="small muted">${escapeHtml(String(label || "Loading...").trim() || "Loading...")}</div>
+            </div>
+          </div>
+          ${skeletonHtml()}
+        </div>
+      `;
 	  };
 
 		  const setOutputReady = (el) => {
 		    if (!el) return;
 		    el.removeAttribute("aria-busy");
+        delete el.dataset.loading;
         const skeleton = el.querySelector?.("[data-skeleton]");
         if (skeleton) skeleton.remove();
 		  };
+
+      const compactMetricMap = (input = {}) => {
+        const out = {};
+        Object.entries(input || {}).forEach(([key, value]) => {
+          const cleanKey = String(key || "").trim();
+          if (!cleanKey) return;
+          if (typeof value === "number" && Number.isFinite(value)) {
+            out[cleanKey] = value;
+            return;
+          }
+          const text = String(value ?? "").trim();
+          if (text) out[cleanKey] = text;
+        });
+        return out;
+      };
+
+      const titleCaseLabel = (value = "") =>
+        String(value || "")
+          .trim()
+          .replace(/[_-]+/g, " ")
+          .replace(/\s+/g, " ")
+          .replace(/\b\w/g, (char) => char.toUpperCase());
+
+      const screenerUniverseLabel = (value = "") => {
+        const clean = String(value || "").trim().toLowerCase();
+        if (clean === "large-cap") return "Large Cap";
+        if (clean === "mid-cap") return "Mid Cap";
+        if (clean === "small-cap") return "Small Cap";
+        if (clean === "trending") return "Trending";
+        return titleCaseLabel(clean || "Market");
+      };
+
+      const screenerMarketLabel = (value = "") => {
+        const clean = String(value || "").trim().toLowerCase();
+        if (clean === "us") return "U.S.";
+        if (clean === "global") return "Global";
+        return titleCaseLabel(clean || "Market");
+      };
+
+      const buildModelCouncilPublishMeta = ({
+        symbol = "",
+        answer = "",
+        provider = "",
+        model = "",
+        latencyMs = 0,
+        selectedModules = [],
+      } = {}) => {
+        const cleanSymbol = normalizeTicker(symbol || "");
+        const providerLabel = titleCaseLabel(provider || "Model Council");
+        const modelLabel = String(getModelMeta(model)?.label || model || "Quantura model").trim();
+        const moduleCount = Array.isArray(selectedModules) ? selectedModules.filter(Boolean).length : 0;
+        const cleanAnswer = String(answer || "").replace(/\s+/g, " ").trim();
+        const summary = cleanAnswer
+          ? `${cleanSymbol ? `${cleanSymbol}: ` : ""}${cleanAnswer}`.slice(0, 480)
+          : `${providerLabel} reviewed ${cleanSymbol || "the active ticker"} across ${Math.max(moduleCount, 1)} research module${
+              Math.max(moduleCount, 1) === 1 ? "" : "s"
+            }.`;
+        return {
+          summary,
+          metrics: compactMetricMap({
+            Provider: providerLabel,
+            Model: modelLabel,
+            Latency:
+              Number.isFinite(Number(latencyMs)) && Number(latencyMs) > 0
+                ? `${Math.max(1, Math.round(Number(latencyMs) / 1000))}s`
+                : "",
+            Modules: moduleCount || "",
+          }),
+        };
+      };
+
+      const buildIndicatorPublishMeta = ({
+        ticker = "",
+        analysis = {},
+        prediction = {},
+        rows = [],
+        selectedIndicators = [],
+        targetPrice = NaN,
+        upsidePct = null,
+      } = {}) => {
+        const cleanTicker = normalizeTicker(ticker || "");
+        const summaryText = String(analysis?.summary || "").replace(/\s+/g, " ").trim();
+        const direction = String(prediction?.direction || "neutral").trim();
+        const confidence = String(prediction?.confidence || "medium").trim();
+        const timeline = String(prediction?.timeline || "").trim();
+        const providerRaw = String(analysis?.provider || "quantura").trim();
+        const modelRaw = String(analysis?.model || "indicator_local_repair").trim();
+        const providerLabel = titleCaseLabel(providerRaw || "Quantura");
+        const modelLabel = String(getModelMeta(modelRaw)?.label || modelRaw || "Quantura model").trim();
+        const signalList = Array.isArray(selectedIndicators)
+          ? selectedIndicators.map((entry) => String(entry || "").trim().toUpperCase()).filter(Boolean)
+          : [];
+        const fallbackSummary = cleanTicker
+          ? `${cleanTicker} indicator stack points ${direction || "neutral"} with ${confidence || "moderate"} confidence${
+              Number.isFinite(targetPrice) ? ` and a target near ${formatUsd(targetPrice, 2)}.` : "."
+            }`
+          : "Indicator stack completed.";
+        return {
+          summary: (summaryText || fallbackSummary).slice(0, 480),
+          aiProvider: providerRaw,
+          aiModel: modelRaw,
+          modelCitation: `${providerLabel} · ${modelLabel} (${modelRaw || "indicator_local_repair"})`.slice(0, 180),
+          metrics: compactMetricMap({
+            Direction: direction,
+            Target: Number.isFinite(targetPrice) ? formatUsd(targetPrice, 2) : "",
+            Confidence: confidence,
+            Timeline: timeline,
+            Move: Number.isFinite(upsidePct) ? formatPercent(upsidePct, { signed: true, digits: 2 }) : "",
+            Signals: signalList.slice(0, 4).join(", "),
+            Rows: Array.isArray(rows) ? rows.length : 0,
+            Model: modelLabel,
+          }),
+        };
+      };
+
+      const buildScreenerPublishMeta = ({
+        payload = {},
+        rows = [],
+        runTitle = "",
+        resultsFound = 0,
+      } = {}) => {
+        const topSymbols = Array.isArray(rows)
+          ? rows
+              .slice(0, 5)
+              .map((row) => normalizeTicker(row?.symbol || ""))
+              .filter(Boolean)
+          : [];
+        const minMarketCap = Number(payload?.minMarketCap || payload?.minCap || 100000000000);
+        const resultCount = Number.isFinite(Number(resultsFound)) ? Number(resultsFound) : Array.isArray(rows) ? rows.length : 0;
+        const summary = [
+          `${runTitle || "GitHub screener"} found ${resultCount} active Prophet signal${resultCount === 1 ? "" : "s"}.`,
+          `Market cap floor: ${Number.isFinite(minMarketCap) ? `$${formatCompactNumber(minMarketCap)}` : "$100B"}.`,
+          topSymbols.length ? `Top ideas: ${topSymbols.join(", ")}.` : "",
+          "Published from the Quantura GitHub Actions tracker.",
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .slice(0, 480);
+        return {
+          summary,
+          topSymbols,
+          metrics: compactMetricMap({
+            Matches: resultCount,
+            Floor: Number.isFinite(minMarketCap) ? `$${formatCompactNumber(minMarketCap)}` : "$100B",
+            Workflow: "GitHub Actions",
+            Top: topSymbols.slice(0, 3).join(", "),
+          }),
+        };
+      };
 
 		  const bindPanelNavigation = () => {
 		    const panelsRoot = document.querySelector("[data-panels]");
@@ -2753,15 +3100,20 @@
 		    buttons.forEach((btn) => {
 		      btn.addEventListener("click", async (event) => {
 		        event.preventDefault?.();
+            if (nativeTransitionInterstitialState.busy) return;
             triggerSubtleHaptic();
             const targetPanel = String(btn.dataset.panelTarget || "").trim();
-            const proceed = await maybeShowNativeRewardGate({
-              reason: "nav",
-              title: "Watch an ad before navigating?",
-              message: "Navigation inside the native app can trigger a rewarded interstitial.",
-            });
-            if (!proceed) return;
-		        setActive(targetPanel);
+            nativeTransitionInterstitialState.busy = true;
+            try {
+              const proceed = await maybeShowNativeInterstitialGate({
+                reason: "nav_panel",
+                fallbackMessage: "",
+              });
+              if (!proceed) return;
+		          setActive(targetPanel);
+            } finally {
+              nativeTransitionInterstitialState.busy = false;
+            }
 		      });
 		    });
 
@@ -3127,16 +3479,17 @@
     window.__quanturaMobileBottomNavSync = syncVisibility;
   };
 
-  const bindNativeRewardedNavigationAds = () => {
+  const bindNativeTransitionInterstitials = () => {
     if (!isNativeApp()) return;
-    if (document.body.dataset.nativeNavRewardBound === "1") return;
-    document.body.dataset.nativeNavRewardBound = "1";
+    if (document.body.dataset.nativeNavInterstitialBound === "1") return;
+    document.body.dataset.nativeNavInterstitialBound = "1";
 
     document.addEventListener("click", async (event) => {
       const link = event.target.closest("a[href]");
       if (!link) return;
       if (link.dataset.panelTarget) return;
       if (link.dataset.skipRewardGate === "1") return;
+      if (link.dataset.skipInterstitialGate === "1") return;
       if (event.defaultPrevented) return;
       if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       const target = String(link.getAttribute("target") || "").trim().toLowerCase();
@@ -3147,22 +3500,19 @@
       if (/^https?:\/\//i.test(href)) return;
       if (!href.startsWith("/")) return;
 
-      const proceed = await maybeShowNativeRewardGate({
-        reason: "nav",
-        title: "Watch an ad before opening this section?",
-        message: "Navigation inside the native app can trigger a rewarded interstitial.",
-      });
-      if (!proceed) {
-        event.preventDefault();
-        return;
+      event.preventDefault();
+      if (nativeTransitionInterstitialState.busy) return;
+      nativeTransitionInterstitialState.busy = true;
+      try {
+        const proceed = await maybeShowNativeInterstitialGate({
+          reason: "nav_link",
+          fallbackMessage: "",
+        });
+        if (!proceed) return;
+        window.location.assign(href);
+      } finally {
+        nativeTransitionInterstitialState.busy = false;
       }
-
-      sendNativeBridgeMessage({
-        action: "showRewardedInterstitial",
-        reason: "nav",
-        href,
-        ts: Date.now(),
-      });
     });
   };
 
@@ -4261,27 +4611,52 @@
     };
   };
 
-  const exchangeNativeIdTokenForCustomToken = async (idToken) => {
-    const token = String(idToken || "").trim();
-    if (!token) throw new Error("Native ID token is missing.");
-    const response = await fetch("/api/auth/exchange", {
+  const postNativeAuthExchange = async (path, idToken, payload = {}) => {
+    const response = await fetch(path, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${idToken}`,
       },
-      body: JSON.stringify({}),
+      body: JSON.stringify(payload),
     });
-    let payload = null;
+    let parsed = null;
     try {
-      payload = await response.json();
+      parsed = await response.json();
     } catch (error) {
-      payload = null;
+      parsed = null;
     }
-    if (!response.ok || !payload?.customToken) {
-      throw new Error(String(payload?.error || "Unable to sync native auth session."));
+    if (!response.ok || !parsed?.customToken) {
+      const nextError = new Error(String(parsed?.error || parsed?.message || "Unable to sync native auth session."));
+      nextError.status = Number(response.status || 0);
+      throw nextError;
     }
-    return String(payload.customToken);
+    return String(parsed.customToken || "").trim();
+  };
+
+  const exchangeNativeIdTokenForCustomToken = async (idToken) => {
+    const token = String(idToken || "").trim();
+    if (!token) throw new Error("Native ID token is missing.");
+    const nativePlatform = String(getNativePlatform() || "").trim().toLowerCase();
+    try {
+      console.info("[Auth][WebNative] Token exchange request started.", {
+        endpoint: "/api/mobile/auth/exchange",
+        nativePlatform,
+      });
+      return await postNativeAuthExchange("/api/mobile/auth/exchange", token, {
+        platform: nativePlatform || "web",
+      });
+    } catch (error) {
+      const status = Number(error?.status || 0);
+      if (![400, 401, 403, 404, 405, 422, 501].includes(status)) {
+        throw error;
+      }
+      console.warn("[Auth][WebNative] Mobile auth exchange unavailable, falling back.", {
+        status,
+        nativePlatform,
+      });
+      return postNativeAuthExchange("/api/auth/exchange", token, {});
+    }
   };
 
   const installNativeAuthBridge = (auth) => {
@@ -4300,6 +4675,7 @@
       const cleanToken = String(token || "").trim();
       if (!cleanToken) return false;
       try {
+        console.info("[Auth][WebNative] Custom token received from native bridge.");
         await auth.signInWithCustomToken(cleanToken);
         window.dispatchEvent(new CustomEvent("quantura:native-custom-token-consumed", { detail: { ok: true } }));
         return true;
@@ -4312,16 +4688,41 @@
     bridge.onNativeAuthState = (authState) => {
       const nextState = authState && typeof authState === "object" ? authState : {};
       state.nativeAuthState = nextState;
+      console.info("[Auth][WebNative] Native auth state received.", {
+        uid: String(nextState.uid || "").trim(),
+        anonymous: Boolean(nextState.isAnonymous),
+      });
       applyRuntimeBodyClasses();
       window.dispatchEvent(new CustomEvent("quantura:native-auth-state-bridge", { detail: nextState }));
       return nextState;
     };
 
-    bridge.requestSignIn = (provider = "") =>
-      sendNativeAuthMessage({
+    bridge.onNativeAuthGateState = (gateState) => {
+      const detail = gateState && typeof gateState === "object" ? gateState : { visible: Boolean(gateState) };
+      state.authGateVisible = Boolean(detail.visible);
+      return state.authGateVisible;
+    };
+
+    bridge.onNativeAuthSync = (authSyncState) => {
+      const detail = authSyncState && typeof authSyncState === "object" ? authSyncState : {};
+      state.nativeAuthSync = detail;
+      return detail;
+    };
+
+    bridge.requestSignIn = (provider = "") => {
+      const requestId = `native_auth_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const sent = sendNativeAuthMessage({
         type: "REQUEST_SIGN_IN",
+        requestId,
         provider: String(provider || "").trim().toLowerCase(),
       });
+      console.info("[Auth][WebNative] Auth request started.", {
+        provider: String(provider || "").trim().toLowerCase() || "native",
+        requestId,
+        sent,
+      });
+      return { sent, requestId };
+    };
 
     bridge.requestAuthState = () => sendNativeAuthMessage({ type: "GET_AUTH_STATE" });
     bridge.signOut = () => sendNativeAuthMessage({ type: "SIGN_OUT" });
@@ -4343,6 +4744,20 @@
       }
     } catch (error) {
       // Ignore stale pending token errors.
+    }
+    try {
+      if (window.__QUANTURA_PENDING_AUTH_GATE_STATE__) {
+        bridge.onNativeAuthGateState(window.__QUANTURA_PENDING_AUTH_GATE_STATE__);
+      }
+    } catch (error) {
+      // Ignore stale pending auth gate state errors.
+    }
+    try {
+      if (window.__QUANTURA_PENDING_AUTH_SYNC__) {
+        bridge.onNativeAuthSync(window.__QUANTURA_PENDING_AUTH_SYNC__);
+      }
+    } catch (error) {
+      // Ignore stale pending auth sync errors.
     }
 
     bridge.requestAuthState();
@@ -4516,7 +4931,9 @@
       syncNotificationPrivacyControls();
       return;
     }
-    const anchor = ui.notificationsStatus.parentElement || ui.notificationsStatus;
+    const anchor =
+      ui.notificationsToken?.closest(".notice") ||
+      ui.notificationsStatus;
     const wrap = document.createElement("div");
     wrap.id = "notifications-privacy-controls";
     wrap.className = "notice small";
@@ -4541,8 +4958,18 @@
         ${categoryItems}
       </div>
       <div class="notification-consent-grid">
-        <label class="feature" style="align-items:flex-start;"><span></span><input id="notifications-location-optin" type="checkbox" /> <span>Allow coarse location + timezone for notification context</span></label>
-        <label class="feature" style="align-items:flex-start;"><span></span><input id="notifications-ip-optin" type="checkbox" /> <span>Allow IP-derived region lookup/storage</span></label>
+        <label class="notification-consent-item">
+          <input id="notifications-location-optin" type="checkbox" />
+          <span class="notification-consent-copy">
+            <span class="notification-consent-title">Allow coarse location + timezone for notification context</span>
+          </span>
+        </label>
+        <label class="notification-consent-item">
+          <input id="notifications-ip-optin" type="checkbox" />
+          <span class="notification-consent-copy">
+            <span class="notification-consent-title">Allow IP-derived region lookup/storage</span>
+          </span>
+        </label>
       </div>
       <div class="notification-privacy-grid">
         <div class="field">
@@ -4715,7 +5142,114 @@
     }
   }
 
+  const normalizePendingSignupProfile = (input = {}) => {
+    const email = String(input?.email || "")
+      .trim()
+      .toLowerCase()
+      .slice(0, 160);
+    const username = String(input?.username || "").trim().slice(0, 64);
+    const createdAtMs = Number(input?.createdAtMs || Date.now());
+    if (!email || !username) return null;
+    if (!Number.isFinite(createdAtMs) || createdAtMs <= 0) return null;
+    return { email, username, createdAtMs };
+  };
+
+  const readPendingSignupProfile = () => {
+    const inMemory = normalizePendingSignupProfile(state.pendingSignupProfile || {});
+    if (inMemory && Date.now() - inMemory.createdAtMs <= 15 * 60 * 1000) {
+      state.pendingSignupProfile = inMemory;
+      return inMemory;
+    }
+    const raw = String(safeLocalStorageGet(AUTH_PENDING_PROFILE_KEY) || "").trim();
+    if (!raw) {
+      state.pendingSignupProfile = null;
+      return null;
+    }
+    try {
+      const parsed = normalizePendingSignupProfile(JSON.parse(raw));
+      if (!parsed || Date.now() - parsed.createdAtMs > 15 * 60 * 1000) {
+        safeLocalStorageRemove(AUTH_PENDING_PROFILE_KEY);
+        state.pendingSignupProfile = null;
+        return null;
+      }
+      state.pendingSignupProfile = parsed;
+      return parsed;
+    } catch (error) {
+      safeLocalStorageRemove(AUTH_PENDING_PROFILE_KEY);
+      state.pendingSignupProfile = null;
+      return null;
+    }
+  };
+
+  const writePendingSignupProfile = ({ email = "", username = "" } = {}) => {
+    const next = normalizePendingSignupProfile({
+      email,
+      username,
+      createdAtMs: Date.now(),
+    });
+    state.pendingSignupProfile = next;
+    if (!next) {
+      safeLocalStorageRemove(AUTH_PENDING_PROFILE_KEY);
+      return null;
+    }
+    safeLocalStorageSet(AUTH_PENDING_PROFILE_KEY, JSON.stringify(next));
+    return next;
+  };
+
+  const clearPendingSignupProfile = () => {
+    state.pendingSignupProfile = null;
+    safeLocalStorageRemove(AUTH_PENDING_PROFILE_KEY);
+  };
+
+  const setEmailAuthMode = (mode = "signin") => {
+    const nextMode = mode === "signup" ? "signup" : "signin";
+    const isSignup = nextMode === "signup";
+    state.authEmailMode = nextMode;
+    if (ui.emailForm) ui.emailForm.dataset.mode = nextMode;
+    if (ui.authCreateFields) {
+      ui.authCreateFields.classList.toggle("hidden", !isSignup);
+      ui.authCreateFields.setAttribute("aria-hidden", isSignup ? "false" : "true");
+    }
+    if (ui.usernameInput) ui.usernameInput.disabled = !isSignup;
+    if (ui.confirmPasswordInput) ui.confirmPasswordInput.disabled = !isSignup;
+    if (ui.authForgotPassword) ui.authForgotPassword.classList.toggle("hidden", isSignup);
+    if (ui.authBackToSignin) ui.authBackToSignin.classList.toggle("hidden", !isSignup);
+    if (ui.authCreateHint) ui.authCreateHint.classList.toggle("hidden", !isSignup);
+    if (ui.emailSignin) ui.emailSignin.textContent = isSignup ? "Create account" : "Sign in";
+    if (ui.emailCreate) ui.emailCreate.textContent = isSignup ? "Back to sign in" : "Create account";
+  };
+
+  const applyPendingSignupProfile = async (db, user) => {
+    if (!db || !hasFullAccount(user)) return false;
+    const pending = readPendingSignupProfile();
+    if (!pending) return false;
+    const userEmail = String(user?.email || "")
+      .trim()
+      .toLowerCase();
+    if (!userEmail || userEmail !== pending.email) return false;
+    const username = sanitizeProfileUsername(pending.username, user);
+    if (!username) {
+      clearPendingSignupProfile();
+      return false;
+    }
+    if (String(user?.displayName || "").trim() !== username) {
+      await user.updateProfile({ displayName: username });
+    }
+    await db.collection("users").doc(user.uid).set(
+      {
+        name: username,
+        profile: { username },
+        metadata: buildMeta(),
+      },
+      { merge: true }
+    );
+    clearPendingSignupProfile();
+    return true;
+  };
+
   let forecastCacheDbPromise = null;
+  const DEFAULT_FORECAST_QUANTILES = Object.freeze([0.01, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99]);
+  const DEFAULT_FORECAST_BAND_SUMMARY = "P01\u2013P99, P10\u2013P90, P25\u2013P75, and the P50 median path";
 
   const computeFastHash = (input) => {
     const text = String(input || "");
@@ -4726,6 +5260,8 @@
     }
     return (hash >>> 0).toString(16).padStart(8, "0");
   };
+
+  const getDefaultForecastQuantiles = () => DEFAULT_FORECAST_QUANTILES.slice();
 
   const buildForecastParamsHash = ({ ticker, interval, horizon, service, quantiles, start } = {}) => {
     const sortedQuantiles = Array.isArray(quantiles)
@@ -4803,6 +5339,17 @@
     return String(index?.[reqId]?.cacheKey || "").trim();
   };
 
+  const normalizeForecastSeriesQuantileKey = (key) => {
+    const raw = String(key || "").trim().toLowerCase();
+    if (!raw) return "";
+    if (raw === "yhat" || raw === "median") return "q50";
+    const match = raw.match(/^[qp](\d{1,3})$/);
+    if (!match) return "";
+    const level = Number(match[1]);
+    if (!Number.isFinite(level) || level < 0 || level > 999) return "";
+    return `q${level}`;
+  };
+
   const normalizeForecastSeriesRows = (rows) => {
     if (!Array.isArray(rows)) return [];
     return rows
@@ -4813,15 +5360,31 @@
         if (!rawDs) return null;
         const normalized = { ds: rawDs };
         Object.entries(row).forEach(([key, value]) => {
-          if (!/^q\d{1,3}$/.test(String(key || ""))) return;
           const numeric = Number(value);
           if (!Number.isFinite(numeric)) return;
-          normalized[key] = Number(numeric.toFixed(6));
+          const normalizedKey = normalizeForecastSeriesQuantileKey(key);
+          if (normalizedKey) {
+            normalized[normalizedKey] = Number(numeric.toFixed(6));
+            if (String(key || "").trim().toLowerCase() === "yhat") {
+              normalized.yhat = Number(numeric.toFixed(6));
+            }
+            return;
+          }
+          const rawKey = String(key || "").trim().toLowerCase();
+          if (["actual", "close", "adjclose", "adj close", "price", "y_usd"].includes(rawKey)) {
+            normalized.actual = Number(numeric.toFixed(6));
+          }
         });
-        if (Object.keys(normalized).length <= 1) return null;
+        if (!Object.keys(normalized).some((key) => /^q\d{1,3}$/.test(key))) return null;
         return normalized;
       })
       .filter(Boolean);
+  };
+
+  const formatIsoDate = (value) => {
+    const dt = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(dt.getTime())) return "";
+    return dt.toISOString().slice(0, 10);
   };
 
   const openForecastCacheDb = () => {
@@ -5080,7 +5643,7 @@
     }
     if (ui.dashboardAuthLink) {
       const linkSpan = ui.dashboardAuthLink.querySelector("span");
-      const linkLabel = sessionAuthed ? (pack.sign_out || fallback.sign_out || "Sign out") : (pack.sign_in || fallback.sign_in || "Sign in");
+      const linkLabel = accountAuthed ? (pack.sign_out || fallback.sign_out || "Sign out") : (pack.sign_in || fallback.sign_in || "Sign in");
       if (linkSpan) setLocalizedText(linkSpan, linkLabel);
       setLocalizedAttribute(ui.dashboardAuthLink, "aria-label", linkLabel);
     }
@@ -5836,8 +6399,8 @@
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
         const request = String(input.value || "").trim();
-        const tickerFallback = getActiveTicker() || normalizeTicker(safeLocalStorageGet(LAST_TICKER_KEY) || "") || "SPY";
-        const ticker = normalizeTicker(tickerInput.value || tickerFallback) || "SPY";
+        const tickerFallback = resolveActiveOrDefaultTicker();
+        const ticker = normalizeTicker(tickerInput.value || tickerFallback) || tickerFallback;
         if (!request) {
           status.textContent = "Tell us what you need so AI can help.";
           return;
@@ -5891,7 +6454,7 @@
       });
     }
 
-    const fallbackTicker = getActiveTicker() || normalizeTicker(safeLocalStorageGet(LAST_TICKER_KEY) || "") || "SPY";
+    const fallbackTicker = resolveActiveOrDefaultTicker();
     if (!String(tickerInput.value || "").trim()) tickerInput.value = fallbackTicker;
     if (prefillPrompt && !String(input.value || "").trim()) input.value = String(prefillPrompt || "").trim();
     status.textContent = "";
@@ -6611,7 +7174,21 @@
       if (node?.id === "profile-status" || node?.id === "auth-email-message") return;
       set.add(node);
     });
-    return Array.from(set);
+    const candidates = Array.from(set).filter((node) => node instanceof HTMLElement);
+    const isGenericContainer = (node) =>
+      node.matches(
+        "main, main > section, main section > .container, main section > .shop-container, main .app-main, main .hero-grid, main .content-grid, main .dashboard-grid, main .insight-grid, main .feature-grid, main .results-grid, main .layout"
+      );
+    return candidates.filter((container) => {
+      if (!isGenericContainer(container)) return true;
+      return !candidates.some(
+        (other) =>
+          other !== container &&
+          container.contains(other) &&
+          !isGenericContainer(other) &&
+          other.offsetParent !== null
+      );
+    });
   };
 
   const isDenseNativeInlineAdContainer = (container, children) => {
@@ -6644,10 +7221,33 @@
     return false;
   };
 
+  const getStructuredNativeInlineAdRule = (container, children) => {
+    if (!(container instanceof HTMLElement)) return null;
+    if (!Array.isArray(children) || children.length < 3) return null;
+    if (children.every((child) => child.matches(".order-card"))) {
+      return { start: 3, interval: 3 };
+    }
+    if (children.every((child) => child.matches(".results-panel"))) {
+      return { start: 3, interval: 3 };
+    }
+    if (children.every((child) => child.matches(".news-card"))) {
+      return { start: 2, interval: 2 };
+    }
+    return null;
+  };
+
   const getNativeInlineAdAnchorIndexes = (childrenCount, rules, container, children) => {
     if (!Number.isFinite(childrenCount) || childrenCount < 2) return [];
     if (isDenseNativeInlineAdContainer(container, children)) {
       return Array.from({ length: Math.max(0, childrenCount - 1) }, (_value, index) => index);
+    }
+    const structuredRule = getStructuredNativeInlineAdRule(container, children);
+    if (structuredRule) {
+      const indexes = new Set();
+      for (let position = structuredRule.start; position <= childrenCount; position += structuredRule.interval) {
+        indexes.add(Math.max(0, Math.min(childrenCount - 1, position - 1)));
+      }
+      return Array.from(indexes).sort((left, right) => left - right);
     }
     const indexes = new Set();
     const midpointIndex = Math.max(0, Math.min(childrenCount - 1, Math.floor((childrenCount - 1) * rules.pageMidpoint)));
@@ -6801,6 +7401,9 @@
     const sessionAuthed = Boolean(user);
     const guestSession = isAnonymousUser(user);
     const authLabel = accountAuthed ? "Logged In" : guestSession ? "Guest Session" : "Logged Out";
+    if (!sessionAuthed || accountAuthed) {
+      setEmailAuthMode("signin");
+    }
     ensureProfileFeedbackButtons();
     ensureHeaderNotificationsCta();
     if (ui.headerAuth) {
@@ -6869,11 +7472,11 @@
     }
 
     if (ui.dashboardAuthLink) {
-      ui.dashboardAuthLink.innerHTML = sessionAuthed
+      ui.dashboardAuthLink.innerHTML = accountAuthed
         ? `${icon("log-out")}<span>Sign out</span>`
         : `${icon("log-in")}<span>Sign in</span>`;
-      ui.dashboardAuthLink.setAttribute("href", sessionAuthed ? "#" : "/account");
-      ui.dashboardAuthLink.setAttribute("aria-label", sessionAuthed ? "Sign out" : "Sign in");
+      ui.dashboardAuthLink.setAttribute("href", accountAuthed ? "#" : "/account");
+      ui.dashboardAuthLink.setAttribute("aria-label", accountAuthed ? "Sign out" : "Sign in");
     }
 
     setPurchaseState(user);
@@ -6882,15 +7485,21 @@
     applyUiTranslations(state.preferredLanguage || "en");
   };
 
+  setEmailAuthMode("signin");
+
   const setAdminOnlyFeaturePanels = (user = state.user) => {
     const allowAdminTools = hasFullAccount(user) && isAdminUser(user);
     ui.uploadsAdminBlock?.classList.toggle("hidden", !allowAdminTools);
     ui.autopilotAdminBlock?.classList.toggle("hidden", !allowAdminTools);
     ui.uploadsVoteBlock?.classList.toggle("hidden", allowAdminTools);
     ui.autopilotVoteBlock?.classList.toggle("hidden", allowAdminTools);
-    if (!allowAdminTools) {
-      if (ui.predictionsStatus) ui.predictionsStatus.textContent = "Admin-only capability.";
-      if (ui.autopilotStatus) ui.autopilotStatus.textContent = "Admin-only capability.";
+    if (!hasFullAccount(user)) {
+      if (ui.autopilotStatus && !String(ui.autopilotStatus.textContent || "").trim()) {
+        ui.autopilotStatus.textContent = "Sign in with a full account to use Forecast Foundry.";
+      }
+      if (ui.foundryAccessNote) ui.foundryAccessNote.classList.remove("hidden");
+    } else if (ui.foundryAccessNote) {
+      ui.foundryAccessNote.classList.remove("hidden");
     }
   };
 
@@ -7556,7 +8165,9 @@
     if (value.toDate) {
       return value.toDate().toLocaleString();
     }
-    return new Date(value).toLocaleString();
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return "Processing";
+    return parsed.toLocaleString();
   };
 
   const formatEpoch = (value) => {
@@ -7954,10 +8565,22 @@
           (snapshot) => {
             const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
             renderScreenerRunPicker(items);
+            if (state.activeScreenerRunId) {
+              const active = items.find((item) => String(item.id || "").trim() === state.activeScreenerRunId);
+              if (active && !state.sharedScreenerView) {
+                renderScreenerRunOutput(active);
+              }
+            }
 
             const params = new URLSearchParams(window.location.search);
+            const requestShare = String(params.get("requestShare") || "").trim();
             const urlRunId = String(params.get("screenerRunId") || params.get("runId") || "").trim();
-            if (urlRunId && !state.screenerUrlRunLoaded) {
+            if (requestShare && !state.screenerUrlRequestShareLoaded) {
+              state.screenerUrlRequestShareLoaded = true;
+              loadSharedMyRequestFromUrl({ setPanel: false }).catch(() => {
+                state.screenerUrlRequestShareLoaded = false;
+              });
+            } else if (urlRunId && !state.screenerUrlRunLoaded) {
               state.screenerUrlRunLoaded = true;
               loadScreenerRunById(db, urlRunId).catch(() => {});
             }
@@ -8273,7 +8896,6 @@
       .get();
     if (querySnap.empty) return { checked: 0, triggered: 0 };
 
-    const getHistory = functions.httpsCallable("get_ticker_history");
     const sendTestNotification = functions.httpsCallable("send_test_notification");
     let checked = 0;
     let triggered = 0;
@@ -8292,8 +8914,7 @@
       checked += 1;
 
       try {
-        const historyResult = await getHistory({ ticker, interval: "1d", start: startKey, end: endKey, meta: buildMeta() });
-        const rows = Array.isArray(historyResult.data?.rows) ? historyResult.data.rows : [];
+        const rows = await apiFetchTickerHistory({ ticker, interval: "1d", start: startKey, end: endKey });
         const current = rows.length ? extractCloseFromHistoryRow(rows[rows.length - 1]) : null;
         if (current === null || current <= 0) continue;
 
@@ -8928,7 +9549,22 @@
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#039;");
 
+  const sanitizeText = (value, maxLen = 600) =>
+    String(value ?? "")
+      .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, Math.max(0, Number(maxLen) || 0));
+
   const icon = (name) => `<i class="iconoir-${name}" aria-hidden="true"></i>`;
+
+  const hidePublicationIcon = () => `
+    <svg class="semantic-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+      <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"></path>
+      <circle cx="12" cy="12" r="2.5"></circle>
+      <path d="M4 4l16 16"></path>
+    </svg>
+  `.trim();
 
   const MARKED_SCRIPT_URL = "https://cdn.jsdelivr.net/npm/marked/marked.min.js";
   const MARKDOWN_ALLOWED_TAGS = new Set([
@@ -9082,7 +9718,6 @@
         watchlist: "/watchlist",
         productivity: "/productivity",
         collaboration: "/collaboration",
-        uploads: "/uploads",
         autopilot: "/autopilot",
         notifications: "/notifications",
         auth: "/account",
@@ -9093,7 +9728,8 @@
         "/dashboard/watchlist": "watchlist",
         "/dashboard/productivity": "productivity",
         "/dashboard/collaboration": "collaboration",
-        "/dashboard/uploads": "uploads",
+        "/dashboard/uploads": "autopilot",
+        "/uploads": "autopilot",
       },
     },
   });
@@ -9165,6 +9801,16 @@
       `,
     },
     {
+      key: "youtube",
+      label: "YouTube",
+      href: "https://www.youtube.com/channel/UCDLV4L-W5rslagltzkEx1cw",
+      svg: `
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M23.5 6.2a3 3 0 0 0-2.11-2.12C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.39.58A3 3 0 0 0 .5 6.2 31.4 31.4 0 0 0 0 12a31.4 31.4 0 0 0 .5 5.8 3 3 0 0 0 2.11 2.12C4.5 20.5 12 20.5 12 20.5s7.5 0 9.39-.58a3 3 0 0 0 2.11-2.12A31.4 31.4 0 0 0 24 12a31.4 31.4 0 0 0-.5-5.8ZM9.6 15.7V8.3l6.4 3.7-6.4 3.7Z"/>
+        </svg>
+      `,
+    },
+    {
       key: "facebook",
       label: "Facebook",
       href: "https://www.facebook.com/quanturaai/",
@@ -9192,11 +9838,10 @@
 
   const normalizeTopNavigation = () => {
     const navs = Array.from(document.querySelectorAll(".header .nav-links"));
-    if (!navs.length) return;
+    const navActions = Array.from(document.querySelectorAll(".header .nav-actions"));
+    if (!navs.length && !navActions.length) return;
     navs.forEach((nav) => {
       nav.innerHTML = `
-        <a href="/forecasting" data-analytics="nav_terminal">${icon("candlestick-chart")}<span>Terminal</span></a>
-        <a href="/dashboard" data-analytics="nav_dashboard">${icon("dashboard-dots")}<span>Dashboard</span></a>
         <a href="/explore" data-analytics="nav_explore">${icon("binocular")}<span>Explore</span></a>
         <a href="/research" data-analytics="nav_research">${icon("bookmark-book")}<span>Research</span></a>
         <a href="/blog" data-analytics="nav_blog">${icon("page")}<span>Blog</span></a>
@@ -9206,6 +9851,9 @@
         <a href="/pricing" data-analytics="nav_pricing">${icon("wallet")}<span>Pricing</span></a>
         <a href="/contact" data-analytics="nav_contact">${icon("mail")}<span>Contact Us</span></a>
       `;
+    });
+    navActions.forEach((group) => {
+      group.querySelectorAll('a[data-analytics="nav_cta"]').forEach((link) => link.remove());
     });
   };
 
@@ -9692,41 +10340,159 @@
 
   const getDefaultPopularTicker = () => normalizeTicker(SESSION_DEFAULT_TICKER) || "AAPL";
 
+  const resolveActiveOrDefaultTicker = (...candidates) => {
+    const ordered = [
+      ...candidates,
+      getActiveTicker(),
+      normalizeTicker(state.tickerContext.ticker || ""),
+      normalizeTicker(safeLocalStorageGet(LAST_TICKER_KEY) || ""),
+      getDefaultPopularTicker(),
+    ];
+    for (const candidate of ordered) {
+      const clean = normalizeTicker(candidate);
+      if (clean) return clean;
+    }
+    return getDefaultPopularTicker();
+  };
+
+  const resolveTradingViewRenderTicker = (...candidates) => {
+    const ordered = [
+      ...candidates,
+      getActiveTicker(),
+      normalizeTicker(state.tickerContext.ticker || ""),
+    ];
+    for (const candidate of ordered) {
+      const clean = normalizeTicker(candidate);
+      if (clean) return clean;
+    }
+    return "";
+  };
+
+  const normalizeTradingViewExchangePrefix = (value) => {
+    const raw = String(value || "").trim().toUpperCase();
+    if (!raw) return "";
+    if (raw.includes(":")) {
+      const [prefix = ""] = raw.split(":", 1);
+      return normalizeTradingViewExchangePrefix(prefix);
+    }
+    if (
+      raw === "NASDAQ" ||
+      raw === "NDAQ" ||
+      raw === "NMS" ||
+      raw === "NGM" ||
+      raw === "NCM" ||
+      raw.includes("NASDAQ")
+    ) {
+      return "NASDAQ";
+    }
+    if (
+      raw === "NYSE" ||
+      raw === "NYQ" ||
+      raw === "NYS" ||
+      (raw.includes("NYSE") && !raw.includes("ARCA"))
+    ) {
+      return "NYSE";
+    }
+    if (
+      raw === "AMEX" ||
+      raw === "ASE" ||
+      raw === "ARCA" ||
+      raw === "NYSEARCA" ||
+      raw.includes("NYSE ARCA") ||
+      raw.includes("AMERICAN")
+    ) {
+      return "AMEX";
+    }
+    if (raw === "CBOE" || raw === "BATS" || raw.includes("CBOE") || raw.includes("BATS")) {
+      return "CBOE";
+    }
+    return "";
+  };
+
+  const getTradingViewSymbolCache = () =>
+    state.tickerContext.tradingViewSymbols && typeof state.tickerContext.tradingViewSymbols === "object"
+      ? state.tickerContext.tradingViewSymbols
+      : (state.tickerContext.tradingViewSymbols = {});
+
+  const getCachedTradingViewSymbol = (ticker) => {
+    const clean = normalizeTicker(ticker);
+    if (!clean) return "";
+    const cached = getTradingViewSymbolCache()[clean];
+    return typeof cached === "string" ? String(cached).trim().toUpperCase() : "";
+  };
+
+  const cacheTradingViewSymbol = (ticker, symbol) => {
+    const cleanTicker = normalizeTicker(ticker);
+    const cleanSymbol = String(symbol || "").trim().toUpperCase();
+    if (!cleanTicker || !cleanSymbol) return "";
+    getTradingViewSymbolCache()[cleanTicker] = cleanSymbol;
+    return cleanSymbol;
+  };
+
+  const resolveTradingViewSymbolFromExchange = (ticker, exchangeValue) => {
+    const cleanTicker = normalizeTicker(ticker);
+    if (!cleanTicker) return "";
+    const raw = String(exchangeValue || "").trim().toUpperCase();
+    if (!raw) return "";
+    if (raw.includes(":")) {
+      const [rawPrefix = "", rawSymbol = ""] = raw.split(":", 2);
+      const prefix = normalizeTradingViewExchangePrefix(rawPrefix);
+      const symbol = normalizeTicker(rawSymbol || cleanTicker);
+      if (prefix && symbol) return `${prefix}:${symbol}`;
+    }
+    const prefix = normalizeTradingViewExchangePrefix(raw);
+    return prefix ? `${prefix}:${cleanTicker}` : "";
+  };
+
+  const buildFallbackTradingViewSymbol = (ticker) => {
+    const clean = normalizeTicker(ticker);
+    if (!clean) return "";
+    if (clean.includes("-")) return clean;
+    return `NASDAQ:${clean}`;
+  };
+
   const resolveTradingViewExchangeSymbol = (ticker) => {
     const clean = normalizeTicker(ticker);
-    if (!clean) return TRADINGVIEW_EXCHANGE_OVERRIDES[getDefaultPopularTicker()] || "NASDAQ:AAPL";
-    return TRADINGVIEW_EXCHANGE_OVERRIDES[clean] || `NASDAQ:${clean}`;
+    if (!clean) return "";
+    const cached = getCachedTradingViewSymbol(clean);
+    if (cached) return cached;
+    return TRADINGVIEW_EXCHANGE_OVERRIDES[clean] || buildFallbackTradingViewSymbol(clean);
+  };
+
+  const normalizeTradingViewQueryTicker = (value) => {
+    const raw = String(value || "").trim().toUpperCase();
+    if (!raw) return "";
+    if (!raw.includes(":")) return normalizeTicker(raw);
+    const [, symbolPartRaw = ""] = raw.split(":", 2);
+    const symbolPart = String(symbolPartRaw || "").trim().toUpperCase();
+    if (!symbolPart) return "";
+    if (symbolPart === "BTCUSD") return "BTC-USD";
+    if (symbolPart === "ETHUSD") return "ETH-USD";
+    if (symbolPart === "SOLUSD") return "SOL-USD";
+    return normalizeTicker(symbolPart);
   };
 
   const normalizeTradingViewSymbol = (ticker) => {
     const raw = String(ticker || "").trim().toUpperCase();
-    if (!raw) return resolveTradingViewExchangeSymbol(getDefaultPopularTicker());
+    if (!raw) return "";
     if (raw.includes(":")) return raw;
     return resolveTradingViewExchangeSymbol(raw);
   };
 
   const buildTradingViewTickerTapeSymbols = (ticker) => {
-    const active = normalizeTicker(ticker) || getDefaultPopularTicker();
-    const ordered = [active, ...POPULAR_TICKER_POOL.filter((candidate) => normalizeTicker(candidate) !== active)].slice(0, 10);
-    return ordered.map((candidate) => ({
-      proName: normalizeTradingViewSymbol(candidate),
-      title: normalizeTicker(candidate) || candidate,
-    }));
+    const active = normalizeTicker(ticker);
+    if (!active) return [];
+    return [
+      {
+        proName: normalizeTradingViewSymbol(active),
+        title: active,
+      },
+    ];
   };
 
-  const resolveTradingViewInterval = (interval, rangePreset) => {
-    const base = String(interval || "").toLowerCase() === "1h" ? "60" : "D";
-    if (base === "60") return "60";
-    const range = String(rangePreset || "max").toLowerCase();
-    if (range === "1d") return "5";
-    if (range === "5d") return "30";
-    if (range === "1m") return "60";
-    if (range === "3m") return "240";
-    if (range === "5y") return "W";
-    return "D";
-  };
+  const resolveTradingViewInterval = (interval) => (String(interval || "").toLowerCase() === "1h" ? "60" : "D");
 
-  const resolveTradingViewStyle = () => (state.chartViewMode === "line" ? "3" : "1");
+  const resolveTradingViewStyle = () => "1";
 
   const setTradingViewStatus = (text) => {
     if (!ui.tradingViewStatus) return;
@@ -9756,36 +10522,113 @@
     return [...forecastOverlays, ...(state.tickerContext.indicatorOverlays || [])];
   };
 
-  const buildTradingViewWidgetSrc = (baseUrl, config) => {
+  const buildTradingViewWidgetSrc = (baseUrl, config, { cacheKey = "" } = {}) => {
+    const url = new URL(baseUrl, window.location.origin);
+    if (cacheKey) {
+      url.searchParams.set("tvcache", String(cacheKey));
+    }
     const payload = encodeURIComponent(JSON.stringify(config || {}));
-    return `${baseUrl}#${payload}`;
+    return `${url.toString()}#${payload}`;
   };
 
-  const mountTradingViewIframe = ({ container, src, title, onload, onerror }) => {
+  const buildTradingViewSingleSymbolWidgetSrc = (baseUrl, symbol, config, { cacheKey = "" } = {}) => {
+    const url = new URL(baseUrl, window.location.origin);
+    url.searchParams.set("tvwidgetsymbol", normalizeTradingViewSymbol(symbol));
+    return buildTradingViewWidgetSrc(url.toString(), config, { cacheKey });
+  };
+
+  const resetTradingViewSlot = (container, { symbol = "", renderKey = "" } = {}) => {
+    if (!container) return;
+    const frames = Array.from(container.querySelectorAll("iframe"));
+    frames.forEach((frame) => {
+      try {
+        frame.removeAttribute("src");
+        frame.src = "about:blank";
+      } catch (error) {
+        // Ignore cross-origin teardown issues and continue replacing the slot.
+      }
+      frame.remove();
+    });
+    container.innerHTML = "";
+    if (symbol) {
+      container.dataset.tvSymbol = symbol;
+    } else {
+      delete container.dataset.tvSymbol;
+    }
+    if (renderKey) {
+      container.dataset.tvRenderKey = renderKey;
+    } else {
+      delete container.dataset.tvRenderKey;
+    }
+  };
+
+  const buildTickerPanelUrl = (ticker) => {
+    const cleanTicker = normalizeTicker(ticker);
+    const params = new URLSearchParams();
+    if (cleanTicker) {
+      params.set("ticker", cleanTicker);
+      const tvSymbol = normalizeTradingViewSymbol(cleanTicker);
+      if (tvSymbol) {
+        params.set("tvwidgetsymbol", tvSymbol);
+      }
+    }
+    const query = params.toString();
+    return `/ticker${query ? `?${query}` : ""}`;
+  };
+
+  const syncTradingViewUrlState = (ticker, symbol) => {
+    try {
+      const url = new URL(window.location.href);
+      const cleanTicker = normalizeTicker(ticker);
+      const cleanSymbol = normalizeTradingViewSymbol(symbol || cleanTicker);
+      if (!cleanTicker || !cleanSymbol) return;
+      url.searchParams.set("ticker", cleanTicker);
+      url.searchParams.set("tvwidgetsymbol", cleanSymbol);
+      const next = `${url.pathname}${url.search}${url.hash}`;
+      const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      if (next !== current) {
+        window.history.replaceState(window.history.state, "", next);
+      }
+    } catch (error) {
+      // Ignore URL sync issues in embedded contexts.
+    }
+  };
+
+  const mountTradingViewIframe = ({ container, src, title, onload, onerror, renderKey = "", symbol = "" }) => {
     if (!container) return null;
     const frame = document.createElement("iframe");
     frame.setAttribute("scrolling", "no");
     frame.setAttribute("allowtransparency", "true");
     frame.setAttribute("frameborder", "0");
-    frame.setAttribute("loading", "lazy");
+    frame.setAttribute("loading", "eager");
     frame.setAttribute("title", title || "TradingView widget");
     frame.setAttribute("lang", "en");
+    if (renderKey) frame.dataset.tvRenderKey = renderKey;
+    if (symbol) frame.dataset.tvSymbol = symbol;
     frame.src = src;
     if (typeof onload === "function") frame.addEventListener("load", onload, { once: true });
     if (typeof onerror === "function") frame.addEventListener("error", onerror, { once: true });
-    container.innerHTML = "";
     container.appendChild(frame);
     return frame;
   };
 
   const renderTradingViewTerminal = ({ ticker, interval, onFallback = null }) => {
     if (!ui.tradingViewRoot || !ui.tradingViewAdvanced) return false;
-    const activeTicker = normalizeTicker(ticker) || getDefaultPopularTicker();
+    const activeTicker = resolveTradingViewRenderTicker(ticker);
+    if (!activeTicker) {
+      setTradingViewStatus("Select a ticker to load TradingView.");
+      return false;
+    }
     const symbol = normalizeTradingViewSymbol(activeTicker);
+    if (!symbol) {
+      setTradingViewStatus("TradingView symbol unavailable.");
+      return false;
+    }
     const theme = resolveTradingViewTheme();
-    const tvInterval = resolveTradingViewInterval(interval, state.chartRangePreset);
+    const tvInterval = resolveTradingViewInterval(interval);
     const style = resolveTradingViewStyle();
     const nonce = Date.now();
+    const renderKey = `${symbol}:${tvInterval}:${theme}:${nonce}`;
     state.tradingViewRenderNonce = nonce;
     state.tradingViewLoadFailed = false;
     if (state.tradingViewLoadTimer) {
@@ -9794,6 +10637,19 @@
     }
     ui.tradingViewFallback?.classList.add("hidden");
     setTradingViewStatus(`TradingView · ${symbol}`);
+    syncTradingViewUrlState(activeTicker, symbol);
+
+    [
+      ui.tradingViewTickerTape,
+      ui.tradingViewSymbolInfo,
+      ui.tradingViewAdvanced,
+      ui.tradingViewCompanyProfile,
+      ui.tradingViewFundamentalData,
+      ui.tradingViewTechnicalAnalysis,
+      ui.tradingViewTopStories,
+    ]
+      .filter(Boolean)
+      .forEach((container) => resetTradingViewSlot(container, { symbol, renderKey }));
 
     const shared = {
       symbol,
@@ -9820,40 +10676,60 @@
 
     mountTradingViewIframe({
       container: ui.tradingViewTickerTape,
-      src: buildTradingViewWidgetSrc("https://www.tradingview-widget.com/embed-widget/ticker-tape/?locale=en", {
-        symbols: buildTradingViewTickerTapeSymbols(activeTicker),
-        showSymbolLogo: true,
-        displayMode: "adaptive",
-        colorTheme: theme,
-        isTransparent: true,
-      }),
+      src: buildTradingViewWidgetSrc(
+        "https://www.tradingview-widget.com/embed-widget/ticker-tape/?locale=en",
+        {
+          symbols: buildTradingViewTickerTapeSymbols(activeTicker),
+          showSymbolLogo: true,
+          displayMode: "adaptive",
+          colorTheme: theme,
+          isTransparent: true,
+        },
+        { cacheKey: `${renderKey}:tape` }
+      ),
       title: `Ticker tape ${activeTicker}`,
+      renderKey: `${renderKey}:tape`,
+      symbol,
     });
 
     mountTradingViewIframe({
       container: ui.tradingViewSymbolInfo,
-      src: buildTradingViewWidgetSrc("https://www.tradingview-widget.com/embed-widget/symbol-info/?locale=en", {
-        ...shared,
-        width: "100%",
-        height: 255,
-      }),
+      src: buildTradingViewSingleSymbolWidgetSrc(
+        "https://www.tradingview-widget.com/embed-widget/symbol-info/?locale=en",
+        symbol,
+        {
+          ...shared,
+          width: "100%",
+          height: 255,
+        },
+        { cacheKey: `${renderKey}:symbol-info` }
+      ),
       title: `Symbol info ${symbol}`,
+      renderKey: `${renderKey}:symbol-info`,
+      symbol,
     });
 
     mountTradingViewIframe({
       container: ui.tradingViewAdvanced,
-      src: buildTradingViewWidgetSrc("https://www.tradingview.com/widgetembed/?hideideas=1&locale=en", {
+      src: buildTradingViewSingleSymbolWidgetSrc(
+        "https://www.tradingview.com/widgetembed/?hideideas=1&locale=en",
         symbol,
-        interval: tvInterval,
-        allow_symbol_change: "1",
-        hide_side_toolbar: "0",
-        save_image: "1",
-        style,
-        theme,
-        timezone: "Etc/UTC",
-        studies: ["STD;MACD"],
-      }),
+        {
+          symbol,
+          interval: tvInterval,
+          allow_symbol_change: "0",
+          hide_side_toolbar: "0",
+          save_image: "1",
+          style,
+          theme,
+          timezone: "Etc/UTC",
+          studies: ["STD;MACD"],
+        },
+        { cacheKey: `${renderKey}:advanced` }
+      ),
       title: `Advanced chart ${symbol}`,
+      renderKey: `${renderKey}:advanced`,
+      symbol,
       onload: () => {
         if (state.tradingViewRenderNonce !== nonce) return;
         state.tradingViewLoadFailed = false;
@@ -9871,53 +10747,82 @@
 
     mountTradingViewIframe({
       container: ui.tradingViewCompanyProfile,
-      src: buildTradingViewWidgetSrc("https://www.tradingview-widget.com/embed-widget/symbol-profile/?locale=en", {
-        ...shared,
-        width: "100%",
-        height: "100%",
-      }),
+      src: buildTradingViewSingleSymbolWidgetSrc(
+        "https://www.tradingview-widget.com/embed-widget/symbol-profile/?locale=en",
+        symbol,
+        {
+          ...shared,
+          width: "100%",
+          height: "100%",
+        },
+        { cacheKey: `${renderKey}:profile` }
+      ),
       title: `Company profile ${symbol}`,
+      renderKey: `${renderKey}:profile`,
+      symbol,
     });
 
     mountTradingViewIframe({
       container: ui.tradingViewFundamentalData,
-      src: buildTradingViewWidgetSrc("https://www.tradingview-widget.com/embed-widget/financials/?locale=en", {
+      src: buildTradingViewSingleSymbolWidgetSrc(
+        "https://www.tradingview-widget.com/embed-widget/financials/?locale=en",
         symbol,
-        colorTheme: theme,
-        isTransparent: true,
-        displayMode: "regular",
-        width: "100%",
-        height: 775,
-      }),
+        {
+          symbol,
+          colorTheme: theme,
+          isTransparent: true,
+          displayMode: "regular",
+          width: "100%",
+          height: 775,
+        },
+        { cacheKey: `${renderKey}:fundamentals` }
+      ),
       title: `Fundamentals ${symbol}`,
+      renderKey: `${renderKey}:fundamentals`,
+      symbol,
     });
 
     mountTradingViewIframe({
       container: ui.tradingViewTechnicalAnalysis,
-      src: buildTradingViewWidgetSrc("https://www.tradingview-widget.com/embed-widget/technical-analysis/?locale=en", {
-        interval: "15m",
-        width: "100%",
-        height: "100%",
-        isTransparent: true,
+      src: buildTradingViewSingleSymbolWidgetSrc(
+        "https://www.tradingview-widget.com/embed-widget/technical-analysis/?locale=en",
         symbol,
-        showIntervalTabs: true,
-        displayMode: "single",
-        colorTheme: theme,
-      }),
+        {
+          interval: "15m",
+          width: "100%",
+          height: "100%",
+          isTransparent: true,
+          symbol,
+          showIntervalTabs: true,
+          displayMode: "single",
+          colorTheme: theme,
+        },
+        { cacheKey: `${renderKey}:technical` }
+      ),
       title: `Technical analysis ${symbol}`,
+      renderKey: `${renderKey}:technical`,
+      symbol,
     });
 
     mountTradingViewIframe({
       container: ui.tradingViewTopStories,
-      src: buildTradingViewWidgetSrc("https://www.tradingview-widget.com/embed-widget/timeline/?locale=en", {
+      src: buildTradingViewSingleSymbolWidgetSrc(
+        "https://www.tradingview-widget.com/embed-widget/timeline/?locale=en",
         symbol,
-        colorTheme: theme,
-        isTransparent: true,
-        displayMode: "regular",
-        width: "100%",
-        height: 600,
-      }),
+        {
+          symbol,
+          feedMode: "symbol",
+          colorTheme: theme,
+          isTransparent: true,
+          displayMode: "regular",
+          width: "100%",
+          height: 600,
+        },
+        { cacheKey: `${renderKey}:timeline` }
+      ),
       title: `Top stories ${symbol}`,
+      renderKey: `${renderKey}:timeline`,
+      symbol,
     });
 
     state.tradingViewLoadTimer = window.setTimeout(() => {
@@ -10071,6 +10976,115 @@
     return values;
   };
 
+  const parseFoundryQuantileToken = (raw) => {
+    const trimmed = String(raw || "").trim().toLowerCase();
+    if (!trimmed) return null;
+    let percent = Number.NaN;
+    let match = trimmed.match(/^(?:p|q)(\d{1,2})$/);
+    if (match) {
+      percent = Number(match[1]);
+    } else {
+      const numeric = Number(trimmed);
+      if (!Number.isFinite(numeric)) {
+        throw new Error(`Invalid Forecast Foundry quantile: ${trimmed}`);
+      }
+      percent = numeric > 1 ? numeric : numeric * 100;
+    }
+    if (!Number.isFinite(percent) || !(percent > 0 && percent < 100)) {
+      throw new Error("Forecast Foundry quantiles must be between 0.01 and 0.99.");
+    }
+    if (Math.abs(percent - Math.round(percent)) > 1e-6) {
+      throw new Error("Forecast Foundry quantiles must use 0.01 steps such as 0.1, 0.25, 0.5, 0.75, or 0.9.");
+    }
+    return `p${Math.round(percent)}`;
+  };
+
+  const formatFoundryQuantileLabel = (value) => {
+    const numeric = Number(String(value || "").replace(/^p/i, ""));
+    if (!Number.isFinite(numeric)) return String(value || "");
+    const decimal = numeric / 100;
+    return decimal.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+  };
+
+  const parseFoundryQuantilesInput = (raw) => {
+    const parts = Array.isArray(raw) ? raw : String(raw || "").split(/[,\s]+/);
+    const values = [];
+    const seen = new Set();
+    for (const part of parts) {
+      const normalized = parseFoundryQuantileToken(part);
+      if (!normalized) continue;
+      if (seen.has(normalized)) continue;
+      seen.add(normalized);
+      values.push(normalized);
+    }
+    if (values.length < 3) {
+      throw new Error("Forecast Foundry requires at least 3 quantiles. Start with 0.1, 0.5, and 0.9.");
+    }
+    if (values.length > 5) {
+      throw new Error("Forecast Foundry supports up to 5 quantiles.");
+    }
+    if (values.length % 2 === 0) {
+      throw new Error("Forecast Foundry quantiles must use an odd count so a middle median quantile exists.");
+    }
+    if (!values.includes("p50")) {
+      throw new Error("Forecast Foundry quantiles must include 0.5.");
+    }
+    return values
+      .map((entry) => ({ entry, numeric: Number(entry.replace(/^p/i, "")) }))
+      .sort((left, right) => left.numeric - right.numeric)
+      .map((entry) => entry.entry);
+  };
+
+  const normalizeFoundryHorizonPresetKey = (raw) => {
+    const value = String(raw || "").trim().toLowerCase();
+    return FOUNDRY_HORIZON_PRESETS.some((preset) => preset.key === value) ? value : "1m";
+  };
+
+  const normalizeFoundryHorizonInterval = (raw) => {
+    const value = String(raw || "").trim().toLowerCase();
+    return value === "1h" || value === "1d" ? value : "1d";
+  };
+
+  const getFoundryHorizonPresetLabel = (presetKey) =>
+    FOUNDRY_HORIZON_PRESETS.find((preset) => preset.key === normalizeFoundryHorizonPresetKey(presetKey))?.label || "1 Month";
+
+  const getFoundryHorizonSteps = ({ presetKey = "1m", interval = "1d" } = {}) => {
+    const normalizedInterval = normalizeFoundryHorizonInterval(interval);
+    const normalizedPresetKey = normalizeFoundryHorizonPresetKey(presetKey);
+    return Number(
+      FOUNDRY_HORIZON_STEPS[normalizedInterval]?.[normalizedPresetKey] ||
+        FOUNDRY_HORIZON_STEPS["1d"][normalizedPresetKey] ||
+        FOUNDRY_HORIZON_STEPS["1d"]["1m"]
+    );
+  };
+
+  const formatFoundryHorizonSummary = ({ forecastHorizon = 0, forecastFrequency = "", interval = "" } = {}) => {
+    const intervalText = String(interval || "").trim().toLowerCase();
+    const normalizedInterval =
+      intervalText === "1h" || intervalText === "1d"
+        ? intervalText
+        : String(forecastFrequency || "").trim().toUpperCase() === "1H"
+          ? "1h"
+          : "1d";
+    const horizonSteps = Math.max(0, Math.floor(Number(forecastHorizon || 0)));
+    if (!horizonSteps) return "";
+    const exactPreset = FOUNDRY_HORIZON_PRESETS.find(
+      (preset) => getFoundryHorizonSteps({ presetKey: preset.key, interval: normalizedInterval }) === horizonSteps
+    );
+    const stepUnit =
+      normalizedInterval === "1h"
+        ? horizonSteps === 1
+          ? "trading hour"
+          : "trading hours"
+        : horizonSteps === 1
+          ? "trading day"
+          : "trading days";
+    if (exactPreset) {
+      return `${exactPreset.label} (${horizonSteps} ${stepUnit})`;
+    }
+    return `${horizonSteps} ${stepUnit}`;
+  };
+
   const setTerminalStatus = (text) => {
     if (!ui.terminalStatus) return;
     ui.terminalStatus.textContent = text || "";
@@ -10170,7 +11184,7 @@
       } else if (kind === "screener") {
         window.location.href = `/screener?runId=${encodeURIComponent(importedId)}`;
       } else if (kind === "upload") {
-        window.location.href = `/uploads?uploadId=${encodeURIComponent(importedId)}`;
+        window.location.href = `/autopilot?uploadId=${encodeURIComponent(importedId)}`;
       }
     }
     return { kind, importedId };
@@ -10199,7 +11213,7 @@
         return { kind, importedId };
       }
       if (kind === "upload") {
-        window.location.href = `/uploads?uploadId=${encodeURIComponent(importedId)}`;
+        window.location.href = `/autopilot?uploadId=${encodeURIComponent(importedId)}`;
         return { kind, importedId };
       }
 
@@ -10304,7 +11318,7 @@
   };
 
   const refreshTradingViewForTicker = (ticker) => {
-    const clean = normalizeTicker(ticker);
+    const clean = resolveTradingViewRenderTicker(ticker);
     if (!clean || !isPanelVisible("ticker")) return;
     const interval = String(ui.terminalInterval?.value || state.tickerContext.interval || "1d");
     const rendered = renderTradingViewTerminal({ ticker: clean, interval });
@@ -10330,8 +11344,9 @@
       }
     });
 
+    refreshTradingViewForTicker(clean);
+
     if (previous !== clean) {
-      refreshTradingViewForTicker(clean);
       scheduleSideDataRefresh(clean, { force: false });
       if (emitAnalytics) {
         logEvent("active_ticker_changed", { ticker: clean, source });
@@ -10353,6 +11368,10 @@
       };
       el.addEventListener("change", commitTicker);
       el.addEventListener("blur", commitTicker);
+      el.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        commitTicker();
+      });
     });
   };
 
@@ -10402,6 +11421,15 @@
     const riskAndEsg = data.riskAndEsg && typeof data.riskAndEsg === "object" ? data.riskAndEsg : {};
     const heatmap = Array.isArray(data.balanceSheetHeatmap) ? data.balanceSheetHeatmap : [];
     const peers = Array.isArray(data.peerComparison) ? data.peerComparison : [];
+    const exchangeSource =
+      String(profile.exchange || "").trim() ||
+      String(executiveSummary.exchange || "").trim() ||
+      String(profileDetails.exchange || "").trim();
+    const previousTradingViewSymbol = getCachedTradingViewSymbol(ticker);
+    const resolvedTradingViewSymbol = resolveTradingViewSymbolFromExchange(ticker, exchangeSource);
+    if (resolvedTradingViewSymbol) {
+      cacheTradingViewSymbol(ticker, resolvedTradingViewSymbol);
+    }
 
     const name = escapeHtml(profile.name || ticker || "Ticker");
     const sector = escapeHtml(profile.sector || "");
@@ -10710,6 +11738,16 @@
     if (ui.tickerIntelligenceOutput) {
       ui.tickerIntelligenceOutput.innerHTML = institutionalHtml;
     }
+
+    if (
+      ticker &&
+      ticker === getActiveTicker() &&
+      resolvedTradingViewSymbol &&
+      resolvedTradingViewSymbol !== previousTradingViewSymbol &&
+      isPanelVisible("ticker")
+    ) {
+      refreshTradingViewForTicker(ticker);
+    }
   };
 
   const formatPredictionDate = (value) => {
@@ -10829,6 +11867,8 @@
       id: String(market.id || market.marketId || market.conditionId || market.market_id || "").trim(),
       question: String(market.question || market.title || "").trim(),
       slug: String(market.slug || "").trim(),
+      groupItemTitle: String(market.groupItemTitle || market.group_item_title || market.targetLabel || "").trim(),
+      description: String(market.description || market.subtitle || "").trim(),
       endDate: String(market.endDate || market.end_date || "").trim(),
       category: String(market.category || "").trim(),
       image: String(market.image || "").trim(),
@@ -10998,24 +12038,59 @@
     };
   };
 
-  const extractPredictionTargetLabel = (question, index = 0) => {
-    const text = String(question || "").trim();
-    if (!text) return `Target ${index + 1}`;
-    const dollarMatch = text.match(/\$\s?\d+(?:\.\d+)?/);
+  const normalizePredictionTargetLabelCandidate = (value, { allowShortText = true } = {}) => {
+    const text = String(value || "").trim();
+    if (!text) return "";
+    const dollarMatch = text.match(/\$\s?-?\d+(?:\.\d+)?/);
     if (dollarMatch) {
       return dollarMatch[0].replace(/\s+/g, "");
     }
-    const thresholdMatch = text.match(/\b(?:above|below|over|under|at)\s+([0-9]+(?:\.[0-9]+)?)/i);
+    const thresholdMatch = text.match(/\b(?:above|below|over|under|at|strike)\s+\$?\s?(-?\d+(?:\.\d+)?)/i);
     if (thresholdMatch) {
       return `$${thresholdMatch[1]}`;
     }
-    return text.length <= 26 ? text : `Target ${index + 1}`;
+    const numericOnlyMatch = text.match(/^\$?\s*(-?\d+(?:\.\d+)?)$/);
+    if (numericOnlyMatch) {
+      return `$${numericOnlyMatch[1]}`;
+    }
+    if (allowShortText && text.length <= 26) {
+      return text;
+    }
+    return "";
+  };
+
+  const extractPredictionTargetLabel = (market, index = 0) => {
+    const candidateFields = [
+      market?.targetPrice,
+      market?.target,
+      market?.price,
+      market?.strike,
+      market?.threshold,
+      market?.groupItemTitle,
+      market?.question,
+      market?.description,
+    ];
+    for (const value of candidateFields) {
+      const label = normalizePredictionTargetLabelCandidate(value);
+      if (label) return label;
+    }
+    const slug = String(market?.slug || "").trim();
+    if (slug) {
+      const normalizedSlug = slug.replace(/[_-]+/g, " ");
+      const slugLabel =
+        normalizePredictionTargetLabelCandidate(normalizedSlug, { allowShortText: false }) ||
+        normalizePredictionTargetLabelCandidate(normalizedSlug, { allowShortText: true });
+      if (slugLabel) return slugLabel;
+    }
+    return `Target ${index + 1}`;
   };
 
   const parsePredictionTargetValue = (label) => {
-    const match = String(label || "").match(/-?\d+(?:\.\d+)?/);
+    const match = String(label || "")
+      .trim()
+      .match(/^\$?\s*(-?\d+(?:\.\d+)?)$/);
     if (!match) return null;
-    const parsed = Number(match[0]);
+    const parsed = Number(match[1]);
     return Number.isFinite(parsed) ? parsed : null;
   };
 
@@ -11073,7 +12148,7 @@
     (Array.isArray(event?.markets) ? event.markets : [])
       .map((market, index) => {
         const { yesProb, noProb, yesTokenId, noTokenId } = getPredictionBinaryPrices(market);
-        const targetLabel = extractPredictionTargetLabel(market.question, index);
+        const targetLabel = extractPredictionTargetLabel(market, index);
         return {
           market,
           targetLabel,
@@ -11532,44 +12607,13 @@
     }
   };
 
-  const openMarketHeadlinesInterstitial = async ({ url = "", title = "", source = "", feedLabel = "" } = {}) => {
+  const openMarketHeadlinesInterstitial = ({ url = "" } = {}) => {
     const cleanUrl = String(url || "").trim();
     if (!cleanUrl) {
       showToast("Article link unavailable for this headline.", "warn");
       return;
     }
-    if (isNativeApp()) {
-      const rewardApproved = await maybeShowNativeRewardGate({
-        reason: "market_headlines_link",
-        title: "Watch an ad before opening this article?",
-        message: "Opening publisher links from Market headlines can trigger a rewarded interstitial.",
-      });
-      if (!rewardApproved) return;
-      window.open(cleanUrl, "_blank", "noopener,noreferrer");
-      return;
-    }
-    const overlay = ensureMarketHeadlinesInterstitialOverlay();
-    marketHeadlinesInterstitialState.url = cleanUrl;
-    marketHeadlinesInterstitialState.title = String(title || "Selected article").trim();
-    marketHeadlinesInterstitialState.source = String(source || "Selected source").trim();
-    marketHeadlinesInterstitialState.feedLabel = String(feedLabel || "RSS feed").trim();
-    marketHeadlinesInterstitialState.unlockAtMs = Date.now() + 5000;
-    updateMarketHeadlinesInterstitialOverlay();
-    overlay.classList.remove("hidden");
-    overlay.setAttribute("aria-hidden", "false");
-    document.body.classList.add("prediction-interstitial-open");
-    if (marketHeadlinesInterstitialState.tickTimer) {
-      window.clearInterval(marketHeadlinesInterstitialState.tickTimer);
-    }
-    marketHeadlinesInterstitialState.tickTimer = window.setInterval(() => {
-      updateMarketHeadlinesInterstitialOverlay();
-    }, 1000);
-    if (marketHeadlinesInterstitialState.autoOpenTimer) {
-      window.clearTimeout(marketHeadlinesInterstitialState.autoOpenTimer);
-    }
-    marketHeadlinesInterstitialState.autoOpenTimer = window.setTimeout(() => {
-      finalizeMarketHeadlinesInterstitial(true);
-    }, 5000);
+    window.open(cleanUrl, "_blank", "noopener,noreferrer");
   };
 
   const fetchTickerPredictionsPayload = async ({ mode, query, includeClosed, signal }) => {
@@ -11993,6 +13037,85 @@
     }
   };
 
+  const buildNewsThumbFallbackUrl = ({ title = "", source = "" } = {}) => {
+    const sourceText = String(source || "News").trim() || "News";
+    const initials = sourceText
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part.charAt(0))
+      .join("")
+      .toUpperCase() || "N";
+    const titleText = String(title || "").trim().slice(0, 54);
+    const svg = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="176" height="176" viewBox="0 0 176 176">
+        <defs>
+          <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#0f172a" />
+            <stop offset="100%" stop-color="#1d5ed8" />
+          </linearGradient>
+        </defs>
+        <rect width="176" height="176" rx="28" fill="url(#g)" />
+        <rect x="12" y="12" width="152" height="152" rx="22" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.16)" />
+        <text x="24" y="58" fill="#f8fafc" font-family="Manrope, Arial, sans-serif" font-size="28" font-weight="700">${sourceText
+          .slice(0, 20)
+          .replace(/[&<>"]/g, "")}</text>
+        <text x="24" y="104" fill="rgba(248,250,252,0.88)" font-family="Manrope, Arial, sans-serif" font-size="50" font-weight="800">${initials}</text>
+        <text x="24" y="140" fill="rgba(248,250,252,0.82)" font-family="Manrope, Arial, sans-serif" font-size="12">${titleText
+          .replace(/[&<>"]/g, "")}</text>
+      </svg>
+    `.trim();
+    return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+  };
+
+  const buildNewsThumbnailMarkup = ({ thumbnailUrl = "", title = "", source = "" } = {}) => {
+    const fallbackUrl = buildNewsThumbFallbackUrl({ title, source });
+    const primaryUrl = String(thumbnailUrl || "").trim() || fallbackUrl;
+    const onError =
+      "if(this.dataset.fallbackSrc&&this.src!==this.dataset.fallbackSrc){this.src=this.dataset.fallbackSrc;this.classList.add('news-thumb--fallback');}else{var card=this.closest('.news-card');if(card){card.classList.remove('news-card--with-thumb');}this.remove();}";
+    return `<img class="news-thumb${primaryUrl === fallbackUrl ? " news-thumb--fallback" : ""}" src="${escapeHtml(
+      primaryUrl
+    )}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-fallback-src="${escapeHtml(
+      fallbackUrl
+    )}" onerror="${escapeHtml(onError)}" />`;
+  };
+
+  const buildTrendingLogoFallbackUrl = ({ symbol = "", companyName = "" } = {}) => {
+    const initials = String(symbol || companyName || "?")
+      .trim()
+      .replace(/[^A-Za-z0-9]/g, "")
+      .slice(0, 2)
+      .toUpperCase() || "?";
+    const label = String(companyName || symbol || "Ticker").trim().slice(0, 24).replace(/[&<>"]/g, "");
+    const svg = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 72 72">
+        <defs>
+          <linearGradient id="tg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#0f172a" />
+            <stop offset="100%" stop-color="#1d4ed8" />
+          </linearGradient>
+        </defs>
+        <rect width="72" height="72" rx="22" fill="url(#tg)" />
+        <rect x="5" y="5" width="62" height="62" rx="18" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.14)" />
+        <text x="36" y="42" text-anchor="middle" fill="#f8fafc" font-family="Manrope, Arial, sans-serif" font-size="24" font-weight="800">${initials}</text>
+        <title>${label}</title>
+      </svg>
+    `.trim();
+    return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+  };
+
+  const buildTrendingLogoMarkup = ({ symbol = "", companyName = "", logoUrl = "" } = {}) => {
+    const fallbackUrl = buildTrendingLogoFallbackUrl({ symbol, companyName });
+    const primaryUrl = normalizeTrendingLogoUrl(logoUrl) || fallbackUrl;
+    const onError =
+      "if(this.dataset.fallbackSrc&&this.src!==this.dataset.fallbackSrc){this.src=this.dataset.fallbackSrc;this.classList.add('trending-logo-img--fallback');}else{this.src=this.dataset.fallbackSrc||this.src;this.classList.add('trending-logo-img--fallback');}";
+    return `<span class="trending-logo-wrap" aria-hidden="true"><img class="trending-logo-img${
+      primaryUrl === fallbackUrl ? " trending-logo-img--fallback" : ""
+    }" src="${escapeHtml(primaryUrl)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-fallback-src="${escapeHtml(
+      fallbackUrl
+    )}" onerror="${escapeHtml(onError)}" /></span>`;
+  };
+
   const renderTickerNews = (items, ticker) => {
     if (!ui.newsOutput) return;
     const list = Array.isArray(items) ? items : [];
@@ -12017,7 +13140,7 @@
         const meta = [publisher, published].filter(Boolean).join(" · ");
         return `
           <article class="news-card${thumb ? " news-card--with-thumb" : ""}">
-            ${thumb ? `<img class="news-thumb" src="${thumb}" alt="" loading="lazy" />` : ""}
+            ${thumb ? buildNewsThumbnailMarkup({ thumbnailUrl: thumb, title: item.title || "", source: item.publisher || symbol || "News" }) : ""}
             <div class="news-body">
               <div class="news-title">${title}</div>
               <div class="news-meta small">${meta}</div>
@@ -13153,7 +14276,15 @@
           const source = escapeHtml(String(item?.sourceLabel || providerLabel).trim() || providerLabel);
           return `
             <article class="news-card${thumb ? " news-card--with-thumb" : ""}">
-              ${thumb ? `<img class="news-thumb" src="${thumb}" alt="" loading="lazy" />` : ""}
+              ${
+                thumb
+                  ? buildNewsThumbnailMarkup({
+                      thumbnailUrl: thumb,
+                      title: String(item?.title || ""),
+                      source: String(item?.sourceLabel || item?.publisher || providerLabel),
+                    })
+                  : ""
+              }
               <div class="news-body">
                 <div class="news-title">${title}</div>
                 <div class="news-meta small">${publisher}${when ? ` · ${when}` : ""} · ${source}</div>
@@ -13236,7 +14367,9 @@
       setOutputReady(ui.marketHeadlinesOutput);
       setOutputReady(ui.marketHeadlinesMeta);
       renderMarketHeadlinesFeed(payload || {});
-      if (ui.marketHeadlinesStatus) ui.marketHeadlinesStatus.textContent = `Loaded ${providerLabel} · ${feedLabel}.`;
+      const loadedProviderLabel = String(payload?.provider?.label || providerLabel).trim() || providerLabel;
+      const loadedFeedLabel = String(payload?.feed?.label || feedLabel).trim() || feedLabel;
+      if (ui.marketHeadlinesStatus) ui.marketHeadlinesStatus.textContent = `Loaded ${loadedProviderLabel} · ${loadedFeedLabel}.`;
       logEvent("market_headlines_loaded", { provider, feed, limit });
     } catch (error) {
       setOutputReady(ui.marketHeadlinesOutput);
@@ -13470,16 +14603,17 @@
     const request = typeof getMyRequestById === "function" ? getMyRequestById(id) : null;
     const published = Boolean(request?.published);
     const stateLabel = published ? "Published to Explore" : "Not published to Explore";
+    const unpublishLabel = "Remove from public Explore";
     return `
       <div class="task-chip-row" data-output-publish-controls data-request-id="${escapeHtml(id)}" data-request-type="${escapeHtml(type)}">
         <span class="status status-icon-only ${published ? "fulfilled" : "pending"}" role="img" aria-label="${escapeHtml(stateLabel)}" title="${escapeHtml(stateLabel)}">
-          ${icon(published ? "eye" : "eye-off")}
+          ${published ? icon("eye") : hidePublicationIcon()}
         </span>
         ${
           published
-            ? `<button class="task-chip" type="button" data-action="output-unpublish" data-request-id="${escapeHtml(id)}" data-request-type="${escapeHtml(type)}">${icon(
-                "eye-off"
-              )}<span>Unpublish</span></button>`
+            ? `<button class="task-chip" type="button" data-action="output-unpublish" data-request-id="${escapeHtml(id)}" data-request-type="${escapeHtml(
+                type
+              )}" aria-label="${escapeHtml(unpublishLabel)}" title="${escapeHtml(unpublishLabel)}">${hidePublicationIcon()}<span>Unpublish</span></button>`
             : `<button class="task-chip" type="button" data-action="output-publish" data-request-id="${escapeHtml(id)}" data-request-type="${escapeHtml(type)}">${icon(
                 "send"
               )}<span>Publish to Explore</span></button>`
@@ -13592,6 +14726,73 @@
     return headers;
   };
 
+  const apiRequestJson = async (path, { method = "GET", body = undefined } = {}) => {
+    const includeJson = body !== undefined && body !== null && method !== "GET" && method !== "HEAD";
+    const headers = await buildApiAuthHeaders({ includeJson });
+    const response = await fetch(path, {
+      method,
+      headers,
+      credentials: "same-origin",
+      body: includeJson ? JSON.stringify(body) : undefined,
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const message = String(payload?.detail || payload?.error || payload?.message || `Request failed (${response.status})`).trim();
+      throw new Error(message || `Request failed (${response.status})`);
+    }
+    return payload;
+  };
+
+  const buildSourceRequestId = (type, sourceId) => {
+    const normalizedType = normalizeMyRequestType(type) || "forecast";
+    const normalizedSourceId = String(sourceId || "")
+      .trim()
+      .replace(/[^A-Za-z0-9._:\-]/g, "_")
+      .slice(0, 180);
+    return `${normalizedType}__${normalizedSourceId || "item"}`;
+  };
+
+  const apiFetchTickerHistory = async ({ ticker = "", interval = "1d", start = "", end = "" } = {}) => {
+    const params = new URLSearchParams();
+    params.set("ticker", normalizeTicker(ticker));
+    params.set("interval", String(interval || "1d"));
+    if (start) params.set("start", String(start));
+    if (end) params.set("end", String(end));
+    const payload = await apiRequestJson(`/api/ticker/history?${params.toString()}`, { method: "GET" });
+    return Array.isArray(payload?.rows) ? payload.rows : [];
+  };
+
+  const apiRunForecast = async (payload = {}) => apiRequestJson("/api/forecast/run", { method: "POST", body: payload });
+
+  const apiDeleteForecast = async (forecastId) =>
+    apiRequestJson(`/api/forecast/${encodeURIComponent(String(forecastId || "").trim())}`, { method: "DELETE" });
+
+  const apiRunScreener = async (payload = {}) => apiRequestJson("/api/screener/run", { method: "POST", body: payload });
+
+  const apiGetScreenerRun = async (runId) =>
+    apiRequestJson(`/api/screener/${encodeURIComponent(String(runId || "").trim())}`, { method: "GET" });
+
+  const apiUpdateScreenerRun = async (runId, payload = {}) =>
+    apiRequestJson(`/api/screener/${encodeURIComponent(String(runId || "").trim())}`, { method: "PATCH", body: payload });
+
+  const apiDeleteScreenerRun = async (runId) =>
+    apiRequestJson(`/api/screener/${encodeURIComponent(String(runId || "").trim())}`, { method: "DELETE" });
+
+  const apiListPublicScreenerGithubRuns = async ({ limit = 12 } = {}) => {
+    const params = new URLSearchParams();
+    params.set("limit", String(Math.max(1, Math.min(60, Number(limit) || 24))));
+    return apiRequestJson(`/api/screener/github-history?${params.toString()}`, { method: "GET" });
+  };
+
+  const buildPublicScreenerArtifactDownloadUrl = (workflowRunId, artifactId) => {
+    const cleanRunId = Math.max(0, Math.floor(Number(workflowRunId) || 0));
+    const cleanArtifactId = Math.max(0, Math.floor(Number(artifactId) || 0));
+    if (!cleanRunId || !cleanArtifactId) return "";
+    return `/api/screener/github-history/${encodeURIComponent(String(cleanRunId))}/artifacts/${encodeURIComponent(
+      String(cleanArtifactId)
+    )}/download`;
+  };
+
   const normalizeFxCode = (value, fallback = "USD") => {
     const normalized = String(value || "")
       .trim()
@@ -13630,6 +14831,20 @@
       minimumFractionDigits: 0,
       maximumFractionDigits: maxDigits,
     }).format(numeric);
+  };
+
+  const formatFileSize = (value) => {
+    const bytes = Number(value);
+    if (!Number.isFinite(bytes) || bytes <= 0) return "";
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    let index = 0;
+    let size = bytes;
+    while (size >= 1024 && index < units.length - 1) {
+      size /= 1024;
+      index += 1;
+    }
+    const digits = size >= 100 || index === 0 ? 0 : size >= 10 ? 1 : 2;
+    return `${size.toFixed(digits)} ${units[index]}`;
   };
 
   const setTerminalFxStatus = (message, isError = false) => {
@@ -13911,7 +15126,7 @@
   };
 
   const renderMyRequestCards = (items = []) => {
-    if (!Array.isArray(items) || !items.length) return `<div class="small muted">No requests matched this filter.</div>`;
+    if (!Array.isArray(items) || !items.length) return "";
     return items
       .map((item) => {
         const id = escapeHtml(String(item?.id || ""));
@@ -13926,6 +15141,16 @@
         const share = item?.share && typeof item.share === "object" ? item.share : {};
         const shareVisibility = escapeHtml(String(share?.visibility || "private").toLowerCase());
         const summary = escapeHtml(String((item?.outputsMeta || {})?.summary || ""));
+        const requestStatus = escapeHtml(
+          String(item?.status || (item?.outputsMeta || {})?.status || (item?.outputsMeta || {})?.workflowStatus || "—")
+        );
+        const workflowRunUrl = escapeHtml(String(item?.workflowRunUrl || (item?.outputsMeta || {})?.workflowRunUrl || ""));
+        const workflowRunNumber = Number.isFinite(Number(item?.workflowRunNumber || (item?.outputsMeta || {})?.workflowRunNumber))
+          ? Number(item?.workflowRunNumber || (item?.outputsMeta || {})?.workflowRunNumber)
+          : null;
+        const workflowProgress = escapeHtml(
+          String(item?.workflowProgress || (item?.outputsMeta || {})?.workflowProgress || (item?.outputsMeta || {})?.workflowActiveStep || "")
+        );
         return `
           <div class="order-card" data-request-id="${id}">
             <div class="order-header">
@@ -13940,19 +15165,23 @@
             <div class="order-meta">
               <div><strong>Type</strong> ${typeLabel}</div>
               <div><strong>Ticker</strong> ${ticker}</div>
+              <div><strong>Status</strong> ${requestStatus}</div>
               <div><strong>Created</strong> ${createdAt}</div>
               <div><strong>Updated</strong> ${updatedAt}</div>
               <div><strong>Share</strong> ${shareVisibility}</div>
+              ${workflowRunNumber !== null ? `<div><strong>Workflow</strong> #${workflowRunNumber}</div>` : ""}
+              ${workflowProgress ? `<div><strong>Workflow progress</strong> ${workflowProgress}</div>` : ""}
               ${summary ? `<div><strong>Summary</strong> ${summary}</div>` : ""}
             </div>
             <div class="order-actions" style="display:flex;gap:10px;flex-wrap:wrap;">
               <button class="cta secondary small" type="button" data-action="my-request-load" data-request-id="${id}">${icon("play")}<span>Load</span></button>
+              ${workflowRunUrl ? `<a class="cta secondary small" href="${workflowRunUrl}" target="_blank" rel="noopener noreferrer">${icon("git-branch")}<span>Open workflow</span></a>` : ""}
               <button class="cta secondary small" type="button" data-action="my-request-share" data-request-id="${id}">${icon("share-ios")}<span>Share</span></button>
               <button class="cta secondary small" type="button" data-action="my-request-rename" data-request-id="${id}">${icon("edit-pencil")}<span>Rename</span></button>
               <button class="cta secondary small" type="button" data-action="my-request-duplicate" data-request-id="${id}">${icon("copy")}<span>Duplicate</span></button>
               ${
                 published
-                  ? `<button class="cta secondary small" type="button" data-action="my-request-unpublish" data-request-id="${id}">${icon("eye-off")}<span>Unpublish</span></button>`
+                  ? `<button class="cta secondary small" type="button" data-action="my-request-unpublish" data-request-id="${id}" aria-label="Remove from public Explore" title="Remove from public Explore">${hidePublicationIcon()}<span>Unpublish</span></button>`
                   : `<button class="cta secondary small" type="button" data-action="my-request-publish" data-request-id="${id}">${icon("send")}<span>Publish</span></button>`
               }
               <button class="cta secondary small danger" type="button" data-action="my-request-delete" data-request-id="${id}">${icon("trash")}<span>Delete</span></button>
@@ -14003,10 +15232,10 @@
         controls.list.innerHTML = `<div class="small muted">${skeletonHtml(3)}</div>`;
         return;
       }
-      controls.status.textContent = rows.length
-        ? `${rows.length} request${rows.length === 1 ? "" : "s"}`
-        : "No requests matched this filter.";
-      controls.list.innerHTML = renderMyRequestCards(rows.slice(0, 60));
+      controls.status.textContent = rows.length ? `${rows.length} request${rows.length === 1 ? "" : "s"}` : "";
+      controls.list.innerHTML = rows.length
+        ? renderMyRequestCards(rows.slice(0, 60))
+        : `<div class="small muted">No requests matched this filter.</div>`;
     });
   };
 
@@ -14946,8 +16175,16 @@
 	            : selectedModules,
 	        },
 	        outputsMeta: {
-	          summary: String(responsePayload.answer || "").trim().slice(0, 480),
-	          answer: String(responsePayload.answer || "").trim().slice(0, 4000),
+            ...buildModelCouncilPublishMeta({
+              symbol,
+              answer: responsePayload.answer || "",
+              provider: responsePayload.provider || selectedProvider,
+              model: responsePayload.model || selectedModel,
+              latencyMs,
+              selectedModules: responsePayload.selectedModules || selectedModules,
+            }),
+	          answer: String(responsePayload.answer || "").trim().slice(0, 12000),
+	          bodyMarkdown: String(responsePayload.answer || "").trim().slice(0, 12000),
 	          provider: responsePayload.provider || selectedProvider,
 	          model: responsePayload.model || selectedModel,
 	          latencyMs,
@@ -14986,7 +16223,7 @@
 
   const autoloadOptionsChain = async (functions, { force = false } = {}) => {
     if (!functions || !ui.optionsForm || !ui.optionsOutput) return;
-    const symbol = normalizeTicker(state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "");
+    const symbol = resolveActiveOrDefaultTicker(state.tickerContext.ticker || "");
     if (!symbol) return;
 
     const tickerInput = document.getElementById("options-ticker");
@@ -15129,12 +16366,22 @@
         const changePct = row.changePct;
         const change = row.change;
         const logoUrl = extractTrendingRowLogoUrl(row);
+        const companyName = String(row.companyName || row.name || "").trim();
 
-        const changeNum = typeof changePct === "number" ? changePct : Number(changePct);
+        const rawChangeNum = typeof changePct === "number" ? changePct : Number(changePct);
+        const absChange = typeof change === "number" ? change : Number(change);
+        const derivedChangePct =
+          Number.isFinite(absChange) && Number.isFinite(lastClose) && Math.abs(Number(lastClose) - absChange) > 1e-9
+            ? (absChange / (Number(lastClose) - absChange)) * 100
+            : null;
+        const changeNum =
+          Number.isFinite(rawChangeNum) && (Math.abs(rawChangeNum) >= 0.00005 || !Number.isFinite(derivedChangePct))
+            ? rawChangeNum
+            : derivedChangePct;
         const changeOk = Number.isFinite(changeNum);
         const direction = !changeOk ? "flat" : changeNum < 0 ? "down" : "up";
-        const changeLabel = changeOk ? formatPercent(changeNum, { signed: true, digits: 2 }) : "Quote unavailable";
-        const absChange = typeof change === "number" ? change : Number(change);
+        const changeDigits = changeOk && Math.abs(changeNum) > 0 && Math.abs(changeNum) < 0.01 ? 4 : 2;
+        const changeLabel = changeOk ? formatPercent(changeNum, { signed: true, digits: changeDigits }) : "Quote unavailable";
         const absChangeLabel = Number.isFinite(absChange) ? `${absChange > 0 ? "+" : ""}${absChange.toFixed(2)}` : "";
 
         const priceLabel = lastClose !== null && lastClose !== undefined ? formatUsd(lastClose) : "—";
@@ -15144,11 +16391,7 @@
           <button class="trending-hot-chip" type="button" data-action="pick-ticker" data-ticker="${escapeHtml(symbol)}">
             <div class="trending-top">
               <div class="trending-symbol" style="display:inline-flex; align-items:center; gap:8px;">
-                ${
-                  logoUrl
-                    ? `<img src="${escapeHtml(logoUrl)}" alt="" loading="lazy" style="width:18px; height:18px; border-radius:50%; object-fit:cover; background:rgba(255,255,255,0.9);" />`
-                    : ""
-                }
+                ${buildTrendingLogoMarkup({ symbol, companyName, logoUrl })}
                 <span>${escapeHtml(symbol)}</span>
               </div>
               <div class="trending-price">${escapeHtml(priceLabel)}</div>
@@ -15263,7 +16506,7 @@
       setTerminalChartEngineVisibility("legacy");
       return;
     }
-    const cleanTicker = normalizeTicker(ticker || state.tickerContext.ticker || "") || getDefaultPopularTicker();
+    const cleanTicker = normalizeTicker(ticker || state.tickerContext.ticker || "");
     const hasOverlays = Array.isArray(overlays) && overlays.length > 0;
     const skipTradingView = Boolean(options?.skipTradingView);
 
@@ -15313,7 +16556,7 @@
       .filter((value) => value !== null)
       .sort((a, b) => a - b);
     const hasOhlc = ["Open", "High", "Low", "Close"].every((key) => key in (rows[0] || {}));
-    const drawCandles = hasOhlc && state.chartViewMode !== "line";
+    const drawCandles = hasOhlc;
 
     const baseTraces = drawCandles
       ? [
@@ -15376,13 +16619,7 @@
           xanchor: "left",
         },
     };
-    const manualRange = computeChartRange(x, state.chartRangePreset);
-    if (manualRange && manualRange.length === 2) {
-      layout.xaxis.range = manualRange;
-      layout.xaxis.autorange = false;
-    } else {
-      layout.xaxis.autorange = true;
-    }
+    layout.xaxis.autorange = true;
 
     await Plotly.react(ui.tickerChart, [...baseTraces, ...overlays], layout, {
       responsive: true,
@@ -15517,6 +16754,214 @@
       displaylogo: false,
       scrollZoom: true,
     });
+  };
+
+  const buildIndicatorLatestMap = (latest = []) => {
+    const map = {};
+    (Array.isArray(latest) ? latest : []).forEach((entry) => {
+      const key = String(entry?.name || "").trim().toUpperCase();
+      const value = Number(entry?.value);
+      if (!key || !Number.isFinite(value)) return;
+      map[key] = value;
+    });
+    return map;
+  };
+
+  const indicatorUses = (selected = [], code = "") =>
+    (Array.isArray(selected) ? selected : []).map((item) => String(item || "").trim().toUpperCase()).includes(String(code || "").trim().toUpperCase());
+
+  const computeIndicatorHistoryContext = (rows = [], fallbackLastClose = NaN) => {
+    const series = Array.isArray(rows) ? rows : [];
+    const closes = series.map((row) => extractCloseFromHistoryRow(row)).filter((value) => Number.isFinite(value));
+    const highs = series.map((row) => Number(row?.High ?? row?.high ?? row?.Close ?? row?.close)).filter((value) => Number.isFinite(value));
+    const lows = series.map((row) => Number(row?.Low ?? row?.low ?? row?.Close ?? row?.close)).filter((value) => Number.isFinite(value));
+    const lastClose = closes.length ? closes[closes.length - 1] : Number(fallbackLastClose);
+    const recentCloses = closes.slice(-21);
+    const returns = [];
+    for (let idx = 1; idx < recentCloses.length; idx += 1) {
+      const current = recentCloses[idx];
+      const previous = recentCloses[idx - 1];
+      if (!Number.isFinite(current) || !Number.isFinite(previous) || previous <= 0) continue;
+      returns.push(Math.log(current / previous));
+    }
+    const mean = returns.length ? returns.reduce((sum, value) => sum + value, 0) / returns.length : 0;
+    const variance = returns.length
+      ? returns.reduce((sum, value) => sum + (value - mean) ** 2, 0) / returns.length
+      : 0;
+    const realizedVol20 = returns.length ? Math.sqrt(variance) : null;
+    const recentHighs = highs.slice(-20);
+    const recentLows = lows.slice(-20);
+    const recentRangePct20 =
+      Number.isFinite(lastClose) && lastClose > 0 && recentHighs.length && recentLows.length
+        ? (Math.max(...recentHighs) - Math.min(...recentLows)) / lastClose
+        : null;
+    return {
+      lastClose: Number.isFinite(lastClose) ? lastClose : null,
+      realizedVol20,
+      recentRangePct20,
+    };
+  };
+
+  const buildLocalIndicatorAnalysis = async ({ data = {}, payload = {}, functions }) => {
+    const selectedIndicators = Array.isArray(data?.selectedIndicators) && data.selectedIndicators.length
+      ? data.selectedIndicators.map((item) => String(item || "").trim().toUpperCase()).filter(Boolean)
+      : Array.isArray(payload?.indicators)
+        ? payload.indicators.map((item) => String(item || "").trim().toUpperCase()).filter(Boolean)
+        : [];
+    const latestMap = buildIndicatorLatestMap(data?.latest || []);
+    const ticker = normalizeTicker(data?.ticker || payload?.ticker || "");
+    const interval = String(data?.interval || payload?.interval || "1d").trim().toLowerCase() === "1h" ? "1h" : "1d";
+    let historyRows =
+      ticker &&
+      normalizeTicker(state.tickerContext.ticker || "") === ticker &&
+      String(state.tickerContext.interval || "1d").trim().toLowerCase() === interval &&
+      Array.isArray(state.tickerContext.rows) &&
+      state.tickerContext.rows.length
+        ? state.tickerContext.rows
+        : [];
+    if (!historyRows.length && ticker) {
+      historyRows = await loadTickerHistory(functions, ticker, interval).catch(() => []);
+    }
+    const history = computeIndicatorHistoryContext(historyRows, Number(data?.meta?.lastClose));
+    const lastClose = Number.isFinite(Number(data?.meta?.lastClose)) ? Number(data.meta.lastClose) : history.lastClose;
+    const rsi = Number(latestMap.RSI_14);
+    const macdHist = Number(latestMap.MACD_HIST);
+    const macdLine = Number(latestMap.MACD_LINE);
+    const macdSignal = Number(latestMap.MACD_SIGNAL);
+    const atr = Number(latestMap.ATR_14);
+    const adx = Number(latestMap.ADX_14);
+    const plusDi = Number(latestMap.PLUS_DI_14);
+    const minusDi = Number(latestMap.MINUS_DI_14);
+
+    let bullish = 0;
+    let bearish = 0;
+    if (indicatorUses(selectedIndicators, "RSI") && Number.isFinite(rsi)) {
+      if (rsi <= 30) bullish += 1.1;
+      else if (rsi >= 70) bearish += 1.1;
+      else if (rsi < 45) bearish += 0.45;
+      else if (rsi > 55) bullish += 0.45;
+    }
+    if (indicatorUses(selectedIndicators, "MACD") && Number.isFinite(macdHist)) {
+      const histPct = Number.isFinite(lastClose) && lastClose > 0 ? Math.abs(macdHist / lastClose) * 100 : 0;
+      const weight = Math.min(1.8, 0.9 + histPct * 8);
+      if (macdHist > 0) bullish += weight;
+      else if (macdHist < 0) bearish += weight;
+    }
+    if (indicatorUses(selectedIndicators, "ADX") && Number.isFinite(adx) && Number.isFinite(plusDi) && Number.isFinite(minusDi)) {
+      const weight = Math.min(1.2, Math.max(0.3, adx / 30));
+      if (plusDi > minusDi) bullish += weight;
+      else if (minusDi > plusDi) bearish += weight;
+    }
+
+    const total = bullish + bearish;
+    const conviction = total > 0 ? Math.min(1, Math.abs(bullish - bearish) / total) : 0;
+    const direction =
+      conviction < 0.18 ? "neutral" : bullish > bearish ? "bullish" : bearish > bullish ? "bearish" : "neutral";
+    const confidence = conviction >= 0.65 && total >= 2.2 ? "high" : conviction >= 0.32 && total >= 1.2 ? "medium" : "low";
+    const trendSelected = ["EMA", "SMA", "ADX", "BBANDS"].filter((code) => indicatorUses(selectedIndicators, code)).length;
+    const oscillatorSelected = ["RSI", "MACD", "CCI", "MFI", "STOCH", "WILLR", "ROC"].filter((code) => indicatorUses(selectedIndicators, code)).length;
+    let timelineDays = interval === "1h" ? 4 : 9;
+    if (trendSelected > oscillatorSelected) timelineDays += interval === "1h" ? 2 : 4;
+    if (oscillatorSelected > trendSelected) timelineDays -= interval === "1h" ? 1 : 1;
+    if (conviction >= 0.7) timelineDays += interval === "1h" ? 1 : 3;
+    if (conviction <= 0.25) timelineDays -= interval === "1h" ? 1 : 2;
+    timelineDays = Math.max(interval === "1h" ? 1 : 3, Math.min(interval === "1h" ? 10 : 30, Math.round(timelineDays)));
+
+    const atrPct = Number.isFinite(atr) && Number.isFinite(lastClose) && lastClose > 0 ? atr / lastClose : 0;
+    const realizedVol = Number.isFinite(history.realizedVol20) ? Number(history.realizedVol20) : 0;
+    const recentRangePct = Number.isFinite(history.recentRangePct20) ? Number(history.recentRangePct20) : 0;
+    const perStepVolPct = Math.max(atrPct, realizedVol * 1.35, recentRangePct > 0 ? recentRangePct / 10 : 0, interval === "1h" ? 0.0035 : 0.006);
+    const projectedMovePct = Math.max(
+      interval === "1h" ? 0.003 : 0.005,
+      Math.min(interval === "1h" ? 0.12 : 0.2, perStepVolPct * Math.sqrt(Math.max(1, timelineDays)) * (0.9 + conviction * 0.9))
+    );
+    const signedMove =
+      direction === "bullish" ? projectedMovePct : direction === "bearish" ? -projectedMovePct : 0;
+    const targetPrice = Number.isFinite(lastClose) && lastClose > 0 ? Number((lastClose * (1 + signedMove)).toFixed(2)) : null;
+
+    const keySignals = [];
+    if (indicatorUses(selectedIndicators, "RSI") && Number.isFinite(rsi)) {
+      keySignals.push(
+        `RSI(14) ${rsi.toFixed(2)} ${
+          rsi <= 30
+            ? "is oversold and can support a reflex bounce if momentum stabilizes."
+            : rsi >= 70
+              ? "is overbought and vulnerable to mean reversion."
+              : rsi >= 55
+                ? "leans bullish."
+                : rsi <= 45
+                  ? "leans bearish."
+                  : "is neutral."
+        }`
+      );
+    }
+    if (indicatorUses(selectedIndicators, "MACD") && Number.isFinite(macdHist)) {
+      keySignals.push(
+        `MACD histogram ${macdHist.toFixed(4)} while MACD line ${Number.isFinite(macdLine) ? macdLine.toFixed(4) : "—"} vs signal ${
+          Number.isFinite(macdSignal) ? macdSignal.toFixed(4) : "—"
+        } means ${macdHist > 0 ? "momentum is improving above the signal line." : macdHist < 0 ? "momentum remains below the signal line." : "momentum is flat."}`
+      );
+    }
+    if (indicatorUses(selectedIndicators, "ATR") && Number.isFinite(atr)) {
+      keySignals.push(
+        `ATR(14) is ${atr.toFixed(2)}${atrPct > 0 ? `, about ${(atrPct * 100).toFixed(2)}% of price` : ""}, which frames the current swing size.`
+      );
+    }
+    if (indicatorUses(selectedIndicators, "ADX") && Number.isFinite(adx)) {
+      keySignals.push(
+        `ADX(14) is ${adx.toFixed(2)}${
+          Number.isFinite(plusDi) && Number.isFinite(minusDi)
+            ? plusDi > minusDi
+              ? " with +DI above -DI"
+              : minusDi > plusDi
+                ? " with -DI above +DI"
+                : " with DI lines balanced"
+            : ""
+        }, so trend strength is ${adx >= 25 ? "confirmed." : "modest."}`
+      );
+    }
+    if (keySignals.length < 3) {
+      keySignals.push(
+        `Recent price context shows ${
+          Number.isFinite(history.realizedVol20) ? `${(Number(history.realizedVol20) * 100).toFixed(2)}%` : "n/a"
+        } realized 20-bar volatility${
+          Number.isFinite(history.recentRangePct20) ? ` and a ${(Number(history.recentRangePct20) * 100).toFixed(2)}% 20-bar high-low range` : ""
+        }.`
+      );
+    }
+
+    const summary = `Computed ${Array.isArray(data?.latest) ? data.latest.length : 0} indicator values for ${ticker || "the active ticker"}. Selected indicators lean ${direction}, with a ${timelineDays}-day tactical horizon.`;
+    const prediction = {
+      direction,
+      targetPrice,
+      timeline: `${timelineDays} trading days`,
+      timelineDays,
+      confidence,
+    };
+    const text = [
+      `Setup: ${summary}`,
+      Number.isFinite(lastClose) ? `As of ${String(data?.meta?.asOf || new Date().toISOString())}, last close was $${Number(lastClose).toFixed(2)} on the ${interval} interval.` : "",
+      "Signal stack:",
+      ...keySignals.slice(0, 6).map((item) => `- ${item}`),
+      `Path: ${direction} bias toward ${Number.isFinite(targetPrice) ? `$${Number(targetPrice).toFixed(2)}` : "the current price area"} over ${timelineDays} trading days with ${confidence} confidence.`,
+      direction === "bullish"
+        ? "Risk frame: bullish conviction weakens if momentum rolls over or price loses short-term trend support."
+        : direction === "bearish"
+          ? "Risk frame: bearish conviction weakens if momentum turns up or price reclaims short-term trend support."
+          : "Risk frame: signals are mixed, so avoid over-weighting any single indicator reading.",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    return {
+      summary,
+      keySignals: keySignals.slice(0, 6),
+      prediction,
+      text,
+      provider: String(data?.analysis?.provider || "quantura"),
+      model: String(data?.analysis?.model || "indicator_local_repair"),
+      disclaimer: String(data?.analysis?.disclaimer || MODEL_COUNCIL_OUTPUT_DISCLAIMER),
+    };
   };
 
   const parseCsvTable = (csvText, { maxRows = 5000 } = {}) => {
@@ -15713,6 +17158,74 @@
       return headers.findIndex((header) => targets.has(String(header || "").trim().toLowerCase()));
     };
 
+    const idxItemId = findIndex("item_id", "itemid", "ticker", "symbol");
+    const idxTimestamp = findIndex("timestamp", "datetime", "date", "time");
+    const idxClosingPrice = findIndex("closing_price", "closingprice", "close", "price");
+    if (idxItemId >= 0 && idxTimestamp >= 0 && idxClosingPrice >= 0) {
+      const normalizedRows = rows
+        .map((row) => {
+          const timestamp = String(row[idxTimestamp] ?? "").trim();
+          const itemId = normalizeTicker(row[idxItemId] ?? ticker);
+          const dt = parseDateCell(timestamp);
+          return {
+            itemId,
+            timestamp,
+            ts: dt ? dt.getTime() : Number.NaN,
+            closingPrice: row[idxClosingPrice],
+          };
+        })
+        .filter((row) => row.itemId && row.timestamp);
+
+      if (!normalizedRows.length) {
+        ui.downloadPreview.innerHTML = `<div class="small muted">No rows available for preview.</div>`;
+        return;
+      }
+
+      normalizedRows.sort((a, b) => {
+        const aFinite = Number.isFinite(a.ts);
+        const bFinite = Number.isFinite(b.ts);
+        if (aFinite && bFinite) return b.ts - a.ts;
+        if (aFinite) return -1;
+        if (bFinite) return 1;
+        return String(b.timestamp).localeCompare(String(a.timestamp));
+      });
+
+      const previewRows = normalizedRows.slice(0, Math.max(1, maxRows));
+      const priceDigits = resolveDownloadPriceDigits(
+        ticker || previewRows[0]?.itemId || normalizedRows[0]?.itemId || ""
+      );
+      ui.downloadPreview.innerHTML = `
+        <div class="small muted" style="margin-bottom:10px;">
+          Showing newest ${previewRows.length} of ${normalizedRows.length.toLocaleString()} canonical row(s).
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>item_id</th>
+                <th>timestamp</th>
+                <th>closing_price</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${previewRows
+                .map(
+                  (row) => `
+                    <tr>
+                      <td>${escapeHtml(row.itemId)}</td>
+                      <td>${escapeHtml(row.timestamp)}</td>
+                      <td>${escapeHtml(formatDownloadPriceValue(row.closingPrice, priceDigits))}</td>
+                    </tr>
+                  `
+                )
+                .join("")}
+            </tbody>
+          </table>
+        </div>
+      `;
+      return;
+    }
+
     const idxDate = findIndex("date", "datetime");
     const idxClose = findIndex("price", "close");
     const idxOpen = findIndex("open");
@@ -15805,6 +17318,10 @@
       const parsed = new Date(`${text}T12:00:00`);
       return Number.isFinite(parsed.getTime()) ? parsed : null;
     }
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(text)) {
+      const parsed = new Date(text.replace(" ", "T") + "Z");
+      return Number.isFinite(parsed.getTime()) ? parsed : null;
+    }
     const parsed = new Date(text);
     return Number.isFinite(parsed.getTime()) ? parsed : null;
   };
@@ -15874,13 +17391,11 @@
   };
 
   const fetchTickerHighNearDate = async (functions, ticker, ymd) => {
-    const getHistory = functions.httpsCallable("get_ticker_history");
     const targetDate = parseDateCell(ymd);
     if (!targetDate) throw new Error("Unable to parse target date for price lookup.");
     const start = shiftYmd(ymd, -5);
     const end = shiftYmd(ymd, 6);
-    const result = await getHistory({ ticker, interval: "1d", start, end, meta: buildMeta() });
-    const rows = Array.isArray(result.data?.rows) ? result.data.rows : [];
+    const rows = await apiFetchTickerHistory({ ticker, interval: "1d", start, end });
     if (!rows.length) throw new Error("No price rows found near the selected weekday.");
 
     const targetYmd = dateToYmd(targetDate);
@@ -16109,6 +17624,311 @@
     return mappingResult;
   };
 
+  const computePredictionOptionsEnvelope = (table) => {
+    const headers = Array.isArray(table?.headers) ? table.headers : [];
+    const rows = Array.isArray(table?.rows) ? table.rows : [];
+    const norm = (h) => String(h || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const dateCandidates = new Set(["date", "ds", "datetime", "timestamp", "time"]);
+    const dateIndex = headers.findIndex((h) => dateCandidates.has(norm(h)));
+    if (dateIndex < 0) throw new Error("Could not find a date column in this CSV.");
+
+    const quantileCols = extractQuantileColumns(headers);
+    if (!quantileCols.length) throw new Error("No quantile columns were detected.");
+    const quantilesForRow = (row) =>
+      quantileCols
+        .map((col) => ({ ...col, value: numericCell(row, col.idx) }))
+        .filter((item) => Number.isFinite(item.value));
+
+    const rowsWithDate = rows
+      .map((row, idx) => {
+        const dt = parseDateCell(row?.[dateIndex]);
+        return {
+          idx,
+          row,
+          date: dt,
+          ymd: dt ? dateToYmd(dt) : "",
+          isWeekday: dt ? isWeekday(dt) : false,
+        };
+      })
+      .filter((item) => item.date);
+
+    if (!rowsWithDate.length) throw new Error("No valid dated rows were found in this CSV.");
+
+    const weekdayRows = rowsWithDate.filter((item) => item.isWeekday);
+    const lastUse =
+      [...weekdayRows].reverse().find((item) => quantilesForRow(item.row).length > 0) ||
+      [...rowsWithDate].reverse().find((item) => quantilesForRow(item.row).length > 0);
+    if (!lastUse) throw new Error("Could not find a valid business-day row with quantile values.");
+
+    const lastQuantiles = quantilesForRow(lastUse.row);
+    if (!lastQuantiles.length) throw new Error("The last business-day row is missing quantile values.");
+
+    const nearest = (target) =>
+      lastQuantiles.reduce((best, item) =>
+        Math.abs(item.q - target) < Math.abs(best.q - target) ? item : best
+      , lastQuantiles[0]);
+
+    return {
+      lastWeekdayDate: lastUse.ymd,
+      rowIndex: lastUse.idx,
+      lower: nearest(0.1),
+      median: nearest(0.5),
+      upper: nearest(0.9),
+    };
+  };
+
+  const pickNearestExpiration = (expirations, targetYmd) => {
+    const list = Array.isArray(expirations) ? expirations.map((item) => String(item || "").trim()).filter(Boolean) : [];
+    if (!list.length) return "";
+    const target = parseDateCell(targetYmd) || new Date();
+    const targetTs = target.getTime();
+    const parsed = list
+      .map((value) => ({ value, dt: parseDateCell(value) }))
+      .filter((item) => item.dt);
+    if (!parsed.length) return list[0];
+    const future = parsed.filter((item) => item.dt.getTime() >= targetTs);
+    const pool = future.length ? future : parsed;
+    pool.sort((a, b) => {
+      const da = Math.abs(a.dt.getTime() - targetTs);
+      const db = Math.abs(b.dt.getTime() - targetTs);
+      if (da !== db) return da - db;
+      return a.dt.getTime() - b.dt.getTime();
+    });
+    return pool[0]?.value || list[0];
+  };
+
+  const chooseOptionEntryQuote = (option) => {
+    const ask = Number(option?.ask);
+    const mid = Number(option?.mid);
+    const lastPrice = Number(option?.lastPrice);
+    const bid = Number(option?.bid);
+    if (Number.isFinite(ask) && ask > 0) return { premium: ask, basis: "ask" };
+    if (Number.isFinite(mid) && mid > 0) return { premium: mid, basis: "mid" };
+    if (Number.isFinite(lastPrice) && lastPrice > 0) return { premium: lastPrice, basis: "last" };
+    if (Number.isFinite(bid) && bid > 0) return { premium: bid, basis: "bid" };
+    return { premium: null, basis: "unavailable" };
+  };
+
+  const selectOptionForForecastTarget = (rows, kind, targetPrice) => {
+    const sorted = (Array.isArray(rows) ? rows : [])
+      .map((item) => {
+        const strike = Number(item?.strike);
+        if (!Number.isFinite(strike)) return null;
+        return {
+          ...item,
+          strike,
+          mid:
+            Number.isFinite(Number(item?.mid))
+              ? Number(item.mid)
+              : Number.isFinite(Number(item?.bid)) && Number.isFinite(Number(item?.ask))
+                ? (Number(item.bid) + Number(item.ask)) / 2
+                : null,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.strike - b.strike);
+    if (!sorted.length || !Number.isFinite(Number(targetPrice))) return null;
+    if (kind === "call") {
+      return sorted.find((item) => item.strike >= Number(targetPrice)) || sorted[sorted.length - 1];
+    }
+    return [...sorted].reverse().find((item) => item.strike <= Number(targetPrice)) || sorted[0];
+  };
+
+  const simulateLongOptionOutcome = ({ kind, strike, scenarioPrice, entryCost }) => {
+    const underlying = Number(scenarioPrice);
+    const strikeNum = Number(strike);
+    const premiumPaid = Number(entryCost);
+    if (!Number.isFinite(underlying) || !Number.isFinite(strikeNum)) {
+      return { payoff: null, pnl: null, returnPct: null, intrinsic: null };
+    }
+    const intrinsic = kind === "call" ? Math.max(underlying - strikeNum, 0) : Math.max(strikeNum - underlying, 0);
+    const payoff = intrinsic * 100;
+    const pnl = Number.isFinite(premiumPaid) ? payoff - premiumPaid : null;
+    const returnPct = Number.isFinite(premiumPaid) && premiumPaid > 0 && Number.isFinite(pnl) ? (pnl / premiumPaid) * 100 : null;
+    return { payoff, pnl, returnPct, intrinsic };
+  };
+
+  const removePredictionOptionsSupplement = () => {
+    ui.predictionsAgentOutput?.querySelectorAll("[data-prediction-options-supplement]").forEach((node) => node.remove());
+  };
+
+  const renderPredictionOptionCandidate = (title, candidate, targetLabel) => {
+    if (!candidate) {
+      return `
+        <div class="small muted" style="margin-top:10px;">${escapeHtml(title)}: no listed contract matched ${escapeHtml(targetLabel)}.</div>
+      `;
+    }
+    const entry = chooseOptionEntryQuote(candidate);
+    const entryCost = Number.isFinite(entry.premium) ? entry.premium * 100 : null;
+    const strike = Number(candidate.strike);
+    const breakEven =
+      Number.isFinite(strike) && Number.isFinite(entry.premium)
+        ? candidate.kind === "call" ? strike + entry.premium : strike - entry.premium
+        : null;
+    const fmtMoney = (value) => (Number.isFinite(Number(value)) ? formatUsd(Number(value), 2) : "—");
+    const fmtPct = (value) => (Number.isFinite(Number(value)) ? `${Number(value).toFixed(2)}%` : "—");
+    const fmtPlain = (value, digits = 2) => (Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : "—");
+    return `
+      <div style="margin-top:14px;">
+        <div class="small"><strong>${escapeHtml(title)}</strong></div>
+        <div class="table-wrap" style="margin-top:8px;">
+          <table class="data-table">
+            <tbody>
+              <tr><th>Contract</th><td>${escapeHtml(String(candidate.contractSymbol || "—"))}</td></tr>
+              <tr><th>Expiration</th><td>${escapeHtml(String(candidate.expiration || "—"))}</td></tr>
+              <tr><th>Target rule</th><td>${escapeHtml(targetLabel)} (${fmtMoney(candidate.targetPrice)})</td></tr>
+              <tr><th>Strike</th><td>${fmtMoney(candidate.strike)}</td></tr>
+              <tr><th>Last</th><td>${fmtMoney(candidate.lastPrice)}</td></tr>
+              <tr><th>Bid</th><td>${fmtMoney(candidate.bid)}</td></tr>
+              <tr><th>Ask</th><td>${fmtMoney(candidate.ask)}</td></tr>
+              <tr><th>Mid</th><td>${fmtMoney(candidate.mid)}</td></tr>
+              <tr><th>Entry basis</th><td>${escapeHtml(entry.basis)}</td></tr>
+              <tr><th>Estimated cost (1 contract)</th><td>${fmtMoney(entryCost)}</td></tr>
+              <tr><th>Break-even</th><td>${fmtMoney(breakEven)}</td></tr>
+              <tr><th>IV</th><td>${Number.isFinite(Number(candidate.impliedVolatility)) ? fmtPct(Number(candidate.impliedVolatility) * 100) : "—"}</td></tr>
+              <tr><th>Delta</th><td>${fmtPlain(candidate.delta, 3)}</td></tr>
+              <tr><th>Prob ITM</th><td>${fmtPct(candidate.probabilityITM)}</td></tr>
+              <tr><th>Volume</th><td>${Number.isFinite(Number(candidate.volume)) ? Number(candidate.volume).toLocaleString() : "—"}</td></tr>
+              <tr><th>Open interest</th><td>${Number.isFinite(Number(candidate.openInterest)) ? Number(candidate.openInterest).toLocaleString() : "—"}</td></tr>
+              <tr><th>ITM now</th><td>${candidate.inTheMoney === true ? "Yes" : candidate.inTheMoney === false ? "No" : "—"}</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  };
+
+  const renderPredictionOptionSimulationTable = (scenarios) => {
+    const fmtMoney = (value) => (Number.isFinite(Number(value)) ? formatUsd(Number(value), 2) : "—");
+    const fmtPct = (value) => (Number.isFinite(Number(value)) ? `${Number(value).toFixed(2)}%` : "—");
+    return `
+      <div style="margin-top:14px;">
+        <div class="small"><strong>Simulated Expiry Returns (Default: 1 Contract)</strong></div>
+        <div class="table-wrap" style="margin-top:8px;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Scenario</th>
+                <th>Underlying</th>
+                <th>Call payoff</th>
+                <th>Call P/L</th>
+                <th>Call return</th>
+                <th>Put payoff</th>
+                <th>Put P/L</th>
+                <th>Put return</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${scenarios
+                .map(
+                  (scenario) => `
+                    <tr>
+                      <td>${escapeHtml(String(scenario.label || ""))}</td>
+                      <td>${fmtMoney(scenario.price)}</td>
+                      <td>${fmtMoney(scenario.call?.payoff)}</td>
+                      <td>${fmtMoney(scenario.call?.pnl)}</td>
+                      <td>${fmtPct(scenario.call?.returnPct)}</td>
+                      <td>${fmtMoney(scenario.put?.payoff)}</td>
+                      <td>${fmtMoney(scenario.put?.pnl)}</td>
+                      <td>${fmtPct(scenario.put?.returnPct)}</td>
+                    </tr>
+                  `
+                )
+                .join("")}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  };
+
+  const appendPredictionOptionsSupplement = async (functions, { ticker, envelope, sourceLabel = "Prediction options analysis" } = {}) => {
+    if (!functions || !ui.predictionsAgentOutput) return null;
+    const cleanTicker = normalizeTicker(ticker || "");
+    if (!cleanTicker || !envelope) return null;
+
+    removePredictionOptionsSupplement();
+    const getOptions = functions.httpsCallable("get_options_chain");
+    const seed = await getOptions({ ticker: cleanTicker, expiration: "", limit: 120, meta: buildMeta() });
+    const seedData = seed?.data || {};
+    const expirations = Array.isArray(seedData.expirations) ? seedData.expirations : [];
+    if (!expirations.length) throw new Error(`No listed options expirations were returned for ${cleanTicker}.`);
+
+    const selectedExpiration = pickNearestExpiration(expirations, envelope.lastWeekdayDate || "") || String(seedData.selectedExpiration || "");
+    const chainResponse =
+      selectedExpiration && selectedExpiration !== String(seedData.selectedExpiration || "")
+        ? await getOptions({ ticker: cleanTicker, expiration: selectedExpiration, limit: 200, meta: buildMeta() })
+        : seed;
+    const chain = chainResponse?.data || {};
+    const calls = Array.isArray(chain.calls) ? chain.calls : [];
+    const puts = Array.isArray(chain.puts) ? chain.puts : [];
+    const callCandidate = selectOptionForForecastTarget(calls, "call", envelope.upper?.value);
+    const putCandidate = selectOptionForForecastTarget(puts, "put", envelope.lower?.value);
+    if (callCandidate) {
+      callCandidate.kind = "call";
+      callCandidate.expiration = selectedExpiration || chain.selectedExpiration || "";
+      callCandidate.targetPrice = envelope.upper?.value;
+    }
+    if (putCandidate) {
+      putCandidate.kind = "put";
+      putCandidate.expiration = selectedExpiration || chain.selectedExpiration || "";
+      putCandidate.targetPrice = envelope.lower?.value;
+    }
+    const callEntry = callCandidate ? chooseOptionEntryQuote(callCandidate) : { premium: null, basis: "unavailable" };
+    const putEntry = putCandidate ? chooseOptionEntryQuote(putCandidate) : { premium: null, basis: "unavailable" };
+    const scenarios = [
+      { label: String(envelope.lower?.label || "Lower"), price: envelope.lower?.value },
+      { label: String(envelope.median?.label || "Median"), price: envelope.median?.value },
+      { label: String(envelope.upper?.label || "Upper"), price: envelope.upper?.value },
+    ].filter((item, index, list) => Number.isFinite(Number(item.price)) && list.findIndex((other) => other.label === item.label) === index)
+      .map((item) => ({
+        ...item,
+        call: callCandidate
+          ? simulateLongOptionOutcome({
+              kind: "call",
+              strike: callCandidate.strike,
+              scenarioPrice: item.price,
+              entryCost: Number.isFinite(callEntry.premium) ? callEntry.premium * 100 : null,
+            })
+          : null,
+        put: putCandidate
+          ? simulateLongOptionOutcome({
+              kind: "put",
+              strike: putCandidate.strike,
+              scenarioPrice: item.price,
+              entryCost: Number.isFinite(putEntry.premium) ? putEntry.premium * 100 : null,
+            })
+          : null,
+      }));
+
+    const supplement = document.createElement("div");
+    supplement.dataset.predictionOptionsSupplement = "1";
+    supplement.className = "small";
+    supplement.innerHTML = `
+      <div class="notice" style="margin-top:14px;">
+        <div><strong>${escapeHtml(sourceLabel)}</strong></div>
+        <div class="small" style="margin-top:6px;">
+          Expiry near forecast end: <strong>${escapeHtml(selectedExpiration || String(chain.selectedExpiration || "Auto"))}</strong>
+          · Upper rule: strike at or above <strong>${escapeHtml(String(envelope.upper?.label || "P90").toUpperCase())}</strong>
+          · Lower rule: strike at or below <strong>${escapeHtml(String(envelope.lower?.label || "P10").toUpperCase())}</strong>
+        </div>
+      </div>
+      ${renderPredictionOptionCandidate("Upper-Bound Call Candidate", callCandidate, String(envelope.upper?.label || "P90").toUpperCase())}
+      ${renderPredictionOptionCandidate("Lower-Bound Put Candidate", putCandidate, String(envelope.lower?.label || "P10").toUpperCase())}
+      ${scenarios.length ? renderPredictionOptionSimulationTable(scenarios) : ""}
+      <div class="small muted" style="margin-top:10px;">
+        Simulations assume a long option held through expiry, using the quoted ask/mid/last/bid fallback in that order and one contract by default.
+      </div>
+    `;
+    ui.predictionsAgentOutput.appendChild(supplement);
+    return {
+      selectedExpiration,
+      callCandidate,
+      putCandidate,
+      scenarios,
+    };
+  };
+
   const inferCsvAxes = (table) => {
     const headers = table?.headers || [];
     const rows = table?.rows || [];
@@ -16223,37 +18043,36 @@
     await Plotly.react(ui.predictionsChart, traces, layout, { responsive: true, displaylogo: false });
   };
 
-  const resolveUploadCsvUrl = async (storage, uploadDoc) => {
-    if (storage && uploadDoc?.filePath) {
-      try {
-        return await storage.ref().child(String(uploadDoc.filePath)).getDownloadURL();
-      } catch (error) {
-        // Fall back.
-      }
+  const resolveUploadCsvUrl = async (_storage, uploadDoc) => {
+    const existingUrl = String(uploadDoc?.fileUrl || uploadDoc?.downloadUrl || "").trim();
+    if (existingUrl) {
+      return existingUrl;
     }
-    return String(uploadDoc?.fileUrl || "").trim();
+    return "";
   };
 
   const fetchUploadCsvText = async ({ uploadId, url, maxBytes = 2_000_000 }) => {
-    if (!url) throw new Error("Upload is missing a downloadable URL.");
-    try {
-      const resp = await fetch(url, { cache: "no-store" });
-      if (!resp.ok) throw new Error("Unable to download CSV.");
-      const text = await resp.text();
-      return { text, truncated: false, source: "direct" };
-    } catch (error) {
-      const functions = state.clients?.functions;
-      if (!functions) throw error;
-      const callable = functions.httpsCallable("get_prediction_upload_csv");
-      const result = await callable({ uploadId, maxBytes, meta: buildMeta() });
-      const text = String(result.data?.csv || "");
-      if (!text) throw new Error("Unable to download CSV.");
-      return {
-        text,
-        truncated: Boolean(result.data?.truncated),
-        source: "function",
-      };
+    const functions = state.clients?.functions;
+    if (url) {
+      try {
+        const resp = await fetch(url, { cache: "no-store" });
+        if (!resp.ok) throw new Error("Unable to download CSV.");
+        const text = await resp.text();
+        return { text, truncated: false, source: "direct" };
+      } catch (error) {
+        if (!functions) throw error;
+      }
     }
+    if (!functions) throw new Error("Upload is missing a downloadable URL.");
+    const callable = functions.httpsCallable("get_prediction_upload_csv");
+    const result = await callable({ uploadId, maxBytes, meta: buildMeta() });
+    const text = String(result.data?.csv || "");
+    if (!text) throw new Error("Unable to download CSV.");
+    return {
+      text,
+      truncated: Boolean(result.data?.truncated),
+      source: "function",
+    };
   };
 
   const plotPredictionUploadById = async (db, storage, uploadId) => {
@@ -16284,6 +18103,7 @@
     ui.predictionsPlotMeta.textContent = `${doc.title || "predictions.csv"} · ${table.rows.length.toLocaleString()} rows · ${table.headers.length} cols${
       truncated ? " · truncated" : ""
     }`;
+    removePredictionOptionsSupplement();
     if (ui.predictionsAgentOutput) {
       ui.predictionsAgentOutput.innerHTML =
         "Run the OpenAI CSV Agent to compute weekday-aware quantile mapping and return an analyst summary.";
@@ -16305,6 +18125,705 @@
       }
     }
     logEvent("predictions_plotted", { upload_id: cleanId, source });
+  };
+
+  const callFoundryApi = async (method, path, body = null) => {
+    const headers = await buildApiAuthHeaders({ includeJson: method !== "GET" });
+    const response = await fetch(path, {
+      method,
+      headers,
+      credentials: "same-origin",
+      body: method === "GET" ? undefined : JSON.stringify(body || {}),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const detail = String(payload?.detail || payload?.error || "Forecast Foundry request failed.").trim();
+      const error = new Error(detail);
+      error.status = response.status;
+      error.payload = payload;
+      throw error;
+    }
+    return payload;
+  };
+
+  const setFoundryStatus = (message, variant = "") => {
+    if (!ui.autopilotStatus) return;
+    ui.autopilotStatus.textContent = String(message || "");
+    ui.autopilotStatus.dataset.variant = String(variant || "").trim();
+  };
+
+  const syncFoundryDateDefaults = ({ force = false } = {}) => {
+    const useAllHistory = Boolean(ui.foundryUseAllHistory?.checked);
+    const today = new Date();
+    const endValue = today.toISOString().slice(0, 10);
+    const startDate = new Date(today);
+    startDate.setFullYear(startDate.getFullYear() - 5);
+    const startValue = startDate.toISOString().slice(0, 10);
+    if (ui.foundryEnd && (force || !String(ui.foundryEnd.value || "").trim())) {
+      ui.foundryEnd.value = endValue;
+    }
+    if (ui.foundryStart) {
+      ui.foundryStart.disabled = useAllHistory;
+      if (useAllHistory) {
+        ui.foundryStart.value = "";
+      } else if (force || !String(ui.foundryStart.value || "").trim()) {
+        ui.foundryStart.value = startValue;
+      }
+    }
+  };
+
+  const syncFoundrySourceFields = () => {
+    const sourceKind = String(ui.foundrySourceKind?.value || "history").trim();
+    const historyMode = sourceKind === "history";
+    const fileMode = sourceKind === "historical_csv" || sourceKind === "prediction_csv";
+    const predictionMode = sourceKind === "prediction_csv";
+    ui.foundryHistoryFields?.classList.toggle("hidden", !historyMode);
+    ui.foundryFileField?.classList.toggle("hidden", !fileMode);
+    ui.foundryUploadActions?.classList.toggle("hidden", !predictionMode);
+    ui.foundryAutopilotControls?.classList.toggle("hidden", predictionMode);
+    ui.foundryPrimaryActions?.classList.toggle("hidden", predictionMode);
+    if (historyMode) syncFoundryDateDefaults();
+    updateFoundryInstanceLimitUi();
+  };
+
+  const getFoundryRequestId = (run) => String(run?.exploreRequestId || "").trim();
+
+  const updateFoundryRunInState = (run) => {
+    if (!run || typeof run !== "object") return;
+    const next = Array.isArray(state.foundryContext.runs) ? state.foundryContext.runs.slice() : [];
+    const idx = next.findIndex((item) => String(item?.id || "").trim() === String(run.id || "").trim());
+    if (idx >= 0) next[idx] = run;
+    else next.unshift(run);
+    state.foundryContext.runs = next;
+  };
+
+  const isFoundryRunActive = (run) => {
+    const status = String(run?.status || "").trim().toLowerCase();
+    return status === "queued" || status === "running" || status === "transforming";
+  };
+
+  const countActiveFoundryRuns = (runs = []) =>
+    (Array.isArray(runs) ? runs : []).filter((item) => isFoundryRunActive(item)).length;
+
+  const canAnalyzeFoundryRun = (run) => {
+    if (!run || typeof run !== "object") return false;
+    const sourceType = String(run?.sourceType || "").trim();
+    const status = String(run?.status || "").trim().toLowerCase();
+    const files = run?.files && typeof run.files === "object" ? run.files : {};
+    const analysis = run?.analysis && typeof run.analysis === "object" ? run.analysis : {};
+    if (sourceType === "prediction_csv") return true;
+    if (status === "completed") return true;
+    if (files?.predictionsCsv && typeof files.predictionsCsv === "object") return true;
+    return Boolean(String(analysis?.markdown || analysis?.summary || "").trim());
+  };
+
+  const updateFoundryInstanceLimitUi = () => {
+    const maxConcurrentRuns = Number(state.foundryContext.maxConcurrentRuns || FOUNDRY_MAX_CONCURRENT_INSTANCES) || FOUNDRY_MAX_CONCURRENT_INSTANCES;
+    const activeConcurrentRuns = countActiveFoundryRuns(state.foundryContext.runs || []);
+    state.foundryContext.activeConcurrentRuns = activeConcurrentRuns;
+    if (ui.foundryInstanceLimit) {
+      if (!hasFullAccount()) {
+        ui.foundryInstanceLimit.textContent = `Concurrent instance limit: 2 active runs max after sign-in.`;
+      } else if (activeConcurrentRuns >= maxConcurrentRuns) {
+        ui.foundryInstanceLimit.textContent = `Concurrent instance limit: ${activeConcurrentRuns} of ${maxConcurrentRuns} active. Wait for one run to finish before starting another.`;
+      } else {
+        ui.foundryInstanceLimit.textContent = `Concurrent instance limit: ${activeConcurrentRuns} of ${maxConcurrentRuns} active.`;
+      }
+    }
+    const sourceKind = String(ui.foundrySourceKind?.value || "history").trim();
+    const predictionMode = sourceKind === "prediction_csv";
+    const requiresFullAccount = !hasFullAccount();
+    const limitReached = hasFullAccount() && activeConcurrentRuns >= maxConcurrentRuns;
+    if (ui.foundryRunButton) {
+      ui.foundryRunButton.disabled = requiresFullAccount || sourceKind === "prediction_csv" || limitReached;
+      ui.foundryRunButton.title = requiresFullAccount
+        ? "Sign in with a full account to use Forecast Foundry."
+        : limitReached
+          ? `Forecast Foundry allows ${maxConcurrentRuns} active runs at a time.`
+          : "";
+    }
+    if (ui.foundryPrepareButton) {
+      ui.foundryPrepareButton.disabled = requiresFullAccount;
+      ui.foundryPrepareButton.title = requiresFullAccount ? "Sign in with a full account to use Forecast Foundry." : "";
+    }
+    if (ui.foundryUploadPrepareButton) {
+      ui.foundryUploadPrepareButton.disabled = requiresFullAccount;
+      ui.foundryUploadPrepareButton.title = requiresFullAccount ? "Sign in with a full account to use Forecast Foundry." : "";
+    }
+    if (ui.foundryAnalyzeButton) {
+      ui.foundryAnalyzeButton.disabled = requiresFullAccount || !predictionMode;
+      ui.foundryAnalyzeButton.title = requiresFullAccount
+        ? "Sign in with a full account to use Forecast Foundry."
+        : predictionMode
+          ? ""
+          : "Prediction analysis is available for prediction CSV uploads or completed prediction outputs.";
+    }
+  };
+
+  const renderFoundryRuns = (items = []) => {
+    state.foundryContext.runs = Array.isArray(items) ? items.slice() : [];
+    updateFoundryInstanceLimitUi();
+    if (!ui.autopilotOutput) return;
+    if (!hasFullAccount()) {
+      ui.autopilotOutput.innerHTML = `<div class="small muted">Sign in with a full account to load Forecast Foundry.</div>`;
+      return;
+    }
+    if (!Array.isArray(items) || !items.length) {
+      ui.autopilotOutput.innerHTML = `<div class="small muted">No Forecast Foundry runs yet. Prepare a source to create one.</div>`;
+      return;
+    }
+    ui.autopilotOutput.innerHTML = items
+      .map((item) => {
+        const active = String(item?.id || "") === String(state.foundryContext.activeRunId || "");
+        const dataset = item?.dataset && typeof item.dataset === "object" ? item.dataset : {};
+        const analysis = item?.analysis && typeof item.analysis === "object" ? item.analysis : {};
+        const autopilot = item?.autopilot && typeof item.autopilot === "object" ? item.autopilot : {};
+        const status = escapeHtml(String(item?.status || "unknown").trim() || "unknown");
+        const title = escapeHtml(String(item?.title || "Forecast Foundry run").trim());
+        const ticker = escapeHtml(String(dataset?.ticker || "").trim() || "Ticker");
+        const interval = escapeHtml(String(dataset?.interval || "").trim() || "n/a");
+        const sourceType = escapeHtml(String(item?.sourceType || "").trim() || "source");
+        const rowCount = Number(dataset?.rowCount || 0);
+        const createdAt = escapeHtml(String(item?.createdAt || "").trim());
+        const metricName = escapeHtml(String(autopilot?.objectiveMetric?.name || "").trim());
+        const metricValue = Number(autopilot?.objectiveMetric?.value);
+        const analysisSummary = escapeHtml(String(analysis?.summary || "").trim().slice(0, 180));
+        const canAnalyze = canAnalyzeFoundryRun(item);
+        return `
+          <article class="task-item${active ? " active" : ""}" data-foundry-run-card="${escapeHtml(String(item?.id || ""))}">
+            <div class="task-item-main">
+              <div class="small muted">${sourceType} · ${ticker} · ${interval}</div>
+              <strong>${title}</strong>
+              <div class="small">${status}${rowCount ? ` · ${rowCount.toLocaleString()} row(s)` : ""}${createdAt ? ` · ${createdAt.slice(0, 10)}` : ""}</div>
+              ${
+                metricName && Number.isFinite(metricValue)
+                  ? `<div class="small muted">${metricName}: ${escapeHtml(metricValue.toFixed(6))}</div>`
+                  : analysisSummary
+                    ? `<div class="small muted">${analysisSummary}</div>`
+                    : ""
+              }
+            </div>
+            <div class="task-chip-row" style="margin-top:10px;">
+              <button class="task-chip" type="button" data-action="foundry-select-run" data-run-id="${escapeHtml(String(item?.id || ""))}">${icon("eye")}<span>Open</span></button>
+              <button class="task-chip" type="button" data-action="foundry-refresh-run" data-run-id="${escapeHtml(String(item?.id || ""))}">${icon("refresh")}<span>Refresh</span></button>
+              ${
+                canAnalyze
+                  ? `<button class="task-chip" type="button" data-action="foundry-analyze-run" data-run-id="${escapeHtml(String(item?.id || ""))}">${icon("sparks")}<span>Analyze</span></button>`
+                  : ""
+              }
+            </div>
+          </article>
+        `;
+      })
+      .join("");
+  };
+
+  const renderFoundryPreviewTableFromObjects = (rows = []) => {
+    if (!ui.predictionsPreview) return;
+    if (!Array.isArray(rows) || !rows.length) {
+      ui.predictionsPreview.innerHTML = `<div class="small muted">No preview rows are available.</div>`;
+      return;
+    }
+    const headers = Object.keys(rows[0] || {});
+    ui.predictionsPreview.innerHTML = `
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr>
+          </thead>
+          <tbody>
+            ${rows
+              .slice(0, 20)
+              .map(
+                (row) =>
+                  `<tr>${headers
+                    .map((header) => `<td>${escapeHtml(row?.[header] ?? "")}</td>`)
+                    .join("")}</tr>`
+              )
+              .join("")}
+          </tbody>
+        </table>
+      </div>
+    `;
+  };
+
+  const loadFoundryCsvIntoPreview = async (run) => {
+    const files = run?.files && typeof run.files === "object" ? run.files : {};
+    const dataset = run?.dataset && typeof run.dataset === "object" ? run.dataset : {};
+    const orderedFiles = [
+      files.predictionsCsv,
+      files.uploadedCsv,
+      files.datasetCsv,
+      files.analysisJson,
+    ].filter((entry) => entry && typeof entry === "object");
+    const targetFile = orderedFiles.find((entry) => String(entry?.downloadUrl || "").trim());
+
+    if (!targetFile) {
+      if (ui.predictionsPlotMeta) {
+        ui.predictionsPlotMeta.textContent = "Signed download URL is unavailable for this run. Showing stored preview rows only.";
+      }
+      renderFoundryPreviewTableFromObjects(Array.isArray(dataset?.previewRows) ? dataset.previewRows : []);
+      if (ui.predictionsChart) {
+        ui.predictionsChart.innerHTML = `<div class="small muted">Chart rendering needs a downloadable CSV artifact.</div>`;
+      }
+      return;
+    }
+
+    if (ui.predictionsPlotMeta) {
+      ui.predictionsPlotMeta.textContent = `${String(targetFile.fileName || "dataset.csv").trim()} · loading CSV preview...`;
+    }
+    setOutputLoading(ui.predictionsPreview, "Loading CSV preview...");
+    setOutputLoading(ui.predictionsChart, "Loading chart...");
+    const response = await fetch(String(targetFile.downloadUrl), { cache: "no-store" });
+    if (!response.ok) throw new Error("Unable to fetch the stored CSV artifact.");
+    const csvText = await response.text();
+    const table = parseCsvTable(csvText, { maxRows: 20000 });
+    state.predictionsContext.table = table;
+    state.predictionsContext.previewPage = 0;
+    state.predictionsContext.previewPageSize = 25;
+    renderCsvPreview(table);
+    setOutputReady(ui.predictionsPreview);
+    await renderPredictionsChart(table, { title: String(run?.title || "Forecast Foundry CSV") });
+    setOutputReady(ui.predictionsChart);
+    if (ui.predictionsPlotMeta) {
+      ui.predictionsPlotMeta.textContent = `${String(targetFile.fileName || "dataset.csv").trim()} · ${table.rows.length.toLocaleString()} rows · ${table.headers.length} columns`;
+    }
+  };
+
+  const renderFoundryRunDetail = async (run, { request = null, shareUrl = "" } = {}) => {
+    state.foundryContext.activeRunId = String(run?.id || "").trim();
+    state.foundryContext.activeRun = run && typeof run === "object" ? run : null;
+    renderFoundryRuns(state.foundryContext.runs || []);
+    removePredictionOptionsSupplement();
+    if (!ui.foundryRunMeta) return;
+    if (!run || typeof run !== "object") {
+      ui.foundryRunMeta.innerHTML = `<div class="small muted">Select a foundry run to inspect it.</div>`;
+      if (ui.foundryPublishHost) ui.foundryPublishHost.innerHTML = `<div class="small muted">Private Explore sync and publish controls appear here after a source is prepared.</div>`;
+      return;
+    }
+    const dataset = run.dataset && typeof run.dataset === "object" ? run.dataset : {};
+    const autopilot = run.autopilot && typeof run.autopilot === "object" ? run.autopilot : {};
+    const analysis = run.analysis && typeof run.analysis === "object" ? run.analysis : {};
+    const files = run.files && typeof run.files === "object" ? run.files : {};
+    const requestId = getFoundryRequestId(run);
+    const requestRecord = request && typeof request === "object" ? request : requestId ? getMyRequestById(requestId) : null;
+    const effectiveShareUrl = String(shareUrl || requestRecord?.share?.shareUrl || "").trim();
+    const horizonSummary = formatFoundryHorizonSummary({
+      forecastHorizon: autopilot?.forecastHorizon,
+      forecastFrequency: autopilot?.forecastFrequency,
+      interval: dataset?.interval,
+    });
+    if (ui.foundryShareButton) ui.foundryShareButton.disabled = !requestId;
+    ui.foundryRunMeta.innerHTML = `
+      <div class="small muted">Forecast Foundry run</div>
+      <h3 style="margin-top:6px;">${escapeHtml(String(run.title || "Forecast Foundry run"))}</h3>
+      <div class="small" style="margin-top:8px;">
+        <strong>Status:</strong> ${escapeHtml(String(run.status || "unknown"))}
+        ${dataset?.ticker ? ` · <strong>Ticker:</strong> ${escapeHtml(String(dataset.ticker))}` : ""}
+        ${dataset?.interval ? ` · <strong>Interval:</strong> ${escapeHtml(String(dataset.interval))}` : ""}
+        ${dataset?.rowCount ? ` · <strong>Rows:</strong> ${Number(dataset.rowCount).toLocaleString()}` : ""}
+      </div>
+      <div class="small" style="margin-top:8px;">
+        <strong>Source:</strong> ${escapeHtml(String(run.sourceType || "source"))}
+        ${autopilot?.forecastFrequency ? ` · <strong>Forecast frequency:</strong> ${escapeHtml(String(autopilot.forecastFrequency))}` : ""}
+        ${horizonSummary ? ` · <strong>Horizon:</strong> ${escapeHtml(horizonSummary)}` : ""}
+        ${Array.isArray(autopilot?.quantiles) && autopilot.quantiles.length ? ` · <strong>Quantiles:</strong> ${escapeHtml(autopilot.quantiles.map((entry) => formatFoundryQuantileLabel(entry)).join(", "))}` : ""}
+      </div>
+      ${
+        dataset?.useAllHistory || dataset?.start || dataset?.end
+          ? `<div class="small" style="margin-top:8px;"><strong>History window:</strong> ${
+              dataset?.useAllHistory
+                ? `All available history${dataset?.end ? ` through ${escapeHtml(String(dataset.end))}` : ""}`
+                : `${dataset?.start ? escapeHtml(String(dataset.start)) : "n/a"} to ${dataset?.end ? escapeHtml(String(dataset.end)) : "n/a"}`
+            }</div>`
+          : ""
+      }
+      ${
+        autopilot?.objectiveMetric?.name
+          ? `<div class="small" style="margin-top:8px;"><strong>Objective:</strong> ${escapeHtml(String(autopilot.objectiveMetric.name))}${
+              Number.isFinite(Number(autopilot?.objectiveMetric?.value))
+                ? ` (${escapeHtml(Number(autopilot.objectiveMetric.value).toFixed(6))})`
+                : ""
+            }</div>`
+          : ""
+      }
+      ${
+        autopilot?.bestCandidate?.candidateName
+          ? `<div class="small" style="margin-top:8px;"><strong>Best candidate:</strong> ${escapeHtml(String(autopilot.bestCandidate.candidateName))}</div>`
+          : ""
+      }
+      ${
+        String(run.notes || "").trim()
+          ? `<div class="small" style="margin-top:8px;"><strong>Notes:</strong> ${escapeHtml(String(run.notes || ""))}</div>`
+          : ""
+      }
+      ${
+        Object.keys(files).length
+          ? `<div class="small" style="margin-top:8px;"><strong>Files:</strong> ${Object.values(files)
+              .map((entry) => escapeHtml(String(entry?.fileName || "").trim()))
+              .filter(Boolean)
+              .join(", ")}</div>`
+          : ""
+      }
+    `;
+    if (ui.foundryPublishHost) {
+      const publishMarkup = renderOutputPublishControlsMarkup({ requestId, requestType: "forecast" });
+      ui.foundryPublishHost.innerHTML = `
+        ${publishMarkup}
+        ${
+          effectiveShareUrl
+            ? `<div class="small muted" style="margin-top:10px;">Share link: <a href="${escapeHtml(effectiveShareUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(effectiveShareUrl)}</a></div>`
+            : `<div class="small muted" style="margin-top:10px;">Create an unlisted share link from the Share button when you want a public URL.</div>`
+        }
+      `;
+    }
+    if (ui.predictionsAgentOutput) {
+      if (String(analysis?.markdown || "").trim()) {
+        ui.predictionsAgentOutput.innerHTML = `<div class="small markdown-output">${renderMarkdown(String(analysis.markdown), {
+          fallback: "Analysis is ready.",
+        })}</div>`;
+      } else if (String(analysis?.summary || "").trim()) {
+        ui.predictionsAgentOutput.innerHTML = `<div class="small">${escapeHtml(String(analysis.summary))}</div>`;
+      } else {
+        ui.predictionsAgentOutput.innerHTML = `<div class="small muted">Prediction analysis is not available yet. Use Refresh AWS status or Analyze predictions.</div>`;
+      }
+    }
+    try {
+      await loadFoundryCsvIntoPreview(run);
+      try {
+        const envelope = computePredictionOptionsEnvelope(state.predictionsContext.table);
+        await appendPredictionOptionsSupplement(state.clients?.functions, {
+          ticker: dataset?.ticker || state.tickerContext?.ticker || "",
+          envelope,
+          sourceLabel: "Options near the Foundry prediction end date",
+        });
+      } catch (optionsError) {
+        removePredictionOptionsSupplement();
+        if (ui.predictionsAgentOutput) {
+          ui.predictionsAgentOutput.innerHTML += `
+            <div class="small muted" style="margin-top:12px;">
+              Options overlay unavailable: ${escapeHtml(optionsError?.message || "Unable to load listed options.")}
+            </div>
+          `;
+        }
+      }
+    } catch (error) {
+      removePredictionOptionsSupplement();
+      if (ui.predictionsPlotMeta) ui.predictionsPlotMeta.textContent = error?.message || "Unable to load CSV preview.";
+      if (ui.predictionsPreview) {
+        ui.predictionsPreview.innerHTML = `<div class="small muted">${escapeHtml(error?.message || "Unable to load CSV preview.")}</div>`;
+      }
+      if (ui.predictionsChart) {
+        ui.predictionsChart.innerHTML = `<div class="small muted">Unable to render chart preview.</div>`;
+      }
+    }
+  };
+
+  const loadFoundryRunById = async (runId, { notify = false, preloadedRun = null, replaceUrl = true } = {}) => {
+    const cleanId = String(runId || "").trim();
+    if (!cleanId) throw new Error("Run ID is required.");
+    state.foundryContext.loadingRunId = cleanId;
+    setFoundryStatus("Loading Forecast Foundry run...");
+    const payload =
+      preloadedRun && typeof preloadedRun === "object"
+        ? { run: preloadedRun }
+        : await callFoundryApi("GET", `/api/autopilot/runs/${encodeURIComponent(cleanId)}`);
+    const run = payload?.run && typeof payload.run === "object" ? payload.run : null;
+    if (!run) throw new Error("Forecast Foundry run was not found.");
+    updateFoundryRunInState(run);
+    const requestId = getFoundryRequestId(run);
+    let requestRecord = requestId ? getMyRequestById(requestId) : null;
+    if (requestId && !requestRecord) {
+      requestRecord = await fetchMyRequestById(requestId).catch(() => null);
+      if (requestRecord && typeof requestRecord === "object") upsertMyRequestInState(requestRecord);
+    }
+    await renderFoundryRunDetail(run, { request: requestRecord });
+    if (replaceUrl && typeof history !== "undefined") {
+      try {
+        history.replaceState({}, "", `/autopilot?runId=${encodeURIComponent(cleanId)}`);
+      } catch (error) {
+        // Ignore URL updates.
+      }
+    }
+    setFoundryStatus(String(run?.status || "Run loaded."));
+    if (notify) showToast("Forecast Foundry run loaded.");
+    return run;
+  };
+
+  const loadFoundryRuns = async ({ focusRunId = "", notify = false } = {}) => {
+    if (!hasFullAccount()) {
+      renderFoundryRuns([]);
+      return [];
+    }
+    setFoundryStatus("Loading Forecast Foundry runs...");
+    const payload = await callFoundryApi("GET", "/api/autopilot/runs?limit=60");
+    const limits = payload?.limits && typeof payload.limits === "object" ? payload.limits : {};
+    state.foundryContext.maxConcurrentRuns = Math.max(
+      1,
+      Math.floor(Number(limits?.maxConcurrentRuns || state.foundryContext.maxConcurrentRuns || FOUNDRY_MAX_CONCURRENT_INSTANCES))
+    );
+    const items = Array.isArray(payload?.items) ? payload.items : [];
+    state.foundryContext.loaded = true;
+    renderFoundryRuns(items);
+    const requestedRunId = String(
+      focusRunId || getQueryParam("runId") || ""
+    ).trim();
+    if (requestedRunId) {
+      const match = items.find((item) => String(item?.id || "").trim() === requestedRunId);
+      await loadFoundryRunById(requestedRunId, { notify: false, preloadedRun: match || null, replaceUrl: false });
+    } else if (!state.foundryContext.activeRunId && items.length) {
+      await renderFoundryRunDetail(items[0]);
+    }
+    setFoundryStatus(items.length ? `Loaded ${items.length} Forecast Foundry run${items.length === 1 ? "" : "s"}.` : "No Forecast Foundry runs yet.");
+    if (notify) showToast("Forecast Foundry runs refreshed.");
+    return items;
+  };
+
+  const uploadFoundryFileToStorage = async (file) => {
+    const storage = state.clients?.storage;
+    const user = state.user;
+    if (!storage || !user) throw new Error("File uploads are not available.");
+    const safeName = String(file?.name || "upload.csv").replace(/[^A-Za-z0-9._-]/g, "_");
+    const path = `predictions/${user.uid}/foundry/${Date.now()}_${safeName}`;
+    await storage.ref().child(path).put(file, {
+      contentType: file?.type || "text/csv",
+    });
+    return {
+      path,
+      name: safeName,
+    };
+  };
+
+  const prepareFoundrySource = async ({ notify = true } = {}) => {
+    if (!hasFullAccount()) {
+      throw new Error("Sign in with a full account to use Forecast Foundry.");
+    }
+    const sourceKind = String(ui.foundrySourceKind?.value || "history").trim();
+    const ticker = normalizeTicker(ui.foundryTicker?.value || "");
+    const interval = "1d";
+    const title = String(ui.foundryTitle?.value || "").trim();
+    const notes = String(ui.foundryNotes?.value || "").trim();
+    const workspaceId = String(state.activeWorkspaceId || state.user?.uid || "").trim();
+
+    setFoundryStatus("Preparing Forecast Foundry source...");
+    let payload = null;
+    if (sourceKind === "history") {
+      const start = String(ui.foundryStart?.value || "").trim();
+      const end = String(ui.foundryEnd?.value || "").trim();
+      const useAllHistory = Boolean(ui.foundryUseAllHistory?.checked);
+      if (!ticker || !end || (!useAllHistory && !start)) {
+        throw new Error(
+          useAllHistory
+            ? "Ticker and end date are required when using all available history."
+            : "Ticker, start date, and end date are required for historical downloader imports."
+        );
+      }
+      payload = await callFoundryApi("POST", "/api/autopilot/datasets/history", {
+        ticker,
+        interval,
+        start,
+        end,
+        useAllHistory,
+        title,
+        notes,
+        workspaceId,
+        persist: true,
+      });
+    } else {
+      const file = ui.foundryFile?.files?.[0];
+      if (!file) throw new Error("Select a CSV file first.");
+      const uploaded = await uploadFoundryFileToStorage(file);
+      payload = await callFoundryApi("POST", "/api/autopilot/datasets/upload", {
+        filePath: uploaded.path,
+        fileName: uploaded.name,
+        ticker,
+        interval,
+        title,
+        notes,
+        workspaceId,
+      });
+      if (ui.foundryFile) ui.foundryFile.value = "";
+    }
+
+    const run = payload?.run && typeof payload.run === "object" ? payload.run : null;
+    if (!run) throw new Error("Forecast Foundry did not return a saved run.");
+    state.foundryContext.pendingPreparedRunId = String(run.id || "").trim();
+    updateFoundryRunInState(run);
+    await renderFoundryRunDetail(run);
+    renderFoundryRuns(state.foundryContext.runs || []);
+    setFoundryStatus(String(run.status || "Source prepared."));
+    if (notify) {
+      showToast(sourceKind === "prediction_csv" ? "Prediction CSV prepared." : "Forecast Foundry source prepared.");
+    }
+    return run;
+  };
+
+  const ensureFoundryActiveRun = async ({ allowPrepare = true } = {}) => {
+    if (state.foundryContext.activeRun && state.foundryContext.activeRunId) {
+      return state.foundryContext.activeRun;
+    }
+    if (!allowPrepare) throw new Error("Prepare a Forecast Foundry source first.");
+    return prepareFoundrySource({ notify: false });
+  };
+
+  const runFoundryAutopilot = async ({ runId = "" } = {}) => {
+    if (!hasFullAccount()) throw new Error("Sign in with a full account to use Forecast Foundry.");
+    let run = runId ? state.foundryContext.runs.find((item) => String(item?.id || "") === String(runId || "").trim()) : null;
+    if (!run) {
+      run = await ensureFoundryActiveRun({ allowPrepare: true });
+    }
+    if (String(run?.sourceType || "").trim() === "prediction_csv") {
+      throw new Error("Prediction CSV uploads are analysis-only. Use a historical dataset to launch Autopilot.");
+    }
+    if (String(run?.dataset?.interval || "1d").trim() !== "1d") {
+      throw new Error("Forecast Foundry currently supports daily historical datasets only.");
+    }
+      const horizonPresetKey = normalizeFoundryHorizonPresetKey(ui.foundryHorizon?.value || "1m");
+      const horizon = getFoundryHorizonSteps({
+        presetKey: horizonPresetKey,
+        interval: "1d",
+      });
+    const quantiles = parseFoundryQuantilesInput(ui.foundryQuantiles?.value || "0.1,0.5,0.9");
+    if (ui.foundryQuantiles) {
+      ui.foundryQuantiles.value = quantiles.map((entry) => formatFoundryQuantileLabel(entry)).join(",");
+    }
+    setFoundryStatus("Starting SageMaker Autopilot...");
+    const payload = await callFoundryApi("POST", "/api/autopilot/runs", {
+      runId: String(run.id || "").trim(),
+      horizon,
+      quantiles,
+    });
+    const nextRun = payload?.run && typeof payload.run === "object" ? payload.run : null;
+    if (!nextRun) throw new Error("Autopilot start did not return an updated run.");
+    updateFoundryRunInState(nextRun);
+    await renderFoundryRunDetail(nextRun);
+    renderFoundryRuns(state.foundryContext.runs || []);
+    setFoundryStatus(`Autopilot started for ${String(nextRun?.dataset?.ticker || "the selected dataset")}.`);
+    showToast("Forecast Foundry Autopilot started.");
+    return nextRun;
+  };
+
+  const refreshFoundryRun = async ({ runId = "", notify = true } = {}) => {
+    if (!hasFullAccount()) throw new Error("Sign in with a full account to use Forecast Foundry.");
+    const activeId = String(runId || state.foundryContext.activeRunId || "").trim();
+    if (!activeId) throw new Error("Select a Forecast Foundry run first.");
+    setFoundryStatus("Refreshing SageMaker status...");
+    const payload = await callFoundryApi("POST", `/api/autopilot/runs/${encodeURIComponent(activeId)}/refresh`, {});
+    const nextRun = payload?.run && typeof payload.run === "object" ? payload.run : null;
+    if (!nextRun) throw new Error("Refresh did not return an updated Forecast Foundry run.");
+    updateFoundryRunInState(nextRun);
+    await renderFoundryRunDetail(nextRun);
+    renderFoundryRuns(state.foundryContext.runs || []);
+    setFoundryStatus(`Run status: ${String(nextRun.status || "unknown")}.`);
+    if (notify) showToast("Forecast Foundry run refreshed.");
+    return nextRun;
+  };
+
+  const analyzeFoundryRun = async ({ runId = "", notify = true } = {}) => {
+    if (!hasFullAccount()) throw new Error("Sign in with a full account to use Forecast Foundry.");
+    let activeId = String(runId || state.foundryContext.activeRunId || "").trim();
+    if (!activeId) {
+      const prepared = await ensureFoundryActiveRun({ allowPrepare: true });
+      activeId = String(prepared?.id || "").trim();
+    }
+    if (!activeId) throw new Error("Prepare a Forecast Foundry source first.");
+    setFoundryStatus("Running prediction analysis...");
+    const payload = await callFoundryApi("POST", `/api/autopilot/runs/${encodeURIComponent(activeId)}/analyze`, {});
+    const nextRun = payload?.run && typeof payload.run === "object" ? payload.run : null;
+    if (!nextRun) throw new Error("Analysis did not return an updated run.");
+    updateFoundryRunInState(nextRun);
+    await renderFoundryRunDetail(nextRun);
+    renderFoundryRuns(state.foundryContext.runs || []);
+    setFoundryStatus("Prediction analysis is ready.");
+    if (notify) showToast("Forecast Foundry analysis completed.");
+    return nextRun;
+  };
+
+  const shareFoundryRun = async () => {
+    if (!hasFullAccount()) throw new Error("Sign in with a full account to share Forecast Foundry runs.");
+    const run = state.foundryContext.activeRun;
+    const requestId = getFoundryRequestId(run);
+    if (!requestId) throw new Error("Prepare a source first so Quantura can create a private Explore record.");
+    const body = await updateMyRequest(
+      requestId,
+      { visibility: "unlisted" },
+      { method: "POST", path: `/api/my-requests/${encodeURIComponent(requestId)}/share` }
+    );
+    const shareUrl = String(body?.share?.shareUrl || body?.request?.share?.shareUrl || "").trim();
+    const refreshedRequest = body?.request && typeof body.request === "object" ? body.request : null;
+    if (refreshedRequest) upsertMyRequestInState(refreshedRequest);
+    if (!shareUrl) throw new Error("Share URL was not returned.");
+    await performShare({
+      url: shareUrl,
+      title: String(run?.title || "Forecast Foundry"),
+      text: "Forecast Foundry result shared from Quantura.",
+    });
+    await renderFoundryRunDetail(run, { request: refreshedRequest, shareUrl });
+    showToast("Share link copied.");
+  };
+
+  const renderSharedFoundryRequest = async (request, shareUrl = "") => {
+    if (!ui.foundryRunMeta) return;
+    const outputsMeta = request?.outputsMeta && typeof request.outputsMeta === "object" ? request.outputsMeta : {};
+    const input = request?.input && typeof request.input === "object" ? request.input : {};
+    const summary = String(outputsMeta.summary || "Shared Forecast Foundry request loaded.").trim();
+    const markdown = String(outputsMeta.analysisMarkdown || "").trim();
+    const pseudoRun = {
+      id: String(request?.sourceRef?.id || request?.id || "").trim(),
+      title: String(request?.title || "Forecast Foundry shared result").trim(),
+      status: String(outputsMeta.analysisStatus || "shared").trim(),
+      sourceType: String(input.sourceType || "shared_request").trim(),
+      dataset: {
+        ticker: String(input.ticker || request?.ticker || "").trim(),
+        interval: String(input.interval || outputsMeta.interval || "").trim(),
+        rowCount: Number(outputsMeta.forecastRowsCount || outputsMeta.resultsCount || 0),
+        previewRows: [],
+      },
+      analysis: {
+        summary,
+        markdown,
+      },
+      exploreRequestId: String(request?.id || "").trim(),
+      files: {},
+    };
+    await renderFoundryRunDetail(pseudoRun, { request, shareUrl });
+    if (ui.predictionsPreview) {
+      ui.predictionsPreview.innerHTML = `<div class="small muted">CSV artifacts are private to the owner workspace. Shared view includes the saved analysis summary only.</div>`;
+    }
+    if (ui.predictionsChart) {
+      ui.predictionsChart.innerHTML = `<div class="small muted">Chart preview is unavailable in shared read-only mode.</div>`;
+    }
+    if (ui.predictionsPlotMeta) {
+      ui.predictionsPlotMeta.textContent = "Shared Forecast Foundry request";
+    }
+  };
+
+  const renderLegacyFoundryUploadCompat = async (db, storage, uploadId, { notify = false } = {}) => {
+    const cleanId = String(uploadId || "").trim();
+    if (!db || !storage || !cleanId) throw new Error("Upload ID is required.");
+    await plotPredictionUploadById(db, storage, cleanId);
+    state.foundryContext.activeRunId = "";
+    state.foundryContext.activeRun = null;
+    renderFoundryRuns(state.foundryContext.runs || []);
+    if (ui.foundryShareButton) ui.foundryShareButton.disabled = true;
+    if (ui.foundryRunMeta) {
+      ui.foundryRunMeta.innerHTML = `
+        <div class="small muted">Legacy upload compatibility view</div>
+        <h3 style="margin-top:6px;">Prediction CSV upload</h3>
+        <div class="small" style="margin-top:8px;">
+          Forecast Foundry now owns new uploads and Autopilot runs. This view keeps older uploaded prediction CSV links readable inside the merged panel.
+        </div>
+      `;
+    }
+    if (ui.foundryPublishHost) {
+      ui.foundryPublishHost.innerHTML = `
+        <div class="small muted">
+          Legacy prediction uploads stay read-only here. Prepare a new Forecast Foundry source to create a private Explore record and publish/share controls.
+        </div>
+      `;
+    }
+    setFoundryStatus("Loaded legacy uploaded prediction CSV.");
+    if (notify) showToast("Legacy upload loaded.");
   };
 
   const buildIndicatorOverlays = (series) => {
@@ -16438,11 +18957,17 @@
       ...list.slice(0, 60).map((item) => {
         const id = escapeHtml(item.id || "");
         const title = escapeHtml(String(item.title || "").trim());
-        const universe = escapeHtml(String(item.universe || "trending"));
         const market = escapeHtml(String(item.market || "us"));
-        const count = Array.isArray(item.results) ? item.results.length : Number(item.count || 0) || 0;
+        const count = Number.isFinite(Number(item.resultsFound))
+          ? Number(item.resultsFound)
+          : Array.isArray(item.results)
+          ? item.results.length
+          : Number(item.count || 0) || 0;
+        const floor = Number(item.minMarketCap || item.minCap || 100000000000);
         const when = escapeHtml(formatTimestamp(item.createdAt));
-        const label = `${title || universe} · ${market.toUpperCase()} · ${count} names · ${when}`;
+        const label = `${title || "Screener"} · ${market.toUpperCase()} · ${count} matches · ${
+          Number.isFinite(floor) ? `$${formatCompactNumber(floor)}` : "$100B"
+        } · ${when}`;
         return `<option value="${id}">${label}</option>`;
       }),
     ];
@@ -16575,6 +19100,120 @@
       adFree: Boolean(config.ad_free ?? normalizedKey !== "free"),
       workspaceLimit,
     };
+  };
+
+  const SCREENER_MARKET_CAP_OPTIONS = Object.freeze([
+    { value: 50000000000, label: "$50B" },
+    { value: 100000000000, label: "$100B" },
+    { value: 200000000000, label: "$200B" },
+    { value: 500000000000, label: "$500B" },
+    { value: 1000000000000, label: "$1T" },
+  ]);
+
+  const renderScreenerMarketCapOptions = (selectedValue = 100000000000) =>
+    SCREENER_MARKET_CAP_OPTIONS.map(
+      (option) =>
+        `<option value="${option.value}"${Number(selectedValue) === Number(option.value) ? " selected" : ""}>${escapeHtml(
+          option.label
+        )}</option>`
+    ).join("");
+
+  const setScreenerGenerateButtonState = ({ busy = false, label = "Launch live screener" } = {}) => {
+    if (!ui.screenerGenerateButton) return;
+    ui.screenerGenerateButton.disabled = Boolean(busy);
+    ui.screenerGenerateButton.setAttribute("aria-busy", busy ? "true" : "false");
+    const labelNode = ui.screenerGenerateButton.querySelector("span");
+    if (labelNode) labelNode.textContent = String(label || "Launch live screener").trim() || "Launch live screener";
+  };
+
+  const setScreenerDispatchStatus = (message = "", tone = "muted") => {
+    if (!ui.screenerDispatchStatus) return;
+    ui.screenerDispatchStatus.className = tone === "warn" ? "small" : "small muted";
+    ui.screenerDispatchStatus.textContent = String(message || "").trim();
+  };
+
+  const formatScreenerWorkflowReference = (runDoc = {}) => {
+    const workflowRunNumber = Number.isFinite(Number(runDoc?.workflowRunNumber)) ? Number(runDoc.workflowRunNumber) : null;
+    if (workflowRunNumber !== null) return `workflow #${workflowRunNumber}`;
+    const workflowRunId = String(runDoc?.workflowRunId || "").trim();
+    if (workflowRunId) return `workflow ${workflowRunId.slice(0, 8)}`;
+    return "the workflow";
+  };
+
+  const updateScreenerDispatchStatusFromRun = (runDoc, { attempt = null, maxAttempts = null } = {}) => {
+    const status = normalizeScreenerRunStatus(runDoc?.status);
+    const workflowRef = formatScreenerWorkflowReference(runDoc);
+    const workflowProgress = String(runDoc?.workflowProgress || runDoc?.workflowActiveStep || "").trim();
+    const resultsFound = Number.isFinite(Number(runDoc?.resultsFound))
+      ? Number(runDoc.resultsFound)
+      : Array.isArray(runDoc?.results)
+      ? runDoc.results.length
+      : 0;
+    if (status === "queued") {
+      setScreenerDispatchStatus(`GitHub Actions accepted the run. Waiting for ${workflowRef} to start producing the artifact.`, "ok");
+      return;
+    }
+    if (status === "running") {
+      const pollLabel =
+        Number.isFinite(attempt) && Number.isFinite(maxAttempts) ? ` Poll ${Number(attempt) + 1}/${Number(maxAttempts)}.` : "";
+      const progressLabel = workflowProgress ? ` ${workflowProgress}.` : "";
+      setScreenerDispatchStatus(`GitHub Actions is running ${workflowRef} now.${progressLabel}${pollLabel}`.trim(), "ok");
+      return;
+    }
+    if (status === "completed") {
+      setScreenerDispatchStatus(
+        resultsFound > 0
+          ? `Screener completed. ${resultsFound} match${resultsFound === 1 ? "" : "es"} saved and published.`
+          : "Screener completed. No signals cleared the selected market-cap floor.",
+        "ok"
+      );
+      return;
+    }
+    if (status === "failed") {
+      setScreenerDispatchStatus(String(runDoc?.serviceMessage || "GitHub Actions did not complete successfully."), "warn");
+      return;
+    }
+    setScreenerDispatchStatus("Ready to dispatch the live GitHub screener.");
+  };
+
+  const mountGithubActionsScreenerForm = () => {
+    const cleanPath = String(window.location.pathname || "").replace(/\/+$/, "") || "/";
+    if (!ui.screenerForm || cleanPath !== "/screener") return;
+    if (ui.screenerForm.dataset.screenerMode === "github_actions" && ui.screenerForm.dataset.githubMounted === "1") return;
+
+    ui.screenerForm.dataset.screenerMode = "github_actions";
+    ui.screenerForm.dataset.githubMounted = "1";
+    ui.screenerForm.innerHTML = `
+      <h3>Run stock screener</h3>
+      <p class="small muted" style="margin-top:8px;">
+        Quantura dispatches the repository GitHub Action, waits for the uploaded artifact, and keeps the saved run shareable after it lands.
+      </p>
+      <div class="form-grid" style="margin-top:12px;">
+        <div class="field">
+          <label class="label" for="screener-min-market-cap">Market cap floor</label>
+          <select
+            id="screener-min-market-cap"
+            name="minMarketCap"
+          >${renderScreenerMarketCapOptions(100000000000)}</select>
+          <p class="small muted">Default floor is $100B. The GitHub workflow scans the combined S&amp;P 500 + Nasdaq universe above this threshold.</p>
+        </div>
+      </div>
+      <div class="small muted" id="screener-results-count">Matches: —</div>
+      <button class="cta" id="screener-generate-button" type="submit" data-analytics="screener_submit">
+        <i class="iconoir-play" aria-hidden="true"></i><span>Launch live screener</span>
+      </button>
+      <p class="small muted" id="screener-dispatch-status">Ready to dispatch the live GitHub screener.</p>
+    `;
+
+    ui.screenerResultsCount = document.getElementById("screener-results-count");
+    ui.screenerGenerateButton = document.getElementById("screener-generate-button");
+    ui.screenerDispatchStatus = document.getElementById("screener-dispatch-status");
+    ui.screenerModel = null;
+    ui.screenerModelMeta = null;
+    ui.screenerCreditsText = null;
+    ui.screenerCreditsFill = null;
+    setScreenerGenerateButtonState();
+    setScreenerDispatchStatus("Ready to dispatch the live GitHub screener.");
   };
 
   const syncScreenerProviderAccent = () => {
@@ -17501,18 +20140,448 @@
     }
   };
 
+  const waitForScreenerPollTick = (delayMs = 3500) =>
+    new Promise((resolve) => window.setTimeout(resolve, Math.max(600, Number(delayMs) || 0)));
+
+  const normalizeScreenerRunStatus = (value) => {
+    const normalized = String(value || "").trim().toLowerCase();
+    if (!normalized) return "queued";
+    if (normalized === "in_progress") return "running";
+    return normalized;
+  };
+
+  const isScreenerRunSettled = (runDoc) => {
+    const status = normalizeScreenerRunStatus(runDoc?.status);
+    return status === "completed" || status === "failed" || status === "cancelled";
+  };
+
+  const formatScreenerRunStatus = (value) => {
+    const normalized = normalizeScreenerRunStatus(value);
+    if (normalized === "queued") return "Queued";
+    if (normalized === "running") return "Running";
+    if (normalized === "completed") return "Completed";
+    if (normalized === "failed") return "Failed";
+    if (normalized === "cancelled") return "Cancelled";
+    return normalized ? normalized.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase()) : "Queued";
+  };
+
+  const formatCompactUsd = (value) => {
+    const num = toFiniteOrNull(value);
+    if (num === null || num < 0) return "—";
+    return `$${formatCompactNumber(num)}`;
+  };
+
+  const formatScreenerNumeric = (value, digits = 2) => {
+    const num = toFiniteOrNull(value);
+    if (num === null) return "—";
+    return num.toFixed(digits);
+  };
+
+  const formatScreenerSignedPercent = (value) => {
+    const num = toFiniteOrNull(value);
+    if (num === null) return "—";
+    return formatPercent(num, { signed: true, digits: 2 });
+  };
+
+  const formatScreenerSignalStatus = (value) => {
+    const normalized = String(value || "").trim().toLowerCase();
+    if (normalized === "below_p10") return "Below P10";
+    if (normalized === "above_p90") return "Above P90";
+    return normalized ? normalized.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase()) : "—";
+  };
+
+  const formatScreenerPeriodLabel = (date, period) => {
+    const parts = [String(date || "").trim(), String(period || "").trim()].filter(Boolean);
+    return parts.length ? parts.join(" · ") : "—";
+  };
+
+  const buildScreenerMetricChip = (label, value, iconName) => `
+    <div class="metric-chip">
+      ${icon(iconName)}
+      <span class="metric-label">${escapeHtml(label)}</span>
+      <span class="metric-value">${escapeHtml(value)}</span>
+    </div>
+  `;
+
+  const updateScreenerResultsCount = (runDoc) => {
+    if (!ui.screenerResultsCount) return;
+    const status = normalizeScreenerRunStatus(runDoc?.status);
+    const count = Number.isFinite(Number(runDoc?.resultsFound))
+      ? Number(runDoc.resultsFound)
+      : Array.isArray(runDoc?.results)
+      ? runDoc.results.length
+      : 0;
+    if (status === "queued" || status === "running") {
+      ui.screenerResultsCount.textContent = `Matches: syncing GitHub Actions run...`;
+      return;
+    }
+    if (status === "failed") {
+      ui.screenerResultsCount.textContent = "Matches: 0 · Run failed";
+      return;
+    }
+    ui.screenerResultsCount.textContent = `Matches: ${count}`;
+  };
+
+  const renderWorkflowScreenerTable = (rows) => `
+    <div class="table-wrap" style="margin-top:12px;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Symbol</th>
+            <th>Status</th>
+            <th>Last close</th>
+            <th>Gap to band</th>
+            <th>P10</th>
+            <th>P50</th>
+            <th>P90</th>
+            <th>Central delta</th>
+            <th>Tail delta</th>
+            <th>Market cap</th>
+            <th>Last earnings</th>
+            <th>Next earnings</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows
+            .map((row) => {
+              const symbol = normalizeTicker(row?.symbol || "");
+              return `
+                <tr>
+                  <td>
+                    <button class="link-button" type="button" data-action="pick-ticker" data-ticker="${escapeHtml(symbol)}">${escapeHtml(
+                      symbol || "—"
+                    )}</button>
+                  </td>
+                  <td>${escapeHtml(formatScreenerSignalStatus(row?.status))}</td>
+                  <td>${formatScreenerNumeric(row?.lastClose)}</td>
+                  <td>${escapeHtml(formatScreenerSignedPercent(row?.gapToBandPct))}</td>
+                  <td>${formatScreenerNumeric(row?.p10)}</td>
+                  <td>${formatScreenerNumeric(row?.p50)}</td>
+                  <td>${formatScreenerNumeric(row?.p90)}</td>
+                  <td>${escapeHtml(
+                    `${String(row?.centralDeltaLabel || "central_delta")
+                      .replace(/_/g, " ")
+                      .toUpperCase()}: ${formatScreenerNumeric(row?.centralDelta)}`
+                  )}</td>
+                  <td>${escapeHtml(
+                    `${String(row?.tailDeltaLabel || "tail_delta")
+                      .replace(/_/g, " ")
+                      .toUpperCase()}: ${formatScreenerNumeric(row?.tailDelta)}`
+                  )}</td>
+                  <td>${escapeHtml(String(row?.marketCapLabel || formatCompactUsd(row?.marketCap) || "—"))}</td>
+                  <td>${escapeHtml(formatScreenerPeriodLabel(row?.lastEarningsDate, row?.lastReportPeriod))}</td>
+                  <td>${escapeHtml(formatScreenerPeriodLabel(row?.nextEarningsDate, row?.nextReportPeriod))}</td>
+                </tr>
+              `;
+            })
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  const renderLegacyScreenerTable = (rows) => `
+    <div class="table-wrap" style="margin-top:12px;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Symbol</th>
+            <th>Last close</th>
+            <th>Return 1M</th>
+            <th>Return 3M</th>
+            <th>RSI 14</th>
+            <th>Volatility</th>
+            <th>Score</th>
+            <th>Projected 1Y ROI</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows
+            .map((row) => {
+              const symbol = normalizeTicker(row?.symbol || "");
+              return `
+                <tr>
+                  <td>
+                    <button class="link-button" type="button" data-action="pick-ticker" data-ticker="${escapeHtml(symbol)}">${escapeHtml(
+                      symbol || "—"
+                    )}</button>
+                  </td>
+                  <td>${row?.lastClose ?? "—"}</td>
+                  <td>${row?.return1m ?? "—"}</td>
+                  <td>${row?.return3m ?? "—"}</td>
+                  <td>${row?.rsi14 ?? "—"}</td>
+                  <td>${row?.volatility ?? "—"}</td>
+                  <td>${row?.score ?? "—"}</td>
+                  <td>${formatRoiPercent(toFiniteOrNull(row?.projectedRoi))}</td>
+                </tr>
+              `;
+            })
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  const renderScreenerRowsTable = (rows) => {
+    const list = Array.isArray(rows) ? rows : [];
+    const workflowShape = list.some(
+      (row) => row && (row.status || row.p50 !== undefined || row.p10 !== undefined || row.gapToBandPct !== undefined)
+    );
+    return workflowShape ? renderWorkflowScreenerTable(list) : renderLegacyScreenerTable(list);
+  };
+
+  const formatScreenerWorkflowStateLabel = (status, conclusion = "") => {
+    const cleanStatus = String(status || "").trim().toLowerCase();
+    const cleanConclusion = String(conclusion || "").trim().toLowerCase();
+    if (cleanStatus === "completed" && cleanConclusion) {
+      return cleanConclusion.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+    }
+    if (cleanStatus === "in_progress") return "Running";
+    if (cleanStatus === "queued") return "Queued";
+    return cleanStatus ? cleanStatus.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase()) : "Pending";
+  };
+
+  const renderScreenerWorkflowActivity = (runDoc) => {
+    const workflowProgress = String(runDoc?.workflowProgress || "").trim();
+    const workflowActiveStep = String(runDoc?.workflowActiveStep || "").trim();
+    const workflowSteps = Array.isArray(runDoc?.workflowSteps)
+      ? runDoc.workflowSteps.map((item) => String(item || "").trim()).filter(Boolean).slice(-8)
+      : [];
+    const workflowJobs = Array.isArray(runDoc?.workflowJobs) ? runDoc.workflowJobs.slice(0, 6) : [];
+    const workflowLogExcerpt = String(runDoc?.workflowLogExcerpt || "").trim();
+
+    if (!workflowProgress && !workflowActiveStep && !workflowSteps.length && !workflowJobs.length && !workflowLogExcerpt) {
+      return "";
+    }
+
+    const jobsMarkup = workflowJobs.length
+      ? `
+        <div style="margin-top:10px;">
+          ${workflowJobs
+            .map((job) => {
+              const steps = Array.isArray(job?.steps) ? job.steps.slice(0, 8) : [];
+              return `
+                <div class="small" style="margin-top:8px;">
+                  <strong>${escapeHtml(String(job?.name || "Workflow job"))}</strong>
+                  <span class="muted"> · ${escapeHtml(
+                    formatScreenerWorkflowStateLabel(job?.status, job?.conclusion)
+                  )}</span>
+                </div>
+                ${
+                  steps.length
+                    ? `<div class="small muted" style="margin-top:4px;">${steps
+                        .map(
+                          (step) =>
+                            `${escapeHtml(String(step?.name || "Step"))} · ${escapeHtml(
+                              formatScreenerWorkflowStateLabel(step?.status, step?.conclusion)
+                            )}`
+                        )
+                        .join("<br>")}</div>`
+                    : ""
+                }
+              `;
+            })
+            .join("")}
+        </div>
+      `
+      : "";
+
+    const stepsMarkup =
+      !workflowJobs.length && workflowSteps.length
+        ? `<div class="small muted" style="margin-top:10px;">${workflowSteps.map((item) => escapeHtml(item)).join("<br>")}</div>`
+        : "";
+
+    const logMarkup = workflowLogExcerpt
+      ? `<div class="small muted" style="margin-top:10px;"><strong>Recent workflow output</strong></div>
+         <pre class="panel-output small" style="margin-top:6px; white-space:pre-wrap;">${escapeHtml(workflowLogExcerpt)}</pre>`
+      : "";
+
+    return `
+      <div class="notice" style="margin-top:12px;">
+        <strong>Live workflow progress</strong>
+        ${workflowProgress ? `<div class="small" style="margin-top:6px;">${escapeHtml(workflowProgress)}</div>` : ""}
+        ${workflowActiveStep ? `<div class="small muted" style="margin-top:4px;">Active step: ${escapeHtml(workflowActiveStep)}</div>` : ""}
+        ${jobsMarkup}
+        ${stepsMarkup}
+        ${logMarkup}
+      </div>
+    `;
+  };
+
+  const renderScreenerArtifactLinks = (runDoc, { compact = false } = {}) => {
+    const workflowArtifacts = Array.isArray(runDoc?.workflowArtifacts)
+      ? runDoc.workflowArtifacts.filter((item) => item && typeof item === "object")
+      : [];
+    const workflowRunId = Number(runDoc?.workflowRunId || 0);
+    const fallbackArtifact =
+      workflowArtifacts.length || !Number.isFinite(Number(runDoc?.workflowArtifactId))
+        ? []
+        : [
+            {
+              id: Number(runDoc.workflowArtifactId),
+              name: String(runDoc?.workflowArtifactName || "daily-prophet-signal-tracker").trim(),
+              sizeInBytes: Number(runDoc?.workflowArtifactSizeInBytes || 0),
+              downloadUrl:
+                String(runDoc?.workflowArtifactDownloadUrl || "").trim() ||
+                buildPublicScreenerArtifactDownloadUrl(workflowRunId, runDoc?.workflowArtifactId),
+            },
+          ];
+    const artifacts = (workflowArtifacts.length ? workflowArtifacts : fallbackArtifact).slice(0, compact ? 3 : 8);
+    if (!artifacts.length) return "";
+    const links = artifacts
+      .map((artifact) => {
+        const name = escapeHtml(String(artifact?.name || "artifact"));
+        const downloadUrl = escapeHtml(
+          String(artifact?.downloadUrl || "").trim() || buildPublicScreenerArtifactDownloadUrl(workflowRunId, artifact?.id)
+        );
+        const githubUrl = escapeHtml(String(artifact?.githubUrl || "").trim());
+        const sizeLabel = formatFileSize(artifact?.sizeInBytes);
+        if (!downloadUrl && !githubUrl) {
+          return compact
+            ? `<span class="small muted">${name}${sizeLabel ? ` · ${escapeHtml(sizeLabel)}` : ""}</span>`
+            : `<div class="small muted">${name}${sizeLabel ? ` · ${escapeHtml(sizeLabel)}` : ""}</div>`;
+        }
+        const href = downloadUrl || githubUrl;
+        const label = compact ? `Artifact · ${name}` : `Download ${name}`;
+        return `<a class="cta secondary small" href="${href}" target="_blank" rel="noopener noreferrer">${label}${
+          sizeLabel ? ` · ${escapeHtml(sizeLabel)}` : ""
+        }</a>`;
+      })
+      .join(compact ? "" : "");
+    if (compact) return links;
+    return `
+      <div class="notice" style="margin-top:12px;">
+        <strong>Workflow artifacts</strong>
+        <div class="hero-actions" style="margin-top:8px;">${links}</div>
+      </div>
+    `;
+  };
+
+  const renderPublicScreenerGithubRuns = (items = []) => {
+    if (!ui.screenerGithubHistoryList || !ui.screenerGithubHistoryStatus) return;
+    const rows = Array.isArray(items) ? items : [];
+    if (!rows.length) {
+      ui.screenerGithubHistoryStatus.textContent = "";
+      ui.screenerGithubHistoryList.innerHTML = `<div class="small muted">No successful GitHub screener runs are available yet.</div>`;
+      return;
+    }
+    ui.screenerGithubHistoryStatus.textContent = `${rows.length} successful GitHub run${rows.length === 1 ? "" : "s"}`;
+    ui.screenerGithubHistoryList.innerHTML = rows
+      .map((item) => {
+        const title = escapeHtml(String(item?.title || item?.displayTitle || "GitHub screener workflow").trim());
+        const workflowRunNumber = Number.isFinite(Number(item?.workflowRunNumber)) ? Number(item.workflowRunNumber) : null;
+        const workflowRunUrl = escapeHtml(String(item?.workflowRunUrl || "").trim());
+        const createdAt = escapeHtml(formatTimestamp(item?.createdAt || item?.completedAt || item?.updatedAt));
+        const completedAt = escapeHtml(formatTimestamp(item?.completedAt || item?.updatedAt || item?.createdAt));
+        const matches = Number.isFinite(Number(item?.resultsFound)) ? Number(item.resultsFound) : 0;
+        const screenedCount = Number.isFinite(Number(item?.screenedCount)) ? Number(item.screenedCount) : null;
+        const minMarketCap = Number(item?.minMarketCap || 0);
+        const serviceMessage = escapeHtml(String(item?.serviceMessage || "").trim());
+        const topSymbols = Array.isArray(item?.topSymbols)
+          ? item.topSymbols.map((symbol) => escapeHtml(String(symbol || "").trim())).filter(Boolean).slice(0, 8)
+          : [];
+        const artifacts = Array.isArray(item?.artifacts)
+          ? item.artifacts.filter((artifact) => artifact && typeof artifact === "object").slice(0, 4)
+          : [];
+        const artifactActions = artifacts.length
+          ? artifacts
+              .map((artifact) => {
+                const href = escapeHtml(String(artifact?.downloadUrl || artifact?.githubUrl || "").trim());
+                const name = escapeHtml(String(artifact?.name || "artifact"));
+                const sizeLabel = formatFileSize(artifact?.sizeInBytes);
+                return href
+                  ? `<a class="cta secondary small" href="${href}" target="_blank" rel="noopener noreferrer">Artifact · ${name}${
+                      sizeLabel ? ` · ${escapeHtml(sizeLabel)}` : ""
+                    }</a>`
+                  : "";
+              })
+              .join("")
+          : `<span class="small muted">Artifacts unavailable</span>`;
+        return `
+          <div class="order-card">
+            <div class="order-header">
+              <div>
+                <div class="order-title">${title}</div>
+                <div class="small">Completed ${completedAt}</div>
+              </div>
+              <span class="status fulfilled">Success</span>
+            </div>
+            <div class="order-meta">
+              <div><strong>Created</strong> ${createdAt}</div>
+              <div><strong>Workflow</strong> ${workflowRunNumber !== null ? `#${workflowRunNumber}` : "GitHub Actions"}</div>
+              <div><strong>Matches</strong> ${matches}</div>
+              ${screenedCount !== null ? `<div><strong>Screened</strong> ${formatCompactNumber(screenedCount)}</div>` : ""}
+              ${Number.isFinite(minMarketCap) && minMarketCap > 0 ? `<div><strong>Floor</strong> $${formatCompactNumber(minMarketCap)}</div>` : ""}
+              ${topSymbols.length ? `<div><strong>Top symbols</strong> ${topSymbols.join(", ")}</div>` : ""}
+              ${serviceMessage ? `<div><strong>Summary</strong> ${serviceMessage}</div>` : ""}
+            </div>
+            <div class="order-actions" style="display:flex;gap:10px;flex-wrap:wrap;">
+              ${workflowRunUrl ? `<a class="cta secondary small" href="${workflowRunUrl}" target="_blank" rel="noopener noreferrer">Open workflow</a>` : ""}
+              ${artifactActions}
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+  };
+
+  const loadPublicScreenerGithubRuns = async ({ force = false, notify = false } = {}) => {
+    if (!ui.screenerGithubHistoryList || !ui.screenerGithubHistoryStatus) return [];
+    if (state.publicScreenerGithubRunsLoading) return state.publicScreenerGithubRuns;
+    if (!force && Array.isArray(state.publicScreenerGithubRuns) && state.publicScreenerGithubRuns.length) {
+      const ageMs = Date.now() - Number(state.publicScreenerGithubRunsLoadedAt || 0);
+      if (ageMs < 30000) {
+        renderPublicScreenerGithubRuns(state.publicScreenerGithubRuns);
+        return state.publicScreenerGithubRuns;
+      }
+    }
+    state.publicScreenerGithubRunsLoading = true;
+    ui.screenerGithubHistoryStatus.textContent = "Loading recent successful GitHub screener runs...";
+    ui.screenerGithubHistoryList.innerHTML = `<div class="small muted">${skeletonHtml(3)}</div>`;
+    try {
+      const payload = await apiListPublicScreenerGithubRuns({ limit: 60 });
+      const items = Array.isArray(payload?.items) ? payload.items : [];
+      state.publicScreenerGithubRuns = items;
+      state.publicScreenerGithubRunsLoadedAt = Date.now();
+      renderPublicScreenerGithubRuns(items);
+      if (notify) showToast("GitHub screener history refreshed.");
+      return items;
+    } catch (error) {
+      const message = extractErrorMessage(error, "Unable to load recent GitHub screener runs.");
+      ui.screenerGithubHistoryStatus.textContent = message;
+      if (Array.isArray(state.publicScreenerGithubRuns) && state.publicScreenerGithubRuns.length) {
+        renderPublicScreenerGithubRuns(state.publicScreenerGithubRuns);
+      } else {
+        ui.screenerGithubHistoryList.innerHTML = `<div class="small muted">${escapeHtml(message)}</div>`;
+      }
+      if (notify) showToast(message, "warn");
+      return state.publicScreenerGithubRuns;
+    } finally {
+      state.publicScreenerGithubRunsLoading = false;
+    }
+  };
+
   const renderScreenerRunOutput = (runDoc) => {
     if (!ui.screenerOutput) return;
     const rows = Array.isArray(runDoc?.results) ? runDoc.results : [];
+    const status = normalizeScreenerRunStatus(runDoc?.status);
+    const resultsFound = Number.isFinite(Number(runDoc?.resultsFound)) ? Number(runDoc.resultsFound) : rows.length;
+    updateScreenerResultsCount({ ...runDoc, resultsFound, status });
+    state.activeScreenerRunId = String(runDoc?.id || "").trim();
+    if (isScreenerRunSettled(runDoc)) {
+      state.activeScreenerPollToken = "";
+    }
     setOutputReady(ui.screenerOutput);
 
-    if (!rows.length) {
-      state.sharedScreenerView = null;
-      ui.screenerOutput.innerHTML = `
-        <div class="small muted">No screener rows stored for this run.</div>
-      `;
-      return;
-    }
+    const requestId = buildSourceRequestId("screener", runDoc?.id || "");
+    const requestRecord = requestId ? getMyRequestById(requestId) : null;
+    const isPublished = Boolean(runDoc?.isPublic || requestRecord?.published);
+    const serviceMessage = String(runDoc?.serviceMessage || "").trim();
+    const appliedFilters = Array.isArray(runDoc?.appliedFilters) ? runDoc.appliedFilters.filter(Boolean) : [];
+    const workflowRunUrl = String(runDoc?.workflowRunUrl || "").trim();
+    const workflowRunId = String(runDoc?.workflowRunId || "").trim();
+    const workflowRunNumber = Number.isFinite(Number(runDoc?.workflowRunNumber)) ? Number(runDoc.workflowRunNumber) : null;
+    const minMarketCap = Number(runDoc?.minMarketCap || runDoc?.minCap || 100000000000);
 
     const sharedMeta = runDoc && typeof runDoc.__sharedMeta === "object" ? runDoc.__sharedMeta : null;
     const sharedShareId = String(sharedMeta?.shareId || "").trim();
@@ -17520,6 +20589,7 @@
     const sharedReadOnly = Boolean(sharedMeta?.readOnly);
     const sharedCanImport = Boolean(sharedMeta?.canImport);
     const isSharedView = Boolean(sharedShareId);
+    const sharedUsesRequestShare = sharedShareUrl.includes("requestShare=");
 
     if (isSharedView) {
       state.sharedScreenerView = {
@@ -17527,36 +20597,30 @@
         shareUrl: sharedShareUrl,
         readOnly: sharedReadOnly,
         canImport: sharedCanImport,
-        runId: String(runDoc.id || "").trim(),
+        runId: String(runDoc?.id || "").trim(),
         rows,
       };
     } else {
       state.sharedScreenerView = null;
     }
 
-    const runId = escapeHtml(runDoc.id || "");
-    const createdAt = escapeHtml(formatTimestamp(runDoc.createdAt));
-    const notes = String(runDoc.notes || "").trim();
-    const title = String(runDoc.title || "").trim();
-    const portfolioSummary = renderAiPortfolioSummary(runDoc);
-    const agentId = escapeHtml(String(runDoc?.aiPortfolio?.agentId || "").trim());
-    const isPublic = Boolean(runDoc?.isPublic);
-    const ownerWorkspaceId = String(runDoc?.userId || "").trim();
-    const canSupportOwner = Boolean(ownerWorkspaceId) && String(state.user?.uid || "").trim() !== ownerWorkspaceId;
-    const ownerUsername = escapeHtml(String(runDoc?.ownerUsername || "").trim());
-    const ownerBio = escapeHtml(String(runDoc?.ownerBio || "").trim());
-    const ownerAvatarMeta = getProfileAvatarMeta(String(runDoc?.ownerAvatar || "bull").trim());
+    const runId = escapeHtml(runDoc?.id || "");
+    const title = String(runDoc?.title || "").trim() || "GitHub stock screener";
+    const createdAt = escapeHtml(formatTimestamp(runDoc?.createdAt));
     const canEditRun = !sharedReadOnly;
-
     const actionButtons = [];
+    const visibilityLabel = isPublished
+      ? "Published to Explore"
+      : status === "queued" || status === "running"
+      ? "Private until completion"
+      : "Private";
+    const artifactLinks = renderScreenerArtifactLinks(runDoc);
+
     if (canEditRun) {
       actionButtons.push(
         `<button class="cta secondary small" type="button" data-action="download-screener" data-run-id="${runId}">Download CSV</button>`,
         `<button class="cta secondary small" type="button" data-action="rename-screener" data-run-id="${runId}">Rename</button>`,
         `<button class="cta secondary small" type="button" data-action="share-screener" data-run-id="${runId}">Share link</button>`,
-        `<button class="cta secondary small" type="button" data-action="toggle-screener-public" data-run-id="${runId}" data-is-public="${
-          isPublic ? "1" : "0"
-        }">${isPublic ? "Make private" : "Publish public"}</button>`,
         `<button class="cta secondary small danger" type="button" data-action="delete-screener" data-run-id="${runId}">Delete</button>`
       );
     } else {
@@ -17566,7 +20630,7 @@
           sharedShareId
         )}">Copy share link</button>`
       );
-      if (sharedShareId && (sharedCanImport || !hasFullAccount())) {
+      if (sharedShareId && !sharedUsesRequestShare && (sharedCanImport || !hasFullAccount())) {
         actionButtons.push(
           `<button class="cta secondary small" type="button" data-action="import-shared-screener" data-share-id="${escapeHtml(
             sharedShareId
@@ -17575,15 +20639,25 @@
       }
     }
 
-    if (canSupportOwner) {
-      actionButtons.push(
-        `<button class="cta secondary small" type="button" data-action="screener-owner-thanks" data-creator-workspace-id="${escapeHtml(
-          ownerWorkspaceId
-        )}" data-target-id="${runId}">Send thanks</button>`,
-        `<button class="cta secondary small" type="button" data-action="screener-owner-subscribe" data-creator-workspace-id="${escapeHtml(
-          ownerWorkspaceId
-        )}" data-target-id="${runId}">Subscribe</button>`
+    if (workflowRunUrl) {
+      actionButtons.unshift(
+        `<a class="cta secondary small" href="${escapeHtml(workflowRunUrl)}" target="_blank" rel="noopener noreferrer">Open workflow</a>`
       );
+    }
+
+    const statusChips = [
+      buildScreenerMetricChip("Status", formatScreenerRunStatus(status), status === "failed" ? "warning-triangle" : "clock"),
+      buildScreenerMetricChip("Floor", Number.isFinite(minMarketCap) ? `$${formatCompactNumber(minMarketCap)}` : "$100B", "bank"),
+      buildScreenerMetricChip("Matches", String(resultsFound), "search"),
+    ];
+    const screenedCount = Number.isFinite(Number(runDoc?.screenedCount)) ? Number(runDoc.screenedCount) : null;
+    if (screenedCount !== null) {
+      statusChips.push(buildScreenerMetricChip("Screened", formatCompactNumber(screenedCount), "database-check"));
+    }
+    if (workflowRunNumber !== null) {
+      statusChips.push(buildScreenerMetricChip("Workflow", `#${workflowRunNumber}`, "git-branch"));
+    } else if (workflowRunId) {
+      statusChips.push(buildScreenerMetricChip("Workflow", workflowRunId, "git-branch"));
     }
 
     const sharedNotice = isSharedView
@@ -17591,88 +20665,103 @@
           sharedReadOnly ? "Read-only view. Only the owner can edit this run." : "Owner view from shared link."
         }</div>`
       : "";
+    const filterSummary = appliedFilters.length
+      ? `<div class="small muted" style="margin-top:8px;"><strong>Applied:</strong> ${escapeHtml(appliedFilters.join(", "))}</div>`
+      : "";
+    const waitingMessage =
+      status === "queued" || status === "running"
+        ? `<div class="notice" style="margin-top:12px;">
+            <strong>${status === "queued" ? "Queued in GitHub Actions" : "GitHub Actions is still running"}</strong>
+            <div class="small" style="margin-top:6px;">${escapeHtml(
+              serviceMessage || "Quantura is waiting for the workflow artifact so it can publish the saved run to Explore."
+            )}</div>
+          </div>`
+        : "";
+    const emptyMessage =
+      status === "completed" && !rows.length
+        ? `<div class="notice" style="margin-top:12px;">
+            <strong>No active signals cleared the floor.</strong>
+            <div class="small" style="margin-top:6px;">${escapeHtml(
+              serviceMessage || "The GitHub Actions tracker completed, but nothing met the current filter."
+            )}</div>
+          </div>`
+        : "";
+    const failureMessage =
+      status === "failed"
+        ? `<div class="notice" style="margin-top:12px;">
+            <strong>Workflow failed</strong>
+            <div class="small" style="margin-top:6px;">${escapeHtml(
+              serviceMessage || "The GitHub Actions stock screener did not complete successfully."
+            )}</div>
+          </div>`
+        : "";
 
     ui.screenerOutput.innerHTML = `
-      ${title ? `<div class="small"><strong>Title:</strong> ${escapeHtml(title)}</div>` : ""}
+      <div class="small"><strong>Title:</strong> ${escapeHtml(title)}</div>
       <div class="small"><strong>Run ID:</strong> ${runId || "—"}</div>
       <div class="small"><strong>Created:</strong> ${createdAt}</div>
-      <div class="small"><strong>Visibility:</strong> ${isPublic ? "Public" : "Private"}</div>
+      <div class="small"><strong>Visibility:</strong> ${visibilityLabel}</div>
       ${sharedNotice}
-      ${
-        ownerUsername || ownerBio
-          ? `<div class="small muted"><strong>Owner:</strong> ${escapeHtml(ownerAvatarMeta.emoji || "")} ${
-              ownerUsername ? `@${ownerUsername}` : "workspace member"
-            }${ownerBio ? ` · ${ownerBio}` : ""}</div>`
-          : ""
-      }
-      ${notes ? `<div class="small" style="margin-top:10px;"><strong>Notes:</strong> ${escapeHtml(notes)}</div>` : ""}
-      <div class="hero-actions" style="margin-top:12px;">
-        ${actionButtons.join("")}
-      </div>
-      <div class="card" style="margin-top:14px;">
-        <div class="card-head">
-          <h3>AI Portfolio</h3>
-          ${
-            canEditRun
-              ? `<div class="hero-actions" style="margin-top:0;">
-                  <button class="cta secondary small" type="button" data-action="generate-ai-portfolio" data-run-id="${runId}">${icon(
-                    "magic-wand"
-                  )}<span>Generate with Quantura Horizon</span></button>
-                  <button class="cta secondary small" type="button" data-action="rename-ai-agent" data-agent-id="${agentId}" ${
-                    agentId ? "" : "disabled"
-                  }>${icon("edit-pencil")}<span>Rename Agent</span></button>
-                </div>`
-              : `<div class="small muted">AI actions are disabled in read-only mode.</div>`
-          }
-        </div>
-        <div id="ai-portfolio-summary" class="small">${portfolioSummary}</div>
-      </div>
-      <div class="table-wrap" style="margin-top:12px;">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Symbol</th>
-              <th>Last close</th>
-              <th>Return 1M (%)</th>
-              <th>Return 3M (%)</th>
-              <th>RSI 14</th>
-              <th>Volatility</th>
-              <th>Score</th>
-              <th>Projected 1Y ROI</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rows
-              .map(
-                (row) => {
-                  const logoRaw = String(row?.logoUrl || row?.logo_url || "").trim();
-                  const logoUrl = /^https?:\/\//i.test(logoRaw) ? logoRaw : "";
-                  return `
-                  <tr>
-                    <td>
-                      <button class="link-button" type="button" data-action="pick-ticker" data-ticker="${escapeHtml(row.symbol)}" style="display:inline-flex; align-items:center; gap:8px;">
-                        ${logoUrl ? `<img src="${escapeHtml(logoUrl)}" alt="" loading="lazy" style="width:16px; height:16px; border-radius:50%; object-fit:cover;" />` : ""}
-                        ${escapeHtml(row.symbol)}
-                      </button>
-                    </td>
-                    <td>${row.lastClose ?? "—"}</td>
-                    <td>${row.return1m ?? "—"}</td>
-                    <td>${row.return3m ?? "—"}</td>
-                    <td>${row.rsi14 ?? "—"}</td>
-                    <td>${row.volatility ?? "—"}</td>
-                    <td>${row.score ?? "—"}</td>
-                    <td>${formatRoiPercent(toFiniteOrNull(row.projectedRoi))}</td>
-                  </tr>
-                `;
-                }
-              )
-              .join("")}
-          </tbody>
-        </table>
-      </div>
+      <div class="metric-strip" style="margin-top:12px;">${statusChips.join("")}</div>
+      ${serviceMessage && status !== "queued" && status !== "running" && status !== "failed" && !(!rows.length && status === "completed")
+        ? `<div class="small muted" style="margin-top:8px;">${escapeHtml(serviceMessage)}</div>`
+        : ""}
+      ${filterSummary}
+      <div class="hero-actions" style="margin-top:12px;">${actionButtons.join("")}</div>
+      ${requestId && !isSharedView ? renderOutputPublishControlsMarkup({ requestId, requestType: "screener" }) : ""}
+      ${artifactLinks}
+      ${waitingMessage}
+      ${renderScreenerWorkflowActivity(runDoc)}
+      ${failureMessage}
+      ${emptyMessage}
+      ${rows.length ? renderScreenerRowsTable(rows) : ""}
     `;
-    bindAIAgentLeaderboardControls();
-    renderAIAgentLeaderboard(state.aiAgents);
+  };
+
+  const fetchAndRenderScreenerRun = async (runId) => {
+    const body = await apiGetScreenerRun(runId);
+    const runDoc = body?.run && typeof body.run === "object" ? body.run : null;
+    if (!runDoc) throw new Error("Saved screener run is unavailable.");
+    renderScreenerRunOutput(runDoc);
+    return runDoc;
+  };
+
+  const pollScreenerRunUntilSettled = async (runId, { delayMs = 3500, maxAttempts = 90 } = {}) => {
+    const cleanRunId = String(runId || "").trim();
+    if (!cleanRunId) throw new Error("Run ID is required.");
+    const token = `${cleanRunId}:${Date.now()}`;
+    state.activeScreenerPollToken = token;
+    let latestRun = null;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      if (attempt > 0) {
+        await waitForScreenerPollTick(delayMs);
+      }
+      if (state.activeScreenerPollToken !== token) return latestRun;
+      latestRun = await fetchAndRenderScreenerRun(cleanRunId);
+      if (state.activeScreenerPollToken !== token) return latestRun;
+      await fetchMyRequestById(buildSourceRequestId("screener", cleanRunId)).catch(() => null);
+      renderMyRequestsPanels();
+      updateScreenerDispatchStatusFromRun(latestRun, { attempt, maxAttempts });
+      if (isScreenerRunSettled(latestRun)) {
+        const refreshedRequest = await fetchMyRequestById(buildSourceRequestId("screener", cleanRunId)).catch(() => null);
+        renderMyRequestsPanels();
+        if (normalizeScreenerRunStatus(latestRun?.status) === "completed") {
+          loadPublicScreenerGithubRuns({ force: true }).catch(() => {});
+        }
+        if (refreshedRequest && typeof refreshedRequest === "object") {
+          latestRun = {
+            ...(latestRun || {}),
+            isPublic: Boolean(refreshedRequest?.published) || Boolean(latestRun?.isPublic),
+          };
+          renderScreenerRunOutput(latestRun);
+        }
+        return latestRun;
+      }
+    }
+
+    setScreenerDispatchStatus("Still waiting on the GitHub artifact. The run is saved, and you can reopen it from My Requests.", "warn");
+    return latestRun;
   };
 
   const extractCloseFromHistoryRow = (row) => {
@@ -17781,9 +20870,7 @@
     const start = startDate.toISOString().slice(0, 10);
     const end = endDate.toISOString().slice(0, 10);
 
-    const getHistory = functions.httpsCallable("get_ticker_history");
-    const historyResult = await getHistory({ ticker: cleanTicker, interval: "1d", start, end, meta: buildMeta() });
-    const historyRows = Array.isArray(historyResult.data?.rows) ? historyResult.data.rows : [];
+    const historyRows = await apiFetchTickerHistory({ ticker: cleanTicker, interval: "1d", start, end });
     if (!historyRows.length) return null;
 
     const closeSeries = historyRows.map((row) => extractCloseFromHistoryRow(row)).filter((value) => value !== null);
@@ -17791,19 +20878,17 @@
     const currentPrice = closeSeries[closeSeries.length - 1];
     if (currentPrice === null || currentPrice <= 0) return null;
 
-    const runForecast = functions.httpsCallable("run_timeseries_forecast");
-    const forecastResult = await runForecast({
+    const forecastData = await apiRunForecast({
       ticker: cleanTicker,
       horizon: 365,
       interval: "1d",
       service: "prophet",
       dailySeasonality: true,
-      quantiles: [0.1, 0.5, 0.9],
+      quantiles: getDefaultForecastQuantiles(),
       workspaceId,
       start,
       meta: buildMeta(),
     });
-    const forecastData = forecastResult.data && typeof forecastResult.data === "object" ? forecastResult.data : {};
     const forecastRows = normalizeForecastSeriesRows(forecastData.forecastSeries || forecastData.forecastRows || []);
     if (!forecastRows.length) return null;
 
@@ -18351,14 +21436,33 @@
 
     const cleanId = String(runId || "").trim();
     if (!cleanId) throw new Error("Run ID is required.");
+    const requestDocId = buildSourceRequestId("screener", cleanId);
+    if (!getMyRequestById(requestDocId)) {
+      fetchMyRequestById(requestDocId).catch(() => {});
+    }
 
     setOutputLoading(ui.screenerOutput, "Loading saved run...");
-    const doc = await db.collection("screener_runs").doc(cleanId).get();
-    if (!doc.exists) throw new Error("Run not found.");
-    const data = doc.data() || {};
-    state.sharedScreenerView = null;
-    renderScreenerRunOutput({ id: doc.id, ...data });
-    logEvent("screener_loaded_saved", { run_id: doc.id });
+    let runDoc = null;
+    try {
+      runDoc = await fetchAndRenderScreenerRun(cleanId);
+    } catch (error) {
+      const doc = await db.collection("screener_runs").doc(cleanId).get();
+      if (!doc.exists) throw new Error("Run not found.");
+      runDoc = { id: doc.id, ...(doc.data() || {}) };
+      renderScreenerRunOutput(runDoc);
+    }
+    if (runDoc && !isScreenerRunSettled(runDoc)) {
+      pollScreenerRunUntilSettled(cleanId).catch(() => {});
+    }
+    logEvent("screener_loaded_saved", { run_id: cleanId });
+  };
+
+  const isAutopilotMyRequest = (request = null) => {
+    const item = request && typeof request === "object" ? request : {};
+    const normalized = normalizeMyRequestType(item.type);
+    if (normalized !== "forecast") return false;
+    const sourceRef = item.sourceRef && typeof item.sourceRef === "object" ? item.sourceRef : {};
+    return String(sourceRef.collection || "").trim() === "autopilot_requests";
   };
 
   const extractQuantileKeys = (rows) => {
@@ -18372,6 +21476,306 @@
       });
     }
     return Array.from(set).sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
+  };
+
+  const formatForecastQuantileLabel = (key) => {
+    const raw = String(key || "").trim().toLowerCase();
+    if (!/^q\d{1,3}$/.test(raw)) return raw.toUpperCase();
+    const level = Math.max(0, Math.floor(Number(raw.slice(1)) || 0));
+    return `P${String(level).padStart(level < 100 ? 2 : 3, "0")}`;
+  };
+
+  const resolveForecastQuantileKey = (quantileKeys = [], targetLevel = 50) => {
+    const entries = quantileKeys
+      .map((key) => ({
+        key,
+        level: Number(String(key || "").replace(/^q/i, "")),
+      }))
+      .filter((entry) => Number.isFinite(entry.level))
+      .sort((left, right) => left.level - right.level);
+    if (!entries.length) return "";
+    const exact = entries.find((entry) => entry.level === targetLevel);
+    if (exact) return exact.key;
+    return (
+      entries
+        .slice()
+        .sort((left, right) => Math.abs(left.level - targetLevel) - Math.abs(right.level - targetLevel))[0]?.key || ""
+    );
+  };
+
+  const describeForecastBands = (quantileKeys = []) => {
+    const levels = new Set(
+      quantileKeys
+        .map((key) => Number(String(key || "").replace(/^q/i, "")))
+        .filter((value) => Number.isFinite(value))
+    );
+    if ([1, 10, 25, 50, 75, 90, 99].every((value) => levels.has(value))) {
+      return DEFAULT_FORECAST_BAND_SUMMARY;
+    }
+    return quantileKeys.map((key) => formatForecastQuantileLabel(key)).join(", ");
+  };
+
+  const collectForecastHistoryPoints = (rows = []) =>
+    (Array.isArray(rows) ? rows : [])
+      .map((row) => ({
+        x: extractDateFromHistoryRow(row),
+        y: extractCloseFromHistoryRow(row),
+      }))
+      .filter((point) => point.x instanceof Date && !Number.isNaN(point.x.getTime()) && point.y !== null);
+
+  const collectForecastActualPointsFromSeries = (rows = []) =>
+    normalizeForecastSeriesRows(rows)
+      .map((row) => ({
+        x: extractDateFromHistoryRow(row),
+        y: toFiniteOrNull(row.actual),
+      }))
+      .filter((point) => point.x instanceof Date && !Number.isNaN(point.x.getTime()) && point.y !== null);
+
+  const renderForecastOutputChart = async (forecastDoc) => {
+    if (!ui.forecastOutput) return;
+    const host = ui.forecastOutput.querySelector("[data-forecast-detail-chart]");
+    if (!host) return;
+
+    const Plotly = getPlotly();
+    if (!Plotly) {
+      host.innerHTML = `<div class="small muted">Interactive chart unavailable right now.</div>`;
+      return;
+    }
+
+    const forecastRows = normalizeForecastSeriesRows(forecastDoc?.forecastRows || forecastDoc?.forecastPreview || []);
+    const quantileKeys = extractQuantileKeys(forecastRows);
+    if (!forecastRows.length || !quantileKeys.length) {
+      host.innerHTML = `<div class="small muted">No forecast series available to plot.</div>`;
+      return;
+    }
+
+    const rawHistoricalRows = collectForecastHistoryPoints(forecastDoc?.historicalRows || state.tickerContext.rows || []).sort(
+      (left, right) => left.x.getTime() - right.x.getTime()
+    );
+    const forecastPoints = forecastRows
+      .map((row) => {
+        const parsed = new Date(String(row.ds || "").trim());
+        if (Number.isNaN(parsed.getTime())) return null;
+        return { x: parsed, row };
+      })
+      .filter(Boolean);
+    if (!forecastPoints.length) {
+      host.innerHTML = `<div class="small muted">No forecast dates were available to plot.</div>`;
+      return;
+    }
+
+    const historicalRows = (rawHistoricalRows.length ? rawHistoricalRows : collectForecastActualPointsFromSeries(forecastRows)).sort(
+      (left, right) => left.x.getTime() - right.x.getTime()
+    );
+
+    const q01Key = resolveForecastQuantileKey(quantileKeys, 1);
+    const q10Key = resolveForecastQuantileKey(quantileKeys, 10);
+    const q25Key = resolveForecastQuantileKey(quantileKeys, 25);
+    const q50Key = resolveForecastQuantileKey(quantileKeys, 50);
+    const q75Key = resolveForecastQuantileKey(quantileKeys, 75);
+    const q90Key = resolveForecastQuantileKey(quantileKeys, 90);
+    const q99Key = resolveForecastQuantileKey(quantileKeys, 99);
+    const medianKey = q50Key || resolveForecastQuantileKey(quantileKeys, 50);
+    const lastActualPoint = historicalRows[historicalRows.length - 1] || null;
+    const firstForecastPoint = forecastPoints[0] || null;
+    const explicitPlotStart = [forecastDoc?.plotStartDate, forecastDoc?.chartConfig?.plotStartDate, forecastDoc?.metrics?.plotStartDate]
+      .map((value) => {
+        const parsed = value ? new Date(String(value).trim()) : null;
+        return parsed instanceof Date && !Number.isNaN(parsed.getTime()) ? parsed : null;
+      })
+      .find(Boolean);
+    const plotStartDate = (() => {
+      if (explicitPlotStart) return explicitPlotStart;
+      const anchor = lastActualPoint?.x || firstForecastPoint?.x || historicalRows[0]?.x || null;
+      if (!(anchor instanceof Date) || Number.isNaN(anchor.getTime())) return null;
+      const candidate = new Date(anchor.getTime());
+      candidate.setDate(candidate.getDate() - 450);
+      const floor = historicalRows[0]?.x || firstForecastPoint?.x || candidate;
+      return candidate < floor ? floor : candidate;
+    })();
+    const visibleHistoricalRows = historicalRows.filter((point) => !plotStartDate || point.x >= plotStartDate);
+    const visibleForecastPoints = forecastPoints.filter((entry) => !plotStartDate || entry.x >= plotStartDate);
+    const shouldBridgeFromLastActual =
+      Boolean(lastActualPoint) &&
+      Boolean(visibleForecastPoints.length) &&
+      visibleForecastPoints[0].x.getTime() > lastActualPoint.x.getTime();
+
+    const buildForecastSeries = (key) => {
+      if (!key) return [];
+      const points = [];
+      if (shouldBridgeFromLastActual && lastActualPoint && (!plotStartDate || lastActualPoint.x >= plotStartDate)) {
+        points.push({ x: lastActualPoint.x, y: lastActualPoint.y });
+      }
+      visibleForecastPoints.forEach((entry) => {
+        const numeric = Number(entry.row?.[key]);
+        if (!Number.isFinite(numeric)) return;
+        points.push({ x: entry.x, y: numeric });
+      });
+      return points;
+    };
+
+    const dark = isDarkMode();
+    const textColor = dark ? "rgba(246, 244, 238, 0.92)" : "#24324a";
+    const gridColor = dark ? "rgba(246, 244, 238, 0.12)" : "rgba(86, 106, 128, 0.16)";
+    const plotBg = dark ? "#162033" : "#E5ECF6";
+    const historyColor = dark ? "#8b90ff" : "#636EFA";
+    const forecastColor = dark ? "#ff9a84" : "#EF553B";
+    const band25Color = dark ? "rgba(190, 214, 127, 0.34)" : "rgba(186, 214, 111, 0.34)";
+    const band25Line = dark ? "#b9d97c" : "#B6CF78";
+    const band10Color = dark ? "rgba(132, 203, 255, 0.24)" : "rgba(125, 198, 255, 0.25)";
+    const band10Line = dark ? "#8ecfff" : "#8CC7F7";
+    const band01Color = dark ? "rgba(182, 142, 255, 0.22)" : "rgba(176, 140, 255, 0.24)";
+    const band01Line = dark ? "#bd98ff" : "#AD8CFF";
+    const isHourlyForecast = String(forecastDoc?.interval || state.tickerContext.interval || "1d").toLowerCase() === "1h";
+    const hoverDateFormat = isHourlyForecast ? "%Y-%m-%d %H:%M" : "%Y-%m-%d";
+    const titleTicker = normalizeTicker(forecastDoc?.ticker || state.tickerContext.ticker || "") || "Ticker";
+    const lastActualDate = lastActualPoint?.x || firstForecastPoint?.x || null;
+    const chartStartDate = plotStartDate || visibleHistoricalRows[0]?.x || visibleForecastPoints[0]?.x || historicalRows[0]?.x || firstForecastPoint?.x || null;
+    const chartEndDate =
+      visibleForecastPoints[visibleForecastPoints.length - 1]?.x ||
+      visibleHistoricalRows[visibleHistoricalRows.length - 1]?.x ||
+      forecastPoints[forecastPoints.length - 1]?.x ||
+      lastActualDate ||
+      chartStartDate;
+    const chartTitle = `${titleTicker} Prophet Forecast (Interactive) from ${formatIsoDate(
+      chartStartDate || chartEndDate || new Date()
+    )} with P10\u2013P90 and P25\u2013P75`;
+    const compactLegend = typeof window !== "undefined" && window.innerWidth < 720;
+
+    const traces = [];
+    const addBand = (lowerKey, upperKey, label, fillcolor, lineColor, legendRank) => {
+      if (!lowerKey || !upperKey || lowerKey === upperKey) return;
+      const upperSeries = buildForecastSeries(upperKey);
+      const lowerSeries = buildForecastSeries(lowerKey);
+      if (upperSeries.length < 2 || lowerSeries.length < 2) return;
+      traces.push({
+        type: "scatter",
+        mode: "lines",
+        name: `${label} upper`,
+        x: upperSeries.map((point) => point.x),
+        y: upperSeries.map((point) => point.y),
+        line: { width: 1.3, color: lineColor },
+        hovertemplate: `Date=%{x|${hoverDateFormat}}<br>${escapeHtml(label)} upper=$%{y:.2f}<extra></extra>`,
+        showlegend: false,
+      });
+      traces.push({
+        type: "scatter",
+        mode: "lines",
+        name: label,
+        x: lowerSeries.map((point) => point.x),
+        y: lowerSeries.map((point) => point.y),
+        line: { width: 1.3, color: lineColor },
+        fill: "tonexty",
+        fillcolor,
+        hovertemplate: `Date=%{x|${hoverDateFormat}}<br>${escapeHtml(label)} lower=$%{y:.2f}<extra></extra>`,
+        legendrank: legendRank,
+      });
+    };
+
+    addBand(q01Key, q99Key, "P01\u2013P99", band01Color, band01Line, 30);
+    addBand(q10Key, q90Key, "P10\u2013P90", band10Color, band10Line, 20);
+    addBand(q25Key, q75Key, "P25\u2013P75", band25Color, band25Line, 10);
+
+    const medianSeries = buildForecastSeries(medianKey);
+    if (medianSeries.length) {
+      traces.push({
+        type: "scatter",
+        mode: "lines",
+        name: "Forecast (yhat)",
+        x: medianSeries.map((point) => point.x),
+        y: medianSeries.map((point) => point.y),
+        line: {
+          width: 2.2,
+          color: forecastColor,
+        },
+        hovertemplate: `Date=%{x|${hoverDateFormat}}<br>yhat=$%{y:.2f}<extra></extra>`,
+        legendrank: 40,
+      });
+    }
+
+    if (visibleHistoricalRows.length) {
+      traces.push({
+        type: "scatter",
+        mode: "lines+markers",
+        name: "Actual Close",
+        x: visibleHistoricalRows.map((point) => point.x),
+        y: visibleHistoricalRows.map((point) => point.y),
+        line: { width: 2, color: historyColor },
+        marker: { size: 4.5, color: historyColor, opacity: 0.82 },
+        hovertemplate: `Date=%{x|${hoverDateFormat}}<br>Actual=$%{y:.2f}<extra></extra>`,
+        legendrank: 50,
+      });
+    }
+
+    const layout = {
+      font: { family: "Manrope, sans-serif", color: textColor },
+      paper_bgcolor: "rgba(0,0,0,0)",
+      plot_bgcolor: plotBg,
+      margin: { l: 68, r: compactLegend ? 20 : 164, t: 74, b: 86 },
+      title: {
+        text: chartTitle,
+        x: 0.02,
+        xanchor: "left",
+        y: 0.98,
+        yanchor: "top",
+        font: { size: compactLegend ? 15 : 18, color: textColor },
+      },
+      hovermode: "x unified",
+      dragmode: "pan",
+      showlegend: true,
+      legend: compactLegend
+        ? { orientation: "h", y: -0.24, x: 0, font: { size: 11 }, traceorder: "normal" }
+        : { orientation: "v", y: 0.98, x: 1.02, xanchor: "left", yanchor: "top", font: { size: 12 }, traceorder: "normal" },
+      xaxis: {
+        title: { text: "Date" },
+        gridcolor: gridColor,
+        zerolinecolor: gridColor,
+        type: "date",
+        showspikes: true,
+        spikemode: "across",
+        spikesnap: "cursor",
+        rangeslider: {
+          visible: true,
+          thickness: 0.13,
+          bgcolor: dark ? "rgba(255,255,255,0.03)" : "rgba(255,255,255,0.55)",
+          bordercolor: gridColor,
+        },
+        ...(chartStartDate && chartEndDate ? { range: [chartStartDate, chartEndDate] } : {}),
+      },
+      yaxis: {
+        title: { text: "Price (USD)" },
+        gridcolor: gridColor,
+        zerolinecolor: gridColor,
+        showspikes: true,
+        spikemode: "across",
+        spikesnap: "cursor",
+      },
+      shapes: lastActualDate && (!chartStartDate || lastActualDate >= chartStartDate)
+        ? [
+            {
+              type: "line",
+              x0: lastActualDate,
+              x1: lastActualDate,
+              y0: 0,
+              y1: 1,
+              yref: "paper",
+              line: {
+                color: dark ? "rgba(255,255,255,0.42)" : "rgba(36,50,74,0.42)",
+                width: 2,
+                dash: "dash",
+              },
+            },
+          ]
+        : [],
+      annotations: [],
+      height: compactLegend ? 560 : 650,
+    };
+
+    await Plotly.react(host, traces, layout, {
+      responsive: true,
+      displaylogo: false,
+      modeBarButtonsToRemove: ["lasso2d", "select2d"],
+    });
   };
 
   const extractForecastKeyLevels = (rows = []) => {
@@ -18593,17 +21997,26 @@
     const error = String(isCurrent ? summary?.error || "" : "").trim();
     const answer = String(isCurrent ? summary?.text || "" : "").trim();
     const disabled = !forecastId;
+    const providerId = normalizeModelCouncilProviderId(
+      isCurrent ? summary?.provider : state.tickerContext.tickerQueryProvider || "openai"
+    ) || "openai";
+    const modelId =
+      normalizeAiModelId(isCurrent ? summary?.model : state.tickerContext.tickerQueryModel || "gpt-5-mini") || "gpt-5-mini";
+    const modelMeta = getModelMeta(modelId);
+    const providerLabel = String(MODEL_PROVIDER_LABEL[providerId] || providerId || "AI").trim();
+    const modelLabel = String(modelMeta?.label || modelId).trim();
     const statusLine = loading
-      ? "Generating automatic Model Council summary..."
+      ? "Generating Model Council summary..."
       : error
         ? error
         : answer
           ? `Summary ready${Number.isFinite(latencyMs) && latencyMs >= 0 ? ` · ${Math.round(latencyMs)}ms` : ""}`
-          : "Run a forecast to generate an automatic AI narrative.";
+          : "Run a forecast to generate an AI narrative.";
     return `
       <div class="results-panel forecast-ai-summary-panel">
-        <h3>Automatic AI summary</h3>
+        <h3>AI summary</h3>
         <div class="small muted">${escapeHtml(statusLine)}</div>
+        <div class="small muted" style="margin-top:4px;">Model used: ${escapeHtml(`${providerLabel} · ${modelLabel} (${modelId})`)}</div>
         <div class="panel-output small" style="margin-top:8px;">
           ${
             loading
@@ -18641,7 +22054,8 @@
 
   const renderForecastDetails = (forecastDoc) => {
     if (!ui.forecastOutput || !forecastDoc) return;
-    const rows = Array.isArray(forecastDoc.forecastRows) ? forecastDoc.forecastRows : [];
+    const rows = normalizeForecastSeriesRows(forecastDoc.forecastRows || forecastDoc.forecastPreview || []);
+    const quantKeys = extractQuantileKeys(rows);
     if (!rows.length) {
       setOutputReady(ui.forecastOutput);
       const source = String(forecastDoc.chartSeriesSource || "").trim();
@@ -18649,7 +22063,7 @@
         source === "missing"
           ? "No local fan-chart series found for this run on this device. Re-run the forecast to regenerate chart data."
           : source === "preview_only"
-            ? "Only preview rows are available on this device. Full fan-chart series was kept client-side on the originating device."
+            ? "Only preview rows are available for this older saved run. New forecasts save the full fan-chart series with the source request."
             : "No forecast rows are available for this run.";
       ui.forecastOutput.innerHTML = `
         <div class="small muted">${escapeHtml(message)}</div>
@@ -18658,7 +22072,6 @@
       return;
     }
 
-    const quantKeys = extractQuantileKeys(rows);
     const headers = ["ds", ...quantKeys];
 
     const pageSize = 25;
@@ -18671,9 +22084,7 @@
     const end = Math.min(total, start + pageSize);
     const slice = rows.slice(start, end);
 
-    const quantileLabel = Array.isArray(forecastDoc.quantiles)
-      ? forecastDoc.quantiles.map((q) => `P${Math.round(Number(q) * 100)}`).filter(Boolean).join(", ")
-      : "";
+    const quantileLabel = describeForecastBands(quantKeys);
     const metrics = forecastDoc.metrics && typeof forecastDoc.metrics === "object" ? forecastDoc.metrics : {};
     const interval = String(forecastDoc.interval || state.tickerContext.interval || "1d");
 
@@ -18746,6 +22157,13 @@
 
     const metricEntries = Object.entries(metrics || {}).filter(([, value]) => value !== null && value !== undefined && value !== "");
     const extraMetrics = metricEntries.filter(([key]) => !displayedKeys.has(key));
+    const forecastTicker = normalizeTicker(forecastDoc.ticker || state.tickerContext.ticker || "");
+    const historicalRows =
+      Array.isArray(forecastDoc.historicalRows) && forecastDoc.historicalRows.length
+        ? forecastDoc.historicalRows
+        : Array.isArray(state.tickerContext.rows)
+          ? state.tickerContext.rows
+          : [];
     const metricsTable = metricEntries.length
       ? `
         <details class="learn-more">
@@ -18766,23 +22184,33 @@
       : "";
 
     const summary = [
+      forecastTicker
+        ? `<div class="small meta-line">${icon("search-engine")}<strong>Ticker:</strong> <button class="link-button" type="button" data-action="pick-ticker" data-ticker="${escapeHtml(
+            forecastTicker
+          )}">${escapeHtml(forecastTicker)}</button></div>`
+        : "",
       `<div class="small meta-line">${icon("hashtag")}<strong>Forecast ID:</strong> ${escapeHtml(forecastDoc.id || "")}</div>`,
       `<div class="small meta-line">${icon("check-circle")}<strong>Status:</strong> ${escapeHtml(
         sanitizeText(forecastDoc.status, 40) || "Forecast ready"
       )}</div>`,
       `<div class="small meta-line">${icon("magic-wand")}<strong>Service:</strong> ${escapeHtml(labelForecastService(forecastDoc.service))}</div>`,
       forecastDoc.engine ? `<div class="small meta-line">${icon("electronics-chip")}<strong>Engine:</strong> ${escapeHtml(forecastDoc.engine)}</div>` : "",
-      quantileLabel ? `<div class="small meta-line">${icon("percentage")}<strong>Quantiles:</strong> ${escapeHtml(quantileLabel)}</div>` : "",
+      quantileLabel ? `<div class="small meta-line">${icon("percentage")}<strong>Bands:</strong> ${escapeHtml(quantileLabel)}</div>` : "",
     ]
       .filter(Boolean)
       .join("");
 
     const tradeRationale = String(forecastDoc.tradeRationale || "").trim();
+    const serviceMessage = String(forecastDoc.serviceMessage || "").trim();
 
     setOutputReady(ui.forecastOutput);
     ui.forecastOutput.innerHTML = `
       <div class="output-stack quantura-horizon-widget">
         ${summary}
+        ${serviceMessage ? `<div class="small muted">${escapeHtml(serviceMessage)}</div>` : ""}
+        <div class="forecast-chart-shell">
+          <div class="forecast-output-plot" data-forecast-detail-chart aria-label="Interactive forecast chart"></div>
+        </div>
         ${metricsStrip}
         ${
           tradeRationale
@@ -18791,6 +22219,13 @@
         }
         ${metricsTable}
         <div class="table-controls">
+          ${
+            forecastTicker
+              ? `<button class="cta secondary small" type="button" data-action="pick-ticker" data-ticker="${escapeHtml(
+                  forecastTicker
+                )}">${icon("eye")}<span>Open ticker</span></button>`
+              : ""
+          }
           <button class="cta secondary small" type="button" data-action="forecast-page" data-delta="-1" ${
             page === 0 ? "disabled" : ""
           }>${icon("arrow-left")}<span>Prev</span></button>
@@ -18823,19 +22258,23 @@
         <details class="learn-more">
           <summary>Learn more</summary>
           <p class="small">
-            Fan-chart series are stored client-side on this device for fast rendering. Firestore stores only request metadata and compact summaries.
+            Forecast rows are saved with the source run so saved requests can be reloaded across devices. Client cache is still used when available for faster chart rendering.
           </p>
         </details>
         ${renderForecastAiSummaryMarkup(forecastDoc)}
       </div>
     `;
+    renderForecastOutputChart({ ...forecastDoc, historicalRows }).catch((error) => {
+      const host = ui.forecastOutput?.querySelector("[data-forecast-detail-chart]");
+      if (host) {
+        host.innerHTML = `<div class="small muted">${escapeHtml(error?.message || "Unable to render the interactive chart.")}</div>`;
+      }
+    });
   };
 
   const loadTickerHistory = async (functions, ticker, interval) => {
-    const fetchHistory = functions.httpsCallable("get_ticker_history");
     const start = computeHistoryStart(interval);
-    const result = await fetchHistory({ ticker, interval, start, end: "" });
-    const rows = result.data?.rows || [];
+    const rows = await apiFetchTickerHistory({ ticker, interval, start, end: "" });
     return Array.isArray(rows) ? rows : [];
   };
 
@@ -18843,6 +22282,7 @@
     const snap = await db.collection("forecast_requests").doc(forecastId).get();
     if (!snap.exists) throw new Error("Forecast not found.");
     const doc = { id: snap.id, ...(snap.data() || {}) };
+    const storedHistoricalRows = Array.isArray(doc.historicalRows) ? doc.historicalRows.slice(-1600) : [];
     const fromCache = await loadForecastSeriesFromClientCache({
       requestId: snap.id,
       ticker: doc.ticker,
@@ -18855,6 +22295,7 @@
     const cachedRows = normalizeForecastSeriesRows(fromCache?.forecastRows || []);
     if (cachedRows.length) {
       doc.forecastRows = cachedRows;
+      doc.historicalRows = Array.isArray(fromCache?.historicalRows) ? fromCache.historicalRows.slice(-1600) : [];
       doc.chartSeriesSource = "client_cache";
       doc.chartCacheKey = String(fromCache?.id || "").trim();
       return doc;
@@ -18863,6 +22304,7 @@
     const legacyRows = normalizeForecastSeriesRows(doc.forecastRows || []);
     if (legacyRows.length) {
       doc.forecastRows = legacyRows;
+      doc.historicalRows = storedHistoricalRows;
       doc.chartSeriesSource = "firestore_legacy";
       saveForecastSeriesToClientCache({
         requestId: snap.id,
@@ -18873,6 +22315,7 @@
         quantiles: doc.quantiles,
         start: doc.start,
         forecastRows: legacyRows,
+        historicalRows: storedHistoricalRows,
         metrics: doc.metrics,
       }).catch(() => {});
       return doc;
@@ -18880,12 +22323,17 @@
 
     const previewRows = normalizeForecastSeriesRows(doc.forecastPreview || []);
     doc.forecastRows = previewRows;
+    doc.historicalRows = storedHistoricalRows;
     doc.chartSeriesSource = previewRows.length ? "preview_only" : "missing";
     return doc;
   };
 
   const plotForecastById = async (db, functions, forecastId, { preloadedDoc = null } = {}) => {
     if (!forecastId) return;
+    const requestDocId = buildSourceRequestId("forecast", forecastId);
+    if (!getMyRequestById(requestDocId)) {
+      fetchMyRequestById(requestDocId).catch(() => {});
+    }
     const doc =
       preloadedDoc && typeof preloadedDoc === "object"
         ? { ...preloadedDoc, id: String(preloadedDoc.id || forecastId).trim() }
@@ -18909,6 +22357,7 @@
       state.tickerContext.rows = rows;
       state.tickerContext.interval = interval;
     }
+    doc.historicalRows = Array.isArray(state.tickerContext.rows) ? state.tickerContext.rows.slice(-1600) : [];
 
     const forecastOverlays = buildForecastOverlays(doc.forecastRows || []);
     const overlays = [...forecastOverlays, ...(state.tickerContext.indicatorOverlays || [])];
@@ -18916,16 +22365,29 @@
     if (String(doc.chartSeriesSource || "") === "missing") {
       setTerminalStatus("Forecast metadata loaded. Re-run on this device to regenerate fan chart data.");
     } else if (String(doc.chartSeriesSource || "") === "preview_only") {
-      setTerminalStatus("Forecast preview loaded. Full fan chart data is stored on the originating device.");
+      setTerminalStatus("Forecast preview loaded from an older saved run.");
     } else {
       setTerminalStatus(`Plotted forecast ${forecastId}.`);
     }
     renderForecastDetails(doc);
+    const currentSummary = state.tickerContext.forecastAiSummary && typeof state.tickerContext.forecastAiSummary === "object"
+      ? state.tickerContext.forecastAiSummary
+      : null;
+    const shouldRequestSummary =
+      Array.isArray(doc.forecastRows) &&
+      doc.forecastRows.length > 0 &&
+      (!currentSummary ||
+        String(currentSummary.requestId || "").trim() !== String(forecastId || "").trim() ||
+        (!currentSummary.loading && !String(currentSummary.text || "").trim() && !String(currentSummary.error || "").trim()));
+    if (shouldRequestSummary) {
+      runForecastAutoSummary({ forecastDoc: doc, requestId: forecastId, notify: false }).catch(() => {});
+    }
     return doc;
   };
 
-  const mapMyRequestTypeToPanel = (type) => {
+  const mapMyRequestTypeToPanel = (type, request = null) => {
     const normalized = normalizeMyRequestType(type);
+    if (isAutopilotMyRequest(request)) return "autopilot";
     if (normalized === "screener") return "screener";
     if (normalized === "indicator") return "indicators";
     if (normalized === "modelCouncil") return "ticker-query";
@@ -18942,7 +22404,7 @@
     if (!item) throw new Error("Request not found.");
 
     const type = normalizeMyRequestType(item.type) || "forecast";
-    const panelId = mapMyRequestTypeToPanel(type);
+    const panelId = mapMyRequestTypeToPanel(type, item);
     if (typeof window.__quanturaSetPanel === "function") {
       window.__quanturaSetPanel(panelId, { pushPath: false });
     }
@@ -18955,6 +22417,13 @@
     if (ticker) syncTickerInputs(ticker, { source: "my_request_load" });
 
     if (type === "forecast") {
+      if (isAutopilotMyRequest(item)) {
+        const runId = sourceId || String(id.split("__").slice(1).join("__") || "").trim();
+        if (!runId) throw new Error("Forecast Foundry source is missing.");
+        await loadFoundryRunById(runId, { notify: false, replaceUrl: false });
+        if (notify) showToast("Forecast Foundry request loaded.");
+        return item;
+      }
       const forecastId = sourceId || String(id.split("__").slice(1).join("__") || "").trim();
       if (!forecastId) throw new Error("Forecast source is missing.");
       await plotForecastById(db, functions, forecastId);
@@ -18987,9 +22456,12 @@
       if (ui.technicalsOutput) {
         setOutputReady(ui.technicalsOutput);
         const summary = String(outputsMeta.summary || "").trim();
+        const modelCitation = String(outputsMeta.modelCitation || "").trim();
         ui.technicalsOutput.innerHTML = `<div class="small muted">${
           summary ? escapeHtml(summary) : "Indicator inputs restored. Run indicators to refresh values."
-        }</div>${renderOutputPublishControlsMarkup({ requestId: String(item.id || "").trim(), requestType: "indicator" })}`;
+        }</div>${
+          modelCitation ? `<div class="small muted" style="margin-top:8px;">Model used: ${escapeHtml(modelCitation)}</div>` : ""
+        }${renderOutputPublishControlsMarkup({ requestId: String(item.id || "").trim(), requestType: "indicator" })}`;
       }
       if (notify) showToast("Indicator request loaded.");
       return item;
@@ -19057,11 +22529,14 @@
       const request = payload?.request && typeof payload.request === "object" ? payload.request : null;
       if (!request) throw new Error("Shared request unavailable.");
       const type = normalizeMyRequestType(request.type) || "forecast";
-      const panelId = mapMyRequestTypeToPanel(type);
+      const shareMeta = payload?.share && typeof payload.share === "object" ? payload.share : {};
+      const panelId = mapMyRequestTypeToPanel(type, request);
       if (setPanel && typeof window.__quanturaSetPanel === "function") {
         window.__quanturaSetPanel(panelId, { pushPath: false });
       }
-      if (type === "modelCouncil" && ui.tickerQueryOutput) {
+      if (isAutopilotMyRequest(request)) {
+        await renderSharedFoundryRequest(request, String(shareMeta?.shareUrl || "").trim());
+      } else if (type === "modelCouncil" && ui.tickerQueryOutput) {
         const outputsMeta = request.outputsMeta && typeof request.outputsMeta === "object" ? request.outputsMeta : {};
         const answer = String(outputsMeta.answer || outputsMeta.summary || "").trim();
         renderTickerQueryResult({
@@ -19073,16 +22548,31 @@
           selectedModules: Array.isArray(request.input?.modules) ? request.input.modules : [],
           responseId: String(request.sourceRef?.id || request.id || ""),
           citations: [],
-          shareUrl: String(payload?.share?.shareUrl || ""),
+          shareUrl: String(shareMeta?.shareUrl || ""),
         });
       } else if (type === "forecast" && ui.forecastOutput) {
         setOutputReady(ui.forecastOutput);
         const summary = String(request.outputsMeta?.summary || "Shared forecast request loaded.");
         ui.forecastOutput.innerHTML = `<div class="small muted">${escapeHtml(summary)}</div>`;
       } else if (type === "screener" && ui.screenerOutput) {
-        setOutputReady(ui.screenerOutput);
-        const summary = String(request.outputsMeta?.summary || "Shared screener request loaded.");
-        ui.screenerOutput.innerHTML = `<div class="small muted">${escapeHtml(summary)}</div>`;
+        const screener = payload?.screener && typeof payload.screener === "object" ? payload.screener : null;
+        if (screener) {
+          renderScreenerRunOutput({
+            ...screener,
+            id: String(screener.id || request.sourceRef?.id || request.id || "").trim(),
+            isPublic: Boolean(request?.published || screener?.isPublic),
+            __sharedMeta: {
+              shareId: String(shareMeta?.slug || "").trim(),
+              shareUrl: String(shareMeta?.shareUrl || "").trim(),
+              readOnly: Boolean(payload?.readOnly),
+              canImport: Boolean(payload?.canImport),
+            },
+          });
+        } else {
+          setOutputReady(ui.screenerOutput);
+          const summary = String(request.outputsMeta?.summary || "Shared screener request loaded.");
+          ui.screenerOutput.innerHTML = `<div class="small muted">${escapeHtml(summary)}</div>`;
+        }
       } else if (type === "indicator" && ui.technicalsOutput) {
         setOutputReady(ui.technicalsOutput);
         const summary = String(request.outputsMeta?.summary || "Shared indicator request loaded.");
@@ -20079,9 +23569,11 @@
         if (!next) return;
         const showTickerChart = next === "ticker";
         const showStudioMain = showTickerChart;
+        const hideStudioPanel = showTickerChart;
 
         if (ui.studioLayout) {
           ui.studioLayout.classList.toggle("is-main-hidden", !showStudioMain);
+          ui.studioLayout.classList.toggle("is-panel-hidden", hideStudioPanel);
         }
 
         if (ui.studioChartShell) {
@@ -20097,7 +23589,7 @@
           if (ui.tickerIntelligenceOutput) {
             ui.tickerIntelligenceOutput.classList.remove("hidden");
           }
-          const activeTicker = getActiveTicker() || normalizeTicker(safeLocalStorageGet(LAST_TICKER_KEY) || "");
+          const activeTicker = resolveActiveOrDefaultTicker();
           if (activeTicker) {
             syncTickerInputs(activeTicker, { source: "panel_open_ticker", skipHistory: true });
             refreshTradingViewForTicker(activeTicker);
@@ -20120,7 +23612,7 @@
         }
 
         if (next === "predictions") {
-          const activeTicker = getActiveTicker() || normalizeTicker(safeLocalStorageGet(LAST_TICKER_KEY) || "");
+          const activeTicker = resolveActiveOrDefaultTicker();
           if (activeTicker) {
             syncTickerInputs(activeTicker, { source: "panel_open_predictions", skipHistory: true });
           }
@@ -20141,7 +23633,7 @@
         }
 
         if (next === "news") {
-          const ticker = getActiveTicker() || normalizeTicker(safeLocalStorageGet(LAST_TICKER_KEY) || "");
+          const ticker = resolveActiveOrDefaultTicker();
           if (!ticker) return;
           scheduleSideDataRefresh(ticker, { force: !state.panelAutoloaded.news });
           state.panelAutoloaded.news = true;
@@ -20160,7 +23652,7 @@
         }
 
         if (next === "ticker-query") {
-          const ticker = getActiveTicker() || normalizeTicker(safeLocalStorageGet(LAST_TICKER_KEY) || "");
+          const ticker = resolveActiveOrDefaultTicker();
           if (ticker && ui.tickerQueryTicker && !String(ui.tickerQueryTicker.value || "").trim()) {
             ui.tickerQueryTicker.value = ticker;
           }
@@ -20173,8 +23665,40 @@
           }
         }
 
+        if (next === "autopilot") {
+          syncFoundrySourceFields();
+          syncFoundryDateDefaults();
+          const firstFoundryLoad = !state.panelAutoloaded.autopilot;
+          state.panelAutoloaded.autopilot = true;
+          const requestShare = String(getQueryParam("requestShare") || "").trim();
+          const focusRunId = String(getQueryParam("runId") || "").trim();
+          const legacyUploadId = String(getQueryParam("uploadId") || "").trim();
+          const shouldLoadFoundryRuns = !state.foundryContext.loaded || firstFoundryLoad || Boolean(focusRunId);
+          if (requestShare) {
+            loadSharedMyRequestFromUrl({ setPanel: false }).catch(() => {});
+          } else {
+            if (!focusRunId && legacyUploadId && db && storage) {
+              const loadRunsPromise =
+                shouldLoadFoundryRuns
+                  ? loadFoundryRuns({ notify: false }).catch((error) => {
+                      setFoundryStatus(error?.message || "Unable to load Forecast Foundry runs.", "warn");
+                    })
+                  : Promise.resolve();
+              loadRunsPromise.finally(() => {
+                renderLegacyFoundryUploadCompat(db, storage, legacyUploadId, { notify: false }).catch((error) => {
+                  setFoundryStatus(error?.message || "Unable to load legacy upload.", "warn");
+                });
+              });
+            } else if (shouldLoadFoundryRuns) {
+              loadFoundryRuns({ focusRunId, notify: false }).catch((error) => {
+                setFoundryStatus(error?.message || "Unable to load Forecast Foundry runs.", "warn");
+              });
+            }
+          }
+        }
+
         if (next === "options") {
-          const ticker = getActiveTicker() || normalizeTicker(safeLocalStorageGet(LAST_TICKER_KEY) || "");
+          const ticker = resolveActiveOrDefaultTicker();
           if (!ticker) return;
           const first = !state.panelAutoloaded.options;
           state.panelAutoloaded.options = true;
@@ -20207,7 +23731,7 @@
       bindMobileSidebarDrawer();
       bindMobileBottomNav();
       bindMarketingBottomNav();
-      bindNativeRewardedNavigationAds();
+      bindNativeTransitionInterstitials();
       registerLegacyNativeAdInjectionHook();
       scheduleNativeInlineAdsRefresh();
       window.setInterval(scheduleNativeInlineAdsRefresh, 3500);
@@ -20333,9 +23857,7 @@
 			        ui.terminalTicker.value = ticker;
 			        ui.terminalForm.requestSubmit?.();
 			      } else {
-		        const params = new URLSearchParams();
-		        params.set("ticker", ticker);
-		        window.location.href = `/ticker-intelligence?${params.toString()}`;
+		        window.location.href = buildTickerPanelUrl(ticker);
 		      }
 		    };
 
@@ -20821,6 +24343,11 @@
             }
             if (requestType === "forecast" && state.tickerContext.forecastDoc) {
               renderForecastDetails(state.tickerContext.forecastDoc);
+            } else if (requestType === "screener" && ui.screenerOutput) {
+              const runId = String(requestId.split("__").slice(1).join("__") || "").trim();
+              if (runId) {
+                fetchAndRenderScreenerRun(runId).catch(() => {});
+              }
             } else if (requestType === "modelCouncil") {
               renderTickerQueryResult({
                 ...(state.tickerContext.tickerQueryLastResponse || {}),
@@ -20848,8 +24375,8 @@
           if (copySharedScreener) {
             event.preventDefault();
             const shareId = String(copySharedScreener.dataset.shareId || state.sharedScreenerView?.shareId || "").trim();
-            if (!shareId) return;
-            const url = buildShareUrl("screener", shareId);
+            const url = String(state.sharedScreenerView?.shareUrl || (shareId ? buildShareUrl("screener", shareId) : "")).trim();
+            if (!url) return;
             copySharedScreener.disabled = true;
             try {
               await performShare({
@@ -20888,7 +24415,7 @@
               } else if (result.kind === "forecast") {
                 window.location.href = `/forecasting?forecastId=${encodeURIComponent(result.importedId)}`;
               } else if (result.kind === "upload") {
-                window.location.href = `/uploads?uploadId=${encodeURIComponent(result.importedId)}`;
+                window.location.href = `/autopilot?uploadId=${encodeURIComponent(result.importedId)}`;
               }
             } catch (error) {
               setPendingShareId(shareId);
@@ -20908,20 +24435,27 @@
             }
             const forecastId = String(shareForecast.dataset.forecastId || "").trim();
             if (!forecastId) return;
+            const requestId = buildSourceRequestId("forecast", forecastId);
 
             shareForecast.disabled = true;
             try {
-              const createShare = functions.httpsCallable("create_share_link");
-              const result = await createShare({ kind: "forecast", id: forecastId, meta: buildMeta() });
-              const shareId = String(result.data?.shareId || "").trim();
-              const url = String(result.data?.shareUrl || "") || buildShareUrl("forecast", shareId);
-              if (!shareId || !url) throw new Error("Unable to create share link.");
-              await performShare({
-                url,
-                title: "Quantura forecast",
-                text: "Forecast shared from Quantura.",
+              let request = getMyRequestById(requestId);
+              if (!request) {
+                request = await fetchMyRequestById(requestId).catch(() => null);
+              }
+              if (!request) {
+                throw new Error("Saved request is not ready yet. Refresh My Requests and try again.");
+              }
+              await openMyRequestShareModal({
+                request,
+                onSaved: (saved) => {
+                  if (saved && typeof saved === "object") {
+                    upsertMyRequestInState(saved);
+                    renderMyRequestsPanels();
+                  }
+                },
               });
-              showToast("Share link copied.");
+              showToast("Share settings updated.");
               logEvent("forecast_shared", { forecast_id: forecastId });
             } catch (error) {
               showToast(error.message || "Unable to share forecast.", "warn");
@@ -20946,12 +24480,15 @@
 	              confirmLabel: "Delete",
 	              danger: true,
 	            });
-	            if (!ok) return;
+            if (!ok) return;
 
             deleteForecast.disabled = true;
             try {
-              const del = functions.httpsCallable("delete_forecast_request");
-              await del({ forecastId, meta: buildMeta() });
+              await apiDeleteForecast(forecastId);
+              await updateMyRequest(buildSourceRequestId("forecast", forecastId), {}, {
+                method: "DELETE",
+                path: `/api/my-requests/${encodeURIComponent(buildSourceRequestId("forecast", forecastId))}`,
+              }).catch(() => {});
               showToast("Forecast deleted.");
               logEvent("forecast_deleted", { forecast_id: forecastId });
               if (state.tickerContext.forecastId === forecastId) {
@@ -20997,12 +24534,14 @@
 
             renameScreener.disabled = true;
             try {
-              const rename = functions.httpsCallable("rename_screener_run");
-              await rename({ runId, title: nextTitle, meta: buildMeta() });
+              await apiUpdateScreenerRun(runId, { title: nextTitle });
+              await updateMyRequest(buildSourceRequestId("screener", runId), { title: nextTitle }, { method: "PATCH" }).catch(() => {});
               showToast("Screener run renamed.");
               logEvent("screener_renamed", { run_id: runId });
-              const fresh = await db.collection("screener_runs").doc(runId).get();
-              if (fresh.exists) renderScreenerRunOutput({ id: fresh.id, ...(fresh.data() || {}) });
+              await fetchAndRenderScreenerRun(runId).catch(async () => {
+                const fresh = await db.collection("screener_runs").doc(runId).get();
+                if (fresh.exists) renderScreenerRunOutput({ id: fresh.id, ...(fresh.data() || {}) });
+              });
             } catch (error) {
               showToast(error.message || "Unable to rename screener run.", "warn");
             } finally {
@@ -21020,20 +24559,27 @@
             }
             const runId = String(shareScreener.dataset.runId || "").trim();
             if (!runId) return;
+            const requestId = buildSourceRequestId("screener", runId);
 
             shareScreener.disabled = true;
             try {
-              const createShare = functions.httpsCallable("create_share_link");
-              const result = await createShare({ kind: "screener", id: runId, meta: buildMeta() });
-              const shareId = String(result.data?.shareId || "").trim();
-              const url = String(result.data?.shareUrl || "") || buildShareUrl("screener", shareId);
-              if (!shareId || !url) throw new Error("Unable to create share link.");
-              await performShare({
-                url,
-                title: "Quantura screener",
-                text: "Screener run shared from Quantura.",
+              let request = getMyRequestById(requestId);
+              if (!request) {
+                request = await fetchMyRequestById(requestId).catch(() => null);
+              }
+              if (!request) {
+                throw new Error("Saved request is not ready yet. Refresh My Requests and try again.");
+              }
+              await openMyRequestShareModal({
+                request,
+                onSaved: (saved) => {
+                  if (saved && typeof saved === "object") {
+                    upsertMyRequestInState(saved);
+                    renderMyRequestsPanels();
+                  }
+                },
               });
-              showToast("Share link copied.");
+              showToast("Share settings updated.");
               logEvent("screener_shared", { run_id: runId });
             } catch (error) {
               showToast(error.message || "Unable to share screener run.", "warn");
@@ -21216,16 +24762,21 @@
             }
             const runId = String(toggleScreenerPublic.dataset.runId || "").trim();
             if (!runId) return;
-            const currentlyPublic = String(toggleScreenerPublic.dataset.isPublic || "0").trim() === "1";
+            const requestId = buildSourceRequestId("screener", runId);
+            const request = getMyRequestById(requestId) || (await fetchMyRequestById(requestId).catch(() => null));
+            const currentlyPublic = Boolean(request?.published);
             const nextValue = !currentlyPublic;
             toggleScreenerPublic.disabled = true;
             try {
-              const updateVisibility = functions.httpsCallable("set_screener_public_visibility");
-              await updateVisibility({ runId, isPublic: nextValue, meta: buildMeta() });
-              const fresh = await db.collection("screener_runs").doc(runId).get();
-              if (fresh.exists) {
-                renderScreenerRunOutput({ id: fresh.id, ...(fresh.data() || {}) });
-              }
+              await updateMyRequest(
+                requestId,
+                {},
+                { method: "POST", path: `/api/my-requests/${encodeURIComponent(requestId)}/${nextValue ? "publish" : "unpublish"}` }
+              );
+              await fetchAndRenderScreenerRun(runId).catch(async () => {
+                const fresh = await db.collection("screener_runs").doc(runId).get();
+                if (fresh.exists) renderScreenerRunOutput({ id: fresh.id, ...(fresh.data() || {}) });
+              });
               showToast(nextValue ? "Screener is now public." : "Screener is now private.");
             } catch (error) {
               showToast(error.message || "Unable to update screener visibility.", "warn");
@@ -21292,12 +24843,19 @@
 	              confirmLabel: "Delete",
 	              danger: true,
 	            });
-	            if (!ok) return;
+            if (!ok) return;
 
             deleteScreener.disabled = true;
             try {
-              const del = functions.httpsCallable("delete_screener_run");
-              await del({ runId, meta: buildMeta() });
+              await apiDeleteScreenerRun(runId);
+              await updateMyRequest(buildSourceRequestId("screener", runId), {}, {
+                method: "DELETE",
+                path: `/api/my-requests/${encodeURIComponent(buildSourceRequestId("screener", runId))}`,
+              }).catch(() => {});
+              if (state.activeScreenerRunId === runId) {
+                state.activeScreenerRunId = "";
+                state.activeScreenerPollToken = "";
+              }
               showToast("Screener run deleted.");
               logEvent("screener_deleted", { run_id: runId });
               if (ui.screenerOutput) ui.screenerOutput.innerHTML = `<div class="small muted">Screener run deleted.</div>`;
@@ -22079,7 +25637,7 @@
       });
 
       ui.dashboardAuthLink?.addEventListener("click", async (event) => {
-        if (!state.user) return;
+        if (!hasFullAccount()) return;
         event.preventDefault?.();
         await performSignOut();
       });
@@ -22354,28 +25912,76 @@
         try {
           await current.linkWithCredential(credential);
           await linkPendingCredentialIfPresent({ silent: true });
-          return;
+          return auth.currentUser || current;
         } catch (linkError) {
           if (await recoverFromAuthCollision(linkError, { methodHint })) {
-            return;
+            return auth.currentUser || null;
           }
           if (isAuthCollision(linkError?.code)) {
-            await fallbackSignIn();
+            const result = await fallbackSignIn();
             await linkPendingCredentialIfPresent({ silent: true });
-            return;
+            return result?.user || auth.currentUser || null;
           }
           throw linkError;
         }
       }
       try {
-        await fallbackSignIn();
+        const result = await fallbackSignIn();
         await linkPendingCredentialIfPresent({ silent: true });
+        return result?.user || auth.currentUser || null;
       } catch (fallbackError) {
-        if (await recoverFromAuthCollision(fallbackError, { methodHint })) return;
+        if (await recoverFromAuthCollision(fallbackError, { methodHint })) return auth.currentUser || null;
         throw fallbackError;
       }
-      if (email && ui.emailInput && !String(ui.emailInput.value || "").trim()) {
-        ui.emailInput.value = email;
+    };
+
+    const createEmailPasswordAccount = async () => {
+      await persistenceReady;
+      const email = String(ui.emailInput?.value || "").trim();
+      const password = String(ui.passwordInput?.value || "");
+      const confirmPassword = String(ui.confirmPasswordInput?.value || "");
+      const username = sanitizeProfileUsername(ui.usernameInput?.value || "", null);
+      if (!email) {
+        throw new Error("Enter your email to create an account.");
+      }
+      if (!username) {
+        throw new Error("Enter a username to create your account.");
+      }
+      if (password.length < 6) {
+        throw new Error("Password must be at least 6 characters.");
+      }
+      if (password !== confirmPassword) {
+        throw new Error("Password and confirm password must match.");
+      }
+      writePendingSignupProfile({ email, username });
+      try {
+        const credential = firebase.auth.EmailAuthProvider.credential(email, password);
+        const user =
+          (await linkOrSignInWithCredential(credential, () => auth.createUserWithEmailAndPassword(email, password), {
+            methodHint: "password",
+            email,
+          })) || auth.currentUser;
+        if (user) {
+          if (String(user.displayName || "").trim() !== username) {
+            await user.updateProfile({ displayName: username });
+          }
+          if (db) {
+            await db.collection("users").doc(user.uid).set(
+              {
+                name: username,
+                profile: { username },
+                metadata: buildMeta(),
+              },
+              { merge: true }
+            );
+          }
+        }
+        showToast("Account created.");
+        logEvent("sign_up", { method: "password" });
+        setEmailAuthMode("signin");
+      } catch (error) {
+        clearPendingSignupProfile();
+        throw error;
       }
     };
 
@@ -22383,16 +25989,20 @@
       event.preventDefault();
       if (ui.emailMessage) ui.emailMessage.textContent = "";
       try {
-        await persistenceReady;
-        const email = String(ui.emailInput?.value || "").trim();
-        const password = String(ui.passwordInput?.value || "");
-        const credential = firebase.auth.EmailAuthProvider.credential(email, password);
-        await linkOrSignInWithCredential(credential, () => auth.signInWithEmailAndPassword(email, password), {
-          methodHint: "password",
-          email,
-        });
-        showToast("Signed in successfully.");
-        logEvent("login", { method: "password" });
+        if (state.authEmailMode === "signup") {
+          await createEmailPasswordAccount();
+        } else {
+          await persistenceReady;
+          const email = String(ui.emailInput?.value || "").trim();
+          const password = String(ui.passwordInput?.value || "");
+          const credential = firebase.auth.EmailAuthProvider.credential(email, password);
+          await linkOrSignInWithCredential(credential, () => auth.signInWithEmailAndPassword(email, password), {
+            methodHint: "password",
+            email,
+          });
+          showToast("Signed in successfully.");
+          logEvent("login", { method: "password" });
+        }
       } catch (error) {
         if (ui.emailMessage) ui.emailMessage.textContent = error.message;
       }
@@ -22400,20 +26010,22 @@
 
     ui.emailCreate?.addEventListener("click", async () => {
       if (ui.emailMessage) ui.emailMessage.textContent = "";
-      try {
-        await persistenceReady;
-        const email = String(ui.emailInput?.value || "").trim();
-        const password = String(ui.passwordInput?.value || "");
-        const credential = firebase.auth.EmailAuthProvider.credential(email, password);
-        await linkOrSignInWithCredential(credential, () => auth.createUserWithEmailAndPassword(email, password), {
-          methodHint: "password",
-          email,
-        });
-        showToast("Account created.");
-        logEvent("sign_up", { method: "password" });
-      } catch (error) {
-        if (ui.emailMessage) ui.emailMessage.textContent = error.message;
+      if (state.authEmailMode !== "signup") {
+        setEmailAuthMode("signup");
+        if (ui.emailMessage) {
+          ui.emailMessage.textContent = "Add a username and confirm your password to create your Quantura account.";
+        }
+        ui.usernameInput?.focus();
+        return;
       }
+      setEmailAuthMode("signin");
+      if (ui.emailMessage) ui.emailMessage.textContent = "";
+    });
+
+    ui.authBackToSignin?.addEventListener("click", (event) => {
+      event.preventDefault();
+      setEmailAuthMode("signin");
+      if (ui.emailMessage) ui.emailMessage.textContent = "";
     });
 
     ui.authForgotPassword?.addEventListener("click", async () => {
@@ -22462,6 +26074,7 @@
       state.authInFlight = true;
       const runtime = resolveRuntimeLabel();
       const normalizedMethod = String(method || "").trim().toLowerCase();
+      const upgradingAnonymousSession = Boolean(auth.currentUser?.isAnonymous);
       const supportsNativeBridge = new Set([
         "google",
         "apple",
@@ -22475,9 +26088,13 @@
         await persistenceReady;
         if (isNativeApp() && supportsNativeBridge) {
           const bridge = installNativeAuthBridge(auth);
-          const requested = Boolean(bridge?.requestSignIn?.(normalizedMethod));
+          const nativeRequest = bridge?.requestSignIn?.(normalizedMethod);
+          const requested = Boolean(nativeRequest?.sent);
           if (!requested) throw new Error("Native sign-in bridge is unavailable.");
-          await waitForNativeAuthCompletion(auth, 90000);
+          await waitForNativeAuthCompletion(auth, 90000, {
+            requestId: nativeRequest?.requestId,
+            provider: normalizedMethod,
+          });
           await linkPendingCredentialIfPresent({ silent: true });
           showToast(successMessage);
           logEvent("login", { method: normalizedMethod, runtime, source: "native_bridge" });
@@ -22485,23 +26102,25 @@
         }
 
         if (isInstalledPwa() || isMobileBrowser()) {
-          if (auth.currentUser?.isAnonymous) {
-            await auth.currentUser.linkWithRedirect(provider);
-          } else {
-            await auth.signInWithRedirect(provider);
-          }
+          // Do not link guest sessions during social sign-in.
+          // A returning provider account should sign in directly, then the auth-state
+          // listener will merge any anonymous session data into the signed-in account.
+          await auth.signInWithRedirect(provider);
           logEvent("login_redirect_started", { method: normalizedMethod, runtime });
           return;
         }
 
-        if (auth.currentUser?.isAnonymous) {
-          await auth.currentUser.linkWithPopup(provider);
-        } else {
-          await auth.signInWithPopup(provider);
-        }
+        // Do not link guest sessions during social sign-in.
+        // Direct sign-in avoids provider collision errors for returning users.
+        await auth.signInWithPopup(provider);
         await linkPendingCredentialIfPresent({ silent: true });
         showToast(successMessage);
-        logEvent("login", { method: normalizedMethod, runtime, source: "popup" });
+        logEvent("login", {
+          method: normalizedMethod,
+          runtime,
+          source: "popup",
+          guest_upgrade: upgradingAnonymousSession,
+        });
       } catch (error) {
         if (await recoverFromAuthCollision(error, { methodHint: normalizedMethod, preferRuntime: runtime })) {
           return;
@@ -22564,12 +26183,21 @@
     }
 
     if (ui.terminalTicker) {
+      const initialTradingViewSymbol = normalizeTradingViewSymbol(getQueryParam("tvwidgetsymbol"));
       const initialTicker =
         normalizeTicker(getQueryParam("ticker")) ||
         normalizeTicker(getQueryParam("symbol")) ||
+        normalizeTradingViewQueryTicker(getQueryParam("tvwidgetsymbol")) ||
         normalizeTicker(safeLocalStorageGet(LAST_TICKER_KEY)) ||
         normalizeTicker(ui.terminalTicker.value) ||
         getDefaultPopularTicker();
+      if (
+        initialTicker &&
+        initialTradingViewSymbol &&
+        normalizeTradingViewQueryTicker(initialTradingViewSymbol) === initialTicker
+      ) {
+        cacheTradingViewSymbol(initialTicker, initialTradingViewSymbol);
+      }
       const initialInterval = getQueryParam("interval") || (ui.terminalInterval?.value || "1d");
       ui.terminalTicker.value = initialTicker;
       if (ui.terminalInterval) ui.terminalInterval.value = initialInterval;
@@ -22748,18 +26376,7 @@
           });
           if (!rewardApproved) return;
 		      const formData = new FormData(ui.forecastForm);
-		      let quantiles = [];
-		      try {
-		        const raw = formData.getAll("quantiles");
-		        if (raw.length === 1 && String(raw[0]).includes(",")) {
-		          quantiles = parseQuantilesInput(String(raw[0]));
-		        } else {
-		          quantiles = parseQuantilesInput(raw);
-		        }
-		      } catch (error) {
-		        showToast(error.message || "Invalid quantiles.", "warn");
-		        return;
-		      }
+	      const quantiles = getDefaultForecastQuantiles();
           const ticker = normalizeTicker(formData.get("ticker") || state.tickerContext.ticker || ui.terminalTicker?.value || "");
           if (!ticker) {
             showToast("Enter a ticker to forecast.", "warn");
@@ -22813,9 +26430,7 @@
                 feedback: "",
                 error: "",
               };
-			        const runForecast = functions.httpsCallable("run_timeseries_forecast");
-			        const result = await runForecast(payload);
-			        const data = result.data || {};
+			        const data = await apiRunForecast(payload);
 			        const requestId = String(data.requestId || "").trim();
 			        if (!requestId) {
 			          throw new Error("Forecast run did not return a request ID.");
@@ -22875,6 +26490,7 @@
                       },
                 forecastPreview: Array.isArray(data.forecastPreview) ? data.forecastPreview : alignedRows.slice(0, 12),
                 forecastRows: alignedRows,
+                historicalRows: Array.isArray(historyRows) ? historyRows.slice(-1600) : [],
                 forecastQuantilesEnd: data.forecastQuantilesEnd && typeof data.forecastQuantilesEnd === "object" ? data.forecastQuantilesEnd : {},
                 tradeRationale: String(data.tradeRationale || "").trim(),
                 chartSeriesSource: "client_cache",
@@ -22899,10 +26515,12 @@
 	                summary: String(data?.serviceMessage || "").trim(),
 	                service: String(payload.service || ""),
 	                interval: String(payload.interval || ""),
-                  chartStorage: "client_only",
+                  chartStorage: "source_saved",
                   chartCacheKey: String(cacheMeta?.cacheKey || "").trim(),
                   chartParamsHash: String(cacheMeta?.paramsHash || "").trim(),
                   chartRows: Number(cacheMeta?.rowCount || 0) || 0,
+                  forecastRowsCount: alignedRows.length,
+                  metrics: data.metrics && typeof data.metrics === "object" ? data.metrics : {},
 	              },
               sourceRef: {
                 collection: "forecast_requests",
@@ -23071,8 +26689,17 @@
           ui.forecastOutput.dataset.bound = "1";
         }
 
-	    ui.technicalsForm?.addEventListener("submit", async (event) => {
+    ui.technicalsForm?.addEventListener("submit", async (event) => {
 	      event.preventDefault();
+        try {
+          await ensureSessionUser({
+            reason: "indicator_requires_session",
+            message: "Sign in to save indicator runs and publish them to Explore.",
+          });
+        } catch (error) {
+          showToast(error?.message || "Unable to start guest session.", "warn");
+          return;
+        }
 	      const formData = new FormData(ui.technicalsForm);
 	      const indicators = formData.getAll("indicators");
 	      const includeSeries = Boolean(ui.indicatorChart || ui.tickerChart);
@@ -23112,9 +26739,14 @@
             throw new Error(detail || "indicator_analysis_failed");
           }
 	        const rows = data.latest || [];
-          const analysis = data.analysis && typeof data.analysis === "object" ? data.analysis : {};
+          const analysis = await buildLocalIndicatorAnalysis({
+            data,
+            payload,
+            functions,
+          });
           const prediction = analysis.prediction && typeof analysis.prediction === "object" ? analysis.prediction : {};
-          const indicatorRequestId = `indicator__${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+          const indicatorSourceId = `ind_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+          const indicatorRequestId = buildSourceRequestId("indicator", indicatorSourceId);
           const indicatorAutoPublish = shouldAutoPublishForType("indicator");
 	        if (ui.technicalsOutput) {
 	          setOutputReady(ui.technicalsOutput);
@@ -23127,6 +26759,10 @@
                   Number.isFinite(targetPrice) && Number.isFinite(lastClose) && lastClose > 0
                     ? ((targetPrice - lastClose) / lastClose) * 100
                     : null;
+                const providerId = normalizeModelCouncilProviderId(String(analysis.provider || "quantura").trim());
+                const providerLabel = String(MODEL_PROVIDER_LABEL[providerId] || titleCaseLabel(analysis.provider || "quantura")).trim() || "Quantura";
+                const modelId = normalizeAiModelId(analysis.model || "indicator_local_repair") || "indicator_local_repair";
+                const modelLabel = String(getModelMeta(modelId)?.label || modelId).trim() || modelId;
                 const keySignals = Array.isArray(analysis.keySignals) ? analysis.keySignals.slice(0, 6) : [];
                 const summaryText = String(analysis.summary || "").trim();
                 const narrativeText = String(analysis.text || "").trim();
@@ -23149,6 +26785,9 @@
                     summaryText || narrativeText
                       ? `<div class="results-panel" style="margin-top: 12px;">
                           <h3>AI indicator analysis</h3>
+                          <div class="small muted" style="margin-top:4px;">Model used: ${escapeHtml(
+                            `${providerLabel} · ${modelLabel} (${modelId})`
+                          )}</div>
                           ${summaryText ? `<div class="small markdown-output" style="margin-top:8px;">${renderMarkdown(summaryText, { fallback: "" })}</div>` : ""}
                           <div class="form-grid" style="margin-top:10px;">
                             <div class="profile-item"><span class="label">Direction</span><span class="value">${escapeHtml(
@@ -23175,10 +26814,7 @@
                               : ""
                           }
                           ${narrativeText ? `<div class="small markdown-output" style="margin-top:10px;">${renderMarkdown(narrativeText, { fallback: "" })}</div>` : ""}
-                          ${renderOutputPublishControlsMarkup({
-                            requestId: indicatorRequestId,
-                            requestType: "indicator",
-                          })}
+                          <div class="small muted" data-indicator-publish-placeholder style="margin-top:10px;">Saving indicator run and publishing it to Explore...</div>
                           <p class="small muted solve-now-disclaimer" style="margin-top:10px;">${escapeHtml(
                             String(analysis.disclaimer || MODEL_COUNCIL_OUTPUT_DISCLAIMER)
                           )}</p>
@@ -23216,35 +26852,47 @@
             indicators: Array.isArray(indicators) ? indicators.map((entry) => String(entry || "").trim().toUpperCase()) : [],
           },
           outputsMeta: {
-            summary:
-              (() => {
-                const narrative = String(analysis?.summary || "").trim();
-                if (narrative) return narrative.slice(0, 320);
-                if (Array.isArray(rows) && rows.length) {
-                  return rows
-                    .slice(0, 4)
-                    .map((row) => `${row?.name}: ${row?.display ?? row?.value}`)
-                    .join(" • ");
-                }
-                return "Indicator request saved.";
-              })(),
+            ...buildIndicatorPublishMeta({
+              ticker: payload.ticker,
+              analysis,
+              prediction,
+              rows,
+              selectedIndicators: indicators,
+              targetPrice,
+              upsidePct,
+            }),
             latestCount: Array.isArray(rows) ? rows.length : 0,
             prediction: prediction?.direction ? String(prediction.direction) : "",
           },
           sourceRef: {
-            collection: "indicator_requests",
-            id: `ind_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+            collection: "indicator_runs",
+            id: indicatorSourceId,
           },
           published: indicatorAutoPublish,
         }).catch(() => null);
-        state.tickerContext.indicatorRequestId = String(savedIndicatorRequest?.id || indicatorRequestId).trim();
+        state.tickerContext.indicatorRequestId = String(savedIndicatorRequest?.id || "").trim();
         const indicatorPublishHost = ui.technicalsOutput?.querySelector?.("[data-output-publish-controls]");
+        const indicatorPublishPlaceholder = ui.technicalsOutput?.querySelector?.("[data-indicator-publish-placeholder]");
+        const publishMarkup = state.tickerContext.indicatorRequestId
+          ? renderOutputPublishControlsMarkup({
+              requestId: state.tickerContext.indicatorRequestId,
+              requestType: "indicator",
+            })
+          : `<div class="small muted">Indicator run saved locally, but Explore publishing is unavailable until the request sync finishes.</div>`;
         if (indicatorPublishHost) {
-          indicatorPublishHost.outerHTML = renderOutputPublishControlsMarkup({
-            requestId: state.tickerContext.indicatorRequestId,
-            requestType: "indicator",
-          });
+          indicatorPublishHost.outerHTML = publishMarkup;
+        } else if (indicatorPublishPlaceholder) {
+          indicatorPublishPlaceholder.outerHTML = publishMarkup;
         }
+        await fetchMyRequestsList({ force: true }).catch(() => {});
+        showToast(
+          state.tickerContext.indicatorRequestId
+            ? indicatorAutoPublish
+              ? "Indicator run saved and published to Explore."
+              : "Indicator run saved."
+            : "Indicator output is ready, but request sync is still catching up.",
+          state.tickerContext.indicatorRequestId ? "ok" : "warn"
+        );
 	      } catch (error) {
 	        showToast(error.message || "Unable to run indicators.", "warn");
 	      }
@@ -23269,27 +26917,22 @@
       if (!rewardApproved) return;
       const formData = new FormData(ui.downloadForm);
       const ticker =
-        normalizeTicker(formData.get("ticker")) || state.tickerContext.ticker || safeLocalStorageGet(LAST_TICKER_KEY) || "";
+        resolveActiveOrDefaultTicker(formData.get("ticker"), state.tickerContext.ticker);
       if (!ticker) {
-        showToast("Load a ticker first.", "warn");
+        showToast("Enter or load a ticker first.", "warn");
         return;
       }
-      const interval = String(formData.get("interval") || "1d");
+      const interval = "1d";
+      const useAllHistory = Boolean(formData.get("useAllHistory"));
       const today = new Date();
       const end = String(formData.get("end") || "").trim() || today.toISOString().slice(0, 10);
-      const start =
-        interval === "1h"
-          ? (() => {
-              const dt = new Date();
-              dt.setDate(dt.getDate() - 729);
-              return dt.toISOString().slice(0, 10);
-            })()
-          : "1900-01-01";
+      const start = useAllHistory ? "" : "1900-01-01";
       const payload = {
         ticker,
         start,
         end,
         interval,
+        useAllHistory,
         meta: buildMeta(),
       };
 
@@ -23298,9 +26941,10 @@
         if (ui.downloadPreview) {
           ui.downloadPreview.innerHTML = `<div class="small muted">Preparing preview...</div>`;
         }
-        const getDownload = functions.httpsCallable("download_price_csv");
-        const result = await getDownload(payload);
-        const data = result.data || {};
+        const data = await callFoundryApi("POST", "/api/autopilot/datasets/history", {
+          ...payload,
+          persist: false,
+        });
         const csvText = String(data.csv || "");
         if (!csvText.trim()) {
           ui.downloadStatus.textContent = "No data returned.";
@@ -23314,7 +26958,7 @@
         triggerDownload(filename, csvText);
         const rowCount = Number(data.rowCount || 0);
         ui.downloadStatus.textContent = rowCount ? `Download ready (${rowCount} rows).` : "Download ready.";
-        logEvent("download_history", { ticker, interval });
+        logEvent("download_history", { ticker, interval, use_all_history: useAllHistory });
       } catch (error) {
         ui.downloadStatus.textContent = "Download failed.";
         showToast(error.message || "Unable to fetch history.", "warn");
@@ -23832,6 +27476,7 @@
 	      }
 	    });
 
+      mountGithubActionsScreenerForm();
       ui.screenerModel?.addEventListener("change", () => {
         syncScreenerProviderAccent();
         refreshScreenerCreditsUi();
@@ -23853,109 +27498,92 @@
         } catch (error) {
           showToast(error?.message || "Unable to start guest session.", "warn");
           return;
-        }
+	        }
 	      const formData = new FormData(ui.screenerForm);
-      const requestedNames = Number(formData.get("maxNames"));
-      const boundedNames = Number.isFinite(requestedNames) ? Math.max(5, Math.min(25, requestedNames)) : 10;
-      const minCapBucket = String(formData.get("minCapBucket") || "any").trim().toLowerCase();
-      const minCapAbs = minCapBucket === "any" ? null : Number(minCapBucket);
-      const selectedModel = normalizeAiModelId(formData.get("model") || state.selectedScreenerModel || "gpt-5-mini");
-      const selectedMeta = getModelMeta(selectedModel) || { personality: "balanced" };
-      const tier = getCurrentAiTierConfig();
-      if (tier.allowedModels.length && !tier.allowedModels.includes(selectedModel)) {
-        await showLimitReachedModal("Selected personality is only available for Pro.");
-        return;
-      }
-      if (Number(state.aiUsageToday || 0) >= Number(tier.weeklyLimit || 3)) {
-        await showLimitReachedModal("You have reached your weekly AI screener credit limit.");
-        return;
-      }
+      const minMarketCap = Math.max(0, Math.floor(toFiniteOrNull(formData.get("minMarketCap")) ?? 100000000000));
       const payload = {
-        universe: formData.get("universe"),
-        market: formData.get("market"),
-        minCap: minCapAbs,
-        marketCapFilter: {
-          type: minCapAbs === null ? "any" : "greater_than",
-          value: minCapAbs,
-        },
-        maxNames: boundedNames,
-        notes: formData.get("notes"),
-        agentName: String(formData.get("agentName") || "").trim(),
-        filters: collectScreenerFilters(formData),
-        model: selectedModel,
-        personality: String(selectedMeta.personality || "balanced"),
+        minMarketCap,
+        autoPublish: true,
         workspaceId: state.activeWorkspaceId || sessionUser?.uid || state.user?.uid || "",
         meta: buildMeta(),
       };
 
 	      try {
-	        setOutputLoading(ui.screenerOutput, "Running screener and preparing AI Portfolio...");
-	        const runScreener = functions.httpsCallable("run_quick_screener");
-	        const result = await runScreener(payload);
-	        const rows = result.data?.results || [];
-          const runId = String(result.data?.runId || "").trim();
-          const runTitle = String(result.data?.title || "").trim();
-          const resultsFound = Number(result.data?.resultsFound || rows.length || 0);
-          if (ui.screenerResultsCount) {
-            ui.screenerResultsCount.textContent = `Results Found: ${Number.isFinite(resultsFound) ? resultsFound : rows.length}`;
+        setScreenerGenerateButtonState({ busy: true, label: "Calling GitHub Action..." });
+        setScreenerDispatchStatus("Calling GitHub Actions now. Quantura will attach the saved run as soon as the workflow responds.", "ok");
+	        setOutputLoading(ui.screenerOutput, "Queueing GitHub Actions screener...");
+	        const result = await apiRunScreener(payload);
+          const runId = String(result?.runId || "").trim();
+          if (!runId) {
+            throw new Error("GitHub Actions run did not return a Quantura run ID.");
           }
-          renderScreenerRunOutput({
-            id: runId || "—",
-            title: runTitle || `${payload.universe || "AI Portfolio"} run`,
-            results: rows,
-            notes: payload.notes,
-            modelUsed: payload.model,
-            modelTier: tier.key,
+          if (result?.request && typeof result.request === "object") {
+            upsertMyRequestInState(result.request);
+          }
+          const pendingRun = result?.run && typeof result.run === "object" ? result.run : {
+            id: runId,
+            title: String(result?.title || "").trim() || `Stock screener · $${formatCompactNumber(minMarketCap)} floor`,
+            status: String(result?.status || "queued").trim().toLowerCase() || "queued",
+            results: [],
+            resultsFound: Number(result?.resultsFound || 0) || 0,
+            minMarketCap,
+            autoPublishRequested: true,
+            serviceMessage: String(result?.serviceMessage || "").trim(),
+            workflowRunId: String(result?.workflowRunId || "").trim(),
+            workflowRunUrl: String(result?.workflowRunUrl || "").trim(),
+            workflowRunNumber: Number.isFinite(Number(result?.workflowRunNumber)) ? Number(result.workflowRunNumber) : null,
             createdAt: new Date().toISOString(),
-          });
-          if (runId) {
-            upsertMyRequest({
-              type: "screener",
-              requestId: `screener__${runId}`,
-              title: runTitle || `${payload.universe || "AI Portfolio"} run`,
-              input: {
-                universe: String(payload.universe || ""),
-                market: String(payload.market || ""),
-                maxNames: Number(payload.maxNames || 0) || null,
-                notes: String(payload.notes || ""),
-                model: String(payload.model || ""),
-                filters: payload.filters && typeof payload.filters === "object" ? payload.filters : {},
-              },
-              outputsMeta: {
-                summary: String(payload.notes || "").trim(),
-                resultsCount: Number.isFinite(resultsFound) ? resultsFound : rows.length,
-                topSymbols: Array.isArray(rows)
-                  ? rows.slice(0, 12).map((row) => normalizeTicker(row?.symbol || "")).filter(Boolean)
-                  : [],
-                modelUsed: String(payload.model || ""),
-              },
-              sourceRef: {
-                collection: "screener_runs",
-                id: runId,
-              },
-              published: shouldAutoPublishForType("screener"),
-            }).catch(() => {});
-          }
-          state.aiUsageToday = Number(state.aiUsageToday || 0) + 1;
-          refreshScreenerCreditsUi();
-          if (runId) {
-            try {
-              await generateAIPortfolioForRun({
-                db,
-                functions,
-                runId,
-                preferredName: payload.agentName,
-                selectedModel: payload.model,
+            appliedFilters: [`Market cap >= $${formatCompactNumber(minMarketCap)}`],
+          };
+          renderScreenerRunOutput(pendingRun);
+          renderMyRequestsPanels();
+          updateScreenerDispatchStatusFromRun(pendingRun);
+          setScreenerGenerateButtonState({ busy: true, label: "Tracking workflow..." });
+          fetchMyRequestById(buildSourceRequestId("screener", runId))
+            .then(() => {
+              renderMyRequestsPanels();
+            })
+            .catch(() => {});
+          await fetchMyRequestsList({ force: true }).catch(() => {});
+          renderMyRequestsPanels();
+          showToast("GitHub Actions screener queued. Quantura will publish it to Explore when it completes.");
+          logEvent("screener_request", { min_market_cap: minMarketCap, workflow: "github_actions" });
+
+          const finalRun = await pollScreenerRunUntilSettled(runId, { delayMs: 3500, maxAttempts: 90 }).catch(() => null);
+          setScreenerGenerateButtonState({ busy: false, label: "Launch live screener" });
+          if (finalRun) {
+            updateScreenerDispatchStatusFromRun(finalRun);
+            await fetchMyRequestsList({ force: true }).catch(() => {});
+            renderMyRequestsPanels();
+            const latestRequest = getMyRequestById(buildSourceRequestId("screener", runId));
+            if (latestRequest) {
+              renderScreenerRunOutput({
+                ...finalRun,
+                isPublic: Boolean(latestRequest?.published) || Boolean(finalRun?.isPublic),
               });
-            } catch (portfolioError) {
-              showToast(portfolioError.message || "Portfolio generated from screener, but AI ranking needs retry.", "warn");
             }
+            if (normalizeScreenerRunStatus(finalRun.status) === "completed") {
+              const finalCount = Number.isFinite(Number(finalRun.resultsFound))
+                ? Number(finalRun.resultsFound)
+                : Array.isArray(finalRun.results)
+                ? finalRun.results.length
+                : 0;
+              showToast(
+                finalCount > 0
+                  ? "Screener completed and published to Explore."
+                  : "Screener completed. No active signals cleared the market-cap floor."
+              );
+            } else if (normalizeScreenerRunStatus(finalRun.status) === "failed") {
+              showToast(finalRun.serviceMessage || "GitHub Actions screener failed.", "warn");
+            }
+          } else {
+            setScreenerDispatchStatus("GitHub Actions accepted the run. You can keep watching the live output panel or reopen it from My Requests.", "ok");
           }
-        showToast("AI Portfolio generation started.");
-        logEvent("screener_request", { universe: payload.universe });
       } catch (error) {
-        const message = extractErrorMessage(error, "Unable to generate AI Portfolio.");
-        if (ui.screenerResultsCount) ui.screenerResultsCount.textContent = "Results Found: 0";
+        const message = extractErrorMessage(error, "Unable to run the GitHub Actions screener.");
+        setScreenerGenerateButtonState({ busy: false, label: "Launch live screener" });
+        setScreenerDispatchStatus(message, "warn");
+        if (ui.screenerResultsCount) ui.screenerResultsCount.textContent = "Matches: 0";
         if (ui.screenerOutput) {
           setOutputReady(ui.screenerOutput);
           ui.screenerOutput.innerHTML = `<div class="small muted">${escapeHtml(message)}</div>`;
@@ -23987,6 +27615,123 @@
       } catch (error) {
         if (ui.screenerLoadStatus) ui.screenerLoadStatus.textContent = error.message || "Unable to load run.";
         showToast(error.message || "Unable to load run.", "warn");
+      }
+    });
+
+    ui.screenerGithubHistoryRefresh?.addEventListener("click", () => {
+      loadPublicScreenerGithubRuns({ force: true, notify: true }).catch(() => {});
+    });
+
+    syncFoundrySourceFields();
+    syncFoundryDateDefaults();
+    ui.foundrySourceKind?.addEventListener("change", () => {
+      syncFoundrySourceFields();
+      syncFoundryDateDefaults({ force: true });
+    });
+    ui.foundryInterval?.addEventListener("change", () => {
+      syncFoundryDateDefaults({ force: true });
+    });
+    ui.foundryUseAllHistory?.addEventListener("change", () => {
+      syncFoundryDateDefaults();
+    });
+    ui.foundryQuantiles?.addEventListener("blur", () => {
+      try {
+        const quantiles = parseFoundryQuantilesInput(ui.foundryQuantiles?.value || "0.1,0.5,0.9");
+        ui.foundryQuantiles.value = quantiles.map((entry) => formatFoundryQuantileLabel(entry)).join(",");
+      } catch (_error) {
+        // Keep the raw user input so they can correct it.
+      }
+    });
+    ui.foundrySourceForm?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try {
+        await prepareFoundrySource({ notify: true });
+      } catch (error) {
+        const message = extractErrorMessage(error, "Unable to prepare Forecast Foundry source.");
+        setFoundryStatus(message, "warn");
+        showToast(message, "warn");
+      }
+    });
+    ui.foundryUploadPrepareButton?.addEventListener("click", async () => {
+      try {
+        await prepareFoundrySource({ notify: true });
+      } catch (error) {
+        const message = extractErrorMessage(error, "Unable to prepare Forecast Foundry source.");
+        setFoundryStatus(message, "warn");
+        showToast(message, "warn");
+      }
+    });
+    ui.foundryRunButton?.addEventListener("click", async () => {
+      try {
+        await runFoundryAutopilot({});
+      } catch (error) {
+        if (Number(error?.status || 0) === 429 || String(error?.message || "").toLowerCase().includes("concurrent active instances")) {
+          await loadFoundryRuns({ notify: false }).catch(() => {});
+        }
+        const message = extractErrorMessage(error, "Unable to start Forecast Foundry Autopilot.");
+        setFoundryStatus(message, "warn");
+        showToast(message, "warn");
+      }
+    });
+    ui.foundryAnalyzeButton?.addEventListener("click", async () => {
+      try {
+        await analyzeFoundryRun({ notify: true });
+      } catch (error) {
+        const message = extractErrorMessage(error, "Unable to analyze Forecast Foundry output.");
+        setFoundryStatus(message, "warn");
+        showToast(message, "warn");
+      }
+    });
+    ui.foundryRefreshList?.addEventListener("click", async () => {
+      try {
+        await loadFoundryRuns({ notify: true });
+      } catch (error) {
+        const message = extractErrorMessage(error, "Unable to refresh Forecast Foundry runs.");
+        setFoundryStatus(message, "warn");
+        showToast(message, "warn");
+      }
+    });
+    ui.foundryRefreshButton?.addEventListener("click", async () => {
+      try {
+        await refreshFoundryRun({ notify: true });
+      } catch (error) {
+        const message = extractErrorMessage(error, "Unable to refresh Forecast Foundry run.");
+        setFoundryStatus(message, "warn");
+        showToast(message, "warn");
+      }
+    });
+    ui.foundryShareButton?.addEventListener("click", async () => {
+      try {
+        await shareFoundryRun();
+      } catch (error) {
+        const message = extractErrorMessage(error, "Unable to share Forecast Foundry run.");
+        setFoundryStatus(message, "warn");
+        showToast(message, "warn");
+      }
+    });
+    ui.autopilotOutput?.addEventListener("click", async (event) => {
+      const actionButton = event.target.closest("[data-action]");
+      if (!actionButton) return;
+      const action = String(actionButton.dataset.action || "").trim();
+      if (!action.startsWith("foundry-")) return;
+      event.preventDefault();
+      const runId = String(actionButton.dataset.runId || "").trim();
+      try {
+        if (action === "foundry-select-run") {
+          await loadFoundryRunById(runId, { notify: false });
+          return;
+        }
+        if (action === "foundry-refresh-run") {
+          await refreshFoundryRun({ runId, notify: true });
+          return;
+        }
+        if (action === "foundry-analyze-run") {
+          await analyzeFoundryRun({ runId, notify: true });
+        }
+      } catch (error) {
+        const message = extractErrorMessage(error, "Unable to load Forecast Foundry run.");
+        setFoundryStatus(message, "warn");
+        showToast(message, "warn");
       }
     });
 
@@ -24073,6 +27818,22 @@
       try {
         setOutputLoading(ui.predictionsAgentOutput, "Analyzing uploaded CSV...");
         const mappingResult = await runPredictionsQuantileMapping(functions);
+        try {
+          const envelope = computePredictionOptionsEnvelope(state.predictionsContext.table);
+          await appendPredictionOptionsSupplement(functions, {
+            ticker: mappingResult?.ticker || ui.predictionsTicker?.value || "",
+            envelope,
+            sourceLabel: "Options near the prediction CSV end date",
+          });
+        } catch (optionsError) {
+          if (ui.predictionsAgentOutput) {
+            ui.predictionsAgentOutput.innerHTML += `
+              <div class="small muted" style="margin-top:12px;">
+                Options overlay unavailable: ${escapeHtml(optionsError?.message || "Unable to load listed options.")}
+              </div>
+            `;
+          }
+        }
         if (mappingResult?.uploadId) {
           try {
             const runAgent = functions.httpsCallable("run_prediction_upload_agent");
@@ -24543,11 +28304,7 @@
               }
             }
             if (isNativeApp()) {
-              const bridge = installNativeAuthBridge(auth);
-              if (!state.nativeAuthPromptRequested) {
-                state.nativeAuthPromptRequested = true;
-                bridge?.requestSignIn?.();
-              }
+              installNativeAuthBridge(auth);
             }
             return;
           }
@@ -24557,6 +28314,7 @@
           if (previousWasAnonymous && hasFullAccount(user) && previousUid && nextUid && previousUid !== nextUid) {
             await mergeAnonymousSessionData(previousUid, nextUid).catch(() => undefined);
           }
+          await applyPendingSignupProfile(db, user).catch(() => undefined);
           await flushPendingNativeIapEvents().catch(() => undefined);
           const shouldRefreshAfterSignIn =
             !isFirstAuthEvent &&
@@ -24581,14 +28339,6 @@
             await pingNotificationSession().catch(() => undefined);
             if (isNativeApp()) {
               installNativeAuthBridge(auth);
-              if (user.isAnonymous) {
-                if (!state.nativeAuthPromptRequested) {
-                  state.nativeAuthPromptRequested = true;
-                  window.__quanturaAuthBridge?.requestSignIn?.();
-                }
-              } else {
-                state.nativeAuthPromptRequested = false;
-              }
             }
 
             await ensureUserProfile(db, user);
@@ -24596,16 +28346,26 @@
             setProfileStatus("Profile is used when publishing AI agents in Explore.");
             setAuthUi(user);
 
-			      if (!hasFullAccount(user)) {
+		      if (!hasFullAccount(user)) {
 		        state.userHasPaidPlan = false;
             state.userSubscriptionTier = "free";
             state.aiUsageToday = 0;
             state.aiUsageTierKey = "free";
             state.collaboratorCount = 0;
             state.pendingCollabInviteCount = 0;
+            state.foundryContext.runs = [];
+            state.foundryContext.loaded = false;
+            state.foundryContext.activeRunId = "";
+            state.foundryContext.activeRun = null;
+            state.foundryContext.pendingPreparedRunId = "";
+            state.foundryContext.loadingRunId = "";
+            state.foundryContext.activeConcurrentRuns = 0;
+            state.foundryContext.maxConcurrentRuns = FOUNDRY_MAX_CONCURRENT_INSTANCES;
             applyAdFreeExperience();
-		        renderOrderList([], ui.userOrders);
-            renderRequestList([], ui.autopilotOutput, "No autopilot requests yet.");
+            renderOrderList([], ui.userOrders);
+            renderFoundryRuns([]);
+            await renderFoundryRunDetail(null);
+            setFoundryStatus("Sign in with a full account to use Forecast Foundry.");
             renderRequestList([], ui.predictionsOutput, "No uploads yet.");
 		        if (ui.watchlistList) ui.watchlistList.textContent = "Sign in to manage your watchlist.";
 		        if (ui.alertsList) ui.alertsList.textContent = "Sign in to manage your alerts.";
@@ -24698,6 +28458,9 @@
             state.predictionsContext.uploadDoc = null;
             state.predictionsContext.table = null;
             state.predictionsContext.previewPage = 0;
+            if (window.location.pathname === "/screener") {
+              loadPublicScreenerGithubRuns({ force: false }).catch(() => {});
+            }
             if (ui.predictionsAgentOutput) {
               ui.predictionsAgentOutput.textContent =
                 "Run the OpenAI CSV Agent to compute weekday-aware quantile mapping and return an analyst summary.";
@@ -24731,6 +28494,9 @@
           startScreenerRuns(db, activeWorkspaceId);
           await fetchMyRequestsList({ force: true }).catch(() => []);
           renderMyRequestsPanels();
+          if (window.location.pathname === "/screener") {
+            loadPublicScreenerGithubRuns({ force: false }).catch(() => {});
+          }
           loadScreenerUsageToday(db);
           startWorkspaceTasks(db, activeWorkspaceId);
 			      startWatchlist(db, activeWorkspaceId);
@@ -24739,8 +28505,6 @@
           await seedAdminPresetScreenerRuns(db, activeWorkspaceId).catch(() => {});
           startAIAgents(db, activeWorkspaceId);
           startVolatilityMonitor(db, functions, activeWorkspaceId);
-	      startAutopilotRequests(db, user);
-	      startPredictionsUploads(db, user);
 	      refreshCollaboration(functions);
 
         const pendingShare = String(getPendingShareId() || "").trim();
@@ -24756,6 +28520,13 @@
 
         if (window.location.pathname === "/account" && !String(getPendingShareId() || "").trim()) {
           window.location.href = "/dashboard";
+        }
+
+        if (
+          (window.location.pathname === "/autopilot" || window.location.pathname === "/uploads") &&
+          typeof window.__quanturaPanelActivated === "function"
+        ) {
+          window.__quanturaPanelActivated("autopilot");
         }
 
 	      if (ui.notificationsStatus) {
