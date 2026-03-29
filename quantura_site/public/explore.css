@@ -261,6 +261,18 @@ button:hover,
   line-height: 1.45;
 }
 
+.post-expand-row {
+  margin-top: 12px;
+}
+
+.see-more-btn {
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: linear-gradient(135deg, rgba(30, 94, 255, 0.12), rgba(44, 168, 216, 0.12));
+  border-color: rgba(30, 94, 255, 0.22);
+  color: #1745b7;
+}
+
 .chip-row {
   display: flex;
   flex-wrap: wrap;
@@ -343,6 +355,7 @@ button:hover,
   position: absolute;
   top: 12px;
   right: 12px;
+  z-index: 2;
   width: 34px;
   height: 34px;
   border-radius: 999px;
@@ -351,38 +364,180 @@ button:hover,
   line-height: 1;
 }
 
+.post-modal-preview {
+  margin-right: 56px;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.post-modal-head {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.post-detail-section {
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid rgba(26, 56, 120, 0.12);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(248, 251, 255, 0.94), rgba(242, 248, 255, 0.88));
+}
+
+.post-detail-label {
+  margin-bottom: 10px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #3559a6;
+}
+
+.post-rich-text {
+  color: var(--ink);
+  line-height: 1.68;
+}
+
+.post-rich-text > :first-child {
+  margin-top: 0;
+}
+
+.post-rich-text > :last-child {
+  margin-bottom: 0;
+}
+
+.post-rich-text p,
+.post-rich-text ul,
+.post-rich-text ol,
+.post-rich-text blockquote,
+.post-rich-text pre {
+  margin: 0 0 12px;
+}
+
+.post-rich-text ul,
+.post-rich-text ol {
+  padding-left: 20px;
+}
+
+.post-rich-text blockquote {
+  border-left: 3px solid rgba(30, 94, 255, 0.28);
+  margin-left: 0;
+  padding-left: 12px;
+  color: #365186;
+}
+
+.post-rich-text code,
+.post-rich-text pre {
+  font-family: "SFMono-Regular", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+.post-rich-text pre {
+  overflow-x: auto;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(15, 31, 63, 0.06);
+}
+
+.post-rich-text a {
+  color: #1b54dc;
+  text-decoration: none;
+}
+
+.post-rich-text a:hover {
+  text-decoration: underline;
+}
+
 .comment-list {
   margin-top: 14px;
   display: grid;
-  gap: 8px;
+  gap: 12px;
 }
 
 .comment-item {
   border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 8px;
-  background: rgba(243, 248, 255, 0.72);
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: linear-gradient(180deg, rgba(248, 251, 255, 0.95), rgba(241, 247, 255, 0.88));
 }
 
 .comment-meta {
   font-size: 12px;
   color: var(--muted);
-  margin-bottom: 4px;
+}
+
+.comment-item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.comment-text {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+.comment-delete-btn {
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  color: #a7283a;
+  border-color: rgba(216, 52, 70, 0.2);
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.comments-panel {
+  margin-top: 22px;
+  padding-top: 4px;
+}
+
+.comments-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.comments-header h3 {
+  margin: 0;
+}
+
+.comments-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(30, 94, 255, 0.18);
+  background: rgba(30, 94, 255, 0.08);
+  font-weight: 700;
+  color: #1946b9;
 }
 
 .comment-form {
   margin-top: 12px;
   display: grid;
-  gap: 8px;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid rgba(26, 56, 120, 0.1);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.78);
 }
 
 .comment-form textarea {
   width: 100%;
-  min-height: 80px;
+  min-height: 96px;
   border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 10px;
+  padding: 12px;
   resize: vertical;
+  font: inherit;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.96);
 }
 
 .comment-form select {
@@ -392,6 +547,21 @@ button:hover,
   padding: 10px;
   background: #fff;
   color: var(--ink);
+}
+
+.comment-form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.comment-empty {
+  padding: 16px;
+  border: 1px dashed rgba(26, 56, 120, 0.16);
+  border-radius: 14px;
+  background: rgba(250, 252, 255, 0.8);
 }
 
 .skeleton {

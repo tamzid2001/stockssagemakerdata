@@ -55,7 +55,7 @@ private enum NativeIapCatalog {
         if iosProductIds.contains(trimmed) { return trimmed }
         let lowered = trimmed.lowercased()
         if let mapped = aliases[lowered] { return mapped }
-        return defaultProductId
+        return trimmed
     }
 }
 
@@ -187,8 +187,13 @@ final class AdDebugStatusStore {
 #if canImport(StoreKit)
 @available(iOS 15.0, *)
 final class StoreKitIapManager: ObservableObject {
+    static let shared = StoreKitIapManager()
+
     @Published var products: [Product] = []
+    @Published var lastFetchError: String = ""
     private var updatesTask: Task<Void, Never>?
+    private var cachedProductsById: [String: Product] = [:]
+    private var lastFetchedIdentifiers: Set<String> = []
 
     init() {
         startTransactionListener()
@@ -198,16 +203,55 @@ final class StoreKitIapManager: ObservableObject {
         updatesTask?.cancel()
     }
 
-    func fetchProducts(_ identifiers: [String]) async {
+    @discardableResult
+    func fetchProducts(_ identifiers: [String]) async -> [Product] {
         guard !identifiers.isEmpty else {
             products = []
-            return
+            cachedProductsById = [:]
+            lastFetchedIdentifiers = []
+            lastFetchError = ""
+            return []
         }
         do {
-            products = try await Product.products(for: identifiers)
+            let fetched = try await fetchProductsWithTimeout(identifiers)
+            products = fetched
+            cachedProductsById = Dictionary(uniqueKeysWithValues: fetched.map { ($0.id, $0) })
+            lastFetchedIdentifiers = Set(identifiers)
+            let requestedIds = identifiers.joined(separator: ", ")
+            lastFetchError = fetched.isEmpty
+                ? "No App Store products were returned for: \(requestedIds)"
+                : ""
+            let fetchedIds = fetched.map(\.id).joined(separator: ", ")
+            print("[Billing][iOS][StoreKit] Prefetched \(fetched.count) product(s) for [\(requestedIds)]: \(fetchedIds)")
+            return fetched
         } catch {
             products = []
+            cachedProductsById = [:]
+            lastFetchedIdentifiers = Set(identifiers)
+            lastFetchError = error.localizedDescription
+            print("[Billing][iOS][StoreKit] Product prefetch failed: \(error.localizedDescription)")
+            return []
         }
+    }
+
+    func resolveProduct(_ identifier: String) async throws -> Product {
+        let productId = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let cached = cachedProductsById[productId] {
+            return cached
+        }
+        let fetched = try await fetchProductsWithTimeout([productId])
+        guard let product = fetched.first(where: { $0.id == productId }) else {
+            throw NSError(
+                domain: "QuanturaStoreKit",
+                code: 404,
+                userInfo: [NSLocalizedDescriptionKey: "App Store product '\(productId)' was not found."]
+            )
+        }
+        products = fetched
+        cachedProductsById = Dictionary(uniqueKeysWithValues: fetched.map { ($0.id, $0) })
+        lastFetchedIdentifiers = Set([productId])
+        lastFetchError = ""
+        return product
     }
 
     func purchase(_ product: Product) async -> Bool {
@@ -239,10 +283,45 @@ final class StoreKitIapManager: ObservableObject {
             }
         }
     }
+
+    private func fetchProductsWithTimeout(_ identifiers: [String]) async throws -> [Product] {
+        let normalized = identifiers.map {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines)
+        }.filter { !$0.isEmpty }
+        guard !normalized.isEmpty else { return [] }
+        if Set(normalized) == lastFetchedIdentifiers && !products.isEmpty {
+            return products
+        }
+        return try await withThrowingTaskGroup(of: [Product].self) { group in
+            group.addTask {
+                try await Product.products(for: normalized)
+            }
+            group.addTask {
+                try await Task.sleep(for: .seconds(15))
+                throw NSError(
+                    domain: "QuanturaStoreKit",
+                    code: 408,
+                    userInfo: [
+                        NSLocalizedDescriptionKey: "The App Store products took too long to load. Check your App Store account and network connection, then try again."
+                    ]
+                )
+            }
+            guard let first = try await group.next() else {
+                throw NSError(
+                    domain: "QuanturaStoreKit",
+                    code: 500,
+                    userInfo: [NSLocalizedDescriptionKey: "The App Store product lookup did not return a result."]
+                )
+            }
+            group.cancelAll()
+            return first
+        }
+    }
 }
 #endif
 
 // Lightweight DI container to keep view wiring explicit and testable.
+@MainActor
 final class AppContainer {
     let remoteConfigManager = RemoteConfigManager()
     lazy var adManager = AdManager(remoteConfigManager: remoteConfigManager)
@@ -268,11 +347,39 @@ struct AdFeatureFlags: Equatable {
     let adsEnabled: Bool
 }
 
+struct AdFormatToggles: Equatable {
+    let appOpen: Bool
+    let banner: Bool
+    let interstitial: Bool
+    let rewarded: Bool
+    let rewardedInterstitial: Bool
+    let native: Bool
+
+    func isEnabled(_ format: AdFormat) -> Bool {
+        switch format {
+        case .appOpen:
+            return appOpen
+        case .banner:
+            return banner
+        case .interstitial:
+            return interstitial
+        case .rewarded:
+            return rewarded
+        case .rewardedInterstitial:
+            return rewardedInterstitial
+        case .native:
+            return native
+        }
+    }
+}
+
 struct AdsRemoteConfigState: Equatable {
     let adsEnabled: Bool
     let adsUseRealIos: Bool
     let adsUseRealAndroid: Bool
     let featureFlags: AdFeatureFlags
+    let iosFormatToggles: AdFormatToggles
+    let androidFormatToggles: AdFormatToggles
     let iosUnits: RemoteConfigManager.AdUnitIDs
     let androidUnits: RemoteConfigManager.AdUnitIDs
 }
@@ -382,6 +489,19 @@ final class RemoteConfigManager {
             "ads_enabled": true as NSObject,
             "ads_use_real_ios": true as NSObject,
             "ads_use_real_android": true as NSObject,
+            "ads_ad_inspector_enabled": false as NSObject,
+            RemoteConfigManager.adFormatEnabledKey(platform: .android, format: .appOpen): true as NSObject,
+            RemoteConfigManager.adFormatEnabledKey(platform: .android, format: .banner): true as NSObject,
+            RemoteConfigManager.adFormatEnabledKey(platform: .android, format: .interstitial): true as NSObject,
+            RemoteConfigManager.adFormatEnabledKey(platform: .android, format: .rewarded): true as NSObject,
+            RemoteConfigManager.adFormatEnabledKey(platform: .android, format: .rewardedInterstitial): true as NSObject,
+            RemoteConfigManager.adFormatEnabledKey(platform: .android, format: .native): true as NSObject,
+            RemoteConfigManager.adFormatEnabledKey(platform: .ios, format: .appOpen): true as NSObject,
+            RemoteConfigManager.adFormatEnabledKey(platform: .ios, format: .banner): true as NSObject,
+            RemoteConfigManager.adFormatEnabledKey(platform: .ios, format: .interstitial): true as NSObject,
+            RemoteConfigManager.adFormatEnabledKey(platform: .ios, format: .rewarded): true as NSObject,
+            RemoteConfigManager.adFormatEnabledKey(platform: .ios, format: .rewardedInterstitial): true as NSObject,
+            RemoteConfigManager.adFormatEnabledKey(platform: .ios, format: .native): true as NSObject,
             "ad_unit_ids": RemoteConfigManager.defaultAdUnitIdsSeedPayload as NSObject,
             "native_feed_ad_start": 4 as NSObject,
             "native_feed_ad_interval": 5 as NSObject,
@@ -423,8 +543,25 @@ final class RemoteConfigManager {
         effectiveAdsConfig().adsEnabled
     }
 
+    func isAdFormatEnabled(
+        platform: AdPlatform = .ios,
+        format: AdFormat,
+        remoteConfigState: AdsRemoteConfigState? = nil
+    ) -> Bool {
+        let state = remoteConfigState ?? currentRemoteConfigState()
+        let adsEnabled = state.adsEnabled && state.featureFlags.adsEnabled
+        let formatEnabled = (platform == .ios)
+            ? state.iosFormatToggles.isEnabled(format)
+            : state.androidFormatToggles.isEnabled(format)
+        return adsEnabled && formatEnabled
+    }
+
     func isUsingTestAds() -> Bool {
         effectiveAdsConfig().usingTestAds
+    }
+
+    func isAdInspectorEnabled() -> Bool {
+        remoteConfig?.configValue(forKey: "ads_ad_inspector_enabled").boolValue ?? false
     }
 
     func debugStatus() -> EffectiveAdsConfig {
@@ -480,6 +617,9 @@ final class RemoteConfigManager {
         let state = remoteConfigState ?? currentRemoteConfigState()
         let adsEnabled = state.adsEnabled && state.featureFlags.adsEnabled
         let platformUseRealAds = (platform == .ios) ? state.adsUseRealIos : state.adsUseRealAndroid
+        let formatEnabled = (platform == .ios)
+            ? state.iosFormatToggles.isEnabled(format)
+            : state.androidFormatToggles.isEnabled(format)
         let useRealAds = adsEnabled && platformUseRealAds
         let selected: AdUnitIDs
         switch platform {
@@ -507,7 +647,7 @@ final class RemoteConfigManager {
         if platform == .ios {
             print(
                 "\(tag) Selected ad unit for \(format.rawValue) = \(adUnitId) " +
-                    "useReal=\(useRealAds) adsEnabled=\(adsEnabled) platformRealFlag=\(platformUseRealAds) " +
+                    "useReal=\(useRealAds) adsEnabled=\(adsEnabled) formatEnabled=\(formatEnabled) platformRealFlag=\(platformUseRealAds) " +
                     "debug=\(resolvedEnvironment.isDebugBuild) simulator=\(resolvedEnvironment.isSimulatorOrEmulator)"
             )
         }
@@ -546,16 +686,39 @@ final class RemoteConfigManager {
         let adsUseRealIos = remoteConfig?.configValue(forKey: "ads_use_real_ios").boolValue ?? true
         let adsUseRealAndroid = remoteConfig?.configValue(forKey: "ads_use_real_android").boolValue ?? true
         let featureFlags = parseFeatureFlags()
+        let iosFormatToggles = parseAdFormatToggles(platform: .ios)
+        let androidFormatToggles = parseAdFormatToggles(platform: .android)
         let payload = parseAdUnitPayload(remoteConfig?["ad_unit_ids"].stringValue ?? "")
-        let iosUnits = parsePlatformUnitIDs(payload: payload, platform: .ios, seed: liveIOSIDs)
-        let androidUnits = parsePlatformUnitIDs(payload: payload, platform: .android, seed: liveAndroidIDs)
+        let iosUnits = sanitizeLiveOverrides(
+            parsePlatformUnitIDs(payload: payload, platform: .ios, seed: liveIOSIDs),
+            bundled: liveIOSIDs,
+            platform: .ios
+        )
+        let androidUnits = sanitizeLiveOverrides(
+            parsePlatformUnitIDs(payload: payload, platform: .android, seed: liveAndroidIDs),
+            bundled: liveAndroidIDs,
+            platform: .android
+        )
         return AdsRemoteConfigState(
             adsEnabled: adsEnabled,
             adsUseRealIos: adsUseRealIos,
             adsUseRealAndroid: adsUseRealAndroid,
             featureFlags: featureFlags,
+            iosFormatToggles: iosFormatToggles,
+            androidFormatToggles: androidFormatToggles,
             iosUnits: iosUnits,
             androidUnits: androidUnits
+        )
+    }
+
+    private func parseAdFormatToggles(platform: AdPlatform) -> AdFormatToggles {
+        AdFormatToggles(
+            appOpen: remoteConfig?.configValue(forKey: Self.adFormatEnabledKey(platform: platform, format: .appOpen)).boolValue ?? true,
+            banner: remoteConfig?.configValue(forKey: Self.adFormatEnabledKey(platform: platform, format: .banner)).boolValue ?? true,
+            interstitial: remoteConfig?.configValue(forKey: Self.adFormatEnabledKey(platform: platform, format: .interstitial)).boolValue ?? true,
+            rewarded: remoteConfig?.configValue(forKey: Self.adFormatEnabledKey(platform: platform, format: .rewarded)).boolValue ?? true,
+            rewardedInterstitial: remoteConfig?.configValue(forKey: Self.adFormatEnabledKey(platform: platform, format: .rewardedInterstitial)).boolValue ?? true,
+            native: remoteConfig?.configValue(forKey: Self.adFormatEnabledKey(platform: platform, format: .native)).boolValue ?? true
         )
     }
 
@@ -624,6 +787,36 @@ final class RemoteConfigManager {
         )
     }
 
+    static func adFormatEnabledKey(platform: AdPlatform, format: AdFormat) -> String {
+        let platformKey = platform == .ios ? "ios" : "android"
+        return "ads_\(platformKey)_\(format.rawValue)_enabled"
+    }
+
+    private func sanitizeLiveOverrides(
+        _ parsed: AdUnitIDs,
+        bundled: AdUnitIDs,
+        platform: AdPlatform
+    ) -> AdUnitIDs {
+        func select(_ candidate: String, fallback: String, format: String) -> String {
+            if !candidate.isGoogleSampleAdUnit { return candidate }
+            if fallback.isGoogleSampleAdUnit { return candidate }
+            let platformName = platform == .ios ? "ios" : "android"
+            print("\(tag) Ignoring sample ad unit override for \(platformName):\(format) and using bundled live unit instead.")
+            return fallback
+        }
+
+        return AdUnitIDs(
+            appOpen: select(parsed.appOpen, fallback: bundled.appOpen, format: "app_open"),
+            adaptiveBanner: select(parsed.adaptiveBanner, fallback: bundled.adaptiveBanner, format: "banner"),
+            fixedBanner: select(parsed.fixedBanner, fallback: bundled.fixedBanner, format: "fixed_banner"),
+            interstitial: select(parsed.interstitial, fallback: bundled.interstitial, format: "interstitial"),
+            rewarded: select(parsed.rewarded, fallback: bundled.rewarded, format: "rewarded"),
+            rewardedInterstitial: select(parsed.rewardedInterstitial, fallback: bundled.rewardedInterstitial, format: "rewarded_interstitial"),
+            nativeAdvanced: select(parsed.nativeAdvanced, fallback: bundled.nativeAdvanced, format: "native"),
+            nativeVideo: select(parsed.nativeVideo, fallback: bundled.nativeVideo, format: "native_video")
+        )
+    }
+
     private func logEffectiveAdsConfig() {
         let config = effectiveAdsConfig()
         print(
@@ -639,6 +832,7 @@ final class RemoteConfigManager {
 }
 
 #if canImport(GoogleMobileAds) && canImport(UIKit)
+@MainActor
 final class AdManager: NSObject, FullScreenContentDelegate {
     private let remoteConfigManager: RemoteConfigManager
     private var interstitialAd: InterstitialAd?
@@ -646,6 +840,34 @@ final class AdManager: NSObject, FullScreenContentDelegate {
     private var rewardedInterstitialAd: RewardedInterstitialAd?
     private var nativeFeedLoaders: [String: NativeFeedLoader] = [:]
     private(set) var isShowingFullScreenAd = false
+    private var interstitialLoadInFlight = false
+    private var rewardedLoadInFlight = false
+    private var rewardedInterstitialLoadInFlight = false
+    private var pendingInterstitialRequest: PendingInterstitialRequest?
+    private var pendingRewardedRequest: PendingRewardedRequest?
+    private var interstitialCallbackContext: FullscreenAdCallbackContext?
+    private var rewardedCallbackContext: FullscreenAdCallbackContext?
+    private var rewardedInterstitialCallbackContext: FullscreenAdCallbackContext?
+    private var waitingForSdkStart = false
+
+    private struct FullscreenAdCallbackContext {
+        let requestId: String
+        let adFormat: String
+        let callback: ([String: Any]) -> Void
+    }
+
+    private struct PendingInterstitialRequest {
+        let rootViewController: UIViewController
+        let requestId: String
+        let callback: ([String: Any]) -> Void
+    }
+
+    private struct PendingRewardedRequest {
+        let rootViewController: UIViewController
+        let requestId: String
+        let preferRewardedInterstitial: Bool
+        let callback: ([String: Any]) -> Void
+    }
 
     private final class NativeFeedLoader: NSObject, AdLoaderDelegate, NativeAdLoaderDelegate {
         let key: String
@@ -686,9 +908,33 @@ final class AdManager: NSObject, FullScreenContentDelegate {
         self.remoteConfigManager = remoteConfigManager
     }
 
+    private func deferUntilSdkReady(work: @escaping () -> Void) {
+        guard !MobileAdsBootstrap.shared.isReady else {
+            work()
+            return
+        }
+        guard !waitingForSdkStart else { return }
+        waitingForSdkStart = true
+        let formats = ["interstitial", "rewarded", "rewarded_interstitial", "native"]
+        formats.forEach { AdDebugStatusStore.shared.updateLoad(format: $0, status: "waiting:sdk_init") }
+        MobileAdsBootstrap.shared.whenReady { [weak self] success in
+            guard let self else { return }
+            self.waitingForSdkStart = false
+            guard success else { return }
+            work()
+        }
+    }
+
     func primeAds() {
         guard remoteConfigManager.areAdsEnabled() else {
             print("[Ads][iOS] Prime skipped because ads are disabled.")
+            return
+        }
+        guard MobileAdsBootstrap.shared.isReady else {
+            print("[Ads][iOS] Prime deferred until Mobile Ads SDK is initialized.")
+            deferUntilSdkReady { [weak self] in
+                self?.primeAds()
+            }
             return
         }
         print(
@@ -723,56 +969,211 @@ final class AdManager: NSObject, FullScreenContentDelegate {
         )
     }
 
-    func showInterstitial(from rootViewController: UIViewController?) {
+    func showInterstitial(
+        from rootViewController: UIViewController?,
+        requestId: String = "",
+        callback: @escaping ([String: Any]) -> Void = { _ in }
+    ) {
         DispatchQueue.main.async {
-            guard self.remoteConfigManager.areAdsEnabled() else { return }
-            guard let rootViewController else { return }
+            guard self.remoteConfigManager.isAdFormatEnabled(format: .interstitial) else {
+                self.emitAdActionResult(
+                    callback: callback,
+                    requestId: requestId,
+                    adFormat: "interstitial",
+                    status: "skipped:format_off",
+                    message: "Interstitial ads are disabled."
+                )
+                return
+            }
+            guard self.remoteConfigManager.areAdsEnabled() else {
+                self.emitAdActionResult(
+                    callback: callback,
+                    requestId: requestId,
+                    adFormat: "interstitial",
+                    status: "skipped:ads_disabled",
+                    message: "Ads are disabled."
+                )
+                return
+            }
+            guard let rootViewController else {
+                self.emitAdActionResult(
+                    callback: callback,
+                    requestId: requestId,
+                    adFormat: "interstitial",
+                    status: "failed",
+                    message: "Unable to resolve a presenting view controller."
+                )
+                return
+            }
             guard !self.isShowingFullScreenAd else {
                 print("[Ads][iOS] Interstitial show skipped; another fullscreen ad is visible.")
                 AdDebugStatusStore.shared.updateShow(format: "interstitial", status: "skipped:fullscreen_visible")
+                self.emitAdActionResult(
+                    callback: callback,
+                    requestId: requestId,
+                    adFormat: "interstitial",
+                    status: "skipped:fullscreen_visible",
+                    message: "Another fullscreen ad is currently visible."
+                )
                 return
             }
             guard let ad = self.interstitialAd else {
-                print("[Ads][iOS] Interstitial unavailable; reloading.")
-                AdDebugStatusStore.shared.updateShow(format: "interstitial", status: "skipped:not_ready")
+                print("[Ads][iOS] Interstitial unavailable; queueing until load completes.")
+                AdDebugStatusStore.shared.updateShow(format: "interstitial", status: "queued:not_ready")
+                self.pendingInterstitialRequest = PendingInterstitialRequest(
+                    rootViewController: rootViewController,
+                    requestId: requestId,
+                    callback: callback
+                )
+                self.emitAdActionResult(
+                    callback: callback,
+                    requestId: requestId,
+                    adFormat: "interstitial",
+                    status: "queued",
+                    message: "Interstitial ad is still loading."
+                )
                 self.loadInterstitial()
                 return
             }
             ad.fullScreenContentDelegate = self
+            self.interstitialCallbackContext = FullscreenAdCallbackContext(
+                requestId: requestId,
+                adFormat: "interstitial",
+                callback: callback
+            )
             print("[Ads][iOS] Presenting interstitial.")
             ad.present(from: rootViewController)
         }
     }
 
-    func showRewarded(from rootViewController: UIViewController?) {
+    func showRewarded(
+        from rootViewController: UIViewController?,
+        requestId: String = "",
+        preferRewardedInterstitial: Bool = true,
+        callback: @escaping ([String: Any]) -> Void = { _ in }
+    ) {
         DispatchQueue.main.async {
-            guard self.remoteConfigManager.areAdsEnabled() else { return }
-            guard let rootViewController else { return }
+            let rewardedEnabled = self.remoteConfigManager.isAdFormatEnabled(format: .rewarded)
+            let rewardedInterstitialEnabled = self.remoteConfigManager.isAdFormatEnabled(format: .rewardedInterstitial)
+            let preferredFormat = preferRewardedInterstitial ? "rewarded_interstitial" : "rewarded"
+            guard rewardedEnabled || rewardedInterstitialEnabled else {
+                self.emitAdActionResult(
+                    callback: callback,
+                    requestId: requestId,
+                    adFormat: preferredFormat,
+                    status: "skipped:format_off",
+                    message: "Rewarded ads are disabled."
+                )
+                return
+            }
+            guard self.remoteConfigManager.areAdsEnabled() else {
+                self.emitAdActionResult(
+                    callback: callback,
+                    requestId: requestId,
+                    adFormat: preferredFormat,
+                    status: "skipped:ads_disabled",
+                    message: "Ads are disabled."
+                )
+                return
+            }
+            guard let rootViewController else {
+                self.emitAdActionResult(
+                    callback: callback,
+                    requestId: requestId,
+                    adFormat: preferredFormat,
+                    status: "failed",
+                    message: "Unable to resolve a presenting view controller."
+                )
+                return
+            }
             guard !self.isShowingFullScreenAd else {
                 print("[Ads][iOS] Rewarded show skipped; another fullscreen ad is visible.")
                 AdDebugStatusStore.shared.updateShow(format: "rewarded", status: "skipped:fullscreen_visible")
                 AdDebugStatusStore.shared.updateShow(format: "rewarded_interstitial", status: "skipped:fullscreen_visible")
+                self.emitAdActionResult(
+                    callback: callback,
+                    requestId: requestId,
+                    adFormat: preferredFormat,
+                    status: "skipped:fullscreen_visible",
+                    message: "Another fullscreen ad is currently visible."
+                )
                 return
             }
-            if let rewardedInterstitial = self.rewardedInterstitialAd {
+            if preferRewardedInterstitial, rewardedInterstitialEnabled, let rewardedInterstitial = self.rewardedInterstitialAd {
                 rewardedInterstitial.fullScreenContentDelegate = self
+                self.rewardedInterstitialCallbackContext = FullscreenAdCallbackContext(
+                    requestId: requestId,
+                    adFormat: "rewarded_interstitial",
+                    callback: callback
+                )
                 print("[Ads][iOS] Presenting rewarded interstitial.")
                 rewardedInterstitial.present(from: rootViewController) {
-                    _ = rewardedInterstitial.adReward
+                    let reward = rewardedInterstitial.adReward
+                    self.emitAdActionResult(
+                        callback: callback,
+                        requestId: requestId,
+                        adFormat: "rewarded_interstitial",
+                        status: "rewarded",
+                        rewardType: reward.type,
+                        rewardAmount: reward.amount
+                    )
                 }
                 return
             }
+            guard rewardedEnabled else {
+                self.pendingRewardedRequest = PendingRewardedRequest(
+                    rootViewController: rootViewController,
+                    requestId: requestId,
+                    preferRewardedInterstitial: preferRewardedInterstitial,
+                    callback: callback
+                )
+                self.emitAdActionResult(
+                    callback: callback,
+                    requestId: requestId,
+                    adFormat: preferredFormat,
+                    status: "queued",
+                    message: "Rewarded ad is still loading."
+                )
+                self.loadRewardedInterstitial()
+                return
+            }
             guard let ad = self.rewardedAd else {
-                print("[Ads][iOS] Rewarded unavailable; reloading.")
-                AdDebugStatusStore.shared.updateShow(format: "rewarded", status: "skipped:not_ready")
+                print("[Ads][iOS] Rewarded unavailable; queueing until load completes.")
+                AdDebugStatusStore.shared.updateShow(format: "rewarded", status: "queued:not_ready")
+                self.pendingRewardedRequest = PendingRewardedRequest(
+                    rootViewController: rootViewController,
+                    requestId: requestId,
+                    preferRewardedInterstitial: preferRewardedInterstitial,
+                    callback: callback
+                )
+                self.emitAdActionResult(
+                    callback: callback,
+                    requestId: requestId,
+                    adFormat: preferredFormat,
+                    status: "queued",
+                    message: "Rewarded ad is still loading."
+                )
                 self.loadRewarded()
                 self.loadRewardedInterstitial()
                 return
             }
             ad.fullScreenContentDelegate = self
+            self.rewardedCallbackContext = FullscreenAdCallbackContext(
+                requestId: requestId,
+                adFormat: "rewarded",
+                callback: callback
+            )
             print("[Ads][iOS] Presenting rewarded.")
             ad.present(from: rootViewController) {
-                _ = ad.adReward
+                let reward = ad.adReward
+                self.emitAdActionResult(
+                    callback: callback,
+                    requestId: requestId,
+                    adFormat: "rewarded",
+                    status: "rewarded",
+                    rewardType: reward.type,
+                    rewardAmount: reward.amount
+                )
             }
         }
     }
@@ -793,6 +1194,22 @@ final class AdManager: NSObject, FullScreenContentDelegate {
         }
         guard remoteConfigManager.areAdsEnabled() else {
             completion(buildNativeFeedErrorPayload(slotId: normalizedSlotId, placement: normalizedPlacement, reason: "ads_disabled"))
+            return
+        }
+        guard remoteConfigManager.isAdFormatEnabled(format: .native) else {
+            completion(buildNativeFeedErrorPayload(slotId: normalizedSlotId, placement: normalizedPlacement, reason: "format_off"))
+            return
+        }
+        guard MobileAdsBootstrap.shared.isReady else {
+            AdDebugStatusStore.shared.updateLoad(format: "native", status: "waiting:sdk_init")
+            deferUntilSdkReady { [weak self] in
+                self?.requestNativeFeedAd(
+                    slotId: normalizedSlotId,
+                    placement: normalizedPlacement,
+                    variant: variant,
+                    completion: completion
+                )
+            }
             return
         }
 
@@ -875,63 +1292,123 @@ final class AdManager: NSObject, FullScreenContentDelegate {
     }
 
     private func loadInterstitial() {
+        guard remoteConfigManager.isAdFormatEnabled(format: .interstitial) else {
+            interstitialAd = nil
+            interstitialLoadInFlight = false
+            AdDebugStatusStore.shared.updateLoad(format: "interstitial", status: "disabled:format_off")
+            return
+        }
+        guard MobileAdsBootstrap.shared.isReady else {
+            AdDebugStatusStore.shared.updateLoad(format: "interstitial", status: "waiting:sdk_init")
+            deferUntilSdkReady { [weak self] in
+                self?.loadInterstitial()
+            }
+            return
+        }
+        guard !interstitialLoadInFlight else { return }
+        interstitialLoadInFlight = true
         let adUnitID = remoteConfigManager.resolveAdUnitId(platform: .ios, format: .interstitial)
         print("[Ads][iOS] Loading interstitial unit=\(adUnitID)")
         AdDebugStatusStore.shared.updateLoad(format: "interstitial", status: "loading")
         InterstitialAd.load(with: adUnitID, request: Request()) { [weak self] ad, error in
-            guard let self else { return }
-            self.interstitialAd = ad
-            self.interstitialAd?.fullScreenContentDelegate = self
-            if let error {
-                print("[Ads][iOS] Interstitial load failed: \(error.localizedDescription)")
-                print("[Ads][iOS] Load fail for interstitial: \(error.localizedDescription)")
-                AdDebugStatusStore.shared.updateLoad(format: "interstitial", status: "failed:\(error.localizedDescription)")
-            } else {
-                print("[Ads][iOS] Interstitial load succeeded.")
-                print("[Ads][iOS] Load success for interstitial")
-                AdDebugStatusStore.shared.updateLoad(format: "interstitial", status: "loaded")
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.interstitialLoadInFlight = false
+                self.interstitialAd = ad
+                self.interstitialAd?.fullScreenContentDelegate = self
+                if let error {
+                    print("[Ads][iOS] Interstitial load failed: \(error.localizedDescription)")
+                    print("[Ads][iOS] Load fail for interstitial: \(error.localizedDescription)")
+                    AdDebugStatusStore.shared.updateLoad(format: "interstitial", status: "failed:\(error.localizedDescription)")
+                    self.failPendingInterstitialRequest(message: error.localizedDescription)
+                } else {
+                    print("[Ads][iOS] Interstitial load succeeded.")
+                    print("[Ads][iOS] Load success for interstitial")
+                    AdDebugStatusStore.shared.updateLoad(format: "interstitial", status: "loaded")
+                    self.drainPendingInterstitialRequest()
+                }
             }
         }
     }
 
     private func loadRewarded() {
+        guard remoteConfigManager.isAdFormatEnabled(format: .rewarded) else {
+            rewardedAd = nil
+            rewardedLoadInFlight = false
+            AdDebugStatusStore.shared.updateLoad(format: "rewarded", status: "disabled:format_off")
+            return
+        }
+        guard MobileAdsBootstrap.shared.isReady else {
+            AdDebugStatusStore.shared.updateLoad(format: "rewarded", status: "waiting:sdk_init")
+            deferUntilSdkReady { [weak self] in
+                self?.loadRewarded()
+            }
+            return
+        }
+        guard !rewardedLoadInFlight else { return }
+        rewardedLoadInFlight = true
         let adUnitID = remoteConfigManager.resolveAdUnitId(platform: .ios, format: .rewarded)
         print("[Ads][iOS] Loading rewarded unit=\(adUnitID)")
         AdDebugStatusStore.shared.updateLoad(format: "rewarded", status: "loading")
         RewardedAd.load(with: adUnitID, request: Request()) { [weak self] ad, error in
-            guard let self else { return }
-            self.rewardedAd = ad
-            self.rewardedAd?.fullScreenContentDelegate = self
-            self.configureServerSideVerification(for: self.rewardedAd, adFormat: "rewarded")
-            if let error {
-                print("[Ads][iOS] Rewarded load failed: \(error.localizedDescription)")
-                print("[Ads][iOS] Load fail for rewarded: \(error.localizedDescription)")
-                AdDebugStatusStore.shared.updateLoad(format: "rewarded", status: "failed:\(error.localizedDescription)")
-            } else {
-                print("[Ads][iOS] Rewarded load succeeded.")
-                print("[Ads][iOS] Load success for rewarded")
-                AdDebugStatusStore.shared.updateLoad(format: "rewarded", status: "loaded")
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.rewardedLoadInFlight = false
+                self.rewardedAd = ad
+                self.rewardedAd?.fullScreenContentDelegate = self
+                self.configureServerSideVerification(for: self.rewardedAd, adFormat: "rewarded")
+                if let error {
+                    print("[Ads][iOS] Rewarded load failed: \(error.localizedDescription)")
+                    print("[Ads][iOS] Load fail for rewarded: \(error.localizedDescription)")
+                    AdDebugStatusStore.shared.updateLoad(format: "rewarded", status: "failed:\(error.localizedDescription)")
+                    self.maybeFailPendingRewardedRequest(message: error.localizedDescription)
+                } else {
+                    print("[Ads][iOS] Rewarded load succeeded.")
+                    print("[Ads][iOS] Load success for rewarded")
+                    AdDebugStatusStore.shared.updateLoad(format: "rewarded", status: "loaded")
+                    self.drainPendingRewardedRequest()
+                }
             }
         }
     }
 
     private func loadRewardedInterstitial() {
+        guard remoteConfigManager.isAdFormatEnabled(format: .rewardedInterstitial) else {
+            rewardedInterstitialAd = nil
+            rewardedInterstitialLoadInFlight = false
+            AdDebugStatusStore.shared.updateLoad(format: "rewarded_interstitial", status: "disabled:format_off")
+            return
+        }
+        guard MobileAdsBootstrap.shared.isReady else {
+            AdDebugStatusStore.shared.updateLoad(format: "rewarded_interstitial", status: "waiting:sdk_init")
+            deferUntilSdkReady { [weak self] in
+                self?.loadRewardedInterstitial()
+            }
+            return
+        }
+        guard !rewardedInterstitialLoadInFlight else { return }
+        rewardedInterstitialLoadInFlight = true
         let adUnitID = remoteConfigManager.resolveAdUnitId(platform: .ios, format: .rewardedInterstitial)
         print("[Ads][iOS] Loading rewarded interstitial unit=\(adUnitID)")
         AdDebugStatusStore.shared.updateLoad(format: "rewarded_interstitial", status: "loading")
         RewardedInterstitialAd.load(with: adUnitID, request: Request()) { [weak self] ad, error in
-            guard let self else { return }
-            self.rewardedInterstitialAd = ad
-            self.rewardedInterstitialAd?.fullScreenContentDelegate = self
-            self.configureServerSideVerification(for: self.rewardedInterstitialAd, adFormat: "rewarded_interstitial")
-            if let error {
-                print("[Ads][iOS] Rewarded interstitial load failed: \(error.localizedDescription)")
-                print("[Ads][iOS] Load fail for rewarded_interstitial: \(error.localizedDescription)")
-                AdDebugStatusStore.shared.updateLoad(format: "rewarded_interstitial", status: "failed:\(error.localizedDescription)")
-            } else {
-                print("[Ads][iOS] Rewarded interstitial load succeeded.")
-                print("[Ads][iOS] Load success for rewarded_interstitial")
-                AdDebugStatusStore.shared.updateLoad(format: "rewarded_interstitial", status: "loaded")
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.rewardedInterstitialLoadInFlight = false
+                self.rewardedInterstitialAd = ad
+                self.rewardedInterstitialAd?.fullScreenContentDelegate = self
+                self.configureServerSideVerification(for: self.rewardedInterstitialAd, adFormat: "rewarded_interstitial")
+                if let error {
+                    print("[Ads][iOS] Rewarded interstitial load failed: \(error.localizedDescription)")
+                    print("[Ads][iOS] Load fail for rewarded_interstitial: \(error.localizedDescription)")
+                    AdDebugStatusStore.shared.updateLoad(format: "rewarded_interstitial", status: "failed:\(error.localizedDescription)")
+                    self.maybeFailPendingRewardedRequest(message: error.localizedDescription)
+                } else {
+                    print("[Ads][iOS] Rewarded interstitial load succeeded.")
+                    print("[Ads][iOS] Load success for rewarded_interstitial")
+                    AdDebugStatusStore.shared.updateLoad(format: "rewarded_interstitial", status: "loaded")
+                    self.drainPendingRewardedRequest()
+                }
             }
         }
     }
@@ -1074,27 +1551,81 @@ final class AdManager: NSObject, FullScreenContentDelegate {
         if ad === interstitialAd {
             print("[Ads][iOS] Show success for interstitial")
             AdDebugStatusStore.shared.updateShow(format: "interstitial", status: "shown")
+            if let context = interstitialCallbackContext {
+                emitAdActionResult(
+                    callback: context.callback,
+                    requestId: context.requestId,
+                    adFormat: context.adFormat,
+                    status: "shown"
+                )
+            }
         } else if ad === rewardedAd {
             print("[Ads][iOS] Show success for rewarded")
             AdDebugStatusStore.shared.updateShow(format: "rewarded", status: "shown")
+            if let context = rewardedCallbackContext {
+                emitAdActionResult(
+                    callback: context.callback,
+                    requestId: context.requestId,
+                    adFormat: context.adFormat,
+                    status: "shown"
+                )
+            }
         } else if ad === rewardedInterstitialAd {
             print("[Ads][iOS] Show success for rewarded_interstitial")
             AdDebugStatusStore.shared.updateShow(format: "rewarded_interstitial", status: "shown")
+            if let context = rewardedInterstitialCallbackContext {
+                emitAdActionResult(
+                    callback: context.callback,
+                    requestId: context.requestId,
+                    adFormat: context.adFormat,
+                    status: "shown"
+                )
+            }
         }
     }
 
     func adDidDismissFullScreenContent(_ ad: FullScreenPresentingAd) {
         isShowingFullScreenAd = false
         if ad === interstitialAd {
+            let context = interstitialCallbackContext
+            interstitialCallbackContext = nil
             AdDebugStatusStore.shared.updateShow(format: "interstitial", status: "dismissed")
+            if let context {
+                emitAdActionResult(
+                    callback: context.callback,
+                    requestId: context.requestId,
+                    adFormat: context.adFormat,
+                    status: "dismissed"
+                )
+            }
             interstitialAd = nil
             loadInterstitial()
         } else if ad === rewardedAd {
+            let context = rewardedCallbackContext
+            rewardedCallbackContext = nil
             AdDebugStatusStore.shared.updateShow(format: "rewarded", status: "dismissed")
+            if let context {
+                emitAdActionResult(
+                    callback: context.callback,
+                    requestId: context.requestId,
+                    adFormat: context.adFormat,
+                    status: "dismissed"
+                )
+            }
             rewardedAd = nil
             loadRewarded()
         } else if ad === rewardedInterstitialAd {
+            let context = rewardedInterstitialCallbackContext
+            rewardedInterstitialCallbackContext = nil
             AdDebugStatusStore.shared.updateShow(format: "rewarded_interstitial", status: "dismissed")
+            if let context {
+                emitAdActionResult(
+                    callback: context.callback,
+                    requestId: context.requestId,
+                    adFormat: context.adFormat,
+                    status: "dismissed"
+                )
+            }
             rewardedInterstitialAd = nil
             loadRewardedInterstitial()
         }
@@ -1107,18 +1638,141 @@ final class AdManager: NSObject, FullScreenContentDelegate {
         isShowingFullScreenAd = false
         print("[Ads][iOS] Fullscreen ad failed to present: \(error.localizedDescription)")
         if ad === interstitialAd {
+            let context = interstitialCallbackContext
+            interstitialCallbackContext = nil
             AdDebugStatusStore.shared.updateShow(format: "interstitial", status: "failed:\(error.localizedDescription)")
+            if let context {
+                emitAdActionResult(
+                    callback: context.callback,
+                    requestId: context.requestId,
+                    adFormat: context.adFormat,
+                    status: "failed",
+                    message: error.localizedDescription
+                )
+            }
             interstitialAd = nil
             loadInterstitial()
         } else if ad === rewardedAd {
+            let context = rewardedCallbackContext
+            rewardedCallbackContext = nil
             AdDebugStatusStore.shared.updateShow(format: "rewarded", status: "failed:\(error.localizedDescription)")
+            if let context {
+                emitAdActionResult(
+                    callback: context.callback,
+                    requestId: context.requestId,
+                    adFormat: context.adFormat,
+                    status: "failed",
+                    message: error.localizedDescription
+                )
+            }
             rewardedAd = nil
             loadRewarded()
         } else if ad === rewardedInterstitialAd {
+            let context = rewardedInterstitialCallbackContext
+            rewardedInterstitialCallbackContext = nil
             AdDebugStatusStore.shared.updateShow(format: "rewarded_interstitial", status: "failed:\(error.localizedDescription)")
+            if let context {
+                emitAdActionResult(
+                    callback: context.callback,
+                    requestId: context.requestId,
+                    adFormat: context.adFormat,
+                    status: "failed",
+                    message: error.localizedDescription
+                )
+            }
             rewardedInterstitialAd = nil
             loadRewardedInterstitial()
         }
+    }
+
+    private func emitAdActionResult(
+        callback: @escaping ([String: Any]) -> Void,
+        requestId: String,
+        adFormat: String,
+        status: String,
+        message: String = "",
+        rewardType: String = "",
+        rewardAmount: NSNumber? = nil
+    ) {
+        callback([
+            "requestId": requestId,
+            "adFormat": adFormat,
+            "status": status,
+            "message": message,
+            "rewardType": rewardType,
+            "rewardAmount": rewardAmount ?? NSNull(),
+        ])
+    }
+
+    private func drainPendingInterstitialRequest() {
+        guard let pending = pendingInterstitialRequest else { return }
+        guard !isShowingFullScreenAd, interstitialAd != nil else { return }
+        pendingInterstitialRequest = nil
+        showInterstitial(
+            from: pending.rootViewController,
+            requestId: pending.requestId,
+            callback: pending.callback
+        )
+    }
+
+    private func failPendingInterstitialRequest(message: String) {
+        guard let pending = pendingInterstitialRequest else { return }
+        pendingInterstitialRequest = nil
+        emitAdActionResult(
+            callback: pending.callback,
+            requestId: pending.requestId,
+            adFormat: "interstitial",
+            status: "failed",
+            message: message
+        )
+    }
+
+    private func drainPendingRewardedRequest() {
+        guard let pending = pendingRewardedRequest else { return }
+        guard !isShowingFullScreenAd else { return }
+        let rewardedEnabled = remoteConfigManager.isAdFormatEnabled(format: .rewarded)
+        let rewardedInterstitialEnabled = remoteConfigManager.isAdFormatEnabled(format: .rewardedInterstitial)
+        let canShowRewardedInterstitial = pending.preferRewardedInterstitial &&
+            rewardedInterstitialEnabled &&
+            rewardedInterstitialAd != nil
+        let canShowRewarded = rewardedEnabled && rewardedAd != nil
+        let shouldFallbackToRewarded = canShowRewarded &&
+            (!pending.preferRewardedInterstitial || !rewardedInterstitialEnabled || !rewardedInterstitialLoadInFlight)
+
+        if canShowRewardedInterstitial {
+            pendingRewardedRequest = nil
+            showRewarded(
+                from: pending.rootViewController,
+                requestId: pending.requestId,
+                preferRewardedInterstitial: true,
+                callback: pending.callback
+            )
+        } else if shouldFallbackToRewarded {
+            pendingRewardedRequest = nil
+            showRewarded(
+                from: pending.rootViewController,
+                requestId: pending.requestId,
+                preferRewardedInterstitial: false,
+                callback: pending.callback
+            )
+        }
+    }
+
+    private func maybeFailPendingRewardedRequest(message: String) {
+        guard let pending = pendingRewardedRequest else { return }
+        if rewardedLoadInFlight || rewardedInterstitialLoadInFlight { return }
+        if rewardedAd != nil || rewardedInterstitialAd != nil {
+            drainPendingRewardedRequest()
+            return
+        }
+        pendingRewardedRequest = nil
+        emitAdActionResult(
+            callback: pending.callback,
+            requestId: pending.requestId,
+            adFormat: pending.preferRewardedInterstitial ? "rewarded_interstitial" : "rewarded",
+            status: "failed",
+            message: message
+        )
     }
 }
 #elseif canImport(UIKit)
@@ -1133,12 +1787,26 @@ final class AdManager {
         _ = remoteConfigManager
     }
 
-    func showInterstitial(from rootViewController: UIViewController?) {
+    func showInterstitial(
+        from rootViewController: UIViewController?,
+        requestId: String = "",
+        callback: @escaping ([String: Any]) -> Void = { _ in }
+    ) {
         _ = rootViewController
+        _ = requestId
+        _ = callback
     }
 
-    func showRewarded(from rootViewController: UIViewController?) {
+    func showRewarded(
+        from rootViewController: UIViewController?,
+        requestId: String = "",
+        preferRewardedInterstitial: Bool = true,
+        callback: @escaping ([String: Any]) -> Void = { _ in }
+    ) {
         _ = rootViewController
+        _ = requestId
+        _ = preferRewardedInterstitial
+        _ = callback
     }
 }
 #else
@@ -1311,11 +1979,18 @@ struct QuanturaWebView: UIViewRepresentable {
             injectNativeRuntime()
             injectPushTokenIfAvailable()
             NativeAuthWebBridge.shared.pushCurrentAuthState()
+            NativeAuthWebBridge.shared.pushAuthGateState(
+                visible: authGateViewModel?.isGateVisible == true,
+                reason: "page_ready"
+            )
 #if canImport(FirebaseAuth)
             if let user = Auth.auth().currentUser, !user.isAnonymous {
                 Task {
                     do {
-                        try await NativeAuthWebBridge.shared.syncWebSessionFromCurrentUser(forceRefresh: false)
+                        try await NativeAuthWebBridge.shared.syncWebSessionFromCurrentUser(
+                            forceRefresh: false,
+                            source: "page_ready"
+                        )
                     } catch {
                         print("[AuthBridge][iOS] Silent sync on page load failed: \(error.localizedDescription)")
                     }
@@ -1380,24 +2055,100 @@ struct QuanturaWebView: UIViewRepresentable {
             DispatchQueue.main.async {
                 switch action {
                 case "showInterstitialAd":
-                    guard self.authGateViewModel?.isGateVisible != true else { return }
-                    self.adManager.showInterstitial(from: Self.topViewController())
+                    let requestId = String(describing: payload["requestId"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard self.authGateViewModel?.isGateVisible != true else {
+                        self.dispatchNativeAdResult([
+                            "requestId": requestId,
+                            "adFormat": "interstitial",
+                            "status": "skipped:auth_gate",
+                            "message": "Auth gate is visible.",
+                        ])
+                        return
+                    }
+                    self.adManager.showInterstitial(from: Self.topViewController(), requestId: requestId) { [weak self] detail in
+                        self?.dispatchNativeAdResult(detail)
+                    }
                 case "showRewardedAd":
-                    guard self.authGateViewModel?.isGateVisible != true else { return }
-                    self.adManager.showRewarded(from: Self.topViewController())
+                    let requestId = String(describing: payload["requestId"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard self.authGateViewModel?.isGateVisible != true else {
+                        self.dispatchNativeAdResult([
+                            "requestId": requestId,
+                            "adFormat": "rewarded",
+                            "status": "skipped:auth_gate",
+                            "message": "Auth gate is visible.",
+                        ])
+                        return
+                    }
+                    self.adManager.showRewarded(
+                        from: Self.topViewController(),
+                        requestId: requestId,
+                        preferRewardedInterstitial: false
+                    ) { [weak self] detail in
+                        self?.dispatchNativeAdResult(detail)
+                    }
                 case "showRewardedInterstitial":
-                    guard self.authGateViewModel?.isGateVisible != true else { return }
-                    self.adManager.showRewarded(from: Self.topViewController())
+                    let requestId = String(describing: payload["requestId"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard self.authGateViewModel?.isGateVisible != true else {
+                        self.dispatchNativeAdResult([
+                            "requestId": requestId,
+                            "adFormat": "rewarded_interstitial",
+                            "status": "skipped:auth_gate",
+                            "message": "Auth gate is visible.",
+                        ])
+                        return
+                    }
+                    self.adManager.showRewarded(
+                        from: Self.topViewController(),
+                        requestId: requestId,
+                        preferRewardedInterstitial: true
+                    ) { [weak self] detail in
+                        self?.dispatchNativeAdResult(detail)
+                    }
                 case "openNewsLink":
                     guard let urlText = payload["url"] as? String, let url = URL(string: urlText) else { return }
-                    guard self.authGateViewModel?.isGateVisible != true else { return }
-                    self.adManager.showInterstitial(from: Self.topViewController())
+                    let requestId = String(describing: payload["requestId"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard self.authGateViewModel?.isGateVisible != true else {
+                        self.dispatchNativeAdResult([
+                            "requestId": requestId,
+                            "adFormat": "interstitial",
+                            "status": "skipped:auth_gate",
+                            "message": "Auth gate is visible.",
+                        ])
+                        return
+                    }
+                    var opened = false
+                    self.adManager.showInterstitial(from: Self.topViewController(), requestId: requestId) { [weak self] detail in
+                        self?.dispatchNativeAdResult(detail)
+                        let status = String(describing: detail["status"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                        if status == "shown" || status == "queued" { return }
+                        if !opened {
+                            opened = true
+                            UIApplication.shared.open(url)
+                        }
+                    }
+                case "openExternalUrl":
+                    guard let urlText = payload["url"] as? String, let url = URL(string: urlText) else { return }
                     UIApplication.shared.open(url)
                 case "handleButtonClick":
                     let buttonID = String(describing: payload["buttonId"] ?? "")
                     print("[Ads][iOS] Button trigger rewarded buttonId=\(buttonID)")
-                    guard self.authGateViewModel?.isGateVisible != true else { return }
-                    self.adManager.showRewarded(from: Self.topViewController())
+                    let requestId = String(describing: payload["requestId"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard self.authGateViewModel?.isGateVisible != true else {
+                        self.dispatchNativeAdResult([
+                            "requestId": requestId,
+                            "adFormat": "rewarded_interstitial",
+                            "status": "skipped:auth_gate",
+                            "message": "Auth gate is visible.",
+                        ])
+                        return
+                    }
+                    self.adManager.showRewarded(
+                        from: Self.topViewController(),
+                        requestId: requestId,
+                        preferRewardedInterstitial: true
+                    ) { [weak self] detail in
+                        self?.dispatchNativeAdResult(detail)
+                    }
                 case "share":
                     self.openNativeShare(payload: payload)
                 case "authSignIn":
@@ -1408,6 +2159,8 @@ struct QuanturaWebView: UIViewRepresentable {
                     if !requestId.isEmpty {
                         self.dispatchNativeAuthResult(requestId: requestId, provider: "native", ok: true)
                     }
+                case "openAdInspector":
+                    self.openAdInspectorIfAllowed()
                 case "startNativePurchase":
                     self.handleNativeStoreKitPurchase(payload: payload)
                 case "openNativeSubscriptionManager":
@@ -1445,14 +2198,47 @@ struct QuanturaWebView: UIViewRepresentable {
             DispatchQueue.main.async {
                 switch type {
                 case "REQUEST_SIGN_IN":
-                    print("[AuthBridge][iOS] Received REQUEST_SIGN_IN from web.")
-                    self.authGateViewModel?.presentGate(trigger: "web_request")
+                    let requestId = String(describing: payload["requestId"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                    let provider = String(describing: payload["provider"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                    print("[AuthBridge][iOS] Received REQUEST_SIGN_IN from web provider=\(provider) requestId=\(requestId)")
+#if canImport(FirebaseAuth)
+                    if let currentUser = Auth.auth().currentUser, !currentUser.isAnonymous {
+                        Task {
+                            do {
+                                try await NativeAuthWebBridge.shared.syncWebSessionFromCurrentUser(
+                                    forceRefresh: false,
+                                    requestId: requestId,
+                                    provider: provider,
+                                    source: "web_request_restore"
+                                )
+                            } catch {
+                                self.dispatchNativeAuthResult(
+                                    requestId: requestId,
+                                    provider: provider.isEmpty ? "native" : provider,
+                                    ok: false,
+                                    error: error.localizedDescription
+                                )
+                            }
+                        }
+                        NativeAuthWebBridge.shared.pushAuthGateState(visible: false, reason: "web_request_restore")
+                        return
+                    }
+#endif
+                    if !provider.isEmpty, !requestId.isEmpty {
+                        self.handleNativeAuthSignIn(payload: payload)
+                    } else {
+                        self.authGateViewModel?.presentGate(trigger: "web_request")
+                    }
                 case "GET_AUTH_STATE":
                     print("[AuthBridge][iOS] Received GET_AUTH_STATE from web.")
                     NativeAuthWebBridge.shared.pushCurrentAuthState()
+                    NativeAuthWebBridge.shared.pushAuthGateState(
+                        visible: self.authGateViewModel?.isGateVisible == true,
+                        reason: "get_auth_state"
+                    )
                 case "SIGN_OUT":
                     print("[AuthBridge][iOS] Received SIGN_OUT from web.")
-                    self.authGateViewModel?.signOutToAnonymous()
+                    self.handleNativeAuthSignOut(payload: payload)
                 default:
                     print("[AuthBridge][iOS] Unknown bridge message type=\(type)")
                 }
@@ -1525,12 +2311,43 @@ struct QuanturaWebView: UIViewRepresentable {
             )
         }
 
+        private func dispatchNativeAdResult(_ detailPayload: [String: Any]) {
+            guard
+                let data = try? JSONSerialization.data(withJSONObject: detailPayload, options: []),
+                let detail = String(data: data, encoding: .utf8)
+            else { return }
+            webView?.evaluateJavaScript(
+                "window.dispatchEvent(new CustomEvent('quantura:native-ad-result',{detail:\(detail)}));"
+            )
+        }
+
+        private func openAdInspectorIfAllowed() {
+#if canImport(GoogleMobileAds)
+            guard remoteConfigManager.isAdInspectorEnabled() else {
+                print("[Ads][iOS] Ad inspector launch skipped; RC flag disabled.")
+                return
+            }
+            guard let presenter = Self.topViewController() else {
+                print("[Ads][iOS] Ad inspector launch skipped; no presenter available.")
+                return
+            }
+            MobileAds.shared.presentAdInspector(from: presenter) { error in
+                if let error {
+                    print("[Ads][iOS] Ad inspector closed with error: \(error.localizedDescription)")
+                } else {
+                    print("[Ads][iOS] Ad inspector closed.")
+                }
+            }
+#endif
+        }
+
         private func handleNativeStoreKitPurchase(payload: [String: Any]) {
             let requestId = String(describing: payload["requestId"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             let orderId = String(describing: payload["orderId"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             let requestedProductId = String(describing: payload["productId"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             let productId = NativeIapCatalog.normalize(requestedProductId)
             guard !requestId.isEmpty else { return }
+            print("[Billing][iOS][StoreKit] Native purchase requested requestId=\(requestId) productId=\(productId) rawProductId=\(requestedProductId)")
 
 #if canImport(StoreKit)
             guard #available(iOS 15.0, *) else {
@@ -1547,20 +2364,10 @@ struct QuanturaWebView: UIViewRepresentable {
 
             Task { @MainActor in
                 do {
-                    let products = try await Product.products(for: [productId])
-                    guard let product = products.first else {
-                        dispatchNativePurchaseResult(
-                            requestId: requestId,
-                            orderId: orderId,
-                            productId: productId,
-                            ok: false,
-                            status: "failed",
-                            message: "App Store product was not found."
-                        )
-                        return
-                    }
-
+                    let product = try await StoreKitIapManager.shared.resolveProduct(productId)
+                    print("[Billing][iOS][StoreKit] Product resolved id=\(product.id) price=\(product.displayPrice)")
                     let result = try await product.purchase()
+                    print("[Billing][iOS][StoreKit] Purchase result received productId=\(productId)")
                     switch result {
                     case .success(let verification):
                         switch verification {
@@ -1610,6 +2417,7 @@ struct QuanturaWebView: UIViewRepresentable {
                         )
                     }
                 } catch {
+                    print("[Billing][iOS][StoreKit] Purchase failed productId=\(productId) error=\(error.localizedDescription)")
                     dispatchNativePurchaseResult(
                         requestId: requestId,
                         orderId: orderId,
@@ -1722,6 +2530,17 @@ struct QuanturaWebView: UIViewRepresentable {
                 handleNativeGoogleSignIn(requestId: requestId)
             case "apple":
                 handleNativeAppleSignIn(requestId: requestId)
+            case "email", "password":
+                authGateViewModel?.presentGate(trigger: "web_request_email")
+                authGateViewModel?.openEmailSheet()
+            case "email_signup", "signup":
+                authGateViewModel?.presentGate(trigger: "web_request_email_signup")
+                authGateViewModel?.emailAuthMode = .signUp
+                authGateViewModel?.emailAddress = ""
+                authGateViewModel?.emailUsername = ""
+                authGateViewModel?.emailPassword = ""
+                authGateViewModel?.emailConfirmPassword = ""
+                authGateViewModel?.isEmailSheetVisible = true
             case "github", "github.com":
                 handleNativeOAuthSignIn(requestId: requestId, providerId: "github.com", providerLabel: "github")
             case "twitter", "x", "twitter.com":
@@ -2001,7 +2820,7 @@ struct QuanturaWebView: UIViewRepresentable {
             GIDSignIn.sharedInstance.signOut()
 #endif
             guard !requestId.isEmpty else { return }
-            dispatchNativeAuthResult(requestId: requestId, provider: "google", ok: true)
+            dispatchNativeAuthResult(requestId: requestId, provider: "native", ok: true)
         }
 
 #if canImport(FirebaseAuth) && canImport(AuthenticationServices) && canImport(CryptoKit)
@@ -2201,11 +3020,18 @@ extension QuanturaWebView.Coordinator: ASAuthorizationControllerDelegate, ASAuth
         if let top = QuanturaWebView.Coordinator.topViewController(), let window = top.view.window {
             return window
         }
-        let fallbackWindow = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .flatMap { $0.windows }
-            .first { $0.isKeyWindow }
-        return fallbackWindow ?? ASPresentationAnchor()
+        if let fallbackWindow = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .flatMap(\.windows)
+            .first(where: \.isKeyWindow) {
+            return fallbackWindow
+        }
+        if let scene = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first {
+            return UIWindow(windowScene: scene)
+        }
+        fatalError("Unable to resolve a valid presentation anchor for Apple Sign-In.")
     }
 }
 #endif
@@ -2265,17 +3091,23 @@ private struct AdsQaSnapshot {
     )
 }
 
+@MainActor
+final class AppContainerStore: ObservableObject {
+    let container = AppContainer()
+}
+
 struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
+    @StateObject private var appContainerStore = AppContainerStore()
     @StateObject private var lifecycleController = WebViewLifecycleController()
     @StateObject private var authGateViewModel = AuthGateViewModel()
     @State private var bannerAdsVisible: Bool = true
     @State private var adsQaPanelVisible: Bool = false
     @State private var adsQaSnapshot: AdsQaSnapshot = .empty
 #if canImport(StoreKit)
-    @StateObject private var storeKitManager = StoreKitIapManager()
+    @StateObject private var storeKitManager = StoreKitIapManager.shared
 #endif
-    private let container = AppContainer()
+    private var container: AppContainer { appContainerStore.container }
 
     var body: some View {
         ZStack {
@@ -2286,7 +3118,7 @@ struct ContentView: View {
                 remoteConfigManager: container.remoteConfigManager,
                 authGateViewModel: authGateViewModel
             )
-            .ignoresSafeArea(edges: [.top, .leading, .trailing])
+            .ignoresSafeArea(edges: [.leading, .trailing])
 
             if authGateViewModel.isGateVisible {
                 AuthGateView(viewModel: authGateViewModel)
@@ -2294,7 +3126,11 @@ struct ContentView: View {
                     .zIndex(999)
             }
 
-            if container.remoteConfigManager.adsEnvironment().isDebugBuild || container.remoteConfigManager.adsEnvironment().isSimulatorOrEmulator {
+            if container.remoteConfigManager.isAdInspectorEnabled() &&
+                (
+                    container.remoteConfigManager.adsEnvironment().isDebugBuild ||
+                        container.remoteConfigManager.adsEnvironment().isSimulatorOrEmulator
+                ) {
                 VStack {
                     Spacer()
                     HStack {
@@ -2312,13 +3148,12 @@ struct ContentView: View {
             }
         }
 #if canImport(GoogleMobileAds) && canImport(UIKit)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+        .safeAreaInset(edge: .top, spacing: 0) {
             if bannerAdsVisible {
                 AdaptiveBannerContainer(
                     adUnitID: container.remoteConfigManager.resolveAdUnitId(platform: .ios, format: .banner)
                 )
-                    .frame(height: 60)
-                    .background(.ultraThinMaterial)
+                    .background(Color.clear)
             }
         }
 #endif
@@ -2332,12 +3167,19 @@ struct ContentView: View {
         .onAppear {
             authGateViewModel.start()
             container.appOpenAdManager.setPresentationBlockedByAuthGate(authGateViewModel.isGateVisible)
-            bannerAdsVisible = container.remoteConfigManager.areAdsEnabled()
+            bannerAdsVisible = container.remoteConfigManager.isAdFormatEnabled(format: .banner)
+            MobileAdsBootstrap.shared.startIfNeeded()
             container.adManager.primeAds()
             container.appOpenAdManager.preloadAdIfNeeded()
+            if scenePhase == .active {
+                container.appOpenAdManager.sceneDidBecomeActive()
+            }
+            DispatchQueue.main.async {
+                container.appOpenAdManager.sceneDidBecomeActive()
+            }
             refreshAdsQaSnapshot()
             container.remoteConfigManager.fetchAndActivate { _ in
-                let enabled = container.remoteConfigManager.areAdsEnabled()
+                let enabled = container.remoteConfigManager.isAdFormatEnabled(format: .banner)
                 DispatchQueue.main.async {
                     bannerAdsVisible = enabled
                 }
@@ -2353,10 +3195,13 @@ struct ContentView: View {
             }
 #endif
         }
-        .onChange(of: authGateViewModel.isGateVisible) { isVisible in
+        .onChange(of: authGateViewModel.isGateVisible) { _, isVisible in
             container.appOpenAdManager.setPresentationBlockedByAuthGate(isVisible)
+            if !isVisible && scenePhase == .active {
+                container.appOpenAdManager.sceneDidBecomeActive()
+            }
         }
-        .onChange(of: scenePhase) { nextPhase in
+        .onChange(of: scenePhase) { _, nextPhase in
             switch nextPhase {
             case .background:
                 lifecycleController.sceneDidEnterBackground()
@@ -2469,6 +3314,10 @@ private struct AdsQaPanelView: View {
 }
 
 private extension String {
+    var isGoogleSampleAdUnit: Bool {
+        hasPrefix("ca-app-pub-3940256099942544/")
+    }
+
     func ifEmpty(replacement: String) -> String {
         isEmpty ? replacement : self
     }

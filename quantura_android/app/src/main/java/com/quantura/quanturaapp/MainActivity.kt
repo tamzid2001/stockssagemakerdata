@@ -4,9 +4,14 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.util.Base64
 import android.util.Log
 import android.webkit.WebChromeClient
@@ -18,6 +23,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
@@ -25,12 +32,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -49,20 +58,29 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.lifecycleScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.safeDrawing
+import com.google.android.gms.ads.MobileAds
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
@@ -110,6 +128,15 @@ private val BANNER_RESERVED_HEIGHT: Dp = 72.dp
 private enum class EmailDialogMode {
     SIGN_IN,
     SIGN_UP,
+}
+
+private enum class AuthProviderMarkKind {
+    GOOGLE,
+    GITHUB,
+    X,
+    YAHOO,
+    MICROSOFT,
+    EMAIL,
 }
 
 private data class AdsQaFormatRow(
@@ -160,18 +187,21 @@ class MainActivity : ComponentActivity() {
     private val playIntegrityClient by lazy { PlayIntegrityClient(applicationContext) }
 
     private var webViewRef: WebView? = null
-    private var bannerAdViewRef: BannerAdView? = null
+    private var topBannerAdViewRef: BannerAdView? = null
+    private var bottomBannerAdViewRef: BannerAdView? = null
     private var googleSignInClient: GoogleSignInClient? = null
     private var authStateListener: FirebaseAuth.AuthStateListener? = null
 
     private var lastSyncedUid: String = ""
     private var bridgeSyncRequired = false
-    private var gateDismissedForSession = false
+    private var gateDismissedForSession = true
     private var anonymousBootstrapInFlight = false
     private var lastNotificationSessionPingAtMs = 0L
     private var lastRegisteredNotificationTokenKey: String = ""
+    private var pendingBridgeAuthRequestId: String = ""
+    private var pendingBridgeAuthProvider: String = ""
 
-    private var authGateVisible by mutableStateOf(true)
+    private var authGateVisible by mutableStateOf(false)
     private var authBusy by mutableStateOf(false)
     private var authErrorText by mutableStateOf("")
     private var emailDialogVisible by mutableStateOf(false)
@@ -182,6 +212,43 @@ class MainActivity : ComponentActivity() {
     private var confirmPasswordValue by mutableStateOf("")
     private var adsQaDialogVisible by mutableStateOf(false)
     private var adsQaSnapshot by mutableStateOf(AdsQaSnapshot.empty())
+    private var adInspectorGestureRegistered = false
+    private var adInspectorOpening = false
+    private var lastShakeAtMs = 0L
+    private var recentShakeCount = 0
+
+    private val sensorManager by lazy {
+        getSystemService(SENSOR_SERVICE) as? SensorManager
+    }
+    private val accelerometerSensor by lazy {
+        sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+    }
+    private val adInspectorShakeListener = object : SensorEventListener {
+        override fun onSensorChanged(event: SensorEvent) {
+            if (!appContainer.remoteConfigManager.isAdInspectorEnabled()) return
+            val values = event.values
+            if (values.size < 3) return
+            val gx = values[0] / SensorManager.GRAVITY_EARTH
+            val gy = values[1] / SensorManager.GRAVITY_EARTH
+            val gz = values[2] / SensorManager.GRAVITY_EARTH
+            val gForceSquared = gx * gx + gy * gy + gz * gz
+            if (gForceSquared < 7.29f) return
+
+            val now = SystemClock.elapsedRealtime()
+            if (now - lastShakeAtMs > 1_500L) {
+                recentShakeCount = 0
+            }
+            if (now - lastShakeAtMs < 400L) return
+            lastShakeAtMs = now
+            recentShakeCount += 1
+            if (recentShakeCount >= 2) {
+                recentShakeCount = 0
+                openAdInspector(trigger = "shake")
+            }
+        }
+
+        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
+    }
 
     private val googleSignInLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -189,6 +256,7 @@ class MainActivity : ComponentActivity() {
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         super.onCreate(savedInstanceState)
 
         enableEdgeToEdge()
@@ -206,9 +274,12 @@ class MainActivity : ComponentActivity() {
 
         lifecycleScope.launch {
             appContainer.remoteConfigManager.fetchAndActivate()
+            appContainer.adManager.refreshForRemoteConfigChange(this@MainActivity)
+            appContainer.appOpenAdManager.refreshForRemoteConfigChange()
             appContainer.adManager.primeAds(this@MainActivity)
             appContainer.appOpenAdManager.loadAdIfNeeded()
             refreshBannerAdVisibility()
+            updateAdInspectorGestureRegistration()
         }
 
         val deepLinkUrl = intent?.getStringExtra(QuanturaMessagingService.EXTRA_DEEP_LINK_URL)
@@ -217,16 +288,67 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    Box(
+                    var topBannerHeightDp by androidx.compose.runtime.remember {
+                        mutableStateOf(0.dp)
+                    }
+                    var bottomBannerHeightDp by androidx.compose.runtime.remember {
+                        mutableStateOf(0.dp)
+                    }
+                    val density = resources.displayMetrics.density.coerceAtLeast(1f)
+                    val updateTopBannerHeight: (Int) -> Unit = { heightPx ->
+                        topBannerHeightDp = if (heightPx <= 0) {
+                            0.dp
+                        } else {
+                            (heightPx.toFloat() / density).dp
+                        }
+                    }
+                    val updateBottomBannerHeight: (Int) -> Unit = { heightPx ->
+                        bottomBannerHeightDp = if (heightPx <= 0) {
+                            0.dp
+                        } else {
+                            (heightPx.toFloat() / density).dp
+                        }
+                    }
+
+                    Column(
                         modifier = Modifier
                             .fillMaxSize()
                             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
                     ) {
-                        Column(modifier = Modifier.fillMaxSize()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.96f))
+                        ) {
+                            AndroidView(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(topBannerHeightDp),
+                                factory = { ctx ->
+                                    BannerAdView(ctx).apply {
+                                        setBannerSlot(BannerAdView.BannerSlot.TOP)
+                                        topBannerAdViewRef = this
+                                        setOnAdHeightChanged(updateTopBannerHeight)
+                                        loadAd(appContainer.remoteConfigManager)
+                                    }
+                                },
+                                update = { banner ->
+                                    banner.setBannerSlot(BannerAdView.BannerSlot.TOP)
+                                    topBannerAdViewRef = banner
+                                    banner.setOnAdHeightChanged(updateTopBannerHeight)
+                                    banner.refreshAdVisibility()
+                                },
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                        ) {
                             QuanturaWebViewScreen(
                                 modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxWidth(),
+                                    .fillMaxSize(),
                                 activity = this@MainActivity,
                                 startUrl = startUrl,
                                 adManager = appContainer.adManager,
@@ -235,47 +357,63 @@ class MainActivity : ComponentActivity() {
                                 onNativeAuthMessage = { type, payload ->
                                     handleNativeAuthMessage(type, payload)
                                 },
+                                onOpenAdInspector = {
+                                    openAdInspector(trigger = "bridge")
+                                },
                                 onReady = { webView ->
                                     webViewRef = webView
                                     appContainer.appOpenAdManager.setPresentationBlockedByAuthGate(authGateVisible)
                                     emitAuthStateToWeb(currentFirebaseUser(), idTokenFresh = false)
+                                    emitAuthGateStateToWeb(authGateVisible, reason = "webview_attached")
+                                },
+                                onPageReady = { webView, url ->
+                                    handleTrustedWebPageReady(webView, url)
                                 },
                             )
+
+                            if (authGateVisible) {
+                                NativeAuthGate(
+                                    modifier = Modifier.fillMaxSize(),
+                                    isBusy = authBusy,
+                                    errorText = authErrorText,
+                                    onGoogle = { startGoogleSignInFlow(trigger = "auth_gate") },
+                                    onGithub = { startOAuthProviderSignIn(providerId = "github.com", trigger = "auth_gate_github") },
+                                    onTwitter = { startOAuthProviderSignIn(providerId = "twitter.com", trigger = "auth_gate_twitter") },
+                                    onYahoo = { startOAuthProviderSignIn(providerId = "yahoo.com", trigger = "auth_gate_yahoo") },
+                                    onMicrosoft = { startOAuthProviderSignIn(providerId = "microsoft.com", trigger = "auth_gate_microsoft") },
+                                    onEmail = {
+                                        authErrorText = ""
+                                        openEmailDialog(EmailDialogMode.SIGN_IN)
+                                    },
+                                    onNotNow = { continueAnonymouslyForNow() },
+                                )
+                            }
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+                                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.96f))
+                        ) {
                             AndroidView(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(BANNER_RESERVED_HEIGHT)
-                                    .navigationBarsPadding(),
+                                    .height(bottomBannerHeightDp),
                                 factory = { ctx ->
                                     BannerAdView(ctx).apply {
-                                        bannerAdViewRef = this
+                                        setBannerSlot(BannerAdView.BannerSlot.BOTTOM)
+                                        bottomBannerAdViewRef = this
+                                        setOnAdHeightChanged(updateBottomBannerHeight)
                                         loadAd(appContainer.remoteConfigManager)
                                     }
                                 },
                                 update = { banner ->
-                                    bannerAdViewRef = banner
+                                    banner.setBannerSlot(BannerAdView.BannerSlot.BOTTOM)
+                                    bottomBannerAdViewRef = banner
+                                    banner.setOnAdHeightChanged(updateBottomBannerHeight)
                                     banner.refreshAdVisibility()
                                 },
-                            )
-                        }
-
-                        if (authGateVisible) {
-                            NativeAuthGate(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(bottom = BANNER_RESERVED_HEIGHT),
-                                isBusy = authBusy,
-                                errorText = authErrorText,
-                                onGoogle = { startGoogleSignInFlow(trigger = "auth_gate") },
-                                onGithub = { startOAuthProviderSignIn(providerId = "github.com", trigger = "auth_gate_github") },
-                                onTwitter = { startOAuthProviderSignIn(providerId = "twitter.com", trigger = "auth_gate_twitter") },
-                                onYahoo = { startOAuthProviderSignIn(providerId = "yahoo.com", trigger = "auth_gate_yahoo") },
-                                onMicrosoft = { startOAuthProviderSignIn(providerId = "microsoft.com", trigger = "auth_gate_microsoft") },
-                                onEmail = {
-                                    authErrorText = ""
-                                    openEmailDialog(EmailDialogMode.SIGN_IN)
-                                },
-                                onNotNow = { continueAnonymouslyForNow() },
                             )
                         }
 
@@ -293,7 +431,10 @@ class MainActivity : ComponentActivity() {
                                 onPasswordChanged = { passwordValue = it },
                                 onConfirmPasswordChanged = { confirmPasswordValue = it },
                                 onDismiss = {
-                                    if (!authBusy) emailDialogVisible = false
+                                    if (!authBusy) {
+                                        emitPendingBridgeAuthFailure("Email sign-in was dismissed.")
+                                        emailDialogVisible = false
+                                    }
                                 },
                                 onContinue = {
                                     if (emailDialogMode == EmailDialogMode.SIGN_UP) {
@@ -396,12 +537,32 @@ class MainActivity : ComponentActivity() {
     private fun updateAuthGateVisibility(visible: Boolean) {
         authGateVisible = visible
         appContainer.appOpenAdManager.setPresentationBlockedByAuthGate(visible)
+        emitAuthGateStateToWeb(visible, reason = "visibility_changed")
         if (!visible) {
             appContainer.appOpenAdManager.showAdIfAvailable()
         }
     }
 
+    private fun handleTrustedWebPageReady(webView: WebView, url: String) {
+        webViewRef = webView
+        Log.i("MainActivity", "[Auth][Android] Trusted page ready url=$url")
+        appContainer.appOpenAdManager.setPresentationBlockedByAuthGate(authGateVisible)
+        emitAuthGateStateToWeb(authGateVisible, reason = "page_ready")
+        emitAuthStateToWeb(currentFirebaseUser(), idTokenFresh = false)
+        val user = currentFirebaseUser()
+        if (user != null && !user.isAnonymous) {
+            Log.i("MainActivity", "[Auth][Android] Re-syncing native session after page load uid=${user.uid}")
+            syncWebSessionForUser(
+                user = user,
+                forceRefresh = false,
+                interactive = false,
+                source = "webview_page_ready",
+            )
+        }
+    }
+
     private fun continueAnonymouslyForNow() {
+        emitPendingBridgeAuthFailure("Sign-in was dismissed.")
         gateDismissedForSession = true
         bridgeSyncRequired = false
         authBusy = false
@@ -718,6 +879,7 @@ class MainActivity : ComponentActivity() {
         authBusy = false
         bridgeSyncRequired = currentFirebaseUser()?.isAnonymous == false
         authErrorText = message
+        emitPendingBridgeAuthFailure(message)
         updateAuthGateVisibility(true)
     }
 
@@ -732,12 +894,30 @@ class MainActivity : ComponentActivity() {
         }
 
         lifecycleScope.launch {
+            val requestId = pendingBridgeAuthRequestId.trim()
+            val requestProvider = pendingBridgeAuthProvider.trim().ifEmpty { source }
             try {
+                emitAuthSyncEventToWeb(
+                    status = "exchange_started",
+                    message = "Native auth exchange started.",
+                    uid = user.uid,
+                    requestId = requestId,
+                    provider = requestProvider,
+                    source = source,
+                )
                 val nativeIdToken = user.awaitIdToken(forceRefresh)
                 val customToken = exchangeNativeIdTokenForCustomToken(nativeIdToken)
                 injectCustomTokenIntoWeb(customToken)
                 emitAuthStateToWeb(user, idTokenFresh = forceRefresh)
                 Log.i("MainActivity", "[Auth][Android] Web custom token sync succeeded source=$source uid=${user.uid}")
+                emitAuthSyncEventToWeb(
+                    status = "exchange_succeeded",
+                    message = "Native auth exchange succeeded.",
+                    uid = user.uid,
+                    requestId = requestId,
+                    provider = requestProvider,
+                    source = source,
+                )
 
                 lastSyncedUid = user.uid
                 bridgeSyncRequired = false
@@ -748,17 +928,29 @@ class MainActivity : ComponentActivity() {
                 usernameValue = ""
                 passwordValue = ""
                 confirmPasswordValue = ""
+                clearPendingBridgeAuthRequest()
                 if (interactive) {
                     authBusy = false
                     updateAuthGateVisibility(false)
                 }
             } catch (error: Exception) {
                 Log.e("MainActivity", "[Auth][Android] Web custom token sync failed source=$source", error)
+                emitAuthSyncEventToWeb(
+                    status = "exchange_failed",
+                    message = error.message ?: "unknown_error",
+                    uid = user.uid,
+                    requestId = requestId,
+                    provider = requestProvider,
+                    source = source,
+                )
                 if (interactive) {
                     authBusy = false
                     bridgeSyncRequired = currentFirebaseUser()?.isAnonymous == false
                     authErrorText = "Signed in, but website sync failed: ${error.message ?: "unknown error"}"
                     updateAuthGateVisibility(true)
+                }
+                if (requestId.isNotEmpty()) {
+                    emitPendingBridgeAuthFailure(error.message ?: "Unable to sync native auth session.")
                 }
             }
         }
@@ -894,6 +1086,33 @@ class MainActivity : ComponentActivity() {
         )
     }
 
+    private fun emitAuthSyncEventToWeb(
+        status: String,
+        message: String,
+        uid: String = "",
+        requestId: String = "",
+        provider: String = "",
+        source: String = "",
+    ) {
+        val payload = JSONObject().apply {
+            put("status", status)
+            put("message", message)
+            put("uid", uid)
+            put("requestId", requestId)
+            put("provider", provider)
+            put("source", source)
+        }
+        emitJs(
+            """
+            window.__QUANTURA_PENDING_AUTH_SYNC__=${payload};
+            if (window.__quanturaAuthBridge?.onNativeAuthSync) {
+                window.__quanturaAuthBridge.onNativeAuthSync(${payload});
+            }
+            window.dispatchEvent(new CustomEvent('quantura:native-auth-sync', { detail: ${payload} }));
+            """.trimIndent()
+        )
+    }
+
     private fun emitAuthStateToWeb(user: FirebaseUser?, idTokenFresh: Boolean) {
         val payload = JSONObject().apply {
             put("type", "AUTH_STATE")
@@ -911,6 +1130,49 @@ class MainActivity : ComponentActivity() {
             window.dispatchEvent(new CustomEvent('quantura:native-auth-state', { detail: ${payload} }));
             """.trimIndent()
         )
+    }
+
+    private fun emitAuthGateStateToWeb(visible: Boolean, reason: String = "state_change") {
+        val payload = JSONObject().apply {
+            put("visible", visible)
+            put("reason", reason)
+        }
+        emitJs(
+            """
+            window.__QUANTURA_PENDING_AUTH_GATE_STATE__=${payload};
+            if (window.__quanturaAuthBridge?.onNativeAuthGateState) {
+                window.__quanturaAuthBridge.onNativeAuthGateState(${payload});
+            }
+            window.dispatchEvent(new CustomEvent('quantura:native-auth-gate', { detail: ${payload} }));
+            """.trimIndent()
+        )
+    }
+
+    private fun emitPendingBridgeAuthFailure(message: String) {
+        val requestId = pendingBridgeAuthRequestId.trim()
+        if (requestId.isEmpty()) return
+        val provider = pendingBridgeAuthProvider.trim().ifEmpty { "native" }
+        val payload = JSONObject().apply {
+            put("requestId", requestId)
+            put("provider", provider)
+            put("ok", false)
+            put("idToken", "")
+            put("error", message)
+        }
+        emitJs(
+            "window.dispatchEvent(new CustomEvent('quantura:native-auth-result',{detail:${payload}}));"
+        )
+        clearPendingBridgeAuthRequest()
+    }
+
+    private fun rememberPendingBridgeAuthRequest(requestId: String, provider: String) {
+        pendingBridgeAuthRequestId = requestId.trim()
+        pendingBridgeAuthProvider = provider.trim().lowercase()
+    }
+
+    private fun clearPendingBridgeAuthRequest() {
+        pendingBridgeAuthRequestId = ""
+        pendingBridgeAuthProvider = ""
     }
 
     private fun providerIdsFor(user: FirebaseUser?): JSONArray {
@@ -948,16 +1210,36 @@ class MainActivity : ComponentActivity() {
     private fun handleNativeAuthMessage(typeRaw: String, payload: JSONObject) {
         when (typeRaw.trim().uppercase()) {
             "REQUEST_SIGN_IN" -> {
-                Log.i("MainActivity", "[Auth][Android] REQUEST_SIGN_IN received from web.")
+                val requestId = payload.optString("requestId").trim()
+                val provider = payload.optString("provider").trim().lowercase()
+                Log.i(
+                    "MainActivity",
+                    "[Auth][Android] REQUEST_SIGN_IN received from web provider=$provider requestId=$requestId"
+                )
+                if (requestId.isNotEmpty()) {
+                    rememberPendingBridgeAuthRequest(requestId, provider.ifEmpty { "native" })
+                }
                 if (firebaseAuthOrNull() == null) {
                     authErrorText = "Native Firebase auth is unavailable in this build."
+                    emitPendingBridgeAuthFailure(authErrorText)
                     updateAuthGateVisibility(true)
+                    return
+                }
+                val currentUser = currentFirebaseUser()
+                if (currentUser != null && !currentUser.isAnonymous) {
+                    emitAuthStateToWeb(currentUser, idTokenFresh = false)
+                    syncWebSessionForUser(
+                        user = currentUser,
+                        forceRefresh = false,
+                        interactive = false,
+                        source = "web_request_restore",
+                    )
+                    updateAuthGateVisibility(false)
                     return
                 }
                 gateDismissedForSession = false
                 authErrorText = ""
                 updateAuthGateVisibility(true)
-                val provider = payload.optString("provider").trim().lowercase()
                 if (provider == "google" && !authBusy) {
                     startGoogleSignInFlow(trigger = "web_request")
                 } else if ((provider == "github" || provider == "github.com") && !authBusy) {
@@ -970,12 +1252,15 @@ class MainActivity : ComponentActivity() {
                     startOAuthProviderSignIn(providerId = "microsoft.com", trigger = "web_request_microsoft")
                 } else if (provider == "email") {
                     openEmailDialog(EmailDialogMode.SIGN_IN)
+                } else if (provider == "email_signup" || provider == "signup") {
+                    openEmailDialog(EmailDialogMode.SIGN_UP)
                 }
             }
 
             "GET_AUTH_STATE" -> {
                 Log.i("MainActivity", "[Auth][Android] GET_AUTH_STATE received from web.")
                 emitAuthStateToWeb(currentFirebaseUser(), idTokenFresh = false)
+                emitAuthGateStateToWeb(authGateVisible, reason = "get_auth_state")
             }
 
             "SIGN_OUT" -> {
@@ -1158,11 +1443,12 @@ class MainActivity : ComponentActivity() {
             Log.w("MainActivity", "[Auth][Android] Sign-out warning: ${error.message}")
         }
         bridgeSyncRequired = false
-        gateDismissedForSession = false
+        gateDismissedForSession = true
         authBusy = false
         authErrorText = ""
         lastSyncedUid = ""
-        updateAuthGateVisibility(true)
+        clearPendingBridgeAuthRequest()
+        updateAuthGateVisibility(false)
         emitAuthStateToWeb(currentFirebaseUser(), idTokenFresh = false)
         ensureAnonymousSessionIfNeeded()
     }
@@ -1188,7 +1474,8 @@ class MainActivity : ComponentActivity() {
 
     private fun refreshBannerAdVisibility() {
         runOnUiThread {
-            bannerAdViewRef?.refreshAdVisibility()
+            topBannerAdViewRef?.refreshAdVisibility()
+            bottomBannerAdViewRef?.refreshAdVisibility()
         }
     }
 
@@ -1251,7 +1538,8 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             appContainer.adManager.preloadAllFormatsForQa(this@MainActivity)
             appContainer.appOpenAdManager.loadAdIfNeeded()
-            bannerAdViewRef?.loadAd(appContainer.remoteConfigManager)
+            topBannerAdViewRef?.loadAd(appContainer.remoteConfigManager)
+            bottomBannerAdViewRef?.loadAd(appContainer.remoteConfigManager)
             delay(600)
             refreshAdsQaSnapshot()
         }
@@ -1330,6 +1618,7 @@ class MainActivity : ComponentActivity() {
         }
 
     override fun onPause() {
+        unregisterAdInspectorGesture()
         webViewRef?.onPause()
         webViewRef?.pauseTimers()
         appContainer.adManager.onPause()
@@ -1341,12 +1630,15 @@ class MainActivity : ComponentActivity() {
         webViewRef?.onResume()
         webViewRef?.resumeTimers()
         appContainer.adManager.onResume(this)
+        appContainer.appOpenAdManager.refreshForRemoteConfigChange()
         InactivityNotificationScheduler.reschedule(this)
         syncNotificationSession(forcePing = true)
         refreshBannerAdVisibility()
+        updateAdInspectorGestureRegistration()
     }
 
     override fun onDestroy() {
+        unregisterAdInspectorGesture()
         val auth = firebaseAuthOrNull()
         authStateListener?.let { listener ->
             runCatching { auth?.removeAuthStateListener(listener) }
@@ -1372,6 +1664,70 @@ class MainActivity : ComponentActivity() {
             if (uri != null) {
                 runCatching { startActivity(Intent(Intent.ACTION_VIEW, uri)) }
             }
+        }
+    }
+
+    private fun updateAdInspectorGestureRegistration() {
+        if (appContainer.remoteConfigManager.isAdInspectorEnabled()) {
+            registerAdInspectorGesture()
+        } else {
+            unregisterAdInspectorGesture()
+        }
+    }
+
+    private fun registerAdInspectorGesture() {
+        if (adInspectorGestureRegistered) return
+        val manager = sensorManager ?: return
+        val accelerometer = accelerometerSensor
+        if (accelerometer == null) {
+            Log.w("MainActivity", "[Ads][Android] Ad inspector gesture unavailable: no accelerometer.")
+            return
+        }
+        adInspectorGestureRegistered = manager.registerListener(
+            adInspectorShakeListener,
+            accelerometer,
+            SensorManager.SENSOR_DELAY_UI
+        )
+        if (adInspectorGestureRegistered) {
+            Log.i("MainActivity", "[Ads][Android] Ad inspector gesture enabled.")
+        }
+    }
+
+    private fun unregisterAdInspectorGesture() {
+        if (!adInspectorGestureRegistered) return
+        sensorManager?.unregisterListener(adInspectorShakeListener)
+        adInspectorGestureRegistered = false
+        recentShakeCount = 0
+        lastShakeAtMs = 0L
+    }
+
+    private fun openAdInspector(trigger: String) {
+        if (!appContainer.remoteConfigManager.isAdInspectorEnabled()) {
+            Log.i("MainActivity", "[Ads][Android] Ad inspector launch skipped; RC flag disabled.")
+            return
+        }
+        if (adInspectorOpening) return
+        adInspectorOpening = true
+        val launchInspector = {
+            MobileAds.openAdInspector(this) { error ->
+                adInspectorOpening = false
+                if (error != null) {
+                    Log.w(
+                        "MainActivity",
+                        "[Ads][Android] Ad inspector closed with error trigger=$trigger message=${error.message}"
+                    )
+                } else {
+                    Log.i("MainActivity", "[Ads][Android] Ad inspector closed trigger=$trigger")
+                }
+            }
+        }
+        if (MobileAdsBootstrap.isInitialized()) {
+            launchInspector()
+            return
+        }
+        Log.i("MainActivity", "[Ads][Android] Waiting for Mobile Ads init before opening ad inspector.")
+        MobileAdsBootstrap.runWhenInitialized {
+            runOnUiThread { launchInspector() }
         }
     }
 
@@ -1401,7 +1757,9 @@ private fun QuanturaWebViewScreen(
     remoteConfigManager: RemoteConfigManager,
     isAuthGateVisible: () -> Boolean,
     onNativeAuthMessage: (type: String, payload: JSONObject) -> Unit,
+    onOpenAdInspector: () -> Unit,
     onReady: (WebView) -> Unit,
+    onPageReady: (WebView, String) -> Unit,
 ) {
     AndroidView(
         modifier = modifier.fillMaxSize(),
@@ -1477,6 +1835,9 @@ private fun QuanturaWebViewScreen(
                                 null
                             )
                         }
+                        view?.let { readyView ->
+                            onPageReady(readyView, url.orEmpty())
+                        }
                     }
                 }
 
@@ -1485,6 +1846,7 @@ private fun QuanturaWebViewScreen(
                     adManager = adManager,
                     onNativeAuthMessage = onNativeAuthMessage,
                     isAuthGateVisible = isAuthGateVisible,
+                    onOpenAdInspector = { onOpenAdInspector() },
                     onBridgeEvent = { eventName, payload ->
                         val safeEventName = eventName.replace("'", "\\'")
                         evaluateJavascript(
@@ -1524,15 +1886,20 @@ private fun NativeAuthGate(
     onEmail: () -> Unit,
     onNotNow: () -> Unit,
 ) {
+    val quanturaInk = Color(0xFF0C1B3D)
+    val quanturaAqua = Color(0xFF8CD9DB)
+    val quanturaMist = Color(0xFFE8F7F7)
+    val quanturaSand = Color(0xFFF6F1E7)
+    val quanturaOrange = Color(0xFFFF7A1A)
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
-                        Color(0xFF081B4A),
-                        Color(0xFF103571),
-                        Color(0xFF07163B),
+                        quanturaSand,
+                        quanturaMist,
+                        Color(0xFFF7FBFB),
                     )
                 )
             )
@@ -1541,21 +1908,48 @@ private fun NativeAuthGate(
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Text(
-                text = "Sign in to Quantura",
-                color = Color.White,
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
+            Box(
+                modifier = Modifier
+                    .background(Color.White.copy(alpha = 0.92f), RoundedCornerShape(26.dp))
+                    .padding(horizontal = 22.dp, vertical = 18.dp),
             )
-            Text(
-                text = "Sync forecasts and unlock personalized alerts.",
-                color = Color.White.copy(alpha = 0.86f),
-                textAlign = TextAlign.Center,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(horizontal = 8.dp),
-            )
+            {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.quantura_auth_logo),
+                        contentDescription = "Quantura",
+                        modifier = Modifier
+                            .size(68.dp)
+                            .background(Color.White, CircleShape)
+                            .padding(4.dp),
+                        contentScale = ContentScale.Fit,
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = "QUANTURA",
+                            color = quanturaInk,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Black,
+                        )
+                        Text(
+                            text = "Sign in to Quantura",
+                            color = quanturaInk,
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            text = "Sync forecasts, alerts, and portfolio workflows in one native session.",
+                            color = quanturaInk.copy(alpha = 0.72f),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -1566,10 +1960,16 @@ private fun NativeAuthGate(
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color.White,
-                    contentColor = Color(0xFF111827),
+                    contentColor = quanturaInk,
                 ),
             ) {
-                Text("Continue with Google", fontWeight = FontWeight.SemiBold)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    AuthProviderMark(kind = AuthProviderMarkKind.GOOGLE)
+                    Text("Continue with Google", fontWeight = FontWeight.SemiBold)
+                }
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
@@ -1578,18 +1978,36 @@ private fun NativeAuthGate(
                     enabled = !isBusy,
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = quanturaInk.copy(alpha = 0.06f),
+                        contentColor = quanturaInk,
+                    ),
                 ) {
-                    Text("GitHub", fontWeight = FontWeight.SemiBold)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        AuthProviderMark(kind = AuthProviderMarkKind.GITHUB)
+                        Text("GitHub", fontWeight = FontWeight.SemiBold)
+                    }
                 }
                 OutlinedButton(
                     onClick = onTwitter,
                     enabled = !isBusy,
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = quanturaInk.copy(alpha = 0.06f),
+                        contentColor = quanturaInk,
+                    ),
                 ) {
-                    Text("Twitter/X", fontWeight = FontWeight.SemiBold)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        AuthProviderMark(kind = AuthProviderMarkKind.X)
+                        Text("Twitter/X", fontWeight = FontWeight.SemiBold)
+                    }
                 }
             }
 
@@ -1599,18 +2017,36 @@ private fun NativeAuthGate(
                     enabled = !isBusy,
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = quanturaInk.copy(alpha = 0.06f),
+                        contentColor = quanturaInk,
+                    ),
                 ) {
-                    Text("Yahoo", fontWeight = FontWeight.SemiBold)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        AuthProviderMark(kind = AuthProviderMarkKind.YAHOO)
+                        Text("Yahoo", fontWeight = FontWeight.SemiBold)
+                    }
                 }
                 OutlinedButton(
                     onClick = onMicrosoft,
                     enabled = !isBusy,
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = quanturaInk.copy(alpha = 0.06f),
+                        contentColor = quanturaInk,
+                    ),
                 ) {
-                    Text("Microsoft", fontWeight = FontWeight.SemiBold)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        AuthProviderMark(kind = AuthProviderMarkKind.MICROSOFT)
+                        Text("Microsoft", fontWeight = FontWeight.SemiBold)
+                    }
                 }
             }
 
@@ -1620,19 +2056,28 @@ private fun NativeAuthGate(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 border = ButtonDefaults.outlinedButtonBorder.copy(width = 1.dp),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = Color.White.copy(alpha = 0.7f),
+                    contentColor = quanturaInk,
+                ),
             ) {
-                Text("Continue with Email", fontWeight = FontWeight.SemiBold)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    AuthProviderMark(kind = AuthProviderMarkKind.EMAIL)
+                    Text("Continue with Email", fontWeight = FontWeight.SemiBold)
+                }
             }
 
             TextButton(onClick = onNotNow, enabled = !isBusy) {
-                Text("Not now", color = Color.White.copy(alpha = 0.92f))
+                Text("Not now", color = quanturaInk.copy(alpha = 0.88f))
             }
 
             if (errorText.isNotBlank()) {
                 Text(
                     text = errorText,
-                    color = Color(0xFFFFCDD2),
+                    color = Color(0xFFB3261E),
                     textAlign = TextAlign.Center,
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -1640,9 +2085,134 @@ private fun NativeAuthGate(
 
             if (isBusy) {
                 Spacer(modifier = Modifier.height(4.dp))
-                CircularProgressIndicator(color = Color.White)
+                CircularProgressIndicator(color = quanturaInk)
             }
         }
+    }
+}
+
+@Composable
+private fun AuthProviderMark(kind: AuthProviderMarkKind) {
+    when (kind) {
+        AuthProviderMarkKind.GOOGLE -> GoogleProviderMark()
+        AuthProviderMarkKind.MICROSOFT -> MicrosoftProviderMark()
+        AuthProviderMarkKind.GITHUB -> SimpleProviderMark(label = "GH", background = Color(0xFF111827), foreground = Color.White)
+        AuthProviderMarkKind.X -> SimpleProviderMark(label = "X", background = Color(0xFF111111), foreground = Color.White)
+        AuthProviderMarkKind.YAHOO -> SimpleProviderMark(label = "Y!", background = Color(0xFF5F01D1), foreground = Color.White)
+        AuthProviderMarkKind.EMAIL -> SimpleProviderMark(label = "@", background = Color(0xFFFF7A1A), foreground = Color.White)
+    }
+}
+
+@Composable
+private fun GoogleProviderMark() {
+    Box(
+        modifier = Modifier
+            .size(24.dp)
+            .background(Color.White, CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(modifier = Modifier.size(16.dp)) {
+            val stroke = size.minDimension * 0.18f
+            val arcSize = Size(size.width, size.height)
+            drawArc(
+                color = Color(0xFF4285F4),
+                startAngle = -38f,
+                sweepAngle = 92f,
+                useCenter = false,
+                size = arcSize,
+                style = Stroke(width = stroke, cap = StrokeCap.Round)
+            )
+            drawArc(
+                color = Color(0xFFEA4335),
+                startAngle = 56f,
+                sweepAngle = 78f,
+                useCenter = false,
+                size = arcSize,
+                style = Stroke(width = stroke, cap = StrokeCap.Round)
+            )
+            drawArc(
+                color = Color(0xFFFBBC05),
+                startAngle = 136f,
+                sweepAngle = 94f,
+                useCenter = false,
+                size = arcSize,
+                style = Stroke(width = stroke, cap = StrokeCap.Round)
+            )
+            drawArc(
+                color = Color(0xFF34A853),
+                startAngle = 230f,
+                sweepAngle = 96f,
+                useCenter = false,
+                size = arcSize,
+                style = Stroke(width = stroke, cap = StrokeCap.Round)
+            )
+            drawLine(
+                color = Color(0xFF4285F4),
+                start = Offset(size.width * 0.55f, size.height * 0.52f),
+                end = Offset(size.width * 0.94f, size.height * 0.52f),
+                strokeWidth = stroke,
+                cap = StrokeCap.Round
+            )
+        }
+    }
+}
+
+@Composable
+private fun MicrosoftProviderMark() {
+    Box(
+        modifier = Modifier
+            .size(24.dp)
+            .background(Color.White, CircleShape)
+            .padding(4.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .background(Color(0xFFF25022), RoundedCornerShape(1.dp))
+                )
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .background(Color(0xFF7FBA00), RoundedCornerShape(1.dp))
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .background(Color(0xFF00A4EF), RoundedCornerShape(1.dp))
+                )
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .background(Color(0xFFFFB900), RoundedCornerShape(1.dp))
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SimpleProviderMark(
+    label: String,
+    background: Color,
+    foreground: Color,
+) {
+    Box(
+        modifier = Modifier
+            .size(24.dp)
+            .background(background, CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            color = foreground,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+        )
     }
 }
 
@@ -1663,6 +2233,38 @@ private fun EmailSignInDialog(
     onContinue: () -> Unit,
 ) {
     val isSignUp = mode == EmailDialogMode.SIGN_UP
+    val signInTouched = email.isNotBlank() || password.isNotBlank()
+    val signUpTouched = signInTouched || username.isNotBlank() || confirmPassword.isNotBlank()
+    val emailError =
+        if ((if (isSignUp) signUpTouched else signInTouched) && email.isBlank()) "Email is required." else null
+    val usernameError =
+        if (isSignUp && signUpTouched) {
+            when {
+                username.isBlank() -> "Username is required."
+                username.trim().length < 3 -> "Username must be at least 3 characters."
+                else -> null
+            }
+        } else {
+            null
+        }
+    val passwordError =
+        if ((if (isSignUp) signUpTouched else signInTouched) && password.isBlank()) {
+            "Password is required."
+        } else if (isSignUp && signUpTouched && password.isNotBlank() && password.length < 8) {
+            "Password must be at least 8 characters."
+        } else {
+            null
+        }
+    val confirmPasswordError =
+        if (isSignUp && signUpTouched) {
+            when {
+                confirmPassword.isBlank() -> "Confirm your password."
+                password.isNotBlank() && confirmPassword != password -> "Passwords do not match."
+                else -> null
+            }
+        } else {
+            null
+        }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (isSignUp) "Create account" else "Continue with Email") },
@@ -1689,8 +2291,10 @@ private fun EmailSignInDialog(
                     onValueChange = onEmailChanged,
                     label = { Text("Email") },
                     singleLine = true,
+                    isError = emailError != null,
                     enabled = !isBusy,
                     modifier = Modifier.fillMaxWidth(),
+                    supportingText = emailError?.let { { Text(it) } },
                 )
                 if (isSignUp) {
                     OutlinedTextField(
@@ -1698,8 +2302,10 @@ private fun EmailSignInDialog(
                         onValueChange = onUsernameChanged,
                         label = { Text("Username") },
                         singleLine = true,
+                        isError = usernameError != null,
                         enabled = !isBusy,
                         modifier = Modifier.fillMaxWidth(),
+                        supportingText = usernameError?.let { { Text(it) } },
                     )
                 }
                 OutlinedTextField(
@@ -1707,9 +2313,11 @@ private fun EmailSignInDialog(
                     onValueChange = onPasswordChanged,
                     label = { Text("Password") },
                     singleLine = true,
+                    isError = passwordError != null,
                     enabled = !isBusy,
                     visualTransformation = PasswordVisualTransformation(),
                     modifier = Modifier.fillMaxWidth(),
+                    supportingText = passwordError?.let { { Text(it) } },
                 )
                 if (isSignUp) {
                     OutlinedTextField(
@@ -1717,9 +2325,11 @@ private fun EmailSignInDialog(
                         onValueChange = onConfirmPasswordChanged,
                         label = { Text("Confirm password") },
                         singleLine = true,
+                        isError = confirmPasswordError != null,
                         enabled = !isBusy,
                         visualTransformation = PasswordVisualTransformation(),
                         modifier = Modifier.fillMaxWidth(),
+                        supportingText = confirmPasswordError?.let { { Text(it) } },
                     )
                 }
                 Text(

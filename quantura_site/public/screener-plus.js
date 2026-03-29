@@ -1,8 +1,10 @@
 (() => {
-  if (window.location.pathname !== "/screener") return;
+  const cleanPath = String(window.location.pathname || "").replace(/\/+$/, "") || "/";
+  if (cleanPath !== "/screener") return;
 
   const screenerForm = document.getElementById("screener-form");
   if (!screenerForm) return;
+  if (String(screenerForm.dataset.screenerMode || "").trim().toLowerCase() === "github_actions") return;
 
   const STORAGE_BASE_KEY = "quantura_market_data_base_v1";
   const STORAGE_SCREENER_STATE = "quantura_screener_plus_state_v2";
@@ -10,7 +12,7 @@
   const getApiBase = () => {
     const explicit = String(window.__QUANTURA_MARKET_DATA_BASE__ || "").trim();
     const saved = String(localStorage.getItem(STORAGE_BASE_KEY) || "").trim();
-    const fallback = "http://127.0.0.1:8090";
+    const fallback = `${window.location.origin}/api`;
     return (explicit || saved || fallback).replace(/\/$/, "");
   };
 

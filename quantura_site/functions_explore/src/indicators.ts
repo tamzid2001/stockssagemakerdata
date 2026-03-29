@@ -276,6 +276,17 @@ function formatIndicatorValue(name: string, value: number | null): string {
   return numeric.toFixed(4);
 }
 
+function roundFinite(value: unknown, digits = 4): number | null {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  return Number(numeric.toFixed(digits));
+}
+
+function percentDelta(base: number | null, current: number | null, digits = 2): number | null {
+  if (!Number.isFinite(base as number) || !Number.isFinite(current as number) || Number(base) === 0) return null;
+  return Number((((Number(current) / Number(base)) - 1) * 100).toFixed(digits));
+}
+
 function sma(values: number[], period: number): Array<number | null> {
   const out = createEmptySeries(values.length);
   if (!Number.isFinite(period) || period <= 1) return values.map((value) => (Number.isFinite(value) ? value : null));
@@ -689,14 +700,77 @@ function parseJsonObject(text: string): Record<string, unknown> | null {
   return null;
 }
 
+function buildIndicatorPromptContext(computed: IndicatorComputation): Record<string, unknown> {
+  const lastClose = roundFinite(computed.lastClose, 4);
+  const previousClose = roundFinite(computed.previousClose, 4);
+  const atr14 = roundFinite(computed.latestNumeric.ATR_14, 4);
+  const ema20 = roundFinite(computed.latestNumeric.EMA_20, 4);
+  const sma20 = roundFinite(computed.latestNumeric.SMA_20, 4);
+  const context = {
+    asOf: computed.asOf,
+    lastClose,
+    previousClose,
+    oneBarChangePct: percentDelta(previousClose, lastClose, 2),
+    selectedIndicators: computed.selectedIndicators,
+    latestIndicators: computed.latestRows.slice(0, 24).map((entry) => ({
+      name: entry.name,
+      value: roundFinite(entry.value, 6),
+      display: entry.display,
+    })),
+    derivedSignals: {
+      rsi14: roundFinite(computed.latestNumeric.RSI_14, 2),
+      macdLine: roundFinite(computed.latestNumeric.MACD_LINE, 4),
+      macdSignal: roundFinite(computed.latestNumeric.MACD_SIGNAL, 4),
+      macdHist: roundFinite(computed.latestNumeric.MACD_HIST, 4),
+      adx14: roundFinite(computed.latestNumeric.ADX_14, 2),
+      plusDi14: roundFinite(computed.latestNumeric.PLUS_DI_14, 2),
+      minusDi14: roundFinite(computed.latestNumeric.MINUS_DI_14, 2),
+      atr14,
+      atrPct: lastClose && atr14 ? roundFinite((atr14 / lastClose) * 100, 2) : null,
+      ema20,
+      sma20,
+      closeVsEma20Pct: percentDelta(ema20, lastClose, 2),
+      closeVsSma20Pct: percentDelta(sma20, lastClose, 2),
+      bbandsUpper: roundFinite(computed.latestNumeric.BBANDS_UPPER, 4),
+      bbandsMiddle: roundFinite(computed.latestNumeric.BBANDS_MIDDLE, 4),
+      bbandsLower: roundFinite(computed.latestNumeric.BBANDS_LOWER, 4),
+      cci20: roundFinite(computed.latestNumeric.CCI_20, 2),
+      mfi14: roundFinite(computed.latestNumeric.MFI_14, 2),
+      roc12: roundFinite(computed.latestNumeric.ROC_12, 2),
+      stochK: roundFinite(computed.latestNumeric.STOCH_K, 2),
+      stochD: roundFinite(computed.latestNumeric.STOCH_D, 2),
+      willr14: roundFinite(computed.latestNumeric.WILLR_14, 2),
+    },
+  };
+  return context;
+}
+
 function extractResponsesOutputText(payload: Record<string, unknown>): string {
   const direct = sanitizeText((payload as any).output_text, 24000);
   if (direct) return direct;
+  const directParsed = (payload as any)?.output_parsed ?? (payload as any)?.parsed;
+  if (directParsed && typeof directParsed === "object") {
+    const serialized = JSON.stringify(directParsed);
+    const text = sanitizeText(serialized, 24000);
+    if (text) return text;
+  }
   const output = Array.isArray((payload as any)?.output) ? ((payload as any).output as any[]) : [];
   const chunks: string[] = [];
   output.forEach((item) => {
+    if (item?.parsed && typeof item.parsed === "object") {
+      const serialized = sanitizeText(JSON.stringify(item.parsed), 24000);
+      if (serialized) chunks.push(serialized);
+    }
     const content = Array.isArray(item?.content) ? item.content : [];
     content.forEach((part: any) => {
+      if (part?.parsed && typeof part.parsed === "object") {
+        const serialized = sanitizeText(JSON.stringify(part.parsed), 24000);
+        if (serialized) chunks.push(serialized);
+      }
+      if (part?.json && typeof part.json === "object") {
+        const serialized = sanitizeText(JSON.stringify(part.json), 24000);
+        if (serialized) chunks.push(serialized);
+      }
       const text = sanitizeText(part?.text?.value ?? part?.text ?? part?.output_text ?? "", 24000);
       if (text) chunks.push(text);
     });
@@ -754,21 +828,116 @@ function buildHeuristicAnalysis(computed: IndicatorComputation): IndicatorAnalys
   ];
 
   const summary = `Computed ${computed.latestRows.length} indicator values for ${computed.ticker}. Momentum is ${direction}, with a ${timelineDays}-day tactical horizon.`;
-  const text = `${summary}\n\nProjected target: ${targetPrice ? `$${targetPrice}` : "n/a"} in about ${timelineDays} trading day(s).`;
+  const prediction: IndicatorPrediction = {
+    direction,
+    targetPrice,
+    timeline: `${timelineDays} trading days`,
+    timelineDays,
+    confidence,
+  };
+  const text = buildIndicatorNarrative(summary, keySignals, prediction, computed);
 
   return {
     summary,
     keySignals,
-    prediction: {
-      direction,
-      targetPrice,
-      timeline: `${timelineDays} trading days`,
-      timelineDays,
-      confidence,
-    },
+    prediction,
     text,
     provider: "heuristic",
     model: "finta-style-rules",
+    disclaimer: LLM_DISCLAIMER,
+  };
+}
+
+function clampIndicatorTargetPrice(
+  targetPrice: number,
+  direction: IndicatorPrediction["direction"],
+  computed: IndicatorComputation,
+  fallbackTarget: number
+): number {
+  const lastClose = Number(computed.lastClose);
+  if (!Number.isFinite(lastClose) || lastClose <= 0) {
+    return Number.isFinite(targetPrice) && targetPrice > 0 ? Number(targetPrice.toFixed(2)) : Number(fallbackTarget.toFixed(2));
+  }
+  const atrValue = Number(computed.latestNumeric.ATR_14 || 0);
+  const atrPct = Number.isFinite(atrValue) && atrValue > 0 ? atrValue / lastClose : 0;
+  const defaultBandPct = computed.interval === "1h" ? 0.05 : 0.1;
+  const hardCapPct = computed.interval === "1h" ? 0.18 : 0.3;
+  const bandPct = Math.max(defaultBandPct, Math.min(hardCapPct, atrPct > 0 ? atrPct * 4 : defaultBandPct));
+  const lower = lastClose * (1 - bandPct);
+  const upper = lastClose * (1 + bandPct);
+  let bounded = Number.isFinite(targetPrice) && targetPrice > 0 ? targetPrice : fallbackTarget;
+  bounded = Math.min(upper, Math.max(lower, bounded));
+  if (direction === "bullish" && bounded < lastClose) bounded = lastClose;
+  if (direction === "bearish" && bounded > lastClose) bounded = lastClose;
+  return Number(bounded.toFixed(2));
+}
+
+function normalizeIndicatorKeySignals(raw: unknown, fallback: string[]): string[] {
+  const candidate = Array.isArray(raw)
+    ? raw.map((item) => sanitizeText(item, 180)).filter(Boolean)
+    : [];
+  if (candidate.length >= 3) return candidate.slice(0, 6);
+  const merged = [...candidate, ...fallback.map((item) => sanitizeText(item, 180)).filter(Boolean)];
+  return Array.from(new Set(merged)).slice(0, 6);
+}
+
+function buildIndicatorNarrative(
+  summary: string,
+  keySignals: string[],
+  prediction: IndicatorPrediction,
+  computed: IndicatorComputation
+): string {
+  const targetText = Number.isFinite(prediction.targetPrice as number) ? `$${Number(prediction.targetPrice).toFixed(2)}` : "the current price area";
+  const riskLine =
+    prediction.direction === "bullish"
+      ? "Risk frame: bullish conviction weakens if momentum rolls over or price loses its short-term trend support."
+      : prediction.direction === "bearish"
+        ? "Risk frame: bearish conviction weakens if momentum turns up or price reclaims short-term trend support."
+        : "Risk frame: signals are mixed, so avoid over-weighting any single indicator reading.";
+  const setupLine = `Setup: ${summary}`;
+  const pathLine = `Path: ${prediction.direction} bias toward ${targetText} over ${prediction.timeline} with ${prediction.confidence} confidence.`;
+  const signalLines = keySignals.slice(0, 4).map((item) => `- ${item}`);
+  const asOfLine = `As of ${computed.asOf}, last close was $${Number(computed.lastClose).toFixed(2)} on the ${computed.interval} interval.`;
+  return [setupLine, asOfLine, "Signal stack:", ...signalLines, pathLine, riskLine].join("\n");
+}
+
+function indicatorTimelineBounds(interval: "1d" | "1h"): { min: number; max: number } {
+  return interval === "1h" ? { min: 1, max: 10 } : { min: 3, max: 30 };
+}
+
+function hasStructuredIndicatorNarrative(text: string): boolean {
+  const normalized = sanitizeText(text, 8000);
+  if (!normalized) return false;
+  return /setup:/i.test(normalized) && /risk frame:/i.test(normalized);
+}
+
+function normalizeIndicatorAnalysisPayload(
+  parsed: Record<string, unknown>,
+  rawText: string,
+  computed: IndicatorComputation,
+  model: string
+): IndicatorAnalysis {
+  const heuristic = buildHeuristicAnalysis(computed);
+  const summary = sanitizeText(parsed.summary, 800) || heuristic.summary;
+  const keySignals = normalizeIndicatorKeySignals(parsed.keySignals, heuristic.keySignals);
+  const prediction = coercePrediction((parsed.prediction as Record<string, unknown>) || {}, computed.lastClose, computed.interval);
+  prediction.targetPrice = clampIndicatorTargetPrice(
+    Number(prediction.targetPrice || 0),
+    prediction.direction,
+    computed,
+    Number(heuristic.prediction.targetPrice || computed.lastClose)
+  );
+  const textCandidate = sanitizeText(parsed.text || rawText, 8000);
+  const text = hasStructuredIndicatorNarrative(textCandidate)
+    ? textCandidate
+    : buildIndicatorNarrative(summary, keySignals, prediction, computed);
+  return {
+    summary,
+    keySignals,
+    prediction,
+    text,
+    provider: "openai",
+    model,
     disclaimer: LLM_DISCLAIMER,
   };
 }
@@ -806,9 +975,13 @@ function coercePrediction(
   lastClose: number,
   interval: "1d" | "1h"
 ): IndicatorPrediction {
+  const timelineBounds = indicatorTimelineBounds(interval);
   const raw = asString(payload.direction).trim().toLowerCase();
   const direction: IndicatorPrediction["direction"] = raw === "bullish" || raw === "bearish" || raw === "neutral" ? (raw as any) : "neutral";
-  const timelineDays = Math.max(1, Math.min(120, Math.floor(asFinite(payload.timelineDays, interval === "1h" ? 5 : 10))));
+  const timelineDays = Math.max(
+    timelineBounds.min,
+    Math.min(timelineBounds.max, Math.floor(asFinite(payload.timelineDays, interval === "1h" ? 5 : 10)))
+  );
   const timeline = sanitizeText(payload.timeline, 80) || `${timelineDays} trading days`;
   const confidenceRaw = asString(payload.confidence).trim().toLowerCase();
   const confidence: IndicatorPrediction["confidence"] =
@@ -831,6 +1004,19 @@ async function runOpenAiIndicatorAnalysis(
   if (!opts.openAiApiKey) return buildHeuristicAnalysis(computed);
 
   const model = sanitizeText(opts.defaultModel, 120) || "gpt-5-mini";
+  const promptContext = buildIndicatorPromptContext(computed);
+  const heuristic = buildHeuristicAnalysis(computed);
+  const timelineBounds = indicatorTimelineBounds(computed.interval);
+  const timelineMin = timelineBounds.min;
+  const timelineMax = timelineBounds.max;
+  const lastClose = Number(computed.lastClose);
+  const atrValue = Number(computed.latestNumeric.ATR_14 || 0);
+  const atrPct = Number.isFinite(atrValue) && Number.isFinite(lastClose) && lastClose > 0 ? atrValue / lastClose : 0;
+  const targetBandPct = Math.max(computed.interval === "1h" ? 0.05 : 0.1, Math.min(computed.interval === "1h" ? 0.18 : 0.3, atrPct > 0 ? atrPct * 4 : computed.interval === "1h" ? 0.05 : 0.1));
+  const targetBand = {
+    lower: Number((lastClose * (1 - targetBandPct)).toFixed(2)),
+    upper: Number((lastClose * (1 + targetBandPct)).toFixed(2)),
+  };
   const toolDef = {
     type: "function",
     name: "finta_calculate_indicators",
@@ -848,19 +1034,98 @@ async function runOpenAiIndicatorAnalysis(
       required: ["ticker", "interval", "indicators"],
     },
   } as const;
+  const responseFormat = {
+    format: {
+      type: "json_schema",
+      name: "indicator_analysis",
+      strict: true,
+      schema: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          summary: {
+            type: "string",
+            minLength: 1,
+            maxLength: 800,
+          },
+          keySignals: {
+            type: "array",
+            minItems: 3,
+            maxItems: 6,
+            items: {
+              type: "string",
+              minLength: 1,
+              maxLength: 180,
+            },
+          },
+          prediction: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              direction: {
+                type: "string",
+                enum: ["bullish", "bearish", "neutral"],
+              },
+              targetPrice: {
+                type: "number",
+              },
+              timeline: {
+                type: "string",
+                minLength: 1,
+                maxLength: 80,
+              },
+              timelineDays: {
+                type: "integer",
+                minimum: timelineMin,
+                maximum: timelineMax,
+              },
+              confidence: {
+                type: "string",
+                enum: ["low", "medium", "high"],
+              },
+            },
+            required: ["direction", "targetPrice", "timeline", "timelineDays", "confidence"],
+          },
+          text: {
+            type: "string",
+            minLength: 1,
+            maxLength: 8000,
+          },
+        },
+        required: ["summary", "keySignals", "prediction", "text"],
+      },
+    },
+  } as const;
 
-  const systemPrompt =
-    "You are a senior technical analyst. Always call finta_calculate_indicators before giving any prediction. Use only returned indicator values. Return strict JSON with keys summary, keySignals, prediction(direction,targetPrice,timeline,timelineDays,confidence).";
+  const systemPrompt = [
+    "You are Quantura Horizon's technical-indicator analyst.",
+    "Always call finta_calculate_indicators before your final answer.",
+    "Use only the provided market context and the tool output.",
+    "Do not invent catalysts, fundamentals, news, support zones, or macro drivers that were not supplied.",
+    "This is tactical decision support, not investment advice or a guarantee.",
+    "Return valid JSON only with exact keys:",
+    '{"summary":"string","keySignals":["string"],"prediction":{"direction":"bullish|bearish|neutral","targetPrice":0,"timeline":"string","timelineDays":0,"confidence":"low|medium|high"},"text":"string"}',
+    "Rules:",
+    "- summary: 1 or 2 concise sentences grounded in the indicator stack.",
+    "- keySignals: 3 to 6 items, each must cite a specific indicator and what it implies.",
+    "- prediction.direction: use bullish or bearish only when multiple signals align; otherwise neutral.",
+    `- prediction.timelineDays: integer between ${timelineMin} and ${timelineMax}.`,
+    `- prediction.targetPrice: numeric and realistic, staying near the current regime. Keep it inside ${targetBand.lower} to ${targetBand.upper} unless the context explicitly justifies a tighter bound.`,
+    "- prediction.confidence: high only if momentum and trend strength confirm each other; low if signals conflict.",
+    "- text: concise markdown-safe narrative with sections named Setup, Signal stack, Path, and Risk frame.",
+    "- Avoid guaranteed language, buy/sell directives, and exaggerated certainty.",
+  ].join(" ");
   const userPayload = {
-    task: "Analyze selected indicators and provide a tactical price prediction.",
+    task: "Analyze the selected technical indicators and provide a tactical scenario update.",
     ticker: computed.ticker,
     interval: computed.interval,
     lookback: computed.lookback,
     selectedIndicators: computed.selectedIndicators,
-    context: {
-      asOf: computed.asOf,
-      lastClose: computed.lastClose,
-      previousClose: computed.previousClose,
+    marketContext: promptContext,
+    guardrails: {
+      timelineDaysRange: [timelineMin, timelineMax],
+      targetPriceRange: targetBand,
+      fallbackPrediction: heuristic.prediction,
     },
   };
 
@@ -877,7 +1142,8 @@ async function runOpenAiIndicatorAnalysis(
       },
     ],
     tools: [toolDef],
-    tool_choice: "auto",
+    tool_choice: "required",
+    text: responseFormat,
     max_output_tokens: 900,
     background: false,
     stream: false,
@@ -907,6 +1173,7 @@ async function runOpenAiIndicatorAnalysis(
         latest: (allowed.length ? allowed : computed.latestRows).map((entry) => ({
           name: entry.name,
           value: entry.value,
+          display: entry.display,
         })),
       };
       return {
@@ -923,6 +1190,7 @@ async function runOpenAiIndicatorAnalysis(
       model,
       previous_response_id: previousResponseId,
       input: outputs,
+      text: responseFormat,
       max_output_tokens: 900,
       background: false,
       stream: false,
@@ -940,30 +1208,12 @@ async function runOpenAiIndicatorAnalysis(
     const fallback = buildHeuristicAnalysis(computed);
     return {
       ...fallback,
-      text: outputText || fallback.text,
+      text: hasStructuredIndicatorNarrative(outputText) ? outputText : fallback.text,
       provider: "openai",
       model,
     };
   }
-
-  const summary = sanitizeText(parsed.summary, 800) || `Indicator analysis generated for ${computed.ticker}.`;
-  const keySignals = Array.isArray(parsed.keySignals)
-    ? parsed.keySignals.map((item) => sanitizeText(item, 180)).filter(Boolean).slice(0, 8)
-    : [];
-  const prediction = coercePrediction((parsed.prediction as Record<string, unknown>) || {}, computed.lastClose, computed.interval);
-  const text =
-    sanitizeText(outputText, 8000) ||
-    `${summary}\n\nPrediction: ${prediction.direction} toward ${prediction.targetPrice ? `$${prediction.targetPrice}` : "n/a"} over ${prediction.timeline}.`;
-
-  return {
-    summary,
-    keySignals,
-    prediction,
-    text,
-    provider: "openai",
-    model,
-    disclaimer: LLM_DISCLAIMER,
-  };
+  return normalizeIndicatorAnalysisPayload(parsed, outputText, computed, model);
 }
 
 export async function runIndicatorAnalysis(

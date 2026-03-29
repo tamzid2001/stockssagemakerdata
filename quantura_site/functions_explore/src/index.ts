@@ -3,11 +3,27 @@ import cors from "cors";
 import rateLimit from "express-rate-limit";
 import express, { Request, Response } from "express";
 import admin from "firebase-admin";
+import crypto from "crypto";
 import { GoogleAuth } from "google-auth-library";
 import { registerFiscalDataRoutes } from "./fiscaldataProxy";
 import { runScheduledFiscaldataRefresh } from "./schedules/refreshFiscaldata";
 import { runIndicatorAnalysis } from "./indicators";
+import {
+  analyzePredictionCsv,
+  classifyUploadedCsv,
+  downloadHistoricalStockDataset,
+  refreshAutopilotRun,
+  startAutopilotTraining,
+} from "./autopilot";
+import {
+  buildForecastFromHistory,
+  DEFAULT_FORECAST_QUANTILES,
+  fetchYahooHistoryBars,
+  runMarketDataScreener,
+} from "./forecastingScreener";
 export { shopApi } from "./shopApi";
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const AdmZip = require("adm-zip");
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -40,12 +56,18 @@ type PostDoc = {
   authorPhotoURL: string;
   title: string;
   caption: string;
+  body?: string;
+  bodyFormat?: "markdown" | "text";
   tickers: string[];
   tags: string[];
   preview: {
     kind: "image" | "summary";
     imageUrl?: string;
     metrics?: Record<string, string | number>;
+  };
+  sourceRef?: {
+    collection?: string;
+    id?: string;
   };
   targetUrl: string;
   visibility: Visibility;
@@ -139,6 +161,12 @@ const REQUIRE_PLAY_INTEGRITY = asBoolean(process.env.REQUIRE_PLAY_INTEGRITY, fal
 const IOS_IAP_WEBHOOK_SECRET = asString(process.env.IOS_IAP_WEBHOOK_SECRET).trim();
 const APPLE_NOTIFICATIONS_WEBHOOK_SECRET = asString(process.env.APPLE_NOTIFICATIONS_WEBHOOK_SECRET).trim();
 const ADMOB_SSV_WEBHOOK_SECRET = asString(process.env.ADMOB_SSV_WEBHOOK_SECRET).trim();
+const GITHUB_ACTIONS_TOKEN = resolveEnvSecret(["GITHUB_ACTIONS_TOKEN", "GITHUB_TOKEN", "GH_TOKEN"], /^(GITHUB|GH).*TOKEN$/i);
+const GITHUB_REPO_OWNER = asString(process.env.GITHUB_REPO_OWNER, "tamzid2001").trim() || "tamzid2001";
+const GITHUB_REPO_NAME = asString(process.env.GITHUB_REPO_NAME, "stockssagemakerdata").trim() || "stockssagemakerdata";
+const GITHUB_SCREENER_WORKFLOW = asString(process.env.GITHUB_SCREENER_WORKFLOW, "stock-screener.yml").trim() || "stock-screener.yml";
+const GITHUB_ACTIONS_BRANCH = asString(process.env.GITHUB_ACTIONS_BRANCH, "main").trim() || "main";
+const GITHUB_ACTIONS_API_BASE = `https://api.github.com/repos/${encodeURIComponent(GITHUB_REPO_OWNER)}/${encodeURIComponent(GITHUB_REPO_NAME)}`;
 const DEFAULT_LLM_MODEL = asString(process.env.DEFAULT_LLM_MODEL, "gpt-5-mini").trim();
 const LLM_TIMEOUT_MS = Math.max(5000, Math.min(120000, Math.floor(asFinite(process.env.LLM_TIMEOUT_MS, 30000))));
 const PROMO_ID = asString(process.env.PROMO_ID, "quantura_generic_50_off").trim();
@@ -156,6 +184,16 @@ const TICKER_TRENDING_CACHE_MAX_ENTRIES = 64;
 const FX_RATE_CACHE_TTL_MS = 60 * 60 * 1000;
 const FX_RATE_CACHE_MAX_ENTRIES = 120;
 const FX_RATE_FETCH_TIMEOUT_MS = 7000;
+const OUTPUT_META_RICH_TEXT_KEYS = new Set([
+  "answer",
+  "answerfull",
+  "fullanswer",
+  "body",
+  "bodymarkdown",
+  "markdown",
+  "analysismarkdown",
+  "narrative",
+]);
 const PROMO_START_MS = (() => {
   const raw = asString(process.env.PROMO_START_AT).trim();
   if (!raw) return Date.now() - 24 * 60 * 60 * 1000;
@@ -205,6 +243,8 @@ type PolymarketMarketRecord = {
   id: string;
   question: string;
   slug?: string;
+  groupItemTitle?: string;
+  description?: string;
   endDate?: string;
   category?: string;
   image?: string;
@@ -213,6 +253,7 @@ type PolymarketMarketRecord = {
   liquidityUsd?: number;
   outcomes: string[];
   outcomePrices: number[];
+  clobTokenIds: string[];
   isBinary: boolean;
   yesProb?: number;
   topOutcomes: PolymarketTopOutcome[];
@@ -241,12 +282,15 @@ type PolymarketPriceRecord = {
   id: string;
   question: string;
   slug?: string;
+  groupItemTitle?: string;
+  description?: string;
   category?: string;
   endDate?: string;
   volumeUsd?: number;
   liquidityUsd?: number;
   outcomes: string[];
   outcomePrices: number[];
+  clobTokenIds: string[];
   isBinary: boolean;
   yesProb?: number;
   topOutcomes: PolymarketTopOutcome[];
@@ -339,8 +383,9 @@ const polymarketCache = new Map<string, PolymarketCacheEntry>();
 const tickerIntelCache = new Map<string, TickerIntelCacheEntry>();
 const tickerTrendingCache = new Map<string, TickerTrendingCacheEntry>();
 const fxRateCache = new Map<string, FxRateCacheEntry>();
-const MARKET_HEADLINE_DEFAULT_FEED_ID = "cnn_topstories";
+const MARKET_HEADLINE_DEFAULT_FEED_ID = "marketwatch_topstories";
 const MARKET_HEADLINE_FETCH_TIMEOUT_MS = 12000;
+const MARKET_HEADLINE_STALE_THRESHOLD_MS = 1000 * 60 * 60 * 24 * 7;
 const MARKET_HEADLINE_PROVIDER_DEFAULTS = {
   cnn: "cnn_topstories",
   spglobal: "spglobal_research",
@@ -600,6 +645,39 @@ const MARKET_HEADLINE_FEEDS: Record<string, MarketHeadlineFeedConfig> = {
 const PLAY_INTEGRITY_AUTH = new GoogleAuth({
   scopes: ["https://www.googleapis.com/auth/playintegrity"],
 });
+const GOOGLE_PLAY_PUBLISHER_AUTH = new GoogleAuth({
+  scopes: ["https://www.googleapis.com/auth/androidpublisher"],
+});
+
+const AUTOMATION_PRODUCT_ID = "quantura_automation_unlock";
+const AUTOMATION_MAX_ACTIVE = 2;
+const AUTOMATION_COLLECTION = "mobile_automations";
+const AUTOMATION_ENTITLEMENT_COLLECTION = "mobile_automation_entitlements";
+const AUTOMATION_HISTORY_SUBCOLLECTION = "runs";
+const AUTOMATION_ALLOWED_CADENCES = new Set(["daily"]);
+const AUTOMATION_ALLOWED_HORIZONS = new Set([
+  "3_days",
+  "1_week",
+  "2_weeks",
+  "3_weeks",
+  "1_month",
+  "3_months",
+  "6_months",
+  "1_year",
+]);
+const AUTOMATION_ALLOWED_PROFILES = new Set(["balanced", "avg_wql", "conservative", "aggressive"]);
+const AUTOMATION_ALLOWED_MODELS = new Set(["autopilot", "avg_wql_all_algorithms"]);
+const APPLE_IAP_BUNDLE_ID = asString(process.env.APPLE_IAP_BUNDLE_ID, "com.quantura.quanturaapp").trim();
+const APPLE_IAP_ENVIRONMENT = asString(process.env.APPLE_IAP_ENVIRONMENT, "Production").trim() || "Production";
+const APPLE_IAP_ISSUER_ID = asString(process.env.APPLE_IAP_ISSUER_ID).trim();
+const APPLE_IAP_KEY_ID = asString(process.env.APPLE_IAP_KEY_ID).trim();
+const APPLE_IAP_PRIVATE_KEY = asString(process.env.APPLE_IAP_PRIVATE_KEY)
+  .replace(/\\n/g, "\n")
+  .trim();
+const GOOGLE_PLAY_ANDROID_PACKAGE = asString(process.env.GOOGLE_PLAY_ANDROID_PACKAGE, "com.quantura.quanturaapp").trim();
+const AUTOMATION_EMAIL_FROM = asString(process.env.AUTOMATION_EMAIL_FROM, "hell@quantura.studio").trim() || "hell@quantura.studio";
+const AUTOMATION_EMAIL_REPLY_TO = asString(process.env.AUTOMATION_EMAIL_REPLY_TO, AUTOMATION_EMAIL_FROM).trim() || AUTOMATION_EMAIL_FROM;
+const RESEND_API_KEY = asString(process.env.RESEND_API_KEY).trim();
 
 registerFiscalDataRoutes(ROUTES, { db });
 
@@ -1022,6 +1100,227 @@ async function fetchFmpTickerLogoMap(
   return out;
 }
 
+async function fetchFmpRows(urls: string[], timeoutMs = 7000): Promise<Array<Record<string, unknown>>> {
+  for (const url of urls) {
+    const payloadRaw = await fetchJsonWithTimeout(url, timeoutMs).catch(() => null);
+    const rows = Array.isArray(payloadRaw)
+      ? (payloadRaw as Array<Record<string, unknown>>)
+      : payloadRaw && typeof payloadRaw === "object"
+        ? [payloadRaw as Record<string, unknown>]
+        : [];
+    if (rows.length) return rows;
+  }
+  return [];
+}
+
+function parseFmpRangeEdge(rangeText: unknown, index: 0 | 1): number | null {
+  const raw = sanitizeText(rangeText, 80);
+  if (!raw.includes("-")) return null;
+  const values = raw.split("-").map((part) => Number(String(part).trim()));
+  const value = values[index];
+  return Number.isFinite(value) ? value : null;
+}
+
+function normalizeDividendYield(value: unknown): number | null {
+  const num = asFinite(value, NaN);
+  if (!Number.isFinite(num) || num < 0) return null;
+  return num > 1 ? num / 100 : num;
+}
+
+async function fetchFmpTickerIntelFallback(ticker: string): Promise<Record<string, unknown> | null> {
+  if (!FMP_API_KEY) return null;
+  const cleanTicker = normalizeTicker(ticker);
+  if (!cleanTicker) return null;
+
+  const profileRows = await fetchFmpRows([
+    `https://financialmodelingprep.com/stable/profile?symbol=${encodeURIComponent(cleanTicker)}&apikey=${encodeURIComponent(FMP_API_KEY)}`,
+    `https://financialmodelingprep.com/api/v3/profile/${encodeURIComponent(cleanTicker)}?apikey=${encodeURIComponent(FMP_API_KEY)}`,
+  ]);
+  const quoteRows = await fetchFmpRows([
+    `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(cleanTicker)}&apikey=${encodeURIComponent(FMP_API_KEY)}`,
+    `https://financialmodelingprep.com/api/v3/quote/${encodeURIComponent(cleanTicker)}?apikey=${encodeURIComponent(FMP_API_KEY)}`,
+  ]);
+
+  const profileRow = profileRows.find((row) => normalizeTicker(row.symbol || row.ticker) === cleanTicker) || profileRows[0] || {};
+  const quoteRow = quoteRows.find((row) => normalizeTicker(row.symbol || row.ticker) === cleanTicker) || quoteRows[0] || {};
+  if (!Object.keys(profileRow).length && !Object.keys(quoteRow).length) return null;
+
+  const website = sanitizeText(profileRow.website, 280);
+  const logoUrl =
+    normalizeRemoteLogoUrl(profileRow.image) ||
+    normalizeRemoteLogoUrl(profileRow.logoUrl) ||
+    normalizeRemoteLogoUrl(profileRow.logo_url) ||
+    normalizeRemoteLogoUrl(profileRow.logo) ||
+    buildLogoUrlFromWebsite(website);
+  const companyName =
+    sanitizeText(profileRow.companyName || profileRow.name || quoteRow.name || quoteRow.companyName || "", 180) || cleanTicker;
+  const marketCapRaw = asFinite(quoteRow.marketCap ?? profileRow.mktCap ?? profileRow.marketCap, NaN);
+  const marketCap = Number.isFinite(marketCapRaw) ? marketCapRaw : null;
+  const lastRaw = asFinite(quoteRow.price ?? profileRow.price, NaN);
+  const last = Number.isFinite(lastRaw) ? lastRaw : null;
+  const prevCloseRaw = asFinite(quoteRow.previousClose ?? quoteRow.previous_close, NaN);
+  const prevClose = Number.isFinite(prevCloseRaw) ? prevCloseRaw : null;
+  const dayLowRaw = asFinite(quoteRow.dayLow ?? quoteRow.low, NaN);
+  const dayLow = Number.isFinite(dayLowRaw) ? dayLowRaw : null;
+  const dayHighRaw = asFinite(quoteRow.dayHigh ?? quoteRow.high, NaN);
+  const dayHigh = Number.isFinite(dayHighRaw) ? dayHighRaw : null;
+  const volumeRaw = asFinite(quoteRow.volume ?? quoteRow.avgVolume, NaN);
+  const volume = Number.isFinite(volumeRaw) ? volumeRaw : null;
+  const avgVolumeRaw = asFinite(quoteRow.avgVolume ?? quoteRow.volume, NaN);
+  const avgVolume = Number.isFinite(avgVolumeRaw) ? avgVolumeRaw : null;
+  const yearLow = (() => {
+    const num = asFinite(quoteRow.yearLow, NaN);
+    if (Number.isFinite(num)) return num;
+    return parseFmpRangeEdge(profileRow.range, 0);
+  })();
+  const yearHigh = (() => {
+    const num = asFinite(quoteRow.yearHigh, NaN);
+    if (Number.isFinite(num)) return num;
+    return parseFmpRangeEdge(profileRow.range, 1);
+  })();
+  const betaRaw = asFinite(quoteRow.beta ?? profileRow.beta, NaN);
+  const beta = Number.isFinite(betaRaw) ? betaRaw : null;
+  const trailingPeRaw = asFinite(quoteRow.pe ?? profileRow.pe, NaN);
+  const trailingPE = Number.isFinite(trailingPeRaw) ? trailingPeRaw : null;
+  const priceToBookRaw = asFinite(profileRow.priceToBookRatio ?? profileRow.priceToBook, NaN);
+  const priceToBook = Number.isFinite(priceToBookRaw) ? priceToBookRaw : null;
+  const sharesOutstandingRaw = asFinite(quoteRow.sharesOutstanding ?? profileRow.sharesOutstanding, NaN);
+  const sharesOutstanding = Number.isFinite(sharesOutstandingRaw) ? sharesOutstandingRaw : null;
+  const dividendRateRaw = asFinite(profileRow.lastDiv ?? quoteRow.lastDiv, NaN);
+  const dividendRate = Number.isFinite(dividendRateRaw) ? dividendRateRaw : null;
+  const dividendYield = normalizeDividendYield(profileRow.dividendYield ?? quoteRow.dividendYield);
+  const currency = sanitizeText(quoteRow.currency || profileRow.currency, 20);
+  const exchange = sanitizeText(profileRow.exchangeShortName || profileRow.exchange || quoteRow.exchange, 120);
+  const sector = sanitizeText(profileRow.sector, 120);
+  const industry = sanitizeText(profileRow.industry, 120);
+  const country = sanitizeText(profileRow.country, 120);
+  const summary = sanitizeText(profileRow.description || profileRow.descriptionShort || "", 2000);
+
+  return {
+    ticker: cleanTicker,
+    source: "fmp_quote_profile_fallback",
+    fetchedAt: new Date().toISOString(),
+    price: {
+      last,
+      prevClose,
+      dayLow,
+      dayHigh,
+      volume,
+      currency,
+    },
+    logoUrl,
+    logo_url: logoUrl,
+    profile: {
+      name: companyName,
+      sector,
+      industry,
+      exchange,
+      currency,
+      website,
+      summary,
+      marketCap,
+      fiftyTwoWeekLow: yearLow,
+      fiftyTwoWeekHigh: yearHigh,
+      trailingPE,
+      forwardPE: null,
+      beta,
+      dividendYield,
+      logoUrl,
+      logo_url: logoUrl,
+    },
+    profileDetails: {
+      longName: companyName,
+      sector,
+      industry,
+      country,
+      website,
+      longBusinessSummary: summary,
+      logoUrl,
+      logo_url: logoUrl,
+    },
+    valuation: {
+      marketCap,
+      trailingPE,
+      forwardPE: null,
+      priceToBook,
+      enterpriseValue: null,
+    },
+    fundamentals: {
+      revenueTTM: null,
+      grossMargins: null,
+      profitMargins: null,
+      operatingMargins: null,
+      ebitdaMargins: null,
+      returnOnAssets: null,
+      returnOnEquity: null,
+    },
+    risk: {
+      beta,
+      shortRatio: null,
+    },
+    dividends: {
+      dividendRate,
+      dividendYield,
+      payoutRatio: null,
+      exDividendDate: "",
+    },
+    trading: {
+      beta,
+      fiftyTwoWeekLow: yearLow,
+      fiftyTwoWeekHigh: yearHigh,
+      avgVolume,
+      sharesOutstanding,
+    },
+    events: [],
+    analyst: {
+      recommendationKey: "",
+      recommendationMean: null,
+      analystOpinions: null,
+      targetMeanPrice: null,
+      targetLowPrice: null,
+      targetHighPrice: null,
+    },
+    recommendationTrend: [],
+    executiveSummary: {
+      ticker: cleanTicker,
+      exchange,
+      sector,
+      priceTarget12m: null,
+    },
+    fundamentalDeepDive: {
+      revenueMechanics: {
+        totalRevenue: null,
+        grossProfit: null,
+        segmentBreakdown: "Detailed segment data was unavailable in the fallback market data source.",
+      },
+      profitability: {
+        netMargin: null,
+        roi: null,
+      },
+      capitalAllocation: {
+        dividendPolicy: dividendRate === null ? "No dividend policy reported in the fallback source." : `Recent dividend rate reported: ${dividendRate}`,
+        shareBuybacks: "Buyback detail was unavailable in the fallback market data source.",
+      },
+    },
+    riskAndEsg: {
+      riskMitigation: "Fallback profile sourced from FMP because Yahoo quote summary was unavailable.",
+      liquidity: {
+        totalCash: null,
+        totalDebt: null,
+        currentRatio: null,
+      },
+      esg: {
+        environmental: null,
+        social: null,
+        governance: null,
+        overall: null,
+      },
+    },
+    balanceSheetHeatmap: [],
+    peerComparison: [],
+  };
+}
+
 async function fetchJsonWithTimeout(url: string, timeoutMs = 7500): Promise<unknown> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -1031,7 +1330,12 @@ async function fetchJsonWithTimeout(url: string, timeoutMs = 7500): Promise<unkn
       signal: controller.signal,
       headers: {
         Accept: "application/json",
-        "User-Agent": "quantura-explore-api/1.0",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Cache-Control": "no-cache",
+        Pragma: "no-cache",
+        Referer: "https://quantura.studio/",
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 QuanturaExploreApi/1.0",
       },
     });
     if (!response.ok) {
@@ -1052,7 +1356,12 @@ async function fetchTextWithTimeout(url: string, timeoutMs = MARKET_HEADLINE_FET
       signal: controller.signal,
       headers: {
         Accept: "application/rss+xml, application/xml;q=0.9, text/xml;q=0.8, text/html;q=0.3, */*;q=0.2",
-        "User-Agent": "quantura-market-headlines/1.0",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Cache-Control": "no-cache",
+        Pragma: "no-cache",
+        Referer: "https://quantura.studio/market-headlines",
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 QuanturaMarketHeadlines/1.0",
       },
     });
     if (!response.ok) {
@@ -1191,6 +1500,40 @@ function resolveMarketHeadlineFeedConfig(providerIdRaw: unknown, feedIdRaw: unkn
   return MARKET_HEADLINE_FEEDS[fallbackId || MARKET_HEADLINE_DEFAULT_FEED_ID];
 }
 
+function getLatestMarketHeadlineTimestamp(headlines: readonly MarketHeadlineArticle[]): number {
+  let latestMs = 0;
+  for (const item of headlines) {
+    const parsed = item?.publishedAt ? Date.parse(item.publishedAt) : Number.NaN;
+    if (Number.isFinite(parsed) && parsed > latestMs) latestMs = parsed;
+  }
+  return latestMs;
+}
+
+function shouldFallbackMarketHeadlineFeed(
+  feedConfig: MarketHeadlineFeedConfig,
+  headlines: readonly MarketHeadlineArticle[]
+): boolean {
+  if (feedConfig.providerId !== "cnn") return false;
+  if (!headlines.length) return true;
+  const latestMs = getLatestMarketHeadlineTimestamp(headlines);
+  if (!latestMs) return false;
+  return Date.now() - latestMs > MARKET_HEADLINE_STALE_THRESHOLD_MS;
+}
+
+function describeMarketHeadlineFallback(
+  requestedFeedConfig: MarketHeadlineFeedConfig,
+  fallbackFeedConfig: MarketHeadlineFeedConfig,
+  headlines: readonly MarketHeadlineArticle[]
+): string {
+  const latestMs = getLatestMarketHeadlineTimestamp(headlines);
+  if (latestMs) {
+    return `${requestedFeedConfig.providerLabel} ${requestedFeedConfig.feedLabel} is stale (latest article ${new Date(
+      latestMs
+    ).toISOString().slice(0, 10)}). Showing ${fallbackFeedConfig.providerLabel} ${fallbackFeedConfig.feedLabel} instead.`;
+  }
+  return `${requestedFeedConfig.providerLabel} ${requestedFeedConfig.feedLabel} did not return current headlines. Showing ${fallbackFeedConfig.providerLabel} ${fallbackFeedConfig.feedLabel} instead.`;
+}
+
 function describeMarketHeadlineFetchError(feedConfig: MarketHeadlineFeedConfig, error: unknown): string {
   const detail = sanitizeText((error as Error | null)?.message || error, 180).toLowerCase();
   if (detail.includes("403")) {
@@ -1213,6 +1556,24 @@ function sanitizeText(value: unknown, maxLen = 600): string {
   const raw = asString(value).replace(/\s+/g, " ").trim();
   if (!raw) return "";
   return raw.slice(0, maxLen);
+}
+
+function normalizeEmail(value: unknown): string {
+  const raw = asString(value).trim().toLowerCase();
+  if (!raw) return "";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) return "";
+  return raw.slice(0, 320);
+}
+
+function sanitizeRichText(value: unknown, maxLen = 20000): string {
+  const raw = asString(value).replace(/\r\n?/g, "\n").replace(/\u0000/g, "").trim();
+  if (!raw) return "";
+  return raw.slice(0, maxLen);
+}
+
+function isRichTextOutputKey(key: string): boolean {
+  const normalized = sanitizeText(key, 80).toLowerCase().replace(/[^a-z0-9]/g, "");
+  return OUTPUT_META_RICH_TEXT_KEYS.has(normalized);
 }
 
 function normalizeFolderId(value: unknown): string {
@@ -1324,6 +1685,17 @@ function getTimestampMs(value: unknown): number {
   return Date.now();
 }
 
+function getOptionalTimestampMs(value: unknown): number | null {
+  if (value instanceof admin.firestore.Timestamp) return value.toMillis();
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
 function timestampFromMs(ms: number): admin.firestore.Timestamp {
   return admin.firestore.Timestamp.fromMillis(ms);
 }
@@ -1417,7 +1789,7 @@ function trimOutputsMeta(input: unknown): Record<string, unknown> {
       const cleanKey = sanitizeText(key, 60);
       if (!cleanKey) return;
       if (typeof value === "string") {
-        out[cleanKey] = sanitizeText(value, 2400);
+        out[cleanKey] = isRichTextOutputKey(cleanKey) ? sanitizeRichText(value, 20000) : sanitizeText(value, 2400);
         return;
       }
       if (typeof value === "number" || typeof value === "boolean") {
@@ -1443,13 +1815,34 @@ function trimOutputsMeta(input: unknown): Record<string, unknown> {
               return;
             }
             if (typeof childValue === "string") {
-              childOut[cleanChildKey] = sanitizeText(childValue, 220);
+              childOut[cleanChildKey] = isRichTextOutputKey(cleanChildKey)
+                ? sanitizeRichText(childValue, 6000)
+                : sanitizeText(childValue, 220);
             }
           });
         if (Object.keys(childOut).length) out[cleanKey] = childOut;
       }
     });
   return out;
+}
+
+function buildMyRequestExploreBody(type: MyRequestType, outputsMeta: Record<string, unknown>): string {
+  if (!outputsMeta || typeof outputsMeta !== "object") return "";
+  const preferredValue =
+    outputsMeta.bodyMarkdown ||
+    outputsMeta.analysisMarkdown ||
+    outputsMeta.fullAnswer ||
+    outputsMeta.answerFull ||
+    outputsMeta.answer ||
+    outputsMeta.body ||
+    outputsMeta.markdown ||
+    outputsMeta.narrative;
+  const richBody = sanitizeRichText(preferredValue, type === "modelCouncil" ? 24000 : 16000);
+  if (richBody) return richBody;
+  if (type === "modelCouncil") {
+    return sanitizeRichText(outputsMeta.summary, 8000);
+  }
+  return "";
 }
 
 function normalizeMyRequestInput(input: unknown): Record<string, unknown> {
@@ -1514,10 +1907,127 @@ function buildMyRequestSearchText(
   return parts.slice(0, 2400);
 }
 
-function myRequestShareUrl(slug: string): string {
+function myRequestShareUrl(slug: string, data: Record<string, unknown> = {}): string {
   const cleanSlug = normalizeShareId(slug);
   if (!cleanSlug) return "";
+  const sourceRef = asPlainObject(data.sourceRef);
+  const sourceCollection = sanitizeText(sourceRef.collection, 80);
+  const type = normalizeMyRequestType(data.type) || "forecast";
+  if (sanitizeText(sourceRef.collection, 80) === "autopilot_requests") {
+    return `${PUBLIC_ORIGIN}/autopilot?requestShare=${encodeURIComponent(cleanSlug)}`;
+  }
+  if (type === "screener" || sourceCollection === "screener_runs") {
+    return `${PUBLIC_ORIGIN}/screener?requestShare=${encodeURIComponent(cleanSlug)}`;
+  }
+  if (type === "indicator") {
+    return `${PUBLIC_ORIGIN}/indicators?requestShare=${encodeURIComponent(cleanSlug)}`;
+  }
+  if (type === "modelCouncil") {
+    return `${PUBLIC_ORIGIN}/model-council?requestShare=${encodeURIComponent(cleanSlug)}`;
+  }
   return `${PUBLIC_ORIGIN}/forecasting?requestShare=${encodeURIComponent(cleanSlug)}`;
+}
+
+function buildSharedScreenerRunPayload(
+  runId: string,
+  source: Record<string, unknown>,
+  extras: Record<string, unknown> = {}
+): Record<string, unknown> {
+  const results = Array.isArray(source.results) ? source.results.slice(0, 300) : [];
+  const workflowRunNumberRaw = asFinite(source.workflowRunNumber, NaN);
+  const createdAtMs = getOptionalTimestampMs(source.createdAt);
+  const updatedAtMs = getOptionalTimestampMs(source.updatedAt || source.createdAt);
+  const workflowSteps = Array.isArray(source.workflowSteps)
+    ? source.workflowSteps.map((item) => sanitizeText(item, 180)).filter(Boolean).slice(0, 10)
+    : [];
+  const workflowJobs = Array.isArray(source.workflowJobs)
+    ? source.workflowJobs.slice(0, 8).map((item) => asPlainObject(item))
+    : [];
+  const workflowRunId = Math.max(0, Math.floor(asFinite(source.workflowRunId, 0)));
+  const workflowArtifactId = Math.max(0, Math.floor(asFinite(source.workflowArtifactId, 0)));
+  const workflowArtifactName = asString(source.workflowArtifactName, "");
+  const workflowArtifactsRaw = Array.isArray(source.workflowArtifacts) ? source.workflowArtifacts : [];
+  type WorkflowArtifactSummary = {
+    id: number;
+    name: string;
+    sizeInBytes: number;
+    expired: boolean;
+    downloadPath: string;
+    downloadUrl: string;
+    githubUrl: string;
+  };
+  const workflowArtifacts: WorkflowArtifactSummary[] = workflowArtifactsRaw.length
+    ? workflowArtifactsRaw
+        .map((item): WorkflowArtifactSummary | null => {
+          const record = asPlainObject(item);
+          const artifactId = Math.max(0, Math.floor(asFinite(record.id, 0)));
+          if (!artifactId) return null;
+          return {
+            id: artifactId,
+            name: asString(record.name, "artifact"),
+            sizeInBytes: Math.max(0, Math.floor(asFinite(record.sizeInBytes, 0))),
+            expired: asBoolean(record.expired, false),
+            downloadPath:
+              asString(record.downloadPath, "") || buildGithubArtifactDownloadPath(workflowRunId, artifactId),
+            downloadUrl:
+              asString(record.downloadUrl, "") || buildGithubArtifactDownloadUrl(workflowRunId, artifactId),
+            githubUrl: asString(record.githubUrl, ""),
+          };
+        })
+        .filter((item): item is WorkflowArtifactSummary => Boolean(item))
+        .slice(0, 8)
+    : workflowRunId && workflowArtifactId
+    ? [
+        {
+          id: workflowArtifactId,
+          name: workflowArtifactName || "daily-prophet-signal-tracker",
+          sizeInBytes: Math.max(0, Math.floor(asFinite(source.workflowArtifactSizeInBytes, 0))),
+          expired: false,
+          downloadPath: buildGithubArtifactDownloadPath(workflowRunId, workflowArtifactId),
+          downloadUrl: buildGithubArtifactDownloadUrl(workflowRunId, workflowArtifactId),
+          githubUrl: `https://github.com/${encodeURIComponent(GITHUB_REPO_OWNER)}/${encodeURIComponent(
+            GITHUB_REPO_NAME
+          )}/actions/runs/${encodeURIComponent(String(workflowRunId))}/artifacts/${encodeURIComponent(
+            String(workflowArtifactId)
+          )}`,
+        },
+      ]
+    : [];
+  return {
+    id: sanitizeText(runId, 220),
+    title: asString(source.title, "Screener run"),
+    notes: asString(source.notes, ""),
+    market: asString(source.market, ""),
+    universe: asString(source.universe, ""),
+    userId: asString(source.userId),
+    isPublic: asBoolean(source.isPublic, false) || asBoolean(source.published, false),
+    status: asString(source.status, "completed"),
+    serviceMessage: asString(source.serviceMessage, ""),
+    minMarketCap: Math.max(0, Math.floor(asFinite(source.minMarketCap || source.minCap, 0))),
+    results,
+    resultsFound: Array.isArray(source.results) ? source.results.length : Math.max(0, Math.floor(asFinite(source.resultsFound, results.length))),
+    appliedFilters: Array.isArray(source.appliedFilters)
+      ? source.appliedFilters.map((item) => sanitizeText(item, 160)).filter(Boolean).slice(0, 24)
+      : [],
+    workflowRunId: workflowRunId || null,
+    workflowRunUrl: asString(source.workflowRunUrl, ""),
+    workflowRunNumber: Number.isFinite(workflowRunNumberRaw) ? Math.floor(workflowRunNumberRaw) : null,
+    workflowStatus: asString(source.workflowStatus, ""),
+    workflowConclusion: asString(source.workflowConclusion, ""),
+    workflowArtifactId: workflowArtifactId || null,
+    workflowArtifactName,
+    workflowArtifactSizeInBytes: Math.max(0, Math.floor(asFinite(source.workflowArtifactSizeInBytes, 0))),
+    workflowArtifacts,
+    workflowProgress: asString(source.workflowProgress, ""),
+    workflowActiveStep: asString(source.workflowActiveStep, ""),
+    workflowSteps,
+    workflowJobs,
+    workflowLogExcerpt: asString(source.workflowLogExcerpt, ""),
+    screenedCount: Math.max(0, Math.floor(asFinite(source.screenedCount, 0))),
+    createdAt: createdAtMs ? new Date(createdAtMs).toISOString() : null,
+    updatedAt: updatedAtMs ? new Date(updatedAtMs).toISOString() : null,
+    ...extras,
+  };
 }
 
 function toMyRequestResponse(
@@ -1540,7 +2050,7 @@ function toMyRequestResponse(
   const deleted = asBoolean(data.deleted, false);
   const shareUrl =
     share.slug && share.visibility !== "private"
-      ? myRequestShareUrl(share.slug)
+      ? myRequestShareUrl(share.slug, data)
       : "";
 
   const response: Record<string, unknown> = {
@@ -1562,6 +2072,13 @@ function toMyRequestResponse(
       collection: sanitizeText(sourceRef.collection, 80),
       id: sanitizeText(sourceRef.id, 220),
     },
+    status: asString(outputsMeta.status || outputsMeta.workflowStatus, ""),
+    workflowRunUrl: asString(outputsMeta.workflowRunUrl, ""),
+    workflowRunNumber: Number.isFinite(asFinite(outputsMeta.workflowRunNumber, Number.NaN))
+      ? Math.floor(asFinite(outputsMeta.workflowRunNumber, 0))
+      : null,
+    workflowProgress: asString(outputsMeta.workflowProgress, ""),
+    workflowActiveStep: asString(outputsMeta.workflowActiveStep, ""),
     share: {
       visibility,
       slug: share.slug,
@@ -1580,6 +2097,13 @@ function toMyRequestResponse(
       provider: outputsMeta.provider,
       model: outputsMeta.model,
       topSymbols: outputsMeta.topSymbols,
+      status: outputsMeta.status,
+      workflowStatus: outputsMeta.workflowStatus,
+      workflowRunUrl: outputsMeta.workflowRunUrl,
+      workflowRunNumber: outputsMeta.workflowRunNumber,
+      workflowProgress: outputsMeta.workflowProgress,
+      workflowActiveStep: outputsMeta.workflowActiveStep,
+      workflowSteps: outputsMeta.workflowSteps,
     });
   }
 
@@ -1602,6 +2126,753 @@ function extractScreenerTopSymbols(resultsRaw: unknown): string[] {
     out.push(symbol);
   });
   return out.slice(0, 12);
+}
+
+function fmtCompactCurrency(value: number): string {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return "";
+  if (numeric >= 1_000_000_000_000) return `$${(numeric / 1_000_000_000_000).toFixed(2)}T`;
+  if (numeric >= 1_000_000_000) return `$${(numeric / 1_000_000_000).toFixed(0)}B`;
+  if (numeric >= 1_000_000) return `$${(numeric / 1_000_000).toFixed(0)}M`;
+  return `$${Math.round(numeric).toLocaleString()}`;
+}
+
+function roundFinite(value: unknown, digits = 2): number | null {
+  const numeric = asFinite(value, Number.NaN);
+  if (!Number.isFinite(numeric)) return null;
+  return Number(numeric.toFixed(digits));
+}
+
+type GithubWorkflowRunRecord = {
+  id: number;
+  htmlUrl: string;
+  path: string;
+  workflowName: string;
+  headBranch: string;
+  status: string;
+  conclusion: string;
+  runNumber: number;
+  createdAt: string;
+  updatedAt: string;
+  displayTitle: string;
+};
+
+type GithubWorkflowStepRecord = {
+  number: number;
+  name: string;
+  status: string;
+  conclusion: string;
+  startedAt: string;
+  completedAt: string;
+};
+
+type GithubWorkflowJobRecord = {
+  id: number;
+  name: string;
+  status: string;
+  conclusion: string;
+  startedAt: string;
+  completedAt: string;
+  steps: GithubWorkflowStepRecord[];
+};
+
+type GithubArtifactRecord = {
+  id: number;
+  name: string;
+  sizeInBytes: number;
+  archiveDownloadUrl: string;
+  expired: boolean;
+};
+
+type GithubScreenerArtifactPayload = {
+  manifest: Record<string, unknown>;
+  activeSignals: Array<Record<string, unknown>>;
+  allLatestRows: Array<Record<string, unknown>>;
+  errors: Array<Record<string, unknown>>;
+  workflowLog: string;
+};
+
+function githubActionsConfigured(): boolean {
+  return Boolean(GITHUB_ACTIONS_TOKEN && GITHUB_REPO_OWNER && GITHUB_REPO_NAME && GITHUB_SCREENER_WORKFLOW);
+}
+
+async function githubApiRequest(path: string, init: RequestInit = {}): Promise<globalThis.Response> {
+  if (!githubActionsConfigured()) {
+    throw new Error("GitHub Actions token is not configured.");
+  }
+  const headers = new Headers(init.headers || {});
+  headers.set("Accept", "application/vnd.github+json");
+  headers.set("Authorization", `Bearer ${GITHUB_ACTIONS_TOKEN}`);
+  headers.set("User-Agent", "quantura-studio");
+  if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  const response = await fetch(`${GITHUB_ACTIONS_API_BASE}${path}`, {
+    ...init,
+    headers,
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(sanitizeText(text || `GitHub API ${response.status}`, 260) || `GitHub API ${response.status}`);
+  }
+  return response;
+}
+
+async function githubApiJson(path: string, init: RequestInit = {}): Promise<Record<string, unknown>> {
+  const response = await githubApiRequest(path, init);
+  return asPlainObject(await response.json().catch(() => ({})));
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function buildScreenerWorkflowRunKey(runId: string): string {
+  const clean = sanitizeText(runId, 80).replace(/[^A-Za-z0-9_-]/g, "");
+  return `quantura_${clean || Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+async function dispatchGithubScreenerWorkflow(input: {
+  runKey: string;
+  minMarketCap: number;
+}): Promise<void> {
+  await githubApiRequest(`/actions/workflows/${encodeURIComponent(GITHUB_SCREENER_WORKFLOW)}/dispatches`, {
+    method: "POST",
+    body: JSON.stringify({
+      ref: GITHUB_ACTIONS_BRANCH,
+      inputs: {
+        run_key: input.runKey,
+        min_market_cap: String(Math.max(0, Math.floor(input.minMarketCap || 0))),
+      },
+    }),
+  });
+}
+
+function normalizeGithubWorkflowRun(raw: unknown): GithubWorkflowRunRecord | null {
+  const record = asPlainObject(raw);
+  const id = Math.floor(asFinite(record.id, 0));
+  if (!id) return null;
+  return {
+    id,
+    htmlUrl: sanitizeText(record.html_url, 600),
+    path: sanitizeText(record.path, 320),
+    workflowName: sanitizeText(record.name, 240),
+    headBranch: sanitizeText(record.head_branch, 120),
+    status: sanitizeText(record.status, 80).toLowerCase(),
+    conclusion: sanitizeText(record.conclusion, 80).toLowerCase(),
+    runNumber: Math.floor(asFinite(record.run_number, 0)),
+    createdAt: sanitizeText(record.created_at, 120),
+    updatedAt: sanitizeText(record.updated_at, 120),
+    displayTitle: sanitizeText(record.display_title || record.name, 240),
+  };
+}
+
+async function findGithubWorkflowRunByKey(runKey: string): Promise<GithubWorkflowRunRecord | null> {
+  const payload = await githubApiJson(
+    `/actions/workflows/${encodeURIComponent(GITHUB_SCREENER_WORKFLOW)}/runs?event=workflow_dispatch&branch=${encodeURIComponent(
+      GITHUB_ACTIONS_BRANCH
+    )}&per_page=25`
+  );
+  const runs = Array.isArray(payload.workflow_runs) ? payload.workflow_runs : [];
+  for (const item of runs) {
+    const normalized = normalizeGithubWorkflowRun(item);
+    if (!normalized) continue;
+    if (normalized.displayTitle.includes(runKey)) return normalized;
+  }
+  return null;
+}
+
+async function waitForGithubWorkflowRun(runKey: string, timeoutMs = 20000): Promise<GithubWorkflowRunRecord | null> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const run = await findGithubWorkflowRunByKey(runKey).catch(() => null);
+    if (run) return run;
+    await delay(1500);
+  }
+  return null;
+}
+
+async function getGithubWorkflowRun(runId: number): Promise<GithubWorkflowRunRecord | null> {
+  if (!runId) return null;
+  const payload = await githubApiJson(`/actions/runs/${encodeURIComponent(String(runId))}`);
+  return normalizeGithubWorkflowRun(payload);
+}
+
+async function listGithubWorkflowRuns(input: { perPage?: number; status?: string; branch?: string } = {}): Promise<GithubWorkflowRunRecord[]> {
+  const perPage = Math.max(1, Math.min(100, Math.floor(asFinite(input.perPage, 20))));
+  const params = new URLSearchParams();
+  params.set("per_page", String(perPage));
+  if (sanitizeText(input.status, 40)) params.set("status", sanitizeText(input.status, 40));
+  if (sanitizeText(input.branch, 120)) params.set("branch", sanitizeText(input.branch, 120));
+  const payload = await githubApiJson(`/actions/workflows/${encodeURIComponent(GITHUB_SCREENER_WORKFLOW)}/runs?${params.toString()}`);
+  const runs = Array.isArray(payload.workflow_runs) ? payload.workflow_runs : [];
+  return runs.map((item) => normalizeGithubWorkflowRun(item)).filter((item): item is GithubWorkflowRunRecord => Boolean(item));
+}
+
+async function listRecentSuccessfulGithubScreenerRuns(limit = 12): Promise<GithubWorkflowRunRecord[]> {
+  const desired = Math.max(1, Math.min(60, Math.floor(asFinite(limit, 12))));
+  const perPage = Math.max(desired * 3, 20);
+  const runs = await listGithubWorkflowRuns({
+    perPage,
+    status: "completed",
+    branch: GITHUB_ACTIONS_BRANCH,
+  });
+  return runs.filter((item) => item.conclusion === "success").slice(0, desired);
+}
+
+function normalizeGithubWorkflowStep(raw: unknown): GithubWorkflowStepRecord | null {
+  const record = asPlainObject(raw);
+  const number = Math.max(0, Math.floor(asFinite(record.number, 0)));
+  const name = sanitizeText(record.name, 240);
+  if (!number && !name) return null;
+  return {
+    number,
+    name,
+    status: sanitizeText(record.status, 80).toLowerCase(),
+    conclusion: sanitizeText(record.conclusion, 80).toLowerCase(),
+    startedAt: sanitizeText(record.started_at, 120),
+    completedAt: sanitizeText(record.completed_at, 120),
+  };
+}
+
+function normalizeGithubWorkflowJob(raw: unknown): GithubWorkflowJobRecord | null {
+  const record = asPlainObject(raw);
+  const id = Math.max(0, Math.floor(asFinite(record.id, 0)));
+  const name = sanitizeText(record.name, 240);
+  if (!id && !name) return null;
+  const stepsRaw = Array.isArray(record.steps) ? record.steps : [];
+  return {
+    id,
+    name,
+    status: sanitizeText(record.status, 80).toLowerCase(),
+    conclusion: sanitizeText(record.conclusion, 80).toLowerCase(),
+    startedAt: sanitizeText(record.started_at, 120),
+    completedAt: sanitizeText(record.completed_at, 120),
+    steps: stepsRaw
+      .map((item) => normalizeGithubWorkflowStep(item))
+      .filter((item): item is GithubWorkflowStepRecord => Boolean(item))
+      .slice(0, 24),
+  };
+}
+
+async function listGithubJobsForRun(runId: number): Promise<GithubWorkflowJobRecord[]> {
+  if (!runId) return [];
+  const payload = await githubApiJson(`/actions/runs/${encodeURIComponent(String(runId))}/jobs?per_page=100`);
+  const jobs = Array.isArray(payload.jobs) ? payload.jobs : [];
+  return jobs
+    .map((item) => normalizeGithubWorkflowJob(item))
+    .filter((item): item is GithubWorkflowJobRecord => Boolean(item))
+    .slice(0, 12);
+}
+
+function formatGithubWorkflowStateLabel(status: unknown, conclusion: unknown = ""): string {
+  const cleanStatus = sanitizeText(status, 80).toLowerCase();
+  const cleanConclusion = sanitizeText(conclusion, 80).toLowerCase();
+  if (cleanStatus === "completed" && cleanConclusion) {
+    return cleanConclusion.replace(/_/g, " ");
+  }
+  if (cleanStatus === "in_progress") return "running";
+  if (cleanStatus === "queued") return "queued";
+  return cleanStatus ? cleanStatus.replace(/_/g, " ") : "pending";
+}
+
+function buildGithubWorkflowProgressSnapshot(jobs: GithubWorkflowJobRecord[]): Record<string, unknown> {
+  const normalizedJobs = Array.isArray(jobs) ? jobs : [];
+  if (!normalizedJobs.length) return {};
+
+  const activeJob =
+    normalizedJobs.find((job) => job.status === "in_progress") ||
+    normalizedJobs.find((job) => job.status === "queued") ||
+    null;
+  const activeStep =
+    activeJob?.steps.find((step) => step.status === "in_progress") ||
+    activeJob?.steps.find((step) => step.status === "queued") ||
+    null;
+  const completedJobs = normalizedJobs.filter((job) => job.status === "completed").length;
+  const workflowProgress = activeStep
+    ? `${activeJob?.name || "Workflow"} · ${activeStep.name}`
+    : activeJob
+    ? `${activeJob.name || "Workflow"} is ${formatGithubWorkflowStateLabel(activeJob.status, activeJob.conclusion)}`
+    : `${completedJobs}/${normalizedJobs.length} workflow job${normalizedJobs.length === 1 ? "" : "s"} completed`;
+
+  const workflowSteps = normalizedJobs
+    .flatMap((job) =>
+      (Array.isArray(job.steps) ? job.steps : []).map((step) => {
+        const stepState = formatGithubWorkflowStateLabel(step.status, step.conclusion);
+        return `${job.name || "Workflow"} · ${step.name || "Step"} · ${stepState}`;
+      })
+    )
+    .filter(Boolean)
+    .slice(-10);
+
+  return {
+    workflowProgress: sanitizeText(workflowProgress, 240),
+    workflowActiveStep: sanitizeText(activeStep ? `${activeJob?.name || "Workflow"} · ${activeStep.name}` : "", 240),
+    workflowSteps,
+    workflowJobs: normalizedJobs.slice(0, 8).map((job) => ({
+      id: job.id,
+      name: sanitizeText(job.name, 180),
+      status: sanitizeText(job.status, 40),
+      conclusion: sanitizeText(job.conclusion, 40),
+      startedAt: sanitizeText(job.startedAt, 120),
+      completedAt: sanitizeText(job.completedAt, 120),
+      steps: (Array.isArray(job.steps) ? job.steps : []).slice(0, 12).map((step) => ({
+        number: Math.max(0, Math.floor(asFinite(step.number, 0))),
+        name: sanitizeText(step.name, 180),
+        status: sanitizeText(step.status, 40),
+        conclusion: sanitizeText(step.conclusion, 40),
+        startedAt: sanitizeText(step.startedAt, 120),
+        completedAt: sanitizeText(step.completedAt, 120),
+      })),
+    })),
+  };
+}
+
+function normalizeGithubArtifact(raw: unknown): GithubArtifactRecord | null {
+  const record = asPlainObject(raw);
+  const id = Math.floor(asFinite(record.id, 0));
+  if (!id) return null;
+  return {
+    id,
+    name: sanitizeText(record.name, 180),
+    sizeInBytes: Math.max(0, Math.floor(asFinite(record.size_in_bytes, 0))),
+    archiveDownloadUrl: sanitizeText(record.archive_download_url, 1000),
+    expired: asBoolean(record.expired, false),
+  };
+}
+
+async function listGithubArtifactsForRun(runId: number): Promise<GithubArtifactRecord[]> {
+  if (!runId) return [];
+  const payload = await githubApiJson(`/actions/runs/${encodeURIComponent(String(runId))}/artifacts?per_page=50`);
+  const artifacts = Array.isArray(payload.artifacts) ? payload.artifacts : [];
+  return artifacts.map((item) => normalizeGithubArtifact(item)).filter((item): item is GithubArtifactRecord => Boolean(item));
+}
+
+function buildGithubArtifactDownloadPath(runId: unknown, artifactId: unknown): string {
+  const cleanRunId = Math.max(0, Math.floor(asFinite(runId, 0)));
+  const cleanArtifactId = Math.max(0, Math.floor(asFinite(artifactId, 0)));
+  if (!cleanRunId || !cleanArtifactId) return "";
+  return `/api/screener/github-history/${encodeURIComponent(String(cleanRunId))}/artifacts/${encodeURIComponent(
+    String(cleanArtifactId)
+  )}/download`;
+}
+
+function buildGithubArtifactDownloadUrl(runId: unknown, artifactId: unknown): string {
+  const path = buildGithubArtifactDownloadPath(runId, artifactId);
+  return path ? `${PUBLIC_ORIGIN}${path}` : "";
+}
+
+function buildGithubArtifactLinkPayload(runId: unknown, artifact: GithubArtifactRecord): Record<string, unknown> {
+  const cleanRunId = Math.max(0, Math.floor(asFinite(runId, 0)));
+  return {
+    id: artifact.id,
+    name: sanitizeText(artifact.name, 180),
+    sizeInBytes: Math.max(0, Math.floor(asFinite(artifact.sizeInBytes, 0))),
+    expired: asBoolean(artifact.expired, false),
+    downloadPath: buildGithubArtifactDownloadPath(cleanRunId, artifact.id),
+    downloadUrl: buildGithubArtifactDownloadUrl(cleanRunId, artifact.id),
+    githubUrl: cleanRunId
+      ? `https://github.com/${encodeURIComponent(GITHUB_REPO_OWNER)}/${encodeURIComponent(
+          GITHUB_REPO_NAME
+        )}/actions/runs/${encodeURIComponent(String(cleanRunId))}/artifacts/${encodeURIComponent(String(artifact.id))}`
+      : "",
+  };
+}
+
+function parseCsvLine(line: string): string[] {
+  const cells: string[] = [];
+  let current = "";
+  let inQuotes = false;
+  for (let idx = 0; idx < line.length; idx += 1) {
+    const char = line[idx];
+    if (char === '"') {
+      if (inQuotes && line[idx + 1] === '"') {
+        current += '"';
+        idx += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+    if (char === "," && !inQuotes) {
+      cells.push(current);
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+  cells.push(current);
+  return cells;
+}
+
+function parseCsvRecords(csvText: string): Array<Record<string, unknown>> {
+  const text = String(csvText || "").trim();
+  if (!text) return [];
+  const lines = text.split(/\r?\n/).filter(Boolean);
+  if (!lines.length) return [];
+  const headers = parseCsvLine(lines[0]).map((item) => sanitizeText(item, 80));
+  const rows: Array<Record<string, unknown>> = [];
+  for (const line of lines.slice(1)) {
+    const cells = parseCsvLine(line);
+    const row: Record<string, unknown> = {};
+    headers.forEach((header, index) => {
+      if (!header) return;
+      const raw = String(cells[index] ?? "").trim();
+      if (!raw) {
+        row[header] = "";
+        return;
+      }
+      const numeric = Number(raw);
+      row[header] = Number.isFinite(numeric) && /^-?\d+(\.\d+)?$/.test(raw) ? numeric : raw;
+    });
+    rows.push(row);
+  }
+  return rows;
+}
+
+function readZipEntryText(zip: any, entryName: string): string {
+  const entry = zip.getEntry(entryName);
+  if (!entry) return "";
+  return String(zip.readAsText(entry) || "");
+}
+
+function normalizeWorkflowScreenerRows(rowsRaw: unknown): Array<Record<string, unknown>> {
+  const rows = Array.isArray(rowsRaw) ? rowsRaw : [];
+  const normalized: Array<Record<string, unknown>> = [];
+  for (const item of rows) {
+    const row = asPlainObject(item);
+    const symbol = normalizeTicker(row.ticker || row.symbol);
+    if (!symbol) continue;
+    normalized.push({
+      symbol,
+      ticker: symbol,
+      status: sanitizeText(row.status, 60).toLowerCase(),
+      lastClose: roundFinite(row.last_price, 2),
+      gapToBandPct: roundFinite(row.gap_to_band_pct, 2),
+      p1: roundFinite(row.p1, 2),
+      p10: roundFinite(row.p10, 2),
+      p50: roundFinite(row.p50, 2),
+      p90: roundFinite(row.p90, 2),
+      p99: roundFinite(row.p99, 2),
+      centralDelta: roundFinite(row.central_delta, 2),
+      centralDeltaLabel: sanitizeText(row.central_delta_label, 80),
+      tailDelta: roundFinite(row.tail_delta, 2),
+      tailDeltaLabel: sanitizeText(row.tail_delta_label, 80),
+      marketCap: asFinite(row.market_cap, Number.NaN),
+      marketCapLabel: sanitizeText(row.market_cap_fmt, 40),
+      lastEarningsDate: sanitizeText(row.last_earnings_date, 40),
+      lastReportPeriod: sanitizeText(row.last_report_period, 80),
+      nextEarningsDate: sanitizeText(row.next_earnings_date, 40),
+      nextReportPeriod: sanitizeText(row.next_report_period, 80),
+      universe: sanitizeText(row.universe, 80),
+    });
+  }
+  return normalized;
+}
+
+async function downloadGithubArtifactPayload(artifact: GithubArtifactRecord): Promise<GithubScreenerArtifactPayload> {
+  const response = await githubApiRequest(`/actions/artifacts/${encodeURIComponent(String(artifact.id))}/zip`, {
+    method: "GET",
+  });
+  const buffer = Buffer.from(await response.arrayBuffer());
+  const zip = new AdmZip(buffer);
+  const manifestText =
+    readZipEntryText(zip, "artifacts/run_manifest.json") || readZipEntryText(zip, "run_manifest.json");
+  const activeSignalsText =
+    readZipEntryText(zip, "artifacts/active_signals.csv") || readZipEntryText(zip, "active_signals.csv");
+  const allLatestRowsText =
+    readZipEntryText(zip, "artifacts/all_latest_rows.csv") || readZipEntryText(zip, "all_latest_rows.csv");
+  const errorsText = readZipEntryText(zip, "artifacts/errors.csv") || readZipEntryText(zip, "errors.csv");
+  const workflowLog =
+    readZipEntryText(zip, "artifacts/workflow-run.log") || readZipEntryText(zip, "workflow-run.log");
+  const manifest = manifestText ? asPlainObject(JSON.parse(manifestText)) : {};
+  return {
+    manifest,
+    activeSignals: parseCsvRecords(activeSignalsText),
+    allLatestRows: parseCsvRecords(allLatestRowsText),
+    errors: parseCsvRecords(errorsText),
+    workflowLog,
+  };
+}
+
+function buildGithubScreenerServiceMessage(manifest: Record<string, unknown>, minMarketCap: number, resultCount: number): string {
+  const status = sanitizeText(manifest.status, 80).toLowerCase();
+  const floorLabel = fmtCompactCurrency(minMarketCap) || `$${Number(minMarketCap || 0).toLocaleString()}`;
+  if (status.startsWith("skipped_")) {
+    return sanitizeText(manifest.reason, 240) || `GitHub Actions skipped this screener run above the ${floorLabel} floor.`;
+  }
+  if (resultCount > 0) {
+    return `GitHub Actions found ${resultCount} active Prophet signal${resultCount === 1 ? "" : "s"} above the ${floorLabel} market-cap floor.`;
+  }
+  return `GitHub Actions completed successfully, but no active Prophet signals cleared the ${floorLabel} market-cap floor.`;
+}
+
+function buildScreenerMyRequestOutputsMeta(source: Record<string, unknown>): Record<string, unknown> {
+  const minMarketCap = Math.max(0, Math.floor(asFinite(source.minMarketCap || source.minCap, 0)));
+  const results = Array.isArray(source.results) ? source.results : [];
+  const resultsCount = Array.isArray(source.results)
+    ? results.length
+    : Math.max(0, Math.floor(asFinite(source.resultsFound, 0)));
+  const topSymbols = Array.isArray(source.topSymbols)
+    ? source.topSymbols.map((item) => normalizeTicker(item)).filter(Boolean).slice(0, 12)
+    : extractScreenerTopSymbols(results);
+  const workflowSteps = Array.isArray(source.workflowSteps)
+    ? source.workflowSteps.map((item) => sanitizeText(item, 180)).filter(Boolean).slice(0, 10)
+    : [];
+  const workflowRunNumber = Math.floor(asFinite(source.workflowRunNumber, 0));
+  const screenedCount = Math.max(0, Math.floor(asFinite(source.screenedCount, 0)));
+  return trimOutputsMeta({
+    summary: asString(source.serviceMessage, ""),
+    resultsCount,
+    topSymbols,
+    modelUsed: asString(source.modelUsed, "daily_prophet_signal_tracker"),
+    status: asString(source.status, "queued"),
+    workflowStatus: asString(source.workflowStatus, ""),
+    workflowConclusion: asString(source.workflowConclusion, ""),
+    workflowRunId: asString(source.workflowRunId, ""),
+    workflowRunUrl: asString(source.workflowRunUrl, ""),
+    workflowRunNumber: workflowRunNumber || 0,
+    workflowProgress: asString(source.workflowProgress, ""),
+    workflowActiveStep: asString(source.workflowActiveStep, ""),
+    workflowSteps,
+    workflowLogExcerpt: asString(source.workflowLogExcerpt, ""),
+    screenedCount,
+    metrics: {
+      Status: asString(source.status, "queued"),
+      Floor: fmtCompactCurrency(minMarketCap),
+      Matches: resultsCount,
+      Screened: screenedCount || 0,
+      Workflow: workflowRunNumber || asString(source.workflowRunId, ""),
+    },
+  });
+}
+
+async function syncScreenerMyRequestFromRun(
+  ownerUid: string,
+  runId: string,
+  source: Record<string, unknown>,
+  published = false
+): Promise<Record<string, unknown> | null> {
+  const requestId = buildMyRequestDocId("screener", runId);
+  const minMarketCap = Math.max(0, Math.floor(asFinite(source.minMarketCap || source.minCap, 100_000_000_000)));
+  await upsertOwnedMyRequestFromSystem(ownerUid, {
+    requestId,
+    type: "screener",
+    title: sanitizeText(source.title, 180) || "GitHub stock screener",
+    input: {
+      minMarketCap,
+      source: "github_actions",
+      workflow: GITHUB_SCREENER_WORKFLOW,
+      branch: GITHUB_ACTIONS_BRANCH,
+    },
+    outputsMeta: buildScreenerMyRequestOutputsMeta(source),
+    sourceRef: {
+      collection: "screener_runs",
+      id: sanitizeText(runId, 220),
+    },
+    published,
+  });
+  const requestSnap = await db.collection("users").doc(ownerUid).collection("requests").doc(requestId).get().catch(() => null);
+  if (!requestSnap?.exists) return null;
+  return toMyRequestResponse(requestSnap.id, (requestSnap.data() || {}) as Record<string, unknown>, { includePayload: true });
+}
+
+async function findScreenerRunRecordByWorkflowRunId(workflowRunId: number): Promise<{ id: string; data: Record<string, unknown> } | null> {
+  const cleanWorkflowRunId = Math.max(0, Math.floor(asFinite(workflowRunId, 0)));
+  if (!cleanWorkflowRunId) return null;
+  const snapshot = await db.collection("screener_runs").where("workflowRunId", "==", cleanWorkflowRunId).limit(1).get();
+  const doc = snapshot.docs[0];
+  if (!doc) return null;
+  return {
+    id: doc.id,
+    data: (doc.data() || {}) as Record<string, unknown>,
+  };
+}
+
+function buildPublicGithubScreenerRunSummary(
+  workflowRun: GithubWorkflowRunRecord,
+  sourceMatch: { id: string; data: Record<string, unknown> } | null,
+  artifacts: GithubArtifactRecord[]
+): Record<string, unknown> {
+  const source = sourceMatch?.data || {};
+  const createdAtMs = getOptionalTimestampMs(source.createdAt);
+  const updatedAtMs = getOptionalTimestampMs(source.updatedAt || source.createdAt);
+  const results = Array.isArray(source.results) ? source.results : [];
+  const resultsFound = Array.isArray(source.results)
+    ? results.length
+    : Math.max(0, Math.floor(asFinite(source.resultsFound, 0)));
+  const screenedCount = Math.max(0, Math.floor(asFinite(source.screenedCount, 0)));
+  const minMarketCap = Math.max(0, Math.floor(asFinite(source.minMarketCap || source.minCap, 0)));
+  const topSymbols = Array.isArray(source.topSymbols)
+    ? source.topSymbols.map((item) => normalizeTicker(item)).filter(Boolean).slice(0, 12)
+    : extractScreenerTopSymbols(results);
+  const visibleArtifacts = (Array.isArray(artifacts) ? artifacts : [])
+    .filter((artifact) => !asBoolean(artifact?.expired, false))
+    .slice(0, 8)
+    .map((artifact) => buildGithubArtifactLinkPayload(workflowRun.id, artifact));
+  const title =
+    sanitizeText(source.title, 180) ||
+    sanitizeText(workflowRun.displayTitle, 180).replace(/\bquantura_[a-z0-9_-]+\b/gi, "").trim() ||
+    `GitHub screener workflow #${workflowRun.runNumber || workflowRun.id}`;
+  return {
+    runId: workflowRun.id,
+    sourceRunId: sanitizeText(sourceMatch?.id, 220),
+    title,
+    displayTitle: sanitizeText(workflowRun.displayTitle, 240),
+    workflowName: sanitizeText(workflowRun.workflowName, 240),
+    workflowRunId: workflowRun.id,
+    workflowRunNumber: workflowRun.runNumber || null,
+    workflowRunUrl: sanitizeText(workflowRun.htmlUrl, 600),
+    workflowStatus: sanitizeText(workflowRun.status, 80) || "completed",
+    workflowConclusion: sanitizeText(workflowRun.conclusion, 80) || "success",
+    createdAt: createdAtMs ? new Date(createdAtMs).toISOString() : workflowRun.createdAt || null,
+    updatedAt: updatedAtMs ? new Date(updatedAtMs).toISOString() : workflowRun.updatedAt || null,
+    completedAt: workflowRun.updatedAt || null,
+    minMarketCap,
+    resultsFound,
+    screenedCount,
+    topSymbols,
+    serviceMessage:
+      sanitizeText(source.serviceMessage, 320) ||
+      `GitHub Actions completed successfully for workflow #${workflowRun.runNumber || workflowRun.id}.`,
+    artifacts: visibleArtifacts,
+    artifactCount: visibleArtifacts.length,
+  };
+}
+
+async function syncGithubScreenerRunRecord(runId: string, viewerUid: string): Promise<Record<string, unknown>> {
+  const cleanRunId = sanitizeText(runId, 220);
+  if (!cleanRunId) throw new Error("invalid_run_id");
+  const ref = db.collection("screener_runs").doc(cleanRunId);
+  const snap = await ref.get();
+  if (!snap.exists) throw new Error("screener_not_found");
+  const data = (snap.data() || {}) as Record<string, unknown>;
+  if (sanitizeText(data.userId, 220) !== viewerUid) throw new Error("forbidden");
+  if (sanitizeText(data.source, 80) !== "github_actions") {
+    return { id: snap.id, ...data };
+  }
+
+  const minMarketCap = Math.max(0, asFinite(data.minMarketCap || data.minCap, 100_000_000_000));
+  const runKey = sanitizeText(data.workflowRunKey, 180);
+  let workflowRunId = Math.floor(asFinite(data.workflowRunId, 0));
+  let workflowRun = workflowRunId ? await getGithubWorkflowRun(workflowRunId).catch(() => null) : null;
+  if (!workflowRun && runKey) {
+    workflowRun = await findGithubWorkflowRunByKey(runKey).catch(() => null);
+    workflowRunId = workflowRun?.id || 0;
+  }
+
+  const patch: Record<string, unknown> = {
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+
+  if (workflowRun) {
+    patch.workflowRunId = workflowRun.id;
+    patch.workflowRunUrl = workflowRun.htmlUrl;
+    patch.workflowRunNumber = workflowRun.runNumber || null;
+    patch.workflowStatus = workflowRun.status;
+    patch.workflowConclusion = workflowRun.conclusion || "";
+  }
+
+  if (!workflowRun) {
+    patch.status = sanitizeText(data.status, 40) || "queued";
+    patch.serviceMessage =
+      sanitizeText(data.serviceMessage, 240) ||
+      `Dispatching GitHub Actions stock screener above the ${fmtCompactCurrency(minMarketCap)} floor.`;
+    await ref.set(patch, { merge: true });
+    const refreshed = await ref.get();
+    const merged = { id: refreshed.id, ...(refreshed.data() || {}) } as Record<string, unknown>;
+    await syncScreenerMyRequestFromRun(viewerUid, cleanRunId, merged, false);
+    return merged;
+  }
+
+  const workflowJobs = await listGithubJobsForRun(workflowRun.id).catch(() => []);
+  if (workflowJobs.length) {
+    Object.assign(patch, buildGithubWorkflowProgressSnapshot(workflowJobs));
+  }
+
+  if (workflowRun.status !== "completed") {
+    patch.status = workflowRun.status === "queued" ? "queued" : "running";
+    patch.serviceMessage =
+      sanitizeText(patch.workflowProgress, 240) ||
+      `GitHub Actions is ${patch.status} for the ${fmtCompactCurrency(minMarketCap)} market-cap floor.`;
+    await ref.set(patch, { merge: true });
+    const refreshed = await ref.get();
+    const merged = { id: refreshed.id, ...(refreshed.data() || {}) } as Record<string, unknown>;
+    await syncScreenerMyRequestFromRun(viewerUid, cleanRunId, merged, false);
+    return merged;
+  }
+
+  if (workflowRun.conclusion !== "success") {
+    patch.status = "failed";
+    patch.autoPublishPending = false;
+    patch.serviceMessage = `GitHub Actions finished with ${workflowRun.conclusion || "failure"}.`;
+    await ref.set(patch, { merge: true });
+    const refreshed = await ref.get();
+    const merged = { id: refreshed.id, ...(refreshed.data() || {}) } as Record<string, unknown>;
+    await syncScreenerMyRequestFromRun(viewerUid, cleanRunId, merged, false);
+    return merged;
+  }
+
+  const artifacts = await listGithubArtifactsForRun(workflowRun.id).catch(() => []);
+  const artifact = artifacts.find((item) => item.name === "daily-prophet-signal-tracker" && !item.expired) || artifacts[0] || null;
+  if (!artifact) {
+    patch.status = "running";
+    patch.serviceMessage = "GitHub Actions finished, but Quantura is still waiting for artifacts.";
+    await ref.set(patch, { merge: true });
+    const refreshed = await ref.get();
+    const merged = { id: refreshed.id, ...(refreshed.data() || {}) } as Record<string, unknown>;
+    await syncScreenerMyRequestFromRun(viewerUid, cleanRunId, merged, false);
+    return merged;
+  }
+
+  const artifactPayload = await downloadGithubArtifactPayload(artifact);
+  const results = normalizeWorkflowScreenerRows(artifactPayload.activeSignals);
+  const allLatestRows = normalizeWorkflowScreenerRows(artifactPayload.allLatestRows);
+  const manifest = artifactPayload.manifest;
+  const serviceMessage = buildGithubScreenerServiceMessage(manifest, minMarketCap, results.length);
+  const topSymbols = extractScreenerTopSymbols(results);
+  const shouldAutoPublishNow = asBoolean(data.autoPublishPending, false);
+  patch.status = sanitizeText(manifest.status, 80).toLowerCase().startsWith("skipped_")
+    ? "completed"
+    : "completed";
+  patch.autoPublishPending = false;
+  patch.serviceMessage = serviceMessage;
+  patch.results = results;
+  patch.resultsFound = results.length;
+  patch.topSymbols = topSymbols;
+  patch.appliedFilters = [`Market cap >= ${fmtCompactCurrency(minMarketCap)}`];
+  patch.ignoredFilters = [];
+  patch.workflowArtifactId = artifact.id;
+  patch.workflowArtifactName = artifact.name;
+  patch.workflowArtifactSizeInBytes = artifact.sizeInBytes;
+  patch.workflowManifest = trimOutputsMeta(manifest);
+  patch.workflowLogExcerpt = sanitizeText(artifactPayload.workflowLog.split(/\r?\n/).slice(-20).join(" "), 2400);
+  patch.screenedCount = Math.max(0, Math.floor(asFinite(manifest.screenedCount, allLatestRows.length)));
+  patch.marketCapSkipped = Math.max(0, Math.floor(asFinite(manifest.marketCapSkipped, 0)));
+  patch.allLatestRowsCount = allLatestRows.length;
+
+  await ref.set(patch, { merge: true });
+  const refreshed = await ref.get();
+  const merged = (refreshed.data() || {}) as Record<string, unknown>;
+  await syncScreenerMyRequestFromRun(viewerUid, cleanRunId, { ...merged, id: cleanRunId }, shouldAutoPublishNow);
+  const requestSnap = await db
+    .collection("users")
+    .doc(viewerUid)
+    .collection("requests")
+    .doc(buildMyRequestDocId("screener", cleanRunId))
+    .get();
+  const requestData = (requestSnap.data() || {}) as Record<string, unknown>;
+  const published = asBoolean(requestData.published, shouldAutoPublishNow);
+  await ref.set(
+    {
+      isPublic: published,
+      published,
+      publishedAt: published ? requestData.publishedAt || admin.firestore.FieldValue.serverTimestamp() : null,
+      explorePostId: published ? sanitizeText(requestData.explorePostId, 220) : "",
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+  const finalized = await ref.get();
+  return { id: finalized.id, ...(finalized.data() || {}) };
 }
 
 function trimModelCouncilAnswer(answerRaw: unknown): string {
@@ -1810,7 +3081,8 @@ async function syncLegacyRequestsForUser(uid: string): Promise<void> {
       },
       outputsMeta: {
         summary: trimModelCouncilAnswer(data.answer),
-        answer: trimModelCouncilAnswer(data.answer),
+        answer: sanitizeRichText(data.answer, 12000),
+        bodyMarkdown: sanitizeRichText(data.answer, 12000),
         provider: sanitizeText(data.provider, 80),
         model: sanitizeText(data.model, 120),
         citationsCount: Array.isArray(data.citations) ? data.citations.length : 0,
@@ -1858,6 +3130,7 @@ function deriveMyRequestExplorePostId(requestId: string, data: Record<string, un
   const sourceCollection = sanitizeText(sourceRef.collection, 80);
   const sourceId = sanitizeText(sourceRef.id, 220);
   if (type === "forecast" && sourceCollection === "forecast_requests" && sourceId) return `forecast_${sourceId}`;
+  if (type === "forecast" && sourceCollection === "autopilot_requests" && sourceId) return `autopilot_${sourceId}`;
   if (type === "screener" && sourceCollection === "screener_runs" && sourceId) return `screener_${sourceId}`;
   if (type === "modelCouncil" && sourceId) return `model_council_${sourceId}`;
   if (type === "indicator" && sourceId) return `indicator_${sourceId}`;
@@ -1871,8 +3144,14 @@ function buildMyRequestTargetUrl(requestId: string, data: Record<string, unknown
   const sourceId = sanitizeText(sourceRef.id, 220);
 
   if (type === "forecast") {
+    if (sourceCollection === "autopilot_requests" && sourceId) {
+      return `/autopilot?runId=${encodeURIComponent(sourceId)}`;
+    }
     if (sourceCollection === "forecast_requests" && sourceId) {
       return `/forecasting?forecastId=${encodeURIComponent(sourceId)}`;
+    }
+    if (sourceCollection === "autopilot_requests") {
+      return `/autopilot?requestId=${encodeURIComponent(requestId)}`;
     }
     return `/forecasting?requestId=${encodeURIComponent(requestId)}`;
   }
@@ -1903,12 +3182,12 @@ async function upsertExplorePostFromMyRequest(
   const sourceRef = asPlainObject(requestData.sourceRef);
   const ticker = firstTickerFromRequest(input, sourceRef, outputsMeta);
   const title = sanitizeText(requestData.title, 180) || defaultMyRequestTitle(type, input);
-  const caption = sanitizeText(
-    outputsMeta.summary || input.question || input.notes || outputsMeta.answer || "",
-    400
-  );
+  const caption = buildMyRequestExploreCaption(type, title, input, outputsMeta, ticker);
   const postId = deriveMyRequestExplorePostId(requestId, requestData);
   const postType = requestPostType(type);
+  const body = buildMyRequestExploreBody(type, outputsMeta);
+  const sourceCollection = sanitizeText(sourceRef.collection, 80);
+  const sourceId = sanitizeText(sourceRef.id, 220);
   const topSymbols = Array.isArray(outputsMeta.topSymbols) ? outputsMeta.topSymbols : [];
   const tickers = Array.from(
     new Set(
@@ -1930,40 +3209,53 @@ async function upsertExplorePostFromMyRequest(
   const createdAt = existingData.createdAt || publishTimestamp;
   const updatedAt = publishTimestamp;
   const createdAtMsForScore = existingData.createdAt ? getTimestampMs(existingData.createdAt) : Date.now();
+  const mergedPreviewMetrics = {
+    ...buildMyRequestPreviewMetrics({ ...input, ...outputsMeta }, postType),
+    ...compactPreviewMetrics(asPlainObject(outputsMeta.metrics)),
+  };
   const preview = extractPreview(
     {
       ...input,
       ...outputsMeta,
-      metrics: outputsMeta.metrics,
-      summary: outputsMeta.summary || outputsMeta.answer || input.question || "",
+      metrics: Object.keys(mergedPreviewMetrics).length ? mergedPreviewMetrics : outputsMeta.metrics,
+      summary: caption,
     },
     postType
   );
 
-  await postRef.set(
-    {
-      id: postId,
-      type: postType,
-      authorUid: ownerUid,
-      authorHandle: handle,
-      authorPhotoURL: photoURL,
-      title,
-      caption,
-      tickers,
-      tags,
-      preview,
-      targetUrl,
-      visibility,
-      updatedAt,
-      createdAt,
-      counts: existingCounts,
-      score: Number.isFinite(asFinite(existingData.score, NaN))
-        ? asFinite(existingData.score, 0)
-        : computeScore(existingCounts, createdAtMsForScore),
-      lastEngagedAt: publishTimestamp,
-    },
-    { merge: true }
-  );
+  const postPatch: Record<string, unknown> = {
+    id: postId,
+    type: postType,
+    authorUid: ownerUid,
+    authorHandle: handle,
+    authorPhotoURL: photoURL,
+    title,
+    caption,
+    tickers,
+    tags,
+    preview,
+    targetUrl,
+    visibility,
+    updatedAt,
+    createdAt,
+    counts: existingCounts,
+    score: Number.isFinite(asFinite(existingData.score, NaN))
+      ? asFinite(existingData.score, 0)
+      : computeScore(existingCounts, createdAtMsForScore),
+    lastEngagedAt: publishTimestamp,
+  };
+  if (body) {
+    postPatch.body = body;
+    postPatch.bodyFormat = "markdown";
+  }
+  if (sourceCollection || sourceId) {
+    postPatch.sourceRef = {
+      collection: sourceCollection,
+      id: sourceId,
+    };
+  }
+
+  await postRef.set(postPatch, { merge: true });
 
   return postId;
 }
@@ -1999,6 +3291,1175 @@ async function ensurePublishedMyRequestExplorePost(
   );
   const refreshed = await requestRef.get();
   return (refreshed.data() || requestData) as Record<string, unknown>;
+}
+
+function isAnonymousDecodedUser(user: admin.auth.DecodedIdToken | null): boolean {
+  return sanitizeText(user?.firebase?.sign_in_provider, 40) === "anonymous";
+}
+
+async function requireFoundryUser(req: Request): Promise<admin.auth.DecodedIdToken> {
+  const user = await verifyRequestUser(req, true);
+  if (!user) throw new Error("unauthenticated");
+  if (isAnonymousDecodedUser(user)) {
+    throw new Error("full_account_required");
+  }
+  return user;
+}
+
+function safePathSegment(value: unknown, maxLen = 80): string {
+  return sanitizeText(value, maxLen)
+    .replace(/[^A-Za-z0-9._-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, maxLen);
+}
+
+function storageBucket() {
+  return admin.storage().bucket();
+}
+
+async function writeStorageTextArtifact(
+  storagePath: string,
+  text: string,
+  contentType: string
+): Promise<Record<string, unknown>> {
+  const cleanPath = sanitizeText(storagePath, 1000).replace(/^\/+/, "");
+  if (!cleanPath) throw new Error("Storage path is required.");
+  const bucket = storageBucket();
+  await bucket.file(cleanPath).save(text, {
+    resumable: false,
+    contentType,
+    metadata: {
+      cacheControl: "private, max-age=0, no-cache",
+    },
+  });
+  return {
+    storagePath: cleanPath,
+    fileName: cleanPath.split("/").pop() || "",
+    contentType,
+    sizeBytes: Buffer.byteLength(text || "", "utf8"),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+}
+
+async function readStorageTextArtifact(storagePath: string): Promise<string> {
+  const cleanPath = sanitizeText(storagePath, 1000).replace(/^\/+/, "");
+  if (!cleanPath) return "";
+  const [buffer] = await storageBucket().file(cleanPath).download();
+  return buffer.toString("utf8");
+}
+
+async function buildStorageFileResponse(fileRaw: unknown): Promise<Record<string, unknown>> {
+  const file = asPlainObject(fileRaw);
+  const storagePath = sanitizeText(file.storagePath, 1000).replace(/^\/+/, "");
+  const response: Record<string, unknown> = {
+    fileName: sanitizeText(file.fileName, 240),
+    storagePath,
+    contentType: sanitizeText(file.contentType, 120),
+    sizeBytes: Number.isFinite(asFinite(file.sizeBytes, NaN)) ? asFinite(file.sizeBytes, 0) : null,
+    s3Uri: sanitizeText(file.s3Uri, 500),
+  };
+  const existingDownloadUrl = sanitizeText(file.downloadUrl, 2000);
+  if (existingDownloadUrl) {
+    response.downloadUrl = existingDownloadUrl;
+    return response;
+  }
+  if (!storagePath) return response;
+  try {
+    const [url] = await storageBucket().file(storagePath).getSignedUrl({
+      action: "read",
+      expires: Date.now() + 6 * 60 * 60 * 1000,
+    });
+    response.downloadUrl = url;
+  } catch (_error) {
+    // Ignore signed URL generation failures.
+  }
+  return response;
+}
+
+function buildAutopilotTitle(data: Record<string, unknown>): string {
+  const explicit = sanitizeText(data.title, 180);
+  if (explicit) return explicit;
+  const dataset = asPlainObject(data.dataset);
+  const ticker = normalizeTicker(dataset.ticker || data.ticker || data.symbol);
+  const sourceType = sanitizeText(data.sourceType, 40);
+  if (sourceType === "prediction_csv") {
+    return `${ticker || "Prediction"} Forecast Foundry analysis`;
+  }
+  return `${ticker || "Market"} Forecast Foundry`;
+}
+
+function buildAutopilotSummary(data: Record<string, unknown>): string {
+  const analysis = asPlainObject(data.analysis);
+  const autopilot = asPlainObject(data.autopilot);
+  const dataset = asPlainObject(data.dataset);
+  const ticker = normalizeTicker(dataset.ticker || data.ticker || data.symbol);
+  const status = sanitizeText(data.status, 40).toLowerCase();
+  const analysisSummary = sanitizeText(analysis.summary, 600);
+  if (analysisSummary) return analysisSummary;
+  if (status === "completed") {
+    const objective = asPlainObject(autopilot.objectiveMetric);
+    const metricName = sanitizeText(objective.name, 120) || "AverageWeightedQuantileLoss";
+    const metricValue = asFinite(objective.value, NaN);
+    return sanitizeText(
+      `${ticker || "Forecast"} Forecast Foundry run completed.${Number.isFinite(metricValue) ? ` ${metricName}: ${metricValue}.` : ""}`,
+      600
+    );
+  }
+  if (status === "failed") {
+    return sanitizeText(
+      `${ticker || "Forecast"} Forecast Foundry run failed. ${sanitizeText(autopilot.failureReason || autopilot.transformFailureReason, 320)}`,
+      600
+    );
+  }
+  if (status === "analysis_ready") {
+    return sanitizeText(`${ticker || "Forecast"} Forecast Foundry prediction analysis is ready.`, 600);
+  }
+  if (status === "dataset_ready") {
+    return sanitizeText(`${ticker || "Forecast"} historical dataset is ready for Forecast Foundry.`, 600);
+  }
+  return sanitizeText(`${ticker || "Forecast"} Forecast Foundry run is ${status || "in progress"}.`, 600);
+}
+
+function buildAutopilotInputPayload(data: Record<string, unknown>): Record<string, unknown> {
+  const dataset = asPlainObject(data.dataset);
+  const autopilot = asPlainObject(data.autopilot);
+  return {
+    ticker: normalizeTicker(dataset.ticker || data.ticker),
+    interval: sanitizeText(dataset.interval, 20),
+    horizon: Number.isFinite(asFinite(autopilot.forecastHorizon, NaN)) ? Math.floor(asFinite(autopilot.forecastHorizon, 0)) : null,
+    quantiles: Array.isArray(autopilot.quantiles) ? autopilot.quantiles.slice(0, 5) : [],
+    notes: sanitizeText(data.notes, 2000),
+    sourceType: sanitizeText(data.sourceType, 40),
+    mode: sanitizeText(data.mode, 60),
+  };
+}
+
+function buildAutopilotOutputsMeta(data: Record<string, unknown>): Record<string, unknown> {
+  const dataset = asPlainObject(data.dataset);
+  const autopilot = asPlainObject(data.autopilot);
+  const analysis = asPlainObject(data.analysis);
+  const files = asPlainObject(data.files);
+  const objective = asPlainObject(autopilot.objectiveMetric);
+  const bestCandidate = asPlainObject(autopilot.bestCandidate);
+  const metrics: Record<string, unknown> = {};
+  const objectiveValue = asFinite(objective.value, NaN);
+  if (Number.isFinite(objectiveValue)) {
+    metrics[sanitizeText(objective.name, 120) || "AverageWeightedQuantileLoss"] = objectiveValue;
+  }
+  const branch = sanitizeText(analysis.metrics && asPlainObject(analysis.metrics).branch, 40);
+  if (branch) metrics.Branch = branch;
+  const rowCount = asFinite(dataset.rowCount, 0);
+  if (rowCount > 0) metrics.Rows = Math.floor(rowCount);
+  const candidateName = sanitizeText(bestCandidate.candidateName, 120);
+  if (candidateName) metrics.Candidate = candidateName;
+  const fileNames = Object.values(files)
+    .map((entry) => sanitizeText(asPlainObject(entry).fileName, 240))
+    .filter(Boolean)
+    .slice(0, 8);
+  return trimOutputsMeta({
+    summary: buildAutopilotSummary(data),
+    service: "aws-sagemaker-autopilot",
+    provider: "aws-sagemaker-autopilot",
+    model: candidateName,
+    interval: sanitizeText(dataset.interval, 20),
+    forecastRowsCount: asFinite(analysis.rowCount, 0) || null,
+    topSymbols: [normalizeTicker(dataset.ticker || data.ticker)].filter(Boolean),
+    ticker: normalizeTicker(dataset.ticker || data.ticker),
+    metrics,
+    analysisMarkdown: asString(analysis.markdown).slice(0, 32000),
+    analysisStatus: sanitizeText(analysis.status, 40),
+    fileNames,
+  });
+}
+
+async function upsertOwnedMyRequestFromSystem(
+  ownerUid: string,
+  seed: {
+    requestId: string;
+    type: MyRequestType;
+    title: string;
+    input: Record<string, unknown>;
+    outputsMeta: Record<string, unknown>;
+    sourceRef: Record<string, unknown>;
+    published?: boolean;
+  }
+): Promise<string> {
+  const requestId = normalizeMyRequestId(seed.requestId);
+  if (!ownerUid || !requestId) throw new Error("My Request upsert requires owner UID and request ID.");
+  const requestRef = db.collection("users").doc(ownerUid).collection("requests").doc(requestId);
+  const existingSnap = await requestRef.get();
+  const existing = (existingSnap.data() || {}) as Record<string, unknown>;
+  const type = normalizeMyRequestType(seed.type) || "forecast";
+  const input = normalizeMyRequestInput(seed.input);
+  const outputsMeta = trimOutputsMeta(seed.outputsMeta);
+  const titleEdited = asBoolean(existing.titleEdited, false);
+  const title = titleEdited
+    ? sanitizeText(existing.title, 180) || defaultMyRequestTitle(type, input)
+    : sanitizeText(seed.title, 180) || sanitizeText(existing.title, 180) || defaultMyRequestTitle(type, input);
+  const share = normalizeMyRequestShareObject(existing.share);
+  const sourceRef = {
+    collection: sanitizeText(seed.sourceRef.collection, 80),
+    id: sanitizeText(seed.sourceRef.id, 220),
+  };
+  const ticker = firstTickerFromRequest(input, sourceRef, outputsMeta);
+  const published =
+    typeof seed.published === "boolean" ? asBoolean(seed.published, false) : asBoolean(existing.published, false);
+  const visibility = published
+    ? "public"
+    : normalizeMyRequestVisibility(existing.visibility, normalizeMyRequestVisibility(share.visibility, "private"));
+
+  const payload: Record<string, unknown> = {
+    type,
+    ownerUid,
+    title,
+    titleEdited,
+    input,
+    outputsMeta,
+    sourceRef,
+    searchText: buildMyRequestSearchText(title, type, ticker, input, outputsMeta),
+    published,
+    publishedAt: published ? existing.publishedAt || admin.firestore.FieldValue.serverTimestamp() : null,
+    explorePostId: published ? sanitizeText(existing.explorePostId, 220) : "",
+    deleted: asBoolean(existing.deleted, false),
+    share: {
+      visibility: normalizeMyRequestVisibility(share.visibility, "private"),
+      slug: normalizeShareId(share.slug),
+      createdAt: share.createdAt || null,
+    },
+    visibility,
+    createdAt: existing.createdAt || admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+
+  await requestRef.set(payload, { merge: true });
+  if (published) {
+    const merged = { ...existing, ...payload };
+    const postId = await upsertExplorePostFromMyRequest(ownerUid, requestId, merged, "public");
+    await requestRef.set(
+      {
+        published: true,
+        publishedAt: existing.publishedAt || admin.firestore.FieldValue.serverTimestamp(),
+        explorePostId: postId,
+        visibility: "public",
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+  }
+  return requestId;
+}
+
+async function syncAutopilotMyRequest(ownerUid: string, runId: string, data: Record<string, unknown>): Promise<string> {
+  const requestId = buildMyRequestDocId("forecast", runId);
+  await upsertOwnedMyRequestFromSystem(ownerUid, {
+    requestId,
+    type: "forecast",
+    title: buildAutopilotTitle(data),
+    input: buildAutopilotInputPayload(data),
+    outputsMeta: buildAutopilotOutputsMeta(data),
+    sourceRef: {
+      collection: "autopilot_requests",
+      id: runId,
+    },
+  });
+  return requestId;
+}
+
+const MAX_FOUNDRY_CONCURRENT_RUNS = 2;
+const ACTIVE_FOUNDRY_STATUSES = new Set(["queued", "running", "transforming"]);
+
+async function countActiveAutopilotRunsForOwner(ownerUid: string, excludeRunId = ""): Promise<number> {
+  const cleanOwnerUid = sanitizeText(ownerUid, 220);
+  const cleanExcludeRunId = sanitizeText(excludeRunId, 220);
+  if (!cleanOwnerUid) return 0;
+  const snap = await db
+    .collection("autopilot_requests")
+    .where("userId", "==", cleanOwnerUid)
+    .orderBy("createdAt", "desc")
+    .get();
+  return snap.docs.reduce((count, doc) => {
+    if (cleanExcludeRunId && doc.id === cleanExcludeRunId) return count;
+    const data = (doc.data() || {}) as Record<string, unknown>;
+    const status = sanitizeText(data.status, 60).toLowerCase();
+    return ACTIVE_FOUNDRY_STATUSES.has(status) ? count + 1 : count;
+  }, 0);
+}
+
+async function readAutopilotRunForOwner(
+  ownerUid: string,
+  runId: string
+): Promise<{ id: string; data: Record<string, unknown> } | null> {
+  const cleanRunId = sanitizeText(runId, 220);
+  if (!ownerUid || !cleanRunId) return null;
+  const snap = await db.collection("autopilot_requests").doc(cleanRunId).get();
+  if (!snap.exists) return null;
+  const data = (snap.data() || {}) as Record<string, unknown>;
+  if (sanitizeText(data.userId, 220) !== ownerUid) return null;
+  return { id: snap.id, data };
+}
+
+async function toAutopilotRunResponse(docId: string, data: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const dataset = asPlainObject(data.dataset);
+  const autopilot = asPlainObject(data.autopilot);
+  const analysis = asPlainObject(data.analysis);
+  const filesRaw = asPlainObject(data.files);
+  const filesEntries = await Promise.all(
+    Object.entries(filesRaw).map(async ([key, value]) => [key, await buildStorageFileResponse(value)] as const)
+  );
+  const files = Object.fromEntries(filesEntries);
+  const createdAtMs = getTimestampMs(data.createdAt);
+  const updatedAtMs = getTimestampMs(data.updatedAt || data.createdAt);
+  return {
+    id: docId,
+    title: buildAutopilotTitle(data),
+    status: sanitizeText(data.status, 60),
+    mode: sanitizeText(data.mode, 60),
+    sourceType: sanitizeText(data.sourceType, 60),
+    userId: sanitizeText(data.userId, 220),
+    workspaceId: sanitizeText(data.workspaceId, 220),
+    notes: sanitizeText(data.notes, 2000),
+    exploreRequestId: sanitizeText(data.exploreRequestId, 220),
+    createdAtMs,
+    updatedAtMs,
+    createdAt: createdAtMs ? new Date(createdAtMs).toISOString() : "",
+    updatedAt: updatedAtMs ? new Date(updatedAtMs).toISOString() : "",
+    dataset: {
+      ticker: normalizeTicker(dataset.ticker || data.ticker),
+      interval: sanitizeText(dataset.interval, 20),
+      rowCount: Math.max(0, Math.floor(asFinite(dataset.rowCount, 0))),
+      trainingEligible: asBoolean(dataset.trainingEligible, false),
+      start: sanitizeText(dataset.start, 40),
+      end: sanitizeText(dataset.end, 40),
+      useAllHistory: asBoolean(dataset.useAllHistory, false),
+      columns: Array.isArray(dataset.columns) ? dataset.columns.slice(0, 20) : [],
+      previewRows: Array.isArray(dataset.previewRows) ? dataset.previewRows.slice(0, 30) : [],
+      sourceTimeColumn: sanitizeText(dataset.sourceTimeColumn, 120),
+      sourceValueColumn: sanitizeText(dataset.sourceValueColumn, 120),
+      sourceItemColumn: sanitizeText(dataset.sourceItemColumn, 120),
+      originalHeaders: Array.isArray(dataset.originalHeaders) ? dataset.originalHeaders.slice(0, 30) : [],
+    },
+    autopilot: {
+      status: sanitizeText(autopilot.status, 60),
+      jobName: sanitizeText(autopilot.jobName, 120),
+      jobArn: sanitizeText(autopilot.jobArn, 220),
+      forecastFrequency: sanitizeText(autopilot.forecastFrequency, 20),
+      forecastHorizon: Math.max(0, Math.floor(asFinite(autopilot.forecastHorizon, 0))),
+      quantiles: Array.isArray(autopilot.quantiles) ? autopilot.quantiles.slice(0, 5) : [],
+      algorithms: Array.isArray(autopilot.algorithms) ? autopilot.algorithms.slice(0, 12) : [],
+      runtimeSeconds: Number.isFinite(asFinite(autopilot.runtimeSeconds, Number.NaN))
+        ? Math.max(0, Math.floor(asFinite(autopilot.runtimeSeconds, Number.NaN)))
+        : null,
+      objectiveMetric: asPlainObject(autopilot.objectiveMetric),
+      bestCandidate: asPlainObject(autopilot.bestCandidate),
+      modelName: sanitizeText(autopilot.modelName, 120),
+      transformJobName: sanitizeText(autopilot.transformJobName, 120),
+      transformStatus: sanitizeText(autopilot.transformStatus, 60),
+      transformOutputS3Uri: sanitizeText(autopilot.transformOutputS3Uri, 500),
+      failureReason: sanitizeText(autopilot.failureReason || autopilot.transformFailureReason, 500),
+    },
+    analysis: {
+      status: sanitizeText(analysis.status, 40),
+      summary: sanitizeText(analysis.summary, 2000),
+      markdown: asString(analysis.markdown).slice(0, 32000),
+      metrics: trimOutputsMeta(analysis.metrics),
+      data: trimOutputsMeta(analysis.data),
+      previewRows: Array.isArray(analysis.previewRows) ? analysis.previewRows.slice(0, 20) : [],
+      generatedAtMs: getTimestampMs(analysis.generatedAt),
+    },
+    files,
+  };
+}
+
+async function persistAutopilotAnalysisArtifacts(
+  ownerUid: string,
+  runId: string,
+  analysis: Record<string, unknown>,
+  predictionsCsvText = ""
+): Promise<{ analysisPatch: Record<string, unknown>; filePatches: Record<string, unknown> }> {
+  const owner = safePathSegment(ownerUid, 120) || "user";
+  const run = safePathSegment(runId, 120) || "run";
+  const reportBase = `forecast_reports/${owner}/foundry/${run}`;
+  const filePatches: Record<string, unknown> = {};
+
+  if (predictionsCsvText.trim()) {
+    filePatches.predictionsCsv = await writeStorageTextArtifact(
+      `${reportBase}/predictions.csv`,
+      predictionsCsvText,
+      "text/csv"
+    );
+  }
+
+  const markdown = asString(analysis.markdown).slice(0, 32000);
+  const jsonText = JSON.stringify(analysis.data || {}, null, 2);
+  if (markdown) {
+    filePatches.analysisMarkdown = await writeStorageTextArtifact(
+      `${reportBase}/analysis.md`,
+      markdown,
+      "text/markdown"
+    );
+  }
+  filePatches.analysisJson = await writeStorageTextArtifact(
+    `${reportBase}/analysis.json`,
+    jsonText,
+    "application/json"
+  );
+
+  return {
+    analysisPatch: {
+      ...analysis,
+      generatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    filePatches,
+  };
+}
+
+async function reconcileAutopilotRunDocument(
+  runId: string,
+  existingData: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const ownerUid = sanitizeText(existingData.userId, 220);
+  if (!ownerUid) return existingData;
+  const currentStatus = sanitizeText(existingData.status, 60).toLowerCase();
+  const files = asPlainObject(existingData.files);
+  const dataset = asPlainObject(existingData.dataset);
+  const autopilot = asPlainObject(existingData.autopilot);
+  let nextPatch: Record<string, unknown> = {};
+
+  if (currentStatus === "completed" && files.predictionsCsv && asPlainObject(existingData.analysis).status === "ok") {
+    const requestId = await syncAutopilotMyRequest(ownerUid, runId, existingData);
+    if (sanitizeText(existingData.exploreRequestId, 220) !== requestId) {
+      nextPatch.exploreRequestId = requestId;
+      await db.collection("autopilot_requests").doc(runId).set(
+        {
+          exploreRequestId: requestId,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      await syncAutomationRunProjection(runId, {
+        ...existingData,
+        exploreRequestId: requestId,
+      });
+      return {
+        ...existingData,
+        exploreRequestId: requestId,
+      };
+    }
+    await syncAutomationRunProjection(runId, existingData);
+    return existingData;
+  }
+
+  if (sanitizeText(autopilot.jobName, 120)) {
+    const refresh = await refreshAutopilotRun({
+      runId,
+      userId: ownerUid,
+      ticker: normalizeTicker(dataset.ticker || existingData.ticker),
+      datasetS3Uri: sanitizeText(asPlainObject(files.datasetCsv).s3Uri || autopilot.inputS3Uri, 500),
+      autopilot,
+    });
+    nextPatch.autopilot = {
+      ...autopilot,
+      ...refresh.autopilotPatch,
+    };
+    nextPatch.status = refresh.status;
+
+    if (refresh.status === "completed" && refresh.predictionsCsvText.trim()) {
+      const analysis = await analyzePredictionCsv(refresh.predictionsCsvText, {
+        ticker: normalizeTicker(dataset.ticker || existingData.ticker),
+      });
+      const persisted = await persistAutopilotAnalysisArtifacts(ownerUid, runId, {
+        status: analysis.status,
+        summary: analysis.summary,
+        markdown: analysis.markdown,
+        metrics: analysis.metrics,
+        data: analysis.analysis,
+        previewRows: analysis.previewRows,
+        rowCount: analysis.rowCount,
+        columns: analysis.columns,
+      }, refresh.predictionsCsvText);
+
+      nextPatch.analysis = persisted.analysisPatch;
+      nextPatch.files = {
+        ...files,
+        ...persisted.filePatches,
+      };
+      nextPatch.status = "completed";
+    }
+  } else if (sanitizeText(existingData.sourceType, 40) === "prediction_csv" && sanitizeText(asPlainObject(existingData.analysis).status, 40) !== "ok") {
+    const uploadedCsvPath = sanitizeText(asPlainObject(files.uploadedCsv).storagePath, 1000);
+    if (uploadedCsvPath) {
+      const csvText = await readStorageTextArtifact(uploadedCsvPath);
+      const analysis = await analyzePredictionCsv(csvText, {
+        ticker: normalizeTicker(dataset.ticker || existingData.ticker),
+      });
+      const persisted = await persistAutopilotAnalysisArtifacts(ownerUid, runId, {
+        status: analysis.status,
+        summary: analysis.summary,
+        markdown: analysis.markdown,
+        metrics: analysis.metrics,
+        data: analysis.analysis,
+        previewRows: analysis.previewRows,
+        rowCount: analysis.rowCount,
+        columns: analysis.columns,
+      });
+      nextPatch.analysis = persisted.analysisPatch;
+      nextPatch.files = {
+        ...files,
+        ...persisted.filePatches,
+      };
+      nextPatch.status = "analysis_ready";
+    }
+  }
+
+  if (!Object.keys(nextPatch).length) {
+    await syncAutomationRunProjection(runId, existingData);
+    return existingData;
+  }
+
+  nextPatch.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+  await db.collection("autopilot_requests").doc(runId).set(nextPatch, { merge: true });
+  const refreshedSnap = await db.collection("autopilot_requests").doc(runId).get();
+  const refreshedData = (refreshedSnap.data() || { ...existingData, ...nextPatch }) as Record<string, unknown>;
+  const requestId = await syncAutopilotMyRequest(ownerUid, runId, refreshedData);
+  if (sanitizeText(refreshedData.exploreRequestId, 220) !== requestId) {
+    await db.collection("autopilot_requests").doc(runId).set(
+      {
+        exploreRequestId: requestId,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    await syncAutomationRunProjection(runId, {
+      ...refreshedData,
+      exploreRequestId: requestId,
+    });
+    return {
+      ...refreshedData,
+      exploreRequestId: requestId,
+    };
+  }
+  await syncAutomationRunProjection(runId, refreshedData);
+  return refreshedData;
+}
+
+function automationEntitlementRef(ownerUid: string) {
+  return db.collection(AUTOMATION_ENTITLEMENT_COLLECTION).doc(sanitizeText(ownerUid, 220));
+}
+
+function automationRef(automationId?: string) {
+  const cleanId = sanitizeText(automationId, 220);
+  return cleanId ? db.collection(AUTOMATION_COLLECTION).doc(cleanId) : db.collection(AUTOMATION_COLLECTION).doc();
+}
+
+function automationHistoryCollection(automationId: string) {
+  return automationRef(automationId).collection(AUTOMATION_HISTORY_SUBCOLLECTION);
+}
+
+function normalizeAutomationCadence(value: unknown): string {
+  const normalized = sanitizeText(value, 40).toLowerCase() || "daily";
+  return AUTOMATION_ALLOWED_CADENCES.has(normalized) ? normalized : "daily";
+}
+
+function normalizeAutomationHorizon(value: unknown): string {
+  const normalized = sanitizeText(value, 40).toLowerCase() || "1_month";
+  return AUTOMATION_ALLOWED_HORIZONS.has(normalized) ? normalized : "1_month";
+}
+
+function normalizeAutomationProfile(value: unknown): string {
+  const normalized = sanitizeText(value, 40).toLowerCase() || "avg_wql";
+  return AUTOMATION_ALLOWED_PROFILES.has(normalized) ? normalized : "avg_wql";
+}
+
+function normalizeAutomationModel(value: unknown): string {
+  const normalized = sanitizeText(value, 60).toLowerCase() || "avg_wql_all_algorithms";
+  return AUTOMATION_ALLOWED_MODELS.has(normalized) ? normalized : "avg_wql_all_algorithms";
+}
+
+function automationHorizonPeriods(horizon: string): number {
+  switch (normalizeAutomationHorizon(horizon)) {
+    case "3_days":
+      return 3;
+    case "1_week":
+      return 5;
+    case "2_weeks":
+      return 10;
+    case "3_weeks":
+      return 15;
+    case "3_months":
+      return 63;
+    case "6_months":
+      return 126;
+    case "1_year":
+      return 252;
+    case "1_month":
+    default:
+      return 21;
+  }
+}
+
+function nextAutomationRunAtMs(fromMs = Date.now()): number {
+  return fromMs + 24 * 60 * 60 * 1000;
+}
+
+async function countActiveAutomationsForOwner(ownerUid: string, excludeAutomationId = ""): Promise<number> {
+  const cleanOwnerUid = sanitizeText(ownerUid, 220);
+  const cleanExcludeId = sanitizeText(excludeAutomationId, 220);
+  if (!cleanOwnerUid) return 0;
+  const snap = await db
+    .collection(AUTOMATION_COLLECTION)
+    .where("ownerUid", "==", cleanOwnerUid)
+    .where("active", "==", true)
+    .get();
+  return snap.docs.reduce((count, doc) => {
+    if (cleanExcludeId && doc.id === cleanExcludeId) return count;
+    return count + 1;
+  }, 0);
+}
+
+async function readAutomationEntitlement(ownerUid: string): Promise<Record<string, unknown>> {
+  const snap = await automationEntitlementRef(ownerUid).get();
+  return (snap.data() || {}) as Record<string, unknown>;
+}
+
+async function resolveAutomationContactEmail(
+  ownerUid: string,
+  decodedUser: admin.auth.DecodedIdToken,
+  explicitEmail?: unknown
+): Promise<string> {
+  const provided = normalizeEmail(explicitEmail);
+  if (provided) return provided;
+  const tokenEmail = normalizeEmail(decodedUser.email);
+  if (tokenEmail) return tokenEmail;
+  const entitlement = await readAutomationEntitlement(ownerUid);
+  return normalizeEmail(entitlement.contactEmail);
+}
+
+async function sendAutomationUnlockEmail(input: {
+  to: string;
+  ownerUid: string;
+  productId: string;
+  purchaseSource: string;
+  purchaseReference: string;
+}): Promise<boolean> {
+  const to = normalizeEmail(input.to);
+  if (!to) return false;
+  if (!RESEND_API_KEY) {
+    console.warn("[Automation] unlock email skipped: RESEND_API_KEY is not configured", {
+      ownerUid: sanitizeText(input.ownerUid, 220),
+      to,
+    });
+    return false;
+  }
+  const sourceLabel = sanitizeText(input.purchaseSource, 40) || "native store";
+  const productId = sanitizeText(input.productId, 120) || AUTOMATION_PRODUCT_ID;
+  const purchaseReference = sanitizeText(input.purchaseReference, 240);
+  const subject = "Quantura Automation unlocked";
+  const html = `
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1.6;color:#111827;">
+      <h2 style="margin:0 0 12px;">Quantura Automation unlocked</h2>
+      <p style="margin:0 0 12px;">Your native Forecast Foundry automation access is now active.</p>
+      <ul style="margin:0 0 16px 18px;padding:0;">
+        <li>Permanent unlock</li>
+        <li>Up to ${AUTOMATION_MAX_ACTIVE} active automations</li>
+        <li>Daily automation cadence</li>
+        <li>Forecast history and status tracking</li>
+      </ul>
+      <p style="margin:0 0 12px;"><strong>Source:</strong> ${sourceLabel}</p>
+      <p style="margin:0 0 12px;"><strong>Product:</strong> ${productId}</p>
+      ${purchaseReference ? `<p style="margin:0 0 12px;"><strong>Reference:</strong> ${purchaseReference}</p>` : ""}
+      <p style="margin:0;">Open the Quantura mobile app to create or manage your automations.</p>
+    </div>
+  `.trim();
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: AUTOMATION_EMAIL_FROM,
+      to: [to],
+      reply_to: AUTOMATION_EMAIL_REPLY_TO,
+      subject,
+      html,
+    }),
+  });
+  if (!response.ok) {
+    const detail = sanitizeText(await response.text(), 500);
+    throw new Error(`automation_email_send_failed:${response.status}${detail ? `:${detail}` : ""}`);
+  }
+  return true;
+}
+
+function buildAutomationEntitlementResponse(
+  ownerUid: string,
+  entitlement: Record<string, unknown>,
+  activeAutomationCount: number
+): Record<string, unknown> {
+  const unlockedAtMs = getOptionalTimestampMs(entitlement.unlockedAt || entitlement.createdAt);
+  const refreshedAtMs = getOptionalTimestampMs(entitlement.updatedAt || entitlement.unlockedAt || entitlement.createdAt);
+  return {
+    ownerUid: sanitizeText(ownerUid, 220),
+    automationUnlocked: asBoolean(entitlement.automationUnlocked, false),
+    purchaseSource: sanitizeText(entitlement.purchaseSource, 40),
+    unlockedAtMs,
+    unlockedAt: unlockedAtMs != null ? new Date(unlockedAtMs).toISOString() : "",
+    refreshedAtMs,
+    refreshedAt: refreshedAtMs != null ? new Date(refreshedAtMs).toISOString() : "",
+    productId: sanitizeText(entitlement.productId, 120) || AUTOMATION_PRODUCT_ID,
+    maxActiveAutomations: Math.max(1, Math.floor(asFinite(entitlement.maxActiveAutomations, AUTOMATION_MAX_ACTIVE))),
+    activeAutomationCount,
+    purchaseReference: sanitizeText(entitlement.purchaseReference, 240),
+    contactEmail: normalizeEmail(entitlement.contactEmail),
+  };
+}
+
+function buildAutomationResponse(docId: string, data: Record<string, unknown>): Record<string, unknown> {
+  const createdAtMs = getOptionalTimestampMs(data.createdAt);
+  const updatedAtMs = getOptionalTimestampMs(data.updatedAt || data.createdAt);
+  const lastRunAtMs = getOptionalTimestampMs(data.lastRunAt);
+  const nextRunAtMs = getOptionalTimestampMs(data.nextRunAt);
+  return {
+    id: docId,
+    ticker: normalizeTicker(data.ticker),
+    forecastProfile: normalizeAutomationProfile(data.forecastProfile),
+    model: normalizeAutomationModel(data.model),
+    cadence: normalizeAutomationCadence(data.cadence),
+    horizon: normalizeAutomationHorizon(data.horizon),
+    active: asBoolean(data.active, false),
+    createdAtMs,
+    updatedAtMs,
+    lastRunAtMs,
+    nextRunAtMs,
+    createdAt: createdAtMs != null ? new Date(createdAtMs).toISOString() : "",
+    updatedAt: updatedAtMs != null ? new Date(updatedAtMs).toISOString() : "",
+    lastRunAt: lastRunAtMs != null ? new Date(lastRunAtMs).toISOString() : "",
+    nextRunAt: nextRunAtMs != null ? new Date(nextRunAtMs).toISOString() : "",
+    lastStatus: sanitizeText(data.lastStatus, 80),
+    lastRunId: sanitizeText(data.lastRunId, 220),
+    ownerUid: sanitizeText(data.ownerUid, 220),
+  };
+}
+
+async function readAutomationForOwner(
+  ownerUid: string,
+  automationId: string
+): Promise<{ id: string; data: Record<string, unknown> } | null> {
+  const ref = automationRef(automationId);
+  const snap = await ref.get();
+  if (!snap.exists) return null;
+  const data = (snap.data() || {}) as Record<string, unknown>;
+  if (sanitizeText(data.ownerUid, 220) !== sanitizeText(ownerUid, 220)) return null;
+  return {
+    id: snap.id,
+    data,
+  };
+}
+
+function decodeJwtPayloadSegment(input: string): Record<string, unknown> {
+  const parts = asString(input).split(".");
+  if (parts.length < 2) return {};
+  try {
+    const payload = Buffer.from(parts[1].replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
+    const parsed = JSON.parse(payload);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
+}
+
+function base64UrlEncode(input: Buffer | string): string {
+  return Buffer.from(input)
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+function createAppleServerJwt(): string {
+  if (!APPLE_IAP_ISSUER_ID || !APPLE_IAP_KEY_ID || !APPLE_IAP_PRIVATE_KEY) {
+    throw new Error("apple_iap_server_credentials_missing");
+  }
+  const header = {
+    alg: "ES256",
+    kid: APPLE_IAP_KEY_ID,
+    typ: "JWT",
+  };
+  const now = Math.floor(Date.now() / 1000);
+  const claims = {
+    iss: APPLE_IAP_ISSUER_ID,
+    iat: now,
+    exp: now + 300,
+    aud: "appstoreconnect-v1",
+    bid: APPLE_IAP_BUNDLE_ID,
+  };
+  const signingInput = `${base64UrlEncode(JSON.stringify(header))}.${base64UrlEncode(JSON.stringify(claims))}`;
+  const signature = crypto.sign("sha256", Buffer.from(signingInput), crypto.createPrivateKey(APPLE_IAP_PRIVATE_KEY));
+  return `${signingInput}.${base64UrlEncode(signature)}`;
+}
+
+async function verifyAppleAutomationPurchase(input: {
+  transactionId: string;
+  productId: string;
+}): Promise<{
+  productId: string;
+  purchaseReference: string;
+  unlockedAtMs: number;
+  source: "apple";
+}> {
+  const transactionId = sanitizeText(input.transactionId, 220);
+  const requestedProductId = sanitizeText(input.productId, 120) || AUTOMATION_PRODUCT_ID;
+  if (!transactionId) {
+    throw new Error("missing_transaction_id");
+  }
+  if (!APPLE_IAP_ISSUER_ID || !APPLE_IAP_KEY_ID || !APPLE_IAP_PRIVATE_KEY) {
+    throw new Error("apple_iap_server_credentials_missing");
+  }
+  const endpoint =
+    APPLE_IAP_ENVIRONMENT.toLowerCase() === "sandbox"
+      ? `https://api.storekit-sandbox.itunes.apple.com/inApps/v1/transactions/${encodeURIComponent(transactionId)}`
+      : `https://api.storekit.itunes.apple.com/inApps/v1/transactions/${encodeURIComponent(transactionId)}`;
+  const response = await fetch(endpoint, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${createAppleServerJwt()}`,
+      Accept: "application/json",
+    },
+  });
+  if (!response.ok) {
+    throw new Error(`apple_iap_validation_failed:${response.status}`);
+  }
+  const payload = (await response.json()) as Record<string, unknown>;
+  const signedTransactionInfo = asString(payload.signedTransactionInfo);
+  const decoded = decodeJwtPayloadSegment(signedTransactionInfo);
+  const bundleId = sanitizeText(decoded.bundleId, 220);
+  const productId = sanitizeText(decoded.productId, 120);
+  const revocationReason = sanitizeText(decoded.revocationReason, 40);
+  const revocationDate = sanitizeText(decoded.revocationDate, 80);
+  if (bundleId && bundleId !== APPLE_IAP_BUNDLE_ID) {
+    throw new Error("apple_bundle_mismatch");
+  }
+  if (productId !== requestedProductId || productId !== AUTOMATION_PRODUCT_ID) {
+    throw new Error("apple_product_mismatch");
+  }
+  if (revocationReason || revocationDate) {
+    throw new Error("apple_purchase_revoked");
+  }
+  const purchaseDateMs = Math.max(0, Math.floor(asFinite(decoded.purchaseDate, Date.now())));
+  return {
+    productId,
+    purchaseReference: sanitizeText(decoded.originalTransactionId || decoded.transactionId || transactionId, 240) || transactionId,
+    unlockedAtMs: purchaseDateMs || Date.now(),
+    source: "apple",
+  };
+}
+
+async function fetchGooglePlayProductPurchase(input: {
+  packageName: string;
+  productId: string;
+  purchaseToken: string;
+}): Promise<Record<string, unknown>> {
+  const client = await GOOGLE_PLAY_PUBLISHER_AUTH.getClient();
+  const endpoint = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${encodeURIComponent(
+    input.packageName
+  )}/purchases/products/${encodeURIComponent(input.productId)}/tokens/${encodeURIComponent(input.purchaseToken)}`;
+  const response = await client.request({
+    url: endpoint,
+    method: "GET",
+  });
+  return (response.data || {}) as Record<string, unknown>;
+}
+
+async function acknowledgeGooglePlayProductPurchase(input: {
+  packageName: string;
+  productId: string;
+  purchaseToken: string;
+  developerPayload: string;
+}): Promise<void> {
+  const client = await GOOGLE_PLAY_PUBLISHER_AUTH.getClient();
+  const endpoint = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${encodeURIComponent(
+    input.packageName
+  )}/purchases/products/${encodeURIComponent(input.productId)}/tokens/${encodeURIComponent(input.purchaseToken)}:acknowledge`;
+  await client.request({
+    url: endpoint,
+    method: "POST",
+    data: {
+      developerPayload: sanitizeText(input.developerPayload, 220),
+    },
+  });
+}
+
+async function verifyGoogleAutomationPurchase(input: {
+  packageName: string;
+  productId: string;
+  purchaseToken: string;
+  ownerUid: string;
+}): Promise<{
+  productId: string;
+  purchaseReference: string;
+  unlockedAtMs: number;
+  source: "google";
+}> {
+  const productId = sanitizeText(input.productId, 120) || AUTOMATION_PRODUCT_ID;
+  const purchaseToken = sanitizeText(input.purchaseToken, 400);
+  const packageName = sanitizeText(input.packageName, 220) || GOOGLE_PLAY_ANDROID_PACKAGE;
+  if (!purchaseToken) {
+    throw new Error("missing_purchase_token");
+  }
+  const payload = await fetchGooglePlayProductPurchase({
+    packageName,
+    productId,
+    purchaseToken,
+  });
+  const purchaseState = Math.floor(asFinite(payload.purchaseState, NaN));
+  if (!Number.isFinite(purchaseState) || purchaseState !== 0) {
+    throw new Error("google_purchase_not_completed");
+  }
+  const acknowledgementState = Math.floor(asFinite(payload.acknowledgementState, NaN));
+  if (!Number.isFinite(acknowledgementState) || acknowledgementState === 0) {
+    await acknowledgeGooglePlayProductPurchase({
+      packageName,
+      productId,
+      purchaseToken,
+      developerPayload: input.ownerUid,
+    });
+  }
+  return {
+    productId,
+    purchaseReference: sanitizeText(payload.orderId, 240) || purchaseToken,
+    unlockedAtMs: Math.max(0, Math.floor(asFinite(payload.purchaseTimeMillis, Date.now()))),
+    source: "google",
+  };
+}
+
+async function syncAutomationEntitlementState(
+  ownerUid: string,
+  patch: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const activeAutomationCount = await countActiveAutomationsForOwner(ownerUid);
+  await automationEntitlementRef(ownerUid).set(
+    {
+      automationUnlocked: asBoolean(patch.automationUnlocked, false),
+      purchaseSource: sanitizeText(patch.purchaseSource, 40),
+      unlockedAt: patch.unlockedAt || admin.firestore.FieldValue.serverTimestamp(),
+      productId: sanitizeText(patch.productId, 120) || AUTOMATION_PRODUCT_ID,
+      maxActiveAutomations: AUTOMATION_MAX_ACTIVE,
+      activeAutomationCount,
+      purchaseReference: sanitizeText(patch.purchaseReference, 240),
+      contactEmail: normalizeEmail(patch.contactEmail),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+  return readAutomationEntitlement(ownerUid);
+}
+
+async function requireAutomationUnlocked(ownerUid: string): Promise<Record<string, unknown>> {
+  const entitlement = await readAutomationEntitlement(ownerUid);
+  if (!asBoolean(entitlement.automationUnlocked, false)) {
+    throw new Error("automation_locked");
+  }
+  return entitlement;
+}
+
+async function startAutomationForecastRun(
+  ownerUid: string,
+  automationId: string,
+  automationData: Record<string, unknown>,
+  trigger: "manual" | "scheduled" | "activation"
+): Promise<Record<string, unknown>> {
+  await requireAutomationUnlocked(ownerUid);
+  const ticker = normalizeTicker(automationData.ticker);
+  if (!ticker) {
+    throw new Error("invalid_ticker");
+  }
+  const horizonKey = normalizeAutomationHorizon(automationData.horizon);
+  const today = new Date().toISOString().slice(0, 10);
+  const dataset = await downloadHistoricalStockDataset({
+    ticker,
+    interval: "1d",
+    start: "",
+    end: today,
+    useAllHistory: true,
+  });
+  const runRef = db.collection("autopilot_requests").doc();
+  const owner = safePathSegment(ownerUid, 120) || "user";
+  const run = safePathSegment(runRef.id, 120) || "run";
+  const datasetFile = await writeStorageTextArtifact(
+    `predictions/${owner}/automation/${safePathSegment(automationId, 120) || "automation"}/${run}/dataset.csv`,
+    dataset.csvText,
+    "text/csv"
+  );
+  const baseDoc: Record<string, unknown> = {
+    userId: ownerUid,
+    workspaceId: ownerUid,
+    title: `${ticker} Quantura Automation`,
+    notes: "",
+    mode: "mobile_automation_run",
+    sourceType: "mobile_automation",
+    status: "dataset_ready",
+    ticker,
+    dataset: {
+      ticker: dataset.ticker,
+      interval: dataset.interval,
+      rowCount: dataset.rowCount,
+      columns: dataset.columns,
+      previewRows: dataset.previewRows,
+      trainingEligible: dataset.trainingEligible,
+      sourceTimeColumn: dataset.sourceTimeColumn,
+      sourceValueColumn: dataset.sourceValueColumn,
+      sourceItemColumn: dataset.sourceItemColumn,
+      originalHeaders: dataset.columns,
+      start: "",
+      end: today,
+      useAllHistory: true,
+    },
+    autopilot: {},
+    analysis: {},
+    automation: {
+      automationId,
+      trigger,
+      cadence: normalizeAutomationCadence(automationData.cadence),
+      horizon: horizonKey,
+      forecastProfile: normalizeAutomationProfile(automationData.forecastProfile),
+      model: normalizeAutomationModel(automationData.model),
+    },
+    files: {
+      datasetCsv: {
+        ...datasetFile,
+      },
+    },
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+  await runRef.set(baseDoc, { merge: false });
+  const started = await startAutopilotTraining({
+    runId: runRef.id,
+    userId: ownerUid,
+    ticker,
+    interval: "1d",
+    horizon: automationHorizonPeriods(horizonKey),
+    quantiles: ["0.1", "0.5", "0.9"],
+    csvText: dataset.csvText,
+  });
+  const patch: Record<string, unknown> = {
+    status: "running",
+    autopilot: {
+      jobName: started.jobName,
+      jobArn: started.jobArn,
+      inputS3Uri: started.inputS3Uri,
+      outputS3Uri: started.outputS3Uri,
+      forecastFrequency: started.forecastFrequency,
+      forecastHorizon: automationHorizonPeriods(horizonKey),
+      quantiles: started.quantiles,
+      algorithms: started.algorithms,
+      runtimeSeconds: started.runtimeSeconds,
+      objectiveMetric: {
+        name: "AverageWeightedQuantileLoss",
+        value: null,
+      },
+      status: "InProgress",
+    },
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+  await runRef.set(patch, { merge: true });
+  const refreshedSnap = await runRef.get();
+  const refreshedData = (refreshedSnap.data() || { ...baseDoc, ...patch }) as Record<string, unknown>;
+  const requestId = await syncAutopilotMyRequest(ownerUid, runRef.id, refreshedData);
+  await runRef.set(
+    {
+      exploreRequestId: requestId,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+  await automationRef(automationId).collection(AUTOMATION_HISTORY_SUBCOLLECTION).doc(runRef.id).set(
+    {
+      ownerUid,
+      automationId,
+      autopilotRunId: runRef.id,
+      trigger,
+      status: "running",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+  await automationRef(automationId).set(
+    {
+      lastRunAt: admin.firestore.FieldValue.serverTimestamp(),
+      lastRunId: runRef.id,
+      lastStatus: "running",
+      nextRunAt: admin.firestore.Timestamp.fromMillis(nextAutomationRunAtMs()),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+  const finalSnap = await runRef.get();
+  return toAutopilotRunResponse(runRef.id, (finalSnap.data() || refreshedData) as Record<string, unknown>);
+}
+
+async function listAutomationHistoryForOwner(
+  ownerUid: string,
+  automationId: string,
+  limit = 20
+): Promise<Record<string, unknown>[]> {
+  const snap = await automationRef(automationId)
+    .collection(AUTOMATION_HISTORY_SUBCOLLECTION)
+    .orderBy("createdAt", "desc")
+    .limit(Math.max(1, Math.min(limit, 40)))
+    .get();
+  const items = await Promise.all(
+    snap.docs.map(async (doc) => {
+      const data = (doc.data() || {}) as Record<string, unknown>;
+      if (sanitizeText(data.ownerUid, 220) !== sanitizeText(ownerUid, 220)) {
+        return null;
+      }
+      const runId = sanitizeText(data.autopilotRunId || doc.id, 220);
+      const ownedRun = runId ? await readAutopilotRunForOwner(ownerUid, runId) : null;
+      return {
+        id: doc.id,
+        trigger: sanitizeText(data.trigger, 40),
+        status: sanitizeText(asPlainObject(ownedRun?.data || {}).status || data.status, 60),
+        createdAtMs: getTimestampMs(data.createdAt),
+        updatedAtMs: getTimestampMs(data.updatedAt || data.createdAt),
+        autopilotRunId: runId,
+        autopilotRun: ownedRun ? await toAutopilotRunResponse(ownedRun.id, ownedRun.data) : null,
+      };
+    })
+  );
+  return items.filter(Boolean) as Record<string, unknown>[];
+}
+
+async function syncAutomationRunProjection(runId: string, data: Record<string, unknown>): Promise<void> {
+  const automation = asPlainObject(data.automation);
+  const automationId = sanitizeText(automation.automationId, 220);
+  const ownerUid = sanitizeText(data.userId, 220);
+  if (!automationId || !ownerUid) return;
+  const status = sanitizeText(data.status, 60) || sanitizeText(asPlainObject(data.autopilot).status, 60) || "queued";
+  await automationRef(automationId).set(
+    {
+      lastRunId: runId,
+      lastStatus: status,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      ...(status === "completed" || status === "failed"
+        ? {}
+        : { nextRunAt: admin.firestore.Timestamp.fromMillis(nextAutomationRunAtMs()) }),
+    },
+    { merge: true }
+  );
+  await automationHistoryCollection(automationId).doc(runId).set(
+    {
+      ownerUid,
+      automationId,
+      autopilotRunId: runId,
+      trigger: sanitizeText(automation.trigger, 40),
+      status,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
 }
 
 function computeDecay(recencyHours: number): number {
@@ -2162,6 +4623,85 @@ function extractTickers(payload: Record<string, unknown>): string[] {
   return Array.from(tickers).slice(0, 8);
 }
 
+function compactPreviewMetrics(source: Record<string, unknown>): Record<string, string | number> {
+  const metrics: Record<string, string | number> = {};
+  Object.entries(source || {})
+    .slice(0, 6)
+    .forEach(([key, value]) => {
+      const cleanKey = sanitizeText(key, 40);
+      if (!cleanKey) return;
+      if (typeof value === "number" && Number.isFinite(value)) {
+        metrics[cleanKey] = value;
+        return;
+      }
+      const text = sanitizeText(value, 120);
+      if (text) metrics[cleanKey] = text;
+    });
+  return metrics;
+}
+
+function buildMyRequestPreviewMetrics(payload: Record<string, unknown>, postType: PostType): Record<string, string | number> {
+  const fallback: Record<string, unknown> = {};
+  if (postType === "screener") {
+    const count = Array.isArray(payload.results) ? payload.results.length : asFinite(payload.resultsCount || payload.resultsFound, 0);
+    if (count > 0) fallback.Results = Math.floor(count);
+    const topSymbols = Array.isArray(payload.topSymbols)
+      ? payload.topSymbols.map((value) => normalizeTicker(value)).filter(Boolean).slice(0, 3)
+      : [];
+    if (topSymbols.length) fallback.Top = topSymbols.join(", ");
+    const modelUsed = sanitizeText(payload.modelUsed || payload.model, 80);
+    if (modelUsed) fallback.Model = modelUsed;
+  } else if (postType === "agent") {
+    const provider = sanitizeText(payload.provider, 80);
+    if (provider) fallback.Provider = provider;
+    const model = sanitizeText(payload.model, 80);
+    if (model) fallback.Model = model;
+    const prediction = sanitizeText(payload.prediction || payload.direction, 80);
+    if (prediction) fallback.Direction = prediction;
+    const target = sanitizeText(payload.targetPrice || payload.target || payload.Target, 80);
+    if (target) fallback.Target = target;
+    const confidence = sanitizeText(payload.confidence || payload.Confidence, 80);
+    if (confidence) fallback.Confidence = confidence;
+    const latencyMs = asFinite(payload.latencyMs, NaN);
+    if (Number.isFinite(latencyMs) && latencyMs > 0) {
+      fallback.Latency = `${Math.max(1, Math.round(latencyMs / 1000))}s`;
+    }
+  }
+  return compactPreviewMetrics(fallback);
+}
+
+function buildMyRequestExploreCaption(
+  type: MyRequestType,
+  title: string,
+  input: Record<string, unknown>,
+  outputsMeta: Record<string, unknown>,
+  ticker: string
+): string {
+  const summary = sanitizeText(outputsMeta.summary || outputsMeta.answer || input.question || input.notes, 400);
+  if (summary) return summary;
+  if (type === "screener") {
+    const count = asFinite(outputsMeta.resultsCount || outputsMeta.resultsFound, 0);
+    const topSymbols = Array.isArray(outputsMeta.topSymbols)
+      ? outputsMeta.topSymbols.map((value) => normalizeTicker(value)).filter(Boolean).slice(0, 4)
+      : [];
+    return sanitizeText(
+      `${title} surfaced ${Math.max(0, Math.floor(count))} ranked candidates.${topSymbols.length ? ` Top names: ${topSymbols.join(", ")}.` : ""}`,
+      400
+    );
+  }
+  if (type === "indicator") {
+    const direction = sanitizeText(outputsMeta.prediction, 80);
+    return sanitizeText(
+      `${ticker || title} indicator analysis is ready${direction ? ` with a ${direction} bias.` : "."}`,
+      400
+    );
+  }
+  if (type === "modelCouncil") {
+    return sanitizeText(`${ticker || title} Model Council response is ready for review.`, 400);
+  }
+  return sanitizeText(title, 400);
+}
+
 function extractPreview(payload: Record<string, unknown>, postType: PostType): PostDoc["preview"] {
   const imageUrl = sanitizeText(payload.imageUrl || payload.chartUrl || payload.previewImage || payload.thumbnailUrl, 1000);
   const metricsSource = payload.metrics && typeof payload.metrics === "object"
@@ -2170,25 +4710,15 @@ function extractPreview(payload: Record<string, unknown>, postType: PostType): P
     ? (payload.summary as Record<string, unknown>)
     : null;
 
-  const metrics: Record<string, string | number> = {};
-  if (metricsSource) {
-    Object.entries(metricsSource)
-      .slice(0, 6)
-      .forEach(([key, value]) => {
-        const cleanKey = sanitizeText(key, 40);
-        if (!cleanKey) return;
-        if (typeof value === "number" && Number.isFinite(value)) {
-          metrics[cleanKey] = value;
-        } else {
-          const text = sanitizeText(value, 120);
-          if (text) metrics[cleanKey] = text;
-        }
-      });
-  }
+  const metrics: Record<string, string | number> = metricsSource ? compactPreviewMetrics(metricsSource) : {};
 
   if (postType === "screener" && !Object.keys(metrics).length) {
     const count = Array.isArray(payload.results) ? payload.results.length : asFinite(payload.resultsFound, 0);
     if (count > 0) metrics.results = Math.floor(count);
+  }
+
+  if (!Object.keys(metrics).length) {
+    Object.assign(metrics, buildMyRequestPreviewMetrics(payload, postType));
   }
 
   if (imageUrl) {
@@ -2478,6 +5008,13 @@ function parsePolymarketOutcomePrices(raw: unknown): number[] {
     .slice(0, 16);
 }
 
+function parsePolymarketClobTokenIds(raw: unknown): string[] {
+  return parseGammaArray(raw)
+    .map((value) => sanitizeText(value, 180))
+    .filter(Boolean)
+    .slice(0, 16);
+}
+
 function polymarketUrlFromSlug(slug: unknown): string {
   const clean = sanitizeText(slug, 240).replace(/^\/+|\/+$/g, "");
   if (!clean) return "";
@@ -2492,9 +5029,11 @@ function normalizePolymarketMarket(raw: unknown, event: Record<string, unknown>)
 
   const parsedOutcomes = parsePolymarketOutcomes(market.outcomes);
   const parsedPrices = parsePolymarketOutcomePrices(market.outcomePrices);
+  const parsedTokenIds = parsePolymarketClobTokenIds(market.clobTokenIds);
   const alignedLength = Math.min(parsedOutcomes.length, parsedPrices.length);
   const outcomes = alignedLength > 0 ? parsedOutcomes.slice(0, alignedLength) : [];
   const outcomePrices = alignedLength > 0 ? parsedPrices.slice(0, alignedLength) : [];
+  const clobTokenIds = alignedLength > 0 ? parsedTokenIds.slice(0, alignedLength) : [];
 
   const topOutcomes = outcomes
     .map((label, index) => ({ label, prob: outcomePrices[index] }))
@@ -2519,6 +5058,8 @@ function normalizePolymarketMarket(raw: unknown, event: Record<string, unknown>)
     id,
     question,
     slug: sanitizeText(market.slug, 220) || undefined,
+    groupItemTitle: sanitizeText(market.groupItemTitle || market.group_item_title || market.targetLabel, 160) || undefined,
+    description: sanitizeText(market.description || market.subtitle, 500) || undefined,
     endDate: sanitizeText(market.endDate || market.end_date, 40) || undefined,
     category: sanitizeText(market.category || event.category, 80) || undefined,
     image: sanitizeText(market.image, 600) || undefined,
@@ -2527,6 +5068,7 @@ function normalizePolymarketMarket(raw: unknown, event: Record<string, unknown>)
     liquidityUsd: parseUsdNumber(market.liquidity),
     outcomes,
     outcomePrices,
+    clobTokenIds,
     isBinary: outcomes.length === 2,
     yesProb,
     topOutcomes,
@@ -2605,12 +5147,15 @@ function flattenPolymarketMarkets(
         id: marketId,
         question: sanitizeText(market.question, 320),
         slug: marketSlug || undefined,
+        groupItemTitle: sanitizeText(market.groupItemTitle, 160) || undefined,
+        description: sanitizeText(market.description, 500) || undefined,
         category: sanitizeText(market.category, 80) || undefined,
         endDate: sanitizeText(market.endDate, 40) || undefined,
         volumeUsd: market.volumeUsd,
         liquidityUsd: market.liquidityUsd,
         outcomes: Array.isArray(market.outcomes) ? market.outcomes : [],
         outcomePrices: Array.isArray(market.outcomePrices) ? market.outcomePrices : [],
+        clobTokenIds: Array.isArray(market.clobTokenIds) ? market.clobTokenIds : [],
         isBinary: Boolean(market.isBinary),
         yesProb: typeof market.yesProb === "number" ? market.yesProb : undefined,
         topOutcomes: Array.isArray(market.topOutcomes) ? market.topOutcomes : [],
@@ -4021,6 +6566,81 @@ function isPostVisibleToViewer(post: Record<string, unknown>, viewerUid: string 
   return viewerUid === asString(post.authorUid);
 }
 
+function postSupportsExpandedBody(postId: string, post: Record<string, unknown>): boolean {
+  if (Boolean(sanitizeRichText(post.body, 200))) return true;
+  const sourceRef = asPlainObject(post.sourceRef);
+  if (sanitizeText(sourceRef.collection, 80) === MODEL_COUNCIL_RESPONSE_COLLECTION && sanitizeText(sourceRef.id, 220)) return true;
+  return sanitizeText(postId, 220).startsWith("model_council_");
+}
+
+async function resolvePostBody(postId: string, post: Record<string, unknown>): Promise<{ body: string; bodyFormat: "markdown" | "text"; hasBody: boolean }> {
+  const directBody = sanitizeRichText(post.body, 24000);
+  const directFormat = sanitizeText(post.bodyFormat, 20).toLowerCase() === "text" ? "text" : "markdown";
+  if (directBody) {
+    return {
+      body: directBody,
+      bodyFormat: directFormat,
+      hasBody: true,
+    };
+  }
+
+  const sourceRef = asPlainObject(post.sourceRef);
+  const sourceCollection = sanitizeText(sourceRef.collection, 80);
+  const sourceId = sanitizeText(sourceRef.id, 220);
+  const fallbackSourceId =
+    sourceCollection === MODEL_COUNCIL_RESPONSE_COLLECTION && sourceId
+      ? sourceId
+      : sanitizeText(postId, 220).startsWith("model_council_")
+      ? sanitizeText(postId, 220).slice("model_council_".length)
+      : "";
+  if (fallbackSourceId) {
+    const sourceSnap = await db.collection(MODEL_COUNCIL_RESPONSE_COLLECTION).doc(fallbackSourceId).get().catch(() => null);
+    if (sourceSnap?.exists) {
+      const sourceData = (sourceSnap.data() || {}) as Record<string, unknown>;
+      const sourceBody = sanitizeRichText(sourceData.answer, 24000);
+      if (sourceBody) {
+        return {
+          body: sourceBody,
+          bodyFormat: "markdown",
+          hasBody: true,
+        };
+      }
+    }
+  }
+
+  const authorUid = sanitizeText(post.authorUid, 220);
+  if (authorUid) {
+    const requestSnap = await db
+      .collection("users")
+      .doc(authorUid)
+      .collection("requests")
+      .where("explorePostId", "==", sanitizeText(postId, 220))
+      .limit(1)
+      .get()
+      .catch(() => null);
+    if (requestSnap && !requestSnap.empty) {
+      const requestDoc = requestSnap.docs[0];
+      const requestData = (requestDoc.data() || {}) as Record<string, unknown>;
+      const type = normalizeMyRequestType(requestData.type) || "forecast";
+      const outputsMeta = trimOutputsMeta(requestData.outputsMeta);
+      const requestBody = buildMyRequestExploreBody(type, outputsMeta);
+      if (requestBody) {
+        return {
+          body: requestBody,
+          bodyFormat: "markdown",
+          hasBody: true,
+        };
+      }
+    }
+  }
+
+  return {
+    body: "",
+    bodyFormat: "markdown",
+    hasBody: postSupportsExpandedBody(postId, post),
+  };
+}
+
 function toPostResponse(
   snap: admin.firestore.QueryDocumentSnapshot | admin.firestore.DocumentSnapshot,
   viewerState: { liked: boolean; reposted: boolean; saved: boolean } = { liked: false, reposted: false, saved: false }
@@ -4043,6 +6663,8 @@ function toPostResponse(
     preview: data.preview || { kind: "summary" },
     targetUrl: asString(data.targetUrl, "/explore"),
     visibility: asString(data.visibility, "public"),
+    hasBody: postSupportsExpandedBody(snap.id, data),
+    bodyFormat: sanitizeText(data.bodyFormat, 20).toLowerCase() === "text" ? "text" : "markdown",
     createdAt: new Date(createdAtMs).toISOString(),
     createdAtMs,
     updatedAt: new Date(updatedAtMs).toISOString(),
@@ -4715,6 +7337,559 @@ ROUTES.get("/health", (_req, res) => {
   res.status(200).json({ ok: true, service: "quantura-explore-api", ts: new Date().toISOString() });
 });
 
+ROUTES.get("/ticker/history", async (req, res) => {
+  try {
+    const query = asPlainObject(req.query);
+    const ticker = normalizeTicker(query.ticker || query.symbol);
+    if (!ticker) {
+      res.status(400).json({ error: "invalid_ticker" });
+      return;
+    }
+    const payload = await fetchYahooHistoryBars({
+      ticker,
+      interval: query.interval,
+      start: query.start,
+      end: query.end,
+    });
+    res.status(200).json(payload);
+  } catch (error: any) {
+    const detail = sanitizeText(error?.message || error, 260) || "history_lookup_failed";
+    const status = /ticker is required|invalid_ticker|start|end/i.test(detail) ? 400 : 502;
+    res.status(status).json({ error: status === 400 ? "invalid_history_request" : "history_lookup_failed", detail });
+  }
+});
+
+ROUTES.post("/forecast/run", async (req, res) => {
+  try {
+    const user = await verifyRequestUser(req, true);
+    if (!user) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const body = asPlainObject(req.body);
+    const ticker = normalizeTicker(body.ticker);
+    const interval = sanitizeText(body.interval, 10).toLowerCase() === "1h" ? "1h" : "1d";
+    const horizonLimit = interval === "1h" ? 240 : 365;
+    const horizon = Math.max(1, Math.min(horizonLimit, Math.floor(asFinite(body.horizon, 0))));
+    if (!ticker) {
+      res.status(400).json({ error: "invalid_ticker" });
+      return;
+    }
+    if (!horizon) {
+      res.status(400).json({ error: "invalid_horizon" });
+      return;
+    }
+
+    const history = await fetchYahooHistoryBars({
+      ticker,
+      interval,
+      start: body.start,
+      end: body.end,
+    });
+    const forecast = buildForecastFromHistory({
+      ticker,
+      interval,
+      horizon,
+      quantiles: DEFAULT_FORECAST_QUANTILES,
+      historyRows: history.rows,
+    });
+
+    const createdAt = admin.firestore.FieldValue.serverTimestamp();
+    const title = `${ticker} forecast`;
+    const docRef = db.collection("forecast_requests").doc();
+    const payload: Record<string, unknown> = {
+      userId: user.uid,
+      userEmail: sanitizeText((user as any)?.email, 320),
+      workspaceId: sanitizeText(body.workspaceId, 220) || user.uid,
+      ticker,
+      title,
+      interval,
+      horizon,
+      service: "prophet",
+      engine: forecast.engine,
+      status: "completed",
+      quantiles: forecast.quantiles,
+      start: sanitizeText(body.start, 40),
+      end: history.actualEnd,
+      forecastRows: forecast.forecastRows,
+      forecastPreview: forecast.forecastPreview,
+      forecastQuantilesEnd: forecast.forecastQuantilesEnd,
+      metrics: forecast.metrics,
+      serviceMessage: forecast.serviceMessage,
+      tradeRationale: forecast.tradeRationale,
+      createdAt,
+      updatedAt: createdAt,
+      meta: trimOutputsMeta(body.meta),
+    };
+    await docRef.set(payload, { merge: false });
+
+    await upsertOwnedMyRequestFromSystem(user.uid, {
+      requestId: buildMyRequestDocId("forecast", docRef.id),
+      type: "forecast",
+      title,
+      input: {
+        ticker,
+        interval,
+        horizon,
+        service: "prophet",
+        quantiles: forecast.quantiles,
+      },
+      outputsMeta: {
+        summary: forecast.serviceMessage,
+        serviceMessage: forecast.serviceMessage,
+        service: "prophet",
+        interval,
+        forecastRowsCount: forecast.forecastRows.length,
+        metrics: trimOutputsMeta(forecast.metrics),
+        topSymbols: [ticker],
+      },
+      sourceRef: {
+        collection: "forecast_requests",
+        id: docRef.id,
+      },
+    });
+
+    res.status(200).json({
+      ok: true,
+      requestId: docRef.id,
+      ticker,
+      interval,
+      horizon,
+      service: "prophet",
+      engine: forecast.engine,
+      status: "completed",
+      quantiles: forecast.quantiles,
+      forecastRows: forecast.forecastRows,
+      forecastSeries: forecast.forecastRows,
+      forecastPreview: forecast.forecastPreview,
+      forecastQuantilesEnd: forecast.forecastQuantilesEnd,
+      metrics: forecast.metrics,
+      serviceMessage: forecast.serviceMessage,
+      tradeRationale: forecast.tradeRationale,
+    });
+  } catch (error: any) {
+    const detail = sanitizeText(error?.message || error, 260) || "forecast_run_failed";
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (/quantile|required|history|horizon/i.test(detail)) {
+      res.status(400).json({ error: "forecast_run_failed", detail });
+      return;
+    }
+    console.error("[Forecast] run failed", error);
+    res.status(500).json({ error: "forecast_run_failed", detail });
+  }
+});
+
+ROUTES.delete("/forecast/:forecastId", async (req, res) => {
+  try {
+    const user = await verifyRequestUser(req, true);
+    if (!user) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const forecastId = sanitizeText(req.params.forecastId, 220);
+    if (!forecastId) {
+      res.status(400).json({ error: "invalid_forecast_id" });
+      return;
+    }
+    const ref = db.collection("forecast_requests").doc(forecastId);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      res.status(404).json({ error: "forecast_not_found" });
+      return;
+    }
+    const data = (snap.data() || {}) as Record<string, unknown>;
+    if (sanitizeText(data.userId, 220) !== user.uid) {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
+    await ref.delete();
+    res.status(200).json({ ok: true, deleted: true, forecastId });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Forecast] delete failed", error);
+    res.status(500).json({ error: "forecast_delete_failed" });
+  }
+});
+
+ROUTES.post("/screener/run", async (req, res) => {
+  try {
+    const user = await verifyRequestUser(req, true);
+    if (!user) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    if (!githubActionsConfigured()) {
+      res.status(500).json({ error: "screener_workflow_not_configured", detail: "GitHub Actions token is not configured." });
+      return;
+    }
+    const body = asPlainObject(req.body);
+    const marketCapValue = body.minMarketCap ?? body.minCap ?? asPlainObject(body.marketCapFilter).value;
+    const minMarketCap = Math.max(0, Math.floor(asFinite(marketCapValue, 100_000_000_000)));
+    const autoPublishRequested = asBoolean(body.autoPublish, true);
+    const createdAt = admin.firestore.FieldValue.serverTimestamp();
+    const docRef = db.collection("screener_runs").doc();
+    const runKey = buildScreenerWorkflowRunKey(docRef.id);
+    const payload: Record<string, unknown> = {
+      userId: user.uid,
+      userEmail: sanitizeText((user as any)?.email, 320),
+      workspaceId: sanitizeText(body.workspaceId, 220) || user.uid,
+      source: "github_actions",
+      market: "us",
+      universe: "both",
+      minMarketCap,
+      title: `Stock screener · ${fmtCompactCurrency(minMarketCap) || "$100B"} floor`,
+      notes: "",
+      status: "queued",
+      results: [],
+      resultsFound: 0,
+      serviceMessage: `Queued GitHub Actions stock screener above the ${fmtCompactCurrency(minMarketCap)} floor.`,
+      filters: {},
+      appliedFilters: [`Market cap >= ${fmtCompactCurrency(minMarketCap)}`],
+      ignoredFilters: [],
+      modelUsed: "daily_prophet_signal_tracker",
+      modelProvider: "github_actions",
+      modelTier: "workflow",
+      autoPublishRequested,
+      autoPublishPending: autoPublishRequested,
+      workflowRunKey: runKey,
+      workflowStatus: "queued",
+      workflowConclusion: "",
+      workflowName: GITHUB_SCREENER_WORKFLOW,
+      workflowBranch: GITHUB_ACTIONS_BRANCH,
+      isPublic: false,
+      createdAt,
+      updatedAt: createdAt,
+      meta: trimOutputsMeta(body.meta),
+    };
+    await docRef.set(payload, { merge: false });
+
+    let requestResponse = await syncScreenerMyRequestFromRun(user.uid, docRef.id, { ...payload, id: docRef.id }, false);
+
+    try {
+      await dispatchGithubScreenerWorkflow({ runKey, minMarketCap });
+      const workflowRun = await waitForGithubWorkflowRun(runKey, 12000).catch(() => null);
+      const dispatchPatch: Record<string, unknown> = {
+        status: workflowRun ? "running" : "queued",
+        workflowStatus: workflowRun?.status || "queued",
+        serviceMessage: workflowRun
+          ? `GitHub Actions is running the stock screener above the ${fmtCompactCurrency(minMarketCap)} floor.`
+          : `GitHub Actions dispatch accepted for the ${fmtCompactCurrency(minMarketCap)} floor.`,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      };
+      if (workflowRun) {
+        dispatchPatch.workflowRunId = workflowRun.id;
+        dispatchPatch.workflowRunUrl = workflowRun.htmlUrl;
+        dispatchPatch.workflowRunNumber = workflowRun.runNumber || null;
+        const workflowJobs = await listGithubJobsForRun(workflowRun.id).catch(() => []);
+        if (workflowJobs.length) {
+          Object.assign(dispatchPatch, buildGithubWorkflowProgressSnapshot(workflowJobs));
+          if (sanitizeText(dispatchPatch.workflowProgress, 240)) {
+            dispatchPatch.serviceMessage = sanitizeText(dispatchPatch.workflowProgress, 240);
+          }
+        }
+      }
+      await docRef.set(dispatchPatch, { merge: true });
+    } catch (dispatchError: any) {
+      const detail = sanitizeText(dispatchError?.message || dispatchError, 260) || "github_workflow_dispatch_failed";
+      await docRef.set(
+        {
+          status: "failed",
+          workflowStatus: "failed",
+          workflowConclusion: "dispatch_failed",
+          serviceMessage: detail,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      const failedSnap = await docRef.get().catch(() => null);
+      if (failedSnap?.exists) {
+        requestResponse =
+          (await syncScreenerMyRequestFromRun(
+            user.uid,
+            docRef.id,
+            { id: failedSnap.id, ...(failedSnap.data() || {}) } as Record<string, unknown>,
+            false
+          )) || requestResponse;
+      }
+      res.status(500).json({ error: "screener_run_failed", detail });
+      return;
+    }
+
+    const refreshed = await docRef.get();
+    const result: Record<string, unknown> = { id: refreshed.id, ...(refreshed.data() || {}) };
+    requestResponse = (await syncScreenerMyRequestFromRun(user.uid, docRef.id, result, false)) || requestResponse;
+
+    res.status(200).json({
+      ok: true,
+      runId: result.id,
+      run: buildSharedScreenerRunPayload(String(result.id || docRef.id), result),
+      request: requestResponse,
+      title: result.title,
+      status: result.status,
+      serviceMessage: result.serviceMessage,
+      minMarketCap,
+      workflowRunId: result.workflowRunId || null,
+      workflowRunUrl: result.workflowRunUrl || "",
+      workflowRunNumber: result.workflowRunNumber || null,
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    const detail = sanitizeText(error?.message || error, 260) || "screener_run_failed";
+    console.error("[Screener] run failed", error);
+    res.status(500).json({ error: "screener_run_failed", detail });
+  }
+});
+
+ROUTES.get("/screener/github-history", async (req, res) => {
+  try {
+    if (!githubActionsConfigured()) {
+      res.status(503).json({ error: "screener_workflow_not_configured" });
+      return;
+    }
+    const requestedLimit = Math.floor(asFinite(req.query.limit, 12));
+    const limit = Math.max(1, Math.min(60, requestedLimit || 24));
+    const workflowRuns = await listRecentSuccessfulGithubScreenerRuns(limit);
+    const items = await Promise.all(
+      workflowRuns.map(async (workflowRun) => {
+        const [sourceMatch, artifacts] = await Promise.all([
+          findScreenerRunRecordByWorkflowRunId(workflowRun.id).catch(() => null),
+          listGithubArtifactsForRun(workflowRun.id).catch(() => []),
+        ]);
+        return buildPublicGithubScreenerRunSummary(workflowRun, sourceMatch, artifacts);
+      })
+    );
+    res.status(200).json({
+      ok: true,
+      items,
+    });
+  } catch (error) {
+    console.error("[Screener] github history failed", error);
+    res.status(500).json({ error: "screener_github_history_failed" });
+  }
+});
+
+ROUTES.get("/screener/github-history/:workflowRunId/artifacts/:artifactId/download", async (req, res) => {
+  try {
+    if (!githubActionsConfigured()) {
+      res.status(503).json({ error: "screener_workflow_not_configured" });
+      return;
+    }
+    const workflowRunId = Math.max(0, Math.floor(asFinite(req.params.workflowRunId, 0)));
+    const artifactId = Math.max(0, Math.floor(asFinite(req.params.artifactId, 0)));
+    if (!workflowRunId || !artifactId) {
+      res.status(400).json({ error: "invalid_github_artifact_request" });
+      return;
+    }
+    const workflowRun = await getGithubWorkflowRun(workflowRunId);
+    if (!workflowRun) {
+      res.status(404).json({ error: "workflow_run_not_found" });
+      return;
+    }
+    if (
+      workflowRun.path &&
+      !workflowRun.path.toLowerCase().includes(String(GITHUB_SCREENER_WORKFLOW || "").trim().toLowerCase())
+    ) {
+      res.status(404).json({ error: "workflow_run_not_found" });
+      return;
+    }
+    const artifacts = await listGithubArtifactsForRun(workflowRunId);
+    const artifact = artifacts.find((item) => item.id === artifactId) || null;
+    if (!artifact) {
+      res.status(404).json({ error: "artifact_not_found" });
+      return;
+    }
+    if (artifact.expired) {
+      res.status(410).json({ error: "artifact_expired" });
+      return;
+    }
+    const response = await githubApiRequest(`/actions/artifacts/${encodeURIComponent(String(artifactId))}/zip`, {
+      method: "GET",
+    });
+    const buffer = Buffer.from(await response.arrayBuffer());
+    const safeBaseName =
+      sanitizeText(artifact.name, 140)
+        .replace(/[^A-Za-z0-9._-]+/g, "-")
+        .replace(/^-+|-+$/g, "") || "github-artifact";
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Cache-Control", "private, max-age=300");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${safeBaseName}-${encodeURIComponent(String(workflowRun.runNumber || workflowRunId))}.zip"`
+    );
+    res.status(200).send(buffer);
+  } catch (error) {
+    console.error("[Screener] github artifact download failed", error);
+    res.status(500).json({ error: "screener_github_artifact_download_failed" });
+  }
+});
+
+ROUTES.get("/screener/:runId", async (req, res) => {
+  try {
+    const user = await verifyRequestUser(req, true);
+    if (!user) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const runId = sanitizeText(req.params.runId, 220);
+    if (!runId) {
+      res.status(400).json({ error: "invalid_run_id" });
+      return;
+    }
+    const runDoc = await syncGithubScreenerRunRecord(runId, user.uid);
+    res.status(200).json({
+      ok: true,
+      run: buildSharedScreenerRunPayload(runId, runDoc),
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "screener_not_found") {
+      res.status(404).json({ error: code });
+      return;
+    }
+    if (code === "forbidden") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    console.error("[Screener] load failed", error);
+    res.status(500).json({ error: "screener_load_failed" });
+  }
+});
+
+ROUTES.patch("/screener/:runId", async (req, res) => {
+  try {
+    const user = await verifyRequestUser(req, true);
+    if (!user) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const runId = sanitizeText(req.params.runId, 220);
+    const nextTitle = sanitizeText(asPlainObject(req.body).title, 180);
+    if (!runId || !nextTitle) {
+      res.status(400).json({ error: "invalid_screener_update" });
+      return;
+    }
+    const ref = db.collection("screener_runs").doc(runId);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      res.status(404).json({ error: "screener_not_found" });
+      return;
+    }
+    const data = (snap.data() || {}) as Record<string, unknown>;
+    if (sanitizeText(data.userId, 220) !== user.uid) {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
+    await ref.set(
+      {
+        title: nextTitle,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    const refreshedSnap = await ref.get();
+    const refreshed = (refreshedSnap.data() || {}) as Record<string, unknown>;
+    await upsertOwnedMyRequestFromSystem(user.uid, {
+      requestId: buildMyRequestDocId("screener", runId),
+      type: "screener",
+      title: nextTitle,
+      input: {
+        universe: sanitizeText(refreshed.universe, 40),
+        market: sanitizeText(refreshed.market, 20),
+        maxNames: asFinite(refreshed.maxNames, 0) || null,
+        notes: sanitizeText(refreshed.notes, 1200),
+        model: sanitizeText(refreshed.modelUsed || refreshed.model, 120),
+        filters: trimOutputsMeta(refreshed.filters),
+      },
+      outputsMeta: {
+        summary: sanitizeText(refreshed.serviceMessage || refreshed.notes, 320),
+        resultsCount: Array.isArray(refreshed.results) ? refreshed.results.length : asFinite(refreshed.resultsFound, 0),
+        topSymbols: extractScreenerTopSymbols(refreshed.results),
+        modelUsed: sanitizeText(refreshed.modelUsed || refreshed.model, 120),
+      },
+      sourceRef: {
+        collection: "screener_runs",
+        id: runId,
+      },
+    });
+    res.status(200).json({ ok: true, runId, title: nextTitle });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Screener] update failed", error);
+    res.status(500).json({ error: "screener_update_failed" });
+  }
+});
+
+ROUTES.delete("/screener/:runId", async (req, res) => {
+  try {
+    const user = await verifyRequestUser(req, true);
+    if (!user) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const runId = sanitizeText(req.params.runId, 220);
+    if (!runId) {
+      res.status(400).json({ error: "invalid_run_id" });
+      return;
+    }
+    const ref = db.collection("screener_runs").doc(runId);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      res.status(404).json({ error: "screener_not_found" });
+      return;
+    }
+    const data = (snap.data() || {}) as Record<string, unknown>;
+    if (sanitizeText(data.userId, 220) !== user.uid) {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
+    await ref.delete();
+    res.status(200).json({ ok: true, deleted: true, runId });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    console.error("[Screener] delete failed", error);
+    res.status(500).json({ error: "screener_delete_failed" });
+  }
+});
+
+ROUTES.post("/stocks/screener", async (req, res) => {
+  try {
+    const body = asPlainObject(req.body);
+    const payload = await runMarketDataScreener({
+      preset: body.preset,
+      size: body.size,
+      query: body.query,
+    });
+    res.status(200).json(payload);
+  } catch (error: any) {
+    const detail = sanitizeText(error?.message || error, 260) || "market_data_screener_failed";
+    res.status(500).json({ error: "market_data_screener_failed", detail });
+  }
+});
+
 ROUTES.get("/ticker/trending", async (req, res) => {
   try {
     const query = asPlainObject(req.query);
@@ -4760,12 +7935,27 @@ ROUTES.get("/ticker/trending", async (req, res) => {
         extractYahooNumber(sparkMeta.previousClose) ??
         extractYahooNumber(sparkMeta.chartPreviousClose);
       const previousClose = extractYahooNumber(sparkMeta.previousClose) ?? extractYahooNumber(sparkMeta.chartPreviousClose);
-      const change =
+      const directChange =
+        extractYahooNumber(sparkMeta.regularMarketChange) ??
+        extractYahooNumber(sparkMeta.change);
+      const computedChange =
         lastClose !== null && previousClose !== null ? Number((lastClose - previousClose).toFixed(4)) : null;
-      const changePct =
+      const change = directChange !== null ? Number(directChange.toFixed(4)) : computedChange;
+      const directChangePct =
+        extractYahooNumber(sparkMeta.regularMarketChangePercent) ??
+        extractYahooNumber(sparkMeta.percentChange);
+      const computedChangePct =
         change !== null && previousClose !== null && Math.abs(previousClose) > 1e-9
           ? Number(((change / Math.abs(previousClose)) * 100).toFixed(4))
           : null;
+      const changePct =
+        directChangePct !== null
+          ? Number(
+              (
+                Math.abs(directChangePct) < 0.00005 && computedChangePct !== null ? computedChangePct : directChangePct
+              ).toFixed(4)
+            )
+          : computedChangePct;
 
       const website = sanitizeText(fmpProfile?.website, 280);
       const logoUrl =
@@ -4858,6 +8048,15 @@ ROUTES.get("/ticker/intel", async (req, res) => {
       (((quotePayload.quoteResponse as any)?.result as Array<Record<string, unknown>> | undefined) || [])[0] || {};
 
     if (!Object.keys(summaryRoot).length && !Object.keys(quoteRow).length) {
+      const fallbackPayload = await fetchFmpTickerIntelFallback(ticker);
+      if (fallbackPayload) {
+        setTickerIntelCache(ticker, fallbackPayload);
+        res.status(200).json({
+          ...fallbackPayload,
+          cached: false,
+        });
+        return;
+      }
       res.status(502).json({ error: "ticker_intel_upstream_empty", ticker });
       return;
     }
@@ -4924,6 +8123,15 @@ ROUTES.get("/ticker/intel", async (req, res) => {
       dividendYield: extractYahooNumber(summaryDetail.dividendYield),
       logoUrl,
       logo_url: logoUrl,
+    };
+
+    const price = {
+      last: extractYahooNumber(quoteRow.regularMarketPrice),
+      prevClose: extractYahooNumber(quoteRow.regularMarketPreviousClose),
+      dayLow: extractYahooNumber(quoteRow.regularMarketDayLow),
+      dayHigh: extractYahooNumber(quoteRow.regularMarketDayHigh),
+      volume: extractYahooNumber(quoteRow.regularMarketVolume),
+      currency: extractYahooText(quoteRow.currency, 20),
     };
 
     const profileDetails = {
@@ -4997,7 +8205,10 @@ ROUTES.get("/ticker/intel", async (req, res) => {
 
     const totalRevenue = extractYahooNumber(financialData.totalRevenue);
     const grossProfits = extractYahooNumber(financialData.grossProfits);
+    const grossMargins = extractYahooNumber(financialData.grossMargins);
     const profitMargin = extractYahooNumber(financialData.profitMargins);
+    const operatingMargins = extractYahooNumber(financialData.operatingMargins);
+    const ebitdaMargins = extractYahooNumber(financialData.ebitdaMargins);
     const roe = extractYahooNumber(financialData.returnOnEquity);
     const roa = extractYahooNumber(financialData.returnOnAssets);
     const totalCash = extractYahooNumber(financialData.totalCash);
@@ -5040,11 +8251,31 @@ ROUTES.get("/ticker/intel", async (req, res) => {
       ticker,
       source: "yahoo_quote_summary",
       fetchedAt: new Date().toISOString(),
+      price,
       logoUrl,
       logo_url: logoUrl,
       profile,
       profileDetails,
       valuation,
+      fundamentals: {
+        revenueTTM: totalRevenue,
+        grossMargins,
+        profitMargins: profitMargin,
+        operatingMargins,
+        ebitdaMargins,
+        returnOnAssets: roa,
+        returnOnEquity: roe,
+      },
+      risk: {
+        beta,
+        shortRatio: extractYahooNumber(defaultStats.shortRatio) ?? extractYahooNumber(quoteRow.shortRatio),
+      },
+      dividends: {
+        dividendRate: extractYahooNumber(summaryDetail.dividendRate),
+        dividendYield: extractYahooNumber(summaryDetail.dividendYield),
+        payoutRatio: extractYahooNumber(summaryDetail.payoutRatio),
+        exDividendDate: extractYahooText(summaryDetail.exDividendDate, 60),
+      },
       trading,
       events,
       analyst,
@@ -5162,41 +8393,74 @@ ROUTES.get("/fx/convert", async (req, res) => {
 });
 
 ROUTES.get("/market-headlines", async (req, res) => {
-  const feedConfig = resolveMarketHeadlineFeedConfig(req.query.provider, req.query.feed);
+  const requestedFeedConfig = resolveMarketHeadlineFeedConfig(req.query.provider, req.query.feed);
   const limitRaw = asFinite(req.query.limit, 18);
   const limit = Number.isFinite(limitRaw) ? Math.max(5, Math.min(40, Math.floor(limitRaw))) : 18;
   const warnings: string[] = [];
   let headlines: MarketHeadlineArticle[] = [];
-  let detectedTitle = feedConfig.feedLabel;
+  let effectiveFeedConfig = requestedFeedConfig;
+  let detectedTitle = requestedFeedConfig.feedLabel;
 
   try {
-    const xml = await fetchTextWithTimeout(feedConfig.url, MARKET_HEADLINE_FETCH_TIMEOUT_MS);
-    const parsed = parseMarketHeadlineFeedXml(xml, feedConfig);
+    const xml = await fetchTextWithTimeout(requestedFeedConfig.url, MARKET_HEADLINE_FETCH_TIMEOUT_MS);
+    const parsed = parseMarketHeadlineFeedXml(xml, requestedFeedConfig);
     detectedTitle = parsed.feedTitle || detectedTitle;
-    headlines = parsed.headlines.slice(0, limit);
+    headlines = parsed.headlines;
     if (!headlines.length) {
-      warnings.push(`${feedConfig.providerLabel} returned a response but no readable headlines were parsed.`);
+      warnings.push(`${requestedFeedConfig.providerLabel} returned a response but no readable headlines were parsed.`);
     }
   } catch (error) {
-    warnings.push(describeMarketHeadlineFetchError(feedConfig, error));
+    warnings.push(describeMarketHeadlineFetchError(requestedFeedConfig, error));
   }
+
+  const fallbackFeedConfig = MARKET_HEADLINE_FEEDS[MARKET_HEADLINE_DEFAULT_FEED_ID];
+  if (
+    fallbackFeedConfig &&
+    fallbackFeedConfig.id !== requestedFeedConfig.id &&
+    shouldFallbackMarketHeadlineFeed(requestedFeedConfig, headlines)
+  ) {
+    warnings.push(describeMarketHeadlineFallback(requestedFeedConfig, fallbackFeedConfig, headlines));
+    try {
+      const xml = await fetchTextWithTimeout(fallbackFeedConfig.url, MARKET_HEADLINE_FETCH_TIMEOUT_MS);
+      const parsed = parseMarketHeadlineFeedXml(xml, fallbackFeedConfig);
+      effectiveFeedConfig = fallbackFeedConfig;
+      detectedTitle = parsed.feedTitle || fallbackFeedConfig.feedLabel;
+      headlines = parsed.headlines;
+      if (!headlines.length) {
+        warnings.push(`${fallbackFeedConfig.providerLabel} returned a response but no readable headlines were parsed.`);
+      }
+    } catch (error) {
+      warnings.push(describeMarketHeadlineFetchError(fallbackFeedConfig, error));
+    }
+  }
+
+  headlines = headlines.slice(0, limit);
 
   res.status(200).json({
     provider: {
-      id: feedConfig.providerId,
-      label: feedConfig.providerLabel,
-      sourceUrl: feedConfig.sourceUrl,
-      directoryUrl: feedConfig.directoryUrl || "",
-      termsUrl: feedConfig.termsUrl || "",
+      id: effectiveFeedConfig.providerId,
+      label: effectiveFeedConfig.providerLabel,
+      sourceUrl: effectiveFeedConfig.sourceUrl,
+      directoryUrl: effectiveFeedConfig.directoryUrl || "",
+      termsUrl: effectiveFeedConfig.termsUrl || "",
     },
     feed: {
-      id: feedConfig.id,
-      label: feedConfig.feedLabel,
+      id: effectiveFeedConfig.id,
+      label: effectiveFeedConfig.feedLabel,
       detectedTitle,
-      url: feedConfig.sourceUrl,
+      url: effectiveFeedConfig.sourceUrl,
     },
+    requestedFeed:
+      effectiveFeedConfig.id !== requestedFeedConfig.id
+        ? {
+            id: requestedFeedConfig.id,
+            label: requestedFeedConfig.feedLabel,
+            providerId: requestedFeedConfig.providerId,
+            providerLabel: requestedFeedConfig.providerLabel,
+          }
+        : null,
     attribution: {
-      note: feedConfig.attributionNote || "",
+      note: effectiveFeedConfig.attributionNote || "",
     },
     fetchedAt: new Date().toISOString(),
     count: headlines.length,
@@ -6495,9 +9759,16 @@ ROUTES.get("/posts/:postId", async (req, res) => {
     });
 
     const viewerState = engagement.get(postId) || { liked: false, reposted: false, saved: false };
+    const postResponse = toPostResponse(postSnap, viewerState);
+    const resolvedBody = await resolvePostBody(postId, data);
+    if (resolvedBody.body) {
+      postResponse.body = resolvedBody.body;
+      postResponse.bodyFormat = resolvedBody.bodyFormat;
+    }
+    postResponse.hasBody = resolvedBody.hasBody;
 
     res.status(200).json({
-      post: toPostResponse(postSnap, viewerState),
+      post: postResponse,
       comments,
     });
   } catch (error) {
@@ -8161,6 +11432,1047 @@ ROUTES.post("/watch-tickers/:ticker", async (req, res) => {
   }
 });
 
+ROUTES.post("/autopilot/datasets/history", async (req, res) => {
+  try {
+    const user = await verifyRequestUser(req, true);
+    if (!user) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+
+    const body = asPlainObject(req.body);
+    const persist = asBoolean(body.persist, true);
+    if (persist && isAnonymousDecodedUser(user)) {
+      res.status(403).json({ error: "full_account_required" });
+      return;
+    }
+
+    const ticker = normalizeTicker(body.ticker);
+    const interval = sanitizeText(body.interval, 20) || "1d";
+    const start = sanitizeText(body.start, 40);
+    const end = sanitizeText(body.end, 40);
+    const useAllHistory = asBoolean(body.useAllHistory, false);
+    if (!ticker || !end || (!useAllHistory && !start)) {
+      res.status(400).json({ error: "invalid_history_request" });
+      return;
+    }
+
+    const dataset = await downloadHistoricalStockDataset({ ticker, interval, start, end, useAllHistory });
+    const filename = `${ticker}_${sanitizeText(interval, 12)}_${useAllHistory ? "full_history" : start}_${end}.csv`.replace(
+      /[^A-Za-z0-9._-]/g,
+      "_"
+    );
+
+    if (!persist) {
+      res.status(200).json({
+        ok: true,
+        filename,
+        rowCount: dataset.rowCount,
+        csv: dataset.csvText,
+        dataset: {
+          ticker: dataset.ticker,
+          interval: dataset.interval,
+          rowCount: dataset.rowCount,
+          columns: dataset.columns,
+          previewRows: dataset.previewRows,
+          trainingEligible: dataset.trainingEligible,
+          start: useAllHistory ? "" : start,
+          end,
+          useAllHistory,
+        },
+      });
+      return;
+    }
+
+    const runRef = db.collection("autopilot_requests").doc();
+    const owner = safePathSegment(user.uid, 120) || "user";
+    const run = safePathSegment(runRef.id, 120) || "run";
+    const datasetFile = await writeStorageTextArtifact(
+      `predictions/${owner}/foundry/${run}/dataset.csv`,
+      dataset.csvText,
+      "text/csv"
+    );
+
+    const doc: Record<string, unknown> = {
+      userId: user.uid,
+      workspaceId: sanitizeText(body.workspaceId, 220) || user.uid,
+      title: sanitizeText(body.title, 180) || `${ticker} Forecast Foundry`,
+      notes: sanitizeText(body.notes, 2000),
+      mode: "dataset",
+      sourceType: "history_downloader",
+      status: "dataset_ready",
+      dataset: {
+        ticker: dataset.ticker,
+        interval: dataset.interval,
+        rowCount: dataset.rowCount,
+        columns: dataset.columns,
+        previewRows: dataset.previewRows,
+        trainingEligible: dataset.trainingEligible,
+        sourceTimeColumn: dataset.sourceTimeColumn,
+        sourceValueColumn: dataset.sourceValueColumn,
+        sourceItemColumn: dataset.sourceItemColumn,
+        originalHeaders: dataset.columns,
+        start: useAllHistory ? "" : start,
+        end,
+        useAllHistory,
+      },
+      autopilot: {},
+      analysis: {},
+      files: {
+        datasetCsv: {
+          ...datasetFile,
+        },
+      },
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    await runRef.set(doc, { merge: false });
+    const requestId = await syncAutopilotMyRequest(user.uid, runRef.id, doc);
+    await runRef.set(
+      {
+        exploreRequestId: requestId,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    const snap = await runRef.get();
+    res.status(200).json({
+      ok: true,
+      run: await toAutopilotRunResponse(snap.id, (snap.data() || doc) as Record<string, unknown>),
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "full_account_required") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    console.error("[Autopilot] history dataset failed", error);
+    res.status(500).json({ error: "autopilot_history_dataset_failed", detail: sanitizeText(error?.message, 240) });
+  }
+});
+
+ROUTES.post("/autopilot/datasets/upload", async (req, res) => {
+  try {
+    const user = await requireFoundryUser(req);
+    const body = asPlainObject(req.body);
+    const filePath = sanitizeText(body.filePath, 1000).replace(/^\/+/, "");
+    if (!filePath) {
+      res.status(400).json({ error: "missing_file_path" });
+      return;
+    }
+    const csvText = await readStorageTextArtifact(filePath);
+    const tickerHint = normalizeTicker(body.ticker);
+    const intervalHint = sanitizeText(body.interval, 20);
+    const classified = await classifyUploadedCsv(csvText, { tickerHint, intervalHint });
+    const runRef = db.collection("autopilot_requests").doc();
+    const owner = safePathSegment(user.uid, 120) || "user";
+    const run = safePathSegment(runRef.id, 120) || "run";
+
+    const baseDoc: Record<string, unknown> = {
+      userId: user.uid,
+      workspaceId: sanitizeText(body.workspaceId, 220) || user.uid,
+      title:
+        sanitizeText(body.title, 180) ||
+        sanitizeText(body.fileName || asPlainObject(body.file).name, 180) ||
+        `${tickerHint || "Forecast"} Forecast Foundry`,
+      notes: sanitizeText(body.notes, 2000),
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      autopilot: {},
+      exploreRequestId: "",
+    };
+
+    if (classified.kind === "historical_dataset") {
+      const normalizedFile = await writeStorageTextArtifact(
+        `predictions/${owner}/foundry/${run}/dataset.csv`,
+        classified.dataset.csvText,
+        "text/csv"
+      );
+      const doc: Record<string, unknown> = {
+        ...baseDoc,
+        mode: "dataset",
+        sourceType: "historical_csv",
+        status: "dataset_ready",
+        dataset: {
+          ticker: classified.dataset.ticker,
+          interval: classified.dataset.interval,
+          rowCount: classified.dataset.rowCount,
+          columns: classified.dataset.columns,
+          previewRows: classified.dataset.previewRows,
+          trainingEligible: classified.dataset.trainingEligible,
+          sourceTimeColumn: classified.dataset.sourceTimeColumn,
+          sourceValueColumn: classified.dataset.sourceValueColumn,
+          sourceItemColumn: classified.dataset.sourceItemColumn,
+          originalHeaders: classified.originalHeaders,
+        },
+        analysis: {},
+        files: {
+          uploadedCsv: {
+            storagePath: filePath,
+            fileName: filePath.split("/").pop() || "upload.csv",
+            contentType: "text/csv",
+          },
+          datasetCsv: normalizedFile,
+        },
+      };
+      await runRef.set(doc, { merge: false });
+      const requestId = await syncAutopilotMyRequest(user.uid, runRef.id, doc);
+      await runRef.set(
+        {
+          exploreRequestId: requestId,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      const snap = await runRef.get();
+      res.status(200).json({
+        ok: true,
+        run: await toAutopilotRunResponse(snap.id, (snap.data() || doc) as Record<string, unknown>),
+      });
+      return;
+    }
+
+    const analysis = classified.analysis;
+    const persisted = await persistAutopilotAnalysisArtifacts(user.uid, runRef.id, {
+      status: analysis.status,
+      summary: analysis.summary,
+      markdown: analysis.markdown,
+      metrics: analysis.metrics,
+      data: analysis.analysis,
+      previewRows: analysis.previewRows,
+      rowCount: analysis.rowCount,
+      columns: analysis.columns,
+    });
+    const doc: Record<string, unknown> = {
+      ...baseDoc,
+      mode: "upload_analysis",
+      sourceType: "prediction_csv",
+      status: "analysis_ready",
+      dataset: {
+        ticker: analysis.ticker || tickerHint,
+        interval: intervalHint,
+        rowCount: analysis.rowCount,
+        columns: analysis.columns,
+        previewRows: analysis.previewRows,
+        trainingEligible: false,
+        originalHeaders: classified.originalHeaders,
+      },
+      analysis: persisted.analysisPatch,
+      files: {
+        uploadedCsv: {
+          storagePath: filePath,
+          fileName: filePath.split("/").pop() || "predictions.csv",
+          contentType: "text/csv",
+        },
+        ...persisted.filePatches,
+      },
+    };
+    await runRef.set(doc, { merge: false });
+    const requestId = await syncAutopilotMyRequest(user.uid, runRef.id, doc);
+    await runRef.set(
+      {
+        exploreRequestId: requestId,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    const snap = await runRef.get();
+    res.status(200).json({
+      ok: true,
+      run: await toAutopilotRunResponse(snap.id, (snap.data() || doc) as Record<string, unknown>),
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "full_account_required") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    console.error("[Autopilot] upload dataset failed", error);
+    res.status(500).json({ error: "autopilot_upload_dataset_failed", detail: sanitizeText(error?.message, 260) });
+  }
+});
+
+ROUTES.post("/autopilot/runs", async (req, res) => {
+  try {
+    const user = await requireFoundryUser(req);
+    const body = asPlainObject(req.body);
+    const runId = sanitizeText(body.runId || body.requestId || body.datasetId, 220);
+    if (!runId) {
+      res.status(400).json({ error: "missing_run_id" });
+      return;
+    }
+    const owned = await readAutopilotRunForOwner(user.uid, runId);
+    if (!owned) {
+      res.status(404).json({ error: "run_not_found" });
+      return;
+    }
+
+    const current = owned.data;
+    const dataset = asPlainObject(current.dataset);
+    const files = asPlainObject(current.files);
+    const sourceType = sanitizeText(current.sourceType, 40);
+    const interval = sanitizeText(dataset.interval, 20).toLowerCase();
+    if (!(sourceType === "history_downloader" || sourceType === "historical_csv")) {
+      res.status(400).json({ error: "run_source_not_trainable" });
+      return;
+    }
+    if (interval !== "1d") {
+      res.status(400).json({
+        error: "daily_training_only",
+        detail: "Forecast Foundry currently supports daily historical datasets only.",
+      });
+      return;
+    }
+    if (sanitizeText(asPlainObject(current.autopilot).jobName, 120)) {
+      res.status(400).json({ error: "autopilot_job_already_started" });
+      return;
+    }
+    const datasetCsvPath = sanitizeText(asPlainObject(files.datasetCsv).storagePath, 1000);
+    if (!datasetCsvPath) {
+      res.status(400).json({ error: "dataset_file_missing" });
+      return;
+    }
+    const activeConcurrentRuns = await countActiveAutopilotRunsForOwner(user.uid);
+    if (activeConcurrentRuns >= MAX_FOUNDRY_CONCURRENT_RUNS) {
+      res.status(429).json({
+        error: "foundry_instance_limit_reached",
+        detail: `Forecast Foundry allows ${MAX_FOUNDRY_CONCURRENT_RUNS} concurrent active instances. Wait for one run to finish before starting another.`,
+        limits: {
+          maxConcurrentRuns: MAX_FOUNDRY_CONCURRENT_RUNS,
+          activeConcurrentRuns,
+        },
+      });
+      return;
+    }
+    const csvText = await readStorageTextArtifact(datasetCsvPath);
+    const started = await startAutopilotTraining({
+      runId,
+      userId: user.uid,
+      ticker: normalizeTicker(dataset.ticker || current.ticker),
+      interval: interval || "1d",
+      horizon: asFinite(body.horizon, asFinite(asPlainObject(current.autopilot).forecastHorizon, 30)),
+      quantiles: body.quantiles || asPlainObject(current.autopilot).quantiles || ["p10", "p50", "p90"],
+      csvText,
+    });
+    const patch: Record<string, unknown> = {
+      mode: "autopilot_run",
+      status: "running",
+      autopilot: {
+        ...(asPlainObject(current.autopilot) || {}),
+        jobName: started.jobName,
+        jobArn: started.jobArn,
+        inputS3Uri: started.inputS3Uri,
+        outputS3Uri: started.outputS3Uri,
+        forecastFrequency: started.forecastFrequency,
+        forecastHorizon: Math.floor(asFinite(body.horizon, 30)),
+        quantiles: started.quantiles,
+        algorithms: started.algorithms,
+        runtimeSeconds: started.runtimeSeconds,
+        objectiveMetric: {
+          name: "AverageWeightedQuantileLoss",
+          value: null,
+        },
+        status: "InProgress",
+      },
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    await db.collection("autopilot_requests").doc(runId).set(patch, { merge: true });
+    const refreshedSnap = await db.collection("autopilot_requests").doc(runId).get();
+    const refreshedData = (refreshedSnap.data() || { ...current, ...patch }) as Record<string, unknown>;
+    const requestId = await syncAutopilotMyRequest(user.uid, runId, refreshedData);
+    await db.collection("autopilot_requests").doc(runId).set(
+      {
+        exploreRequestId: requestId,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    const finalSnap = await db.collection("autopilot_requests").doc(runId).get();
+    res.status(200).json({
+      ok: true,
+      run: await toAutopilotRunResponse(runId, (finalSnap.data() || refreshedData) as Record<string, unknown>),
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "full_account_required") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    if (code.startsWith("invalid_quantiles:")) {
+      res.status(400).json({ error: "invalid_quantiles", detail: sanitizeText(code.replace(/^invalid_quantiles:\s*/i, ""), 260) });
+      return;
+    }
+    console.error("[Autopilot] create run failed", error);
+    res.status(500).json({ error: "autopilot_run_create_failed", detail: sanitizeText(error?.message, 260) });
+  }
+});
+
+ROUTES.get("/autopilot/runs", async (req, res) => {
+  try {
+    const user = await requireFoundryUser(req);
+    const limit = Math.max(1, Math.min(80, Math.floor(asFinite(req.query.limit, 40))));
+    const activeConcurrentRuns = await countActiveAutopilotRunsForOwner(user.uid);
+    const snap = await db
+      .collection("autopilot_requests")
+      .where("userId", "==", user.uid)
+      .orderBy("createdAt", "desc")
+      .limit(limit)
+      .get();
+    const items = await Promise.all(
+      snap.docs.map((doc) => toAutopilotRunResponse(doc.id, (doc.data() || {}) as Record<string, unknown>))
+    );
+    res.status(200).json({
+      items,
+      count: items.length,
+      limits: {
+        maxConcurrentRuns: MAX_FOUNDRY_CONCURRENT_RUNS,
+        activeConcurrentRuns,
+      },
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "full_account_required") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    console.error("[Autopilot] list runs failed", error);
+    res.status(500).json({ error: "autopilot_runs_list_failed" });
+  }
+});
+
+ROUTES.get("/autopilot/runs/:runId", async (req, res) => {
+  try {
+    const user = await requireFoundryUser(req);
+    const runId = sanitizeText(req.params.runId, 220);
+    if (!runId) {
+      res.status(400).json({ error: "invalid_run_id" });
+      return;
+    }
+    const owned = await readAutopilotRunForOwner(user.uid, runId);
+    if (!owned) {
+      res.status(404).json({ error: "run_not_found" });
+      return;
+    }
+    res.status(200).json({
+      run: await toAutopilotRunResponse(owned.id, owned.data),
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "full_account_required") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    console.error("[Autopilot] read run failed", error);
+    res.status(500).json({ error: "autopilot_run_read_failed" });
+  }
+});
+
+ROUTES.post("/autopilot/runs/:runId/refresh", async (req, res) => {
+  try {
+    const user = await requireFoundryUser(req);
+    const runId = sanitizeText(req.params.runId, 220);
+    if (!runId) {
+      res.status(400).json({ error: "invalid_run_id" });
+      return;
+    }
+    const owned = await readAutopilotRunForOwner(user.uid, runId);
+    if (!owned) {
+      res.status(404).json({ error: "run_not_found" });
+      return;
+    }
+    const reconciled = await reconcileAutopilotRunDocument(runId, owned.data);
+    res.status(200).json({
+      ok: true,
+      run: await toAutopilotRunResponse(runId, reconciled),
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "full_account_required") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    console.error("[Autopilot] refresh run failed", error);
+    res.status(500).json({ error: "autopilot_run_refresh_failed", detail: sanitizeText(error?.message, 260) });
+  }
+});
+
+ROUTES.post("/autopilot/runs/:runId/analyze", async (req, res) => {
+  try {
+    const user = await requireFoundryUser(req);
+    const runId = sanitizeText(req.params.runId, 220);
+    if (!runId) {
+      res.status(400).json({ error: "invalid_run_id" });
+      return;
+    }
+    const owned = await readAutopilotRunForOwner(user.uid, runId);
+    if (!owned) {
+      res.status(404).json({ error: "run_not_found" });
+      return;
+    }
+    const data = owned.data;
+    const files = asPlainObject(data.files);
+    const dataset = asPlainObject(data.dataset);
+    const csvStoragePath =
+      sanitizeText(asPlainObject(files.predictionsCsv).storagePath, 1000) ||
+      sanitizeText(asPlainObject(files.uploadedCsv).storagePath, 1000);
+    if (!csvStoragePath) {
+      res.status(400).json({ error: "analysis_source_missing" });
+      return;
+    }
+    const csvText = await readStorageTextArtifact(csvStoragePath);
+    const analysis = await analyzePredictionCsv(csvText, {
+      ticker: normalizeTicker(dataset.ticker || data.ticker),
+    });
+    const persisted = await persistAutopilotAnalysisArtifacts(user.uid, runId, {
+      status: analysis.status,
+      summary: analysis.summary,
+      markdown: analysis.markdown,
+      metrics: analysis.metrics,
+      data: analysis.analysis,
+      previewRows: analysis.previewRows,
+      rowCount: analysis.rowCount,
+      columns: analysis.columns,
+    });
+    const nextStatus =
+      sanitizeText(asPlainObject(data.autopilot).transformStatus, 60) === "Completed" ||
+      sanitizeText(data.status, 60) === "completed"
+        ? "completed"
+        : "analysis_ready";
+    const patch: Record<string, unknown> = {
+      analysis: persisted.analysisPatch,
+      files: {
+        ...files,
+        ...persisted.filePatches,
+      },
+      status: nextStatus,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    await db.collection("autopilot_requests").doc(runId).set(patch, { merge: true });
+    const snap = await db.collection("autopilot_requests").doc(runId).get();
+    const refreshed = (snap.data() || { ...data, ...patch }) as Record<string, unknown>;
+    const requestId = await syncAutopilotMyRequest(user.uid, runId, refreshed);
+    await db.collection("autopilot_requests").doc(runId).set(
+      {
+        exploreRequestId: requestId,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    const finalSnap = await db.collection("autopilot_requests").doc(runId).get();
+    res.status(200).json({
+      ok: true,
+      run: await toAutopilotRunResponse(runId, (finalSnap.data() || refreshed) as Record<string, unknown>),
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "full_account_required") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    console.error("[Autopilot] analyze run failed", error);
+    res.status(500).json({ error: "autopilot_run_analyze_failed", detail: sanitizeText(error?.message, 260) });
+  }
+});
+
+ROUTES.get("/mobile/automation/entitlement", async (req, res) => {
+  try {
+    const user = await requireFoundryUser(req);
+    const [entitlement, activeAutomationCount] = await Promise.all([
+      readAutomationEntitlement(user.uid),
+      countActiveAutomationsForOwner(user.uid),
+    ]);
+    res.status(200).json({
+      ok: true,
+      entitlement: buildAutomationEntitlementResponse(user.uid, entitlement, activeAutomationCount),
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "full_account_required") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    console.error("[Automation] entitlement read failed", error);
+    res.status(500).json({ error: "automation_entitlement_read_failed", detail: sanitizeText(error?.message, 260) });
+  }
+});
+
+ROUTES.post("/mobile/automation/apple/verify", async (req, res) => {
+  try {
+    const user = await requireFoundryUser(req);
+    const body = asPlainObject(req.body);
+    const contactEmail = await resolveAutomationContactEmail(user.uid, user, body.contactEmail);
+    if (!contactEmail) {
+      res.status(400).json({
+        error: "contact_email_required",
+        detail: "A valid email is required before Quantura Automation can be unlocked.",
+      });
+      return;
+    }
+    const verified = await verifyAppleAutomationPurchase({
+      transactionId: sanitizeText(body.transactionId, 220),
+      productId: sanitizeText(body.productId, 120) || AUTOMATION_PRODUCT_ID,
+    });
+    const entitlement = await syncAutomationEntitlementState(user.uid, {
+      automationUnlocked: true,
+      purchaseSource: verified.source,
+      unlockedAt: admin.firestore.Timestamp.fromMillis(verified.unlockedAtMs),
+      productId: verified.productId,
+      purchaseReference: verified.purchaseReference,
+      contactEmail,
+    });
+    try {
+      await sendAutomationUnlockEmail({
+        to: contactEmail,
+        ownerUid: user.uid,
+        productId: verified.productId,
+        purchaseSource: verified.source,
+        purchaseReference: verified.purchaseReference,
+      });
+    } catch (mailError) {
+      console.error("[Automation] apple unlock email failed", { uid: user.uid, mailError });
+    }
+    const activeAutomationCount = await countActiveAutomationsForOwner(user.uid);
+    res.status(200).json({
+      ok: true,
+      entitlement: buildAutomationEntitlementResponse(user.uid, entitlement, activeAutomationCount),
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "full_account_required") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    if (code === "apple_iap_server_credentials_missing") {
+      res.status(501).json({ error: code, detail: "Apple server-side purchase verification is not configured." });
+      return;
+    }
+    if (
+      code === "contact_email_required" ||
+      code === "missing_transaction_id" ||
+      code === "apple_bundle_mismatch" ||
+      code === "apple_product_mismatch" ||
+      code === "apple_purchase_revoked" ||
+      code.startsWith("apple_iap_validation_failed:")
+    ) {
+      res.status(400).json({ error: code });
+      return;
+    }
+    console.error("[Automation] apple verification failed", error);
+    res.status(500).json({ error: "automation_apple_verify_failed", detail: sanitizeText(error?.message, 260) });
+  }
+});
+
+ROUTES.post("/mobile/automation/google/verify", async (req, res) => {
+  try {
+    const user = await requireFoundryUser(req);
+    const body = asPlainObject(req.body);
+    const contactEmail = await resolveAutomationContactEmail(user.uid, user, body.contactEmail);
+    if (!contactEmail) {
+      res.status(400).json({
+        error: "contact_email_required",
+        detail: "A valid email is required before Quantura Automation can be unlocked.",
+      });
+      return;
+    }
+    const verified = await verifyGoogleAutomationPurchase({
+      packageName: sanitizeText(body.packageName, 220) || GOOGLE_PLAY_ANDROID_PACKAGE,
+      productId: sanitizeText(body.productId, 120) || AUTOMATION_PRODUCT_ID,
+      purchaseToken: sanitizeText(body.purchaseToken, 400),
+      ownerUid: user.uid,
+    });
+    const entitlement = await syncAutomationEntitlementState(user.uid, {
+      automationUnlocked: true,
+      purchaseSource: verified.source,
+      unlockedAt: admin.firestore.Timestamp.fromMillis(verified.unlockedAtMs),
+      productId: verified.productId,
+      purchaseReference: verified.purchaseReference,
+      contactEmail,
+    });
+    try {
+      await sendAutomationUnlockEmail({
+        to: contactEmail,
+        ownerUid: user.uid,
+        productId: verified.productId,
+        purchaseSource: verified.source,
+        purchaseReference: verified.purchaseReference,
+      });
+    } catch (mailError) {
+      console.error("[Automation] google unlock email failed", { uid: user.uid, mailError });
+    }
+    const activeAutomationCount = await countActiveAutomationsForOwner(user.uid);
+    res.status(200).json({
+      ok: true,
+      entitlement: buildAutomationEntitlementResponse(user.uid, entitlement, activeAutomationCount),
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "full_account_required") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    if (code === "contact_email_required" || code === "missing_purchase_token" || code === "google_purchase_not_completed") {
+      res.status(400).json({ error: code });
+      return;
+    }
+    console.error("[Automation] google verification failed", error);
+    res.status(500).json({ error: "automation_google_verify_failed", detail: sanitizeText(error?.message, 260) });
+  }
+});
+
+ROUTES.get("/mobile/automation", async (req, res) => {
+  try {
+    const user = await requireFoundryUser(req);
+    const [entitlement, activeAutomationCount, snap] = await Promise.all([
+      readAutomationEntitlement(user.uid),
+      countActiveAutomationsForOwner(user.uid),
+      db.collection(AUTOMATION_COLLECTION).where("ownerUid", "==", user.uid).get(),
+    ]);
+    const automations = snap.docs
+      .map((doc) => buildAutomationResponse(doc.id, (doc.data() || {}) as Record<string, unknown>))
+      .sort((left, right) => (right.updatedAtMs as number) - (left.updatedAtMs as number));
+    res.status(200).json({
+      ok: true,
+      entitlement: buildAutomationEntitlementResponse(user.uid, entitlement, activeAutomationCount),
+      automations,
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "full_account_required") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    console.error("[Automation] list failed", error);
+    res.status(500).json({ error: "automation_list_failed", detail: sanitizeText(error?.message, 260) });
+  }
+});
+
+ROUTES.post("/mobile/automation", async (req, res) => {
+  try {
+    const user = await requireFoundryUser(req);
+    const body = asPlainObject(req.body);
+    const ticker = normalizeTicker(body.ticker);
+    if (!ticker) {
+      res.status(400).json({ error: "invalid_ticker" });
+      return;
+    }
+    const active = asBoolean(body.active, true);
+    const ref = automationRef();
+    await db.runTransaction(async (transaction) => {
+      const entitlementSnap = await transaction.get(automationEntitlementRef(user.uid));
+      const entitlement = (entitlementSnap.data() || {}) as Record<string, unknown>;
+      if (!asBoolean(entitlement.automationUnlocked, false)) {
+        throw new Error("automation_locked");
+      }
+      const activeSnap = await transaction.get(
+        db.collection(AUTOMATION_COLLECTION).where("ownerUid", "==", user.uid).where("active", "==", true)
+      );
+      const activeCount = activeSnap.size;
+      if (active && activeCount >= AUTOMATION_MAX_ACTIVE) {
+        throw new Error("automation_active_limit_reached");
+      }
+      transaction.set(ref, {
+        ticker,
+        forecastProfile: normalizeAutomationProfile(body.forecastProfile),
+        model: normalizeAutomationModel(body.model),
+        cadence: normalizeAutomationCadence(body.cadence),
+        horizon: normalizeAutomationHorizon(body.horizon),
+        active,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        nextRunAt: active ? admin.firestore.Timestamp.fromMillis(nextAutomationRunAtMs()) : null,
+        lastRunAt: null,
+        lastStatus: active ? "scheduled" : "inactive",
+        lastRunId: "",
+        ownerUid: user.uid,
+      });
+      transaction.set(
+        automationEntitlementRef(user.uid),
+        {
+          maxActiveAutomations: AUTOMATION_MAX_ACTIVE,
+          activeAutomationCount: active ? activeCount + 1 : activeCount,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    });
+    const created = await readAutomationForOwner(user.uid, ref.id);
+    res.status(200).json({
+      ok: true,
+      automation: created ? buildAutomationResponse(created.id, created.data) : null,
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "full_account_required") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    if (code === "automation_locked") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    if (code === "automation_active_limit_reached") {
+      res.status(429).json({
+        error: code,
+        detail: `Quantura Automation allows ${AUTOMATION_MAX_ACTIVE} active automations at a time. Deactivate one first.`,
+      });
+      return;
+    }
+    console.error("[Automation] create failed", error);
+    res.status(500).json({ error: "automation_create_failed", detail: sanitizeText(error?.message, 260) });
+  }
+});
+
+ROUTES.get("/mobile/automation/:automationId", async (req, res) => {
+  try {
+    const user = await requireFoundryUser(req);
+    const owned = await readAutomationForOwner(user.uid, req.params.automationId);
+    if (!owned) {
+      res.status(404).json({ error: "automation_not_found" });
+      return;
+    }
+    res.status(200).json({
+      ok: true,
+      automation: buildAutomationResponse(owned.id, owned.data),
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "full_account_required") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    console.error("[Automation] read failed", error);
+    res.status(500).json({ error: "automation_read_failed", detail: sanitizeText(error?.message, 260) });
+  }
+});
+
+ROUTES.patch("/mobile/automation/:automationId", async (req, res) => {
+  try {
+    const user = await requireFoundryUser(req);
+    const owned = await readAutomationForOwner(user.uid, req.params.automationId);
+    if (!owned) {
+      res.status(404).json({ error: "automation_not_found" });
+      return;
+    }
+    const body = asPlainObject(req.body);
+    const nextTicker = normalizeTicker(body.ticker || owned.data.ticker);
+    if (!nextTicker) {
+      res.status(400).json({ error: "invalid_ticker" });
+      return;
+    }
+    const nextActive =
+      typeof body.active === "boolean" ? asBoolean(body.active, false) : asBoolean(owned.data.active, false);
+    await db.runTransaction(async (transaction) => {
+      const entitlementSnap = await transaction.get(automationEntitlementRef(user.uid));
+      const entitlement = (entitlementSnap.data() || {}) as Record<string, unknown>;
+      if (!asBoolean(entitlement.automationUnlocked, false)) {
+        throw new Error("automation_locked");
+      }
+      const activeSnap = await transaction.get(
+        db.collection(AUTOMATION_COLLECTION).where("ownerUid", "==", user.uid).where("active", "==", true)
+      );
+      const activeIds = new Set(activeSnap.docs.map((doc) => doc.id));
+      const alreadyActive = activeIds.has(owned.id);
+      const activeCountExcludingCurrent = alreadyActive ? Math.max(0, activeSnap.size - 1) : activeSnap.size;
+      if (nextActive && activeCountExcludingCurrent >= AUTOMATION_MAX_ACTIVE) {
+        throw new Error("automation_active_limit_reached");
+      }
+      transaction.set(
+        automationRef(owned.id),
+        {
+          ticker: nextTicker,
+          forecastProfile: normalizeAutomationProfile(body.forecastProfile || owned.data.forecastProfile),
+          model: normalizeAutomationModel(body.model || owned.data.model),
+          cadence: normalizeAutomationCadence(body.cadence || owned.data.cadence),
+          horizon: normalizeAutomationHorizon(body.horizon || owned.data.horizon),
+          active: nextActive,
+          nextRunAt: nextActive
+            ? owned.data.nextRunAt || admin.firestore.Timestamp.fromMillis(nextAutomationRunAtMs())
+            : null,
+          lastStatus: nextActive ? sanitizeText(owned.data.lastStatus, 80) || "scheduled" : "inactive",
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      transaction.set(
+        automationEntitlementRef(user.uid),
+        {
+          maxActiveAutomations: AUTOMATION_MAX_ACTIVE,
+          activeAutomationCount: nextActive ? activeCountExcludingCurrent + 1 : activeCountExcludingCurrent,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    });
+    const updated = await readAutomationForOwner(user.uid, owned.id);
+    res.status(200).json({
+      ok: true,
+      automation: updated ? buildAutomationResponse(updated.id, updated.data) : null,
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "full_account_required") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    if (code === "automation_locked") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    if (code === "automation_active_limit_reached") {
+      res.status(429).json({
+        error: code,
+        detail: `Quantura Automation allows ${AUTOMATION_MAX_ACTIVE} active automations at a time. Deactivate one first.`,
+      });
+      return;
+    }
+    console.error("[Automation] update failed", error);
+    res.status(500).json({ error: "automation_update_failed", detail: sanitizeText(error?.message, 260) });
+  }
+});
+
+ROUTES.get("/mobile/automation/:automationId/history", async (req, res) => {
+  try {
+    const user = await requireFoundryUser(req);
+    const owned = await readAutomationForOwner(user.uid, req.params.automationId);
+    if (!owned) {
+      res.status(404).json({ error: "automation_not_found" });
+      return;
+    }
+    const history = await listAutomationHistoryForOwner(user.uid, owned.id);
+    res.status(200).json({
+      ok: true,
+      automation: buildAutomationResponse(owned.id, owned.data),
+      history,
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "full_account_required") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    console.error("[Automation] history failed", error);
+    res.status(500).json({ error: "automation_history_failed", detail: sanitizeText(error?.message, 260) });
+  }
+});
+
+ROUTES.post("/mobile/automation/:automationId/run", async (req, res) => {
+  try {
+    const user = await requireFoundryUser(req);
+    const owned = await readAutomationForOwner(user.uid, req.params.automationId);
+    if (!owned) {
+      res.status(404).json({ error: "automation_not_found" });
+      return;
+    }
+    if (!asBoolean(owned.data.active, false)) {
+      res.status(400).json({ error: "automation_inactive", detail: "Activate this automation before running it." });
+      return;
+    }
+    const activeAutomationCount = await countActiveAutomationsForOwner(user.uid);
+    if (activeAutomationCount > AUTOMATION_MAX_ACTIVE) {
+      res.status(429).json({
+        error: "automation_active_limit_reached",
+        detail: `Quantura Automation allows ${AUTOMATION_MAX_ACTIVE} active automations at a time. Deactivate one first.`,
+      });
+      return;
+    }
+    const lastRunId = sanitizeText(owned.data.lastRunId, 220);
+    if (lastRunId) {
+      const currentRun = await readAutopilotRunForOwner(user.uid, lastRunId);
+      const currentStatus = sanitizeText(asPlainObject(currentRun?.data || {}).status, 60).toLowerCase();
+      if (ACTIVE_FOUNDRY_STATUSES.has(currentStatus)) {
+        res.status(409).json({ error: "automation_run_already_active" });
+        return;
+      }
+    }
+    const run = await startAutomationForecastRun(user.uid, owned.id, owned.data, "manual");
+    res.status(200).json({ ok: true, run });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "full_account_required") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    if (code === "automation_locked") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    if (code === "invalid_ticker") {
+      res.status(400).json({ error: code });
+      return;
+    }
+    if (code.startsWith("invalid_quantiles:")) {
+      res.status(400).json({ error: "invalid_quantiles", detail: sanitizeText(code.replace(/^invalid_quantiles:\s*/i, ""), 260) });
+      return;
+    }
+    console.error("[Automation] run failed", error);
+    res.status(500).json({ error: "automation_run_failed", detail: sanitizeText(error?.message, 260) });
+  }
+});
+
 ROUTES.get("/my-requests/shared/:slug", async (req, res) => {
   try {
     const slug = normalizeShareId(req.params.slug);
@@ -8202,15 +12514,30 @@ ROUTES.get("/my-requests/shared/:slug", async (req, res) => {
       res.status(404).json({ error: "request_not_found" });
       return;
     }
+    const type = normalizeMyRequestType(data.type) || "forecast";
     const responseItem = toMyRequestResponse(requestSnap.id, data, { includePayload: true });
+    const sourceRef = asPlainObject(data.sourceRef);
+    const sourceCollection = sanitizeText(sourceRef.collection, 80);
+    const sourceId = sanitizeText(sourceRef.id, 220);
+    let screenerPayload: Record<string, unknown> | null = null;
+    if (type === "screener" && sourceCollection === "screener_runs" && sourceId) {
+      const sourceSnap = await db.collection(sourceCollection).doc(sourceId).get();
+      if (sourceSnap.exists) {
+        screenerPayload = buildSharedScreenerRunPayload(sourceSnap.id, (sourceSnap.data() || {}) as Record<string, unknown>, {
+          isPublic: asBoolean(data.published, false),
+        });
+      }
+    }
     res.status(200).json({
       request: responseItem,
       readOnly: !(viewer?.uid && viewer.uid === ownerUid),
+      canImport: Boolean(viewer?.uid && viewer.uid !== ownerUid && !isAnonymousDecodedUser(viewer)),
       share: {
         slug,
         visibility,
-        shareUrl: myRequestShareUrl(slug),
+        shareUrl: myRequestShareUrl(slug, data),
       },
+      screener: screenerPayload,
     });
   } catch (error) {
     console.error("[Explore] read shared request failed", error);
@@ -8597,7 +12924,7 @@ ROUTES.post("/my-requests/:requestId/share", async (req, res) => {
         ),
     ]);
 
-    const shareUrl = myRequestShareUrl(slug);
+    const shareUrl = myRequestShareUrl(slug, existing);
     const refreshed = await requestRef.get();
     res.status(200).json({
       ok: true,
@@ -8658,6 +12985,24 @@ ROUTES.post("/my-requests/:requestId/publish", async (req, res) => {
       },
       { merge: true }
     );
+    const sourceRef = asPlainObject(existing.sourceRef);
+    const sourceCollection = sanitizeText(sourceRef.collection, 80);
+    const sourceId = sanitizeText(sourceRef.id, 220);
+    if ((normalizeMyRequestType(existing.type) || "forecast") === "screener" && sourceCollection === "screener_runs" && sourceId) {
+      await db
+        .collection(sourceCollection)
+        .doc(sourceId)
+        .set(
+          {
+            isPublic: true,
+            published: true,
+            publishedAt: admin.firestore.FieldValue.serverTimestamp(),
+            explorePostId: postId,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+    }
 
     const refreshed = await requestRef.get();
     res.status(200).json({
@@ -8741,6 +13086,21 @@ ROUTES.post("/my-requests/:requestId/unpublish", async (req, res) => {
       },
       { merge: true }
     );
+    if (type === "screener" && sourceCollection === "screener_runs" && sourceId) {
+      await db
+        .collection(sourceCollection)
+        .doc(sourceId)
+        .set(
+          {
+            isPublic: false,
+            published: false,
+            publishedAt: null,
+            explorePostId: "",
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+    }
 
     const refreshed = await requestRef.get();
     res.status(200).json({
@@ -9289,7 +13649,6 @@ ROUTES.get("/shares/:shareId", async (req, res) => {
     const source = (sourceSnap.data() || {}) as Record<string, unknown>;
     const ownerUid = asString(source.userId);
     const readOnly = !(viewer?.uid && ownerUid && viewer.uid === ownerUid);
-    const results = Array.isArray(source.results) ? source.results.slice(0, 300) : [];
     const ownerProfile = ownerUid ? await readAuthorProfile(ownerUid) : { handle: "", photoURL: "" };
 
     res.status(200).json({
@@ -9298,20 +13657,11 @@ ROUTES.get("/shares/:shareId", async (req, res) => {
       sourceId: sourceSnap.id,
       readOnly,
       canImport: Boolean(viewer?.uid && readOnly),
-      screener: {
-        id: sourceSnap.id,
-        title: asString(source.title, "Screener run"),
-        notes: asString(source.notes, ""),
-        market: asString(source.market, ""),
-        universe: asString(source.universe, ""),
+      screener: buildSharedScreenerRunPayload(sourceSnap.id, source, {
         userId: ownerUid,
         ownerUsername: asString(source.ownerUsername || ownerProfile.handle),
         ownerAvatar: asString(source.ownerAvatar || "bull"),
-        isPublic: asBoolean(source.isPublic, false),
-        results,
-        createdAt: source.createdAt || null,
-        updatedAt: source.updatedAt || null,
-      },
+      }),
     });
   } catch (error) {
     console.error("[Explore] share lookup failed", error);
@@ -9379,4 +13729,56 @@ export async function onScreenerRunCreated(cloudEvent: any): Promise<void> {
 
 export async function refreshFiscaldataDefaults(_cloudEvent: any): Promise<void> {
   await runScheduledFiscaldataRefresh({ db });
+}
+
+export async function reconcileAutopilotRuns(_cloudEvent: any): Promise<void> {
+  const statuses = ["queued", "running", "transforming", "analysis_ready"];
+  try {
+    const snap = await db.collection("autopilot_requests").where("status", "in", statuses).limit(24).get();
+    for (const doc of snap.docs) {
+      try {
+        await reconcileAutopilotRunDocument(doc.id, (doc.data() || {}) as Record<string, unknown>);
+      } catch (error) {
+        console.error("[Autopilot] scheduled reconcile failed", { runId: doc.id, error });
+      }
+    }
+  } catch (error) {
+    console.error("[Autopilot] reconcile job failed", error);
+  }
+}
+
+export async function runAutomationSchedules(_cloudEvent: any): Promise<void> {
+  try {
+    const weekday = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York",
+      weekday: "short",
+    }).format(new Date());
+    if (weekday === "Sat" || weekday === "Sun") {
+      return;
+    }
+    const nowMs = Date.now();
+    const snap = await db.collection(AUTOMATION_COLLECTION).where("active", "==", true).get();
+    for (const doc of snap.docs) {
+      const data = (doc.data() || {}) as Record<string, unknown>;
+      const ownerUid = sanitizeText(data.ownerUid, 220);
+      if (!ownerUid) continue;
+      const nextRunAtMs = getOptionalTimestampMs(data.nextRunAt);
+      if (nextRunAtMs != null && nextRunAtMs > nowMs) continue;
+      try {
+        const entitlement = await readAutomationEntitlement(ownerUid);
+        if (!asBoolean(entitlement.automationUnlocked, false)) continue;
+        const lastRunId = sanitizeText(data.lastRunId, 220);
+        if (lastRunId) {
+          const currentRun = await readAutopilotRunForOwner(ownerUid, lastRunId);
+          const currentStatus = sanitizeText(asPlainObject(currentRun?.data || {}).status, 60).toLowerCase();
+          if (ACTIVE_FOUNDRY_STATUSES.has(currentStatus)) continue;
+        }
+        await startAutomationForecastRun(ownerUid, doc.id, data, "scheduled");
+      } catch (error) {
+        console.error("[Automation] scheduled run failed", { automationId: doc.id, error });
+      }
+    }
+  } catch (error) {
+    console.error("[Automation] scheduler failed", error);
+  }
 }

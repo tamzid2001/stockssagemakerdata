@@ -130,23 +130,6 @@
 	              <div class="studio-layout" data-panels data-panel-router="terminal">
                 <div class="studio-main">
                   <div class="chart-shell studio-chart">
-                    <div class="chart-toolbar" id="chart-toolbar" aria-label="Chart controls">
-                      <div class="chart-range-group" role="group" aria-label="Chart range">
-                        <button class="chart-control-btn" type="button" data-chart-range="1d">1D</button>
-                        <button class="chart-control-btn" type="button" data-chart-range="5d">5D</button>
-                        <button class="chart-control-btn" type="button" data-chart-range="1m">1M</button>
-                        <button class="chart-control-btn" type="button" data-chart-range="3m">3M</button>
-                        <button class="chart-control-btn" type="button" data-chart-range="ytd">YTD</button>
-                        <button class="chart-control-btn" type="button" data-chart-range="1y">1Y</button>
-                        <button class="chart-control-btn" type="button" data-chart-range="5y">5Y</button>
-                        <button class="chart-control-btn" type="button" data-chart-range="max">MAX</button>
-                      </div>
-                      <div class="chart-view-group" role="group" aria-label="Chart view style">
-                        <button class="chart-control-btn" type="button" data-chart-view="candlestick">Candles</button>
-                        <button class="chart-control-btn" type="button" data-chart-view="line">Line</button>
-                      </div>
-                    </div>
-
                     <div id="tradingview-terminal-root" class="tradingview-terminal hidden">
                       <div class="tv-widget-status-row">
                         <span class="small muted" id="tv-widget-status">Loading TradingView...</span>
@@ -214,17 +197,19 @@
                         </div>
 	                      </div>
 	                      <div class="field">
-	                        <label class="label" for="forecast-quantiles">Quantiles (comma-delimited)</label>
-	                        <input id="forecast-quantiles" name="quantiles" value="0.1,0.25,0.5,0.75,0.9" placeholder="0.1,0.25,0.5,0.75,0.9" required />
-	                        <div class="small muted">Values must be between 0 and 1 (exclusive). Example: 0.1,0.25,0.5,0.75,0.9</div>
+	                        <label class="label">Forecast bands</label>
+	                        <div class="small muted">
+                            Quantura Horizon always uses fixed bands: <strong>P01-P99</strong>, <strong>P10-P90</strong>, <strong>P25-P75</strong>, plus the
+                            <strong>P50</strong> median path.
+                          </div>
 	                      </div>
 	                      <button class="cta" type="submit" data-analytics="forecast_submit"><i class="iconoir-magic-wand" aria-hidden="true"></i><span>Generate forecast</span></button>
 	                      <details class="learn-more">
 	                        <summary>Learn more</summary>
 	                        <div class="small">
                             <p>
-                              Forecasts are stored to your workspace as quantile bands. Quantiles are probabilities (not targets): for example, <strong>0.1</strong> is a lower band,
-                              <strong>0.5</strong> is the median path, and <strong>0.9</strong> is an upper band. Use them to reason about uncertainty, not to force a single outcome.
+                              Forecasts are stored to your workspace as fixed probability bands. Quantura Horizon saves a <strong>P01-P99</strong> outer range,
+                              a <strong>P10-P90</strong> range, a <strong>P25-P75</strong> range, and the <strong>P50</strong> median path so every saved run renders consistently.
                             </p>
                             <p>
                               <strong>Forecast length</strong> controls how many future timestamps are generated for the selected timeframe. Daily forecasts use trading days (business days).
@@ -424,16 +409,22 @@
                       <p class="small">Company context and headlines update automatically and render below your chart.</p>
                     </div>
                     <div class="content-grid">
-                      <form id="download-form" class="card">
-                        <h3>Download price history</h3>
-                        <input id="download-ticker" name="ticker" type="hidden" />
-                        <div class="small muted" style="margin-bottom: 12px;">Uses the ticker from your chart context.</div>
-                        <div class="form-grid">
+                      <form id="download-form" class="card download-form-card">
+                        <div class="card-head">
+                          <div>
+                            <h3>Download price history</h3>
+                            <p class="small muted download-form-subcopy">Enter a ticker directly or let Quantura prefill it from your active chart.</p>
+                          </div>
+                        </div>
+                        <div class="form-grid download-form-grid">
+                          <div class="field">
+                            <label class="label" for="download-ticker">Ticker</label>
+                            <input id="download-ticker" name="ticker" type="text" placeholder="AAPL" autocomplete="off" />
+                          </div>
                           <div class="field">
                             <label class="label" for="download-interval">Interval</label>
                             <select id="download-interval" name="interval">
                               <option value="1d">Daily</option>
-                              <option value="1h">Hourly</option>
                             </select>
                           </div>
                           <div class="field">
@@ -441,26 +432,32 @@
                             <input id="download-end" name="end" type="date" />
                           </div>
                         </div>
-                        <button class="cta" type="submit" data-analytics="download_prices">Download CSV</button>
-                        <p class="small" id="download-status"></p>
+                        <div class="field">
+                          <label class="checkbox download-history-toggle">
+                            <input id="download-use-all-history" name="useAllHistory" type="checkbox" />
+                            <span>Use all available historical data for this interval</span>
+                          </label>
+                          <div class="small muted download-history-note">Historical downloader exports daily market data only.</div>
+                        </div>
+                        <div class="download-form-actions">
+                          <button class="cta" type="submit" data-analytics="download_prices">Download CSV</button>
+                          <p class="small" id="download-status"></p>
+                        </div>
                       </form>
-                      <div class="card">
+                      <div class="card download-guidance-card">
                         <h3>Export guidance</h3>
                         <p class="small">
-                          Use daily exports for longer-horizon strategy analysis and hourly exports to inspect short-term regime shifts.
-                          Quantura keeps your terminal context consistent so you can pull data without re-entering symbols.
+                          Use the ticker field to export a clean canonical dataset with <code>item_id</code>, <code>timestamp</code>, and <code>closing_price</code>.
+                          Daily exports keep the downloader aligned with Forecast Foundry's daily-only historical workflow.
                         </p>
                         <details class="learn-more">
                           <summary>Learn more</summary>
                           <p class="small">
-                            If you're building your own dashboard, export the same interval you used to generate forecasts so the timestamps align cleanly in downstream tooling.
+                            If you're building your own dashboard, keep the export interval matched to your modeling interval so the timestamp cadence stays consistent across training and evaluation.
                           </p>
                         </details>
+                        <div id="download-preview" class="panel-output small">Run a download to preview canonical <code>item_id</code>, <code>timestamp</code>, and <code>closing_price</code> rows before exporting.</div>
                       </div>
-                    </div>
-                    <div class="results-panel" style="margin-top: 16px;">
-                      <h3>History preview</h3>
-                      <div id="download-preview" class="panel-output small">Run a download to preview Date, Close, Open, High, Low, and Volume.</div>
                     </div>
                     <div class="notice" style="margin-top: 16px;">
                       TradingView widgets and the ticker chart are available only in the Ticker panel for the active symbol.
@@ -478,32 +475,19 @@
                         <div class="field">
                           <label class="label" for="market-headlines-provider">Source provider</label>
                           <select id="market-headlines-provider" name="provider">
-                            <option value="cnn">CNN RSS</option>
+                            <option value="marketwatch" selected>MarketWatch Top Stories</option>
                             <option value="spglobal">S&amp;P DJI RSS</option>
                             <option value="mql5">MQL5 Blogs RSS</option>
                             <option value="cnbc">CNBC Market Insider</option>
                             <option value="economictimes">Economic Times Stocks</option>
                             <option value="investing">Investing.com Markets</option>
                             <option value="seekingalpha">Seeking Alpha</option>
-                            <option value="marketwatch">MarketWatch Top Stories</option>
                           </select>
                         </div>
                         <div class="field">
                           <label class="label" for="market-headlines-feed">Feed / topic</label>
                           <select id="market-headlines-feed" name="feed">
-                            <option value="cnn_topstories">Top Stories</option>
-                            <option value="cnn_world">World</option>
-                            <option value="cnn_us">U.S.</option>
-                            <option value="cnn_business">Business</option>
-                            <option value="cnn_politics">Politics</option>
-                            <option value="cnn_technology">Technology</option>
-                            <option value="cnn_health">Health</option>
-                            <option value="cnn_entertainment">Entertainment</option>
-                            <option value="cnn_travel">Travel</option>
-                            <option value="cnn_video">Video</option>
-                            <option value="cnn10">CNN 10</option>
-                            <option value="cnn_latest">Most Recent</option>
-                            <option value="cnn_underscored">CNN Underscored</option>
+                            <option value="marketwatch_topstories" selected>Top stories</option>
                           </select>
                         </div>
                         <div class="field">
@@ -763,9 +747,9 @@
                   </section>
 
 	                  <section class="panel hidden" data-panel="screener">
-                    <div class="panel-header">
-                      <h2>AI Portfolio Generator</h2>
-                      <p class="small">Run criteria, rank candidates with Quantura Horizon long-term growth scores, and publish an AI Agent.</p>
+                    <div class="panel-header screener-panel-header">
+                      <h2>Quantura Portfolio Architect</h2>
+                      <p class="small">Scan market filters, rank high-conviction names with Quantura Horizon scoring, and publish a portfolio brief ready for Explore.</p>
                     </div>
                     <form id="screener-form" class="card">
                       <div class="form-grid">
@@ -1197,7 +1181,7 @@
                     </form>
 	                    <div class="results-panel">
 	                      <h3>Portfolio output</h3>
-	                      <div id="screener-output" class="panel-output small">Generate a portfolio to see ranked candidates and AI Agent performance.</div>
+	                      <div id="screener-output" class="panel-output small">Generate a portfolio to surface ranked candidates, allocation cues, and a publish-ready AI brief.</div>
 	                    </div>
                       <div class="card" data-my-requests-panel data-default-type="screener">
                         <div class="card-head">
