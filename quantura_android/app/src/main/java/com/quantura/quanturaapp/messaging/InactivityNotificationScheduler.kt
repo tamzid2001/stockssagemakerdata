@@ -56,7 +56,9 @@ object InactivityNotificationScheduler {
     }
 
     private fun buildPendingIntent(context: Context, action: String, requestCode: Int): PendingIntent {
-        val intent = Intent(context, InactivityNotificationReceiver::class.java).apply {
+        val intent = Intent().apply {
+            setClass(context, InactivityNotificationReceiver::class.java)
+            setPackage(context.packageName)
             this.action = action
         }
         return PendingIntent.getBroadcast(

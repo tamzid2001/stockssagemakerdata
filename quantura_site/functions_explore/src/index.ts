@@ -1,4 +1,6 @@
+import crypto from "crypto";
 import cors from "cors";
+import rateLimit from "express-rate-limit";
 import express, { Request, Response } from "express";
 import admin from "firebase-admin";
 import { GoogleAuth } from "google-auth-library";
@@ -281,6 +283,11 @@ const MY_REQUEST_TYPE_LABEL: Record<MyRequestType, string> = {
 };
 
 const ROUTES = express.Router();
+const API_RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const API_RATE_LIMIT_MAX = 240;
+const SENSITIVE_API_RATE_LIMIT_MAX = 60;
+const LLM_API_RATE_LIMIT_MAX = 24;
+const API_RATE_LIMIT_SKIP_PREFIXES = ["/webhooks/", "/webhook/", "/admob/reward"];
 const polymarketCache = new Map<string, PolymarketCacheEntry>();
 const tickerIntelCache = new Map<string, TickerIntelCacheEntry>();
 const tickerTrendingCache = new Map<string, TickerTrendingCacheEntry>();
@@ -2278,17 +2285,11 @@ async function createPostFromResult(postType: PostType, sourceDocId: string, pay
 }
 
 async function verifyRequestUser(req: Request, required = false): Promise<admin.auth.DecodedIdToken | null> {
-  const authHeader = asString(req.headers.authorization);
-  if (!authHeader) {
+  const token = extractBearerToken(req.headers.authorization);
+  if (!token) {
     if (required) throw new Error("unauthenticated");
     return null;
   }
-  const match = authHeader.match(/^Bearer\s+(.+)$/i);
-  if (!match) {
-    if (required) throw new Error("unauthenticated");
-    return null;
-  }
-  const token = match[1];
   try {
     return await auth.verifyIdToken(token);
   } catch {
@@ -2297,10 +2298,32 @@ async function verifyRequestUser(req: Request, required = false): Promise<admin.
 }
 
 function getBearerToken(req: Request): string {
-  const authHeader = asString(req.headers["authorization"] || (req.headers as any)["Authorization"]).trim();
+  return extractBearerToken(req.headers["authorization"] || (req.headers as any)["Authorization"]);
+}
+
+function extractBearerToken(rawHeader: unknown): string {
+  const authHeader = asString(rawHeader).trim();
   if (!authHeader) return "";
-  const match = authHeader.match(/^Bearer\s+(.+)$/i);
-  return match ? match[1].trim() : "";
+  if (authHeader.length <= 7) return "";
+  if (authHeader.slice(0, 7).toLowerCase() !== "bearer ") return "";
+  return authHeader.slice(7).trim();
+}
+
+function buildRateLimitKey(req: Request): string {
+  const bearerToken = extractBearerToken(req.headers["authorization"] || (req.headers as any)["Authorization"]);
+  if (bearerToken) {
+    const digest = crypto.createHash("sha256").update(bearerToken).digest("hex").slice(0, 24);
+    return `token:${digest}`;
+  }
+  const ipAddress = sanitizeText(requestIpAddress(req), 120);
+  return ipAddress ? `ip:${ipAddress}` : "ip:unknown";
+}
+
+function sendRateLimitResponse(res: Response): void {
+  res.status(429).json({
+    error: "rate_limit_exceeded",
+    detail: "Too many requests. Please slow down and retry shortly.",
+  });
 }
 
 function normalizeAdFormat(value: unknown): string {
@@ -2323,6 +2346,45 @@ function asPlainObject(value: unknown): Record<string, unknown> {
   }
   return {};
 }
+
+const apiRateLimiter = rateLimit({
+  windowMs: API_RATE_LIMIT_WINDOW_MS,
+  max: API_RATE_LIMIT_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: buildRateLimitKey,
+  skip: (req) => req.path === "/health" || API_RATE_LIMIT_SKIP_PREFIXES.some((prefix) => req.path.startsWith(prefix)),
+  handler: (_req, res) => sendRateLimitResponse(res),
+});
+
+const sensitiveApiRateLimiter = rateLimit({
+  windowMs: API_RATE_LIMIT_WINDOW_MS,
+  max: SENSITIVE_API_RATE_LIMIT_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: buildRateLimitKey,
+  handler: (_req, res) => sendRateLimitResponse(res),
+});
+
+const llmApiRateLimiter = rateLimit({
+  windowMs: API_RATE_LIMIT_WINDOW_MS,
+  max: LLM_API_RATE_LIMIT_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: buildRateLimitKey,
+  handler: (_req, res) => sendRateLimitResponse(res),
+});
+
+ROUTES.use(apiRateLimiter);
+ROUTES.use("/llm", llmApiRateLimiter);
+ROUTES.use("/mobile/play-integrity/verify", sensitiveApiRateLimiter);
+ROUTES.use("/mobile/auth/exchange", sensitiveApiRateLimiter);
+ROUTES.use("/notify/sendTest", sensitiveApiRateLimiter);
+ROUTES.use("/notifications/register-token", sensitiveApiRateLimiter);
+ROUTES.use("/notifications/unregister-token", sensitiveApiRateLimiter);
+ROUTES.use("/notifications/preferences", sensitiveApiRateLimiter);
+ROUTES.use("/notifications/personalize", sensitiveApiRateLimiter);
+ROUTES.use("/notifications/sync-topics", sensitiveApiRateLimiter);
 
 function normalizePolymarketSort(value: unknown): "relevance" | "volume" {
   return sanitizeText(value, 24).toLowerCase() === "volume" ? "volume" : "relevance";
