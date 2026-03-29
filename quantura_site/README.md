@@ -1,284 +1,90 @@
-# Quantura Platform
+# Quantura Web App
 
-Quantura is a Firebase-hosted market intelligence web app with:
-- Multi-page SSR-rendered marketing + app routes
-- Authenticated dashboard workflows
-- Forecasting, screener, options/news/technicals, uploads, backtesting
-- Admin fulfillment operations
-- Remote Config + Analytics + Messaging integrations
-- Python Cloud Functions for data and workflow automation
+This directory contains the live Quantura website and dashboard application.
 
-This README documents architecture, setup, deployment, and operations.
+Production URLs:
 
-## 1) Architecture
+- [https://quantura.studio](https://quantura.studio)
+- [https://quantura-e2e3d.web.app](https://quantura-e2e3d.web.app)
 
-## Frontend
-- Source pages: `quantura_site/pages/*.html`
-- Client logic: `quantura_site/public/app.js`
-- Shared styling: `quantura_site/public/styles.css`
-- Static assets + SEO files: `quantura_site/public/*`
+## Directory map
 
-## SSR layer (Firebase Functions, Node)
-- Entry: `quantura_site/functions_ssr/index.js`
-- Template sync script: `quantura_site/functions_ssr/scripts/sync-templates.js`
-- Templates target: `quantura_site/functions_ssr/templates/`
-
-## Backend (Firebase Functions, Python)
-- Entry: `quantura_site/functions/main.py`
-- Requirements: `quantura_site/functions/requirements.txt`
-
-## Firebase resources
-- Firestore rules/indexes: `quantura_site/firestore.rules`, `quantura_site/firestore.indexes.json`
-- Storage rules: `quantura_site/storage.rules`
-- Hosting + rewrites: `quantura_site/firebase.json`
-
-## CI/CD
-- Workflows: `.github/workflows/*.yml`
-
----
-
-## 2) Core Product Features
-
-## Authentication + session
-- Firebase Email/Password + Google sign-in
-- Persistent auth state across routes
-- Admin account gate for `tamzid257@gmail.com`
-
-## Forecasting
-- Meta Prophet and SageMaker Canvas options
-- Quantile forecasting input and saved runs
-- Plotly chart visualization and replay from saved runs
-
-## Screener
-- Run, save, rename, delete screener runs
-- Load historical runs from workspace
-
-## Uploads / predictions.csv
-- Upload CSV with ticker metadata
-- Plot uploaded CSV interactively
-- Pagination controls in preview (`25/50/100/250/500` rows)
-- CRUD actions: rename, delete, download, plot
-- OpenAI CSV Agent (`run_prediction_upload_agent`) for analyst-style commentary
-
-## Dashboard productivity
-- Watchlist, price alerts, collaboration invites, tasks
-- Autopilot request queue + CRUD
-- Notifications controls and token registration flow
-
-## Pricing + purchase
-- Monthly pricing plans in `/pricing`
-- Subscription plan checkout integrated into pricing page
-- `/purchase` redirected to `/pricing`
-
-## Admin fulfillment
-- Order status updates
-- Upload fulfillment files and notes
-- Admin-only data visibility
-
----
-
-## 3) Routes
-
-## Public
-- `/`
-- `/forecasting`
-- `/screener`
-- `/pricing`
-- `/contact`
-- `/blog`
-- `/blog/posts/:slug`
-- `/terms`
-- `/privacy`
-
-## Auth-gated app
-- `/dashboard`
-- `/account`
-- `/watchlist`
-- `/productivity`
-- `/collaboration`
-- `/uploads`
-- `/autopilot`
-- `/notifications`
-
-## Admin
-- `/admin`
-
----
-
-## 4) Remote Config Parameters
-
-Client and SSR use Remote Config with fallbacks. Current keys in use:
-- `welcome_message` (string)
-- `watchlist_enabled` (bool-ish)
-- `forecast_prophet_enabled` (bool-ish)
-- `forecast_canvas_enabled` (bool-ish)
-- `push_notifications_enabled` (bool-ish)
-- `webpush_vapid_key` (string)
-- `stripe_checkout_enabled` (bool-ish)
-- `stripe_public_key` (string)
-- `native_ios_storekit_checkout_only` (bool-ish)
-- `native_android_play_billing_enabled` (bool-ish)
-- `native_iap_product_ids` (JSON map: plan -> productId)
-- `ads_use_real_ios` (bool-ish)
-- `ads_use_real_android` (bool-ish)
-- `ad_unit_ids` (JSON ad unit override map)
-- `holiday_promo` (bool-ish)
-- `backtesting_enabled` (bool-ish)
-- `backtesting_free_daily_limit` (number)
-- `backtesting_pro_daily_limit` (number)
-- `llm_allowed_models` (string CSV/JSON allowlist)
-
-Server evaluation happens in:
-- SSR: `quantura_site/functions_ssr/index.js`
-- Python functions: `quantura_site/functions/main.py`
-
----
-
-## 5) Environment Variables
-
-Use local `.env` files for local development only. Never commit secrets.
-
-Local-only credential files (ignored by git):
-- `quantura_site/functions/serviceAccountKey.json`
-- `quantura_ios/quantura_ios/GoogleService-Info.plist`
-- `quantura_android/app/google-services.json`
-
-You can create placeholders with:
-```bash
-cd /Users/tamzidullah/Desktop/stockssagemakerdata
-./scripts/setup_local_firebase_credentials.sh
+```text
+quantura_site/
+├── pages/                 # Source HTML pages
+├── public/                # Public assets, app.js, styles.css, service workers, static pages
+├── functions_explore/     # Gen2 Node API for app features and AWS integrations
+├── functions_ssr/         # Gen2 Node SSR renderer and template sync script
+├── functions_newsletter/  # Python newsletter handlers and schedulers
+├── firestore.rules
+├── firestore.indexes.json
+├── storage.rules
+└── firebase.json
 ```
 
-## Root `.env` (automation/scripts)
-See `.env.example` for full template.
+## Main product areas
 
-## Functions `.env`
-Typical keys:
-- Firebase/service: `SERVICE_ACCOUNT_PATH`, `STORAGE_BUCKET`, `PUBLIC_ORIGIN`
-- OpenAI: `OPENAI_API_KEY`, `SOCIAL_CONTENT_MODEL`, `PREDICTION_AGENT_MODEL`
-- Amazon Nova (optional): `AMAZON_NOVA_API_KEY`, `AMAZON_NOVA_API_ENDPOINT`, `AMAZON_NOVA_DEFAULT_MODEL`
-- Model policy fallback: `LLM_ALLOWED_MODELS`
-- Stripe: `STRIPE_PUBLIC_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`
-- Messaging: `FCM_WEB_VAPID_KEY`
-- Alpaca: `ALPACA_API_KEY`/`ALPACAAPIKEY`, `ALPACA_SECRET_KEY`/`ALPACASECRETKEY`
-- SageMaker Canvas/HF: `SAGEMAKER_CANVAS_API_KEY`, `HUGGINGFACEHUB_API_TOKEN`
-- Slack/social: `SLACK_WEBHOOK_URL`, `SOCIAL_WEBHOOK_*`
+- public home, pricing, blog, research, and legal pages
+- dashboard, account, notifications, productivity, collaboration, and admin
+- Forecast Foundry and historical-data workflows
+- Explore publishing and comments
+- market headlines, screening, charting, and research surfaces
 
----
+## Source of truth
 
-## 6) Local Development
+- Edit page markup in `pages/`
+- Edit client behavior in `public/app.js`, `public/explore.js`, and related assets
+- Edit styling in `public/styles.css` and page-specific CSS files
+- Edit API behavior in `functions_explore/src/`
+- Edit SSR behavior in `functions_ssr/index.js`
 
-From repo root:
-```bash
-cd quantura_site
-npm ci
-```
+Do not edit the synced SSR templates directly. They are generated from `pages/`.
 
-If you use Python tests:
-```bash
-cd /Users/tamzidullah/Desktop/stockssagemakerdata
-python3 -m venv .venv-test
-source .venv-test/bin/activate
-pip install -r requirements.txt pytest
-pytest -q quantura_site/tests/test_public_assets.py
-```
+## Local setup
 
-Optional frontend sanity checks:
-```bash
-node --check quantura_site/public/app.js
-node --check quantura_site/functions_ssr/index.js
-```
-
----
-
-## 7) Deploy
-
-Deploy from `quantura_site`:
 ```bash
 cd /Users/tamzidullah/Desktop/stockssagemakerdata/quantura_site
-firebase deploy
+npm install
 ```
 
-Or scoped deploys:
+Optional checks:
+
 ```bash
-firebase deploy --only hosting
-firebase deploy --only functions
-firebase deploy --only functions:ssr
-firebase deploy --only firestore:rules,firestore:indexes,storage
+node --check public/app.js
+node --check functions_ssr/index.js
+pytest -q tests
+node functions_ssr/scripts/sync-templates.js
+git diff -- functions_ssr/templates
 ```
 
----
+## Deploy
 
-## 8) CI/CD Workflows
+The preferred deploy path is the root script:
 
-Key workflows:
-- `firebase-hosting-merge.yml`: Hosting deploy on merge
-- `firebase-hosting-pull-request.yml`: Preview deploy on PR
-- `daily-quantura-tests.yml`: static/tests
-- `mlops-data.yml`: market data + optional S3 upload
-- `autopilot_timeseries.yml`: scheduled Autopilot job
+```bash
+cd /Users/tamzidullah/Desktop/stockssagemakerdata
+./deploy.sh
+```
 
-Recent hardening:
-- `mlops-data.yml` now skips AWS upload steps when AWS secrets are missing.
-- `autopilot_timeseries.yml` now skips run cleanly when required secrets are missing.
-- `scripts/run_autopilot_timeseries.py` fixed import path + `args.s3_prefix` bug.
+That script handles template sync, function deploys, scheduler setup, and hosting release.
 
-Required repo secrets for AWS jobs:
-- `AWS_ACCESS_KEY_ID`
-- `AWS_SECRET_ACCESS_KEY`
-- `AUTOPILOT_ROLE_ARN`
-- `AUTOPILOT_S3_BUCKET`
-- `AUTOPILOT_TICKERS`
+Scoped deploys can still be useful during debugging:
 
----
+```bash
+cd /Users/tamzidullah/Desktop/stockssagemakerdata/quantura_site
+firebase deploy --only hosting
+firebase deploy --only functions:ssr
+```
 
-## 9) Social Automation
+## Notes for contributors
 
-Backend functions:
-- `generate_social_campaign_drafts`
-- `queue_social_campaign_posts`
-- `list_social_campaigns`
-- `list_social_queue`
-- `publish_social_queue_now`
-- `social_dispatch_scheduler`
+- If you change `pages/`, make sure SSR templates stay in sync.
+- If you change dashboard or Explore behavior, test both logged-out and logged-in states.
+- If you touch app-side copy or workflow behavior, update the relevant docs and screenshots when appropriate.
+- Never commit secrets, service-account JSON files, or production mobile config files.
 
-Setup guide:
-- `quantura_site/docs/social_media_setup.md`
+Repository-wide contribution, conduct, and security guidance lives in:
 
----
-
-## 10) Legal + Compliance Text
-
-Footer now includes:
-- Terms and Conditions link (`/terms`)
-- Privacy Policy link (`/privacy`)
-- Financial disclaimer
-
----
-
-## 11) Troubleshooting
-
-## "I uploaded CSV but cannot plot"
-- Confirm upload owner matches signed-in user
-- Verify `get_prediction_upload_csv` callable is deployed
-- Check Storage path exists in upload doc
-
-## "Agent button shows fallback"
-- `OPENAI_API_KEY` is missing or unreachable
-- Fallback deterministic summary is expected in this case
-
-## "Auth button still says Sign in"
-- Clear stale cache and hard reload
-- Confirm latest `public/app.js` is deployed
-
-## "Pagination not visible"
-- Ensure latest `public/app.js` + `public/styles.css` are deployed
-- Preview panel must have loaded CSV rows first
-
----
-
-## 12) Release
-
-First tagged release:
-- Tag: `v1.0.0`
-- Release: <https://github.com/tamzid2001/stockssagemakerdata/releases/tag/v1.0.0>
+- [CONTRIBUTING.md](../CONTRIBUTING.md)
+- [CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md)
+- [SECURITY.md](../SECURITY.md)

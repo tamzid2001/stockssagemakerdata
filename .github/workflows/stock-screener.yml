@@ -1,0 +1,137 @@
+name: Stock Screener
+
+on:
+  workflow_dispatch:
+    inputs:
+      universe:
+        description: "Universe to scan"
+        required: false
+        default: "both"
+      max_tickers:
+        description: "Optional cap for debugging smaller runs"
+        required: false
+        default: ""
+      min_market_cap:
+        description: "Minimum market cap in USD"
+        required: false
+        default: "100000000000"
+      min_central_delta:
+        description: "Optional minimum central delta filter"
+        required: false
+        default: ""
+      min_tail_delta:
+        description: "Optional minimum tail delta filter"
+        required: false
+        default: ""
+  schedule:
+    - cron: "5 21 * * 1-5"
+    - cron: "5 22 * * 1-5"
+
+permissions:
+  contents: read
+
+jobs:
+  run-screener:
+    runs-on: ubuntu-latest
+    env:
+      TRACKER_UNIVERSE: ${{ github.event.inputs.universe || 'both' }}
+      TRACKER_MAX_TICKERS: ${{ github.event.inputs.max_tickers || '' }}
+      MIN_MARKET_CAP: ${{ github.event.inputs.min_market_cap || '100000000000' }}
+      MIN_CENTRAL_DELTA: ${{ github.event.inputs.min_central_delta || '' }}
+      MIN_TAIL_DELTA: ${{ github.event.inputs.min_tail_delta || '' }}
+      OUTPUT_DIR: artifacts
+      STATE_DIR: state
+      ENFORCE_SCHEDULE_GATES: ${{ github.event_name == 'schedule' && 'true' || 'false' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare screener artifact directories
+        run: |
+          mkdir -p "${OUTPUT_DIR}" "${STATE_DIR}"
+          printf 'initialized at %s\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" > "${OUTPUT_DIR}/placeholder.txt"
+          printf 'initialized at %s\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" > "${STATE_DIR}/placeholder.txt"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install screener dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install yfinance pandas numpy prophet requests lxml exchange_calendars
+
+      - name: Validate screener configuration
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          script_path = Path("daily_prophet_signal_tracker.py")
+          if not script_path.exists():
+              raise SystemExit("daily_prophet_signal_tracker.py is missing")
+
+          print("Tracker configuration looks good.")
+          PY
+
+      - name: Run stock screener
+        run: |
+          mkdir -p "${OUTPUT_DIR}" "${STATE_DIR}"
+          cmd=(
+            python daily_prophet_signal_tracker.py
+            --universe "${TRACKER_UNIVERSE}"
+            --min-market-cap "${MIN_MARKET_CAP}"
+            --output-dir "${OUTPUT_DIR}"
+            --state-dir "${STATE_DIR}"
+          )
+
+          if [ -n "${TRACKER_MAX_TICKERS}" ]; then
+            cmd+=(--max-tickers "${TRACKER_MAX_TICKERS}")
+          fi
+          if [ -n "${MIN_CENTRAL_DELTA}" ]; then
+            cmd+=(--min-central-delta "${MIN_CENTRAL_DELTA}")
+          fi
+          if [ -n "${MIN_TAIL_DELTA}" ]; then
+            cmd+=(--min-tail-delta "${MIN_TAIL_DELTA}")
+          fi
+          if [ "${ENFORCE_SCHEDULE_GATES}" = "true" ]; then
+            cmd+=(--enforce-5pm-newyork-window --enforce-trading-day)
+          fi
+
+          printf 'Workflow started at %s\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" > "${OUTPUT_DIR}/workflow-run.log"
+          printf 'Command: %s\n\n' "${cmd[*]}" >> "${OUTPUT_DIR}/workflow-run.log"
+          "${cmd[@]}" 2>&1 | tee -a "${OUTPUT_DIR}/workflow-run.log"
+
+      - name: Upload screener artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-prophet-signal-tracker
+          path: |
+            ${{ env.OUTPUT_DIR }}
+            ${{ env.STATE_DIR }}
+          if-no-files-found: warn
+
+      - name: Write workflow summary
+        if: always()
+        run: |
+          {
+            echo "## Stock Screener Run"
+            echo
+            echo "- Output directory: \`${OUTPUT_DIR}\`"
+            echo "- State directory: \`${STATE_DIR}\`"
+            echo "- Universe: \`${TRACKER_UNIVERSE}\`"
+            echo "- Minimum market cap: \`${MIN_MARKET_CAP}\`"
+            echo "- Scheduled gate mode: \`${ENFORCE_SCHEDULE_GATES}\`"
+            if [ -n "${TRACKER_MAX_TICKERS}" ]; then
+              echo "- Max tickers override: \`${TRACKER_MAX_TICKERS}\`"
+            fi
+            if [ -n "${MIN_CENTRAL_DELTA}" ]; then
+              echo "- Min central delta: \`${MIN_CENTRAL_DELTA}\`"
+            fi
+            if [ -n "${MIN_TAIL_DELTA}" ]; then
+              echo "- Min tail delta: \`${MIN_TAIL_DELTA}\`"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

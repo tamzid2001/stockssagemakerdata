@@ -19,14 +19,6 @@
       .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
       .join(" ");
 
-  const escapeHtml = (value) =>
-    String(value || "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#39;");
-
   const formatDate = (iso) => {
     const date = new Date(String(iso || ""));
     if (Number.isNaN(date.getTime())) return "Unknown date";
@@ -62,30 +54,71 @@
     return query ? `/blog?${query}` : "/blog";
   };
 
+  const clearNode = (node) => {
+    while (node.firstChild) node.removeChild(node.firstChild);
+  };
+
+  const createArchiveCard = (message) => {
+    const card = document.createElement("div");
+    card.className = "card";
+    const paragraph = document.createElement("p");
+    paragraph.className = "small muted";
+    paragraph.textContent = message;
+    card.appendChild(paragraph);
+    return card;
+  };
+
+  const createPaginationLink = (label, href, className, disabled = false, current = false) => {
+    const link = document.createElement("a");
+    link.className = className;
+    link.textContent = label;
+    if (disabled) {
+      link.setAttribute("aria-disabled", "true");
+    } else {
+      link.href = href;
+    }
+    if (current) link.setAttribute("aria-current", "page");
+    return link;
+  };
+
   const renderPagination = (page, totalPages) => {
+    clearNode(paginationEl);
     if (totalPages <= 1) {
-      paginationEl.innerHTML = "";
       return;
     }
     const start = Math.max(1, page - 2);
     const end = Math.min(totalPages, start + 4);
     const pages = [];
     for (let i = start; i <= end; i += 1) pages.push(i);
-
-    paginationEl.innerHTML = `
-      <a class="cta secondary small ${page <= 1 ? "disabled" : ""}" ${page <= 1 ? 'aria-disabled="true"' : `href="${pageUrl(page - 1)}"`}>Previous</a>
-      ${pages
-        .map(
-          (item) =>
-            `<a class="cta secondary small ${item === page ? "active" : ""}" href="${pageUrl(item)}" ${
-              item === page ? 'aria-current="page"' : ""
-            }>${item}</a>`
+    const fragment = document.createDocumentFragment();
+    fragment.appendChild(
+      createPaginationLink(
+        "Previous",
+        pageUrl(page - 1),
+        `cta secondary small ${page <= 1 ? "disabled" : ""}`,
+        page <= 1
+      )
+    );
+    pages.forEach((item) => {
+      fragment.appendChild(
+        createPaginationLink(
+          String(item),
+          pageUrl(item),
+          `cta secondary small ${item === page ? "active" : ""}`,
+          false,
+          item === page
         )
-        .join("")}
-      <a class="cta secondary small ${page >= totalPages ? "disabled" : ""}" ${
-        page >= totalPages ? 'aria-disabled="true"' : `href="${pageUrl(page + 1)}"`
-      }>Next</a>
-    `;
+      );
+    });
+    fragment.appendChild(
+      createPaginationLink(
+        "Next",
+        pageUrl(page + 1),
+        `cta secondary small ${page >= totalPages ? "disabled" : ""}`,
+        page >= totalPages
+      )
+    );
+    paginationEl.appendChild(fragment);
   };
 
   const renderPosts = (posts, page) => {
@@ -97,32 +130,50 @@
 
     if (!slice.length) {
       statusEl.textContent = "No posts found for this page.";
-      gridEl.innerHTML = `<div class="card"><p class="small muted">No posts available.</p></div>`;
-      paginationEl.innerHTML = "";
+      clearNode(gridEl);
+      gridEl.appendChild(createArchiveCard("No posts available."));
+      clearNode(paginationEl);
       return;
     }
 
     statusEl.textContent = `Showing ${start + 1}-${start + slice.length} of ${total} posts.`;
-    gridEl.innerHTML = slice
-      .map((post) => {
-        const topicLabel = titleCaseTopic(post.topic) || "Quantura";
-        return `
-          <a class="card" href="/blog/posts/${encodeURIComponent(post.slug)}">
-            <h3>${escapeHtml(post.title)}</h3>
-            <div class="small">${escapeHtml(formatDate(post.dateIso))}</div>
-            <p class="small" style="margin-top: 12px;">${escapeHtml(post.excerpt || "Quantura research note.")}</p>
-            <div class="tag" style="margin-top: 14px;">${escapeHtml(topicLabel)}</div>
-          </a>
-        `;
-      })
-      .join("");
+    clearNode(gridEl);
+    const fragment = document.createDocumentFragment();
+    slice.forEach((post) => {
+      const topicLabel = titleCaseTopic(post.topic) || "Quantura";
+      const card = document.createElement("a");
+      card.className = "card";
+      card.href = `/blog/posts/${encodeURIComponent(post.slug)}`;
+
+      const heading = document.createElement("h3");
+      heading.textContent = post.title;
+
+      const date = document.createElement("div");
+      date.className = "small";
+      date.textContent = formatDate(post.dateIso);
+
+      const excerpt = document.createElement("p");
+      excerpt.className = "small";
+      excerpt.style.marginTop = "12px";
+      excerpt.textContent = post.excerpt || "Quantura research note.";
+
+      const topic = document.createElement("div");
+      topic.className = "tag";
+      topic.style.marginTop = "14px";
+      topic.textContent = topicLabel;
+
+      card.append(heading, date, excerpt, topic);
+      fragment.appendChild(card);
+    });
+    gridEl.appendChild(fragment);
     renderPagination(safePage, totalPages);
   };
 
   const renderFailure = (message) => {
     statusEl.textContent = "Unable to load blog archive.";
-    gridEl.innerHTML = `<div class="card"><p class="small muted">${escapeHtml(message || "Try again later.")}</p></div>`;
-    paginationEl.innerHTML = "";
+    clearNode(gridEl);
+    gridEl.appendChild(createArchiveCard(message || "Try again later."));
+    clearNode(paginationEl);
   };
 
   const loadArchive = async () => {

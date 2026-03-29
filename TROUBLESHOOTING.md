@@ -9,6 +9,8 @@
   - Android: `AppOpenAdManager` / `AdManager`
 
 ## Verify Firebase Auth config
+- Before mobile/Firebase-dependent local testing, run:
+  - `./scripts/setup_local_firebase_credentials.sh`
 - iOS:
   - Ensure `GoogleService-Info.plist` is in the app bundle, or `GoogleService-Info.local.plist` is present and bundled.
   - Confirm startup logs show Firebase configured: `[Firebase][iOS] Firebase configured successfully.`
@@ -25,6 +27,7 @@
   - Confirm `default_web_client_id` is generated from `google-services.json`.
   - Ensure Firebase project has Android app SHA certificates configured; missing SHA commonly causes `DEVELOPER_ERROR`.
   - Confirm native logs show Google sign-in started and auth success/error details.
+  - If `google-services.json` is missing, rerun `./scripts/setup_local_firebase_credentials.sh` and verify Secret Manager access.
 
 ## Verify AdMob config and test ads
 - Debug builds use test ad units by default.
