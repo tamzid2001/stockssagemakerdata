@@ -93,6 +93,7 @@
 		            <a class="sidebar-link" href="/productivity" data-panel-target="productivity"><i class="iconoir-kanban-board" aria-hidden="true"></i><span>Productivity</span></a>
 		            <a class="sidebar-link" href="/collaboration" data-panel-target="collaboration"><i class="iconoir-group" aria-hidden="true"></i><span>Collaboration</span></a>
 		            <a class="sidebar-link" href="/autopilot" data-panel-target="autopilot"><i class="iconoir-rocket" aria-hidden="true"></i><span>Forecast Foundry</span></a>
+		            <a class="sidebar-link" href="/dashboard?panel=sports-autopilot" data-panel-target="sports-autopilot"><i class="iconoir-trophy" aria-hidden="true"></i><span>Sports Forecasting</span></a>
 		            <a class="sidebar-link" href="/notifications" data-panel-target="notifications"><i class="iconoir-bell-notification" aria-hidden="true"></i><span>Notifications</span></a>
 		            <a class="sidebar-link" href="/account" data-panel-target="auth" id="dashboard-auth-link"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></a>
 		          </nav>
@@ -587,8 +588,9 @@
             <p class="small">Prepare market data, upload prediction CSVs, run SageMaker Autopilot on daily history, and keep every result private in Explore until you publish it.</p>
           </div>
 
-          <div class="content-grid">
-            <form id="foundry-source-form" class="card">
+          <div class="foundry-layout">
+            <div class="foundry-main-grid">
+              <form id="foundry-source-form" class="card">
               <div class="eyebrow">Quantura Forecast Foundry</div>
               <h3>Prepare a source</h3>
               <p class="small">Historical downloader data is normalized to <code>item_id</code>, <code>timestamp</code>, and <code>closing_price</code>. Uploaded prediction CSVs are analyzed and pushed into Explore-ready request records automatically.</p>
@@ -715,9 +717,30 @@
                   </p>
                 </div>
               </div>
-            </form>
+              </form>
 
-            <div class="results-panel" id="autopilot-result">
+              <div class="card foundry-detail-card">
+                <div class="card-head">
+                  <h3>Selected run</h3>
+                  <div class="hero-actions" style="justify-content: flex-start;">
+                    <button class="cta secondary small" id="foundry-refresh-button" type="button">
+                      <i class="iconoir-refresh" aria-hidden="true"></i><span>Refresh AWS status</span>
+                    </button>
+                    <button class="cta secondary small" id="foundry-share-button" type="button">
+                      <i class="iconoir-share-ios" aria-hidden="true"></i><span>Copy share link</span>
+                    </button>
+                  </div>
+                </div>
+                <div id="foundry-run-meta" class="panel-output small">Select a foundry run to inspect its schema, predictions, and conclusions.</div>
+                <div id="foundry-publish-host" class="small muted" style="margin-top: 12px;">Private Explore sync and publish controls appear here after a source is prepared.</div>
+                <div id="predictions-agent-output" class="panel-output small" style="margin-top: 14px;">Prediction analysis and conclusions will appear here.</div>
+                <div id="predictions-plot-meta" class="small muted" style="margin-top: 14px;">CSV schema preview metadata will appear here.</div>
+                <div id="predictions-chart" class="chart" style="margin-top: 14px; min-height: 420px;"></div>
+                <div id="predictions-preview" class="panel-output small" style="margin-top: 14px;">Preview will appear here.</div>
+              </div>
+            </div>
+
+            <div class="results-panel foundry-runs-panel" id="autopilot-result">
               <div class="card-head">
                 <h3>Foundry runs</h3>
                 <button class="cta secondary small" id="foundry-refresh-list" type="button">Refresh</button>
@@ -725,25 +748,121 @@
               <div id="autopilot-output" class="panel-output small">Saved foundry runs will appear here.</div>
             </div>
           </div>
+	        </div>
+	      </section>
 
-          <div class="card" style="margin-top: 18px;">
-            <div class="card-head">
-              <h3>Selected run</h3>
-              <div class="hero-actions" style="justify-content: flex-start;">
-                <button class="cta secondary small" id="foundry-refresh-button" type="button">
-                  <i class="iconoir-refresh" aria-hidden="true"></i><span>Refresh AWS status</span>
-                </button>
-                <button class="cta secondary small" id="foundry-share-button" type="button">
-                  <i class="iconoir-share-ios" aria-hidden="true"></i><span>Copy share link</span>
-                </button>
+	      <section class="section panel hidden" data-panel="sports-autopilot" id="sports-autopilot">
+	        <div class="container">
+	          <div class="section-title">
+	            <h2>Sports Forecasting</h2>
+            <p class="small">Build player-level NBA, NFL, and MLB forecasts with the same private-save and Explore publishing flow used by Forecast Foundry.</p>
+          </div>
+
+          <div class="foundry-layout sports-foundry-layout">
+            <div class="foundry-main-grid sports-foundry-main-grid">
+              <form id="sports-foundry-form" class="card">
+                <div class="eyebrow">Quantura Sports Foundry</div>
+                <h3>Prepare a sports forecast</h3>
+                <p class="small">Select a league, team, player, stat, and future scheduled game. Quantura will normalize recent game logs, export the data, and launch an Autopilot forecast for the chosen matchup.</p>
+
+                <div class="form-grid">
+                  <div class="field">
+                    <label class="label" for="sports-foundry-league">League</label>
+                    <select id="sports-foundry-league" name="league">
+                      <option value="nba">NBA</option>
+                      <option value="nfl">NFL</option>
+                      <option value="mlb">MLB</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label class="label" for="sports-foundry-team">Team</label>
+                    <select id="sports-foundry-team" name="team">
+                      <option value="">Choose a league first</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label class="label" for="sports-foundry-player">Player</label>
+                    <select id="sports-foundry-player" name="player">
+                      <option value="">Choose a team first</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label class="label" for="sports-foundry-stat">Stat</label>
+                    <select id="sports-foundry-stat" name="stat">
+                      <option value="">Choose a player first</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label class="label" for="sports-foundry-game">Future game</label>
+                    <select id="sports-foundry-game" name="game">
+                      <option value="">Choose a player first</option>
+                    </select>
+                    <div class="small muted" id="sports-foundry-game-gap">Future matchup timing will appear here once a game is selected.</div>
+                  </div>
+                  <div class="field">
+                    <label class="label" for="sports-foundry-title">Run title</label>
+                    <input id="sports-foundry-title" name="title" placeholder="Stephen Curry points vs BOS" />
+                  </div>
+                </div>
+
+                <div class="field">
+                  <label class="label" for="sports-foundry-notes">Notes</label>
+                  <textarea id="sports-foundry-notes" name="notes" placeholder="What this forecast should emphasize, matchup context, or how you plan to use the result"></textarea>
+                </div>
+
+                <div class="card sports-foundry-preview-card" style="margin-top: 18px;">
+                  <div class="card-head">
+                    <h3>Historical preview</h3>
+                    <div class="small muted" id="sports-foundry-history-meta">Choose a player to load historical game data and stat options.</div>
+                  </div>
+                  <div id="sports-foundry-history-preview" class="panel-output small">Historical player game logs will appear here.</div>
+                </div>
+
+                <div class="hero-actions sports-foundry-actions" style="margin-top: 14px; justify-content: flex-start;">
+                  <button class="cta secondary" id="sports-foundry-download-history" type="button">
+                    <i class="iconoir-download" aria-hidden="true"></i><span>Download historical CSV</span>
+                  </button>
+                  <button class="cta secondary" id="sports-foundry-download-json" type="button">
+                    <i class="iconoir-page" aria-hidden="true"></i><span>Download forecast JSON</span>
+                  </button>
+                  <button class="cta" id="sports-foundry-run-button" type="submit">
+                    <i class="iconoir-rocket" aria-hidden="true"></i><span>Run sports forecast</span>
+                  </button>
+                </div>
+
+                <p class="small" id="sports-foundry-status">Sign in with a full account to unlock sports forecasting.</p>
+                <div class="notice small" id="sports-foundry-empty-state">
+                  Choose a player to load league-aware stats, normalized historical game logs, and relevant future scheduled games.
+                </div>
+              </form>
+
+              <div class="card foundry-detail-card">
+                <div class="card-head">
+                  <h3>Selected sports run</h3>
+                  <div class="hero-actions" style="justify-content: flex-start;">
+                    <button class="cta secondary small" id="sports-foundry-refresh-button" type="button">
+                      <i class="iconoir-refresh" aria-hidden="true"></i><span>Refresh AWS status</span>
+                    </button>
+                    <button class="cta secondary small" id="sports-foundry-share-button" type="button">
+                      <i class="iconoir-share-ios" aria-hidden="true"></i><span>Copy share link</span>
+                    </button>
+                  </div>
+                </div>
+                <div id="sports-foundry-run-meta" class="panel-output small">Select a sports forecast run to inspect the matchup, model inputs, and forecast output.</div>
+                <div id="sports-foundry-publish-host" class="small muted" style="margin-top: 12px;">Private Explore sync and publish controls appear here after a sports run is saved.</div>
+                <div id="sports-foundry-analysis" class="panel-output small" style="margin-top: 14px;">Sports forecast analysis will appear here.</div>
+                <div id="sports-foundry-chart" class="chart" style="margin-top: 14px; min-height: 420px;"></div>
+                <div id="sports-foundry-preview" class="panel-output small" style="margin-top: 14px;">Historical and prediction preview data will appear here.</div>
               </div>
             </div>
-            <div id="foundry-run-meta" class="panel-output small">Select a foundry run to inspect its schema, predictions, and conclusions.</div>
-            <div id="foundry-publish-host" class="small muted" style="margin-top: 12px;">Private Explore sync and publish controls appear here after a source is prepared.</div>
-            <div id="predictions-agent-output" class="panel-output small" style="margin-top: 14px;">Prediction analysis and conclusions will appear here.</div>
-            <div id="predictions-plot-meta" class="small muted" style="margin-top: 14px;">CSV schema preview metadata will appear here.</div>
-            <div id="predictions-chart" class="chart" style="margin-top: 14px; min-height: 420px;"></div>
-            <div id="predictions-preview" class="panel-output small" style="margin-top: 14px;">Preview will appear here.</div>
+
+            <div class="results-panel foundry-runs-panel" id="sports-foundry-result">
+              <div class="card-head">
+                <h3>Sports runs</h3>
+                <button class="cta secondary small" id="sports-foundry-refresh-list" type="button">Refresh</button>
+              </div>
+              <div id="sports-foundry-output" class="panel-output small">Saved sports forecasts will appear here.</div>
+            </div>
           </div>
 	        </div>
 	      </section>

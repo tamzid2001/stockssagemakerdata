@@ -860,7 +860,7 @@
       button_load_chart: "Load chart",
       terminal_tip: "Tip: pick a panel on the left, then click any ticker in results to update the chart immediately.",
       label_market_country: "Source provider",
-      button_load_market_feed: "Load market feed",
+      button_load_market_feed: "Feeds load automatically",
       label_response_language: "Response language",
       label_question: "Question",
       button_ask_gpt5: "Prepare Model Council",
@@ -1931,6 +1931,8 @@
     tickerQueryOutput: document.getElementById("ticker-query-output"),
 	    optionsForm: document.getElementById("options-form"),
 	    optionsExpiration: document.getElementById("options-expiration"),
+    optionsStartDate: document.getElementById("options-start-date"),
+    optionsDateStatus: document.getElementById("options-date-status"),
 	    optionsOutput: document.getElementById("options-output"),
 	    screenerForm: document.getElementById("screener-form"),
 	    screenerOutput: document.getElementById("screener-output"),
@@ -1996,6 +1998,31 @@
     foundryPublishHost: document.getElementById("foundry-publish-host"),
     foundryInstanceLimit: document.getElementById("foundry-instance-limit"),
     foundryAccessNote: document.getElementById("foundry-access-note"),
+    sportsFoundryForm: document.getElementById("sports-foundry-form"),
+    sportsFoundryLeague: document.getElementById("sports-foundry-league"),
+    sportsFoundryTeam: document.getElementById("sports-foundry-team"),
+    sportsFoundryPlayer: document.getElementById("sports-foundry-player"),
+    sportsFoundryStat: document.getElementById("sports-foundry-stat"),
+    sportsFoundryGame: document.getElementById("sports-foundry-game"),
+    sportsFoundryTitle: document.getElementById("sports-foundry-title"),
+    sportsFoundryNotes: document.getElementById("sports-foundry-notes"),
+    sportsFoundryHistoryMeta: document.getElementById("sports-foundry-history-meta"),
+    sportsFoundryHistoryPreview: document.getElementById("sports-foundry-history-preview"),
+    sportsFoundryGameGap: document.getElementById("sports-foundry-game-gap"),
+    sportsFoundryRunButton: document.getElementById("sports-foundry-run-button"),
+    sportsFoundryDownloadHistory: document.getElementById("sports-foundry-download-history"),
+    sportsFoundryDownloadJson: document.getElementById("sports-foundry-download-json"),
+    sportsFoundryStatus: document.getElementById("sports-foundry-status"),
+    sportsFoundryEmptyState: document.getElementById("sports-foundry-empty-state"),
+    sportsFoundryRefreshList: document.getElementById("sports-foundry-refresh-list"),
+    sportsFoundryRefreshButton: document.getElementById("sports-foundry-refresh-button"),
+    sportsFoundryShareButton: document.getElementById("sports-foundry-share-button"),
+    sportsFoundryRunMeta: document.getElementById("sports-foundry-run-meta"),
+    sportsFoundryPublishHost: document.getElementById("sports-foundry-publish-host"),
+    sportsFoundryAnalysis: document.getElementById("sports-foundry-analysis"),
+    sportsFoundryChart: document.getElementById("sports-foundry-chart"),
+    sportsFoundryPreview: document.getElementById("sports-foundry-preview"),
+    sportsFoundryOutput: document.getElementById("sports-foundry-output"),
     autopilotForm: document.getElementById("autopilot-form"),
     autopilotOutput: document.getElementById("autopilot-output"),
     autopilotStatus: document.getElementById("autopilot-status"),
@@ -2278,6 +2305,19 @@
       loadingRunId: "",
       activeConcurrentRuns: 0,
       maxConcurrentRuns: FOUNDRY_MAX_CONCURRENT_INSTANCES,
+    },
+    sportsFoundryContext: {
+      teams: [],
+      players: [],
+      context: null,
+      runs: [],
+      loaded: false,
+      activeRunId: "",
+      activeRun: null,
+      loadingRunId: "",
+      lastLeague: "",
+      lastTeamId: "",
+      lastPlayerId: "",
     },
     aiLeaderboardHorizon: AI_LEADERBOARD_DEFAULT_HORIZON,
     aiModelFilter: "all",
@@ -14327,6 +14367,7 @@
     const requestKey = `${provider}_${feed}_${limit}`;
     if (!force && ui.marketHeadlinesOutput.dataset.requestKey === requestKey) return;
     ui.marketHeadlinesOutput.dataset.requestKey = requestKey;
+    if (ui.marketHeadlinesMeta) ui.marketHeadlinesMeta.dataset.requestKey = requestKey;
     try {
       if (ui.marketHeadlinesStatus) ui.marketHeadlinesStatus.textContent = `Loading ${feedLabel} from ${providerLabel}...`;
       setOutputLoading(ui.marketHeadlinesOutput, "Loading RSS headlines...");
@@ -14344,6 +14385,7 @@
       if (!response.ok) {
         throw new Error(String(payload?.detail || payload?.error || "Unable to load market headlines."));
       }
+      if (ui.marketHeadlinesOutput.dataset.requestKey !== requestKey) return;
       setOutputReady(ui.marketHeadlinesOutput);
       setOutputReady(ui.marketHeadlinesMeta);
       renderMarketHeadlinesFeed(payload || {});
@@ -14352,6 +14394,7 @@
       if (ui.marketHeadlinesStatus) ui.marketHeadlinesStatus.textContent = `Loaded ${loadedProviderLabel} · ${loadedFeedLabel}.`;
       logEvent("market_headlines_loaded", { provider, feed, limit });
     } catch (error) {
+      if (ui.marketHeadlinesOutput.dataset.requestKey !== requestKey) return;
       setOutputReady(ui.marketHeadlinesOutput);
       setOutputReady(ui.marketHeadlinesMeta);
       ui.marketHeadlinesOutput.innerHTML = `<div class="small muted">Unable to load market headlines right now.</div>`;
@@ -16217,6 +16260,91 @@
     } catch (error) {
       // Ignore.
     }
+  };
+
+  const formatOptionsYmdLabel = (value) => {
+    const date = parseYmdUtc(value);
+    if (!date) return "";
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: "UTC",
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    }).format(date);
+  };
+
+  const getDefaultOptionsStartYmd = () => {
+    const zone = String(Intl.DateTimeFormat().resolvedOptions().timeZone || "").trim() || "UTC";
+    return getTimeZoneYmd(new Date(), zone);
+  };
+
+  const renderOptionsDateStatus = ({ state: nextState = "idle", value = "", detail = "" } = {}) => {
+    if (!ui.optionsDateStatus) return;
+    ui.optionsDateStatus.dataset.state = nextState;
+    if (value) {
+      ui.optionsDateStatus.innerHTML = `
+        <span class="options-date-status-value">${escapeHtml(value)}</span>
+        <span class="options-date-status-detail">${escapeHtml(detail)}</span>
+      `;
+      return;
+    }
+    ui.optionsDateStatus.innerHTML = `<span class="options-date-status-detail">${escapeHtml(detail)}</span>`;
+  };
+
+  const syncOptionsDateTool = () => {
+    if (ui.optionsStartDate && !String(ui.optionsStartDate.value || "").trim()) {
+      ui.optionsStartDate.value = getDefaultOptionsStartYmd();
+    }
+    const startValue = String(ui.optionsStartDate?.value || "").trim();
+    const endValue = String(ui.optionsExpiration?.value || "").trim();
+    const hasLoadedExpirations = Number(ui.optionsExpiration?.options?.length || 0) > 1;
+    const noListedExpirations = String(ui.optionsExpiration?.dataset?.expirationsEmpty || "") === "1";
+
+    if (!startValue) {
+      renderOptionsDateStatus({
+        state: "idle",
+        detail: "Choose a begin date to calculate the gap to the selected options expiry.",
+      });
+      return;
+    }
+
+    if (!endValue) {
+      renderOptionsDateStatus({
+        state: "idle",
+        detail: noListedExpirations
+          ? "No listed expiry dates were returned for this ticker."
+          : hasLoadedExpirations
+          ? "Choose an expiry end date to calculate the calendar day count."
+          : "Load an options chain to populate expiry dates, then the day count will appear here.",
+      });
+      return;
+    }
+
+    const start = parseYmdUtc(startValue);
+    const end = parseYmdUtc(endValue);
+    if (!start || !end) {
+      renderOptionsDateStatus({
+        state: "warn",
+        detail: "Use valid begin and expiry dates to calculate the calendar day count.",
+      });
+      return;
+    }
+
+    const diffDays = Math.round((end.getTime() - start.getTime()) / EARNINGS_DAY_MS);
+    if (diffDays < 0) {
+      renderOptionsDateStatus({
+        state: "warn",
+        value: "Begin date is after expiry",
+        detail: `${formatOptionsYmdLabel(startValue)} to ${formatOptionsYmdLabel(endValue)} needs the dates reversed.`,
+      });
+      return;
+    }
+
+    renderOptionsDateStatus({
+      state: "ready",
+      value: `${diffDays} ${diffDays === 1 ? "calendar day" : "calendar days"}`,
+      detail: `${formatOptionsYmdLabel(endValue)} is ${diffDays} ${diffDays === 1 ? "day" : "days"} after ${formatOptionsYmdLabel(startValue)}.`,
+    });
   };
 
   const scheduleSideDataRefresh = (ticker, { force = false } = {}) => {
@@ -18298,14 +18426,14 @@
       .join("");
   };
 
-  const renderFoundryPreviewTableFromObjects = (rows = []) => {
-    if (!ui.predictionsPreview) return;
+  const renderFoundryPreviewTableFromObjects = (rows = [], host = ui.predictionsPreview) => {
+    if (!host) return;
     if (!Array.isArray(rows) || !rows.length) {
-      ui.predictionsPreview.innerHTML = `<div class="small muted">No preview rows are available.</div>`;
+      host.innerHTML = `<div class="small muted">No preview rows are available.</div>`;
       return;
     }
     const headers = Object.keys(rows[0] || {});
-    ui.predictionsPreview.innerHTML = `
+    host.innerHTML = `
       <div class="table-wrap">
         <table class="data-table">
           <thead>
@@ -18804,6 +18932,722 @@
     }
     setFoundryStatus("Loaded legacy uploaded prediction CSV.");
     if (notify) showToast("Legacy upload loaded.");
+  };
+
+  const isSportsAutopilotRun = (run = null) => {
+    const item = run && typeof run === "object" ? run : {};
+    return String(item?.sourceGroup || "").trim().toLowerCase() === "sports" || String(item?.sourceType || "").trim().toLowerCase() === "sports_timeseries";
+  };
+
+  const isSportsAutopilotMyRequest = (request = null) => {
+    if (!isAutopilotMyRequest(request)) return false;
+    const input = request?.input && typeof request.input === "object" ? request.input : {};
+    const outputsMeta = request?.outputsMeta && typeof request.outputsMeta === "object" ? request.outputsMeta : {};
+    return (
+      String(input?.panel || outputsMeta?.panel || "").trim().toLowerCase() === "sports-autopilot" ||
+      String(input?.sourceGroup || outputsMeta?.sourceGroup || "").trim().toLowerCase() === "sports"
+    );
+  };
+
+  const setSportsFoundryStatus = (message, variant = "") => {
+    if (!ui.sportsFoundryStatus) return;
+    ui.sportsFoundryStatus.textContent = String(message || "");
+    ui.sportsFoundryStatus.dataset.variant = String(variant || "").trim();
+  };
+
+  const getSportsFoundryRequestId = (run) => String(run?.exploreRequestId || "").trim();
+
+  const updateSportsFoundryRunInState = (run) => {
+    if (!run || typeof run !== "object") return;
+    const next = Array.isArray(state.sportsFoundryContext.runs) ? state.sportsFoundryContext.runs.slice() : [];
+    const idx = next.findIndex((item) => String(item?.id || "").trim() === String(run?.id || "").trim());
+    if (idx >= 0) next[idx] = run;
+    else next.unshift(run);
+    state.sportsFoundryContext.runs = next;
+  };
+
+  const renderSportsFoundrySelect = (select, items = [], { placeholder = "Select an option", valueKey = "id", labelBuilder = null } = {}) => {
+    if (!select) return;
+    const options = Array.isArray(items) ? items : [];
+    select.innerHTML = [`<option value="">${escapeHtml(placeholder)}</option>`]
+      .concat(
+        options.map((item) => {
+          const value = String(item?.[valueKey] || "").trim();
+          const label = labelBuilder ? labelBuilder(item) : String(item?.label || item?.displayName || value).trim();
+          return `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`;
+        })
+      )
+      .join("");
+  };
+
+  const getSportsFoundryLeagueLabel = (league) => {
+    const clean = String(league || "").trim().toLowerCase();
+    if (clean === "nba") return "NBA";
+    if (clean === "nfl") return "NFL";
+    if (clean === "mlb") return "MLB";
+    return clean.toUpperCase();
+  };
+
+  const formatSportsFoundryDaysUntil = (targetDate) => {
+    const clean = String(targetDate || "").trim();
+    const targetMs = Date.parse(clean);
+    if (!Number.isFinite(targetMs)) return "";
+    const now = new Date();
+    const todayMs = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+    const targetDayMs = Date.UTC(new Date(targetMs).getUTCFullYear(), new Date(targetMs).getUTCMonth(), new Date(targetMs).getUTCDate());
+    const diffDays = Math.round((targetDayMs - todayMs) / (24 * 60 * 60 * 1000));
+    if (diffDays === 0) return "Today";
+    if (diffDays === 1) return "1 day away";
+    if (diffDays > 1) return `${diffDays} days away`;
+    if (diffDays === -1) return "1 day ago";
+    return `${Math.abs(diffDays)} days ago`;
+  };
+
+  const syncSportsFoundryGameGap = () => {
+    const gameId = String(ui.sportsFoundryGame?.value || "").trim();
+    const futureGames = Array.isArray(state.sportsFoundryContext.context?.futureGames) ? state.sportsFoundryContext.context.futureGames : [];
+    const game = futureGames.find((entry) => String(entry?.id || "").trim() === gameId);
+    if (!ui.sportsFoundryGameGap) return;
+    if (!game) {
+      ui.sportsFoundryGameGap.textContent = "Future matchup timing will appear here once a game is selected.";
+      return;
+    }
+    const timing = formatSportsFoundryDaysUntil(game.date);
+    ui.sportsFoundryGameGap.textContent = `${String(game.label || "").trim()}${timing ? ` · ${timing}` : ""}`;
+  };
+
+  const syncSportsFoundryButtons = () => {
+    const hasContext = Boolean(state.sportsFoundryContext.context);
+    const hasFull = hasFullAccount();
+    const hasStat = Boolean(String(ui.sportsFoundryStat?.value || "").trim());
+    const hasGame = Boolean(String(ui.sportsFoundryGame?.value || "").trim());
+    if (ui.sportsFoundryRunButton) {
+      ui.sportsFoundryRunButton.disabled = !hasFull || !hasContext || !hasStat || !hasGame;
+    }
+    if (ui.sportsFoundryDownloadHistory) {
+      ui.sportsFoundryDownloadHistory.disabled = !hasContext;
+    }
+    if (ui.sportsFoundryDownloadJson) {
+      const activeRun = state.sportsFoundryContext.activeRun;
+      const hasExportFile =
+        Boolean(String(activeRun?.files?.forecastPayloadJson?.downloadUrl || "").trim()) ||
+        Boolean(String(activeRun?.files?.forecastInputJson?.downloadUrl || "").trim());
+      ui.sportsFoundryDownloadJson.disabled = !hasContext && !hasExportFile;
+    }
+    if (ui.sportsFoundryRefreshButton) ui.sportsFoundryRefreshButton.disabled = !Boolean(state.sportsFoundryContext.activeRunId);
+    if (ui.sportsFoundryShareButton) ui.sportsFoundryShareButton.disabled = !Boolean(getSportsFoundryRequestId(state.sportsFoundryContext.activeRun));
+  };
+
+  const renderSportsFoundryHistoryPreview = (payload = null) => {
+    const historical = payload?.historical && typeof payload.historical === "object" ? payload.historical : {};
+    const rawRows = Array.isArray(historical?.rows) ? historical.rows : [];
+    const selectedStatKey = String(ui.sportsFoundryStat?.value || payload?.defaultStatKey || "").trim();
+    const rows = rawRows.map((row) => {
+      if (!selectedStatKey || !(selectedStatKey in (row || {}))) return row;
+      const ordered = {};
+      Object.entries(row || {}).forEach(([key, value]) => {
+        if (key !== selectedStatKey) ordered[key] = value;
+      });
+      const preferred = {
+        league: ordered.league,
+        team: ordered.team,
+        player: ordered.player,
+        position: ordered.position,
+        gameDate: ordered.gameDate,
+        displayDate: ordered.displayDate,
+        seasonLabel: ordered.seasonLabel,
+        homeAway: ordered.homeAway,
+        opponentAbbreviation: ordered.opponentAbbreviation,
+        opponentDisplayName: ordered.opponentDisplayName,
+        result: ordered.result,
+        score: ordered.score,
+        teamScore: ordered.teamScore,
+        opponentScore: ordered.opponentScore,
+      };
+      delete ordered.league;
+      delete ordered.team;
+      delete ordered.player;
+      delete ordered.position;
+      delete ordered.gameDate;
+      delete ordered.displayDate;
+      delete ordered.seasonLabel;
+      delete ordered.homeAway;
+      delete ordered.opponentAbbreviation;
+      delete ordered.opponentDisplayName;
+      delete ordered.result;
+      delete ordered.score;
+      delete ordered.teamScore;
+      delete ordered.opponentScore;
+      return { ...preferred, [selectedStatKey]: row[selectedStatKey], ...ordered };
+    });
+    const statCatalog = Array.isArray(payload?.statCatalog) ? payload.statCatalog : [];
+    if (ui.sportsFoundryHistoryMeta) {
+      const playerName = String(payload?.player?.displayName || "").trim();
+      const seasons = Array.isArray(historical?.seasonsUsed) ? historical.seasonsUsed.join(", ") : "";
+      ui.sportsFoundryHistoryMeta.textContent = rows.length
+        ? `${playerName || "Player"} · ${rows.length} game(s) · ${statCatalog.length} stat option(s)${seasons ? ` · Seasons ${seasons}` : ""}`
+        : "Historical game logs will appear here.";
+    }
+    renderFoundryPreviewTableFromObjects(rows.slice(-18).reverse(), ui.sportsFoundryHistoryPreview);
+  };
+
+  const renderSportsFoundryChart = async (run) => {
+    if (!ui.sportsFoundryChart) return;
+    const analysisData = run?.analysis?.data && typeof run.analysis.data === "object" ? run.analysis.data : {};
+    const statLabel = String(run?.sports?.stat?.label || "Selected stat").trim();
+    const recentHistory = Array.isArray(analysisData?.recentHistory) ? analysisData.recentHistory : [];
+    const predictionSeries = Array.isArray(analysisData?.predictionSeries) ? analysisData.predictionSeries : [];
+    if (!window.Plotly || (!recentHistory.length && !predictionSeries.length)) {
+      ui.sportsFoundryChart.innerHTML = `<div class="small muted">Historical and prediction chart will appear here once a forecast is ready.</div>`;
+      return;
+    }
+    const traces = [];
+    if (recentHistory.length) {
+      traces.push({
+        type: "scatter",
+        mode: "lines+markers",
+        name: "History",
+        x: recentHistory.map((entry) => entry.gameDate),
+        y: recentHistory.map((entry) => entry.value),
+        line: { color: "#0f9d8a", width: 2.2 },
+        marker: { size: 8, color: "#0f9d8a" },
+      });
+    }
+    const predictedX = predictionSeries.map((entry) => entry.timestamp);
+    const lowerY = predictionSeries.map((entry) => entry.lower);
+    const upperY = predictionSeries.map((entry) => entry.upper);
+    if (predictionSeries.length && lowerY.some((value) => Number.isFinite(Number(value)))) {
+      traces.push({
+        type: "scatter",
+        mode: "lines",
+        name: "Lower",
+        x: predictedX,
+        y: lowerY,
+        line: { color: "rgba(15,157,138,0)", width: 1 },
+        hoverinfo: "skip",
+        showlegend: false,
+      });
+      traces.push({
+        type: "scatter",
+        mode: "lines",
+        name: "Range",
+        x: predictedX,
+        y: upperY,
+        line: { color: "rgba(15,157,138,0)", width: 1 },
+        fill: "tonexty",
+        fillcolor: "rgba(15, 157, 138, 0.16)",
+      });
+    }
+    if (predictionSeries.length) {
+      traces.push({
+        type: "scatter",
+        mode: "lines+markers",
+        name: "Forecast",
+        x: predictedX,
+        y: predictionSeries.map((entry) => entry.median),
+        line: { color: "#f28c28", width: 2.4, dash: "dash" },
+        marker: { size: 8, color: "#f28c28" },
+      });
+    }
+    const targetGameDate = String(run?.sports?.targetGame?.date || "").trim();
+    const targetGameLabel = String(run?.sports?.targetGame?.label || "").trim();
+    const layout = {
+      paper_bgcolor: "transparent",
+      plot_bgcolor: "transparent",
+      margin: { l: 48, r: 18, t: 36, b: 44 },
+      xaxis: { title: "Game / forecast date" },
+      yaxis: { title: statLabel },
+      legend: { orientation: "h", y: 1.12 },
+      shapes: targetGameDate
+        ? [
+            {
+              type: "line",
+              x0: targetGameDate,
+              x1: targetGameDate,
+              yref: "paper",
+              y0: 0,
+              y1: 1,
+              line: { color: "#f28c28", width: 1.4, dash: "dot" },
+            },
+          ]
+        : [],
+      annotations: targetGameDate && targetGameLabel
+        ? [
+            {
+              x: targetGameDate,
+              y: 1.06,
+              yref: "paper",
+              text: targetGameLabel,
+              showarrow: false,
+              font: { size: 11 },
+            },
+          ]
+        : [],
+    };
+    await window.Plotly.newPlot(ui.sportsFoundryChart, traces, layout, { responsive: true, displayModeBar: false });
+  };
+
+  const renderSportsFoundryRunPreview = (run) => {
+    if (!ui.sportsFoundryPreview) return;
+    const analysisData = run?.analysis?.data && typeof run.analysis.data === "object" ? run.analysis.data : {};
+    const selectedForecast = analysisData?.selectedForecast && typeof analysisData.selectedForecast === "object" ? analysisData.selectedForecast : {};
+    const rows = Array.isArray(run?.sports?.historicalPreviewRows) ? run.sports.historicalPreviewRows : [];
+    const selectedForecastMarkup = Object.keys(selectedForecast).length
+      ? `<div class="small" style="margin-bottom:12px;">
+          <strong>Selected forecast row:</strong> ${escapeHtml(String(selectedForecast.timestamp || "").trim() || "n/a")}
+          ${
+            Number.isFinite(Number(selectedForecast.median))
+              ? ` · <strong>Median:</strong> ${escapeHtml(Number(selectedForecast.median).toFixed(2))}`
+              : ""
+          }
+        </div>`
+      : "";
+    ui.sportsFoundryPreview.innerHTML = `${selectedForecastMarkup}<div class="small muted" style="margin-bottom:10px;">Recent normalized historical rows</div>`;
+    const tableHost = document.createElement("div");
+    ui.sportsFoundryPreview.appendChild(tableHost);
+    renderFoundryPreviewTableFromObjects(rows.slice(-12).reverse(), tableHost);
+  };
+
+  const renderSportsFoundryRunDetail = async (run, { request = null, shareUrl = "" } = {}) => {
+    state.sportsFoundryContext.activeRunId = String(run?.id || "").trim();
+    state.sportsFoundryContext.activeRun = run && typeof run === "object" ? run : null;
+    renderSportsFoundryRuns(state.sportsFoundryContext.runs || []);
+    if (!ui.sportsFoundryRunMeta) return;
+    if (!run || typeof run !== "object") {
+      ui.sportsFoundryRunMeta.innerHTML = `<div class="small muted">Select a sports run to inspect it.</div>`;
+      if (ui.sportsFoundryPublishHost) {
+        ui.sportsFoundryPublishHost.innerHTML = `<div class="small muted">Private Explore sync and publish controls appear here after a sports run is saved.</div>`;
+      }
+      if (ui.sportsFoundryAnalysis) ui.sportsFoundryAnalysis.innerHTML = `<div class="small muted">Sports forecast analysis will appear here.</div>`;
+      if (ui.sportsFoundryChart) ui.sportsFoundryChart.innerHTML = `<div class="small muted">Historical and prediction chart will appear here once a forecast is ready.</div>`;
+      if (ui.sportsFoundryPreview) ui.sportsFoundryPreview.innerHTML = `<div class="small muted">Historical and prediction preview data will appear here.</div>`;
+      syncSportsFoundryButtons();
+      return;
+    }
+    const sports = run?.sports && typeof run.sports === "object" ? run.sports : {};
+    const team = sports?.team && typeof sports.team === "object" ? sports.team : {};
+    const player = sports?.player && typeof sports.player === "object" ? sports.player : {};
+    const stat = sports?.stat && typeof sports.stat === "object" ? sports.stat : {};
+    const targetGame = sports?.targetGame && typeof sports.targetGame === "object" ? sports.targetGame : {};
+    const requestId = getSportsFoundryRequestId(run);
+    const requestRecord = request && typeof request === "object" ? request : requestId ? getMyRequestById(requestId) : null;
+    const effectiveShareUrl = String(shareUrl || requestRecord?.share?.shareUrl || "").trim();
+    ui.sportsFoundryRunMeta.innerHTML = `
+      <div class="small muted">Sports forecast run</div>
+      <h3 style="margin-top:6px;">${escapeHtml(String(run?.title || "Sports forecast run"))}</h3>
+      <div class="small" style="margin-top:8px;">
+        <strong>Status:</strong> ${escapeHtml(String(run?.status || "unknown"))}
+        ${sports?.leagueLabel ? ` · <strong>League:</strong> ${escapeHtml(String(sports.leagueLabel))}` : ""}
+        ${team?.abbreviation ? ` · <strong>Team:</strong> ${escapeHtml(String(team.abbreviation))}` : ""}
+      </div>
+      <div class="small" style="margin-top:8px;">
+        ${player?.displayName ? `<strong>Player:</strong> ${escapeHtml(String(player.displayName))}` : ""}
+        ${player?.positionAbbreviation ? ` · <strong>Pos:</strong> ${escapeHtml(String(player.positionAbbreviation))}` : ""}
+        ${stat?.label ? ` · <strong>Stat:</strong> ${escapeHtml(String(stat.label))}` : ""}
+      </div>
+      ${
+        targetGame?.label
+          ? `<div class="small" style="margin-top:8px;"><strong>Target game:</strong> ${escapeHtml(String(targetGame.label))}</div>`
+          : ""
+      }
+      ${
+        Number(run?.dataset?.rowCount)
+          ? `<div class="small" style="margin-top:8px;"><strong>Historical games:</strong> ${Number(run.dataset.rowCount).toLocaleString()}</div>`
+          : ""
+      }
+      ${
+        String(run?.notes || "").trim()
+          ? `<div class="small" style="margin-top:8px;"><strong>Notes:</strong> ${escapeHtml(String(run.notes || ""))}</div>`
+          : ""
+      }
+    `;
+    if (ui.sportsFoundryPublishHost) {
+      const publishMarkup = renderOutputPublishControlsMarkup({ requestId, requestType: "forecast" });
+      ui.sportsFoundryPublishHost.innerHTML = `
+        ${publishMarkup}
+        ${
+          effectiveShareUrl
+            ? `<div class="small muted" style="margin-top:10px;">Share link: <a href="${escapeHtml(effectiveShareUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(effectiveShareUrl)}</a></div>`
+            : `<div class="small muted" style="margin-top:10px;">Create an unlisted share link from the Share button when you want a public URL.</div>`
+        }
+      `;
+    }
+    if (ui.sportsFoundryAnalysis) {
+      if (String(run?.analysis?.markdown || "").trim()) {
+        ui.sportsFoundryAnalysis.innerHTML = `<div class="small markdown-output">${renderMarkdown(String(run.analysis.markdown), {
+          fallback: "Sports forecast analysis is ready.",
+        })}</div>`;
+      } else if (String(run?.analysis?.summary || "").trim()) {
+        ui.sportsFoundryAnalysis.innerHTML = `<div class="small">${escapeHtml(String(run.analysis.summary))}</div>`;
+      } else {
+        ui.sportsFoundryAnalysis.innerHTML = `<div class="small muted">Sports forecast analysis will appear here once the run completes.</div>`;
+      }
+    }
+    renderSportsFoundryRunPreview(run);
+    await renderSportsFoundryChart(run);
+    syncSportsFoundryButtons();
+  };
+
+  const renderSportsFoundryRuns = (items = []) => {
+    state.sportsFoundryContext.runs = Array.isArray(items) ? items.slice() : [];
+    if (!ui.sportsFoundryOutput) return;
+    if (!hasFullAccount()) {
+      ui.sportsFoundryOutput.innerHTML = `<div class="small muted">Sign in with a full account to load sports forecasts.</div>`;
+      syncSportsFoundryButtons();
+      return;
+    }
+    if (!items.length) {
+      ui.sportsFoundryOutput.innerHTML = `<div class="small muted">No sports forecast runs yet. Choose a player and future game to create one.</div>`;
+      syncSportsFoundryButtons();
+      return;
+    }
+    ui.sportsFoundryOutput.innerHTML = items
+      .map((item) => {
+        const active = String(item?.id || "").trim() === String(state.sportsFoundryContext.activeRunId || "").trim();
+        const sports = item?.sports && typeof item.sports === "object" ? item.sports : {};
+        const player = sports?.player && typeof sports.player === "object" ? sports.player : {};
+        const stat = sports?.stat && typeof sports.stat === "object" ? sports.stat : {};
+        const game = sports?.targetGame && typeof sports.targetGame === "object" ? sports.targetGame : {};
+        return `
+          <article class="task-item${active ? " active" : ""}">
+            <div class="task-item-main">
+              <div class="small muted">${escapeHtml(String(sports?.leagueLabel || "").trim() || "Sports")} · ${escapeHtml(String(sports?.team?.abbreviation || "").trim() || "TEAM")}</div>
+              <strong>${escapeHtml(String(item?.title || "Sports forecast run").trim())}</strong>
+              <div class="small">${escapeHtml(String(item?.status || "unknown"))}${player?.displayName ? ` · ${escapeHtml(String(player.displayName))}` : ""}${stat?.label ? ` · ${escapeHtml(String(stat.label))}` : ""}</div>
+              ${game?.label ? `<div class="small muted">${escapeHtml(String(game.label))}</div>` : ""}
+            </div>
+            <div class="task-chip-row" style="margin-top:10px;">
+              <button class="task-chip" type="button" data-action="sports-foundry-select-run" data-run-id="${escapeHtml(String(item?.id || ""))}">${icon("eye")}<span>Open</span></button>
+              <button class="task-chip" type="button" data-action="sports-foundry-refresh-run" data-run-id="${escapeHtml(String(item?.id || ""))}">${icon("refresh")}<span>Refresh</span></button>
+            </div>
+          </article>
+        `;
+      })
+      .join("");
+    syncSportsFoundryButtons();
+  };
+
+  const buildSportsFoundryHistoryCsv = () => {
+    const context = state.sportsFoundryContext.context;
+    const historical = context?.historical && typeof context.historical === "object" ? context.historical : {};
+    const rows = Array.isArray(historical?.rows) ? historical.rows : [];
+    const rawHeaders = Array.isArray(historical?.headers) ? historical.headers : Object.keys(rows[0] || {});
+    const selectedStatKey = String(ui.sportsFoundryStat?.value || "").trim();
+    const pinnedHeaders = [
+      "league",
+      "team",
+      "player",
+      "position",
+      "gameDate",
+      "displayDate",
+      "seasonLabel",
+      "homeAway",
+      "opponentAbbreviation",
+      "opponentDisplayName",
+      "result",
+      "score",
+      "teamScore",
+      "opponentScore",
+    ];
+    const remainingHeaders = rawHeaders.filter((header) => !pinnedHeaders.includes(header) && header !== selectedStatKey);
+    const headers = selectedStatKey && rawHeaders.includes(selectedStatKey)
+      ? pinnedHeaders.filter((header) => rawHeaders.includes(header)).concat([selectedStatKey], remainingHeaders)
+      : rawHeaders;
+    if (!rows.length || !headers.length) throw new Error("Historical data is not loaded yet.");
+    return {
+      csv: buildCsv(rows, headers),
+      headers,
+    };
+  };
+
+  const loadSportsFoundryTeams = async ({ preserveSelection = false } = {}) => {
+    const league = String(ui.sportsFoundryLeague?.value || "nba").trim().toLowerCase();
+    setSportsFoundryStatus(`Loading ${getSportsFoundryLeagueLabel(league)} teams...`);
+    const payload = await callFoundryApi("GET", `/api/autopilot/sports/teams?league=${encodeURIComponent(league)}`);
+    const items = Array.isArray(payload?.items) ? payload.items : [];
+    state.sportsFoundryContext.teams = items;
+    renderSportsFoundrySelect(ui.sportsFoundryTeam, items, {
+      placeholder: "Select a team",
+      labelBuilder: (item) => `${item?.displayName || item?.shortDisplayName || item?.abbreviation || "Team"}${item?.abbreviation ? ` (${item.abbreviation})` : ""}`,
+    });
+    if (preserveSelection && state.sportsFoundryContext.lastTeamId) {
+      ui.sportsFoundryTeam.value = state.sportsFoundryContext.lastTeamId;
+    } else {
+      state.sportsFoundryContext.lastTeamId = "";
+    }
+    renderSportsFoundrySelect(ui.sportsFoundryPlayer, [], { placeholder: "Choose a team first" });
+    renderSportsFoundrySelect(ui.sportsFoundryStat, [], { placeholder: "Choose a player first", valueKey: "key" });
+    renderSportsFoundrySelect(ui.sportsFoundryGame, [], { placeholder: "Choose a player first" });
+    state.sportsFoundryContext.players = [];
+    state.sportsFoundryContext.context = null;
+    renderSportsFoundryHistoryPreview(null);
+    syncSportsFoundryGameGap();
+    syncSportsFoundryButtons();
+    setSportsFoundryStatus(`Loaded ${items.length} ${getSportsFoundryLeagueLabel(league)} teams.`);
+    return items;
+  };
+
+  const loadSportsFoundryPlayers = async ({ preserveSelection = false } = {}) => {
+    const league = String(ui.sportsFoundryLeague?.value || "nba").trim().toLowerCase();
+    const teamId = String(ui.sportsFoundryTeam?.value || "").trim();
+    if (!teamId) {
+      renderSportsFoundrySelect(ui.sportsFoundryPlayer, [], { placeholder: "Choose a team first" });
+      return [];
+    }
+    state.sportsFoundryContext.lastTeamId = teamId;
+    setSportsFoundryStatus("Loading team roster...");
+    const payload = await callFoundryApi(
+      "GET",
+      `/api/autopilot/sports/players?league=${encodeURIComponent(league)}&teamId=${encodeURIComponent(teamId)}`
+    );
+    const items = Array.isArray(payload?.items) ? payload.items : [];
+    state.sportsFoundryContext.players = items;
+    renderSportsFoundrySelect(ui.sportsFoundryPlayer, items, {
+      placeholder: "Select a player",
+      labelBuilder: (item) =>
+        `${item?.displayName || "Player"}${item?.positionAbbreviation ? ` · ${item.positionAbbreviation}` : ""}${item?.jersey ? ` · #${item.jersey}` : ""}`,
+    });
+    if (preserveSelection && state.sportsFoundryContext.lastPlayerId) {
+      ui.sportsFoundryPlayer.value = state.sportsFoundryContext.lastPlayerId;
+    } else {
+      state.sportsFoundryContext.lastPlayerId = "";
+    }
+    renderSportsFoundrySelect(ui.sportsFoundryStat, [], { placeholder: "Choose a player first", valueKey: "key" });
+    renderSportsFoundrySelect(ui.sportsFoundryGame, [], { placeholder: "Choose a player first" });
+    state.sportsFoundryContext.context = null;
+    renderSportsFoundryHistoryPreview(null);
+    syncSportsFoundryGameGap();
+    syncSportsFoundryButtons();
+    setSportsFoundryStatus(`Loaded ${items.length} player${items.length === 1 ? "" : "s"}.`);
+    return items;
+  };
+
+  const loadSportsFoundryContext = async () => {
+    const league = String(ui.sportsFoundryLeague?.value || "nba").trim().toLowerCase();
+    const teamId = String(ui.sportsFoundryTeam?.value || "").trim();
+    const playerId = String(ui.sportsFoundryPlayer?.value || "").trim();
+    if (!teamId || !playerId) {
+      state.sportsFoundryContext.context = null;
+      renderSportsFoundryHistoryPreview(null);
+      syncSportsFoundryButtons();
+      return null;
+    }
+    state.sportsFoundryContext.lastLeague = league;
+    state.sportsFoundryContext.lastTeamId = teamId;
+    state.sportsFoundryContext.lastPlayerId = playerId;
+    state.sportsFoundryContext.context = null;
+    renderSportsFoundrySelect(ui.sportsFoundryStat, [], { placeholder: "Loading stat options...", valueKey: "key" });
+    renderSportsFoundrySelect(ui.sportsFoundryGame, [], { placeholder: "Loading future games..." });
+    renderSportsFoundryHistoryPreview(null);
+    syncSportsFoundryGameGap();
+    syncSportsFoundryButtons();
+    setSportsFoundryStatus("Loading historical player data...");
+    const payload = await callFoundryApi(
+      "GET",
+      `/api/autopilot/sports/context?league=${encodeURIComponent(league)}&teamId=${encodeURIComponent(teamId)}&playerId=${encodeURIComponent(playerId)}`
+    );
+    state.sportsFoundryContext.context = payload;
+    const statCatalog = Array.isArray(payload?.statCatalog) ? payload.statCatalog : [];
+    renderSportsFoundrySelect(ui.sportsFoundryStat, statCatalog, {
+      placeholder: "Select a stat",
+      valueKey: "key",
+      labelBuilder: (item) => item?.label || item?.key || "Stat",
+    });
+    const nextStatKey = String(ui.sportsFoundryStat?.value || "").trim();
+    ui.sportsFoundryStat.value =
+      nextStatKey && statCatalog.some((item) => String(item?.key || "").trim() === nextStatKey)
+        ? nextStatKey
+        : String(payload?.defaultStatKey || statCatalog[0]?.key || "").trim();
+    const futureGames = Array.isArray(payload?.futureGames) ? payload.futureGames : [];
+    renderSportsFoundrySelect(ui.sportsFoundryGame, futureGames, {
+      placeholder: futureGames.length ? "Select a future game" : "No future games available",
+      labelBuilder: (item) => item?.label || item?.displayDate || "Scheduled game",
+    });
+    if (futureGames.length) {
+      ui.sportsFoundryGame.value = String(futureGames[0]?.id || "").trim();
+    }
+    if (ui.sportsFoundryTitle && !String(ui.sportsFoundryTitle.value || "").trim()) {
+      const playerName = String(payload?.player?.displayName || "").trim();
+      const statLabel = String(statCatalog.find((entry) => String(entry?.key || "").trim() === String(ui.sportsFoundryStat?.value || "").trim())?.label || "").trim();
+      const opp = String(futureGames[0]?.opponentAbbreviation || "").trim();
+      ui.sportsFoundryTitle.value = [playerName, statLabel ? `${statLabel.toLowerCase()}` : "", opp ? `vs ${opp}` : ""].filter(Boolean).join(" ");
+    }
+    renderSportsFoundryHistoryPreview(payload);
+    syncSportsFoundryGameGap();
+    syncSportsFoundryButtons();
+    setSportsFoundryStatus(
+      futureGames.length
+        ? `Loaded ${payload?.historical?.rowCount || 0} historical games and ${futureGames.length} future matchup${futureGames.length === 1 ? "" : "s"}.`
+        : `Loaded ${payload?.historical?.rowCount || 0} historical games. No future scheduled games are available right now.`
+    );
+    return payload;
+  };
+
+  const loadSportsFoundryRunById = async (runId, { notify = false, preloadedRun = null, replaceUrl = true } = {}) => {
+    const cleanId = String(runId || "").trim();
+    if (!cleanId) throw new Error("Run ID is required.");
+    state.sportsFoundryContext.loadingRunId = cleanId;
+    setSportsFoundryStatus("Loading sports forecast run...");
+    const payload =
+      preloadedRun && typeof preloadedRun === "object"
+        ? { run: preloadedRun }
+        : await callFoundryApi("GET", `/api/autopilot/runs/${encodeURIComponent(cleanId)}`);
+    const run = payload?.run && typeof payload.run === "object" ? payload.run : null;
+    if (!run || !isSportsAutopilotRun(run)) throw new Error("Sports forecast run was not found.");
+    updateSportsFoundryRunInState(run);
+    const requestId = getSportsFoundryRequestId(run);
+    let requestRecord = requestId ? getMyRequestById(requestId) : null;
+    if (requestId && !requestRecord) {
+      requestRecord = await fetchMyRequestById(requestId).catch(() => null);
+      if (requestRecord && typeof requestRecord === "object") upsertMyRequestInState(requestRecord);
+    }
+    await renderSportsFoundryRunDetail(run, { request: requestRecord });
+    if (replaceUrl && typeof history !== "undefined") {
+      try {
+        history.replaceState({}, "", `/dashboard?panel=sports-autopilot&runId=${encodeURIComponent(cleanId)}`);
+      } catch (_error) {
+        // Ignore URL update failures.
+      }
+    }
+    setSportsFoundryStatus(String(run?.status || "Run loaded."));
+    if (notify) showToast("Sports forecast run loaded.");
+    return run;
+  };
+
+  const loadSportsFoundryRuns = async ({ focusRunId = "", notify = false } = {}) => {
+    if (!hasFullAccount()) {
+      renderSportsFoundryRuns([]);
+      return [];
+    }
+    setSportsFoundryStatus("Loading sports forecast runs...");
+    const payload = await callFoundryApi("GET", "/api/autopilot/sports/runs?limit=60");
+    const items = Array.isArray(payload?.items) ? payload.items : [];
+    state.sportsFoundryContext.loaded = true;
+    renderSportsFoundryRuns(items);
+    const requestedRunId = String(focusRunId || getQueryParam("runId") || "").trim();
+    if (requestedRunId) {
+      const match = items.find((item) => String(item?.id || "").trim() === requestedRunId);
+      await loadSportsFoundryRunById(requestedRunId, { notify: false, preloadedRun: match || null, replaceUrl: false });
+    } else if (!state.sportsFoundryContext.activeRunId && items.length) {
+      await renderSportsFoundryRunDetail(items[0]);
+    }
+    setSportsFoundryStatus(items.length ? `Loaded ${items.length} sports forecast run${items.length === 1 ? "" : "s"}.` : "No sports forecast runs yet.");
+    if (notify) showToast("Sports forecast runs refreshed.");
+    return items;
+  };
+
+  const createSportsFoundryRun = async ({ notify = true } = {}) => {
+    if (!hasFullAccount()) throw new Error("Sign in with a full account to use sports forecasting.");
+    const league = String(ui.sportsFoundryLeague?.value || "").trim().toLowerCase();
+    const teamId = String(ui.sportsFoundryTeam?.value || "").trim();
+    const playerId = String(ui.sportsFoundryPlayer?.value || "").trim();
+    const statKey = String(ui.sportsFoundryStat?.value || "").trim();
+    const targetGameId = String(ui.sportsFoundryGame?.value || "").trim();
+    if (!league || !teamId || !playerId || !statKey || !targetGameId) {
+      throw new Error("League, team, player, stat, and future game are all required.");
+    }
+    setSportsFoundryStatus("Starting sports forecast...");
+    const payload = await callFoundryApi("POST", "/api/autopilot/sports/runs", {
+      league,
+      teamId,
+      playerId,
+      statKey,
+      targetGameId,
+      title: String(ui.sportsFoundryTitle?.value || "").trim(),
+      notes: String(ui.sportsFoundryNotes?.value || "").trim(),
+      workspaceId: String(state.activeWorkspaceId || state.user?.uid || "").trim(),
+    });
+    const run = payload?.run && typeof payload.run === "object" ? payload.run : null;
+    if (!run) throw new Error("Sports forecast run was not created.");
+    updateSportsFoundryRunInState(run);
+    await renderSportsFoundryRunDetail(run);
+    renderSportsFoundryRuns(state.sportsFoundryContext.runs || []);
+    setSportsFoundryStatus(`Sports forecast started for ${String(run?.sports?.player?.displayName || "the selected player")}.`);
+    if (notify) showToast("Sports forecast started.");
+    return run;
+  };
+
+  const refreshSportsFoundryRun = async ({ runId = "", notify = true } = {}) => {
+    if (!hasFullAccount()) throw new Error("Sign in with a full account to use sports forecasting.");
+    const activeId = String(runId || state.sportsFoundryContext.activeRunId || "").trim();
+    if (!activeId) throw new Error("Select a sports forecast run first.");
+    setSportsFoundryStatus("Refreshing sports forecast status...");
+    const payload = await callFoundryApi("POST", `/api/autopilot/runs/${encodeURIComponent(activeId)}/refresh`, {});
+    const run = payload?.run && typeof payload.run === "object" ? payload.run : null;
+    if (!run) throw new Error("Refresh did not return an updated sports run.");
+    updateSportsFoundryRunInState(run);
+    await renderSportsFoundryRunDetail(run);
+    renderSportsFoundryRuns(state.sportsFoundryContext.runs || []);
+    setSportsFoundryStatus(`Run status: ${String(run?.status || "unknown")}.`);
+    if (notify) showToast("Sports forecast run refreshed.");
+    return run;
+  };
+
+  const shareSportsFoundryRun = async () => {
+    if (!hasFullAccount()) throw new Error("Sign in with a full account to share sports forecasts.");
+    const run = state.sportsFoundryContext.activeRun;
+    const requestId = getSportsFoundryRequestId(run);
+    if (!requestId) throw new Error("This sports run has not been saved yet.");
+    const body = await updateMyRequest(
+      requestId,
+      { visibility: "unlisted" },
+      { method: "POST", path: `/api/my-requests/${encodeURIComponent(requestId)}/share` }
+    );
+    const shareUrl = String(body?.share?.shareUrl || body?.request?.share?.shareUrl || "").trim();
+    const refreshedRequest = body?.request && typeof body.request === "object" ? body.request : null;
+    if (refreshedRequest) upsertMyRequestInState(refreshedRequest);
+    if (!shareUrl) throw new Error("Share URL was not returned.");
+    await performShare({
+      url: shareUrl,
+      title: String(run?.title || "Sports forecast"),
+      text: "Sports forecast shared from Quantura.",
+    });
+    await renderSportsFoundryRunDetail(run, { request: refreshedRequest, shareUrl });
+    showToast("Share link copied.");
+  };
+
+  const renderSharedSportsFoundryRequest = async (request, shareUrl = "") => {
+    const input = request?.input && typeof request.input === "object" ? request.input : {};
+    const outputsMeta = request?.outputsMeta && typeof request.outputsMeta === "object" ? request.outputsMeta : {};
+    const pseudoRun = {
+      id: String(request?.sourceRef?.id || request?.id || "").trim(),
+      title: String(request?.title || "Sports forecast").trim(),
+      status: String(outputsMeta?.analysisStatus || outputsMeta?.status || "shared").trim(),
+      sourceType: "sports_timeseries",
+      sourceGroup: "sports",
+      exploreRequestId: String(request?.id || "").trim(),
+      sports: {
+        leagueLabel: String(outputsMeta?.leagueLabel || input?.leagueLabel || input?.league || "").trim(),
+        team: {
+          abbreviation: String(outputsMeta?.teamAbbreviation || input?.teamAbbreviation || "").trim(),
+        },
+        player: {
+          displayName: String(outputsMeta?.playerName || input?.playerName || "").trim(),
+        },
+        stat: {
+          key: String(outputsMeta?.statKey || input?.statKey || "").trim(),
+          label: String(outputsMeta?.statLabel || input?.statLabel || "").trim(),
+        },
+        targetGame: {
+          date: String(outputsMeta?.gameDate || input?.gameDate || "").trim(),
+          opponentAbbreviation: String(outputsMeta?.opponent || input?.opponent || "").trim(),
+          label: `${String(outputsMeta?.gameDate || input?.gameDate || "").trim()} ${String(outputsMeta?.opponent || input?.opponent || "").trim()}`.trim(),
+        },
+        historicalPreviewRows: [],
+      },
+      analysis: {
+        summary: String(outputsMeta?.summary || "").trim(),
+        markdown: String(outputsMeta?.analysisMarkdown || "").trim(),
+      },
+      files: {},
+    };
+    await renderSportsFoundryRunDetail(pseudoRun, { request, shareUrl });
+    if (ui.sportsFoundryPreview) {
+      ui.sportsFoundryPreview.innerHTML = `<div class="small muted">Private CSV exports stay inside the owner workspace. Shared view includes the saved sports forecast summary only.</div>`;
+    }
+    if (ui.sportsFoundryChart) {
+      ui.sportsFoundryChart.innerHTML = `<div class="small muted">Chart preview is unavailable in shared read-only mode.</div>`;
+    }
   };
 
   const buildIndicatorOverlays = (series) => {
@@ -22367,6 +23211,7 @@
 
   const mapMyRequestTypeToPanel = (type, request = null) => {
     const normalized = normalizeMyRequestType(type);
+    if (isSportsAutopilotMyRequest(request)) return "sports-autopilot";
     if (isAutopilotMyRequest(request)) return "autopilot";
     if (normalized === "screener") return "screener";
     if (normalized === "indicator") return "indicators";
@@ -22397,6 +23242,13 @@
     if (ticker) syncTickerInputs(ticker, { source: "my_request_load" });
 
     if (type === "forecast") {
+      if (isSportsAutopilotMyRequest(item)) {
+        const runId = sourceId || String(id.split("__").slice(1).join("__") || "").trim();
+        if (!runId) throw new Error("Sports forecast source is missing.");
+        await loadSportsFoundryRunById(runId, { notify: false, replaceUrl: false });
+        if (notify) showToast("Sports forecast request loaded.");
+        return item;
+      }
       if (isAutopilotMyRequest(item)) {
         const runId = sourceId || String(id.split("__").slice(1).join("__") || "").trim();
         if (!runId) throw new Error("Forecast Foundry source is missing.");
@@ -22514,7 +23366,9 @@
       if (setPanel && typeof window.__quanturaSetPanel === "function") {
         window.__quanturaSetPanel(panelId, { pushPath: false });
       }
-      if (isAutopilotMyRequest(request)) {
+      if (isSportsAutopilotMyRequest(request)) {
+        await renderSharedSportsFoundryRequest(request, String(shareMeta?.shareUrl || "").trim());
+      } else if (isAutopilotMyRequest(request)) {
         await renderSharedFoundryRequest(request, String(shareMeta?.shareUrl || "").trim());
       } else if (type === "modelCouncil" && ui.tickerQueryOutput) {
         const outputsMeta = request.outputsMeta && typeof request.outputsMeta === "object" ? request.outputsMeta : {};
@@ -23672,6 +24526,45 @@
             } else if (shouldLoadFoundryRuns) {
               loadFoundryRuns({ focusRunId, notify: false }).catch((error) => {
                 setFoundryStatus(error?.message || "Unable to load Forecast Foundry runs.", "warn");
+              });
+            }
+          }
+        }
+
+        if (next === "sports-autopilot") {
+          const firstSportsLoad = !state.panelAutoloaded["sports-autopilot"];
+          state.panelAutoloaded["sports-autopilot"] = true;
+          const requestShare = String(getQueryParam("requestShare") || "").trim();
+          const focusRunId = String(getQueryParam("runId") || "").trim();
+          if (!state.sportsFoundryContext.lastLeague) {
+            state.sportsFoundryContext.lastLeague = String(ui.sportsFoundryLeague?.value || "nba").trim().toLowerCase();
+          }
+          if (ui.sportsFoundryLeague && !String(ui.sportsFoundryLeague.value || "").trim()) {
+            ui.sportsFoundryLeague.value = state.sportsFoundryContext.lastLeague || "nba";
+          }
+          if (requestShare) {
+            loadSharedMyRequestFromUrl({ setPanel: false }).catch(() => {});
+          } else {
+            if (!state.sportsFoundryContext.teams.length || firstSportsLoad) {
+              loadSportsFoundryTeams({ preserveSelection: true })
+                .then(() => {
+                  if (state.sportsFoundryContext.lastTeamId) {
+                    return loadSportsFoundryPlayers({ preserveSelection: true }).then(() => {
+                      if (state.sportsFoundryContext.lastPlayerId) {
+                        return loadSportsFoundryContext().catch(() => {});
+                      }
+                      return null;
+                    });
+                  }
+                  return null;
+                })
+                .catch((error) => {
+                  setSportsFoundryStatus(error?.message || "Unable to load sports metadata.", "warn");
+                });
+            }
+            if (!state.sportsFoundryContext.loaded || firstSportsLoad || focusRunId) {
+              loadSportsFoundryRuns({ focusRunId, notify: false }).catch((error) => {
+                setSportsFoundryStatus(error?.message || "Unable to load sports forecast runs.", "warn");
               });
             }
           }
@@ -27041,9 +27934,15 @@
       ui.marketHeadlinesProvider?.value || DEFAULT_MARKET_HEADLINES_PROVIDER,
       ui.marketHeadlinesFeed?.value || DEFAULT_MARKET_HEADLINES_FEED
     );
-    ui.marketHeadlinesProvider?.addEventListener("change", () => {
+    ui.marketHeadlinesProvider?.addEventListener("change", async () => {
       syncMarketHeadlinesFeedOptions(ui.marketHeadlinesProvider?.value || DEFAULT_MARKET_HEADLINES_PROVIDER);
-      if (ui.marketHeadlinesStatus) ui.marketHeadlinesStatus.textContent = "";
+      await loadMarketHeadlinesFeed(functions, { force: true, notify: false });
+    });
+    ui.marketHeadlinesFeed?.addEventListener("change", async () => {
+      await loadMarketHeadlinesFeed(functions, { force: true, notify: false });
+    });
+    ui.marketHeadlinesLimit?.addEventListener("change", async () => {
+      await loadMarketHeadlinesFeed(functions, { force: true, notify: false });
     });
     ui.marketHeadlinesForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -27336,15 +28235,19 @@
 	        }
 
 	        const expirationEl = document.getElementById("options-expiration");
-	        if (expirationEl && expirationEl.tagName === "SELECT" && Array.isArray(expirations) && expirations.length) {
+	        if (expirationEl && expirationEl.tagName === "SELECT") {
 	          expirationEl.innerHTML = [
 	            `<option value="">Auto (nearest)</option>`,
-	            ...expirations.map((exp) => `<option value="${escapeHtml(exp)}">${escapeHtml(exp)}</option>`),
+	            ...Array.isArray(expirations)
+	              ? expirations.map((exp) => `<option value="${escapeHtml(exp)}">${escapeHtml(exp)}</option>`)
+	              : [],
 	          ].join("");
-	          if (expirations.includes(selectedExpiration)) {
+            expirationEl.dataset.expirationsEmpty = Array.isArray(expirations) && expirations.length ? "0" : "1";
+	          if (Array.isArray(expirations) && expirations.includes(selectedExpiration)) {
 	            expirationEl.value = selectedExpiration;
 	          }
 	        }
+          syncOptionsDateTool();
 
 	        if (ui.optionsOutput) {
 	          setOutputReady(ui.optionsOutput);
@@ -27448,6 +28351,7 @@
 	    });
 
 	    ui.optionsExpiration?.addEventListener("change", () => {
+      syncOptionsDateTool();
 	      if (!ui.optionsForm) return;
 	      try {
 	        ui.optionsForm.requestSubmit?.();
@@ -27455,6 +28359,16 @@
 	        // Ignore.
 	      }
 	    });
+
+      ui.optionsStartDate?.addEventListener("input", () => {
+        syncOptionsDateTool();
+      });
+
+      ui.optionsStartDate?.addEventListener("change", () => {
+        syncOptionsDateTool();
+      });
+
+      syncOptionsDateTool();
 
       mountGithubActionsScreenerForm();
       ui.screenerModel?.addEventListener("change", () => {
@@ -27604,6 +28518,8 @@
 
     syncFoundrySourceFields();
     syncFoundryDateDefaults();
+    syncSportsFoundryButtons();
+    syncSportsFoundryGameGap();
     ui.foundrySourceKind?.addEventListener("change", () => {
       syncFoundrySourceFields();
       syncFoundryDateDefaults({ force: true });
@@ -27711,6 +28627,170 @@
       } catch (error) {
         const message = extractErrorMessage(error, "Unable to load Forecast Foundry run.");
         setFoundryStatus(message, "warn");
+        showToast(message, "warn");
+      }
+    });
+
+    ui.sportsFoundryLeague?.addEventListener("change", async () => {
+      state.sportsFoundryContext.lastLeague = String(ui.sportsFoundryLeague?.value || "nba").trim().toLowerCase();
+      state.sportsFoundryContext.lastTeamId = "";
+      state.sportsFoundryContext.lastPlayerId = "";
+      try {
+        await loadSportsFoundryTeams({ preserveSelection: false });
+      } catch (error) {
+        const message = extractErrorMessage(error, "Unable to load teams.");
+        setSportsFoundryStatus(message, "warn");
+        showToast(message, "warn");
+      }
+    });
+
+    ui.sportsFoundryTeam?.addEventListener("change", async () => {
+      state.sportsFoundryContext.lastTeamId = String(ui.sportsFoundryTeam?.value || "").trim();
+      state.sportsFoundryContext.lastPlayerId = "";
+      try {
+        await loadSportsFoundryPlayers({ preserveSelection: false });
+      } catch (error) {
+        const message = extractErrorMessage(error, "Unable to load players.");
+        setSportsFoundryStatus(message, "warn");
+        showToast(message, "warn");
+      }
+    });
+
+    ui.sportsFoundryPlayer?.addEventListener("change", async () => {
+      state.sportsFoundryContext.lastPlayerId = String(ui.sportsFoundryPlayer?.value || "").trim();
+      try {
+        await loadSportsFoundryContext();
+      } catch (error) {
+        const message = extractErrorMessage(error, "Unable to load player data.");
+        setSportsFoundryStatus(message, "warn");
+        showToast(message, "warn");
+      }
+    });
+
+    ui.sportsFoundryStat?.addEventListener("change", () => {
+      const context = state.sportsFoundryContext.context;
+      if (context) renderSportsFoundryHistoryPreview(context);
+      syncSportsFoundryButtons();
+    });
+
+    ui.sportsFoundryGame?.addEventListener("change", () => {
+      syncSportsFoundryGameGap();
+      syncSportsFoundryButtons();
+    });
+
+    ui.sportsFoundryForm?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try {
+        await createSportsFoundryRun({ notify: true });
+      } catch (error) {
+        const message = extractErrorMessage(error, "Unable to start sports forecast.");
+        setSportsFoundryStatus(message, "warn");
+        showToast(message, "warn");
+      }
+    });
+
+    ui.sportsFoundryDownloadHistory?.addEventListener("click", async () => {
+      try {
+        const { csv } = buildSportsFoundryHistoryCsv();
+        const context = state.sportsFoundryContext.context;
+        const player = String(context?.player?.displayName || "player").trim().replace(/[^A-Za-z0-9._-]+/g, "_");
+        const league = String(context?.league?.key || ui.sportsFoundryLeague?.value || "sports").trim().toLowerCase();
+        triggerDownload(`${league}_${player}_historical_game_log.csv`, csv, { mimeType: "text/csv;charset=utf-8;" });
+        showToast("Historical CSV downloaded.");
+      } catch (error) {
+        const message = extractErrorMessage(error, "Unable to download historical CSV.");
+        setSportsFoundryStatus(message, "warn");
+        showToast(message, "warn");
+      }
+    });
+
+    ui.sportsFoundryDownloadJson?.addEventListener("click", async () => {
+      try {
+        const activeRun = state.sportsFoundryContext.activeRun;
+        const forecastPayloadFile = activeRun?.files?.forecastPayloadJson;
+        const inputPayloadFile = activeRun?.files?.forecastInputJson;
+        const downloadUrl = String(forecastPayloadFile?.downloadUrl || inputPayloadFile?.downloadUrl || "").trim();
+        if (downloadUrl) {
+          await triggerDownloadFromUrl(downloadUrl, String(forecastPayloadFile?.fileName || inputPayloadFile?.fileName || "sports_forecast.json"));
+          showToast("Forecast JSON downloaded.");
+          return;
+        }
+        const context = state.sportsFoundryContext.context;
+        if (!context) throw new Error("Load a sports context first.");
+        const statCatalog = Array.isArray(context?.statCatalog) ? context.statCatalog : [];
+        const futureGames = Array.isArray(context?.futureGames) ? context.futureGames : [];
+        const stat = statCatalog.find((entry) => String(entry?.key || "").trim() === String(ui.sportsFoundryStat?.value || "").trim()) || statCatalog[0] || null;
+        const game = futureGames.find((entry) => String(entry?.id || "").trim() === String(ui.sportsFoundryGame?.value || "").trim()) || futureGames[0] || null;
+        const payload = {
+          type: "sports_forecast_input",
+          league: context?.league || {},
+          team: context?.team || {},
+          player: context?.player || {},
+          stat,
+          targetGame: game,
+          historicalRowCount: Number(context?.historical?.rowCount || 0),
+          title: String(ui.sportsFoundryTitle?.value || "").trim(),
+          notes: String(ui.sportsFoundryNotes?.value || "").trim(),
+        };
+        triggerDownload("sports_forecast_input.json", JSON.stringify(payload, null, 2), {
+          mimeType: "application/json;charset=utf-8;",
+        });
+        showToast("Forecast JSON downloaded.");
+      } catch (error) {
+        const message = extractErrorMessage(error, "Unable to download forecast JSON.");
+        setSportsFoundryStatus(message, "warn");
+        showToast(message, "warn");
+      }
+    });
+
+    ui.sportsFoundryRefreshList?.addEventListener("click", async () => {
+      try {
+        await loadSportsFoundryRuns({ notify: true });
+      } catch (error) {
+        const message = extractErrorMessage(error, "Unable to refresh sports forecast runs.");
+        setSportsFoundryStatus(message, "warn");
+        showToast(message, "warn");
+      }
+    });
+
+    ui.sportsFoundryRefreshButton?.addEventListener("click", async () => {
+      try {
+        await refreshSportsFoundryRun({ notify: true });
+      } catch (error) {
+        const message = extractErrorMessage(error, "Unable to refresh sports forecast run.");
+        setSportsFoundryStatus(message, "warn");
+        showToast(message, "warn");
+      }
+    });
+
+    ui.sportsFoundryShareButton?.addEventListener("click", async () => {
+      try {
+        await shareSportsFoundryRun();
+      } catch (error) {
+        const message = extractErrorMessage(error, "Unable to share sports forecast run.");
+        setSportsFoundryStatus(message, "warn");
+        showToast(message, "warn");
+      }
+    });
+
+    ui.sportsFoundryOutput?.addEventListener("click", async (event) => {
+      const actionButton = event.target.closest("[data-action]");
+      if (!actionButton) return;
+      const action = String(actionButton.dataset.action || "").trim();
+      const runId = String(actionButton.dataset.runId || "").trim();
+      if (!action.startsWith("sports-foundry-")) return;
+      event.preventDefault();
+      try {
+        if (action === "sports-foundry-select-run") {
+          await loadSportsFoundryRunById(runId, { notify: false });
+          return;
+        }
+        if (action === "sports-foundry-refresh-run") {
+          await refreshSportsFoundryRun({ runId, notify: true });
+        }
+      } catch (error) {
+        const message = extractErrorMessage(error, "Unable to load sports forecast run.");
+        setSportsFoundryStatus(message, "warn");
         showToast(message, "warn");
       }
     });
@@ -28341,11 +29421,22 @@
             state.foundryContext.loadingRunId = "";
             state.foundryContext.activeConcurrentRuns = 0;
             state.foundryContext.maxConcurrentRuns = FOUNDRY_MAX_CONCURRENT_INSTANCES;
+            state.sportsFoundryContext.teams = [];
+            state.sportsFoundryContext.players = [];
+            state.sportsFoundryContext.context = null;
+            state.sportsFoundryContext.runs = [];
+            state.sportsFoundryContext.loaded = false;
+            state.sportsFoundryContext.activeRunId = "";
+            state.sportsFoundryContext.activeRun = null;
+            state.sportsFoundryContext.loadingRunId = "";
             applyAdFreeExperience();
             renderOrderList([], ui.userOrders);
             renderFoundryRuns([]);
             await renderFoundryRunDetail(null);
             setFoundryStatus("Sign in with a full account to use Forecast Foundry.");
+            renderSportsFoundryRuns([]);
+            await renderSportsFoundryRunDetail(null);
+            setSportsFoundryStatus("Sign in with a full account to use sports forecasting.");
             renderRequestList([], ui.predictionsOutput, "No uploads yet.");
 		        if (ui.watchlistList) ui.watchlistList.textContent = "Sign in to manage your watchlist.";
 		        if (ui.alertsList) ui.alertsList.textContent = "Sign in to manage your alerts.";

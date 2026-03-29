@@ -19,6 +19,18 @@ import {
   fetchYahooHistoryBars,
   runMarketDataScreener,
 } from "./forecastingScreener";
+import {
+  analyzeSportsPredictionCsv,
+  buildSportsAutopilotDatasetCsv,
+  buildSportsHistoricalCsv,
+  buildSportsPlayerContext,
+  buildSportsRunPayloadExport,
+  listSportsPlayers,
+  listSportsTeams,
+  type NormalizedSportsHistoryRow,
+  type SportsLeagueKey,
+  SPORTS_LEAGUES,
+} from "./sports";
 export { shopApi } from "./shopApi";
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const AdmZip = require("adm-zip");
@@ -1859,7 +1871,15 @@ function myRequestShareUrl(slug: string, data: Record<string, unknown> = {}): st
   const sourceRef = asPlainObject(data.sourceRef);
   const sourceCollection = sanitizeText(sourceRef.collection, 80);
   const type = normalizeMyRequestType(data.type) || "forecast";
+  const input = normalizeMyRequestInput(data.input);
+  const outputsMeta = trimOutputsMeta(data.outputsMeta);
   if (sanitizeText(sourceRef.collection, 80) === "autopilot_requests") {
+    const sportsPanel =
+      sanitizeText(input.panel || outputsMeta.panel, 80).toLowerCase() === "sports-autopilot" ||
+      sanitizeText(input.sourceGroup || outputsMeta.sourceGroup, 40).toLowerCase() === "sports";
+    if (sportsPanel) {
+      return `${PUBLIC_ORIGIN}/dashboard?panel=sports-autopilot&requestShare=${encodeURIComponent(cleanSlug)}`;
+    }
     return `${PUBLIC_ORIGIN}/autopilot?requestShare=${encodeURIComponent(cleanSlug)}`;
   }
   if (type === "screener" || sourceCollection === "screener_runs") {
@@ -3088,15 +3108,29 @@ function buildMyRequestTargetUrl(requestId: string, data: Record<string, unknown
   const sourceRef = asPlainObject(data.sourceRef);
   const sourceCollection = sanitizeText(sourceRef.collection, 80);
   const sourceId = sanitizeText(sourceRef.id, 220);
+  const input = normalizeMyRequestInput(data.input);
+  const outputsMeta = trimOutputsMeta(data.outputsMeta);
 
   if (type === "forecast") {
     if (sourceCollection === "autopilot_requests" && sourceId) {
+      const sportsPanel =
+        sanitizeText(input.panel || outputsMeta.panel, 80).toLowerCase() === "sports-autopilot" ||
+        sanitizeText(input.sourceGroup || outputsMeta.sourceGroup, 40).toLowerCase() === "sports";
+      if (sportsPanel) {
+        return `/dashboard?panel=sports-autopilot&runId=${encodeURIComponent(sourceId)}`;
+      }
       return `/autopilot?runId=${encodeURIComponent(sourceId)}`;
     }
     if (sourceCollection === "forecast_requests" && sourceId) {
       return `/forecasting?forecastId=${encodeURIComponent(sourceId)}`;
     }
     if (sourceCollection === "autopilot_requests") {
+      const sportsPanel =
+        sanitizeText(input.panel || outputsMeta.panel, 80).toLowerCase() === "sports-autopilot" ||
+        sanitizeText(input.sourceGroup || outputsMeta.sourceGroup, 40).toLowerCase() === "sports";
+      if (sportsPanel) {
+        return `/dashboard?panel=sports-autopilot&requestId=${encodeURIComponent(requestId)}`;
+      }
       return `/autopilot?requestId=${encodeURIComponent(requestId)}`;
     }
     return `/forecasting?requestId=${encodeURIComponent(requestId)}`;
@@ -3323,7 +3357,40 @@ async function buildStorageFileResponse(fileRaw: unknown): Promise<Record<string
   return response;
 }
 
+function isSportsAutopilotData(data: Record<string, unknown>): boolean {
+  return sanitizeText(data.sourceGroup, 40).toLowerCase() === "sports" || sanitizeText(data.sourceType, 60).toLowerCase() === "sports_timeseries";
+}
+
+function buildSportsSyntheticTicker(sportsRaw: unknown, datasetRaw: unknown): string {
+  const sports = asPlainObject(sportsRaw);
+  const team = asPlainObject(sports.team);
+  const player = asPlainObject(sports.player);
+  const league = sanitizeText(sports.leagueKey || sports.league, 20).toUpperCase();
+  const teamAbbreviation = sanitizeText(team.abbreviation, 20).toUpperCase();
+  const playerId = sanitizeText(player.id, 40);
+  const value = `${league}-${teamAbbreviation}-${playerId}`.replace(/[^A-Z0-9.=^/-]/gi, "-");
+  return normalizeTicker(value || datasetRaw);
+}
+
+function buildSportsRunTitle(data: Record<string, unknown>): string {
+  const explicit = sanitizeText(data.title, 180);
+  if (explicit) return explicit;
+  const sports = asPlainObject(data.sports);
+  const team = asPlainObject(sports.team);
+  const player = asPlainObject(sports.player);
+  const stat = asPlainObject(sports.stat);
+  const targetGame = asPlainObject(sports.targetGame);
+  const playerName = sanitizeText(player.displayName, 120) || "Player";
+  const statLabel = sanitizeText(stat.label, 80) || "Stat";
+  const opponent = sanitizeText(targetGame.opponentAbbreviation, 20).toUpperCase() || sanitizeText(targetGame.opponentDisplayName, 80);
+  const teamAbbreviation = sanitizeText(team.abbreviation, 20).toUpperCase();
+  return sanitizeText(`${playerName} ${statLabel} vs ${opponent || "Opponent"} (${teamAbbreviation || "Sports"})`, 180);
+}
+
 function buildAutopilotTitle(data: Record<string, unknown>): string {
+  if (isSportsAutopilotData(data)) {
+    return buildSportsRunTitle(data);
+  }
   const explicit = sanitizeText(data.title, 180);
   if (explicit) return explicit;
   const dataset = asPlainObject(data.dataset);
@@ -3336,6 +3403,26 @@ function buildAutopilotTitle(data: Record<string, unknown>): string {
 }
 
 function buildAutopilotSummary(data: Record<string, unknown>): string {
+  if (isSportsAutopilotData(data)) {
+    const analysis = asPlainObject(data.analysis);
+    const sports = asPlainObject(data.sports);
+    const player = asPlainObject(sports.player);
+    const stat = asPlainObject(sports.stat);
+    const targetGame = asPlainObject(sports.targetGame);
+    const playerName = sanitizeText(player.displayName, 120) || "Player";
+    const statLabel = sanitizeText(stat.label, 80) || "Stat";
+    const opponent = sanitizeText(targetGame.opponentAbbreviation, 20).toUpperCase() || sanitizeText(targetGame.opponentDisplayName, 80);
+    const status = sanitizeText(data.status, 40).toLowerCase();
+    const analysisSummary = sanitizeText(analysis.summary, 600);
+    if (analysisSummary) return analysisSummary;
+    if (status === "completed") {
+      return sanitizeText(`${playerName} ${statLabel.toLowerCase()} forecast against ${opponent || "the selected opponent"} is ready.`, 600);
+    }
+    if (status === "failed") {
+      return sanitizeText(`${playerName} sports forecast failed. ${sanitizeText(asPlainObject(data.autopilot).failureReason, 320)}`, 600);
+    }
+    return sanitizeText(`${playerName} ${statLabel.toLowerCase()} forecast is ${status || "in progress"} for ${opponent || "the selected opponent"}.`, 600);
+  }
   const analysis = asPlainObject(data.analysis);
   const autopilot = asPlainObject(data.autopilot);
   const dataset = asPlainObject(data.dataset);
@@ -3368,6 +3455,33 @@ function buildAutopilotSummary(data: Record<string, unknown>): string {
 }
 
 function buildAutopilotInputPayload(data: Record<string, unknown>): Record<string, unknown> {
+  if (isSportsAutopilotData(data)) {
+    const sports = asPlainObject(data.sports);
+    const team = asPlainObject(sports.team);
+    const player = asPlainObject(sports.player);
+    const stat = asPlainObject(sports.stat);
+    const targetGame = asPlainObject(sports.targetGame);
+    return {
+      ticker: sanitizeText(team.abbreviation, 20).toUpperCase(),
+      sourceType: sanitizeText(data.sourceType, 40),
+      sourceGroup: "sports",
+      panel: "sports-autopilot",
+      league: sanitizeText(sports.leagueKey || sports.league, 20).toLowerCase(),
+      leagueLabel: sanitizeText(sports.leagueLabel, 40),
+      teamId: sanitizeText(team.id, 40),
+      teamAbbreviation: sanitizeText(team.abbreviation, 20).toUpperCase(),
+      teamName: sanitizeText(team.displayName, 120),
+      playerId: sanitizeText(player.id, 40),
+      playerName: sanitizeText(player.displayName, 120),
+      statKey: sanitizeText(stat.key, 120),
+      statLabel: sanitizeText(stat.label, 80),
+      gameId: sanitizeText(targetGame.id, 40),
+      gameDate: sanitizeText(targetGame.date, 80),
+      opponent: sanitizeText(targetGame.opponentAbbreviation, 20).toUpperCase() || sanitizeText(targetGame.opponentDisplayName, 120),
+      notes: sanitizeText(data.notes, 2000),
+      mode: sanitizeText(data.mode, 60),
+    };
+  }
   const dataset = asPlainObject(data.dataset);
   const autopilot = asPlainObject(data.autopilot);
   return {
@@ -3382,6 +3496,56 @@ function buildAutopilotInputPayload(data: Record<string, unknown>): Record<strin
 }
 
 function buildAutopilotOutputsMeta(data: Record<string, unknown>): Record<string, unknown> {
+  if (isSportsAutopilotData(data)) {
+    const sports = asPlainObject(data.sports);
+    const team = asPlainObject(sports.team);
+    const player = asPlainObject(sports.player);
+    const stat = asPlainObject(sports.stat);
+    const targetGame = asPlainObject(sports.targetGame);
+    const analysis = asPlainObject(data.analysis);
+    const autopilot = asPlainObject(data.autopilot);
+    const files = asPlainObject(data.files);
+    const analysisMetrics = asPlainObject(analysis.metrics);
+    const forecastValue = asFinite(analysisMetrics.forecastValue, Number.NaN);
+    const lowerBound = asFinite(analysisMetrics.lowerBound, Number.NaN);
+    const upperBound = asFinite(analysisMetrics.upperBound, Number.NaN);
+    const metrics: Record<string, unknown> = {
+      League: sanitizeText(sports.leagueLabel, 40),
+      Team: sanitizeText(team.abbreviation, 20).toUpperCase(),
+      Opponent: sanitizeText(targetGame.opponentAbbreviation, 20).toUpperCase() || sanitizeText(targetGame.opponentDisplayName, 80),
+      Stat: sanitizeText(stat.label, 80),
+      Games: Math.max(0, Math.floor(asFinite(asPlainObject(data.dataset).rowCount, 0))),
+    };
+    if (Number.isFinite(forecastValue)) metrics.Forecast = Number(forecastValue.toFixed(4));
+    if (Number.isFinite(lowerBound)) metrics.Low = Number(lowerBound.toFixed(4));
+    if (Number.isFinite(upperBound)) metrics.High = Number(upperBound.toFixed(4));
+    if (sanitizeText(autopilot.status, 40)) metrics.Status = sanitizeText(autopilot.status, 40);
+    const fileNames = Object.values(files)
+      .map((entry) => sanitizeText(asPlainObject(entry).fileName, 240))
+      .filter(Boolean)
+      .slice(0, 10);
+    return trimOutputsMeta({
+      summary: buildAutopilotSummary(data),
+      service: "aws-sagemaker-autopilot",
+      provider: "aws-sagemaker-autopilot",
+      sourceGroup: "sports",
+      panel: "sports-autopilot",
+      league: sanitizeText(sports.leagueKey || sports.league, 20).toLowerCase(),
+      leagueLabel: sanitizeText(sports.leagueLabel, 40),
+      teamAbbreviation: sanitizeText(team.abbreviation, 20).toUpperCase(),
+      playerName: sanitizeText(player.displayName, 120),
+      statKey: sanitizeText(stat.key, 120),
+      statLabel: sanitizeText(stat.label, 80),
+      gameDate: sanitizeText(targetGame.date, 80),
+      opponent: sanitizeText(targetGame.opponentAbbreviation, 20).toUpperCase() || sanitizeText(targetGame.opponentDisplayName, 80),
+      ticker: sanitizeText(team.abbreviation, 20).toUpperCase(),
+      topSymbols: [sanitizeText(team.abbreviation, 20).toUpperCase()].filter(Boolean),
+      metrics,
+      analysisMarkdown: asString(analysis.markdown).slice(0, 32000),
+      analysisStatus: sanitizeText(analysis.status, 40),
+      fileNames,
+    });
+  }
   const dataset = asPlainObject(data.dataset);
   const autopilot = asPlainObject(data.autopilot);
   const analysis = asPlainObject(data.analysis);
@@ -3498,6 +3662,11 @@ async function upsertOwnedMyRequestFromSystem(
 
 async function syncAutopilotMyRequest(ownerUid: string, runId: string, data: Record<string, unknown>): Promise<string> {
   const requestId = buildMyRequestDocId("forecast", runId);
+  const shouldAutoPublishSportsRun =
+    isSportsAutopilotData(data) &&
+    asBoolean(data.autoPublishToExplore, true) &&
+    (sanitizeText(data.status, 60).toLowerCase() === "completed" ||
+      sanitizeText(asPlainObject(data.analysis).status, 40).toLowerCase() === "ok");
   await upsertOwnedMyRequestFromSystem(ownerUid, {
     requestId,
     type: "forecast",
@@ -3508,6 +3677,7 @@ async function syncAutopilotMyRequest(ownerUid: string, runId: string, data: Rec
       collection: "autopilot_requests",
       id: runId,
     },
+    published: shouldAutoPublishSportsRun,
   });
   return requestId;
 }
@@ -3549,6 +3719,7 @@ async function toAutopilotRunResponse(docId: string, data: Record<string, unknow
   const dataset = asPlainObject(data.dataset);
   const autopilot = asPlainObject(data.autopilot);
   const analysis = asPlainObject(data.analysis);
+  const sports = asPlainObject(data.sports);
   const filesRaw = asPlainObject(data.files);
   const filesEntries = await Promise.all(
     Object.entries(filesRaw).map(async ([key, value]) => [key, await buildStorageFileResponse(value)] as const)
@@ -3613,6 +3784,21 @@ async function toAutopilotRunResponse(docId: string, data: Record<string, unknow
       previewRows: Array.isArray(analysis.previewRows) ? analysis.previewRows.slice(0, 20) : [],
       generatedAtMs: getTimestampMs(analysis.generatedAt),
     },
+    sports: isSportsAutopilotData(data)
+      ? {
+          league: sanitizeText(sports.leagueKey || sports.league, 20).toLowerCase(),
+          leagueLabel: sanitizeText(sports.leagueLabel, 40),
+          team: trimOutputsMeta(asPlainObject(sports.team)),
+          player: trimOutputsMeta(asPlainObject(sports.player)),
+          stat: trimOutputsMeta(asPlainObject(sports.stat)),
+          targetGame: trimOutputsMeta(asPlainObject(sports.targetGame)),
+          seasonsUsed: Array.isArray(sports.seasonsUsed) ? sports.seasonsUsed.slice(0, 4) : [],
+          historicalPreviewRows: Array.isArray(sports.historicalPreviewRows) ? sports.historicalPreviewRows.slice(0, 20) : [],
+          recentHistoryRows: Array.isArray(sports.recentHistoryRows) ? sports.recentHistoryRows.slice(-20) : [],
+          futureGames: Array.isArray(sports.futureGames) ? sports.futureGames.slice(0, 20) : [],
+          statCatalog: Array.isArray(sports.statCatalog) ? sports.statCatalog.slice(0, 40) : [],
+        }
+      : {},
     files,
   };
 }
@@ -3658,6 +3844,20 @@ async function persistAutopilotAnalysisArtifacts(
     },
     filePatches,
   };
+}
+
+async function persistSportsForecastPayloadArtifact(
+  ownerUid: string,
+  runId: string,
+  payload: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const owner = safePathSegment(ownerUid, 120) || "user";
+  const run = safePathSegment(runId, 120) || "run";
+  return writeStorageTextArtifact(
+    `forecast_reports/${owner}/foundry/${run}/sports_forecast_payload.json`,
+    JSON.stringify(payload, null, 2),
+    "application/json"
+  );
 }
 
 async function reconcileAutopilotRunDocument(
@@ -3711,26 +3911,76 @@ async function reconcileAutopilotRunDocument(
     nextPatch.status = refresh.status;
 
     if (refresh.status === "completed" && refresh.predictionsCsvText.trim()) {
-      const analysis = await analyzePredictionCsv(refresh.predictionsCsvText, {
-        ticker: normalizeTicker(dataset.ticker || existingData.ticker),
-      });
-      const persisted = await persistAutopilotAnalysisArtifacts(ownerUid, runId, {
-        status: analysis.status,
-        summary: analysis.summary,
-        markdown: analysis.markdown,
-        metrics: analysis.metrics,
-        data: analysis.analysis,
-        previewRows: analysis.previewRows,
-        rowCount: analysis.rowCount,
-        columns: analysis.columns,
-      }, refresh.predictionsCsvText);
+      if (isSportsAutopilotData(existingData)) {
+        const sports = asPlainObject(existingData.sports);
+        const team = asPlainObject(sports.team);
+        const player = asPlainObject(sports.player);
+        const stat = asPlainObject(sports.stat);
+        const targetGame = asPlainObject(sports.targetGame);
+        const recentHistoryRows = Array.isArray(sports.recentHistoryRows)
+          ? (sports.recentHistoryRows as NormalizedSportsHistoryRow[])
+          : [];
+        const analysis = analyzeSportsPredictionCsv(refresh.predictionsCsvText, {
+          syntheticTicker: buildSportsSyntheticTicker(sports, dataset),
+          statKey: sanitizeText(stat.key, 120),
+          statLabel: sanitizeText(stat.label, 80),
+          leagueLabel: sanitizeText(sports.leagueLabel, 40),
+          playerName: sanitizeText(player.displayName, 120),
+          teamAbbreviation: sanitizeText(team.abbreviation, 20).toUpperCase(),
+          opponentAbbreviation: sanitizeText(targetGame.opponentAbbreviation, 20).toUpperCase(),
+          targetGameDate: sanitizeText(targetGame.date, 80),
+          targetGameLabel: sanitizeText(targetGame.label, 160) || sanitizeText(targetGame.displayDate, 120),
+          historicalRows: recentHistoryRows,
+        });
+        const persisted = await persistAutopilotAnalysisArtifacts(
+          ownerUid,
+          runId,
+          {
+            status: analysis.status,
+            summary: analysis.summary,
+            markdown: analysis.markdown,
+            metrics: analysis.metrics,
+            data: analysis.analysis,
+            previewRows: analysis.previewRows,
+            rowCount: analysis.rowCount,
+            columns: analysis.columns,
+          },
+          refresh.predictionsCsvText
+        );
+        const forecastPayloadFile = await persistSportsForecastPayloadArtifact(ownerUid, runId, {
+          input: buildAutopilotInputPayload(existingData),
+          output: analysis.analysis,
+          metrics: analysis.metrics,
+        });
+        nextPatch.analysis = persisted.analysisPatch;
+        nextPatch.files = {
+          ...files,
+          ...persisted.filePatches,
+          forecastPayloadJson: forecastPayloadFile,
+        };
+        nextPatch.status = "completed";
+      } else {
+        const analysis = await analyzePredictionCsv(refresh.predictionsCsvText, {
+          ticker: normalizeTicker(dataset.ticker || existingData.ticker),
+        });
+        const persisted = await persistAutopilotAnalysisArtifacts(ownerUid, runId, {
+          status: analysis.status,
+          summary: analysis.summary,
+          markdown: analysis.markdown,
+          metrics: analysis.metrics,
+          data: analysis.analysis,
+          previewRows: analysis.previewRows,
+          rowCount: analysis.rowCount,
+          columns: analysis.columns,
+        }, refresh.predictionsCsvText);
 
-      nextPatch.analysis = persisted.analysisPatch;
-      nextPatch.files = {
-        ...files,
-        ...persisted.filePatches,
-      };
-      nextPatch.status = "completed";
+        nextPatch.analysis = persisted.analysisPatch;
+        nextPatch.files = {
+          ...files,
+          ...persisted.filePatches,
+        };
+        nextPatch.status = "completed";
+      }
     }
   } else if (sanitizeText(existingData.sourceType, 40) === "prediction_csv" && sanitizeText(asPlainObject(existingData.analysis).status, 40) !== "ok") {
     const uploadedCsvPath = sanitizeText(asPlainObject(files.uploadedCsv).storagePath, 1000);
@@ -11315,6 +11565,401 @@ ROUTES.post("/watch-tickers/:ticker", async (req, res) => {
   }
 });
 
+ROUTES.get("/autopilot/sports/teams", async (req, res) => {
+  try {
+    await requireFoundryUser(req);
+    const league = sanitizeText(req.query.league, 20).toLowerCase() as SportsLeagueKey;
+    const teams = await listSportsTeams(league);
+    res.status(200).json({
+      league,
+      leagueLabel: SPORTS_LEAGUES[league]?.label || league.toUpperCase(),
+      items: teams,
+      count: teams.length,
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "full_account_required") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    if (code === "invalid_sports_league") {
+      res.status(400).json({ error: code });
+      return;
+    }
+    console.error("[Sports] list teams failed", error);
+    res.status(500).json({ error: "sports_teams_failed", detail: sanitizeText(error?.message, 240) });
+  }
+});
+
+ROUTES.get("/autopilot/sports/players", async (req, res) => {
+  try {
+    await requireFoundryUser(req);
+    const league = sanitizeText(req.query.league, 20).toLowerCase() as SportsLeagueKey;
+    const teamId = sanitizeText(req.query.teamId, 40);
+    if (!teamId) {
+      res.status(400).json({ error: "invalid_team_id" });
+      return;
+    }
+    const players = await listSportsPlayers(league, teamId);
+    res.status(200).json({
+      league,
+      teamId,
+      items: players,
+      count: players.length,
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "full_account_required") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    if (code === "invalid_sports_league" || code === "invalid_team_id" || code === "team_not_found") {
+      res.status(400).json({ error: code });
+      return;
+    }
+    console.error("[Sports] list players failed", error);
+    res.status(500).json({ error: "sports_players_failed", detail: sanitizeText(error?.message, 240) });
+  }
+});
+
+ROUTES.get("/autopilot/sports/context", async (req, res) => {
+  try {
+    await requireFoundryUser(req);
+    const league = sanitizeText(req.query.league, 20).toLowerCase() as SportsLeagueKey;
+    const teamId = sanitizeText(req.query.teamId, 40);
+    const playerId = sanitizeText(req.query.playerId, 40);
+    if (!teamId || !playerId) {
+      res.status(400).json({ error: "invalid_sports_context_request" });
+      return;
+    }
+    const context = await buildSportsPlayerContext(league, teamId, playerId);
+    const historical = buildSportsHistoricalCsv(context);
+    res.status(200).json({
+      league: {
+        key: context.league.key,
+        label: context.league.label,
+      },
+      team: context.team,
+      player: context.player,
+      statCatalog: context.statCatalog,
+      defaultStatKey: context.defaultStatKey,
+      futureGames: context.futureGames,
+      historical: {
+        rowCount: context.historicalRows.length,
+        rows: historical.rows,
+        headers: historical.headers,
+        seasonsUsed: context.seasonsUsed,
+      },
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "full_account_required") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    if (
+      code === "invalid_sports_league" ||
+      code === "invalid_team_id" ||
+      code === "invalid_player_id" ||
+      code === "team_not_found" ||
+      code === "player_not_found" ||
+      code === "sports_history_unavailable" ||
+      code === "sports_stats_unavailable"
+    ) {
+      res.status(400).json({ error: code });
+      return;
+    }
+    console.error("[Sports] context failed", error);
+    res.status(500).json({ error: "sports_context_failed", detail: sanitizeText(error?.message, 260) });
+  }
+});
+
+ROUTES.get("/autopilot/sports/runs", async (req, res) => {
+  try {
+    const user = await requireFoundryUser(req);
+    const limit = Math.max(1, Math.min(80, Math.floor(asFinite(req.query.limit, 40))));
+    const snap = await db
+      .collection("autopilot_requests")
+      .where("userId", "==", user.uid)
+      .orderBy("createdAt", "desc")
+      .limit(Math.max(limit * 3, 80))
+      .get();
+    const docs = snap.docs.filter((doc) => isSportsAutopilotData((doc.data() || {}) as Record<string, unknown>)).slice(0, limit);
+    const items = await Promise.all(docs.map((doc) => toAutopilotRunResponse(doc.id, (doc.data() || {}) as Record<string, unknown>)));
+    res.status(200).json({
+      items,
+      count: items.length,
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "full_account_required") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    console.error("[Sports] list runs failed", error);
+    res.status(500).json({ error: "sports_runs_list_failed", detail: sanitizeText(error?.message, 240) });
+  }
+});
+
+ROUTES.post("/autopilot/sports/runs", async (req, res) => {
+  let user: admin.auth.DecodedIdToken | null = null;
+  let runId = "";
+  try {
+    user = await requireFoundryUser(req);
+    const activeConcurrentRuns = await countActiveAutopilotRunsForOwner(user.uid);
+    if (activeConcurrentRuns >= MAX_FOUNDRY_CONCURRENT_RUNS) {
+      res.status(429).json({
+        error: "foundry_instance_limit_reached",
+        detail: `Forecast Foundry allows ${MAX_FOUNDRY_CONCURRENT_RUNS} concurrent active instances. Wait for one run to finish before starting another.`,
+        limits: {
+          maxConcurrentRuns: MAX_FOUNDRY_CONCURRENT_RUNS,
+          activeConcurrentRuns,
+        },
+      });
+      return;
+    }
+
+    const body = asPlainObject(req.body);
+    const league = sanitizeText(body.league, 20).toLowerCase() as SportsLeagueKey;
+    const teamId = sanitizeText(body.teamId, 40);
+    const playerId = sanitizeText(body.playerId, 40);
+    const statKey = sanitizeText(body.statKey, 120);
+    const targetGameId = sanitizeText(body.targetGameId, 40);
+    const workspaceId = sanitizeText(body.workspaceId, 220) || user.uid;
+    const notes = sanitizeText(body.notes, 2000);
+
+    if (!teamId || !playerId || !statKey || !targetGameId) {
+      res.status(400).json({ error: "invalid_sports_run_request" });
+      return;
+    }
+
+    const context = await buildSportsPlayerContext(league, teamId, playerId);
+    const stat = context.statCatalog.find((entry) => sanitizeText(entry.key, 120) === statKey);
+    if (!stat) {
+      res.status(400).json({ error: "sports_stat_not_found" });
+      return;
+    }
+    const targetGame = context.futureGames.find((entry) => sanitizeText(entry.id, 40) === targetGameId);
+    if (!targetGame) {
+      res.status(400).json({ error: "sports_future_game_not_found" });
+      return;
+    }
+
+    const datasetExport = buildSportsAutopilotDatasetCsv(context, stat.key);
+    const historicalExport = buildSportsHistoricalCsv(context, stat.key);
+    const targetGameMs = Date.parse(targetGame.date);
+    const lastHistoryMs = Date.parse(datasetExport.lastHistoryDate);
+    const forecastHorizon = Math.max(1, Math.ceil((targetGameMs - lastHistoryMs) / (24 * 60 * 60 * 1000)));
+    const syntheticTicker = buildSportsSyntheticTicker(
+      {
+        league: context.league.key,
+        team: context.team,
+        player: context.player,
+      },
+      {}
+    );
+    const title =
+      sanitizeText(body.title, 180) ||
+      sanitizeText(`${context.player.displayName} ${stat.label} vs ${targetGame.opponentAbbreviation}`, 180);
+    const runRef = db.collection("autopilot_requests").doc();
+    runId = runRef.id;
+    const owner = safePathSegment(user.uid, 120) || "user";
+    const run = safePathSegment(runId, 120) || "run";
+    const datasetCsvFile = await writeStorageTextArtifact(
+      `predictions/${owner}/foundry/${run}/dataset.csv`,
+      datasetExport.csvText,
+      "text/csv"
+    );
+    const historicalCsvFile = await writeStorageTextArtifact(
+      `predictions/${owner}/foundry/${run}/historical.csv`,
+      historicalExport.csvText,
+      "text/csv"
+    );
+    const inputPayload = buildSportsRunPayloadExport(context, stat, targetGame, datasetExport);
+    const inputJsonFile = await writeStorageTextArtifact(
+      `predictions/${owner}/foundry/${run}/sports_input.json`,
+      JSON.stringify(inputPayload, null, 2),
+      "application/json"
+    );
+
+    const baseDoc: Record<string, unknown> = {
+      userId: user.uid,
+      workspaceId,
+      title,
+      notes,
+      mode: "sports_autopilot_run",
+      sourceType: "sports_timeseries",
+      sourceGroup: "sports",
+      autoPublishToExplore: true,
+      status: "dataset_ready",
+      dataset: {
+        ticker: syntheticTicker,
+        interval: "1d",
+        rowCount: datasetExport.rowCount,
+        columns: ["item_id", "timestamp", "closing_price"],
+        previewRows: datasetExport.previewRows,
+        trainingEligible: true,
+        sourceTimeColumn: "timestamp",
+        sourceValueColumn: "closing_price",
+        sourceItemColumn: "item_id",
+        originalHeaders: historicalExport.headers,
+        start: context.historicalRows[0]?.gameDate || "",
+        end: context.historicalRows[context.historicalRows.length - 1]?.gameDate || "",
+        useAllHistory: true,
+      },
+      sports: {
+        leagueKey: context.league.key,
+        leagueLabel: context.league.label,
+        team: context.team,
+        player: context.player,
+        stat,
+        targetGame,
+        futureGames: context.futureGames.slice(0, 24),
+        statCatalog: context.statCatalog.slice(0, 48),
+        historicalPreviewRows: historicalExport.rows.slice(-24),
+        recentHistoryRows: context.historicalRows.slice(-24),
+        seasonsUsed: context.seasonsUsed,
+      },
+      autopilot: {
+        forecastHorizon,
+        quantiles: ["p10", "p50", "p90"],
+      },
+      analysis: {},
+      files: {
+        datasetCsv: datasetCsvFile,
+        historicalCsv: historicalCsvFile,
+        forecastInputJson: inputJsonFile,
+      },
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    await runRef.set(baseDoc, { merge: false });
+    let requestId = await syncAutopilotMyRequest(user.uid, runId, baseDoc);
+    await runRef.set(
+      {
+        exploreRequestId: requestId,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    try {
+      const started = await startAutopilotTraining({
+        runId,
+        userId: user.uid,
+        ticker: syntheticTicker,
+        interval: "1d",
+        horizon: forecastHorizon,
+        quantiles: [0.1, 0.5, 0.9],
+        csvText: datasetExport.csvText,
+      });
+      const runningPatch: Record<string, unknown> = {
+        status: "running",
+        autopilot: {
+          ...(asPlainObject(baseDoc.autopilot) || {}),
+          jobName: started.jobName,
+          jobArn: started.jobArn,
+          inputS3Uri: started.inputS3Uri,
+          outputS3Uri: started.outputS3Uri,
+          forecastFrequency: started.forecastFrequency,
+          forecastHorizon,
+          quantiles: started.quantiles,
+          algorithms: started.algorithms,
+          runtimeSeconds: started.runtimeSeconds,
+          objectiveMetric: {
+            name: "AverageWeightedQuantileLoss",
+            value: null,
+          },
+          status: "InProgress",
+        },
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      };
+      await runRef.set(runningPatch, { merge: true });
+      const refreshedSnap = await runRef.get();
+      const refreshedData = (refreshedSnap.data() || { ...baseDoc, ...runningPatch }) as Record<string, unknown>;
+      requestId = await syncAutopilotMyRequest(user.uid, runId, refreshedData);
+      await runRef.set(
+        {
+          exploreRequestId: requestId,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      const finalSnap = await runRef.get();
+      res.status(200).json({
+        ok: true,
+        run: await toAutopilotRunResponse(runId, (finalSnap.data() || refreshedData) as Record<string, unknown>),
+      });
+    } catch (startError: any) {
+      const failedPatch: Record<string, unknown> = {
+        status: "failed",
+        autopilot: {
+          ...(asPlainObject(baseDoc.autopilot) || {}),
+          status: "Failed",
+          failureReason: sanitizeText(startError?.message, 500) || "sports_autopilot_start_failed",
+        },
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      };
+      await runRef.set(failedPatch, { merge: true });
+      const failedSnap = await runRef.get();
+      const failedData = (failedSnap.data() || { ...baseDoc, ...failedPatch }) as Record<string, unknown>;
+      requestId = await syncAutopilotMyRequest(user.uid, runId, failedData);
+      await runRef.set(
+        {
+          exploreRequestId: requestId,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      throw startError;
+    }
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "full_account_required") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    if (
+      code === "invalid_sports_league" ||
+      code === "invalid_team_id" ||
+      code === "invalid_player_id" ||
+      code === "team_not_found" ||
+      code === "player_not_found" ||
+      code === "sports_stat_not_found" ||
+      code === "sports_future_game_not_found" ||
+      code === "sports_history_unavailable" ||
+      code === "sports_stats_unavailable" ||
+      code === "sports_history_too_short"
+    ) {
+      res.status(400).json({ error: code });
+      return;
+    }
+    console.error("[Sports] create run failed", { runId, error });
+    res.status(500).json({ error: "sports_run_create_failed", detail: sanitizeText(error?.message, 260) });
+  }
+});
+
 ROUTES.post("/autopilot/datasets/history", async (req, res) => {
   try {
     const user = await verifyRequestUser(req, true);
@@ -11827,19 +12472,40 @@ ROUTES.post("/autopilot/runs/:runId/analyze", async (req, res) => {
       return;
     }
     const csvText = await readStorageTextArtifact(csvStoragePath);
-    const analysis = await analyzePredictionCsv(csvText, {
-      ticker: normalizeTicker(dataset.ticker || data.ticker),
-    });
-    const persisted = await persistAutopilotAnalysisArtifacts(user.uid, runId, {
-      status: analysis.status,
-      summary: analysis.summary,
-      markdown: analysis.markdown,
-      metrics: analysis.metrics,
-      data: analysis.analysis,
-      previewRows: analysis.previewRows,
-      rowCount: analysis.rowCount,
-      columns: analysis.columns,
-    });
+    const analysis = isSportsAutopilotData(data)
+      ? analyzeSportsPredictionCsv(csvText, {
+          syntheticTicker: buildSportsSyntheticTicker(data.sports, dataset),
+          statKey: sanitizeText(asPlainObject(asPlainObject(data.sports).stat).key, 120),
+          statLabel: sanitizeText(asPlainObject(asPlainObject(data.sports).stat).label, 80),
+          leagueLabel: sanitizeText(asPlainObject(data.sports).leagueLabel, 40),
+          playerName: sanitizeText(asPlainObject(asPlainObject(data.sports).player).displayName, 120),
+          teamAbbreviation: sanitizeText(asPlainObject(asPlainObject(data.sports).team).abbreviation, 20).toUpperCase(),
+          opponentAbbreviation: sanitizeText(asPlainObject(asPlainObject(data.sports).targetGame).opponentAbbreviation, 20).toUpperCase(),
+          targetGameDate: sanitizeText(asPlainObject(asPlainObject(data.sports).targetGame).date, 80),
+          targetGameLabel:
+            sanitizeText(asPlainObject(asPlainObject(data.sports).targetGame).label, 160) ||
+            sanitizeText(asPlainObject(asPlainObject(data.sports).targetGame).displayDate, 120),
+          historicalRows: Array.isArray(asPlainObject(data.sports).recentHistoryRows)
+            ? ((asPlainObject(data.sports).recentHistoryRows as unknown[]) as NormalizedSportsHistoryRow[])
+            : [],
+        })
+      : await analyzePredictionCsv(csvText, {
+          ticker: normalizeTicker(dataset.ticker || data.ticker),
+        });
+    const persisted = await persistAutopilotAnalysisArtifacts(
+      user.uid,
+      runId,
+      {
+        status: analysis.status,
+        summary: analysis.summary,
+        markdown: analysis.markdown,
+        metrics: analysis.metrics,
+        data: analysis.analysis,
+        previewRows: analysis.previewRows,
+        rowCount: analysis.rowCount,
+        columns: analysis.columns,
+      }
+    );
     const nextStatus =
       sanitizeText(asPlainObject(data.autopilot).transformStatus, 60) === "Completed" ||
       sanitizeText(data.status, 60) === "completed"
@@ -11854,6 +12520,17 @@ ROUTES.post("/autopilot/runs/:runId/analyze", async (req, res) => {
       status: nextStatus,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
+    if (isSportsAutopilotData(data)) {
+      patch.files = {
+        ...files,
+        ...persisted.filePatches,
+        forecastPayloadJson: await persistSportsForecastPayloadArtifact(user.uid, runId, {
+          input: buildAutopilotInputPayload(data),
+          output: analysis.analysis,
+          metrics: analysis.metrics,
+        }),
+      };
+    }
     await db.collection("autopilot_requests").doc(runId).set(patch, { merge: true });
     const snap = await db.collection("autopilot_requests").doc(runId).get();
     const refreshed = (snap.data() || { ...data, ...patch }) as Record<string, unknown>;
