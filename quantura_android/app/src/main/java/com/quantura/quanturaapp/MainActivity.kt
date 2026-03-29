@@ -1063,7 +1063,7 @@ class MainActivity : ComponentActivity() {
                             productId = productId,
                             ok = false,
                             status = "failed",
-                            message = result.message
+                            message = "Purchase could not be completed."
                         )
                     }
                 }
@@ -1074,7 +1074,7 @@ class MainActivity : ComponentActivity() {
                     productId = productId,
                     ok = false,
                     status = "failed",
-                    message = error.message ?: "Native purchase failed."
+                    message = "Purchase could not be completed."
                 )
             }
         }

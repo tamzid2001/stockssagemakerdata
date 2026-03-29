@@ -148,23 +148,20 @@ def main() -> int:
     ] or list(SECRET_SOURCES.keys())
 
     print(f"Syncing GitHub secrets for {repo}")
-    updated: list[str] = []
-    missing: list[str] = []
+    updated_count = 0
+    missing_count = 0
     for name in wanted:
         value = resolve_secret_value(name)
         if not value:
-            missing.append(name)
+            missing_count += 1
             continue
         set_secret(repo, name, value)
-        updated.append(name)
-        print(f"  set {name}")
+        updated_count += 1
 
-    print(f"\nUpdated: {len(updated)}")
-    print(f"Missing: {len(missing)}")
-    if missing:
-        print("Missing keys:")
-        for key in missing:
-            print(f"  - {key}")
+    print(f"\nUpdated: {updated_count}")
+    print(f"Missing: {missing_count}")
+    if missing_count:
+        print("Some requested secrets were not configured locally.")
     return 0
 
 

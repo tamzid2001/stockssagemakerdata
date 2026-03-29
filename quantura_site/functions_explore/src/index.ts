@@ -19,8 +19,6 @@ const messaging = admin.messaging();
 
 const app = express();
 app.disable("x-powered-by");
-app.use(cors({ origin: true }));
-app.use(express.json({ limit: "1mb" }));
 
 type PostType = "forecast" | "backtest" | "agent" | "screener";
 
@@ -67,6 +65,31 @@ type ExploreCursor = {
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 40;
 const PUBLIC_ORIGIN = asString(process.env.PUBLIC_ORIGIN, "https://quantura.studio").replace(/\/$/, "");
+const EXTRA_ALLOWED_CORS_ORIGINS = asString(process.env.ALLOWED_CORS_ORIGINS)
+  .split(",")
+  .map((origin) => normalizeCorsOrigin(origin))
+  .filter(Boolean);
+const STATIC_ALLOWED_CORS_ORIGINS = new Set<string>([
+  normalizeCorsOrigin(PUBLIC_ORIGIN),
+  "https://quantura.studio",
+  "https://www.quantura.studio",
+  "https://quantura-e2e3d.web.app",
+  "https://quantura-e2e3d.firebaseapp.com",
+  "http://localhost:5000",
+  "http://127.0.0.1:5000",
+  "http://10.0.2.2:5000",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "http://10.0.2.2:5173",
+  "capacitor://localhost",
+  "ionic://localhost",
+  ...EXTRA_ALLOWED_CORS_ORIGINS,
+]);
+const ALLOWED_CORS_ORIGIN_PATTERNS = [
+  /^https:\/\/quantura-e2e3d(?:--[a-z0-9-]+)?\.web\.app$/i,
+  /^https:\/\/quantura-e2e3d(?:--[a-z0-9-]+)?\.firebaseapp\.com$/i,
+  /^http:\/\/(?:localhost|127\.0\.0\.1|10\.0\.2\.2)(?::\d+)?$/i,
+];
 const ADMIN_EMAIL = "tamzid257@gmail.com";
 const MODEL_COUNCIL_RESPONSE_COLLECTION = "model_council_responses";
 const OPENAI_API_KEY = resolveEnvSecret(["OPENAI_API_KEY", "OPENAI_SECRET_KEY", "OPENAI_KEY"], /^OPENAI_.*KEY$/i);
@@ -78,6 +101,31 @@ const PERPLEXITY_API_KEY = resolveEnvSecret(["PERPLEXITY_API_KEY", "PERPLEXITY_S
 const QWEN_API_KEY = resolveEnvSecret(["QWEN_API_KEY", "QWEN_SECRET_KEY"], /^QWEN_.*KEY$/i);
 const AMAZON_NOVA_API_KEY = resolveEnvSecret(["AMAZON_NOVA_API_KEY", "BEDROCK_API_KEY"], /^(AMAZON_NOVA|BEDROCK)_.*KEY$/i);
 const AMAZON_NOVA_BASE_URL = asString(process.env.AMAZON_NOVA_BASE_URL).trim().replace(/\/$/, "");
+
+function normalizeCorsOrigin(origin: unknown): string {
+  if (typeof origin !== "string") return "";
+  return origin.trim().replace(/\/$/, "").toLowerCase();
+}
+
+function isAllowedCorsOrigin(origin: string | undefined): boolean {
+  const normalizedOrigin = normalizeCorsOrigin(origin);
+  if (!normalizedOrigin) return false;
+  if (STATIC_ALLOWED_CORS_ORIGINS.has(normalizedOrigin)) return true;
+  return ALLOWED_CORS_ORIGIN_PATTERNS.some((pattern) => pattern.test(normalizedOrigin));
+}
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin) {
+        callback(null, false);
+        return;
+      }
+      callback(null, isAllowedCorsOrigin(origin) ? origin : false);
+    },
+  })
+);
+app.use(express.json({ limit: "1mb" }));
 const CLAUDE_API_VERSION = asString(process.env.CLAUDE_API_VERSION, "2023-06-01").trim();
 const MODEL_COUNCIL_OTHER_API_KEY = resolveEnvSecret(
   ["MODEL_COUNCIL_OTHER_API_KEY", "MODEL_COUNCIL_OTHER_KEY"],
@@ -284,10 +332,9 @@ const MY_REQUEST_TYPE_LABEL: Record<MyRequestType, string> = {
 
 const ROUTES = express.Router();
 const API_RATE_LIMIT_WINDOW_MS = 60 * 1000;
-const API_RATE_LIMIT_MAX = 240;
+const API_RATE_LIMIT_MAX = 600;
 const SENSITIVE_API_RATE_LIMIT_MAX = 60;
 const LLM_API_RATE_LIMIT_MAX = 24;
-const API_RATE_LIMIT_SKIP_PREFIXES = ["/webhooks/", "/webhook/", "/admob/reward"];
 const polymarketCache = new Map<string, PolymarketCacheEntry>();
 const tickerIntelCache = new Map<string, TickerIntelCacheEntry>();
 const tickerTrendingCache = new Map<string, TickerTrendingCacheEntry>();
@@ -2353,7 +2400,7 @@ const apiRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: buildRateLimitKey,
-  skip: (req) => req.path === "/health" || API_RATE_LIMIT_SKIP_PREFIXES.some((prefix) => req.path.startsWith(prefix)),
+  skip: (req) => req.path === "/health",
   handler: (_req, res) => sendRateLimitResponse(res),
 });
 
@@ -3100,7 +3147,15 @@ function pickModelForProvider(
 }
 
 function parseWebhookSecret(req: Request): string {
-  return sanitizeText(req.headers["x-quantura-webhook-secret"] || req.query.secret, 500);
+  const headerSecret = sanitizeText(req.headers["x-quantura-webhook-secret"] || req.headers["x-webhook-secret"], 500);
+  if (headerSecret) return headerSecret;
+  const bearerSecret = extractBearerToken(req.headers["authorization"] || (req.headers as any)["Authorization"]);
+  if (bearerSecret) return sanitizeText(bearerSecret, 500);
+  if (sanitizeText(req.method, 16).toUpperCase() !== "GET") {
+    const body = asPlainObject(req.body);
+    return sanitizeText(body.secret || body.webhookSecret, 500);
+  }
+  return "";
 }
 
 function checkWebhookSecret(req: Request, expected: string): boolean {
