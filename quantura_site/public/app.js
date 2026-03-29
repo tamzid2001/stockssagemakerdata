@@ -1939,11 +1939,14 @@
     screenerCreditsText: document.getElementById("screener-credits-text"),
     screenerCreditsFill: document.getElementById("screener-credits-fill"),
     screenerResultsCount: document.getElementById("screener-results-count"),
-    screenerGenerateButton: document.getElementById("screener-generate-button"),
+	    screenerGenerateButton: document.getElementById("screener-generate-button"),
     screenerDispatchStatus: document.getElementById("screener-dispatch-status"),
 	    screenerLoadSelect: document.getElementById("screener-load-select"),
 	    screenerLoadButton: document.getElementById("screener-load-button"),
 	    screenerLoadStatus: document.getElementById("screener-load-status"),
+    screenerGithubHistoryRefresh: document.getElementById("screener-github-history-refresh"),
+    screenerGithubHistoryStatus: document.getElementById("screener-github-history-status"),
+    screenerGithubHistoryList: document.getElementById("screener-github-history-list"),
     myRequestsPanels: Array.from(document.querySelectorAll("[data-my-requests-panel]")),
 	    watchlistForm: document.getElementById("watchlist-form"),
 	    watchlistTicker: document.getElementById("watchlist-ticker"),
@@ -2322,6 +2325,9 @@
     sharedScreenerView: null,
     activeScreenerRunId: "",
     activeScreenerPollToken: "",
+    publicScreenerGithubRuns: [],
+    publicScreenerGithubRunsLoadedAt: 0,
+    publicScreenerGithubRunsLoading: false,
     promoStatus: null,
     promoClockOffsetMs: 0,
     promoTimer: null,
@@ -8139,7 +8145,9 @@
     if (value.toDate) {
       return value.toDate().toLocaleString();
     }
-    return new Date(value).toLocaleString();
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return "Processing";
+    return parsed.toLocaleString();
   };
 
   const formatEpoch = (value) => {
@@ -14750,6 +14758,21 @@
   const apiDeleteScreenerRun = async (runId) =>
     apiRequestJson(`/api/screener/${encodeURIComponent(String(runId || "").trim())}`, { method: "DELETE" });
 
+  const apiListPublicScreenerGithubRuns = async ({ limit = 12 } = {}) => {
+    const params = new URLSearchParams();
+    params.set("limit", String(Math.max(1, Math.min(60, Number(limit) || 24))));
+    return apiRequestJson(`/api/screener/github-history?${params.toString()}`, { method: "GET" });
+  };
+
+  const buildPublicScreenerArtifactDownloadUrl = (workflowRunId, artifactId) => {
+    const cleanRunId = Math.max(0, Math.floor(Number(workflowRunId) || 0));
+    const cleanArtifactId = Math.max(0, Math.floor(Number(artifactId) || 0));
+    if (!cleanRunId || !cleanArtifactId) return "";
+    return `/api/screener/github-history/${encodeURIComponent(String(cleanRunId))}/artifacts/${encodeURIComponent(
+      String(cleanArtifactId)
+    )}/download`;
+  };
+
   const normalizeFxCode = (value, fallback = "USD") => {
     const normalized = String(value || "")
       .trim()
@@ -14788,6 +14811,20 @@
       minimumFractionDigits: 0,
       maximumFractionDigits: maxDigits,
     }).format(numeric);
+  };
+
+  const formatFileSize = (value) => {
+    const bytes = Number(value);
+    if (!Number.isFinite(bytes) || bytes <= 0) return "";
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    let index = 0;
+    let size = bytes;
+    while (size >= 1024 && index < units.length - 1) {
+      size /= 1024;
+      index += 1;
+    }
+    const digits = size >= 100 || index === 0 ? 0 : size >= 10 ? 1 : 2;
+    return `${size.toFixed(digits)} ${units[index]}`;
   };
 
   const setTerminalFxStatus = (message, isError = false) => {
@@ -15069,7 +15106,7 @@
   };
 
   const renderMyRequestCards = (items = []) => {
-    if (!Array.isArray(items) || !items.length) return `<div class="small muted">No requests matched this filter.</div>`;
+    if (!Array.isArray(items) || !items.length) return "";
     return items
       .map((item) => {
         const id = escapeHtml(String(item?.id || ""));
@@ -15084,6 +15121,16 @@
         const share = item?.share && typeof item.share === "object" ? item.share : {};
         const shareVisibility = escapeHtml(String(share?.visibility || "private").toLowerCase());
         const summary = escapeHtml(String((item?.outputsMeta || {})?.summary || ""));
+        const requestStatus = escapeHtml(
+          String(item?.status || (item?.outputsMeta || {})?.status || (item?.outputsMeta || {})?.workflowStatus || "—")
+        );
+        const workflowRunUrl = escapeHtml(String(item?.workflowRunUrl || (item?.outputsMeta || {})?.workflowRunUrl || ""));
+        const workflowRunNumber = Number.isFinite(Number(item?.workflowRunNumber || (item?.outputsMeta || {})?.workflowRunNumber))
+          ? Number(item?.workflowRunNumber || (item?.outputsMeta || {})?.workflowRunNumber)
+          : null;
+        const workflowProgress = escapeHtml(
+          String(item?.workflowProgress || (item?.outputsMeta || {})?.workflowProgress || (item?.outputsMeta || {})?.workflowActiveStep || "")
+        );
         return `
           <div class="order-card" data-request-id="${id}">
             <div class="order-header">
@@ -15098,13 +15145,17 @@
             <div class="order-meta">
               <div><strong>Type</strong> ${typeLabel}</div>
               <div><strong>Ticker</strong> ${ticker}</div>
+              <div><strong>Status</strong> ${requestStatus}</div>
               <div><strong>Created</strong> ${createdAt}</div>
               <div><strong>Updated</strong> ${updatedAt}</div>
               <div><strong>Share</strong> ${shareVisibility}</div>
+              ${workflowRunNumber !== null ? `<div><strong>Workflow</strong> #${workflowRunNumber}</div>` : ""}
+              ${workflowProgress ? `<div><strong>Workflow progress</strong> ${workflowProgress}</div>` : ""}
               ${summary ? `<div><strong>Summary</strong> ${summary}</div>` : ""}
             </div>
             <div class="order-actions" style="display:flex;gap:10px;flex-wrap:wrap;">
               <button class="cta secondary small" type="button" data-action="my-request-load" data-request-id="${id}">${icon("play")}<span>Load</span></button>
+              ${workflowRunUrl ? `<a class="cta secondary small" href="${workflowRunUrl}" target="_blank" rel="noopener noreferrer">${icon("git-branch")}<span>Open workflow</span></a>` : ""}
               <button class="cta secondary small" type="button" data-action="my-request-share" data-request-id="${id}">${icon("share-ios")}<span>Share</span></button>
               <button class="cta secondary small" type="button" data-action="my-request-rename" data-request-id="${id}">${icon("edit-pencil")}<span>Rename</span></button>
               <button class="cta secondary small" type="button" data-action="my-request-duplicate" data-request-id="${id}">${icon("copy")}<span>Duplicate</span></button>
@@ -15161,10 +15212,10 @@
         controls.list.innerHTML = `<div class="small muted">${skeletonHtml(3)}</div>`;
         return;
       }
-      controls.status.textContent = rows.length
-        ? `${rows.length} request${rows.length === 1 ? "" : "s"}`
-        : "No requests matched this filter.";
-      controls.list.innerHTML = renderMyRequestCards(rows.slice(0, 60));
+      controls.status.textContent = rows.length ? `${rows.length} request${rows.length === 1 ? "" : "s"}` : "";
+      controls.list.innerHTML = rows.length
+        ? renderMyRequestCards(rows.slice(0, 60))
+        : `<div class="small muted">No requests matched this filter.</div>`;
     });
   };
 
@@ -19072,6 +19123,7 @@
   const updateScreenerDispatchStatusFromRun = (runDoc, { attempt = null, maxAttempts = null } = {}) => {
     const status = normalizeScreenerRunStatus(runDoc?.status);
     const workflowRef = formatScreenerWorkflowReference(runDoc);
+    const workflowProgress = String(runDoc?.workflowProgress || runDoc?.workflowActiveStep || "").trim();
     const resultsFound = Number.isFinite(Number(runDoc?.resultsFound))
       ? Number(runDoc.resultsFound)
       : Array.isArray(runDoc?.results)
@@ -19084,7 +19136,8 @@
     if (status === "running") {
       const pollLabel =
         Number.isFinite(attempt) && Number.isFinite(maxAttempts) ? ` Poll ${Number(attempt) + 1}/${Number(maxAttempts)}.` : "";
-      setScreenerDispatchStatus(`GitHub Actions is running ${workflowRef} now.${pollLabel}`, "ok");
+      const progressLabel = workflowProgress ? ` ${workflowProgress}.` : "";
+      setScreenerDispatchStatus(`GitHub Actions is running ${workflowRef} now.${progressLabel}${pollLabel}`.trim(), "ok");
       return;
     }
     if (status === "completed") {
@@ -20257,6 +20310,237 @@
     return workflowShape ? renderWorkflowScreenerTable(list) : renderLegacyScreenerTable(list);
   };
 
+  const formatScreenerWorkflowStateLabel = (status, conclusion = "") => {
+    const cleanStatus = String(status || "").trim().toLowerCase();
+    const cleanConclusion = String(conclusion || "").trim().toLowerCase();
+    if (cleanStatus === "completed" && cleanConclusion) {
+      return cleanConclusion.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+    }
+    if (cleanStatus === "in_progress") return "Running";
+    if (cleanStatus === "queued") return "Queued";
+    return cleanStatus ? cleanStatus.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase()) : "Pending";
+  };
+
+  const renderScreenerWorkflowActivity = (runDoc) => {
+    const workflowProgress = String(runDoc?.workflowProgress || "").trim();
+    const workflowActiveStep = String(runDoc?.workflowActiveStep || "").trim();
+    const workflowSteps = Array.isArray(runDoc?.workflowSteps)
+      ? runDoc.workflowSteps.map((item) => String(item || "").trim()).filter(Boolean).slice(-8)
+      : [];
+    const workflowJobs = Array.isArray(runDoc?.workflowJobs) ? runDoc.workflowJobs.slice(0, 6) : [];
+    const workflowLogExcerpt = String(runDoc?.workflowLogExcerpt || "").trim();
+
+    if (!workflowProgress && !workflowActiveStep && !workflowSteps.length && !workflowJobs.length && !workflowLogExcerpt) {
+      return "";
+    }
+
+    const jobsMarkup = workflowJobs.length
+      ? `
+        <div style="margin-top:10px;">
+          ${workflowJobs
+            .map((job) => {
+              const steps = Array.isArray(job?.steps) ? job.steps.slice(0, 8) : [];
+              return `
+                <div class="small" style="margin-top:8px;">
+                  <strong>${escapeHtml(String(job?.name || "Workflow job"))}</strong>
+                  <span class="muted"> · ${escapeHtml(
+                    formatScreenerWorkflowStateLabel(job?.status, job?.conclusion)
+                  )}</span>
+                </div>
+                ${
+                  steps.length
+                    ? `<div class="small muted" style="margin-top:4px;">${steps
+                        .map(
+                          (step) =>
+                            `${escapeHtml(String(step?.name || "Step"))} · ${escapeHtml(
+                              formatScreenerWorkflowStateLabel(step?.status, step?.conclusion)
+                            )}`
+                        )
+                        .join("<br>")}</div>`
+                    : ""
+                }
+              `;
+            })
+            .join("")}
+        </div>
+      `
+      : "";
+
+    const stepsMarkup =
+      !workflowJobs.length && workflowSteps.length
+        ? `<div class="small muted" style="margin-top:10px;">${workflowSteps.map((item) => escapeHtml(item)).join("<br>")}</div>`
+        : "";
+
+    const logMarkup = workflowLogExcerpt
+      ? `<div class="small muted" style="margin-top:10px;"><strong>Recent workflow output</strong></div>
+         <pre class="panel-output small" style="margin-top:6px; white-space:pre-wrap;">${escapeHtml(workflowLogExcerpt)}</pre>`
+      : "";
+
+    return `
+      <div class="notice" style="margin-top:12px;">
+        <strong>Live workflow progress</strong>
+        ${workflowProgress ? `<div class="small" style="margin-top:6px;">${escapeHtml(workflowProgress)}</div>` : ""}
+        ${workflowActiveStep ? `<div class="small muted" style="margin-top:4px;">Active step: ${escapeHtml(workflowActiveStep)}</div>` : ""}
+        ${jobsMarkup}
+        ${stepsMarkup}
+        ${logMarkup}
+      </div>
+    `;
+  };
+
+  const renderScreenerArtifactLinks = (runDoc, { compact = false } = {}) => {
+    const workflowArtifacts = Array.isArray(runDoc?.workflowArtifacts)
+      ? runDoc.workflowArtifacts.filter((item) => item && typeof item === "object")
+      : [];
+    const workflowRunId = Number(runDoc?.workflowRunId || 0);
+    const fallbackArtifact =
+      workflowArtifacts.length || !Number.isFinite(Number(runDoc?.workflowArtifactId))
+        ? []
+        : [
+            {
+              id: Number(runDoc.workflowArtifactId),
+              name: String(runDoc?.workflowArtifactName || "daily-prophet-signal-tracker").trim(),
+              sizeInBytes: Number(runDoc?.workflowArtifactSizeInBytes || 0),
+              downloadUrl:
+                String(runDoc?.workflowArtifactDownloadUrl || "").trim() ||
+                buildPublicScreenerArtifactDownloadUrl(workflowRunId, runDoc?.workflowArtifactId),
+            },
+          ];
+    const artifacts = (workflowArtifacts.length ? workflowArtifacts : fallbackArtifact).slice(0, compact ? 3 : 8);
+    if (!artifacts.length) return "";
+    const links = artifacts
+      .map((artifact) => {
+        const name = escapeHtml(String(artifact?.name || "artifact"));
+        const downloadUrl = escapeHtml(
+          String(artifact?.downloadUrl || "").trim() || buildPublicScreenerArtifactDownloadUrl(workflowRunId, artifact?.id)
+        );
+        const githubUrl = escapeHtml(String(artifact?.githubUrl || "").trim());
+        const sizeLabel = formatFileSize(artifact?.sizeInBytes);
+        if (!downloadUrl && !githubUrl) {
+          return compact
+            ? `<span class="small muted">${name}${sizeLabel ? ` · ${escapeHtml(sizeLabel)}` : ""}</span>`
+            : `<div class="small muted">${name}${sizeLabel ? ` · ${escapeHtml(sizeLabel)}` : ""}</div>`;
+        }
+        const href = downloadUrl || githubUrl;
+        const label = compact ? `Artifact · ${name}` : `Download ${name}`;
+        return `<a class="cta secondary small" href="${href}" target="_blank" rel="noopener noreferrer">${label}${
+          sizeLabel ? ` · ${escapeHtml(sizeLabel)}` : ""
+        }</a>`;
+      })
+      .join(compact ? "" : "");
+    if (compact) return links;
+    return `
+      <div class="notice" style="margin-top:12px;">
+        <strong>Workflow artifacts</strong>
+        <div class="hero-actions" style="margin-top:8px;">${links}</div>
+      </div>
+    `;
+  };
+
+  const renderPublicScreenerGithubRuns = (items = []) => {
+    if (!ui.screenerGithubHistoryList || !ui.screenerGithubHistoryStatus) return;
+    const rows = Array.isArray(items) ? items : [];
+    if (!rows.length) {
+      ui.screenerGithubHistoryStatus.textContent = "";
+      ui.screenerGithubHistoryList.innerHTML = `<div class="small muted">No successful GitHub screener runs are available yet.</div>`;
+      return;
+    }
+    ui.screenerGithubHistoryStatus.textContent = `${rows.length} successful GitHub run${rows.length === 1 ? "" : "s"}`;
+    ui.screenerGithubHistoryList.innerHTML = rows
+      .map((item) => {
+        const title = escapeHtml(String(item?.title || item?.displayTitle || "GitHub screener workflow").trim());
+        const workflowRunNumber = Number.isFinite(Number(item?.workflowRunNumber)) ? Number(item.workflowRunNumber) : null;
+        const workflowRunUrl = escapeHtml(String(item?.workflowRunUrl || "").trim());
+        const createdAt = escapeHtml(formatTimestamp(item?.createdAt || item?.completedAt || item?.updatedAt));
+        const completedAt = escapeHtml(formatTimestamp(item?.completedAt || item?.updatedAt || item?.createdAt));
+        const matches = Number.isFinite(Number(item?.resultsFound)) ? Number(item.resultsFound) : 0;
+        const screenedCount = Number.isFinite(Number(item?.screenedCount)) ? Number(item.screenedCount) : null;
+        const minMarketCap = Number(item?.minMarketCap || 0);
+        const serviceMessage = escapeHtml(String(item?.serviceMessage || "").trim());
+        const topSymbols = Array.isArray(item?.topSymbols)
+          ? item.topSymbols.map((symbol) => escapeHtml(String(symbol || "").trim())).filter(Boolean).slice(0, 8)
+          : [];
+        const artifacts = Array.isArray(item?.artifacts)
+          ? item.artifacts.filter((artifact) => artifact && typeof artifact === "object").slice(0, 4)
+          : [];
+        const artifactActions = artifacts.length
+          ? artifacts
+              .map((artifact) => {
+                const href = escapeHtml(String(artifact?.downloadUrl || artifact?.githubUrl || "").trim());
+                const name = escapeHtml(String(artifact?.name || "artifact"));
+                const sizeLabel = formatFileSize(artifact?.sizeInBytes);
+                return href
+                  ? `<a class="cta secondary small" href="${href}" target="_blank" rel="noopener noreferrer">Artifact · ${name}${
+                      sizeLabel ? ` · ${escapeHtml(sizeLabel)}` : ""
+                    }</a>`
+                  : "";
+              })
+              .join("")
+          : `<span class="small muted">Artifacts unavailable</span>`;
+        return `
+          <div class="order-card">
+            <div class="order-header">
+              <div>
+                <div class="order-title">${title}</div>
+                <div class="small">Completed ${completedAt}</div>
+              </div>
+              <span class="status fulfilled">Success</span>
+            </div>
+            <div class="order-meta">
+              <div><strong>Created</strong> ${createdAt}</div>
+              <div><strong>Workflow</strong> ${workflowRunNumber !== null ? `#${workflowRunNumber}` : "GitHub Actions"}</div>
+              <div><strong>Matches</strong> ${matches}</div>
+              ${screenedCount !== null ? `<div><strong>Screened</strong> ${formatCompactNumber(screenedCount)}</div>` : ""}
+              ${Number.isFinite(minMarketCap) && minMarketCap > 0 ? `<div><strong>Floor</strong> $${formatCompactNumber(minMarketCap)}</div>` : ""}
+              ${topSymbols.length ? `<div><strong>Top symbols</strong> ${topSymbols.join(", ")}</div>` : ""}
+              ${serviceMessage ? `<div><strong>Summary</strong> ${serviceMessage}</div>` : ""}
+            </div>
+            <div class="order-actions" style="display:flex;gap:10px;flex-wrap:wrap;">
+              ${workflowRunUrl ? `<a class="cta secondary small" href="${workflowRunUrl}" target="_blank" rel="noopener noreferrer">Open workflow</a>` : ""}
+              ${artifactActions}
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+  };
+
+  const loadPublicScreenerGithubRuns = async ({ force = false, notify = false } = {}) => {
+    if (!ui.screenerGithubHistoryList || !ui.screenerGithubHistoryStatus) return [];
+    if (state.publicScreenerGithubRunsLoading) return state.publicScreenerGithubRuns;
+    if (!force && Array.isArray(state.publicScreenerGithubRuns) && state.publicScreenerGithubRuns.length) {
+      const ageMs = Date.now() - Number(state.publicScreenerGithubRunsLoadedAt || 0);
+      if (ageMs < 30000) {
+        renderPublicScreenerGithubRuns(state.publicScreenerGithubRuns);
+        return state.publicScreenerGithubRuns;
+      }
+    }
+    state.publicScreenerGithubRunsLoading = true;
+    ui.screenerGithubHistoryStatus.textContent = "Loading recent successful GitHub screener runs...";
+    ui.screenerGithubHistoryList.innerHTML = `<div class="small muted">${skeletonHtml(3)}</div>`;
+    try {
+      const payload = await apiListPublicScreenerGithubRuns({ limit: 60 });
+      const items = Array.isArray(payload?.items) ? payload.items : [];
+      state.publicScreenerGithubRuns = items;
+      state.publicScreenerGithubRunsLoadedAt = Date.now();
+      renderPublicScreenerGithubRuns(items);
+      if (notify) showToast("GitHub screener history refreshed.");
+      return items;
+    } catch (error) {
+      const message = extractErrorMessage(error, "Unable to load recent GitHub screener runs.");
+      ui.screenerGithubHistoryStatus.textContent = message;
+      if (Array.isArray(state.publicScreenerGithubRuns) && state.publicScreenerGithubRuns.length) {
+        renderPublicScreenerGithubRuns(state.publicScreenerGithubRuns);
+      } else {
+        ui.screenerGithubHistoryList.innerHTML = `<div class="small muted">${escapeHtml(message)}</div>`;
+      }
+      if (notify) showToast(message, "warn");
+      return state.publicScreenerGithubRuns;
+    } finally {
+      state.publicScreenerGithubRunsLoading = false;
+    }
+  };
+
   const renderScreenerRunOutput = (runDoc) => {
     if (!ui.screenerOutput) return;
     const rows = Array.isArray(runDoc?.results) ? runDoc.results : [];
@@ -20310,6 +20594,7 @@
       : status === "queued" || status === "running"
       ? "Private until completion"
       : "Private";
+    const artifactLinks = renderScreenerArtifactLinks(runDoc);
 
     if (canEditRun) {
       actionButtons.push(
@@ -20404,7 +20689,9 @@
       ${filterSummary}
       <div class="hero-actions" style="margin-top:12px;">${actionButtons.join("")}</div>
       ${requestId && !isSharedView ? renderOutputPublishControlsMarkup({ requestId, requestType: "screener" }) : ""}
+      ${artifactLinks}
       ${waitingMessage}
+      ${renderScreenerWorkflowActivity(runDoc)}
       ${failureMessage}
       ${emptyMessage}
       ${rows.length ? renderScreenerRowsTable(rows) : ""}
@@ -20433,9 +20720,15 @@
       if (state.activeScreenerPollToken !== token) return latestRun;
       latestRun = await fetchAndRenderScreenerRun(cleanRunId);
       if (state.activeScreenerPollToken !== token) return latestRun;
+      await fetchMyRequestById(buildSourceRequestId("screener", cleanRunId)).catch(() => null);
+      renderMyRequestsPanels();
       updateScreenerDispatchStatusFromRun(latestRun, { attempt, maxAttempts });
       if (isScreenerRunSettled(latestRun)) {
         const refreshedRequest = await fetchMyRequestById(buildSourceRequestId("screener", cleanRunId)).catch(() => null);
+        renderMyRequestsPanels();
+        if (normalizeScreenerRunStatus(latestRun?.status) === "completed") {
+          loadPublicScreenerGithubRuns({ force: true }).catch(() => {});
+        }
         if (refreshedRequest && typeof refreshedRequest === "object") {
           latestRun = {
             ...(latestRun || {}),
@@ -27204,7 +27497,10 @@
           if (!runId) {
             throw new Error("GitHub Actions run did not return a Quantura run ID.");
           }
-          const pendingRun = {
+          if (result?.request && typeof result.request === "object") {
+            upsertMyRequestInState(result.request);
+          }
+          const pendingRun = result?.run && typeof result.run === "object" ? result.run : {
             id: runId,
             title: String(result?.title || "").trim() || `Stock screener · $${formatCompactNumber(minMarketCap)} floor`,
             status: String(result?.status || "queued").trim().toLowerCase() || "queued",
@@ -27220,10 +27516,16 @@
             appliedFilters: [`Market cap >= $${formatCompactNumber(minMarketCap)}`],
           };
           renderScreenerRunOutput(pendingRun);
+          renderMyRequestsPanels();
           updateScreenerDispatchStatusFromRun(pendingRun);
           setScreenerGenerateButtonState({ busy: true, label: "Tracking workflow..." });
-          fetchMyRequestById(buildSourceRequestId("screener", runId)).catch(() => {});
+          fetchMyRequestById(buildSourceRequestId("screener", runId))
+            .then(() => {
+              renderMyRequestsPanels();
+            })
+            .catch(() => {});
           await fetchMyRequestsList({ force: true }).catch(() => {});
+          renderMyRequestsPanels();
           showToast("GitHub Actions screener queued. Quantura will publish it to Explore when it completes.");
           logEvent("screener_request", { min_market_cap: minMarketCap, workflow: "github_actions" });
 
@@ -27232,6 +27534,7 @@
           if (finalRun) {
             updateScreenerDispatchStatusFromRun(finalRun);
             await fetchMyRequestsList({ force: true }).catch(() => {});
+            renderMyRequestsPanels();
             const latestRequest = getMyRequestById(buildSourceRequestId("screener", runId));
             if (latestRequest) {
               renderScreenerRunOutput({
@@ -27293,6 +27596,10 @@
         if (ui.screenerLoadStatus) ui.screenerLoadStatus.textContent = error.message || "Unable to load run.";
         showToast(error.message || "Unable to load run.", "warn");
       }
+    });
+
+    ui.screenerGithubHistoryRefresh?.addEventListener("click", () => {
+      loadPublicScreenerGithubRuns({ force: true, notify: true }).catch(() => {});
     });
 
     syncFoundrySourceFields();
@@ -28131,6 +28438,9 @@
             state.predictionsContext.uploadDoc = null;
             state.predictionsContext.table = null;
             state.predictionsContext.previewPage = 0;
+            if (window.location.pathname === "/screener") {
+              loadPublicScreenerGithubRuns({ force: false }).catch(() => {});
+            }
             if (ui.predictionsAgentOutput) {
               ui.predictionsAgentOutput.textContent =
                 "Run the OpenAI CSV Agent to compute weekday-aware quantile mapping and return an analyst summary.";
@@ -28164,6 +28474,9 @@
           startScreenerRuns(db, activeWorkspaceId);
           await fetchMyRequestsList({ force: true }).catch(() => []);
           renderMyRequestsPanels();
+          if (window.location.pathname === "/screener") {
+            loadPublicScreenerGithubRuns({ force: false }).catch(() => {});
+          }
           loadScreenerUsageToday(db);
           startWorkspaceTasks(db, activeWorkspaceId);
 			      startWatchlist(db, activeWorkspaceId);

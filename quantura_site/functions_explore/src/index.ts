@@ -1857,10 +1857,114 @@ function myRequestShareUrl(slug: string, data: Record<string, unknown> = {}): st
   const cleanSlug = normalizeShareId(slug);
   if (!cleanSlug) return "";
   const sourceRef = asPlainObject(data.sourceRef);
+  const sourceCollection = sanitizeText(sourceRef.collection, 80);
+  const type = normalizeMyRequestType(data.type) || "forecast";
   if (sanitizeText(sourceRef.collection, 80) === "autopilot_requests") {
     return `${PUBLIC_ORIGIN}/autopilot?requestShare=${encodeURIComponent(cleanSlug)}`;
   }
+  if (type === "screener" || sourceCollection === "screener_runs") {
+    return `${PUBLIC_ORIGIN}/screener?requestShare=${encodeURIComponent(cleanSlug)}`;
+  }
+  if (type === "indicator") {
+    return `${PUBLIC_ORIGIN}/indicators?requestShare=${encodeURIComponent(cleanSlug)}`;
+  }
+  if (type === "modelCouncil") {
+    return `${PUBLIC_ORIGIN}/model-council?requestShare=${encodeURIComponent(cleanSlug)}`;
+  }
   return `${PUBLIC_ORIGIN}/forecasting?requestShare=${encodeURIComponent(cleanSlug)}`;
+}
+
+function buildSharedScreenerRunPayload(
+  runId: string,
+  source: Record<string, unknown>,
+  extras: Record<string, unknown> = {}
+): Record<string, unknown> {
+  const results = Array.isArray(source.results) ? source.results.slice(0, 300) : [];
+  const workflowRunNumberRaw = asFinite(source.workflowRunNumber, NaN);
+  const createdAtMs = getOptionalTimestampMs(source.createdAt);
+  const updatedAtMs = getOptionalTimestampMs(source.updatedAt || source.createdAt);
+  const workflowSteps = Array.isArray(source.workflowSteps)
+    ? source.workflowSteps.map((item) => sanitizeText(item, 180)).filter(Boolean).slice(0, 10)
+    : [];
+  const workflowJobs = Array.isArray(source.workflowJobs)
+    ? source.workflowJobs.slice(0, 8).map((item) => asPlainObject(item))
+    : [];
+  const workflowRunId = Math.max(0, Math.floor(asFinite(source.workflowRunId, 0)));
+  const workflowArtifactId = Math.max(0, Math.floor(asFinite(source.workflowArtifactId, 0)));
+  const workflowArtifactName = asString(source.workflowArtifactName, "");
+  const workflowArtifactsRaw = Array.isArray(source.workflowArtifacts) ? source.workflowArtifacts : [];
+  const workflowArtifacts = workflowArtifactsRaw.length
+    ? workflowArtifactsRaw
+        .map((item) => {
+          const record = asPlainObject(item);
+          const artifactId = Math.max(0, Math.floor(asFinite(record.id, 0)));
+          if (!artifactId) return null;
+          return {
+            id: artifactId,
+            name: asString(record.name, "artifact"),
+            sizeInBytes: Math.max(0, Math.floor(asFinite(record.sizeInBytes, 0))),
+            expired: asBoolean(record.expired, false),
+            downloadPath:
+              asString(record.downloadPath, "") || buildGithubArtifactDownloadPath(workflowRunId, artifactId),
+            downloadUrl:
+              asString(record.downloadUrl, "") || buildGithubArtifactDownloadUrl(workflowRunId, artifactId),
+            githubUrl: asString(record.githubUrl, ""),
+          };
+        })
+        .filter((item): item is Record<string, unknown> => Boolean(item))
+        .slice(0, 8)
+    : workflowRunId && workflowArtifactId
+    ? [
+        {
+          id: workflowArtifactId,
+          name: workflowArtifactName || "daily-prophet-signal-tracker",
+          sizeInBytes: Math.max(0, Math.floor(asFinite(source.workflowArtifactSizeInBytes, 0))),
+          expired: false,
+          downloadPath: buildGithubArtifactDownloadPath(workflowRunId, workflowArtifactId),
+          downloadUrl: buildGithubArtifactDownloadUrl(workflowRunId, workflowArtifactId),
+          githubUrl: `https://github.com/${encodeURIComponent(GITHUB_REPO_OWNER)}/${encodeURIComponent(
+            GITHUB_REPO_NAME
+          )}/actions/runs/${encodeURIComponent(String(workflowRunId))}/artifacts/${encodeURIComponent(
+            String(workflowArtifactId)
+          )}`,
+        },
+      ]
+    : [];
+  return {
+    id: sanitizeText(runId, 220),
+    title: asString(source.title, "Screener run"),
+    notes: asString(source.notes, ""),
+    market: asString(source.market, ""),
+    universe: asString(source.universe, ""),
+    userId: asString(source.userId),
+    isPublic: asBoolean(source.isPublic, false) || asBoolean(source.published, false),
+    status: asString(source.status, "completed"),
+    serviceMessage: asString(source.serviceMessage, ""),
+    minMarketCap: Math.max(0, Math.floor(asFinite(source.minMarketCap || source.minCap, 0))),
+    results,
+    resultsFound: Array.isArray(source.results) ? source.results.length : Math.max(0, Math.floor(asFinite(source.resultsFound, results.length))),
+    appliedFilters: Array.isArray(source.appliedFilters)
+      ? source.appliedFilters.map((item) => sanitizeText(item, 160)).filter(Boolean).slice(0, 24)
+      : [],
+    workflowRunId: workflowRunId || null,
+    workflowRunUrl: asString(source.workflowRunUrl, ""),
+    workflowRunNumber: Number.isFinite(workflowRunNumberRaw) ? Math.floor(workflowRunNumberRaw) : null,
+    workflowStatus: asString(source.workflowStatus, ""),
+    workflowConclusion: asString(source.workflowConclusion, ""),
+    workflowArtifactId: workflowArtifactId || null,
+    workflowArtifactName,
+    workflowArtifactSizeInBytes: Math.max(0, Math.floor(asFinite(source.workflowArtifactSizeInBytes, 0))),
+    workflowArtifacts,
+    workflowProgress: asString(source.workflowProgress, ""),
+    workflowActiveStep: asString(source.workflowActiveStep, ""),
+    workflowSteps,
+    workflowJobs,
+    workflowLogExcerpt: asString(source.workflowLogExcerpt, ""),
+    screenedCount: Math.max(0, Math.floor(asFinite(source.screenedCount, 0))),
+    createdAt: createdAtMs ? new Date(createdAtMs).toISOString() : null,
+    updatedAt: updatedAtMs ? new Date(updatedAtMs).toISOString() : null,
+    ...extras,
+  };
 }
 
 function toMyRequestResponse(
@@ -1905,6 +2009,13 @@ function toMyRequestResponse(
       collection: sanitizeText(sourceRef.collection, 80),
       id: sanitizeText(sourceRef.id, 220),
     },
+    status: asString(outputsMeta.status || outputsMeta.workflowStatus, ""),
+    workflowRunUrl: asString(outputsMeta.workflowRunUrl, ""),
+    workflowRunNumber: Number.isFinite(asFinite(outputsMeta.workflowRunNumber, Number.NaN))
+      ? Math.floor(asFinite(outputsMeta.workflowRunNumber, 0))
+      : null,
+    workflowProgress: asString(outputsMeta.workflowProgress, ""),
+    workflowActiveStep: asString(outputsMeta.workflowActiveStep, ""),
     share: {
       visibility,
       slug: share.slug,
@@ -1923,6 +2034,13 @@ function toMyRequestResponse(
       provider: outputsMeta.provider,
       model: outputsMeta.model,
       topSymbols: outputsMeta.topSymbols,
+      status: outputsMeta.status,
+      workflowStatus: outputsMeta.workflowStatus,
+      workflowRunUrl: outputsMeta.workflowRunUrl,
+      workflowRunNumber: outputsMeta.workflowRunNumber,
+      workflowProgress: outputsMeta.workflowProgress,
+      workflowActiveStep: outputsMeta.workflowActiveStep,
+      workflowSteps: outputsMeta.workflowSteps,
     });
   }
 
@@ -1965,12 +2083,34 @@ function roundFinite(value: unknown, digits = 2): number | null {
 type GithubWorkflowRunRecord = {
   id: number;
   htmlUrl: string;
+  path: string;
+  workflowName: string;
+  headBranch: string;
   status: string;
   conclusion: string;
   runNumber: number;
   createdAt: string;
   updatedAt: string;
   displayTitle: string;
+};
+
+type GithubWorkflowStepRecord = {
+  number: number;
+  name: string;
+  status: string;
+  conclusion: string;
+  startedAt: string;
+  completedAt: string;
+};
+
+type GithubWorkflowJobRecord = {
+  id: number;
+  name: string;
+  status: string;
+  conclusion: string;
+  startedAt: string;
+  completedAt: string;
+  steps: GithubWorkflowStepRecord[];
 };
 
 type GithubArtifactRecord = {
@@ -2050,6 +2190,9 @@ function normalizeGithubWorkflowRun(raw: unknown): GithubWorkflowRunRecord | nul
   return {
     id,
     htmlUrl: sanitizeText(record.html_url, 600),
+    path: sanitizeText(record.path, 320),
+    workflowName: sanitizeText(record.name, 240),
+    headBranch: sanitizeText(record.head_branch, 120),
     status: sanitizeText(record.status, 80).toLowerCase(),
     conclusion: sanitizeText(record.conclusion, 80).toLowerCase(),
     runNumber: Math.floor(asFinite(record.run_number, 0)),
@@ -2090,6 +2233,136 @@ async function getGithubWorkflowRun(runId: number): Promise<GithubWorkflowRunRec
   return normalizeGithubWorkflowRun(payload);
 }
 
+async function listGithubWorkflowRuns(input: { perPage?: number; status?: string; branch?: string } = {}): Promise<GithubWorkflowRunRecord[]> {
+  const perPage = Math.max(1, Math.min(100, Math.floor(asFinite(input.perPage, 20))));
+  const params = new URLSearchParams();
+  params.set("per_page", String(perPage));
+  if (sanitizeText(input.status, 40)) params.set("status", sanitizeText(input.status, 40));
+  if (sanitizeText(input.branch, 120)) params.set("branch", sanitizeText(input.branch, 120));
+  const payload = await githubApiJson(`/actions/workflows/${encodeURIComponent(GITHUB_SCREENER_WORKFLOW)}/runs?${params.toString()}`);
+  const runs = Array.isArray(payload.workflow_runs) ? payload.workflow_runs : [];
+  return runs.map((item) => normalizeGithubWorkflowRun(item)).filter((item): item is GithubWorkflowRunRecord => Boolean(item));
+}
+
+async function listRecentSuccessfulGithubScreenerRuns(limit = 12): Promise<GithubWorkflowRunRecord[]> {
+  const desired = Math.max(1, Math.min(60, Math.floor(asFinite(limit, 12))));
+  const perPage = Math.max(desired * 3, 20);
+  const runs = await listGithubWorkflowRuns({
+    perPage,
+    status: "completed",
+    branch: GITHUB_ACTIONS_BRANCH,
+  });
+  return runs.filter((item) => item.conclusion === "success").slice(0, desired);
+}
+
+function normalizeGithubWorkflowStep(raw: unknown): GithubWorkflowStepRecord | null {
+  const record = asPlainObject(raw);
+  const number = Math.max(0, Math.floor(asFinite(record.number, 0)));
+  const name = sanitizeText(record.name, 240);
+  if (!number && !name) return null;
+  return {
+    number,
+    name,
+    status: sanitizeText(record.status, 80).toLowerCase(),
+    conclusion: sanitizeText(record.conclusion, 80).toLowerCase(),
+    startedAt: sanitizeText(record.started_at, 120),
+    completedAt: sanitizeText(record.completed_at, 120),
+  };
+}
+
+function normalizeGithubWorkflowJob(raw: unknown): GithubWorkflowJobRecord | null {
+  const record = asPlainObject(raw);
+  const id = Math.max(0, Math.floor(asFinite(record.id, 0)));
+  const name = sanitizeText(record.name, 240);
+  if (!id && !name) return null;
+  const stepsRaw = Array.isArray(record.steps) ? record.steps : [];
+  return {
+    id,
+    name,
+    status: sanitizeText(record.status, 80).toLowerCase(),
+    conclusion: sanitizeText(record.conclusion, 80).toLowerCase(),
+    startedAt: sanitizeText(record.started_at, 120),
+    completedAt: sanitizeText(record.completed_at, 120),
+    steps: stepsRaw
+      .map((item) => normalizeGithubWorkflowStep(item))
+      .filter((item): item is GithubWorkflowStepRecord => Boolean(item))
+      .slice(0, 24),
+  };
+}
+
+async function listGithubJobsForRun(runId: number): Promise<GithubWorkflowJobRecord[]> {
+  if (!runId) return [];
+  const payload = await githubApiJson(`/actions/runs/${encodeURIComponent(String(runId))}/jobs?per_page=100`);
+  const jobs = Array.isArray(payload.jobs) ? payload.jobs : [];
+  return jobs
+    .map((item) => normalizeGithubWorkflowJob(item))
+    .filter((item): item is GithubWorkflowJobRecord => Boolean(item))
+    .slice(0, 12);
+}
+
+function formatGithubWorkflowStateLabel(status: unknown, conclusion: unknown = ""): string {
+  const cleanStatus = sanitizeText(status, 80).toLowerCase();
+  const cleanConclusion = sanitizeText(conclusion, 80).toLowerCase();
+  if (cleanStatus === "completed" && cleanConclusion) {
+    return cleanConclusion.replace(/_/g, " ");
+  }
+  if (cleanStatus === "in_progress") return "running";
+  if (cleanStatus === "queued") return "queued";
+  return cleanStatus ? cleanStatus.replace(/_/g, " ") : "pending";
+}
+
+function buildGithubWorkflowProgressSnapshot(jobs: GithubWorkflowJobRecord[]): Record<string, unknown> {
+  const normalizedJobs = Array.isArray(jobs) ? jobs : [];
+  if (!normalizedJobs.length) return {};
+
+  const activeJob =
+    normalizedJobs.find((job) => job.status === "in_progress") ||
+    normalizedJobs.find((job) => job.status === "queued") ||
+    null;
+  const activeStep =
+    activeJob?.steps.find((step) => step.status === "in_progress") ||
+    activeJob?.steps.find((step) => step.status === "queued") ||
+    null;
+  const completedJobs = normalizedJobs.filter((job) => job.status === "completed").length;
+  const workflowProgress = activeStep
+    ? `${activeJob?.name || "Workflow"} · ${activeStep.name}`
+    : activeJob
+    ? `${activeJob.name || "Workflow"} is ${formatGithubWorkflowStateLabel(activeJob.status, activeJob.conclusion)}`
+    : `${completedJobs}/${normalizedJobs.length} workflow job${normalizedJobs.length === 1 ? "" : "s"} completed`;
+
+  const workflowSteps = normalizedJobs
+    .flatMap((job) =>
+      (Array.isArray(job.steps) ? job.steps : []).map((step) => {
+        const stepState = formatGithubWorkflowStateLabel(step.status, step.conclusion);
+        return `${job.name || "Workflow"} · ${step.name || "Step"} · ${stepState}`;
+      })
+    )
+    .filter(Boolean)
+    .slice(-10);
+
+  return {
+    workflowProgress: sanitizeText(workflowProgress, 240),
+    workflowActiveStep: sanitizeText(activeStep ? `${activeJob?.name || "Workflow"} · ${activeStep.name}` : "", 240),
+    workflowSteps,
+    workflowJobs: normalizedJobs.slice(0, 8).map((job) => ({
+      id: job.id,
+      name: sanitizeText(job.name, 180),
+      status: sanitizeText(job.status, 40),
+      conclusion: sanitizeText(job.conclusion, 40),
+      startedAt: sanitizeText(job.startedAt, 120),
+      completedAt: sanitizeText(job.completedAt, 120),
+      steps: (Array.isArray(job.steps) ? job.steps : []).slice(0, 12).map((step) => ({
+        number: Math.max(0, Math.floor(asFinite(step.number, 0))),
+        name: sanitizeText(step.name, 180),
+        status: sanitizeText(step.status, 40),
+        conclusion: sanitizeText(step.conclusion, 40),
+        startedAt: sanitizeText(step.startedAt, 120),
+        completedAt: sanitizeText(step.completedAt, 120),
+      })),
+    })),
+  };
+}
+
 function normalizeGithubArtifact(raw: unknown): GithubArtifactRecord | null {
   const record = asPlainObject(raw);
   const id = Math.floor(asFinite(record.id, 0));
@@ -2108,6 +2381,37 @@ async function listGithubArtifactsForRun(runId: number): Promise<GithubArtifactR
   const payload = await githubApiJson(`/actions/runs/${encodeURIComponent(String(runId))}/artifacts?per_page=50`);
   const artifacts = Array.isArray(payload.artifacts) ? payload.artifacts : [];
   return artifacts.map((item) => normalizeGithubArtifact(item)).filter((item): item is GithubArtifactRecord => Boolean(item));
+}
+
+function buildGithubArtifactDownloadPath(runId: unknown, artifactId: unknown): string {
+  const cleanRunId = Math.max(0, Math.floor(asFinite(runId, 0)));
+  const cleanArtifactId = Math.max(0, Math.floor(asFinite(artifactId, 0)));
+  if (!cleanRunId || !cleanArtifactId) return "";
+  return `/api/screener/github-history/${encodeURIComponent(String(cleanRunId))}/artifacts/${encodeURIComponent(
+    String(cleanArtifactId)
+  )}/download`;
+}
+
+function buildGithubArtifactDownloadUrl(runId: unknown, artifactId: unknown): string {
+  const path = buildGithubArtifactDownloadPath(runId, artifactId);
+  return path ? `${PUBLIC_ORIGIN}${path}` : "";
+}
+
+function buildGithubArtifactLinkPayload(runId: unknown, artifact: GithubArtifactRecord): Record<string, unknown> {
+  const cleanRunId = Math.max(0, Math.floor(asFinite(runId, 0)));
+  return {
+    id: artifact.id,
+    name: sanitizeText(artifact.name, 180),
+    sizeInBytes: Math.max(0, Math.floor(asFinite(artifact.sizeInBytes, 0))),
+    expired: asBoolean(artifact.expired, false),
+    downloadPath: buildGithubArtifactDownloadPath(cleanRunId, artifact.id),
+    downloadUrl: buildGithubArtifactDownloadUrl(cleanRunId, artifact.id),
+    githubUrl: cleanRunId
+      ? `https://github.com/${encodeURIComponent(GITHUB_REPO_OWNER)}/${encodeURIComponent(
+          GITHUB_REPO_NAME
+        )}/actions/runs/${encodeURIComponent(String(cleanRunId))}/artifacts/${encodeURIComponent(String(artifact.id))}`
+      : "",
+  };
 }
 
 function parseCsvLine(line: string): string[] {
@@ -2238,6 +2542,139 @@ function buildGithubScreenerServiceMessage(manifest: Record<string, unknown>, mi
   return `GitHub Actions completed successfully, but no active Prophet signals cleared the ${floorLabel} market-cap floor.`;
 }
 
+function buildScreenerMyRequestOutputsMeta(source: Record<string, unknown>): Record<string, unknown> {
+  const minMarketCap = Math.max(0, Math.floor(asFinite(source.minMarketCap || source.minCap, 0)));
+  const results = Array.isArray(source.results) ? source.results : [];
+  const resultsCount = Array.isArray(source.results)
+    ? results.length
+    : Math.max(0, Math.floor(asFinite(source.resultsFound, 0)));
+  const topSymbols = Array.isArray(source.topSymbols)
+    ? source.topSymbols.map((item) => normalizeTicker(item)).filter(Boolean).slice(0, 12)
+    : extractScreenerTopSymbols(results);
+  const workflowSteps = Array.isArray(source.workflowSteps)
+    ? source.workflowSteps.map((item) => sanitizeText(item, 180)).filter(Boolean).slice(0, 10)
+    : [];
+  const workflowRunNumber = Math.floor(asFinite(source.workflowRunNumber, 0));
+  const screenedCount = Math.max(0, Math.floor(asFinite(source.screenedCount, 0)));
+  return trimOutputsMeta({
+    summary: asString(source.serviceMessage, ""),
+    resultsCount,
+    topSymbols,
+    modelUsed: asString(source.modelUsed, "daily_prophet_signal_tracker"),
+    status: asString(source.status, "queued"),
+    workflowStatus: asString(source.workflowStatus, ""),
+    workflowConclusion: asString(source.workflowConclusion, ""),
+    workflowRunId: asString(source.workflowRunId, ""),
+    workflowRunUrl: asString(source.workflowRunUrl, ""),
+    workflowRunNumber: workflowRunNumber || 0,
+    workflowProgress: asString(source.workflowProgress, ""),
+    workflowActiveStep: asString(source.workflowActiveStep, ""),
+    workflowSteps,
+    workflowLogExcerpt: asString(source.workflowLogExcerpt, ""),
+    screenedCount,
+    metrics: {
+      Status: asString(source.status, "queued"),
+      Floor: fmtCompactCurrency(minMarketCap),
+      Matches: resultsCount,
+      Screened: screenedCount || 0,
+      Workflow: workflowRunNumber || asString(source.workflowRunId, ""),
+    },
+  });
+}
+
+async function syncScreenerMyRequestFromRun(
+  ownerUid: string,
+  runId: string,
+  source: Record<string, unknown>,
+  published = false
+): Promise<Record<string, unknown> | null> {
+  const requestId = buildMyRequestDocId("screener", runId);
+  const minMarketCap = Math.max(0, Math.floor(asFinite(source.minMarketCap || source.minCap, 100_000_000_000)));
+  await upsertOwnedMyRequestFromSystem(ownerUid, {
+    requestId,
+    type: "screener",
+    title: sanitizeText(source.title, 180) || "GitHub stock screener",
+    input: {
+      minMarketCap,
+      source: "github_actions",
+      workflow: GITHUB_SCREENER_WORKFLOW,
+      branch: GITHUB_ACTIONS_BRANCH,
+    },
+    outputsMeta: buildScreenerMyRequestOutputsMeta(source),
+    sourceRef: {
+      collection: "screener_runs",
+      id: sanitizeText(runId, 220),
+    },
+    published,
+  });
+  const requestSnap = await db.collection("users").doc(ownerUid).collection("requests").doc(requestId).get().catch(() => null);
+  if (!requestSnap?.exists) return null;
+  return toMyRequestResponse(requestSnap.id, (requestSnap.data() || {}) as Record<string, unknown>, { includePayload: true });
+}
+
+async function findScreenerRunRecordByWorkflowRunId(workflowRunId: number): Promise<{ id: string; data: Record<string, unknown> } | null> {
+  const cleanWorkflowRunId = Math.max(0, Math.floor(asFinite(workflowRunId, 0)));
+  if (!cleanWorkflowRunId) return null;
+  const snapshot = await db.collection("screener_runs").where("workflowRunId", "==", cleanWorkflowRunId).limit(1).get();
+  const doc = snapshot.docs[0];
+  if (!doc) return null;
+  return {
+    id: doc.id,
+    data: (doc.data() || {}) as Record<string, unknown>,
+  };
+}
+
+function buildPublicGithubScreenerRunSummary(
+  workflowRun: GithubWorkflowRunRecord,
+  sourceMatch: { id: string; data: Record<string, unknown> } | null,
+  artifacts: GithubArtifactRecord[]
+): Record<string, unknown> {
+  const source = sourceMatch?.data || {};
+  const createdAtMs = getOptionalTimestampMs(source.createdAt);
+  const updatedAtMs = getOptionalTimestampMs(source.updatedAt || source.createdAt);
+  const results = Array.isArray(source.results) ? source.results : [];
+  const resultsFound = Array.isArray(source.results)
+    ? results.length
+    : Math.max(0, Math.floor(asFinite(source.resultsFound, 0)));
+  const screenedCount = Math.max(0, Math.floor(asFinite(source.screenedCount, 0)));
+  const minMarketCap = Math.max(0, Math.floor(asFinite(source.minMarketCap || source.minCap, 0)));
+  const topSymbols = Array.isArray(source.topSymbols)
+    ? source.topSymbols.map((item) => normalizeTicker(item)).filter(Boolean).slice(0, 12)
+    : extractScreenerTopSymbols(results);
+  const visibleArtifacts = (Array.isArray(artifacts) ? artifacts : [])
+    .filter((artifact) => !asBoolean(artifact?.expired, false))
+    .slice(0, 8)
+    .map((artifact) => buildGithubArtifactLinkPayload(workflowRun.id, artifact));
+  const title =
+    sanitizeText(source.title, 180) ||
+    sanitizeText(workflowRun.displayTitle, 180).replace(/\bquantura_[a-z0-9_-]+\b/gi, "").trim() ||
+    `GitHub screener workflow #${workflowRun.runNumber || workflowRun.id}`;
+  return {
+    runId: workflowRun.id,
+    sourceRunId: sanitizeText(sourceMatch?.id, 220),
+    title,
+    displayTitle: sanitizeText(workflowRun.displayTitle, 240),
+    workflowName: sanitizeText(workflowRun.workflowName, 240),
+    workflowRunId: workflowRun.id,
+    workflowRunNumber: workflowRun.runNumber || null,
+    workflowRunUrl: sanitizeText(workflowRun.htmlUrl, 600),
+    workflowStatus: sanitizeText(workflowRun.status, 80) || "completed",
+    workflowConclusion: sanitizeText(workflowRun.conclusion, 80) || "success",
+    createdAt: createdAtMs ? new Date(createdAtMs).toISOString() : workflowRun.createdAt || null,
+    updatedAt: updatedAtMs ? new Date(updatedAtMs).toISOString() : workflowRun.updatedAt || null,
+    completedAt: workflowRun.updatedAt || null,
+    minMarketCap,
+    resultsFound,
+    screenedCount,
+    topSymbols,
+    serviceMessage:
+      sanitizeText(source.serviceMessage, 320) ||
+      `GitHub Actions completed successfully for workflow #${workflowRun.runNumber || workflowRun.id}.`,
+    artifacts: visibleArtifacts,
+    artifactCount: visibleArtifacts.length,
+  };
+}
+
 async function syncGithubScreenerRunRecord(runId: string, viewerUid: string): Promise<Record<string, unknown>> {
   const cleanRunId = sanitizeText(runId, 220);
   if (!cleanRunId) throw new Error("invalid_run_id");
@@ -2278,15 +2715,26 @@ async function syncGithubScreenerRunRecord(runId: string, viewerUid: string): Pr
       `Dispatching GitHub Actions stock screener above the ${fmtCompactCurrency(minMarketCap)} floor.`;
     await ref.set(patch, { merge: true });
     const refreshed = await ref.get();
-    return { id: refreshed.id, ...(refreshed.data() || {}) };
+    const merged = { id: refreshed.id, ...(refreshed.data() || {}) } as Record<string, unknown>;
+    await syncScreenerMyRequestFromRun(viewerUid, cleanRunId, merged, false);
+    return merged;
+  }
+
+  const workflowJobs = await listGithubJobsForRun(workflowRun.id).catch(() => []);
+  if (workflowJobs.length) {
+    Object.assign(patch, buildGithubWorkflowProgressSnapshot(workflowJobs));
   }
 
   if (workflowRun.status !== "completed") {
     patch.status = workflowRun.status === "queued" ? "queued" : "running";
-    patch.serviceMessage = `GitHub Actions is ${patch.status} for the ${fmtCompactCurrency(minMarketCap)} market-cap floor.`;
+    patch.serviceMessage =
+      sanitizeText(patch.workflowProgress, 240) ||
+      `GitHub Actions is ${patch.status} for the ${fmtCompactCurrency(minMarketCap)} market-cap floor.`;
     await ref.set(patch, { merge: true });
     const refreshed = await ref.get();
-    return { id: refreshed.id, ...(refreshed.data() || {}) };
+    const merged = { id: refreshed.id, ...(refreshed.data() || {}) } as Record<string, unknown>;
+    await syncScreenerMyRequestFromRun(viewerUid, cleanRunId, merged, false);
+    return merged;
   }
 
   if (workflowRun.conclusion !== "success") {
@@ -2295,30 +2743,9 @@ async function syncGithubScreenerRunRecord(runId: string, viewerUid: string): Pr
     patch.serviceMessage = `GitHub Actions finished with ${workflowRun.conclusion || "failure"}.`;
     await ref.set(patch, { merge: true });
     const refreshed = await ref.get();
-    await upsertOwnedMyRequestFromSystem(viewerUid, {
-      requestId: buildMyRequestDocId("screener", cleanRunId),
-      type: "screener",
-      title: sanitizeText(refreshed.data()?.title, 180) || "GitHub stock screener",
-      input: {
-        minMarketCap,
-        source: "github_actions",
-        workflow: GITHUB_SCREENER_WORKFLOW,
-      },
-      outputsMeta: {
-        summary: patch.serviceMessage,
-        resultsCount: 0,
-        metrics: {
-          Status: "failed",
-          Floor: fmtCompactCurrency(minMarketCap),
-        },
-      },
-      sourceRef: {
-        collection: "screener_runs",
-        id: cleanRunId,
-      },
-      published: false,
-    });
-    return { id: refreshed.id, ...(refreshed.data() || {}) };
+    const merged = { id: refreshed.id, ...(refreshed.data() || {}) } as Record<string, unknown>;
+    await syncScreenerMyRequestFromRun(viewerUid, cleanRunId, merged, false);
+    return merged;
   }
 
   const artifacts = await listGithubArtifactsForRun(workflowRun.id).catch(() => []);
@@ -2328,7 +2755,9 @@ async function syncGithubScreenerRunRecord(runId: string, viewerUid: string): Pr
     patch.serviceMessage = "GitHub Actions finished, but Quantura is still waiting for artifacts.";
     await ref.set(patch, { merge: true });
     const refreshed = await ref.get();
-    return { id: refreshed.id, ...(refreshed.data() || {}) };
+    const merged = { id: refreshed.id, ...(refreshed.data() || {}) } as Record<string, unknown>;
+    await syncScreenerMyRequestFromRun(viewerUid, cleanRunId, merged, false);
+    return merged;
   }
 
   const artifactPayload = await downloadGithubArtifactPayload(artifact);
@@ -2360,35 +2789,27 @@ async function syncGithubScreenerRunRecord(runId: string, viewerUid: string): Pr
   await ref.set(patch, { merge: true });
   const refreshed = await ref.get();
   const merged = (refreshed.data() || {}) as Record<string, unknown>;
-  await upsertOwnedMyRequestFromSystem(viewerUid, {
-    requestId: buildMyRequestDocId("screener", cleanRunId),
-    type: "screener",
-    title: sanitizeText(merged.title, 180) || "GitHub stock screener",
-    input: {
-      minMarketCap,
-      source: "github_actions",
-      workflow: GITHUB_SCREENER_WORKFLOW,
-      branch: GITHUB_ACTIONS_BRANCH,
+  await syncScreenerMyRequestFromRun(viewerUid, cleanRunId, { ...merged, id: cleanRunId }, shouldAutoPublishNow);
+  const requestSnap = await db
+    .collection("users")
+    .doc(viewerUid)
+    .collection("requests")
+    .doc(buildMyRequestDocId("screener", cleanRunId))
+    .get();
+  const requestData = (requestSnap.data() || {}) as Record<string, unknown>;
+  const published = asBoolean(requestData.published, shouldAutoPublishNow);
+  await ref.set(
+    {
+      isPublic: published,
+      published,
+      publishedAt: published ? requestData.publishedAt || admin.firestore.FieldValue.serverTimestamp() : null,
+      explorePostId: published ? sanitizeText(requestData.explorePostId, 220) : "",
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     },
-    outputsMeta: {
-      summary: serviceMessage,
-      resultsCount: results.length,
-      topSymbols,
-      metrics: {
-        Status: "completed",
-        Floor: fmtCompactCurrency(minMarketCap),
-        Matches: results.length,
-        Screened: Math.max(0, Math.floor(asFinite(merged.screenedCount, 0))),
-      },
-    },
-    sourceRef: {
-      collection: "screener_runs",
-      id: cleanRunId,
-    },
-    published: shouldAutoPublishNow,
-  });
-
-  return { id: refreshed.id, ...(refreshed.data() || {}) };
+    { merge: true }
+  );
+  const finalized = await ref.get();
+  return { id: finalized.id, ...(finalized.data() || {}) };
 }
 
 function trimModelCouncilAnswer(answerRaw: unknown): string {
@@ -7024,32 +7445,7 @@ ROUTES.post("/screener/run", async (req, res) => {
     };
     await docRef.set(payload, { merge: false });
 
-    await upsertOwnedMyRequestFromSystem(user.uid, {
-      requestId: buildMyRequestDocId("screener", docRef.id),
-      type: "screener",
-      title: sanitizeText(payload.title, 180) || "GitHub stock screener",
-      input: {
-        minMarketCap,
-        source: "github_actions",
-        workflow: GITHUB_SCREENER_WORKFLOW,
-        branch: GITHUB_ACTIONS_BRANCH,
-      },
-      outputsMeta: {
-        summary: payload.serviceMessage,
-        resultsCount: 0,
-        topSymbols: [],
-        modelUsed: payload.modelUsed,
-        metrics: {
-          Status: "queued",
-          Floor: fmtCompactCurrency(minMarketCap),
-        },
-      },
-      sourceRef: {
-        collection: "screener_runs",
-        id: docRef.id,
-      },
-      published: false,
-    });
+    let requestResponse = await syncScreenerMyRequestFromRun(user.uid, docRef.id, { ...payload, id: docRef.id }, false);
 
     try {
       await dispatchGithubScreenerWorkflow({ runKey, minMarketCap });
@@ -7066,6 +7462,13 @@ ROUTES.post("/screener/run", async (req, res) => {
         dispatchPatch.workflowRunId = workflowRun.id;
         dispatchPatch.workflowRunUrl = workflowRun.htmlUrl;
         dispatchPatch.workflowRunNumber = workflowRun.runNumber || null;
+        const workflowJobs = await listGithubJobsForRun(workflowRun.id).catch(() => []);
+        if (workflowJobs.length) {
+          Object.assign(dispatchPatch, buildGithubWorkflowProgressSnapshot(workflowJobs));
+          if (sanitizeText(dispatchPatch.workflowProgress, 240)) {
+            dispatchPatch.serviceMessage = sanitizeText(dispatchPatch.workflowProgress, 240);
+          }
+        }
       }
       await docRef.set(dispatchPatch, { merge: true });
     } catch (dispatchError: any) {
@@ -7080,22 +7483,36 @@ ROUTES.post("/screener/run", async (req, res) => {
         },
         { merge: true }
       );
+      const failedSnap = await docRef.get().catch(() => null);
+      if (failedSnap?.exists) {
+        requestResponse =
+          (await syncScreenerMyRequestFromRun(
+            user.uid,
+            docRef.id,
+            { id: failedSnap.id, ...(failedSnap.data() || {}) } as Record<string, unknown>,
+            false
+          )) || requestResponse;
+      }
       res.status(500).json({ error: "screener_run_failed", detail });
       return;
     }
 
     const refreshed = await docRef.get();
     const result: Record<string, unknown> = { id: refreshed.id, ...(refreshed.data() || {}) };
+    requestResponse = (await syncScreenerMyRequestFromRun(user.uid, docRef.id, result, false)) || requestResponse;
 
     res.status(200).json({
       ok: true,
       runId: result.id,
+      run: buildSharedScreenerRunPayload(String(result.id || docRef.id), result),
+      request: requestResponse,
       title: result.title,
       status: result.status,
       serviceMessage: result.serviceMessage,
       minMarketCap,
       workflowRunId: result.workflowRunId || null,
       workflowRunUrl: result.workflowRunUrl || "",
+      workflowRunNumber: result.workflowRunNumber || null,
     });
   } catch (error: any) {
     const code = String(error?.message || "");
@@ -7106,6 +7523,89 @@ ROUTES.post("/screener/run", async (req, res) => {
     const detail = sanitizeText(error?.message || error, 260) || "screener_run_failed";
     console.error("[Screener] run failed", error);
     res.status(500).json({ error: "screener_run_failed", detail });
+  }
+});
+
+ROUTES.get("/screener/github-history", async (req, res) => {
+  try {
+    if (!githubActionsConfigured()) {
+      res.status(503).json({ error: "screener_workflow_not_configured" });
+      return;
+    }
+    const requestedLimit = Math.floor(asFinite(req.query.limit, 12));
+    const limit = Math.max(1, Math.min(60, requestedLimit || 24));
+    const workflowRuns = await listRecentSuccessfulGithubScreenerRuns(limit);
+    const items = await Promise.all(
+      workflowRuns.map(async (workflowRun) => {
+        const [sourceMatch, artifacts] = await Promise.all([
+          findScreenerRunRecordByWorkflowRunId(workflowRun.id).catch(() => null),
+          listGithubArtifactsForRun(workflowRun.id).catch(() => []),
+        ]);
+        return buildPublicGithubScreenerRunSummary(workflowRun, sourceMatch, artifacts);
+      })
+    );
+    res.status(200).json({
+      ok: true,
+      items,
+    });
+  } catch (error) {
+    console.error("[Screener] github history failed", error);
+    res.status(500).json({ error: "screener_github_history_failed" });
+  }
+});
+
+ROUTES.get("/screener/github-history/:workflowRunId/artifacts/:artifactId/download", async (req, res) => {
+  try {
+    if (!githubActionsConfigured()) {
+      res.status(503).json({ error: "screener_workflow_not_configured" });
+      return;
+    }
+    const workflowRunId = Math.max(0, Math.floor(asFinite(req.params.workflowRunId, 0)));
+    const artifactId = Math.max(0, Math.floor(asFinite(req.params.artifactId, 0)));
+    if (!workflowRunId || !artifactId) {
+      res.status(400).json({ error: "invalid_github_artifact_request" });
+      return;
+    }
+    const workflowRun = await getGithubWorkflowRun(workflowRunId);
+    if (!workflowRun) {
+      res.status(404).json({ error: "workflow_run_not_found" });
+      return;
+    }
+    if (
+      workflowRun.path &&
+      !workflowRun.path.toLowerCase().includes(String(GITHUB_SCREENER_WORKFLOW || "").trim().toLowerCase())
+    ) {
+      res.status(404).json({ error: "workflow_run_not_found" });
+      return;
+    }
+    const artifacts = await listGithubArtifactsForRun(workflowRunId);
+    const artifact = artifacts.find((item) => item.id === artifactId) || null;
+    if (!artifact) {
+      res.status(404).json({ error: "artifact_not_found" });
+      return;
+    }
+    if (artifact.expired) {
+      res.status(410).json({ error: "artifact_expired" });
+      return;
+    }
+    const response = await githubApiRequest(`/actions/artifacts/${encodeURIComponent(String(artifactId))}/zip`, {
+      method: "GET",
+    });
+    const buffer = Buffer.from(await response.arrayBuffer());
+    const safeBaseName =
+      sanitizeText(artifact.name, 140)
+        .replace(/[^A-Za-z0-9._-]+/g, "-")
+        .replace(/^-+|-+$/g, "") || "github-artifact";
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Cache-Control", "private, max-age=300");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${safeBaseName}-${encodeURIComponent(String(workflowRun.runNumber || workflowRunId))}.zip"`
+    );
+    res.status(200).send(buffer);
+  } catch (error) {
+    console.error("[Screener] github artifact download failed", error);
+    res.status(500).json({ error: "screener_github_artifact_download_failed" });
   }
 });
 
@@ -7124,7 +7624,7 @@ ROUTES.get("/screener/:runId", async (req, res) => {
     const runDoc = await syncGithubScreenerRunRecord(runId, user.uid);
     res.status(200).json({
       ok: true,
-      run: runDoc,
+      run: buildSharedScreenerRunPayload(runId, runDoc),
     });
   } catch (error: any) {
     const code = String(error?.message || "");
@@ -11888,15 +12388,30 @@ ROUTES.get("/my-requests/shared/:slug", async (req, res) => {
       res.status(404).json({ error: "request_not_found" });
       return;
     }
+    const type = normalizeMyRequestType(data.type) || "forecast";
     const responseItem = toMyRequestResponse(requestSnap.id, data, { includePayload: true });
+    const sourceRef = asPlainObject(data.sourceRef);
+    const sourceCollection = sanitizeText(sourceRef.collection, 80);
+    const sourceId = sanitizeText(sourceRef.id, 220);
+    let screenerPayload: Record<string, unknown> | null = null;
+    if (type === "screener" && sourceCollection === "screener_runs" && sourceId) {
+      const sourceSnap = await db.collection(sourceCollection).doc(sourceId).get();
+      if (sourceSnap.exists) {
+        screenerPayload = buildSharedScreenerRunPayload(sourceSnap.id, (sourceSnap.data() || {}) as Record<string, unknown>, {
+          isPublic: asBoolean(data.published, false),
+        });
+      }
+    }
     res.status(200).json({
       request: responseItem,
       readOnly: !(viewer?.uid && viewer.uid === ownerUid),
+      canImport: Boolean(viewer?.uid && viewer.uid !== ownerUid && !isAnonymousDecodedUser(viewer)),
       share: {
         slug,
         visibility,
         shareUrl: myRequestShareUrl(slug, data),
       },
+      screener: screenerPayload,
     });
   } catch (error) {
     console.error("[Explore] read shared request failed", error);
@@ -12344,6 +12859,24 @@ ROUTES.post("/my-requests/:requestId/publish", async (req, res) => {
       },
       { merge: true }
     );
+    const sourceRef = asPlainObject(existing.sourceRef);
+    const sourceCollection = sanitizeText(sourceRef.collection, 80);
+    const sourceId = sanitizeText(sourceRef.id, 220);
+    if ((normalizeMyRequestType(existing.type) || "forecast") === "screener" && sourceCollection === "screener_runs" && sourceId) {
+      await db
+        .collection(sourceCollection)
+        .doc(sourceId)
+        .set(
+          {
+            isPublic: true,
+            published: true,
+            publishedAt: admin.firestore.FieldValue.serverTimestamp(),
+            explorePostId: postId,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+    }
 
     const refreshed = await requestRef.get();
     res.status(200).json({
@@ -12427,6 +12960,21 @@ ROUTES.post("/my-requests/:requestId/unpublish", async (req, res) => {
       },
       { merge: true }
     );
+    if (type === "screener" && sourceCollection === "screener_runs" && sourceId) {
+      await db
+        .collection(sourceCollection)
+        .doc(sourceId)
+        .set(
+          {
+            isPublic: false,
+            published: false,
+            publishedAt: null,
+            explorePostId: "",
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+    }
 
     const refreshed = await requestRef.get();
     res.status(200).json({
@@ -12975,7 +13523,6 @@ ROUTES.get("/shares/:shareId", async (req, res) => {
     const source = (sourceSnap.data() || {}) as Record<string, unknown>;
     const ownerUid = asString(source.userId);
     const readOnly = !(viewer?.uid && ownerUid && viewer.uid === ownerUid);
-    const results = Array.isArray(source.results) ? source.results.slice(0, 300) : [];
     const ownerProfile = ownerUid ? await readAuthorProfile(ownerUid) : { handle: "", photoURL: "" };
 
     res.status(200).json({
@@ -12984,20 +13531,11 @@ ROUTES.get("/shares/:shareId", async (req, res) => {
       sourceId: sourceSnap.id,
       readOnly,
       canImport: Boolean(viewer?.uid && readOnly),
-      screener: {
-        id: sourceSnap.id,
-        title: asString(source.title, "Screener run"),
-        notes: asString(source.notes, ""),
-        market: asString(source.market, ""),
-        universe: asString(source.universe, ""),
+      screener: buildSharedScreenerRunPayload(sourceSnap.id, source, {
         userId: ownerUid,
         ownerUsername: asString(source.ownerUsername || ownerProfile.handle),
         ownerAvatar: asString(source.ownerAvatar || "bull"),
-        isPublic: asBoolean(source.isPublic, false),
-        results,
-        createdAt: source.createdAt || null,
-        updatedAt: source.updatedAt || null,
-      },
+      }),
     });
   } catch (error) {
     console.error("[Explore] share lookup failed", error);
