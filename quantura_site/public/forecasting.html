@@ -129,6 +129,13 @@
 	            <div class="container">
 	              <div class="studio-layout" data-panels data-panel-router="terminal">
                 <div class="studio-main">
+                  <div class="ticker-intelligence-hero">
+                    <p class="ticker-intelligence-hero-kicker">Ticker Intelligence</p>
+                    <div class="panel-header">
+                      <h2>Ticker Intelligence</h2>
+                      <p class="small">Research-grade company context with TradingView widgets pinned to the same active ticker across the full workspace.</p>
+                    </div>
+                  </div>
                   <div class="chart-shell studio-chart">
                     <div id="tradingview-terminal-root" class="tradingview-terminal hidden">
                       <div class="tv-widget-status-row">
@@ -1183,6 +1190,16 @@
 	                      <h3>Portfolio output</h3>
 	                      <div id="screener-output" class="panel-output small">Generate a portfolio to surface ranked candidates, allocation cues, and a publish-ready AI brief.</div>
 	                    </div>
+                      <div class="card">
+                        <div class="card-head">
+                          <h3>Successful GitHub Runs</h3>
+                          <button class="cta secondary small" id="screener-github-history-refresh" type="button">Refresh</button>
+                        </div>
+                        <p class="small muted" id="screener-github-history-status">Loading recent successful GitHub screener runs...</p>
+                        <div class="order-list panel-output" id="screener-github-history-list">
+                          <div class="small muted">Recent successful GitHub screener workflows will appear here.</div>
+                        </div>
+                      </div>
                       <div class="card" data-my-requests-panel data-default-type="screener">
                         <div class="card-head">
                           <h3>My Requests</h3>
