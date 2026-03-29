@@ -16182,12 +16182,20 @@
         const logoUrl = extractTrendingRowLogoUrl(row);
         const companyName = String(row.companyName || row.name || "").trim();
 
-        const changeNum = typeof changePct === "number" ? changePct : Number(changePct);
+        const rawChangeNum = typeof changePct === "number" ? changePct : Number(changePct);
+        const absChange = typeof change === "number" ? change : Number(change);
+        const derivedChangePct =
+          Number.isFinite(absChange) && Number.isFinite(lastClose) && Math.abs(Number(lastClose) - absChange) > 1e-9
+            ? (absChange / (Number(lastClose) - absChange)) * 100
+            : null;
+        const changeNum =
+          Number.isFinite(rawChangeNum) && (Math.abs(rawChangeNum) >= 0.00005 || !Number.isFinite(derivedChangePct))
+            ? rawChangeNum
+            : derivedChangePct;
         const changeOk = Number.isFinite(changeNum);
         const direction = !changeOk ? "flat" : changeNum < 0 ? "down" : "up";
         const changeDigits = changeOk && Math.abs(changeNum) > 0 && Math.abs(changeNum) < 0.01 ? 4 : 2;
         const changeLabel = changeOk ? formatPercent(changeNum, { signed: true, digits: changeDigits }) : "Quote unavailable";
-        const absChange = typeof change === "number" ? change : Number(change);
         const absChangeLabel = Number.isFinite(absChange) ? `${absChange > 0 ? "+" : ""}${absChange.toFixed(2)}` : "";
 
         const priceLabel = lastClose !== null && lastClose !== undefined ? formatUsd(lastClose) : "—";
