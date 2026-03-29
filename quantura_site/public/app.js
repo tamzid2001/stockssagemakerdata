@@ -2348,6 +2348,7 @@
       collaboratorCount: 0,
       pendingCollabInviteCount: 0,
 	    screenerUrlRunLoaded: false,
+      screenerUrlRequestShareLoaded: false,
       uploadUrlLoaded: false,
 	    messagingBound: false,
 	    remoteConfigLoaded: false,
@@ -8544,8 +8545,14 @@
             }
 
             const params = new URLSearchParams(window.location.search);
+            const requestShare = String(params.get("requestShare") || "").trim();
             const urlRunId = String(params.get("screenerRunId") || params.get("runId") || "").trim();
-            if (urlRunId && !state.screenerUrlRunLoaded) {
+            if (requestShare && !state.screenerUrlRequestShareLoaded) {
+              state.screenerUrlRequestShareLoaded = true;
+              loadSharedMyRequestFromUrl({ setPanel: false }).catch(() => {
+                state.screenerUrlRequestShareLoaded = false;
+              });
+            } else if (urlRunId && !state.screenerUrlRunLoaded) {
               state.screenerUrlRunLoaded = true;
               loadScreenerRunById(db, urlRunId).catch(() => {});
             }
@@ -9807,7 +9814,6 @@
     if (!navs.length && !navActions.length) return;
     navs.forEach((nav) => {
       nav.innerHTML = `
-        <a href="/forecasting" data-analytics="nav_terminal">${icon("candlestick-chart")}<span>Terminal</span></a>
         <a href="/explore" data-analytics="nav_explore">${icon("binocular")}<span>Explore</span></a>
         <a href="/research" data-analytics="nav_research">${icon("bookmark-book")}<span>Research</span></a>
         <a href="/blog" data-analytics="nav_blog">${icon("page")}<span>Blog</span></a>
@@ -10321,17 +10327,18 @@
     return getDefaultPopularTicker();
   };
 
-  const resolveTradingViewRenderTicker = (...candidates) =>
-    resolveActiveOrDefaultTicker(
+  const resolveTradingViewRenderTicker = (...candidates) => {
+    const ordered = [
       ...candidates,
-      ui.terminalTicker?.value,
-      ui.intelTicker?.value,
-      ui.newsTicker?.value,
-      ui.predictionsTicker?.value,
-      state.tickerContext.predictionsTicker || "",
-      state.tickerContext.intelTicker || "",
-      state.tickerContext.newsTicker || ""
-    );
+      getActiveTicker(),
+      normalizeTicker(state.tickerContext.ticker || ""),
+    ];
+    for (const candidate of ordered) {
+      const clean = normalizeTicker(candidate);
+      if (clean) return clean;
+    }
+    return "";
+  };
 
   const normalizeTradingViewExchangePrefix = (value) => {
     const raw = String(value || "").trim().toUpperCase();
@@ -10409,12 +10416,19 @@
     return prefix ? `${prefix}:${cleanTicker}` : "";
   };
 
+  const buildFallbackTradingViewSymbol = (ticker) => {
+    const clean = normalizeTicker(ticker);
+    if (!clean) return "";
+    if (clean.includes("-")) return clean;
+    return `NASDAQ:${clean}`;
+  };
+
   const resolveTradingViewExchangeSymbol = (ticker) => {
     const clean = normalizeTicker(ticker);
-    if (!clean) return TRADINGVIEW_EXCHANGE_OVERRIDES[getDefaultPopularTicker()] || "NASDAQ:AAPL";
+    if (!clean) return "";
     const cached = getCachedTradingViewSymbol(clean);
     if (cached) return cached;
-    return TRADINGVIEW_EXCHANGE_OVERRIDES[clean] || `NASDAQ:${clean}`;
+    return TRADINGVIEW_EXCHANGE_OVERRIDES[clean] || buildFallbackTradingViewSymbol(clean);
   };
 
   const normalizeTradingViewQueryTicker = (value) => {
@@ -10432,18 +10446,20 @@
 
   const normalizeTradingViewSymbol = (ticker) => {
     const raw = String(ticker || "").trim().toUpperCase();
-    if (!raw) return resolveTradingViewExchangeSymbol(getDefaultPopularTicker());
+    if (!raw) return "";
     if (raw.includes(":")) return raw;
     return resolveTradingViewExchangeSymbol(raw);
   };
 
   const buildTradingViewTickerTapeSymbols = (ticker) => {
-    const active = normalizeTicker(ticker) || getDefaultPopularTicker();
-    const ordered = [active, ...POPULAR_TICKER_POOL.filter((candidate) => normalizeTicker(candidate) !== active)].slice(0, 10);
-    return ordered.map((candidate) => ({
-      proName: normalizeTradingViewSymbol(candidate),
-      title: normalizeTicker(candidate) || candidate,
-    }));
+    const active = normalizeTicker(ticker);
+    if (!active) return [];
+    return [
+      {
+        proName: normalizeTradingViewSymbol(active),
+        title: active,
+      },
+    ];
   };
 
   const resolveTradingViewInterval = (interval) => (String(interval || "").toLowerCase() === "1h" ? "60" : "D");
@@ -10478,15 +10494,44 @@
     return [...forecastOverlays, ...(state.tickerContext.indicatorOverlays || [])];
   };
 
-  const buildTradingViewWidgetSrc = (baseUrl, config) => {
+  const buildTradingViewWidgetSrc = (baseUrl, config, { cacheKey = "" } = {}) => {
+    const url = new URL(baseUrl, window.location.origin);
+    if (cacheKey) {
+      url.searchParams.set("tvcache", String(cacheKey));
+    }
     const payload = encodeURIComponent(JSON.stringify(config || {}));
-    return `${baseUrl}#${payload}`;
+    return `${url.toString()}#${payload}`;
   };
 
-  const buildTradingViewSingleSymbolWidgetSrc = (baseUrl, symbol, config) => {
+  const buildTradingViewSingleSymbolWidgetSrc = (baseUrl, symbol, config, { cacheKey = "" } = {}) => {
     const url = new URL(baseUrl, window.location.origin);
     url.searchParams.set("tvwidgetsymbol", normalizeTradingViewSymbol(symbol));
-    return buildTradingViewWidgetSrc(url.toString(), config);
+    return buildTradingViewWidgetSrc(url.toString(), config, { cacheKey });
+  };
+
+  const resetTradingViewSlot = (container, { symbol = "", renderKey = "" } = {}) => {
+    if (!container) return;
+    const frames = Array.from(container.querySelectorAll("iframe"));
+    frames.forEach((frame) => {
+      try {
+        frame.removeAttribute("src");
+        frame.src = "about:blank";
+      } catch (error) {
+        // Ignore cross-origin teardown issues and continue replacing the slot.
+      }
+      frame.remove();
+    });
+    container.innerHTML = "";
+    if (symbol) {
+      container.dataset.tvSymbol = symbol;
+    } else {
+      delete container.dataset.tvSymbol;
+    }
+    if (renderKey) {
+      container.dataset.tvRenderKey = renderKey;
+    } else {
+      delete container.dataset.tvRenderKey;
+    }
   };
 
   const buildTickerPanelUrl = (ticker) => {
@@ -10521,19 +10566,20 @@
     }
   };
 
-  const mountTradingViewIframe = ({ container, src, title, onload, onerror }) => {
+  const mountTradingViewIframe = ({ container, src, title, onload, onerror, renderKey = "", symbol = "" }) => {
     if (!container) return null;
     const frame = document.createElement("iframe");
     frame.setAttribute("scrolling", "no");
     frame.setAttribute("allowtransparency", "true");
     frame.setAttribute("frameborder", "0");
-    frame.setAttribute("loading", "lazy");
+    frame.setAttribute("loading", "eager");
     frame.setAttribute("title", title || "TradingView widget");
     frame.setAttribute("lang", "en");
+    if (renderKey) frame.dataset.tvRenderKey = renderKey;
+    if (symbol) frame.dataset.tvSymbol = symbol;
     frame.src = src;
     if (typeof onload === "function") frame.addEventListener("load", onload, { once: true });
     if (typeof onerror === "function") frame.addEventListener("error", onerror, { once: true });
-    container.innerHTML = "";
     container.appendChild(frame);
     return frame;
   };
@@ -10541,11 +10587,20 @@
   const renderTradingViewTerminal = ({ ticker, interval, onFallback = null }) => {
     if (!ui.tradingViewRoot || !ui.tradingViewAdvanced) return false;
     const activeTicker = resolveTradingViewRenderTicker(ticker);
+    if (!activeTicker) {
+      setTradingViewStatus("Select a ticker to load TradingView.");
+      return false;
+    }
     const symbol = normalizeTradingViewSymbol(activeTicker);
+    if (!symbol) {
+      setTradingViewStatus("TradingView symbol unavailable.");
+      return false;
+    }
     const theme = resolveTradingViewTheme();
     const tvInterval = resolveTradingViewInterval(interval);
     const style = resolveTradingViewStyle();
     const nonce = Date.now();
+    const renderKey = `${symbol}:${tvInterval}:${theme}:${nonce}`;
     state.tradingViewRenderNonce = nonce;
     state.tradingViewLoadFailed = false;
     if (state.tradingViewLoadTimer) {
@@ -10555,6 +10610,18 @@
     ui.tradingViewFallback?.classList.add("hidden");
     setTradingViewStatus(`TradingView · ${symbol}`);
     syncTradingViewUrlState(activeTicker, symbol);
+
+    [
+      ui.tradingViewTickerTape,
+      ui.tradingViewSymbolInfo,
+      ui.tradingViewAdvanced,
+      ui.tradingViewCompanyProfile,
+      ui.tradingViewFundamentalData,
+      ui.tradingViewTechnicalAnalysis,
+      ui.tradingViewTopStories,
+    ]
+      .filter(Boolean)
+      .forEach((container) => resetTradingViewSlot(container, { symbol, renderKey }));
 
     const shared = {
       symbol,
@@ -10581,40 +10648,60 @@
 
     mountTradingViewIframe({
       container: ui.tradingViewTickerTape,
-      src: buildTradingViewWidgetSrc("https://www.tradingview-widget.com/embed-widget/ticker-tape/?locale=en", {
-        symbols: buildTradingViewTickerTapeSymbols(activeTicker),
-        showSymbolLogo: true,
-        displayMode: "adaptive",
-        colorTheme: theme,
-        isTransparent: true,
-      }),
+      src: buildTradingViewWidgetSrc(
+        "https://www.tradingview-widget.com/embed-widget/ticker-tape/?locale=en",
+        {
+          symbols: buildTradingViewTickerTapeSymbols(activeTicker),
+          showSymbolLogo: true,
+          displayMode: "adaptive",
+          colorTheme: theme,
+          isTransparent: true,
+        },
+        { cacheKey: `${renderKey}:tape` }
+      ),
       title: `Ticker tape ${activeTicker}`,
+      renderKey: `${renderKey}:tape`,
+      symbol,
     });
 
     mountTradingViewIframe({
       container: ui.tradingViewSymbolInfo,
-      src: buildTradingViewSingleSymbolWidgetSrc("https://www.tradingview-widget.com/embed-widget/symbol-info/?locale=en", symbol, {
-        ...shared,
-        width: "100%",
-        height: 255,
-      }),
+      src: buildTradingViewSingleSymbolWidgetSrc(
+        "https://www.tradingview-widget.com/embed-widget/symbol-info/?locale=en",
+        symbol,
+        {
+          ...shared,
+          width: "100%",
+          height: 255,
+        },
+        { cacheKey: `${renderKey}:symbol-info` }
+      ),
       title: `Symbol info ${symbol}`,
+      renderKey: `${renderKey}:symbol-info`,
+      symbol,
     });
 
     mountTradingViewIframe({
       container: ui.tradingViewAdvanced,
-      src: buildTradingViewSingleSymbolWidgetSrc("https://www.tradingview.com/widgetembed/?hideideas=1&locale=en", symbol, {
+      src: buildTradingViewSingleSymbolWidgetSrc(
+        "https://www.tradingview.com/widgetembed/?hideideas=1&locale=en",
         symbol,
-        interval: tvInterval,
-        allow_symbol_change: "0",
-        hide_side_toolbar: "0",
-        save_image: "1",
-        style,
-        theme,
-        timezone: "Etc/UTC",
-        studies: ["STD;MACD"],
-      }),
+        {
+          symbol,
+          interval: tvInterval,
+          allow_symbol_change: "0",
+          hide_side_toolbar: "0",
+          save_image: "1",
+          style,
+          theme,
+          timezone: "Etc/UTC",
+          studies: ["STD;MACD"],
+        },
+        { cacheKey: `${renderKey}:advanced` }
+      ),
       title: `Advanced chart ${symbol}`,
+      renderKey: `${renderKey}:advanced`,
+      symbol,
       onload: () => {
         if (state.tradingViewRenderNonce !== nonce) return;
         state.tradingViewLoadFailed = false;
@@ -10632,54 +10719,82 @@
 
     mountTradingViewIframe({
       container: ui.tradingViewCompanyProfile,
-      src: buildTradingViewSingleSymbolWidgetSrc("https://www.tradingview-widget.com/embed-widget/symbol-profile/?locale=en", symbol, {
-        ...shared,
-        width: "100%",
-        height: "100%",
-      }),
+      src: buildTradingViewSingleSymbolWidgetSrc(
+        "https://www.tradingview-widget.com/embed-widget/symbol-profile/?locale=en",
+        symbol,
+        {
+          ...shared,
+          width: "100%",
+          height: "100%",
+        },
+        { cacheKey: `${renderKey}:profile` }
+      ),
       title: `Company profile ${symbol}`,
+      renderKey: `${renderKey}:profile`,
+      symbol,
     });
 
     mountTradingViewIframe({
       container: ui.tradingViewFundamentalData,
-      src: buildTradingViewSingleSymbolWidgetSrc("https://www.tradingview-widget.com/embed-widget/financials/?locale=en", symbol, {
+      src: buildTradingViewSingleSymbolWidgetSrc(
+        "https://www.tradingview-widget.com/embed-widget/financials/?locale=en",
         symbol,
-        colorTheme: theme,
-        isTransparent: true,
-        displayMode: "regular",
-        width: "100%",
-        height: 775,
-      }),
+        {
+          symbol,
+          colorTheme: theme,
+          isTransparent: true,
+          displayMode: "regular",
+          width: "100%",
+          height: 775,
+        },
+        { cacheKey: `${renderKey}:fundamentals` }
+      ),
       title: `Fundamentals ${symbol}`,
+      renderKey: `${renderKey}:fundamentals`,
+      symbol,
     });
 
     mountTradingViewIframe({
       container: ui.tradingViewTechnicalAnalysis,
-      src: buildTradingViewSingleSymbolWidgetSrc("https://www.tradingview-widget.com/embed-widget/technical-analysis/?locale=en", symbol, {
-        interval: "15m",
-        width: "100%",
-        height: "100%",
-        isTransparent: true,
+      src: buildTradingViewSingleSymbolWidgetSrc(
+        "https://www.tradingview-widget.com/embed-widget/technical-analysis/?locale=en",
         symbol,
-        showIntervalTabs: true,
-        displayMode: "single",
-        colorTheme: theme,
-      }),
+        {
+          interval: "15m",
+          width: "100%",
+          height: "100%",
+          isTransparent: true,
+          symbol,
+          showIntervalTabs: true,
+          displayMode: "single",
+          colorTheme: theme,
+        },
+        { cacheKey: `${renderKey}:technical` }
+      ),
       title: `Technical analysis ${symbol}`,
+      renderKey: `${renderKey}:technical`,
+      symbol,
     });
 
     mountTradingViewIframe({
       container: ui.tradingViewTopStories,
-      src: buildTradingViewSingleSymbolWidgetSrc("https://www.tradingview-widget.com/embed-widget/timeline/?locale=en", symbol, {
+      src: buildTradingViewSingleSymbolWidgetSrc(
+        "https://www.tradingview-widget.com/embed-widget/timeline/?locale=en",
         symbol,
-        feedMode: "symbol",
-        colorTheme: theme,
-        isTransparent: true,
-        displayMode: "regular",
-        width: "100%",
-        height: 600,
-      }),
+        {
+          symbol,
+          feedMode: "symbol",
+          colorTheme: theme,
+          isTransparent: true,
+          displayMode: "regular",
+          width: "100%",
+          height: 600,
+        },
+        { cacheKey: `${renderKey}:timeline` }
+      ),
       title: `Top stories ${symbol}`,
+      renderKey: `${renderKey}:timeline`,
+      symbol,
     });
 
     state.tradingViewLoadTimer = window.setTimeout(() => {
@@ -16320,7 +16435,7 @@
       setTerminalChartEngineVisibility("legacy");
       return;
     }
-    const cleanTicker = normalizeTicker(ticker || state.tickerContext.ticker || "") || getDefaultPopularTicker();
+    const cleanTicker = normalizeTicker(ticker || state.tickerContext.ticker || "");
     const hasOverlays = Array.isArray(overlays) && overlays.length > 0;
     const skipTradingView = Boolean(options?.skipTradingView);
 
@@ -20156,7 +20271,7 @@
 
     const requestId = buildSourceRequestId("screener", runDoc?.id || "");
     const requestRecord = requestId ? getMyRequestById(requestId) : null;
-    const isPublished = Boolean(requestRecord?.published ?? runDoc?.isPublic);
+    const isPublished = Boolean(runDoc?.isPublic || requestRecord?.published);
     const serviceMessage = String(runDoc?.serviceMessage || "").trim();
     const appliedFilters = Array.isArray(runDoc?.appliedFilters) ? runDoc.appliedFilters.filter(Boolean) : [];
     const workflowRunUrl = String(runDoc?.workflowRunUrl || "").trim();
@@ -20170,6 +20285,7 @@
     const sharedReadOnly = Boolean(sharedMeta?.readOnly);
     const sharedCanImport = Boolean(sharedMeta?.canImport);
     const isSharedView = Boolean(sharedShareId);
+    const sharedUsesRequestShare = sharedShareUrl.includes("requestShare=");
 
     if (isSharedView) {
       state.sharedScreenerView = {
@@ -20209,7 +20325,7 @@
           sharedShareId
         )}">Copy share link</button>`
       );
-      if (sharedShareId && (sharedCanImport || !hasFullAccount())) {
+      if (sharedShareId && !sharedUsesRequestShare && (sharedCanImport || !hasFullAccount())) {
         actionButtons.push(
           `<button class="cta secondary small" type="button" data-action="import-shared-screener" data-share-id="${escapeHtml(
             sharedShareId
@@ -20287,7 +20403,7 @@
         : ""}
       ${filterSummary}
       <div class="hero-actions" style="margin-top:12px;">${actionButtons.join("")}</div>
-      ${requestId ? renderOutputPublishControlsMarkup({ requestId, requestType: "screener" }) : ""}
+      ${requestId && !isSharedView ? renderOutputPublishControlsMarkup({ requestId, requestType: "screener" }) : ""}
       ${waitingMessage}
       ${failureMessage}
       ${emptyMessage}
@@ -20303,7 +20419,7 @@
     return runDoc;
   };
 
-  const pollScreenerRunUntilSettled = async (runId, { delayMs = 3500, maxAttempts = 36 } = {}) => {
+  const pollScreenerRunUntilSettled = async (runId, { delayMs = 3500, maxAttempts = 90 } = {}) => {
     const cleanRunId = String(runId || "").trim();
     if (!cleanRunId) throw new Error("Run ID is required.");
     const token = `${cleanRunId}:${Date.now()}`;
@@ -20319,7 +20435,14 @@
       if (state.activeScreenerPollToken !== token) return latestRun;
       updateScreenerDispatchStatusFromRun(latestRun, { attempt, maxAttempts });
       if (isScreenerRunSettled(latestRun)) {
-        await fetchMyRequestById(buildSourceRequestId("screener", cleanRunId)).catch(() => {});
+        const refreshedRequest = await fetchMyRequestById(buildSourceRequestId("screener", cleanRunId)).catch(() => null);
+        if (refreshedRequest && typeof refreshedRequest === "object") {
+          latestRun = {
+            ...(latestRun || {}),
+            isPublic: Boolean(refreshedRequest?.published) || Boolean(latestRun?.isPublic),
+          };
+          renderScreenerRunOutput(latestRun);
+        }
         return latestRun;
       }
     }
@@ -22093,12 +22216,13 @@
       const request = payload?.request && typeof payload.request === "object" ? payload.request : null;
       if (!request) throw new Error("Shared request unavailable.");
       const type = normalizeMyRequestType(request.type) || "forecast";
+      const shareMeta = payload?.share && typeof payload.share === "object" ? payload.share : {};
       const panelId = mapMyRequestTypeToPanel(type, request);
       if (setPanel && typeof window.__quanturaSetPanel === "function") {
         window.__quanturaSetPanel(panelId, { pushPath: false });
       }
       if (isAutopilotMyRequest(request)) {
-        await renderSharedFoundryRequest(request, String(payload?.share?.shareUrl || "").trim());
+        await renderSharedFoundryRequest(request, String(shareMeta?.shareUrl || "").trim());
       } else if (type === "modelCouncil" && ui.tickerQueryOutput) {
         const outputsMeta = request.outputsMeta && typeof request.outputsMeta === "object" ? request.outputsMeta : {};
         const answer = String(outputsMeta.answer || outputsMeta.summary || "").trim();
@@ -22111,16 +22235,31 @@
           selectedModules: Array.isArray(request.input?.modules) ? request.input.modules : [],
           responseId: String(request.sourceRef?.id || request.id || ""),
           citations: [],
-          shareUrl: String(payload?.share?.shareUrl || ""),
+          shareUrl: String(shareMeta?.shareUrl || ""),
         });
       } else if (type === "forecast" && ui.forecastOutput) {
         setOutputReady(ui.forecastOutput);
         const summary = String(request.outputsMeta?.summary || "Shared forecast request loaded.");
         ui.forecastOutput.innerHTML = `<div class="small muted">${escapeHtml(summary)}</div>`;
       } else if (type === "screener" && ui.screenerOutput) {
-        setOutputReady(ui.screenerOutput);
-        const summary = String(request.outputsMeta?.summary || "Shared screener request loaded.");
-        ui.screenerOutput.innerHTML = `<div class="small muted">${escapeHtml(summary)}</div>`;
+        const screener = payload?.screener && typeof payload.screener === "object" ? payload.screener : null;
+        if (screener) {
+          renderScreenerRunOutput({
+            ...screener,
+            id: String(screener.id || request.sourceRef?.id || request.id || "").trim(),
+            isPublic: Boolean(request?.published || screener?.isPublic),
+            __sharedMeta: {
+              shareId: String(shareMeta?.slug || "").trim(),
+              shareUrl: String(shareMeta?.shareUrl || "").trim(),
+              readOnly: Boolean(payload?.readOnly),
+              canImport: Boolean(payload?.canImport),
+            },
+          });
+        } else {
+          setOutputReady(ui.screenerOutput);
+          const summary = String(request.outputsMeta?.summary || "Shared screener request loaded.");
+          ui.screenerOutput.innerHTML = `<div class="small muted">${escapeHtml(summary)}</div>`;
+        }
       } else if (type === "indicator" && ui.technicalsOutput) {
         setOutputReady(ui.technicalsOutput);
         const summary = String(request.outputsMeta?.summary || "Shared indicator request loaded.");
@@ -23117,9 +23256,11 @@
         if (!next) return;
         const showTickerChart = next === "ticker";
         const showStudioMain = showTickerChart;
+        const hideStudioPanel = showTickerChart;
 
         if (ui.studioLayout) {
           ui.studioLayout.classList.toggle("is-main-hidden", !showStudioMain);
+          ui.studioLayout.classList.toggle("is-panel-hidden", hideStudioPanel);
         }
 
         if (ui.studioChartShell) {
@@ -23921,8 +24062,8 @@
           if (copySharedScreener) {
             event.preventDefault();
             const shareId = String(copySharedScreener.dataset.shareId || state.sharedScreenerView?.shareId || "").trim();
-            if (!shareId) return;
-            const url = buildShareUrl("screener", shareId);
+            const url = String(state.sharedScreenerView?.shareUrl || (shareId ? buildShareUrl("screener", shareId) : "")).trim();
+            if (!url) return;
             copySharedScreener.disabled = true;
             try {
               await performShare({
@@ -27086,11 +27227,18 @@
           showToast("GitHub Actions screener queued. Quantura will publish it to Explore when it completes.");
           logEvent("screener_request", { min_market_cap: minMarketCap, workflow: "github_actions" });
 
-          const finalRun = await pollScreenerRunUntilSettled(runId, { delayMs: 3500, maxAttempts: 40 }).catch(() => null);
+          const finalRun = await pollScreenerRunUntilSettled(runId, { delayMs: 3500, maxAttempts: 90 }).catch(() => null);
           setScreenerGenerateButtonState({ busy: false, label: "Launch live screener" });
           if (finalRun) {
             updateScreenerDispatchStatusFromRun(finalRun);
             await fetchMyRequestsList({ force: true }).catch(() => {});
+            const latestRequest = getMyRequestById(buildSourceRequestId("screener", runId));
+            if (latestRequest) {
+              renderScreenerRunOutput({
+                ...finalRun,
+                isPublic: Boolean(latestRequest?.published) || Boolean(finalRun?.isPublic),
+              });
+            }
             if (normalizeScreenerRunStatus(finalRun.status) === "completed") {
               const finalCount = Number.isFinite(Number(finalRun.resultsFound))
                 ? Number(finalRun.resultsFound)
