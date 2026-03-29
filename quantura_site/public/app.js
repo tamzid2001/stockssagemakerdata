@@ -1940,6 +1940,7 @@
     screenerCreditsFill: document.getElementById("screener-credits-fill"),
     screenerResultsCount: document.getElementById("screener-results-count"),
     screenerGenerateButton: document.getElementById("screener-generate-button"),
+    screenerDispatchStatus: document.getElementById("screener-dispatch-status"),
 	    screenerLoadSelect: document.getElementById("screener-load-select"),
 	    screenerLoadButton: document.getElementById("screener-load-button"),
 	    screenerLoadStatus: document.getElementById("screener-load-status"),
@@ -2072,27 +2073,13 @@
   let polymarketInFlightController = null;
   let polymarketInFlightNonce = 0;
   let predictionCountdownTimer = 0;
-  const DEFAULT_MARKET_HEADLINES_PROVIDER = "cnn";
-  const DEFAULT_MARKET_HEADLINES_FEED = "cnn_topstories";
+  const DEFAULT_MARKET_HEADLINES_PROVIDER = "marketwatch";
+  const DEFAULT_MARKET_HEADLINES_FEED = "marketwatch_topstories";
   const MARKET_HEADLINES_SOURCE_CATALOG = Object.freeze({
-    cnn: Object.freeze({
-      id: "cnn",
-      label: "CNN RSS",
-      feedIds: Object.freeze([
-        "cnn_topstories",
-        "cnn_world",
-        "cnn_us",
-        "cnn_business",
-        "cnn_politics",
-        "cnn_technology",
-        "cnn_health",
-        "cnn_entertainment",
-        "cnn_travel",
-        "cnn_video",
-        "cnn10",
-        "cnn_latest",
-        "cnn_underscored",
-      ]),
+    marketwatch: Object.freeze({
+      id: "marketwatch",
+      label: "MarketWatch Top Stories",
+      feedIds: Object.freeze(["marketwatch_topstories"]),
     }),
     spglobal: Object.freeze({
       id: "spglobal",
@@ -2114,11 +2101,6 @@
     }),
     investing: Object.freeze({ id: "investing", label: "Investing.com Markets", feedIds: Object.freeze(["investing_markets"]) }),
     seekingalpha: Object.freeze({ id: "seekingalpha", label: "Seeking Alpha", feedIds: Object.freeze(["seekingalpha_top"]) }),
-    marketwatch: Object.freeze({
-      id: "marketwatch",
-      label: "MarketWatch Top Stories",
-      feedIds: Object.freeze(["marketwatch_topstories"]),
-    }),
   });
   const MARKET_HEADLINES_FEED_CATALOG = Object.freeze({
     cnn_topstories: Object.freeze({ id: "cnn_topstories", provider: "cnn", label: "Top Stories" }),
@@ -2947,6 +2929,10 @@
         const direction = String(prediction?.direction || "neutral").trim();
         const confidence = String(prediction?.confidence || "medium").trim();
         const timeline = String(prediction?.timeline || "").trim();
+        const providerRaw = String(analysis?.provider || "quantura").trim();
+        const modelRaw = String(analysis?.model || "indicator_local_repair").trim();
+        const providerLabel = titleCaseLabel(providerRaw || "Quantura");
+        const modelLabel = String(getModelMeta(modelRaw)?.label || modelRaw || "Quantura model").trim();
         const signalList = Array.isArray(selectedIndicators)
           ? selectedIndicators.map((entry) => String(entry || "").trim().toUpperCase()).filter(Boolean)
           : [];
@@ -2957,6 +2943,9 @@
           : "Indicator stack completed.";
         return {
           summary: (summaryText || fallbackSummary).slice(0, 480),
+          aiProvider: providerRaw,
+          aiModel: modelRaw,
+          modelCitation: `${providerLabel} · ${modelLabel} (${modelRaw || "indicator_local_repair"})`.slice(0, 180),
           metrics: compactMetricMap({
             Direction: direction,
             Target: Number.isFinite(targetPrice) ? formatUsd(targetPrice, 2) : "",
@@ -2965,6 +2954,7 @@
             Move: Number.isFinite(upsidePct) ? formatPercent(upsidePct, { signed: true, digits: 2 }) : "",
             Signals: signalList.slice(0, 4).join(", "),
             Rows: Array.isArray(rows) ? rows.length : 0,
+            Model: modelLabel,
           }),
         };
       };
@@ -5232,7 +5222,7 @@
 
   let forecastCacheDbPromise = null;
   const DEFAULT_FORECAST_QUANTILES = Object.freeze([0.01, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99]);
-  const DEFAULT_FORECAST_BAND_SUMMARY = "P01-P99, P10-P90, P25-P75, and the P50 median path";
+  const DEFAULT_FORECAST_BAND_SUMMARY = "P01\u2013P99, P10\u2013P90, P25\u2013P75, and the P50 median path";
 
   const computeFastHash = (input) => {
     const text = String(input || "");
@@ -5322,6 +5312,17 @@
     return String(index?.[reqId]?.cacheKey || "").trim();
   };
 
+  const normalizeForecastSeriesQuantileKey = (key) => {
+    const raw = String(key || "").trim().toLowerCase();
+    if (!raw) return "";
+    if (raw === "yhat" || raw === "median") return "q50";
+    const match = raw.match(/^[qp](\d{1,3})$/);
+    if (!match) return "";
+    const level = Number(match[1]);
+    if (!Number.isFinite(level) || level < 0 || level > 999) return "";
+    return `q${level}`;
+  };
+
   const normalizeForecastSeriesRows = (rows) => {
     if (!Array.isArray(rows)) return [];
     return rows
@@ -5332,12 +5333,22 @@
         if (!rawDs) return null;
         const normalized = { ds: rawDs };
         Object.entries(row).forEach(([key, value]) => {
-          if (!/^q\d{1,3}$/.test(String(key || ""))) return;
           const numeric = Number(value);
           if (!Number.isFinite(numeric)) return;
-          normalized[key] = Number(numeric.toFixed(6));
+          const normalizedKey = normalizeForecastSeriesQuantileKey(key);
+          if (normalizedKey) {
+            normalized[normalizedKey] = Number(numeric.toFixed(6));
+            if (String(key || "").trim().toLowerCase() === "yhat") {
+              normalized.yhat = Number(numeric.toFixed(6));
+            }
+            return;
+          }
+          const rawKey = String(key || "").trim().toLowerCase();
+          if (["actual", "close", "adjclose", "adj close", "price", "y_usd"].includes(rawKey)) {
+            normalized.actual = Number(numeric.toFixed(6));
+          }
         });
-        if (Object.keys(normalized).length <= 1) return null;
+        if (!Object.keys(normalized).some((key) => /^q\d{1,3}$/.test(key))) return null;
         return normalized;
       })
       .filter(Boolean);
@@ -9514,9 +9525,8 @@
 
   const hidePublicationIcon = () => `
     <svg class="semantic-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-      <circle cx="12" cy="12" r="8"></circle>
-      <path d="M4 12h16"></path>
-      <path d="M12 4c2.2 2 3.5 4.93 3.5 8S14.2 18 12 20c-2.2-2-3.5-4.93-3.5-8S9.8 6 12 4z"></path>
+      <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"></path>
+      <circle cx="12" cy="12" r="2.5"></circle>
       <path d="M4 4l16 16"></path>
     </svg>
   `.trim();
@@ -12927,6 +12937,42 @@
     )}" onerror="${escapeHtml(onError)}" />`;
   };
 
+  const buildTrendingLogoFallbackUrl = ({ symbol = "", companyName = "" } = {}) => {
+    const initials = String(symbol || companyName || "?")
+      .trim()
+      .replace(/[^A-Za-z0-9]/g, "")
+      .slice(0, 2)
+      .toUpperCase() || "?";
+    const label = String(companyName || symbol || "Ticker").trim().slice(0, 24).replace(/[&<>"]/g, "");
+    const svg = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 72 72">
+        <defs>
+          <linearGradient id="tg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#0f172a" />
+            <stop offset="100%" stop-color="#1d4ed8" />
+          </linearGradient>
+        </defs>
+        <rect width="72" height="72" rx="22" fill="url(#tg)" />
+        <rect x="5" y="5" width="62" height="62" rx="18" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.14)" />
+        <text x="36" y="42" text-anchor="middle" fill="#f8fafc" font-family="Manrope, Arial, sans-serif" font-size="24" font-weight="800">${initials}</text>
+        <title>${label}</title>
+      </svg>
+    `.trim();
+    return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+  };
+
+  const buildTrendingLogoMarkup = ({ symbol = "", companyName = "", logoUrl = "" } = {}) => {
+    const fallbackUrl = buildTrendingLogoFallbackUrl({ symbol, companyName });
+    const primaryUrl = normalizeTrendingLogoUrl(logoUrl) || fallbackUrl;
+    const onError =
+      "if(this.dataset.fallbackSrc&&this.src!==this.dataset.fallbackSrc){this.src=this.dataset.fallbackSrc;this.classList.add('trending-logo-img--fallback');}else{this.src=this.dataset.fallbackSrc||this.src;this.classList.add('trending-logo-img--fallback');}";
+    return `<span class="trending-logo-wrap" aria-hidden="true"><img class="trending-logo-img${
+      primaryUrl === fallbackUrl ? " trending-logo-img--fallback" : ""
+    }" src="${escapeHtml(primaryUrl)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-fallback-src="${escapeHtml(
+      fallbackUrl
+    )}" onerror="${escapeHtml(onError)}" /></span>`;
+  };
+
   const renderTickerNews = (items, ticker) => {
     if (!ui.newsOutput) return;
     const list = Array.isArray(items) ? items : [];
@@ -14178,7 +14224,9 @@
       setOutputReady(ui.marketHeadlinesOutput);
       setOutputReady(ui.marketHeadlinesMeta);
       renderMarketHeadlinesFeed(payload || {});
-      if (ui.marketHeadlinesStatus) ui.marketHeadlinesStatus.textContent = `Loaded ${providerLabel} · ${feedLabel}.`;
+      const loadedProviderLabel = String(payload?.provider?.label || providerLabel).trim() || providerLabel;
+      const loadedFeedLabel = String(payload?.feed?.label || feedLabel).trim() || feedLabel;
+      if (ui.marketHeadlinesStatus) ui.marketHeadlinesStatus.textContent = `Loaded ${loadedProviderLabel} · ${loadedFeedLabel}.`;
       logEvent("market_headlines_loaded", { provider, feed, limit });
     } catch (error) {
       setOutputReady(ui.marketHeadlinesOutput);
@@ -16132,11 +16180,13 @@
         const changePct = row.changePct;
         const change = row.change;
         const logoUrl = extractTrendingRowLogoUrl(row);
+        const companyName = String(row.companyName || row.name || "").trim();
 
         const changeNum = typeof changePct === "number" ? changePct : Number(changePct);
         const changeOk = Number.isFinite(changeNum);
         const direction = !changeOk ? "flat" : changeNum < 0 ? "down" : "up";
-        const changeLabel = changeOk ? formatPercent(changeNum, { signed: true, digits: 2 }) : "Quote unavailable";
+        const changeDigits = changeOk && Math.abs(changeNum) > 0 && Math.abs(changeNum) < 0.01 ? 4 : 2;
+        const changeLabel = changeOk ? formatPercent(changeNum, { signed: true, digits: changeDigits }) : "Quote unavailable";
         const absChange = typeof change === "number" ? change : Number(change);
         const absChangeLabel = Number.isFinite(absChange) ? `${absChange > 0 ? "+" : ""}${absChange.toFixed(2)}` : "";
 
@@ -16147,11 +16197,7 @@
           <button class="trending-hot-chip" type="button" data-action="pick-ticker" data-ticker="${escapeHtml(symbol)}">
             <div class="trending-top">
               <div class="trending-symbol" style="display:inline-flex; align-items:center; gap:8px;">
-                ${
-                  logoUrl
-                    ? `<img src="${escapeHtml(logoUrl)}" alt="" loading="lazy" style="width:18px; height:18px; border-radius:50%; object-fit:cover; background:rgba(255,255,255,0.9);" />`
-                    : ""
-                }
+                ${buildTrendingLogoMarkup({ symbol, companyName, logoUrl })}
                 <span>${escapeHtml(symbol)}</span>
               </div>
               <div class="trending-price">${escapeHtml(priceLabel)}</div>
@@ -17803,37 +17849,36 @@
     await Plotly.react(ui.predictionsChart, traces, layout, { responsive: true, displaylogo: false });
   };
 
-  const resolveUploadCsvUrl = async (storage, uploadDoc) => {
-    if (storage && uploadDoc?.filePath) {
-      try {
-        return await storage.ref().child(String(uploadDoc.filePath)).getDownloadURL();
-      } catch (error) {
-        // Fall back.
-      }
+  const resolveUploadCsvUrl = async (_storage, uploadDoc) => {
+    const existingUrl = String(uploadDoc?.fileUrl || uploadDoc?.downloadUrl || "").trim();
+    if (existingUrl) {
+      return existingUrl;
     }
-    return String(uploadDoc?.fileUrl || "").trim();
+    return "";
   };
 
   const fetchUploadCsvText = async ({ uploadId, url, maxBytes = 2_000_000 }) => {
-    if (!url) throw new Error("Upload is missing a downloadable URL.");
-    try {
-      const resp = await fetch(url, { cache: "no-store" });
-      if (!resp.ok) throw new Error("Unable to download CSV.");
-      const text = await resp.text();
-      return { text, truncated: false, source: "direct" };
-    } catch (error) {
-      const functions = state.clients?.functions;
-      if (!functions) throw error;
-      const callable = functions.httpsCallable("get_prediction_upload_csv");
-      const result = await callable({ uploadId, maxBytes, meta: buildMeta() });
-      const text = String(result.data?.csv || "");
-      if (!text) throw new Error("Unable to download CSV.");
-      return {
-        text,
-        truncated: Boolean(result.data?.truncated),
-        source: "function",
-      };
+    const functions = state.clients?.functions;
+    if (url) {
+      try {
+        const resp = await fetch(url, { cache: "no-store" });
+        if (!resp.ok) throw new Error("Unable to download CSV.");
+        const text = await resp.text();
+        return { text, truncated: false, source: "direct" };
+      } catch (error) {
+        if (!functions) throw error;
+      }
     }
+    if (!functions) throw new Error("Upload is missing a downloadable URL.");
+    const callable = functions.httpsCallable("get_prediction_upload_csv");
+    const result = await callable({ uploadId, maxBytes, meta: buildMeta() });
+    const text = String(result.data?.csv || "");
+    if (!text) throw new Error("Unable to download CSV.");
+    return {
+      text,
+      truncated: Boolean(result.data?.truncated),
+      source: "function",
+    };
   };
 
   const plotPredictionUploadById = async (db, storage, uploadId) => {
@@ -18346,12 +18391,11 @@
     if (!storage || !user) throw new Error("File uploads are not available.");
     const safeName = String(file?.name || "upload.csv").replace(/[^A-Za-z0-9._-]/g, "_");
     const path = `predictions/${user.uid}/foundry/${Date.now()}_${safeName}`;
-    const snapshot = await storage.ref().child(path).put(file, {
+    await storage.ref().child(path).put(file, {
       contentType: file?.type || "text/csv",
     });
     return {
       path,
-      downloadUrl: await snapshot.ref.getDownloadURL(),
       name: safeName,
     };
   };
@@ -18864,6 +18908,78 @@
     };
   };
 
+  const SCREENER_MARKET_CAP_OPTIONS = Object.freeze([
+    { value: 50000000000, label: "$50B" },
+    { value: 100000000000, label: "$100B" },
+    { value: 200000000000, label: "$200B" },
+    { value: 500000000000, label: "$500B" },
+    { value: 1000000000000, label: "$1T" },
+  ]);
+
+  const renderScreenerMarketCapOptions = (selectedValue = 100000000000) =>
+    SCREENER_MARKET_CAP_OPTIONS.map(
+      (option) =>
+        `<option value="${option.value}"${Number(selectedValue) === Number(option.value) ? " selected" : ""}>${escapeHtml(
+          option.label
+        )}</option>`
+    ).join("");
+
+  const setScreenerGenerateButtonState = ({ busy = false, label = "Launch live screener" } = {}) => {
+    if (!ui.screenerGenerateButton) return;
+    ui.screenerGenerateButton.disabled = Boolean(busy);
+    ui.screenerGenerateButton.setAttribute("aria-busy", busy ? "true" : "false");
+    const labelNode = ui.screenerGenerateButton.querySelector("span");
+    if (labelNode) labelNode.textContent = String(label || "Launch live screener").trim() || "Launch live screener";
+  };
+
+  const setScreenerDispatchStatus = (message = "", tone = "muted") => {
+    if (!ui.screenerDispatchStatus) return;
+    ui.screenerDispatchStatus.className = tone === "warn" ? "small" : "small muted";
+    ui.screenerDispatchStatus.textContent = String(message || "").trim();
+  };
+
+  const formatScreenerWorkflowReference = (runDoc = {}) => {
+    const workflowRunNumber = Number.isFinite(Number(runDoc?.workflowRunNumber)) ? Number(runDoc.workflowRunNumber) : null;
+    if (workflowRunNumber !== null) return `workflow #${workflowRunNumber}`;
+    const workflowRunId = String(runDoc?.workflowRunId || "").trim();
+    if (workflowRunId) return `workflow ${workflowRunId.slice(0, 8)}`;
+    return "the workflow";
+  };
+
+  const updateScreenerDispatchStatusFromRun = (runDoc, { attempt = null, maxAttempts = null } = {}) => {
+    const status = normalizeScreenerRunStatus(runDoc?.status);
+    const workflowRef = formatScreenerWorkflowReference(runDoc);
+    const resultsFound = Number.isFinite(Number(runDoc?.resultsFound))
+      ? Number(runDoc.resultsFound)
+      : Array.isArray(runDoc?.results)
+      ? runDoc.results.length
+      : 0;
+    if (status === "queued") {
+      setScreenerDispatchStatus(`GitHub Actions accepted the run. Waiting for ${workflowRef} to start producing the artifact.`, "ok");
+      return;
+    }
+    if (status === "running") {
+      const pollLabel =
+        Number.isFinite(attempt) && Number.isFinite(maxAttempts) ? ` Poll ${Number(attempt) + 1}/${Number(maxAttempts)}.` : "";
+      setScreenerDispatchStatus(`GitHub Actions is running ${workflowRef} now.${pollLabel}`, "ok");
+      return;
+    }
+    if (status === "completed") {
+      setScreenerDispatchStatus(
+        resultsFound > 0
+          ? `Screener completed. ${resultsFound} match${resultsFound === 1 ? "" : "es"} saved and published.`
+          : "Screener completed. No signals cleared the selected market-cap floor.",
+        "ok"
+      );
+      return;
+    }
+    if (status === "failed") {
+      setScreenerDispatchStatus(String(runDoc?.serviceMessage || "GitHub Actions did not complete successfully."), "warn");
+      return;
+    }
+    setScreenerDispatchStatus("Ready to dispatch the live GitHub screener.");
+  };
+
   const mountGithubActionsScreenerForm = () => {
     const cleanPath = String(window.location.pathname || "").replace(/\/+$/, "") || "/";
     if (!ui.screenerForm || cleanPath !== "/screener") return;
@@ -18878,32 +18994,30 @@
       </p>
       <div class="form-grid" style="margin-top:12px;">
         <div class="field">
-          <label class="label" for="screener-min-market-cap">Minimum market cap (USD)</label>
-          <input
+          <label class="label" for="screener-min-market-cap">Market cap floor</label>
+          <select
             id="screener-min-market-cap"
             name="minMarketCap"
-            type="number"
-            min="0"
-            step="1000000000"
-            inputmode="numeric"
-            value="100000000000"
-            placeholder="100000000000"
-          />
+          >${renderScreenerMarketCapOptions(100000000000)}</select>
           <p class="small muted">Default floor is $100B. The GitHub workflow scans the combined S&amp;P 500 + Nasdaq universe above this threshold.</p>
         </div>
       </div>
       <div class="small muted" id="screener-results-count">Matches: —</div>
       <button class="cta" id="screener-generate-button" type="submit" data-analytics="screener_submit">
-        <i class="iconoir-search" aria-hidden="true"></i><span>Run GitHub Screener</span>
+        <i class="iconoir-play" aria-hidden="true"></i><span>Launch live screener</span>
       </button>
+      <p class="small muted" id="screener-dispatch-status">Ready to dispatch the live GitHub screener.</p>
     `;
 
     ui.screenerResultsCount = document.getElementById("screener-results-count");
     ui.screenerGenerateButton = document.getElementById("screener-generate-button");
+    ui.screenerDispatchStatus = document.getElementById("screener-dispatch-status");
     ui.screenerModel = null;
     ui.screenerModelMeta = null;
     ui.screenerCreditsText = null;
     ui.screenerCreditsFill = null;
+    setScreenerGenerateButtonState();
+    setScreenerDispatchStatus("Ready to dispatch the live GitHub screener.");
   };
 
   const syncScreenerProviderAccent = () => {
@@ -20195,12 +20309,14 @@
       if (state.activeScreenerPollToken !== token) return latestRun;
       latestRun = await fetchAndRenderScreenerRun(cleanRunId);
       if (state.activeScreenerPollToken !== token) return latestRun;
+      updateScreenerDispatchStatusFromRun(latestRun, { attempt, maxAttempts });
       if (isScreenerRunSettled(latestRun)) {
         await fetchMyRequestById(buildSourceRequestId("screener", cleanRunId)).catch(() => {});
         return latestRun;
       }
     }
 
+    setScreenerDispatchStatus("Still waiting on the GitHub artifact. The run is saved, and you can reopen it from My Requests.", "warn");
     return latestRun;
   };
 
@@ -20963,6 +21079,14 @@
       }))
       .filter((point) => point.x instanceof Date && !Number.isNaN(point.x.getTime()) && point.y !== null);
 
+  const collectForecastActualPointsFromSeries = (rows = []) =>
+    normalizeForecastSeriesRows(rows)
+      .map((row) => ({
+        x: extractDateFromHistoryRow(row),
+        y: toFiniteOrNull(row.actual),
+      }))
+      .filter((point) => point.x instanceof Date && !Number.isNaN(point.x.getTime()) && point.y !== null);
+
   const renderForecastOutputChart = async (forecastDoc) => {
     if (!ui.forecastOutput) return;
     const host = ui.forecastOutput.querySelector("[data-forecast-detail-chart]");
@@ -20981,7 +21105,7 @@
       return;
     }
 
-    const historicalRows = collectForecastHistoryPoints(forecastDoc?.historicalRows || state.tickerContext.rows || []).sort(
+    const rawHistoricalRows = collectForecastHistoryPoints(forecastDoc?.historicalRows || state.tickerContext.rows || []).sort(
       (left, right) => left.x.getTime() - right.x.getTime()
     );
     const forecastPoints = forecastRows
@@ -20996,6 +21120,10 @@
       return;
     }
 
+    const historicalRows = (rawHistoricalRows.length ? rawHistoricalRows : collectForecastActualPointsFromSeries(forecastRows)).sort(
+      (left, right) => left.x.getTime() - right.x.getTime()
+    );
+
     const q01Key = resolveForecastQuantileKey(quantileKeys, 1);
     const q10Key = resolveForecastQuantileKey(quantileKeys, 10);
     const q25Key = resolveForecastQuantileKey(quantileKeys, 25);
@@ -21006,14 +21134,35 @@
     const medianKey = q50Key || resolveForecastQuantileKey(quantileKeys, 50);
     const lastActualPoint = historicalRows[historicalRows.length - 1] || null;
     const firstForecastPoint = forecastPoints[0] || null;
+    const explicitPlotStart = [forecastDoc?.plotStartDate, forecastDoc?.chartConfig?.plotStartDate, forecastDoc?.metrics?.plotStartDate]
+      .map((value) => {
+        const parsed = value ? new Date(String(value).trim()) : null;
+        return parsed instanceof Date && !Number.isNaN(parsed.getTime()) ? parsed : null;
+      })
+      .find(Boolean);
+    const plotStartDate = (() => {
+      if (explicitPlotStart) return explicitPlotStart;
+      const anchor = lastActualPoint?.x || firstForecastPoint?.x || historicalRows[0]?.x || null;
+      if (!(anchor instanceof Date) || Number.isNaN(anchor.getTime())) return null;
+      const candidate = new Date(anchor.getTime());
+      candidate.setDate(candidate.getDate() - 450);
+      const floor = historicalRows[0]?.x || firstForecastPoint?.x || candidate;
+      return candidate < floor ? floor : candidate;
+    })();
+    const visibleHistoricalRows = historicalRows.filter((point) => !plotStartDate || point.x >= plotStartDate);
+    const visibleForecastPoints = forecastPoints.filter((entry) => !plotStartDate || entry.x >= plotStartDate);
+    const shouldBridgeFromLastActual =
+      Boolean(lastActualPoint) &&
+      Boolean(visibleForecastPoints.length) &&
+      visibleForecastPoints[0].x.getTime() > lastActualPoint.x.getTime();
 
     const buildForecastSeries = (key) => {
       if (!key) return [];
       const points = [];
-      if (lastActualPoint) {
+      if (shouldBridgeFromLastActual && lastActualPoint && (!plotStartDate || lastActualPoint.x >= plotStartDate)) {
         points.push({ x: lastActualPoint.x, y: lastActualPoint.y });
       }
-      forecastPoints.forEach((entry) => {
+      visibleForecastPoints.forEach((entry) => {
         const numeric = Number(entry.row?.[key]);
         if (!Number.isFinite(numeric)) return;
         points.push({ x: entry.x, y: numeric });
@@ -21024,48 +21173,33 @@
     const dark = isDarkMode();
     const textColor = dark ? "rgba(246, 244, 238, 0.92)" : "#24324a";
     const gridColor = dark ? "rgba(246, 244, 238, 0.12)" : "rgba(86, 106, 128, 0.16)";
-    const plotBg = dark ? "#121a2f" : "#eaf0f8";
-    const historyColor = dark ? "#7c89ff" : "#6366f1";
-    const forecastColor = dark ? "#ff9a6a" : "#f97316";
-    const band25Color = dark ? "rgba(176, 224, 124, 0.42)" : "rgba(186, 214, 111, 0.45)";
-    const band25Line = dark ? "#b4e179" : "#96b454";
-    const band10Color = dark ? "rgba(113, 190, 255, 0.28)" : "rgba(111, 196, 255, 0.32)";
-    const band10Line = dark ? "#78c4ff" : "#61b6e8";
-    const band01Color = dark ? "rgba(170, 132, 255, 0.22)" : "rgba(168, 122, 255, 0.28)";
-    const band01Line = dark ? "#ae86ff" : "#9f76ff";
+    const plotBg = dark ? "#162033" : "#E5ECF6";
+    const historyColor = dark ? "#8b90ff" : "#636EFA";
+    const forecastColor = dark ? "#ff9a84" : "#EF553B";
+    const band25Color = dark ? "rgba(190, 214, 127, 0.34)" : "rgba(186, 214, 111, 0.34)";
+    const band25Line = dark ? "#b9d97c" : "#B6CF78";
+    const band10Color = dark ? "rgba(132, 203, 255, 0.24)" : "rgba(125, 198, 255, 0.25)";
+    const band10Line = dark ? "#8ecfff" : "#8CC7F7";
+    const band01Color = dark ? "rgba(182, 142, 255, 0.22)" : "rgba(176, 140, 255, 0.24)";
+    const band01Line = dark ? "#bd98ff" : "#AD8CFF";
     const isHourlyForecast = String(forecastDoc?.interval || state.tickerContext.interval || "1d").toLowerCase() === "1h";
-    const intervalLabel = isHourlyForecast ? "Timestamp" : "Date";
     const hoverDateFormat = isHourlyForecast ? "%Y-%m-%d %H:%M" : "%Y-%m-%d";
     const titleTicker = normalizeTicker(forecastDoc?.ticker || state.tickerContext.ticker || "") || "Ticker";
     const lastActualDate = lastActualPoint?.x || firstForecastPoint?.x || null;
-    const chartStartDate = (() => {
-      if (!lastActualDate) return historicalRows[0]?.x || firstForecastPoint?.x || null;
-      const lookbackDays = 450;
-      const candidate = new Date(lastActualDate.getTime() - lookbackDays * 24 * 60 * 60 * 1000);
-      const floor = historicalRows[0]?.x || candidate;
-      return candidate < floor ? floor : candidate;
-    })();
-    const chartEndDate = forecastPoints[forecastPoints.length - 1]?.x || lastActualDate || chartStartDate;
-    const chartTitle = `${titleTicker} Quantura Horizon Forecast (Interactive) from ${formatIsoDate(
+    const chartStartDate = plotStartDate || visibleHistoricalRows[0]?.x || visibleForecastPoints[0]?.x || historicalRows[0]?.x || firstForecastPoint?.x || null;
+    const chartEndDate =
+      visibleForecastPoints[visibleForecastPoints.length - 1]?.x ||
+      visibleHistoricalRows[visibleHistoricalRows.length - 1]?.x ||
+      forecastPoints[forecastPoints.length - 1]?.x ||
+      lastActualDate ||
+      chartStartDate;
+    const chartTitle = `${titleTicker} Prophet Forecast (Interactive) from ${formatIsoDate(
       chartStartDate || chartEndDate || new Date()
-    )} with P10-P90 and P25-P75`;
+    )} with P10\u2013P90 and P25\u2013P75`;
     const compactLegend = typeof window !== "undefined" && window.innerWidth < 720;
 
     const traces = [];
-    if (historicalRows.length) {
-      traces.push({
-        type: "scatter",
-        mode: "lines+markers",
-        name: "History",
-        x: historicalRows.map((point) => point.x),
-        y: historicalRows.map((point) => point.y),
-        line: { width: 2.2, color: historyColor },
-        marker: { size: 4, color: historyColor, opacity: 0.82 },
-        hovertemplate: `Actual Close<br>%{x|${hoverDateFormat}}<br>$%{y:.2f}<extra></extra>`,
-      });
-    }
-
-    const addBand = (lowerKey, upperKey, label, fillcolor, lineColor) => {
+    const addBand = (lowerKey, upperKey, label, fillcolor, lineColor, legendRank) => {
       if (!lowerKey || !upperKey || lowerKey === upperKey) return;
       const upperSeries = buildForecastSeries(upperKey);
       const lowerSeries = buildForecastSeries(lowerKey);
@@ -21076,8 +21210,8 @@
         name: `${label} upper`,
         x: upperSeries.map((point) => point.x),
         y: upperSeries.map((point) => point.y),
-        line: { width: 1.2, color: lineColor },
-        hovertemplate: `${escapeHtml(label)} upper<br>%{x|${hoverDateFormat}}<br>$%{y:.2f}<extra></extra>`,
+        line: { width: 1.3, color: lineColor },
+        hovertemplate: `Date=%{x|${hoverDateFormat}}<br>${escapeHtml(label)} upper=$%{y:.2f}<extra></extra>`,
         showlegend: false,
       });
       traces.push({
@@ -21086,16 +21220,17 @@
         name: label,
         x: lowerSeries.map((point) => point.x),
         y: lowerSeries.map((point) => point.y),
-        line: { width: 1.2, color: lineColor },
+        line: { width: 1.3, color: lineColor },
         fill: "tonexty",
         fillcolor,
-        hovertemplate: `${escapeHtml(label)} lower<br>%{x|${hoverDateFormat}}<br>$%{y:.2f}<extra></extra>`,
+        hovertemplate: `Date=%{x|${hoverDateFormat}}<br>${escapeHtml(label)} lower=$%{y:.2f}<extra></extra>`,
+        legendrank: legendRank,
       });
     };
 
-    addBand(q01Key, q99Key, "P01-P99", band01Color, band01Line);
-    addBand(q10Key, q90Key, "P10-P90", band10Color, band10Line);
-    addBand(q25Key, q75Key, "P25-P75", band25Color, band25Line);
+    addBand(q01Key, q99Key, "P01\u2013P99", band01Color, band01Line, 30);
+    addBand(q10Key, q90Key, "P10\u2013P90", band10Color, band10Line, 20);
+    addBand(q25Key, q75Key, "P25\u2013P75", band25Color, band25Line, 10);
 
     const medianSeries = buildForecastSeries(medianKey);
     if (medianSeries.length) {
@@ -21106,10 +21241,25 @@
         x: medianSeries.map((point) => point.x),
         y: medianSeries.map((point) => point.y),
         line: {
-          width: 2.6,
+          width: 2.2,
           color: forecastColor,
         },
-        hovertemplate: `Forecast (yhat)<br>%{x|${hoverDateFormat}}<br>$%{y:.2f}<extra></extra>`,
+        hovertemplate: `Date=%{x|${hoverDateFormat}}<br>yhat=$%{y:.2f}<extra></extra>`,
+        legendrank: 40,
+      });
+    }
+
+    if (visibleHistoricalRows.length) {
+      traces.push({
+        type: "scatter",
+        mode: "lines+markers",
+        name: "Actual Close",
+        x: visibleHistoricalRows.map((point) => point.x),
+        y: visibleHistoricalRows.map((point) => point.y),
+        line: { width: 2, color: historyColor },
+        marker: { size: 4.5, color: historyColor, opacity: 0.82 },
+        hovertemplate: `Date=%{x|${hoverDateFormat}}<br>Actual=$%{y:.2f}<extra></extra>`,
+        legendrank: 50,
       });
     }
 
@@ -21117,7 +21267,7 @@
       font: { family: "Manrope, sans-serif", color: textColor },
       paper_bgcolor: "rgba(0,0,0,0)",
       plot_bgcolor: plotBg,
-      margin: { l: 62, r: compactLegend ? 20 : 150, t: 58, b: 78 },
+      margin: { l: 68, r: compactLegend ? 20 : 164, t: 74, b: 86 },
       title: {
         text: chartTitle,
         x: 0.02,
@@ -21130,18 +21280,19 @@
       dragmode: "pan",
       showlegend: true,
       legend: compactLegend
-        ? { orientation: "h", y: -0.24, x: 0, font: { size: 11 } }
-        : { orientation: "v", y: 0.98, x: 1.02, xanchor: "left", yanchor: "top", font: { size: 12 } },
+        ? { orientation: "h", y: -0.24, x: 0, font: { size: 11 }, traceorder: "normal" }
+        : { orientation: "v", y: 0.98, x: 1.02, xanchor: "left", yanchor: "top", font: { size: 12 }, traceorder: "normal" },
       xaxis: {
-        title: { text: intervalLabel },
+        title: { text: "Date" },
         gridcolor: gridColor,
         zerolinecolor: gridColor,
+        type: "date",
         showspikes: true,
         spikemode: "across",
         spikesnap: "cursor",
         rangeslider: {
           visible: true,
-          thickness: 0.14,
+          thickness: 0.13,
           bgcolor: dark ? "rgba(255,255,255,0.03)" : "rgba(255,255,255,0.55)",
           bordercolor: gridColor,
         },
@@ -21151,9 +21302,11 @@
         title: { text: "Price (USD)" },
         gridcolor: gridColor,
         zerolinecolor: gridColor,
-        tickprefix: "$",
+        showspikes: true,
+        spikemode: "across",
+        spikesnap: "cursor",
       },
-      shapes: lastActualDate
+      shapes: lastActualDate && (!chartStartDate || lastActualDate >= chartStartDate)
         ? [
             {
               type: "line",
@@ -21170,20 +21323,8 @@
             },
           ]
         : [],
-      annotations: lastActualDate
-        ? [
-            {
-              x: lastActualDate,
-              y: 1,
-              yref: "paper",
-              text: "Forecast start",
-              showarrow: false,
-              yshift: 16,
-              font: { size: 11, color: dark ? "rgba(246,244,238,0.72)" : "rgba(36,50,74,0.72)" },
-            },
-          ]
-        : [],
-      height: compactLegend ? 520 : 660,
+      annotations: [],
+      height: compactLegend ? 560 : 650,
     };
 
     await Plotly.react(host, traces, layout, {
@@ -21412,17 +21553,26 @@
     const error = String(isCurrent ? summary?.error || "" : "").trim();
     const answer = String(isCurrent ? summary?.text || "" : "").trim();
     const disabled = !forecastId;
+    const providerId = normalizeModelCouncilProviderId(
+      isCurrent ? summary?.provider : state.tickerContext.tickerQueryProvider || "openai"
+    ) || "openai";
+    const modelId =
+      normalizeAiModelId(isCurrent ? summary?.model : state.tickerContext.tickerQueryModel || "gpt-5-mini") || "gpt-5-mini";
+    const modelMeta = getModelMeta(modelId);
+    const providerLabel = String(MODEL_PROVIDER_LABEL[providerId] || providerId || "AI").trim();
+    const modelLabel = String(modelMeta?.label || modelId).trim();
     const statusLine = loading
-      ? "Generating automatic Model Council summary..."
+      ? "Generating Model Council summary..."
       : error
         ? error
         : answer
           ? `Summary ready${Number.isFinite(latencyMs) && latencyMs >= 0 ? ` · ${Math.round(latencyMs)}ms` : ""}`
-          : "Run a forecast to generate an automatic AI narrative.";
+          : "Run a forecast to generate an AI narrative.";
     return `
       <div class="results-panel forecast-ai-summary-panel">
-        <h3>Automatic AI summary</h3>
+        <h3>AI summary</h3>
         <div class="small muted">${escapeHtml(statusLine)}</div>
+        <div class="small muted" style="margin-top:4px;">Model used: ${escapeHtml(`${providerLabel} · ${modelLabel} (${modelId})`)}</div>
         <div class="panel-output small" style="margin-top:8px;">
           ${
             loading
@@ -21564,10 +21714,12 @@
     const metricEntries = Object.entries(metrics || {}).filter(([, value]) => value !== null && value !== undefined && value !== "");
     const extraMetrics = metricEntries.filter(([key]) => !displayedKeys.has(key));
     const forecastTicker = normalizeTicker(forecastDoc.ticker || state.tickerContext.ticker || "");
-    const historicalRows = Array.isArray(forecastDoc.historicalRows) && forecastDoc.historicalRows.length
-      ? forecastDoc.historicalRows
-      : state.tickerContext.rows;
-    const historyPoints = collectForecastHistoryPoints(historicalRows);
+    const historicalRows =
+      Array.isArray(forecastDoc.historicalRows) && forecastDoc.historicalRows.length
+        ? forecastDoc.historicalRows
+        : Array.isArray(state.tickerContext.rows)
+          ? state.tickerContext.rows
+          : [];
     const metricsTable = metricEntries.length
       ? `
         <details class="learn-more">
@@ -21613,14 +21765,6 @@
         ${summary}
         ${serviceMessage ? `<div class="small muted">${escapeHtml(serviceMessage)}</div>` : ""}
         <div class="forecast-chart-shell">
-          <div class="forecast-chart-head">
-            <div class="small"><strong>Interactive forecast plot</strong></div>
-            <div class="small muted">
-              ${historyPoints.length ? `${historyPoints.length.toLocaleString()} historical points` : "Forecast only"} ·
-              ${rows.length.toLocaleString()} projected points ·
-              Fixed Prophet-style bands
-            </div>
-          </div>
           <div class="forecast-output-plot" data-forecast-detail-chart aria-label="Interactive forecast chart"></div>
         </div>
         ${metricsStrip}
@@ -21694,6 +21838,7 @@
     const snap = await db.collection("forecast_requests").doc(forecastId).get();
     if (!snap.exists) throw new Error("Forecast not found.");
     const doc = { id: snap.id, ...(snap.data() || {}) };
+    const storedHistoricalRows = Array.isArray(doc.historicalRows) ? doc.historicalRows.slice(-1600) : [];
     const fromCache = await loadForecastSeriesFromClientCache({
       requestId: snap.id,
       ticker: doc.ticker,
@@ -21715,6 +21860,7 @@
     const legacyRows = normalizeForecastSeriesRows(doc.forecastRows || []);
     if (legacyRows.length) {
       doc.forecastRows = legacyRows;
+      doc.historicalRows = storedHistoricalRows;
       doc.chartSeriesSource = "firestore_legacy";
       saveForecastSeriesToClientCache({
         requestId: snap.id,
@@ -21725,6 +21871,7 @@
         quantiles: doc.quantiles,
         start: doc.start,
         forecastRows: legacyRows,
+        historicalRows: storedHistoricalRows,
         metrics: doc.metrics,
       }).catch(() => {});
       return doc;
@@ -21732,6 +21879,7 @@
 
     const previewRows = normalizeForecastSeriesRows(doc.forecastPreview || []);
     doc.forecastRows = previewRows;
+    doc.historicalRows = storedHistoricalRows;
     doc.chartSeriesSource = previewRows.length ? "preview_only" : "missing";
     return doc;
   };
@@ -21864,9 +22012,12 @@
       if (ui.technicalsOutput) {
         setOutputReady(ui.technicalsOutput);
         const summary = String(outputsMeta.summary || "").trim();
+        const modelCitation = String(outputsMeta.modelCitation || "").trim();
         ui.technicalsOutput.innerHTML = `<div class="small muted">${
           summary ? escapeHtml(summary) : "Indicator inputs restored. Run indicators to refresh values."
-        }</div>${renderOutputPublishControlsMarkup({ requestId: String(item.id || "").trim(), requestType: "indicator" })}`;
+        }</div>${
+          modelCitation ? `<div class="small muted" style="margin-top:8px;">Model used: ${escapeHtml(modelCitation)}</div>` : ""
+        }${renderOutputPublishControlsMarkup({ requestId: String(item.id || "").trim(), requestType: "indicator" })}`;
       }
       if (notify) showToast("Indicator request loaded.");
       return item;
@@ -26076,8 +26227,17 @@
           ui.forecastOutput.dataset.bound = "1";
         }
 
-	    ui.technicalsForm?.addEventListener("submit", async (event) => {
+    ui.technicalsForm?.addEventListener("submit", async (event) => {
 	      event.preventDefault();
+        try {
+          await ensureSessionUser({
+            reason: "indicator_requires_session",
+            message: "Sign in to save indicator runs and publish them to Explore.",
+          });
+        } catch (error) {
+          showToast(error?.message || "Unable to start guest session.", "warn");
+          return;
+        }
 	      const formData = new FormData(ui.technicalsForm);
 	      const indicators = formData.getAll("indicators");
 	      const includeSeries = Boolean(ui.indicatorChart || ui.tickerChart);
@@ -26123,7 +26283,8 @@
             functions,
           });
           const prediction = analysis.prediction && typeof analysis.prediction === "object" ? analysis.prediction : {};
-          const indicatorRequestId = `indicator__${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+          const indicatorSourceId = `ind_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+          const indicatorRequestId = buildSourceRequestId("indicator", indicatorSourceId);
           const indicatorAutoPublish = shouldAutoPublishForType("indicator");
 	        if (ui.technicalsOutput) {
 	          setOutputReady(ui.technicalsOutput);
@@ -26136,6 +26297,10 @@
                   Number.isFinite(targetPrice) && Number.isFinite(lastClose) && lastClose > 0
                     ? ((targetPrice - lastClose) / lastClose) * 100
                     : null;
+                const providerId = normalizeModelCouncilProviderId(String(analysis.provider || "quantura").trim());
+                const providerLabel = String(MODEL_PROVIDER_LABEL[providerId] || titleCaseLabel(analysis.provider || "quantura")).trim() || "Quantura";
+                const modelId = normalizeAiModelId(analysis.model || "indicator_local_repair") || "indicator_local_repair";
+                const modelLabel = String(getModelMeta(modelId)?.label || modelId).trim() || modelId;
                 const keySignals = Array.isArray(analysis.keySignals) ? analysis.keySignals.slice(0, 6) : [];
                 const summaryText = String(analysis.summary || "").trim();
                 const narrativeText = String(analysis.text || "").trim();
@@ -26158,6 +26323,9 @@
                     summaryText || narrativeText
                       ? `<div class="results-panel" style="margin-top: 12px;">
                           <h3>AI indicator analysis</h3>
+                          <div class="small muted" style="margin-top:4px;">Model used: ${escapeHtml(
+                            `${providerLabel} · ${modelLabel} (${modelId})`
+                          )}</div>
                           ${summaryText ? `<div class="small markdown-output" style="margin-top:8px;">${renderMarkdown(summaryText, { fallback: "" })}</div>` : ""}
                           <div class="form-grid" style="margin-top:10px;">
                             <div class="profile-item"><span class="label">Direction</span><span class="value">${escapeHtml(
@@ -26184,10 +26352,7 @@
                               : ""
                           }
                           ${narrativeText ? `<div class="small markdown-output" style="margin-top:10px;">${renderMarkdown(narrativeText, { fallback: "" })}</div>` : ""}
-                          ${renderOutputPublishControlsMarkup({
-                            requestId: indicatorRequestId,
-                            requestType: "indicator",
-                          })}
+                          <div class="small muted" data-indicator-publish-placeholder style="margin-top:10px;">Saving indicator run and publishing it to Explore...</div>
                           <p class="small muted solve-now-disclaimer" style="margin-top:10px;">${escapeHtml(
                             String(analysis.disclaimer || MODEL_COUNCIL_OUTPUT_DISCLAIMER)
                           )}</p>
@@ -26238,19 +26403,34 @@
             prediction: prediction?.direction ? String(prediction.direction) : "",
           },
           sourceRef: {
-            collection: "indicator_requests",
-            id: `ind_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+            collection: "indicator_runs",
+            id: indicatorSourceId,
           },
           published: indicatorAutoPublish,
         }).catch(() => null);
-        state.tickerContext.indicatorRequestId = String(savedIndicatorRequest?.id || indicatorRequestId).trim();
+        state.tickerContext.indicatorRequestId = String(savedIndicatorRequest?.id || "").trim();
         const indicatorPublishHost = ui.technicalsOutput?.querySelector?.("[data-output-publish-controls]");
+        const indicatorPublishPlaceholder = ui.technicalsOutput?.querySelector?.("[data-indicator-publish-placeholder]");
+        const publishMarkup = state.tickerContext.indicatorRequestId
+          ? renderOutputPublishControlsMarkup({
+              requestId: state.tickerContext.indicatorRequestId,
+              requestType: "indicator",
+            })
+          : `<div class="small muted">Indicator run saved locally, but Explore publishing is unavailable until the request sync finishes.</div>`;
         if (indicatorPublishHost) {
-          indicatorPublishHost.outerHTML = renderOutputPublishControlsMarkup({
-            requestId: state.tickerContext.indicatorRequestId,
-            requestType: "indicator",
-          });
+          indicatorPublishHost.outerHTML = publishMarkup;
+        } else if (indicatorPublishPlaceholder) {
+          indicatorPublishPlaceholder.outerHTML = publishMarkup;
         }
+        await fetchMyRequestsList({ force: true }).catch(() => {});
+        showToast(
+          state.tickerContext.indicatorRequestId
+            ? indicatorAutoPublish
+              ? "Indicator run saved and published to Explore."
+              : "Indicator run saved."
+            : "Indicator output is ready, but request sync is still catching up.",
+          state.tickerContext.indicatorRequestId ? "ok" : "warn"
+        );
 	      } catch (error) {
 	        showToast(error.message || "Unable to run indicators.", "warn");
 	      }
@@ -26856,9 +27036,9 @@
         } catch (error) {
           showToast(error?.message || "Unable to start guest session.", "warn");
           return;
-        }
+	        }
 	      const formData = new FormData(ui.screenerForm);
-      const minMarketCap = Math.max(0, Math.floor(asFinite(formData.get("minMarketCap"), 100000000000)));
+      const minMarketCap = Math.max(0, Math.floor(toFiniteOrNull(formData.get("minMarketCap")) ?? 100000000000));
       const payload = {
         minMarketCap,
         autoPublish: true,
@@ -26867,6 +27047,8 @@
       };
 
 	      try {
+        setScreenerGenerateButtonState({ busy: true, label: "Calling GitHub Action..." });
+        setScreenerDispatchStatus("Calling GitHub Actions now. Quantura will attach the saved run as soon as the workflow responds.", "ok");
 	        setOutputLoading(ui.screenerOutput, "Queueing GitHub Actions screener...");
 	        const result = await apiRunScreener(payload);
           const runId = String(result?.runId || "").trim();
@@ -26884,17 +27066,22 @@
             serviceMessage: String(result?.serviceMessage || "").trim(),
             workflowRunId: String(result?.workflowRunId || "").trim(),
             workflowRunUrl: String(result?.workflowRunUrl || "").trim(),
+            workflowRunNumber: Number.isFinite(Number(result?.workflowRunNumber)) ? Number(result.workflowRunNumber) : null,
             createdAt: new Date().toISOString(),
             appliedFilters: [`Market cap >= $${formatCompactNumber(minMarketCap)}`],
           };
           renderScreenerRunOutput(pendingRun);
+          updateScreenerDispatchStatusFromRun(pendingRun);
+          setScreenerGenerateButtonState({ busy: true, label: "Tracking workflow..." });
           fetchMyRequestById(buildSourceRequestId("screener", runId)).catch(() => {});
           await fetchMyRequestsList({ force: true }).catch(() => {});
           showToast("GitHub Actions screener queued. Quantura will publish it to Explore when it completes.");
           logEvent("screener_request", { min_market_cap: minMarketCap, workflow: "github_actions" });
 
           const finalRun = await pollScreenerRunUntilSettled(runId, { delayMs: 3500, maxAttempts: 40 }).catch(() => null);
+          setScreenerGenerateButtonState({ busy: false, label: "Launch live screener" });
           if (finalRun) {
+            updateScreenerDispatchStatusFromRun(finalRun);
             await fetchMyRequestsList({ force: true }).catch(() => {});
             if (normalizeScreenerRunStatus(finalRun.status) === "completed") {
               const finalCount = Number.isFinite(Number(finalRun.resultsFound))
@@ -26910,9 +27097,13 @@
             } else if (normalizeScreenerRunStatus(finalRun.status) === "failed") {
               showToast(finalRun.serviceMessage || "GitHub Actions screener failed.", "warn");
             }
+          } else {
+            setScreenerDispatchStatus("GitHub Actions accepted the run. You can keep watching the live output panel or reopen it from My Requests.", "ok");
           }
       } catch (error) {
         const message = extractErrorMessage(error, "Unable to run the GitHub Actions screener.");
+        setScreenerGenerateButtonState({ busy: false, label: "Launch live screener" });
+        setScreenerDispatchStatus(message, "warn");
         if (ui.screenerResultsCount) ui.screenerResultsCount.textContent = "Matches: 0";
         if (ui.screenerOutput) {
           setOutputReady(ui.screenerOutput);
