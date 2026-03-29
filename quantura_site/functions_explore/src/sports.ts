@@ -778,10 +778,9 @@ export async function listSportsUpcomingGames(leagueKey: unknown, teamId: unknow
         const teamNode = (teamCompetitor as Record<string, unknown>).team as Record<string, unknown>;
         const opponentNode = (opponentCompetitor as Record<string, unknown>).team as Record<string, unknown>;
         const homeAway = sanitizeText((teamCompetitor as Record<string, unknown>).homeAway, 20).toLowerCase() === "home" ? "home" : "away";
-        const venue = sanitizeText(
-          (competition.venue as Record<string, unknown>)?.fullName || (competition.venue as Record<string, unknown>)?.address?.city,
-          160
-        );
+        const venueNode = asPlainObject(competition.venue);
+        const venueAddress = asPlainObject(venueNode.address);
+        const venue = sanitizeText(venueNode.fullName || venueAddress.city, 160);
         return {
           id: sanitizeText(record.id, 40),
           date,
