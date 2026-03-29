@@ -329,8 +329,9 @@ const polymarketCache = new Map<string, PolymarketCacheEntry>();
 const tickerIntelCache = new Map<string, TickerIntelCacheEntry>();
 const tickerTrendingCache = new Map<string, TickerTrendingCacheEntry>();
 const fxRateCache = new Map<string, FxRateCacheEntry>();
-const MARKET_HEADLINE_DEFAULT_FEED_ID = "cnn_topstories";
+const MARKET_HEADLINE_DEFAULT_FEED_ID = "marketwatch_topstories";
 const MARKET_HEADLINE_FETCH_TIMEOUT_MS = 12000;
+const MARKET_HEADLINE_STALE_THRESHOLD_MS = 1000 * 60 * 60 * 24 * 7;
 const MARKET_HEADLINE_PROVIDER_DEFAULTS = {
   cnn: "cnn_topstories",
   spglobal: "spglobal_research",
@@ -1445,6 +1446,40 @@ function resolveMarketHeadlineFeedConfig(providerIdRaw: unknown, feedIdRaw: unkn
   return MARKET_HEADLINE_FEEDS[fallbackId || MARKET_HEADLINE_DEFAULT_FEED_ID];
 }
 
+function getLatestMarketHeadlineTimestamp(headlines: readonly MarketHeadlineArticle[]): number {
+  let latestMs = 0;
+  for (const item of headlines) {
+    const parsed = item?.publishedAt ? Date.parse(item.publishedAt) : Number.NaN;
+    if (Number.isFinite(parsed) && parsed > latestMs) latestMs = parsed;
+  }
+  return latestMs;
+}
+
+function shouldFallbackMarketHeadlineFeed(
+  feedConfig: MarketHeadlineFeedConfig,
+  headlines: readonly MarketHeadlineArticle[]
+): boolean {
+  if (feedConfig.providerId !== "cnn") return false;
+  if (!headlines.length) return true;
+  const latestMs = getLatestMarketHeadlineTimestamp(headlines);
+  if (!latestMs) return false;
+  return Date.now() - latestMs > MARKET_HEADLINE_STALE_THRESHOLD_MS;
+}
+
+function describeMarketHeadlineFallback(
+  requestedFeedConfig: MarketHeadlineFeedConfig,
+  fallbackFeedConfig: MarketHeadlineFeedConfig,
+  headlines: readonly MarketHeadlineArticle[]
+): string {
+  const latestMs = getLatestMarketHeadlineTimestamp(headlines);
+  if (latestMs) {
+    return `${requestedFeedConfig.providerLabel} ${requestedFeedConfig.feedLabel} is stale (latest article ${new Date(
+      latestMs
+    ).toISOString().slice(0, 10)}). Showing ${fallbackFeedConfig.providerLabel} ${fallbackFeedConfig.feedLabel} instead.`;
+  }
+  return `${requestedFeedConfig.providerLabel} ${requestedFeedConfig.feedLabel} did not return current headlines. Showing ${fallbackFeedConfig.providerLabel} ${fallbackFeedConfig.feedLabel} instead.`;
+}
+
 function describeMarketHeadlineFetchError(feedConfig: MarketHeadlineFeedConfig, error: unknown): string {
   const detail = sanitizeText((error as Error | null)?.message || error, 180).toLowerCase();
   if (detail.includes("403")) {
@@ -1921,6 +1956,12 @@ function fmtCompactCurrency(value: number): string {
   return `$${Math.round(numeric).toLocaleString()}`;
 }
 
+function roundFinite(value: unknown, digits = 2): number | null {
+  const numeric = asFinite(value, Number.NaN);
+  if (!Number.isFinite(numeric)) return null;
+  return Number(numeric.toFixed(digits));
+}
+
 type GithubWorkflowRunRecord = {
   id: number;
   htmlUrl: string;
@@ -1952,7 +1993,7 @@ function githubActionsConfigured(): boolean {
   return Boolean(GITHUB_ACTIONS_TOKEN && GITHUB_REPO_OWNER && GITHUB_REPO_NAME && GITHUB_SCREENER_WORKFLOW);
 }
 
-async function githubApiRequest(path: string, init: RequestInit = {}): Promise<Response> {
+async function githubApiRequest(path: string, init: RequestInit = {}): Promise<globalThis.Response> {
   if (!githubActionsConfigured()) {
     throw new Error("GitHub Actions token is not configured.");
   }
@@ -2128,38 +2169,36 @@ function readZipEntryText(zip: any, entryName: string): string {
 
 function normalizeWorkflowScreenerRows(rowsRaw: unknown): Array<Record<string, unknown>> {
   const rows = Array.isArray(rowsRaw) ? rowsRaw : [];
-  return rows
-    .map((item) => {
-      const row = asPlainObject(item);
-      const symbol = normalizeTicker(row.ticker || row.symbol);
-      if (!symbol) return null;
-      const centralLabel = sanitizeText(row.central_delta_label, 80);
-      const tailLabel = sanitizeText(row.tail_delta_label, 80);
-      return {
-        symbol,
-        ticker: symbol,
-        status: sanitizeText(row.status, 60).toLowerCase(),
-        lastClose: roundFinite(asFinite(row.last_price, Number.NaN), 2),
-        gapToBandPct: roundFinite(asFinite(row.gap_to_band_pct, Number.NaN), 2),
-        p1: roundFinite(asFinite(row.p1, Number.NaN), 2),
-        p10: roundFinite(asFinite(row.p10, Number.NaN), 2),
-        p50: roundFinite(asFinite(row.p50, Number.NaN), 2),
-        p90: roundFinite(asFinite(row.p90, Number.NaN), 2),
-        p99: roundFinite(asFinite(row.p99, Number.NaN), 2),
-        centralDelta: roundFinite(asFinite(row.central_delta, Number.NaN), 2),
-        centralDeltaLabel: centralLabel,
-        tailDelta: roundFinite(asFinite(row.tail_delta, Number.NaN), 2),
-        tailDeltaLabel: tailLabel,
-        marketCap: asFinite(row.market_cap, Number.NaN),
-        marketCapLabel: sanitizeText(row.market_cap_fmt, 40),
-        lastEarningsDate: sanitizeText(row.last_earnings_date, 40),
-        lastReportPeriod: sanitizeText(row.last_report_period, 80),
-        nextEarningsDate: sanitizeText(row.next_earnings_date, 40),
-        nextReportPeriod: sanitizeText(row.next_report_period, 80),
-        universe: sanitizeText(row.universe, 80),
-      };
-    })
-    .filter((item): item is Record<string, unknown> => Boolean(item));
+  const normalized: Array<Record<string, unknown>> = [];
+  for (const item of rows) {
+    const row = asPlainObject(item);
+    const symbol = normalizeTicker(row.ticker || row.symbol);
+    if (!symbol) continue;
+    normalized.push({
+      symbol,
+      ticker: symbol,
+      status: sanitizeText(row.status, 60).toLowerCase(),
+      lastClose: roundFinite(row.last_price, 2),
+      gapToBandPct: roundFinite(row.gap_to_band_pct, 2),
+      p1: roundFinite(row.p1, 2),
+      p10: roundFinite(row.p10, 2),
+      p50: roundFinite(row.p50, 2),
+      p90: roundFinite(row.p90, 2),
+      p99: roundFinite(row.p99, 2),
+      centralDelta: roundFinite(row.central_delta, 2),
+      centralDeltaLabel: sanitizeText(row.central_delta_label, 80),
+      tailDelta: roundFinite(row.tail_delta, 2),
+      tailDeltaLabel: sanitizeText(row.tail_delta_label, 80),
+      marketCap: asFinite(row.market_cap, Number.NaN),
+      marketCapLabel: sanitizeText(row.market_cap_fmt, 40),
+      lastEarningsDate: sanitizeText(row.last_earnings_date, 40),
+      lastReportPeriod: sanitizeText(row.last_report_period, 80),
+      nextEarningsDate: sanitizeText(row.next_earnings_date, 40),
+      nextReportPeriod: sanitizeText(row.next_report_period, 80),
+      universe: sanitizeText(row.universe, 80),
+    });
+  }
+  return normalized;
 }
 
 async function downloadGithubArtifactPayload(artifact: GithubArtifactRecord): Promise<GithubScreenerArtifactPayload> {
@@ -6945,7 +6984,8 @@ ROUTES.post("/screener/run", async (req, res) => {
       return;
     }
     const body = asPlainObject(req.body);
-    const minMarketCap = Math.max(0, Math.floor(asFinite(body.minMarketCap || body.minCap ?? asPlainObject(body.marketCapFilter).value, 100_000_000_000)));
+    const marketCapValue = body.minMarketCap ?? body.minCap ?? asPlainObject(body.marketCapFilter).value;
+    const minMarketCap = Math.max(0, Math.floor(asFinite(marketCapValue, 100_000_000_000)));
     const autoPublishRequested = asBoolean(body.autoPublish, true);
     const createdAt = admin.firestore.FieldValue.serverTimestamp();
     const docRef = db.collection("screener_runs").doc();
@@ -7045,7 +7085,7 @@ ROUTES.post("/screener/run", async (req, res) => {
     }
 
     const refreshed = await docRef.get();
-    const result = { id: refreshed.id, ...(refreshed.data() || {}) };
+    const result: Record<string, unknown> = { id: refreshed.id, ...(refreshed.data() || {}) };
 
     res.status(200).json({
       ok: true,
@@ -7269,12 +7309,27 @@ ROUTES.get("/ticker/trending", async (req, res) => {
         extractYahooNumber(sparkMeta.previousClose) ??
         extractYahooNumber(sparkMeta.chartPreviousClose);
       const previousClose = extractYahooNumber(sparkMeta.previousClose) ?? extractYahooNumber(sparkMeta.chartPreviousClose);
-      const change =
+      const directChange =
+        extractYahooNumber(sparkMeta.regularMarketChange) ??
+        extractYahooNumber(sparkMeta.change);
+      const computedChange =
         lastClose !== null && previousClose !== null ? Number((lastClose - previousClose).toFixed(4)) : null;
-      const changePct =
+      const change = directChange !== null ? Number(directChange.toFixed(4)) : computedChange;
+      const directChangePct =
+        extractYahooNumber(sparkMeta.regularMarketChangePercent) ??
+        extractYahooNumber(sparkMeta.percentChange);
+      const computedChangePct =
         change !== null && previousClose !== null && Math.abs(previousClose) > 1e-9
           ? Number(((change / Math.abs(previousClose)) * 100).toFixed(4))
           : null;
+      const changePct =
+        directChangePct !== null
+          ? Number(
+              (
+                Math.abs(directChangePct) < 0.00005 && computedChangePct !== null ? computedChangePct : directChangePct
+              ).toFixed(4)
+            )
+          : computedChangePct;
 
       const website = sanitizeText(fmpProfile?.website, 280);
       const logoUrl =
@@ -7712,41 +7767,74 @@ ROUTES.get("/fx/convert", async (req, res) => {
 });
 
 ROUTES.get("/market-headlines", async (req, res) => {
-  const feedConfig = resolveMarketHeadlineFeedConfig(req.query.provider, req.query.feed);
+  const requestedFeedConfig = resolveMarketHeadlineFeedConfig(req.query.provider, req.query.feed);
   const limitRaw = asFinite(req.query.limit, 18);
   const limit = Number.isFinite(limitRaw) ? Math.max(5, Math.min(40, Math.floor(limitRaw))) : 18;
   const warnings: string[] = [];
   let headlines: MarketHeadlineArticle[] = [];
-  let detectedTitle = feedConfig.feedLabel;
+  let effectiveFeedConfig = requestedFeedConfig;
+  let detectedTitle = requestedFeedConfig.feedLabel;
 
   try {
-    const xml = await fetchTextWithTimeout(feedConfig.url, MARKET_HEADLINE_FETCH_TIMEOUT_MS);
-    const parsed = parseMarketHeadlineFeedXml(xml, feedConfig);
+    const xml = await fetchTextWithTimeout(requestedFeedConfig.url, MARKET_HEADLINE_FETCH_TIMEOUT_MS);
+    const parsed = parseMarketHeadlineFeedXml(xml, requestedFeedConfig);
     detectedTitle = parsed.feedTitle || detectedTitle;
-    headlines = parsed.headlines.slice(0, limit);
+    headlines = parsed.headlines;
     if (!headlines.length) {
-      warnings.push(`${feedConfig.providerLabel} returned a response but no readable headlines were parsed.`);
+      warnings.push(`${requestedFeedConfig.providerLabel} returned a response but no readable headlines were parsed.`);
     }
   } catch (error) {
-    warnings.push(describeMarketHeadlineFetchError(feedConfig, error));
+    warnings.push(describeMarketHeadlineFetchError(requestedFeedConfig, error));
   }
+
+  const fallbackFeedConfig = MARKET_HEADLINE_FEEDS[MARKET_HEADLINE_DEFAULT_FEED_ID];
+  if (
+    fallbackFeedConfig &&
+    fallbackFeedConfig.id !== requestedFeedConfig.id &&
+    shouldFallbackMarketHeadlineFeed(requestedFeedConfig, headlines)
+  ) {
+    warnings.push(describeMarketHeadlineFallback(requestedFeedConfig, fallbackFeedConfig, headlines));
+    try {
+      const xml = await fetchTextWithTimeout(fallbackFeedConfig.url, MARKET_HEADLINE_FETCH_TIMEOUT_MS);
+      const parsed = parseMarketHeadlineFeedXml(xml, fallbackFeedConfig);
+      effectiveFeedConfig = fallbackFeedConfig;
+      detectedTitle = parsed.feedTitle || fallbackFeedConfig.feedLabel;
+      headlines = parsed.headlines;
+      if (!headlines.length) {
+        warnings.push(`${fallbackFeedConfig.providerLabel} returned a response but no readable headlines were parsed.`);
+      }
+    } catch (error) {
+      warnings.push(describeMarketHeadlineFetchError(fallbackFeedConfig, error));
+    }
+  }
+
+  headlines = headlines.slice(0, limit);
 
   res.status(200).json({
     provider: {
-      id: feedConfig.providerId,
-      label: feedConfig.providerLabel,
-      sourceUrl: feedConfig.sourceUrl,
-      directoryUrl: feedConfig.directoryUrl || "",
-      termsUrl: feedConfig.termsUrl || "",
+      id: effectiveFeedConfig.providerId,
+      label: effectiveFeedConfig.providerLabel,
+      sourceUrl: effectiveFeedConfig.sourceUrl,
+      directoryUrl: effectiveFeedConfig.directoryUrl || "",
+      termsUrl: effectiveFeedConfig.termsUrl || "",
     },
     feed: {
-      id: feedConfig.id,
-      label: feedConfig.feedLabel,
+      id: effectiveFeedConfig.id,
+      label: effectiveFeedConfig.feedLabel,
       detectedTitle,
-      url: feedConfig.sourceUrl,
+      url: effectiveFeedConfig.sourceUrl,
     },
+    requestedFeed:
+      effectiveFeedConfig.id !== requestedFeedConfig.id
+        ? {
+            id: requestedFeedConfig.id,
+            label: requestedFeedConfig.feedLabel,
+            providerId: requestedFeedConfig.providerId,
+            providerLabel: requestedFeedConfig.providerLabel,
+          }
+        : null,
     attribution: {
-      note: feedConfig.attributionNote || "",
+      note: effectiveFeedConfig.attributionNote || "",
     },
     fetchedAt: new Date().toISOString(),
     count: headlines.length,

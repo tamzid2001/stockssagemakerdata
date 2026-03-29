@@ -120,22 +120,23 @@
               </p>
               <div class="form-grid" style="margin-top:12px;">
                 <div class="field">
-                  <label class="label" for="screener-min-market-cap">Minimum market cap (USD)</label>
-                  <input
+                  <label class="label" for="screener-min-market-cap">Market cap floor</label>
+                  <select
                     id="screener-min-market-cap"
                     name="minMarketCap"
-                    type="number"
-                    min="0"
-                    step="1000000000"
-                    inputmode="numeric"
-                    value="100000000000"
-                    placeholder="100000000000"
-                  />
+                  >
+                    <option value="50000000000">$50B</option>
+                    <option value="100000000000" selected>$100B</option>
+                    <option value="200000000000">$200B</option>
+                    <option value="500000000000">$500B</option>
+                    <option value="1000000000000">$1T</option>
+                  </select>
                   <p class="small muted">Default floor is $100B. The GitHub workflow scans the combined S&amp;P 500 + Nasdaq universe above this threshold.</p>
                 </div>
               </div>
               <div class="small muted" id="screener-results-count">Matches: —</div>
-              <button class="cta" id="screener-generate-button" type="submit" data-analytics="screener_submit"><i class="iconoir-search" aria-hidden="true"></i><span>Run GitHub Screener</span></button>
+              <button class="cta" id="screener-generate-button" type="submit" data-analytics="screener_submit"><i class="iconoir-play" aria-hidden="true"></i><span>Launch live screener</span></button>
+              <p class="small muted" id="screener-dispatch-status">Ready to dispatch the live GitHub screener.</p>
             </form>
               <div class="card" data-my-requests-panel data-default-type="screener">
                 <div class="card-head">
