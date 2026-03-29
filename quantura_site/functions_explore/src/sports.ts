@@ -245,6 +245,10 @@ function asFinite(value: unknown, fallback = Number.NaN): number {
   return Number.isFinite(numeric) ? numeric : fallback;
 }
 
+function asPlainObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
 function sanitizeText(value: unknown, maxLen = 240): string {
   return asString(value)
     .replace(/[\u0000-\u001f\u007f]+/g, " ")
