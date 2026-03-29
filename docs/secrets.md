@@ -70,4 +70,23 @@ Functions that require a missing secret return `FAILED_PRECONDITION` with explic
 
 ## Local development
 
-Use a local pull script (ignored by git) to materialize secrets into `.env.local` for local emulators only. Do not commit `.env`, `.env.local`, or any secret values.
+Use the local bootstrap script to materialize ignored Firebase files from Google Secret Manager:
+
+```bash
+./scripts/setup_local_firebase_credentials.sh
+```
+
+The script looks for these secret names by default:
+
+- `FIREBASE_SERVICE_ACCOUNT_JSON`
+- `FIREBASE_IOS_GOOGLE_SERVICE_INFO_PLIST`
+- `FIREBASE_ANDROID_GOOGLE_SERVICES_JSON`
+
+You can override the project or secret names with:
+
+- `GOOGLE_CLOUD_PROJECT`
+- `FIREBASE_SERVICE_ACCOUNT_SECRET_NAME`
+- `FIREBASE_IOS_CONFIG_SECRET_NAME`
+- `FIREBASE_ANDROID_CONFIG_SECRET_NAME`
+
+If Secret Manager access is not available, the script creates placeholder example files instead. Do not commit `.env`, `.env.local`, or hydrated local credential files.

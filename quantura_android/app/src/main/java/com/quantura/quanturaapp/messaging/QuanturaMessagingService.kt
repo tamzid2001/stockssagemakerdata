@@ -35,7 +35,9 @@ class QuanturaMessagingService : FirebaseMessagingService() {
         val baseUrl = "https://quantura.studio"
         val targetUrl = if (deepLinkPath.startsWith("http")) deepLinkPath else "$baseUrl${if (deepLinkPath.startsWith("/")) deepLinkPath else "/$deepLinkPath"}"
 
-        val intent = Intent(this, MainActivity::class.java).apply {
+        val intent = Intent().apply {
+            setClass(this@QuanturaMessagingService, MainActivity::class.java)
+            setPackage(packageName)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra(EXTRA_DEEP_LINK_URL, targetUrl)
         }

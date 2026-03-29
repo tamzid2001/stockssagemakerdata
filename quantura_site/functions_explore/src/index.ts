@@ -1,4 +1,6 @@
+import crypto from "crypto";
 import cors from "cors";
+import rateLimit from "express-rate-limit";
 import express, { Request, Response } from "express";
 import admin from "firebase-admin";
 import { GoogleAuth } from "google-auth-library";
@@ -17,8 +19,6 @@ const messaging = admin.messaging();
 
 const app = express();
 app.disable("x-powered-by");
-app.use(cors({ origin: true }));
-app.use(express.json({ limit: "1mb" }));
 
 type PostType = "forecast" | "backtest" | "agent" | "screener";
 
@@ -65,6 +65,31 @@ type ExploreCursor = {
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 40;
 const PUBLIC_ORIGIN = asString(process.env.PUBLIC_ORIGIN, "https://quantura.studio").replace(/\/$/, "");
+const EXTRA_ALLOWED_CORS_ORIGINS = asString(process.env.ALLOWED_CORS_ORIGINS)
+  .split(",")
+  .map((origin) => normalizeCorsOrigin(origin))
+  .filter(Boolean);
+const STATIC_ALLOWED_CORS_ORIGINS = new Set<string>([
+  normalizeCorsOrigin(PUBLIC_ORIGIN),
+  "https://quantura.studio",
+  "https://www.quantura.studio",
+  "https://quantura-e2e3d.web.app",
+  "https://quantura-e2e3d.firebaseapp.com",
+  "http://localhost:5000",
+  "http://127.0.0.1:5000",
+  "http://10.0.2.2:5000",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "http://10.0.2.2:5173",
+  "capacitor://localhost",
+  "ionic://localhost",
+  ...EXTRA_ALLOWED_CORS_ORIGINS,
+]);
+const ALLOWED_CORS_ORIGIN_PATTERNS = [
+  /^https:\/\/quantura-e2e3d(?:--[a-z0-9-]+)?\.web\.app$/i,
+  /^https:\/\/quantura-e2e3d(?:--[a-z0-9-]+)?\.firebaseapp\.com$/i,
+  /^http:\/\/(?:localhost|127\.0\.0\.1|10\.0\.2\.2)(?::\d+)?$/i,
+];
 const ADMIN_EMAIL = "tamzid257@gmail.com";
 const MODEL_COUNCIL_RESPONSE_COLLECTION = "model_council_responses";
 const OPENAI_API_KEY = resolveEnvSecret(["OPENAI_API_KEY", "OPENAI_SECRET_KEY", "OPENAI_KEY"], /^OPENAI_.*KEY$/i);
@@ -76,6 +101,31 @@ const PERPLEXITY_API_KEY = resolveEnvSecret(["PERPLEXITY_API_KEY", "PERPLEXITY_S
 const QWEN_API_KEY = resolveEnvSecret(["QWEN_API_KEY", "QWEN_SECRET_KEY"], /^QWEN_.*KEY$/i);
 const AMAZON_NOVA_API_KEY = resolveEnvSecret(["AMAZON_NOVA_API_KEY", "BEDROCK_API_KEY"], /^(AMAZON_NOVA|BEDROCK)_.*KEY$/i);
 const AMAZON_NOVA_BASE_URL = asString(process.env.AMAZON_NOVA_BASE_URL).trim().replace(/\/$/, "");
+
+function normalizeCorsOrigin(origin: unknown): string {
+  if (typeof origin !== "string") return "";
+  return origin.trim().replace(/\/$/, "").toLowerCase();
+}
+
+function isAllowedCorsOrigin(origin: string | undefined): boolean {
+  const normalizedOrigin = normalizeCorsOrigin(origin);
+  if (!normalizedOrigin) return false;
+  if (STATIC_ALLOWED_CORS_ORIGINS.has(normalizedOrigin)) return true;
+  return ALLOWED_CORS_ORIGIN_PATTERNS.some((pattern) => pattern.test(normalizedOrigin));
+}
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin) {
+        callback(null, false);
+        return;
+      }
+      callback(null, isAllowedCorsOrigin(origin) ? origin : false);
+    },
+  })
+);
+app.use(express.json({ limit: "1mb" }));
 const CLAUDE_API_VERSION = asString(process.env.CLAUDE_API_VERSION, "2023-06-01").trim();
 const MODEL_COUNCIL_OTHER_API_KEY = resolveEnvSecret(
   ["MODEL_COUNCIL_OTHER_API_KEY", "MODEL_COUNCIL_OTHER_KEY"],
@@ -281,6 +331,10 @@ const MY_REQUEST_TYPE_LABEL: Record<MyRequestType, string> = {
 };
 
 const ROUTES = express.Router();
+const API_RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const API_RATE_LIMIT_MAX = 600;
+const SENSITIVE_API_RATE_LIMIT_MAX = 60;
+const LLM_API_RATE_LIMIT_MAX = 24;
 const polymarketCache = new Map<string, PolymarketCacheEntry>();
 const tickerIntelCache = new Map<string, TickerIntelCacheEntry>();
 const tickerTrendingCache = new Map<string, TickerTrendingCacheEntry>();
@@ -2278,17 +2332,11 @@ async function createPostFromResult(postType: PostType, sourceDocId: string, pay
 }
 
 async function verifyRequestUser(req: Request, required = false): Promise<admin.auth.DecodedIdToken | null> {
-  const authHeader = asString(req.headers.authorization);
-  if (!authHeader) {
+  const token = extractBearerToken(req.headers.authorization);
+  if (!token) {
     if (required) throw new Error("unauthenticated");
     return null;
   }
-  const match = authHeader.match(/^Bearer\s+(.+)$/i);
-  if (!match) {
-    if (required) throw new Error("unauthenticated");
-    return null;
-  }
-  const token = match[1];
   try {
     return await auth.verifyIdToken(token);
   } catch {
@@ -2297,10 +2345,32 @@ async function verifyRequestUser(req: Request, required = false): Promise<admin.
 }
 
 function getBearerToken(req: Request): string {
-  const authHeader = asString(req.headers["authorization"] || (req.headers as any)["Authorization"]).trim();
+  return extractBearerToken(req.headers["authorization"] || (req.headers as any)["Authorization"]);
+}
+
+function extractBearerToken(rawHeader: unknown): string {
+  const authHeader = asString(rawHeader).trim();
   if (!authHeader) return "";
-  const match = authHeader.match(/^Bearer\s+(.+)$/i);
-  return match ? match[1].trim() : "";
+  if (authHeader.length <= 7) return "";
+  if (authHeader.slice(0, 7).toLowerCase() !== "bearer ") return "";
+  return authHeader.slice(7).trim();
+}
+
+function buildRateLimitKey(req: Request): string {
+  const bearerToken = extractBearerToken(req.headers["authorization"] || (req.headers as any)["Authorization"]);
+  if (bearerToken) {
+    const digest = crypto.createHash("sha256").update(bearerToken).digest("hex").slice(0, 24);
+    return `token:${digest}`;
+  }
+  const ipAddress = sanitizeText(requestIpAddress(req), 120);
+  return ipAddress ? `ip:${ipAddress}` : "ip:unknown";
+}
+
+function sendRateLimitResponse(res: Response): void {
+  res.status(429).json({
+    error: "rate_limit_exceeded",
+    detail: "Too many requests. Please slow down and retry shortly.",
+  });
 }
 
 function normalizeAdFormat(value: unknown): string {
@@ -2323,6 +2393,45 @@ function asPlainObject(value: unknown): Record<string, unknown> {
   }
   return {};
 }
+
+const apiRateLimiter = rateLimit({
+  windowMs: API_RATE_LIMIT_WINDOW_MS,
+  max: API_RATE_LIMIT_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: buildRateLimitKey,
+  skip: (req) => req.path === "/health",
+  handler: (_req, res) => sendRateLimitResponse(res),
+});
+
+const sensitiveApiRateLimiter = rateLimit({
+  windowMs: API_RATE_LIMIT_WINDOW_MS,
+  max: SENSITIVE_API_RATE_LIMIT_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: buildRateLimitKey,
+  handler: (_req, res) => sendRateLimitResponse(res),
+});
+
+const llmApiRateLimiter = rateLimit({
+  windowMs: API_RATE_LIMIT_WINDOW_MS,
+  max: LLM_API_RATE_LIMIT_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: buildRateLimitKey,
+  handler: (_req, res) => sendRateLimitResponse(res),
+});
+
+ROUTES.use(apiRateLimiter);
+ROUTES.use("/llm", llmApiRateLimiter);
+ROUTES.use("/mobile/play-integrity/verify", sensitiveApiRateLimiter);
+ROUTES.use("/mobile/auth/exchange", sensitiveApiRateLimiter);
+ROUTES.use("/notify/sendTest", sensitiveApiRateLimiter);
+ROUTES.use("/notifications/register-token", sensitiveApiRateLimiter);
+ROUTES.use("/notifications/unregister-token", sensitiveApiRateLimiter);
+ROUTES.use("/notifications/preferences", sensitiveApiRateLimiter);
+ROUTES.use("/notifications/personalize", sensitiveApiRateLimiter);
+ROUTES.use("/notifications/sync-topics", sensitiveApiRateLimiter);
 
 function normalizePolymarketSort(value: unknown): "relevance" | "volume" {
   return sanitizeText(value, 24).toLowerCase() === "volume" ? "volume" : "relevance";
@@ -3038,7 +3147,15 @@ function pickModelForProvider(
 }
 
 function parseWebhookSecret(req: Request): string {
-  return sanitizeText(req.headers["x-quantura-webhook-secret"] || req.query.secret, 500);
+  const headerSecret = sanitizeText(req.headers["x-quantura-webhook-secret"] || req.headers["x-webhook-secret"], 500);
+  if (headerSecret) return headerSecret;
+  const bearerSecret = extractBearerToken(req.headers["authorization"] || (req.headers as any)["Authorization"]);
+  if (bearerSecret) return sanitizeText(bearerSecret, 500);
+  if (sanitizeText(req.method, 16).toUpperCase() !== "GET") {
+    const body = asPlainObject(req.body);
+    return sanitizeText(body.secret || body.webhookSecret, 500);
+  }
+  return "";
 }
 
 function checkWebhookSecret(req: Request, expected: string): boolean {

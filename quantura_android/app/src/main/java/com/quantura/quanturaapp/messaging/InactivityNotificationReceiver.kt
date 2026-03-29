@@ -52,7 +52,9 @@ class InactivityNotificationReceiver : BroadcastReceiver() {
         }
 
         val deepLink = if (path.startsWith("http")) path else "https://quantura.studio$path"
-        val launchIntent = Intent(context, MainActivity::class.java).apply {
+        val launchIntent = Intent().apply {
+            setClass(context, MainActivity::class.java)
+            setPackage(context.packageName)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra(QuanturaMessagingService.EXTRA_DEEP_LINK_URL, deepLink)
         }

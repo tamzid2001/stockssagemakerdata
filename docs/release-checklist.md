@@ -13,7 +13,7 @@
 ### Android Native
 - [ ] QuanturaMessagingService registered in AndroidManifest
 - [ ] POST_NOTIFICATIONS permission requested (Android 13+)
-- [ ] google-services.json present with correct package
+- [ ] `google-services.json` materialized locally via `./scripts/setup_local_firebase_credentials.sh` with the correct package
 - [ ] FCM token fetched and injected into WebView (window.__NATIVE_FCM_TOKEN__)
 - [ ] Test: send test notification to native app
 - [ ] Test: tap notification → app opens to deep link URL
@@ -22,7 +22,7 @@
 - [ ] Apple Developer Program membership
 - [ ] APNs key (.p8) created in Apple Developer Console
 - [ ] APNs key uploaded to Firebase Console (Project Settings → Cloud Messaging)
-- [ ] GoogleService-Info.plist with correct bundle ID
+- [ ] `GoogleService-Info.plist` materialized locally via `./scripts/setup_local_firebase_credentials.sh` with the correct bundle ID
 - [ ] Push Notifications capability enabled in Xcode
 - [ ] Test: iOS simulator/device receive notification
 - **Stub:** iOS project not yet configured; add when account available.
@@ -80,7 +80,7 @@
 - [ ] App Store / Play Store privacy declarations (data collected)
 - [ ] POST_NOTIFICATIONS (Android 13+): request only when needed
 - [ ] No API keys or secrets in version control
-- [ ] .env / google-services.json in .gitignore
+- [ ] `.env`, `google-services.json`, and `GoogleService-Info.plist` remain ignored by git
 
 ---
 
@@ -103,7 +103,7 @@
 | AdMob production IDs | Pending | Replace demo IDs in Remote Config |
 | Play Console IAP products | Pending | Create product IDs for paywall |
 | RevenueCat keys (optional) | Optional | If using RevenueCat |
-| google-services.json | Required | In quantura_android/app/ for Firebase |
+| google-services.json | Required locally | Materialize via `./scripts/setup_local_firebase_credentials.sh` into `quantura_android/app/` |
 
 ---
 

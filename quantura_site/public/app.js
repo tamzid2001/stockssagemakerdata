@@ -4148,6 +4148,26 @@
 	    return state.remoteFlags;
 	  };
 
+  const createSecureIdChunk = (length = 9) => {
+    const desired = Math.max(4, Math.floor(length));
+    const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
+    const cryptoApi = typeof window !== "undefined" && window.crypto && typeof window.crypto.getRandomValues === "function"
+      ? window.crypto
+      : null;
+    if (cryptoApi) {
+      const bytes = new Uint8Array(desired);
+      cryptoApi.getRandomValues(bytes);
+      let chunk = "";
+      for (let index = 0; index < bytes.length; index += 1) {
+        chunk += alphabet.charAt(bytes[index] % alphabet.length);
+      }
+      return chunk;
+    }
+    const perfNow = typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : 0;
+    const fallbackSeed = `${Date.now().toString(36)}${perfNow.toString(36).replace(".", "")}`;
+    return fallbackSeed.slice(-desired).padStart(desired, "0");
+  };
+
   let ephemeralSessionId = "";
   const getSessionId = () => {
     if (ephemeralSessionId) return ephemeralSessionId;
@@ -4158,13 +4178,13 @@
         ephemeralSessionId = existing;
         return existing;
       }
-      const sessionId = `qs_${Math.random().toString(36).slice(2, 11)}${Date.now().toString(36)}`;
+      const sessionId = `qs_${createSecureIdChunk(9)}${Date.now().toString(36)}`;
       localStorage.setItem(key, sessionId);
       ephemeralSessionId = sessionId;
       return sessionId;
     } catch (error) {
       // Some browsers/extensions block storage access. Keep a stable per-page session id anyway.
-      ephemeralSessionId = `qs_${Math.random().toString(36).slice(2, 11)}${Date.now().toString(36)}`;
+      ephemeralSessionId = `qs_${createSecureIdChunk(9)}${Date.now().toString(36)}`;
       return ephemeralSessionId;
     }
   };

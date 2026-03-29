@@ -71,13 +71,15 @@ function normalizeAssetUrl(rawUrl: string): string {
   if (!input) return "";
   try {
     const url = new URL(input);
-    if (url.hostname.includes("dropbox.com")) {
+    const normalizedHost = url.hostname.trim().toLowerCase();
+    if (url.protocol !== "https:" && url.protocol !== "http:") return "";
+    if (normalizedHost === "dropbox.com" || normalizedHost.endsWith(".dropbox.com")) {
       url.searchParams.delete("dl");
       url.searchParams.set("raw", "1");
     }
     return url.toString();
   } catch (_error) {
-    return input;
+    return "";
   }
 }
 
