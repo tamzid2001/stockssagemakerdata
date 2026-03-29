@@ -99,6 +99,12 @@ If you update files in `quantura_site/pages/`, sync SSR templates before shippin
 node quantura_site/functions_ssr/scripts/sync-templates.js
 ```
 
+For local Firebase/mobile work, hydrate ignored local credential files from Google Secret Manager first:
+
+```bash
+./scripts/setup_local_firebase_credentials.sh
+```
+
 ## Deployment
 
 The canonical production deploy path is the repo-level script:
