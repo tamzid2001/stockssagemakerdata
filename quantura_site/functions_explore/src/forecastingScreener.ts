@@ -68,6 +68,8 @@ export type MarketDataScreenerResponse = {
   serviceMessage: string;
 };
 
+export const DEFAULT_FORECAST_QUANTILES = Object.freeze([0.01, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99]);
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
 const DEFAULT_TIMEOUT_MS = 12000;
@@ -657,7 +659,7 @@ function normalizeForecastQuantiles(raw: unknown): number[] {
       return true;
     })
     .sort((left, right) => left - right);
-  if (!values.length) throw new Error("At least one quantile is required.");
+  if (!values.length) return [...DEFAULT_FORECAST_QUANTILES];
   return values;
 }
 
@@ -742,9 +744,7 @@ export function buildForecastFromHistory(input: {
       drift: Number(metrics.drift.toFixed(6)),
       volatility: Number(metrics.volatility.toFixed(6)),
     },
-    serviceMessage: `Quantura Horizon generated ${horizon} forward ${interval === "1h" ? "hourly" : "daily"} quantile steps from ${
-      closes.length
-    } historical bars using a deterministic drift and volatility model.`,
+    serviceMessage: `Quantura Horizon generated ${horizon} forward ${interval === "1h" ? "hourly" : "daily"} steps with fixed P01-P99, P10-P90, and P25-P75 bands from ${closes.length} historical bars.`,
     tradeRationale: buildTradeRationale(lastClose, finalMedian, metrics.volatility, interval),
     historyRows: input.historyRows,
     engine: "quantura_quantile_drift_v1",

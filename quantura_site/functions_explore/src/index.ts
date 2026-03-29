@@ -1893,9 +1893,18 @@ function buildSharedScreenerRunPayload(
   const workflowArtifactId = Math.max(0, Math.floor(asFinite(source.workflowArtifactId, 0)));
   const workflowArtifactName = asString(source.workflowArtifactName, "");
   const workflowArtifactsRaw = Array.isArray(source.workflowArtifacts) ? source.workflowArtifacts : [];
-  const workflowArtifacts = workflowArtifactsRaw.length
+  type WorkflowArtifactSummary = {
+    id: number;
+    name: string;
+    sizeInBytes: number;
+    expired: boolean;
+    downloadPath: string;
+    downloadUrl: string;
+    githubUrl: string;
+  };
+  const workflowArtifacts: WorkflowArtifactSummary[] = workflowArtifactsRaw.length
     ? workflowArtifactsRaw
-        .map((item) => {
+        .map((item): WorkflowArtifactSummary | null => {
           const record = asPlainObject(item);
           const artifactId = Math.max(0, Math.floor(asFinite(record.id, 0)));
           if (!artifactId) return null;
@@ -1911,7 +1920,7 @@ function buildSharedScreenerRunPayload(
             githubUrl: asString(record.githubUrl, ""),
           };
         })
-        .filter((item): item is Record<string, unknown> => Boolean(item))
+        .filter((item): item is WorkflowArtifactSummary => Boolean(item))
         .slice(0, 8)
     : workflowRunId && workflowArtifactId
     ? [
