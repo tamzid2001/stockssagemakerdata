@@ -53,6 +53,7 @@ const refs = {
   followAuthorList: document.getElementById("follow-author-list"),
 };
 
+const PROFILE_BRAND_LOGO = "/assets/quantura-icon.svg";
 const state = {
   authClient: null,
   api: null,
@@ -153,7 +154,11 @@ function renderProfileHeader() {
   if (refs.profileName) refs.profileName.textContent = profile.name || "-";
   if (refs.profileHandle) refs.profileHandle.textContent = `@${handle}`;
   if (refs.profileEmail) refs.profileEmail.textContent = profile.emailVisible ? profile.email || "-" : "Hidden";
-  if (refs.profileAvatar) refs.profileAvatar.src = profile.photoURL || "/assets/quantura-icon.svg";
+  if (refs.profileAvatar) {
+    const photoUrl = String(profile.photoURL || "").trim();
+    refs.profileAvatar.src = photoUrl || PROFILE_BRAND_LOGO;
+    refs.profileAvatar.classList.toggle("brand-avatar", !photoUrl);
+  }
   refs.profileVerifiedBadge?.classList.toggle("hidden", !profile.verified);
   refs.profilePrivacySection?.classList.toggle("hidden", !state.ownProfile);
   refs.savedFoldersSection?.classList.toggle("hidden", !state.ownProfile);
