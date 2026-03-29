@@ -151,7 +151,9 @@ object NativePersonalizedNotificationManager {
         val normalizedPath = if (deepLinkPath.startsWith("/")) deepLinkPath else "/$deepLinkPath"
         val targetUrl = "$BASE_URL$normalizedPath"
         val id = notificationId.incrementAndGet()
-        val intent = Intent(context, MainActivity::class.java).apply {
+        val intent = Intent().apply {
+            setClass(context, MainActivity::class.java)
+            setPackage(context.packageName)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra(QuanturaMessagingService.EXTRA_DEEP_LINK_URL, targetUrl)
         }
