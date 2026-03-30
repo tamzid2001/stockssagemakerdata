@@ -3,7 +3,6 @@ import cors from "cors";
 import rateLimit from "express-rate-limit";
 import express, { Request, Response } from "express";
 import admin from "firebase-admin";
-import crypto from "crypto";
 import { GoogleAuth } from "google-auth-library";
 import { registerFiscalDataRoutes } from "./fiscaldataProxy";
 import { runScheduledFiscaldataRefresh } from "./schedules/refreshFiscaldata";
