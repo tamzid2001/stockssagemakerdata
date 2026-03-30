@@ -3,13 +3,27 @@ name: Quantura App CI
 on:
   pull_request:
     paths:
+      - ".env.example"
+      - ".gitignore"
       - "quantura_site/**"
+      - "README.md"
+      - "SECURITY.md"
+      - "TROUBLESHOOTING.md"
+      - "docs/release-checklist.md"
+      - "scripts/setup_local_firebase_credentials.sh"
       - ".github/workflows/quantura-app-ci.yml"
   push:
     branches:
       - main
     paths:
+      - ".env.example"
+      - ".gitignore"
       - "quantura_site/**"
+      - "README.md"
+      - "SECURITY.md"
+      - "TROUBLESHOOTING.md"
+      - "docs/release-checklist.md"
+      - "scripts/setup_local_firebase_credentials.sh"
       - ".github/workflows/quantura-app-ci.yml"
   workflow_dispatch:
 
@@ -37,16 +51,53 @@ jobs:
       - name: Install Python test deps
         run: |
           python -m pip install --upgrade pip
+          pip install -r requirements.txt
           pip install pytest
+
+      - name: Install web and backend deps
+        run: |
+          npm ci --prefix quantura_site
+          npm ci --prefix quantura_site/functions_explore
 
       - name: Run Quantura tests
         run: |
           pytest -q quantura_site/tests
 
+      - name: Build Quantura web bundle
+        run: |
+          npm run build --prefix quantura_site
+
+      - name: Build Explore backend
+        run: |
+          npm run build --prefix quantura_site/functions_explore
+
       - name: Syntax check frontend and SSR entrypoints
         run: |
           node --check quantura_site/public/app.js
           node --check quantura_site/functions_ssr/index.js
+
+      - name: Verify local-only secret files are not tracked
+        run: |
+          set -euo pipefail
+          forbidden_files=(
+            "quantura_site/functions/serviceAccountKey.json"
+            "quantura_ios/quantura_ios/GoogleService-Info.plist"
+            "quantura_android/app/google-services.json"
+          )
+
+          tracked="$(git ls-files)"
+          violations=0
+
+          for path in "${forbidden_files[@]}"; do
+            if grep -Fxq "$path" <<<"$tracked"; then
+              echo "Tracked local-only secret file detected: $path"
+              violations=$((violations + 1))
+            fi
+          done
+
+          if [[ "$violations" -gt 0 ]]; then
+            exit 1
+          fi
 
       - name: Verify SSR templates are synced
         run: |

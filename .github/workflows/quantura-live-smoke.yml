@@ -11,11 +11,12 @@ permissions:
 jobs:
   smoke:
     runs-on: ubuntu-latest
-    name: Probe key production routes
+    name: Probe key production routes and API health
     steps:
       - name: Check live endpoints
         env:
-          BASE_URL: https://quantura-e2e3d.web.app
+          PRIMARY_BASE_URL: https://quantura.studio
+          FALLBACK_BASE_URL: https://quantura-e2e3d.web.app
         run: |
           set -euo pipefail
 
@@ -38,30 +39,64 @@ jobs:
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
 
-          for path in "${paths[@]}"; do
-            url="${BASE_URL}${path}"
+          check_route() {
+            local base_url="$1"
+            local path="$2"
+            local url="${base_url}${path}"
+            local tmp
             tmp="$(mktemp)"
+            local code
             code="$(curl -L --max-time 30 -sS -o "$tmp" -w "%{http_code}" "$url" || true)"
 
             if [[ "$code" != "200" ]]; then
               echo "❌ ${url} returned HTTP ${code}"
-              echo "- ❌ \`${path}\` -> HTTP ${code}" >> "$GITHUB_STEP_SUMMARY"
+              echo "- ❌ \`${url}\` -> HTTP ${code}" >> "$GITHUB_STEP_SUMMARY"
               failures=$((failures + 1))
               rm -f "$tmp"
-              continue
+              return
             fi
 
             if ! grep -qi "QUANTURA" "$tmp"; then
               echo "❌ ${url} did not include expected Quantura marker text"
-              echo "- ❌ \`${path}\` -> 200 but marker text missing" >> "$GITHUB_STEP_SUMMARY"
+              echo "- ❌ \`${url}\` -> 200 but marker text missing" >> "$GITHUB_STEP_SUMMARY"
               failures=$((failures + 1))
               rm -f "$tmp"
-              continue
+              return
             fi
 
             echo "✅ ${url}"
-            echo "- ✅ \`${path}\` -> 200" >> "$GITHUB_STEP_SUMMARY"
+            echo "- ✅ \`${url}\` -> 200" >> "$GITHUB_STEP_SUMMARY"
             rm -f "$tmp"
+          }
+
+          for path in "${paths[@]}"; do
+            check_route "$PRIMARY_BASE_URL" "$path"
+          done
+
+          for api_base in "$PRIMARY_BASE_URL" "$FALLBACK_BASE_URL"; do
+            api_url="${api_base}/api/health"
+            api_body="$(mktemp)"
+            api_code="$(curl -L --max-time 30 -sS -o "$api_body" -w "%{http_code}" "$api_url" || true)"
+
+            if [[ "$api_code" != "200" ]]; then
+              echo "❌ ${api_url} returned HTTP ${api_code}"
+              echo "- ❌ \`${api_url}\` -> HTTP ${api_code}" >> "$GITHUB_STEP_SUMMARY"
+              failures=$((failures + 1))
+              rm -f "$api_body"
+              continue
+            fi
+
+            if ! grep -q '"ok":true' "$api_body"; then
+              echo "❌ ${api_url} did not return an ok health payload"
+              echo "- ❌ \`${api_url}\` -> 200 but ok payload missing" >> "$GITHUB_STEP_SUMMARY"
+              failures=$((failures + 1))
+              rm -f "$api_body"
+              continue
+            fi
+
+            echo "✅ ${api_url}"
+            echo "- ✅ \`${api_url}\` -> 200 with ok payload" >> "$GITHUB_STEP_SUMMARY"
+            rm -f "$api_body"
           done
 
           if [[ "$failures" -gt 0 ]]; then
