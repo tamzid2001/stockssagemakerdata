@@ -10,24 +10,28 @@ service firebase.storage {
       return isSignedIn() && request.auth.token.email == "tamzid257@gmail.com";
     }
 
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
     match /fulfillment/{orderId}/{fileName} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
 
-    match /predictions/{userId}/{fileName} {
-      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
-      allow write: if isSignedIn() && request.auth.uid == userId;
+    match /predictions/{userId}/{allPaths=**} {
+      allow read: if isAdmin() || isOwner(userId);
+      allow write: if isOwner(userId);
     }
 
-    match /backtests/{userId}/{fileName} {
-      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
-      allow write: if isSignedIn() && request.auth.uid == userId;
+    match /backtests/{userId}/{allPaths=**} {
+      allow read: if isAdmin() || isOwner(userId);
+      allow write: if isOwner(userId);
     }
 
-    match /forecast_reports/{userId}/{fileName} {
-      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
-      allow write: if isSignedIn() && request.auth.uid == userId;
+    match /forecast_reports/{userId}/{allPaths=**} {
+      allow read: if isAdmin() || isOwner(userId);
+      allow write: if isOwner(userId);
     }
 
     match /{allPaths=**} {
