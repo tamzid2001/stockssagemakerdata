@@ -57,15 +57,13 @@ High-value areas in this repo include:
 
 ## Secret handling rules
 
-- Never commit service-account JSON files, `.env` files, OAuth secrets, API tokens, or mobile Firebase config files.
+- Never commit service-account JSON files, `.env` files, OAuth secrets, API tokens, or other local credential files.
 - Use Google Secret Manager, GitHub Actions secrets, or local ignored files for sensitive values.
 - Treat logs, screenshots, artifacts, and issue comments as potentially public unless they are in a private vulnerability report.
 
 Known local-only credential paths that must stay out of Git:
 
 - `quantura_site/functions/serviceAccountKey.json`
-- `quantura_ios/quantura_ios/GoogleService-Info.plist`
-- `quantura_android/app/google-services.json`
 
 ## Incident response checklist
 

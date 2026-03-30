@@ -5,8 +5,6 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_ID="${GOOGLE_CLOUD_PROJECT:-quantura-e2e3d}"
 FORCE_REFRESH="${FORCE_REFRESH:-0}"
 FIREBASE_SERVICE_ACCOUNT_SECRET_NAME="${FIREBASE_SERVICE_ACCOUNT_SECRET_NAME:-FIREBASE_SERVICE_ACCOUNT_JSON}"
-FIREBASE_IOS_CONFIG_SECRET_NAME="${FIREBASE_IOS_CONFIG_SECRET_NAME:-FIREBASE_IOS_GOOGLE_SERVICE_INFO_PLIST}"
-FIREBASE_ANDROID_CONFIG_SECRET_NAME="${FIREBASE_ANDROID_CONFIG_SECRET_NAME:-FIREBASE_ANDROID_GOOGLE_SERVICES_JSON}"
 
 copy_example_if_missing() {
   local target="$1"
@@ -63,20 +61,8 @@ materialize_local_credential \
   "$ROOT_DIR/quantura_site/functions/serviceAccountKey.json" \
   "$ROOT_DIR/quantura_site/functions/serviceAccountKey.example.json"
 
-materialize_local_credential \
-  "$FIREBASE_IOS_CONFIG_SECRET_NAME" \
-  "$ROOT_DIR/quantura_ios/quantura_ios/GoogleService-Info.plist" \
-  "$ROOT_DIR/quantura_ios/quantura_ios/GoogleService-Info.plist.example"
-
-materialize_local_credential \
-  "$FIREBASE_ANDROID_CONFIG_SECRET_NAME" \
-  "$ROOT_DIR/quantura_android/app/google-services.json" \
-  "$ROOT_DIR/quantura_android/app/google-services.json.example"
-
 echo "Done. Local Firebase credential files stay ignored by git."
 echo "Project: $PROJECT_ID"
 echo "Secrets used:"
 echo "  service account: $FIREBASE_SERVICE_ACCOUNT_SECRET_NAME"
-echo "  iOS config:      $FIREBASE_IOS_CONFIG_SECRET_NAME"
-echo "  Android config:  $FIREBASE_ANDROID_CONFIG_SECRET_NAME"
 echo "If Secret Manager access is unavailable, placeholder example files are created instead."

@@ -1,119 +1,89 @@
 # Quantura Release Checklist
 
-## Push Notifications
+## Web and API Readiness
 
-### Web / PWA
-- [ ] `firebase-messaging-sw.js` deployed at site root (quantura_site/public/)
-- [ ] FCM_WEB_VAPID_KEY configured in Secret Manager
-- [ ] `register_notification_token` and `send_test_notification` functions deployed
-- [ ] Test: foreground notification (toast)
-- [ ] Test: background notification (system notification)
-- [ ] Test: click notification → deep link opens correct screen
+### Hosting and app shell
+- [ ] Public assets built from `quantura_site/public/`
+- [ ] Source page changes synced into `quantura_site/functions_ssr/templates/`
+- [ ] Firebase Hosting config reviewed for the target release
+- [ ] Core logged-out routes render correctly
+- [ ] Core logged-in dashboard routes render correctly
 
-### Android Native
-- [ ] QuanturaMessagingService registered in AndroidManifest
-- [ ] POST_NOTIFICATIONS permission requested (Android 13+)
-- [ ] `google-services.json` materialized locally via `./scripts/setup_local_firebase_credentials.sh` with the correct package
-- [ ] FCM token fetched and injected into WebView (window.__NATIVE_FCM_TOKEN__)
-- [ ] Test: send test notification to native app
-- [ ] Test: tap notification → app opens to deep link URL
+### Notifications and messaging
+- [ ] `firebase-messaging-sw.js` deployed at the site root
+- [ ] `FCM_WEB_VAPID_KEY` configured in Secret Manager
+- [ ] Notification registration and send-test endpoints deployed
+- [ ] Foreground notification test passes
+- [ ] Background notification test passes
+- [ ] Notification click deep link opens the correct route
 
-### iOS Native (blocked until Apple Developer account)
-- [ ] Apple Developer Program membership
-- [ ] APNs key (.p8) created in Apple Developer Console
-- [ ] APNs key uploaded to Firebase Console (Project Settings → Cloud Messaging)
-- [ ] `GoogleService-Info.plist` materialized locally via `./scripts/setup_local_firebase_credentials.sh` with the correct bundle ID
-- [ ] Push Notifications capability enabled in Xcode
-- [ ] Test: iOS simulator/device receive notification
-- **Stub:** iOS project not yet configured; add when account available.
+### Forecasting and data workflows
+- [ ] Forecast Foundry create/save/reopen flow verified
+- [ ] Historical-data download flow verified
+- [ ] Explore publication flow verified
+- [ ] Sports forecasting or other newly added forecast workflows verified if part of the release
+- [ ] Any new export/download payloads verified against real sample data
 
 ---
 
-## Ads (AdMob)
+## Remote Config and feature flags
 
-### Configuration
-- [ ] Replace demo ad unit IDs with production IDs in Remote Config:
-  - `adaptiveBanner`: ca-app-pub-3940256099942544/9214589741 (demo) → your banner ID
-  - `interstitial`: ca-app-pub-3940256099942544/1033173712 (demo) → your interstitial ID
-  - `rewarded`: ca-app-pub-3940256099942544/5224354917 (demo) → your rewarded ID
-  - `appOpen`: ca-app-pub-3940256099942544/9257395921 (demo) → your app open ID
-- [ ] `feature_flags.ads_enabled` = true in Remote Config (or default)
-- [ ] AdMob App ID in AndroidManifest (com.google.android.gms.ads.APPLICATION_ID)
-
-### GDPR / Consent (UMP)
-- [ ] Add User Messaging Platform SDK: `implementation("com.google.android.ump:user-messaging-platform:2.x")`
-- [ ] Request consent before loading ads (ConsentInformation.requestConsentInfoUpdate)
-- [ ] Document: UMP integration stubbed; implement before EU rollout.
-
-### Testing
-- [ ] Test banner renders at bottom of screen
-- [ ] Test interstitial triggers (via QuanturaBridge showInterstitialAd)
-- [ ] No crashes with missing google-services.json (local builds)
+- [ ] Required feature flags exist in Remote Config
+- [ ] Default values are mirrored between SSR and hydrated client behavior where applicable
+- [ ] Rollout-sensitive flags are documented before shipping
+- [ ] Ad and monetization flags point to the intended environment values
 
 ---
 
-## In-App Purchases (IAP)
+## Billing and access control
 
-### Android (Play Billing)
-- [ ] Billing dependency: `implementation("com.android.billingclient:billing-ktx:6.x")`
-- [ ] Product IDs created in Play Console (e.g. `quantura_pro_monthly`)
-- [ ] License testers added in Play Console
-- [ ] IapService implementation wired to BillingClient
-- [ ] Paywall screen: list offerings, purchase, restore
-- [ ] Entitlement check gates premium feature
-
-### iOS (StoreKit) – blocked
-- [ ] Apple Developer account required
-- [ ] In-App Purchase products in App Store Connect
-- [ ] StoreKit 2 integration
-- **Stub:** iOS IAP not implemented; add when account available.
-
-### RevenueCat (optional)
-- [ ] If using RevenueCat: API keys in Secret Manager
-- [ ] Configure product IDs in RevenueCat dashboard
+- [ ] Stripe checkout or billing portal changes validated if touched
+- [ ] Premium gating and entitlement checks verified
+- [ ] Creator/support/subscription flows verified if touched
+- [ ] Anonymous, authenticated, and admin-only access boundaries validated for changed surfaces
 
 ---
 
-## Privacy & Permissions
+## Privacy and security
 
-- [ ] Privacy policy URL updated and linked
-- [ ] App Store / Play Store privacy declarations (data collected)
-- [ ] POST_NOTIFICATIONS (Android 13+): request only when needed
-- [ ] No API keys or secrets in version control
-- [ ] `.env`, `google-services.json`, and `GoogleService-Info.plist` remain ignored by git
-
----
-
-## Build & Versioning
-
-- [ ] versionCode / versionName incremented (Android)
-- [ ] CFBundleShortVersionString incremented (iOS)
-- [ ] Firebase / GCP project matches deployment target
-- [ ] CI build passes (if present)
-- [ ] ProGuard rules keep required classes (release)
+- [ ] Privacy policy and legal links remain current
+- [ ] No API keys, tokens, `.env` files, or service-account credentials are present in git
+- [ ] Local credential files remain ignored by `.gitignore`
+- [ ] Secret Manager bindings and runtime configuration reviewed for touched integrations
 
 ---
 
-## What You Must Supply
+## Build and deployment
+
+- [ ] `node --check` or equivalent syntax checks pass for touched browser and SSR files
+- [ ] `npm run build` passes for touched JavaScript or TypeScript packages
+- [ ] Targeted tests pass for the changed area
+- [ ] `./deploy.sh` is used for production deploys
+- [ ] Live smoke checks pass after deploy
+
+---
+
+## What you must supply
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Apple Developer account | Blocked | Required for iOS push, IAP |
-| APNs key (.p8) | Blocked | Upload to Firebase after Apple account |
-| AdMob production IDs | Pending | Replace demo IDs in Remote Config |
-| Play Console IAP products | Pending | Create product IDs for paywall |
-| RevenueCat keys (optional) | Optional | If using RevenueCat |
-| google-services.json | Required locally | Materialize via `./scripts/setup_local_firebase_credentials.sh` into `quantura_android/app/` |
+| Secret Manager values | Required | Needed for protected runtime integrations |
+| Ad or monetization config | Conditional | Required only when the release touches those surfaces |
+| Stripe secrets | Conditional | Required only for billing-related releases |
+| Provider API keys | Conditional | Required only for changed data or model integrations |
 
 ---
 
-## Quick Test Commands
+## Quick test commands
 
 ```bash
-# Web push (from Firebase Console or send_test_notification callable)
-# Android: build and run on emulator/device
-cd quantura_android && ./gradlew assembleDebug
+# Web syntax checks
+node --check quantura_site/public/app.js
+node --check quantura_site/functions_ssr/index.js
 
-# Firebase deploy (site + functions)
-cd quantura_site && firebase deploy
+# Optional targeted tests
+pytest -q quantura_site/tests
+
+# Deploy
+./deploy.sh
 ```
