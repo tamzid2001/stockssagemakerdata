@@ -2254,6 +2254,7 @@ type GithubWorkflowRunRecord = {
   path: string;
   workflowName: string;
   headBranch: string;
+  event: string;
   status: string;
   conclusion: string;
   runNumber: number;
@@ -2361,6 +2362,7 @@ function normalizeGithubWorkflowRun(raw: unknown): GithubWorkflowRunRecord | nul
     path: sanitizeText(record.path, 320),
     workflowName: sanitizeText(record.name, 240),
     headBranch: sanitizeText(record.head_branch, 120),
+    event: sanitizeText(record.event, 80).toLowerCase(),
     status: sanitizeText(record.status, 80).toLowerCase(),
     conclusion: sanitizeText(record.conclusion, 80).toLowerCase(),
     runNumber: Math.floor(asFinite(record.run_number, 0)),
@@ -2401,26 +2403,30 @@ async function getGithubWorkflowRun(runId: number): Promise<GithubWorkflowRunRec
   return normalizeGithubWorkflowRun(payload);
 }
 
-async function listGithubWorkflowRuns(input: { perPage?: number; status?: string; branch?: string } = {}): Promise<GithubWorkflowRunRecord[]> {
+async function listGithubWorkflowRuns(input: { perPage?: number; status?: string; branch?: string; event?: string } = {}): Promise<GithubWorkflowRunRecord[]> {
   const perPage = Math.max(1, Math.min(100, Math.floor(asFinite(input.perPage, 20))));
   const params = new URLSearchParams();
   params.set("per_page", String(perPage));
   if (sanitizeText(input.status, 40)) params.set("status", sanitizeText(input.status, 40));
   if (sanitizeText(input.branch, 120)) params.set("branch", sanitizeText(input.branch, 120));
+  if (sanitizeText(input.event, 40)) params.set("event", sanitizeText(input.event, 40));
   const payload = await githubApiJson(`/actions/workflows/${encodeURIComponent(GITHUB_SCREENER_WORKFLOW)}/runs?${params.toString()}`);
   const runs = Array.isArray(payload.workflow_runs) ? payload.workflow_runs : [];
   return runs.map((item) => normalizeGithubWorkflowRun(item)).filter((item): item is GithubWorkflowRunRecord => Boolean(item));
 }
 
-async function listRecentSuccessfulGithubScreenerRuns(limit = 12): Promise<GithubWorkflowRunRecord[]> {
+async function listRecentScheduledGithubScreenerRuns(limit = 12): Promise<GithubWorkflowRunRecord[]> {
   const desired = Math.max(1, Math.min(60, Math.floor(asFinite(limit, 12))));
-  const perPage = Math.max(desired * 3, 20);
+  const perPage = Math.max(desired * 2, 20);
   const runs = await listGithubWorkflowRuns({
     perPage,
-    status: "completed",
     branch: GITHUB_ACTIONS_BRANCH,
+    event: "schedule",
   });
-  return runs.filter((item) => item.conclusion === "success").slice(0, desired);
+  return runs
+    .filter((item) => item.event === "schedule")
+    .filter((item) => item.status === "queued" || item.status === "in_progress" || item.status === "completed")
+    .slice(0, desired);
 }
 
 function normalizeGithubWorkflowStep(raw: unknown): GithubWorkflowStepRecord | null {
@@ -2826,6 +2832,7 @@ function buildPublicGithubScreenerRunSummary(
     workflowRunId: workflowRun.id,
     workflowRunNumber: workflowRun.runNumber || null,
     workflowRunUrl: sanitizeText(workflowRun.htmlUrl, 600),
+    workflowEvent: sanitizeText(workflowRun.event, 80) || "schedule",
     workflowStatus: sanitizeText(workflowRun.status, 80) || "completed",
     workflowConclusion: sanitizeText(workflowRun.conclusion, 80) || "success",
     createdAt: createdAtMs ? new Date(createdAtMs).toISOString() : workflowRun.createdAt || null,
@@ -2837,7 +2844,13 @@ function buildPublicGithubScreenerRunSummary(
     topSymbols,
     serviceMessage:
       sanitizeText(source.serviceMessage, 320) ||
-      `GitHub Actions completed successfully for workflow #${workflowRun.runNumber || workflowRun.id}.`,
+      (workflowRun.status === "in_progress"
+        ? `Scheduled GitHub Actions screener workflow #${workflowRun.runNumber || workflowRun.id} is running now.`
+        : workflowRun.status === "queued"
+        ? `Scheduled GitHub Actions screener workflow #${workflowRun.runNumber || workflowRun.id} is queued.`
+        : workflowRun.conclusion && workflowRun.conclusion !== "success"
+        ? `Scheduled GitHub Actions screener workflow #${workflowRun.runNumber || workflowRun.id} finished with ${workflowRun.conclusion}.`
+        : `Scheduled GitHub Actions screener workflow #${workflowRun.runNumber || workflowRun.id} completed successfully.`),
     artifacts: visibleArtifacts,
     artifactCount: visibleArtifacts.length,
   };
@@ -8154,8 +8167,8 @@ ROUTES.get("/screener/github-history", async (req, res) => {
       return;
     }
     const requestedLimit = Math.floor(asFinite(req.query.limit, 12));
-    const limit = Math.max(1, Math.min(60, requestedLimit || 24));
-    const workflowRuns = await listRecentSuccessfulGithubScreenerRuns(limit);
+    const limit = Math.max(1, Math.min(60, requestedLimit || 60));
+    const workflowRuns = await listRecentScheduledGithubScreenerRuns(limit);
     const items = await Promise.all(
       workflowRuns.map(async (workflowRun) => {
         const [sourceMatch, artifacts] = await Promise.all([

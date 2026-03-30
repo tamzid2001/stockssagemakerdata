@@ -14820,7 +14820,7 @@
 
   const apiListPublicScreenerGithubRuns = async ({ limit = 12 } = {}) => {
     const params = new URLSearchParams();
-    params.set("limit", String(Math.max(1, Math.min(60, Number(limit) || 24))));
+    params.set("limit", String(Math.max(1, Math.min(60, Number(limit) || 60))));
     return apiRequestJson(`/api/screener/github-history?${params.toString()}`, { method: "GET" });
   };
 
@@ -21666,21 +21666,51 @@
     const rows = Array.isArray(items) ? items : [];
     if (!rows.length) {
       ui.screenerGithubHistoryStatus.textContent = "";
-      ui.screenerGithubHistoryList.innerHTML = `<div class="small muted">No successful GitHub screener runs are available yet.</div>`;
+      ui.screenerGithubHistoryList.innerHTML = `<div class="small muted">No scheduled GitHub screener runs are available yet.</div>`;
       return;
     }
-    ui.screenerGithubHistoryStatus.textContent = `${rows.length} successful GitHub run${rows.length === 1 ? "" : "s"}`;
+    const humanizeWorkflowLabel = (value = "") =>
+      String(value || "")
+        .trim()
+        .replace(/[_-]+/g, " ")
+        .replace(/\s+/g, " ")
+        .replace(/\b\w/g, (match) => match.toUpperCase());
+    const getStatusMeta = (item = {}) => {
+      const workflowStatus = String(item?.workflowStatus || "").trim().toLowerCase();
+      const workflowConclusion = String(item?.workflowConclusion || "").trim().toLowerCase();
+      if (workflowStatus === "in_progress") return { label: "Running", className: "in_progress" };
+      if (workflowStatus === "queued" || workflowStatus === "requested" || workflowStatus === "waiting" || workflowStatus === "pending") {
+        return { label: "Queued", className: "pending" };
+      }
+      if (workflowStatus === "completed") {
+        if (workflowConclusion === "success" || !workflowConclusion) return { label: "Completed", className: "fulfilled" };
+        if (workflowConclusion === "cancelled" || workflowConclusion === "failure" || workflowConclusion === "timed_out") {
+          return { label: humanizeWorkflowLabel(workflowConclusion), className: "cancelled" };
+        }
+        return { label: humanizeWorkflowLabel(workflowConclusion), className: "pending" };
+      }
+      return {
+        label: humanizeWorkflowLabel(workflowStatus || workflowConclusion || "unknown"),
+        className: workflowConclusion === "success" ? "fulfilled" : "pending",
+      };
+    };
+    ui.screenerGithubHistoryStatus.textContent = `${rows.length} scheduled GitHub run${rows.length === 1 ? "" : "s"}`;
     ui.screenerGithubHistoryList.innerHTML = rows
       .map((item) => {
+        const statusMeta = getStatusMeta(item);
         const title = escapeHtml(String(item?.title || item?.displayTitle || "GitHub screener workflow").trim());
         const workflowRunNumber = Number.isFinite(Number(item?.workflowRunNumber)) ? Number(item.workflowRunNumber) : null;
         const workflowRunUrl = escapeHtml(String(item?.workflowRunUrl || "").trim());
+        const workflowEvent = escapeHtml(humanizeWorkflowLabel(String(item?.workflowEvent || "schedule").trim() || "schedule"));
         const createdAt = escapeHtml(formatTimestamp(item?.createdAt || item?.completedAt || item?.updatedAt));
+        const updatedAt = escapeHtml(formatTimestamp(item?.updatedAt || item?.completedAt || item?.createdAt));
         const completedAt = escapeHtml(formatTimestamp(item?.completedAt || item?.updatedAt || item?.createdAt));
-        const matches = Number.isFinite(Number(item?.resultsFound)) ? Number(item.resultsFound) : 0;
+        const matchesValue = Number.isFinite(Number(item?.resultsFound)) ? Number(item.resultsFound) : 0;
         const screenedCount = Number.isFinite(Number(item?.screenedCount)) ? Number(item.screenedCount) : null;
         const minMarketCap = Number(item?.minMarketCap || 0);
         const serviceMessage = escapeHtml(String(item?.serviceMessage || "").trim());
+        const hasStructuredSummary = Boolean(String(item?.sourceRunId || "").trim()) || screenedCount !== null || minMarketCap > 0;
+        const matches = hasStructuredSummary ? matchesValue : null;
         const topSymbols = Array.isArray(item?.topSymbols)
           ? item.topSymbols.map((symbol) => escapeHtml(String(symbol || "").trim())).filter(Boolean).slice(0, 8)
           : [];
@@ -21700,20 +21730,26 @@
                   : "";
               })
               .join("")
-          : `<span class="small muted">Artifacts unavailable</span>`;
+          : String(item?.workflowStatus || "").trim().toLowerCase() === "completed"
+          ? `<span class="small muted">Artifacts unavailable</span>`
+          : `<span class="small muted">Artifacts will appear after completion</span>`;
         return `
           <div class="order-card">
             <div class="order-header">
               <div>
                 <div class="order-title">${title}</div>
-                <div class="small">Completed ${completedAt}</div>
+                <div class="small">${
+                  String(item?.workflowStatus || "").trim().toLowerCase() === "completed" ? `Completed ${completedAt}` : `Started ${createdAt}`
+                }</div>
               </div>
-              <span class="status fulfilled">Success</span>
+              <span class="status ${escapeHtml(statusMeta.className)}">${escapeHtml(statusMeta.label)}</span>
             </div>
             <div class="order-meta">
               <div><strong>Created</strong> ${createdAt}</div>
+              <div><strong>Updated</strong> ${updatedAt}</div>
+              <div><strong>Trigger</strong> ${workflowEvent}</div>
               <div><strong>Workflow</strong> ${workflowRunNumber !== null ? `#${workflowRunNumber}` : "GitHub Actions"}</div>
-              <div><strong>Matches</strong> ${matches}</div>
+              ${matches !== null ? `<div><strong>Matches</strong> ${matches}</div>` : ""}
               ${screenedCount !== null ? `<div><strong>Screened</strong> ${formatCompactNumber(screenedCount)}</div>` : ""}
               ${Number.isFinite(minMarketCap) && minMarketCap > 0 ? `<div><strong>Floor</strong> $${formatCompactNumber(minMarketCap)}</div>` : ""}
               ${topSymbols.length ? `<div><strong>Top symbols</strong> ${topSymbols.join(", ")}</div>` : ""}
@@ -21740,7 +21776,7 @@
       }
     }
     state.publicScreenerGithubRunsLoading = true;
-    ui.screenerGithubHistoryStatus.textContent = "Loading recent successful GitHub screener runs...";
+    ui.screenerGithubHistoryStatus.textContent = "Loading scheduled GitHub screener runs...";
     ui.screenerGithubHistoryList.innerHTML = `<div class="small muted">${skeletonHtml(3)}</div>`;
     try {
       const payload = await apiListPublicScreenerGithubRuns({ limit: 60 });
@@ -21748,10 +21784,10 @@
       state.publicScreenerGithubRuns = items;
       state.publicScreenerGithubRunsLoadedAt = Date.now();
       renderPublicScreenerGithubRuns(items);
-      if (notify) showToast("GitHub screener history refreshed.");
+      if (notify) showToast("Scheduled GitHub screener history refreshed.");
       return items;
     } catch (error) {
-      const message = extractErrorMessage(error, "Unable to load recent GitHub screener runs.");
+      const message = extractErrorMessage(error, "Unable to load scheduled GitHub screener runs.");
       ui.screenerGithubHistoryStatus.textContent = message;
       if (Array.isArray(state.publicScreenerGithubRuns) && state.publicScreenerGithubRuns.length) {
         renderPublicScreenerGithubRuns(state.publicScreenerGithubRuns);
@@ -30072,7 +30108,7 @@
             state.predictionsContext.uploadDoc = null;
             state.predictionsContext.table = null;
             state.predictionsContext.previewPage = 0;
-            if (window.location.pathname === "/screener") {
+            if (ui.screenerGithubHistoryList) {
               loadPublicScreenerGithubRuns({ force: false }).catch(() => {});
             }
             if (ui.predictionsAgentOutput) {
@@ -30108,7 +30144,7 @@
           startScreenerRuns(db, activeWorkspaceId);
           await fetchMyRequestsList({ force: true }).catch(() => []);
           renderMyRequestsPanels();
-          if (window.location.pathname === "/screener") {
+          if (ui.screenerGithubHistoryList) {
             loadPublicScreenerGithubRuns({ force: false }).catch(() => {});
           }
           loadScreenerUsageToday(db);
