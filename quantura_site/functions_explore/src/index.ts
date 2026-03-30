@@ -2040,6 +2040,40 @@ function buildSharedScreenerRunPayload(
   };
 }
 
+async function buildSharedAutopilotFileResponse(
+  shareSlug: string,
+  runId: string,
+  fileKey: string,
+  fileRaw: unknown
+): Promise<Record<string, unknown>> {
+  const response = await buildStorageFileResponse(fileRaw);
+  const file = asPlainObject(fileRaw);
+  if (sanitizeText(file.artifactStore, 40) === "firestore") {
+    response.apiTextPath = `/api/my-requests/shared/${encodeURIComponent(shareSlug)}/files/${encodeURIComponent(fileKey)}/text`;
+  }
+  return response;
+}
+
+async function buildSharedAutopilotRunPayload(
+  shareSlug: string,
+  runId: string,
+  source: Record<string, unknown>,
+  extras: Record<string, unknown> = {}
+): Promise<Record<string, unknown>> {
+  const payload = await toAutopilotRunResponse(runId, source);
+  const filesRaw = asPlainObject(source.files);
+  const fileEntries = await Promise.all(
+    Object.entries(filesRaw).map(async ([key, value]) =>
+      [key, await buildSharedAutopilotFileResponse(shareSlug, runId, key, value)] as const
+    )
+  );
+  return {
+    ...payload,
+    files: Object.fromEntries(fileEntries),
+    ...extras,
+  };
+}
+
 function toMyRequestResponse(
   docId: string,
   data: Record<string, unknown>,
@@ -2118,6 +2152,67 @@ function toMyRequestResponse(
   }
 
   return response;
+}
+
+async function resolveSharedMyRequestContext(
+  slugRaw: string,
+  viewer: { uid?: string } | null
+): Promise<{
+  slug: string;
+  visibility: MyRequestShareVisibility;
+  ownerUid: string;
+  requestId: string;
+  requestSnap: FirebaseFirestore.DocumentSnapshot<FirebaseFirestore.DocumentData>;
+  requestData: Record<string, unknown>;
+  readOnly: boolean;
+  sourceCollection: string;
+  sourceId: string;
+}> {
+  const slug = normalizeShareId(slugRaw);
+  if (!slug) {
+    throw new Error("invalid_share_slug");
+  }
+
+  const shareSnap = await db.collection("request_shares").doc(slug).get();
+  if (!shareSnap.exists) {
+    throw new Error("share_not_found");
+  }
+  const shareData = (shareSnap.data() || {}) as Record<string, unknown>;
+  const visibility = normalizeMyRequestVisibility(shareData.visibility, "private");
+  const ownerUid = sanitizeText(shareData.ownerUid, 220);
+  const requestId = normalizeMyRequestId(shareData.requestId);
+  if (!ownerUid || !requestId) {
+    throw new Error("share_invalid");
+  }
+
+  const canRead =
+    visibility === "public" ||
+    visibility === "unlisted" ||
+    (viewer?.uid && viewer.uid === ownerUid);
+  if (!canRead) {
+    throw new Error("forbidden");
+  }
+
+  const requestSnap = await db.collection("users").doc(ownerUid).collection("requests").doc(requestId).get();
+  if (!requestSnap.exists) {
+    throw new Error("request_not_found");
+  }
+  const requestData = (requestSnap.data() || {}) as Record<string, unknown>;
+  if (asBoolean(requestData.deleted, false)) {
+    throw new Error("request_not_found");
+  }
+  const sourceRef = asPlainObject(requestData.sourceRef);
+  return {
+    slug,
+    visibility,
+    ownerUid,
+    requestId,
+    requestSnap,
+    requestData,
+    readOnly: !(viewer?.uid && viewer.uid === ownerUid),
+    sourceCollection: sanitizeText(sourceRef.collection, 80),
+    sourceId: sanitizeText(sourceRef.id, 220),
+  };
 }
 
 function normalizeMyRequestPublishedFilter(input: unknown): "all" | "published" | "unpublished" {
@@ -13408,73 +13503,105 @@ ROUTES.post("/mobile/automation/:automationId/run", async (req, res) => {
 
 ROUTES.get("/my-requests/shared/:slug", async (req, res) => {
   try {
-    const slug = normalizeShareId(req.params.slug);
-    if (!slug) {
-      res.status(400).json({ error: "invalid_share_slug" });
-      return;
-    }
-
     const viewer = await verifyRequestUser(req, false).catch(() => null);
-    const shareSnap = await db.collection("request_shares").doc(slug).get();
-    if (!shareSnap.exists) {
-      res.status(404).json({ error: "share_not_found" });
-      return;
-    }
-    const shareData = (shareSnap.data() || {}) as Record<string, unknown>;
-    const visibility = normalizeMyRequestVisibility(shareData.visibility, "private");
-    const ownerUid = sanitizeText(shareData.ownerUid, 220);
-    const requestId = normalizeMyRequestId(shareData.requestId);
-    if (!ownerUid || !requestId) {
-      res.status(404).json({ error: "share_invalid" });
-      return;
-    }
-    const canRead =
-      visibility === "public" ||
-      visibility === "unlisted" ||
-      (viewer?.uid && viewer.uid === ownerUid);
-    if (!canRead) {
-      res.status(403).json({ error: "forbidden" });
-      return;
-    }
-
-    const requestSnap = await db.collection("users").doc(ownerUid).collection("requests").doc(requestId).get();
-    if (!requestSnap.exists) {
-      res.status(404).json({ error: "request_not_found" });
-      return;
-    }
-    const data = (requestSnap.data() || {}) as Record<string, unknown>;
-    if (asBoolean(data.deleted, false)) {
-      res.status(404).json({ error: "request_not_found" });
-      return;
-    }
-    const type = normalizeMyRequestType(data.type) || "forecast";
-    const responseItem = toMyRequestResponse(requestSnap.id, data, { includePayload: true });
-    const sourceRef = asPlainObject(data.sourceRef);
-    const sourceCollection = sanitizeText(sourceRef.collection, 80);
-    const sourceId = sanitizeText(sourceRef.id, 220);
+    const context = await resolveSharedMyRequestContext(req.params.slug, viewer);
+    const { slug, visibility, ownerUid, requestSnap, requestData, readOnly, sourceCollection, sourceId } = context;
+    const type = normalizeMyRequestType(requestData.type) || "forecast";
+    const responseItem = toMyRequestResponse(requestSnap.id, requestData, { includePayload: true });
     let screenerPayload: Record<string, unknown> | null = null;
+    let autopilotRunPayload: Record<string, unknown> | null = null;
     if (type === "screener" && sourceCollection === "screener_runs" && sourceId) {
       const sourceSnap = await db.collection(sourceCollection).doc(sourceId).get();
       if (sourceSnap.exists) {
         screenerPayload = buildSharedScreenerRunPayload(sourceSnap.id, (sourceSnap.data() || {}) as Record<string, unknown>, {
-          isPublic: asBoolean(data.published, false),
+          isPublic: asBoolean(requestData.published, false),
+        });
+      }
+    }
+    if (sourceCollection === "autopilot_requests" && sourceId) {
+      const sourceSnap = await db.collection(sourceCollection).doc(sourceId).get();
+      if (sourceSnap.exists) {
+        autopilotRunPayload = await buildSharedAutopilotRunPayload(slug, sourceSnap.id, (sourceSnap.data() || {}) as Record<string, unknown>, {
+          isSharedView: true,
+          readOnly,
         });
       }
     }
     res.status(200).json({
       request: responseItem,
-      readOnly: !(viewer?.uid && viewer.uid === ownerUid),
+      readOnly,
       canImport: Boolean(viewer?.uid && viewer.uid !== ownerUid && !isAnonymousDecodedUser(viewer)),
       share: {
         slug,
         visibility,
-        shareUrl: myRequestShareUrl(slug, data),
+        shareUrl: myRequestShareUrl(slug, requestData),
       },
       screener: screenerPayload,
+      autopilotRun: autopilotRunPayload,
     });
-  } catch (error) {
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "invalid_share_slug") {
+      res.status(400).json({ error: code });
+      return;
+    }
+    if (code === "share_not_found" || code === "share_invalid" || code === "request_not_found") {
+      res.status(404).json({ error: code });
+      return;
+    }
+    if (code === "forbidden") {
+      res.status(403).json({ error: code });
+      return;
+    }
     console.error("[Explore] read shared request failed", error);
     res.status(500).json({ error: "request_share_lookup_failed" });
+  }
+});
+
+ROUTES.get("/my-requests/shared/:slug/files/:fileKey/text", async (req, res) => {
+  try {
+    const viewer = await verifyRequestUser(req, false).catch(() => null);
+    const context = await resolveSharedMyRequestContext(req.params.slug, viewer);
+    const fileKey = safePathSegment(req.params.fileKey, 80);
+    if (!fileKey) {
+      res.status(400).json({ error: "invalid_file_request" });
+      return;
+    }
+    if (context.sourceCollection !== "autopilot_requests" || !context.sourceId) {
+      res.status(404).json({ error: "run_file_not_found" });
+      return;
+    }
+    const runSnap = await db.collection(context.sourceCollection).doc(context.sourceId).get();
+    if (!runSnap.exists) {
+      res.status(404).json({ error: "run_not_found" });
+      return;
+    }
+    const runData = (runSnap.data() || {}) as Record<string, unknown>;
+    const file = asPlainObject(asPlainObject(runData.files)[fileKey]);
+    if (!Object.keys(file).length) {
+      res.status(404).json({ error: "run_file_not_found" });
+      return;
+    }
+    const text = await readFoundryTextArtifact(context.sourceId, file);
+    res.set("Cache-Control", "public, max-age=300");
+    res.type(sanitizeText(file.contentType, 120) || "text/plain");
+    res.status(200).send(text);
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "invalid_share_slug") {
+      res.status(400).json({ error: code });
+      return;
+    }
+    if (code === "share_not_found" || code === "share_invalid" || code === "request_not_found" || code === "run_not_found" || code === "run_file_not_found") {
+      res.status(404).json({ error: code });
+      return;
+    }
+    if (code === "forbidden") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    console.error("[Explore] read shared request file failed", error);
+    res.status(500).json({ error: "request_share_file_failed" });
   }
 });
 

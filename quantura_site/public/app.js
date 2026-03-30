@@ -1999,6 +1999,7 @@
     foundryAnalyzeButton: document.getElementById("foundry-analyze-button"),
     foundryRefreshList: document.getElementById("foundry-refresh-list"),
     foundryRefreshButton: document.getElementById("foundry-refresh-button"),
+    foundryOpenChartButton: document.getElementById("foundry-open-chart-button"),
     foundryBusinessDaysButton: document.getElementById("foundry-business-days-button"),
     foundryShareButton: document.getElementById("foundry-share-button"),
     foundryRunMeta: document.getElementById("foundry-run-meta"),
@@ -2306,6 +2307,7 @@
       uploadId: "",
       uploadDoc: null,
       table: null,
+      chartTitle: "",
       previewPage: 0,
       previewPageSize: 25,
     },
@@ -18159,17 +18161,17 @@
     return { xIndex, yCols };
   };
 
-  const renderPredictionsChart = async (table, { title = "CSV plot" } = {}) => {
-    if (!ui.predictionsChart) return;
+  const renderPredictionsChart = async (table, { title = "CSV plot", container = ui.predictionsChart, height = 520 } = {}) => {
+    if (!container) return;
     const Plotly = getPlotly();
     if (!Plotly) {
-      ui.predictionsChart.textContent = "Chart library not loaded.";
+      container.textContent = "Chart library not loaded.";
       return;
     }
     const headers = table?.headers || [];
     const rows = table?.rows || [];
     if (!headers.length || !rows.length) {
-      ui.predictionsChart.textContent = "No CSV data to plot.";
+      container.textContent = "No CSV data to plot.";
       return;
     }
 
@@ -18205,6 +18207,7 @@
       font: { family: "Manrope, sans-serif", color: textColor },
       paper_bgcolor: "rgba(0,0,0,0)",
       plot_bgcolor: plotBg,
+      height,
       margin: { l: 50, r: 30, t: 44, b: 44 },
       xaxis: { title: { text: xLabel }, showspikes: true, spikemode: "across", spikesnap: "cursor", gridcolor: gridColor, zerolinecolor: gridColor },
       yaxis: { gridcolor: gridColor, zerolinecolor: gridColor },
@@ -18212,7 +18215,86 @@
       hovermode: "x unified",
     };
 
-    await Plotly.react(ui.predictionsChart, traces, layout, { responsive: true, displaylogo: false });
+    await Plotly.react(container, traces, layout, {
+      responsive: true,
+      displaylogo: false,
+      modeBarButtonsToRemove: ["lasso2d", "select2d"],
+    });
+  };
+
+  const renderFoundryChartLauncher = ({ available = false, title = "", detail = "" } = {}) => {
+    if (!ui.predictionsChart) return;
+    if (ui.foundryOpenChartButton) {
+      ui.foundryOpenChartButton.disabled = !available;
+      ui.foundryOpenChartButton.title = available ? "" : "Load a Forecast Foundry CSV first.";
+    }
+    ui.predictionsChart.innerHTML = `
+      <div class="foundry-chart-launcher-card">
+        <div>
+          <div class="small muted">Interactive chart workspace</div>
+          <div class="foundry-chart-launcher-title">${escapeHtml(title || "Forecast Foundry chart")}</div>
+          <div class="small muted" style="margin-top:6px;">${escapeHtml(detail || (available ? "Open the modal chart to zoom, pan, compare quantiles, and inspect the shared prediction path." : "Load a CSV artifact to unlock the interactive chart."))}</div>
+        </div>
+        <button class="cta secondary small" type="button" data-action="open-foundry-chart-modal" ${available ? "" : "disabled"}>
+          ${icon("graph-up")}<span>Open interactive chart</span>
+        </button>
+      </div>
+    `;
+  };
+
+  const ensureFoundryChartModal = () => {
+    let modal = document.getElementById("foundry-chart-modal");
+    if (!modal) {
+      modal = buildModalShell("foundry-chart-modal");
+      const card = modal.querySelector(".modal-card");
+      if (card) card.classList.add("foundry-chart-modal-card");
+      modal.addEventListener("click", (event) => {
+        const action = String(event.target?.dataset?.action || "").trim();
+        if (action === "close" || action === "close-foundry-chart-modal") {
+          modal.classList.add("hidden");
+          document.body.classList.remove("modal-open");
+        }
+      });
+      window.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape" || modal.classList.contains("hidden")) return;
+        modal.classList.add("hidden");
+        document.body.classList.remove("modal-open");
+      }, true);
+    }
+    return modal;
+  };
+
+  const openFoundryChartModal = async () => {
+    const table = state.predictionsContext.table;
+    if (!table?.headers?.length || !table?.rows?.length) {
+      throw new Error("Load a Forecast Foundry CSV first.");
+    }
+    const modal = ensureFoundryChartModal();
+    const card = modal.querySelector(".modal-card");
+    if (!card) throw new Error("Chart modal is unavailable.");
+    const title = String(state.predictionsContext.chartTitle || "Forecast Foundry chart").trim() || "Forecast Foundry chart";
+    const detail = `${table.rows.length.toLocaleString()} rows · ${table.headers.length.toLocaleString()} columns`;
+    card.innerHTML = `
+      <div class="foundry-chart-modal-head">
+        <div>
+          <div class="small muted">Forecast Foundry chart</div>
+          <h3>${escapeHtml(title)}</h3>
+          <div class="small muted">${escapeHtml(detail)}</div>
+        </div>
+        <button class="modal-close" type="button" data-action="close-foundry-chart-modal" aria-label="Close chart">×</button>
+      </div>
+      <div id="foundry-chart-modal-plot" class="foundry-chart-modal-plot"></div>
+    `;
+    modal.classList.remove("hidden");
+    document.body.classList.add("modal-open");
+    const plotNode = card.querySelector("#foundry-chart-modal-plot");
+    if (!plotNode) throw new Error("Chart container is unavailable.");
+    setOutputLoading(plotNode, "Rendering chart...");
+    await renderPredictionsChart(table, {
+      title,
+      container: plotNode,
+      height: Math.max(520, Math.floor(window.innerHeight * 0.68)),
+    });
   };
 
   const resolveUploadCsvUrl = async (_storage, uploadDoc) => {
@@ -18254,7 +18336,7 @@
     if (!cleanId) throw new Error("Upload ID is required.");
 
     ui.predictionsPlotMeta.textContent = "Loading CSV...";
-    if (ui.predictionsChart) setOutputLoading(ui.predictionsChart, "Loading CSV plot...");
+    renderFoundryChartLauncher({ available: false, title: "Forecast Foundry chart", detail: "Loading CSV preview..." });
     if (ui.predictionsPreview) setOutputLoading(ui.predictionsPreview, "Loading preview...");
 
     const snap = await db.collection("prediction_uploads").doc(cleanId).get();
@@ -18270,6 +18352,7 @@
     state.predictionsContext.uploadId = cleanId;
     state.predictionsContext.uploadDoc = doc;
     state.predictionsContext.table = table;
+    state.predictionsContext.chartTitle = title;
     state.predictionsContext.previewPage = 0;
     if (ui.predictionsTicker && doc.ticker) ui.predictionsTicker.value = normalizeTicker(doc.ticker) || String(doc.ticker);
     ui.predictionsPlotMeta.textContent = `${doc.title || "predictions.csv"} · ${table.rows.length.toLocaleString()} rows · ${table.headers.length} cols${
@@ -18283,19 +18366,11 @@
 
     renderCsvPreview(table);
     setOutputReady(ui.predictionsPreview);
-    try {
-      await renderPredictionsChart(table, { title });
-      setOutputReady(ui.predictionsChart);
-    } catch (chartError) {
-      setOutputReady(ui.predictionsChart);
-      if (ui.predictionsChart) {
-        ui.predictionsChart.innerHTML = `
-          <div class="small muted">
-            CSV preview is available, but chart rendering failed: ${escapeHtml(chartError?.message || "Unknown error")}
-          </div>
-        `;
-      }
-    }
+    renderFoundryChartLauncher({
+      available: true,
+      title,
+      detail: `${table.rows.length.toLocaleString()} rows are ready. Open the chart modal to inspect the prediction path interactively.`,
+    });
     logEvent("predictions_plotted", { upload_id: cleanId, source });
   };
 
@@ -18604,9 +18679,12 @@
         ui.predictionsPlotMeta.textContent = "A CSV artifact is unavailable for this run. Showing stored preview rows only.";
       }
       renderFoundryPreviewTableFromObjects(Array.isArray(dataset?.previewRows) ? dataset.previewRows : []);
-      if (ui.predictionsChart) {
-        ui.predictionsChart.innerHTML = `<div class="small muted">Chart rendering needs a downloadable CSV artifact.</div>`;
-      }
+      state.predictionsContext.chartTitle = String(run?.title || "Forecast Foundry CSV");
+      renderFoundryChartLauncher({
+        available: false,
+        title: state.predictionsContext.chartTitle,
+        detail: "Chart rendering needs a downloadable CSV artifact.",
+      });
       return;
     }
 
@@ -18614,33 +18692,44 @@
       ui.predictionsPlotMeta.textContent = `${String(targetFile.fileName || "dataset.csv").trim()} · loading CSV preview...`;
     }
     setOutputLoading(ui.predictionsPreview, "Loading CSV preview...");
-    setOutputLoading(ui.predictionsChart, "Loading chart...");
+    renderFoundryChartLauncher({ available: false, title: String(run?.title || "Forecast Foundry CSV"), detail: "Loading interactive chart data..." });
     const csvText = await readPrivateTextArtifact(targetFile, {
       fallbackMessage: "Unable to fetch the stored CSV artifact.",
     });
     const table = parseCsvTable(csvText, { maxRows: 20000 });
     state.predictionsContext.table = table;
+    state.predictionsContext.chartTitle = String(run?.title || "Forecast Foundry CSV");
     state.predictionsContext.previewPage = 0;
     state.predictionsContext.previewPageSize = 25;
     renderCsvPreview(table);
     setOutputReady(ui.predictionsPreview);
-    await renderPredictionsChart(table, { title: String(run?.title || "Forecast Foundry CSV") });
-    setOutputReady(ui.predictionsChart);
+    renderFoundryChartLauncher({
+      available: true,
+      title: state.predictionsContext.chartTitle,
+      detail: `${table.rows.length.toLocaleString()} rows are ready. Open the chart modal to zoom, pan, and compare quantiles interactively.`,
+    });
     if (ui.predictionsPlotMeta) {
       ui.predictionsPlotMeta.textContent = `${String(targetFile.fileName || "dataset.csv").trim()} · ${table.rows.length.toLocaleString()} rows · ${table.headers.length} columns`;
     }
   };
 
-  const renderFoundryRunDetail = async (run, { request = null, shareUrl = "" } = {}) => {
+  const renderFoundryRunDetail = async (run, { request = null, shareUrl = "", readOnly = false } = {}) => {
     state.foundryContext.activeRunId = String(run?.id || "").trim();
     state.foundryContext.activeRun = run && typeof run === "object" ? run : null;
     renderFoundryRuns(state.foundryContext.runs || []);
     removePredictionOptionsSupplement();
     if (!ui.foundryRunMeta) return;
     if (!run || typeof run !== "object") {
+      state.predictionsContext.table = null;
+      state.predictionsContext.chartTitle = "";
       if (ui.foundryBusinessDaysButton) ui.foundryBusinessDaysButton.classList.add("hidden");
       ui.foundryRunMeta.innerHTML = `<div class="small muted">Select a foundry run to inspect it.</div>`;
       if (ui.foundryPublishHost) ui.foundryPublishHost.innerHTML = `<div class="small muted">Private Explore sync and publish controls appear here after a source is prepared.</div>`;
+      renderFoundryChartLauncher({
+        available: false,
+        title: "Forecast Foundry chart",
+        detail: "Open a Foundry run to inspect its saved prediction path in the modal chart workspace.",
+      });
       return;
     }
     const dataset = run.dataset && typeof run.dataset === "object" ? run.dataset : {};
@@ -18648,6 +18737,10 @@
     const analysis = run.analysis && typeof run.analysis === "object" ? run.analysis : {};
     const modelMetrics = run.modelMetrics && typeof run.modelMetrics === "object" ? run.modelMetrics : {};
     const files = run.files && typeof run.files === "object" ? run.files : {};
+    const sharedMeta = run.__sharedMeta && typeof run.__sharedMeta === "object" ? run.__sharedMeta : {};
+    const sharedReadOnly = Boolean(readOnly || sharedMeta.readOnly);
+    state.predictionsContext.table = null;
+    state.predictionsContext.chartTitle = String(run?.title || "Forecast Foundry chart");
     const requestId = getFoundryRequestId(run);
     const requestRecord = request && typeof request === "object" ? request : requestId ? getMyRequestById(requestId) : null;
     const effectiveShareUrl = String(shareUrl || requestRecord?.share?.shareUrl || "").trim();
@@ -18657,7 +18750,8 @@
       (files?.uploadedCsv && typeof files.uploadedCsv === "object");
     if (ui.foundryBusinessDaysButton) {
       ui.foundryBusinessDaysButton.classList.toggle("hidden", !hasPredictionSource);
-      ui.foundryBusinessDaysButton.disabled = !hasFullAccount() || !hasPredictionSource;
+      const hasBusinessDaysFile = files?.businessDaysCsv && typeof files.businessDaysCsv === "object";
+      ui.foundryBusinessDaysButton.disabled = !hasPredictionSource || (sharedReadOnly && !hasBusinessDaysFile);
       ui.foundryBusinessDaysButton.title = hasPredictionSource
         ? "Download the cleaned business-day prediction CSV for this run."
         : "";
@@ -18667,7 +18761,13 @@
       forecastFrequency: autopilot?.forecastFrequency,
       interval: dataset?.interval,
     });
-    if (ui.foundryShareButton) ui.foundryShareButton.disabled = !requestId;
+    if (ui.foundryShareButton) ui.foundryShareButton.disabled = sharedReadOnly || !requestId;
+    if (ui.foundryRefreshButton) ui.foundryRefreshButton.disabled = sharedReadOnly;
+    renderFoundryChartLauncher({
+      available: false,
+      title: state.predictionsContext.chartTitle,
+      detail: sharedReadOnly ? "Loading the shared CSV preview and interactive chart workspace..." : "Loading the interactive chart workspace...",
+    });
     ui.foundryRunMeta.innerHTML = `
       <div class="small muted">Forecast Foundry run</div>
       <h3 style="margin-top:6px;">${escapeHtml(String(run.title || "Forecast Foundry run"))}</h3>
@@ -18722,15 +18822,28 @@
       }
     `;
     if (ui.foundryPublishHost) {
-      const publishMarkup = renderOutputPublishControlsMarkup({ requestId, requestType: "forecast" });
-      ui.foundryPublishHost.innerHTML = `
-        ${publishMarkup}
-        ${
-          effectiveShareUrl
-            ? `<div class="small muted" style="margin-top:10px;">Share link: <a href="${escapeHtml(effectiveShareUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(effectiveShareUrl)}</a></div>`
-            : `<div class="small muted" style="margin-top:10px;">Create an unlisted share link from the Share button when you want a public URL.</div>`
-        }
-      `;
+      if (sharedReadOnly) {
+        ui.foundryPublishHost.innerHTML = `
+          <div class="small muted">
+            Shared Forecast Foundry request. The saved CSV preview, interactive chart modal, and analysis are available here in read-only mode.
+            ${
+              effectiveShareUrl
+                ? ` <a href="${escapeHtml(effectiveShareUrl)}" target="_blank" rel="noopener noreferrer">Open share link</a>.`
+                : ""
+            }
+          </div>
+        `;
+      } else {
+        const publishMarkup = renderOutputPublishControlsMarkup({ requestId, requestType: "forecast" });
+        ui.foundryPublishHost.innerHTML = `
+          ${publishMarkup}
+          ${
+            effectiveShareUrl
+              ? `<div class="small muted" style="margin-top:10px;">Share link: <a href="${escapeHtml(effectiveShareUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(effectiveShareUrl)}</a></div>`
+              : `<div class="small muted" style="margin-top:10px;">Create an unlisted share link from the Share button when you want a public URL.</div>`
+          }
+        `;
+      }
     }
     if (ui.predictionsAgentOutput) {
       if (String(analysis?.markdown || "").trim()) {
@@ -18768,9 +18881,11 @@
       if (ui.predictionsPreview) {
         ui.predictionsPreview.innerHTML = `<div class="small muted">${escapeHtml(error?.message || "Unable to load CSV preview.")}</div>`;
       }
-      if (ui.predictionsChart) {
-        ui.predictionsChart.innerHTML = `<div class="small muted">Unable to render chart preview.</div>`;
-      }
+      renderFoundryChartLauncher({
+        available: false,
+        title: String(run?.title || "Forecast Foundry chart"),
+        detail: error?.message || "Unable to load chart data for this request.",
+      });
     }
   };
 
@@ -18982,11 +19097,16 @@
   };
 
   const downloadFoundryBusinessDayCsv = async () => {
-    if (!hasFullAccount()) throw new Error("Sign in with a full account to download Forecast Foundry files.");
     let run = state.foundryContext.activeRun;
     if (!run || typeof run !== "object") throw new Error("Select a Forecast Foundry run first.");
+    const sharedMeta = run.__sharedMeta && typeof run.__sharedMeta === "object" ? run.__sharedMeta : {};
+    const sharedReadOnly = Boolean(sharedMeta.readOnly);
     let businessDaysFile = run?.files?.businessDaysCsv;
     if (!businessDaysFile || (typeof businessDaysFile === "object" && !String(businessDaysFile.downloadUrl || businessDaysFile.apiTextPath || "").trim())) {
+      if (sharedReadOnly) {
+        throw new Error("This shared request does not include a downloadable business-day CSV.");
+      }
+      if (!hasFullAccount()) throw new Error("Sign in with a full account to download Forecast Foundry files.");
       if (!canAnalyzeFoundryRun(run)) {
         throw new Error("A cleaned business-day CSV is not available for this run yet.");
       }
@@ -19031,13 +19151,13 @@
     showToast("Share link copied.");
   };
 
-  const renderSharedFoundryRequest = async (request, shareUrl = "") => {
+  const renderSharedFoundryRequest = async (request, shareUrl = "", sharedRun = null) => {
     if (!ui.foundryRunMeta) return;
     const outputsMeta = request?.outputsMeta && typeof request.outputsMeta === "object" ? request.outputsMeta : {};
     const input = request?.input && typeof request.input === "object" ? request.input : {};
     const summary = String(outputsMeta.summary || "Shared Forecast Foundry request loaded.").trim();
     const markdown = String(outputsMeta.analysisMarkdown || "").trim();
-    const pseudoRun = {
+    const fallbackRun = {
       id: String(request?.sourceRef?.id || request?.id || "").trim(),
       title: String(request?.title || "Forecast Foundry shared result").trim(),
       status: String(outputsMeta.analysisStatus || "shared").trim(),
@@ -19055,15 +19175,18 @@
       exploreRequestId: String(request?.id || "").trim(),
       files: {},
     };
-    await renderFoundryRunDetail(pseudoRun, { request, shareUrl });
-    if (ui.foundryBusinessDaysButton) ui.foundryBusinessDaysButton.classList.add("hidden");
-    if (ui.predictionsPreview) {
-      ui.predictionsPreview.innerHTML = `<div class="small muted">CSV artifacts are private to the owner workspace. Shared view includes the saved analysis summary only.</div>`;
+    const run = sharedRun && typeof sharedRun === "object" ? {
+      ...sharedRun,
+      __sharedMeta: {
+        ...(sharedRun.__sharedMeta && typeof sharedRun.__sharedMeta === "object" ? sharedRun.__sharedMeta : {}),
+        readOnly: true,
+      },
+    } : fallbackRun;
+    await renderFoundryRunDetail(run, { request, shareUrl, readOnly: true });
+    if (!sharedRun && ui.predictionsPreview) {
+      ui.predictionsPreview.innerHTML = `<div class="small muted">This shared Forecast Foundry request does not include a saved CSV artifact. The saved analysis summary is still available.</div>`;
     }
-    if (ui.predictionsChart) {
-      ui.predictionsChart.innerHTML = `<div class="small muted">Chart preview is unavailable in shared read-only mode.</div>`;
-    }
-    if (ui.predictionsPlotMeta) {
+    if (!sharedRun && ui.predictionsPlotMeta) {
       ui.predictionsPlotMeta.textContent = "Shared Forecast Foundry request";
     }
   };
@@ -23653,6 +23776,7 @@
       if (!request) throw new Error("Shared request unavailable.");
       const type = normalizeMyRequestType(request.type) || "forecast";
       const shareMeta = payload?.share && typeof payload.share === "object" ? payload.share : {};
+      const autopilotRun = payload?.autopilotRun && typeof payload.autopilotRun === "object" ? payload.autopilotRun : null;
       const panelId = mapMyRequestTypeToPanel(type, request);
       if (setPanel && typeof window.__quanturaSetPanel === "function") {
         window.__quanturaSetPanel(panelId, { pushPath: false });
@@ -23660,7 +23784,7 @@
       if (isSportsAutopilotMyRequest(request)) {
         await renderSharedSportsFoundryRequest(request, String(shareMeta?.shareUrl || "").trim());
       } else if (isAutopilotMyRequest(request)) {
-        await renderSharedFoundryRequest(request, String(shareMeta?.shareUrl || "").trim());
+        await renderSharedFoundryRequest(request, String(shareMeta?.shareUrl || "").trim(), autopilotRun);
       } else if (type === "modelCouncil" && ui.tickerQueryOutput) {
         const outputsMeta = request.outputsMeta && typeof request.outputsMeta === "object" ? request.outputsMeta : {};
         const answer = String(outputsMeta.answer || outputsMeta.summary || "").trim();
@@ -28931,6 +29055,15 @@
         showToast(message, "warn");
       }
     });
+    ui.foundryOpenChartButton?.addEventListener("click", async () => {
+      try {
+        await openFoundryChartModal();
+      } catch (error) {
+        const message = extractErrorMessage(error, "Unable to open the Forecast Foundry chart.");
+        setFoundryStatus(message, "warn");
+        showToast(message, "warn");
+      }
+    });
     ui.foundryBusinessDaysButton?.addEventListener("click", async () => {
       try {
         await downloadFoundryBusinessDayCsv();
@@ -28971,6 +29104,17 @@
         }
       } catch (error) {
         const message = extractErrorMessage(error, "Unable to load Forecast Foundry run.");
+        setFoundryStatus(message, "warn");
+        showToast(message, "warn");
+      }
+    });
+    ui.predictionsChart?.addEventListener("click", async (event) => {
+      const openButton = event.target.closest('[data-action="open-foundry-chart-modal"]');
+      if (!openButton) return;
+      try {
+        await openFoundryChartModal();
+      } catch (error) {
+        const message = extractErrorMessage(error, "Unable to open the Forecast Foundry chart.");
         setFoundryStatus(message, "warn");
         showToast(message, "warn");
       }

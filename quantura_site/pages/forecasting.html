@@ -448,6 +448,9 @@
                                 <button class="cta secondary small" id="foundry-refresh-button" type="button">
                                   <i class="iconoir-refresh" aria-hidden="true"></i><span>Refresh AWS status</span>
                                 </button>
+                                <button class="cta secondary small" id="foundry-open-chart-button" type="button" disabled>
+                                  <i class="iconoir-graph-up" aria-hidden="true"></i><span>Open interactive chart</span>
+                                </button>
                                 <button class="cta secondary small hidden" id="foundry-business-days-button" type="button">
                                   <i class="iconoir-download" aria-hidden="true"></i><span>Download business-day CSV</span>
                                 </button>
@@ -460,7 +463,7 @@
                             <div id="foundry-publish-host" class="small muted" style="margin-top: 12px;">Private Explore sync and publish controls appear here after a source is prepared.</div>
                             <div id="predictions-agent-output" class="panel-output small" style="margin-top: 14px;">Prediction analysis and conclusions will appear here.</div>
                             <div id="predictions-plot-meta" class="small muted" style="margin-top: 14px;">CSV schema preview metadata will appear here.</div>
-                            <div id="predictions-chart" class="chart" style="margin-top: 14px; min-height: 420px;"></div>
+                            <div id="predictions-chart" class="chart foundry-chart-launcher" style="margin-top: 14px;"></div>
                             <div id="predictions-preview" class="panel-output small" style="margin-top: 14px;">Preview will appear here.</div>
                           </div>
                         </div>
