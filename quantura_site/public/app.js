@@ -10616,6 +10616,17 @@
     return `/ticker${query ? `?${query}` : ""}`;
   };
 
+  const buildForecastPanelUrl = (ticker) => {
+    const cleanTicker = normalizeTicker(ticker);
+    const params = new URLSearchParams();
+    params.set("panel", "forecast");
+    if (cleanTicker) {
+      params.set("ticker", cleanTicker);
+    }
+    const query = params.toString();
+    return `/forecasting${query ? `?${query}` : ""}`;
+  };
+
   const syncTradingViewUrlState = (ticker, symbol) => {
     try {
       const url = new URL(window.location.href);
@@ -16516,7 +16527,7 @@
         const subLabel = absChangeLabel && changeOk ? `${absChangeLabel} · ${changeLabel}` : changeLabel;
 
         return `
-          <button class="trending-hot-chip" type="button" data-action="pick-ticker" data-ticker="${escapeHtml(symbol)}">
+          <button class="trending-hot-chip" type="button" data-action="open-forecast-ticker" data-ticker="${escapeHtml(symbol)}">
             <div class="trending-top">
               <div class="trending-symbol" style="display:inline-flex; align-items:center; gap:8px;">
                 ${buildTrendingLogoMarkup({ symbol, companyName, logoUrl })}
@@ -16526,7 +16537,7 @@
             </div>
             <div class="trending-bottom">
               <span class="trending-chip trending-chip--${direction}">${escapeHtml(subLabel)}</span>
-              <span class="small muted">Open ticker</span>
+              <span class="small muted">Open forecast</span>
             </div>
           </button>
         `;
@@ -24750,11 +24761,36 @@
 			        ui.terminalTicker.value = ticker;
 			        ui.terminalForm.requestSubmit?.();
 			      } else {
-		        window.location.href = buildTickerPanelUrl(ticker);
+			        window.location.href = buildTickerPanelUrl(ticker);
 		      }
 		    };
 
+        const openForecastForTicker = async (rawTicker) => {
+          const ticker = normalizeTicker(rawTicker);
+          if (!ticker) return;
+          syncTickerInputs(ticker, { source: "trending_forecast_pick", emitAnalytics: true });
+          logEvent("ticker_selected", {
+            ticker,
+            page_path: window.location.pathname,
+            destination: "forecast",
+          });
+
+          if (ui.forecastForm && ui.forecastTicker && typeof window.__quanturaSetPanel === "function") {
+            window.__quanturaSetPanel("forecast");
+            ui.forecastTicker.value = ticker;
+            ui.forecastTicker.focus?.();
+          } else {
+            window.location.href = buildForecastPanelUrl(ticker);
+          }
+        };
+
 		    document.addEventListener("click", async (event) => {
+          const forecastTickerButton = event.target.closest('[data-action="open-forecast-ticker"]');
+          if (forecastTickerButton) {
+            event.preventDefault();
+            await openForecastForTicker(forecastTickerButton.dataset.ticker || forecastTickerButton.textContent);
+            return;
+          }
           const historySelect = event.target.closest('[data-action="ticker-history-select"]');
           if (historySelect) {
             event.preventDefault();
