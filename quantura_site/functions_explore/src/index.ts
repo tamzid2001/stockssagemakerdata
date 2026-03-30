@@ -86,7 +86,7 @@ const messaging = admin.messaging();
 const app = express();
 app.disable("x-powered-by");
 app.use(cors({ origin: true }));
-app.use(express.json({ limit: "1mb" }));
+app.use(express.json({ limit: "25mb" }));
 
 type PostType = "forecast" | "backtest" | "agent" | "screener";
 
@@ -3344,6 +3344,92 @@ function storageBucket() {
   return configuredBucket ? admin.storage().bucket(configuredBucket) : admin.storage().bucket();
 }
 
+const FOUNDRY_TEXT_ARTIFACT_CHUNK_CHARS = 180_000;
+
+function foundryTextArtifactRef(runId: string, fileKey: string) {
+  return db.collection("autopilot_requests").doc(runId).collection("text_artifacts").doc(fileKey);
+}
+
+function splitFoundryTextArtifact(text: string): string[] {
+  const chunks: string[] = [];
+  for (let index = 0; index < text.length; index += FOUNDRY_TEXT_ARTIFACT_CHUNK_CHARS) {
+    chunks.push(text.slice(index, index + FOUNDRY_TEXT_ARTIFACT_CHUNK_CHARS));
+  }
+  return chunks.length ? chunks : [""];
+}
+
+async function writeFoundryFirestoreTextArtifact(
+  runId: string,
+  fileKeyRaw: string,
+  text: string,
+  contentType: string,
+  fileName = ""
+): Promise<Record<string, unknown>> {
+  const cleanRunId = sanitizeText(runId, 220);
+  const cleanFileKey = safePathSegment(fileKeyRaw, 80) || "artifact";
+  if (!cleanRunId) throw new Error("Run ID is required for Firestore artifacts.");
+  const chunks = splitFoundryTextArtifact(text || "");
+  const artifactRef = foundryTextArtifactRef(cleanRunId, cleanFileKey);
+  const batch = db.batch();
+  batch.set(
+    artifactRef,
+    {
+      runId: cleanRunId,
+      fileKey: cleanFileKey,
+      fileName: sanitizeText(fileName, 240) || `${cleanFileKey}.txt`,
+      contentType: sanitizeText(contentType, 120) || "text/plain",
+      sizeBytes: Buffer.byteLength(text || "", "utf8"),
+      chunkCount: chunks.length,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+  chunks.forEach((chunk, index) => {
+    batch.set(artifactRef.collection("chunks").doc(String(index).padStart(4, "0")), {
+      text: chunk,
+      order: index,
+    });
+  });
+  await batch.commit();
+  return {
+    artifactStore: "firestore",
+    firestoreKey: cleanFileKey,
+    fileName: sanitizeText(fileName, 240) || `${cleanFileKey}.txt`,
+    contentType: sanitizeText(contentType, 120) || "text/plain",
+    sizeBytes: Buffer.byteLength(text || "", "utf8"),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+}
+
+async function readFoundryFirestoreTextArtifact(runId: string, fileKeyRaw: unknown): Promise<string> {
+  const cleanRunId = sanitizeText(runId, 220);
+  const cleanFileKey = safePathSegment(fileKeyRaw, 80);
+  if (!cleanRunId || !cleanFileKey) return "";
+  const artifactRef = foundryTextArtifactRef(cleanRunId, cleanFileKey);
+  const artifactSnap = await artifactRef.get();
+  if (!artifactSnap.exists) return "";
+  const chunkCount = Math.max(0, Math.floor(asFinite((artifactSnap.data() || {}).chunkCount, 0)));
+  if (!chunkCount) return "";
+  const chunkRefs = Array.from({ length: chunkCount }, (_, index) =>
+    artifactRef.collection("chunks").doc(String(index).padStart(4, "0"))
+  );
+  const chunkSnaps = await db.getAll(...chunkRefs);
+  return chunkSnaps
+    .map((snap) => sanitizeText((snap.data() || {}).text, FOUNDRY_TEXT_ARTIFACT_CHUNK_CHARS + 20_000))
+    .join("");
+}
+
+async function readFoundryTextArtifact(runId: string, fileRaw: unknown): Promise<string> {
+  const file = asPlainObject(fileRaw);
+  const firestoreKey = safePathSegment(file.firestoreKey || file.fileKey, 80);
+  if (sanitizeText(file.artifactStore, 40) === "firestore" && firestoreKey) {
+    return readFoundryFirestoreTextArtifact(runId, firestoreKey);
+  }
+  const storagePath = sanitizeText(file.storagePath, 1000).replace(/^\/+/, "");
+  if (!storagePath) return "";
+  return readStorageTextArtifact(storagePath);
+}
+
 async function writeStorageTextArtifact(
   storagePath: string,
   text: string,
@@ -3375,7 +3461,7 @@ async function readStorageTextArtifact(storagePath: string): Promise<string> {
   return buffer.toString("utf8");
 }
 
-async function buildStorageFileResponse(fileRaw: unknown): Promise<Record<string, unknown>> {
+async function buildStorageFileResponse(fileRaw: unknown, runId = "", fileKey = ""): Promise<Record<string, unknown>> {
   const file = asPlainObject(fileRaw);
   const storagePath = sanitizeText(file.storagePath, 1000).replace(/^\/+/, "");
   const response: Record<string, unknown> = {
@@ -3384,7 +3470,13 @@ async function buildStorageFileResponse(fileRaw: unknown): Promise<Record<string
     contentType: sanitizeText(file.contentType, 120),
     sizeBytes: Number.isFinite(asFinite(file.sizeBytes, NaN)) ? asFinite(file.sizeBytes, 0) : null,
     s3Uri: sanitizeText(file.s3Uri, 500),
+    artifactStore: sanitizeText(file.artifactStore, 40),
+    firestoreKey: safePathSegment(file.firestoreKey || file.fileKey, 80),
   };
+  if (sanitizeText(file.artifactStore, 40) === "firestore" && runId && fileKey) {
+    response.apiTextPath = `/api/autopilot/runs/${encodeURIComponent(runId)}/files/${encodeURIComponent(fileKey)}/text`;
+    return response;
+  }
   const existingDownloadUrl = sanitizeText(file.downloadUrl, 2000);
   if (existingDownloadUrl) {
     response.downloadUrl = existingDownloadUrl;
@@ -3469,8 +3561,11 @@ function firstFoundryMetricValue(source: Record<string, unknown>, aliases: reado
 function normalizeFoundryModelMetrics(raw: unknown): Record<string, string | number> {
   const source = asPlainObject(raw);
   const metrics: Record<string, string | number> = {};
-  const status = sanitizeText(firstFoundryMetricValue(source, ["status", "modelStatus", "model_status"]), 120);
-  if (status) metrics.status = status;
+  const rawStatus = sanitizeText(firstFoundryMetricValue(source, ["status", "modelStatus", "model_status"]), 120);
+  const statusLower = rawStatus.toLowerCase();
+  if (statusLower === "standard" || statusLower === "standard build") metrics.status = "Standard Build";
+  else if (statusLower === "quick" || statusLower === "quick build") metrics.status = "Quick Build";
+  else if (rawStatus) metrics.status = rawStatus;
   FOUNDRY_MODEL_METRIC_FIELDS.filter((field) => field.key !== "status").forEach((field) => {
     const value = asFinite(firstFoundryMetricValue(source, field.aliases), Number.NaN);
     if (Number.isFinite(value)) metrics[field.key] = Number(value.toFixed(6));
@@ -3823,7 +3918,7 @@ async function toAutopilotRunResponse(docId: string, data: Record<string, unknow
   const sports = asPlainObject(data.sports);
   const filesRaw = asPlainObject(data.files);
   const filesEntries = await Promise.all(
-    Object.entries(filesRaw).map(async ([key, value]) => [key, await buildStorageFileResponse(value)] as const)
+    Object.entries(filesRaw).map(async ([key, value]) => [key, await buildStorageFileResponse(value, docId, key)] as const)
   );
   const files = Object.fromEntries(filesEntries);
   const createdAtMs = getTimestampMs(data.createdAt);
@@ -3905,6 +4000,45 @@ async function toAutopilotRunResponse(docId: string, data: Record<string, unknow
   };
 }
 
+function buildAutopilotAnalysisPatch(analysis: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...analysis,
+    generatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+}
+
+async function persistAutopilotFirestoreAnalysisArtifacts(
+  runId: string,
+  analysis: Record<string, unknown>
+): Promise<{ analysisPatch: Record<string, unknown>; filePatches: Record<string, unknown> }> {
+  const filePatches: Record<string, unknown> = {};
+  const markdown = asString(analysis.markdown).slice(0, 32000);
+  const jsonText = JSON.stringify(analysis.data || {}, null, 2);
+
+  if (markdown) {
+    filePatches.analysisMarkdown = await writeFoundryFirestoreTextArtifact(
+      runId,
+      "analysisMarkdown",
+      markdown,
+      "text/markdown",
+      "analysis.md"
+    );
+  }
+
+  filePatches.analysisJson = await writeFoundryFirestoreTextArtifact(
+    runId,
+    "analysisJson",
+    jsonText,
+    "application/json",
+    "analysis.json"
+  );
+
+  return {
+    analysisPatch: buildAutopilotAnalysisPatch(analysis),
+    filePatches,
+  };
+}
+
 async function persistAutopilotAnalysisArtifacts(
   ownerUid: string,
   runId: string,
@@ -3940,10 +4074,7 @@ async function persistAutopilotAnalysisArtifacts(
   );
 
   return {
-    analysisPatch: {
-      ...analysis,
-      generatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    },
+    analysisPatch: buildAutopilotAnalysisPatch(analysis),
     filePatches,
   };
 }
@@ -4085,13 +4216,13 @@ async function reconcileAutopilotRunDocument(
       }
     }
   } else if (sanitizeText(existingData.sourceType, 40) === "prediction_csv" && sanitizeText(asPlainObject(existingData.analysis).status, 40) !== "ok") {
-    const uploadedCsvPath = sanitizeText(asPlainObject(files.uploadedCsv).storagePath, 1000);
-    if (uploadedCsvPath) {
-      const csvText = await readStorageTextArtifact(uploadedCsvPath);
+    const uploadedCsv = asPlainObject(files.uploadedCsv);
+    const csvText = await readFoundryTextArtifact(runId, uploadedCsv);
+    if (csvText.trim()) {
       const analysis = await analyzePredictionCsv(csvText, {
         ticker: normalizeTicker(dataset.ticker || existingData.ticker),
       });
-      const persisted = await persistAutopilotAnalysisArtifacts(ownerUid, runId, {
+      const persisted = await persistAutopilotFirestoreAnalysisArtifacts(runId, {
         status: analysis.status,
         summary: analysis.summary,
         markdown: analysis.markdown,
@@ -12191,11 +12322,18 @@ ROUTES.post("/autopilot/datasets/upload", async (req, res) => {
     const user = await requireFoundryUser(req);
     const body = asPlainObject(req.body);
     const filePath = sanitizeText(body.filePath, 1000).replace(/^\/+/, "");
-    if (!filePath) {
-      res.status(400).json({ error: "missing_file_path" });
+    let csvText = asString(body.csvText);
+    if (!csvText.trim()) {
+      if (!filePath) {
+        res.status(400).json({ error: "missing_csv_text" });
+        return;
+      }
+      csvText = await readStorageTextArtifact(filePath);
+    }
+    if (!csvText.trim()) {
+      res.status(400).json({ error: "empty_csv_text" });
       return;
     }
-    const csvText = await readStorageTextArtifact(filePath);
     const tickerHint = normalizeTicker(body.ticker);
     const intervalHint = sanitizeText(body.interval, 20);
     const modelMetrics = normalizeFoundryModelMetrics(body.modelMetrics);
@@ -12203,6 +12341,18 @@ ROUTES.post("/autopilot/datasets/upload", async (req, res) => {
     const runRef = db.collection("autopilot_requests").doc();
     const owner = safePathSegment(user.uid, 120) || "user";
     const run = safePathSegment(runRef.id, 120) || "run";
+    const uploadedFileName =
+      sanitizeText(body.fileName, 240) ||
+      filePath.split("/").pop() ||
+      (classified.kind === "prediction_output" ? "predictions.csv" : "upload.csv");
+    const uploadedCsvFile = csvText.trim()
+      ? await writeFoundryFirestoreTextArtifact(runRef.id, "uploadedCsv", csvText, "text/csv", uploadedFileName)
+      : {
+          storagePath: filePath,
+          fileName: uploadedFileName,
+          contentType: "text/csv",
+          sizeBytes: Buffer.byteLength(csvText || "", "utf8"),
+        };
 
     const baseDoc: Record<string, unknown> = {
       userId: user.uid,
@@ -12240,11 +12390,7 @@ ROUTES.post("/autopilot/datasets/upload", async (req, res) => {
         },
         analysis: {},
         files: {
-          uploadedCsv: {
-            storagePath: filePath,
-            fileName: filePath.split("/").pop() || "upload.csv",
-            contentType: "text/csv",
-          },
+          uploadedCsv: uploadedCsvFile,
           datasetCsv: normalizedFile,
         },
       };
@@ -12266,7 +12412,7 @@ ROUTES.post("/autopilot/datasets/upload", async (req, res) => {
     }
 
     const analysis = classified.analysis;
-    const persisted = await persistAutopilotAnalysisArtifacts(user.uid, runRef.id, {
+    const persisted = await persistAutopilotFirestoreAnalysisArtifacts(runRef.id, {
       status: analysis.status,
       summary: analysis.summary,
       markdown: analysis.markdown,
@@ -12292,11 +12438,7 @@ ROUTES.post("/autopilot/datasets/upload", async (req, res) => {
       },
       analysis: persisted.analysisPatch,
       files: {
-        uploadedCsv: {
-          storagePath: filePath,
-          fileName: filePath.split("/").pop() || "predictions.csv",
-          contentType: "text/csv",
-        },
+        uploadedCsv: uploadedCsvFile,
         ...persisted.filePatches,
       },
     };
@@ -12516,6 +12658,44 @@ ROUTES.get("/autopilot/runs/:runId", async (req, res) => {
   }
 });
 
+ROUTES.get("/autopilot/runs/:runId/files/:fileKey/text", async (req, res) => {
+  try {
+    const user = await requireFoundryUser(req);
+    const runId = sanitizeText(req.params.runId, 220);
+    const fileKey = safePathSegment(req.params.fileKey, 80);
+    if (!runId || !fileKey) {
+      res.status(400).json({ error: "invalid_file_request" });
+      return;
+    }
+    const owned = await readAutopilotRunForOwner(user.uid, runId);
+    if (!owned) {
+      res.status(404).json({ error: "run_not_found" });
+      return;
+    }
+    const file = asPlainObject(asPlainObject(owned.data.files)[fileKey]);
+    if (!Object.keys(file).length) {
+      res.status(404).json({ error: "run_file_not_found" });
+      return;
+    }
+    const text = await readFoundryTextArtifact(runId, file);
+    res.set("Cache-Control", "private, no-store");
+    res.type(sanitizeText(file.contentType, 120) || "text/plain");
+    res.status(200).send(text);
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "full_account_required") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    console.error("[Autopilot] read run file failed", error);
+    res.status(500).json({ error: "autopilot_run_file_read_failed", detail: sanitizeText(error?.message, 260) });
+  }
+});
+
 ROUTES.post("/autopilot/runs/:runId/refresh", async (req, res) => {
   try {
     const user = await requireFoundryUser(req);
@@ -12565,14 +12745,16 @@ ROUTES.post("/autopilot/runs/:runId/analyze", async (req, res) => {
     const data = owned.data;
     const files = asPlainObject(data.files);
     const dataset = asPlainObject(data.dataset);
-    const csvStoragePath =
-      sanitizeText(asPlainObject(files.predictionsCsv).storagePath, 1000) ||
-      sanitizeText(asPlainObject(files.uploadedCsv).storagePath, 1000);
-    if (!csvStoragePath) {
+    const csvFile = files.predictionsCsv || files.uploadedCsv;
+    if (!csvFile) {
       res.status(400).json({ error: "analysis_source_missing" });
       return;
     }
-    const csvText = await readStorageTextArtifact(csvStoragePath);
+    const csvText = await readFoundryTextArtifact(runId, csvFile);
+    if (!csvText.trim()) {
+      res.status(400).json({ error: "analysis_source_missing" });
+      return;
+    }
     const analysis = isSportsAutopilotData(data)
       ? analyzeSportsPredictionCsv(csvText, {
           syntheticTicker: buildSportsSyntheticTicker(data.sports, dataset),
@@ -12593,20 +12775,20 @@ ROUTES.post("/autopilot/runs/:runId/analyze", async (req, res) => {
       : await analyzePredictionCsv(csvText, {
           ticker: normalizeTicker(dataset.ticker || data.ticker),
         });
-    const persisted = await persistAutopilotAnalysisArtifacts(
-      user.uid,
-      runId,
-      {
-        status: analysis.status,
-        summary: analysis.summary,
-        markdown: analysis.markdown,
-        metrics: analysis.metrics,
-        data: analysis.analysis,
-        previewRows: analysis.previewRows,
-        rowCount: analysis.rowCount,
-        columns: analysis.columns,
-      }
-    );
+    const analysisPayload = {
+      status: analysis.status,
+      summary: analysis.summary,
+      markdown: analysis.markdown,
+      metrics: analysis.metrics,
+      data: analysis.analysis,
+      previewRows: analysis.previewRows,
+      rowCount: analysis.rowCount,
+      columns: analysis.columns,
+    };
+    const persisted =
+      sanitizeText(data.sourceType, 40) === "prediction_csv"
+        ? await persistAutopilotFirestoreAnalysisArtifacts(runId, analysisPayload)
+        : await persistAutopilotAnalysisArtifacts(user.uid, runId, analysisPayload);
     const nextStatus =
       sanitizeText(asPlainObject(data.autopilot).transformStatus, 60) === "Completed" ||
       sanitizeText(data.status, 60) === "completed"

@@ -18551,13 +18551,14 @@
       files.predictionsCsv,
       files.uploadedCsv,
       files.datasetCsv,
-      files.analysisJson,
     ].filter((entry) => entry && typeof entry === "object");
-    const targetFile = orderedFiles.find((entry) => String(entry?.downloadUrl || "").trim());
+    const targetFile = orderedFiles.find(
+      (entry) => String(entry?.downloadUrl || "").trim() || String(entry?.apiTextPath || "").trim()
+    );
 
     if (!targetFile) {
       if (ui.predictionsPlotMeta) {
-        ui.predictionsPlotMeta.textContent = "Signed download URL is unavailable for this run. Showing stored preview rows only.";
+        ui.predictionsPlotMeta.textContent = "A CSV artifact is unavailable for this run. Showing stored preview rows only.";
       }
       renderFoundryPreviewTableFromObjects(Array.isArray(dataset?.previewRows) ? dataset.previewRows : []);
       if (ui.predictionsChart) {
@@ -18571,7 +18572,15 @@
     }
     setOutputLoading(ui.predictionsPreview, "Loading CSV preview...");
     setOutputLoading(ui.predictionsChart, "Loading chart...");
-    const response = await fetch(String(targetFile.downloadUrl), { cache: "no-store" });
+    const targetDownloadUrl = String(targetFile.downloadUrl || "").trim();
+    const targetApiTextPath = String(targetFile.apiTextPath || "").trim();
+    const targetUrl = targetDownloadUrl || targetApiTextPath;
+    const response = await fetch(targetUrl, {
+      method: "GET",
+      headers: targetDownloadUrl ? undefined : await buildApiAuthHeaders({ includeJson: false }),
+      credentials: "same-origin",
+      cache: "no-store",
+    });
     if (!response.ok) throw new Error("Unable to fetch the stored CSV artifact.");
     const csvText = await response.text();
     const table = parseCsvTable(csvText, { maxRows: 20000 });
@@ -18778,21 +18787,6 @@
     return items;
   };
 
-  const uploadFoundryFileToStorage = async (file) => {
-    const storage = state.clients?.storage;
-    const user = state.user;
-    if (!storage || !user) throw new Error("File uploads are not available.");
-    const safeName = String(file?.name || "upload.csv").replace(/[^A-Za-z0-9._-]/g, "_");
-    const path = `predictions/${user.uid}/foundry/${Date.now()}_${safeName}`;
-    await storage.ref().child(path).put(file, {
-      contentType: file?.type || "text/csv",
-    });
-    return {
-      path,
-      name: safeName,
-    };
-  };
-
   const prepareFoundrySource = async ({ notify = true } = {}) => {
     if (!hasFullAccount()) {
       throw new Error("Sign in with a full account to use Forecast Foundry.");
@@ -18831,10 +18825,12 @@
     } else {
       const file = ui.foundryFile?.files?.[0];
       if (!file) throw new Error("Select a CSV file first.");
-      const uploaded = await uploadFoundryFileToStorage(file);
+      const csvText = await file.text();
       payload = await callFoundryApi("POST", "/api/autopilot/datasets/upload", {
-        filePath: uploaded.path,
-        fileName: uploaded.name,
+        csvText,
+        fileName: String(file?.name || "upload.csv")
+          .replace(/[^A-Za-z0-9._-]/g, "_")
+          .trim(),
         ticker,
         interval,
         notes,
