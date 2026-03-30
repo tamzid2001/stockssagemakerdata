@@ -7,7 +7,6 @@ The repository combines:
 - the Quantura web product and dashboard
 - server-side APIs and SSR rendering
 - scheduled research and stock-screening automation
-- mobile client workspaces
 - deployment and operational tooling
 
 ## What is in the product
@@ -34,8 +33,6 @@ stockssagemakerdata/
 │   ├── firestore.rules
 │   ├── storage.rules
 │   └── firebase.json
-├── quantura_android/          # Android client workspace
-├── quantura_ios/              # iOS client workspace
 ├── .github/workflows/         # CI, smoke tests, sitemap refresh, stock screener
 ├── daily_prophet_signal_tracker.py
 ├── combined_stock_screener.py
@@ -99,7 +96,7 @@ If you update files in `quantura_site/pages/`, sync SSR templates before shippin
 node quantura_site/functions_ssr/scripts/sync-templates.js
 ```
 
-For local Firebase/mobile work, hydrate ignored local credential files from Google Secret Manager first:
+For local Firebase and service-account work, hydrate ignored local credential files from Google Secret Manager first:
 
 ```bash
 ./scripts/setup_local_firebase_credentials.sh

@@ -17,12 +17,6 @@ quantura_site/functions/venv/
 quantura_site/functions_ssr/templates/
 quantura_site/functions_explore/dist/
 quantura_site/.firebase/
-quantura_ios/**/GoogleService-Info.plist
-quantura_ios/**/GoogleService-Info.local.plist
-quantura_android/**/google-services.json
-quantura_android/**/google-services.local.json
-**/xcuserdata/
-*.xcuserstate
 *.local
 scripts/pull-secrets.sh
 .DS_Store
