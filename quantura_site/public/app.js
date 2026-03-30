@@ -837,7 +837,6 @@
       account: "Account",
       leaderboard_profile: "Public profile",
       sidebar_forecast: "Forecast",
-      sidebar_ticker_intelligence: "Ticker",
       sidebar_indicators: "Indicators",
       sidebar_trending: "Trending",
       sidebar_news_data: "Historical Data Download",
@@ -899,7 +898,6 @@
       account: "Cuenta",
       leaderboard_profile: "Perfil publico",
       sidebar_forecast: "Pronostico",
-      sidebar_ticker_intelligence: "Ticker",
       sidebar_indicators: "Indicadores",
       sidebar_trending: "Tendencias",
       sidebar_news_data: "Noticias y datos",
@@ -961,7 +959,6 @@
       account: "Compte",
       leaderboard_profile: "Profil public",
       sidebar_forecast: "Prevision",
-      sidebar_ticker_intelligence: "Ticker",
       sidebar_indicators: "Indicateurs",
       sidebar_trending: "Tendances",
       sidebar_news_data: "Actualites et donnees",
@@ -1023,7 +1020,6 @@
       account: "Konto",
       leaderboard_profile: "Offentliches Profil",
       sidebar_forecast: "Forecast",
-      sidebar_ticker_intelligence: "Ticker",
       sidebar_indicators: "Indikatoren",
       sidebar_trending: "Trending",
       sidebar_news_data: "News und Daten",
@@ -1085,7 +1081,6 @@
       account: "الحساب",
       leaderboard_profile: "الملف العام",
       sidebar_forecast: "التوقع",
-      sidebar_ticker_intelligence: "الرمز",
       sidebar_indicators: "المؤشرات",
       sidebar_trending: "الترند",
       sidebar_news_data: "الاخبار والبيانات",
@@ -1147,7 +1142,6 @@
       account: "অ্যাকাউন্ট",
       leaderboard_profile: "পাবলিক প্রোফাইল",
       sidebar_forecast: "ফোরকাস্ট",
-      sidebar_ticker_intelligence: "টিকার",
       sidebar_indicators: "ইন্ডিকেটর",
       sidebar_trending: "ট্রেন্ডিং",
       sidebar_news_data: "খবর ও ডেটা",
@@ -1197,7 +1191,6 @@
     leaderboard_profile: [".profile-settings > summary"],
     open_dashboard: ['.sidebar-card a[href="/dashboard"] span'],
     sidebar_forecast: ['[data-panel-target="forecast"] span'],
-    sidebar_ticker_intelligence: ['[data-panel-target="ticker"] span'],
     sidebar_indicators: ['[data-panel-target="indicators"] span'],
     sidebar_trending: ['[data-panel-target="trending"] span'],
     sidebar_news_data: ['[data-panel-target="news"] span'],
@@ -3095,7 +3088,8 @@
         };
 
 		    const setActive = (target, { pushPath = true } = {}) => {
-		      const next = String(target || "").trim();
+		      const requested = String(target || "").trim();
+          const next = panelNames.has(requested) ? requested : String(router?.defaultPanel || buttons[0]?.dataset?.panelTarget || "").trim();
 		      if (!next) return;
 		      panels.forEach((panel) => panel.classList.toggle("hidden", panel.dataset.panel !== next));
 		      buttons.forEach((btn) => btn.classList.toggle("active", btn.dataset.panelTarget === next));
@@ -3301,7 +3295,6 @@
           "/terminal",
           "/forecasting",
           "/terminal/fx",
-          "/ticker-intelligence",
           "/predictions",
           "/indicators",
           "/trending",
@@ -3381,22 +3374,11 @@
     };
 
     const preferredByRouter = {
-      terminal: [
-        "forecast",
-        "/forecasting",
-        "ticker",
-        "/ticker-intelligence",
-        "predictions",
-        "/predictions",
-        "ticker-query",
-        "/model-council",
-        "fx",
-        "/terminal/fx",
-      ],
+      terminal: ["forecast", "/forecasting", "predictions", "/predictions", "ticker-query", "/model-council", "fx", "/terminal/fx"],
       dashboard: ["orders", "profile", "watchlist", "collaboration", "notifications", "/explore"],
     };
     const preferredByPath = {
-      "/screener": ["/forecasting", "/ticker-intelligence", "/indicators", "/screener", "/model-council"],
+      "/screener": ["/forecasting", "/predictions", "/indicators", "/screener", "/model-council"],
     };
     const preferredPanels = preferredByPath[path] || preferredByRouter[routerName] || [];
     const selected = preferredPanels
@@ -9749,7 +9731,6 @@
         forecast: "/forecasting",
         autopilot: "/autopilot",
         "sports-autopilot": "/sports-forecasting",
-        ticker: "/ticker-intelligence",
         predictions: "/predictions",
         indicators: "/indicators",
         trending: "/trending",
@@ -9765,7 +9746,6 @@
         "/uploads": "autopilot",
         "/dashboard/uploads": "autopilot",
         "/sports-forecasting": "sports-autopilot",
-        "/ticker-intelligence": "ticker",
         "/predictions": "predictions",
         "/ticker-query": "ticker-query",
         "/model-council": "ticker-query",
@@ -9796,7 +9776,7 @@
 
   const normalizePanelName = (value) => {
     const panel = String(value || "").trim();
-    if (panel === "ticker-intelligence") return "ticker";
+    if (panel === "ticker-intelligence" || panel === "ticker") return "forecast";
     return panel;
   };
 
@@ -10620,20 +10600,6 @@
     } else {
       delete container.dataset.tvRenderKey;
     }
-  };
-
-  const buildTickerPanelUrl = (ticker) => {
-    const cleanTicker = normalizeTicker(ticker);
-    const params = new URLSearchParams();
-    if (cleanTicker) {
-      params.set("ticker", cleanTicker);
-      const tvSymbol = normalizeTradingViewSymbol(cleanTicker);
-      if (tvSymbol) {
-        params.set("tvwidgetsymbol", tvSymbol);
-      }
-    }
-    const query = params.toString();
-    return `/ticker${query ? `?${query}` : ""}`;
   };
 
   const buildForecastPanelUrl = (ticker) => {
@@ -25156,13 +25122,13 @@
 		      syncTickerInputs(ticker, { source: "pick_ticker", emitAnalytics: true });
 		      logEvent("ticker_selected", { ticker, page_path: window.location.pathname });
 
-			      // If we're in the terminal, load the chart immediately. Otherwise, jump to the terminal.
-			      if (ui.terminalForm && ui.terminalTicker && ui.tickerChart) {
-              window.__quanturaSetPanel?.("ticker");
-			        ui.terminalTicker.value = ticker;
-			        ui.terminalForm.requestSubmit?.();
+			      // Forecast is now the canonical terminal destination for ticker-driven actions.
+			      if (ui.forecastForm && ui.forecastTicker && typeof window.__quanturaSetPanel === "function") {
+              window.__quanturaSetPanel("forecast");
+			        ui.forecastTicker.value = ticker;
+              ui.forecastTicker.focus?.();
 			      } else {
-			        window.location.href = buildTickerPanelUrl(ticker);
+			        window.location.href = buildForecastPanelUrl(ticker);
 		      }
 		    };
 

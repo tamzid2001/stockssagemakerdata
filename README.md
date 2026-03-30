@@ -56,17 +56,15 @@ This repository is the operational source of truth for:
 | Explore | Published forecast outputs, community-style discovery, profile surfaces | `quantura_site/public/explore*`, `quantura_site/functions_explore/src/` |
 | SSR app shell | Server-rendered delivery for page templates and route handling | `quantura_site/functions_ssr/` |
 | Newsletter pipeline | Email send/unsubscribe handlers and scheduled weekly jobs | `quantura_site/functions_newsletter/` |
-| Mobile workspaces | Android and iOS client projects | `quantura_android/`, `quantura_ios/` |
 | Research automation | Scheduled stock-screening and signal-generation jobs | repo root Python scripts, `.github/workflows/` |
 
 ## System Architecture
 
-The platform uses Firebase Hosting for delivery, Cloud Functions Gen2 for APIs and SSR, Firestore and Storage for persistence, AWS services for forecasting execution, and Python/GitHub Actions for scheduled research automation.
+The platform uses Firebase Hosting for delivery, Cloud Functions Gen2 for APIs and SSR, Firestore and Storage for persistence, AWS services for forecasting execution, and Python/GitHub Actions for scheduled research automation. The repository is now web/backend-only after the legacy Android and Swift/iOS workspaces were removed.
 
 ```mermaid
 flowchart LR
     A["Web users"] --> B["Firebase Hosting"]
-    M["Mobile users"] --> B
     B --> C["Static pages and assets<br/>quantura_site/public"]
     B --> D["SSR function<br/>quantura_site/functions_ssr"]
     C --> E["Client app runtime<br/>public/app.js + RN web bundle"]
@@ -114,8 +112,6 @@ stockssagemakerdata/
 │   ├── firestore.rules            # Firestore security rules
 │   ├── firestore.indexes.json     # Firestore composite indexes
 │   └── storage.rules              # Cloud Storage security rules
-├── quantura_android/              # Android application workspace
-├── quantura_ios/                  # iOS application workspace
 ├── .github/workflows/             # CI, smoke checks, sitemap, stock screener, readiness reporting
 ├── deploy.sh                      # Canonical production deploy entrypoint
 ├── daily_prophet_signal_tracker.py

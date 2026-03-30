@@ -106,7 +106,6 @@ const resolveTemplate = (pathname) => {
     "/sports-forecasting",
     "/terminal/fx",
     "/tools/fx",
-    "/ticker-intelligence",
     "/predictions",
     "/indicators",
     "/trending",
