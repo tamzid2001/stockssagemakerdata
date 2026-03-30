@@ -57,6 +57,7 @@ export type PredictionAnalysisResult = {
   metrics: Record<string, number | string | null>;
   analysis: Record<string, unknown>;
   previewRows: Array<Record<string, string>>;
+  businessDayCsvText?: string;
 };
 
 export type UploadClassificationResult =
@@ -144,6 +145,22 @@ type BusinessBoundaryInfo = {
   validRows: BusinessBoundaryRow[];
   firstValid: BusinessBoundaryRow;
   lastValid: BusinessBoundaryRow;
+};
+
+type PredictionQuantileValue = {
+  header: string;
+  quantile: number;
+  value: number;
+};
+
+type PredictionBusinessDayExport = {
+  boundary: BusinessBoundaryInfo;
+  csvText: string;
+  rowCount: number;
+  previewRows: Array<Record<string, string>>;
+  nearestP10: PredictionQuantileValue | null;
+  nearestP50: PredictionQuantileValue | null;
+  nearestP90: PredictionQuantileValue | null;
 };
 
 const GCP_PROJECT_ID = asString(
@@ -567,7 +584,7 @@ function createSageMakerClient(config: AutopilotAwsConfig): SageMakerClient {
 }
 
 function parseCsvTable(csvText: string, maxRows = 200000): ParsedCsv {
-  const text = asString(csvText);
+  const text = asString(csvText).replace(/^\uFEFF/, "");
   if (!text.trim()) throw new Error("CSV file is empty.");
 
   const rows: string[][] = [];
@@ -1181,6 +1198,7 @@ function buildPredictionAnalysisError(
       message: cleanMessage,
     },
     previewRows: rowsToObjectPreview(parsed.headers, parsed.rows),
+    businessDayCsvText: "",
   };
 }
 
@@ -1221,6 +1239,36 @@ function resolveBusinessBoundaryRows(headers: string[], rows: string[][]): Busin
   };
 }
 
+function pickNearestPredictionQuantile(columns: PredictionQuantileValue[], target: number): PredictionQuantileValue | null {
+  if (!Array.isArray(columns) || !columns.length) return null;
+  return columns.reduce((best, item) =>
+    Math.abs(item.quantile - target) < Math.abs(best.quantile - target) ? item : best
+  , columns[0]);
+}
+
+function buildPredictionBusinessDayExport(parsed: ParsedCsv): PredictionBusinessDayExport {
+  const headers = parsed.headers || [];
+  const boundary = resolveBusinessBoundaryRows(headers, parsed.rows);
+  const validRows = boundary.validRows.map((entry) => entry.row);
+  const lastRowQuantiles = extractQuantileColumns(headers)
+    .map((column) => ({
+      header: column.header.toUpperCase(),
+      quantile: column.quantile,
+      value: Number(boundary.lastValid.row[column.index]),
+    }))
+    .filter((entry) => Number.isFinite(entry.value));
+
+  return {
+    boundary,
+    csvText: serializeCsv(headers, validRows),
+    rowCount: validRows.length,
+    previewRows: rowsToObjectPreview(headers, validRows),
+    nearestP10: pickNearestPredictionQuantile(lastRowQuantiles, 0.1),
+    nearestP50: pickNearestPredictionQuantile(lastRowQuantiles, 0.5),
+    nearestP90: pickNearestPredictionQuantile(lastRowQuantiles, 0.9),
+  };
+}
+
 export async function analyzePredictionCsv(
   csvText: string,
   options: { ticker?: string; fetchImpl?: typeof fetch } = {}
@@ -1248,11 +1296,12 @@ export async function analyzePredictionCsv(
   }
 
   try {
+    const businessDayExport = buildPredictionBusinessDayExport(parsed);
     const medianIndex = Math.floor(quantileColumns.length / 2);
     const medianCol = quantileColumns[medianIndex];
     const lowerCols = quantileColumns.slice(0, medianIndex);
     const upperCols = quantileColumns.slice(medianIndex + 1);
-    const boundary = resolveBusinessBoundaryRows(headers, parsed.rows);
+    const boundary = businessDayExport.boundary;
     const firstRow = boundary.firstValid.row;
     const lastRow = boundary.lastValid.row;
     const firstMedianRaw = Number(firstRow[medianCol.index]);
@@ -1266,9 +1315,13 @@ export async function analyzePredictionCsv(
     const lastMedianRounded = roundTo10(lastMedianRaw);
     const branch = firstMedianRounded > lastMedianRounded ? "upper" : "lower";
     const recommendation = branch === "upper" ? "buy" : "sell";
-    const targetQuantileCol = branch === "upper" ? findNearestQuantileColumn(upperCols, 0.9) : findNearestQuantileColumn(lowerCols, 0.1);
+    const upperTargetQuantileCol = findNearestQuantileColumn(upperCols, 0.9);
+    const lowerTargetQuantileCol = findNearestQuantileColumn(lowerCols, 0.1);
+    const targetQuantileCol = branch === "upper" ? upperTargetQuantileCol : lowerTargetQuantileCol;
     const endDateBias = branch === "upper" ? "near_upper_bound" : "near_lower_bound";
     const endDateBiasLabel = branch === "upper" ? "upper bound" : "lower bound";
+    const upperTargetLabel = upperTargetQuantileCol?.header ? upperTargetQuantileCol.header.toUpperCase() : "P90";
+    const lowerTargetLabel = lowerTargetQuantileCol?.header ? lowerTargetQuantileCol.header.toUpperCase() : "P10";
     const endDateTargetLabel = targetQuantileCol?.header ? targetQuantileCol.header.toUpperCase() : branch === "upper" ? "P90" : "P10";
     const returnedCols = branch === "upper" ? upperCols : lowerCols;
     const returnedValues = Object.fromEntries(
@@ -1285,6 +1338,17 @@ export async function analyzePredictionCsv(
     const returnedLines = Object.entries(returnedValues)
       .map(([label, value]) => `- **${label}**: ${Number(value).toLocaleString(undefined, { maximumFractionDigits: 6 })}`)
       .join("\n");
+    const terminalQuantiles = [
+      businessDayExport.nearestP10,
+      businessDayExport.nearestP50,
+      businessDayExport.nearestP90,
+    ].filter(Boolean) as PredictionQuantileValue[];
+    const terminalQuantileSummary = terminalQuantiles
+      .map((entry) => `${entry.header}=${Number(entry.value).toLocaleString(undefined, { maximumFractionDigits: 6 })}`)
+      .join(", ");
+    const terminalQuantileLines = terminalQuantiles
+      .map((entry) => `- **${entry.header}**: ${Number(entry.value).toLocaleString(undefined, { maximumFractionDigits: 6 })}`)
+      .join("\n");
     const currentPriceHeading =
       currentPriceInfo && (currentPriceInfo.currentPrice !== null || currentPriceInfo.error) ? "### Current Price" : "";
     const currentPriceLine =
@@ -1298,8 +1362,9 @@ export async function analyzePredictionCsv(
     const summary = [
       `${ticker || "Uploaded"} exploratory analysis issued a ${recommendation.toUpperCase()} signal.`,
       `Rounded P50 moved from ${firstMedianRounded} on ${firstValidTimestamp} to ${lastMedianRounded} on ${lastValidTimestamp}.`,
-      `Rule: if the last rounded P50 is below the first rounded P50, bias the final price toward the upper bound (${endDateTargetLabel}) by the end date; otherwise bias it toward the lower bound.`,
+      `Rule: if the last rounded P50 is below the first rounded P50, bias the final price toward the upper bound (${upperTargetLabel}) by the end date; otherwise bias it toward the lower bound (${lowerTargetLabel}).`,
       `Current end-date bias: ${endDateBiasLabel} (${endDateTargetLabel}).`,
+      terminalQuantileSummary ? `Final business-day quantiles at ${lastValidTimestamp}: ${terminalQuantileSummary}.` : "",
       Object.keys(returnedValues).length
         ? `Returned last business-day values: ${Object.entries(returnedValues)
             .map(([label, value]) => `${label}=${value}`)
@@ -1324,6 +1389,7 @@ export async function analyzePredictionCsv(
       `- Last valid row index: **${boundary.lastValid.rowIndex}**`,
       `- Last valid date/time: **${lastValidTimestamp}**`,
       `- Valid business-day rows found: **${boundary.validRows.length}**`,
+      `- Cleaned business-day CSV rows: **${businessDayExport.rowCount}**`,
       "",
       "### Comparison Rule",
       "Compare the first valid-row P50 with the last valid-row P50 after rounding both to the nearest 10 so the decision uses their tens-place levels.",
@@ -1341,8 +1407,12 @@ export async function analyzePredictionCsv(
       "AWS Forecast documents how Average wQL, wQL, WAPE, RMSE, MAPE, and MASE should be interpreted for time-series models. Lower values indicate better models. See [AWS Forecast metrics documentation](https://docs.aws.amazon.com/forecast/latest/dg/metrics.html?utm_source=chatgpt.com).",
       "",
       `- Point-forecast anchor: **${medianCol.header}** (the middle quantile, usually **P50** / **0.5**)`,
-      `- Decision rule: if the last rounded P50 is below the first rounded P50, output **BUY** and bias the terminal price toward the **upper** bound, usually **${endDateTargetLabel}**. Otherwise output **SELL** and bias the terminal price toward the **lower** bound.`,
+      `- Decision rule: if the last rounded P50 is below the first rounded P50, output **BUY** and bias the terminal price toward the **upper** bound, usually **${upperTargetLabel}**. Otherwise output **SELL** and bias the terminal price toward the **lower** bound, usually **${lowerTargetLabel}**.`,
       `- End-date communication rule: by the final forecast date, price is treated as finishing closer to the **${endDateBiasLabel}** first.`,
+      "",
+      "### End-Date Quantile Snapshot",
+      `- Final business-day date/time: **${lastValidTimestamp}**`,
+      terminalQuantileLines || "- No terminal quantile values were available for P10/P50/P90.",
       "",
       "### Quantile Structure",
       `- Ordered quantile columns: **${orderedLabels}**`,
@@ -1392,6 +1462,10 @@ export async function analyzePredictionCsv(
         validBusinessDayRows: boundary.validRows.length,
         firstValidTimestamp,
         lastValidTimestamp,
+        businessDayRows: businessDayExport.rowCount,
+        lastBusinessDayP10: businessDayExport.nearestP10 ? Number(businessDayExport.nearestP10.value.toFixed(6)) : null,
+        lastBusinessDayP50: businessDayExport.nearestP50 ? Number(businessDayExport.nearestP50.value.toFixed(6)) : null,
+        lastBusinessDayP90: businessDayExport.nearestP90 ? Number(businessDayExport.nearestP90.value.toFixed(6)) : null,
       },
       analysis: {
         orderedQuantileColumns: quantileColumns.map((col) => col.header),
@@ -1410,8 +1484,14 @@ export async function analyzePredictionCsv(
         firstValidTimestamp,
         lastValidTimestamp,
         validBusinessDayRows: boundary.validRows.length,
+        businessDayRows: businessDayExport.rowCount,
+        lastBusinessDayQuantiles: terminalQuantiles.reduce<Record<string, number>>((acc, entry) => {
+          acc[entry.header] = Number(entry.value.toFixed(6));
+          return acc;
+        }, {}),
       },
       previewRows: rowsToObjectPreview(headers, parsed.rows),
+      businessDayCsvText: businessDayExport.csvText,
     };
   } catch (error: any) {
     return buildPredictionAnalysisError(

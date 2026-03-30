@@ -3416,7 +3416,7 @@ async function readFoundryFirestoreTextArtifact(runId: string, fileKeyRaw: unkno
   );
   const chunkSnaps = await db.getAll(...chunkRefs);
   return chunkSnaps
-    .map((snap) => sanitizeText((snap.data() || {}).text, FOUNDRY_TEXT_ARTIFACT_CHUNK_CHARS + 20_000))
+    .map((snap) => asString((snap.data() || {}).text))
     .join("");
 }
 
@@ -4010,11 +4010,13 @@ function buildAutopilotAnalysisPatch(analysis: Record<string, unknown>): Record<
 
 async function persistAutopilotFirestoreAnalysisArtifacts(
   runId: string,
-  analysis: Record<string, unknown>
+  analysis: Record<string, unknown>,
+  options: { businessDayCsvText?: string } = {}
 ): Promise<{ analysisPatch: Record<string, unknown>; filePatches: Record<string, unknown> }> {
   const filePatches: Record<string, unknown> = {};
   const markdown = asString(analysis.markdown).slice(0, 32000);
   const jsonText = JSON.stringify(analysis.data || {}, null, 2);
+  const businessDayCsvText = asString(options.businessDayCsvText);
 
   if (markdown) {
     filePatches.analysisMarkdown = await writeFoundryFirestoreTextArtifact(
@@ -4033,6 +4035,15 @@ async function persistAutopilotFirestoreAnalysisArtifacts(
     "application/json",
     "analysis.json"
   );
+  if (businessDayCsvText.trim()) {
+    filePatches.businessDaysCsv = await writeFoundryFirestoreTextArtifact(
+      runId,
+      "businessDaysCsv",
+      businessDayCsvText,
+      "text/csv",
+      "business_days_predictions.csv"
+    );
+  }
 
   return {
     analysisPatch: buildAutopilotAnalysisPatch(analysis),
@@ -4044,17 +4055,26 @@ async function persistAutopilotAnalysisArtifacts(
   ownerUid: string,
   runId: string,
   analysis: Record<string, unknown>,
-  predictionsCsvText = ""
+  predictionsCsvText = "",
+  options: { businessDayCsvText?: string } = {}
 ): Promise<{ analysisPatch: Record<string, unknown>; filePatches: Record<string, unknown> }> {
   const owner = safePathSegment(ownerUid, 120) || "user";
   const run = safePathSegment(runId, 120) || "run";
   const reportBase = `forecast_reports/${owner}/foundry/${run}`;
   const filePatches: Record<string, unknown> = {};
+  const businessDayCsvText = asString(options.businessDayCsvText);
 
   if (predictionsCsvText.trim()) {
     filePatches.predictionsCsv = await writeStorageTextArtifact(
       `${reportBase}/predictions.csv`,
       predictionsCsvText,
+      "text/csv"
+    );
+  }
+  if (businessDayCsvText.trim()) {
+    filePatches.businessDaysCsv = await writeStorageTextArtifact(
+      `${reportBase}/business_days_predictions.csv`,
+      businessDayCsvText,
       "text/csv"
     );
   }
@@ -4179,7 +4199,10 @@ async function reconcileAutopilotRunDocument(
             rowCount: analysis.rowCount,
             columns: analysis.columns,
           },
-          refresh.predictionsCsvText
+          refresh.predictionsCsvText,
+          {
+            businessDayCsvText: asString((analysis as any).businessDayCsvText),
+          }
         );
         const forecastPayloadFile = await persistSportsForecastPayloadArtifact(ownerUid, runId, {
           input: buildAutopilotInputPayload(existingData),
@@ -4197,16 +4220,24 @@ async function reconcileAutopilotRunDocument(
         const analysis = await analyzePredictionCsv(refresh.predictionsCsvText, {
           ticker: normalizeTicker(dataset.ticker || existingData.ticker),
         });
-        const persisted = await persistAutopilotAnalysisArtifacts(ownerUid, runId, {
-          status: analysis.status,
-          summary: analysis.summary,
-          markdown: analysis.markdown,
-          metrics: analysis.metrics,
-          data: analysis.analysis,
-          previewRows: analysis.previewRows,
-          rowCount: analysis.rowCount,
-          columns: analysis.columns,
-        }, refresh.predictionsCsvText);
+        const persisted = await persistAutopilotAnalysisArtifacts(
+          ownerUid,
+          runId,
+          {
+            status: analysis.status,
+            summary: analysis.summary,
+            markdown: analysis.markdown,
+            metrics: analysis.metrics,
+            data: analysis.analysis,
+            previewRows: analysis.previewRows,
+            rowCount: analysis.rowCount,
+            columns: analysis.columns,
+          },
+          refresh.predictionsCsvText,
+          {
+            businessDayCsvText: asString((analysis as any).businessDayCsvText),
+          }
+        );
 
         nextPatch.analysis = persisted.analysisPatch;
         nextPatch.files = {
@@ -4232,6 +4263,8 @@ async function reconcileAutopilotRunDocument(
         previewRows: analysis.previewRows,
         rowCount: analysis.rowCount,
         columns: analysis.columns,
+      }, {
+        businessDayCsvText: asString((analysis as any).businessDayCsvText),
       });
       nextPatch.analysis = persisted.analysisPatch;
       nextPatch.files = {
@@ -12472,6 +12505,8 @@ ROUTES.post("/autopilot/datasets/upload", async (req, res) => {
       previewRows: analysis.previewRows,
       rowCount: analysis.rowCount,
       columns: analysis.columns,
+    }, {
+      businessDayCsvText: asString((analysis as any).businessDayCsvText),
     });
     const doc: Record<string, unknown> = {
       ...baseDoc,
@@ -12838,8 +12873,12 @@ ROUTES.post("/autopilot/runs/:runId/analyze", async (req, res) => {
     };
     const persisted =
       sanitizeText(data.sourceType, 40) === "prediction_csv"
-        ? await persistAutopilotFirestoreAnalysisArtifacts(runId, analysisPayload)
-        : await persistAutopilotAnalysisArtifacts(user.uid, runId, analysisPayload);
+        ? await persistAutopilotFirestoreAnalysisArtifacts(runId, analysisPayload, {
+            businessDayCsvText: asString((analysis as any).businessDayCsvText),
+          })
+        : await persistAutopilotAnalysisArtifacts(user.uid, runId, analysisPayload, "", {
+            businessDayCsvText: asString((analysis as any).businessDayCsvText),
+          });
     const nextStatus =
       sanitizeText(asPlainObject(data.autopilot).transformStatus, 60) === "Completed" ||
       sanitizeText(data.status, 60) === "completed"

@@ -1999,6 +1999,7 @@
     foundryAnalyzeButton: document.getElementById("foundry-analyze-button"),
     foundryRefreshList: document.getElementById("foundry-refresh-list"),
     foundryRefreshButton: document.getElementById("foundry-refresh-button"),
+    foundryBusinessDaysButton: document.getElementById("foundry-business-days-button"),
     foundryShareButton: document.getElementById("foundry-share-button"),
     foundryRunMeta: document.getElementById("foundry-run-meta"),
     foundryPublishHost: document.getElementById("foundry-publish-host"),
@@ -17121,7 +17122,7 @@
   };
 
   const parseCsvTable = (csvText, { maxRows = 5000 } = {}) => {
-    const text = String(csvText || "");
+    const text = String(csvText || "").replace(/^\uFEFF/, "");
     if (!text.trim()) throw new Error("CSV file is empty.");
 
     const delimiter = ",";
@@ -17825,8 +17826,10 @@
       , lastQuantiles[0]);
 
     return {
+      firstWeekdayDate: (weekdayRows[0] || rowsWithDate[0] || {}).ymd || "",
       lastWeekdayDate: lastUse.ymd,
       rowIndex: lastUse.idx,
+      businessDayRows: weekdayRows.length || rowsWithDate.length,
       lower: nearest(0.1),
       median: nearest(0.5),
       upper: nearest(0.9),
@@ -18001,7 +18004,10 @@
   const appendPredictionOptionsSupplement = async (functions, { ticker, envelope, sourceLabel = "Prediction options analysis" } = {}) => {
     if (!functions || !ui.predictionsAgentOutput) return null;
     const cleanTicker = normalizeTicker(ticker || "");
-    if (!cleanTicker || !envelope) return null;
+    if (!envelope) return null;
+    if (!cleanTicker) {
+      throw new Error("Enter a ticker on the Forecast Foundry run to load nearest P10 and P90 options contracts.");
+    }
 
     removePredictionOptionsSupplement();
     const getOptions = functions.httpsCallable("get_options_chain");
@@ -18056,6 +18062,7 @@
             })
           : null,
       }));
+    const fmtMoney = (value) => (Number.isFinite(Number(value)) ? formatUsd(Number(value), 2) : "—");
 
     const supplement = document.createElement("div");
     supplement.dataset.predictionOptionsSupplement = "1";
@@ -18064,16 +18071,25 @@
       <div class="notice" style="margin-top:14px;">
         <div><strong>${escapeHtml(sourceLabel)}</strong></div>
         <div class="small" style="margin-top:6px;">
-          Expiry near forecast end: <strong>${escapeHtml(selectedExpiration || String(chain.selectedExpiration || "Auto"))}</strong>
-          · Upper rule: strike at or above <strong>${escapeHtml(String(envelope.upper?.label || "P90").toUpperCase())}</strong>
-          · Lower rule: strike at or below <strong>${escapeHtml(String(envelope.lower?.label || "P10").toUpperCase())}</strong>
+          Forecast end date: <strong>${escapeHtml(String(envelope.lastWeekdayDate || "Unknown"))}</strong>
+          · Nearest listed expiry: <strong>${escapeHtml(selectedExpiration || String(chain.selectedExpiration || "Auto"))}</strong>
+          · Business-day rows used: <strong>${Number(envelope.businessDayRows || 0).toLocaleString()}</strong>
+        </div>
+        <div class="small" style="margin-top:6px;">
+          End-date ${escapeHtml(String(envelope.lower?.label || "P10").toUpperCase())}: <strong>${fmtMoney(envelope.lower?.value)}</strong>
+          · ${escapeHtml(String(envelope.median?.label || "P50").toUpperCase())}: <strong>${fmtMoney(envelope.median?.value)}</strong>
+          · ${escapeHtml(String(envelope.upper?.label || "P90").toUpperCase())}: <strong>${fmtMoney(envelope.upper?.value)}</strong>
+        </div>
+        <div class="small" style="margin-top:6px;">
+          Call rule: strike at or above <strong>${escapeHtml(String(envelope.upper?.label || "P90").toUpperCase())}</strong>
+          · Put rule: strike at or below <strong>${escapeHtml(String(envelope.lower?.label || "P10").toUpperCase())}</strong>
         </div>
       </div>
-      ${renderPredictionOptionCandidate("Upper-Bound Call Candidate", callCandidate, String(envelope.upper?.label || "P90").toUpperCase())}
-      ${renderPredictionOptionCandidate("Lower-Bound Put Candidate", putCandidate, String(envelope.lower?.label || "P10").toUpperCase())}
+      ${renderPredictionOptionCandidate("Nearest P90 Call Contract", callCandidate, String(envelope.upper?.label || "P90").toUpperCase())}
+      ${renderPredictionOptionCandidate("Nearest P10 Put Contract", putCandidate, String(envelope.lower?.label || "P10").toUpperCase())}
       ${scenarios.length ? renderPredictionOptionSimulationTable(scenarios) : ""}
       <div class="small muted" style="margin-top:10px;">
-        Simulations assume a long option held through expiry, using the quoted ask/mid/last/bid fallback in that order and one contract by default.
+        Contracts are aligned to the nearest listed expiration on or after the final business day in the CSV. Simulations assume a long option held through expiry, using the quoted ask/mid/last/bid fallback in that order and one contract by default.
       </div>
     `;
     ui.predictionsAgentOutput.appendChild(supplement);
@@ -18555,10 +18571,26 @@
     `;
   };
 
+  const readPrivateTextArtifact = async (file, { fallbackMessage = "Unable to fetch the stored file." } = {}) => {
+    const targetDownloadUrl = String(file?.downloadUrl || "").trim();
+    const targetApiTextPath = String(file?.apiTextPath || "").trim();
+    const targetUrl = targetDownloadUrl || targetApiTextPath;
+    if (!targetUrl) throw new Error(fallbackMessage);
+    const response = await fetch(targetUrl, {
+      method: "GET",
+      headers: targetDownloadUrl ? undefined : await buildApiAuthHeaders({ includeJson: false }),
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    if (!response.ok) throw new Error(fallbackMessage);
+    return response.text();
+  };
+
   const loadFoundryCsvIntoPreview = async (run) => {
     const files = run?.files && typeof run.files === "object" ? run.files : {};
     const dataset = run?.dataset && typeof run.dataset === "object" ? run.dataset : {};
     const orderedFiles = [
+      files.businessDaysCsv,
       files.predictionsCsv,
       files.uploadedCsv,
       files.datasetCsv,
@@ -18583,17 +18615,9 @@
     }
     setOutputLoading(ui.predictionsPreview, "Loading CSV preview...");
     setOutputLoading(ui.predictionsChart, "Loading chart...");
-    const targetDownloadUrl = String(targetFile.downloadUrl || "").trim();
-    const targetApiTextPath = String(targetFile.apiTextPath || "").trim();
-    const targetUrl = targetDownloadUrl || targetApiTextPath;
-    const response = await fetch(targetUrl, {
-      method: "GET",
-      headers: targetDownloadUrl ? undefined : await buildApiAuthHeaders({ includeJson: false }),
-      credentials: "same-origin",
-      cache: "no-store",
+    const csvText = await readPrivateTextArtifact(targetFile, {
+      fallbackMessage: "Unable to fetch the stored CSV artifact.",
     });
-    if (!response.ok) throw new Error("Unable to fetch the stored CSV artifact.");
-    const csvText = await response.text();
     const table = parseCsvTable(csvText, { maxRows: 20000 });
     state.predictionsContext.table = table;
     state.predictionsContext.previewPage = 0;
@@ -18614,6 +18638,7 @@
     removePredictionOptionsSupplement();
     if (!ui.foundryRunMeta) return;
     if (!run || typeof run !== "object") {
+      if (ui.foundryBusinessDaysButton) ui.foundryBusinessDaysButton.classList.add("hidden");
       ui.foundryRunMeta.innerHTML = `<div class="small muted">Select a foundry run to inspect it.</div>`;
       if (ui.foundryPublishHost) ui.foundryPublishHost.innerHTML = `<div class="small muted">Private Explore sync and publish controls appear here after a source is prepared.</div>`;
       return;
@@ -18626,6 +18651,17 @@
     const requestId = getFoundryRequestId(run);
     const requestRecord = request && typeof request === "object" ? request : requestId ? getMyRequestById(requestId) : null;
     const effectiveShareUrl = String(shareUrl || requestRecord?.share?.shareUrl || "").trim();
+    const hasPredictionSource =
+      String(run?.sourceType || "").trim() === "prediction_csv" ||
+      (files?.predictionsCsv && typeof files.predictionsCsv === "object") ||
+      (files?.uploadedCsv && typeof files.uploadedCsv === "object");
+    if (ui.foundryBusinessDaysButton) {
+      ui.foundryBusinessDaysButton.classList.toggle("hidden", !hasPredictionSource);
+      ui.foundryBusinessDaysButton.disabled = !hasFullAccount() || !hasPredictionSource;
+      ui.foundryBusinessDaysButton.title = hasPredictionSource
+        ? "Download the cleaned business-day prediction CSV for this run."
+        : "";
+    }
     const horizonSummary = formatFoundryHorizonSummary({
       forecastHorizon: autopilot?.forecastHorizon,
       forecastFrequency: autopilot?.forecastFrequency,
@@ -18945,6 +18981,33 @@
     return nextRun;
   };
 
+  const downloadFoundryBusinessDayCsv = async () => {
+    if (!hasFullAccount()) throw new Error("Sign in with a full account to download Forecast Foundry files.");
+    let run = state.foundryContext.activeRun;
+    if (!run || typeof run !== "object") throw new Error("Select a Forecast Foundry run first.");
+    let businessDaysFile = run?.files?.businessDaysCsv;
+    if (!businessDaysFile || (typeof businessDaysFile === "object" && !String(businessDaysFile.downloadUrl || businessDaysFile.apiTextPath || "").trim())) {
+      if (!canAnalyzeFoundryRun(run)) {
+        throw new Error("A cleaned business-day CSV is not available for this run yet.");
+      }
+      run = await analyzeFoundryRun({ runId: String(run.id || "").trim(), notify: false });
+      businessDaysFile = run?.files?.businessDaysCsv;
+    }
+    if (!businessDaysFile || typeof businessDaysFile !== "object") {
+      throw new Error("A cleaned business-day CSV is not available for this run yet.");
+    }
+    const filename = String(businessDaysFile.fileName || `${String(run?.dataset?.ticker || "prediction").trim() || "prediction"}_business_days.csv`).trim();
+    const directUrl = String(businessDaysFile.downloadUrl || "").trim();
+    if (directUrl) {
+      await triggerDownloadFromUrl(directUrl, filename);
+      return;
+    }
+    const csvText = await readPrivateTextArtifact(businessDaysFile, {
+      fallbackMessage: "Unable to fetch the cleaned business-day CSV.",
+    });
+    triggerDownload(filename, csvText, { mimeType: "text/csv;charset=utf-8;" });
+  };
+
   const shareFoundryRun = async () => {
     if (!hasFullAccount()) throw new Error("Sign in with a full account to share Forecast Foundry runs.");
     const run = state.foundryContext.activeRun;
@@ -18993,6 +19056,7 @@
       files: {},
     };
     await renderFoundryRunDetail(pseudoRun, { request, shareUrl });
+    if (ui.foundryBusinessDaysButton) ui.foundryBusinessDaysButton.classList.add("hidden");
     if (ui.predictionsPreview) {
       ui.predictionsPreview.innerHTML = `<div class="small muted">CSV artifacts are private to the owner workspace. Shared view includes the saved analysis summary only.</div>`;
     }
@@ -19012,6 +19076,7 @@
     state.foundryContext.activeRun = null;
     renderFoundryRuns(state.foundryContext.runs || []);
     if (ui.foundryShareButton) ui.foundryShareButton.disabled = true;
+    if (ui.foundryBusinessDaysButton) ui.foundryBusinessDaysButton.classList.add("hidden");
     if (ui.foundryRunMeta) {
       ui.foundryRunMeta.innerHTML = `
         <div class="small muted">Legacy upload compatibility view</div>
@@ -28862,6 +28927,16 @@
         await refreshFoundryRun({ notify: true });
       } catch (error) {
         const message = extractErrorMessage(error, "Unable to refresh Forecast Foundry run.");
+        setFoundryStatus(message, "warn");
+        showToast(message, "warn");
+      }
+    });
+    ui.foundryBusinessDaysButton?.addEventListener("click", async () => {
+      try {
+        await downloadFoundryBusinessDayCsv();
+        showToast("Business-day CSV downloaded.");
+      } catch (error) {
+        const message = extractErrorMessage(error, "Unable to download the cleaned business-day CSV.");
         setFoundryStatus(message, "warn");
         showToast(message, "warn");
       }
