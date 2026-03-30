@@ -35,8 +35,48 @@ export { shopApi } from "./shopApi";
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const AdmZip = require("adm-zip");
 
+function normalizeStorageBucketName(value: unknown): string {
+  return String(value || "")
+    .trim()
+    .replace(/^gs:\/\//i, "")
+    .replace(/^\/+/, "")
+    .replace(/\/+$/, "");
+}
+
+function resolveFirebaseConfigStorageBucket(): string {
+  const raw = String(process.env.FIREBASE_CONFIG || "").trim();
+  if (!raw || !raw.startsWith("{")) return "";
+  try {
+    const parsed = JSON.parse(raw) as { storageBucket?: unknown };
+    return normalizeStorageBucketName(parsed.storageBucket);
+  } catch (_error) {
+    return "";
+  }
+}
+
+function resolveDefaultStorageBucketName(): string {
+  const projectId = String(
+    process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || ""
+  ).trim();
+  const candidates = [
+    process.env.FIREBASE_STORAGE_BUCKET,
+    process.env.STORAGE_BUCKET,
+    process.env.GCLOUD_STORAGE_BUCKET,
+    resolveFirebaseConfigStorageBucket(),
+    projectId ? `${projectId}.firebasestorage.app` : "",
+    projectId ? `${projectId}.appspot.com` : "",
+  ];
+  for (const candidate of candidates) {
+    const normalized = normalizeStorageBucketName(candidate);
+    if (normalized) return normalized;
+  }
+  return "";
+}
+
+const DEFAULT_STORAGE_BUCKET = resolveDefaultStorageBucketName();
+
 if (!admin.apps.length) {
-  admin.initializeApp();
+  admin.initializeApp(DEFAULT_STORAGE_BUCKET ? { storageBucket: DEFAULT_STORAGE_BUCKET } : undefined);
 }
 
 const db = admin.firestore();
@@ -3298,7 +3338,10 @@ function safePathSegment(value: unknown, maxLen = 80): string {
 }
 
 function storageBucket() {
-  return admin.storage().bucket();
+  const configuredBucket =
+    normalizeStorageBucketName((admin.app().options as { storageBucket?: unknown })?.storageBucket) ||
+    DEFAULT_STORAGE_BUCKET;
+  return configuredBucket ? admin.storage().bucket(configuredBucket) : admin.storage().bucket();
 }
 
 async function writeStorageTextArtifact(
@@ -3405,6 +3448,51 @@ function buildAutopilotTitle(data: Record<string, unknown>): string {
   return `${ticker || "Market"} Forecast Foundry`;
 }
 
+const FOUNDRY_MODEL_METRIC_FIELDS = [
+  { key: "status", label: "Model status", aliases: ["status", "modelStatus", "model_status"] },
+  { key: "avgWql", label: "Avg. wQL", aliases: ["avgWql", "avg_wql", "avgWQL", "averageWeightedQuantileLoss"] },
+  { key: "mape", label: "MAPE", aliases: ["mape"] },
+  { key: "wape", label: "WAPE", aliases: ["wape"] },
+  { key: "rmse", label: "RMSE", aliases: ["rmse"] },
+  { key: "mase", label: "MASE", aliases: ["mase"] },
+] as const;
+
+function firstFoundryMetricValue(source: Record<string, unknown>, aliases: readonly string[]): unknown {
+  for (const alias of aliases) {
+    if (Object.prototype.hasOwnProperty.call(source, alias)) {
+      return source[alias];
+    }
+  }
+  return undefined;
+}
+
+function normalizeFoundryModelMetrics(raw: unknown): Record<string, string | number> {
+  const source = asPlainObject(raw);
+  const metrics: Record<string, string | number> = {};
+  const status = sanitizeText(firstFoundryMetricValue(source, ["status", "modelStatus", "model_status"]), 120);
+  if (status) metrics.status = status;
+  FOUNDRY_MODEL_METRIC_FIELDS.filter((field) => field.key !== "status").forEach((field) => {
+    const value = asFinite(firstFoundryMetricValue(source, field.aliases), Number.NaN);
+    if (Number.isFinite(value)) metrics[field.key] = Number(value.toFixed(6));
+  });
+  return metrics;
+}
+
+function buildFoundryModelMetricsDisplay(raw: unknown): Record<string, string | number> {
+  const normalized = normalizeFoundryModelMetrics(raw);
+  const display: Record<string, string | number> = {};
+  FOUNDRY_MODEL_METRIC_FIELDS.forEach((field) => {
+    const value = normalized[field.key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      display[field.label] = value;
+      return;
+    }
+    const text = sanitizeText(value, 120);
+    if (text) display[field.label] = text;
+  });
+  return display;
+}
+
 function buildAutopilotSummary(data: Record<string, unknown>): string {
   if (isSportsAutopilotData(data)) {
     const analysis = asPlainObject(data.analysis);
@@ -3487,6 +3575,7 @@ function buildAutopilotInputPayload(data: Record<string, unknown>): Record<strin
   }
   const dataset = asPlainObject(data.dataset);
   const autopilot = asPlainObject(data.autopilot);
+  const modelMetrics = buildFoundryModelMetricsDisplay(data.modelMetrics);
   return {
     ticker: normalizeTicker(dataset.ticker || data.ticker),
     interval: sanitizeText(dataset.interval, 20),
@@ -3495,6 +3584,7 @@ function buildAutopilotInputPayload(data: Record<string, unknown>): Record<strin
     notes: sanitizeText(data.notes, 2000),
     sourceType: sanitizeText(data.sourceType, 40),
     mode: sanitizeText(data.mode, 60),
+    modelMetrics,
   };
 }
 
@@ -3553,6 +3643,7 @@ function buildAutopilotOutputsMeta(data: Record<string, unknown>): Record<string
   const autopilot = asPlainObject(data.autopilot);
   const analysis = asPlainObject(data.analysis);
   const files = asPlainObject(data.files);
+  const modelMetrics = buildFoundryModelMetricsDisplay(data.modelMetrics);
   const objective = asPlainObject(autopilot.objectiveMetric);
   const bestCandidate = asPlainObject(autopilot.bestCandidate);
   const metrics: Record<string, unknown> = {};
@@ -3570,6 +3661,9 @@ function buildAutopilotOutputsMeta(data: Record<string, unknown>): Record<string
   if (rowCount > 0) metrics.Rows = Math.floor(rowCount);
   const candidateName = sanitizeText(bestCandidate.candidateName, 120);
   if (candidateName) metrics.Candidate = candidateName;
+  Object.entries(modelMetrics).forEach(([key, value]) => {
+    if (!(key in metrics)) metrics[key] = value;
+  });
   const fileNames = Object.values(files)
     .map((entry) => sanitizeText(asPlainObject(entry).fileName, 240))
     .filter(Boolean)
@@ -3743,6 +3837,7 @@ async function toAutopilotRunResponse(docId: string, data: Record<string, unknow
     userId: sanitizeText(data.userId, 220),
     workspaceId: sanitizeText(data.workspaceId, 220),
     notes: sanitizeText(data.notes, 2000),
+    modelMetrics: buildFoundryModelMetricsDisplay(data.modelMetrics),
     exploreRequestId: sanitizeText(data.exploreRequestId, 220),
     createdAtMs,
     updatedAtMs,
@@ -11987,6 +12082,7 @@ ROUTES.post("/autopilot/datasets/history", async (req, res) => {
     const start = sanitizeText(body.start, 40);
     const end = sanitizeText(body.end, 40);
     const useAllHistory = asBoolean(body.useAllHistory, false);
+    const modelMetrics = normalizeFoundryModelMetrics(body.modelMetrics);
     if (!ticker || !end || (!useAllHistory && !start)) {
       res.status(400).json({ error: "invalid_history_request" });
       return;
@@ -12031,8 +12127,8 @@ ROUTES.post("/autopilot/datasets/history", async (req, res) => {
     const doc: Record<string, unknown> = {
       userId: user.uid,
       workspaceId: sanitizeText(body.workspaceId, 220) || user.uid,
-      title: sanitizeText(body.title, 180) || `${ticker} Forecast Foundry`,
       notes: sanitizeText(body.notes, 2000),
+      modelMetrics,
       mode: "dataset",
       sourceType: "history_downloader",
       status: "dataset_ready",
@@ -12102,6 +12198,7 @@ ROUTES.post("/autopilot/datasets/upload", async (req, res) => {
     const csvText = await readStorageTextArtifact(filePath);
     const tickerHint = normalizeTicker(body.ticker);
     const intervalHint = sanitizeText(body.interval, 20);
+    const modelMetrics = normalizeFoundryModelMetrics(body.modelMetrics);
     const classified = await classifyUploadedCsv(csvText, { tickerHint, intervalHint });
     const runRef = db.collection("autopilot_requests").doc();
     const owner = safePathSegment(user.uid, 120) || "user";
@@ -12110,11 +12207,8 @@ ROUTES.post("/autopilot/datasets/upload", async (req, res) => {
     const baseDoc: Record<string, unknown> = {
       userId: user.uid,
       workspaceId: sanitizeText(body.workspaceId, 220) || user.uid,
-      title:
-        sanitizeText(body.title, 180) ||
-        sanitizeText(body.fileName || asPlainObject(body.file).name, 180) ||
-        `${tickerHint || "Forecast"} Forecast Foundry`,
       notes: sanitizeText(body.notes, 2000),
+      modelMetrics,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       autopilot: {},

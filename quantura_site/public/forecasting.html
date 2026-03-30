@@ -302,9 +302,38 @@
                                 </select>
                                 <div class="small muted">Forecast Foundry currently supports daily historical datasets only.</div>
                               </div>
+                            </div>
+
+                            <div class="small muted">Run titles are generated automatically from the ticker or detected symbol.</div>
+
+                            <div class="field" style="margin-top: 8px;">
+                              <label class="label">Optional model metrics</label>
+                              <div class="small muted">Attach external model diagnostics if you want them saved alongside this Foundry run.</div>
+                            </div>
+                            <div class="form-grid">
                               <div class="field">
-                                <label class="label" for="foundry-title">Run title</label>
-                                <input id="foundry-title" name="title" placeholder="AAPL Forecast Foundry" />
+                                <label class="label" for="foundry-model-status">Model status</label>
+                                <input id="foundry-model-status" name="modelStatus" placeholder="Standard build" />
+                              </div>
+                              <div class="field">
+                                <label class="label" for="foundry-avg-wql">Avg. wQL</label>
+                                <input id="foundry-avg-wql" name="avgWql" inputmode="decimal" placeholder="0.020" />
+                              </div>
+                              <div class="field">
+                                <label class="label" for="foundry-mape">MAPE</label>
+                                <input id="foundry-mape" name="mape" inputmode="decimal" placeholder="0.023" />
+                              </div>
+                              <div class="field">
+                                <label class="label" for="foundry-wape">WAPE</label>
+                                <input id="foundry-wape" name="wape" inputmode="decimal" placeholder="0.031" />
+                              </div>
+                              <div class="field">
+                                <label class="label" for="foundry-rmse">RMSE</label>
+                                <input id="foundry-rmse" name="rmse" inputmode="decimal" placeholder="12.819" />
+                              </div>
+                              <div class="field">
+                                <label class="label" for="foundry-mase">MASE</label>
+                                <input id="foundry-mase" name="mase" inputmode="decimal" placeholder="0.087" />
                               </div>
                             </div>
 

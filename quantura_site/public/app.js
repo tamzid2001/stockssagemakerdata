@@ -1974,7 +1974,12 @@
     foundrySourceKind: document.getElementById("foundry-source-kind"),
     foundryTicker: document.getElementById("foundry-ticker"),
     foundryInterval: document.getElementById("foundry-interval"),
-    foundryTitle: document.getElementById("foundry-title"),
+    foundryModelStatus: document.getElementById("foundry-model-status"),
+    foundryAvgWql: document.getElementById("foundry-avg-wql"),
+    foundryMape: document.getElementById("foundry-mape"),
+    foundryWape: document.getElementById("foundry-wape"),
+    foundryRmse: document.getElementById("foundry-rmse"),
+    foundryMase: document.getElementById("foundry-mase"),
     foundryStart: document.getElementById("foundry-start"),
     foundryEnd: document.getElementById("foundry-end"),
     foundryUseAllHistory: document.getElementById("foundry-use-all-history"),
@@ -18328,6 +18333,56 @@
     updateFoundryInstanceLimitUi();
   };
 
+  const normalizeFoundryModelMetricNumber = (value) => {
+    const trimmed = String(value ?? "").trim();
+    if (!trimmed) return null;
+    const numeric = Number(trimmed);
+    return Number.isFinite(numeric) ? Number(numeric.toFixed(6)) : null;
+  };
+
+  const collectFoundryModelMetrics = () => {
+    const metrics = {};
+    const status = String(ui.foundryModelStatus?.value || "").trim();
+    if (status) metrics.status = status;
+    const numericFields = [
+      ["avgWql", ui.foundryAvgWql?.value],
+      ["mape", ui.foundryMape?.value],
+      ["wape", ui.foundryWape?.value],
+      ["rmse", ui.foundryRmse?.value],
+      ["mase", ui.foundryMase?.value],
+    ];
+    numericFields.forEach(([key, rawValue]) => {
+      const numeric = normalizeFoundryModelMetricNumber(rawValue);
+      if (numeric !== null) metrics[key] = numeric;
+    });
+    return metrics;
+  };
+
+  const formatFoundryModelMetricValue = (value) => {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value.toFixed(6).replace(/\.?0+$/, "");
+    }
+    return String(value ?? "").trim() || "—";
+  };
+
+  const renderFoundryModelMetricsTable = (modelMetrics = {}) => {
+    const entries = Object.entries(modelMetrics || {}).filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== "");
+    if (!entries.length) return "";
+    return `
+      <div class="small" style="margin-top:8px;"><strong>Saved model metrics</strong></div>
+      <div class="table-wrap" style="margin-top:8px;">
+        <table class="data-table">
+          <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+          <tbody>
+            ${entries
+              .map(([label, value]) => `<tr><td>${escapeHtml(label)}</td><td>${escapeHtml(formatFoundryModelMetricValue(value))}</td></tr>`)
+              .join("")}
+          </tbody>
+        </table>
+      </div>
+    `;
+  };
+
   const getFoundryRequestId = (run) => String(run?.exploreRequestId || "").trim();
 
   const updateFoundryRunInState = (run) => {
@@ -18546,6 +18601,7 @@
     const dataset = run.dataset && typeof run.dataset === "object" ? run.dataset : {};
     const autopilot = run.autopilot && typeof run.autopilot === "object" ? run.autopilot : {};
     const analysis = run.analysis && typeof run.analysis === "object" ? run.analysis : {};
+    const modelMetrics = run.modelMetrics && typeof run.modelMetrics === "object" ? run.modelMetrics : {};
     const files = run.files && typeof run.files === "object" ? run.files : {};
     const requestId = getFoundryRequestId(run);
     const requestRecord = request && typeof request === "object" ? request : requestId ? getMyRequestById(requestId) : null;
@@ -18599,6 +18655,7 @@
           ? `<div class="small" style="margin-top:8px;"><strong>Notes:</strong> ${escapeHtml(String(run.notes || ""))}</div>`
           : ""
       }
+      ${renderFoundryModelMetricsTable(modelMetrics)}
       ${
         Object.keys(files).length
           ? `<div class="small" style="margin-top:8px;"><strong>Files:</strong> ${Object.values(files)
@@ -18743,8 +18800,8 @@
     const sourceKind = String(ui.foundrySourceKind?.value || "history").trim();
     const ticker = normalizeTicker(ui.foundryTicker?.value || "");
     const interval = "1d";
-    const title = String(ui.foundryTitle?.value || "").trim();
     const notes = String(ui.foundryNotes?.value || "").trim();
+    const modelMetrics = collectFoundryModelMetrics();
     const workspaceId = String(state.activeWorkspaceId || state.user?.uid || "").trim();
 
     setFoundryStatus("Preparing Forecast Foundry source...");
@@ -18766,8 +18823,8 @@
         start,
         end,
         useAllHistory,
-        title,
         notes,
+        modelMetrics,
         workspaceId,
         persist: true,
       });
@@ -18780,8 +18837,8 @@
         fileName: uploaded.name,
         ticker,
         interval,
-        title,
         notes,
+        modelMetrics,
         workspaceId,
       });
       if (ui.foundryFile) ui.foundryFile.value = "";
