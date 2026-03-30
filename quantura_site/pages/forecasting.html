@@ -306,37 +306,39 @@
 
                             <div class="small muted">Run titles are generated automatically from the ticker or detected symbol.</div>
 
-                            <div class="field" style="margin-top: 8px;">
-                              <label class="label">Optional model metrics</label>
-                              <div class="small muted">Attach external model diagnostics if you want them saved alongside this Foundry run.</div>
-                            </div>
-                            <div class="form-grid">
-                              <div class="field">
-                                <label class="label" for="foundry-model-status">Model status</label>
-                                <select id="foundry-model-status" name="modelStatus">
-                                  <option value="Standard Build" selected>Standard Build</option>
-                                  <option value="Quick Build">Quick Build</option>
-                                </select>
+                            <div id="foundry-model-metrics-block">
+                              <div class="field" style="margin-top: 8px;">
+                                <label class="label">Optional model metrics</label>
+                                <div class="small muted">Attach external model diagnostics if you want them saved alongside this Foundry run.</div>
                               </div>
-                              <div class="field">
-                                <label class="label" for="foundry-avg-wql">Avg. wQL</label>
-                                <input id="foundry-avg-wql" name="avgWql" inputmode="decimal" placeholder="0.020" />
-                              </div>
-                              <div class="field">
-                                <label class="label" for="foundry-mape">MAPE</label>
-                                <input id="foundry-mape" name="mape" inputmode="decimal" placeholder="0.023" />
-                              </div>
-                              <div class="field">
-                                <label class="label" for="foundry-wape">WAPE</label>
-                                <input id="foundry-wape" name="wape" inputmode="decimal" placeholder="0.031" />
-                              </div>
-                              <div class="field">
-                                <label class="label" for="foundry-rmse">RMSE</label>
-                                <input id="foundry-rmse" name="rmse" inputmode="decimal" placeholder="12.819" />
-                              </div>
-                              <div class="field">
-                                <label class="label" for="foundry-mase">MASE</label>
-                                <input id="foundry-mase" name="mase" inputmode="decimal" placeholder="0.087" />
+                              <div class="form-grid">
+                                <div class="field">
+                                  <label class="label" for="foundry-model-status">Model status</label>
+                                  <select id="foundry-model-status" name="modelStatus">
+                                    <option value="Standard Build" selected>Standard Build</option>
+                                    <option value="Quick Build">Quick Build</option>
+                                  </select>
+                                </div>
+                                <div class="field">
+                                  <label class="label" for="foundry-avg-wql">Avg. wQL</label>
+                                  <input id="foundry-avg-wql" name="avgWql" inputmode="decimal" placeholder="0.020" />
+                                </div>
+                                <div class="field">
+                                  <label class="label" for="foundry-mape">MAPE</label>
+                                  <input id="foundry-mape" name="mape" inputmode="decimal" placeholder="0.023" />
+                                </div>
+                                <div class="field">
+                                  <label class="label" for="foundry-wape">WAPE</label>
+                                  <input id="foundry-wape" name="wape" inputmode="decimal" placeholder="0.031" />
+                                </div>
+                                <div class="field">
+                                  <label class="label" for="foundry-rmse">RMSE</label>
+                                  <input id="foundry-rmse" name="rmse" inputmode="decimal" placeholder="12.819" />
+                                </div>
+                                <div class="field">
+                                  <label class="label" for="foundry-mase">MASE</label>
+                                  <input id="foundry-mase" name="mase" inputmode="decimal" placeholder="0.087" />
+                                </div>
                               </div>
                             </div>
 
@@ -482,10 +484,24 @@
                         <div class="foundry-main-grid sports-foundry-main-grid">
                           <form id="sports-foundry-form" class="card">
                             <div class="eyebrow">Quantura Sports Foundry</div>
-                            <h3>Prepare a sports forecast</h3>
-                            <p class="small">Select a league, team, player, stat, and future scheduled game. Quantura will normalize recent game logs, export the data, and launch an Autopilot forecast for the chosen matchup.</p>
+                            <h3>Prepare a sports workflow</h3>
+                            <p class="small">Switch between a player-level sports forecast and a quick team total export. Quantura will normalize the league data, preview it here, and let you download the exact slice you need.</p>
 
                             <div class="form-grid">
+                              <div class="field">
+                                <label class="label">Workflow</label>
+                                <div class="sports-foundry-workflow-toggle" id="sports-foundry-workflow-toggle">
+                                  <label class="sports-foundry-workflow-option">
+                                    <input type="radio" name="sportsFoundryWorkflow" value="player_forecast" checked />
+                                    <span>Player forecast</span>
+                                  </label>
+                                  <label class="sports-foundry-workflow-option">
+                                    <input type="radio" name="sportsFoundryWorkflow" value="team_total_export" />
+                                    <span>Team total export</span>
+                                  </label>
+                                </div>
+                                <div class="small muted">Player forecasts save runs and publish to Explore. Team total export is a quick download tool for one team on one day.</div>
+                              </div>
                               <div class="field">
                                 <label class="label" for="sports-foundry-league">League</label>
                                 <select id="sports-foundry-league" name="league">
@@ -500,47 +516,70 @@
                                   <option value="">Choose a league first</option>
                                 </select>
                               </div>
-                              <div class="field">
-                                <label class="label" for="sports-foundry-player">Player</label>
-                                <select id="sports-foundry-player" name="player">
-                                  <option value="">Choose a team first</option>
-                                </select>
+                            </div>
+
+                            <div id="sports-foundry-player-fields">
+                              <div class="form-grid">
+                                <div class="field">
+                                  <label class="label" for="sports-foundry-player">Player</label>
+                                  <select id="sports-foundry-player" name="player">
+                                    <option value="">Choose a team first</option>
+                                  </select>
+                                </div>
+                                <div class="field">
+                                  <label class="label" for="sports-foundry-stat">Stat</label>
+                                  <select id="sports-foundry-stat" name="stat">
+                                    <option value="">Choose a player first</option>
+                                  </select>
+                                </div>
+                                <div class="field">
+                                  <label class="label" for="sports-foundry-game">Future game</label>
+                                  <select id="sports-foundry-game" name="game">
+                                    <option value="">Choose a player first</option>
+                                  </select>
+                                  <div class="small muted" id="sports-foundry-game-gap">Future matchup timing will appear here once a game is selected.</div>
+                                </div>
+                                <div class="field">
+                                  <label class="label" for="sports-foundry-title">Run title</label>
+                                  <input id="sports-foundry-title" name="title" placeholder="Stephen Curry points vs BOS" />
+                                </div>
                               </div>
+
                               <div class="field">
-                                <label class="label" for="sports-foundry-stat">Stat</label>
-                                <select id="sports-foundry-stat" name="stat">
-                                  <option value="">Choose a player first</option>
-                                </select>
-                              </div>
-                              <div class="field">
-                                <label class="label" for="sports-foundry-game">Future game</label>
-                                <select id="sports-foundry-game" name="game">
-                                  <option value="">Choose a player first</option>
-                                </select>
-                                <div class="small muted" id="sports-foundry-game-gap">Future matchup timing will appear here once a game is selected.</div>
-                              </div>
-                              <div class="field">
-                                <label class="label" for="sports-foundry-title">Run title</label>
-                                <input id="sports-foundry-title" name="title" placeholder="Stephen Curry points vs BOS" />
+                                <label class="label" for="sports-foundry-notes">Notes</label>
+                                <textarea id="sports-foundry-notes" name="notes" placeholder="What this forecast should emphasize, matchup context, or how you plan to use the result"></textarea>
                               </div>
                             </div>
 
-                            <div class="field">
-                              <label class="label" for="sports-foundry-notes">Notes</label>
-                              <textarea id="sports-foundry-notes" name="notes" placeholder="What this forecast should emphasize, matchup context, or how you plan to use the result"></textarea>
+                            <div id="sports-foundry-team-total-fields" class="hidden">
+                              <div class="form-grid">
+                                <div class="field">
+                                  <label class="label" for="sports-team-total-date">Game date</label>
+                                  <input id="sports-team-total-date" name="teamTotalDate" type="date" />
+                                </div>
+                                <div class="field">
+                                  <label class="label" for="sports-team-total-home-away">Venue filter</label>
+                                  <select id="sports-team-total-home-away" name="teamTotalHomeAway">
+                                    <option value="any">Home or away</option>
+                                    <option value="home">Home only</option>
+                                    <option value="away">Away only</option>
+                                  </select>
+                                </div>
+                              </div>
+                              <div class="small muted">Download the selected team&apos;s scored total for completed games on the chosen date. Doubleheaders will export one row per game.</div>
                             </div>
 
                             <div class="card sports-foundry-preview-card" style="margin-top: 18px;">
                               <div class="card-head">
                                 <h3>Historical preview</h3>
-                                <div class="small muted" id="sports-foundry-history-meta">Choose a player to load historical game data and stat options.</div>
+                                <div class="small muted" id="sports-foundry-history-meta">Choose a player to load historical game data and stat options, or switch to team total export for a one-day team score snapshot.</div>
                               </div>
                               <div id="sports-foundry-history-preview" class="panel-output small">Historical player game logs will appear here.</div>
                             </div>
 
                             <div class="hero-actions sports-foundry-actions" style="margin-top: 14px; justify-content: flex-start;">
                               <button class="cta secondary" id="sports-foundry-download-history" type="button">
-                                <i class="iconoir-download" aria-hidden="true"></i><span>Download historical CSV</span>
+                                <i class="iconoir-download" aria-hidden="true"></i><span id="sports-foundry-download-history-label">Download historical CSV</span>
                               </button>
                               <button class="cta secondary" id="sports-foundry-download-json" type="button">
                                 <i class="iconoir-page" aria-hidden="true"></i><span>Download forecast JSON</span>
@@ -552,7 +591,7 @@
 
                             <p class="small" id="sports-foundry-status">Sign in with a full account to unlock sports forecasting.</p>
                             <div class="notice small" id="sports-foundry-empty-state">
-                              Choose a player to load league-aware stats, normalized historical game logs, and relevant future scheduled games.
+                              Choose a player to load league-aware stats and future scheduled games, or switch to team total export for a quick team score download.
                             </div>
                           </form>
 

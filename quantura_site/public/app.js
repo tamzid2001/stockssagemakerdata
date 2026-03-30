@@ -1985,6 +1985,7 @@
     foundryUseAllHistory: document.getElementById("foundry-use-all-history"),
     foundryFile: document.getElementById("foundry-file"),
     foundryNotes: document.getElementById("foundry-notes"),
+    foundryModelMetricsBlock: document.getElementById("foundry-model-metrics-block"),
     foundryHistoryFields: document.getElementById("foundry-history-fields"),
     foundryFileField: document.getElementById("foundry-file-field"),
     foundryUploadActions: document.getElementById("foundry-upload-actions"),
@@ -2004,11 +2005,16 @@
     foundryInstanceLimit: document.getElementById("foundry-instance-limit"),
     foundryAccessNote: document.getElementById("foundry-access-note"),
     sportsFoundryForm: document.getElementById("sports-foundry-form"),
+    sportsFoundryWorkflowInputs: Array.from(document.querySelectorAll('input[name="sportsFoundryWorkflow"]')),
     sportsFoundryLeague: document.getElementById("sports-foundry-league"),
     sportsFoundryTeam: document.getElementById("sports-foundry-team"),
     sportsFoundryPlayer: document.getElementById("sports-foundry-player"),
     sportsFoundryStat: document.getElementById("sports-foundry-stat"),
     sportsFoundryGame: document.getElementById("sports-foundry-game"),
+    sportsFoundryPlayerFields: document.getElementById("sports-foundry-player-fields"),
+    sportsFoundryTeamTotalFields: document.getElementById("sports-foundry-team-total-fields"),
+    sportsFoundryTeamTotalDate: document.getElementById("sports-team-total-date"),
+    sportsFoundryTeamTotalHomeAway: document.getElementById("sports-team-total-home-away"),
     sportsFoundryTitle: document.getElementById("sports-foundry-title"),
     sportsFoundryNotes: document.getElementById("sports-foundry-notes"),
     sportsFoundryHistoryMeta: document.getElementById("sports-foundry-history-meta"),
@@ -2016,6 +2022,7 @@
     sportsFoundryGameGap: document.getElementById("sports-foundry-game-gap"),
     sportsFoundryRunButton: document.getElementById("sports-foundry-run-button"),
     sportsFoundryDownloadHistory: document.getElementById("sports-foundry-download-history"),
+    sportsFoundryDownloadHistoryLabel: document.getElementById("sports-foundry-download-history-label"),
     sportsFoundryDownloadJson: document.getElementById("sports-foundry-download-json"),
     sportsFoundryStatus: document.getElementById("sports-foundry-status"),
     sportsFoundryEmptyState: document.getElementById("sports-foundry-empty-state"),
@@ -2312,9 +2319,11 @@
       maxConcurrentRuns: FOUNDRY_MAX_CONCURRENT_INSTANCES,
     },
     sportsFoundryContext: {
+      workflow: "player_forecast",
       teams: [],
       players: [],
       context: null,
+      teamTotals: null,
       runs: [],
       loaded: false,
       activeRunId: "",
@@ -18324,6 +18333,7 @@
     const historyMode = sourceKind === "history";
     const fileMode = sourceKind === "historical_csv" || sourceKind === "prediction_csv";
     const predictionMode = sourceKind === "prediction_csv";
+    ui.foundryModelMetricsBlock?.classList.toggle("hidden", !predictionMode);
     ui.foundryHistoryFields?.classList.toggle("hidden", !historyMode);
     ui.foundryFileField?.classList.toggle("hidden", !fileMode);
     ui.foundryUploadActions?.classList.toggle("hidden", !predictionMode);
@@ -18341,6 +18351,7 @@
   };
 
   const collectFoundryModelMetrics = () => {
+    if (String(ui.foundrySourceKind?.value || "").trim() !== "prediction_csv") return {};
     const metrics = {};
     const status = String(ui.foundryModelStatus?.value || "").trim();
     if (status) metrics.status = status;
@@ -19075,6 +19086,22 @@
     return clean.toUpperCase();
   };
 
+  const getSportsFoundryWorkflow = () => {
+    const selected = Array.isArray(ui.sportsFoundryWorkflowInputs)
+      ? ui.sportsFoundryWorkflowInputs.find((input) => input?.checked)
+      : null;
+    const workflow = String(selected?.value || state.sportsFoundryContext.workflow || "player_forecast").trim();
+    return workflow === "team_total_export" ? "team_total_export" : "player_forecast";
+  };
+
+  const syncSportsFoundryTeamTotalDateDefault = ({ force = false } = {}) => {
+    if (!ui.sportsFoundryTeamTotalDate) return;
+    const today = new Date().toISOString().slice(0, 10);
+    if (force || !String(ui.sportsFoundryTeamTotalDate.value || "").trim()) {
+      ui.sportsFoundryTeamTotalDate.value = today;
+    }
+  };
+
   const formatSportsFoundryDaysUntil = (targetDate) => {
     const clean = String(targetDate || "").trim();
     const targetMs = Date.parse(clean);
@@ -19088,6 +19115,34 @@
     if (diffDays > 1) return `${diffDays} days away`;
     if (diffDays === -1) return "1 day ago";
     return `${Math.abs(diffDays)} days ago`;
+  };
+
+  const renderSportsFoundryTeamTotalsPreview = (payload = null) => {
+    const snapshot = payload?.teamTotals && typeof payload.teamTotals === "object" ? payload.teamTotals : {};
+    const rows = Array.isArray(snapshot?.rows) ? snapshot.rows : [];
+    const filters = payload?.filters && typeof payload.filters === "object" ? payload.filters : {};
+    const team = payload?.team && typeof payload.team === "object" ? payload.team : {};
+    const league = payload?.league && typeof payload.league === "object" ? payload.league : {};
+    const gameDate = String(filters?.gameDate || ui.sportsFoundryTeamTotalDate?.value || "").trim();
+    const homeAway = String(filters?.homeAway || ui.sportsFoundryTeamTotalHomeAway?.value || "any").trim().toLowerCase();
+    const venueLabel = homeAway === "home" ? "home only" : homeAway === "away" ? "away only" : "home or away";
+    if (ui.sportsFoundryHistoryMeta) {
+      if (!String(team?.id || "").trim()) {
+        ui.sportsFoundryHistoryMeta.textContent = "Choose a team, date, and venue filter to load team total rows.";
+      } else if (rows.length) {
+        ui.sportsFoundryHistoryMeta.textContent = `${String(league?.label || getSportsFoundryLeagueLabel(ui.sportsFoundryLeague?.value)).trim()} ${String(team?.abbreviation || team?.displayName || "team").trim()} · ${rows.length} completed game total${rows.length === 1 ? "" : "s"} for ${gameDate} (${venueLabel}).`;
+      } else {
+        ui.sportsFoundryHistoryMeta.textContent = `${String(league?.label || getSportsFoundryLeagueLabel(ui.sportsFoundryLeague?.value)).trim()} ${String(team?.abbreviation || team?.displayName || "team").trim()} · no completed game totals found for ${gameDate} (${venueLabel}).`;
+      }
+    }
+    if (!ui.sportsFoundryHistoryPreview) return;
+    if (!rows.length) {
+      ui.sportsFoundryHistoryPreview.innerHTML = !String(team?.id || "").trim()
+        ? `<div class="small muted">Choose a team, date, and venue filter to preview team totals.</div>`
+        : `<div class="small muted">No completed team-total rows matched the selected date and venue filter.</div>`;
+      return;
+    }
+    renderFoundryPreviewTableFromObjects(rows, ui.sportsFoundryHistoryPreview);
   };
 
   const syncSportsFoundryGameGap = () => {
@@ -19104,12 +19159,15 @@
   };
 
   const syncSportsFoundryButtons = () => {
-    const hasContext = Boolean(state.sportsFoundryContext.context);
+    const teamTotalMode = getSportsFoundryWorkflow() === "team_total_export";
+    const hasContext = teamTotalMode
+      ? Array.isArray(state.sportsFoundryContext.teamTotals?.teamTotals?.rows) && state.sportsFoundryContext.teamTotals.teamTotals.rows.length > 0
+      : Boolean(state.sportsFoundryContext.context);
     const hasFull = hasFullAccount();
     const hasStat = Boolean(String(ui.sportsFoundryStat?.value || "").trim());
     const hasGame = Boolean(String(ui.sportsFoundryGame?.value || "").trim());
     if (ui.sportsFoundryRunButton) {
-      ui.sportsFoundryRunButton.disabled = !hasFull || !hasContext || !hasStat || !hasGame;
+      ui.sportsFoundryRunButton.disabled = teamTotalMode || !hasFull || !hasContext || !hasStat || !hasGame;
     }
     if (ui.sportsFoundryDownloadHistory) {
       ui.sportsFoundryDownloadHistory.disabled = !hasContext;
@@ -19123,6 +19181,31 @@
     }
     if (ui.sportsFoundryRefreshButton) ui.sportsFoundryRefreshButton.disabled = !Boolean(state.sportsFoundryContext.activeRunId);
     if (ui.sportsFoundryShareButton) ui.sportsFoundryShareButton.disabled = !Boolean(getSportsFoundryRequestId(state.sportsFoundryContext.activeRun));
+  };
+
+  const syncSportsFoundryWorkflowUi = () => {
+    const workflow = getSportsFoundryWorkflow();
+    const teamTotalMode = workflow === "team_total_export";
+    state.sportsFoundryContext.workflow = workflow;
+    ui.sportsFoundryPlayerFields?.classList.toggle("hidden", teamTotalMode);
+    ui.sportsFoundryTeamTotalFields?.classList.toggle("hidden", !teamTotalMode);
+    ui.sportsFoundryDownloadJson?.classList.toggle("hidden", teamTotalMode);
+    ui.sportsFoundryRunButton?.classList.toggle("hidden", teamTotalMode);
+    if (ui.sportsFoundryDownloadHistoryLabel) {
+      ui.sportsFoundryDownloadHistoryLabel.textContent = teamTotalMode ? "Download team total CSV" : "Download historical CSV";
+    }
+    if (ui.sportsFoundryEmptyState) {
+      ui.sportsFoundryEmptyState.textContent = teamTotalMode
+        ? "Choose a team, date, and venue filter to load completed team-total rows for that day."
+        : "Choose a player to load league-aware stats, normalized historical game logs, and relevant future scheduled games.";
+    }
+    if (teamTotalMode) {
+      syncSportsFoundryTeamTotalDateDefault();
+      renderSportsFoundryTeamTotalsPreview(state.sportsFoundryContext.teamTotals);
+    } else {
+      renderSportsFoundryHistoryPreview(state.sportsFoundryContext.context);
+    }
+    syncSportsFoundryButtons();
   };
 
   const renderSportsFoundryHistoryPreview = (payload = null) => {
@@ -19447,6 +19530,26 @@
     };
   };
 
+  const buildSportsFoundryTeamTotalsCsv = () => {
+    const snapshot = state.sportsFoundryContext.teamTotals;
+    const teamTotals = snapshot?.teamTotals && typeof snapshot.teamTotals === "object" ? snapshot.teamTotals : {};
+    const rows = Array.isArray(teamTotals?.rows) ? teamTotals.rows : [];
+    const headers = Array.isArray(teamTotals?.headers) ? teamTotals.headers : Object.keys(rows[0] || {});
+    if (!headers.length) throw new Error("Team total export is not loaded yet.");
+    if (!rows.length) throw new Error("No completed team totals matched the selected date and venue filter.");
+    const league = String(snapshot?.league?.key || ui.sportsFoundryLeague?.value || "sports").trim().toLowerCase();
+    const team = String(snapshot?.team?.abbreviation || snapshot?.team?.displayName || "team")
+      .trim()
+      .replace(/[^A-Za-z0-9._-]+/g, "_");
+    const gameDate = String(snapshot?.filters?.gameDate || ui.sportsFoundryTeamTotalDate?.value || "date").trim();
+    const homeAway = String(snapshot?.filters?.homeAway || ui.sportsFoundryTeamTotalHomeAway?.value || "any").trim().toLowerCase();
+    return {
+      csv: String(teamTotals?.csvText || buildCsv(rows, headers)),
+      headers,
+      fileName: `${league}_${team}_team_total_${gameDate}_${homeAway}.csv`,
+    };
+  };
+
   const loadSportsFoundryTeams = async ({ preserveSelection = false } = {}) => {
     const league = String(ui.sportsFoundryLeague?.value || "nba").trim().toLowerCase();
     setSportsFoundryStatus(`Loading ${getSportsFoundryLeagueLabel(league)} teams...`);
@@ -19467,7 +19570,9 @@
     renderSportsFoundrySelect(ui.sportsFoundryGame, [], { placeholder: "Choose a player first" });
     state.sportsFoundryContext.players = [];
     state.sportsFoundryContext.context = null;
-    renderSportsFoundryHistoryPreview(null);
+    state.sportsFoundryContext.teamTotals = null;
+    if (getSportsFoundryWorkflow() === "team_total_export") renderSportsFoundryTeamTotalsPreview(null);
+    else renderSportsFoundryHistoryPreview(null);
     syncSportsFoundryGameGap();
     syncSportsFoundryButtons();
     setSportsFoundryStatus(`Loaded ${items.length} ${getSportsFoundryLeagueLabel(league)} teams.`);
@@ -19502,11 +19607,40 @@
     renderSportsFoundrySelect(ui.sportsFoundryStat, [], { placeholder: "Choose a player first", valueKey: "key" });
     renderSportsFoundrySelect(ui.sportsFoundryGame, [], { placeholder: "Choose a player first" });
     state.sportsFoundryContext.context = null;
-    renderSportsFoundryHistoryPreview(null);
+    state.sportsFoundryContext.teamTotals = null;
+    if (getSportsFoundryWorkflow() === "team_total_export") renderSportsFoundryTeamTotalsPreview(null);
+    else renderSportsFoundryHistoryPreview(null);
     syncSportsFoundryGameGap();
     syncSportsFoundryButtons();
     setSportsFoundryStatus(`Loaded ${items.length} player${items.length === 1 ? "" : "s"}.`);
     return items;
+  };
+
+  const loadSportsFoundryTeamTotals = async () => {
+    const league = String(ui.sportsFoundryLeague?.value || "nba").trim().toLowerCase();
+    const teamId = String(ui.sportsFoundryTeam?.value || "").trim();
+    const gameDate = String(ui.sportsFoundryTeamTotalDate?.value || "").trim();
+    const homeAway = String(ui.sportsFoundryTeamTotalHomeAway?.value || "any").trim().toLowerCase();
+    if (!teamId || !gameDate) {
+      state.sportsFoundryContext.teamTotals = null;
+      renderSportsFoundryTeamTotalsPreview(null);
+      syncSportsFoundryButtons();
+      return null;
+    }
+    setSportsFoundryStatus("Loading team total export...");
+    const payload = await callFoundryApi(
+      "GET",
+      `/api/autopilot/sports/team-totals?league=${encodeURIComponent(league)}&teamId=${encodeURIComponent(teamId)}&gameDate=${encodeURIComponent(gameDate)}&homeAway=${encodeURIComponent(homeAway)}`
+    );
+    state.sportsFoundryContext.teamTotals = payload;
+    renderSportsFoundryTeamTotalsPreview(payload);
+    syncSportsFoundryButtons();
+    setSportsFoundryStatus(
+      Number(payload?.teamTotals?.rowCount || 0) > 0
+        ? `Loaded ${Number(payload.teamTotals.rowCount).toLocaleString()} completed team total row${Number(payload.teamTotals.rowCount) === 1 ? "" : "s"}.`
+        : "No completed team totals matched that date and venue filter."
+    );
+    return payload;
   };
 
   const loadSportsFoundryContext = async () => {
@@ -19515,6 +19649,7 @@
     const playerId = String(ui.sportsFoundryPlayer?.value || "").trim();
     if (!teamId || !playerId) {
       state.sportsFoundryContext.context = null;
+      state.sportsFoundryContext.teamTotals = null;
       renderSportsFoundryHistoryPreview(null);
       syncSportsFoundryButtons();
       return null;
@@ -19523,6 +19658,7 @@
     state.sportsFoundryContext.lastTeamId = teamId;
     state.sportsFoundryContext.lastPlayerId = playerId;
     state.sportsFoundryContext.context = null;
+    state.sportsFoundryContext.teamTotals = null;
     renderSportsFoundrySelect(ui.sportsFoundryStat, [], { placeholder: "Loading stat options...", valueKey: "key" });
     renderSportsFoundrySelect(ui.sportsFoundryGame, [], { placeholder: "Loading future games..." });
     renderSportsFoundryHistoryPreview(null);
@@ -19625,6 +19761,9 @@
 
   const createSportsFoundryRun = async ({ notify = true } = {}) => {
     if (!hasFullAccount()) throw new Error("Sign in with a full account to use sports forecasting.");
+    if (getSportsFoundryWorkflow() === "team_total_export") {
+      throw new Error("Team total export mode only supports CSV downloads.");
+    }
     const league = String(ui.sportsFoundryLeague?.value || "").trim().toLowerCase();
     const teamId = String(ui.sportsFoundryTeam?.value || "").trim();
     const playerId = String(ui.sportsFoundryPlayer?.value || "").trim();
@@ -28647,6 +28786,8 @@
 
     syncFoundrySourceFields();
     syncFoundryDateDefaults();
+    syncSportsFoundryTeamTotalDateDefault({ force: true });
+    syncSportsFoundryWorkflowUi();
     syncSportsFoundryButtons();
     syncSportsFoundryGameGap();
     ui.foundrySourceKind?.addEventListener("change", () => {
@@ -28766,6 +28907,9 @@
       state.sportsFoundryContext.lastPlayerId = "";
       try {
         await loadSportsFoundryTeams({ preserveSelection: false });
+        if (getSportsFoundryWorkflow() === "team_total_export") {
+          await loadSportsFoundryTeamTotals();
+        }
       } catch (error) {
         const message = extractErrorMessage(error, "Unable to load teams.");
         setSportsFoundryStatus(message, "warn");
@@ -28777,7 +28921,17 @@
       state.sportsFoundryContext.lastTeamId = String(ui.sportsFoundryTeam?.value || "").trim();
       state.sportsFoundryContext.lastPlayerId = "";
       try {
-        await loadSportsFoundryPlayers({ preserveSelection: false });
+        if (getSportsFoundryWorkflow() === "team_total_export") {
+          state.sportsFoundryContext.players = [];
+          state.sportsFoundryContext.context = null;
+          renderSportsFoundrySelect(ui.sportsFoundryPlayer, [], { placeholder: "Choose a team first" });
+          renderSportsFoundrySelect(ui.sportsFoundryStat, [], { placeholder: "Choose a player first", valueKey: "key" });
+          renderSportsFoundrySelect(ui.sportsFoundryGame, [], { placeholder: "Choose a player first" });
+          syncSportsFoundryGameGap();
+          await loadSportsFoundryTeamTotals();
+        } else {
+          await loadSportsFoundryPlayers({ preserveSelection: false });
+        }
       } catch (error) {
         const message = extractErrorMessage(error, "Unable to load players.");
         setSportsFoundryStatus(message, "warn");
@@ -28788,6 +28942,10 @@
     ui.sportsFoundryPlayer?.addEventListener("change", async () => {
       state.sportsFoundryContext.lastPlayerId = String(ui.sportsFoundryPlayer?.value || "").trim();
       try {
+        if (getSportsFoundryWorkflow() === "team_total_export") {
+          syncSportsFoundryButtons();
+          return;
+        }
         await loadSportsFoundryContext();
       } catch (error) {
         const message = extractErrorMessage(error, "Unable to load player data.");
@@ -28810,6 +28968,13 @@
     ui.sportsFoundryForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
       try {
+        if (getSportsFoundryWorkflow() === "team_total_export") {
+          await loadSportsFoundryTeamTotals();
+          const { csv, fileName } = buildSportsFoundryTeamTotalsCsv();
+          triggerDownload(fileName, csv, { mimeType: "text/csv;charset=utf-8;" });
+          showToast("Team total CSV downloaded.");
+          return;
+        }
         await createSportsFoundryRun({ notify: true });
       } catch (error) {
         const message = extractErrorMessage(error, "Unable to start sports forecast.");
@@ -28820,6 +28985,13 @@
 
     ui.sportsFoundryDownloadHistory?.addEventListener("click", async () => {
       try {
+        if (getSportsFoundryWorkflow() === "team_total_export") {
+          await loadSportsFoundryTeamTotals();
+          const { csv, fileName } = buildSportsFoundryTeamTotalsCsv();
+          triggerDownload(fileName, csv, { mimeType: "text/csv;charset=utf-8;" });
+          showToast("Team total CSV downloaded.");
+          return;
+        }
         const { csv } = buildSportsFoundryHistoryCsv();
         const context = state.sportsFoundryContext.context;
         const player = String(context?.player?.displayName || "player").trim().replace(/[^A-Za-z0-9._-]+/g, "_");
@@ -28835,6 +29007,9 @@
 
     ui.sportsFoundryDownloadJson?.addEventListener("click", async () => {
       try {
+        if (getSportsFoundryWorkflow() === "team_total_export") {
+          throw new Error("Team total export mode only supports CSV downloads.");
+        }
         const activeRun = state.sportsFoundryContext.activeRun;
         const forecastPayloadFile = activeRun?.files?.forecastPayloadJson;
         const inputPayloadFile = activeRun?.files?.forecastInputJson;
@@ -28867,6 +29042,50 @@
         showToast("Forecast JSON downloaded.");
       } catch (error) {
         const message = extractErrorMessage(error, "Unable to download forecast JSON.");
+        setSportsFoundryStatus(message, "warn");
+        showToast(message, "warn");
+      }
+    });
+
+    ui.sportsFoundryWorkflowInputs?.forEach((input) => {
+      input.addEventListener("change", async () => {
+        syncSportsFoundryWorkflowUi();
+        try {
+          if (getSportsFoundryWorkflow() === "team_total_export") {
+            if (!String(ui.sportsFoundryTeam?.value || "").trim()) return;
+            await loadSportsFoundryTeamTotals();
+            return;
+          }
+          if (String(ui.sportsFoundryPlayer?.value || "").trim()) {
+            await loadSportsFoundryContext();
+          }
+        } catch (error) {
+          const message = extractErrorMessage(
+            error,
+            getSportsFoundryWorkflow() === "team_total_export" ? "Unable to load team totals." : "Unable to load player data."
+          );
+          setSportsFoundryStatus(message, "warn");
+        }
+      });
+    });
+
+    ui.sportsFoundryTeamTotalDate?.addEventListener("change", async () => {
+      if (getSportsFoundryWorkflow() !== "team_total_export") return;
+      try {
+        await loadSportsFoundryTeamTotals();
+      } catch (error) {
+        const message = extractErrorMessage(error, "Unable to load team totals.");
+        setSportsFoundryStatus(message, "warn");
+        showToast(message, "warn");
+      }
+    });
+
+    ui.sportsFoundryTeamTotalHomeAway?.addEventListener("change", async () => {
+      if (getSportsFoundryWorkflow() !== "team_total_export") return;
+      try {
+        await loadSportsFoundryTeamTotals();
+      } catch (error) {
+        const message = extractErrorMessage(error, "Unable to load team totals.");
         setSportsFoundryStatus(message, "warn");
         showToast(message, "warn");
       }
@@ -29553,11 +29772,16 @@
             state.sportsFoundryContext.teams = [];
             state.sportsFoundryContext.players = [];
             state.sportsFoundryContext.context = null;
+            state.sportsFoundryContext.teamTotals = null;
             state.sportsFoundryContext.runs = [];
             state.sportsFoundryContext.loaded = false;
             state.sportsFoundryContext.activeRunId = "";
             state.sportsFoundryContext.activeRun = null;
             state.sportsFoundryContext.loadingRunId = "";
+            state.sportsFoundryContext.workflow = "player_forecast";
+            state.sportsFoundryContext.lastLeague = "";
+            state.sportsFoundryContext.lastTeamId = "";
+            state.sportsFoundryContext.lastPlayerId = "";
             applyAdFreeExperience();
             renderOrderList([], ui.userOrders);
             renderFoundryRuns([]);
@@ -29565,6 +29789,11 @@
             setFoundryStatus("Sign in with a full account to use Forecast Foundry.");
             renderSportsFoundryRuns([]);
             await renderSportsFoundryRunDetail(null);
+            ui.sportsFoundryWorkflowInputs?.forEach((input) => {
+              input.checked = String(input?.value || "").trim() === "player_forecast";
+            });
+            syncSportsFoundryTeamTotalDateDefault({ force: true });
+            syncSportsFoundryWorkflowUi();
             setSportsFoundryStatus("Sign in with a full account to use sports forecasting.");
             renderRequestList([], ui.predictionsOutput, "No uploads yet.");
 		        if (ui.watchlistList) ui.watchlistList.textContent = "Sign in to manage your watchlist.";

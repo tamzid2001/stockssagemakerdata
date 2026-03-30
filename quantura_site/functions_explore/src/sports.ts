@@ -89,6 +89,39 @@ export type SportsPlayerContext = {
   defaultStatKey: string;
 };
 
+export type SportsTeamTotalFilter = "any" | "home" | "away";
+
+export type SportsTeamGameTotalRow = {
+  league: string;
+  team: string;
+  teamDisplayName: string;
+  gameId: string;
+  gameDate: string;
+  displayDate: string;
+  homeAway: "home" | "away";
+  opponentTeamId: string;
+  opponentAbbreviation: string;
+  opponentDisplayName: string;
+  status: string;
+  result: string;
+  score: string;
+  teamTotalPoints: number | null;
+  opponentTotalPoints: number | null;
+  venue: string;
+};
+
+export type SportsTeamGameTotalsSnapshot = {
+  league: SportsLeagueInfo;
+  team: NormalizedSportsTeam;
+  filters: {
+    gameDate: string;
+    homeAway: SportsTeamTotalFilter;
+  };
+  headers: string[];
+  rows: SportsTeamGameTotalRow[];
+  csvText: string;
+};
+
 export type SportsPredictionAnalysisResult = {
   kind: "prediction_output";
   status: "ok" | "error";
@@ -516,6 +549,33 @@ function scheduleUrl(league: SportsLeagueInfo, teamId: string, seasonYear = ""):
   }`;
 }
 
+function normalizeSportsGameDate(value: unknown): string {
+  const raw = sanitizeText(value, 40);
+  if (!raw) throw new Error("invalid_sports_game_date");
+  const parsed = new Date(`${raw}T12:00:00Z`);
+  if (!Number.isFinite(parsed.getTime())) throw new Error("invalid_sports_game_date");
+  return formatDateYmd(parsed);
+}
+
+function normalizeSportsHomeAwayFilter(value: unknown): SportsTeamTotalFilter {
+  const clean = sanitizeText(value, 20).toLowerCase();
+  if (clean === "home" || clean === "away") return clean;
+  return "any";
+}
+
+function scheduleSeasonCandidatesForDate(league: SportsLeagueInfo, gameDate: string): string[] {
+  const parsed = new Date(`${gameDate}T12:00:00Z`);
+  const year = parsed.getUTCFullYear();
+  const offset = Math.max(0, Math.floor(asFinite(league.defaultTeamSeasonOffset, 0)));
+  return Array.from(
+    new Set(
+      [year, year - 1, year + 1, year - offset, year - 1 - offset, year + 1 - offset]
+        .filter((value) => Number.isFinite(value) && value > 0)
+        .map((value) => String(value))
+    )
+  );
+}
+
 function gameLogUrl(league: SportsLeagueInfo, playerId: string, seasonYear = "", category = ""): string {
   const params = new URLSearchParams();
   if (seasonYear) {
@@ -820,6 +880,131 @@ export async function listSportsUpcomingGames(leagueKey: unknown, teamId: unknow
     if (games.length) return games;
   }
   return [];
+}
+
+export async function buildSportsTeamGameTotalsSnapshot(
+  leagueKey: unknown,
+  teamId: unknown,
+  gameDate: unknown,
+  homeAwayFilterRaw: unknown
+): Promise<SportsTeamGameTotalsSnapshot> {
+  const league = leagueInfo(leagueKey);
+  const cleanTeamId = sanitizeText(teamId, 40);
+  const targetGameDate = normalizeSportsGameDate(gameDate);
+  const homeAwayFilter = normalizeSportsHomeAwayFilter(homeAwayFilterRaw);
+  if (!cleanTeamId) throw new Error("invalid_team_id");
+
+  const teams = await listSportsTeams(league.key);
+  const team = teams.find((entry) => entry.id === cleanTeamId);
+  if (!team) throw new Error("team_not_found");
+
+  const headers = [
+    "league",
+    "team",
+    "teamDisplayName",
+    "gameId",
+    "gameDate",
+    "displayDate",
+    "homeAway",
+    "opponentAbbreviation",
+    "opponentDisplayName",
+    "status",
+    "result",
+    "score",
+    "teamTotalPoints",
+    "opponentTotalPoints",
+    "venue",
+  ];
+
+  const rowsByGameId = new Map<string, SportsTeamGameTotalRow>();
+  const collectRows = (payload: Record<string, unknown>) => {
+    const events = Array.isArray(payload.events) ? payload.events : [];
+    events.forEach((event) => {
+      const record = event && typeof event === "object" ? (event as Record<string, unknown>) : {};
+      const date = sanitizeText(record.date, 80);
+      if (!date) return;
+      const parsedDate = new Date(date);
+      if (!Number.isFinite(parsedDate.getTime())) return;
+      const eventYmd = formatDateYmd(parsedDate);
+      if (eventYmd !== targetGameDate) return;
+      const competitions = Array.isArray(record.competitions) ? record.competitions : [];
+      const competition = competitions[0] && typeof competitions[0] === "object" ? (competitions[0] as Record<string, unknown>) : {};
+      const competitors = Array.isArray(competition.competitors) ? competition.competitors : [];
+      const teamCompetitor = competitors.find(
+        (entry) => sanitizeText((entry as Record<string, unknown>)?.team && ((entry as Record<string, unknown>).team as Record<string, unknown>).id, 40) === cleanTeamId
+      );
+      const opponentCompetitor = competitors.find(
+        (entry) => sanitizeText((entry as Record<string, unknown>)?.team && ((entry as Record<string, unknown>).team as Record<string, unknown>).id, 40) !== cleanTeamId
+      );
+      if (!teamCompetitor || !opponentCompetitor) return;
+      const homeAway = sanitizeText((teamCompetitor as Record<string, unknown>).homeAway, 20).toLowerCase() === "home" ? "home" : "away";
+      if (homeAwayFilter !== "any" && homeAway !== homeAwayFilter) return;
+      const teamNode = asPlainObject((teamCompetitor as Record<string, unknown>).team);
+      const opponentNode = asPlainObject((opponentCompetitor as Record<string, unknown>).team);
+      const teamTotalPoints = safeNumber((teamCompetitor as Record<string, unknown>).score);
+      const opponentTotalPoints = safeNumber((opponentCompetitor as Record<string, unknown>).score);
+      if (teamTotalPoints === null && opponentTotalPoints === null) return;
+      const statusType = asPlainObject(asPlainObject(competition.status).type);
+      const venueNode = asPlainObject(competition.venue);
+      const venueAddress = asPlainObject(venueNode.address);
+      const status =
+        sanitizeText(statusType.detail || statusType.description, 160) ||
+        sanitizeText(asPlainObject(competition.status).displayClock, 80) ||
+        "Final";
+      const result =
+        teamTotalPoints !== null && opponentTotalPoints !== null
+          ? teamTotalPoints > opponentTotalPoints
+            ? "W"
+            : teamTotalPoints < opponentTotalPoints
+              ? "L"
+              : "T"
+          : "";
+      const score =
+        teamTotalPoints !== null && opponentTotalPoints !== null ? `${teamTotalPoints}-${opponentTotalPoints}` : "";
+      const gameId = sanitizeText(record.id, 40);
+      if (!gameId) return;
+      rowsByGameId.set(gameId, {
+        league: league.label,
+        team: sanitizeText(teamNode.abbreviation || team.abbreviation, 20).toUpperCase() || team.abbreviation,
+        teamDisplayName: sanitizeText(teamNode.displayName || team.displayName, 120) || team.displayName,
+        gameId,
+        gameDate: targetGameDate,
+        displayDate: formatDateLabel(date),
+        homeAway,
+        opponentTeamId: sanitizeText(opponentNode.id, 40),
+        opponentAbbreviation: sanitizeText(opponentNode.abbreviation, 20).toUpperCase(),
+        opponentDisplayName: sanitizeText(opponentNode.displayName, 120),
+        status,
+        result,
+        score,
+        teamTotalPoints,
+        opponentTotalPoints,
+        venue: sanitizeText(venueNode.fullName || venueAddress.city, 160),
+      });
+    });
+  };
+
+  const directPayload = (await fetchCachedJson<Record<string, unknown>>(scheduleUrl(league, cleanTeamId), 30 * 60 * 1000)) || {};
+  collectRows(directPayload);
+  for (const seasonYear of scheduleSeasonCandidatesForDate(league, targetGameDate)) {
+    if (rowsByGameId.size) break;
+    const seasonPayload =
+      (await fetchCachedJson<Record<string, unknown>>(scheduleUrl(league, cleanTeamId, seasonYear), 30 * 60 * 1000)) || {};
+    collectRows(seasonPayload);
+  }
+
+  const rows = Array.from(rowsByGameId.values()).sort((left, right) => left.gameId.localeCompare(right.gameId));
+  return {
+    league,
+    team,
+    filters: {
+      gameDate: targetGameDate,
+      homeAway: homeAwayFilter,
+    },
+    headers,
+    rows,
+    csvText: buildCsv(headers, rows),
+  };
 }
 
 export async function buildSportsPlayerContext(

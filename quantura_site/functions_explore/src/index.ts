@@ -23,6 +23,7 @@ import {
   analyzeSportsPredictionCsv,
   buildSportsAutopilotDatasetCsv,
   buildSportsHistoricalCsv,
+  buildSportsTeamGameTotalsSnapshot,
   buildSportsPlayerContext,
   buildSportsRunPayloadExport,
   listSportsPlayers,
@@ -11916,6 +11917,56 @@ ROUTES.get("/autopilot/sports/context", async (req, res) => {
     }
     console.error("[Sports] context failed", error);
     res.status(500).json({ error: "sports_context_failed", detail: sanitizeText(error?.message, 260) });
+  }
+});
+
+ROUTES.get("/autopilot/sports/team-totals", async (req, res) => {
+  try {
+    await requireFoundryUser(req);
+    const league = sanitizeText(req.query.league, 20).toLowerCase() as SportsLeagueKey;
+    const teamId = sanitizeText(req.query.teamId, 40);
+    const gameDate = sanitizeText(req.query.gameDate, 40);
+    const homeAway = sanitizeText(req.query.homeAway, 20).toLowerCase();
+    if (!teamId || !gameDate) {
+      res.status(400).json({ error: "invalid_sports_team_totals_request" });
+      return;
+    }
+    const snapshot = await buildSportsTeamGameTotalsSnapshot(league, teamId, gameDate, homeAway);
+    res.status(200).json({
+      league: {
+        key: snapshot.league.key,
+        label: snapshot.league.label,
+      },
+      team: snapshot.team,
+      filters: snapshot.filters,
+      teamTotals: {
+        rowCount: snapshot.rows.length,
+        headers: snapshot.headers,
+        rows: snapshot.rows,
+        csvText: snapshot.csvText,
+      },
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "full_account_required") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    if (
+      code === "invalid_sports_league" ||
+      code === "invalid_team_id" ||
+      code === "team_not_found" ||
+      code === "invalid_sports_game_date"
+    ) {
+      res.status(400).json({ error: code });
+      return;
+    }
+    console.error("[Sports] team totals failed", error);
+    res.status(500).json({ error: "sports_team_totals_failed", detail: sanitizeText(error?.message, 260) });
   }
 });
 
