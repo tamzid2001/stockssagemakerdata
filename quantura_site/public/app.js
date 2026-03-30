@@ -9730,6 +9730,8 @@
       defaultPanel: "forecast",
       panelToPath: {
         forecast: "/forecasting",
+        autopilot: "/autopilot",
+        "sports-autopilot": "/sports-forecasting",
         ticker: "/ticker-intelligence",
         predictions: "/predictions",
         indicators: "/indicators",
@@ -9742,6 +9744,10 @@
         learn: "/studio",
       },
       pathAliases: {
+        "/autopilot": "autopilot",
+        "/uploads": "autopilot",
+        "/dashboard/uploads": "autopilot",
+        "/sports-forecasting": "sports-autopilot",
         "/ticker-intelligence": "ticker",
         "/predictions": "predictions",
         "/ticker-query": "ticker-query",
@@ -9758,7 +9764,6 @@
         watchlist: "/watchlist",
         productivity: "/productivity",
         collaboration: "/collaboration",
-        autopilot: "/autopilot",
         notifications: "/notifications",
         auth: "/account",
       },
@@ -9768,8 +9773,6 @@
         "/dashboard/watchlist": "watchlist",
         "/dashboard/productivity": "productivity",
         "/dashboard/collaboration": "collaboration",
-        "/dashboard/uploads": "autopilot",
-        "/uploads": "autopilot",
       },
     },
   });
@@ -19535,7 +19538,7 @@
     await renderSportsFoundryRunDetail(run, { request: requestRecord });
     if (replaceUrl && typeof history !== "undefined") {
       try {
-        history.replaceState({}, "", `/dashboard?panel=sports-autopilot&runId=${encodeURIComponent(cleanId)}`);
+        history.replaceState({}, "", `/sports-forecasting?runId=${encodeURIComponent(cleanId)}`);
       } catch (_error) {
         // Ignore URL update failures.
       }
@@ -24417,6 +24420,23 @@
 		    }
 
       applyTheme(resolveThemePreference(), { persist: false });
+
+      try {
+        const currentPath = normalizePath(window.location.pathname || "/");
+        if (currentPath === "/dashboard") {
+          const params = new URLSearchParams(window.location.search || "");
+          const legacyPanel = normalizePanelName(params.get("panel"));
+          if (legacyPanel === "autopilot" || legacyPanel === "sports-autopilot") {
+            const targetPath = legacyPanel === "sports-autopilot" ? "/sports-forecasting" : "/autopilot";
+            params.delete("panel");
+            const nextQuery = params.toString();
+            window.location.replace(nextQuery ? `${targetPath}?${nextQuery}` : targetPath);
+            return;
+          }
+        }
+      } catch (_error) {
+        // Ignore legacy redirect errors and continue booting.
+      }
 
 			    const auth = firebase.auth();
 			    const db = firebase.firestore();

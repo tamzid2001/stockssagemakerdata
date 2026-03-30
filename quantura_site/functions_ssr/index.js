@@ -101,6 +101,9 @@ const resolveTemplate = (pathname) => {
 
   const forecastingAliases = new Set([
     "/forecasting",
+    "/autopilot",
+    "/uploads",
+    "/sports-forecasting",
     "/terminal/fx",
     "/tools/fx",
     "/ticker-intelligence",
@@ -131,8 +134,6 @@ const resolveTemplate = (pathname) => {
     "/watchlist",
     "/productivity",
     "/collaboration",
-    "/uploads",
-    "/autopilot",
     "/notifications",
   ]);
   if (dashboardAliases.has(route)) return "dashboard.html";
