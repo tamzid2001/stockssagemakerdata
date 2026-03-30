@@ -44,7 +44,7 @@
     <script defer src="/__/firebase/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
     <script defer src="/app.js"></script>
-
+  
     <script>
       window.__QUANTURA_RC_TEMPLATE_ID__ = "firebase-server";
       window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ = {"status":200,"eTag":"etag-quantura-e2e3d-firebase-server-fetch--1213937490","config":{"welcome_message":"","watchlist_enabled":"true","forecast_prophet_enabled":"true","forecast_canvas_enabled":"true","push_notifications_enabled":"true","webpush_vapid_key":"","stripe_checkout_enabled":"true","stripe_public_key":"","holiday_promo":"false"}};
@@ -713,7 +713,7 @@
                     <code>P50</code> or <code>0.5</code>.
                   </p>
                   <p>
-                    For stock prediction analysis, Quantura takes the first actionable business-day median in the forecast window and the last valid business-day median in the forecast output, rounds both to the nearest 10, and compares them. If the last rounded median is below the first rounded median, Quantura selects the upper bound from the last business-day row as the point-side. Otherwise it selects the lower bound.
+                    For stock prediction analysis, Quantura takes the first actionable business-day <code>P50</code> in the forecast window and the last valid business-day <code>P50</code> in the forecast output, rounds both to the nearest 10, and compares those tens-place levels. If the last rounded <code>P50</code> is below the first, Quantura marks the setup as <strong>BUY</strong> and communicates an end-date bias toward the upper bound, typically <code>P90</code>. Otherwise it marks the setup as <strong>SELL</strong> and communicates an end-date bias toward the lower bound.
                   </p>
                 </div>
               </div>

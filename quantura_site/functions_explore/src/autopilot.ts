@@ -691,6 +691,13 @@ function findPreferredColumn(headers: string[], candidates: string[]): number {
   return headers.findIndex((header) => wanted.has(normalizeCsvHeader(header)));
 }
 
+function findNearestQuantileColumn(columns: QuantileColumn[], targetQuantile: number): QuantileColumn | null {
+  if (!Array.isArray(columns) || !columns.length) return null;
+  return columns.reduce((best, item) =>
+    Math.abs(item.quantile - targetQuantile) < Math.abs(best.quantile - targetQuantile) ? item : best
+  , columns[0]);
+}
+
 function inferIntervalFromRows(rows: CanonicalDatasetRow[]): SupportedDatasetInterval {
   if (rows.length < 2) return "1d";
   const diffs = rows
@@ -1258,6 +1265,11 @@ export async function analyzePredictionCsv(
     const firstMedianRounded = roundTo10(firstMedianRaw);
     const lastMedianRounded = roundTo10(lastMedianRaw);
     const branch = firstMedianRounded > lastMedianRounded ? "upper" : "lower";
+    const recommendation = branch === "upper" ? "buy" : "sell";
+    const targetQuantileCol = branch === "upper" ? findNearestQuantileColumn(upperCols, 0.9) : findNearestQuantileColumn(lowerCols, 0.1);
+    const endDateBias = branch === "upper" ? "near_upper_bound" : "near_lower_bound";
+    const endDateBiasLabel = branch === "upper" ? "upper bound" : "lower bound";
+    const endDateTargetLabel = targetQuantileCol?.header ? targetQuantileCol.header.toUpperCase() : branch === "upper" ? "P90" : "P10";
     const returnedCols = branch === "upper" ? upperCols : lowerCols;
     const returnedValues = Object.fromEntries(
       returnedCols
@@ -1284,9 +1296,10 @@ export async function analyzePredictionCsv(
     const currentPriceQuoteTime = currentPriceInfo?.quoteTime ? `- Quote time: **${currentPriceInfo.quoteTime}**` : "";
     const currentPriceSource = currentPriceInfo?.source ? `- Source: **${currentPriceInfo.source}**` : "";
     const summary = [
-      `${ticker || "Uploaded"} quantile analysis selected the ${branch} branch.`,
-      `Rounded median moved from ${firstMedianRounded} on ${firstValidTimestamp} to ${lastMedianRounded} on ${lastValidTimestamp}.`,
-      `Point-side rule: if the last rounded median is below the first rounded median, use the upper bound; otherwise use the lower bound.`,
+      `${ticker || "Uploaded"} exploratory analysis issued a ${recommendation.toUpperCase()} signal.`,
+      `Rounded P50 moved from ${firstMedianRounded} on ${firstValidTimestamp} to ${lastMedianRounded} on ${lastValidTimestamp}.`,
+      `Rule: if the last rounded P50 is below the first rounded P50, bias the final price toward the upper bound (${endDateTargetLabel}) by the end date; otherwise bias it toward the lower bound.`,
+      `Current end-date bias: ${endDateBiasLabel} (${endDateTargetLabel}).`,
       Object.keys(returnedValues).length
         ? `Returned last business-day values: ${Object.entries(returnedValues)
             .map(([label, value]) => `${label}=${value}`)
@@ -1313,28 +1326,34 @@ export async function analyzePredictionCsv(
       `- Valid business-day rows found: **${boundary.validRows.length}**`,
       "",
       "### Comparison Rule",
-      "Compare the first valid row median with the last valid row median after rounding both to the nearest 10.",
+      "Compare the first valid-row P50 with the last valid-row P50 after rounding both to the nearest 10 so the decision uses their tens-place levels.",
       "",
-      `- First valid median raw: **${firstMedianRaw.toFixed(6)}**`,
-      `- First valid median rounded: **${firstMedianRounded.toFixed(0)}**`,
-      `- Last valid median raw: **${lastMedianRaw.toFixed(6)}**`,
-      `- Last valid median rounded: **${lastMedianRounded.toFixed(0)}**`,
+      `- First valid P50 raw: **${firstMedianRaw.toFixed(6)}**`,
+      `- First valid P50 rounded to nearest 10: **${firstMedianRounded.toFixed(0)}**`,
+      `- Last valid P50 raw: **${lastMedianRaw.toFixed(6)}**`,
+      `- Last valid P50 rounded to nearest 10: **${lastMedianRounded.toFixed(0)}**`,
       "",
-      `Since **${firstMedianRounded.toFixed(0)} ${firstMedianRounded > lastMedianRounded ? ">" : "<="} ${lastMedianRounded.toFixed(
+      `Since **${lastMedianRounded.toFixed(0)} ${lastMedianRounded < firstMedianRounded ? "<" : ">="} ${firstMedianRounded.toFixed(
         0
-      )}**, the logic selects the **${branch}** branch.`,
+      )}**, the logic issues a **${recommendation.toUpperCase()}** signal and selects the **${branch}** branch.`,
       "",
       "### Research Context",
       "AWS Forecast documents how Average wQL, wQL, WAPE, RMSE, MAPE, and MASE should be interpreted for time-series models. Lower values indicate better models. See [AWS Forecast metrics documentation](https://docs.aws.amazon.com/forecast/latest/dg/metrics.html?utm_source=chatgpt.com).",
       "",
       `- Point-forecast anchor: **${medianCol.header}** (the middle quantile, usually **P50** / **0.5**)`,
-      `- Decision rule: if the last rounded median is below the first rounded median, use the **upper** bound from the last valid business-day row; otherwise use the **lower** bound.`,
+      `- Decision rule: if the last rounded P50 is below the first rounded P50, output **BUY** and bias the terminal price toward the **upper** bound, usually **${endDateTargetLabel}**. Otherwise output **SELL** and bias the terminal price toward the **lower** bound.`,
+      `- End-date communication rule: by the final forecast date, price is treated as finishing closer to the **${endDateBiasLabel}** first.`,
       "",
       "### Quantile Structure",
       `- Ordered quantile columns: **${orderedLabels}**`,
       `- Median column: **${medianCol.header}**`,
       `- Lower columns: **${lowerCols.map((col) => col.header).join(", ") || "None"}**`,
       `- Upper columns: **${upperCols.map((col) => col.header).join(", ") || "None"}**`,
+      "",
+      "### Trading Interpretation",
+      `- Signal: **${recommendation.toUpperCase()}**`,
+      `- End-date bias: **${endDateBiasLabel.toUpperCase()}**`,
+      `- Terminal target quantile: **${endDateTargetLabel}**`,
       "",
       currentPriceHeading,
       currentPriceLine,
@@ -1360,6 +1379,9 @@ export async function analyzePredictionCsv(
       markdown,
       metrics: {
         branch,
+        recommendation,
+        endDateBias,
+        endDateTargetQuantile: endDateTargetLabel,
         firstMedianRaw: Number(firstMedianRaw.toFixed(6)),
         firstMedianRounded,
         lastMedianRaw: Number(lastMedianRaw.toFixed(6)),
@@ -1377,6 +1399,9 @@ export async function analyzePredictionCsv(
         lowerColumns: lowerCols.map((col) => col.header),
         upperColumns: upperCols.map((col) => col.header),
         branch,
+        recommendation,
+        endDateBias,
+        endDateTargetQuantile: endDateTargetLabel,
         returnedValues,
         currentPriceInfo,
         timeColumn: boundary.timeHeader,

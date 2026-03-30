@@ -104,6 +104,32 @@ type IndicatorComputation = {
   previousClose: number | null;
 };
 
+type CoreIndicatorSnapshot = {
+  rsi14: number | null;
+  macdLine: number | null;
+  macdSignal: number | null;
+  macdHist: number | null;
+  atr14: number | null;
+  atrPct: number | null;
+  adx14: number | null;
+  plusDi14: number | null;
+  minusDi14: number | null;
+  ema20: number | null;
+  sma20: number | null;
+  bbandsUpper: number | null;
+  bbandsMiddle: number | null;
+  bbandsLower: number | null;
+  cci20: number | null;
+  mfi14: number | null;
+  roc12: number | null;
+  stochK: number | null;
+  stochD: number | null;
+  willr14: number | null;
+  realizedVol20: number | null;
+  recentRangePct20: number | null;
+  obvSlope10: number | null;
+};
+
 const SUPPORTED_INDICATORS: IndicatorCode[] = [
   "RSI",
   "MACD",
@@ -677,6 +703,369 @@ function computeIndicators(input: {
   };
 }
 
+function latestNumericOrComputed(
+  latestNumeric: Record<string, number>,
+  key: string,
+  fallbackSeries: Array<number | null>
+): number | null {
+  if (Number.isFinite(latestNumeric[key])) return Number(latestNumeric[key]);
+  return latestFinite(fallbackSeries);
+}
+
+function deriveCoreIndicatorSnapshot(computed: IndicatorComputation): CoreIndicatorSnapshot {
+  const rsiSeries = rsi(computed.close, 14);
+  const ema20Series = ema(computed.close, 20);
+  const sma20Series = sma(computed.close, 20);
+  const atrSeries = atr(computed.high, computed.low, computed.close, 14);
+  const adxPack = adx(computed.high, computed.low, computed.close, 14);
+  const bbandsPack = bbands(computed.close, 20, 2);
+  const cciSeries = cci(computed.high, computed.low, computed.close, 20);
+  const mfiSeries = mfi(computed.high, computed.low, computed.close, computed.volume, 14);
+  const rocSeries = roc(computed.close, 12);
+  const stochPack = stoch(computed.high, computed.low, computed.close, 14, 3);
+  const willrSeries = willr(computed.high, computed.low, computed.close, 14);
+  const obvSeries = obv(computed.close, computed.volume);
+  const ema12Series = ema(computed.close, 12);
+  const ema26Series = ema(computed.close, 26);
+  const macdLineSeries = createEmptySeries(computed.close.length);
+  for (let idx = 0; idx < computed.close.length; idx += 1) {
+    const fast = ema12Series[idx];
+    const slow = ema26Series[idx];
+    if (Number.isFinite(fast as number) && Number.isFinite(slow as number)) {
+      macdLineSeries[idx] = Number(fast) - Number(slow);
+    }
+  }
+  const macdSignalSeries = ema(
+    macdLineSeries.map((item) => (Number.isFinite(item as number) ? Number(item) : 0)),
+    9
+  );
+  const macdHistSeries = createEmptySeries(computed.close.length);
+  for (let idx = 0; idx < computed.close.length; idx += 1) {
+    const line = macdLineSeries[idx];
+    const signal = macdSignalSeries[idx];
+    if (Number.isFinite(line as number) && Number.isFinite(signal as number)) {
+      macdHistSeries[idx] = Number(line) - Number(signal);
+    }
+  }
+
+  const recentReturns = computed.close
+    .slice(-21)
+    .map((close, idx, arr) => {
+      if (idx === 0) return null;
+      const prev = arr[idx - 1];
+      if (!Number.isFinite(prev) || prev <= 0 || !Number.isFinite(close) || close <= 0) return null;
+      return Math.log(close / prev);
+    })
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  const realizedVol20 = recentReturns.length ? stddev(recentReturns) : null;
+  const recentHighs = computed.high.slice(-20).filter((value) => Number.isFinite(value));
+  const recentLows = computed.low.slice(-20).filter((value) => Number.isFinite(value));
+  const recentRangePct20 =
+    Number.isFinite(computed.lastClose) && computed.lastClose > 0 && recentHighs.length && recentLows.length
+      ? (Math.max(...recentHighs) - Math.min(...recentLows)) / computed.lastClose
+      : null;
+  const obvNow = latestFinite(obvSeries);
+  const obvPast =
+    obvSeries.length > 10
+      ? latestFinite(obvSeries.slice(0, Math.max(0, obvSeries.length - 10)))
+      : null;
+  const obvSlope10 =
+    Number.isFinite(obvNow as number) && Number.isFinite(obvPast as number) ? Number(obvNow) - Number(obvPast) : null;
+
+  const atr14 = latestNumericOrComputed(computed.latestNumeric, "ATR_14", atrSeries);
+  return {
+    rsi14: latestNumericOrComputed(computed.latestNumeric, "RSI_14", rsiSeries),
+    macdLine: latestNumericOrComputed(computed.latestNumeric, "MACD_LINE", macdLineSeries),
+    macdSignal: latestNumericOrComputed(computed.latestNumeric, "MACD_SIGNAL", macdSignalSeries),
+    macdHist: latestNumericOrComputed(computed.latestNumeric, "MACD_HIST", macdHistSeries),
+    atr14,
+    atrPct:
+      Number.isFinite(atr14 as number) && Number.isFinite(computed.lastClose) && computed.lastClose > 0
+        ? Number(atr14) / computed.lastClose
+        : null,
+    adx14: latestNumericOrComputed(computed.latestNumeric, "ADX_14", adxPack.adx),
+    plusDi14: latestNumericOrComputed(computed.latestNumeric, "PLUS_DI_14", adxPack.plusDi),
+    minusDi14: latestNumericOrComputed(computed.latestNumeric, "MINUS_DI_14", adxPack.minusDi),
+    ema20: latestNumericOrComputed(computed.latestNumeric, "EMA_20", ema20Series),
+    sma20: latestNumericOrComputed(computed.latestNumeric, "SMA_20", sma20Series),
+    bbandsUpper: latestNumericOrComputed(computed.latestNumeric, "BBANDS_UPPER", bbandsPack.upper),
+    bbandsMiddle: latestNumericOrComputed(computed.latestNumeric, "BBANDS_MIDDLE", bbandsPack.middle),
+    bbandsLower: latestNumericOrComputed(computed.latestNumeric, "BBANDS_LOWER", bbandsPack.lower),
+    cci20: latestNumericOrComputed(computed.latestNumeric, "CCI_20", cciSeries),
+    mfi14: latestNumericOrComputed(computed.latestNumeric, "MFI_14", mfiSeries),
+    roc12: latestNumericOrComputed(computed.latestNumeric, "ROC_12", rocSeries),
+    stochK: latestNumericOrComputed(computed.latestNumeric, "STOCH_K", stochPack.k),
+    stochD: latestNumericOrComputed(computed.latestNumeric, "STOCH_D", stochPack.d),
+    willr14: latestNumericOrComputed(computed.latestNumeric, "WILLR_14", willrSeries),
+    realizedVol20,
+    recentRangePct20,
+    obvSlope10,
+  };
+}
+
+function hasSelectedIndicator(computed: IndicatorComputation, indicator: IndicatorCode): boolean {
+  return computed.selectedIndicators.includes(indicator);
+}
+
+function buildSelectedIndicatorSignals(computed: IndicatorComputation, snapshot: CoreIndicatorSnapshot): string[] {
+  const signals: string[] = [];
+  const lastClose = Number(computed.lastClose);
+
+  if (hasSelectedIndicator(computed, "RSI") && Number.isFinite(snapshot.rsi14 as number)) {
+    const rsiValue = Number(snapshot.rsi14);
+    const tone =
+      rsiValue <= 30 ? "is oversold and can support a reflex bounce if momentum stabilizes" :
+      rsiValue >= 70 ? "is overbought and vulnerable to mean reversion" :
+      rsiValue >= 55 ? "leans bullish" :
+      rsiValue <= 45 ? "leans bearish" :
+      "is neutral";
+    signals.push(`RSI(14) ${rsiValue.toFixed(2)} ${tone}.`);
+  }
+
+  if (hasSelectedIndicator(computed, "MACD") && Number.isFinite(snapshot.macdHist as number)) {
+    const hist = Number(snapshot.macdHist);
+    const line = Number(snapshot.macdLine || 0);
+    const signal = Number(snapshot.macdSignal || 0);
+    const tone = hist > 0 ? "momentum is improving above the signal line" : hist < 0 ? "momentum remains below the signal line" : "momentum is flat";
+    signals.push(`MACD histogram ${hist.toFixed(4)} while MACD line ${line.toFixed(4)} vs signal ${signal.toFixed(4)} means ${tone}.`);
+  }
+
+  if (hasSelectedIndicator(computed, "EMA") && Number.isFinite(snapshot.ema20 as number) && Number.isFinite(lastClose)) {
+    const gapPct = percentDelta(snapshot.ema20, lastClose, 2);
+    signals.push(`Price is ${formatSignedPctText(gapPct)} versus EMA(20), which ${Number(gapPct || 0) >= 0 ? "keeps short-term trend support intact" : "shows price is still below short-term trend"}.`);
+  }
+
+  if (hasSelectedIndicator(computed, "SMA") && Number.isFinite(snapshot.sma20 as number) && Number.isFinite(lastClose)) {
+    const gapPct = percentDelta(snapshot.sma20, lastClose, 2);
+    signals.push(`Price is ${formatSignedPctText(gapPct)} versus SMA(20), reinforcing a ${Number(gapPct || 0) >= 0 ? "constructive" : "defensive"} baseline.`);
+  }
+
+  if (hasSelectedIndicator(computed, "BBANDS") && Number.isFinite(snapshot.bbandsUpper as number) && Number.isFinite(snapshot.bbandsLower as number)) {
+    const upper = Number(snapshot.bbandsUpper);
+    const lower = Number(snapshot.bbandsLower);
+    const middle = Number(snapshot.bbandsMiddle || (upper + lower) / 2);
+    const tone =
+      lastClose >= upper ? "price is pressing the upper band" :
+      lastClose <= lower ? "price is testing the lower band" :
+      lastClose >= middle ? "price is holding the upper half of the band structure" :
+      "price is trading in the lower half of the band structure";
+    signals.push(`Bollinger Bands place the middle line at ${middle.toFixed(2)} and ${tone}.`);
+  }
+
+  if (hasSelectedIndicator(computed, "ATR") && Number.isFinite(snapshot.atr14 as number)) {
+    const atrPct = snapshot.atrPct !== null ? snapshot.atrPct * 100 : null;
+    signals.push(`ATR(14) is ${Number(snapshot.atr14).toFixed(2)}${atrPct !== null ? `, about ${atrPct.toFixed(2)}% of price` : ""}, which frames the current daily swing size.`);
+  }
+
+  if (hasSelectedIndicator(computed, "ADX") && Number.isFinite(snapshot.adx14 as number)) {
+    const adxText =
+      Number(snapshot.adx14) >= 25 ? "trend strength is confirmed" : "trend strength is modest";
+    const diBias =
+      Number.isFinite(snapshot.plusDi14 as number) && Number.isFinite(snapshot.minusDi14 as number)
+        ? Number(snapshot.plusDi14) > Number(snapshot.minusDi14)
+          ? "with +DI above -DI"
+          : Number(snapshot.plusDi14) < Number(snapshot.minusDi14)
+            ? "with -DI above +DI"
+            : "with DI lines balanced"
+        : "";
+    signals.push(`ADX(14) is ${Number(snapshot.adx14).toFixed(2)} ${diBias ? `${diBias}, so ` : "so "}${adxText}.`);
+  }
+
+  if (hasSelectedIndicator(computed, "CCI") && Number.isFinite(snapshot.cci20 as number)) {
+    const cciValue = Number(snapshot.cci20);
+    const tone = cciValue >= 100 ? "shows strong upside extension" : cciValue <= -100 ? "shows strong downside extension" : "is near its mid-range";
+    signals.push(`CCI(20) ${cciValue.toFixed(2)} ${tone}.`);
+  }
+
+  if (hasSelectedIndicator(computed, "MFI") && Number.isFinite(snapshot.mfi14 as number)) {
+    const mfiValue = Number(snapshot.mfi14);
+    const tone = mfiValue >= 80 ? "points to heavy buying pressure" : mfiValue <= 20 ? "points to heavy selling pressure" : "shows balanced money flow";
+    signals.push(`MFI(14) ${mfiValue.toFixed(2)} ${tone}.`);
+  }
+
+  if (hasSelectedIndicator(computed, "OBV") && Number.isFinite(snapshot.obvSlope10 as number)) {
+    const slope = Number(snapshot.obvSlope10);
+    signals.push(`OBV changed by ${Math.round(slope).toLocaleString()} over the last 10 bars, which ${slope >= 0 ? "supports accumulation" : "points to distribution"}.`);
+  }
+
+  if (hasSelectedIndicator(computed, "ROC") && Number.isFinite(snapshot.roc12 as number)) {
+    const rocValue = Number(snapshot.roc12);
+    signals.push(`ROC(12) ${rocValue.toFixed(2)}% keeps price momentum ${rocValue >= 0 ? "positive" : "negative"}.`);
+  }
+
+  if (hasSelectedIndicator(computed, "STOCH") && Number.isFinite(snapshot.stochK as number) && Number.isFinite(snapshot.stochD as number)) {
+    const k = Number(snapshot.stochK);
+    const d = Number(snapshot.stochD);
+    const tone = k <= 20 ? "is oversold" : k >= 80 ? "is overbought" : "is mid-range";
+    signals.push(`Stochastic K/D is ${k.toFixed(2)}/${d.toFixed(2)} and ${tone}${k > d ? " with an improving cross" : k < d ? " with a weakening cross" : ""}.`);
+  }
+
+  if (hasSelectedIndicator(computed, "WILLR") && Number.isFinite(snapshot.willr14 as number)) {
+    const willrValue = Number(snapshot.willr14);
+    const tone = willrValue <= -80 ? "sits in oversold territory" : willrValue >= -20 ? "sits in overbought territory" : "is in a neutral zone";
+    signals.push(`Williams %R(14) ${willrValue.toFixed(2)} ${tone}.`);
+  }
+
+  if (signals.length < 3) {
+    const volPct = Number.isFinite(snapshot.realizedVol20 as number) ? Number(snapshot.realizedVol20) * 100 : null;
+    const rangePct = Number.isFinite(snapshot.recentRangePct20 as number) ? Number(snapshot.recentRangePct20) * 100 : null;
+    signals.push(
+      `Recent price context shows ${volPct !== null ? `${volPct.toFixed(2)}%` : "n/a"} realized 20-bar volatility${
+        rangePct !== null ? ` and a ${rangePct.toFixed(2)}% 20-bar high-low range` : ""
+      }.`
+    );
+  }
+
+  return Array.from(new Set(signals)).slice(0, 6);
+}
+
+function formatSignedPctText(value: number | null): string {
+  if (!Number.isFinite(value as number)) return "flat";
+  const numeric = Number(value);
+  return `${numeric >= 0 ? "+" : ""}${numeric.toFixed(2)}%`;
+}
+
+function estimateIndicatorTimelineDays(computed: IndicatorComputation, conviction: number): number {
+  const interval = computed.interval;
+  const trendSignals = ["EMA", "SMA", "ADX", "BBANDS"].filter((item) => hasSelectedIndicator(computed, item as IndicatorCode)).length;
+  const oscillatorSignals = ["RSI", "MACD", "CCI", "MFI", "STOCH", "WILLR", "ROC"].filter((item) =>
+    hasSelectedIndicator(computed, item as IndicatorCode)
+  ).length;
+  let base = interval === "1h" ? 4 : 9;
+  if (trendSignals > oscillatorSignals) base += interval === "1h" ? 2 : 4;
+  if (oscillatorSignals > trendSignals) base -= interval === "1h" ? 1 : 1;
+  if (conviction >= 0.7) base += interval === "1h" ? 1 : 3;
+  if (conviction <= 0.25) base -= interval === "1h" ? 1 : 2;
+  const bounds = indicatorTimelineBounds(interval);
+  return Math.max(bounds.min, Math.min(bounds.max, Math.round(base)));
+}
+
+function estimateIndicatorMovePct(
+  computed: IndicatorComputation,
+  snapshot: CoreIndicatorSnapshot,
+  timelineDays: number,
+  conviction: number
+): number {
+  const lastClose = Number(computed.lastClose);
+  const atrPct = Number.isFinite(snapshot.atrPct as number) ? Number(snapshot.atrPct) : 0;
+  const realizedVol = Number.isFinite(snapshot.realizedVol20 as number) ? Number(snapshot.realizedVol20) : 0;
+  const recentRangePct = Number.isFinite(snapshot.recentRangePct20 as number) ? Number(snapshot.recentRangePct20) : 0;
+  const perStepVolPct = Math.max(
+    atrPct,
+    realizedVol * 1.35,
+    recentRangePct > 0 ? recentRangePct / 10 : 0,
+    computed.interval === "1h" ? 0.0035 : 0.006
+  );
+  const horizonScale = Math.sqrt(Math.max(1, timelineDays));
+  const convictionScale = 0.9 + conviction * 0.9;
+  const movePct = perStepVolPct * horizonScale * convictionScale;
+  const minMove = computed.interval === "1h" ? 0.003 : 0.005;
+  const maxMove = computed.interval === "1h" ? 0.12 : 0.2;
+  if (!Number.isFinite(lastClose) || lastClose <= 0) return minMove;
+  return Math.max(minMove, Math.min(maxMove, movePct));
+}
+
+function scoreIndicatorDirection(
+  computed: IndicatorComputation,
+  snapshot: CoreIndicatorSnapshot
+): { direction: IndicatorPrediction["direction"]; conviction: number; confidence: IndicatorPrediction["confidence"] } {
+  let bullish = 0;
+  let bearish = 0;
+
+  const addBullish = (value: number) => {
+    bullish += Math.max(0, value);
+  };
+  const addBearish = (value: number) => {
+    bearish += Math.max(0, value);
+  };
+
+  if (hasSelectedIndicator(computed, "RSI") && Number.isFinite(snapshot.rsi14 as number)) {
+    const rsiValue = Number(snapshot.rsi14);
+    if (rsiValue <= 30) addBullish(0.9 + (30 - rsiValue) / 20);
+    else if (rsiValue >= 70) addBearish(0.9 + (rsiValue - 70) / 20);
+    else if (rsiValue < 45) addBearish(0.45);
+    else if (rsiValue > 55) addBullish(0.45);
+  }
+
+  if (hasSelectedIndicator(computed, "MACD") && Number.isFinite(snapshot.macdHist as number)) {
+    const histPct = Number.isFinite(snapshot.macdHist as number) && Number.isFinite(computed.lastClose) && computed.lastClose > 0
+      ? Math.abs(Number(snapshot.macdHist) / computed.lastClose) * 100
+      : 0;
+    const weight = Math.min(1.8, 0.9 + histPct * 8);
+    if (Number(snapshot.macdHist) > 0) addBullish(weight);
+    else if (Number(snapshot.macdHist) < 0) addBearish(weight);
+  }
+
+  if (hasSelectedIndicator(computed, "EMA") && Number.isFinite(snapshot.ema20 as number) && Number.isFinite(computed.lastClose)) {
+    const gap = Number(computed.lastClose) - Number(snapshot.ema20);
+    if (gap > 0) addBullish(0.8);
+    else if (gap < 0) addBearish(0.8);
+  }
+
+  if (hasSelectedIndicator(computed, "SMA") && Number.isFinite(snapshot.sma20 as number) && Number.isFinite(computed.lastClose)) {
+    const gap = Number(computed.lastClose) - Number(snapshot.sma20);
+    if (gap > 0) addBullish(0.7);
+    else if (gap < 0) addBearish(0.7);
+  }
+
+  if (hasSelectedIndicator(computed, "BBANDS") && Number.isFinite(snapshot.bbandsUpper as number) && Number.isFinite(snapshot.bbandsLower as number)) {
+    if (computed.lastClose <= Number(snapshot.bbandsLower)) addBullish(0.8);
+    else if (computed.lastClose >= Number(snapshot.bbandsUpper)) addBearish(0.8);
+    else if (Number.isFinite(snapshot.bbandsMiddle as number)) {
+      if (computed.lastClose >= Number(snapshot.bbandsMiddle)) addBullish(0.4);
+      else addBearish(0.4);
+    }
+  }
+
+  if (hasSelectedIndicator(computed, "ADX") && Number.isFinite(snapshot.adx14 as number) && Number.isFinite(snapshot.plusDi14 as number) && Number.isFinite(snapshot.minusDi14 as number)) {
+    const strengthScale = Math.min(1.2, Math.max(0.3, Number(snapshot.adx14) / 30));
+    if (Number(snapshot.plusDi14) > Number(snapshot.minusDi14)) addBullish(strengthScale);
+    else if (Number(snapshot.minusDi14) > Number(snapshot.plusDi14)) addBearish(strengthScale);
+  }
+
+  if (hasSelectedIndicator(computed, "CCI") && Number.isFinite(snapshot.cci20 as number)) {
+    if (Number(snapshot.cci20) >= 100) addBullish(0.85);
+    else if (Number(snapshot.cci20) <= -100) addBearish(0.85);
+  }
+
+  if (hasSelectedIndicator(computed, "MFI") && Number.isFinite(snapshot.mfi14 as number)) {
+    if (Number(snapshot.mfi14) >= 80) addBullish(0.6);
+    else if (Number(snapshot.mfi14) <= 20) addBearish(0.6);
+  }
+
+  if (hasSelectedIndicator(computed, "OBV") && Number.isFinite(snapshot.obvSlope10 as number)) {
+    if (Number(snapshot.obvSlope10) > 0) addBullish(0.55);
+    else if (Number(snapshot.obvSlope10) < 0) addBearish(0.55);
+  }
+
+  if (hasSelectedIndicator(computed, "ROC") && Number.isFinite(snapshot.roc12 as number)) {
+    if (Number(snapshot.roc12) > 0) addBullish(0.7);
+    else if (Number(snapshot.roc12) < 0) addBearish(0.7);
+  }
+
+  if (hasSelectedIndicator(computed, "STOCH") && Number.isFinite(snapshot.stochK as number) && Number.isFinite(snapshot.stochD as number)) {
+    const bullishCross = Number(snapshot.stochK) > Number(snapshot.stochD);
+    if (Number(snapshot.stochK) <= 20) addBullish(bullishCross ? 0.8 : 0.55);
+    else if (Number(snapshot.stochK) >= 80) addBearish(!bullishCross ? 0.8 : 0.55);
+    else if (bullishCross) addBullish(0.35);
+    else addBearish(0.35);
+  }
+
+  if (hasSelectedIndicator(computed, "WILLR") && Number.isFinite(snapshot.willr14 as number)) {
+    if (Number(snapshot.willr14) <= -80) addBullish(0.65);
+    else if (Number(snapshot.willr14) >= -20) addBearish(0.65);
+  }
+
+  const total = bullish + bearish;
+  const net = bullish - bearish;
+  const conviction = total > 0 ? Math.min(1, Math.abs(net) / total) : 0;
+  const direction: IndicatorPrediction["direction"] =
+    conviction < 0.18 ? "neutral" : net > 0 ? "bullish" : net < 0 ? "bearish" : "neutral";
+  const confidence: IndicatorPrediction["confidence"] =
+    conviction >= 0.65 && total >= 2.2 ? "high" : conviction >= 0.32 && total >= 1.2 ? "medium" : "low";
+  return { direction, conviction, confidence };
+}
+
 function parseJsonObject(text: string): Record<string, unknown> | null {
   const raw = String(text || "").trim();
   if (!raw) return null;
@@ -701,11 +1090,9 @@ function parseJsonObject(text: string): Record<string, unknown> | null {
 }
 
 function buildIndicatorPromptContext(computed: IndicatorComputation): Record<string, unknown> {
+  const snapshot = deriveCoreIndicatorSnapshot(computed);
   const lastClose = roundFinite(computed.lastClose, 4);
   const previousClose = roundFinite(computed.previousClose, 4);
-  const atr14 = roundFinite(computed.latestNumeric.ATR_14, 4);
-  const ema20 = roundFinite(computed.latestNumeric.EMA_20, 4);
-  const sma20 = roundFinite(computed.latestNumeric.SMA_20, 4);
   const context = {
     asOf: computed.asOf,
     lastClose,
@@ -718,28 +1105,30 @@ function buildIndicatorPromptContext(computed: IndicatorComputation): Record<str
       display: entry.display,
     })),
     derivedSignals: {
-      rsi14: roundFinite(computed.latestNumeric.RSI_14, 2),
-      macdLine: roundFinite(computed.latestNumeric.MACD_LINE, 4),
-      macdSignal: roundFinite(computed.latestNumeric.MACD_SIGNAL, 4),
-      macdHist: roundFinite(computed.latestNumeric.MACD_HIST, 4),
-      adx14: roundFinite(computed.latestNumeric.ADX_14, 2),
-      plusDi14: roundFinite(computed.latestNumeric.PLUS_DI_14, 2),
-      minusDi14: roundFinite(computed.latestNumeric.MINUS_DI_14, 2),
-      atr14,
-      atrPct: lastClose && atr14 ? roundFinite((atr14 / lastClose) * 100, 2) : null,
-      ema20,
-      sma20,
-      closeVsEma20Pct: percentDelta(ema20, lastClose, 2),
-      closeVsSma20Pct: percentDelta(sma20, lastClose, 2),
-      bbandsUpper: roundFinite(computed.latestNumeric.BBANDS_UPPER, 4),
-      bbandsMiddle: roundFinite(computed.latestNumeric.BBANDS_MIDDLE, 4),
-      bbandsLower: roundFinite(computed.latestNumeric.BBANDS_LOWER, 4),
-      cci20: roundFinite(computed.latestNumeric.CCI_20, 2),
-      mfi14: roundFinite(computed.latestNumeric.MFI_14, 2),
-      roc12: roundFinite(computed.latestNumeric.ROC_12, 2),
-      stochK: roundFinite(computed.latestNumeric.STOCH_K, 2),
-      stochD: roundFinite(computed.latestNumeric.STOCH_D, 2),
-      willr14: roundFinite(computed.latestNumeric.WILLR_14, 2),
+      rsi14: roundFinite(snapshot.rsi14, 2),
+      macdLine: roundFinite(snapshot.macdLine, 4),
+      macdSignal: roundFinite(snapshot.macdSignal, 4),
+      macdHist: roundFinite(snapshot.macdHist, 4),
+      adx14: roundFinite(snapshot.adx14, 2),
+      plusDi14: roundFinite(snapshot.plusDi14, 2),
+      minusDi14: roundFinite(snapshot.minusDi14, 2),
+      atr14: roundFinite(snapshot.atr14, 4),
+      atrPct: roundFinite(snapshot.atrPct !== null ? snapshot.atrPct * 100 : null, 2),
+      ema20: roundFinite(snapshot.ema20, 4),
+      sma20: roundFinite(snapshot.sma20, 4),
+      closeVsEma20Pct: percentDelta(snapshot.ema20, lastClose, 2),
+      closeVsSma20Pct: percentDelta(snapshot.sma20, lastClose, 2),
+      bbandsUpper: roundFinite(snapshot.bbandsUpper, 4),
+      bbandsMiddle: roundFinite(snapshot.bbandsMiddle, 4),
+      bbandsLower: roundFinite(snapshot.bbandsLower, 4),
+      cci20: roundFinite(snapshot.cci20, 2),
+      mfi14: roundFinite(snapshot.mfi14, 2),
+      roc12: roundFinite(snapshot.roc12, 2),
+      stochK: roundFinite(snapshot.stochK, 2),
+      stochD: roundFinite(snapshot.stochD, 2),
+      willr14: roundFinite(snapshot.willr14, 2),
+      realizedVol20Pct: roundFinite(snapshot.realizedVol20 !== null ? snapshot.realizedVol20 * 100 : null, 2),
+      recentRangePct20: roundFinite(snapshot.recentRangePct20 !== null ? snapshot.recentRangePct20 * 100 : null, 2),
     },
   };
   return context;
@@ -800,40 +1189,27 @@ function extractFunctionCalls(payload: Record<string, unknown>): Array<{ callId:
 }
 
 function buildHeuristicAnalysis(computed: IndicatorComputation): IndicatorAnalysis {
+  const snapshot = deriveCoreIndicatorSnapshot(computed);
   const lastClose = computed.lastClose;
-  const atrValue = Number(computed.latestNumeric.ATR_14 || 0);
-  const atrPct = lastClose > 0 ? atrValue / lastClose : 0;
-  const rsiValue = Number(computed.latestNumeric.RSI_14 || 50);
-  const macdHist = Number(computed.latestNumeric.MACD_HIST || 0);
-  const adxValue = Number(computed.latestNumeric.ADX_14 || 20);
-
-  let direction: IndicatorPrediction["direction"] = "neutral";
-  if (rsiValue < 40 && macdHist >= 0) direction = "bullish";
-  else if (rsiValue > 60 && macdHist <= 0) direction = "bearish";
-  else if (macdHist > 0) direction = "bullish";
-  else if (macdHist < 0) direction = "bearish";
-
-  const timelineDays = computed.interval === "1h" ? 5 : 10;
-  const moveMultiplier = Math.max(0.7, Math.min(2.2, adxValue >= 25 ? 1.6 : 1.1));
-  const projectedMove = Math.max(0.01, atrPct * moveMultiplier);
-  const signedMove = direction === "bullish" ? projectedMove : direction === "bearish" ? -projectedMove : 0;
+  const directionalScore = scoreIndicatorDirection(computed, snapshot);
+  const timelineDays = estimateIndicatorTimelineDays(computed, directionalScore.conviction);
+  const projectedMove = estimateIndicatorMovePct(computed, snapshot, timelineDays, directionalScore.conviction);
+  const signedMove =
+    directionalScore.direction === "bullish"
+      ? projectedMove
+      : directionalScore.direction === "bearish"
+        ? -projectedMove
+        : 0;
   const targetPrice = Number.isFinite(lastClose) ? Number((lastClose * (1 + signedMove)).toFixed(2)) : null;
 
-  const confidence: IndicatorPrediction["confidence"] = adxValue >= 30 ? "high" : adxValue >= 20 ? "medium" : "low";
-  const keySignals = [
-    `RSI(14): ${Number.isFinite(rsiValue) ? rsiValue.toFixed(2) : "—"}`,
-    `MACD histogram: ${Number.isFinite(macdHist) ? macdHist.toFixed(4) : "—"}`,
-    `ADX(14): ${Number.isFinite(adxValue) ? adxValue.toFixed(2) : "—"}`,
-    `ATR(14): ${Number.isFinite(atrValue) ? atrValue.toFixed(4) : "—"}`,
-  ];
-
-  const summary = `Computed ${computed.latestRows.length} indicator values for ${computed.ticker}. Momentum is ${direction}, with a ${timelineDays}-day tactical horizon.`;
+  const keySignals = buildSelectedIndicatorSignals(computed, snapshot);
+  const summary = `Computed ${computed.latestRows.length} indicator values for ${computed.ticker}. Selected indicators lean ${directionalScore.direction}, with a ${timelineDays}-day tactical horizon.`;
   const prediction: IndicatorPrediction = {
-    direction,
+    direction: directionalScore.direction,
     targetPrice,
     timeline: `${timelineDays} trading days`,
     timelineDays,
-    confidence,
+    confidence: directionalScore.confidence,
   };
   const text = buildIndicatorNarrative(summary, keySignals, prediction, computed);
 
@@ -858,11 +1234,14 @@ function clampIndicatorTargetPrice(
   if (!Number.isFinite(lastClose) || lastClose <= 0) {
     return Number.isFinite(targetPrice) && targetPrice > 0 ? Number(targetPrice.toFixed(2)) : Number(fallbackTarget.toFixed(2));
   }
-  const atrValue = Number(computed.latestNumeric.ATR_14 || 0);
-  const atrPct = Number.isFinite(atrValue) && atrValue > 0 ? atrValue / lastClose : 0;
-  const defaultBandPct = computed.interval === "1h" ? 0.05 : 0.1;
-  const hardCapPct = computed.interval === "1h" ? 0.18 : 0.3;
-  const bandPct = Math.max(defaultBandPct, Math.min(hardCapPct, atrPct > 0 ? atrPct * 4 : defaultBandPct));
+  const snapshot = deriveCoreIndicatorSnapshot(computed);
+  const bandPct = Math.max(
+    computed.interval === "1h" ? 0.05 : 0.08,
+    Math.min(
+      computed.interval === "1h" ? 0.18 : 0.25,
+      estimateIndicatorMovePct(computed, snapshot, indicatorTimelineBounds(computed.interval).max, 0.85) * 1.75
+    )
+  );
   const lower = lastClose * (1 - bandPct);
   const upper = lastClose * (1 + bandPct);
   let bounded = Number.isFinite(targetPrice) && targetPrice > 0 ? targetPrice : fallbackTarget;
@@ -879,6 +1258,30 @@ function normalizeIndicatorKeySignals(raw: unknown, fallback: string[]): string[
   if (candidate.length >= 3) return candidate.slice(0, 6);
   const merged = [...candidate, ...fallback.map((item) => sanitizeText(item, 180)).filter(Boolean)];
   return Array.from(new Set(merged)).slice(0, 6);
+}
+
+function indicatorSignalMentionsUnselectedIndicator(text: string, computed: IndicatorComputation): boolean {
+  const normalized = sanitizeText(text, 220).toUpperCase();
+  if (!normalized) return false;
+  const indicatorLabels: Array<{ code: IndicatorCode; tokens: string[] }> = [
+    { code: "RSI", tokens: ["RSI"] },
+    { code: "MACD", tokens: ["MACD"] },
+    { code: "SMA", tokens: ["SMA"] },
+    { code: "EMA", tokens: ["EMA"] },
+    { code: "BBANDS", tokens: ["BOLLINGER", "BBANDS"] },
+    { code: "ATR", tokens: ["ATR"] },
+    { code: "ADX", tokens: ["ADX", "+DI", "-DI"] },
+    { code: "CCI", tokens: ["CCI"] },
+    { code: "MFI", tokens: ["MFI"] },
+    { code: "OBV", tokens: ["OBV"] },
+    { code: "ROC", tokens: ["ROC"] },
+    { code: "STOCH", tokens: ["STOCHASTIC", "STOCH"] },
+    { code: "WILLR", tokens: ["WILLR", "WILLIAMS %R", "WILLIAMS"] },
+  ];
+  return indicatorLabels.some(
+    (entry) =>
+      !hasSelectedIndicator(computed, entry.code) && entry.tokens.some((token) => normalized.includes(token))
+  );
 }
 
 function buildIndicatorNarrative(
@@ -911,6 +1314,14 @@ function hasStructuredIndicatorNarrative(text: string): boolean {
   return /setup:/i.test(normalized) && /risk frame:/i.test(normalized);
 }
 
+function narrativeMentionsUnselectedIndicators(text: string, computed: IndicatorComputation): boolean {
+  const lines = String(text || "")
+    .split(/\n+/)
+    .map((line) => sanitizeText(line, 240))
+    .filter(Boolean);
+  return lines.some((line) => indicatorSignalMentionsUnselectedIndicator(line, computed));
+}
+
 function normalizeIndicatorAnalysisPayload(
   parsed: Record<string, unknown>,
   rawText: string,
@@ -919,7 +1330,13 @@ function normalizeIndicatorAnalysisPayload(
 ): IndicatorAnalysis {
   const heuristic = buildHeuristicAnalysis(computed);
   const summary = sanitizeText(parsed.summary, 800) || heuristic.summary;
-  const keySignals = normalizeIndicatorKeySignals(parsed.keySignals, heuristic.keySignals);
+  const llmSignals = Array.isArray(parsed.keySignals)
+    ? parsed.keySignals
+        .map((item) => sanitizeText(item, 180))
+        .filter(Boolean)
+        .filter((item) => !indicatorSignalMentionsUnselectedIndicator(item, computed))
+    : [];
+  const keySignals = normalizeIndicatorKeySignals(llmSignals, heuristic.keySignals);
   const prediction = coercePrediction((parsed.prediction as Record<string, unknown>) || {}, computed.lastClose, computed.interval);
   prediction.targetPrice = clampIndicatorTargetPrice(
     Number(prediction.targetPrice || 0),
@@ -928,7 +1345,7 @@ function normalizeIndicatorAnalysisPayload(
     Number(heuristic.prediction.targetPrice || computed.lastClose)
   );
   const textCandidate = sanitizeText(parsed.text || rawText, 8000);
-  const text = hasStructuredIndicatorNarrative(textCandidate)
+  const text = hasStructuredIndicatorNarrative(textCandidate) && !narrativeMentionsUnselectedIndicators(textCandidate, computed)
     ? textCandidate
     : buildIndicatorNarrative(summary, keySignals, prediction, computed);
   return {
@@ -1101,18 +1518,20 @@ async function runOpenAiIndicatorAnalysis(
     "You are Quantura Horizon's technical-indicator analyst.",
     "Always call finta_calculate_indicators before your final answer.",
     "Use only the provided market context and the tool output.",
+    "Only cite indicators that were explicitly selected for this request, plus directly derived price context such as last close or realized range.",
     "Do not invent catalysts, fundamentals, news, support zones, or macro drivers that were not supplied.",
     "This is tactical decision support, not investment advice or a guarantee.",
     "Return valid JSON only with exact keys:",
     '{"summary":"string","keySignals":["string"],"prediction":{"direction":"bullish|bearish|neutral","targetPrice":0,"timeline":"string","timelineDays":0,"confidence":"low|medium|high"},"text":"string"}',
     "Rules:",
     "- summary: 1 or 2 concise sentences grounded in the indicator stack.",
-    "- keySignals: 3 to 6 items, each must cite a specific indicator and what it implies.",
+    "- keySignals: 3 to 6 items, each must cite a selected indicator and what it implies.",
     "- prediction.direction: use bullish or bearish only when multiple signals align; otherwise neutral.",
     `- prediction.timelineDays: integer between ${timelineMin} and ${timelineMax}.`,
     `- prediction.targetPrice: numeric and realistic, staying near the current regime. Keep it inside ${targetBand.lower} to ${targetBand.upper} unless the context explicitly justifies a tighter bound.`,
     "- prediction.confidence: high only if momentum and trend strength confirm each other; low if signals conflict.",
     "- text: concise markdown-safe narrative with sections named Setup, Signal stack, Path, and Risk frame.",
+    "- Never mention ATR or ADX unless ATR or ADX was selected for this run.",
     "- Avoid guaranteed language, buy/sell directives, and exaggerated certainty.",
   ].join(" ");
   const userPayload = {

@@ -44,7 +44,7 @@
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
     <script defer src="/app.js"></script>
     <script defer src="/assets/rnweb/quantura-rnw.js"></script>
-
+  
     <script>
       window.__QUANTURA_RC_TEMPLATE_ID__ = "firebase-server";
       window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ = {"status":200,"eTag":"etag-quantura-e2e3d-firebase-server-fetch--1213937490","config":{"welcome_message":"","watchlist_enabled":"true","forecast_prophet_enabled":"true","forecast_canvas_enabled":"true","push_notifications_enabled":"true","webpush_vapid_key":"","stripe_checkout_enabled":"true","stripe_public_key":"","holiday_promo":"false"}};
@@ -309,24 +309,24 @@
                           <input id="technicals-lookback" name="lookback" type="number" min="30" max="365" value="120" />
                         </div>
                       </div>
-                      <div class="field">
-                        <label class="label">Indicators</label>
-                        <div class="checkbox-grid">
-                          <label><input type="checkbox" name="indicators" value="RSI" checked /> RSI</label>
-                          <label><input type="checkbox" name="indicators" value="MACD" checked /> MACD</label>
-                          <label><input type="checkbox" name="indicators" value="SMA" /> SMA</label>
-                          <label><input type="checkbox" name="indicators" value="EMA" /> EMA</label>
-                          <label><input type="checkbox" name="indicators" value="BBANDS" /> Bollinger</label>
-                          <label><input type="checkbox" name="indicators" value="ATR" /> ATR</label>
-                          <label><input type="checkbox" name="indicators" value="ADX" /> ADX</label>
-                          <label><input type="checkbox" name="indicators" value="CCI" /> CCI</label>
-                          <label><input type="checkbox" name="indicators" value="MFI" /> MFI</label>
-                          <label><input type="checkbox" name="indicators" value="OBV" /> OBV</label>
-                          <label><input type="checkbox" name="indicators" value="ROC" /> ROC</label>
-                          <label><input type="checkbox" name="indicators" value="STOCH" /> Stochastic</label>
-                          <label><input type="checkbox" name="indicators" value="WILLR" /> Williams %R</label>
+                      <fieldset class="field indicator-field">
+                        <legend class="label">Indicators</legend>
+                        <div class="checkbox-grid indicator-toggle-grid">
+                          <label class="indicator-toggle"><input type="checkbox" name="indicators" value="RSI" checked /><span class="indicator-toggle-label">RSI</span></label>
+                          <label class="indicator-toggle"><input type="checkbox" name="indicators" value="MACD" checked /><span class="indicator-toggle-label">MACD</span></label>
+                          <label class="indicator-toggle"><input type="checkbox" name="indicators" value="SMA" /><span class="indicator-toggle-label">SMA</span></label>
+                          <label class="indicator-toggle"><input type="checkbox" name="indicators" value="EMA" /><span class="indicator-toggle-label">EMA</span></label>
+                          <label class="indicator-toggle"><input type="checkbox" name="indicators" value="BBANDS" /><span class="indicator-toggle-label">Bollinger</span></label>
+                          <label class="indicator-toggle"><input type="checkbox" name="indicators" value="ATR" /><span class="indicator-toggle-label">ATR</span></label>
+                          <label class="indicator-toggle"><input type="checkbox" name="indicators" value="ADX" /><span class="indicator-toggle-label">ADX</span></label>
+                          <label class="indicator-toggle"><input type="checkbox" name="indicators" value="CCI" /><span class="indicator-toggle-label">CCI</span></label>
+                          <label class="indicator-toggle"><input type="checkbox" name="indicators" value="MFI" /><span class="indicator-toggle-label">MFI</span></label>
+                          <label class="indicator-toggle"><input type="checkbox" name="indicators" value="OBV" /><span class="indicator-toggle-label">OBV</span></label>
+                          <label class="indicator-toggle"><input type="checkbox" name="indicators" value="ROC" /><span class="indicator-toggle-label">ROC</span></label>
+                          <label class="indicator-toggle"><input type="checkbox" name="indicators" value="STOCH" /><span class="indicator-toggle-label">Stochastic</span></label>
+                          <label class="indicator-toggle"><input type="checkbox" name="indicators" value="WILLR" /><span class="indicator-toggle-label">Williams %R</span></label>
                         </div>
-                      </div>
+                      </fieldset>
                       <button class="cta" type="submit" data-analytics="technicals_submit">Run indicators</button>
                       <details class="learn-more">
                         <summary>Learn more</summary>
@@ -502,13 +502,12 @@
                           <input id="market-headlines-limit" name="limit" type="number" min="5" max="40" value="18" />
                         </div>
                       </div>
-                      <button class="cta" type="submit" data-analytics="market_headlines_load"><i class="iconoir-globe" aria-hidden="true"></i><span>Load market feed</span></button>
-                      <p class="small muted" id="market-headlines-status"></p>
+                      <p class="small muted" id="market-headlines-status">Feeds load automatically when you change the source, topic, or headline count.</p>
                     </form>
                     <div class="content-grid">
                       <div class="results-panel">
                         <h3>Headlines</h3>
-                        <div id="market-headlines-output" class="panel-output small">Load an RSS source to see attributed market headlines.</div>
+                        <div id="market-headlines-output" class="panel-output small">Select a source provider to load attributed market headlines automatically.</div>
                       </div>
                       <div class="results-panel">
                         <h3>Feed access &amp; attribution</h3>
@@ -669,11 +668,26 @@
                           <input id="options-ticker" name="ticker" placeholder="AAPL" required />
                         </div>
                         <div class="field">
-                          <label class="label" for="options-expiration">Expiration</label>
+                          <label class="label" for="options-expiration">Expiry end date</label>
                           <select id="options-expiration" name="expiration">
                             <option value="">Auto (nearest)</option>
                           </select>
-                          <div class="small muted" style="margin-top:8px;">Quantura loads available expirations from the market and remembers your last choice.</div>
+                          <div class="small muted" style="margin-top:8px;">Quantura loads available expirations from the market, remembers your last choice, and uses the selected date as the end date for the day counter.</div>
+                        </div>
+                      </div>
+                      <div class="options-date-tool">
+                        <div class="form-grid options-date-tool-grid">
+                          <div class="field">
+                            <label class="label" for="options-start-date">Begin date</label>
+                            <input id="options-start-date" name="startDate" type="date" />
+                            <div class="small muted" style="margin-top:8px;">Defaults to today and compares against the selected options expiry.</div>
+                          </div>
+                          <div class="field">
+                            <span class="label">Calendar day count</span>
+                            <div id="options-date-status" class="options-date-status" role="status" aria-live="polite">
+                              Load an options chain to populate expiry dates, then the day count will appear here.
+                            </div>
+                          </div>
                         </div>
                       </div>
                       <button class="cta" type="submit" data-analytics="options_submit">Load options</button>

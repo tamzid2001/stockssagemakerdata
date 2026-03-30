@@ -713,7 +713,7 @@
                     <code>P50</code> or <code>0.5</code>.
                   </p>
                   <p>
-                    For stock prediction analysis, Quantura takes the first actionable business-day median in the forecast window and the last valid business-day median in the forecast output, rounds both to the nearest 10, and compares them. If the last rounded median is below the first rounded median, Quantura selects the upper bound from the last business-day row as the point-side. Otherwise it selects the lower bound.
+                    For stock prediction analysis, Quantura takes the first actionable business-day <code>P50</code> in the forecast window and the last valid business-day <code>P50</code> in the forecast output, rounds both to the nearest 10, and compares those tens-place levels. If the last rounded <code>P50</code> is below the first, Quantura marks the setup as <strong>BUY</strong> and communicates an end-date bias toward the upper bound, typically <code>P90</code>. Otherwise it marks the setup as <strong>SELL</strong> and communicates an end-date bias toward the lower bound.
                   </p>
                 </div>
               </div>
