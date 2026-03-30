@@ -50,6 +50,7 @@ def test_pages_include_analytics():
         html = (PAGES / name).read_text()
         assert "firebase-analytics-compat" in html
         assert "app.js" in html
-        assert "manifest.json" in html
+        assert 'rel="manifest"' in html
+        assert ("site.webmanifest" in html) or ("manifest.json" in html)
     dashboard_html = (PAGES / "dashboard.html").read_text()
     assert "firebase-messaging-compat" in dashboard_html
