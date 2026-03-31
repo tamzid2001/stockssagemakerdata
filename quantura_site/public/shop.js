@@ -41,7 +41,6 @@
     message: document.getElementById("shop-message"),
     productCount: document.getElementById("product-count"),
     bundleCount: document.getElementById("bundle-count"),
-    visibilitySummary: document.getElementById("visibility-summary"),
     catalogSummary: document.getElementById("catalog-summary"),
     bundleStatus: document.getElementById("bundle-status"),
     shopGrid: document.getElementById("shop-grid"),
@@ -336,7 +335,6 @@
   }
 
   function renderSummary() {
-    const totalVisible = state.visibleProducts.length + state.visibleBundles.length;
     const filteredProducts = getFilteredItems(state.visibleProducts);
     const filteredBundles = getFilteredItems(state.visibleBundles);
     if (ui.productCount) {
@@ -344,13 +342,6 @@
     }
     if (ui.bundleCount) {
       ui.bundleCount.textContent = `${state.visibleBundles.length} reward bundles`;
-    }
-    if (ui.visibilitySummary) {
-      if (!state.shopEnabled) {
-        ui.visibilitySummary.textContent = "Shop is currently hidden by Firebase Remote Config.";
-      } else {
-        ui.visibilitySummary.textContent = `${totalVisible} live listings are currently enabled by Firebase Remote Config.`;
-      }
     }
     if (ui.catalogSummary) {
       if (!state.shopEnabled) {
