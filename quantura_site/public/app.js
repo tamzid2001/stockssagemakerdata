@@ -19775,6 +19775,7 @@
     const teamId = String(ui.sportsFoundryTeam?.value || "").trim();
     const gameDate = String(ui.sportsFoundryTeamTotalDate?.value || "").trim();
     const homeAway = String(ui.sportsFoundryTeamTotalHomeAway?.value || "any").trim().toLowerCase();
+    const timeZone = String(Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC").trim() || "UTC";
     if (!teamId || !gameDate) {
       state.sportsFoundryContext.teamTotals = null;
       renderSportsFoundryTeamTotalsPreview(null);
@@ -19784,7 +19785,7 @@
     setSportsFoundryStatus("Loading team total export...");
     const payload = await callFoundryApi(
       "GET",
-      `/api/autopilot/sports/team-totals?league=${encodeURIComponent(league)}&teamId=${encodeURIComponent(teamId)}&gameDate=${encodeURIComponent(gameDate)}&homeAway=${encodeURIComponent(homeAway)}`
+      `/api/autopilot/sports/team-totals?league=${encodeURIComponent(league)}&teamId=${encodeURIComponent(teamId)}&gameDate=${encodeURIComponent(gameDate)}&homeAway=${encodeURIComponent(homeAway)}&timeZone=${encodeURIComponent(timeZone)}`
     );
     state.sportsFoundryContext.teamTotals = payload;
     renderSportsFoundryTeamTotalsPreview(payload);

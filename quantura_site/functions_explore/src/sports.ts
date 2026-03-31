@@ -116,6 +116,7 @@ export type SportsTeamGameTotalsSnapshot = {
   filters: {
     gameDate: string;
     homeAway: SportsTeamTotalFilter;
+    timeZone: string;
   };
   headers: string[];
   rows: SportsTeamGameTotalRow[];
@@ -297,6 +298,15 @@ function normalizeLeagueKey(value: unknown): SportsLeagueKey {
 }
 
 function safeNumber(raw: unknown): number | null {
+  if (raw && typeof raw === "object") {
+    const record = raw as Record<string, unknown>;
+    const nestedCandidates = [record.value, record.displayValue, record.score];
+    for (const candidate of nestedCandidates) {
+      if (candidate === raw) continue;
+      const parsed = safeNumber(candidate);
+      if (parsed !== null) return parsed;
+    }
+  }
   const text = sanitizeText(raw, 60);
   if (!text || text === "-" || text === "--") return null;
   const numeric = Number(text);
@@ -309,21 +319,49 @@ function formatColor(raw: unknown): string {
   return `#${clean.slice(0, 6)}`;
 }
 
-function formatDateYmd(value: Date): string {
+function formatDateYmd(value: Date, timeZone = "UTC"): string {
+  try {
+    const formatter = new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+    const parts = formatter.formatToParts(value);
+    const year = parts.find((part) => part.type === "year")?.value || "";
+    const month = parts.find((part) => part.type === "month")?.value || "";
+    const day = parts.find((part) => part.type === "day")?.value || "";
+    if (year && month && day) return `${year}-${month}-${day}`;
+  } catch {
+    // Fall back to UTC formatting below.
+  }
   return value.toISOString().slice(0, 10);
 }
 
-function formatDateLabel(value: string): string {
+function formatDateLabel(value: string, timeZone = ""): string {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return sanitizeText(value, 40);
-  return new Intl.DateTimeFormat("en-US", {
+  const options: Intl.DateTimeFormatOptions = {
     month: "short",
     day: "numeric",
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
     timeZoneName: "short",
-  }).format(date);
+  };
+  if (sanitizeText(timeZone, 80)) options.timeZone = timeZone;
+  return new Intl.DateTimeFormat("en-US", options).format(date);
+}
+
+function normalizeSportsTimeZone(value: unknown): string {
+  const clean = sanitizeText(value, 80).replace(/[^A-Za-z0-9/_+-]/g, "");
+  if (!clean) return "UTC";
+  try {
+    Intl.DateTimeFormat("en-US", { timeZone: clean }).format(new Date());
+    return clean;
+  } catch {
+    return "UTC";
+  }
 }
 
 function escapeCsvCell(value: unknown): string {
@@ -886,12 +924,14 @@ export async function buildSportsTeamGameTotalsSnapshot(
   leagueKey: unknown,
   teamId: unknown,
   gameDate: unknown,
-  homeAwayFilterRaw: unknown
+  homeAwayFilterRaw: unknown,
+  timeZoneRaw: unknown = "UTC"
 ): Promise<SportsTeamGameTotalsSnapshot> {
   const league = leagueInfo(leagueKey);
   const cleanTeamId = sanitizeText(teamId, 40);
   const targetGameDate = normalizeSportsGameDate(gameDate);
   const homeAwayFilter = normalizeSportsHomeAwayFilter(homeAwayFilterRaw);
+  const timeZone = normalizeSportsTimeZone(timeZoneRaw);
   if (!cleanTeamId) throw new Error("invalid_team_id");
 
   const teams = await listSportsTeams(league.key);
@@ -925,7 +965,7 @@ export async function buildSportsTeamGameTotalsSnapshot(
       if (!date) return;
       const parsedDate = new Date(date);
       if (!Number.isFinite(parsedDate.getTime())) return;
-      const eventYmd = formatDateYmd(parsedDate);
+      const eventYmd = formatDateYmd(parsedDate, timeZone);
       if (eventYmd !== targetGameDate) return;
       const competitions = Array.isArray(record.competitions) ? record.competitions : [];
       const competition = competitions[0] && typeof competitions[0] === "object" ? (competitions[0] as Record<string, unknown>) : {};
@@ -969,7 +1009,7 @@ export async function buildSportsTeamGameTotalsSnapshot(
         teamDisplayName: sanitizeText(teamNode.displayName || team.displayName, 120) || team.displayName,
         gameId,
         gameDate: targetGameDate,
-        displayDate: formatDateLabel(date),
+        displayDate: formatDateLabel(date, timeZone),
         homeAway,
         opponentTeamId: sanitizeText(opponentNode.id, 40),
         opponentAbbreviation: sanitizeText(opponentNode.abbreviation, 20).toUpperCase(),
@@ -1000,6 +1040,7 @@ export async function buildSportsTeamGameTotalsSnapshot(
     filters: {
       gameDate: targetGameDate,
       homeAway: homeAwayFilter,
+      timeZone,
     },
     headers,
     rows,

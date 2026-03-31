@@ -12068,11 +12068,12 @@ ROUTES.get("/autopilot/sports/team-totals", async (req, res) => {
     const teamId = sanitizeText(req.query.teamId, 40);
     const gameDate = sanitizeText(req.query.gameDate, 40);
     const homeAway = sanitizeText(req.query.homeAway, 20).toLowerCase();
+    const timeZone = sanitizeText(req.query.timeZone, 80);
     if (!teamId || !gameDate) {
       res.status(400).json({ error: "invalid_sports_team_totals_request" });
       return;
     }
-    const snapshot = await buildSportsTeamGameTotalsSnapshot(league, teamId, gameDate, homeAway);
+    const snapshot = await buildSportsTeamGameTotalsSnapshot(league, teamId, gameDate, homeAway, timeZone);
     res.status(200).json({
       league: {
         key: snapshot.league.key,
