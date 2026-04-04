@@ -3,6 +3,7 @@ import express, { Request, Response } from "express";
 import admin from "firebase-admin";
 import crypto from "crypto";
 import { GoogleAuth } from "google-auth-library";
+import { SecretManagerServiceClient } from "@google-cloud/secret-manager";
 import { registerFiscalDataRoutes } from "./fiscaldataProxy";
 import { runScheduledFiscaldataRefresh } from "./schedules/refreshFiscaldata";
 import { runIndicatorAnalysis } from "./indicators";
@@ -75,6 +76,12 @@ function resolveDefaultStorageBucketName(): string {
 }
 
 const DEFAULT_STORAGE_BUCKET = resolveDefaultStorageBucketName();
+const GCP_PROJECT_ID = String(
+  process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || process.env.PROJECT_ID || ""
+).trim();
+const SECRET_MANAGER_CLIENT = GCP_PROJECT_ID ? new SecretManagerServiceClient() : null;
+const SECRET_NAME_CACHE = new Map<string, string>();
+const SECRET_VALUE_PROMISE_CACHE = new Map<string, Promise<string>>();
 
 if (!admin.apps.length) {
   admin.initializeApp(DEFAULT_STORAGE_BUCKET ? { storageBucket: DEFAULT_STORAGE_BUCKET } : undefined);
@@ -710,6 +717,84 @@ function resolveEnvSecret(preferredKeys: string[], pattern?: RegExp): string {
     .sort(([a], [b]) => a.localeCompare(b));
   if (!matches.length) return "";
   return asString(matches[0][1]).trim();
+}
+
+async function readSecretManagerValue(secretName: string): Promise<string> {
+  if (!SECRET_MANAGER_CLIENT || !GCP_PROJECT_ID || !secretName) return "";
+  try {
+    const resource = `projects/${GCP_PROJECT_ID}/secrets/${secretName}/versions/latest`;
+    const [version] = await SECRET_MANAGER_CLIENT.accessSecretVersion({ name: resource });
+    const rawBytes = version.payload?.data;
+    const raw = rawBytes ? Buffer.from(rawBytes).toString("utf8") : "";
+    return raw.trim();
+  } catch (error: any) {
+    const message = asString(error?.message).toLowerCase();
+    if (message.includes("not found") || message.includes("permission")) return "";
+    console.warn(`[LLM] secret lookup failed for ${secretName}:`, error?.message || error);
+    return "";
+  }
+}
+
+async function discoverSecretValueByPattern(pattern: RegExp): Promise<string> {
+  if (!SECRET_MANAGER_CLIENT || !GCP_PROJECT_ID) return "";
+  const cacheKey = pattern.source;
+  const cachedName = SECRET_NAME_CACHE.get(cacheKey);
+  if (cachedName) {
+    return readSecretManagerValue(cachedName);
+  }
+  try {
+    const [secrets] = await SECRET_MANAGER_CLIENT.listSecrets({
+      parent: `projects/${GCP_PROJECT_ID}`,
+    });
+    const names = (secrets || [])
+      .map((secret) => asString(secret.name).split("/").pop() || "")
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+    const matched = names.find((name) => pattern.test(name));
+    if (!matched) return "";
+    SECRET_NAME_CACHE.set(cacheKey, matched);
+    return readSecretManagerValue(matched);
+  } catch (error: any) {
+    console.warn("[LLM] secret discovery failed:", error?.message || error);
+    return "";
+  }
+}
+
+async function resolveRuntimeSecretValue(
+  cacheKey: string,
+  envKeys: string[],
+  secretNames: string[],
+  discoverPatterns: RegExp[] = []
+): Promise<string> {
+  const cached = SECRET_VALUE_PROMISE_CACHE.get(cacheKey);
+  if (cached) return cached;
+
+  const promise = (async () => {
+    const fromEnv = readEnvSecret(envKeys);
+    if (fromEnv) return fromEnv;
+
+    for (const secretName of secretNames) {
+      const fromManager = await readSecretManagerValue(secretName);
+      if (fromManager) return fromManager;
+    }
+
+    for (const pattern of discoverPatterns) {
+      const discovered = await discoverSecretValueByPattern(pattern);
+      if (discovered) return discovered;
+    }
+    return "";
+  })();
+
+  SECRET_VALUE_PROMISE_CACHE.set(cacheKey, promise);
+  return promise;
+}
+
+function readEnvSecret(keys: string[]): string {
+  for (const key of keys) {
+    const value = asString(process.env[key]).trim();
+    if (value) return value;
+  }
+  return "";
 }
 
 function requestIpAddress(req: Request): string {
@@ -6084,6 +6169,118 @@ const MODEL_COUNCIL_PROVIDER_REGISTRY: ModelCouncilProviderConfig[] = [
   },
 ];
 
+async function getOpenAiApiKey(): Promise<string> {
+  return resolveRuntimeSecretValue(
+    "llm:openai:key",
+    ["OPENAI_API_KEY", "OPENAI_SECRET_KEY", "OPENAI_KEY"],
+    ["OPENAI_API_KEY", "OPENAI_SECRET_KEY", "OPENAI_KEY"],
+    [/^openai.*key$/i]
+  );
+}
+
+async function getClaudeApiKey(): Promise<string> {
+  return resolveRuntimeSecretValue(
+    "llm:claude:key",
+    ["CLAUDE_API_KEY", "ANTHROPIC_API_KEY"],
+    ["CLAUDE_API_KEY", "ANTHROPIC_API_KEY"],
+    [/^(claude|anthropic).*key$/i]
+  );
+}
+
+async function getGeminiApiKey(): Promise<string> {
+  return resolveRuntimeSecretValue(
+    "llm:gemini:key",
+    ["GEMINI_API_KEY", "GOOGLE_GENAI_API_KEY"],
+    ["GEMINI_API_KEY", "GOOGLE_GENAI_API_KEY"],
+    [/^(gemini|google[-_]?genai).*key$/i]
+  );
+}
+
+async function getDeepseekApiKey(): Promise<string> {
+  return resolveRuntimeSecretValue(
+    "llm:deepseek:key",
+    ["DEEPSEEK_API_KEY", "DEEPSEEK_SECRET_KEY"],
+    ["DEEPSEEK_API_KEY", "DEEPSEEK_SECRET_KEY"],
+    [/^deepseek.*key$/i]
+  );
+}
+
+async function getMistralApiKey(): Promise<string> {
+  return resolveRuntimeSecretValue(
+    "llm:mistral:key",
+    ["MISTRAL_API_KEY", "MISTRAL_SECRET_KEY"],
+    ["MISTRAL_API_KEY", "MISTRAL_SECRET_KEY"],
+    [/^mistral.*key$/i]
+  );
+}
+
+async function getPerplexityApiKey(): Promise<string> {
+  return resolveRuntimeSecretValue(
+    "llm:perplexity:key",
+    ["PERPLEXITY_API_KEY", "PERPLEXITY_SECRET_KEY"],
+    ["PERPLEXITY_API_KEY", "PERPLEXITY_SECRET_KEY"],
+    [/^perplexity.*key$/i]
+  );
+}
+
+async function getQwenApiKey(): Promise<string> {
+  return resolveRuntimeSecretValue(
+    "llm:qwen:key",
+    ["QWEN_API_KEY", "QWEN_SECRET_KEY"],
+    ["QWEN_API_KEY", "QWEN_SECRET_KEY"],
+    [/^qwen.*key$/i]
+  );
+}
+
+async function getAmazonNovaApiKey(): Promise<string> {
+  return resolveRuntimeSecretValue(
+    "llm:amazon_nova:key",
+    ["AMAZON_NOVA_API_KEY", "BEDROCK_API_KEY"],
+    ["AMAZON_NOVA_API_KEY", "BEDROCK_API_KEY", "AMAZON_NOVA_KEY"],
+    [/^(amazon[-_]?nova|bedrock).*key$/i]
+  );
+}
+
+async function getAmazonNovaBaseUrl(): Promise<string> {
+  return resolveRuntimeSecretValue(
+    "llm:amazon_nova:base_url",
+    ["AMAZON_NOVA_BASE_URL", "BEDROCK_BASE_URL"],
+    ["AMAZON_NOVA_BASE_URL", "BEDROCK_BASE_URL", "AMAZON_NOVA_ENDPOINT"],
+    [/^(amazon[-_]?nova|bedrock).*(base|url|endpoint)/i]
+  );
+}
+
+async function getOtherProviderApiKey(): Promise<string> {
+  return resolveRuntimeSecretValue(
+    "llm:other:key",
+    ["MODEL_COUNCIL_OTHER_API_KEY", "MODEL_COUNCIL_OTHER_KEY"],
+    ["MODEL_COUNCIL_OTHER_API_KEY", "MODEL_COUNCIL_OTHER_KEY"],
+    [/^model[-_]?council[-_]?other.*key$/i]
+  );
+}
+
+async function getOtherProviderBaseUrl(): Promise<string> {
+  return resolveRuntimeSecretValue(
+    "llm:other:base_url",
+    ["MODEL_COUNCIL_OTHER_BASE_URL"],
+    ["MODEL_COUNCIL_OTHER_BASE_URL", "MODEL_COUNCIL_OTHER_URL", "MODEL_COUNCIL_OTHER_ENDPOINT"],
+    [/^model[-_]?council[-_]?other.*(base|url|endpoint)/i]
+  );
+}
+
+async function isModelCouncilProviderConfigured(provider: LlmProviderId): Promise<boolean> {
+  if (provider === "openai") return Boolean(await getOpenAiApiKey());
+  if (provider === "claude") return Boolean(await getClaudeApiKey());
+  if (provider === "gemini") return Boolean(await getGeminiApiKey());
+  if (provider === "deepseek") return Boolean(await getDeepseekApiKey());
+  if (provider === "mistral") return Boolean(await getMistralApiKey());
+  if (provider === "perplexity") return Boolean(await getPerplexityApiKey());
+  if (provider === "qwen") return Boolean(await getQwenApiKey());
+  if (provider === "amazon_nova") return Boolean((await getAmazonNovaApiKey()) && (await getAmazonNovaBaseUrl()));
+  if (provider === "other") return Boolean((await getOtherProviderApiKey()) && (await getOtherProviderBaseUrl()));
+  return false;
+}
+
 const MODEL_COUNCIL_MODELS: Record<LlmProviderId, ModelCouncilModelView[]> = {
   openai: [
     { id: "gpt-5-nano", label: "GPT-5 Nano", provider: "openai", group: "Fast", hint: "Lowest latency for quick triage." },
@@ -6128,18 +6325,17 @@ const MODEL_COUNCIL_MODELS: Record<LlmProviderId, ModelCouncilModelView[]> = {
   ],
 };
 
-function listModelCouncilProviders(opts: { includeUnavailable?: boolean } = {}): ModelCouncilProviderView[] {
+async function listModelCouncilProviders(opts: { includeUnavailable?: boolean } = {}): Promise<ModelCouncilProviderView[]> {
   const includeUnavailable = Boolean(opts.includeUnavailable);
-  const rows = MODEL_COUNCIL_PROVIDER_REGISTRY.map((provider) => {
-    const available = provider.isConfigured();
-    return {
+  const rows = await Promise.all(
+    MODEL_COUNCIL_PROVIDER_REGISTRY.map(async (provider) => ({
       id: provider.id,
       label: provider.label,
       displayName: provider.label,
-      available,
+      available: await isModelCouncilProviderConfigured(provider.id),
       supportsModelList: provider.supportsModelList,
-    };
-  });
+    }))
+  );
   if (includeUnavailable) return rows;
   return rows.filter((row) => row.available);
 }
@@ -6237,7 +6433,8 @@ async function invokeOpenAiLlm(payload: {
   tools?: unknown[];
   jsonSchema?: unknown;
 }): Promise<{ text: string; usage: Record<string, unknown>; responseId: string; status: string }> {
-  if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is not configured.");
+  const openAiApiKey = await getOpenAiApiKey();
+  if (!openAiApiKey) throw new Error("OPENAI_API_KEY is not configured.");
   const requestedTools = Array.isArray(payload.tools) ? payload.tools : [];
   const tools: Array<Record<string, unknown>> = [];
   const pushWebSearch = () => {
@@ -6284,7 +6481,7 @@ async function invokeOpenAiLlm(payload: {
       signal,
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        Authorization: `Bearer ${openAiApiKey}`,
       },
       body: JSON.stringify({
         model: payload.model,
@@ -6409,13 +6606,14 @@ async function invokeGeminiLlm(payload: {
   temperature: number;
   maxTokens: number;
 }): Promise<{ text: string; usage: Record<string, unknown> }> {
-  if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY is not configured.");
+  const geminiApiKey = await getGeminiApiKey();
+  if (!geminiApiKey) throw new Error("GEMINI_API_KEY is not configured.");
   const prompt = payload.messages.map((item) => `${item.role.toUpperCase()}: ${item.content}`).join("\n\n");
   const { signal, clear } = llmTimeoutSignal();
   try {
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(payload.model)}:generateContent?key=${encodeURIComponent(
-        GEMINI_API_KEY
+        geminiApiKey
       )}`,
       {
         method: "POST",
@@ -6447,7 +6645,8 @@ async function invokeMistralLlm(payload: {
   temperature: number;
   maxTokens: number;
 }): Promise<{ text: string; usage: Record<string, unknown> }> {
-  if (!MISTRAL_API_KEY) throw new Error("MISTRAL_API_KEY is not configured.");
+  const mistralApiKey = await getMistralApiKey();
+  if (!mistralApiKey) throw new Error("MISTRAL_API_KEY is not configured.");
   const { signal, clear } = llmTimeoutSignal();
   try {
     const response = await fetch("https://api.mistral.ai/v1/chat/completions", {
@@ -6455,7 +6654,7 @@ async function invokeMistralLlm(payload: {
       signal,
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${MISTRAL_API_KEY}`,
+        Authorization: `Bearer ${mistralApiKey}`,
       },
       body: JSON.stringify({
         model: payload.model,
@@ -6480,7 +6679,8 @@ async function invokePerplexityLlm(payload: {
   temperature: number;
   maxTokens: number;
 }): Promise<{ text: string; usage: Record<string, unknown>; citations: unknown[] }> {
-  if (!PERPLEXITY_API_KEY) throw new Error("PERPLEXITY_API_KEY is not configured.");
+  const perplexityApiKey = await getPerplexityApiKey();
+  if (!perplexityApiKey) throw new Error("PERPLEXITY_API_KEY is not configured.");
   const { signal, clear } = llmTimeoutSignal();
   try {
     const response = await fetch("https://api.perplexity.ai/chat/completions", {
@@ -6488,7 +6688,7 @@ async function invokePerplexityLlm(payload: {
       signal,
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${PERPLEXITY_API_KEY}`,
+        Authorization: `Bearer ${perplexityApiKey}`,
       },
       body: JSON.stringify({
         model: payload.model,
@@ -6517,7 +6717,8 @@ async function invokeClaudeLlm(payload: {
   temperature: number;
   maxTokens: number;
 }): Promise<{ text: string; usage: Record<string, unknown> }> {
-  if (!CLAUDE_API_KEY) throw new Error("CLAUDE_API_KEY is not configured.");
+  const claudeApiKey = await getClaudeApiKey();
+  if (!claudeApiKey) throw new Error("CLAUDE_API_KEY is not configured.");
   const system = payload.messages
     .filter((item) => item.role === "system")
     .map((item) => item.content)
@@ -6537,7 +6738,7 @@ async function invokeClaudeLlm(payload: {
       signal,
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": CLAUDE_API_KEY,
+        "x-api-key": claudeApiKey,
         "anthropic-version": CLAUDE_API_VERSION,
       },
       body: JSON.stringify({
@@ -6617,9 +6818,10 @@ async function invokeDeepseekLlm(payload: {
   temperature: number;
   maxTokens: number;
 }): Promise<{ text: string; usage: Record<string, unknown> }> {
-  if (!DEEPSEEK_API_KEY) throw new Error("DEEPSEEK_API_KEY is not configured.");
+  const deepseekApiKey = await getDeepseekApiKey();
+  if (!deepseekApiKey) throw new Error("DEEPSEEK_API_KEY is not configured.");
   return invokeOpenAiCompatibleChatLlm({
-    apiKey: DEEPSEEK_API_KEY,
+    apiKey: deepseekApiKey,
     baseUrl: "https://api.deepseek.com/v1",
     providerLabel: "DeepSeek",
     ...payload,
@@ -6632,9 +6834,10 @@ async function invokeQwenLlm(payload: {
   temperature: number;
   maxTokens: number;
 }): Promise<{ text: string; usage: Record<string, unknown> }> {
-  if (!QWEN_API_KEY) throw new Error("QWEN_API_KEY is not configured.");
+  const qwenApiKey = await getQwenApiKey();
+  if (!qwenApiKey) throw new Error("QWEN_API_KEY is not configured.");
   return invokeOpenAiCompatibleChatLlm({
-    apiKey: QWEN_API_KEY,
+    apiKey: qwenApiKey,
     baseUrl: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
     providerLabel: "Qwen",
     ...payload,
@@ -6647,11 +6850,13 @@ async function invokeAmazonNovaLlm(payload: {
   temperature: number;
   maxTokens: number;
 }): Promise<{ text: string; usage: Record<string, unknown> }> {
-  if (!AMAZON_NOVA_API_KEY) throw new Error("AMAZON_NOVA_API_KEY is not configured.");
-  if (!AMAZON_NOVA_BASE_URL) throw new Error("AMAZON_NOVA_BASE_URL is not configured.");
+  const amazonNovaApiKey = await getAmazonNovaApiKey();
+  const amazonNovaBaseUrl = await getAmazonNovaBaseUrl();
+  if (!amazonNovaApiKey) throw new Error("AMAZON_NOVA_API_KEY is not configured.");
+  if (!amazonNovaBaseUrl) throw new Error("AMAZON_NOVA_BASE_URL is not configured.");
   return invokeOpenAiCompatibleChatLlm({
-    apiKey: AMAZON_NOVA_API_KEY,
-    baseUrl: AMAZON_NOVA_BASE_URL,
+    apiKey: amazonNovaApiKey,
+    baseUrl: amazonNovaBaseUrl,
     providerLabel: "Amazon Nova",
     ...payload,
   });
@@ -6670,7 +6875,8 @@ async function streamOpenAiLlmSse(
     jsonSchema?: unknown;
   }
 ): Promise<void> {
-  if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is not configured.");
+  const openAiApiKey = await getOpenAiApiKey();
+  if (!openAiApiKey) throw new Error("OPENAI_API_KEY is not configured.");
   const requestedTools = Array.isArray(payload.tools) ? payload.tools : [];
   const tools: Array<Record<string, unknown>> = [];
   const pushWebSearch = () => {
@@ -6714,7 +6920,7 @@ async function streamOpenAiLlmSse(
       signal: abort.signal,
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        Authorization: `Bearer ${openAiApiKey}`,
       },
       body: JSON.stringify({
         model: payload.model,
@@ -6777,16 +6983,18 @@ async function invokeOtherLlm(payload: {
   stream: boolean;
   background: boolean;
 }): Promise<{ text: string; usage: Record<string, unknown>; citations: unknown[] }> {
-  if (!MODEL_COUNCIL_OTHER_API_KEY) throw new Error("MODEL_COUNCIL_OTHER_API_KEY is not configured.");
-  if (!MODEL_COUNCIL_OTHER_BASE_URL) throw new Error("MODEL_COUNCIL_OTHER_BASE_URL is not configured.");
+  const otherProviderApiKey = await getOtherProviderApiKey();
+  const otherProviderBaseUrl = await getOtherProviderBaseUrl();
+  if (!otherProviderApiKey) throw new Error("MODEL_COUNCIL_OTHER_API_KEY is not configured.");
+  if (!otherProviderBaseUrl) throw new Error("MODEL_COUNCIL_OTHER_BASE_URL is not configured.");
   const { signal, clear } = llmTimeoutSignal();
   try {
-    const response = await fetch(`${MODEL_COUNCIL_OTHER_BASE_URL}/v1/responses`, {
+    const response = await fetch(`${otherProviderBaseUrl}/v1/responses`, {
       method: "POST",
       signal,
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${MODEL_COUNCIL_OTHER_API_KEY}`,
+        Authorization: `Bearer ${otherProviderApiKey}`,
       },
       body: JSON.stringify({
         model: payload.model,
@@ -8980,10 +9188,38 @@ ROUTES.get("/market-headlines", async (req, res) => {
 ROUTES.post("/indicators/analyze", async (req, res) => {
   try {
     const payload = asPlainObject(req.body);
+    try {
+      payload.userTier = await resolveLlmTierForRequest(req, payload);
+    } catch (error: any) {
+      if (String(error?.message || "") === "invalid_token") {
+        res.status(401).json({ error: "invalid_token" });
+        return;
+      }
+      payload.userTier = normalizeLlmTier(payload.userTier);
+    }
     const result = await runIndicatorAnalysis(payload, {
-      openAiApiKey: OPENAI_API_KEY,
-      defaultModel: DEFAULT_LLM_MODEL,
+      openAiApiKey: await getOpenAiApiKey(),
+      defaultModel: sanitizeText(payload.model, 120) || DEFAULT_LLM_MODEL,
       timeoutMs: LLM_TIMEOUT_MS,
+      invokeLlm: async (llmPayload) => {
+        const llmResult = await invokeLlmWithFallback({
+          provider: llmPayload.provider,
+          model: llmPayload.model,
+          fallbackProviders: Array.isArray(llmPayload.fallbackProviders) ? llmPayload.fallbackProviders : [],
+          userTier: llmPayload.userTier,
+          messages: llmPayload.messages,
+          params: {
+            ...(llmPayload.params || {}),
+            jsonSchema: llmPayload.jsonSchema,
+          },
+        });
+        return {
+          provider: llmResult.provider,
+          model: llmResult.model,
+          text: llmResult.text,
+          usage: llmResult.usage,
+        };
+      },
     });
     res.status(200).json({
       ok: true,
@@ -9004,10 +9240,228 @@ ROUTES.post("/indicators/analyze", async (req, res) => {
   }
 });
 
+function normalizeModelCouncilLanguage(value: unknown): string {
+  const raw = sanitizeText(value, 20).toLowerCase();
+  return raw || "en";
+}
+
+function normalizeModelCouncilModules(value: unknown): string[] {
+  const rows = Array.isArray(value) ? value : [];
+  return Array.from(new Set(rows.map((item) => sanitizeText(item, 80)).filter(Boolean))).slice(0, 24);
+}
+
+function buildModelCouncilQuestion(payload: Record<string, unknown>): string {
+  const direct = sanitizeText(payload.question || payload.prompt, 4000);
+  if (direct) return direct;
+  const messages = normalizeLlmMessages(payload.messages);
+  const questions = messages
+    .filter((item) => item.role === "user")
+    .map((item) => sanitizeText(item.content, 4000))
+    .filter(Boolean);
+  return questions[questions.length - 1] || "";
+}
+
+function buildModelCouncilContext(payload: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ticker: normalizeTicker(payload.ticker),
+    language: normalizeModelCouncilLanguage(payload.language),
+    selectedModules: normalizeModelCouncilModules(payload.modules),
+    technicalContext: trimOutputsMeta(asPlainObject(payload.technicalContext)),
+  };
+}
+
+function buildModelCouncilSystemPrompt(payload: Record<string, unknown>): string {
+  const context = buildModelCouncilContext(payload);
+  return [
+    "You are Quantura Model Council, a multi-model equity research copilot.",
+    "Use the provided structured ticker context and cite uncertainty clearly.",
+    "Return a concise, structured response with thesis, risks, and next steps.",
+    `Structured context JSON:\n${JSON.stringify(context)}`,
+  ].join("\n\n");
+}
+
+async function persistModelCouncilResponse(
+  viewer: admin.auth.DecodedIdToken | null,
+  payload: Record<string, unknown>,
+  result: {
+    text: string;
+    provider: string;
+    model: string;
+    usage?: Record<string, unknown>;
+    citations?: unknown[];
+    latencyMs?: number;
+  }
+): Promise<string> {
+  if (!viewer?.uid) return "";
+  const ticker = normalizeTicker(payload.ticker);
+  const responseRef = db.collection(MODEL_COUNCIL_RESPONSE_COLLECTION).doc();
+  await responseRef.set({
+    userId: viewer.uid,
+    title: `${ticker || "Ticker"} Model Council`,
+    ticker,
+    question: buildModelCouncilQuestion(payload),
+    answer: sanitizeRichText(result.text, 20000),
+    provider: normalizeProvider(result.provider || payload.provider || "openai"),
+    model: sanitizeText(result.model || payload.model, 120),
+    language: normalizeModelCouncilLanguage(payload.language),
+    selectedModules: normalizeModelCouncilModules(payload.modules),
+    context: buildModelCouncilContext(payload),
+    citations: Array.isArray(result.citations) ? result.citations.slice(0, 24) : [],
+    usage: trimOutputsMeta(result.usage),
+    latencyMs: Number.isFinite(Number(result.latencyMs)) ? Number(result.latencyMs) : null,
+    meta: trimOutputsMeta(asPlainObject(payload.meta)),
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return responseRef.id;
+}
+
+ROUTES.post("/model-council/query", async (req, res) => {
+  const startedAt = Date.now();
+  try {
+    const payload = asPlainObject(req.body);
+    const ticker = normalizeTicker(payload.ticker);
+    const question = buildModelCouncilQuestion(payload);
+    if (!ticker) {
+      res.status(400).json({ error: "ticker_required" });
+      return;
+    }
+    if (!question) {
+      res.status(400).json({ error: "question_required" });
+      return;
+    }
+
+    let viewer: admin.auth.DecodedIdToken | null = null;
+    try {
+      viewer = await verifyRequestUser(req, false);
+      payload.userTier = await resolveLlmTierForRequest(req, payload);
+    } catch (error: any) {
+      if (String(error?.message || "") === "invalid_token") {
+        res.status(401).json({ error: "invalid_token" });
+        return;
+      }
+      payload.userTier = normalizeLlmTier(payload.userTier);
+    }
+
+    const result = await invokeLlmWithFallback({
+      provider: normalizeProvider(payload.provider || "openai"),
+      model: sanitizeText(payload.model, 120) || DEFAULT_LLM_MODEL,
+      fallbackProviders: [],
+      userTier: payload.userTier,
+      messages: [
+        { role: "system", content: buildModelCouncilSystemPrompt(payload) },
+        { role: "user", content: question },
+      ],
+      params: {
+        temperature: 0.2,
+        maxTokens: 900,
+        webSearch: true,
+        background: false,
+      },
+    });
+
+    const responseId = await persistModelCouncilResponse(viewer, payload, {
+      text: result.text,
+      provider: result.provider,
+      model: result.model,
+      usage: result.usage,
+      citations: result.citations,
+      latencyMs: result.latencyMs,
+    });
+
+    res.status(200).json({
+      answer: result.text,
+      text: result.text,
+      model: result.model,
+      provider: result.provider,
+      usage: result.usage,
+      latencyMs: Number.isFinite(Number(result.latencyMs)) ? Number(result.latencyMs) : Date.now() - startedAt,
+      context: buildModelCouncilContext(payload),
+      moduleData: {},
+      selectedModules: normalizeModelCouncilModules(payload.modules),
+      responseId,
+      citations: Array.isArray(result.citations) ? result.citations : [],
+    });
+  } catch (error: any) {
+    const message = sanitizeText(error?.message || error, 220) || "model_council_query_failed";
+    const configMissing = /not configured/i.test(message);
+    res.status(502).json({
+      error: message,
+      detail: configMissing
+        ? "Provider secret is missing in runtime. Quantura now resolves model keys from Secret Manager or runtime env bindings."
+        : "",
+    });
+  }
+});
+
+ROUTES.post("/model-council/improve-prompt", async (req, res) => {
+  try {
+    const payload = asPlainObject(req.body);
+    const ticker = normalizeTicker(payload.ticker);
+    const question = buildModelCouncilQuestion(payload);
+    if (!ticker) {
+      res.status(400).json({ error: "ticker_required" });
+      return;
+    }
+    if (!question) {
+      res.status(400).json({ error: "question_required" });
+      return;
+    }
+
+    try {
+      payload.userTier = await resolveLlmTierForRequest(req, payload);
+    } catch (error: any) {
+      if (String(error?.message || "") === "invalid_token") {
+        res.status(401).json({ error: "invalid_token" });
+        return;
+      }
+      payload.userTier = normalizeLlmTier(payload.userTier);
+    }
+
+    const result = await invokeLlmWithFallback({
+      provider: normalizeProvider(payload.provider || "openai"),
+      model: sanitizeText(payload.model, 120) || DEFAULT_LLM_MODEL,
+      fallbackProviders: [],
+      userTier: payload.userTier,
+      messages: [
+        {
+          role: "system",
+          content: "Rewrite the user prompt for clarity and specificity for financial analysis. Return plain text only. Preserve intent.",
+        },
+        {
+          role: "user",
+          content: `Ticker: ${ticker}\nLanguage: ${normalizeModelCouncilLanguage(payload.language)}\nModules: ${normalizeModelCouncilModules(payload.modules).join(", ")}\nPrompt:\n${question}`,
+        },
+      ],
+      params: {
+        temperature: 0.1,
+        maxTokens: 420,
+        webSearch: false,
+        background: false,
+      },
+    });
+
+    res.status(200).json({
+      improvedPrompt: sanitizeText(result.text, 4000) || question,
+      model: result.model,
+      provider: result.provider,
+    });
+  } catch (error: any) {
+    const message = sanitizeText(error?.message || error, 220) || "model_council_improve_prompt_failed";
+    const configMissing = /not configured/i.test(message);
+    res.status(502).json({
+      error: message,
+      detail: configMissing
+        ? "Provider secret is missing in runtime. Quantura now resolves model keys from Secret Manager or runtime env bindings."
+        : "",
+    });
+  }
+});
+
 ROUTES.get("/model-council/providers", async (_req, res) => {
   try {
-    const available = listModelCouncilProviders();
-    const all = listModelCouncilProviders({ includeUnavailable: true });
+    const available = await listModelCouncilProviders();
+    const all = await listModelCouncilProviders({ includeUnavailable: true });
     console.info(
       "[ModelCouncil] provider availability",
       all.map((item) => `${item.id}:${item.available ? "ready" : "missing"}`).join(", ")
@@ -9038,8 +9492,8 @@ ROUTES.get("/model-council/providers", async (_req, res) => {
 
 ROUTES.get("/model-council/models", async (req, res) => {
   try {
-    const availableProviders = listModelCouncilProviders();
-    const allProviders = listModelCouncilProviders({ includeUnavailable: true });
+    const availableProviders = await listModelCouncilProviders();
+    const allProviders = await listModelCouncilProviders({ includeUnavailable: true });
     const requestedProvider = normalizeProvider(req.query.provider || req.query.providerId || "openai");
     const availableSet = new Set(availableProviders.map((item) => item.id));
     const provider: LlmProviderId =

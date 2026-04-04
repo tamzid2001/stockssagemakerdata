@@ -16104,7 +16104,6 @@
       body: JSON.stringify({
         provider: providerPath,
         model,
-        fallbackProviders: ["openai", "claude", "gemini", "deepseek", "mistral", "perplexity", "qwen", "amazon_nova", "other"],
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: String(prompt || "").trim() },
@@ -28292,6 +28291,10 @@
 	      const formData = new FormData(ui.technicalsForm);
 	      const indicators = formData.getAll("indicators");
 	      const includeSeries = Boolean(ui.indicatorChart || ui.tickerChart);
+      const selectedProvider =
+        normalizeModelCouncilProviderId(ui.tickerQueryProvider?.value || state.tickerContext.tickerQueryProvider || "openai") || "openai";
+      const selectedModel =
+        normalizeAiModelId(ui.tickerQueryModel?.value || state.tickerContext.tickerQueryModel || "gpt-5-mini") || "gpt-5-mini";
       const payload = {
         ticker: formData.get("ticker"),
         interval: formData.get("interval"),
@@ -28299,6 +28302,8 @@
         indicators,
         includeSeries,
         maxPoints: formData.get("interval") === "1h" ? 240 : 260,
+        provider: selectedProvider,
+        model: selectedModel,
         meta: buildMeta(),
 	      };
 

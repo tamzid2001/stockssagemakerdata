@@ -68,12 +68,30 @@ export type IndicatorAnalyzeInput = {
   lookback?: unknown;
   indicators?: unknown;
   maxPoints?: unknown;
+  provider?: unknown;
+  model?: unknown;
+  fallbackProviders?: unknown;
+  userTier?: unknown;
 };
 
 export type IndicatorAnalyzeOptions = {
   openAiApiKey: string;
   defaultModel: string;
   timeoutMs: number;
+  invokeLlm?: (payload: {
+    provider: string;
+    model: string;
+    fallbackProviders?: string[];
+    userTier?: string;
+    messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
+    params?: Record<string, unknown>;
+    jsonSchema?: unknown;
+  }) => Promise<{
+    provider: string;
+    model: string;
+    text: string;
+    usage?: Record<string, unknown>;
+  }>;
 };
 
 type CandlePoint = {
@@ -175,6 +193,28 @@ function normalizeTicker(value: unknown): string {
 function normalizeInterval(value: unknown): "1d" | "1h" {
   const raw = sanitizeText(value, 8).toLowerCase();
   return raw === "1h" ? "1h" : "1d";
+}
+
+function normalizeLlmProvider(value: unknown): string {
+  const raw = sanitizeText(value, 40).toLowerCase().replace(/[^a-z0-9_-]/g, "");
+  if (raw === "anthropic") return "claude";
+  if (raw === "amazon-nova" || raw === "nova") return "amazon_nova";
+  if (raw) return raw;
+  return "openai";
+}
+
+function normalizeLlmModel(value: unknown, fallback = "gpt-5-mini"): string {
+  return sanitizeText(value, 120) || sanitizeText(fallback, 120) || "gpt-5-mini";
+}
+
+function normalizeFallbackProviders(value: unknown): string[] {
+  const rows = Array.isArray(value) ? value : [];
+  return Array.from(new Set(rows.map((item) => normalizeLlmProvider(item)).filter(Boolean)));
+}
+
+function normalizeLlmTier(value: unknown): string {
+  const raw = sanitizeText(value, 40).toLowerCase();
+  return raw === "premium" || raw === "pro" || raw === "business" ? "premium" : "free";
 }
 
 function normalizeLookback(value: unknown): number {
@@ -1326,7 +1366,8 @@ function normalizeIndicatorAnalysisPayload(
   parsed: Record<string, unknown>,
   rawText: string,
   computed: IndicatorComputation,
-  model: string
+  model: string,
+  provider = "openai"
 ): IndicatorAnalysis {
   const heuristic = buildHeuristicAnalysis(computed);
   const summary = sanitizeText(parsed.summary, 800) || heuristic.summary;
@@ -1353,7 +1394,7 @@ function normalizeIndicatorAnalysisPayload(
     keySignals,
     prediction,
     text,
-    provider: "openai",
+    provider,
     model,
     disclaimer: LLM_DISCLAIMER,
   };
@@ -1384,6 +1425,191 @@ async function postResponses(
     return payload;
   } finally {
     clearTimeout(timer);
+  }
+}
+
+function buildIndicatorAnalysisRequest(computed: IndicatorComputation): {
+  heuristic: IndicatorAnalysis;
+  systemPrompt: string;
+  userPayload: Record<string, unknown>;
+  responseSchema: Record<string, unknown>;
+} {
+  const promptContext = buildIndicatorPromptContext(computed);
+  const heuristic = buildHeuristicAnalysis(computed);
+  const timelineBounds = indicatorTimelineBounds(computed.interval);
+  const timelineMin = timelineBounds.min;
+  const timelineMax = timelineBounds.max;
+  const lastClose = Number(computed.lastClose);
+  const atrValue = Number(computed.latestNumeric.ATR_14 || 0);
+  const atrPct = Number.isFinite(atrValue) && Number.isFinite(lastClose) && lastClose > 0 ? atrValue / lastClose : 0;
+  const targetBandPct = Math.max(
+    computed.interval === "1h" ? 0.05 : 0.1,
+    Math.min(computed.interval === "1h" ? 0.18 : 0.3, atrPct > 0 ? atrPct * 4 : computed.interval === "1h" ? 0.05 : 0.1)
+  );
+  const targetBand = {
+    lower: Number((lastClose * (1 - targetBandPct)).toFixed(2)),
+    upper: Number((lastClose * (1 + targetBandPct)).toFixed(2)),
+  };
+
+  const responseSchema = {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      summary: {
+        type: "string",
+        minLength: 1,
+        maxLength: 800,
+      },
+      keySignals: {
+        type: "array",
+        minItems: 3,
+        maxItems: 6,
+        items: {
+          type: "string",
+          minLength: 1,
+          maxLength: 180,
+        },
+      },
+      prediction: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          direction: {
+            type: "string",
+            enum: ["bullish", "bearish", "neutral"],
+          },
+          targetPrice: {
+            type: "number",
+          },
+          timeline: {
+            type: "string",
+            minLength: 1,
+            maxLength: 80,
+          },
+          timelineDays: {
+            type: "integer",
+            minimum: timelineMin,
+            maximum: timelineMax,
+          },
+          confidence: {
+            type: "string",
+            enum: ["low", "medium", "high"],
+          },
+        },
+        required: ["direction", "targetPrice", "timeline", "timelineDays", "confidence"],
+      },
+      text: {
+        type: "string",
+        minLength: 1,
+        maxLength: 8000,
+      },
+    },
+    required: ["summary", "keySignals", "prediction", "text"],
+  } as const;
+
+  const systemPrompt = [
+    "You are Quantura Horizon's technical-indicator analyst.",
+    "Use only the provided market context.",
+    "Only cite indicators that were explicitly selected for this request, plus directly derived price context such as last close or realized range.",
+    "Do not invent catalysts, fundamentals, news, support zones, or macro drivers that were not supplied.",
+    "This is tactical decision support, not investment advice or a guarantee.",
+    "Return valid JSON only with exact keys:",
+    '{"summary":"string","keySignals":["string"],"prediction":{"direction":"bullish|bearish|neutral","targetPrice":0,"timeline":"string","timelineDays":0,"confidence":"low|medium|high"},"text":"string"}',
+    "Rules:",
+    "- summary: 1 or 2 concise sentences grounded in the indicator stack.",
+    "- keySignals: 3 to 6 items, each must cite a selected indicator and what it implies.",
+    "- prediction.direction: use bullish or bearish only when multiple signals align; otherwise neutral.",
+    `- prediction.timelineDays: integer between ${timelineMin} and ${timelineMax}.`,
+    `- prediction.targetPrice: numeric and realistic, staying near the current regime. Keep it inside ${targetBand.lower} to ${targetBand.upper} unless the context explicitly justifies a tighter bound.`,
+    "- prediction.confidence: high only if momentum and trend strength confirm each other; low if signals conflict.",
+    "- text: concise markdown-safe narrative with sections named Setup, Signal stack, Path, and Risk frame.",
+    "- Never mention ATR or ADX unless ATR or ADX was selected for this run.",
+    "- Avoid guaranteed language, buy/sell directives, and exaggerated certainty.",
+  ].join(" ");
+
+  const userPayload = {
+    task: "Analyze the selected technical indicators and provide a tactical scenario update.",
+    ticker: computed.ticker,
+    interval: computed.interval,
+    lookback: computed.lookback,
+    selectedIndicators: computed.selectedIndicators,
+    marketContext: promptContext,
+    guardrails: {
+      timelineDaysRange: [timelineMin, timelineMax],
+      targetPriceRange: targetBand,
+      fallbackPrediction: heuristic.prediction,
+    },
+  };
+
+  return {
+    heuristic,
+    systemPrompt,
+    userPayload,
+    responseSchema,
+  };
+}
+
+async function runSharedIndicatorAnalysis(
+  computed: IndicatorComputation,
+  input: IndicatorAnalyzeInput,
+  opts: IndicatorAnalyzeOptions
+): Promise<IndicatorAnalysis> {
+  if (typeof opts.invokeLlm !== "function") {
+    return runOpenAiIndicatorAnalysis(computed, opts);
+  }
+
+  const provider = normalizeLlmProvider(input.provider);
+  const model = normalizeLlmModel(input.model, opts.defaultModel);
+  const fallbackProviders = normalizeFallbackProviders(input.fallbackProviders).filter((item) => item !== provider);
+  const userTier = normalizeLlmTier(input.userTier);
+  const { heuristic, systemPrompt, userPayload, responseSchema } = buildIndicatorAnalysisRequest(computed);
+
+  try {
+    const result = await opts.invokeLlm({
+      provider,
+      model,
+      fallbackProviders,
+      userTier,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: JSON.stringify(userPayload) },
+      ],
+      params: {
+        temperature: 0.2,
+        maxTokens: 900,
+        webSearch: false,
+        background: false,
+      },
+      jsonSchema: {
+        name: "indicator_analysis",
+        schema: responseSchema,
+      },
+    });
+    const text = sanitizeText(result?.text, 24000);
+    const parsed = parseJsonObject(text);
+    const actualProvider = normalizeLlmProvider(result?.provider || provider);
+    const actualModel = normalizeLlmModel(result?.model, model);
+    if (!parsed) {
+      return {
+        ...heuristic,
+        text: hasStructuredIndicatorNarrative(text) ? text : heuristic.text,
+        provider: actualProvider,
+        model: actualModel,
+      };
+    }
+    return normalizeIndicatorAnalysisPayload(parsed, text, computed, actualModel, actualProvider);
+  } catch (_error) {
+    if (provider === "openai") {
+      return runOpenAiIndicatorAnalysis(computed, {
+        ...opts,
+        defaultModel: model,
+      });
+    }
+    return {
+      ...heuristic,
+      provider,
+      model,
+    };
   }
 }
 
@@ -1421,19 +1647,7 @@ async function runOpenAiIndicatorAnalysis(
   if (!opts.openAiApiKey) return buildHeuristicAnalysis(computed);
 
   const model = sanitizeText(opts.defaultModel, 120) || "gpt-5-mini";
-  const promptContext = buildIndicatorPromptContext(computed);
-  const heuristic = buildHeuristicAnalysis(computed);
-  const timelineBounds = indicatorTimelineBounds(computed.interval);
-  const timelineMin = timelineBounds.min;
-  const timelineMax = timelineBounds.max;
-  const lastClose = Number(computed.lastClose);
-  const atrValue = Number(computed.latestNumeric.ATR_14 || 0);
-  const atrPct = Number.isFinite(atrValue) && Number.isFinite(lastClose) && lastClose > 0 ? atrValue / lastClose : 0;
-  const targetBandPct = Math.max(computed.interval === "1h" ? 0.05 : 0.1, Math.min(computed.interval === "1h" ? 0.18 : 0.3, atrPct > 0 ? atrPct * 4 : computed.interval === "1h" ? 0.05 : 0.1));
-  const targetBand = {
-    lower: Number((lastClose * (1 - targetBandPct)).toFixed(2)),
-    upper: Number((lastClose * (1 + targetBandPct)).toFixed(2)),
-  };
+  const { heuristic, systemPrompt, userPayload, responseSchema } = buildIndicatorAnalysisRequest(computed);
   const toolDef = {
     type: "function",
     name: "finta_calculate_indicators",
@@ -1456,97 +1670,9 @@ async function runOpenAiIndicatorAnalysis(
       type: "json_schema",
       name: "indicator_analysis",
       strict: true,
-      schema: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          summary: {
-            type: "string",
-            minLength: 1,
-            maxLength: 800,
-          },
-          keySignals: {
-            type: "array",
-            minItems: 3,
-            maxItems: 6,
-            items: {
-              type: "string",
-              minLength: 1,
-              maxLength: 180,
-            },
-          },
-          prediction: {
-            type: "object",
-            additionalProperties: false,
-            properties: {
-              direction: {
-                type: "string",
-                enum: ["bullish", "bearish", "neutral"],
-              },
-              targetPrice: {
-                type: "number",
-              },
-              timeline: {
-                type: "string",
-                minLength: 1,
-                maxLength: 80,
-              },
-              timelineDays: {
-                type: "integer",
-                minimum: timelineMin,
-                maximum: timelineMax,
-              },
-              confidence: {
-                type: "string",
-                enum: ["low", "medium", "high"],
-              },
-            },
-            required: ["direction", "targetPrice", "timeline", "timelineDays", "confidence"],
-          },
-          text: {
-            type: "string",
-            minLength: 1,
-            maxLength: 8000,
-          },
-        },
-        required: ["summary", "keySignals", "prediction", "text"],
-      },
+      schema: responseSchema,
     },
   } as const;
-
-  const systemPrompt = [
-    "You are Quantura Horizon's technical-indicator analyst.",
-    "Always call finta_calculate_indicators before your final answer.",
-    "Use only the provided market context and the tool output.",
-    "Only cite indicators that were explicitly selected for this request, plus directly derived price context such as last close or realized range.",
-    "Do not invent catalysts, fundamentals, news, support zones, or macro drivers that were not supplied.",
-    "This is tactical decision support, not investment advice or a guarantee.",
-    "Return valid JSON only with exact keys:",
-    '{"summary":"string","keySignals":["string"],"prediction":{"direction":"bullish|bearish|neutral","targetPrice":0,"timeline":"string","timelineDays":0,"confidence":"low|medium|high"},"text":"string"}',
-    "Rules:",
-    "- summary: 1 or 2 concise sentences grounded in the indicator stack.",
-    "- keySignals: 3 to 6 items, each must cite a selected indicator and what it implies.",
-    "- prediction.direction: use bullish or bearish only when multiple signals align; otherwise neutral.",
-    `- prediction.timelineDays: integer between ${timelineMin} and ${timelineMax}.`,
-    `- prediction.targetPrice: numeric and realistic, staying near the current regime. Keep it inside ${targetBand.lower} to ${targetBand.upper} unless the context explicitly justifies a tighter bound.`,
-    "- prediction.confidence: high only if momentum and trend strength confirm each other; low if signals conflict.",
-    "- text: concise markdown-safe narrative with sections named Setup, Signal stack, Path, and Risk frame.",
-    "- Never mention ATR or ADX unless ATR or ADX was selected for this run.",
-    "- Avoid guaranteed language, buy/sell directives, and exaggerated certainty.",
-  ].join(" ");
-  const userPayload = {
-    task: "Analyze the selected technical indicators and provide a tactical scenario update.",
-    ticker: computed.ticker,
-    interval: computed.interval,
-    lookback: computed.lookback,
-    selectedIndicators: computed.selectedIndicators,
-    marketContext: promptContext,
-    guardrails: {
-      timelineDaysRange: [timelineMin, timelineMax],
-      targetPriceRange: targetBand,
-      fallbackPrediction: heuristic.prediction,
-    },
-  };
 
   let responsePayload = await postResponses(opts.openAiApiKey, opts.timeoutMs, {
     model,
@@ -1665,7 +1791,7 @@ export async function runIndicatorAnalysis(
     throw new Error("Unable to compute indicators for this ticker and interval.");
   }
 
-  const analysis = await runOpenAiIndicatorAnalysis(computed, opts);
+  const analysis = await runSharedIndicatorAnalysis(computed, input, opts);
 
   return {
     ticker,
