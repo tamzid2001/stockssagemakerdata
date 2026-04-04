@@ -15033,6 +15033,38 @@
     }
   };
 
+  const initStaticPageCommentsSurfaces = async () => {
+    const hosts = Array.from(document.querySelectorAll('[data-quantura-page-comments="1"]'));
+    if (!hosts.length) return;
+    const path = normalizePath(window.location.pathname || "/");
+    const metaDescription = String(document.querySelector('meta[name="description"]')?.getAttribute("content") || "").trim();
+    for (const host of hosts) {
+      if (!(host instanceof HTMLElement)) continue;
+      const statusNode =
+        host.closest(".quantura-comments-card, .shop-comments-card")?.querySelector("[data-quantura-comments-status]")
+        || host.parentElement?.querySelector("[data-quantura-comments-status]");
+      const scope = String(host.dataset.commentsScope || document.title || "Quantura").trim() || "Quantura";
+      const itemId = String(host.dataset.commentsId || path || "page").trim() || "page";
+      const description =
+        String(host.dataset.commentsDescription || metaDescription || document.title || "Quantura discussion").trim()
+        || "Quantura discussion";
+      const backLink = String(host.dataset.commentsBackLink || path || "/").trim() || "/";
+      try {
+        await mountGithubComments({
+          host,
+          statusNode,
+          term: buildDiscussionTerm(scope, itemId),
+          description,
+          backLink: buildAbsoluteAppUrl(backLink),
+        });
+      } catch (error) {
+        if (statusNode) {
+          statusNode.textContent = extractErrorMessage(error, "Unable to load GitHub discussion.");
+        }
+      }
+    }
+  };
+
   const apiFetchTickerHistory = async ({ ticker = "", interval = "1d", start = "", end = "" } = {}) => {
     const params = new URLSearchParams();
     params.set("ticker", normalizeTicker(ticker));
@@ -25056,6 +25088,7 @@
       loadLiquidGlassRuntime().catch(() => {});
       applyTheme(resolveThemePreference(), { persist: false });
       initBlogCommentsSurface().catch(() => {});
+      initStaticPageCommentsSurfaces().catch(() => {});
       syncScreenerCommentsThread(null).catch(() => {});
 
       try {
