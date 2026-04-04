@@ -1866,8 +1866,6 @@
     downloadUseAllHistory: document.getElementById("download-use-all-history"),
     downloadStatus: document.getElementById("download-status"),
     downloadPreview: document.getElementById("download-preview"),
-    trendingButton: document.getElementById("load-trending"),
-    trendingList: document.getElementById("trending-list"),
     intelOutput: document.getElementById("intel-output"),
     newsOutput: document.getElementById("news-output"),
     xTrendingOutput: document.getElementById("x-trending-output"),
@@ -9763,7 +9761,6 @@
         "sports-autopilot": "/sports-forecasting",
         predictions: "/predictions",
         indicators: "/indicators",
-        trending: "/trending",
         news: "/news",
         "market-headlines": "/market-headlines",
         "ticker-query": "/model-council",
@@ -9777,6 +9774,7 @@
         "/dashboard/uploads": "autopilot",
         "/sports-forecasting": "sports-autopilot",
         "/predictions": "predictions",
+        "/trending": "forecast",
         "/ticker-query": "ticker-query",
         "/model-council": "ticker-query",
         "/tools/fx": "fx",
@@ -9806,7 +9804,7 @@
 
   const normalizePanelName = (value) => {
     const panel = String(value || "").trim();
-    if (panel === "ticker-intelligence" || panel === "ticker") return "forecast";
+    if (panel === "ticker-intelligence" || panel === "ticker" || panel === "trending") return "forecast";
     return panel;
   };
 
@@ -25204,13 +25202,6 @@
           }).catch(() => {});
         }
 
-        if (next === "trending") {
-          if (!state.panelAutoloaded.trending) {
-            state.panelAutoloaded.trending = true;
-            loadTrendingTickers(functions, { notify: false });
-          }
-        }
-
         if (next === "news") {
           const ticker = resolveActiveOrDefaultTicker();
           if (!ticker) return;
@@ -28616,10 +28607,6 @@
         showToast(error.message || "Unable to fetch history.", "warn");
       }
     });
-
-		    ui.trendingButton?.addEventListener("click", async () => {
-		      await loadTrendingTickers(functions, { notify: true, force: true });
-		    });
 
     if (ui.eventsCalendarPreset && !String(ui.eventsCalendarPreset.value || "").trim()) {
       ui.eventsCalendarPreset.value = "this-week";

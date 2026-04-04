@@ -108,7 +108,6 @@ const resolveTemplate = (pathname) => {
     "/tools/fx",
     "/predictions",
     "/indicators",
-    "/trending",
     "/news",
     "/market-headlines",
     "/model-council",
