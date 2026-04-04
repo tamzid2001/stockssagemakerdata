@@ -54,6 +54,8 @@
   --glass-focus-ring: rgba(56, 114, 255, 0.18);
   --glass-panel-backdrop: blur(calc(var(--glass-blur) + 4px)) saturate(170%);
   --glass-control-backdrop: blur(calc(var(--glass-blur) - 5px)) saturate(160%);
+  --glass-text: #081221;
+  --glass-muted: #33415c;
   --mobile-bottom-nav-height: 62px;
   --page-gutter: clamp(16px, 2.6vw, 32px);
   --page-gutter-mobile: 12px;
@@ -102,6 +104,8 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.1),
     inset 0 -1px 0 rgba(255, 255, 255, 0.03);
   --glass-focus-ring: rgba(116, 163, 255, 0.22);
+  --glass-text: #f4f7ff;
+  --glass-muted: rgba(212, 223, 245, 0.88);
 }
 
 * {
@@ -133,6 +137,53 @@ body {
   box-shadow: var(--glass-shadow);
   backdrop-filter: blur(var(--glass-blur)) saturate(140%);
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+}
+
+:is(
+  .liquid-glass,
+  .card,
+  .results-panel,
+  .sidebar-card,
+  .sidebar-nav,
+  .modal-card,
+  .toast,
+  .cookie-banner,
+  .mobile-bottom-nav,
+  .home-bottom-nav,
+  .quantura-comments-card,
+  .quantura-comments-shell
+) {
+  color: var(--glass-text);
+}
+
+:is(
+  .liquid-glass,
+  .card,
+  .results-panel,
+  .sidebar-card,
+  .sidebar-nav,
+  .modal-card,
+  .toast,
+  .cookie-banner,
+  .quantura-comments-card,
+  .quantura-comments-shell
+) :is(p, .muted, .small, .meta, .meta-line, .status-note, .field-hint, .form-help, .helper-text) {
+  color: var(--glass-muted);
+}
+
+:is(
+  .liquid-glass,
+  .card,
+  .results-panel,
+  .sidebar-card,
+  .sidebar-nav,
+  .modal-card,
+  .toast,
+  .cookie-banner,
+  .quantura-comments-card,
+  .quantura-comments-shell
+) :is(h1, h2, h3, h4, h5, h6, strong, label, summary) {
+  color: var(--glass-text);
 }
 
 @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
@@ -342,6 +393,56 @@ i[class*=" iconoir-"]::before {
 [data-theme="dark"] .cta.secondary.danger:hover {
   border-color: rgba(255, 102, 89, 0.55);
   background: rgba(38, 18, 18, 0.85);
+}
+
+:is(
+  input:not([type]),
+  input[type="text"],
+  input[type="search"],
+  input[type="email"],
+  input[type="number"],
+  input[type="date"],
+  input[type="url"],
+  input[type="tel"],
+  input[type="password"],
+  textarea,
+  select,
+  .file-input,
+  .input.notes-input,
+  .theme-toggle,
+  .sidebar-link,
+  .tab,
+  .status-select,
+  .notification-privacy-select,
+  .modal-input,
+  .personality-select,
+  .model-council-improve-toggle,
+  .module-picker-chip,
+  .sports-foundry-workflow-option span,
+  .indicator-toggle-label,
+  .mobile-sidebar-toggle,
+  .download-history-toggle,
+  .model-council-prompt-card
+) {
+  color: var(--glass-text);
+}
+
+:is(
+  input:not([type]),
+  input[type="text"],
+  input[type="search"],
+  input[type="email"],
+  input[type="number"],
+  input[type="date"],
+  input[type="url"],
+  input[type="tel"],
+  input[type="password"],
+  textarea,
+  select,
+  .modal-input
+)::placeholder {
+  color: var(--glass-muted);
+  opacity: 1;
 }
 
 .cta.google {
@@ -7159,13 +7260,13 @@ body.mobile-sidebar-lock {
   left: 16px;
   right: 16px;
   bottom: calc(12px + var(--safe-area-bottom));
-  z-index: 82;
+  z-index: 96;
   border-radius: calc(var(--glass-radius) + 4px);
-  border: 1px solid var(--glass-border);
-  background: var(--glass-tint);
-  box-shadow: var(--glass-shadow);
-  backdrop-filter: blur(var(--glass-blur)) saturate(145%);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(145%);
+  border: 1px solid var(--glass-panel-border-strong);
+  background: var(--glass-panel-fill);
+  box-shadow: var(--glass-panel-shadow-strong);
+  backdrop-filter: var(--glass-panel-backdrop);
+  -webkit-backdrop-filter: var(--glass-panel-backdrop);
 }
 
 .cookie-banner.hidden {
@@ -7182,10 +7283,12 @@ body.mobile-sidebar-lock {
 
 .cookie-banner-content h3 {
   margin-bottom: 4px;
+  color: var(--glass-text);
 }
 
 .cookie-banner-content .small {
   margin: 0;
+  color: var(--glass-muted);
 }
 
 .cookie-banner-actions {
@@ -7193,6 +7296,32 @@ body.mobile-sidebar-lock {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.cookie-banner .cta,
+.cookie-banner .cta.secondary,
+[data-theme="dark"] .cookie-banner .cta,
+[data-theme="dark"] .cookie-banner .cta.secondary {
+  background: #0b0f1a;
+  color: #ffffff;
+  border: 1px solid #0b0f1a;
+  box-shadow: 0 12px 24px rgba(11, 15, 26, 0.28);
+}
+
+.cookie-banner .cta:hover,
+.cookie-banner .cta.secondary:hover,
+[data-theme="dark"] .cookie-banner .cta:hover,
+[data-theme="dark"] .cookie-banner .cta.secondary:hover {
+  background: #16233d;
+  border-color: #16233d;
+  color: #ffffff;
+}
+
+.cookie-banner .cta span,
+.cookie-banner .cta i,
+.cookie-banner .cta.secondary span,
+.cookie-banner .cta.secondary i {
+  color: #ffffff !important;
 }
 
 /* Better select/dropdown layering and readability */

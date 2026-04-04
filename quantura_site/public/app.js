@@ -25404,7 +25404,7 @@
 
     if (state.cookieConsent === "accepted") {
       ensureInitialPageView();
-    } else if (state.cookieConsent !== "declined") {
+    } else {
       ensureCookieModal().classList.remove("hidden");
 	    }
       ensureProfileFeedbackButtons();
