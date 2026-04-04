@@ -65,7 +65,7 @@
     policyReturnsCopy: document.getElementById("policy-returns-copy"),
   };
 
-  if (!ui.shopGrid || !ui.bundleGrid || !ui.cartItems) return;
+  if (!ui.shopGrid || !ui.cartItems) return;
 
   bootstrap().catch((error) => {
     console.error("[shop] bootstrap failed", error);
@@ -337,40 +337,38 @@
   function renderSummary() {
     const filteredProducts = getFilteredItems(state.visibleProducts);
     const filteredBundles = getFilteredItems(state.visibleBundles);
+    const totalListings = filteredProducts.length + filteredBundles.length;
     if (ui.productCount) {
       ui.productCount.textContent = `${state.visibleProducts.length} products`;
     }
     if (ui.bundleCount) {
-      ui.bundleCount.textContent = `${state.visibleBundles.length} reward bundles`;
+      ui.bundleCount.textContent = `${state.visibleBundles.length} bundle deals`;
     }
     if (ui.catalogSummary) {
       if (!state.shopEnabled) {
         ui.catalogSummary.textContent =
           "The shop is disabled right now. Flip the Firebase Remote Config shop flag back on to restore the catalog.";
       } else {
-        ui.catalogSummary.textContent = `${filteredProducts.length} product results and ${filteredBundles.length} bundle results match the active view.`;
+        ui.catalogSummary.textContent =
+          filteredBundles.length > 0
+            ? `${totalListings} live listings match the active filters, including ${filteredBundles.length} bundle deal${filteredBundles.length === 1 ? "" : "s"}.`
+            : `${filteredProducts.length} live product listings match the active filters.`;
       }
     }
     if (ui.bundleStatus) {
       if (!state.visibleBundles.length) {
-        ui.bundleStatus.textContent = "No active bundles";
-      } else if (state.adFreeEntitlement) {
-        ui.bundleStatus.textContent = "Ad-free entitlement: bundles unlocked";
-      } else if (state.isNative) {
-        const unlockedCount = state.visibleBundles.filter((item) => isBundleUnlocked(item)).length;
-        ui.bundleStatus.textContent =
-          unlockedCount > 0
-            ? `${unlockedCount} bundle${unlockedCount === 1 ? "" : "s"} unlocked on this device`
-            : "Reward unlock ready on this device";
+        ui.bundleStatus.textContent = "No active bundle deals";
       } else {
-        ui.bundleStatus.textContent = "Visible on web, unlock in Quantura iOS/Android";
+        ui.bundleStatus.textContent = "Bundle pricing is available on the web";
       }
     }
   }
 
   function renderCatalogSections() {
     renderProducts();
-    renderBundles();
+    if (ui.bundleGrid) {
+      renderBundles();
+    }
     updateTabState();
   }
 
@@ -387,15 +385,17 @@
       return;
     }
 
-    const items = getFilteredItems(state.visibleProducts);
+    const items = getFilteredItems(state.visibleProducts).concat(getFilteredItems(state.visibleBundles));
     if (!items.length) {
       ui.shopGrid.innerHTML = renderEmptyCard(
-        "No products match this view",
+        "No catalog items match this view",
         "Try a different category or search term to widen the catalog results."
       );
       return;
     }
-    ui.shopGrid.innerHTML = items.map((item) => renderProductCard(item)).join("");
+    ui.shopGrid.innerHTML = items
+      .map((item) => (item.kind === "bundle" ? renderBundleCard(item) : renderProductCard(item)))
+      .join("");
   }
 
   function renderBundles() {
@@ -405,8 +405,8 @@
     }
     if (!state.shopEnabled) {
       ui.bundleGrid.innerHTML = renderEmptyCard(
-        "Bundles paused",
-        "Reward bundles are hidden while the shop is disabled from Firebase Remote Config."
+        "Bundle deals paused",
+        "Bundle deals are hidden while the shop is disabled from Firebase Remote Config."
       );
       return;
     }
@@ -490,27 +490,17 @@
   }
 
   function renderBundleCard(item) {
-    const unlocked = isBundleUnlocked(item);
-    const busy = state.rewardBusySku === item.sku;
-    const nativeUnlockNote = state.isNative
-      ? "Unlock runs after the rewarded interstitial finishes on this device."
-      : "Install Quantura on iOS or Android to unlock the discounted bundle.";
-    let actionMarkup = "";
-    if (unlocked || !item.rewardUnlockRequired) {
-      actionMarkup = `<button class="cta" type="button" data-action="add-to-cart" data-sku="${escapeHtml(item.sku)}">Add bundle</button>`;
-    } else if (state.isNative) {
-      actionMarkup = `<button class="cta" type="button" data-action="unlock-bundle" data-sku="${escapeHtml(item.sku)}" ${
-        busy ? "disabled" : ""
-      }>${escapeHtml(busy ? "Unlocking…" : item.unlockCtaCopy || "Unlock bundle")}</button>`;
-    } else {
-      actionMarkup = '<button class="cta secondary" type="button" disabled>Unlock in app</button>';
-    }
+    const unlocked = true;
+    const bundleNote = item.rewardUnlockRequired
+      ? "Bundle pricing is available directly on the web shop."
+      : "Bundle deal available for direct web checkout.";
+    const actionMarkup = `<button class="cta" type="button" data-action="add-to-cart" data-sku="${escapeHtml(item.sku)}">Add bundle</button>`;
 
     return `
       <article class="bundle-card ${unlocked ? "is-unlocked" : "is-locked"}" data-sku="${escapeHtml(item.sku)}">
         <div class="product-media">
           <div class="product-badge-row">
-            <span class="product-badge accent">${unlocked ? "Unlocked" : "Reward bundle"}</span>
+            <span class="product-badge accent">Bundle deal</span>
             <span class="product-badge secondary">${escapeHtml(labelForTab(item.tab))}</span>
           </div>
           ${renderCarousel(item)}
@@ -518,11 +508,11 @@
         <div class="product-body">
           <div class="product-topline">
             <span class="detail-chip">${escapeHtml(item.provider)}</span>
-            <span class="detail-chip subtle">${escapeHtml(item.providerMethod || "Reward-unlocked bundle")}</span>
+            <span class="detail-chip subtle">${escapeHtml(item.providerMethod || "Curated bundle")}</span>
           </div>
           <h3 class="product-name">${escapeHtml(item.name)}</h3>
           <p class="product-desc">${escapeHtml(item.description)}</p>
-          <p class="bundle-note">${escapeHtml(nativeUnlockNote)}</p>
+          <p class="bundle-note">${escapeHtml(bundleNote)}</p>
           ${renderPriceRow(item)}
           ${renderFactGrid(item.factGrid)}
           <div class="bundle-components">
@@ -694,10 +684,6 @@
   function addToCart(sku, qty) {
     const item = state.catalogBySku.get(sku);
     if (!item) return;
-    if (item.kind === "bundle" && item.rewardUnlockRequired && !isBundleUnlocked(item)) {
-      showMessage("Unlock this bundle in the native app before adding it to cart.", "warn");
-      return;
-    }
     const nextQty = getCartQty(sku) + qty;
     state.cart[sku] = clampNumber(nextQty, 0, 99);
     persistCart();
@@ -751,34 +737,7 @@
   async function unlockBundle(sku) {
     const item = state.catalogBySku.get(sku);
     if (!item || !item.rewardUnlockRequired) return;
-    if (!state.isNative || !window.QuanturaShopRuntime || typeof window.QuanturaShopRuntime.runRewardUnlock !== "function") {
-      showMessage("Bundle unlocks only run inside Quantura iOS and Android builds.", "warn");
-      return;
-    }
-
-    try {
-      state.rewardBusySku = sku;
-      renderBundles();
-      const result = await window.QuanturaShopRuntime.runRewardUnlock({
-        reason: `shop_bundle_${sku.toLowerCase()}`,
-      });
-      if (result && result.ok) {
-        state.unlockedBundles[sku] = true;
-        persistUnlockedBundles();
-        showMessage(`${item.name} unlocked. You can add it to cart now.`, "success");
-      } else {
-        const message =
-          (result && result.message) || "Rewarded interstitial was unavailable. Try again in a few seconds.";
-        showMessage(message, "warn");
-      }
-    } catch (error) {
-      console.error("[shop] bundle unlock failed", error);
-      showMessage("Rewarded interstitial failed. Try again shortly.", "warn");
-    } finally {
-      state.rewardBusySku = "";
-      renderSummary();
-      renderBundles();
-    }
+    showMessage("Bundle pricing is already available on the web shop.", "success");
   }
 
   async function startCheckout() {
@@ -919,7 +878,7 @@
   }
 
   function isBundleUnlocked(item) {
-    return !item.rewardUnlockRequired || state.unlockedBundles[item.sku] === true || state.adFreeEntitlement;
+    return true;
   }
 
   function advanceCarousel(sku, delta) {

@@ -3,34 +3,34 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Quantura Shop | Operator Gear</title>
+    <title>Quantura Shop | Physical Products</title>
     <meta
       name="description"
-      content="Shop Quantura operator gear across cases, audio, workspace accessories, and native-unlocked reward bundles."
+      content="Shop Quantura physical products and bundle deals for research workspaces, desk setups, audio, and privacy protection."
     />
     <meta name="robots" content="index, follow" />
     <meta
       name="keywords"
-      content="quantura shop, apple accessories, desk accessories, rewarded bundle offers, stripe checkout"
+      content="quantura shop, physical products, desk setup, audio gear, privacy products, stripe checkout"
     />
     <link rel="canonical" href="https://quantura.studio/shop" />
-    <meta property="og:title" content="Quantura Shop | Operator Gear" />
+    <meta property="og:title" content="Quantura Shop | Physical Products" />
     <meta
       property="og:description"
-      content="Physical products for Apple carry, workstations, audio kits, and reward-unlocked bundles in Quantura iOS and Android."
+      content="Physical goods and web bundle deals for desk setups, audio, privacy, and operator workflows with secure Stripe checkout."
     />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://quantura.studio/shop" />
-    <meta property="og:image" content="/assets/quantura-logo.svg" />
+    <meta property="og:image" content="/assets/logo.png" />
     <meta property="og:site_name" content="Quantura" />
     <meta property="og:locale" content="en_US" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Quantura Shop | Operator Gear" />
+    <meta name="twitter:title" content="Quantura Shop | Physical Products" />
     <meta
       name="twitter:description"
-      content="Physical products for Apple carry, workstations, audio kits, and reward-unlocked bundles in Quantura iOS and Android."
+      content="Physical goods and web bundle deals for desk setups, audio, privacy, and operator workflows with secure Stripe checkout."
     />
-    <meta name="twitter:image" content="/assets/quantura-logo.svg" />
+    <meta name="twitter:image" content="/assets/logo.png" />
     <meta name="twitter:url" content="https://quantura.studio/shop" />
     <meta name="author" content="Quantura" />
     <meta name="theme-color" content="#0B1526" />
@@ -49,7 +49,6 @@
     <script defer src="/__/firebase/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
     <script defer src="/app.js"></script>
-    <script defer src="/shop.js"></script>
   </head>
   <body class="shop-page">
     <header class="shop-header">
@@ -61,18 +60,14 @@
           <a href="/forecasting">Terminal</a>
           <a href="/explore">Explore</a>
           <a href="/research">Research</a>
-          <a href="/blog">Blog</a>
           <a href="/events">Events</a>
           <a href="/shop" aria-current="page">Shop</a>
           <a href="/pricing">Pricing</a>
-          <a href="/contact">Contact</a>
+          <a href="/contact">Contact Us</a>
         </nav>
-        <div class="header-actions">
-          <a class="ghost header-link" href="/pricing">Plans</a>
-          <button id="cart-toggle" class="cart-toggle" type="button" aria-expanded="false" aria-controls="cart-drawer">
-            Cart <span id="cart-count" class="count-pill">0</span>
-          </button>
-        </div>
+        <button id="cart-toggle" class="cart-toggle" type="button" aria-expanded="false" aria-controls="cart-drawer">
+          Cart <span id="cart-count" class="count-pill">0</span>
+        </button>
       </div>
     </header>
 
@@ -80,24 +75,28 @@
       <section class="shop-hero shop-container">
         <div class="hero-copy">
           <p class="eyebrow">Shop</p>
-          <h1>Operator gear for Apple carry, desk resets, and audio kits.</h1>
+          <h1>Physical gear for research desks, privacy setups, and operator workflows.</h1>
           <p>
-            Quantura Shop now carries physical accessories across cases, wearables, audio, and workstation gear.
-            Bundle offers unlock after the rewarded interstitial plays inside installed Quantura iOS and Android builds.
+            Quantura Shop is web-only. Browse physical products and bundle deals with direct Stripe checkout,
+            cleaner catalog browsing, and no native-app unlock steps.
           </p>
           <div class="hero-cta-row">
-            <a class="cta" href="#shop-grid">Browse products</a>
-            <a class="cta secondary" href="#bundle-grid">See bundle offers</a>
+            <a class="cta" href="#shop-catalog">Browse catalog</a>
+            <a class="cta secondary" href="#shop-comments-heading">Ask a product question</a>
           </div>
         </div>
         <div class="hero-meta">
           <div>
             <strong id="product-count">0 products</strong>
-            <p>Cases, audio, workbench gear, and wearable accessories sourced from rated providers.</p>
+            <p>Live catalog listings across cases, audio, workspace gear, and privacy hardware.</p>
           </div>
           <div>
-            <strong id="bundle-count">0 reward bundles</strong>
-            <p>Discounted bundles unlock after rewarded interstitial playback in native Quantura builds.</p>
+            <strong id="bundle-count">0 bundle deals</strong>
+            <p>Bundle pricing is available directly on the web shop with no extra app unlock step.</p>
+          </div>
+          <div class="hero-meta-wide">
+            <strong>Shipping &amp; Returns</strong>
+            <p>POD: $6.95 free over $75. Hardware/privacy: $12.95 free over $250. Returns and defect support are handled directly through Quantura.</p>
           </div>
         </div>
       </section>
@@ -111,7 +110,7 @@
           <button class="tab" type="button" data-filter="wearables" role="tab" aria-selected="false">Wearables</button>
         </div>
         <label class="search-wrap" for="shop-search">
-          <span>Search products and bundles</span>
+          <span>Search products and bundle deals</span>
           <input id="shop-search" type="search" placeholder="Search gear, materials, or providers" autocomplete="off" />
         </label>
       </section>
@@ -122,13 +121,13 @@
 
       <section class="shop-container layout">
         <div class="catalog-area">
-          <section class="collection-section">
+          <section id="shop-catalog" class="collection-section catalog-shell">
             <div class="section-head">
               <div>
-                <p class="eyebrow">Core catalog</p>
-                <h2>Physical products</h2>
+                <p class="eyebrow">Catalog</p>
+                <h2>Products and bundle deals</h2>
                 <p id="catalog-summary" class="section-copy">
-                  Loading the latest catalog, provider details, and carousel mockups.
+                  Loading the latest catalog, provider details, and bundle offers.
                 </p>
               </div>
             </div>
@@ -141,25 +140,6 @@
               <div class="skeleton-card"></div>
             </div>
           </section>
-
-          <section class="collection-section bundle-section">
-            <div class="section-head">
-              <div>
-                <p class="eyebrow">Reward bundles</p>
-                <h2>Native bundle unlocks</h2>
-                <p class="section-copy">
-                  Bundled offers unlock after the rewarded interstitial plays on Quantura for iOS and Android. The
-                  cards stay visible on web, but the unlock flow is native-only.
-                </p>
-              </div>
-              <div id="bundle-status" class="status-chip">Checking bundle unlock status…</div>
-            </div>
-            <div id="bundle-grid" class="bundle-grid" aria-live="polite">
-              <div class="skeleton-card skeleton-card-short"></div>
-              <div class="skeleton-card skeleton-card-short"></div>
-              <div class="skeleton-card skeleton-card-short"></div>
-            </div>
-          </section>
         </div>
 
         <aside id="cart-drawer" class="cart-drawer" aria-label="Cart panel">
@@ -167,10 +147,6 @@
             <h2>Cart</h2>
             <button id="cart-close" class="ghost" type="button" aria-label="Close cart">Close</button>
           </div>
-
-          <p class="muted cart-helper">
-            Reward bundles become normal cart items after the rewarded unlock completes in the native app.
-          </p>
 
           <div id="cart-items" class="cart-items">
             <p class="muted">Your cart is empty.</p>
@@ -197,10 +173,10 @@
 
       <section class="shop-container policy-section">
         <details class="policy-card" open>
-          <summary>Shipping, returns, and native unlock policy</summary>
+          <summary>Shipping &amp; Returns</summary>
           <div class="policy-grid">
             <article>
-              <h3>Shipping</h3>
+              <h3>Standard shipping</h3>
               <p id="policy-pod-copy">
                 Physical-product shipping is calculated from the live catalog policy and finalized at checkout.
               </p>
@@ -209,14 +185,10 @@
               </p>
             </article>
             <article>
-              <h3>Returns &amp; bundles</h3>
+              <h3>Returns</h3>
               <p id="policy-returns-copy">
                 Physical products are eligible for defect or transit support. Contact Quantura support before shipping
                 anything back.
-              </p>
-              <p>
-                Reward bundles stay visible on the web shop, but the discounted unlock only activates after the native
-                rewarded interstitial completes on iOS or Android.
               </p>
             </article>
           </div>
@@ -240,7 +212,7 @@
             data-quantura-page-comments="1"
             data-comments-scope="Quantura Shop"
             data-comments-id="shop"
-            data-comments-description="Discuss Quantura Shop products, bundle unlocks, shipping policy, and checkout questions."
+            data-comments-description="Discuss Quantura Shop products, bundle deals, shipping policy, and checkout questions."
             data-comments-back-link="/shop"
           ></div>
         </div>
@@ -248,5 +220,7 @@
     </main>
 
     <div id="cart-overlay" class="cart-overlay" hidden></div>
+
+    <script defer src="/shop.js"></script>
   </body>
 </html>

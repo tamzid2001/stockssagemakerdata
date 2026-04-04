@@ -4,20 +4,32 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Quantura Shop | Physical Products</title>
-        <meta name="description" content="Shop Quantura physical products for research workspaces, desk setups, and privacy protection." />
-        <meta name="robots" content="index, follow" />
-    <meta name="keywords" content="quantura shop, physical products, desk setup, privacy screen, stripe checkout" />
-        <link rel="canonical" href="https://quantura.studio/shop" />
-        <meta property="og:title" content="Quantura Shop | Physical Products" />
-        <meta property="og:description" content="Physical goods only: merch, desk setup hardware, and privacy products with secure checkout." />
-        <meta property="og:type" content="website" />
-        <meta property="og:url" content="https://quantura.studio/shop" />
-        <meta property="og:image" content="/assets/logo.png" />
+    <meta
+      name="description"
+      content="Shop Quantura physical products and bundle deals for research workspaces, desk setups, audio, and privacy protection."
+    />
+    <meta name="robots" content="index, follow" />
+    <meta
+      name="keywords"
+      content="quantura shop, physical products, desk setup, audio gear, privacy products, stripe checkout"
+    />
+    <link rel="canonical" href="https://quantura.studio/shop" />
+    <meta property="og:title" content="Quantura Shop | Physical Products" />
+    <meta
+      property="og:description"
+      content="Physical goods and web bundle deals for desk setups, audio, privacy, and operator workflows with secure Stripe checkout."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://quantura.studio/shop" />
+    <meta property="og:image" content="/assets/logo.png" />
     <meta property="og:site_name" content="Quantura" />
     <meta property="og:locale" content="en_US" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Quantura Shop | Physical Products" />
-    <meta name="twitter:description" content="Physical goods only: merch, desk setup hardware, and privacy products with secure checkout." />
+    <meta
+      name="twitter:description"
+      content="Physical goods and web bundle deals for desk setups, audio, privacy, and operator workflows with secure Stripe checkout."
+    />
     <meta name="twitter:image" content="/assets/logo.png" />
     <meta name="twitter:url" content="https://quantura.studio/shop" />
     <meta name="author" content="Quantura" />
@@ -31,6 +43,7 @@
     <meta name="apple-mobile-web-app-title" content="Quantura" />
     <link rel="manifest" href="/site.webmanifest" />
     <link rel="stylesheet" href="/shop.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
     <script defer src="/__/firebase/12.9.0/firebase-app-compat.js"></script>
     <script defer src="/__/firebase/12.9.0/firebase-remote-config-compat.js"></script>
     <script defer src="/__/firebase/12.9.0/firebase-analytics-compat.js"></script>
@@ -60,22 +73,30 @@
 
     <main class="shop-main">
       <section class="shop-hero shop-container">
-        <div>
+        <div class="hero-copy">
           <p class="eyebrow">Shop</p>
-          <h1>Physical products for research desks and execution teams.</h1>
+          <h1>Physical gear for research desks, privacy setups, and operator workflows.</h1>
           <p>
-            Merch, workspace hardware, and privacy gear with secure shipping checkout through Stripe.
-            No in-app subscriptions on this page.
+            Quantura Shop is web-only. Browse physical products and bundle deals with direct Stripe checkout,
+            cleaner catalog browsing, and no native-app unlock steps.
           </p>
+          <div class="hero-cta-row">
+            <a class="cta" href="#shop-catalog">Browse catalog</a>
+            <a class="cta secondary" href="#shop-comments-heading">Ask a product question</a>
+          </div>
         </div>
         <div class="hero-meta">
           <div>
-            <strong>Shipping</strong>
-            <p>POD: $6.95 (free over $75). Hardware/privacy: $12.95 (free over $250).</p>
+            <strong id="product-count">0 products</strong>
+            <p>Live catalog listings across cases, audio, workspace gear, and privacy hardware.</p>
           </div>
           <div>
-            <strong>Delivery</strong>
-            <p>POD 5-12 business days. Hardware/privacy 5-10 business days.</p>
+            <strong id="bundle-count">0 bundle deals</strong>
+            <p>Bundle pricing is available directly on the web shop with no extra app unlock step.</p>
+          </div>
+          <div class="hero-meta-wide">
+            <strong>Shipping &amp; Returns</strong>
+            <p>POD: $6.95 free over $75. Hardware/privacy: $12.95 free over $250. Returns and defect support are handled directly through Quantura.</p>
           </div>
         </div>
       </section>
@@ -83,13 +104,14 @@
       <section class="shop-controls shop-container" aria-label="Catalog filters">
         <div class="tabs" role="tablist" aria-label="Catalog categories">
           <button class="tab active" type="button" data-filter="all" role="tab" aria-selected="true">All</button>
-          <button class="tab" type="button" data-filter="merch" role="tab" aria-selected="false">Merch</button>
-          <button class="tab" type="button" data-filter="desk_setup" role="tab" aria-selected="false">Desk Setup</button>
-          <button class="tab" type="button" data-filter="privacy" role="tab" aria-selected="false">Privacy</button>
+          <button class="tab" type="button" data-filter="cases" role="tab" aria-selected="false">Cases</button>
+          <button class="tab" type="button" data-filter="audio" role="tab" aria-selected="false">Audio</button>
+          <button class="tab" type="button" data-filter="workspace" role="tab" aria-selected="false">Workspace</button>
+          <button class="tab" type="button" data-filter="wearables" role="tab" aria-selected="false">Wearables</button>
         </div>
         <label class="search-wrap" for="shop-search">
-          <span>Search</span>
-          <input id="shop-search" type="search" placeholder="Search products" autocomplete="off" />
+          <span>Search products and bundle deals</span>
+          <input id="shop-search" type="search" placeholder="Search gear, materials, or providers" autocomplete="off" />
         </label>
       </section>
 
@@ -99,14 +121,25 @@
 
       <section class="shop-container layout">
         <div class="catalog-area">
-          <div id="shop-grid" class="shop-grid" aria-live="polite">
-            <div class="skeleton-card"></div>
-            <div class="skeleton-card"></div>
-            <div class="skeleton-card"></div>
-            <div class="skeleton-card"></div>
-            <div class="skeleton-card"></div>
-            <div class="skeleton-card"></div>
-          </div>
+          <section id="shop-catalog" class="collection-section catalog-shell">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Catalog</p>
+                <h2>Products and bundle deals</h2>
+                <p id="catalog-summary" class="section-copy">
+                  Loading the latest catalog, provider details, and bundle offers.
+                </p>
+              </div>
+            </div>
+            <div id="shop-grid" class="shop-grid" aria-live="polite">
+              <div class="skeleton-card"></div>
+              <div class="skeleton-card"></div>
+              <div class="skeleton-card"></div>
+              <div class="skeleton-card"></div>
+              <div class="skeleton-card"></div>
+              <div class="skeleton-card"></div>
+            </div>
+          </section>
         </div>
 
         <aside id="cart-drawer" class="cart-drawer" aria-label="Cart panel">
@@ -144,13 +177,19 @@
           <div class="policy-grid">
             <article>
               <h3>Standard shipping</h3>
-              <p><strong>POD items:</strong> $6.95 (free over $75), estimated 5-12 business days total.</p>
-              <p><strong>Hardware/privacy:</strong> $12.95 (free over $250), estimated 5-10 business days total.</p>
+              <p id="policy-pod-copy">
+                Physical-product shipping is calculated from the live catalog policy and finalized at checkout.
+              </p>
+              <p id="policy-hardware-copy">
+                Most products ship after 1-3 business days of production and then land in roughly 4-7 business days.
+              </p>
             </article>
             <article>
               <h3>Returns</h3>
-              <p><strong>POD:</strong> Reprint/refund for defects or lost shipments. Contact support for help.</p>
-              <p><strong>Hardware/privacy:</strong> 30-day returns (unopened preferred). Warranty varies by brand.</p>
+              <p id="policy-returns-copy">
+                Physical products are eligible for defect or transit support. Contact Quantura support before shipping
+                anything back.
+              </p>
             </article>
           </div>
         </details>
@@ -173,7 +212,7 @@
             data-quantura-page-comments="1"
             data-comments-scope="Quantura Shop"
             data-comments-id="shop"
-            data-comments-description="Discuss Quantura Shop products, bundle unlocks, shipping policy, and checkout questions."
+            data-comments-description="Discuss Quantura Shop products, bundle deals, shipping policy, and checkout questions."
             data-comments-back-link="/shop"
           ></div>
         </div>
