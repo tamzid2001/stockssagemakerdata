@@ -3524,6 +3524,30 @@
     window.__quanturaMobileBottomNavSync = syncVisibility;
   };
 
+  const bindHomeBottomNav = () => {
+    const nav = document.querySelector(".home-bottom-nav");
+    if (!(nav instanceof HTMLElement)) return;
+    const links = Array.from(nav.querySelectorAll(".home-bottom-nav-link[href]"));
+    const currentPath = normalizePath(window.location.pathname || "/");
+
+    links.forEach((link) => {
+      if (!(link instanceof HTMLElement)) return;
+      const href = String(link.getAttribute("href") || "").trim();
+      const linkPath = normalizePath(href.split("?")[0].split("#")[0] || "/");
+      link.classList.toggle("active", Boolean(linkPath && linkPath === currentPath));
+    });
+
+    const syncVisibility = () => {
+      const visible = window.innerWidth <= 980;
+      nav.classList.toggle("is-visible", visible);
+      document.body.classList.toggle("home-bottom-nav-enabled", visible);
+    };
+
+    syncVisibility();
+    window.addEventListener("resize", syncVisibility);
+    window.__quanturaHomeBottomNavSync = syncVisibility;
+  };
+
   const bindNativeTransitionInterstitials = () => {
     if (!isNativeApp()) return;
     if (document.body.dataset.nativeNavInterstitialBound === "1") return;
@@ -25327,6 +25351,7 @@
       bindMobileSidebarDrawer();
       bindMobileBottomNav();
       bindMarketingBottomNav();
+      bindHomeBottomNav();
       bindNativeTransitionInterstitials();
       registerLegacyNativeAdInjectionHook();
       scheduleNativeInlineAdsRefresh();
