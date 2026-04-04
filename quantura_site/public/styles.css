@@ -416,10 +416,6 @@ i[class*=" iconoir-"]::before {
   .notification-privacy-select,
   .modal-input,
   .personality-select,
-  .model-council-improve-toggle,
-  .module-picker-chip,
-  .sports-foundry-workflow-option span,
-  .indicator-toggle-label,
   .mobile-sidebar-toggle,
   .download-history-toggle,
   .model-council-prompt-card
@@ -8509,10 +8505,6 @@ html[data-liquid-glass-mode="refraction"] {
   .notification-privacy-select,
   .modal-input,
   .personality-select,
-  .model-council-improve-toggle,
-  .module-picker-chip,
-  .sports-foundry-workflow-option span,
-  .indicator-toggle-label,
   .mobile-sidebar-toggle,
   .download-history-toggle,
   .model-council-prompt-card
@@ -8541,10 +8533,6 @@ html[data-liquid-glass-mode="refraction"] {
   .notification-privacy-select,
   .modal-input,
   .personality-select,
-  .model-council-improve-toggle,
-  .module-picker-chip,
-  .sports-foundry-workflow-option span,
-  .indicator-toggle-label,
   .mobile-sidebar-toggle,
   .download-history-toggle,
   .model-council-prompt-card
@@ -8570,10 +8558,6 @@ html[data-liquid-glass-mode="refraction"] {
   .notification-privacy-select,
   .modal-input,
   .personality-select,
-  .model-council-improve-toggle,
-  .module-picker-chip,
-  .sports-foundry-workflow-option span,
-  .indicator-toggle-label,
   .mobile-sidebar-toggle,
   .download-history-toggle,
   .model-council-prompt-card
@@ -8588,10 +8572,6 @@ html[data-liquid-glass-mode="refraction"] {
 .theme-toggle,
 .sidebar-link,
 .tab,
-.module-picker-chip,
-.sports-foundry-workflow-option span,
-.indicator-toggle-label,
-.model-council-improve-toggle,
 .mobile-sidebar-toggle,
 .download-history-toggle {
   overflow: hidden;
@@ -8605,9 +8585,6 @@ html[data-liquid-glass-mode="refraction"] {
 .sidebar-link.active,
 .tab.is-active,
 .screener-filter-tab.is-active,
-.module-picker-chip.is-selected,
-.sports-foundry-workflow-option input:checked + span,
-.indicator-toggle input:checked + .indicator-toggle-label,
 .mobile-bottom-link.active,
 .home-bottom-nav-link.active {
   border-color: rgba(118, 156, 255, 0.4);
@@ -8625,9 +8602,6 @@ html[data-liquid-glass-mode="refraction"] {
 [data-theme="dark"] .sidebar-link.active,
 [data-theme="dark"] .tab.is-active,
 [data-theme="dark"] .screener-filter-tab.is-active,
-[data-theme="dark"] .module-picker-chip.is-selected,
-[data-theme="dark"] .sports-foundry-workflow-option input:checked + span,
-[data-theme="dark"] .indicator-toggle input:checked + .indicator-toggle-label,
 [data-theme="dark"] .mobile-bottom-link.active,
 [data-theme="dark"] .home-bottom-nav-link.active {
   border-color: rgba(125, 171, 255, 0.42);
@@ -8637,67 +8611,152 @@ html[data-liquid-glass-mode="refraction"] {
   color: var(--ink);
 }
 
-.indicator-toggle-label::before,
-.sports-foundry-workflow-option span::after,
-.model-council-improve-toggle input[type="checkbox"],
-.module-picker-chip input {
-  backdrop-filter: var(--glass-control-backdrop);
-  -webkit-backdrop-filter: var(--glass-control-backdrop);
+.indicator-toggle-label,
+.sports-foundry-workflow-option span,
+.module-picker-chip,
+.model-council-improve-toggle {
+  isolation: isolate;
 }
 
-.indicator-toggle-label::before,
-.model-council-improve-toggle input[type="checkbox"],
-.module-picker-chip input {
-  border-color: rgba(255, 255, 255, 0.32);
-  background:
-    radial-gradient(circle at 32% 22%, rgba(255, 255, 255, 0.74), rgba(255, 255, 255, 0.12) 46%, rgba(255, 255, 255, 0) 72%),
-    linear-gradient(145deg, rgba(255, 255, 255, 0.34), rgba(228, 235, 249, 0.18));
+.indicator-toggle-label,
+.sports-foundry-workflow-option span,
+.module-picker-chip {
+  overflow: hidden;
+}
+
+.indicator-toggle-label,
+.sports-foundry-workflow-option span,
+.module-picker-chip,
+.model-council-improve-toggle {
+  border-color: var(--glass-control-border-strong);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.7),
-    0 8px 18px rgba(15, 23, 42, 0.12);
+    0 14px 30px rgba(15, 23, 42, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.78);
 }
 
-.indicator-toggle input:checked + .indicator-toggle-label::before,
-.model-council-improve-toggle input[type="checkbox"]:checked,
-.module-picker-chip input:checked {
-  border-color: rgba(167, 210, 255, 0.38);
+.indicator-toggle-label,
+.sports-foundry-workflow-option span {
   background:
-    radial-gradient(circle at 30% 22%, rgba(255, 255, 255, 0.44), rgba(255, 255, 255, 0.12) 38%, rgba(255, 255, 255, 0) 72%),
-    linear-gradient(145deg, rgba(71, 114, 255, 0.62), rgba(27, 171, 168, 0.38));
+    radial-gradient(150% 180% at 0% 0%, rgba(255, 255, 255, 0.78) 0%, rgba(255, 255, 255, 0.26) 28%, rgba(255, 255, 255, 0) 56%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.78), rgba(243, 239, 232, 0.9));
+  color: var(--glass-text);
+}
+
+.indicator-toggle-label::before,
+.module-picker-chip input,
+.model-council-improve-toggle input[type="checkbox"] {
+  border-color: rgba(15, 23, 42, 0.08);
+  background: rgba(148, 163, 184, 0.24);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
+  backdrop-filter: blur(calc(var(--glass-blur) - 8px)) saturate(140%);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) - 8px)) saturate(140%);
 }
 
 .indicator-toggle-label::after,
-.model-council-improve-toggle input[type="checkbox"]::after,
-.module-picker-chip input::after {
-  background:
-    radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0.78) 48%, rgba(216, 227, 247, 0.82) 100%);
+.module-picker-chip input::after,
+.model-council-improve-toggle input[type="checkbox"]::after {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(239, 244, 252, 0.92));
   box-shadow:
-    0 5px 14px rgba(15, 23, 42, 0.16),
-    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    0 4px 12px rgba(15, 23, 42, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.94);
+}
+
+.indicator-toggle:hover .indicator-toggle-label,
+.sports-foundry-workflow-option:hover span,
+.module-picker-chip:hover,
+.model-council-improve-toggle:hover {
+  border-color: rgba(82, 132, 255, 0.28);
+  box-shadow:
+    0 18px 34px rgba(15, 23, 42, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.82);
+}
+
+.indicator-toggle input:checked + .indicator-toggle-label,
+.module-picker-chip.is-selected,
+.sports-foundry-workflow-option input:checked + span,
+.model-council-improve-toggle:has(input[type="checkbox"]:checked) {
+  border-color: rgba(82, 132, 255, 0.38);
+  box-shadow:
+    0 18px 38px rgba(44, 93, 211, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.82);
+}
+
+.indicator-toggle input:checked + .indicator-toggle-label {
+  background:
+    radial-gradient(140% 200% at 0% 0%, rgba(255, 255, 255, 0.34) 0%, rgba(255, 255, 255, 0.12) 28%, rgba(255, 255, 255, 0) 56%),
+    linear-gradient(145deg, rgba(92, 145, 255, 0.38), rgba(207, 232, 255, 0.62));
+  color: #12315e;
+}
+
+.indicator-toggle input:checked + .indicator-toggle-label::before,
+.module-picker-chip input:checked,
+.model-council-improve-toggle input[type="checkbox"]:checked {
+  border-color: rgba(71, 114, 255, 0.28);
+  background: linear-gradient(145deg, rgba(71, 114, 255, 0.78), rgba(34, 196, 193, 0.48));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.18),
+    0 6px 16px rgba(44, 93, 211, 0.18);
+}
+
+[data-theme="dark"] .indicator-toggle-label,
+[data-theme="dark"] .sports-foundry-workflow-option span,
+[data-theme="dark"] .module-picker-chip,
+[data-theme="dark"] .model-council-improve-toggle {
+  border-color: rgba(233, 237, 247, 0.16);
+  box-shadow:
+    0 18px 34px rgba(2, 6, 23, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+[data-theme="dark"] .indicator-toggle-label,
+[data-theme="dark"] .sports-foundry-workflow-option span {
+  background:
+    radial-gradient(150% 180% at 0% 0%, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.04) 28%, rgba(255, 255, 255, 0) 56%),
+    linear-gradient(145deg, rgba(23, 33, 58, 0.92), rgba(14, 21, 39, 0.9));
+  color: var(--glass-text);
 }
 
 [data-theme="dark"] .indicator-toggle-label::before,
-[data-theme="dark"] .model-council-improve-toggle input[type="checkbox"],
-[data-theme="dark"] .module-picker-chip input {
-  border-color: rgba(255, 255, 255, 0.12);
-  background:
-    radial-gradient(circle at 32% 22%, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.06) 46%, rgba(255, 255, 255, 0) 72%),
-    linear-gradient(145deg, rgba(43, 56, 92, 0.7), rgba(16, 24, 43, 0.46));
-}
-
-[data-theme="dark"] .indicator-toggle input:checked + .indicator-toggle-label::before,
-[data-theme="dark"] .model-council-improve-toggle input[type="checkbox"]:checked,
-[data-theme="dark"] .module-picker-chip input:checked {
-  background:
-    radial-gradient(circle at 30% 22%, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.04) 38%, rgba(255, 255, 255, 0) 72%),
-    linear-gradient(145deg, rgba(73, 110, 227, 0.68), rgba(30, 144, 141, 0.4));
+[data-theme="dark"] .module-picker-chip input,
+[data-theme="dark"] .model-council-improve-toggle input[type="checkbox"] {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(148, 163, 184, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
 
 [data-theme="dark"] .indicator-toggle-label::after,
-[data-theme="dark"] .model-council-improve-toggle input[type="checkbox"]::after,
-[data-theme="dark"] .module-picker-chip input::after {
+[data-theme="dark"] .module-picker-chip input::after,
+[data-theme="dark"] .model-council-improve-toggle input[type="checkbox"]::after {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(214, 226, 247, 0.88));
+  box-shadow:
+    0 6px 16px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.88);
+}
+
+[data-theme="dark"] .indicator-toggle input:checked + .indicator-toggle-label,
+[data-theme="dark"] .module-picker-chip.is-selected,
+[data-theme="dark"] .sports-foundry-workflow-option input:checked + span,
+[data-theme="dark"] .model-council-improve-toggle:has(input[type="checkbox"]:checked) {
+  border-color: rgba(125, 171, 255, 0.34);
+  box-shadow:
+    0 20px 38px rgba(2, 6, 23, 0.36),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+[data-theme="dark"] .indicator-toggle input:checked + .indicator-toggle-label {
   background:
-    radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.94), rgba(227, 236, 252, 0.8) 48%, rgba(179, 197, 232, 0.72) 100%);
+    radial-gradient(140% 200% at 0% 0%, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.04) 28%, rgba(255, 255, 255, 0) 56%),
+    linear-gradient(145deg, rgba(49, 92, 194, 0.68), rgba(28, 128, 150, 0.34));
+  color: #f4f7ff;
+}
+
+[data-theme="dark"] .indicator-toggle input:checked + .indicator-toggle-label::before,
+[data-theme="dark"] .module-picker-chip input:checked,
+[data-theme="dark"] .model-council-improve-toggle input[type="checkbox"]:checked {
+  background: linear-gradient(145deg, rgba(76, 118, 232, 0.88), rgba(31, 155, 149, 0.5));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.1),
+    0 8px 18px rgba(10, 24, 56, 0.32);
 }
 
 .personality-select-wrap::after {
