@@ -11,6 +11,22 @@
   --radius-lg: 18px;
   --radius-md: 12px;
   --shadow-soft: 0 14px 34px rgba(15, 24, 41, 0.08);
+  --glass-panel-fill:
+    radial-gradient(140% 220% at 0% 0%, rgba(255, 255, 255, 0.82) 0%, rgba(255, 255, 255, 0.22) 32%, rgba(255, 255, 255, 0) 58%),
+    radial-gradient(120% 180% at 100% 100%, rgba(78, 142, 255, 0.12) 0%, rgba(78, 142, 255, 0) 54%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.56) 0%, rgba(242, 245, 252, 0.28) 100%);
+  --glass-control-fill:
+    radial-gradient(120% 200% at 10% 0%, rgba(255, 255, 255, 0.86) 0%, rgba(255, 255, 255, 0.22) 34%, rgba(255, 255, 255, 0) 58%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.62) 0%, rgba(240, 244, 251, 0.3) 100%);
+  --glass-border-strong: rgba(255, 255, 255, 0.58);
+  --glass-shadow-strong:
+    0 24px 48px rgba(15, 24, 41, 0.14),
+    0 8px 18px rgba(15, 24, 41, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.86),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.18);
+  --glass-focus-ring: rgba(11, 77, 122, 0.16);
+  --glass-panel-backdrop: blur(16px) saturate(168%);
+  --glass-control-backdrop: blur(12px) saturate(158%);
 }
 
 * {
@@ -1217,4 +1233,90 @@ body.mobile-bottom-nav-enabled {
   .mobile-bottom-nav {
     display: none !important;
   }
+}
+
+html[data-liquid-glass-mode="refraction"] {
+  --glass-panel-backdrop: url("#quantura-liquid-glass-panel-filter") blur(18px) saturate(172%);
+  --glass-control-backdrop: url("#quantura-liquid-glass-control-filter") blur(12px) saturate(162%);
+}
+
+.shop-header,
+.shop-hero,
+.hero-meta > div,
+.collection-section,
+.policy-card,
+.bundle-card,
+.product-card,
+.cart-drawer,
+.cart-overlay,
+.shipping-card,
+.summary-card,
+.bundle-note,
+.shop-message {
+  background: var(--glass-panel-fill);
+  border-color: var(--glass-border-strong);
+  box-shadow: var(--glass-shadow-strong);
+  backdrop-filter: var(--glass-panel-backdrop);
+  -webkit-backdrop-filter: var(--glass-panel-backdrop);
+}
+
+.cart-toggle,
+.tab,
+.search-wrap input,
+.carousel-button,
+.cart-email input,
+.qty-button,
+.header-link,
+.shop-nav a {
+  background: var(--glass-control-fill);
+  border-color: var(--glass-border-strong);
+  box-shadow:
+    0 16px 30px rgba(15, 24, 41, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.88),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.16);
+  backdrop-filter: var(--glass-control-backdrop);
+  -webkit-backdrop-filter: var(--glass-control-backdrop);
+}
+
+.cart-toggle,
+.tab,
+.carousel-button {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.cart-toggle::before,
+.tab::before,
+.carousel-button::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    linear-gradient(158deg, rgba(255, 255, 255, 0.74) 0%, rgba(255, 255, 255, 0.18) 30%, rgba(255, 255, 255, 0) 58%),
+    radial-gradient(110% 90% at 84% 100%, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0) 70%);
+}
+
+.tab.active,
+.cart-toggle:hover {
+  background:
+    radial-gradient(130% 200% at 0% 0%, rgba(255, 255, 255, 0.52) 0%, rgba(255, 255, 255, 0.16) 30%, rgba(255, 255, 255, 0) 58%),
+    linear-gradient(145deg, rgba(11, 77, 122, 0.3) 0%, rgba(28, 113, 178, 0.16) 100%);
+  color: var(--shop-brand-dark);
+  border-color: rgba(11, 77, 122, 0.28);
+}
+
+.search-wrap input:focus,
+.cart-email input:focus,
+.cart-toggle:focus-visible,
+.tab:focus-visible,
+.carousel-button:focus-visible {
+  outline: none;
+  border-color: rgba(11, 77, 122, 0.4);
+  box-shadow:
+    0 0 0 4px var(--glass-focus-ring),
+    0 16px 30px rgba(15, 24, 41, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.88);
 }

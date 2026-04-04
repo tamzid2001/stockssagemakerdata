@@ -27,6 +27,33 @@
   --glass-border: rgba(255, 255, 255, 0.52);
   --glass-shadow: 0 14px 30px rgba(11, 15, 26, 0.14);
   --glass-radius: 18px;
+  --glass-panel-fill:
+    radial-gradient(140% 220% at 0% 0%, rgba(255, 255, 255, 0.82) 0%, rgba(255, 255, 255, 0.28) 30%, rgba(255, 255, 255, 0) 56%),
+    radial-gradient(120% 180% at 100% 100%, rgba(145, 198, 255, 0.16) 0%, rgba(145, 198, 255, 0) 52%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.5) 0%, rgba(252, 249, 243, 0.22) 100%);
+  --glass-panel-border-strong: rgba(255, 255, 255, 0.56);
+  --glass-panel-shadow-strong:
+    0 24px 48px rgba(11, 15, 26, 0.16),
+    0 10px 22px rgba(11, 15, 26, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.86),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.22);
+  --glass-control-fill:
+    radial-gradient(120% 200% at 10% 0%, rgba(255, 255, 255, 0.88) 0%, rgba(255, 255, 255, 0.26) 34%, rgba(255, 255, 255, 0) 58%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.62) 0%, rgba(245, 240, 231, 0.34) 100%);
+  --glass-control-border-strong: rgba(255, 255, 255, 0.62);
+  --glass-control-shadow-strong:
+    0 16px 34px rgba(15, 23, 42, 0.12),
+    0 6px 14px rgba(15, 23, 42, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.2);
+  --glass-control-hover-shadow:
+    0 20px 40px rgba(15, 23, 42, 0.14),
+    0 8px 18px rgba(15, 23, 42, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.18);
+  --glass-focus-ring: rgba(56, 114, 255, 0.18);
+  --glass-panel-backdrop: blur(calc(var(--glass-blur) + 4px)) saturate(170%);
+  --glass-control-backdrop: blur(calc(var(--glass-blur) - 5px)) saturate(160%);
   --mobile-bottom-nav-height: 62px;
 }
 
@@ -48,6 +75,31 @@
   --glass-tint: rgba(18, 24, 42, 0.62);
   --glass-border: rgba(233, 237, 247, 0.2);
   --glass-shadow: 0 18px 36px rgba(0, 0, 0, 0.42);
+  --glass-panel-fill:
+    radial-gradient(140% 220% at 0% 0%, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.05) 26%, rgba(255, 255, 255, 0) 56%),
+    radial-gradient(120% 180% at 100% 100%, rgba(76, 154, 255, 0.16) 0%, rgba(76, 154, 255, 0) 54%),
+    linear-gradient(145deg, rgba(28, 38, 63, 0.72) 0%, rgba(18, 24, 42, 0.52) 100%);
+  --glass-panel-border-strong: rgba(233, 237, 247, 0.18);
+  --glass-panel-shadow-strong:
+    0 26px 52px rgba(0, 0, 0, 0.4),
+    0 10px 22px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.03);
+  --glass-control-fill:
+    radial-gradient(120% 200% at 10% 0%, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.04) 32%, rgba(255, 255, 255, 0) 58%),
+    linear-gradient(145deg, rgba(29, 38, 63, 0.82) 0%, rgba(14, 20, 37, 0.62) 100%);
+  --glass-control-border-strong: rgba(233, 237, 247, 0.2);
+  --glass-control-shadow-strong:
+    0 18px 36px rgba(0, 0, 0, 0.34),
+    0 8px 18px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.03);
+  --glass-control-hover-shadow:
+    0 24px 44px rgba(0, 0, 0, 0.38),
+    0 10px 22px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.03);
+  --glass-focus-ring: rgba(116, 163, 255, 0.22);
 }
 
 * {
@@ -8135,4 +8187,360 @@ body:not(.native-runtime) .quantura-rn-injection-shell {
 
 [data-theme="dark"] .quantura-rn-root {
   color-scheme: dark;
+}
+
+html[data-liquid-glass-mode="refraction"] {
+  --glass-panel-backdrop: url("#quantura-liquid-glass-panel-filter") blur(calc(var(--glass-blur) + 3px)) saturate(174%);
+  --glass-control-backdrop: url("#quantura-liquid-glass-control-filter") blur(calc(var(--glass-blur) - 6px)) saturate(164%);
+}
+
+:is(
+  .liquid-glass,
+  .card,
+  .results-panel,
+  .sidebar-card,
+  .sidebar-nav,
+  .modal-card,
+  .toast,
+  .mobile-bottom-nav,
+  .cookie-banner,
+  .home-bottom-nav,
+  .quantura-comments-card,
+  .quantura-comments-shell
+) {
+  background: var(--glass-panel-fill);
+  border-color: var(--glass-panel-border-strong);
+  box-shadow: var(--glass-panel-shadow-strong);
+  backdrop-filter: var(--glass-panel-backdrop);
+  -webkit-backdrop-filter: var(--glass-panel-backdrop);
+}
+
+:is(
+  .card,
+  .results-panel,
+  .sidebar-card,
+  .sidebar-nav,
+  .modal-card,
+  .tab,
+  .sidebar-link,
+  .module-picker-chip,
+  .sports-foundry-workflow-option span,
+  .indicator-toggle-label,
+  .quantura-comments-card,
+  .quantura-comments-shell,
+  .home-bottom-nav,
+  .home-bottom-nav-link
+) {
+  position: relative;
+  isolation: isolate;
+}
+
+:is(
+  .card,
+  .results-panel,
+  .sidebar-card,
+  .sidebar-nav,
+  .modal-card,
+  .tab,
+  .sidebar-link,
+  .module-picker-chip,
+  .sports-foundry-workflow-option span,
+  .indicator-toggle-label,
+  .quantura-comments-card,
+  .quantura-comments-shell,
+  .home-bottom-nav,
+  .home-bottom-nav-link
+)::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    linear-gradient(158deg, rgba(255, 255, 255, 0.72) 0%, rgba(255, 255, 255, 0.22) 28%, rgba(255, 255, 255, 0) 56%),
+    radial-gradient(110% 90% at 84% 100%, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0) 68%);
+  opacity: 0.85;
+}
+
+[data-theme="dark"] :is(
+  .card,
+  .results-panel,
+  .sidebar-card,
+  .sidebar-nav,
+  .modal-card,
+  .tab,
+  .sidebar-link,
+  .module-picker-chip,
+  .sports-foundry-workflow-option span,
+  .indicator-toggle-label,
+  .quantura-comments-card,
+  .quantura-comments-shell,
+  .home-bottom-nav,
+  .home-bottom-nav-link
+)::before {
+  background:
+    linear-gradient(158deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.06) 26%, rgba(255, 255, 255, 0) 56%),
+    radial-gradient(110% 90% at 84% 100%, rgba(125, 171, 255, 0.16), rgba(125, 171, 255, 0) 68%);
+}
+
+:is(
+  input:not([type]),
+  input[type="text"],
+  input[type="search"],
+  input[type="email"],
+  input[type="number"],
+  input[type="date"],
+  input[type="url"],
+  input[type="tel"],
+  input[type="password"],
+  textarea,
+  select,
+  .file-input,
+  .input.notes-input,
+  .theme-toggle,
+  .sidebar-link,
+  .tab,
+  .status-select,
+  .notification-privacy-select,
+  .modal-input,
+  .personality-select,
+  .model-council-improve-toggle,
+  .module-picker-chip,
+  .sports-foundry-workflow-option span,
+  .indicator-toggle-label,
+  .mobile-sidebar-toggle,
+  .download-history-toggle,
+  .model-council-prompt-card
+) {
+  background: var(--glass-control-fill);
+  border-color: var(--glass-control-border-strong);
+  box-shadow: var(--glass-control-shadow-strong);
+  backdrop-filter: var(--glass-control-backdrop);
+  -webkit-backdrop-filter: var(--glass-control-backdrop);
+}
+
+:is(
+  input:not([type]),
+  input[type="text"],
+  input[type="search"],
+  input[type="email"],
+  input[type="number"],
+  input[type="date"],
+  input[type="url"],
+  input[type="tel"],
+  input[type="password"],
+  textarea,
+  select,
+  .file-input,
+  .input.notes-input,
+  .theme-toggle,
+  .sidebar-link,
+  .tab,
+  .status-select,
+  .notification-privacy-select,
+  .modal-input,
+  .personality-select,
+  .model-council-improve-toggle,
+  .module-picker-chip,
+  .sports-foundry-workflow-option span,
+  .indicator-toggle-label,
+  .mobile-sidebar-toggle,
+  .download-history-toggle,
+  .model-council-prompt-card
+):hover {
+  box-shadow: var(--glass-control-hover-shadow);
+}
+
+:is(
+  input:not([type]),
+  input[type="text"],
+  input[type="search"],
+  input[type="email"],
+  input[type="number"],
+  input[type="date"],
+  input[type="url"],
+  input[type="tel"],
+  input[type="password"],
+  textarea,
+  select,
+  .file-input,
+  .input.notes-input,
+  .theme-toggle,
+  .sidebar-link,
+  .tab,
+  .status-select,
+  .notification-privacy-select,
+  .modal-input,
+  .personality-select,
+  .model-council-improve-toggle,
+  .module-picker-chip,
+  .sports-foundry-workflow-option span,
+  .indicator-toggle-label,
+  .mobile-sidebar-toggle,
+  .download-history-toggle,
+  .model-council-prompt-card
+):focus,
+:is(
+  input:not([type]),
+  input[type="text"],
+  input[type="search"],
+  input[type="email"],
+  input[type="number"],
+  input[type="date"],
+  input[type="url"],
+  input[type="tel"],
+  input[type="password"],
+  textarea,
+  select,
+  .file-input,
+  .input.notes-input,
+  .theme-toggle,
+  .sidebar-link,
+  .tab,
+  .status-select,
+  .notification-privacy-select,
+  .modal-input,
+  .personality-select,
+  .model-council-improve-toggle,
+  .module-picker-chip,
+  .sports-foundry-workflow-option span,
+  .indicator-toggle-label,
+  .mobile-sidebar-toggle,
+  .download-history-toggle,
+  .model-council-prompt-card
+):focus-visible {
+  outline: none;
+  border-color: rgba(82, 132, 255, 0.42);
+  box-shadow:
+    0 0 0 4px var(--glass-focus-ring),
+    var(--glass-control-hover-shadow);
+}
+
+.theme-toggle,
+.sidebar-link,
+.tab,
+.module-picker-chip,
+.sports-foundry-workflow-option span,
+.indicator-toggle-label,
+.model-council-improve-toggle,
+.mobile-sidebar-toggle,
+.download-history-toggle {
+  overflow: hidden;
+}
+
+.sidebar-nav a:hover,
+.sidebar-link:hover {
+  background: var(--glass-control-fill);
+}
+
+.sidebar-link.active,
+.tab.is-active,
+.screener-filter-tab.is-active,
+.module-picker-chip.is-selected,
+.sports-foundry-workflow-option input:checked + span,
+.indicator-toggle input:checked + .indicator-toggle-label,
+.mobile-bottom-link.active,
+.home-bottom-nav-link.active {
+  border-color: rgba(118, 156, 255, 0.4);
+  background:
+    radial-gradient(130% 200% at 0% 0%, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.16) 30%, rgba(255, 255, 255, 0) 58%),
+    linear-gradient(145deg, rgba(66, 120, 255, 0.28) 0%, rgba(34, 196, 193, 0.16) 100%);
+  color: var(--ink);
+  box-shadow:
+    0 18px 38px rgba(44, 93, 211, 0.18),
+    0 8px 18px rgba(15, 23, 42, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.18);
+}
+
+[data-theme="dark"] .sidebar-link.active,
+[data-theme="dark"] .tab.is-active,
+[data-theme="dark"] .screener-filter-tab.is-active,
+[data-theme="dark"] .module-picker-chip.is-selected,
+[data-theme="dark"] .sports-foundry-workflow-option input:checked + span,
+[data-theme="dark"] .indicator-toggle input:checked + .indicator-toggle-label,
+[data-theme="dark"] .mobile-bottom-link.active,
+[data-theme="dark"] .home-bottom-nav-link.active {
+  border-color: rgba(125, 171, 255, 0.42);
+  background:
+    radial-gradient(130% 200% at 0% 0%, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.06) 30%, rgba(255, 255, 255, 0) 58%),
+    linear-gradient(145deg, rgba(58, 102, 214, 0.38) 0%, rgba(26, 136, 143, 0.22) 100%);
+  color: var(--ink);
+}
+
+.indicator-toggle-label::before,
+.sports-foundry-workflow-option span::after,
+.model-council-improve-toggle input[type="checkbox"],
+.module-picker-chip input {
+  backdrop-filter: var(--glass-control-backdrop);
+  -webkit-backdrop-filter: var(--glass-control-backdrop);
+}
+
+.indicator-toggle-label::before,
+.model-council-improve-toggle input[type="checkbox"],
+.module-picker-chip input {
+  border-color: rgba(255, 255, 255, 0.32);
+  background:
+    radial-gradient(circle at 32% 22%, rgba(255, 255, 255, 0.74), rgba(255, 255, 255, 0.12) 46%, rgba(255, 255, 255, 0) 72%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.34), rgba(228, 235, 249, 0.18));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    0 8px 18px rgba(15, 23, 42, 0.12);
+}
+
+.indicator-toggle input:checked + .indicator-toggle-label::before,
+.model-council-improve-toggle input[type="checkbox"]:checked,
+.module-picker-chip input:checked {
+  border-color: rgba(167, 210, 255, 0.38);
+  background:
+    radial-gradient(circle at 30% 22%, rgba(255, 255, 255, 0.44), rgba(255, 255, 255, 0.12) 38%, rgba(255, 255, 255, 0) 72%),
+    linear-gradient(145deg, rgba(71, 114, 255, 0.62), rgba(27, 171, 168, 0.38));
+}
+
+.indicator-toggle-label::after,
+.model-council-improve-toggle input[type="checkbox"]::after,
+.module-picker-chip input::after {
+  background:
+    radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0.78) 48%, rgba(216, 227, 247, 0.82) 100%);
+  box-shadow:
+    0 5px 14px rgba(15, 23, 42, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+[data-theme="dark"] .indicator-toggle-label::before,
+[data-theme="dark"] .model-council-improve-toggle input[type="checkbox"],
+[data-theme="dark"] .module-picker-chip input {
+  border-color: rgba(255, 255, 255, 0.12);
+  background:
+    radial-gradient(circle at 32% 22%, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.06) 46%, rgba(255, 255, 255, 0) 72%),
+    linear-gradient(145deg, rgba(43, 56, 92, 0.7), rgba(16, 24, 43, 0.46));
+}
+
+[data-theme="dark"] .indicator-toggle input:checked + .indicator-toggle-label::before,
+[data-theme="dark"] .model-council-improve-toggle input[type="checkbox"]:checked,
+[data-theme="dark"] .module-picker-chip input:checked {
+  background:
+    radial-gradient(circle at 30% 22%, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.04) 38%, rgba(255, 255, 255, 0) 72%),
+    linear-gradient(145deg, rgba(73, 110, 227, 0.68), rgba(30, 144, 141, 0.4));
+}
+
+[data-theme="dark"] .indicator-toggle-label::after,
+[data-theme="dark"] .model-council-improve-toggle input[type="checkbox"]::after,
+[data-theme="dark"] .module-picker-chip input::after {
+  background:
+    radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.94), rgba(227, 236, 252, 0.8) 48%, rgba(179, 197, 232, 0.72) 100%);
+}
+
+.personality-select-wrap::after {
+  border-color: color-mix(in srgb, var(--ink-2) 76%, white 24%);
+}
+
+.search-wrap input,
+.ticker-filter input,
+.inline-controls input {
+  background: var(--glass-control-fill);
+  border-color: var(--glass-control-border-strong);
+  box-shadow: var(--glass-control-shadow-strong);
+  backdrop-filter: var(--glass-control-backdrop);
+  -webkit-backdrop-filter: var(--glass-control-backdrop);
 }

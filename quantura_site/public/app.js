@@ -14798,6 +14798,36 @@
     return `${normalizedType}__${normalizedSourceId || "item"}`;
   };
 
+  const LIQUID_GLASS_RUNTIME_URL = "/liquid-glass.js";
+  let liquidGlassRuntimePromise = null;
+
+  const loadLiquidGlassRuntime = () => {
+    if (window.QuanturaLiquidGlass?.ensure) return Promise.resolve(window.QuanturaLiquidGlass.ensure());
+    if (liquidGlassRuntimePromise) return liquidGlassRuntimePromise;
+    liquidGlassRuntimePromise = new Promise((resolve, reject) => {
+      const existing = document.querySelector('script[data-quantura-liquid-glass-runtime="1"]');
+      if (existing) {
+        existing.addEventListener("load", () => resolve(window.QuanturaLiquidGlass?.ensure?.() || null), { once: true });
+        existing.addEventListener("error", () => reject(new Error("Unable to load the liquid glass runtime.")), { once: true });
+        return;
+      }
+      const script = document.createElement("script");
+      script.src = LIQUID_GLASS_RUNTIME_URL;
+      script.defer = true;
+      script.dataset.quanturaLiquidGlassRuntime = "1";
+      script.addEventListener("load", () => {
+        if (window.QuanturaLiquidGlass?.ensure) resolve(window.QuanturaLiquidGlass.ensure());
+        else reject(new Error("Liquid glass runtime is unavailable."));
+      });
+      script.addEventListener("error", () => reject(new Error("Unable to load the liquid glass runtime.")));
+      document.head.appendChild(script);
+    }).catch((error) => {
+      liquidGlassRuntimePromise = null;
+      throw error;
+    });
+    return liquidGlassRuntimePromise;
+  };
+
   const GISCUS_RUNTIME_URL = "/giscus-comments.js";
   let giscusRuntimePromise = null;
 
@@ -25024,6 +25054,7 @@
 		      return;
 		    }
 
+      loadLiquidGlassRuntime().catch(() => {});
       applyTheme(resolveThemePreference(), { persist: false });
       initBlogCommentsSurface().catch(() => {});
       syncScreenerCommentsThread(null).catch(() => {});
