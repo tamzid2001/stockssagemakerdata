@@ -25101,18 +25101,50 @@
     }
   };
 
-		  const init = () => {
-	    hydrateUnsplashGallery();
-		    if (typeof firebase === "undefined") {
-		      console.error("App SDK not loaded.");
-		      return;
-		    }
-
+  const initializeUiShell = () => {
+      publishShopRuntimeBridge();
       loadLiquidGlassRuntime().catch(() => {});
       applyTheme(resolveThemePreference(), { persist: false });
       initBlogCommentsSurface().catch(() => {});
       initStaticPageCommentsSurfaces().catch(() => {});
       syncScreenerCommentsThread(null).catch(() => {});
+      ensureThemeToggle();
+      normalizeHeaderBranding();
+      normalizeTopNavigation();
+      normalizeFooterSocialLinks();
+      normalizeFooterContactInfo();
+      initPricingBillingToggle();
+      bindSolveNowModalTriggers();
+      removeHeaderSolveNowCta();
+      ensureHeaderNotificationsCta();
+      ensureSidebarCollapseToggle();
+      bindMobileNav();
+      bindMobileSidebarDrawer();
+      bindMobileBottomNav();
+      bindMarketingBottomNav();
+      bindHomeBottomNav();
+      bindNativeTransitionInterstitials();
+      registerLegacyNativeAdInjectionHook();
+      scheduleNativeInlineAdsRefresh();
+      window.setInterval(scheduleNativeInlineAdsRefresh, 3500);
+      initializeLanguageControls().catch(() => {});
+      captureShareFromUrl();
+      renderNotificationLog();
+      renderNotificationFeed();
+      ensureNotificationPrivacyControls();
+      syncNotificationPrivacyControls();
+      recordPromoSessionUsage();
+      state.promoForecastCount = getStoredNumber(PROMO_FORECAST_COUNT_KEY, 0);
+      bindChartControls();
+  };
+
+		  const init = () => {
+	    hydrateUnsplashGallery();
+      initializeUiShell();
+		    if (typeof firebase === "undefined") {
+		      console.error("App SDK not loaded.");
+		      return;
+		    }
 
       try {
         const currentPath = normalizePath(window.location.pathname || "/");
@@ -25328,39 +25360,9 @@
         scheduleNativeInlineAdsRefresh();
       };
 
-      publishShopRuntimeBridge();
-      ensureThemeToggle();
-      normalizeHeaderBranding();
-      normalizeTopNavigation();
-      normalizeFooterSocialLinks();
-      normalizeFooterContactInfo();
-      initPricingBillingToggle();
-      bindSolveNowModalTriggers();
-      removeHeaderSolveNowCta();
-      ensureHeaderNotificationsCta();
-      ensureSidebarCollapseToggle();
-      bindMobileNav();
-      bindMobileSidebarDrawer();
-      bindMobileBottomNav();
-      bindMarketingBottomNav();
-      bindHomeBottomNav();
-      bindNativeTransitionInterstitials();
-      registerLegacyNativeAdInjectionHook();
-      scheduleNativeInlineAdsRefresh();
-      window.setInterval(scheduleNativeInlineAdsRefresh, 3500);
-      initializeLanguageControls().catch(() => {});
-      captureShareFromUrl();
-      renderNotificationLog();
-      renderNotificationFeed();
-      ensureNotificationPrivacyControls();
-      syncNotificationPrivacyControls();
-      recordPromoSessionUsage();
-      state.promoForecastCount = getStoredNumber(PROMO_FORECAST_COUNT_KEY, 0);
-      bindChartControls();
-
-	    if (!state.authResolved) {
-	      if (ui.headerUserEmail) ui.headerUserEmail.textContent = "Restoring session...";
-	      if (ui.headerUserStatus) ui.headerUserStatus.textContent = "Loading";
+		    if (!state.authResolved) {
+		      if (ui.headerUserEmail) ui.headerUserEmail.textContent = "Restoring session...";
+		      if (ui.headerUserStatus) ui.headerUserStatus.textContent = "Loading";
 	    }
 
     if (ui.notificationsStatus) {

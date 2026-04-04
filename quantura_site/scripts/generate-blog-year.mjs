@@ -501,18 +501,7 @@ function blogPostHtml(meta) {
     <script defer src="/app.js"></script>
   </head>
   <body>
-    <header class="header">
-      <div class="container nav">
-        <a class="logo" href="/" aria-label="Quantura home"><span>QUANTURA</span></a>
-        <nav class="nav-links">
-          <a href="/terminal" data-analytics="nav_terminal"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Terminal</span></a>
-          <a href="/explore" data-analytics="nav_explore"><i class="iconoir-binocular" aria-hidden="true"></i><span>Explore</span></a>
-          <a href="/research" data-analytics="nav_research"><i class="iconoir-bookmark-book" aria-hidden="true"></i><span>Research</span></a>
-          <a href="/blog" data-analytics="nav_blog"><i class="iconoir-page" aria-hidden="true"></i><span>Blog</span></a>
-          <a href="/pricing" data-analytics="nav_pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>Pricing</span></a>
-        </nav>
-      </div>
-    </header>
+    ${siteHeaderHtml()}
 
     <main>
       <section class="page-hero">
@@ -565,6 +554,30 @@ function blogPostHtml(meta) {
 `;
 }
 
+function siteHeaderHtml() {
+  return `
+    <header class="header">
+      <div class="container nav">
+        <a class="logo" href="/" aria-label="Quantura home">
+          <img class="logo-img" src="/assets/logo.png" alt="" aria-hidden="true" />
+          <span>QUANTURA</span>
+        </a>
+        <nav class="nav-links">
+          <a href="/explore" data-analytics="nav_explore"><i class="iconoir-binocular" aria-hidden="true"></i><span>Explore</span></a>
+          <a href="/research" data-analytics="nav_research"><i class="iconoir-bookmark-book" aria-hidden="true"></i><span>Research</span></a>
+          <a href="/blog" data-analytics="nav_blog"><i class="iconoir-page" aria-hidden="true"></i><span>Blog</span></a>
+          <a href="/events" data-analytics="nav_events"><i class="iconoir-calendar" aria-hidden="true"></i><span>Events</span></a>
+          <a href="/shop" data-analytics="nav_shop"><i class="iconoir-shop" aria-hidden="true"></i><span>Shop</span></a>
+          <a href="/about" data-analytics="nav_about"><i class="iconoir-info-circle" aria-hidden="true"></i><span>About</span></a>
+          <a href="/pricing" data-analytics="nav_pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>Pricing</span></a>
+          <a href="/contact" data-analytics="nav_contact"><i class="iconoir-mail" aria-hidden="true"></i><span>Contact Us</span></a>
+        </nav>
+        <div class="nav-actions"></div>
+      </div>
+    </header>
+  `;
+}
+
 function blogIndexHtml(posts) {
   const latest = posts.slice(0, 12);
   return `<!doctype html>
@@ -596,19 +609,7 @@ function blogIndexHtml(posts) {
     <script defer src="/app.js"></script>
   </head>
   <body>
-    <header class="header">
-      <div class="container nav">
-        <a class="logo" href="/" aria-label="Quantura home"><span>QUANTURA</span></a>
-        <nav class="nav-links">
-          <a href="/terminal" data-analytics="nav_terminal"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Terminal</span></a>
-          <a href="/explore" data-analytics="nav_explore"><i class="iconoir-binocular" aria-hidden="true"></i><span>Explore</span></a>
-          <a href="/research" data-analytics="nav_research"><i class="iconoir-bookmark-book" aria-hidden="true"></i><span>Research</span></a>
-          <a href="/blog" data-analytics="nav_blog"><i class="iconoir-page" aria-hidden="true"></i><span>Blog</span></a>
-          <a href="/pricing" data-analytics="nav_pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>Pricing</span></a>
-          <a href="/contact" data-analytics="nav_contact"><i class="iconoir-mail" aria-hidden="true"></i><span>Contact Us</span></a>
-        </nav>
-      </div>
-    </header>
+    ${siteHeaderHtml()}
 
     <main>
       <section class="page-hero">
@@ -682,19 +683,7 @@ function topicPageHtml(topicSlug, posts) {
     <script defer src="/app.js"></script>
   </head>
   <body>
-    <header class="header">
-      <div class="container nav">
-        <a class="logo" href="/" aria-label="Quantura home"><span>QUANTURA</span></a>
-        <nav class="nav-links">
-          <a href="/terminal" data-analytics="nav_terminal"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Terminal</span></a>
-          <a href="/explore" data-analytics="nav_explore"><i class="iconoir-binocular" aria-hidden="true"></i><span>Explore</span></a>
-          <a href="/research" data-analytics="nav_research"><i class="iconoir-bookmark-book" aria-hidden="true"></i><span>Research</span></a>
-          <a href="/blog" data-analytics="nav_blog"><i class="iconoir-page" aria-hidden="true"></i><span>Blog</span></a>
-          <a href="/pricing" data-analytics="nav_pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>Pricing</span></a>
-          <a href="/contact" data-analytics="nav_contact"><i class="iconoir-mail" aria-hidden="true"></i><span>Contact Us</span></a>
-        </nav>
-      </div>
-    </header>
+    ${siteHeaderHtml()}
 
     <main>
       <section class="page-hero">
