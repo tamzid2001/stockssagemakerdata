@@ -633,6 +633,119 @@ button:hover,
   width: 100%;
 }
 
+.quantura-comments-fallback {
+  display: grid;
+  gap: 14px;
+}
+
+.quantura-comments-fallback-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.quantura-comments-fallback-head h4 {
+  margin: 4px 0 0;
+}
+
+.quantura-comments-fallback-head p,
+.quantura-comments-fallback-body p {
+  margin: 0;
+}
+
+.quantura-comments-fallback-eyebrow {
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.quantura-comments-fallback-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(26, 56, 120, 0.18);
+  background: rgba(11, 15, 26, 0.94);
+  color: #ffffff;
+  font-weight: 700;
+  text-decoration: none;
+  box-shadow: 0 10px 22px rgba(18, 42, 86, 0.18);
+}
+
+.quantura-comments-fallback-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.quantura-comments-fallback-summary span {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(26, 56, 120, 0.12);
+  background: rgba(255, 255, 255, 0.56);
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.quantura-comments-fallback-body,
+.quantura-comments-fallback-empty,
+.quantura-comments-fallback-meta {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.quantura-comments-fallback-list {
+  display: grid;
+  gap: 12px;
+}
+
+.quantura-comments-fallback-item {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(26, 56, 120, 0.12);
+  background: rgba(255, 255, 255, 0.56);
+}
+
+.quantura-comments-fallback-author {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.quantura-comments-fallback-author a {
+  font-weight: 700;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.quantura-comments-fallback-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  object-fit: cover;
+  border: 1px solid rgba(26, 56, 120, 0.12);
+}
+
+.quantura-comments-fallback-avatar--placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(11, 15, 26, 0.08);
+  color: var(--ink);
+  font-weight: 800;
+}
+
 html[data-liquid-glass-mode="refraction"] {
   --glass-panel-backdrop: url("#quantura-liquid-glass-panel-filter") blur(18px) saturate(174%);
   --glass-control-backdrop: url("#quantura-liquid-glass-control-filter") blur(12px) saturate(164%);

@@ -2516,6 +2516,128 @@ textarea {
   width: 100%;
 }
 
+.quantura-comments-fallback {
+  display: grid;
+  gap: 14px;
+}
+
+.quantura-comments-fallback-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.quantura-comments-fallback-head h4 {
+  margin: 4px 0 0;
+  font-size: 1.05rem;
+}
+
+.quantura-comments-fallback-head p {
+  margin: 8px 0 0;
+}
+
+.quantura-comments-fallback-eyebrow {
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--glass-muted);
+}
+
+.quantura-comments-fallback-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: rgba(11, 15, 26, 0.92);
+  color: #ffffff;
+  font-weight: 700;
+  text-decoration: none;
+  box-shadow: 0 12px 24px rgba(11, 15, 26, 0.18);
+}
+
+.quantura-comments-fallback-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.quantura-comments-fallback-summary span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.56);
+  color: var(--glass-text);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.quantura-comments-fallback-body {
+  color: var(--glass-muted);
+  line-height: 1.6;
+}
+
+.quantura-comments-fallback-body p {
+  margin: 0;
+}
+
+.quantura-comments-fallback-list {
+  display: grid;
+  gap: 12px;
+}
+
+.quantura-comments-fallback-item {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.quantura-comments-fallback-author {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.quantura-comments-fallback-author a {
+  font-weight: 700;
+  color: var(--glass-text);
+  text-decoration: none;
+}
+
+.quantura-comments-fallback-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  object-fit: cover;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.quantura-comments-fallback-avatar--placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(11, 15, 26, 0.12);
+  color: var(--glass-text);
+  font-weight: 800;
+}
+
+.quantura-comments-fallback-meta,
+.quantura-comments-fallback-empty {
+  color: var(--glass-muted);
+  font-size: 0.9rem;
+}
+
 [data-theme="dark"] .quantura-comments-card {
   border-color: rgba(233, 237, 247, 0.14);
   background: linear-gradient(180deg, rgba(18, 24, 42, 0.86), rgba(18, 24, 42, 0.64));
@@ -2525,6 +2647,22 @@ textarea {
 [data-theme="dark"] .quantura-comments-shell {
   border-color: rgba(233, 237, 247, 0.16);
   background: rgba(11, 15, 26, 0.48);
+}
+
+[data-theme="dark"] .quantura-comments-fallback-link {
+  border-color: rgba(233, 237, 247, 0.16);
+  background: rgba(233, 237, 247, 0.08);
+  color: #ffffff;
+}
+
+[data-theme="dark"] .quantura-comments-fallback-summary span,
+[data-theme="dark"] .quantura-comments-fallback-item {
+  border-color: rgba(233, 237, 247, 0.12);
+  background: rgba(18, 24, 42, 0.48);
+}
+
+[data-theme="dark"] .quantura-comments-fallback-avatar {
+  border-color: rgba(233, 237, 247, 0.16);
 }
 
 .sports-foundry-workflow-toggle {

@@ -2383,6 +2383,32 @@ type GithubScreenerArtifactPayload = {
   workflowLog: string;
 };
 
+type GithubDiscussionCommentPreview = {
+  authorLogin: string;
+  authorUrl: string;
+  authorAvatarUrl: string;
+  body: string;
+  createdAt: string;
+};
+
+type GithubDiscussionPreview = {
+  id: string;
+  title: string;
+  url: string;
+  number: number;
+  categoryName: string;
+  categorySlug: string;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+  commentCount: number;
+  comments: GithubDiscussionCommentPreview[];
+};
+
+function githubReadConfigured(): boolean {
+  return Boolean(GITHUB_ACTIONS_TOKEN && GITHUB_REPO_OWNER && GITHUB_REPO_NAME);
+}
+
 function githubActionsConfigured(): boolean {
   return Boolean(GITHUB_ACTIONS_TOKEN && GITHUB_REPO_OWNER && GITHUB_REPO_NAME && GITHUB_SCREENER_WORKFLOW);
 }
@@ -2410,6 +2436,153 @@ async function githubApiRequest(path: string, init: RequestInit = {}): Promise<g
 async function githubApiJson(path: string, init: RequestInit = {}): Promise<Record<string, unknown>> {
   const response = await githubApiRequest(path, init);
   return asPlainObject(await response.json().catch(() => ({})));
+}
+
+async function githubGraphqlJson(query: string, variables: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
+  if (!githubReadConfigured()) {
+    throw new Error("GitHub token is not configured.");
+  }
+  const response = await fetch("https://api.github.com/graphql", {
+    method: "POST",
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${GITHUB_ACTIONS_TOKEN}`,
+      "Content-Type": "application/json",
+      "User-Agent": "quantura-studio",
+    },
+    body: JSON.stringify({
+      query,
+      variables,
+    }),
+  });
+  const payload = asPlainObject(await response.json().catch(() => ({})));
+  if (!response.ok) {
+    const message = sanitizeText(
+      (Array.isArray(payload.errors) ? asPlainObject(payload.errors[0]).message : "") || payload.message || `GitHub GraphQL ${response.status}`,
+      260
+    );
+    throw new Error(message || `GitHub GraphQL ${response.status}`);
+  }
+  const errors = Array.isArray(payload.errors) ? payload.errors : [];
+  if (errors.length) {
+    const first = asPlainObject(errors[0]);
+    throw new Error(sanitizeText(first.message || "GitHub GraphQL query failed.", 260) || "GitHub GraphQL query failed.");
+  }
+  return asPlainObject(payload.data);
+}
+
+function normalizeGithubDiscussionSearchText(value: unknown): string {
+  return sanitizeText(value, 220).toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function normalizeGithubDiscussionComment(raw: unknown): GithubDiscussionCommentPreview | null {
+  const record = asPlainObject(raw);
+  const author = asPlainObject(record.author);
+  const authorLogin = sanitizeText(author.login, 120) || "github";
+  const body = sanitizeRichText(record.body, 5000);
+  return {
+    authorLogin,
+    authorUrl: sanitizeText(author.url, 500),
+    authorAvatarUrl: sanitizeText(author.avatarUrl, 1200),
+    body,
+    createdAt: sanitizeText(record.createdAt, 80),
+  };
+}
+
+function normalizeGithubDiscussionNode(raw: unknown): GithubDiscussionPreview | null {
+  const record = asPlainObject(raw);
+  const title = sanitizeText(record.title, 260);
+  const url = sanitizeText(record.url, 1200);
+  const id = sanitizeText(record.id, 160);
+  const number = Math.max(0, Math.floor(asFinite(record.number, 0)));
+  if (!title || !url || !id || !number) return null;
+  const category = asPlainObject(record.category);
+  const commentsRecord = asPlainObject(record.comments);
+  const rawCommentNodes = Array.isArray(commentsRecord.nodes) ? commentsRecord.nodes : [];
+  const comments = rawCommentNodes
+    .map((entry) => normalizeGithubDiscussionComment(entry))
+    .filter((entry): entry is GithubDiscussionCommentPreview => Boolean(entry));
+  return {
+    id,
+    title,
+    url,
+    number,
+    categoryName: sanitizeText(category.name, 120),
+    categorySlug: sanitizeText(category.slug, 120),
+    body: sanitizeRichText(record.body, 12000),
+    createdAt: sanitizeText(record.createdAt, 80),
+    updatedAt: sanitizeText(record.updatedAt || record.createdAt, 80),
+    commentCount: Math.max(comments.length, Math.floor(asFinite(commentsRecord.totalCount, comments.length))),
+    comments,
+  };
+}
+
+function buildGithubDiscussionRepoUrl(): string {
+  return `https://github.com/${encodeURIComponent(GITHUB_REPO_OWNER)}/${encodeURIComponent(GITHUB_REPO_NAME)}/discussions`;
+}
+
+function buildGithubDiscussionCreateUrl(term: string): string {
+  const cleanTerm = sanitizeText(term, 220);
+  const baseUrl = `${buildGithubDiscussionRepoUrl()}/new`;
+  if (!cleanTerm) return `${baseUrl}?category=general`;
+  return `${baseUrl}?category=general&title=${encodeURIComponent(cleanTerm)}`;
+}
+
+async function lookupGithubDiscussionByTerm(term: string): Promise<GithubDiscussionPreview | null> {
+  const cleanTerm = sanitizeText(term, 220);
+  if (!cleanTerm) return null;
+  const searchTerm = cleanTerm.replace(/["\\]/g, " ").replace(/\s+/g, " ").trim();
+  const data = await githubGraphqlJson(
+    `
+      query QuanturaDiscussionLookup($query: String!) {
+        search(query: $query, type: DISCUSSION, first: 10) {
+          nodes {
+            ... on Discussion {
+              id
+              title
+              url
+              number
+              body
+              createdAt
+              updatedAt
+              category {
+                name
+                slug
+              }
+              comments(first: 10) {
+                totalCount
+                nodes {
+                  body
+                  createdAt
+                  author {
+                    login
+                    url
+                    avatarUrl
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    `,
+    {
+      query: `repo:${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME} is:discussion in:title "${searchTerm}"`,
+    }
+  );
+  const search = asPlainObject(data.search);
+  const rawNodes = Array.isArray(search.nodes) ? search.nodes : [];
+  const discussions = rawNodes
+    .map((entry) => normalizeGithubDiscussionNode(entry))
+    .filter((entry): entry is GithubDiscussionPreview => Boolean(entry));
+  if (!discussions.length) return null;
+  const normalizedTerm = normalizeGithubDiscussionSearchText(cleanTerm);
+  return (
+    discussions.find((entry) => normalizeGithubDiscussionSearchText(entry.title) === normalizedTerm) ||
+    discussions.find((entry) => normalizeGithubDiscussionSearchText(entry.title).includes(normalizedTerm)) ||
+    discussions.find((entry) => normalizedTerm.includes(normalizeGithubDiscussionSearchText(entry.title))) ||
+    null
+  );
 }
 
 function delay(ms: number): Promise<void> {
@@ -10592,6 +10765,58 @@ ROUTES.get("/explore/suggestions", async (req, res) => {
   } catch (error) {
     console.error("[Explore] suggestions failed", error);
     res.status(500).json({ error: "suggestions_failed" });
+  }
+});
+
+ROUTES.get("/explore/discussions/lookup", async (req, res) => {
+  const term = sanitizeText(req.query.term, 220);
+  const repoUrl = buildGithubDiscussionRepoUrl();
+  const createUrl = buildGithubDiscussionCreateUrl(term);
+
+  if (!term) {
+    res.status(400).json({
+      ok: false,
+      error: "discussion_term_required",
+      found: false,
+      repoUrl,
+      createUrl,
+      discussion: null,
+    });
+    return;
+  }
+
+  if (!githubReadConfigured()) {
+    res.status(200).json({
+      ok: true,
+      found: false,
+      repoUrl,
+      createUrl,
+      discussion: null,
+      reason: "github_not_configured",
+    });
+    return;
+  }
+
+  try {
+    const discussion = await lookupGithubDiscussionByTerm(term);
+    res.status(200).json({
+      ok: true,
+      found: Boolean(discussion),
+      repoUrl,
+      createUrl,
+      discussion,
+    });
+  } catch (error: any) {
+    const detail = sanitizeText(error?.message || error, 260) || "discussion_lookup_failed";
+    console.error("[GitHub] discussion lookup failed", error);
+    res.status(200).json({
+      ok: false,
+      found: false,
+      repoUrl,
+      createUrl,
+      discussion: null,
+      reason: detail,
+    });
   }
 });
 
