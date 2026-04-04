@@ -58,6 +58,7 @@ const state = {
 };
 
 const MARKED_SCRIPT_URL = "https://cdn.jsdelivr.net/npm/marked/marked.min.js";
+const GISCUS_RUNTIME_URL = "/giscus-comments.js";
 const MARKDOWN_ALLOWED_TAGS = new Set([
   "p",
   "br",
@@ -90,6 +91,7 @@ const MARKDOWN_ALLOWED_TAGS = new Set([
 ]);
 const MARKDOWN_ALLOWED_ATTRS = new Set(["href", "target", "rel", "title", "colspan", "rowspan"]);
 let markedLoaderPromise = null;
+let giscusRuntimePromise = null;
 
 function ensureMarkedLibrary() {
   if (window.marked?.parse) return Promise.resolve(window.marked);
@@ -111,6 +113,69 @@ function ensureMarkedLibrary() {
     document.head.appendChild(script);
   });
   return markedLoaderPromise;
+}
+
+function loadGiscusRuntime() {
+  if (window.QuanturaGiscus?.mount) return Promise.resolve(window.QuanturaGiscus);
+  if (giscusRuntimePromise) return giscusRuntimePromise;
+  giscusRuntimePromise = new Promise((resolve, reject) => {
+    const existing = document.querySelector('script[data-quantura-giscus-runtime="1"]');
+    if (existing) {
+      existing.addEventListener("load", () => resolve(window.QuanturaGiscus || null), { once: true });
+      existing.addEventListener("error", () => reject(new Error("Unable to load the GitHub discussion runtime.")), { once: true });
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = GISCUS_RUNTIME_URL;
+    script.async = true;
+    script.defer = true;
+    script.dataset.quanturaGiscusRuntime = "1";
+    script.addEventListener("load", () => {
+      if (window.QuanturaGiscus?.mount) {
+        resolve(window.QuanturaGiscus);
+        return;
+      }
+      reject(new Error("GitHub discussion runtime is unavailable."));
+    }, { once: true });
+    script.addEventListener("error", () => reject(new Error("Unable to load the GitHub discussion runtime.")), { once: true });
+    document.head.appendChild(script);
+  });
+  return giscusRuntimePromise;
+}
+
+function buildAbsoluteExploreUrl(path = "/explore") {
+  try {
+    return new URL(String(path || "/explore"), window.location.origin).toString();
+  } catch {
+    return `${window.location.origin}/explore`;
+  }
+}
+
+function buildDiscussionTerm(scope, id) {
+  const cleanScope = String(scope || "Quantura Discussion").trim();
+  const cleanId = String(id || "general").trim();
+  return `${cleanScope} · ${cleanId}`;
+}
+
+async function mountExplorePostComments(post) {
+  if (!post) return;
+  const host = document.getElementById("post-comments-host");
+  const statusNode = document.getElementById("post-comments-status");
+  const countNode = document.getElementById("post-comments-count");
+  if (!host) return;
+  try {
+    const runtime = await loadGiscusRuntime();
+    if (!runtime?.mount) throw new Error("GitHub discussion runtime is unavailable.");
+    await runtime.mount(host, {
+      statusNode,
+      countNode,
+      term: buildDiscussionTerm("Quantura Explore Post", post.id || post.slug || post.title || "general"),
+      description: `Discussion for "${String(post.title || "Quantura Explore post").trim()}".`,
+      backLink: buildAbsoluteExploreUrl(`/explore?post=${encodeURIComponent(String(post.id || "").trim())}`),
+    });
+  } catch (error) {
+    if (statusNode) statusNode.textContent = error?.message || "Unable to load GitHub discussion.";
+  }
 }
 
 function sanitizeMarkdownHtml(rawHtml) {
@@ -386,7 +451,7 @@ function getEngagementMarkup(post) {
   const viewer = post.viewer || {};
   return `
     <button type="button" data-action="like" data-post-id="${escapeHtml(post.id)}" class="${viewer.liked ? "active" : ""}">♥ ${Number(counts.likes || 0)}</button>
-    <button type="button" data-action="comment" data-post-id="${escapeHtml(post.id)}">💬 ${Number(counts.comments || 0)}</button>
+    <button type="button" data-action="comment" data-post-id="${escapeHtml(post.id)}">💬 Discuss</button>
     <button type="button" data-action="repost" data-post-id="${escapeHtml(post.id)}" class="${viewer.reposted ? "active" : ""}">↻ ${Number(counts.reposts || 0)}</button>
     <button type="button" data-action="share" data-post-id="${escapeHtml(post.id)}">↗ ${Number(counts.shares || 0)}</button>
     <button type="button" data-action="save" data-post-id="${escapeHtml(post.id)}" class="${viewer.saved ? "active" : ""}">★ Save</button>
@@ -556,7 +621,8 @@ async function refreshPost(postId) {
       state.postsById.set(postId, detail.post);
       upsertPost(detail.post);
       if (state.activePostId === postId) {
-        renderModal(detail.post, detail.comments || []);
+        renderModal(detail.post);
+        await mountExplorePostComments(detail.post);
       }
     }
   } catch {
@@ -645,27 +711,10 @@ function openReportModal(postId) {
   refs.reportModal?.setAttribute("aria-hidden", "false");
 }
 
-function renderModal(post, comments) {
+function renderModal(post) {
   if (!refs.postModalBody) return;
   const summaryText = normalizeRichTextSource(post.caption || "");
   const fullBody = normalizeRichTextSource(post.body || post.caption || "");
-  const commentsHtml = (comments || [])
-    .map(
-      (item) => `
-        <div class="comment-item">
-          <div class="comment-item-head">
-            <div class="comment-meta">@${escapeHtml(item.authorHandle || "user")} • ${formatRelativeTime(item.createdAtMs)}</div>
-            ${
-              state.user?.uid === item.authorUid
-                ? `<button type="button" class="comment-delete-btn" data-comment-delete="${escapeHtml(item.id)}" data-post-id="${escapeHtml(post.id)}">Delete</button>`
-                : ""
-            }
-          </div>
-          <div class="comment-text">${escapeHtml(item.text || "").replace(/\n/g, "<br>")}</div>
-        </div>
-      `
-    )
-    .join("");
 
   refs.postModalBody.innerHTML = `
     <div class="post-preview post-modal-preview">${getPreviewMarkup(post)}</div>
@@ -692,19 +741,16 @@ function renderModal(post, comments) {
       <div class="post-rich-text markdown-output">${renderRichText(fullBody, { fallback: "No response body available." })}</div>
     </section>
 
-    <section class="comments-panel">
+    <section class="comments-panel comments-panel--giscus">
       <div class="comments-header">
-        <h3>Comments</h3>
-        <span class="comments-count">${Number(post?.counts?.comments || 0)}</span>
-      </div>
-      <form class="comment-form" data-comment-form="${escapeHtml(post.id)}">
-        <textarea name="comment" maxlength="500" placeholder="Add a comment"></textarea>
-        <div class="comment-form-actions">
-          <span class="muted small">Keep it specific and useful.</span>
-          <button type="submit">Post comment</button>
+        <div>
+          <h3>GitHub Discussion</h3>
+          <p class="small muted" id="post-comments-status">Comments powered by GitHub Discussions.</p>
         </div>
-      </form>
-      <div class="comment-list">${commentsHtml || `<div class="comment-empty muted">No comments yet.</div>`}</div>
+        <span class="comments-count" id="post-comments-count">${Number(post?.counts?.comments || 0)}</span>
+      </div>
+      <p class="small muted">Sign in with GitHub inside the discussion widget to join the thread for this Explore post.</p>
+      <div id="post-comments-host" class="quantura-comments-host"></div>
     </section>
   `;
 }
@@ -719,7 +765,8 @@ async function openPostModal(postId) {
     state.postsById.set(postId, detail.post);
     upsertPost(detail.post);
     await ensureMarkedLibrary().catch(() => null);
-    renderModal(detail.post, detail.comments || []);
+    renderModal(detail.post);
+    await mountExplorePostComments(detail.post);
     refs.postModal?.classList.remove("hidden");
     refs.postModal?.setAttribute("aria-hidden", "false");
     track("explore_post_opened", { post_id: postId });
