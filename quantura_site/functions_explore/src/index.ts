@@ -6427,7 +6427,8 @@ function isOpenAiReasoningModel(model: string): boolean {
   return normalized.startsWith("gpt-5");
 }
 
-function getOpenAiReasoningEffort(model: string): "minimal" | "low" {
+function getOpenAiReasoningEffort(model: string, allowWebSearch = false): "minimal" | "low" {
+  if (allowWebSearch) return "low";
   const normalized = sanitizeText(model, 120).toLowerCase();
   if (normalized === "gpt-5" || normalized.startsWith("gpt-5.4")) return "low";
   return "minimal";
@@ -6482,7 +6483,7 @@ async function invokeOpenAiLlm(payload: {
   const maxOutputTokens = getOpenAiMaxOutputTokens(payload.model, payload.maxTokens);
   const reasoning = isOpenAiReasoningModel(payload.model)
     ? {
-        effort: getOpenAiReasoningEffort(payload.model),
+        effort: getOpenAiReasoningEffort(payload.model, payload.allowWebSearch),
       }
     : undefined;
   const textFormat =
@@ -6925,7 +6926,7 @@ async function streamOpenAiLlmSse(
   const maxOutputTokens = getOpenAiMaxOutputTokens(payload.model, payload.maxTokens);
   const reasoning = isOpenAiReasoningModel(payload.model)
     ? {
-        effort: getOpenAiReasoningEffort(payload.model),
+        effort: getOpenAiReasoningEffort(payload.model, payload.allowWebSearch),
       }
     : undefined;
   const textFormat =
