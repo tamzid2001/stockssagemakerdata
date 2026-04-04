@@ -6422,6 +6422,23 @@ function llmTimeoutSignal(timeoutMs = LLM_TIMEOUT_MS): { signal: AbortSignal; cl
   };
 }
 
+function isOpenAiReasoningModel(model: string): boolean {
+  const normalized = sanitizeText(model, 120).toLowerCase();
+  return normalized.startsWith("gpt-5");
+}
+
+function getOpenAiReasoningEffort(model: string): "minimal" | "low" {
+  const normalized = sanitizeText(model, 120).toLowerCase();
+  if (normalized === "gpt-5" || normalized.startsWith("gpt-5.4")) return "low";
+  return "minimal";
+}
+
+function getOpenAiMaxOutputTokens(model: string, requestedMaxTokens: number): number {
+  const safeMaxTokens = Math.max(64, Math.floor(asFinite(requestedMaxTokens, 600)));
+  if (!isOpenAiReasoningModel(model)) return safeMaxTokens;
+  return Math.max(safeMaxTokens, 300);
+}
+
 async function invokeOpenAiLlm(payload: {
   model: string;
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
@@ -6462,6 +6479,12 @@ async function invokeOpenAiLlm(payload: {
     schemaSource && schemaSource.schema && typeof schemaSource.schema === "object"
       ? (schemaSource.schema as Record<string, unknown>)
       : schemaSource;
+  const maxOutputTokens = getOpenAiMaxOutputTokens(payload.model, payload.maxTokens);
+  const reasoning = isOpenAiReasoningModel(payload.model)
+    ? {
+        effort: getOpenAiReasoningEffort(payload.model),
+      }
+    : undefined;
   const textFormat =
     schemaObject && typeof schemaObject === "object"
       ? {
@@ -6489,9 +6512,10 @@ async function invokeOpenAiLlm(payload: {
           role: item.role,
           content: [{ type: "input_text", text: item.content }],
         })),
-        max_output_tokens: payload.maxTokens,
+        max_output_tokens: maxOutputTokens,
         stream: Boolean(payload.stream),
         background: Boolean(payload.background),
+        reasoning,
         tools,
         text: textFormat,
         metadata: {
@@ -6898,6 +6922,12 @@ async function streamOpenAiLlmSse(
     schemaSource && schemaSource.schema && typeof schemaSource.schema === "object"
       ? (schemaSource.schema as Record<string, unknown>)
       : schemaSource;
+  const maxOutputTokens = getOpenAiMaxOutputTokens(payload.model, payload.maxTokens);
+  const reasoning = isOpenAiReasoningModel(payload.model)
+    ? {
+        effort: getOpenAiReasoningEffort(payload.model),
+      }
+    : undefined;
   const textFormat =
     schemaObject && typeof schemaObject === "object"
       ? {
@@ -6928,9 +6958,10 @@ async function streamOpenAiLlmSse(
           role: item.role,
           content: [{ type: "input_text", text: item.content }],
         })),
-        max_output_tokens: payload.maxTokens,
+        max_output_tokens: maxOutputTokens,
         stream: true,
         background: Boolean(payload.background),
+        reasoning,
         tools,
         text: textFormat,
         metadata: {
