@@ -12780,7 +12780,7 @@ ROUTES.get("/autopilot/sports/team-totals", async (req, res) => {
     const gameDate = sanitizeText(req.query.gameDate, 40);
     const homeAway = sanitizeText(req.query.homeAway, 20).toLowerCase();
     const timeZone = sanitizeText(req.query.timeZone, 80);
-    if (!teamId || !gameDate) {
+    if (!teamId) {
       res.status(400).json({ error: "invalid_sports_team_totals_request" });
       return;
     }

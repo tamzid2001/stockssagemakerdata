@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 from datetime import datetime, timedelta
@@ -34,6 +35,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--frequency", default="1D", help="Forecast frequency (e.g. 1D, 1H)")
     parser.add_argument("--max-runtime-seconds", type=int, default=40 * 60, help="Max AutoML runtime")
     parser.add_argument("--job-name-prefix", default="automl-ts", help="AutoML job name prefix")
+    parser.add_argument("--run-key", default="", help="Optional GitHub Actions or Quantura run key")
+    parser.add_argument("--emit-json", default="", help="Optional path to write a JSON manifest")
     parser.add_argument(
         "--skip-if-monday-holiday",
         action="store_true",
@@ -141,7 +144,7 @@ def main() -> None:
     }
 
     sm = boto3.client("sagemaker", region_name=args.region)
-    sm.create_auto_ml_job_v2(
+    response = sm.create_auto_ml_job_v2(
         AutoMLJobName=automl_job_name,
         AutoMLJobInputDataConfig=automl_job_input_data_config,
         OutputDataConfig={"S3OutputPath": s3_output_prefix},
@@ -150,7 +153,34 @@ def main() -> None:
         RoleArn=args.role_arn,
     )
 
+    manifest = {
+        "status": "started",
+        "runKey": args.run_key,
+        "jobName": automl_job_name,
+        "jobArn": response.get("AutoMLJobArn", ""),
+        "tickers": [ticker.upper() for ticker in tickers],
+        "start": args.start,
+        "end": end_date,
+        "interval": args.interval,
+        "forecastHorizon": args.forecast_horizon,
+        "frequency": args.frequency.upper(),
+        "maxRuntimeSeconds": args.max_runtime_seconds,
+        "trainingRowCount": int(len(training_df.index)),
+        "trainingPath": training_path,
+        "inputS3Uri": f"s3://{args.s3_bucket}/{args.s3_prefix}/data/train/",
+        "outputS3Uri": s3_output_prefix,
+        "region": args.region,
+        "roleArn": args.role_arn,
+        "timestampUtc": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+
+    if args.emit_json:
+        ensure_dir(os.path.dirname(args.emit_json) or "./")
+        with open(args.emit_json, "w", encoding="utf-8") as f:
+            json.dump(manifest, f, indent=2)
+
     print(f"Started Autopilot job: {automl_job_name}")
+    print(json.dumps(manifest))
 
 
 if __name__ == "__main__":

@@ -8540,7 +8540,6 @@ html[data-liquid-glass-mode="refraction"] {
   .sidebar-link,
   .module-picker-chip,
   .sports-foundry-workflow-option span,
-  .indicator-toggle-label,
   .quantura-comments-card,
   .quantura-comments-shell,
   .home-bottom-nav,
@@ -8560,7 +8559,6 @@ html[data-liquid-glass-mode="refraction"] {
   .sidebar-link,
   .module-picker-chip,
   .sports-foundry-workflow-option span,
-  .indicator-toggle-label,
   .quantura-comments-card,
   .quantura-comments-shell,
   .home-bottom-nav,
@@ -8587,7 +8585,6 @@ html[data-liquid-glass-mode="refraction"] {
   .sidebar-link,
   .module-picker-chip,
   .sports-foundry-workflow-option span,
-  .indicator-toggle-label,
   .quantura-comments-card,
   .quantura-comments-shell,
   .home-bottom-nav,
@@ -8622,7 +8619,6 @@ html[data-liquid-glass-mode="refraction"] {
   .model-council-improve-toggle,
   .module-picker-chip,
   .sports-foundry-workflow-option span,
-  .indicator-toggle-label,
   .mobile-sidebar-toggle,
   .download-history-toggle,
   .model-council-prompt-card
@@ -8761,20 +8757,17 @@ html[data-liquid-glass-mode="refraction"] {
   color: var(--ink);
 }
 
-.indicator-toggle-label,
 .sports-foundry-workflow-option span,
 .module-picker-chip,
 .model-council-improve-toggle {
   isolation: isolate;
 }
 
-.indicator-toggle-label,
 .sports-foundry-workflow-option span,
 .module-picker-chip {
   overflow: hidden;
 }
 
-.indicator-toggle-label,
 .sports-foundry-workflow-option span,
 .module-picker-chip,
 .model-council-improve-toggle {
@@ -8784,7 +8777,6 @@ html[data-liquid-glass-mode="refraction"] {
     inset 0 1px 0 rgba(255, 255, 255, 0.78);
 }
 
-.indicator-toggle-label,
 .sports-foundry-workflow-option span {
   background:
     radial-gradient(150% 180% at 0% 0%, rgba(255, 255, 255, 0.78) 0%, rgba(255, 255, 255, 0.26) 28%, rgba(255, 255, 255, 0) 56%),
@@ -8792,7 +8784,6 @@ html[data-liquid-glass-mode="refraction"] {
   color: var(--glass-text);
 }
 
-.indicator-toggle-label::before,
 .module-picker-chip input,
 .model-council-improve-toggle input[type="checkbox"] {
   border-color: rgba(15, 23, 42, 0.08);
@@ -8802,7 +8793,6 @@ html[data-liquid-glass-mode="refraction"] {
   -webkit-backdrop-filter: blur(calc(var(--glass-blur) - 8px)) saturate(140%);
 }
 
-.indicator-toggle-label::after,
 .module-picker-chip input::after,
 .model-council-improve-toggle input[type="checkbox"]::after {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(239, 244, 252, 0.92));
@@ -8811,7 +8801,6 @@ html[data-liquid-glass-mode="refraction"] {
     inset 0 1px 0 rgba(255, 255, 255, 0.94);
 }
 
-.indicator-toggle:hover .indicator-toggle-label,
 .sports-foundry-workflow-option:hover span,
 .module-picker-chip:hover,
 .model-council-improve-toggle:hover {
@@ -8821,7 +8810,6 @@ html[data-liquid-glass-mode="refraction"] {
     inset 0 1px 0 rgba(255, 255, 255, 0.82);
 }
 
-.indicator-toggle input:checked + .indicator-toggle-label,
 .module-picker-chip.is-selected,
 .sports-foundry-workflow-option input:checked + span,
 .model-council-improve-toggle:has(input[type="checkbox"]:checked) {
@@ -8831,14 +8819,6 @@ html[data-liquid-glass-mode="refraction"] {
     inset 0 1px 0 rgba(255, 255, 255, 0.82);
 }
 
-.indicator-toggle input:checked + .indicator-toggle-label {
-  background:
-    radial-gradient(140% 200% at 0% 0%, rgba(255, 255, 255, 0.34) 0%, rgba(255, 255, 255, 0.12) 28%, rgba(255, 255, 255, 0) 56%),
-    linear-gradient(145deg, rgba(92, 145, 255, 0.38), rgba(207, 232, 255, 0.62));
-  color: #12315e;
-}
-
-.indicator-toggle input:checked + .indicator-toggle-label::before,
 .module-picker-chip input:checked,
 .model-council-improve-toggle input[type="checkbox"]:checked {
   border-color: rgba(71, 114, 255, 0.28);
@@ -8848,7 +8828,6 @@ html[data-liquid-glass-mode="refraction"] {
     0 6px 16px rgba(44, 93, 211, 0.18);
 }
 
-[data-theme="dark"] .indicator-toggle-label,
 [data-theme="dark"] .sports-foundry-workflow-option span,
 [data-theme="dark"] .module-picker-chip,
 [data-theme="dark"] .model-council-improve-toggle {
@@ -8858,7 +8837,6 @@ html[data-liquid-glass-mode="refraction"] {
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
-[data-theme="dark"] .indicator-toggle-label,
 [data-theme="dark"] .sports-foundry-workflow-option span {
   background:
     radial-gradient(150% 180% at 0% 0%, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.04) 28%, rgba(255, 255, 255, 0) 56%),
@@ -8866,7 +8844,6 @@ html[data-liquid-glass-mode="refraction"] {
   color: var(--glass-text);
 }
 
-[data-theme="dark"] .indicator-toggle-label::before,
 [data-theme="dark"] .module-picker-chip input,
 [data-theme="dark"] .model-council-improve-toggle input[type="checkbox"] {
   border-color: rgba(255, 255, 255, 0.08);
@@ -8874,7 +8851,6 @@ html[data-liquid-glass-mode="refraction"] {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
 
-[data-theme="dark"] .indicator-toggle-label::after,
 [data-theme="dark"] .module-picker-chip input::after,
 [data-theme="dark"] .model-council-improve-toggle input[type="checkbox"]::after {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(214, 226, 247, 0.88));
@@ -8883,7 +8859,6 @@ html[data-liquid-glass-mode="refraction"] {
     inset 0 1px 0 rgba(255, 255, 255, 0.88);
 }
 
-[data-theme="dark"] .indicator-toggle input:checked + .indicator-toggle-label,
 [data-theme="dark"] .module-picker-chip.is-selected,
 [data-theme="dark"] .sports-foundry-workflow-option input:checked + span,
 [data-theme="dark"] .model-council-improve-toggle:has(input[type="checkbox"]:checked) {
@@ -8893,14 +8868,6 @@ html[data-liquid-glass-mode="refraction"] {
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
-[data-theme="dark"] .indicator-toggle input:checked + .indicator-toggle-label {
-  background:
-    radial-gradient(140% 200% at 0% 0%, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.04) 28%, rgba(255, 255, 255, 0) 56%),
-    linear-gradient(145deg, rgba(49, 92, 194, 0.68), rgba(28, 128, 150, 0.34));
-  color: #f4f7ff;
-}
-
-[data-theme="dark"] .indicator-toggle input:checked + .indicator-toggle-label::before,
 [data-theme="dark"] .module-picker-chip input:checked,
 [data-theme="dark"] .model-council-improve-toggle input[type="checkbox"]:checked {
   background: linear-gradient(145deg, rgba(76, 118, 232, 0.88), rgba(31, 155, 149, 0.5));

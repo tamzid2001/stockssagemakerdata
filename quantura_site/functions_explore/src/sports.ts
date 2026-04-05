@@ -116,6 +116,7 @@ export type SportsTeamGameTotalsSnapshot = {
   filters: {
     gameDate: string;
     homeAway: SportsTeamTotalFilter;
+    scope: "all_history" | "single_day";
     timeZone: string;
   };
   headers: string[];
@@ -595,6 +596,12 @@ function normalizeSportsGameDate(value: unknown): string {
   return formatDateYmd(parsed);
 }
 
+function normalizeOptionalSportsGameDate(value: unknown): string {
+  const raw = sanitizeText(value, 40);
+  if (!raw) return "";
+  return normalizeSportsGameDate(raw);
+}
+
 function normalizeSportsHomeAwayFilter(value: unknown): SportsTeamTotalFilter {
   const clean = sanitizeText(value, 20).toLowerCase();
   if (clean === "home" || clean === "away") return clean;
@@ -929,7 +936,7 @@ export async function buildSportsTeamGameTotalsSnapshot(
 ): Promise<SportsTeamGameTotalsSnapshot> {
   const league = leagueInfo(leagueKey);
   const cleanTeamId = sanitizeText(teamId, 40);
-  const targetGameDate = normalizeSportsGameDate(gameDate);
+  const targetGameDate = normalizeOptionalSportsGameDate(gameDate);
   const homeAwayFilter = normalizeSportsHomeAwayFilter(homeAwayFilterRaw);
   const timeZone = normalizeSportsTimeZone(timeZoneRaw);
   if (!cleanTeamId) throw new Error("invalid_team_id");
@@ -966,7 +973,7 @@ export async function buildSportsTeamGameTotalsSnapshot(
       const parsedDate = new Date(date);
       if (!Number.isFinite(parsedDate.getTime())) return;
       const eventYmd = formatDateYmd(parsedDate, timeZone);
-      if (eventYmd !== targetGameDate) return;
+      if (targetGameDate && eventYmd !== targetGameDate) return;
       const competitions = Array.isArray(record.competitions) ? record.competitions : [];
       const competition = competitions[0] && typeof competitions[0] === "object" ? (competitions[0] as Record<string, unknown>) : {};
       const competitors = Array.isArray(competition.competitors) ? competition.competitors : [];
@@ -1008,7 +1015,7 @@ export async function buildSportsTeamGameTotalsSnapshot(
         team: sanitizeText(teamNode.abbreviation || team.abbreviation, 20).toUpperCase() || team.abbreviation,
         teamDisplayName: sanitizeText(teamNode.displayName || team.displayName, 120) || team.displayName,
         gameId,
-        gameDate: targetGameDate,
+        gameDate: eventYmd,
         displayDate: formatDateLabel(date, timeZone),
         homeAway,
         opponentTeamId: sanitizeText(opponentNode.id, 40),
@@ -1026,20 +1033,27 @@ export async function buildSportsTeamGameTotalsSnapshot(
 
   const directPayload = (await fetchCachedJson<Record<string, unknown>>(scheduleUrl(league, cleanTeamId), 30 * 60 * 1000)) || {};
   collectRows(directPayload);
-  for (const seasonYear of scheduleSeasonCandidatesForDate(league, targetGameDate)) {
-    if (rowsByGameId.size) break;
+  const seasonSeedDate = targetGameDate || formatDateYmd(new Date());
+  for (const seasonYear of scheduleSeasonCandidatesForDate(league, seasonSeedDate)) {
+    if (targetGameDate && rowsByGameId.size) break;
     const seasonPayload =
       (await fetchCachedJson<Record<string, unknown>>(scheduleUrl(league, cleanTeamId, seasonYear), 30 * 60 * 1000)) || {};
     collectRows(seasonPayload);
   }
 
-  const rows = Array.from(rowsByGameId.values()).sort((left, right) => left.gameId.localeCompare(right.gameId));
+  const rows = Array.from(rowsByGameId.values()).sort((left, right) => {
+    const leftMs = Date.parse(left.gameDate);
+    const rightMs = Date.parse(right.gameDate);
+    if (Number.isFinite(leftMs) && Number.isFinite(rightMs) && leftMs !== rightMs) return rightMs - leftMs;
+    return right.gameId.localeCompare(left.gameId);
+  });
   return {
     league,
     team,
     filters: {
       gameDate: targetGameDate,
       homeAway: homeAwayFilter,
+      scope: targetGameDate ? "single_day" : "all_history",
       timeZone,
     },
     headers,

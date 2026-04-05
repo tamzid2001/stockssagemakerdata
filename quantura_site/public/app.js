@@ -2010,7 +2010,9 @@
     sportsFoundryGame: document.getElementById("sports-foundry-game"),
     sportsFoundryPlayerFields: document.getElementById("sports-foundry-player-fields"),
     sportsFoundryTeamTotalFields: document.getElementById("sports-foundry-team-total-fields"),
+    sportsFoundryTeamTotalAllHistory: document.getElementById("sports-team-total-all-history"),
     sportsFoundryTeamTotalDate: document.getElementById("sports-team-total-date"),
+    sportsFoundryTeamTotalDateNote: document.getElementById("sports-team-total-date-note"),
     sportsFoundryTeamTotalHomeAway: document.getElementById("sports-team-total-home-away"),
     sportsFoundryTitle: document.getElementById("sports-foundry-title"),
     sportsFoundryNotes: document.getElementById("sports-foundry-notes"),
@@ -14852,7 +14854,7 @@
     return `${normalizedType}__${normalizedSourceId || "item"}`;
   };
 
-  const LIQUID_GLASS_RUNTIME_URL = "/liquid-glass.js?v=20260404c";
+  const LIQUID_GLASS_RUNTIME_URL = "/liquid-glass.js?v=20260405a";
   let liquidGlassRuntimePromise = null;
 
   const queueIdleTask = (task, { timeout = 1200 } = {}) => {
@@ -14921,7 +14923,7 @@
     return liquidGlassRuntimePromise;
   };
 
-  const GISCUS_RUNTIME_URL = "/giscus-comments.js?v=20260404c";
+  const GISCUS_RUNTIME_URL = "/giscus-comments.js?v=20260405a";
   let giscusRuntimePromise = null;
 
   const loadGiscusRuntime = () => {
@@ -19615,8 +19617,28 @@
     return workflow === "team_total_export" ? "team_total_export" : "player_forecast";
   };
 
+  const getSportsFoundryTeamTotalScope = () =>
+    ui.sportsFoundryTeamTotalAllHistory?.checked ? "all_history" : "single_day";
+
+  const syncSportsFoundryTeamTotalScopeUi = () => {
+    const useAllHistory = getSportsFoundryTeamTotalScope() === "all_history";
+    if (ui.sportsFoundryTeamTotalDate) {
+      ui.sportsFoundryTeamTotalDate.disabled = useAllHistory;
+      if (useAllHistory) ui.sportsFoundryTeamTotalDate.value = "";
+    }
+    if (ui.sportsFoundryTeamTotalDateNote) {
+      ui.sportsFoundryTeamTotalDateNote.textContent = useAllHistory
+        ? "Quantura will load the full completed schedule history for this team."
+        : "Quantura will only return completed games on the selected date.";
+    }
+  };
+
   const syncSportsFoundryTeamTotalDateDefault = ({ force = false } = {}) => {
     if (!ui.sportsFoundryTeamTotalDate) return;
+    if (getSportsFoundryTeamTotalScope() === "all_history") {
+      ui.sportsFoundryTeamTotalDate.value = "";
+      return;
+    }
     const today = new Date().toISOString().slice(0, 10);
     if (force || !String(ui.sportsFoundryTeamTotalDate.value || "").trim()) {
       ui.sportsFoundryTeamTotalDate.value = today;
@@ -19646,21 +19668,32 @@
     const league = payload?.league && typeof payload.league === "object" ? payload.league : {};
     const gameDate = String(filters?.gameDate || ui.sportsFoundryTeamTotalDate?.value || "").trim();
     const homeAway = String(filters?.homeAway || ui.sportsFoundryTeamTotalHomeAway?.value || "any").trim().toLowerCase();
+    const scope = String(filters?.scope || getSportsFoundryTeamTotalScope()).trim().toLowerCase() === "single_day"
+      ? "single_day"
+      : "all_history";
     const venueLabel = homeAway === "home" ? "home only" : homeAway === "away" ? "away only" : "home or away";
     if (ui.sportsFoundryHistoryMeta) {
       if (!String(team?.id || "").trim()) {
-        ui.sportsFoundryHistoryMeta.textContent = "Choose a team, date, and venue filter to load team total rows.";
+        ui.sportsFoundryHistoryMeta.textContent = "Choose a team and venue filter to load completed team-total history.";
       } else if (rows.length) {
-        ui.sportsFoundryHistoryMeta.textContent = `${String(league?.label || getSportsFoundryLeagueLabel(ui.sportsFoundryLeague?.value)).trim()} ${String(team?.abbreviation || team?.displayName || "team").trim()} · ${rows.length} completed game total${rows.length === 1 ? "" : "s"} for ${gameDate} (${venueLabel}).`;
+        ui.sportsFoundryHistoryMeta.textContent =
+          scope === "single_day"
+            ? `${String(league?.label || getSportsFoundryLeagueLabel(ui.sportsFoundryLeague?.value)).trim()} ${String(team?.abbreviation || team?.displayName || "team").trim()} · ${rows.length} completed game total${rows.length === 1 ? "" : "s"} for ${gameDate} (${venueLabel}).`
+            : `${String(league?.label || getSportsFoundryLeagueLabel(ui.sportsFoundryLeague?.value)).trim()} ${String(team?.abbreviation || team?.displayName || "team").trim()} · ${rows.length} completed game total${rows.length === 1 ? "" : "s"} across available history (${venueLabel}).`;
       } else {
-        ui.sportsFoundryHistoryMeta.textContent = `${String(league?.label || getSportsFoundryLeagueLabel(ui.sportsFoundryLeague?.value)).trim()} ${String(team?.abbreviation || team?.displayName || "team").trim()} · no completed game totals found for ${gameDate} (${venueLabel}).`;
+        ui.sportsFoundryHistoryMeta.textContent =
+          scope === "single_day"
+            ? `${String(league?.label || getSportsFoundryLeagueLabel(ui.sportsFoundryLeague?.value)).trim()} ${String(team?.abbreviation || team?.displayName || "team").trim()} · no completed game totals found for ${gameDate} (${venueLabel}).`
+            : `${String(league?.label || getSportsFoundryLeagueLabel(ui.sportsFoundryLeague?.value)).trim()} ${String(team?.abbreviation || team?.displayName || "team").trim()} · no completed game totals found in the available history (${venueLabel}).`;
       }
     }
     if (!ui.sportsFoundryHistoryPreview) return;
     if (!rows.length) {
       ui.sportsFoundryHistoryPreview.innerHTML = !String(team?.id || "").trim()
-        ? `<div class="small muted">Choose a team, date, and venue filter to preview team totals.</div>`
-        : `<div class="small muted">No completed team-total rows matched the selected date and venue filter.</div>`;
+        ? `<div class="small muted">Choose a team and venue filter to preview completed team totals.</div>`
+        : scope === "single_day"
+        ? `<div class="small muted">No completed team-total rows matched the selected date and venue filter.</div>`
+        : `<div class="small muted">No completed team-total rows were available for that team and venue filter.</div>`;
       return;
     }
     renderFoundryPreviewTableFromObjects(rows, ui.sportsFoundryHistoryPreview);
@@ -19717,10 +19750,11 @@
     }
     if (ui.sportsFoundryEmptyState) {
       ui.sportsFoundryEmptyState.textContent = teamTotalMode
-        ? "Choose a team, date, and venue filter to load completed team-total rows for that day."
+        ? "Choose a team and venue filter to load completed team-total history, or switch off full history to target one date."
         : "Choose a player to load league-aware stats, normalized historical game logs, and relevant future scheduled games.";
     }
     if (teamTotalMode) {
+      syncSportsFoundryTeamTotalScopeUi();
       syncSportsFoundryTeamTotalDateDefault();
       renderSportsFoundryTeamTotalsPreview(state.sportsFoundryContext.teamTotals);
     } else {
@@ -20059,17 +20093,23 @@
     const rows = Array.isArray(teamTotals?.rows) ? teamTotals.rows : [];
     const headers = Array.isArray(teamTotals?.headers) ? teamTotals.headers : Object.keys(rows[0] || {});
     if (!headers.length) throw new Error("Team total export is not loaded yet.");
-    if (!rows.length) throw new Error("No completed team totals matched the selected date and venue filter.");
+    if (!rows.length) throw new Error("No completed team totals matched the current filters.");
     const league = String(snapshot?.league?.key || ui.sportsFoundryLeague?.value || "sports").trim().toLowerCase();
     const team = String(snapshot?.team?.abbreviation || snapshot?.team?.displayName || "team")
       .trim()
       .replace(/[^A-Za-z0-9._-]+/g, "_");
-    const gameDate = String(snapshot?.filters?.gameDate || ui.sportsFoundryTeamTotalDate?.value || "date").trim();
+    const scope = String(snapshot?.filters?.scope || getSportsFoundryTeamTotalScope()).trim().toLowerCase() === "single_day"
+      ? "single_day"
+      : "all_history";
+    const gameDate = String(snapshot?.filters?.gameDate || ui.sportsFoundryTeamTotalDate?.value || "").trim();
     const homeAway = String(snapshot?.filters?.homeAway || ui.sportsFoundryTeamTotalHomeAway?.value || "any").trim().toLowerCase();
     return {
       csv: String(teamTotals?.csvText || buildCsv(rows, headers)),
       headers,
-      fileName: `${league}_${team}_team_total_${gameDate}_${homeAway}.csv`,
+      fileName:
+        scope === "single_day" && gameDate
+          ? `${league}_${team}_team_total_${gameDate}_${homeAway}.csv`
+          : `${league}_${team}_team_total_history_${homeAway}.csv`,
     };
   };
 
@@ -20142,16 +20182,17 @@
   const loadSportsFoundryTeamTotals = async () => {
     const league = String(ui.sportsFoundryLeague?.value || "nba").trim().toLowerCase();
     const teamId = String(ui.sportsFoundryTeam?.value || "").trim();
-    const gameDate = String(ui.sportsFoundryTeamTotalDate?.value || "").trim();
+    const scope = getSportsFoundryTeamTotalScope();
+    const gameDate = scope === "single_day" ? String(ui.sportsFoundryTeamTotalDate?.value || "").trim() : "";
     const homeAway = String(ui.sportsFoundryTeamTotalHomeAway?.value || "any").trim().toLowerCase();
     const timeZone = String(Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC").trim() || "UTC";
-    if (!teamId || !gameDate) {
+    if (!teamId || (scope === "single_day" && !gameDate)) {
       state.sportsFoundryContext.teamTotals = null;
       renderSportsFoundryTeamTotalsPreview(null);
       syncSportsFoundryButtons();
       return null;
     }
-    setSportsFoundryStatus("Loading team total export...");
+    setSportsFoundryStatus(scope === "single_day" ? "Loading team total export..." : "Loading completed team-total history...");
     const payload = await callFoundryApi(
       "GET",
       `/api/autopilot/sports/team-totals?league=${encodeURIComponent(league)}&teamId=${encodeURIComponent(teamId)}&gameDate=${encodeURIComponent(gameDate)}&homeAway=${encodeURIComponent(homeAway)}&timeZone=${encodeURIComponent(timeZone)}`
@@ -20162,7 +20203,9 @@
     setSportsFoundryStatus(
       Number(payload?.teamTotals?.rowCount || 0) > 0
         ? `Loaded ${Number(payload.teamTotals.rowCount).toLocaleString()} completed team total row${Number(payload.teamTotals.rowCount) === 1 ? "" : "s"}.`
-        : "No completed team totals matched that date and venue filter."
+        : scope === "single_day"
+        ? "No completed team totals matched that date and venue filter."
+        : "No completed team totals matched that team and venue filter."
     );
     return payload;
   };
@@ -29675,6 +29718,19 @@
           setSportsFoundryStatus(message, "warn");
         }
       });
+    });
+
+    ui.sportsFoundryTeamTotalAllHistory?.addEventListener("change", async () => {
+      syncSportsFoundryTeamTotalScopeUi();
+      syncSportsFoundryTeamTotalDateDefault({ force: true });
+      if (getSportsFoundryWorkflow() !== "team_total_export") return;
+      try {
+        await loadSportsFoundryTeamTotals();
+      } catch (error) {
+        const message = extractErrorMessage(error, "Unable to load team totals.");
+        setSportsFoundryStatus(message, "warn");
+        showToast(message, "warn");
+      }
     });
 
     ui.sportsFoundryTeamTotalDate?.addEventListener("change", async () => {

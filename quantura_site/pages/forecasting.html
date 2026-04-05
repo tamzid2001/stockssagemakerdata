@@ -30,7 +30,7 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-title" content="Quantura" />
     <link rel="manifest" href="/site.webmanifest" />
-    <link rel="stylesheet" href="/styles.css?v=20260404c" />
+    <link rel="stylesheet" href="/styles.css?v=20260405a" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
     <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 
@@ -42,7 +42,7 @@
     <script defer src="/__/firebase/12.9.0/firebase-remote-config-compat.js"></script>
     <script defer src="/__/firebase/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
-    <script defer src="/app.js?v=20260404c"></script>
+    <script defer src="/app.js?v=20260405a"></script>
     <script defer src="/assets/rnweb/quantura-rnw.js"></script>
   
     <script>
@@ -364,7 +364,7 @@
                             <p class="small" id="autopilot-status">Sign in with a full account to unlock Forecast Foundry.</p>
                             <div class="small muted" id="foundry-instance-limit">Concurrent instance limit: 0 of 2 active.</div>
                             <div class="notice small" id="foundry-access-note">
-                              Forecast Foundry currently supports daily historical datasets only. Prediction CSV uploads can still be analyzed here.
+                              Forecast Foundry currently supports daily historical datasets only. Prediction CSV uploads can still be analyzed here. A matching repository workflow is now available in GitHub Actions for manual Foundry launches.
                             </div>
 
                             <div class="card" style="margin-top: 18px;">
@@ -460,7 +460,7 @@
                                     <span>Team total export</span>
                                   </label>
                                 </div>
-                                <div class="small muted">Player forecasts save runs and publish to Explore. Team total export is a quick download tool for one team on one day.</div>
+                                <div class="small muted">Player forecasts save runs and publish to Explore. Team total export now supports full completed-history downloads or a filtered single-day export.</div>
                               </div>
                               <div class="field">
                                 <label class="label" for="sports-foundry-league">League</label>
@@ -514,8 +514,16 @@
                             <div id="sports-foundry-team-total-fields" class="hidden">
                               <div class="form-grid">
                                 <div class="field">
+                                  <label class="label" for="sports-team-total-all-history">History scope</label>
+                                  <label class="checkbox download-history-toggle">
+                                    <input id="sports-team-total-all-history" name="teamTotalAllHistory" type="checkbox" checked />
+                                    <span>Load full completed history</span>
+                                  </label>
+                                </div>
+                                <div class="field">
                                   <label class="label" for="sports-team-total-date">Game date</label>
                                   <input id="sports-team-total-date" name="teamTotalDate" type="date" />
+                                  <div class="small muted" id="sports-team-total-date-note">Optional when full history is enabled.</div>
                                 </div>
                                 <div class="field">
                                   <label class="label" for="sports-team-total-home-away">Venue filter</label>
@@ -526,13 +534,13 @@
                                   </select>
                                 </div>
                               </div>
-                              <div class="small muted">Download the selected team&apos;s scored total for completed games on the chosen date. Doubleheaders will export one row per game.</div>
+                              <div class="small muted">Download the selected team&apos;s completed game totals across the available schedule history, or narrow it to one date. Doubleheaders export one row per game.</div>
                             </div>
 
                             <div class="card sports-foundry-preview-card" style="margin-top: 18px;">
                               <div class="card-head">
                                 <h3>Historical preview</h3>
-                                <div class="small muted" id="sports-foundry-history-meta">Choose a player to load historical game data and stat options, or switch to team total export for a one-day team score snapshot.</div>
+                                <div class="small muted" id="sports-foundry-history-meta">Choose a player to load historical game data and stat options, or switch to team total export for completed team-total history.</div>
                               </div>
                               <div id="sports-foundry-history-preview" class="panel-output small">Historical player game logs will appear here.</div>
                             </div>
@@ -551,7 +559,7 @@
 
                             <p class="small" id="sports-foundry-status">Sign in with a full account to unlock sports forecasting.</p>
                             <div class="notice small" id="sports-foundry-empty-state">
-                              Choose a player to load league-aware stats and future scheduled games, or switch to team total export for a quick team score download.
+                              Choose a player to load league-aware stats and future scheduled games, or switch to team total export for completed team-total history.
                             </div>
                           </form>
 
