@@ -2537,6 +2537,9 @@
   // React-style hook analogue for this vanilla app: subscribe to Remote Config updates.
   const useRemoteConfig = (listener) => remoteConfigStore.subscribe(listener);
 
+  const QUANTURA_ICON_URL = "/assets/quantura-icon.svg";
+  const QUANTURA_FAVICON_URL = "/favicon.svg";
+
   const hasSessionUser = (user = state.user) => Boolean(user?.uid);
   const isAnonymousUser = (user = state.user) => Boolean(user?.isAnonymous);
   const hasFullAccount = (user = state.user) => Boolean(user && !user.isAnonymous);
@@ -2547,7 +2550,7 @@
     state.authGateVisible = true;
     const branding = {
       name: "Quantura",
-      logoUrl: `${window.location.origin}/assets/logo.png`,
+      logoUrl: `${window.location.origin}${QUANTURA_ICON_URL}`,
       primaryColor: "#0f2a61",
       accentColor: "#3ab5a2",
       ctaColor: "#1d5ed8",
@@ -6789,6 +6792,7 @@
     observedContainers: new WeakSet(),
     observerMap: new Map(),
     refreshTimer: 0,
+    refreshInterval: 0,
   };
 
   const getNativeInlineAdRules = () => {
@@ -7418,8 +7422,34 @@
   };
 
   const scheduleNativeInlineAdsRefresh = () => {
+    if (!isNativeInlineAdEligible()) {
+      if (nativeInlineAdState.refreshTimer) clearTimeout(nativeInlineAdState.refreshTimer);
+      return;
+    }
     if (nativeInlineAdState.refreshTimer) clearTimeout(nativeInlineAdState.refreshTimer);
     nativeInlineAdState.refreshTimer = window.setTimeout(refreshNativeInlineAds, 200);
+  };
+
+  const stopNativeInlineAdRefreshLoop = () => {
+    if (!nativeInlineAdState.refreshInterval) return;
+    clearInterval(nativeInlineAdState.refreshInterval);
+    nativeInlineAdState.refreshInterval = 0;
+  };
+
+  const ensureNativeInlineAdRefreshLoop = () => {
+    if (!isNativeInlineAdEligible()) {
+      stopNativeInlineAdRefreshLoop();
+      return;
+    }
+    if (nativeInlineAdState.refreshInterval) return;
+    scheduleNativeInlineAdsRefresh();
+    nativeInlineAdState.refreshInterval = window.setInterval(() => {
+      if (!isNativeInlineAdEligible()) {
+        stopNativeInlineAdRefreshLoop();
+        return;
+      }
+      scheduleNativeInlineAdsRefresh();
+    }, 3500);
   };
 
   const getWorkspaceSeatLimitForTier = () => {
@@ -9955,7 +9985,7 @@
   };
 
   const normalizeHeaderBranding = () => {
-    const brandIcon = "/assets/logo.png";
+    const brandIcon = QUANTURA_ICON_URL;
     document.querySelectorAll(".header .logo").forEach((logo) => {
       if (!(logo instanceof HTMLElement)) return;
       const existing = logo.querySelector("img.logo-img");
@@ -9970,15 +10000,14 @@
       iconImg.setAttribute("aria-hidden", "true");
       logo.prepend(iconImg);
     });
-    const faviconHref = "/favicon-96x96.png";
-    let favicon = document.querySelector('link[rel="icon"][sizes="96x96"]');
+    const faviconHref = QUANTURA_FAVICON_URL;
+    let favicon = document.querySelector('link[rel="icon"][type="image/svg+xml"]');
     if (!(favicon instanceof HTMLLinkElement)) {
       favicon = document.createElement("link");
       favicon.setAttribute("rel", "icon");
-      favicon.setAttribute("sizes", "96x96");
+      favicon.setAttribute("type", "image/svg+xml");
       document.head.appendChild(favicon);
     }
-    favicon.setAttribute("type", "image/png");
     favicon.setAttribute("href", faviconHref);
   };
 
@@ -14823,6 +14852,45 @@
 
   const LIQUID_GLASS_RUNTIME_URL = "/liquid-glass.js";
   let liquidGlassRuntimePromise = null;
+
+  const queueIdleTask = (task, { timeout = 1200 } = {}) => {
+    if (typeof task !== "function") return 0;
+    const runner = () => {
+      try {
+        task();
+      } catch (error) {
+        // Ignore non-critical UI task failures.
+      }
+    };
+    if (typeof window.requestIdleCallback === "function") {
+      return window.requestIdleCallback(() => runner(), {
+        timeout: Math.max(1, Number(timeout) || 1200),
+      });
+    }
+    return window.setTimeout(runner, Math.min(Math.max(1, Number(timeout) || 1200), 320));
+  };
+
+  const shouldHydrateLiquidGlass = () => {
+    if (!document.querySelector(".liquid-glass, .theme-toggle, .task-chip, .toggle-switch")) return false;
+    try {
+      const brands = Array.isArray(navigator.userAgentData?.brands) ? navigator.userAgentData.brands : [];
+      if (brands.length) {
+        const brandText = brands.map((entry) => String(entry?.brand || "")).join(" ");
+        if (!/(Chromium|Google Chrome|Microsoft Edge|Opera)/i.test(brandText)) return false;
+      } else {
+        const userAgent = String(navigator.userAgent || "");
+        if (/Firefox|FxiOS/i.test(userAgent)) return false;
+        if (/Safari/i.test(userAgent) && !/Chrome|CriOS|Chromium|Edg|OPR/i.test(userAgent)) return false;
+        if (!/Chrome|CriOS|Chromium|Edg|OPR/i.test(userAgent)) return false;
+      }
+      return Boolean(
+        window.CSS?.supports?.("backdrop-filter: blur(1px)")
+          || window.CSS?.supports?.("-webkit-backdrop-filter: blur(1px)")
+      );
+    } catch (error) {
+      return false;
+    }
+  };
 
   const loadLiquidGlassRuntime = () => {
     if (window.QuanturaLiquidGlass?.ensure) return Promise.resolve(window.QuanturaLiquidGlass.ensure());
@@ -25103,11 +25171,7 @@
 
   const initializeUiShell = () => {
       publishShopRuntimeBridge();
-      loadLiquidGlassRuntime().catch(() => {});
       applyTheme(resolveThemePreference(), { persist: false });
-      initBlogCommentsSurface().catch(() => {});
-      initStaticPageCommentsSurfaces().catch(() => {});
-      syncScreenerCommentsThread(null).catch(() => {});
       ensureThemeToggle();
       normalizeHeaderBranding();
       normalizeTopNavigation();
@@ -25123,10 +25187,11 @@
       bindMobileBottomNav();
       bindMarketingBottomNav();
       bindHomeBottomNav();
-      bindNativeTransitionInterstitials();
-      registerLegacyNativeAdInjectionHook();
-      scheduleNativeInlineAdsRefresh();
-      window.setInterval(scheduleNativeInlineAdsRefresh, 3500);
+      if (isNativeApp()) {
+        bindNativeTransitionInterstitials();
+        registerLegacyNativeAdInjectionHook();
+        ensureNativeInlineAdRefreshLoop();
+      }
       initializeLanguageControls().catch(() => {});
       captureShareFromUrl();
       renderNotificationLog();
@@ -25136,6 +25201,16 @@
       recordPromoSessionUsage();
       state.promoForecastCount = getStoredNumber(PROMO_FORECAST_COUNT_KEY, 0);
       bindChartControls();
+      queueIdleTask(() => {
+        if (shouldHydrateLiquidGlass()) {
+          loadLiquidGlassRuntime().catch(() => {});
+        }
+      }, { timeout: 1600 });
+      queueIdleTask(() => {
+        initBlogCommentsSurface().catch(() => {});
+        initStaticPageCommentsSurfaces().catch(() => {});
+        syncScreenerCommentsThread(null).catch(() => {});
+      }, { timeout: 2200 });
   };
 
 		  const init = () => {

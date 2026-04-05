@@ -559,7 +559,7 @@ function siteHeaderHtml() {
     <header class="header">
       <div class="container nav">
         <a class="logo" href="/" aria-label="Quantura home">
-          <img class="logo-img" src="/assets/logo.png" alt="" aria-hidden="true" />
+          <img class="logo-img" src="/assets/quantura-icon.svg" alt="" aria-hidden="true" />
           <span>QUANTURA</span>
         </a>
         <nav class="nav-links">
