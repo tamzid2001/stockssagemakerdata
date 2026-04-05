@@ -30485,7 +30485,7 @@
 		        if (ui.tasksCalendar) ui.tasksCalendar.textContent = "Tasks with due dates will appear here.";
             if (ui.screenerLoadSelect) ui.screenerLoadSelect.innerHTML = `<option value="">Select a run</option>`;
             if (ui.screenerLoadStatus) ui.screenerLoadStatus.textContent = "";
-            if (ui.screenerOutput && !ui.screenerOutput.dataset.loading) ui.screenerOutput.textContent = "Sign in to generate an AI Portfolio.";
+            if (ui.screenerOutput && !ui.screenerOutput.dataset.loading) ui.screenerOutput.textContent = "Sign in to run the live screener.";
             await fetchMyRequestsList({ force: true }).catch(() => []);
             renderMyRequestsPanels();
             refreshCollaboration(functions);
