@@ -2540,7 +2540,7 @@
   const useRemoteConfig = (listener) => remoteConfigStore.subscribe(listener);
 
   const QUANTURA_ICON_URL = "/assets/quantura-icon.svg";
-  const QUANTURA_FAVICON_URL = "/favicon.svg";
+  const QUANTURA_FAVICON_URL = "/favicon.svg?v=20260405b";
 
   const hasSessionUser = (user = state.user) => Boolean(user?.uid);
   const isAnonymousUser = (user = state.user) => Boolean(user?.isAnonymous);

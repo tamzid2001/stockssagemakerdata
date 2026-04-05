@@ -53,7 +53,7 @@ const refs = {
   followAuthorList: document.getElementById("follow-author-list"),
 };
 
-const PROFILE_BRAND_LOGO = "/assets/quantura-brand-icon.png";
+const PROFILE_BRAND_LOGO = "/assets/quantura-icon.svg";
 const state = {
   authClient: null,
   api: null,

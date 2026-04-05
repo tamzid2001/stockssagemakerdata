@@ -8,9 +8,22 @@
   "theme_color": "#0b0f1a",
   "icons": [
     {
-      "src": "/assets/quantura-icon.svg",
+      "src": "/web-app-manifest-192x192.png?v=20260405b",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/web-app-manifest-512x512.png?v=20260405b",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/assets/quantura-icon.svg?v=20260405b",
       "sizes": "256x256",
-      "type": "image/svg+xml"
+      "type": "image/svg+xml",
+      "purpose": "any"
     }
   ]
 }
