@@ -14,6 +14,7 @@ const publicPostsDir = path.join(publicBlogDir, "posts");
 const publicTopicsDir = path.join(publicBlogDir, "topics");
 
 const SITE_URL = "https://quantura.studio";
+const ASSET_VERSION = "20260404b";
 
 const TOPICS = [
   { slug: "macro-signals", label: "Macro Signals", description: "Regime-aware macro signals and scenario framing for institutional workflows." },
@@ -477,7 +478,7 @@ function blogPostHtml(meta) {
     <link rel="alternate" type="application/rss+xml" title="Quantura Blog RSS" href="/blog/rss.xml" />
     <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="/manifest.json" />
-    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/styles.css?v=${ASSET_VERSION}" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
     <script type="application/ld+json">
       {
@@ -498,7 +499,7 @@ function blogPostHtml(meta) {
         "mainEntityOfPage": "${canonical}"
       }
     </script>
-    <script defer src="/app.js"></script>
+    <script defer src="/app.js?v=${ASSET_VERSION}"></script>
   </head>
   <body>
     ${siteHeaderHtml()}
@@ -604,9 +605,9 @@ function blogIndexHtml(posts) {
     <meta name="twitter:url" content="${SITE_URL}/blog" />
     <link rel="alternate" type="application/rss+xml" title="Quantura Blog RSS" href="/blog/rss.xml" />
     <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/styles.css?v=${ASSET_VERSION}" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
-    <script defer src="/app.js"></script>
+    <script defer src="/app.js?v=${ASSET_VERSION}"></script>
   </head>
   <body>
     ${siteHeaderHtml()}
@@ -678,9 +679,9 @@ function topicPageHtml(topicSlug, posts) {
     <meta name="twitter:image" content="/assets/hero-illustration.svg" />
     <meta name="twitter:url" content="${SITE_URL}/blog/topics/${topic.slug}" />
     <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/styles.css?v=${ASSET_VERSION}" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
-    <script defer src="/app.js"></script>
+    <script defer src="/app.js?v=${ASSET_VERSION}"></script>
   </head>
   <body>
     ${siteHeaderHtml()}

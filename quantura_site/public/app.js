@@ -14850,7 +14850,7 @@
     return `${normalizedType}__${normalizedSourceId || "item"}`;
   };
 
-  const LIQUID_GLASS_RUNTIME_URL = "/liquid-glass.js";
+  const LIQUID_GLASS_RUNTIME_URL = "/liquid-glass.js?v=20260404b";
   let liquidGlassRuntimePromise = null;
 
   const queueIdleTask = (task, { timeout = 1200 } = {}) => {
@@ -14919,7 +14919,7 @@
     return liquidGlassRuntimePromise;
   };
 
-  const GISCUS_RUNTIME_URL = "/giscus-comments.js";
+  const GISCUS_RUNTIME_URL = "/giscus-comments.js?v=20260404b";
   let giscusRuntimePromise = null;
 
   const loadGiscusRuntime = () => {

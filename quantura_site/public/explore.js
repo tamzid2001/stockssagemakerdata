@@ -58,7 +58,7 @@ const state = {
 };
 
 const MARKED_SCRIPT_URL = "https://cdn.jsdelivr.net/npm/marked/marked.min.js";
-const GISCUS_RUNTIME_URL = "/giscus-comments.js";
+const GISCUS_RUNTIME_URL = "/giscus-comments.js?v=20260404b";
 const MARKDOWN_ALLOWED_TAGS = new Set([
   "p",
   "br",

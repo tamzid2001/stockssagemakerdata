@@ -191,11 +191,7 @@
     const summaryText =
       normalizeRichText(discussion?.body || "", 2400) || normalizeText(state.currentConfig.description, 260);
     const prettyUpdatedAt = formatDateTime(discussion?.updatedAt || discussion?.createdAt);
-    const normalizedReason = normalizeText(reason, 220).toLowerCase();
-    const installBlocked = normalizedReason.includes("giscus is not installed");
-    const fallbackHint = installBlocked
-      ? "GitHub Discussions is available, but the embedded Giscus app is not installed on this repository."
-      : "Showing a GitHub Discussions fallback for this page.";
+    const fallbackHint = "Comments for this page are powered by GitHub Discussions.";
 
     state.fallbackActive = true;
     if (state.iframeWindow) frameStateByWindow.delete(state.iframeWindow);
@@ -266,7 +262,7 @@
         commentCount
           ? `${commentCount} comment${commentCount === 1 ? "" : "s"} on GitHub Discussions.`
           : "Discussion thread found on GitHub. Open it to leave the first comment.",
-        installBlocked ? "warn" : ""
+        ""
       );
       return true;
     }
@@ -287,7 +283,7 @@
       </div>
     `;
     if (state.countNode) state.countNode.textContent = "0";
-    setStatus(state, "No GitHub discussion thread exists yet. Start one on GitHub.", installBlocked ? "warn" : "");
+    setStatus(state, "No GitHub discussion thread exists yet. Start one on GitHub.", "");
     return true;
   };
 
@@ -423,22 +419,8 @@
           <div class="quantura-comments-loading">Loading GitHub discussion...</div>
         </div>
       `;
-      const shell = host.querySelector(".quantura-comments-shell");
-      const script = buildScript(config);
-      shell?.appendChild(script);
-      setStatus(state, "Comments powered by GitHub Discussions. Sign in with GitHub in the widget to join.");
-
-      try {
-        const iframe = await waitForFrame(host);
-        state.iframe = iframe;
-        state.iframeWindow = iframe.contentWindow;
-        frameStateByWindow.set(state.iframeWindow, state);
-        const loading = host.querySelector(".quantura-comments-loading");
-        if (loading) loading.remove();
-        postConfig(state, config);
-      } catch (error) {
-        await activateFallbackDiscussion(state, error?.message || "Unable to load GitHub discussion.");
-      }
+      setStatus(state, "Loading GitHub discussion...");
+      await activateFallbackDiscussion(state, "GitHub Discussions fallback enabled.");
       return state;
     }
 
@@ -451,15 +433,7 @@
       return state;
     }
 
-    try {
-      const iframe = await waitForFrame(host);
-      state.iframe = iframe;
-      state.iframeWindow = iframe.contentWindow;
-      frameStateByWindow.set(state.iframeWindow, state);
-      postConfig(state, config);
-    } catch (error) {
-      await activateFallbackDiscussion(state, error?.message || "Unable to load GitHub discussion.");
-    }
+    await activateFallbackDiscussion(state, "GitHub Discussions fallback enabled.");
     return state;
   };
 
