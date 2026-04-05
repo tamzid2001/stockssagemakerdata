@@ -3528,6 +3528,8 @@
   const bindHomeBottomNav = () => {
     const nav = document.querySelector(".home-bottom-nav");
     if (!(nav instanceof HTMLElement)) return;
+    const isHomePage = document.body.classList.contains("home-page");
+    if (!isHomePage) return;
     const links = Array.from(nav.querySelectorAll(".home-bottom-nav-link[href]"));
     const currentPath = normalizePath(window.location.pathname || "/");
 
@@ -3539,7 +3541,7 @@
     });
 
     const syncVisibility = () => {
-      const visible = window.innerWidth <= 980;
+      const visible = true;
       nav.classList.toggle("is-visible", visible);
       document.body.classList.toggle("home-bottom-nav-enabled", visible);
     };
@@ -14850,7 +14852,7 @@
     return `${normalizedType}__${normalizedSourceId || "item"}`;
   };
 
-  const LIQUID_GLASS_RUNTIME_URL = "/liquid-glass.js?v=20260404b";
+  const LIQUID_GLASS_RUNTIME_URL = "/liquid-glass.js?v=20260404c";
   let liquidGlassRuntimePromise = null;
 
   const queueIdleTask = (task, { timeout = 1200 } = {}) => {
@@ -14919,7 +14921,7 @@
     return liquidGlassRuntimePromise;
   };
 
-  const GISCUS_RUNTIME_URL = "/giscus-comments.js?v=20260404b";
+  const GISCUS_RUNTIME_URL = "/giscus-comments.js?v=20260404c";
   let giscusRuntimePromise = null;
 
   const loadGiscusRuntime = () => {

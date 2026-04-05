@@ -8362,8 +8362,11 @@ form[data-provider-accent="amazon_nova"] #screener-generate-button {
   box-shadow: var(--glass-panel-shadow-strong);
   backdrop-filter: var(--glass-panel-backdrop);
   -webkit-backdrop-filter: var(--glass-panel-backdrop);
-  z-index: 94;
+  z-index: 160;
   overflow: hidden;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
 }
 
 .home-bottom-nav::before {
@@ -8479,7 +8482,8 @@ form[data-provider-accent="amazon_nova"] #screener-generate-button {
 
 @media (min-width: 981px) {
   .home-bottom-nav {
-    display: none !important;
+    width: min(420px, calc(100% - 32px));
+    bottom: 20px;
   }
 }
 

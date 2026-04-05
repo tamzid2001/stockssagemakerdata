@@ -14,7 +14,7 @@ const publicPostsDir = path.join(publicBlogDir, "posts");
 const publicTopicsDir = path.join(publicBlogDir, "topics");
 
 const SITE_URL = "https://quantura.studio";
-const ASSET_VERSION = "20260404b";
+const ASSET_VERSION = "20260404c";
 
 const TOPICS = [
   { slug: "macro-signals", label: "Macro Signals", description: "Regime-aware macro signals and scenario framing for institutional workflows." },
