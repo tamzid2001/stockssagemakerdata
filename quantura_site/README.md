@@ -29,6 +29,7 @@ quantura_site/
 - Forecast Foundry and historical-data workflows
 - Explore publishing and comments
 - market headlines, screening, charting, and research surfaces
+- GitHub Actions social publishing sourced from site content and logged in Firestore
 
 ## Source of truth
 
@@ -81,6 +82,7 @@ firebase deploy --only functions:ssr
 - If you change `pages/`, make sure SSR templates stay in sync.
 - If you change dashboard or Explore behavior, test both logged-out and logged-in states.
 - If you touch app-side copy or workflow behavior, update the relevant docs and screenshots when appropriate.
+- If you change social publishing behavior or channel constraints, also update `quantura_site/docs/social_media_setup.md` and `scripts/lib/social/config/channels/`.
 - Never commit secrets, service-account JSON files, or production mobile config files.
 
 Repository-wide contribution, conduct, and security guidance lives in:

@@ -1,0 +1,35 @@
+{
+  "channel": "facebook",
+  "provider": "facebook",
+  "label": "Facebook",
+  "schedule": "35 15 * * 1,3,5",
+  "model": "gpt-5-mini",
+  "maxBodyLength": 1200,
+  "maxHashtags": 3,
+  "defaultMediaUrl": "https://quantura.studio/web-app-manifest-512x512.png?v=20260405b",
+  "secretNames": [
+    "FACEBOOK_PAGE_ID",
+    "FACEBOOK_PAGE_ACCESS_TOKEN"
+  ],
+  "providerOptions": {
+    "graphApiVersion": "v23.0"
+  },
+  "rateLimit": {
+    "minIntervalSeconds": 5
+  },
+  "retry": {
+    "maxAttempts": 4,
+    "baseDelaySeconds": 5
+  },
+  "defaults": {
+    "ctaUrl": "https://quantura.studio/explore",
+    "objective": "Drive qualified traffic into Quantura Explore and forecasting pages",
+    "audience": "active retail investors and market learners",
+    "tone": "clear, practical, approachable"
+  },
+  "cta": "View Explore",
+  "notes": [
+    "Uses Facebook Page feed publishing with message + link.",
+    "Workflow assumes a Page access token with page post permissions and app review where required."
+  ]
+}

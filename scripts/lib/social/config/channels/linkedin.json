@@ -1,0 +1,35 @@
+{
+  "channel": "linkedin",
+  "provider": "linkedin",
+  "label": "LinkedIn",
+  "schedule": "20 14 * * 1-5",
+  "model": "gpt-5-mini",
+  "maxBodyLength": 2500,
+  "maxHashtags": 3,
+  "defaultMediaUrl": "https://quantura.studio/web-app-manifest-512x512.png?v=20260405b",
+  "secretNames": [
+    "LINKEDIN_ACCESS_TOKEN",
+    "LINKEDIN_AUTHOR_URN"
+  ],
+  "providerOptions": {
+    "linkedinVersion": "202504"
+  },
+  "rateLimit": {
+    "minIntervalSeconds": 4
+  },
+  "retry": {
+    "maxAttempts": 3,
+    "baseDelaySeconds": 5
+  },
+  "defaults": {
+    "ctaUrl": "https://quantura.studio/research",
+    "objective": "Drive high-intent research operators into Quantura workflows",
+    "audience": "portfolio managers, analysts, fintech operators, and research leads",
+    "tone": "professional, practical, and evidence-aware"
+  },
+  "cta": "See the workflow",
+  "notes": [
+    "Uses LinkedIn Posts API with PUBLIC visibility and MAIN_FEED distribution.",
+    "LinkedIn article/link preview scraping is not relied on in scheduled automation; the canonical URL is included directly in commentary."
+  ]
+}

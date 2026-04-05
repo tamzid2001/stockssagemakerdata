@@ -42,7 +42,7 @@ This repository is the operational source of truth for:
 - client-side JavaScript and styling
 - Node.js Gen2 Cloud Functions APIs
 - server-side rendering templates and runtime
-- Python-based newsletter and research jobs
+- Python-based newsletter, research, and social publishing jobs
 - build, deploy, and smoke-check procedures
 
 ## Production Surfaces
@@ -56,7 +56,7 @@ This repository is the operational source of truth for:
 | Explore | Published forecast outputs, community-style discovery, profile surfaces | `quantura_site/public/explore*`, `quantura_site/functions_explore/src/` |
 | SSR app shell | Server-rendered delivery for page templates and route handling | `quantura_site/functions_ssr/` |
 | Newsletter pipeline | Email send/unsubscribe handlers and scheduled weekly jobs | `quantura_site/functions_newsletter/` |
-| Research automation | Scheduled stock-screening and signal-generation jobs | repo root Python scripts, `.github/workflows/` |
+| Research automation | Scheduled stock-screening, signal-generation, and social publishing jobs | repo root Python scripts, `.github/workflows/` |
 
 ## System Architecture
 
@@ -480,6 +480,12 @@ Current workflow files include:
 - `quantura-app-ci.yml`
 - `quantura-live-smoke.yml`
 - `quantura-sitemap.yml`
+- `social-channel-runner.yml`
+- `social-x.yml`
+- `social-linkedin.yml`
+- `social-facebook.yml`
+- `social-instagram.yml`
+- `social-tiktok.yml`
 - `stock-screener.yml`
 - `workflow-readiness-report.yml`
 
@@ -492,6 +498,16 @@ The repo-root stock screening scripts support recurring signal generation and re
 - compute quantile-band based signal conditions
 - write artifacts for active signals and state transitions
 - run on scheduled GitHub Actions timing near market close
+
+### Social Publishing Automation
+
+The repo also ships per-channel GitHub Actions workflows for social publishing. Those workflows:
+
+- authenticate to Google Cloud with OIDC
+- read social provider credentials from Secret Manager
+- select unpublished site/blog content or build an evergreen fallback
+- enforce duplicate protection through Firestore
+- support manual `workflow_dispatch` dry-runs before live publishing
 
 ## Documentation and Governance
 

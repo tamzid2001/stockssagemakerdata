@@ -23,6 +23,10 @@ jobs:
       HAS_AUTOPILOT_BUCKET: ${{ secrets.AUTOPILOT_S3_BUCKET != '' }}
       HAS_LINEAR_KEY: ${{ secrets.LINEAR_API_KEY != '' }}
       HAS_LINEAR_TEAM: ${{ secrets.LINEAR_TEAM_ID != '' }}
+      HAS_GCP_PROJECT_VAR: ${{ vars.GCP_PROJECT_ID != '' }}
+      HAS_SOCIAL_WIF_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '' }}
+      HAS_SOCIAL_WIF_SERVICE_ACCOUNT: ${{ vars.GCP_SERVICE_ACCOUNT_EMAIL != '' }}
+      HAS_SOCIAL_GCP_KEY_FALLBACK: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY_JSON != '' }}
     steps:
       - name: Build readiness summary
         run: |
@@ -40,6 +44,10 @@ jobs:
           echo "| Autopilot S3 bucket | ${HAS_AUTOPILOT_BUCKET} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Linear API key | ${HAS_LINEAR_KEY} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Linear team ID | ${HAS_LINEAR_TEAM} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| GCP project var | ${HAS_GCP_PROJECT_VAR} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Social WIF provider var | ${HAS_SOCIAL_WIF_PROVIDER} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Social WIF service account var | ${HAS_SOCIAL_WIF_SERVICE_ACCOUNT} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Social service-account JSON fallback | ${HAS_SOCIAL_GCP_KEY_FALLBACK} |" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
 
           missing=0

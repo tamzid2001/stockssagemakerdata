@@ -21,3 +21,4 @@ quantura_site/.firebase/
 scripts/pull-secrets.sh
 .DS_Store
 __pycache__/
+artifacts/

@@ -1,0 +1,35 @@
+{
+  "channel": "instagram",
+  "provider": "instagram",
+  "label": "Instagram",
+  "schedule": "40 16 * * 2,4,6",
+  "model": "gpt-5-mini",
+  "maxBodyLength": 2200,
+  "maxHashtags": 5,
+  "defaultMediaUrl": "https://quantura.studio/web-app-manifest-512x512.png?v=20260405b",
+  "secretNames": [
+    "INSTAGRAM_BUSINESS_ACCOUNT_ID",
+    "INSTAGRAM_ACCESS_TOKEN"
+  ],
+  "providerOptions": {
+    "graphApiVersion": "v23.0"
+  },
+  "rateLimit": {
+    "minIntervalSeconds": 8
+  },
+  "retry": {
+    "maxAttempts": 4,
+    "baseDelaySeconds": 8
+  },
+  "defaults": {
+    "ctaUrl": "https://quantura.studio/forecasting",
+    "objective": "Show product-led workflow value with concise visual captions",
+    "audience": "mobile-first market operators and product-curious followers",
+    "tone": "crisp, visual, disciplined"
+  },
+  "cta": "Open Quantura",
+  "notes": [
+    "Uses Instagram Graph API content publishing via media container creation then media_publish.",
+    "Scheduled automation is image-first because Instagram does not support text-only feed publishing through the Graph API."
+  ]
+}

@@ -1,213 +1,363 @@
-# Quantura Social Media Automation Setup
+# Quantura Social Publishing via GitHub Actions
 
-This guide covers:
-- how to create high-conversion social pages,
-- how to connect API credentials later,
-- how to use the new Firebase backend automation for low-cost posting.
+This document describes the production social automation architecture now used by Quantura.
 
-## 1) Create motivated social pages (brand + positioning)
+The old Firebase-backed social automation flow is retired. Scheduled social publishing is now driven by GitHub Actions, with Google Cloud Secret Manager as the source of truth for credentials and Firestore used for deduplication and dispatch logs.
 
-Use this identity on every channel:
-- Brand name: `Quantura`
-- Tagline: `Data Analytics + ML/AI for active market decisions`
-- Primary CTA: `https://quantura.studio`
-- Proof points: forecasting bands, indicator overlays, saved workspaces, collaboration.
+## What changed
 
-Profile checklist (all channels):
-- Handle: reserve `@quantura` or nearest available variant.
-- Logo: upload your transparent Quantura logo.
-- Banner: value proposition + CTA URL.
-- Bio formula: `Who you help + what outcome + social proof + CTA`.
-- Link-in-bio: home page + pricing + forecasting page.
-- Pinned post: short intro + 3 key outcomes + CTA.
+- Social automation no longer depends on the retired Python backend shim in `quantura_site/functions/main.py`.
+- Each live social channel now has its own scheduled GitHub Actions workflow:
+  - `.github/workflows/social-x.yml`
+  - `.github/workflows/social-linkedin.yml`
+  - `.github/workflows/social-facebook.yml`
+  - `.github/workflows/social-instagram.yml`
+  - `.github/workflows/social-tiktok.yml`
+- All of those wrappers call the shared reusable runner:
+  - `.github/workflows/social-channel-runner.yml`
+- Shared publish logic lives in:
+  - `scripts/lib/social/`
+- The workflow entrypoint is:
+  - `scripts/social_workflow_runner.py`
 
-## 2) Channels to open first
+## Current supported channels
 
-Prioritize this order:
-1. LinkedIn Company Page (B2B trust + organic reach for analytics/AI buyers)
-2. X (market commentary and fast distribution)
-3. YouTube (short explainers and demos)
-4. Reddit (community feedback and intent traffic)
-5. Facebook + Instagram + Threads + TikTok + Pinterest
+Production-grade scheduled publishing is implemented for the channels that had real runnable automation paths in the previous repo flow:
 
-## 3) Content pillars (for conversion, not vanity)
+- X
+- LinkedIn
+- Facebook Pages
+- Instagram Business / Creator
+- TikTok
 
-Publish around 4 pillars:
-- `Market Context`: what moved, why it matters, what to watch next.
-- `Product Value`: forecast examples, saved run workflows, collaboration use cases.
-- `Education`: indicators, quantiles, risk framing, repeatable research process.
-- `Proof`: user outcomes, before/after workflows, benchmark snapshots.
+Legacy webhook placeholders such as Threads, Reddit, YouTube, and Pinterest were not production-grade in the audited repo state. They are not scheduled by default in this migration.
 
-Recommended cadence:
-- Daily short post: 1-2 platform-native messages.
-- Weekly anchor post: one deeper insight thread/article/video.
-- Weekly recap: wins, lessons, next week watchlist.
+## Architecture
 
-## 4) Backend automation now available
+### Shared runtime
 
-Implemented in:
-- `/Users/tamzidullah/Desktop/stockssagemakerdata/quantura_site/functions/main.py`
+The shared runtime handles:
 
-Functions:
-- `generate_social_campaign_drafts`
-- `queue_social_campaign_posts`
-- `list_social_campaigns`
-- `list_social_queue`
-- `publish_social_queue_now` (admin)
-- `social_dispatch_scheduler` (hourly)
-- `schedule_social_autopilot_now` (admin, manual trigger)
-- `social_daily_planner_scheduler` (daily campaign planner)
+- source selection
+- optional AI draft generation
+- platform formatting
+- duplicate protection
+- Firestore campaign / queue / dispatch logging
+- retry behavior
+- per-platform provider execution
 
-Model:
-- Default low-cost model: `gpt-5-mini` via `SOCIAL_CONTENT_MODEL`.
-- If `OPENAI_API_KEY` is missing, template fallback is used so automation still works.
-- GPT-5 generation uses OpenAI Responses API with channel-by-channel drafting to avoid truncation.
+Directory layout:
 
-Tier model access used by Quantura AI screeners:
-- `free`: `gpt-5-nano`, `gpt-5-mini` (3 weekly runs)
-- `pro`: `gpt-5-mini`, `gpt-5`, `gpt-5.1` (25 weekly runs)
-- `desk`: `gpt-5-nano`, `gpt-5-mini`, `gpt-5`, `gpt-5.1`, `gpt-5.2` (75 weekly runs)
-
-## 5) Environment variables
-
-Add these in your Functions environment (or `.env` for local emulator):
-- `OPENAI_API_KEY`
-- `SOCIAL_AUTOMATION_ENABLED=true`
-- `SOCIAL_CONTENT_MODEL=gpt-5-mini`
-- `SOCIAL_AUTOMATION_TIMEZONE=America/New_York`
-- `SOCIAL_DISPATCH_BATCH_SIZE=30`
-- `SOCIAL_DEFAULT_CTA_URL=https://quantura.studio`
-- `SOCIAL_WEBHOOK_X`
-- `SOCIAL_WEBHOOK_LINKEDIN`
-- `SOCIAL_WEBHOOK_FACEBOOK`
-- `SOCIAL_WEBHOOK_INSTAGRAM`
-- `SOCIAL_WEBHOOK_THREADS`
-- `SOCIAL_WEBHOOK_REDDIT`
-- `SOCIAL_WEBHOOK_TIKTOK`
-- `SOCIAL_WEBHOOK_YOUTUBE`
-- `SOCIAL_WEBHOOK_PINTEREST`
-- `SOCIAL_POSTING_TIMEZONE=America/New_York`
-- `SOCIAL_AUTOPILOT_ENABLED=true`
-- `SOCIAL_AUTOPILOT_CHANNELS=x,linkedin,facebook,instagram,tiktok`
-- `SOCIAL_AUTOPILOT_POSTS_PER_CHANNEL=3`
-- `SOCIAL_AUTOPILOT_USER_ID=quantura_system`
-- `SOCIAL_AUTOPILOT_USER_EMAIL=system@quantura.ai`
-- `SOCIAL_AUTOPILOT_TOPIC=Daily Quantura market pulse: top catalysts, risk posture, and setup watchlist`
-- `SOCIAL_AUTOPILOT_OBJECTIVE=Drive qualified users to Quantura forecasting workflows`
-- `SOCIAL_AUTOPILOT_AUDIENCE=active investors, analysts, and portfolio operators`
-- `SOCIAL_AUTOPILOT_TONE=institutional, concise, actionable`
-
-Direct provider posting credentials (optional alternative to webhooks):
-- `TWITTER_BEARER_TOKEN` (read/search) plus user-write credentials `TWITTER_API_KEY` + `TWITTER_API_SECRET` + `TWITTER_ACCESS_TOKEN` + `TWITTER_ACCESS_TOKEN_SECRET` for X posting
-- `LINKEDIN_ACCESS_TOKEN` + `LINKEDIN_AUTHOR_URN`
-- `FACEBOOK_PAGE_ID` + `FACEBOOK_PAGE_ACCESS_TOKEN`
-- `INSTAGRAM_BUSINESS_ACCOUNT_ID` + `INSTAGRAM_ACCESS_TOKEN` + `INSTAGRAM_DEFAULT_IMAGE_URL`
-- `TIKTOK_ACCESS_TOKEN` + `TIKTOK_OPEN_ID` (or webhook integration)
-
-Current adapter pattern:
-- tries direct official API integration first for X/LinkedIn/Facebook/Instagram/TikTok.
-- falls back to per-channel webhook when direct credentials are unavailable.
-
-## 6) Example automation flow (client to backend)
-
-1. Generate drafts:
-
-```js
-const gen = functions.httpsCallable("generate_social_campaign_drafts");
-const draftRes = await gen({
-  title: "Quantura weekly market pulse",
-  topic: "How uncertainty bands improve position sizing",
-  objective: "Drive qualified signups",
-  audience: "Active investors and fintech operators",
-  tone: "confident, concise, practical",
-  channels: ["x", "linkedin", "youtube", "reddit"],
-  postsPerChannel: 2,
-  ctaUrl: "https://quantura.studio/pricing",
-  saveDraft: true
-});
+```text
+scripts/lib/social/
+├── config.py
+├── content.py
+├── drafting.py
+├── models.py
+├── pipeline.py
+├── secrets.py
+├── store.py
+├── config/channels/
+│   ├── x.json
+│   ├── linkedin.json
+│   ├── facebook.json
+│   ├── instagram.json
+│   └── tiktok.json
+└── providers/
+    ├── base.py
+    ├── x.py
+    ├── linkedin.py
+    ├── facebook.py
+    ├── instagram.py
+    └── tiktok.py
 ```
 
-2. Queue posts:
+### Content source strategy
 
-```js
-const queue = functions.httpsCallable("queue_social_campaign_posts");
-await queue({
-  campaignId: draftRes.data.campaignId,
-  scheduledFor: "2026-02-16T14:00:00Z"
-});
-```
+Default scheduled content selection works like this:
 
-3. Dispatch:
-- Automatic: hourly via `social_dispatch_scheduler`.
-- Manual (admin): call `publish_social_queue_now`.
+1. Pick the newest unpublished blog entry from `quantura_site/public/blog/posts.manifest.json` for the channel.
+2. If all current blog posts were already published to that channel, generate an evergreen Quantura market pulse fallback.
+3. If a manual topic is supplied via `workflow_dispatch`, use that instead.
 
-## 6.1) CLI smoke test and strategic queue
+### Duplicate protection
 
-Run this locally from repo root:
+Duplicate protection is enforced through Firestore:
+
+- `social_publications`
+- `social_campaigns`
+- `social_queue`
+- `social_dispatch_logs`
+
+Each publish attempt reserves an idempotency record based on:
+
+- channel
+- source ID
+
+That prevents scheduled reruns or overlapping workflows from posting the same source twice unless `force=true` is explicitly used.
+
+## Google Cloud Secret Manager
+
+Social publishing credentials must live in Google Cloud Secret Manager for the Quantura project.
+
+Recommended project:
+
+- `quantura-e2e3d`
+
+### Required secrets by channel
+
+#### Shared
+
+- `OPENAI_API_KEY` (optional but recommended for AI-generated copy)
+
+#### X
+
+- `TWITTER_API_KEY`
+- `TWITTER_API_SECRET`
+- `TWITTER_ACCESS_TOKEN`
+- `TWITTER_ACCESS_TOKEN_SECRET`
+
+Optional:
+
+- `X_USER_OAUTH2_TOKEN`
+
+If `X_USER_OAUTH2_TOKEN` is present, the X adapter prefers it. Otherwise it uses OAuth 1.0a user-context credentials.
+
+#### LinkedIn
+
+- `LINKEDIN_ACCESS_TOKEN`
+- `LINKEDIN_AUTHOR_URN`
+
+#### Facebook
+
+- `FACEBOOK_PAGE_ID`
+- `FACEBOOK_PAGE_ACCESS_TOKEN`
+
+#### Instagram
+
+- `INSTAGRAM_BUSINESS_ACCOUNT_ID`
+- `INSTAGRAM_ACCESS_TOKEN`
+
+Optional override:
+
+- `INSTAGRAM_DEFAULT_IMAGE_URL`
+
+If `INSTAGRAM_DEFAULT_IMAGE_URL` is not set, the workflow uses Quantura’s public app icon as the media source.
+
+#### TikTok
+
+- `TIKTOK_ACCESS_TOKEN`
+- `TIKTOK_OPEN_ID`
+
+Optional but strongly recommended:
+
+- `TIKTOK_DEFAULT_MEDIA_URL`
+- `TIKTOK_PRIVACY_LEVEL`
+
+If `TIKTOK_DEFAULT_MEDIA_URL` is not set, the workflow uses Quantura’s public app icon. The domain serving that media must be allowed by TikTok for pull-from-URL posting.
+
+## GitHub repository settings
+
+### Recommended auth model
+
+Use GitHub Actions OIDC with Google Workload Identity Federation.
+
+Required GitHub repository variables:
+
+- `GCP_PROJECT_ID`
+- `GCP_WORKLOAD_IDENTITY_PROVIDER`
+- `GCP_SERVICE_ACCOUNT_EMAIL`
+
+Optional fallback secret:
+
+- `GCP_SERVICE_ACCOUNT_KEY_JSON`
+
+The reusable workflow prefers OIDC. The service-account-JSON fallback is only there for environments that have not finished OIDC setup yet.
+
+### Workflow permissions
+
+The reusable social workflow requires:
+
+- `contents: read`
+- `id-token: write`
+
+### Service account capabilities
+
+The Google service account used by GitHub Actions should have the minimum roles needed to:
+
+- read Secret Manager secrets
+- write Firestore documents for publish logs and idempotency
+
+In practice, that usually means:
+
+- Secret Manager Secret Accessor
+- Firestore User or another narrowly scoped Firestore write role
+
+## Manual usage
+
+Each platform workflow supports `workflow_dispatch`.
+
+Manual inputs:
+
+- `dry_run`
+- `force`
+- `source_mode`
+- `topic`
+- `cta_url`
+
+### Dry-run
+
+Dry-run builds the source, formats the post, records a run artifact, and writes a workflow summary without publishing to the provider.
+
+### Force
+
+`force=true` bypasses duplicate-post protection for a single run.
+
+## Local usage
+
+For local testing:
 
 ```bash
-quantura_site/functions/venv/bin/python scripts/social_poster_runner.py --send-now --queue-strategic
+python scripts/social_poster_runner.py --channels x,linkedin --dry-run
 ```
 
-- `--send-now` attempts immediate posting once per selected channel.
-- `--queue-strategic` saves queue rows with dayparted `suggestedPostTime`.
-- `--schedule-autopilot` triggers the daily planner path manually.
-
-Health probe (reads/fallback checks across X, Reddit, Facebook, Instagram, LinkedIn, TikTok):
+To publish locally instead of previewing:
 
 ```bash
-python scripts/social_channel_probe.py --query "US stock market top headlines today"
+python scripts/social_poster_runner.py --channels x --send-now
 ```
 
-## 6.2) GitHub automations
-
-Use these workflows:
-- `.github/workflows/social-media-automation.yml` for recurring social drafting/posting automation.
-- `.github/workflows/weekly-blog-post.yml` for weekly blog generation and auto-commit.
-
-`social-media-automation.yml` supports two modes:
-- health probe only (no Firebase service account secret)
-- full queue + dispatch mode when `FIREBASE_SERVICE_ACCOUNT_JSON` is configured.
-
-The workflow also accepts `FIREBASE_SERVICE_ACCOUNT_QUANTURA_E2E3D` as a fallback secret name.
-To ensure immediate feed activity each run, it performs:
-- direct `--send-now` publish attempts,
-- strategic queueing,
-- `--publish-now-first` so at least one queued post per routable channel dispatches immediately.
-
-### One-command secret sync (local -> GitHub Actions)
-
-Use:
+To sync local env values into Google Cloud Secret Manager:
 
 ```bash
-python scripts/sync_github_social_secrets.py
+python scripts/sync_social_secrets_to_secret_manager.py --project-id quantura-e2e3d
 ```
 
-Optional (only selected keys):
+The old helper `scripts/sync_github_social_secrets.py` is deprecated and should not be used for social publishing credentials anymore.
 
-```bash
-python scripts/sync_github_social_secrets.py --only OPENAI_API_KEY,TWITTER_API_KEY,TWITTER_API_SECRET,TWITTER_ACCESS_TOKEN,TWITTER_ACCESS_TOKEN_SECRET
-```
+## Schedule map
 
-## 7) Launch plan for first 14 days
+The current default schedules are:
 
-Day 1-2:
-- Create pages, complete bios, pin intro post, add CTA links.
+- X: weekdays at `13:15 UTC`
+- LinkedIn: weekdays at `14:20 UTC`
+- Facebook: Monday / Wednesday / Friday at `15:35 UTC`
+- Instagram: Tuesday / Thursday / Saturday at `16:40 UTC`
+- TikTok: Monday / Wednesday / Friday at `17:50 UTC`
 
-Day 3-5:
-- Publish 1 post/day from two pillars (Market Context + Product Value).
+These are intentionally separated so one platform’s failure or rate-limit event does not block the others.
 
-Day 6-10:
-- Add educational carousels/threads and one short video demo.
+## Platform implementation summary
 
-Day 11-14:
-- Review clicks, saves, comments, and signups.
-- Keep top-performing hooks and remove low-signal formats.
+### X
 
-## 8) Compliance guardrails
+Implemented:
 
-Use in every post process:
-- no guaranteed return language,
-- include risk-aware phrasing,
-- avoid personalized investment advice in public copy,
-- keep claims evidence-backed.
+- scheduled and manual publish workflow
+- duplicate protection
+- OAuth user-context publishing through `POST /2/tweets`
+- retry on transient failures
+- text-first formatting with native URL inclusion
+
+Constraints:
+
+- text-first automation only in this migration
+- media upload is intentionally not attempted in the scheduled path
+- character limit handling is enforced in channel config
+
+Official references used:
+
+- [X API docs](https://docs.x.com/)
+
+### LinkedIn
+
+Implemented:
+
+- scheduled and manual publish workflow
+- Posts API publishing to member or organization URNs
+- versioned REST headers
+- duplicate protection and retry handling
+
+Constraints:
+
+- uses a text-first post body
+- does not depend on LinkedIn scraping article preview behavior
+- requires a valid `LINKEDIN_AUTHOR_URN`
+
+Official references used:
+
+- [LinkedIn community management docs on Microsoft Learn](https://learn.microsoft.com/en-us/linkedin/marketing/community-management/)
+
+### Facebook
+
+Implemented:
+
+- scheduled and manual publish workflow
+- Page feed publishing with message plus canonical link
+- duplicate protection and retry handling
+
+Constraints:
+
+- targets Facebook Pages, not personal profiles
+- requires Page-scoped token and relevant app permissions/review
+
+Official references used:
+
+- [Meta for Developers](https://developers.facebook.com/docs/)
+
+### Instagram
+
+Implemented:
+
+- scheduled and manual publish workflow
+- image-first publishing through Graph API media container creation and `media_publish`
+- duplicate protection and retry handling
+
+Constraints:
+
+- Instagram feed publishing is not text-only; a public media URL is required
+- requires a Business or Creator account linked through Meta Graph permissions
+
+Official references used:
+
+- [Instagram Graph API content publishing docs](https://developers.facebook.com/docs/instagram-api/guides/content-publishing)
+
+### TikTok
+
+Implemented:
+
+- scheduled and manual publish workflow
+- Content Posting API direct-post flow using pull-from-URL media
+- creator privacy-option query before publish
+- duplicate protection and retry handling
+
+Constraints:
+
+- requires a valid access token and `open_id`
+- public publish availability depends on TikTok app approval and creator privacy options
+- domain/media URL must be acceptable for pull-from-URL posting
+- current automation uses photo posting for operational simplicity
+
+Official references used:
+
+- [TikTok Content Posting API](https://developers.tiktok.com/doc/content-posting-api-reference-direct-post?enter_method=left_navigation&from_seo_redirect=1)
+- [TikTok User Data API](https://developers.tiktok.com/doc/minis-user-data)
+
+## Operational guidance
+
+- Run new channels in `dry_run=true` first.
+- Confirm provider credentials and app review state before turning on scheduled publishing.
+- Verify the Firestore idempotency log after the first real run.
+- Use `force=true` only for deliberate reposts.
+- Avoid changing schedules and provider configs in the same deploy when possible.
+
+## Failure handling
+
+Each channel workflow:
+
+- logs the exact failing step in GitHub Actions
+- writes a JSON artifact with the draft, source, and result payload
+- retries transient provider failures
+- fails early when required secrets are missing
+
+That makes failures visible without leaking secrets into logs.

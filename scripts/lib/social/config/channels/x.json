@@ -1,0 +1,39 @@
+{
+  "channel": "x",
+  "provider": "x",
+  "label": "X",
+  "schedule": "15 13 * * 1-5",
+  "model": "gpt-5-mini",
+  "maxBodyLength": 280,
+  "maxHashtags": 2,
+  "defaultMediaUrl": "https://quantura.studio/web-app-manifest-512x512.png?v=20260405b",
+  "secretSets": [
+    [
+      "X_USER_OAUTH2_TOKEN"
+    ],
+    [
+      "TWITTER_API_KEY",
+      "TWITTER_API_SECRET",
+      "TWITTER_ACCESS_TOKEN",
+      "TWITTER_ACCESS_TOKEN_SECRET"
+    ]
+  ],
+  "rateLimit": {
+    "minIntervalSeconds": 2
+  },
+  "retry": {
+    "maxAttempts": 4,
+    "baseDelaySeconds": 3
+  },
+  "defaults": {
+    "ctaUrl": "https://quantura.studio/forecasting",
+    "objective": "Drive qualified operators into Quantura forecasting workflows",
+    "audience": "active investors, analysts, and portfolio operators",
+    "tone": "institutional, concise, actionable"
+  },
+  "cta": "Open Forecasting",
+  "notes": [
+    "Uses POST /2/tweets with user-context auth.",
+    "Text-first post formatting is used to avoid media-upload fragility in scheduled automation."
+  ]
+}
