@@ -11,7 +11,7 @@
   },
   "overrides": {
     "@tootallnate/once": "^3.0.1",
-    "fast-xml-parser": "^5.5.9",
+    "fast-xml-parser": "^5.7.2",
     "node-forge": "^1.4.0",
     "path-to-regexp": "0.1.13"
   }
