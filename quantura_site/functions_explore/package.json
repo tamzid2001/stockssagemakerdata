@@ -22,6 +22,7 @@
     "express-rate-limit": "^7.5.1",
     "firebase-admin": "^13.7.0",
     "google-auth-library": "^9.15.1",
+    "helmet": "8.1.0",
     "stripe": "^20.4.0"
   },
   "overrides": {
