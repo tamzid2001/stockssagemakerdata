@@ -112,6 +112,7 @@ const SUBSCRIPTION_PLANS: Record<string, SubscriptionPlan> = {
 };
 
 const app = express();
+app.use(helmet());
 app.disable("x-powered-by");
 
 app.post("/api/shop/webhook/stripe", express.raw({ type: "application/json" }), async (req, res) => {
