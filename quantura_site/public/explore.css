@@ -1,16 +1,16 @@
 :root {
-  --bg-a: #f3f8ff;
-  --bg-b: #eef5ff;
-  --ink: #0f1f3f;
-  --muted: #5d6f96;
-  --surface: rgba(255, 255, 255, 0.9);
+  --bg-a: #ffffff;
+  --bg-b: #ffffff;
+  --ink: #000000;
+  --muted: #111111;
+  --surface: rgba(255, 255, 255, 0.96);
   --surface-strong: #ffffff;
-  --line: rgba(26, 56, 120, 0.16);
+  --line: rgba(0, 0, 0, 0.12);
   --brand: #1e5eff;
   --brand-2: #2ca8d8;
   --danger: #d83446;
   --radius: 18px;
-  --shadow: 0 14px 40px rgba(18, 42, 86, 0.14);
+  --shadow: 0 14px 40px rgba(0, 0, 0, 0.08);
 }
 
 * {
@@ -23,6 +23,11 @@ body {
   color: var(--ink);
   background: linear-gradient(135deg, var(--bg-a), var(--bg-b));
   min-height: 100vh;
+}
+
+body p,
+body label {
+  color: var(--ink);
 }
 
 .explore-bg {
@@ -60,9 +65,9 @@ body {
   height: 38px;
   flex: 0 0 auto;
   object-fit: contain;
-  padding: 7px;
+  padding: 4px;
   border-radius: 12px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(240, 246, 255, 0.94));
+  background: radial-gradient(circle at 30% 22%, rgba(255, 255, 255, 0.99), rgba(235, 243, 255, 0.96));
   border: 1px solid rgba(26, 56, 120, 0.12);
   box-shadow: 0 8px 18px rgba(18, 42, 86, 0.1);
 }
@@ -760,9 +765,10 @@ button:hover,
 
 .avatar-wrap img.brand-avatar {
   object-fit: contain;
-  padding: 8px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(240, 246, 255, 0.94));
-  box-shadow: 0 10px 24px rgba(18, 42, 86, 0.12);
+  padding: 5px;
+  border-color: rgba(26, 56, 120, 0.18);
+  background: radial-gradient(circle at 30% 22%, rgba(255, 255, 255, 0.99), rgba(232, 241, 255, 0.96));
+  box-shadow: 0 12px 26px rgba(18, 42, 86, 0.14);
 }
 
 .card-surface {

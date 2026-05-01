@@ -3559,6 +3559,10 @@ function buildAutopilotOutputsMeta(data: Record<string, unknown>): Record<string
   }
   const branch = sanitizeText(analysis.metrics && asPlainObject(analysis.metrics).branch, 40);
   if (branch) metrics.Branch = branch;
+  const recommendation = sanitizeText(analysis.metrics && asPlainObject(analysis.metrics).recommendation, 40).toUpperCase();
+  if (recommendation) metrics.Signal = recommendation;
+  const endDateBias = sanitizeText(analysis.metrics && asPlainObject(analysis.metrics).endDateBias, 80);
+  if (endDateBias) metrics["End Bias"] = endDateBias.replace(/_/g, " ");
   const rowCount = asFinite(dataset.rowCount, 0);
   if (rowCount > 0) metrics.Rows = Math.floor(rowCount);
   const candidateName = sanitizeText(bestCandidate.candidateName, 120);
@@ -12088,24 +12092,62 @@ ROUTES.post("/autopilot/datasets/upload", async (req, res) => {
     const user = await requireFoundryUser(req);
     const body = asPlainObject(req.body);
     const filePath = sanitizeText(body.filePath, 1000).replace(/^\/+/, "");
-    if (!filePath) {
-      res.status(400).json({ error: "missing_file_path" });
+    let csvText = asString(body.csvText);
+    if (!csvText.trim() && !filePath) {
+      res.status(400).json({ error: "missing_csv_source" });
       return;
     }
-    const csvText = await readStorageTextArtifact(filePath);
     const tickerHint = normalizeTicker(body.ticker);
     const intervalHint = sanitizeText(body.interval, 20);
-    const classified = await classifyUploadedCsv(csvText, { tickerHint, intervalHint });
     const runRef = db.collection("autopilot_requests").doc();
     const owner = safePathSegment(user.uid, 120) || "user";
     const run = safePathSegment(runRef.id, 120) || "run";
+    const requestedFileName =
+      sanitizeText(body.fileName || asPlainObject(body.file).name || filePath.split("/").pop(), 180)
+        .replace(/[^A-Za-z0-9._-]/g, "_")
+        .trim() || "upload.csv";
+    const sourceFileName = requestedFileName.toLowerCase().endsWith(".csv") ? requestedFileName : `${requestedFileName}.csv`;
+
+    if (!csvText.trim()) {
+      csvText = await readStorageTextArtifact(filePath);
+    }
+    if (!csvText.trim()) {
+      res.status(400).json({ error: "empty_csv_upload" });
+      return;
+    }
+
+    const uploadedCsvFile = await writeStorageTextArtifact(
+      `predictions/${owner}/foundry/${run}/uploads/${sourceFileName}`,
+      csvText,
+      "text/csv"
+    );
+    const classified = await classifyUploadedCsv(csvText, { tickerHint, intervalHint });
+
+    console.info("[Autopilot] upload dataset prepared", {
+      runId: runRef.id,
+      userId: user.uid,
+      sourcePath: filePath || "",
+      storedPath: sanitizeText(uploadedCsvFile.storagePath, 1000),
+      sourceKind: classified.kind,
+      fileName: sourceFileName,
+      rowCount:
+        Math.max(
+          0,
+          Math.floor(
+            asFinite(
+              classified.kind === "historical_dataset" ? classified.dataset.rowCount : classified.analysis.rowCount,
+              0
+            )
+          )
+        ) || 0,
+    });
 
     const baseDoc: Record<string, unknown> = {
       userId: user.uid,
       workspaceId: sanitizeText(body.workspaceId, 220) || user.uid,
       title:
         sanitizeText(body.title, 180) ||
-        sanitizeText(body.fileName || asPlainObject(body.file).name, 180) ||
+        sourceFileName ||
         `${tickerHint || "Forecast"} Forecast Foundry`,
       notes: sanitizeText(body.notes, 2000),
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -12139,11 +12181,7 @@ ROUTES.post("/autopilot/datasets/upload", async (req, res) => {
         },
         analysis: {},
         files: {
-          uploadedCsv: {
-            storagePath: filePath,
-            fileName: filePath.split("/").pop() || "upload.csv",
-            contentType: "text/csv",
-          },
+          uploadedCsv: uploadedCsvFile,
           datasetCsv: normalizedFile,
         },
       };
@@ -12191,11 +12229,7 @@ ROUTES.post("/autopilot/datasets/upload", async (req, res) => {
       },
       analysis: persisted.analysisPatch,
       files: {
-        uploadedCsv: {
-          storagePath: filePath,
-          fileName: filePath.split("/").pop() || "predictions.csv",
-          contentType: "text/csv",
-        },
+        uploadedCsv: uploadedCsvFile,
         ...persisted.filePatches,
       },
     };

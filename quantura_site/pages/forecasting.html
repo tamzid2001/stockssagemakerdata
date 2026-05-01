@@ -14,13 +14,7 @@
         <meta property="og:url" content="https://quantura.studio/forecasting" />
         <meta property="og:image" content="/assets/quantura-logo.svg" />
     <meta property="og:site_name" content="Quantura" />
-    <meta property="og:locale" content="en_US" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Quantura Forecasting Studio" />
-    <meta name="twitter:description" content="Quantile forecasting, technical indicators, and demand intelligence for serious investors." />
-    <meta name="twitter:image" content="/assets/quantura-logo.svg" />
-    <meta name="twitter:url" content="https://quantura.studio/forecasting" />
-    <meta name="author" content="Quantura" />
+    <meta property="og:locale" content="en_US" /><meta name="author" content="Quantura" />
     <meta name="theme-color" content="#0B1526" />
     <link rel="alternate" hreflang="en-US" href="https://quantura.studio/forecasting" />
     <link rel="alternate" hreflang="x-default" href="https://quantura.studio/forecasting" />
@@ -54,7 +48,7 @@
     <header class="header">
       <div class="container nav">
         <a class="logo" href="/" aria-label="Quantura home">
-          <img class="logo-img" src="/assets/quantura-icon.svg" alt="" aria-hidden="true" />
+          <img class="logo-img" src="/favicon.svg" alt="" aria-hidden="true" />
           <span>QUANTURA</span>
         </a>
         <nav class="nav-links">
@@ -94,8 +88,9 @@
         <aside class="app-sidebar">
 	          <nav class="sidebar-nav" aria-label="Terminal navigation">
 	            <a class="sidebar-link active" href="/forecasting" data-panel-target="forecast"><i class="iconoir-magic-wand" aria-hidden="true"></i><span>Forecast</span></a>
-	            <a class="sidebar-link" href="/ticker-intelligence" data-panel-target="ticker"><i class="iconoir-eye" aria-hidden="true"></i><span>Ticker</span></a>
-              <a class="sidebar-link" href="/predictions" data-panel-target="predictions"><i class="iconoir-graph-up" aria-hidden="true"></i><span>Predictions</span></a>
+              <a class="sidebar-link" href="/autopilot" data-panel-target="autopilot"><i class="iconoir-rocket" aria-hidden="true"></i><span>Forecast Foundry</span></a>
+              <a class="sidebar-link" href="/sports-forecasting" data-panel-target="sports-autopilot"><i class="iconoir-trophy" aria-hidden="true"></i><span>Sports Forecasting</span></a>
+	              <a class="sidebar-link" href="/predictions" data-panel-target="predictions"><i class="iconoir-graph-up" aria-hidden="true"></i><span>Predictions</span></a>
 	            <a class="sidebar-link" href="/indicators" data-panel-target="indicators"><i class="iconoir-sigma-function" aria-hidden="true"></i><span>Indicators</span></a>
               <a class="sidebar-link" href="/trending" data-panel-target="trending"><i class="iconoir-fire-flame" aria-hidden="true"></i><span>Trending</span></a>
 	            <a class="sidebar-link" href="/news" data-panel-target="news"><i class="iconoir-journal-page" aria-hidden="true"></i><span>Historical Data Download</span></a>
@@ -127,52 +122,9 @@
           </div>
 	          <section class="section studio-section" id="terminal">
 	            <div class="container">
-	              <div class="studio-layout" data-panels data-panel-router="terminal">
-                <div class="studio-main">
-                  <div class="chart-shell studio-chart">
-                    <div id="tradingview-terminal-root" class="tradingview-terminal hidden">
-                      <div class="tv-widget-status-row">
-                        <span class="small muted" id="tv-widget-status">Loading TradingView...</span>
-                      </div>
-                      <div class="tradingview-grid">
-                        <div id="tv-ticker-tape" class="tv-widget-slot tv-slot-tape tv-span-2"></div>
-                        <div id="tv-symbol-info" class="tv-widget-slot tv-slot-info tv-span-2"></div>
-                        <div id="tv-advanced-chart" class="tv-widget-slot tv-slot-advanced tv-span-2"></div>
-                        <div id="tv-company-profile" class="tv-widget-slot tv-slot-company tv-span-2"></div>
-                        <div id="tv-fundamental-data" class="tv-widget-slot tv-slot-fundamentals tv-span-2"></div>
-                        <div id="tv-technical-analysis" class="tv-widget-slot tv-slot-technical"></div>
-                        <div id="tv-top-stories" class="tv-widget-slot tv-slot-news"></div>
-                        <div id="tv-widget-fallback" class="notice tv-widget-fallback hidden">
-                          TradingView widgets did not load right now. Quantura chart fallback is active.
-                        </div>
-                      </div>
-                      <p class="small muted tv-widget-credit">
-                        Charts and financial information provided by
-                        <a href="https://www.tradingview.com/widget/" target="_blank" rel="noopener noreferrer">TradingView</a>.
-                      </p>
-                    </div>
-                    <div id="ticker-chart" class="chart"></div>
-                  </div>
-
-                    <div class="studio-secondary" id="intel-strip">
-                      <div class="card">
-                        <div class="card-head">
-                          <h3>Headlines</h3>
-                        </div>
-                        <div id="news-output" class="panel-output small">Latest headlines will appear here.</div>
-                        <details class="learn-more">
-                          <summary>Learn more</summary>
-                          <p class="small">
-                            Headlines refresh automatically when you load a new ticker. Use them to find catalysts, then confirm with indicator overlays and saved run bands.
-                          </p>
-                        </details>
-                      </div>
-
-                    </div>
-		                </div>
-
-                <div class="studio-panel">
-	                  <section class="panel" data-panel="forecast">
+		              <div class="studio-layout is-main-hidden" data-panels data-panel-router="terminal">
+	                <div class="studio-panel">
+                  <section class="panel" data-panel="forecast">
 	                    <div class="panel-header">
 	                      <h2>Forecast</h2>
 	                      <p class="small">Generate quantile bands for the ticker in your chart and save the run so you can re-plot it later.</p>
@@ -260,14 +212,370 @@
                     </div>
                   </section>
 
-                  <section class="panel hidden" data-panel="ticker">
-                    <div class="panel-header">
-                      <h2>Ticker Intelligence</h2>
-                      <p class="small">Research-grade company context with valuation, balance-sheet risk, business quality, and peer benchmarking.</p>
+                  <section class="panel hidden" data-panel="autopilot" id="autopilot">
+                    <div class="container">
+                      <div class="section-title">
+                        <h2>Forecast Foundry</h2>
+                        <p class="small">Prepare market data, upload prediction CSVs, run SageMaker Autopilot on daily history, and keep every result private in Explore until you publish it.</p>
+                      </div>
+
+                      <div class="foundry-layout">
+                        <div class="foundry-main-grid">
+                          <form id="foundry-source-form" class="card">
+                            <div class="eyebrow">Quantura Forecast Foundry</div>
+                            <h3>Prepare a source</h3>
+                            <p class="small">Historical downloader data is normalized to <code>item_id</code>, <code>timestamp</code>, and <code>closing_price</code>. Uploaded prediction CSVs are analyzed and pushed into Explore-ready request records automatically.</p>
+                            <div class="form-grid">
+                              <div class="field">
+                                <label class="label" for="foundry-source-kind">Source type</label>
+                                <select id="foundry-source-kind" name="sourceKind">
+                                  <option value="history">Historical downloader</option>
+                                  <option value="historical_csv">Historical CSV</option>
+                                  <option value="prediction_csv">Predictions CSV</option>
+                                </select>
+                              </div>
+                              <div class="field">
+                                <label class="label" for="foundry-ticker">Ticker</label>
+                                <input id="foundry-ticker" name="ticker" placeholder="AAPL" />
+                              </div>
+                              <div class="field">
+                                <label class="label" for="foundry-interval">Data interval</label>
+                                <select id="foundry-interval" name="interval">
+                                  <option value="1d">Daily</option>
+                                </select>
+                                <div class="small muted">Forecast Foundry currently supports daily historical datasets only.</div>
+                              </div>
+                            </div>
+
+                            <div class="small muted">Run titles are generated automatically from the ticker or detected symbol.</div>
+
+                            <div id="foundry-model-metrics-block">
+                              <div class="field" style="margin-top: 8px;">
+                                <label class="label">Optional model metrics</label>
+                                <div class="small muted">Attach external model diagnostics if you want them saved alongside this Foundry run.</div>
+                              </div>
+                              <div class="form-grid">
+                                <div class="field">
+                                  <label class="label" for="foundry-model-status">Model status</label>
+                                  <select id="foundry-model-status" name="modelStatus">
+                                    <option value="Standard Build" selected>Standard Build</option>
+                                    <option value="Quick Build">Quick Build</option>
+                                  </select>
+                                </div>
+                                <div class="field">
+                                  <label class="label" for="foundry-avg-wql">Avg. wQL</label>
+                                  <input id="foundry-avg-wql" name="avgWql" inputmode="decimal" placeholder="0.020" />
+                                </div>
+                                <div class="field">
+                                  <label class="label" for="foundry-mape">MAPE</label>
+                                  <input id="foundry-mape" name="mape" inputmode="decimal" placeholder="0.023" />
+                                </div>
+                                <div class="field">
+                                  <label class="label" for="foundry-wape">WAPE</label>
+                                  <input id="foundry-wape" name="wape" inputmode="decimal" placeholder="0.031" />
+                                </div>
+                                <div class="field">
+                                  <label class="label" for="foundry-rmse">RMSE</label>
+                                  <input id="foundry-rmse" name="rmse" inputmode="decimal" placeholder="12.819" />
+                                </div>
+                                <div class="field">
+                                  <label class="label" for="foundry-mase">MASE</label>
+                                  <input id="foundry-mase" name="mase" inputmode="decimal" placeholder="0.087" />
+                                </div>
+                              </div>
+                            </div>
+
+                            <div id="foundry-history-fields" class="form-grid">
+                              <div class="field">
+                                <label class="label" for="foundry-start">Start date</label>
+                                <input id="foundry-start" name="start" type="date" />
+                              </div>
+                              <div class="field">
+                                <label class="label" for="foundry-end">End date</label>
+                                <input id="foundry-end" name="end" type="date" />
+                              </div>
+                              <div class="field">
+                                <label class="label" for="foundry-use-all-history">Use all available history</label>
+                                <label class="checkbox" style="display:flex; align-items:center; gap:10px; margin-top:8px;">
+                                  <input id="foundry-use-all-history" name="useAllHistory" type="checkbox" />
+                                  <span>Use all available historical data for this interval</span>
+                                </label>
+                                <div class="small muted">Foundry history preparation uses daily market data only.</div>
+                              </div>
+                            </div>
+
+                            <div id="foundry-file-field" class="field">
+                              <label class="label" for="foundry-file">CSV file</label>
+                              <input id="foundry-file" class="file-input" type="file" accept=".csv,text/csv" />
+                              <div class="small muted">Historical CSVs must resolve to item/date-close columns. Prediction CSVs should include quantiles such as P10, P50, and P90.</div>
+                            </div>
+
+                            <div class="hero-actions hidden" id="foundry-upload-actions" style="margin-top: 12px; justify-content: flex-start;">
+                              <button class="cta" id="foundry-upload-prepare-button" type="button" data-analytics="foundry_prepare_source_upload">
+                                <i class="iconoir-data-transfer-up" aria-hidden="true"></i><span>Prepare source</span>
+                              </button>
+                              <button class="cta secondary" id="foundry-analyze-button" type="button" data-analytics="foundry_analyze_csv">
+                                <i class="iconoir-sparks" aria-hidden="true"></i><span>Analyze predictions</span>
+                              </button>
+                            </div>
+
+                            <div class="field">
+                              <label class="label" for="foundry-notes">Notes</label>
+                              <textarea id="foundry-notes" name="notes" placeholder="Context, horizon assumptions, special constraints, or what the analysis should emphasize"></textarea>
+                            </div>
+
+                            <div id="foundry-autopilot-controls">
+                              <h3 style="margin-top: 16px;">Autopilot controls</h3>
+                              <div class="form-grid">
+                                <div class="field">
+                                  <label class="label" for="foundry-horizon">Forecast horizon</label>
+                                  <select id="foundry-horizon" name="horizon">
+                                    <option value="3d">3 Days</option>
+                                    <option value="1w">Week Ending Friday</option>
+                                    <option value="2w">2 Weeks</option>
+                                    <option value="3w">3 Weeks</option>
+                                    <option value="1m" selected>1 Month</option>
+                                    <option value="3m">3 Months</option>
+                                    <option value="6m">6 Months</option>
+                                    <option value="1y">1 Year</option>
+                                  </select>
+                                  <div class="small muted">Pick a market-ready horizon. Forecast Foundry maps it to trading-day or trading-hour steps automatically based on your selected interval.</div>
+                                </div>
+                                <div class="field">
+                                  <label class="label" for="foundry-quantiles">Quantiles (0-1)</label>
+                                  <input id="foundry-quantiles" name="quantiles" placeholder="0.1,0.5,0.9" value="0.1,0.5,0.9" />
+                                  <div class="small muted">Enter 3 to 5 quantiles between <code>0.01</code> and <code>0.99</code>. Use an odd count and include <code>0.5</code>. Example: <code>0.1,0.5,0.9</code> or <code>0.1,0.25,0.5,0.75,0.9</code>.</div>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div class="hero-actions" id="foundry-primary-actions" style="margin-top: 14px; justify-content: flex-start;">
+                              <button class="cta" id="foundry-prepare-button" type="submit" data-analytics="foundry_prepare_source">
+                                <i class="iconoir-data-transfer-up" aria-hidden="true"></i><span>Prepare source</span>
+                              </button>
+                              <button class="cta secondary" id="foundry-run-button" type="button" data-analytics="foundry_start_autopilot">
+                                <i class="iconoir-rocket" aria-hidden="true"></i><span>Start Autopilot</span>
+                              </button>
+                            </div>
+                            <p class="small" id="autopilot-status">Sign in with a full account to unlock Forecast Foundry.</p>
+                            <div class="small muted" id="foundry-instance-limit">Concurrent instance limit: 0 of 2 active.</div>
+                            <div class="notice small" id="foundry-access-note">
+                              Forecast Foundry currently supports daily historical datasets only. Prediction CSV uploads can still be analyzed here.
+                            </div>
+
+                            <div class="card" style="margin-top: 18px;">
+                              <div class="card-head">
+                                <h3>Research guide</h3>
+                              </div>
+                              <div class="small">
+                                <p>
+                                  Use the
+                                  <a href="https://docs.aws.amazon.com/forecast/latest/dg/metrics.html?utm_source=chatgpt.com" target="_blank" rel="noopener noreferrer">AWS Forecast metrics documentation</a>
+                                  to understand how Average wQL, wQL, WAPE, RMSE, MAPE, and MASE are interpreted. Lower error values indicate a stronger forecasting model.
+                                </p>
+                                <p>
+                                  In Forecast Foundry, the point-forecast anchor is the middle quantile column, which is usually the median
+                                  <code>P50</code> or <code>0.5</code>.
+                                </p>
+                                <p>
+                                  Quantura compares the first and last valid business-day <code>P50</code> values after rounding both to the nearest 10, but only issues a <strong>BUY</strong> or <strong>SELL</strong> when the live price is above the first analyzed business-day <code>P50</code>. It also reports the first forecast business day where the live price fits between adjacent quantiles, plus the max value and date for each quantile column.
+                                </p>
+                              </div>
+                            </div>
+                          </form>
+
+                          <div class="card foundry-detail-card">
+                            <div class="card-head">
+                              <h3>Selected run</h3>
+                              <div class="hero-actions" style="justify-content: flex-start;">
+                                <button class="cta secondary small" id="foundry-refresh-button" type="button">
+                                  <i class="iconoir-refresh" aria-hidden="true"></i><span>Refresh AWS status</span>
+                                </button>
+                                <button class="cta secondary small" id="foundry-open-chart-button" type="button" disabled>
+                                  <i class="iconoir-graph-up" aria-hidden="true"></i><span>Open interactive chart</span>
+                                </button>
+                                <button class="cta secondary small hidden" id="foundry-business-days-button" type="button">
+                                  <i class="iconoir-download" aria-hidden="true"></i><span>Download business-day CSV</span>
+                                </button>
+                                <button class="cta secondary small" id="foundry-share-button" type="button">
+                                  <i class="iconoir-share-ios" aria-hidden="true"></i><span>Copy share link</span>
+                                </button>
+                              </div>
+                            </div>
+                            <div id="foundry-run-meta" class="panel-output small">Select a foundry run to inspect its schema, predictions, and conclusions.</div>
+                            <div id="foundry-publish-host" class="small muted" style="margin-top: 12px;">Private Explore sync and publish controls appear here after a source is prepared.</div>
+                            <div id="predictions-agent-output" class="panel-output small" style="margin-top: 14px;">Prediction analysis and conclusions will appear here.</div>
+                            <div id="predictions-plot-meta" class="small muted" style="margin-top: 14px;">CSV schema preview metadata will appear here.</div>
+                            <div id="predictions-chart" class="chart foundry-chart-launcher" style="margin-top: 14px;"></div>
+                            <div id="predictions-preview" class="panel-output small" style="margin-top: 14px;">Preview will appear here.</div>
+                          </div>
+                        </div>
+
+                        <div class="results-panel foundry-runs-panel" id="autopilot-result">
+                          <div class="card-head">
+                            <h3>Foundry runs</h3>
+                            <button class="cta secondary small" id="foundry-refresh-list" type="button">Refresh</button>
+                          </div>
+                          <div id="autopilot-output" class="panel-output small">Saved foundry runs will appear here.</div>
+                        </div>
+                      </div>
                     </div>
                   </section>
 
-                  <section class="panel hidden" data-panel="predictions">
+                  <section class="panel hidden" data-panel="sports-autopilot" id="sports-autopilot">
+                    <div class="container">
+                      <div class="section-title">
+                        <h2>Sports Forecasting</h2>
+                        <p class="small">Build player-level NBA, NFL, and MLB forecasts with the same private-save and Explore publishing flow used by Forecast Foundry.</p>
+                      </div>
+
+                      <div class="foundry-layout sports-foundry-layout">
+                        <div class="foundry-main-grid sports-foundry-main-grid">
+                          <form id="sports-foundry-form" class="card">
+                            <div class="eyebrow">Quantura Sports Foundry</div>
+                            <h3>Prepare a sports workflow</h3>
+                            <p class="small">Switch between a player-level sports forecast and a quick team total export. Quantura will normalize the league data, preview it here, and let you download the exact slice you need.</p>
+
+                            <div class="form-grid">
+                              <div class="field">
+                                <label class="label">Workflow</label>
+                                <div class="sports-foundry-workflow-toggle" id="sports-foundry-workflow-toggle">
+                                  <label class="sports-foundry-workflow-option">
+                                    <input type="radio" name="sportsFoundryWorkflow" value="player_forecast" checked />
+                                    <span>Player forecast</span>
+                                  </label>
+                                  <label class="sports-foundry-workflow-option">
+                                    <input type="radio" name="sportsFoundryWorkflow" value="team_total_export" />
+                                    <span>Team total export</span>
+                                  </label>
+                                </div>
+                                <div class="small muted">Player forecasts save runs and publish to Explore. Team total export is a quick download tool for one team on one day.</div>
+                              </div>
+                              <div class="field">
+                                <label class="label" for="sports-foundry-league">League</label>
+                                <select id="sports-foundry-league" name="league">
+                                  <option value="nba">NBA</option>
+                                  <option value="nfl">NFL</option>
+                                  <option value="mlb">MLB</option>
+                                </select>
+                              </div>
+                              <div class="field">
+                                <label class="label" for="sports-foundry-team">Team</label>
+                                <select id="sports-foundry-team" name="team">
+                                  <option value="">Choose a league first</option>
+                                </select>
+                              </div>
+                            </div>
+
+                            <div id="sports-foundry-player-fields">
+                              <div class="form-grid">
+                                <div class="field">
+                                  <label class="label" for="sports-foundry-player">Player</label>
+                                  <select id="sports-foundry-player" name="player">
+                                    <option value="">Choose a team first</option>
+                                  </select>
+                                </div>
+                                <div class="field">
+                                  <label class="label" for="sports-foundry-stat">Stat</label>
+                                  <select id="sports-foundry-stat" name="stat">
+                                    <option value="">Choose a player first</option>
+                                  </select>
+                                </div>
+                                <div class="field">
+                                  <label class="label" for="sports-foundry-game">Future game</label>
+                                  <select id="sports-foundry-game" name="game">
+                                    <option value="">Choose a player first</option>
+                                  </select>
+                                  <div class="small muted" id="sports-foundry-game-gap">Future matchup timing will appear here once a game is selected.</div>
+                                </div>
+                                <div class="field">
+                                  <label class="label" for="sports-foundry-title">Run title</label>
+                                  <input id="sports-foundry-title" name="title" placeholder="Stephen Curry points vs BOS" />
+                                </div>
+                              </div>
+
+                              <div class="field">
+                                <label class="label" for="sports-foundry-notes">Notes</label>
+                                <textarea id="sports-foundry-notes" name="notes" placeholder="What this forecast should emphasize, matchup context, or how you plan to use the result"></textarea>
+                              </div>
+                            </div>
+
+                            <div id="sports-foundry-team-total-fields" class="hidden">
+                              <div class="form-grid">
+                                <div class="field">
+                                  <label class="label" for="sports-team-total-date">Game date</label>
+                                  <input id="sports-team-total-date" name="teamTotalDate" type="date" />
+                                </div>
+                                <div class="field">
+                                  <label class="label" for="sports-team-total-home-away">Venue filter</label>
+                                  <select id="sports-team-total-home-away" name="teamTotalHomeAway">
+                                    <option value="any">Home or away</option>
+                                    <option value="home">Home only</option>
+                                    <option value="away">Away only</option>
+                                  </select>
+                                </div>
+                              </div>
+                              <div class="small muted">Download the selected team&apos;s scored total for completed games on the chosen date. Doubleheaders will export one row per game.</div>
+                            </div>
+
+                            <div class="card sports-foundry-preview-card" style="margin-top: 18px;">
+                              <div class="card-head">
+                                <h3>Historical preview</h3>
+                                <div class="small muted" id="sports-foundry-history-meta">Choose a player to load historical game data and stat options, or switch to team total export for a one-day team score snapshot.</div>
+                              </div>
+                              <div id="sports-foundry-history-preview" class="panel-output small">Historical player game logs will appear here.</div>
+                            </div>
+
+                            <div class="hero-actions sports-foundry-actions" style="margin-top: 14px; justify-content: flex-start;">
+                              <button class="cta secondary" id="sports-foundry-download-history" type="button">
+                                <i class="iconoir-download" aria-hidden="true"></i><span id="sports-foundry-download-history-label">Download historical CSV</span>
+                              </button>
+                              <button class="cta secondary" id="sports-foundry-download-json" type="button">
+                                <i class="iconoir-page" aria-hidden="true"></i><span>Download forecast JSON</span>
+                              </button>
+                              <button class="cta" id="sports-foundry-run-button" type="submit">
+                                <i class="iconoir-rocket" aria-hidden="true"></i><span>Run sports forecast</span>
+                              </button>
+                            </div>
+
+                            <p class="small" id="sports-foundry-status">Sign in with a full account to unlock sports forecasting.</p>
+                            <div class="notice small" id="sports-foundry-empty-state">
+                              Choose a player to load league-aware stats and future scheduled games, or switch to team total export for a quick team score download.
+                            </div>
+                          </form>
+
+                          <div class="card foundry-detail-card">
+                            <div class="card-head">
+                              <h3>Selected sports run</h3>
+                              <div class="hero-actions" style="justify-content: flex-start;">
+                                <button class="cta secondary small" id="sports-foundry-refresh-button" type="button">
+                                  <i class="iconoir-refresh" aria-hidden="true"></i><span>Refresh AWS status</span>
+                                </button>
+                                <button class="cta secondary small" id="sports-foundry-share-button" type="button">
+                                  <i class="iconoir-share-ios" aria-hidden="true"></i><span>Copy share link</span>
+                                </button>
+                              </div>
+                            </div>
+                            <div id="sports-foundry-run-meta" class="panel-output small">Select a sports forecast run to inspect the matchup, model inputs, and forecast output.</div>
+                            <div id="sports-foundry-publish-host" class="small muted" style="margin-top: 12px;">Private Explore sync and publish controls appear here after a sports run is saved.</div>
+                            <div id="sports-foundry-analysis" class="panel-output small" style="margin-top: 14px;">Sports forecast analysis will appear here.</div>
+                            <div id="sports-foundry-chart" class="chart" style="margin-top: 14px; min-height: 420px;"></div>
+                            <div id="sports-foundry-preview" class="panel-output small" style="margin-top: 14px;">Historical and prediction preview data will appear here.</div>
+                          </div>
+                        </div>
+
+                        <div class="results-panel foundry-runs-panel" id="sports-foundry-result">
+                          <div class="card-head">
+                            <h3>Sports runs</h3>
+                            <button class="cta secondary small" id="sports-foundry-refresh-list" type="button">Refresh</button>
+                          </div>
+                          <div id="sports-foundry-output" class="panel-output small">Saved sports forecasts will appear here.</div>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+	                  <section class="panel hidden" data-panel="predictions">
                     <div class="panel-header">
                       <h2>Predictions</h2>
                       <p class="small">Polymarket-inspired list view powered by Gamma API. Search by ticker or browse top active stock markets.</p>
@@ -302,24 +610,24 @@
                           <input id="technicals-lookback" name="lookback" type="number" min="30" max="365" value="120" />
                         </div>
                       </div>
-                      <div class="field">
-                        <label class="label">Indicators</label>
-                        <div class="checkbox-grid">
-                          <label><input type="checkbox" name="indicators" value="RSI" checked /> RSI</label>
-                          <label><input type="checkbox" name="indicators" value="MACD" checked /> MACD</label>
-                          <label><input type="checkbox" name="indicators" value="SMA" /> SMA</label>
-                          <label><input type="checkbox" name="indicators" value="EMA" /> EMA</label>
-                          <label><input type="checkbox" name="indicators" value="BBANDS" /> Bollinger</label>
-                          <label><input type="checkbox" name="indicators" value="ATR" /> ATR</label>
-                          <label><input type="checkbox" name="indicators" value="ADX" /> ADX</label>
-                          <label><input type="checkbox" name="indicators" value="CCI" /> CCI</label>
-                          <label><input type="checkbox" name="indicators" value="MFI" /> MFI</label>
-                          <label><input type="checkbox" name="indicators" value="OBV" /> OBV</label>
-                          <label><input type="checkbox" name="indicators" value="ROC" /> ROC</label>
-                          <label><input type="checkbox" name="indicators" value="STOCH" /> Stochastic</label>
-                          <label><input type="checkbox" name="indicators" value="WILLR" /> Williams %R</label>
+                      <fieldset class="field indicator-field">
+                        <legend class="label">Indicators</legend>
+                        <div class="checkbox-grid indicator-toggle-grid">
+                          <label class="indicator-toggle"><input type="checkbox" name="indicators" value="RSI" checked /><span class="indicator-toggle-label">RSI</span></label>
+                          <label class="indicator-toggle"><input type="checkbox" name="indicators" value="MACD" checked /><span class="indicator-toggle-label">MACD</span></label>
+                          <label class="indicator-toggle"><input type="checkbox" name="indicators" value="SMA" /><span class="indicator-toggle-label">SMA</span></label>
+                          <label class="indicator-toggle"><input type="checkbox" name="indicators" value="EMA" /><span class="indicator-toggle-label">EMA</span></label>
+                          <label class="indicator-toggle"><input type="checkbox" name="indicators" value="BBANDS" /><span class="indicator-toggle-label">Bollinger</span></label>
+                          <label class="indicator-toggle"><input type="checkbox" name="indicators" value="ATR" /><span class="indicator-toggle-label">ATR</span></label>
+                          <label class="indicator-toggle"><input type="checkbox" name="indicators" value="ADX" /><span class="indicator-toggle-label">ADX</span></label>
+                          <label class="indicator-toggle"><input type="checkbox" name="indicators" value="CCI" /><span class="indicator-toggle-label">CCI</span></label>
+                          <label class="indicator-toggle"><input type="checkbox" name="indicators" value="MFI" /><span class="indicator-toggle-label">MFI</span></label>
+                          <label class="indicator-toggle"><input type="checkbox" name="indicators" value="OBV" /><span class="indicator-toggle-label">OBV</span></label>
+                          <label class="indicator-toggle"><input type="checkbox" name="indicators" value="ROC" /><span class="indicator-toggle-label">ROC</span></label>
+                          <label class="indicator-toggle"><input type="checkbox" name="indicators" value="STOCH" /><span class="indicator-toggle-label">Stochastic</span></label>
+                          <label class="indicator-toggle"><input type="checkbox" name="indicators" value="WILLR" /><span class="indicator-toggle-label">Williams %R</span></label>
                         </div>
-                      </div>
+                      </fieldset>
                       <button class="cta" type="submit" data-analytics="technicals_submit">Run indicators</button>
                       <details class="learn-more">
                         <summary>Learn more</summary>
@@ -370,7 +678,7 @@
                   <section class="panel hidden" data-panel="trending">
                     <div class="panel-header">
                       <h2>Trending</h2>
-                      <p class="small">Load the market's most active tickers and click any symbol to drive the chart context.</p>
+                      <p class="small">Load the market's most active tickers and send any symbol straight into Forecasting.</p>
                     </div>
                     <div class="content-grid news-data-grid">
                       <div class="card">
@@ -382,21 +690,21 @@
                         <details class="learn-more">
                           <summary>Learn more</summary>
                           <p class="small">
-                            Trending is a discovery surface. Use it to seed a watchlist, then validate moves with indicators, news, and forecast bands.
+                            Trending is a discovery surface. Use it to seed a watchlist, then jump into Forecasting to validate moves with history, indicators, and forecast bands.
                           </p>
                         </details>
                       </div>
                       <div class="card">
-                        <h3>Quick workflow</h3>
+                        <h3>Quick forecasting workflow</h3>
                         <div class="feature-list">
-                          <div class="feature"><span></span>Load a symbol and choose a timeframe</div>
-                          <div class="feature"><span></span>Overlay indicators to confirm momentum</div>
-                          <div class="feature"><span></span>Store a forecast band and compare later</div>
+                          <div class="feature"><span></span>Open a symbol directly in Forecasting</div>
+                          <div class="feature"><span></span>Choose a timeframe and compare the projected band</div>
+                          <div class="feature"><span></span>Save the run and revisit it from your workspace later</div>
                         </div>
                         <details class="learn-more">
                           <summary>Learn more</summary>
                           <p class="small">
-                            Quantura stores runs inside your workspace so you can revisit the same ticker later and share context with collaborators.
+                            Quantura keeps the active symbol synced into Forecasting so you can move from discovery to a saved run without bouncing through the old ticker workflow.
                           </p>
                         </details>
                       </div>
@@ -460,8 +768,8 @@
                       </div>
                     </div>
                     <div class="notice" style="margin-top: 16px;">
-                      TradingView widgets and the ticker chart are available only in the Ticker panel for the active symbol.
-                      <a class="news-link" href="/ticker-intelligence">Open Ticker</a>.
+                      Historical downloads pair best with the Forecasting panel for the active symbol.
+                      <a class="news-link" href="/forecasting?panel=forecast">Open Forecasting</a>.
                     </div>
                   </section>
 
@@ -495,13 +803,12 @@
                           <input id="market-headlines-limit" name="limit" type="number" min="5" max="40" value="18" />
                         </div>
                       </div>
-                      <button class="cta" type="submit" data-analytics="market_headlines_load"><i class="iconoir-globe" aria-hidden="true"></i><span>Load market feed</span></button>
-                      <p class="small muted" id="market-headlines-status"></p>
+                      <p class="small muted" id="market-headlines-status">Feeds load automatically when you change the source, topic, or headline count.</p>
                     </form>
                     <div class="content-grid">
                       <div class="results-panel">
                         <h3>Headlines</h3>
-                        <div id="market-headlines-output" class="panel-output small">Load an RSS source to see attributed market headlines.</div>
+                        <div id="market-headlines-output" class="panel-output small">Select a source provider to load attributed market headlines automatically.</div>
                       </div>
                       <div class="results-panel">
                         <h3>Feed access &amp; attribution</h3>
@@ -662,11 +969,26 @@
                           <input id="options-ticker" name="ticker" placeholder="AAPL" required />
                         </div>
                         <div class="field">
-                          <label class="label" for="options-expiration">Expiration</label>
+                          <label class="label" for="options-expiration">Expiry end date</label>
                           <select id="options-expiration" name="expiration">
                             <option value="">Auto (nearest)</option>
                           </select>
-                          <div class="small muted" style="margin-top:8px;">Quantura loads available expirations from the market and remembers your last choice.</div>
+                          <div class="small muted" style="margin-top:8px;">Quantura loads available expirations from the market, remembers your last choice, and uses the selected date as the end date for the day counter.</div>
+                        </div>
+                      </div>
+                      <div class="options-date-tool">
+                        <div class="form-grid options-date-tool-grid">
+                          <div class="field">
+                            <label class="label" for="options-start-date">Begin date</label>
+                            <input id="options-start-date" name="startDate" type="date" />
+                            <div class="small muted" style="margin-top:8px;">Defaults to today and compares against the selected options expiry.</div>
+                          </div>
+                          <div class="field">
+                            <span class="label">Calendar day count</span>
+                            <div id="options-date-status" class="options-date-status" role="status" aria-live="polite">
+                              Load an options chain to populate expiry dates, then the day count will appear here.
+                            </div>
+                          </div>
                         </div>
                       </div>
                       <button class="cta" type="submit" data-analytics="options_submit">Load options</button>
@@ -1363,12 +1685,6 @@
           <div class="logo">QUANTURA</div>
           <p class="small">Decision intelligence for market research, forecasting, and execution.</p>
           <div class="footer-social" aria-label="Quantura social links">
-            <a class="social-link" href="#" data-analytics="social_x" aria-label="X (coming soon)">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.9 2H22l-6.8 7.8L23 22h-6.9l-5.4-6.9L4.7 22H1.6l7.3-8.4L1 2h7.1l4.9 6.3L18.9 2zm-1.2 18h1.7L7.2 3.9H5.4L17.7 20z"/></svg>
-            </a>
-            <a class="social-link" href="#" data-analytics="social_linkedin" aria-label="LinkedIn (coming soon)">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.98 3.5C4.98 4.88 3.87 6 2.5 6S0 4.88 0 3.5 1.12 1 2.5 1 4.98 2.12 4.98 3.5zM0.5 8.5H4.5V23H0.5V8.5zM8.5 8.5H12.3V10.4h.1c.5-1 1.9-2.1 3.9-2.1 4.2 0 5 2.8 5 6.5V23h-4v-6.7c0-1.6 0-3.7-2.2-3.7-2.3 0-2.6 1.8-2.6 3.6V23h-4V8.5z"/></svg>
-            </a>
             <a class="social-link" href="#" data-analytics="social_reddit" aria-label="Reddit (coming soon)">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21.9 10.7c.1-.4.1-.8 0-1.2-.3-1-1.4-1.6-2.5-1.3-.6.2-1 .6-1.2 1.1-1.5-1-3.4-1.7-5.5-1.8l1-4.6 3.2.7c.1.8.8 1.4 1.7 1.4.9 0 1.7-.8 1.7-1.7S19.5 2 18.6 2c-.6 0-1.2.4-1.5.9l-3.7-.8c-.3-.1-.6.1-.7.4l-1.2 5.2c-2.2.1-4.2.8-5.7 1.8-.2-.5-.6-.9-1.2-1.1-1-.3-2.1.3-2.5 1.3-.1.4-.1.8 0 1.2.1.6.4 1 .9 1.3-.1.4-.1.9-.1 1.3 0 3.6 4.1 6.5 9.1 6.5s9.1-2.9 9.1-6.5c0-.4 0-.9-.1-1.3.5-.3.8-.8.9-1.3zM7.9 12.8c0-.8.7-1.5 1.5-1.5s1.5.7 1.5 1.5-.7 1.5-1.5 1.5-1.5-.6-1.5-1.5zm8.5 4c-.9.9-2.6 1.3-4.4 1.3s-3.5-.4-4.4-1.3c-.2-.2-.2-.5 0-.7.2-.2.5-.2.7 0 .6.6 2 1 3.7 1 1.7 0 3.1-.4 3.7-1 .2-.2.5-.2.7 0 .2.2.2.5 0 .7zm-1.8-2.5c-.8 0-1.5-.7-1.5-1.5s.7-1.5 1.5-1.5 1.5.7 1.5 1.5-.7 1.5-1.5 1.5z"/></svg>
             </a>

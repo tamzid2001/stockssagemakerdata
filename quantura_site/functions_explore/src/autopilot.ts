@@ -146,6 +146,25 @@ type BusinessBoundaryInfo = {
   lastValid: BusinessBoundaryRow;
 };
 
+type CurrentPriceBandMatch = {
+  rowIndex: number;
+  timestamp: string;
+  lowerLabel: string;
+  upperLabel: string;
+  lowerValue: number;
+  upperValue: number;
+  price: number;
+};
+
+type QuantileColumnMaxima = {
+  label: string;
+  quantile: number;
+  value: number;
+  timestamp: string;
+  rowIndex: number;
+  daysAfterFirstBusinessDay: number;
+};
+
 const GCP_PROJECT_ID = asString(
   process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT
 ).trim();
@@ -689,6 +708,88 @@ function extractQuantileColumns(headers: string[]): QuantileColumn[] {
 function findPreferredColumn(headers: string[], candidates: string[]): number {
   const wanted = new Set(candidates.map((entry) => normalizeCsvHeader(entry)));
   return headers.findIndex((header) => wanted.has(normalizeCsvHeader(header)));
+}
+
+function findNearestQuantileColumn(columns: QuantileColumn[], targetQuantile: number): QuantileColumn | null {
+  if (!Array.isArray(columns) || !columns.length) return null;
+  return columns.reduce((best, item) =>
+    Math.abs(item.quantile - targetQuantile) < Math.abs(best.quantile - targetQuantile) ? item : best
+  , columns[0]);
+}
+
+function findCurrentPriceBandMatch(
+  validRows: BusinessBoundaryRow[],
+  quantileColumns: QuantileColumn[],
+  currentPrice: number | null
+): CurrentPriceBandMatch | null {
+  if (!Array.isArray(validRows) || !validRows.length || !Array.isArray(quantileColumns) || quantileColumns.length < 2) {
+    return null;
+  }
+  if (!Number.isFinite(currentPrice)) return null;
+  const targetPrice = Number(currentPrice);
+  for (const entry of validRows) {
+    for (let index = 0; index < quantileColumns.length - 1; index += 1) {
+      const lowerCol = quantileColumns[index];
+      const upperCol = quantileColumns[index + 1];
+      const lowerRaw = Number(entry.row[lowerCol.index]);
+      const upperRaw = Number(entry.row[upperCol.index]);
+      if (!Number.isFinite(lowerRaw) || !Number.isFinite(upperRaw)) continue;
+      const bandFloor = Math.min(lowerRaw, upperRaw);
+      const bandCeiling = Math.max(lowerRaw, upperRaw);
+      if (targetPrice < bandFloor || targetPrice > bandCeiling) continue;
+      return {
+        rowIndex: entry.rowIndex,
+        timestamp: formatAnalysisTimestamp(entry.parsedDate.toISOString()),
+        lowerLabel: lowerCol.header.toUpperCase(),
+        upperLabel: upperCol.header.toUpperCase(),
+        lowerValue: Number(lowerRaw.toFixed(6)),
+        upperValue: Number(upperRaw.toFixed(6)),
+        price: Number(targetPrice.toFixed(4)),
+      };
+    }
+  }
+  return null;
+}
+
+function calendarDaysAfter(startDate: Date, endDate: Date): number {
+  const startUtc = Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate());
+  const endUtc = Date.UTC(endDate.getUTCFullYear(), endDate.getUTCMonth(), endDate.getUTCDate());
+  return Math.max(0, Math.round((endUtc - startUtc) / DAY_MS));
+}
+
+function findQuantileColumnMaxima(
+  validRows: BusinessBoundaryRow[],
+  quantileColumns: QuantileColumn[],
+  firstBusinessDay: Date
+): QuantileColumnMaxima[] {
+  return quantileColumns
+    .map((column) => {
+      let best: QuantileColumnMaxima | null = null;
+      for (const entry of validRows) {
+        const raw = Number(entry.row[column.index]);
+        if (!Number.isFinite(raw)) continue;
+        if (!best || raw > best.value) {
+          best = {
+            label: column.header.toUpperCase(),
+            quantile: column.quantile,
+            value: Number(raw.toFixed(6)),
+            timestamp: formatAnalysisTimestamp(entry.parsedDate.toISOString()),
+            rowIndex: entry.rowIndex,
+            daysAfterFirstBusinessDay: calendarDaysAfter(firstBusinessDay, entry.sessionDate),
+          };
+        }
+      }
+      return best;
+    })
+    .filter(Boolean) as QuantileColumnMaxima[];
+}
+
+function findMaxAcrossQuantileSet(maxima: QuantileColumnMaxima[], columns: QuantileColumn[]): QuantileColumnMaxima | null {
+  if (!Array.isArray(maxima) || !maxima.length || !Array.isArray(columns) || !columns.length) return null;
+  const wanted = new Set(columns.map((column) => column.header.toUpperCase()));
+  const matching = maxima.filter((entry) => wanted.has(entry.label));
+  if (!matching.length) return null;
+  return matching.reduce((best, item) => (item.value > best.value ? item : best), matching[0]);
 }
 
 function inferIntervalFromRows(rows: CanonicalDatasetRow[]): SupportedDatasetInterval {
@@ -1258,6 +1359,13 @@ export async function analyzePredictionCsv(
     const firstMedianRounded = roundTo10(firstMedianRaw);
     const lastMedianRounded = roundTo10(lastMedianRaw);
     const branch = firstMedianRounded > lastMedianRounded ? "upper" : "lower";
+    const currentPriceInfo = ticker ? await fetchCurrentPriceInfo(ticker, options.fetchImpl || fetch) : null;
+    const currentPriceGatePassed = currentPriceInfo?.currentPrice !== null && currentPriceInfo.currentPrice > firstMedianRaw;
+    const recommendation = currentPriceGatePassed ? (branch === "upper" ? "buy" : "sell") : "hold";
+    const targetQuantileCol = branch === "upper" ? findNearestQuantileColumn(upperCols, 0.9) : findNearestQuantileColumn(lowerCols, 0.1);
+    const endDateBias = branch === "upper" ? "near_upper_bound" : "near_lower_bound";
+    const endDateBiasLabel = branch === "upper" ? "upper bound" : "lower bound";
+    const endDateTargetLabel = targetQuantileCol?.header ? targetQuantileCol.header.toUpperCase() : branch === "upper" ? "P90" : "P10";
     const returnedCols = branch === "upper" ? upperCols : lowerCols;
     const returnedValues = Object.fromEntries(
       returnedCols
@@ -1268,25 +1376,69 @@ export async function analyzePredictionCsv(
 
     const firstValidTimestamp = formatAnalysisTimestamp(boundary.firstValid.parsedDate.toISOString());
     const lastValidTimestamp = formatAnalysisTimestamp(boundary.lastValid.parsedDate.toISOString());
-    const currentPriceInfo = ticker ? await fetchCurrentPriceInfo(ticker, options.fetchImpl || fetch) : null;
+    const currentPriceBandMatch = findCurrentPriceBandMatch(
+      boundary.validRows,
+      quantileColumns,
+      currentPriceInfo?.currentPrice ?? null
+    );
+    const quantileMaxima = findQuantileColumnMaxima(boundary.validRows, quantileColumns, boundary.firstValid.sessionDate);
+    const selectedSideMax = recommendation === "buy"
+      ? findMaxAcrossQuantileSet(quantileMaxima, upperCols)
+      : recommendation === "sell"
+        ? findMaxAcrossQuantileSet(quantileMaxima, lowerCols)
+        : null;
     const orderedLabels = quantileColumns.map((col) => col.header).join(", ");
     const returnedLines = Object.entries(returnedValues)
       .map(([label, value]) => `- **${label}**: ${Number(value).toLocaleString(undefined, { maximumFractionDigits: 6 })}`)
       .join("\n");
-    const currentPriceHeading =
-      currentPriceInfo && (currentPriceInfo.currentPrice !== null || currentPriceInfo.error) ? "### Current Price" : "";
+    const quantileMaxLines = quantileMaxima
+      .map(
+        (entry) =>
+          `- **${entry.label}** max: **${entry.value.toLocaleString(undefined, { maximumFractionDigits: 6 })}** on **${entry.timestamp}** (${entry.daysAfterFirstBusinessDay} day${entry.daysAfterFirstBusinessDay === 1 ? "" : "s"} after the first analyzed business day)`
+      )
+      .join("\n");
     const currentPriceLine =
       currentPriceInfo && currentPriceInfo.currentPrice !== null
-        ? `- Current price: **${currentPriceInfo.currentPrice.toFixed(4)}**`
+        ? currentPriceBandMatch
+          ? `Current price **${currentPriceInfo.currentPrice.toFixed(4)}** first fits inside **${currentPriceBandMatch.lowerLabel}-${currentPriceBandMatch.upperLabel}** on **${currentPriceBandMatch.timestamp}**.`
+          : `Current price **${currentPriceInfo.currentPrice.toFixed(4)}** does not fit inside any adjacent quantile band in the returned forecast business days.`
         : currentPriceInfo?.error
-          ? `- Unable to fetch price: **${currentPriceInfo.error}**`
-          : "";
-    const currentPriceQuoteTime = currentPriceInfo?.quoteTime ? `- Quote time: **${currentPriceInfo.quoteTime}**` : "";
-    const currentPriceSource = currentPriceInfo?.source ? `- Source: **${currentPriceInfo.source}**` : "";
+          ? `Current price unavailable: **${currentPriceInfo.error}**.`
+          : "Current price unavailable.";
+    const currentPriceBandLine =
+      currentPriceInfo && currentPriceInfo.currentPrice !== null
+        ? currentPriceBandMatch
+          ? `Band values on that day: **${currentPriceBandMatch.lowerLabel}=${currentPriceBandMatch.lowerValue.toLocaleString(undefined, { maximumFractionDigits: 6 })}**, **${currentPriceBandMatch.upperLabel}=${currentPriceBandMatch.upperValue.toLocaleString(undefined, { maximumFractionDigits: 6 })}**.`
+          : "The current price stays outside all adjacent quantile bands across the returned forecast business days."
+        : "";
+    const currentPriceMeta = [
+      currentPriceInfo?.quoteTime ? `Quote time: **${currentPriceInfo.quoteTime}**` : "",
+      currentPriceInfo?.source ? `Source: **${currentPriceInfo.source}**` : "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    const priceGateLine =
+      currentPriceInfo && currentPriceInfo.currentPrice !== null
+        ? currentPriceGatePassed
+          ? `First analyzed business-day price gate passed: **${currentPriceInfo.currentPrice.toFixed(4)} > ${firstMedianRaw.toFixed(6)}** (${medianCol.header.toUpperCase()}).`
+          : `First analyzed business-day price gate failed: **${currentPriceInfo.currentPrice.toFixed(4)} <= ${firstMedianRaw.toFixed(6)}** (${medianCol.header.toUpperCase()}). No buy/sell recommendation is issued.`
+        : "First analyzed business-day price gate could not be evaluated because the live price was unavailable.";
+    const selectedSideMaxLine = selectedSideMax
+      ? `${recommendation.toUpperCase()} side max: ${selectedSideMax.label} reached ${selectedSideMax.value.toLocaleString(undefined, {
+          maximumFractionDigits: 6,
+        })} on ${selectedSideMax.timestamp}, ${selectedSideMax.daysAfterFirstBusinessDay} day${
+          selectedSideMax.daysAfterFirstBusinessDay === 1 ? "" : "s"
+        } after the first analyzed business day.`
+      : recommendation === "hold"
+        ? "No side max is highlighted because the price gate blocked a buy/sell recommendation."
+        : "No side max could be determined for the recommendation branch.";
     const summary = [
-      `${ticker || "Uploaded"} quantile analysis selected the ${branch} branch.`,
-      `Rounded median moved from ${firstMedianRounded} on ${firstValidTimestamp} to ${lastMedianRounded} on ${lastValidTimestamp}.`,
-      `Point-side rule: if the last rounded median is below the first rounded median, use the upper bound; otherwise use the lower bound.`,
+      `${ticker || "Uploaded"}: ${recommendation.toUpperCase()} signal.`,
+      `Rounded P50 moved from ${firstMedianRounded} on ${firstValidTimestamp} to ${lastMedianRounded} on ${lastValidTimestamp}.`,
+      priceGateLine.replace(/\*\*/g, ""),
+      currentPriceLine.replace(/\*\*/g, ""),
+      selectedSideMaxLine,
+      `End-date bias: ${endDateBiasLabel} (${endDateTargetLabel}).`,
       Object.keys(returnedValues).length
         ? `Returned last business-day values: ${Object.entries(returnedValues)
             .map(([label, value]) => `${label}=${value}`)
@@ -1299,52 +1451,35 @@ export async function analyzePredictionCsv(
     const markdown = [
       "## Quantile Analysis",
       "",
-      `**Ticker:** \`${ticker || "UNKNOWN"}\``,
-      `**Branch:** **${branch.toUpperCase()}**`,
+      `- **Ticker:** \`${ticker || "UNKNOWN"}\``,
+      `- Signal: **${recommendation.toUpperCase()}**`,
+      `- Branch: **${branch.toUpperCase()}**`,
+      `- Business-day window: **${firstValidTimestamp}** to **${lastValidTimestamp}** (${boundary.validRows.length} rows)`,
+      `- Rounded P50: **${firstMedianRounded.toFixed(0)} -> ${lastMedianRounded.toFixed(0)}**`,
+      `- Raw P50: **${firstMedianRaw.toFixed(6)} -> ${lastMedianRaw.toFixed(6)}**`,
+      `- First-day price gate: **${currentPriceGatePassed ? "PASSED" : "BLOCKED"}**`,
+      `- End-date bias: **${endDateBiasLabel.toUpperCase()}**`,
+      `- Terminal target quantile: **${endDateTargetLabel}**`,
       "",
-      "### Business-Day Boundary Rule",
-      "Compare only the nearest first valid business-day row and the nearest last valid business-day row. Weekends and observed U.S. equity-market holidays are skipped.",
+      "### Current Price Fit",
+      `- ${priceGateLine}`,
+      `- ${currentPriceLine}`,
+      currentPriceBandLine ? `- ${currentPriceBandLine}` : "",
+      currentPriceMeta ? `- ${currentPriceMeta}` : "",
       "",
-      `- Time column used: **${boundary.timeHeader}**`,
-      `- First valid row index: **${boundary.firstValid.rowIndex}**`,
-      `- First valid date/time: **${firstValidTimestamp}**`,
-      `- Last valid row index: **${boundary.lastValid.rowIndex}**`,
-      `- Last valid date/time: **${lastValidTimestamp}**`,
-      `- Valid business-day rows found: **${boundary.validRows.length}**`,
+      "### Quantile Maxima",
+      quantileMaxLines || "- None",
       "",
-      "### Comparison Rule",
-      "Compare the first valid row median with the last valid row median after rounding both to the nearest 10.",
+      "### Recommendation Side Max",
+      `- ${selectedSideMaxLine}`,
       "",
-      `- First valid median raw: **${firstMedianRaw.toFixed(6)}**`,
-      `- First valid median rounded: **${firstMedianRounded.toFixed(0)}**`,
-      `- Last valid median raw: **${lastMedianRaw.toFixed(6)}**`,
-      `- Last valid median rounded: **${lastMedianRounded.toFixed(0)}**`,
-      "",
-      `Since **${firstMedianRounded.toFixed(0)} ${firstMedianRounded > lastMedianRounded ? ">" : "<="} ${lastMedianRounded.toFixed(
-        0
-      )}**, the logic selects the **${branch}** branch.`,
-      "",
-      "### Research Context",
-      "AWS Forecast documents how Average wQL, wQL, WAPE, RMSE, MAPE, and MASE should be interpreted for time-series models. Lower values indicate better models. See [AWS Forecast metrics documentation](https://docs.aws.amazon.com/forecast/latest/dg/metrics.html?utm_source=chatgpt.com).",
-      "",
-      `- Point-forecast anchor: **${medianCol.header}** (the middle quantile, usually **P50** / **0.5**)`,
-      `- Decision rule: if the last rounded median is below the first rounded median, use the **upper** bound from the last valid business-day row; otherwise use the **lower** bound.`,
-      "",
-      "### Quantile Structure",
-      `- Ordered quantile columns: **${orderedLabels}**`,
+      "### Quantiles",
+      `- Ordered columns: **${orderedLabels}**`,
       `- Median column: **${medianCol.header}**`,
-      `- Lower columns: **${lowerCols.map((col) => col.header).join(", ") || "None"}**`,
-      `- Upper columns: **${upperCols.map((col) => col.header).join(", ") || "None"}**`,
+      `- Lower side: **${lowerCols.map((col) => col.header).join(", ") || "None"}**`,
+      `- Upper side: **${upperCols.map((col) => col.header).join(", ") || "None"}**`,
       "",
-      currentPriceHeading,
-      currentPriceLine,
-      currentPriceQuoteTime,
-      currentPriceSource,
-      "",
-      "### Conclusion",
-      summary,
-      "",
-      "### Returned Columns from the Last Valid Business-Day Row",
+      "### Last Business-Day Values",
       returnedLines || "- None",
     ]
       .filter(Boolean)
@@ -1360,11 +1495,22 @@ export async function analyzePredictionCsv(
       markdown,
       metrics: {
         branch,
+        recommendation,
+        endDateBias,
+        endDateTargetQuantile: endDateTargetLabel,
+        currentPriceGate: currentPriceGatePassed ? "passed" : "blocked",
         firstMedianRaw: Number(firstMedianRaw.toFixed(6)),
         firstMedianRounded,
         lastMedianRaw: Number(lastMedianRaw.toFixed(6)),
         lastMedianRounded,
         currentPrice: currentPriceInfo?.currentPrice ?? null,
+        currentPriceBandLower: currentPriceBandMatch?.lowerLabel || null,
+        currentPriceBandUpper: currentPriceBandMatch?.upperLabel || null,
+        currentPriceBandTimestamp: currentPriceBandMatch?.timestamp || null,
+        selectedSideMaxLabel: selectedSideMax?.label || null,
+        selectedSideMaxValue: selectedSideMax ? Number(selectedSideMax.value.toFixed(6)) : null,
+        selectedSideMaxTimestamp: selectedSideMax?.timestamp || null,
+        selectedSideMaxDaysAfterFirstBusinessDay: selectedSideMax?.daysAfterFirstBusinessDay ?? null,
         firstValidRowIndex: boundary.firstValid.rowIndex,
         lastValidRowIndex: boundary.lastValid.rowIndex,
         validBusinessDayRows: boundary.validRows.length,
@@ -1377,8 +1523,15 @@ export async function analyzePredictionCsv(
         lowerColumns: lowerCols.map((col) => col.header),
         upperColumns: upperCols.map((col) => col.header),
         branch,
+        recommendation,
+        endDateBias,
+        endDateTargetQuantile: endDateTargetLabel,
+        currentPriceGatePassed,
         returnedValues,
         currentPriceInfo,
+        currentPriceBandMatch,
+        quantileMaxima,
+        selectedSideMax,
         timeColumn: boundary.timeHeader,
         firstValidRowIndex: boundary.firstValid.rowIndex,
         lastValidRowIndex: boundary.lastValid.rowIndex,

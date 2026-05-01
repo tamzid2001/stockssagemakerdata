@@ -90,6 +90,11 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /site_config/{docId} {
+      allow read: if docId == "page_visibility";
+      allow create, update, delete: if isAdmin() && docId == "page_visibility";
+    }
+
     match /forecast_requests/{requestId} {
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow read: if isAdmin()

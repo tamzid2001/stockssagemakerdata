@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Quantura Ticker Details</title>
+        <meta name="description" content="Normalized ticker profile, valuation, fundamentals, and full yfinance fields." />
+        <meta name="robots" content="index, follow" />
+    <meta name="keywords" content="ticker intelligence, company fundamentals, valuation metrics, yfinance ticker profile" />
+        <link rel="canonical" href="https://quantura.studio/ticker" />
+        <meta property="og:title" content="Quantura Ticker Details" />
+        <meta property="og:description" content="Normalized ticker profile, valuation, fundamentals, and full yfinance fields." />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content="https://quantura.studio/ticker" />
+        <meta property="og:image" content="/assets/quantura-logo.svg" />
+    <meta property="og:site_name" content="Quantura" />
+    <meta property="og:locale" content="en_US" /><meta name="author" content="Quantura" />
+    <meta name="theme-color" content="#0B1526" />
+    <link rel="alternate" hreflang="en-US" href="https://quantura.studio/ticker" />
+    <link rel="alternate" hreflang="x-default" href="https://quantura.studio/ticker" />
+    <link rel="icon" type="image/png" href="/favicon-96x96.png" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-title" content="Quantura" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
+
+    <script defer src="/__/firebase/12.9.0/firebase-app-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-auth-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-firestore-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-functions-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-storage-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-remote-config-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-analytics-compat.js"></script>
+    <script defer src="/__/firebase/init.js?useEmulator=false"></script>
+    <script defer src="/app.js"></script>
+    <script defer src="/analysis-service.js"></script>
+    <script defer src="/ticker-details.js"></script>
+  </head>
+  <body>
+    <header class="header">
+      <div class="container nav">
+        <a class="logo" href="/" aria-label="Quantura home"><span>QUANTURA</span></a>
+        <nav class="nav-links">
+          <a href="/forecasting"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Terminal</span></a>
+          <a href="/screener"><i class="iconoir-search" aria-hidden="true"></i><span>Screener</span></a>
+          <a href="/research"><i class="iconoir-bookmark-book" aria-hidden="true"></i><span>Research</span></a>
+          <a href="/tools/fx"><i class="iconoir-dollar-circle" aria-hidden="true"></i><span>FX Tool</span></a>
+        </nav>
+        <div class="nav-actions">
+          <span id="header-user-status" class="pill">Logged Out</span>
+          <button class="cta secondary" id="header-auth" type="button"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></button>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="section" id="ticker-details-root">
+        <div class="container" style="max-width: 1120px;">
+          <div class="section-title">
+            <h1>Ticker Details</h1>
+            <p class="small">Fast path first, full info on demand. All fields tab renders the complete `yfinance.info` payload safely.</p>
+          </div>
+
+          <div class="card">
+            <form id="ticker-form" class="form-grid" style="align-items:end;">
+              <div class="field">
+                <label class="label" for="ticker-symbol-input">Ticker</label>
+                <input id="ticker-symbol-input" class="input" type="text" value="AAPL" maxlength="15" placeholder="AAPL" />
+              </div>
+              <div class="field">
+                <label class="label" for="ticker-api-base">Market Data API</label>
+                <input id="ticker-api-base" class="input" type="url" placeholder="http://127.0.0.1:8090" />
+              </div>
+              <div class="field" style="display:flex; gap:8px; align-items:center;">
+                <button class="cta" type="submit" id="ticker-load-btn"><i class="iconoir-search" aria-hidden="true"></i><span>Load ticker</span></button>
+                <button class="cta secondary" type="button" id="ticker-copy-json"><i class="iconoir-copy" aria-hidden="true"></i><span>Copy JSON</span></button>
+              </div>
+            </form>
+            <p id="ticker-load-status" class="small muted" style="margin-top: 10px;">Ready.</p>
+          </div>
+
+          <div class="card" style="margin-top: 16px;">
+            <div class="hero-actions" id="ticker-tabs" style="margin-bottom: 12px;">
+              <button type="button" class="task-chip active" data-tab-target="overview">Overview</button>
+              <button type="button" class="task-chip" data-tab-target="fundamentals">Fundamentals</button>
+              <button type="button" class="task-chip" data-tab-target="valuation">Valuation</button>
+              <button type="button" class="task-chip" data-tab-target="all-fields">All Fields</button>
+            </div>
+
+            <div data-tab-panel="overview"></div>
+            <div data-tab-panel="fundamentals" class="hidden"></div>
+            <div data-tab-panel="valuation" class="hidden"></div>
+            <div data-tab-panel="all-fields" class="hidden">
+              <div class="form-grid" style="margin-bottom: 10px;">
+                <div class="field">
+                  <label class="label" for="ticker-raw-search">Search keys</label>
+                  <input id="ticker-raw-search" class="input" type="search" placeholder="marketCap, grossMargins, ..." />
+                </div>
+              </div>
+              <div id="ticker-raw-output" class="panel-output small"></div>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top: 16px;">
+            <h3>Iterative AI Analysis (Informational)</h3>
+            <p class="small muted">This summary is informational only and is not investment advice.</p>
+            <div class="hero-actions" style="margin-top: 10px;">
+              <button class="cta" id="ticker-analysis-run" type="button"><i class="iconoir-spark-solid" aria-hidden="true"></i><span>Run analysis</span></button>
+            </div>
+            <p id="ticker-analysis-status" class="small muted" style="margin-top: 10px;">Not started.</p>
+            <div id="ticker-analysis-output" class="panel-output small" style="margin-top: 10px;">
+              <div class="small muted">Run analysis to generate a thesis summary, drivers, risks, and follow-up questions.</div>
+            </div>
+            <div id="ticker-analysis-followups" class="hero-actions" style="margin-top: 10px; gap: 6px;"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

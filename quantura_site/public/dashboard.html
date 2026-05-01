@@ -14,13 +14,7 @@
         <meta property="og:url" content="https://quantura.studio/dashboard" />
         <meta property="og:image" content="/assets/quantura-logo.svg" />
     <meta property="og:site_name" content="Quantura" />
-    <meta property="og:locale" content="en_US" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Quantura Dashboard" />
-    <meta name="twitter:description" content="Access your forecasts, Forecast Foundry runs, orders, and workspace activity in one secure dashboard." />
-    <meta name="twitter:image" content="/assets/quantura-logo.svg" />
-    <meta name="twitter:url" content="https://quantura.studio/dashboard" />
-    <meta name="author" content="Quantura" />
+    <meta property="og:locale" content="en_US" /><meta name="author" content="Quantura" />
     <meta name="theme-color" content="#0B1526" />
     <link rel="alternate" hreflang="en-US" href="https://quantura.studio/dashboard" />
     <link rel="alternate" hreflang="x-default" href="https://quantura.studio/dashboard" />
@@ -54,7 +48,7 @@
     <header class="header">
       <div class="container nav">
         <a class="logo" href="/" aria-label="Quantura home">
-          <img class="logo-img" src="/assets/quantura-icon.svg" alt="" aria-hidden="true" />
+          <img class="logo-img" src="/favicon.svg" alt="" aria-hidden="true" />
           <span>QUANTURA</span>
         </a>
         <nav class="nav-links">
@@ -112,7 +106,7 @@
           </div>
 	          <div class="section-title">
 	            <h2>Sign in to unlock your dashboard</h2>
-	            <p class="small">Email/password plus Google, GitHub, and X sign-in, secured to your account.</p>
+	            <p class="small">Email/password plus Google, Facebook, GitHub, Yahoo, and Microsoft sign-in, secured to your account.</p>
 	          </div>
           <div class="auth-grid">
             <div class="card">
@@ -179,14 +173,6 @@
                     </svg>
                   </span>
                   <span>Continue with GitHub</span>
-                </button>
-                <button class="cta secondary auth-provider-button" id="twitter-signin" type="button">
-                  <span class="auth-provider-logo auth-provider-logo--x" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
-                      <path fill="currentColor" d="M18.9 2h3.7l-8 9.1L24 22h-7.4l-5.8-7.6L4.2 22H.5l8.5-9.8L0 2h7.6l5.2 6.9L18.9 2zm-1.3 17.8h2.1L6.5 4.1H4.2z"/>
-                    </svg>
-                  </span>
-                  <span>Continue with X</span>
                 </button>
                 <button class="cta secondary auth-provider-button" id="anonymous-signin" type="button">
                   <span class="auth-provider-logo auth-provider-logo--guest" aria-hidden="true">
@@ -284,10 +270,6 @@
                 </div>
 
                 <div class="profile-links-grid" style="margin-top:10px;">
-                  <label class="label" for="profile-social-x">X</label>
-                  <input id="profile-social-x" class="input" type="url" placeholder="https://x.com/username" />
-                  <label class="label" for="profile-social-linkedin">LinkedIn</label>
-                  <input id="profile-social-linkedin" class="input" type="url" placeholder="https://linkedin.com/in/username" />
                   <label class="label" for="profile-social-github">GitHub</label>
                   <input id="profile-social-github" class="input" type="url" placeholder="https://github.com/username" />
                   <label class="label" for="profile-social-youtube">YouTube</label>
@@ -713,7 +695,7 @@
                     <code>P50</code> or <code>0.5</code>.
                   </p>
                   <p>
-                    For stock prediction analysis, Quantura takes the first actionable business-day median in the forecast window and the last valid business-day median in the forecast output, rounds both to the nearest 10, and compares them. If the last rounded median is below the first rounded median, Quantura selects the upper bound from the last business-day row as the point-side. Otherwise it selects the lower bound.
+                    For stock prediction analysis, Quantura takes the first actionable business-day <code>P50</code> in the forecast window and the last valid business-day <code>P50</code> in the forecast output, rounds both to the nearest 10, and compares those tens-place levels. If the last rounded <code>P50</code> is below the first, Quantura marks the setup as <strong>BUY</strong> and communicates an end-date bias toward the upper bound, typically <code>P90</code>. Otherwise it marks the setup as <strong>SELL</strong> and communicates an end-date bias toward the lower bound.
                   </p>
                 </div>
               </div>
@@ -877,12 +859,6 @@
           <div class="logo">QUANTURA</div>
           <p class="small">Decision intelligence for market research, forecasting, and execution.</p>
           <div class="footer-social" aria-label="Quantura social links">
-            <a class="social-link" href="#" data-analytics="social_x" aria-label="X (coming soon)">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.9 2H22l-6.8 7.8L23 22h-6.9l-5.4-6.9L4.7 22H1.6l7.3-8.4L1 2h7.1l4.9 6.3L18.9 2zm-1.2 18h1.7L7.2 3.9H5.4L17.7 20z"/></svg>
-            </a>
-            <a class="social-link" href="#" data-analytics="social_linkedin" aria-label="LinkedIn (coming soon)">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.98 3.5C4.98 4.88 3.87 6 2.5 6S0 4.88 0 3.5 1.12 1 2.5 1 4.98 2.12 4.98 3.5zM0.5 8.5H4.5V23H0.5V8.5zM8.5 8.5H12.3V10.4h.1c.5-1 1.9-2.1 3.9-2.1 4.2 0 5 2.8 5 6.5V23h-4v-6.7c0-1.6 0-3.7-2.2-3.7-2.3 0-2.6 1.8-2.6 3.6V23h-4V8.5z"/></svg>
-            </a>
             <a class="social-link" href="#" data-analytics="social_reddit" aria-label="Reddit (coming soon)">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21.9 10.7c.1-.4.1-.8 0-1.2-.3-1-1.4-1.6-2.5-1.3-.6.2-1 .6-1.2 1.1-1.5-1-3.4-1.7-5.5-1.8l1-4.6 3.2.7c.1.8.8 1.4 1.7 1.4.9 0 1.7-.8 1.7-1.7S19.5 2 18.6 2c-.6 0-1.2.4-1.5.9l-3.7-.8c-.3-.1-.6.1-.7.4l-1.2 5.2c-2.2.1-4.2.8-5.7 1.8-.2-.5-.6-.9-1.2-1.1-1-.3-2.1.3-2.5 1.3-.1.4-.1.8 0 1.2.1.6.4 1 .9 1.3-.1.4-.1.9-.1 1.3 0 3.6 4.1 6.5 9.1 6.5s9.1-2.9 9.1-6.5c0-.4 0-.9-.1-1.3.5-.3.8-.8.9-1.3zM7.9 12.8c0-.8.7-1.5 1.5-1.5s1.5.7 1.5 1.5-.7 1.5-1.5 1.5-1.5-.6-1.5-1.5zm8.5 4c-.9.9-2.6 1.3-4.4 1.3s-3.5-.4-4.4-1.3c-.2-.2-.2-.5 0-.7.2-.2.5-.2.7 0 .6.6 2 1 3.7 1 1.7 0 3.1-.4 3.7-1 .2-.2.5-.2.7 0 .2.2.2.5 0 .7zm-1.8-2.5c-.8 0-1.5-.7-1.5-1.5s.7-1.5 1.5-1.5 1.5.7 1.5 1.5-.7 1.5-1.5 1.5z"/></svg>
             </a>

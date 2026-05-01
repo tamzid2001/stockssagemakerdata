@@ -27,6 +27,7 @@ const STRIPE_SECRET_ENV_KEYS = ["STRIPE_SECRET_KEY", "STRIPE_PRIVATE_KEY", "STRI
 const STRIPE_WEBHOOK_ENV_KEYS = ["STRIPE_WEBHOOK_SECRET", "STRIPE_WEBHOOK_SECRET_CONNECT", "STRIPE_SIGNING_SECRET"];
 const STRIPE_SECRET_NAMES = ["STRIPE_SECRET_KEY", "STRIPE_PRIVATE_KEY", "STRIPE_SECRET", "STRIPE_API_KEY"];
 const STRIPE_WEBHOOK_SECRET_NAMES = ["STRIPE_WEBHOOK_SECRET", "STRIPE_WEBHOOK_SECRET_CONNECT", "STRIPE_SIGNING_SECRET"];
+const STRIPE_API_VERSION: Stripe.LatestApiVersion = "2026-02-25.clover";
 let stripeClientPromise: Promise<Stripe | null> | null = null;
 let stripeWebhookSecretPromise: Promise<string> | null = null;
 
@@ -807,7 +808,9 @@ async function getStripeClient(): Promise<Stripe | null> {
   stripeClientPromise = (async () => {
     const secret = await resolveSecretValue(STRIPE_SECRET_ENV_KEYS, STRIPE_SECRET_NAMES);
     if (!secret) return null;
-    return new Stripe(secret);
+    return new Stripe(secret, {
+      apiVersion: STRIPE_API_VERSION,
+    });
   })();
   return stripeClientPromise;
 }

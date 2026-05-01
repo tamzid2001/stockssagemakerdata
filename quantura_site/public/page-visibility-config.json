@@ -1,0 +1,223 @@
+{
+  "version": 1,
+  "categories": [
+    {
+      "id": "dashboard",
+      "label": "Dashboard"
+    },
+    {
+      "id": "features",
+      "label": "User Features"
+    },
+    {
+      "id": "marketing",
+      "label": "Marketing Pages"
+    },
+    {
+      "id": "settings",
+      "label": "Settings"
+    }
+  ],
+  "pages": [
+    {
+      "key": "home",
+      "label": "Home",
+      "category": "marketing",
+      "routes": ["/"]
+    },
+    {
+      "key": "research",
+      "label": "Research",
+      "category": "marketing",
+      "routes": ["/research"]
+    },
+    {
+      "key": "blog",
+      "label": "Blog",
+      "category": "marketing",
+      "routes": ["/blog"],
+      "prefixes": ["/blog/posts/", "/blog/topics/"]
+    },
+    {
+      "key": "events",
+      "label": "Events",
+      "category": "marketing",
+      "routes": ["/events", "/events-calendar"]
+    },
+    {
+      "key": "about",
+      "label": "About",
+      "category": "marketing",
+      "routes": ["/about"]
+    },
+    {
+      "key": "pricing",
+      "label": "Pricing",
+      "category": "marketing",
+      "routes": ["/pricing", "/purchase"]
+    },
+    {
+      "key": "contact",
+      "label": "Contact",
+      "category": "marketing",
+      "routes": ["/contact"]
+    },
+    {
+      "key": "terminal",
+      "label": "Terminal",
+      "category": "features",
+      "routes": ["/forecasting", "/forecast", "/terminal", "/studio"]
+    },
+    {
+      "key": "forecast_foundry",
+      "label": "Forecast Foundry",
+      "category": "features",
+      "routes": ["/autopilot", "/uploads", "/dashboard/uploads"]
+    },
+    {
+      "key": "sports_forecasting",
+      "label": "Sports Forecasting",
+      "category": "features",
+      "routes": ["/sports-forecasting"]
+    },
+    {
+      "key": "predictions",
+      "label": "Predictions",
+      "category": "features",
+      "routes": ["/predictions"]
+    },
+    {
+      "key": "indicators",
+      "label": "Indicators",
+      "category": "features",
+      "routes": ["/indicators"]
+    },
+    {
+      "key": "trending",
+      "label": "Trending",
+      "category": "features",
+      "routes": ["/trending"]
+    },
+    {
+      "key": "historical_data",
+      "label": "Historical Data Download",
+      "category": "features",
+      "routes": ["/news"]
+    },
+    {
+      "key": "market_headlines",
+      "label": "Market Headlines",
+      "category": "features",
+      "routes": ["/market-headlines"]
+    },
+    {
+      "key": "model_council",
+      "label": "Model Council",
+      "category": "features",
+      "routes": ["/model-council", "/ticker-query", "/ask-gpt-5", "/ask-gpt5", "/ask-gpt"]
+    },
+    {
+      "key": "options",
+      "label": "Options",
+      "category": "features",
+      "routes": ["/options"]
+    },
+    {
+      "key": "fx",
+      "label": "FX Tool",
+      "category": "features",
+      "routes": ["/fx", "/terminal/fx", "/tools/fx"]
+    },
+    {
+      "key": "saved_forecasts",
+      "label": "Saved Forecasts",
+      "category": "features",
+      "routes": ["/saved-forecasts"]
+    },
+    {
+      "key": "screener",
+      "label": "Screener",
+      "category": "features",
+      "routes": ["/screener"]
+    },
+    {
+      "key": "ticker",
+      "label": "Ticker",
+      "category": "features",
+      "routes": ["/ticker"],
+      "prefixes": ["/ticker/"]
+    },
+    {
+      "key": "explore",
+      "label": "Explore",
+      "category": "features",
+      "routes": ["/explore"]
+    },
+    {
+      "key": "shop",
+      "label": "Shop",
+      "category": "features",
+      "routes": ["/shop"]
+    },
+    {
+      "key": "dashboard",
+      "label": "Dashboard",
+      "category": "dashboard",
+      "routes": ["/dashboard", "/dashboard/orders"]
+    },
+    {
+      "key": "profile",
+      "label": "Profile",
+      "category": "dashboard",
+      "routes": ["/account", "/dashboard/profile"]
+    },
+    {
+      "key": "watchlist",
+      "label": "Watchlist",
+      "category": "dashboard",
+      "routes": ["/watchlist", "/dashboard/watchlist"]
+    },
+    {
+      "key": "productivity",
+      "label": "Productivity",
+      "category": "dashboard",
+      "routes": ["/productivity", "/dashboard/productivity"]
+    },
+    {
+      "key": "collaboration",
+      "label": "Collaboration",
+      "category": "dashboard",
+      "routes": ["/collaboration", "/dashboard/collaboration"]
+    },
+    {
+      "key": "notifications",
+      "label": "Notifications",
+      "category": "dashboard",
+      "routes": ["/notifications"]
+    },
+    {
+      "key": "admin",
+      "label": "Admin",
+      "category": "settings",
+      "routes": ["/admin"]
+    },
+    {
+      "key": "terms",
+      "label": "Terms",
+      "category": "settings",
+      "routes": ["/terms"]
+    },
+    {
+      "key": "privacy",
+      "label": "Privacy",
+      "category": "settings",
+      "routes": ["/privacy"]
+    },
+    {
+      "key": "disclaimer",
+      "label": "Disclaimer",
+      "category": "settings",
+      "routes": ["/disclaimer"]
+    }
+  ]
+}

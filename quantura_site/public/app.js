@@ -837,7 +837,6 @@
       account: "Account",
       leaderboard_profile: "Public profile",
       sidebar_forecast: "Forecast",
-      sidebar_ticker_intelligence: "Ticker",
       sidebar_indicators: "Indicators",
       sidebar_trending: "Trending",
       sidebar_news_data: "Historical Data Download",
@@ -899,7 +898,6 @@
       account: "Cuenta",
       leaderboard_profile: "Perfil publico",
       sidebar_forecast: "Pronostico",
-      sidebar_ticker_intelligence: "Ticker",
       sidebar_indicators: "Indicadores",
       sidebar_trending: "Tendencias",
       sidebar_news_data: "Noticias y datos",
@@ -961,7 +959,6 @@
       account: "Compte",
       leaderboard_profile: "Profil public",
       sidebar_forecast: "Prevision",
-      sidebar_ticker_intelligence: "Ticker",
       sidebar_indicators: "Indicateurs",
       sidebar_trending: "Tendances",
       sidebar_news_data: "Actualites et donnees",
@@ -1023,7 +1020,6 @@
       account: "Konto",
       leaderboard_profile: "Offentliches Profil",
       sidebar_forecast: "Forecast",
-      sidebar_ticker_intelligence: "Ticker",
       sidebar_indicators: "Indikatoren",
       sidebar_trending: "Trending",
       sidebar_news_data: "News und Daten",
@@ -1085,7 +1081,6 @@
       account: "الحساب",
       leaderboard_profile: "الملف العام",
       sidebar_forecast: "التوقع",
-      sidebar_ticker_intelligence: "الرمز",
       sidebar_indicators: "المؤشرات",
       sidebar_trending: "الترند",
       sidebar_news_data: "الاخبار والبيانات",
@@ -1147,7 +1142,6 @@
       account: "অ্যাকাউন্ট",
       leaderboard_profile: "পাবলিক প্রোফাইল",
       sidebar_forecast: "ফোরকাস্ট",
-      sidebar_ticker_intelligence: "টিকার",
       sidebar_indicators: "ইন্ডিকেটর",
       sidebar_trending: "ট্রেন্ডিং",
       sidebar_news_data: "খবর ও ডেটা",
@@ -1197,7 +1191,6 @@
     leaderboard_profile: [".profile-settings > summary"],
     open_dashboard: ['.sidebar-card a[href="/dashboard"] span'],
     sidebar_forecast: ['[data-panel-target="forecast"] span'],
-    sidebar_ticker_intelligence: ['[data-panel-target="ticker"] span'],
     sidebar_indicators: ['[data-panel-target="indicators"] span'],
     sidebar_trending: ['[data-panel-target="trending"] span'],
     sidebar_news_data: ['[data-panel-target="news"] span'],
@@ -1244,8 +1237,6 @@
   });
   const DEFAULT_PROFILE_SOCIAL_LINKS = Object.freeze({
     website: "",
-    x: "",
-    linkedin: "",
     github: "",
     youtube: "",
     tiktok: "",
@@ -1253,19 +1244,16 @@
     instagram: "",
     reddit: "",
   });
+  const PAGE_VISIBILITY_CONFIG_URL = "/page-visibility-config.json";
+  const PAGE_VISIBILITY_DOC = Object.freeze({
+    collection: "site_config",
+    id: "page_visibility",
+  });
   const PROFILE_SOCIAL_URL_RULES = Object.freeze({
     website: {
       hosts: [],
       allowAnyHost: true,
       requirePath: false,
-    },
-    x: {
-      hosts: ["x.com", "www.x.com", "twitter.com", "www.twitter.com", "mobile.twitter.com"],
-      requirePath: true,
-    },
-    linkedin: {
-      hosts: ["linkedin.com", "www.linkedin.com"],
-      requirePath: true,
     },
     github: {
       hosts: ["github.com", "www.github.com"],
@@ -1810,7 +1798,6 @@
     googleSignin: document.getElementById("google-signin"),
     facebookSignin: document.getElementById("facebook-signin"),
     githubSignin: document.getElementById("github-signin"),
-    twitterSignin: document.getElementById("twitter-signin"),
     microsoftSignin: document.getElementById("microsoft-signin"),
     yahooSignin: document.getElementById("yahoo-signin"),
     anonymousSignin: document.getElementById("anonymous-signin"),
@@ -1826,8 +1813,6 @@
     profilePublicScreener: document.getElementById("profile-public-screener"),
     profilePublicEmail: document.getElementById("profile-public-email"),
     profileWebsite: document.getElementById("profile-social-website"),
-    profileX: document.getElementById("profile-social-x"),
-    profileLinkedin: document.getElementById("profile-social-linkedin"),
     profileGithub: document.getElementById("profile-social-github"),
     profileYoutube: document.getElementById("profile-social-youtube"),
     profileTiktok: document.getElementById("profile-social-tiktok"),
@@ -1845,6 +1830,8 @@
     adminFeatureVoteResults: document.getElementById("admin-feature-vote-results"),
     adminFiscaldataCapabilitiesStatus: document.getElementById("admin-fiscaldata-capabilities-status"),
     adminFiscaldataCapabilities: document.getElementById("admin-fiscaldata-capabilities"),
+    adminPageVisibilityStatus: document.getElementById("admin-page-visibility-status"),
+    adminPageVisibility: document.getElementById("admin-page-visibility"),
     contactForm: document.getElementById("contact-form"),
     navAdmin: document.getElementById("nav-admin"),
     terminalForm: document.getElementById("terminal-form"),
@@ -1877,7 +1864,6 @@
     trendingList: document.getElementById("trending-list"),
     intelOutput: document.getElementById("intel-output"),
     newsOutput: document.getElementById("news-output"),
-    xTrendingOutput: document.getElementById("x-trending-output"),
     eventsCalendarPreset: document.getElementById("events-calendar-preset"),
     eventsCalendarPrev: document.getElementById("events-calendar-prev"),
     eventsCalendarNext: document.getElementById("events-calendar-next"),
@@ -1974,12 +1960,18 @@
     foundrySourceKind: document.getElementById("foundry-source-kind"),
     foundryTicker: document.getElementById("foundry-ticker"),
     foundryInterval: document.getElementById("foundry-interval"),
-    foundryTitle: document.getElementById("foundry-title"),
+    foundryModelStatus: document.getElementById("foundry-model-status"),
+    foundryAvgWql: document.getElementById("foundry-avg-wql"),
+    foundryMape: document.getElementById("foundry-mape"),
+    foundryWape: document.getElementById("foundry-wape"),
+    foundryRmse: document.getElementById("foundry-rmse"),
+    foundryMase: document.getElementById("foundry-mase"),
     foundryStart: document.getElementById("foundry-start"),
     foundryEnd: document.getElementById("foundry-end"),
     foundryUseAllHistory: document.getElementById("foundry-use-all-history"),
     foundryFile: document.getElementById("foundry-file"),
     foundryNotes: document.getElementById("foundry-notes"),
+    foundryModelMetricsBlock: document.getElementById("foundry-model-metrics-block"),
     foundryHistoryFields: document.getElementById("foundry-history-fields"),
     foundryFileField: document.getElementById("foundry-file-field"),
     foundryUploadActions: document.getElementById("foundry-upload-actions"),
@@ -1993,17 +1985,24 @@
     foundryAnalyzeButton: document.getElementById("foundry-analyze-button"),
     foundryRefreshList: document.getElementById("foundry-refresh-list"),
     foundryRefreshButton: document.getElementById("foundry-refresh-button"),
+    foundryOpenChartButton: document.getElementById("foundry-open-chart-button"),
+    foundryBusinessDaysButton: document.getElementById("foundry-business-days-button"),
     foundryShareButton: document.getElementById("foundry-share-button"),
     foundryRunMeta: document.getElementById("foundry-run-meta"),
     foundryPublishHost: document.getElementById("foundry-publish-host"),
     foundryInstanceLimit: document.getElementById("foundry-instance-limit"),
     foundryAccessNote: document.getElementById("foundry-access-note"),
     sportsFoundryForm: document.getElementById("sports-foundry-form"),
+    sportsFoundryWorkflowInputs: Array.from(document.querySelectorAll('input[name="sportsFoundryWorkflow"]')),
     sportsFoundryLeague: document.getElementById("sports-foundry-league"),
     sportsFoundryTeam: document.getElementById("sports-foundry-team"),
     sportsFoundryPlayer: document.getElementById("sports-foundry-player"),
     sportsFoundryStat: document.getElementById("sports-foundry-stat"),
     sportsFoundryGame: document.getElementById("sports-foundry-game"),
+    sportsFoundryPlayerFields: document.getElementById("sports-foundry-player-fields"),
+    sportsFoundryTeamTotalFields: document.getElementById("sports-foundry-team-total-fields"),
+    sportsFoundryTeamTotalDate: document.getElementById("sports-team-total-date"),
+    sportsFoundryTeamTotalHomeAway: document.getElementById("sports-team-total-home-away"),
     sportsFoundryTitle: document.getElementById("sports-foundry-title"),
     sportsFoundryNotes: document.getElementById("sports-foundry-notes"),
     sportsFoundryHistoryMeta: document.getElementById("sports-foundry-history-meta"),
@@ -2011,6 +2010,7 @@
     sportsFoundryGameGap: document.getElementById("sports-foundry-game-gap"),
     sportsFoundryRunButton: document.getElementById("sports-foundry-run-button"),
     sportsFoundryDownloadHistory: document.getElementById("sports-foundry-download-history"),
+    sportsFoundryDownloadHistoryLabel: document.getElementById("sports-foundry-download-history-label"),
     sportsFoundryDownloadJson: document.getElementById("sports-foundry-download-json"),
     sportsFoundryStatus: document.getElementById("sports-foundry-status"),
     sportsFoundryEmptyState: document.getElementById("sports-foundry-empty-state"),
@@ -2260,7 +2260,6 @@
       forecastAiSummary: null,
       forecastCacheMeta: null,
       newsTicker: "",
-      xTicker: "",
       intelTicker: "",
       predictionsTicker: "",
       predictionsMode: "ticker",
@@ -2293,6 +2292,7 @@
       uploadId: "",
       uploadDoc: null,
       table: null,
+      chartTitle: "",
       previewPage: 0,
       previewPageSize: 25,
     },
@@ -2303,13 +2303,16 @@
       activeRun: null,
       pendingPreparedRunId: "",
       loadingRunId: "",
+      renderVersion: 0,
       activeConcurrentRuns: 0,
       maxConcurrentRuns: FOUNDRY_MAX_CONCURRENT_INSTANCES,
     },
     sportsFoundryContext: {
+      workflow: "player_forecast",
       teams: [],
       players: [],
       context: null,
+      teamTotals: null,
       runs: [],
       loaded: false,
       activeRunId: "",
@@ -2329,6 +2332,15 @@
     fiscaldataRegistry: [],
     fiscaldataRegistryLoadedAt: 0,
     fiscaldataMacroPages: {},
+    pageVisibility: {
+      config: null,
+      map: {},
+      updatedAt: "",
+      updatedBy: "",
+      unsub: null,
+      redirecting: false,
+      lastResolvedKey: "",
+    },
     earningsCalendar: {
       preset: "this-week",
       rangeStart: "",
@@ -3078,7 +3090,8 @@
         };
 
 		    const setActive = (target, { pushPath = true } = {}) => {
-		      const next = String(target || "").trim();
+		      const requested = String(target || "").trim();
+          const next = panelNames.has(requested) ? requested : String(router?.defaultPanel || buttons[0]?.dataset?.panelTarget || "").trim();
 		      if (!next) return;
 		      panels.forEach((panel) => panel.classList.toggle("hidden", panel.dataset.panel !== next));
 		      buttons.forEach((btn) => btn.classList.toggle("active", btn.dataset.panelTarget === next));
@@ -3284,7 +3297,6 @@
           "/terminal",
           "/forecasting",
           "/terminal/fx",
-          "/ticker-intelligence",
           "/predictions",
           "/indicators",
           "/trending",
@@ -3333,6 +3345,7 @@
       nav.innerHTML = `<div class="mobile-bottom-nav-inner"></div>`;
       document.body.appendChild(nav);
     }
+    nav.dataset.navScope = "app";
     const inner = nav.querySelector(".mobile-bottom-nav-inner");
     if (!inner) return;
 
@@ -3364,22 +3377,11 @@
     };
 
     const preferredByRouter = {
-      terminal: [
-        "forecast",
-        "/forecasting",
-        "ticker",
-        "/ticker-intelligence",
-        "predictions",
-        "/predictions",
-        "ticker-query",
-        "/model-council",
-        "fx",
-        "/terminal/fx",
-      ],
+      terminal: ["forecast", "/forecasting", "predictions", "/predictions", "ticker-query", "/model-council", "fx", "/terminal/fx"],
       dashboard: ["orders", "profile", "watchlist", "collaboration", "notifications", "/explore"],
     };
     const preferredByPath = {
-      "/screener": ["/forecasting", "/ticker-intelligence", "/indicators", "/screener", "/model-council"],
+      "/screener": ["/forecasting", "/predictions", "/indicators", "/screener", "/model-council"],
     };
     const preferredPanels = preferredByPath[path] || preferredByRouter[routerName] || [];
     const selected = preferredPanels
@@ -3450,7 +3452,7 @@
       .join("");
 
     const syncVisibility = () => {
-      const visible = window.innerWidth <= 980;
+      const visible = true;
       nav.classList.toggle("hidden", !visible);
       document.body.classList.toggle("mobile-bottom-nav-enabled", visible);
     };
@@ -3492,6 +3494,7 @@
       nav.innerHTML = '<div class="mobile-bottom-nav-inner"></div>';
       document.body.appendChild(nav);
     }
+    nav.dataset.navScope = "marketing";
     const inner = nav.querySelector(".mobile-bottom-nav-inner");
     if (!inner) return;
 
@@ -4538,6 +4541,26 @@
 	    return state.remoteFlags;
 	  };
 
+  const createSecureIdChunk = (length = 9) => {
+    const desired = Math.max(4, Math.floor(length));
+    const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
+    const cryptoApi = typeof window !== "undefined" && window.crypto && typeof window.crypto.getRandomValues === "function"
+      ? window.crypto
+      : null;
+    if (cryptoApi) {
+      const bytes = new Uint8Array(desired);
+      cryptoApi.getRandomValues(bytes);
+      let chunk = "";
+      for (let index = 0; index < bytes.length; index += 1) {
+        chunk += alphabet.charAt(bytes[index] % alphabet.length);
+      }
+      return chunk;
+    }
+    const perfNow = typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : 0;
+    const fallbackSeed = `${Date.now().toString(36)}${perfNow.toString(36).replace(".", "")}`;
+    return fallbackSeed.slice(-desired).padStart(desired, "0");
+  };
+
   let ephemeralSessionId = "";
   const getSessionId = () => {
     if (ephemeralSessionId) return ephemeralSessionId;
@@ -4548,13 +4571,13 @@
         ephemeralSessionId = existing;
         return existing;
       }
-      const sessionId = `qs_${Math.random().toString(36).slice(2, 11)}${Date.now().toString(36)}`;
+      const sessionId = `qs_${createSecureIdChunk(9)}${Date.now().toString(36)}`;
       localStorage.setItem(key, sessionId);
       ephemeralSessionId = sessionId;
       return sessionId;
     } catch (error) {
       // Some browsers/extensions block storage access. Keep a stable per-page session id anyway.
-      ephemeralSessionId = `qs_${Math.random().toString(36).slice(2, 11)}${Date.now().toString(36)}`;
+      ephemeralSessionId = `qs_${createSecureIdChunk(9)}${Date.now().toString(36)}`;
       return ephemeralSessionId;
     }
   };
@@ -7136,7 +7159,6 @@
       "trending-list",
       "intel-output",
       "news-output",
-      "x-trending-output",
       "events-calendar-output",
       "market-headlines-output",
       "fiscaldata-macro-groups",
@@ -9335,8 +9357,6 @@
     if (ui.profilePublicScreener) ui.profilePublicScreener.checked = publicScreenerSharing;
     if (ui.profilePublicEmail) ui.profilePublicEmail.checked = publicEmailOptIn;
     if (ui.profileWebsite) ui.profileWebsite.value = socialLinks.website || "";
-    if (ui.profileX) ui.profileX.value = socialLinks.x || "";
-    if (ui.profileLinkedin) ui.profileLinkedin.value = socialLinks.linkedin || "";
     if (ui.profileGithub) ui.profileGithub.value = socialLinks.github || "";
     if (ui.profileYoutube) ui.profileYoutube.value = socialLinks.youtube || "";
     if (ui.profileTiktok) ui.profileTiktok.value = socialLinks.tiktok || "";
@@ -9705,12 +9725,276 @@
     return pathname;
   };
 
+  const normalizePageVisibilityConfig = (raw) => {
+    const input = raw && typeof raw === "object" ? raw : {};
+    const categories = Array.isArray(input.categories)
+      ? input.categories
+          .map((entry) => ({
+            id: String(entry?.id || "").trim(),
+            label: String(entry?.label || "").trim(),
+          }))
+          .filter((entry) => entry.id && entry.label)
+      : [];
+    const pages = Array.isArray(input.pages)
+      ? input.pages
+          .map((entry) => ({
+            key: String(entry?.key || "").trim(),
+            label: String(entry?.label || "").trim(),
+            category: String(entry?.category || "").trim(),
+            routes: Array.isArray(entry?.routes) ? entry.routes.map((route) => normalizePath(route)).filter(Boolean) : [],
+            prefixes: Array.isArray(entry?.prefixes)
+              ? entry.prefixes.map((prefix) => normalizePath(prefix).replace(/\/$/, "/")).filter(Boolean)
+              : [],
+          }))
+          .filter((entry) => entry.key && entry.label)
+      : [];
+    return {
+      version: Number.isFinite(Number(input.version)) ? Number(input.version) : 1,
+      categories,
+      pages,
+    };
+  };
+
+  const buildDefaultPageVisibilityMap = (config) => {
+    const map = {};
+    (config?.pages || []).forEach((entry) => {
+      map[entry.key] = {
+        enabled: true,
+        label: entry.label,
+        category: entry.category,
+        routes: entry.routes.slice(),
+        prefixes: entry.prefixes.slice(),
+      };
+    });
+    return map;
+  };
+
+  let pageVisibilityConfigPromise = null;
+  const loadPageVisibilityConfig = async () => {
+    if (state.pageVisibility.config) return state.pageVisibility.config;
+    if (!pageVisibilityConfigPromise) {
+      pageVisibilityConfigPromise = fetch(PAGE_VISIBILITY_CONFIG_URL, {
+        credentials: "same-origin",
+        cache: "no-store",
+      })
+        .then((response) => {
+          if (!response.ok) throw new Error(`page_visibility_config_${response.status}`);
+          return response.json();
+        })
+        .then((payload) => {
+          const config = normalizePageVisibilityConfig(payload);
+          state.pageVisibility.config = config;
+          if (!Object.keys(state.pageVisibility.map || {}).length) {
+            state.pageVisibility.map = buildDefaultPageVisibilityMap(config);
+          }
+          return config;
+        })
+        .catch((error) => {
+          pageVisibilityConfigPromise = null;
+          throw error;
+        });
+    }
+    return pageVisibilityConfigPromise;
+  };
+
+  const resolvePageVisibilityKeyForPath = (rawPath) => {
+    const config = state.pageVisibility.config;
+    if (!config) return "";
+    const route = normalizePath(rawPath || "/");
+    for (const entry of config.pages || []) {
+      if (entry.routes.includes(route)) return entry.key;
+      if ((entry.prefixes || []).some((prefix) => route.startsWith(prefix))) return entry.key;
+    }
+    return "";
+  };
+
+  const resolvePageVisibilityFallbackPath = (excludeKey = "") => {
+    const config = state.pageVisibility.config;
+    const map = state.pageVisibility.map || {};
+    const preferredKeys = ["home", "terminal", "dashboard", "research", "pricing", "blog", "contact"];
+    const findRoute = (predicate) => {
+      const match = (config?.pages || []).find((entry) => predicate(entry) && Array.isArray(entry.routes) && entry.routes.length);
+      return match ? match.routes[0] : "/";
+    };
+    const preferred = findRoute((entry) => entry.key !== excludeKey && map[entry.key]?.enabled !== false && preferredKeys.includes(entry.key));
+    if (preferred) return preferred;
+    return findRoute((entry) => entry.key !== excludeKey && map[entry.key]?.enabled !== false) || "/";
+  };
+
+  const isPageVisible = (pageKey) => {
+    if (!pageKey) return true;
+    const entry = state.pageVisibility.map?.[pageKey];
+    return entry ? entry.enabled !== false : true;
+  };
+
+  const setAdminPageVisibilityStatus = (message, variant = "muted") => {
+    if (!ui.adminPageVisibilityStatus) return;
+    ui.adminPageVisibilityStatus.textContent = String(message || "");
+    ui.adminPageVisibilityStatus.dataset.variant = String(variant || "muted");
+  };
+
+  const applyPageVisibilityToLinks = () => {
+    const config = state.pageVisibility.config;
+    if (!config) return;
+    const linkEntries = Array.from(document.querySelectorAll("a[href]"));
+    linkEntries.forEach((node) => {
+      const href = String(node.getAttribute("href") || "").trim();
+      if (!href || href.startsWith("#") || href.startsWith("mailto:") || href.startsWith("tel:")) return;
+      if (/^https?:\/\//i.test(href)) return;
+      const route = normalizePath(href);
+      const pageKey = resolvePageVisibilityKeyForPath(route);
+      if (!pageKey) return;
+      const visible = isPageVisible(pageKey) || (pageKey === "admin" && isAdminUser());
+      node.classList.toggle("hidden", !visible);
+      node.setAttribute("aria-hidden", visible ? "false" : "true");
+      if (!visible) node.setAttribute("tabindex", "-1");
+      else node.removeAttribute("tabindex");
+    });
+  };
+
+  const syncPageVisibilityAccess = () => {
+    const currentKey = resolvePageVisibilityKeyForPath(window.location.pathname || "/");
+    state.pageVisibility.lastResolvedKey = currentKey;
+    applyPageVisibilityToLinks();
+    if (!currentKey || currentKey === "admin" || state.pageVisibility.redirecting) return;
+    if (isPageVisible(currentKey) || isAdminUser()) return;
+    state.pageVisibility.redirecting = true;
+    const fallback = resolvePageVisibilityFallbackPath(currentKey);
+    showToast("That page is currently hidden by the system administrator.", "warn");
+    window.setTimeout(() => {
+      window.location.replace(fallback || "/");
+    }, 120);
+  };
+
+  const renderAdminPageVisibilityControls = () => {
+    if (!ui.adminPageVisibility || !state.pageVisibility.config) return;
+    if (!isAdminUser()) {
+      ui.adminPageVisibility.innerHTML = `<div class="small muted">Sign in with the admin account to manage page visibility.</div>`;
+      return;
+    }
+    const categoryLabels = new Map((state.pageVisibility.config.categories || []).map((entry) => [entry.id, entry.label]));
+    const groups = new Map();
+    (state.pageVisibility.config.pages || []).forEach((entry) => {
+      const key = entry.category || "other";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(entry);
+    });
+    ui.adminPageVisibility.innerHTML = Array.from(groups.entries())
+      .map(([category, entries]) => {
+        const label = categoryLabels.get(category) || titleCaseLabel(category || "Pages");
+        const cards = entries
+          .map((entry) => {
+            const stateEntry = state.pageVisibility.map?.[entry.key] || {};
+            const enabled = stateEntry.enabled !== false;
+            const routeLabel = Array.isArray(entry.routes) ? entry.routes.join(", ") : "";
+            return `
+              <label class="admin-visibility-card" for="page-visibility-${escapeHtml(entry.key)}">
+                <div class="admin-visibility-copy">
+                  <strong>${escapeHtml(entry.label)}</strong>
+                  <div class="small muted">${escapeHtml(routeLabel)}</div>
+                </div>
+                <span class="admin-visibility-switch">
+                  <input
+                    id="page-visibility-${escapeHtml(entry.key)}"
+                    type="checkbox"
+                    data-page-visibility-toggle="${escapeHtml(entry.key)}"
+                    ${enabled ? "checked" : ""}
+                  />
+                  <span>${enabled ? "Visible" : "Hidden"}</span>
+                </span>
+              </label>
+            `;
+          })
+          .join("");
+        return `
+          <section class="admin-visibility-group">
+            <div class="admin-visibility-group-head">
+              <h3>${escapeHtml(label)}</h3>
+            </div>
+            <div class="admin-visibility-group-grid">${cards}</div>
+          </section>
+        `;
+      })
+      .join("");
+    const updatedParts = [];
+    if (state.pageVisibility.updatedAt) updatedParts.push(`Updated ${state.pageVisibility.updatedAt}`);
+    if (state.pageVisibility.updatedBy) updatedParts.push(`by ${state.pageVisibility.updatedBy}`);
+    setAdminPageVisibilityStatus(updatedParts.length ? updatedParts.join(" ") : "Visibility settings are live.", "muted");
+  };
+
+  const applyPageVisibilityState = (payload = {}) => {
+    const config = state.pageVisibility.config;
+    if (!config) return;
+    const defaults = buildDefaultPageVisibilityMap(config);
+    const incomingPages = payload.pages && typeof payload.pages === "object" ? payload.pages : {};
+    Object.keys(defaults).forEach((key) => {
+      const incoming = incomingPages[key];
+      if (incoming && typeof incoming === "object" && typeof incoming.enabled === "boolean") {
+        defaults[key].enabled = incoming.enabled;
+      }
+    });
+    state.pageVisibility.map = defaults;
+    state.pageVisibility.updatedAt = String(payload.updatedAt || payload.updatedAtIso || "").trim();
+    state.pageVisibility.updatedBy = String(payload.updatedBy || payload.updatedByEmail || "").trim();
+    renderAdminPageVisibilityControls();
+    syncPageVisibilityAccess();
+  };
+
+  const subscribeToPageVisibility = async (db) => {
+    await loadPageVisibilityConfig();
+    applyPageVisibilityState({});
+    if (!db || typeof db.collection !== "function") return;
+    if (typeof state.pageVisibility.unsub === "function") {
+      state.pageVisibility.unsub();
+      state.pageVisibility.unsub = null;
+    }
+    state.pageVisibility.unsub = db
+      .collection(PAGE_VISIBILITY_DOC.collection)
+      .doc(PAGE_VISIBILITY_DOC.id)
+      .onSnapshot(
+        (snapshot) => {
+          const payload = snapshot?.exists ? snapshot.data() || {} : {};
+          applyPageVisibilityState(payload);
+        },
+        () => {
+          renderAdminPageVisibilityControls();
+          syncPageVisibilityAccess();
+        }
+      );
+  };
+
+  const updatePageVisibilitySetting = async (db, pageKey, enabled) => {
+    if (!db || typeof db.collection !== "function") {
+      throw new Error("Firestore is not available on this page.");
+    }
+    if (!requireAdminAccess("Admin access required to manage page visibility.")) {
+      throw new Error("Admin access required.");
+    }
+    await db
+      .collection(PAGE_VISIBILITY_DOC.collection)
+      .doc(PAGE_VISIBILITY_DOC.id)
+      .set(
+        {
+          version: Number.isFinite(Number(state.pageVisibility.config?.version)) ? Number(state.pageVisibility.config.version) : 1,
+          pages: {
+            [pageKey]: {
+              enabled: Boolean(enabled),
+            },
+          },
+          updatedAtIso: new Date().toISOString(),
+          updatedByEmail: String(state.user?.email || "").trim().toLowerCase(),
+        },
+        { merge: true }
+      );
+  };
+
   const PANEL_ROUTERS = Object.freeze({
     terminal: {
       defaultPanel: "forecast",
       panelToPath: {
         forecast: "/forecasting",
-        ticker: "/ticker-intelligence",
+        autopilot: "/autopilot",
+        "sports-autopilot": "/sports-forecasting",
         predictions: "/predictions",
         indicators: "/indicators",
         trending: "/trending",
@@ -9722,7 +10006,10 @@
         learn: "/studio",
       },
       pathAliases: {
-        "/ticker-intelligence": "ticker",
+        "/autopilot": "autopilot",
+        "/uploads": "autopilot",
+        "/dashboard/uploads": "autopilot",
+        "/sports-forecasting": "sports-autopilot",
         "/predictions": "predictions",
         "/ticker-query": "ticker-query",
         "/model-council": "ticker-query",
@@ -9738,7 +10025,6 @@
         watchlist: "/watchlist",
         productivity: "/productivity",
         collaboration: "/collaboration",
-        autopilot: "/autopilot",
         notifications: "/notifications",
         auth: "/account",
       },
@@ -9748,15 +10034,13 @@
         "/dashboard/watchlist": "watchlist",
         "/dashboard/productivity": "productivity",
         "/dashboard/collaboration": "collaboration",
-        "/dashboard/uploads": "autopilot",
-        "/uploads": "autopilot",
       },
     },
   });
 
   const normalizePanelName = (value) => {
     const panel = String(value || "").trim();
-    if (panel === "ticker-intelligence") return "ticker";
+    if (panel === "ticker-intelligence" || panel === "ticker") return "forecast";
     return panel;
   };
 
@@ -9847,12 +10131,6 @@
       label: "Reddit",
       href: "https://www.reddit.com/r/Quantura_AI/",
       icon: "/assets/social/reddit-alien.svg",
-    },
-    {
-      key: "linkedin",
-      label: "LinkedIn",
-      href: "https://www.linkedin.com/company/quanturaai/?viewAsMember=true",
-      icon: "/assets/social/linkedin-in.svg",
     },
   ];
 
@@ -10582,18 +10860,15 @@
     }
   };
 
-  const buildTickerPanelUrl = (ticker) => {
+  const buildForecastPanelUrl = (ticker) => {
     const cleanTicker = normalizeTicker(ticker);
     const params = new URLSearchParams();
+    params.set("panel", "forecast");
     if (cleanTicker) {
       params.set("ticker", cleanTicker);
-      const tvSymbol = normalizeTradingViewSymbol(cleanTicker);
-      if (tvSymbol) {
-        params.set("tvwidgetsymbol", tvSymbol);
-      }
     }
     const query = params.toString();
-    return `/ticker${query ? `?${query}` : ""}`;
+    return `/forecasting${query ? `?${query}` : ""}`;
   };
 
   const syncTradingViewUrlState = (ticker, symbol) => {
@@ -13195,415 +13470,6 @@
       setOutputReady(ui.newsOutput);
       ui.newsOutput.innerHTML = `<div class="small muted">Unable to load headlines right now.</div>`;
       if (notify) showToast(error.message || "Unable to load news.", "warn");
-    }
-  };
-
-  const normalizeXSocialQuery = (raw) => String(raw || "").trim();
-
-  const normalizeXAuthorHandle = (value) => sanitizeText(String(value || "").replace(/^@+/, ""), 80);
-
-  const readXCount = (...values) => {
-    for (const value of values) {
-      const num = Number(value);
-      if (Number.isFinite(num)) return Math.max(0, Math.floor(num));
-    }
-    return 0;
-  };
-
-  const normalizeXTrendPost = (raw) => {
-    const post = raw && typeof raw === "object" ? raw : {};
-    const author = post.author && typeof post.author === "object" ? post.author : {};
-    const user = post.user && typeof post.user === "object" ? post.user : {};
-    const account = post.account && typeof post.account === "object" ? post.account : {};
-    const metricsRaw =
-      (post.metrics && typeof post.metrics === "object" ? post.metrics : null) ||
-      (post.public_metrics && typeof post.public_metrics === "object" ? post.public_metrics : null) ||
-      (post.engagement && typeof post.engagement === "object" ? post.engagement : null) ||
-      {};
-
-    const authorUsername = normalizeXAuthorHandle(
-      post.authorUsername ||
-        post.author_username ||
-        post.username ||
-        post.screen_name ||
-        post.handle ||
-        author.username ||
-        author.screen_name ||
-        author.handle ||
-        user.username ||
-        user.screen_name ||
-        user.handle ||
-        account.username ||
-        account.screen_name
-    );
-    const authorName =
-      sanitizeText(
-        post.authorName ||
-          post.author_name ||
-          post.authorDisplayName ||
-          post.author_display_name ||
-          post.name ||
-          author.name ||
-          author.display_name ||
-          author.full_name ||
-          user.name ||
-          user.display_name ||
-          account.name,
-        120
-      ) || authorUsername;
-
-    const postId = sanitizeText(post.id || post.id_str || post.tweet_id || post.status_id, 120);
-    const text = sanitizeText(post.text || post.full_text || post.content || post.body || post.title || post.snippet, 8000);
-    const createdAt = post.createdAt || post.created_at || post.publishedAt || post.timestamp || post.date || null;
-    const permalink =
-      sanitizeText(post.permalink || post.url || post.link || post.tweetUrl || post.tweet_url, 500) ||
-      (postId ? `https://x.com/i/web/status/${encodeURIComponent(postId)}` : "");
-
-    const likes = readXCount(
-      metricsRaw.like_count,
-      metricsRaw.favorite_count,
-      metricsRaw.likes,
-      metricsRaw.likeCount,
-      post.like_count,
-      post.favorite_count,
-      post.likes,
-      post.likeCount,
-      post.favoriteCount
-    );
-    const reposts = readXCount(
-      metricsRaw.retweet_count,
-      metricsRaw.repost_count,
-      metricsRaw.reposts,
-      metricsRaw.retweetCount,
-      metricsRaw.repostCount,
-      post.retweet_count,
-      post.repost_count,
-      post.reposts,
-      post.retweetCount,
-      post.repostCount
-    );
-    const replies = readXCount(
-      metricsRaw.reply_count,
-      metricsRaw.replies,
-      metricsRaw.replyCount,
-      post.reply_count,
-      post.replies,
-      post.replyCount
-    );
-
-    return {
-      ...post,
-      id: postId || sanitizeText(post.id, 120),
-      text,
-      createdAt,
-      permalink,
-      authorName,
-      authorUsername,
-      likes,
-      reposts,
-      replies,
-      metrics: {
-        ...metricsRaw,
-        like_count: likes,
-        retweet_count: reposts,
-        reply_count: replies,
-      },
-    };
-  };
-
-  const uniqueSocialRows = (rows) => {
-    const list = Array.isArray(rows) ? rows : [];
-    const seen = new Set();
-    const out = [];
-    for (const row of list) {
-      const key = String(row?.id || row?.permalink || `${row?.text || row?.title || ""}_${row?.createdAt || ""}`).trim();
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
-      out.push(row);
-    }
-    return out;
-  };
-
-  const isTransientXTrendsError = (error) => {
-    const code = String(error?.code || "").toLowerCase();
-    const message = String(error?.message || "").toLowerCase();
-    if (["resource-exhausted", "unavailable", "internal", "deadline-exceeded"].some((item) => code.includes(item))) return true;
-    if (message.includes("429")) return true;
-    if (/\b5\d\d\b/.test(message)) return true;
-    if (message.includes("timeout")) return true;
-    return false;
-  };
-
-  const callWithBackoffRetry = async (callable, payload, { attempts = 3, baseDelayMs = 320 } = {}) => {
-    let lastError = null;
-    for (let i = 0; i < Math.max(1, attempts); i += 1) {
-      try {
-        return await callable(payload);
-      } catch (error) {
-        lastError = error;
-        if (!isTransientXTrendsError(error) || i >= attempts - 1) throw error;
-        const jitter = Math.floor(Math.random() * 160);
-        const delay = baseDelayMs * (2 ** i) + jitter;
-        // Exponential backoff keeps noisy 429/5xx from surfacing as immediate hard failures.
-        await new Promise((resolve) => window.setTimeout(resolve, delay));
-      }
-    }
-    throw lastError || new Error("X trends request failed.");
-  };
-
-  const buildXVariantChips = ({ variants, activeQuery, ticker }) => {
-    const symbol = normalizeTicker(ticker) || "";
-    const active = normalizeXSocialQuery(activeQuery).toUpperCase();
-    const chips = (Array.isArray(variants) ? variants : [])
-      .map((item) => normalizeTicker(item))
-      .filter(Boolean)
-      .filter((item, idx, arr) => arr.indexOf(item) === idx)
-      .filter((item) => item !== active)
-      .slice(0, 4);
-    if (!chips.length || !symbol) return "";
-    return `
-      <div class="x-variant-chips">
-        ${chips
-          .map(
-            (variant) =>
-              `<button class="task-chip" type="button" data-action="x-trends-variant" data-ticker="${escapeHtml(symbol)}" data-query="${escapeHtml(
-                variant
-              )}">Try ${escapeHtml(variant)}</button>`
-          )
-          .join("")}
-      </div>
-    `;
-  };
-
-  const renderTickerXTrends = (payload = {}) => {
-    if (!ui.xTrendingOutput) return;
-    const list = Array.isArray(payload.posts) ? payload.posts : [];
-    const storyList = Array.isArray(payload.stories) ? payload.stories : [];
-    const symbol = normalizeTicker(payload.ticker || "") || "";
-    const warningText = String(payload.warning || "").trim();
-    const query = normalizeXSocialQuery(payload.query || symbol);
-    const fallbackUsed = Boolean(payload.fallbackUsed);
-    const fallbackQuery = normalizeXSocialQuery(payload.fallbackQuery || "");
-    const page = Math.max(1, Number(payload.page || 1));
-    const pageSize = Math.max(1, Number(payload.pageSize || 8));
-    const totalPosts = Number(payload.totalPosts || list.length || 0);
-    const hasMorePosts = Boolean(payload.hasMorePosts);
-    const variantChips = buildXVariantChips({
-      variants: payload.queryVariants,
-      activeQuery: query,
-      ticker: symbol,
-    });
-    const warningBlock = warningText ? `<div class="small muted" style="margin-top:10px;">${escapeHtml(warningText)}</div>` : "";
-    const queryBlock = query ? `<div class="small muted" style="margin-bottom:8px;">Query: ${escapeHtml(query)}</div>` : "";
-    const fallbackBlock = fallbackUsed
-      ? `<div class="small muted" style="margin-bottom:8px;">Fallback query used: ${escapeHtml(fallbackQuery || "$" + symbol)}</div>`
-      : "";
-
-    if (!list.length && !storyList.length) {
-      ui.xTrendingOutput.innerHTML = `
-        <div class="x-empty-state">
-          <div class="small muted">No posts found for ${escapeHtml(symbol || "this ticker")}.</div>
-          ${queryBlock}
-          ${fallbackBlock}
-          ${variantChips}
-          <div style="margin-top:10px;">
-            <button class="cta secondary small" type="button" data-action="x-trends-retry" data-ticker="${escapeHtml(symbol)}" data-query="${escapeHtml(
-              query
-            )}">Retry</button>
-          </div>
-          ${warningBlock}
-        </div>
-      `;
-      return;
-    }
-
-    const blocks = [];
-    if (queryBlock) blocks.push(queryBlock);
-    if (fallbackBlock) blocks.push(fallbackBlock);
-
-    if (list.length) {
-      blocks.push(
-        list
-          .map((post) => {
-            const authorName = escapeHtml(post.authorName || post.authorUsername || "Unknown");
-            const authorHandle = escapeHtml(post.authorUsername ? `@${post.authorUsername}` : "");
-            const text = escapeHtml(post.text || post.title || "");
-            const created = formatEpoch(post.createdAt);
-            const metrics = post.metrics && typeof post.metrics === "object" ? post.metrics : {};
-            const likes = readXCount(post.likes, metrics.like_count, metrics.favorite_count, metrics.likes, metrics.likeCount);
-            const reposts = readXCount(
-              post.reposts,
-              metrics.retweet_count,
-              metrics.repost_count,
-              metrics.reposts,
-              metrics.retweetCount,
-              metrics.repostCount
-            );
-            const replies = readXCount(post.replies, metrics.reply_count, metrics.replies, metrics.replyCount);
-            const permalink = post.permalink ? escapeHtml(post.permalink) : "";
-            return `
-              <article class="x-post-card">
-                <div class="x-post-top">
-                  <div class="x-post-author">${authorName}</div>
-                  <div class="x-post-handle small muted">${authorHandle}</div>
-                </div>
-                <div class="x-post-text small">${text}</div>
-                <div class="x-post-meta small">
-                  <span>${escapeHtml(created || "Now")}</span>
-                  <span>Likes ${Number.isFinite(likes) ? likes.toLocaleString() : "0"}</span>
-                  <span>Reposts ${Number.isFinite(reposts) ? reposts.toLocaleString() : "0"}</span>
-                  <span>Replies ${Number.isFinite(replies) ? replies.toLocaleString() : "0"}</span>
-                </div>
-                ${permalink ? `<a class="x-post-link" href="${permalink}" target="_blank" rel="noreferrer">View on X</a>` : ""}
-              </article>
-            `;
-          })
-          .join("")
-      );
-    } else if (storyList.length) {
-      blocks.push(`<div class="small muted">No matching X posts returned for ${escapeHtml(symbol || "this ticker")}.</div>`);
-    }
-
-    if (storyList.length) {
-      blocks.push(`<div class="x-story-divider small muted">X News stories</div>`);
-      blocks.push(
-        storyList
-          .map((story) => {
-            const title = escapeHtml(story.name || "X News story");
-            const hook = escapeHtml(story.hook || "");
-            const summary = escapeHtml(story.summary || "");
-            const updated = escapeHtml(formatEpoch(story.updatedAt) || "");
-            const category = escapeHtml(story.category || "");
-            const tickers = Array.isArray(story.tickers) ? story.tickers.filter(Boolean).slice(0, 6).join(", ") : "";
-            const meta = [category, updated, tickers ? `Tickers: ${tickers}` : ""].filter(Boolean).join(" · ");
-            const link = story.searchUrl ? escapeHtml(story.searchUrl) : "";
-            return `
-              <article class="x-story-card">
-                <div class="x-story-title">${title}</div>
-                ${meta ? `<div class="x-story-meta small muted">${meta}</div>` : ""}
-                ${hook ? `<div class="x-story-hook small">${hook}</div>` : ""}
-                ${summary && summary !== hook ? `<div class="x-story-summary small muted">${summary}</div>` : ""}
-                ${link ? `<a class="x-post-link" href="${link}" target="_blank" rel="noreferrer">Open on X</a>` : ""}
-              </article>
-            `;
-          })
-          .join("")
-      );
-    }
-
-    if (hasMorePosts) {
-      blocks.push(`
-        <div class="x-pagination">
-          <button
-            class="cta secondary small"
-            type="button"
-            data-action="x-trends-more"
-            data-ticker="${escapeHtml(symbol)}"
-            data-query="${escapeHtml(query)}"
-            data-next-page="${page + 1}"
-          >
-            Load more posts
-          </button>
-          <span class="small muted">${Math.min(list.length, totalPosts)} / ${Number.isFinite(totalPosts) ? totalPosts : "?"}</span>
-        </div>
-      `);
-    }
-
-    ui.xTrendingOutput.innerHTML = blocks.join("") + variantChips + warningBlock;
-  };
-
-  const loadTickerXTrends = async (
-    functions,
-    ticker,
-    { notify = false, force = false, page = 1, append = false, queryOverride = "", pageSize = 8 } = {}
-  ) => {
-    if (!functions || !ui.xTrendingOutput) return;
-    const symbol = normalizeTicker(ticker);
-    if (!symbol) {
-      ui.xTrendingOutput.innerHTML = `<div class="small muted">Load a ticker to see live X discussion.</div>`;
-      return;
-    }
-
-    const query = normalizeXSocialQuery(queryOverride);
-    const normalizedPage = Math.max(1, Number(page || 1));
-    const normalizedPageSize = Math.max(1, Math.min(20, Number(pageSize || 8)));
-    const sameRequest = state.tickerContext.xTicker === symbol && state.tickerContext.xQuery === query;
-    if (!force && !append && sameRequest && state.tickerContext.xPage === normalizedPage) return;
-
-    if (!append) {
-      state.tickerContext.xTicker = symbol;
-      state.tickerContext.xQuery = query;
-      state.tickerContext.xPage = 1;
-      state.tickerContext.xPosts = [];
-      state.tickerContext.xStories = [];
-      state.tickerContext.xHasMorePosts = false;
-      state.tickerContext.xHasMoreStories = false;
-      state.tickerContext.xVariants = [];
-      setOutputLoading(ui.xTrendingOutput, "Loading X trends...");
-    }
-
-    try {
-      const getXTrends = functions.httpsCallable("get_ticker_x_trends");
-      const result = await callWithBackoffRetry(getXTrends, {
-        ticker: symbol,
-        query,
-        page: normalizedPage,
-        pageSize: normalizedPageSize,
-        meta: buildMeta(),
-      });
-      const payload = result.data || {};
-      const incomingPosts = (Array.isArray(payload.posts) ? payload.posts : []).map(normalizeXTrendPost).filter(Boolean);
-      const incomingStories = Array.isArray(payload.stories) ? payload.stories : [];
-
-      const mergedPosts = append ? uniqueSocialRows([...(state.tickerContext.xPosts || []), ...incomingPosts]) : uniqueSocialRows(incomingPosts);
-      const mergedStories = append
-        ? uniqueSocialRows([...(state.tickerContext.xStories || []), ...incomingStories])
-        : uniqueSocialRows(incomingStories);
-
-      state.tickerContext.xTicker = symbol;
-      state.tickerContext.xQuery = query;
-      state.tickerContext.xPage = normalizedPage;
-      state.tickerContext.xPosts = mergedPosts;
-      state.tickerContext.xStories = mergedStories;
-      state.tickerContext.xHasMorePosts = Boolean(payload.hasMorePosts);
-      state.tickerContext.xHasMoreStories = Boolean(payload.hasMoreStories);
-      state.tickerContext.xVariants = Array.isArray(payload.queryVariants) ? payload.queryVariants : [];
-
-      setOutputReady(ui.xTrendingOutput);
-      renderTickerXTrends({
-        ticker: symbol,
-        query: payload.query || query || symbol,
-        queryVariants: state.tickerContext.xVariants,
-        posts: mergedPosts,
-        stories: mergedStories,
-        page: normalizedPage,
-        pageSize: Number(payload.pageSize || normalizedPageSize),
-        hasMorePosts: state.tickerContext.xHasMorePosts,
-        hasMoreStories: state.tickerContext.xHasMoreStories,
-        totalPosts: Number(payload.totalPosts || mergedPosts.length || 0),
-        totalStories: Number(payload.totalStories || mergedStories.length || 0),
-        warning: String(payload.warning || "").trim(),
-        fallbackUsed: Boolean(payload.fallbackUsed),
-        fallbackQuery: String(payload.fallbackQuery || "").trim(),
-      });
-      logEvent("x_trends_loaded", {
-        ticker: symbol,
-        query: query || symbol,
-        count: mergedPosts.length,
-        stories: mergedStories.length,
-        page: normalizedPage,
-      });
-    } catch (error) {
-      setOutputReady(ui.xTrendingOutput);
-      ui.xTrendingOutput.innerHTML = `
-        <div class="small muted">Unable to load X trends right now.</div>
-        <div style="margin-top:10px;">
-          <button class="cta secondary small" type="button" data-action="x-trends-retry" data-ticker="${escapeHtml(symbol)}" data-query="${escapeHtml(
-            query
-          )}">Retry</button>
-        </div>
-      `;
-      if (notify) showToast(error.message || "Unable to load X trends.", "warn");
     }
   };
 
@@ -16496,7 +16362,7 @@
         const subLabel = absChangeLabel && changeOk ? `${absChangeLabel} · ${changeLabel}` : changeLabel;
 
         return `
-          <button class="trending-hot-chip" type="button" data-action="pick-ticker" data-ticker="${escapeHtml(symbol)}">
+          <button class="trending-hot-chip" type="button" data-action="open-forecast-ticker" data-ticker="${escapeHtml(symbol)}">
             <div class="trending-top">
               <div class="trending-symbol" style="display:inline-flex; align-items:center; gap:8px;">
                 ${buildTrendingLogoMarkup({ symbol, companyName, logoUrl })}
@@ -16506,7 +16372,7 @@
             </div>
             <div class="trending-bottom">
               <span class="trending-chip trending-chip--${direction}">${escapeHtml(subLabel)}</span>
-              <span class="small muted">Open ticker</span>
+              <span class="small muted">Open forecast</span>
             </div>
           </button>
         `;
@@ -17073,7 +16939,7 @@
   };
 
   const parseCsvTable = (csvText, { maxRows = 5000 } = {}) => {
-    const text = String(csvText || "");
+    const text = String(csvText || "").replace(/^\uFEFF/, "");
     if (!text.trim()) throw new Error("CSV file is empty.");
 
     const delimiter = ",";
@@ -17777,8 +17643,10 @@
       , lastQuantiles[0]);
 
     return {
+      firstWeekdayDate: (weekdayRows[0] || rowsWithDate[0] || {}).ymd || "",
       lastWeekdayDate: lastUse.ymd,
       rowIndex: lastUse.idx,
+      businessDayRows: weekdayRows.length || rowsWithDate.length,
       lower: nearest(0.1),
       median: nearest(0.5),
       upper: nearest(0.9),
@@ -17953,7 +17821,10 @@
   const appendPredictionOptionsSupplement = async (functions, { ticker, envelope, sourceLabel = "Prediction options analysis" } = {}) => {
     if (!functions || !ui.predictionsAgentOutput) return null;
     const cleanTicker = normalizeTicker(ticker || "");
-    if (!cleanTicker || !envelope) return null;
+    if (!envelope) return null;
+    if (!cleanTicker) {
+      throw new Error("Enter a ticker on the Forecast Foundry run to load nearest P10 and P90 options contracts.");
+    }
 
     removePredictionOptionsSupplement();
     const getOptions = functions.httpsCallable("get_options_chain");
@@ -18008,6 +17879,7 @@
             })
           : null,
       }));
+    const fmtMoney = (value) => (Number.isFinite(Number(value)) ? formatUsd(Number(value), 2) : "—");
 
     const supplement = document.createElement("div");
     supplement.dataset.predictionOptionsSupplement = "1";
@@ -18016,16 +17888,25 @@
       <div class="notice" style="margin-top:14px;">
         <div><strong>${escapeHtml(sourceLabel)}</strong></div>
         <div class="small" style="margin-top:6px;">
-          Expiry near forecast end: <strong>${escapeHtml(selectedExpiration || String(chain.selectedExpiration || "Auto"))}</strong>
-          · Upper rule: strike at or above <strong>${escapeHtml(String(envelope.upper?.label || "P90").toUpperCase())}</strong>
-          · Lower rule: strike at or below <strong>${escapeHtml(String(envelope.lower?.label || "P10").toUpperCase())}</strong>
+          Forecast end date: <strong>${escapeHtml(String(envelope.lastWeekdayDate || "Unknown"))}</strong>
+          · Nearest listed expiry: <strong>${escapeHtml(selectedExpiration || String(chain.selectedExpiration || "Auto"))}</strong>
+          · Business-day rows used: <strong>${Number(envelope.businessDayRows || 0).toLocaleString()}</strong>
+        </div>
+        <div class="small" style="margin-top:6px;">
+          End-date ${escapeHtml(String(envelope.lower?.label || "P10").toUpperCase())}: <strong>${fmtMoney(envelope.lower?.value)}</strong>
+          · ${escapeHtml(String(envelope.median?.label || "P50").toUpperCase())}: <strong>${fmtMoney(envelope.median?.value)}</strong>
+          · ${escapeHtml(String(envelope.upper?.label || "P90").toUpperCase())}: <strong>${fmtMoney(envelope.upper?.value)}</strong>
+        </div>
+        <div class="small" style="margin-top:6px;">
+          Call rule: strike at or above <strong>${escapeHtml(String(envelope.upper?.label || "P90").toUpperCase())}</strong>
+          · Put rule: strike at or below <strong>${escapeHtml(String(envelope.lower?.label || "P10").toUpperCase())}</strong>
         </div>
       </div>
-      ${renderPredictionOptionCandidate("Upper-Bound Call Candidate", callCandidate, String(envelope.upper?.label || "P90").toUpperCase())}
-      ${renderPredictionOptionCandidate("Lower-Bound Put Candidate", putCandidate, String(envelope.lower?.label || "P10").toUpperCase())}
+      ${renderPredictionOptionCandidate("Nearest P90 Call Contract", callCandidate, String(envelope.upper?.label || "P90").toUpperCase())}
+      ${renderPredictionOptionCandidate("Nearest P10 Put Contract", putCandidate, String(envelope.lower?.label || "P10").toUpperCase())}
       ${scenarios.length ? renderPredictionOptionSimulationTable(scenarios) : ""}
       <div class="small muted" style="margin-top:10px;">
-        Simulations assume a long option held through expiry, using the quoted ask/mid/last/bid fallback in that order and one contract by default.
+        Contracts are aligned to the nearest listed expiration on or after the final business day in the CSV. Simulations assume a long option held through expiry, using the quoted ask/mid/last/bid fallback in that order and one contract by default.
       </div>
     `;
     ui.predictionsAgentOutput.appendChild(supplement);
@@ -18095,17 +17976,17 @@
     return { xIndex, yCols };
   };
 
-  const renderPredictionsChart = async (table, { title = "CSV plot" } = {}) => {
-    if (!ui.predictionsChart) return;
+  const renderPredictionsChart = async (table, { title = "CSV plot", container = ui.predictionsChart, height = 520 } = {}) => {
+    if (!container) return;
     const Plotly = getPlotly();
     if (!Plotly) {
-      ui.predictionsChart.textContent = "Chart library not loaded.";
+      container.textContent = "Chart library not loaded.";
       return;
     }
     const headers = table?.headers || [];
     const rows = table?.rows || [];
     if (!headers.length || !rows.length) {
-      ui.predictionsChart.textContent = "No CSV data to plot.";
+      container.textContent = "No CSV data to plot.";
       return;
     }
 
@@ -18141,6 +18022,7 @@
       font: { family: "Manrope, sans-serif", color: textColor },
       paper_bgcolor: "rgba(0,0,0,0)",
       plot_bgcolor: plotBg,
+      height,
       margin: { l: 50, r: 30, t: 44, b: 44 },
       xaxis: { title: { text: xLabel }, showspikes: true, spikemode: "across", spikesnap: "cursor", gridcolor: gridColor, zerolinecolor: gridColor },
       yaxis: { gridcolor: gridColor, zerolinecolor: gridColor },
@@ -18148,7 +18030,86 @@
       hovermode: "x unified",
     };
 
-    await Plotly.react(ui.predictionsChart, traces, layout, { responsive: true, displaylogo: false });
+    await Plotly.react(container, traces, layout, {
+      responsive: true,
+      displaylogo: false,
+      modeBarButtonsToRemove: ["lasso2d", "select2d"],
+    });
+  };
+
+  const renderFoundryChartLauncher = ({ available = false, title = "", detail = "" } = {}) => {
+    if (!ui.predictionsChart) return;
+    if (ui.foundryOpenChartButton) {
+      ui.foundryOpenChartButton.disabled = !available;
+      ui.foundryOpenChartButton.title = available ? "" : "Load a Forecast Foundry CSV first.";
+    }
+    ui.predictionsChart.innerHTML = `
+      <div class="foundry-chart-launcher-card">
+        <div>
+          <div class="small muted">Interactive chart workspace</div>
+          <div class="foundry-chart-launcher-title">${escapeHtml(title || "Forecast Foundry chart")}</div>
+          <div class="small muted" style="margin-top:6px;">${escapeHtml(detail || (available ? "Open the modal chart to zoom, pan, compare quantiles, and inspect the shared prediction path." : "Load a CSV artifact to unlock the interactive chart."))}</div>
+        </div>
+        <button class="cta secondary small" type="button" data-action="open-foundry-chart-modal" ${available ? "" : "disabled"}>
+          ${icon("graph-up")}<span>Open interactive chart</span>
+        </button>
+      </div>
+    `;
+  };
+
+  const ensureFoundryChartModal = () => {
+    let modal = document.getElementById("foundry-chart-modal");
+    if (!modal) {
+      modal = buildModalShell("foundry-chart-modal");
+      const card = modal.querySelector(".modal-card");
+      if (card) card.classList.add("foundry-chart-modal-card");
+      modal.addEventListener("click", (event) => {
+        const action = String(event.target?.dataset?.action || "").trim();
+        if (action === "close" || action === "close-foundry-chart-modal") {
+          modal.classList.add("hidden");
+          document.body.classList.remove("modal-open");
+        }
+      });
+      window.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape" || modal.classList.contains("hidden")) return;
+        modal.classList.add("hidden");
+        document.body.classList.remove("modal-open");
+      }, true);
+    }
+    return modal;
+  };
+
+  const openFoundryChartModal = async () => {
+    const table = state.predictionsContext.table;
+    if (!table?.headers?.length || !table?.rows?.length) {
+      throw new Error("Load a Forecast Foundry CSV first.");
+    }
+    const modal = ensureFoundryChartModal();
+    const card = modal.querySelector(".modal-card");
+    if (!card) throw new Error("Chart modal is unavailable.");
+    const title = String(state.predictionsContext.chartTitle || "Forecast Foundry chart").trim() || "Forecast Foundry chart";
+    const detail = `${table.rows.length.toLocaleString()} rows · ${table.headers.length.toLocaleString()} columns`;
+    card.innerHTML = `
+      <div class="foundry-chart-modal-head">
+        <div>
+          <div class="small muted">Forecast Foundry chart</div>
+          <h3>${escapeHtml(title)}</h3>
+          <div class="small muted">${escapeHtml(detail)}</div>
+        </div>
+        <button class="modal-close" type="button" data-action="close-foundry-chart-modal" aria-label="Close chart">×</button>
+      </div>
+      <div id="foundry-chart-modal-plot" class="foundry-chart-modal-plot"></div>
+    `;
+    modal.classList.remove("hidden");
+    document.body.classList.add("modal-open");
+    const plotNode = card.querySelector("#foundry-chart-modal-plot");
+    if (!plotNode) throw new Error("Chart container is unavailable.");
+    setOutputLoading(plotNode, "Rendering chart...");
+    await renderPredictionsChart(table, {
+      title,
+      container: plotNode,
+      height: Math.max(520, Math.floor(window.innerHeight * 0.68)),
+    });
   };
 
   const resolveUploadCsvUrl = async (_storage, uploadDoc) => {
@@ -18190,7 +18151,7 @@
     if (!cleanId) throw new Error("Upload ID is required.");
 
     ui.predictionsPlotMeta.textContent = "Loading CSV...";
-    if (ui.predictionsChart) setOutputLoading(ui.predictionsChart, "Loading CSV plot...");
+    renderFoundryChartLauncher({ available: false, title: "Forecast Foundry chart", detail: "Loading CSV preview..." });
     if (ui.predictionsPreview) setOutputLoading(ui.predictionsPreview, "Loading preview...");
 
     const snap = await db.collection("prediction_uploads").doc(cleanId).get();
@@ -18206,6 +18167,7 @@
     state.predictionsContext.uploadId = cleanId;
     state.predictionsContext.uploadDoc = doc;
     state.predictionsContext.table = table;
+    state.predictionsContext.chartTitle = title;
     state.predictionsContext.previewPage = 0;
     if (ui.predictionsTicker && doc.ticker) ui.predictionsTicker.value = normalizeTicker(doc.ticker) || String(doc.ticker);
     ui.predictionsPlotMeta.textContent = `${doc.title || "predictions.csv"} · ${table.rows.length.toLocaleString()} rows · ${table.headers.length} cols${
@@ -18219,19 +18181,11 @@
 
     renderCsvPreview(table);
     setOutputReady(ui.predictionsPreview);
-    try {
-      await renderPredictionsChart(table, { title });
-      setOutputReady(ui.predictionsChart);
-    } catch (chartError) {
-      setOutputReady(ui.predictionsChart);
-      if (ui.predictionsChart) {
-        ui.predictionsChart.innerHTML = `
-          <div class="small muted">
-            CSV preview is available, but chart rendering failed: ${escapeHtml(chartError?.message || "Unknown error")}
-          </div>
-        `;
-      }
-    }
+    renderFoundryChartLauncher({
+      available: true,
+      title,
+      detail: `${table.rows.length.toLocaleString()} rows are ready. Open the chart modal to inspect the prediction path interactively.`,
+    });
     logEvent("predictions_plotted", { upload_id: cleanId, source });
   };
 
@@ -18260,6 +18214,90 @@
     ui.autopilotStatus.dataset.variant = String(variant || "").trim();
   };
 
+  const logFoundryDebug = (event, details = {}) => {
+    try {
+      console.info("[Forecast Foundry]", event, details);
+    } catch (_error) {
+      // Ignore logging failures.
+    }
+  };
+
+  const bumpFoundryRenderVersion = () => {
+    const next = Math.max(0, Math.floor(Number(state.foundryContext.renderVersion || 0))) + 1;
+    state.foundryContext.renderVersion = next;
+    return next;
+  };
+
+  const isFoundryRenderCurrent = (renderVersion, runId = "") => {
+    const requestedVersion = Math.max(0, Math.floor(Number(renderVersion || 0)));
+    const activeVersion = Math.max(0, Math.floor(Number(state.foundryContext.renderVersion || 0)));
+    if (requestedVersion && requestedVersion !== activeVersion) return false;
+    return runId ? String(state.foundryContext.activeRunId || "").trim() === String(runId || "").trim() : true;
+  };
+
+  const resetFoundryPreviewState = ({
+    loading = false,
+    previewMessage = "Preview will appear here.",
+    plotMessage = "Select a Foundry run to preview its CSV artifact.",
+    chartTitle = "Forecast Foundry chart",
+    chartDetail = "Prepare a source to inspect its saved prediction path in the chart workspace.",
+    clearAnalysis = false,
+  } = {}) => {
+    state.predictionsContext.uploadId = "";
+    state.predictionsContext.uploadDoc = null;
+    state.predictionsContext.table = null;
+    state.predictionsContext.chartTitle = "";
+    state.predictionsContext.previewPage = 0;
+    state.predictionsContext.previewPageSize = 25;
+    if (ui.predictionsPlotMeta) ui.predictionsPlotMeta.textContent = String(plotMessage || "").trim();
+    if (ui.predictionsPreview) {
+      if (loading) {
+        setOutputLoading(ui.predictionsPreview, previewMessage || "Loading preview...");
+      } else {
+        ui.predictionsPreview.innerHTML = `<div class="small muted">${escapeHtml(previewMessage || "Preview will appear here.")}</div>`;
+      }
+    }
+    renderFoundryChartLauncher({
+      available: false,
+      title: chartTitle,
+      detail: chartDetail,
+    });
+    if (clearAnalysis && ui.predictionsAgentOutput) {
+      ui.predictionsAgentOutput.innerHTML = `<div class="small muted">Prediction analysis will appear here after parsing completes.</div>`;
+    }
+  };
+
+  const beginFoundryPreparation = ({ sourceKind = "history", fileName = "" } = {}) => {
+    const renderVersion = bumpFoundryRenderVersion();
+    const kind = String(sourceKind || "history").trim();
+    const cleanFileName = String(fileName || "").trim();
+    const sourceLabel =
+      kind === "prediction_csv" ? "prediction CSV" : kind === "historical_csv" ? "historical CSV" : "historical dataset";
+    state.foundryContext.activeRunId = "";
+    state.foundryContext.activeRun = null;
+    renderFoundryRuns(state.foundryContext.runs || []);
+    resetFoundryPreviewState({
+      loading: true,
+      previewMessage: cleanFileName ? `Preparing ${cleanFileName}...` : `Preparing ${sourceLabel}...`,
+      plotMessage: cleanFileName ? `${cleanFileName} · preparing source...` : `Preparing ${sourceLabel}...`,
+      chartTitle: cleanFileName || "Forecast Foundry chart",
+      chartDetail: "The latest upload is being parsed and stale preview state has been cleared.",
+      clearAnalysis: kind === "prediction_csv",
+    });
+    if (ui.foundryRunMeta) {
+      ui.foundryRunMeta.innerHTML = `
+        <div class="small muted">Preparing Forecast Foundry source</div>
+        <h3 style="margin-top:6px;">${escapeHtml(cleanFileName || "Latest source")}</h3>
+        <div class="small" style="margin-top:8px;">Parsing the latest ${escapeHtml(sourceLabel)} and replacing any stale preview state before rendering.</div>
+      `;
+    }
+    if (ui.foundryPublishHost) {
+      ui.foundryPublishHost.innerHTML = `<div class="small muted">Publish controls will appear after the latest source finishes preparing.</div>`;
+    }
+    logFoundryDebug("prepare:start", { sourceKind: kind, fileName: cleanFileName, renderVersion });
+    return renderVersion;
+  };
+
   const syncFoundryDateDefaults = ({ force = false } = {}) => {
     const useAllHistory = Boolean(ui.foundryUseAllHistory?.checked);
     const today = new Date();
@@ -18285,6 +18323,7 @@
     const historyMode = sourceKind === "history";
     const fileMode = sourceKind === "historical_csv" || sourceKind === "prediction_csv";
     const predictionMode = sourceKind === "prediction_csv";
+    ui.foundryModelMetricsBlock?.classList.toggle("hidden", !predictionMode);
     ui.foundryHistoryFields?.classList.toggle("hidden", !historyMode);
     ui.foundryFileField?.classList.toggle("hidden", !fileMode);
     ui.foundryUploadActions?.classList.toggle("hidden", !predictionMode);
@@ -18292,6 +18331,57 @@
     ui.foundryPrimaryActions?.classList.toggle("hidden", predictionMode);
     if (historyMode) syncFoundryDateDefaults();
     updateFoundryInstanceLimitUi();
+  };
+
+  const normalizeFoundryModelMetricNumber = (value) => {
+    const trimmed = String(value ?? "").trim();
+    if (!trimmed) return null;
+    const numeric = Number(trimmed);
+    return Number.isFinite(numeric) ? Number(numeric.toFixed(6)) : null;
+  };
+
+  const collectFoundryModelMetrics = () => {
+    if (String(ui.foundrySourceKind?.value || "").trim() !== "prediction_csv") return {};
+    const metrics = {};
+    const status = String(ui.foundryModelStatus?.value || "").trim();
+    if (status) metrics.status = status;
+    const numericFields = [
+      ["avgWql", ui.foundryAvgWql?.value],
+      ["mape", ui.foundryMape?.value],
+      ["wape", ui.foundryWape?.value],
+      ["rmse", ui.foundryRmse?.value],
+      ["mase", ui.foundryMase?.value],
+    ];
+    numericFields.forEach(([key, rawValue]) => {
+      const numeric = normalizeFoundryModelMetricNumber(rawValue);
+      if (numeric !== null) metrics[key] = numeric;
+    });
+    return metrics;
+  };
+
+  const formatFoundryModelMetricValue = (value) => {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value.toFixed(6).replace(/\.?0+$/, "");
+    }
+    return String(value ?? "").trim() || "—";
+  };
+
+  const renderFoundryModelMetricsTable = (modelMetrics = {}) => {
+    const entries = Object.entries(modelMetrics || {}).filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== "");
+    if (!entries.length) return "";
+    return `
+      <div class="small" style="margin-top:8px;"><strong>Saved model metrics</strong></div>
+      <div class="table-wrap" style="margin-top:8px;">
+        <table class="data-table">
+          <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+          <tbody>
+            ${entries
+              .map(([label, value]) => `<tr><td>${escapeHtml(label)}</td><td>${escapeHtml(formatFoundryModelMetricValue(value))}</td></tr>`)
+              .join("")}
+          </tbody>
+        </table>
+      </div>
+    `;
   };
 
   const getFoundryRequestId = (run) => String(run?.exploreRequestId || "").trim();
@@ -18455,73 +18545,145 @@
     `;
   };
 
-  const loadFoundryCsvIntoPreview = async (run) => {
+  const readPrivateTextArtifact = async (file, { fallbackMessage = "Unable to fetch the stored file." } = {}) => {
+    const targetDownloadUrl = String(file?.downloadUrl || "").trim();
+    const targetApiTextPath = String(file?.apiTextPath || "").trim();
+    const targetUrl = targetDownloadUrl || targetApiTextPath;
+    if (!targetUrl) throw new Error(fallbackMessage);
+    const response = await fetch(targetUrl, {
+      method: "GET",
+      headers: targetDownloadUrl ? undefined : await buildApiAuthHeaders({ includeJson: false }),
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    if (!response.ok) throw new Error(fallbackMessage);
+    return response.text();
+  };
+
+  const loadFoundryCsvIntoPreview = async (run, { renderVersion = 0 } = {}) => {
+    const runId = String(run?.id || "").trim();
     const files = run?.files && typeof run.files === "object" ? run.files : {};
     const dataset = run?.dataset && typeof run.dataset === "object" ? run.dataset : {};
     const orderedFiles = [
+      files.businessDaysCsv,
       files.predictionsCsv,
       files.uploadedCsv,
       files.datasetCsv,
-      files.analysisJson,
     ].filter((entry) => entry && typeof entry === "object");
-    const targetFile = orderedFiles.find((entry) => String(entry?.downloadUrl || "").trim());
+    const targetFile = orderedFiles.find(
+      (entry) => String(entry?.downloadUrl || "").trim() || String(entry?.apiTextPath || "").trim()
+    );
 
     if (!targetFile) {
+      if (!isFoundryRenderCurrent(renderVersion, runId)) return false;
       if (ui.predictionsPlotMeta) {
-        ui.predictionsPlotMeta.textContent = "Signed download URL is unavailable for this run. Showing stored preview rows only.";
+        ui.predictionsPlotMeta.textContent = "A CSV artifact is unavailable for this run. Showing stored preview rows only.";
       }
       renderFoundryPreviewTableFromObjects(Array.isArray(dataset?.previewRows) ? dataset.previewRows : []);
-      if (ui.predictionsChart) {
-        ui.predictionsChart.innerHTML = `<div class="small muted">Chart rendering needs a downloadable CSV artifact.</div>`;
-      }
-      return;
+      state.predictionsContext.chartTitle = String(run?.title || "Forecast Foundry CSV");
+      renderFoundryChartLauncher({
+        available: false,
+        title: state.predictionsContext.chartTitle,
+        detail: "Chart rendering needs a downloadable CSV artifact.",
+      });
+      return false;
     }
 
+    if (!isFoundryRenderCurrent(renderVersion, runId)) return false;
     if (ui.predictionsPlotMeta) {
       ui.predictionsPlotMeta.textContent = `${String(targetFile.fileName || "dataset.csv").trim()} · loading CSV preview...`;
     }
     setOutputLoading(ui.predictionsPreview, "Loading CSV preview...");
-    setOutputLoading(ui.predictionsChart, "Loading chart...");
-    const response = await fetch(String(targetFile.downloadUrl), { cache: "no-store" });
-    if (!response.ok) throw new Error("Unable to fetch the stored CSV artifact.");
-    const csvText = await response.text();
+    renderFoundryChartLauncher({ available: false, title: String(run?.title || "Forecast Foundry CSV"), detail: "Loading interactive chart data..." });
+    const csvText = await readPrivateTextArtifact(targetFile, {
+      fallbackMessage: "Unable to fetch the stored CSV artifact.",
+    });
+    if (!isFoundryRenderCurrent(renderVersion, runId)) return false;
     const table = parseCsvTable(csvText, { maxRows: 20000 });
+    if (!isFoundryRenderCurrent(renderVersion, runId)) return false;
     state.predictionsContext.table = table;
+    state.predictionsContext.chartTitle = String(run?.title || "Forecast Foundry CSV");
     state.predictionsContext.previewPage = 0;
     state.predictionsContext.previewPageSize = 25;
     renderCsvPreview(table);
     setOutputReady(ui.predictionsPreview);
-    await renderPredictionsChart(table, { title: String(run?.title || "Forecast Foundry CSV") });
-    setOutputReady(ui.predictionsChart);
+    renderFoundryChartLauncher({
+      available: true,
+      title: state.predictionsContext.chartTitle,
+      detail: `${table.rows.length.toLocaleString()} rows are ready. Open the chart modal to zoom, pan, and compare quantiles interactively.`,
+    });
     if (ui.predictionsPlotMeta) {
       ui.predictionsPlotMeta.textContent = `${String(targetFile.fileName || "dataset.csv").trim()} · ${table.rows.length.toLocaleString()} rows · ${table.headers.length} columns`;
     }
+    logFoundryDebug("preview:loaded", {
+      runId,
+      renderVersion,
+      fileName: String(targetFile.fileName || "dataset.csv").trim(),
+      rows: table.rows.length,
+      columns: table.headers.length,
+    });
+    return true;
   };
 
-  const renderFoundryRunDetail = async (run, { request = null, shareUrl = "" } = {}) => {
+  const renderFoundryRunDetail = async (run, { request = null, shareUrl = "", readOnly = false, renderVersion = 0 } = {}) => {
+    const activeRenderVersion = renderVersion || bumpFoundryRenderVersion();
     state.foundryContext.activeRunId = String(run?.id || "").trim();
     state.foundryContext.activeRun = run && typeof run === "object" ? run : null;
     renderFoundryRuns(state.foundryContext.runs || []);
     removePredictionOptionsSupplement();
     if (!ui.foundryRunMeta) return;
     if (!run || typeof run !== "object") {
+      if (!isFoundryRenderCurrent(activeRenderVersion)) return;
+      if (ui.foundryBusinessDaysButton) ui.foundryBusinessDaysButton.classList.add("hidden");
       ui.foundryRunMeta.innerHTML = `<div class="small muted">Select a foundry run to inspect it.</div>`;
       if (ui.foundryPublishHost) ui.foundryPublishHost.innerHTML = `<div class="small muted">Private Explore sync and publish controls appear here after a source is prepared.</div>`;
+      resetFoundryPreviewState({
+        loading: false,
+        previewMessage: "Preview will appear here.",
+        plotMessage: "Select a Foundry run to preview its CSV artifact.",
+        chartTitle: "Forecast Foundry chart",
+        chartDetail: "Open a Foundry run to inspect its saved prediction path in the modal chart workspace.",
+      });
       return;
     }
     const dataset = run.dataset && typeof run.dataset === "object" ? run.dataset : {};
     const autopilot = run.autopilot && typeof run.autopilot === "object" ? run.autopilot : {};
     const analysis = run.analysis && typeof run.analysis === "object" ? run.analysis : {};
+    const modelMetrics = run.modelMetrics && typeof run.modelMetrics === "object" ? run.modelMetrics : {};
     const files = run.files && typeof run.files === "object" ? run.files : {};
+    const sharedMeta = run.__sharedMeta && typeof run.__sharedMeta === "object" ? run.__sharedMeta : {};
+    const sharedReadOnly = Boolean(readOnly || sharedMeta.readOnly);
+    state.predictionsContext.uploadId = "";
+    state.predictionsContext.uploadDoc = null;
+    state.predictionsContext.table = null;
+    state.predictionsContext.chartTitle = String(run?.title || "Forecast Foundry chart");
     const requestId = getFoundryRequestId(run);
     const requestRecord = request && typeof request === "object" ? request : requestId ? getMyRequestById(requestId) : null;
     const effectiveShareUrl = String(shareUrl || requestRecord?.share?.shareUrl || "").trim();
+    const hasPredictionSource =
+      String(run?.sourceType || "").trim() === "prediction_csv" ||
+      (files?.predictionsCsv && typeof files.predictionsCsv === "object") ||
+      (files?.uploadedCsv && typeof files.uploadedCsv === "object");
+    if (ui.foundryBusinessDaysButton) {
+      ui.foundryBusinessDaysButton.classList.toggle("hidden", !hasPredictionSource);
+      const hasBusinessDaysFile = files?.businessDaysCsv && typeof files.businessDaysCsv === "object";
+      ui.foundryBusinessDaysButton.disabled = !hasPredictionSource || (sharedReadOnly && !hasBusinessDaysFile);
+      ui.foundryBusinessDaysButton.title = hasPredictionSource
+        ? "Download the cleaned business-day prediction CSV for this run."
+        : "";
+    }
     const horizonSummary = formatFoundryHorizonSummary({
       forecastHorizon: autopilot?.forecastHorizon,
       forecastFrequency: autopilot?.forecastFrequency,
       interval: dataset?.interval,
     });
-    if (ui.foundryShareButton) ui.foundryShareButton.disabled = !requestId;
+    if (ui.foundryShareButton) ui.foundryShareButton.disabled = sharedReadOnly || !requestId;
+    if (ui.foundryRefreshButton) ui.foundryRefreshButton.disabled = sharedReadOnly;
+    renderFoundryChartLauncher({
+      available: false,
+      title: state.predictionsContext.chartTitle,
+      detail: sharedReadOnly ? "Loading the shared CSV preview and interactive chart workspace..." : "Loading the interactive chart workspace...",
+    });
     ui.foundryRunMeta.innerHTML = `
       <div class="small muted">Forecast Foundry run</div>
       <h3 style="margin-top:6px;">${escapeHtml(String(run.title || "Forecast Foundry run"))}</h3>
@@ -18565,6 +18727,7 @@
           ? `<div class="small" style="margin-top:8px;"><strong>Notes:</strong> ${escapeHtml(String(run.notes || ""))}</div>`
           : ""
       }
+      ${renderFoundryModelMetricsTable(modelMetrics)}
       ${
         Object.keys(files).length
           ? `<div class="small" style="margin-top:8px;"><strong>Files:</strong> ${Object.values(files)
@@ -18575,15 +18738,28 @@
       }
     `;
     if (ui.foundryPublishHost) {
-      const publishMarkup = renderOutputPublishControlsMarkup({ requestId, requestType: "forecast" });
-      ui.foundryPublishHost.innerHTML = `
-        ${publishMarkup}
-        ${
-          effectiveShareUrl
-            ? `<div class="small muted" style="margin-top:10px;">Share link: <a href="${escapeHtml(effectiveShareUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(effectiveShareUrl)}</a></div>`
-            : `<div class="small muted" style="margin-top:10px;">Create an unlisted share link from the Share button when you want a public URL.</div>`
-        }
-      `;
+      if (sharedReadOnly) {
+        ui.foundryPublishHost.innerHTML = `
+          <div class="small muted">
+            Shared Forecast Foundry request. The saved CSV preview, interactive chart modal, and analysis are available here in read-only mode.
+            ${
+              effectiveShareUrl
+                ? ` <a href="${escapeHtml(effectiveShareUrl)}" target="_blank" rel="noopener noreferrer">Open share link</a>.`
+                : ""
+            }
+          </div>
+        `;
+      } else {
+        const publishMarkup = renderOutputPublishControlsMarkup({ requestId, requestType: "forecast" });
+        ui.foundryPublishHost.innerHTML = `
+          ${publishMarkup}
+          ${
+            effectiveShareUrl
+              ? `<div class="small muted" style="margin-top:10px;">Share link: <a href="${escapeHtml(effectiveShareUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(effectiveShareUrl)}</a></div>`
+              : `<div class="small muted" style="margin-top:10px;">Create an unlisted share link from the Share button when you want a public URL.</div>`
+          }
+        `;
+      }
     }
     if (ui.predictionsAgentOutput) {
       if (String(analysis?.markdown || "").trim()) {
@@ -18597,7 +18773,8 @@
       }
     }
     try {
-      await loadFoundryCsvIntoPreview(run);
+      await loadFoundryCsvIntoPreview(run, { renderVersion: activeRenderVersion });
+      if (!isFoundryRenderCurrent(activeRenderVersion, run?.id)) return;
       try {
         const envelope = computePredictionOptionsEnvelope(state.predictionsContext.table);
         await appendPredictionOptionsSupplement(state.clients?.functions, {
@@ -18605,7 +18782,9 @@
           envelope,
           sourceLabel: "Options near the Foundry prediction end date",
         });
+        if (!isFoundryRenderCurrent(activeRenderVersion, run?.id)) return;
       } catch (optionsError) {
+        if (!isFoundryRenderCurrent(activeRenderVersion, run?.id)) return;
         removePredictionOptionsSupplement();
         if (ui.predictionsAgentOutput) {
           ui.predictionsAgentOutput.innerHTML += `
@@ -18616,14 +18795,17 @@
         }
       }
     } catch (error) {
+      if (!isFoundryRenderCurrent(activeRenderVersion, run?.id)) return;
       removePredictionOptionsSupplement();
       if (ui.predictionsPlotMeta) ui.predictionsPlotMeta.textContent = error?.message || "Unable to load CSV preview.";
       if (ui.predictionsPreview) {
         ui.predictionsPreview.innerHTML = `<div class="small muted">${escapeHtml(error?.message || "Unable to load CSV preview.")}</div>`;
       }
-      if (ui.predictionsChart) {
-        ui.predictionsChart.innerHTML = `<div class="small muted">Unable to render chart preview.</div>`;
-      }
+      renderFoundryChartLauncher({
+        available: false,
+        title: String(run?.title || "Forecast Foundry chart"),
+        detail: error?.message || "Unable to load chart data for this request.",
+      });
     }
   };
 
@@ -18687,21 +18869,6 @@
     return items;
   };
 
-  const uploadFoundryFileToStorage = async (file) => {
-    const storage = state.clients?.storage;
-    const user = state.user;
-    if (!storage || !user) throw new Error("File uploads are not available.");
-    const safeName = String(file?.name || "upload.csv").replace(/[^A-Za-z0-9._-]/g, "_");
-    const path = `predictions/${user.uid}/foundry/${Date.now()}_${safeName}`;
-    await storage.ref().child(path).put(file, {
-      contentType: file?.type || "text/csv",
-    });
-    return {
-      path,
-      name: safeName,
-    };
-  };
-
   const prepareFoundrySource = async ({ notify = true } = {}) => {
     if (!hasFullAccount()) {
       throw new Error("Sign in with a full account to use Forecast Foundry.");
@@ -18709,57 +18876,94 @@
     const sourceKind = String(ui.foundrySourceKind?.value || "history").trim();
     const ticker = normalizeTicker(ui.foundryTicker?.value || "");
     const interval = "1d";
-    const title = String(ui.foundryTitle?.value || "").trim();
     const notes = String(ui.foundryNotes?.value || "").trim();
+    const modelMetrics = collectFoundryModelMetrics();
     const workspaceId = String(state.activeWorkspaceId || state.user?.uid || "").trim();
-
-    setFoundryStatus("Preparing Forecast Foundry source...");
+    const selectedFile = sourceKind === "history" ? null : ui.foundryFile?.files?.[0] || null;
+    const selectedFileName = String(selectedFile?.name || "").trim();
+    if (sourceKind !== "history" && !selectedFile) {
+      throw new Error("Select a CSV file first.");
+    }
     let payload = null;
-    if (sourceKind === "history") {
-      const start = String(ui.foundryStart?.value || "").trim();
-      const end = String(ui.foundryEnd?.value || "").trim();
-      const useAllHistory = Boolean(ui.foundryUseAllHistory?.checked);
-      if (!ticker || !end || (!useAllHistory && !start)) {
-        throw new Error(
-          useAllHistory
-            ? "Ticker and end date are required when using all available history."
-            : "Ticker, start date, and end date are required for historical downloader imports."
-        );
+    const start = String(ui.foundryStart?.value || "").trim();
+    const end = String(ui.foundryEnd?.value || "").trim();
+    const useAllHistory = Boolean(ui.foundryUseAllHistory?.checked);
+    if (sourceKind === "history" && (!ticker || !end || (!useAllHistory && !start))) {
+      throw new Error(
+        useAllHistory
+          ? "Ticker and end date are required when using all available history."
+          : "Ticker, start date, and end date are required for historical downloader imports."
+      );
+    }
+
+    const renderVersion = beginFoundryPreparation({
+      sourceKind,
+      fileName: selectedFileName || (ticker ? `${ticker} ${sourceKind === "history" ? "history" : "upload"}` : ""),
+    });
+    setFoundryStatus("Preparing Forecast Foundry source...");
+
+    try {
+      if (sourceKind === "history") {
+        payload = await callFoundryApi("POST", "/api/autopilot/datasets/history", {
+          ticker,
+          interval,
+          start,
+          end,
+          useAllHistory,
+          notes,
+          modelMetrics,
+          workspaceId,
+          persist: true,
+        });
+      } else {
+        const csvText = await selectedFile.text();
+        payload = await callFoundryApi("POST", "/api/autopilot/datasets/upload", {
+          csvText,
+          fileName: String(selectedFile?.name || "upload.csv")
+            .replace(/[^A-Za-z0-9._-]/g, "_")
+            .trim(),
+          ticker,
+          interval,
+          notes,
+          modelMetrics,
+          workspaceId,
+        });
+        if (ui.foundryFile) ui.foundryFile.value = "";
       }
-      payload = await callFoundryApi("POST", "/api/autopilot/datasets/history", {
-        ticker,
-        interval,
-        start,
-        end,
-        useAllHistory,
-        title,
-        notes,
-        workspaceId,
-        persist: true,
+    } catch (error) {
+      if (isFoundryRenderCurrent(renderVersion)) {
+        resetFoundryPreviewState({
+          loading: false,
+          previewMessage: error?.message || "Unable to prepare the selected source.",
+          plotMessage: error?.message || "Unable to prepare the selected source.",
+          chartTitle: selectedFileName || "Forecast Foundry chart",
+          chartDetail: error?.message || "Unable to prepare the latest upload.",
+          clearAnalysis: sourceKind === "prediction_csv",
+        });
+      }
+      logFoundryDebug("prepare:error", {
+        sourceKind,
+        fileName: selectedFileName,
+        renderVersion,
+        message: error?.message || "Unknown error",
       });
-    } else {
-      const file = ui.foundryFile?.files?.[0];
-      if (!file) throw new Error("Select a CSV file first.");
-      const uploaded = await uploadFoundryFileToStorage(file);
-      payload = await callFoundryApi("POST", "/api/autopilot/datasets/upload", {
-        filePath: uploaded.path,
-        fileName: uploaded.name,
-        ticker,
-        interval,
-        title,
-        notes,
-        workspaceId,
-      });
-      if (ui.foundryFile) ui.foundryFile.value = "";
+      throw error;
     }
 
     const run = payload?.run && typeof payload.run === "object" ? payload.run : null;
     if (!run) throw new Error("Forecast Foundry did not return a saved run.");
     state.foundryContext.pendingPreparedRunId = String(run.id || "").trim();
     updateFoundryRunInState(run);
-    await renderFoundryRunDetail(run);
+    await renderFoundryRunDetail(run, { renderVersion });
     renderFoundryRuns(state.foundryContext.runs || []);
     setFoundryStatus(String(run.status || "Source prepared."));
+    logFoundryDebug("prepare:complete", {
+      runId: String(run.id || "").trim(),
+      sourceKind,
+      fileName: selectedFileName,
+      status: String(run.status || "").trim(),
+      renderVersion,
+    });
     if (notify) {
       showToast(sourceKind === "prediction_csv" ? "Prediction CSV prepared." : "Forecast Foundry source prepared.");
     }
@@ -18847,6 +19051,38 @@
     return nextRun;
   };
 
+  const downloadFoundryBusinessDayCsv = async () => {
+    let run = state.foundryContext.activeRun;
+    if (!run || typeof run !== "object") throw new Error("Select a Forecast Foundry run first.");
+    const sharedMeta = run.__sharedMeta && typeof run.__sharedMeta === "object" ? run.__sharedMeta : {};
+    const sharedReadOnly = Boolean(sharedMeta.readOnly);
+    let businessDaysFile = run?.files?.businessDaysCsv;
+    if (!businessDaysFile || (typeof businessDaysFile === "object" && !String(businessDaysFile.downloadUrl || businessDaysFile.apiTextPath || "").trim())) {
+      if (sharedReadOnly) {
+        throw new Error("This shared request does not include a downloadable business-day CSV.");
+      }
+      if (!hasFullAccount()) throw new Error("Sign in with a full account to download Forecast Foundry files.");
+      if (!canAnalyzeFoundryRun(run)) {
+        throw new Error("A cleaned business-day CSV is not available for this run yet.");
+      }
+      run = await analyzeFoundryRun({ runId: String(run.id || "").trim(), notify: false });
+      businessDaysFile = run?.files?.businessDaysCsv;
+    }
+    if (!businessDaysFile || typeof businessDaysFile !== "object") {
+      throw new Error("A cleaned business-day CSV is not available for this run yet.");
+    }
+    const filename = String(businessDaysFile.fileName || `${String(run?.dataset?.ticker || "prediction").trim() || "prediction"}_business_days.csv`).trim();
+    const directUrl = String(businessDaysFile.downloadUrl || "").trim();
+    if (directUrl) {
+      await triggerDownloadFromUrl(directUrl, filename);
+      return;
+    }
+    const csvText = await readPrivateTextArtifact(businessDaysFile, {
+      fallbackMessage: "Unable to fetch the cleaned business-day CSV.",
+    });
+    triggerDownload(filename, csvText, { mimeType: "text/csv;charset=utf-8;" });
+  };
+
   const shareFoundryRun = async () => {
     if (!hasFullAccount()) throw new Error("Sign in with a full account to share Forecast Foundry runs.");
     const run = state.foundryContext.activeRun;
@@ -18870,13 +19106,13 @@
     showToast("Share link copied.");
   };
 
-  const renderSharedFoundryRequest = async (request, shareUrl = "") => {
+  const renderSharedFoundryRequest = async (request, shareUrl = "", sharedRun = null) => {
     if (!ui.foundryRunMeta) return;
     const outputsMeta = request?.outputsMeta && typeof request.outputsMeta === "object" ? request.outputsMeta : {};
     const input = request?.input && typeof request.input === "object" ? request.input : {};
     const summary = String(outputsMeta.summary || "Shared Forecast Foundry request loaded.").trim();
     const markdown = String(outputsMeta.analysisMarkdown || "").trim();
-    const pseudoRun = {
+    const fallbackRun = {
       id: String(request?.sourceRef?.id || request?.id || "").trim(),
       title: String(request?.title || "Forecast Foundry shared result").trim(),
       status: String(outputsMeta.analysisStatus || "shared").trim(),
@@ -18894,14 +19130,18 @@
       exploreRequestId: String(request?.id || "").trim(),
       files: {},
     };
-    await renderFoundryRunDetail(pseudoRun, { request, shareUrl });
-    if (ui.predictionsPreview) {
-      ui.predictionsPreview.innerHTML = `<div class="small muted">CSV artifacts are private to the owner workspace. Shared view includes the saved analysis summary only.</div>`;
+    const run = sharedRun && typeof sharedRun === "object" ? {
+      ...sharedRun,
+      __sharedMeta: {
+        ...(sharedRun.__sharedMeta && typeof sharedRun.__sharedMeta === "object" ? sharedRun.__sharedMeta : {}),
+        readOnly: true,
+      },
+    } : fallbackRun;
+    await renderFoundryRunDetail(run, { request, shareUrl, readOnly: true });
+    if (!sharedRun && ui.predictionsPreview) {
+      ui.predictionsPreview.innerHTML = `<div class="small muted">This shared Forecast Foundry request does not include a saved CSV artifact. The saved analysis summary is still available.</div>`;
     }
-    if (ui.predictionsChart) {
-      ui.predictionsChart.innerHTML = `<div class="small muted">Chart preview is unavailable in shared read-only mode.</div>`;
-    }
-    if (ui.predictionsPlotMeta) {
+    if (!sharedRun && ui.predictionsPlotMeta) {
       ui.predictionsPlotMeta.textContent = "Shared Forecast Foundry request";
     }
   };
@@ -18914,6 +19154,7 @@
     state.foundryContext.activeRun = null;
     renderFoundryRuns(state.foundryContext.runs || []);
     if (ui.foundryShareButton) ui.foundryShareButton.disabled = true;
+    if (ui.foundryBusinessDaysButton) ui.foundryBusinessDaysButton.classList.add("hidden");
     if (ui.foundryRunMeta) {
       ui.foundryRunMeta.innerHTML = `
         <div class="small muted">Legacy upload compatibility view</div>
@@ -18988,6 +19229,22 @@
     return clean.toUpperCase();
   };
 
+  const getSportsFoundryWorkflow = () => {
+    const selected = Array.isArray(ui.sportsFoundryWorkflowInputs)
+      ? ui.sportsFoundryWorkflowInputs.find((input) => input?.checked)
+      : null;
+    const workflow = String(selected?.value || state.sportsFoundryContext.workflow || "player_forecast").trim();
+    return workflow === "team_total_export" ? "team_total_export" : "player_forecast";
+  };
+
+  const syncSportsFoundryTeamTotalDateDefault = ({ force = false } = {}) => {
+    if (!ui.sportsFoundryTeamTotalDate) return;
+    const today = new Date().toISOString().slice(0, 10);
+    if (force || !String(ui.sportsFoundryTeamTotalDate.value || "").trim()) {
+      ui.sportsFoundryTeamTotalDate.value = today;
+    }
+  };
+
   const formatSportsFoundryDaysUntil = (targetDate) => {
     const clean = String(targetDate || "").trim();
     const targetMs = Date.parse(clean);
@@ -19001,6 +19258,34 @@
     if (diffDays > 1) return `${diffDays} days away`;
     if (diffDays === -1) return "1 day ago";
     return `${Math.abs(diffDays)} days ago`;
+  };
+
+  const renderSportsFoundryTeamTotalsPreview = (payload = null) => {
+    const snapshot = payload?.teamTotals && typeof payload.teamTotals === "object" ? payload.teamTotals : {};
+    const rows = Array.isArray(snapshot?.rows) ? snapshot.rows : [];
+    const filters = payload?.filters && typeof payload.filters === "object" ? payload.filters : {};
+    const team = payload?.team && typeof payload.team === "object" ? payload.team : {};
+    const league = payload?.league && typeof payload.league === "object" ? payload.league : {};
+    const gameDate = String(filters?.gameDate || ui.sportsFoundryTeamTotalDate?.value || "").trim();
+    const homeAway = String(filters?.homeAway || ui.sportsFoundryTeamTotalHomeAway?.value || "any").trim().toLowerCase();
+    const venueLabel = homeAway === "home" ? "home only" : homeAway === "away" ? "away only" : "home or away";
+    if (ui.sportsFoundryHistoryMeta) {
+      if (!String(team?.id || "").trim()) {
+        ui.sportsFoundryHistoryMeta.textContent = "Choose a team, date, and venue filter to load team total rows.";
+      } else if (rows.length) {
+        ui.sportsFoundryHistoryMeta.textContent = `${String(league?.label || getSportsFoundryLeagueLabel(ui.sportsFoundryLeague?.value)).trim()} ${String(team?.abbreviation || team?.displayName || "team").trim()} · ${rows.length} completed game total${rows.length === 1 ? "" : "s"} for ${gameDate} (${venueLabel}).`;
+      } else {
+        ui.sportsFoundryHistoryMeta.textContent = `${String(league?.label || getSportsFoundryLeagueLabel(ui.sportsFoundryLeague?.value)).trim()} ${String(team?.abbreviation || team?.displayName || "team").trim()} · no completed game totals found for ${gameDate} (${venueLabel}).`;
+      }
+    }
+    if (!ui.sportsFoundryHistoryPreview) return;
+    if (!rows.length) {
+      ui.sportsFoundryHistoryPreview.innerHTML = !String(team?.id || "").trim()
+        ? `<div class="small muted">Choose a team, date, and venue filter to preview team totals.</div>`
+        : `<div class="small muted">No completed team-total rows matched the selected date and venue filter.</div>`;
+      return;
+    }
+    renderFoundryPreviewTableFromObjects(rows, ui.sportsFoundryHistoryPreview);
   };
 
   const syncSportsFoundryGameGap = () => {
@@ -19017,12 +19302,15 @@
   };
 
   const syncSportsFoundryButtons = () => {
-    const hasContext = Boolean(state.sportsFoundryContext.context);
+    const teamTotalMode = getSportsFoundryWorkflow() === "team_total_export";
+    const hasContext = teamTotalMode
+      ? Array.isArray(state.sportsFoundryContext.teamTotals?.teamTotals?.rows) && state.sportsFoundryContext.teamTotals.teamTotals.rows.length > 0
+      : Boolean(state.sportsFoundryContext.context);
     const hasFull = hasFullAccount();
     const hasStat = Boolean(String(ui.sportsFoundryStat?.value || "").trim());
     const hasGame = Boolean(String(ui.sportsFoundryGame?.value || "").trim());
     if (ui.sportsFoundryRunButton) {
-      ui.sportsFoundryRunButton.disabled = !hasFull || !hasContext || !hasStat || !hasGame;
+      ui.sportsFoundryRunButton.disabled = teamTotalMode || !hasFull || !hasContext || !hasStat || !hasGame;
     }
     if (ui.sportsFoundryDownloadHistory) {
       ui.sportsFoundryDownloadHistory.disabled = !hasContext;
@@ -19036,6 +19324,31 @@
     }
     if (ui.sportsFoundryRefreshButton) ui.sportsFoundryRefreshButton.disabled = !Boolean(state.sportsFoundryContext.activeRunId);
     if (ui.sportsFoundryShareButton) ui.sportsFoundryShareButton.disabled = !Boolean(getSportsFoundryRequestId(state.sportsFoundryContext.activeRun));
+  };
+
+  const syncSportsFoundryWorkflowUi = () => {
+    const workflow = getSportsFoundryWorkflow();
+    const teamTotalMode = workflow === "team_total_export";
+    state.sportsFoundryContext.workflow = workflow;
+    ui.sportsFoundryPlayerFields?.classList.toggle("hidden", teamTotalMode);
+    ui.sportsFoundryTeamTotalFields?.classList.toggle("hidden", !teamTotalMode);
+    ui.sportsFoundryDownloadJson?.classList.toggle("hidden", teamTotalMode);
+    ui.sportsFoundryRunButton?.classList.toggle("hidden", teamTotalMode);
+    if (ui.sportsFoundryDownloadHistoryLabel) {
+      ui.sportsFoundryDownloadHistoryLabel.textContent = teamTotalMode ? "Download team total CSV" : "Download historical CSV";
+    }
+    if (ui.sportsFoundryEmptyState) {
+      ui.sportsFoundryEmptyState.textContent = teamTotalMode
+        ? "Choose a team, date, and venue filter to load completed team-total rows for that day."
+        : "Choose a player to load league-aware stats, normalized historical game logs, and relevant future scheduled games.";
+    }
+    if (teamTotalMode) {
+      syncSportsFoundryTeamTotalDateDefault();
+      renderSportsFoundryTeamTotalsPreview(state.sportsFoundryContext.teamTotals);
+    } else {
+      renderSportsFoundryHistoryPreview(state.sportsFoundryContext.context);
+    }
+    syncSportsFoundryButtons();
   };
 
   const renderSportsFoundryHistoryPreview = (payload = null) => {
@@ -19360,6 +19673,26 @@
     };
   };
 
+  const buildSportsFoundryTeamTotalsCsv = () => {
+    const snapshot = state.sportsFoundryContext.teamTotals;
+    const teamTotals = snapshot?.teamTotals && typeof snapshot.teamTotals === "object" ? snapshot.teamTotals : {};
+    const rows = Array.isArray(teamTotals?.rows) ? teamTotals.rows : [];
+    const headers = Array.isArray(teamTotals?.headers) ? teamTotals.headers : Object.keys(rows[0] || {});
+    if (!headers.length) throw new Error("Team total export is not loaded yet.");
+    if (!rows.length) throw new Error("No completed team totals matched the selected date and venue filter.");
+    const league = String(snapshot?.league?.key || ui.sportsFoundryLeague?.value || "sports").trim().toLowerCase();
+    const team = String(snapshot?.team?.abbreviation || snapshot?.team?.displayName || "team")
+      .trim()
+      .replace(/[^A-Za-z0-9._-]+/g, "_");
+    const gameDate = String(snapshot?.filters?.gameDate || ui.sportsFoundryTeamTotalDate?.value || "date").trim();
+    const homeAway = String(snapshot?.filters?.homeAway || ui.sportsFoundryTeamTotalHomeAway?.value || "any").trim().toLowerCase();
+    return {
+      csv: String(teamTotals?.csvText || buildCsv(rows, headers)),
+      headers,
+      fileName: `${league}_${team}_team_total_${gameDate}_${homeAway}.csv`,
+    };
+  };
+
   const loadSportsFoundryTeams = async ({ preserveSelection = false } = {}) => {
     const league = String(ui.sportsFoundryLeague?.value || "nba").trim().toLowerCase();
     setSportsFoundryStatus(`Loading ${getSportsFoundryLeagueLabel(league)} teams...`);
@@ -19380,7 +19713,9 @@
     renderSportsFoundrySelect(ui.sportsFoundryGame, [], { placeholder: "Choose a player first" });
     state.sportsFoundryContext.players = [];
     state.sportsFoundryContext.context = null;
-    renderSportsFoundryHistoryPreview(null);
+    state.sportsFoundryContext.teamTotals = null;
+    if (getSportsFoundryWorkflow() === "team_total_export") renderSportsFoundryTeamTotalsPreview(null);
+    else renderSportsFoundryHistoryPreview(null);
     syncSportsFoundryGameGap();
     syncSportsFoundryButtons();
     setSportsFoundryStatus(`Loaded ${items.length} ${getSportsFoundryLeagueLabel(league)} teams.`);
@@ -19415,11 +19750,40 @@
     renderSportsFoundrySelect(ui.sportsFoundryStat, [], { placeholder: "Choose a player first", valueKey: "key" });
     renderSportsFoundrySelect(ui.sportsFoundryGame, [], { placeholder: "Choose a player first" });
     state.sportsFoundryContext.context = null;
-    renderSportsFoundryHistoryPreview(null);
+    state.sportsFoundryContext.teamTotals = null;
+    if (getSportsFoundryWorkflow() === "team_total_export") renderSportsFoundryTeamTotalsPreview(null);
+    else renderSportsFoundryHistoryPreview(null);
     syncSportsFoundryGameGap();
     syncSportsFoundryButtons();
     setSportsFoundryStatus(`Loaded ${items.length} player${items.length === 1 ? "" : "s"}.`);
     return items;
+  };
+
+  const loadSportsFoundryTeamTotals = async () => {
+    const league = String(ui.sportsFoundryLeague?.value || "nba").trim().toLowerCase();
+    const teamId = String(ui.sportsFoundryTeam?.value || "").trim();
+    const gameDate = String(ui.sportsFoundryTeamTotalDate?.value || "").trim();
+    const homeAway = String(ui.sportsFoundryTeamTotalHomeAway?.value || "any").trim().toLowerCase();
+    if (!teamId || !gameDate) {
+      state.sportsFoundryContext.teamTotals = null;
+      renderSportsFoundryTeamTotalsPreview(null);
+      syncSportsFoundryButtons();
+      return null;
+    }
+    setSportsFoundryStatus("Loading team total export...");
+    const payload = await callFoundryApi(
+      "GET",
+      `/api/autopilot/sports/team-totals?league=${encodeURIComponent(league)}&teamId=${encodeURIComponent(teamId)}&gameDate=${encodeURIComponent(gameDate)}&homeAway=${encodeURIComponent(homeAway)}`
+    );
+    state.sportsFoundryContext.teamTotals = payload;
+    renderSportsFoundryTeamTotalsPreview(payload);
+    syncSportsFoundryButtons();
+    setSportsFoundryStatus(
+      Number(payload?.teamTotals?.rowCount || 0) > 0
+        ? `Loaded ${Number(payload.teamTotals.rowCount).toLocaleString()} completed team total row${Number(payload.teamTotals.rowCount) === 1 ? "" : "s"}.`
+        : "No completed team totals matched that date and venue filter."
+    );
+    return payload;
   };
 
   const loadSportsFoundryContext = async () => {
@@ -19428,6 +19792,7 @@
     const playerId = String(ui.sportsFoundryPlayer?.value || "").trim();
     if (!teamId || !playerId) {
       state.sportsFoundryContext.context = null;
+      state.sportsFoundryContext.teamTotals = null;
       renderSportsFoundryHistoryPreview(null);
       syncSportsFoundryButtons();
       return null;
@@ -19436,6 +19801,7 @@
     state.sportsFoundryContext.lastTeamId = teamId;
     state.sportsFoundryContext.lastPlayerId = playerId;
     state.sportsFoundryContext.context = null;
+    state.sportsFoundryContext.teamTotals = null;
     renderSportsFoundrySelect(ui.sportsFoundryStat, [], { placeholder: "Loading stat options...", valueKey: "key" });
     renderSportsFoundrySelect(ui.sportsFoundryGame, [], { placeholder: "Loading future games..." });
     renderSportsFoundryHistoryPreview(null);
@@ -19504,7 +19870,7 @@
     await renderSportsFoundryRunDetail(run, { request: requestRecord });
     if (replaceUrl && typeof history !== "undefined") {
       try {
-        history.replaceState({}, "", `/dashboard?panel=sports-autopilot&runId=${encodeURIComponent(cleanId)}`);
+        history.replaceState({}, "", `/sports-forecasting?runId=${encodeURIComponent(cleanId)}`);
       } catch (_error) {
         // Ignore URL update failures.
       }
@@ -19538,6 +19904,9 @@
 
   const createSportsFoundryRun = async ({ notify = true } = {}) => {
     if (!hasFullAccount()) throw new Error("Sign in with a full account to use sports forecasting.");
+    if (getSportsFoundryWorkflow() === "team_total_export") {
+      throw new Error("Team total export mode only supports CSV downloads.");
+    }
     const league = String(ui.sportsFoundryLeague?.value || "").trim().toLowerCase();
     const teamId = String(ui.sportsFoundryTeam?.value || "").trim();
     const playerId = String(ui.sportsFoundryPlayer?.value || "").trim();
@@ -20672,8 +21041,6 @@
     const links = normalizeProfileSocialLinks(agent?.ownerSocialLinks || {});
     const chips = [
       ["website", "Site"],
-      ["x", "X"],
-      ["linkedin", "LinkedIn"],
       ["github", "GitHub"],
       ["youtube", "YouTube"],
       ["tiktok", "TikTok"],
@@ -22121,8 +22488,6 @@
           ownerEmail: "system@quantura.ai",
           ownerSocialLinks: {
             website: "https://quantura.studio/",
-            x: "",
-            linkedin: "",
             github: "",
             youtube: "",
             tiktok: "",
@@ -23362,6 +23727,7 @@
       if (!request) throw new Error("Shared request unavailable.");
       const type = normalizeMyRequestType(request.type) || "forecast";
       const shareMeta = payload?.share && typeof payload.share === "object" ? payload.share : {};
+      const autopilotRun = payload?.autopilotRun && typeof payload.autopilotRun === "object" ? payload.autopilotRun : null;
       const panelId = mapMyRequestTypeToPanel(type, request);
       if (setPanel && typeof window.__quanturaSetPanel === "function") {
         window.__quanturaSetPanel(panelId, { pushPath: false });
@@ -23369,7 +23735,7 @@
       if (isSportsAutopilotMyRequest(request)) {
         await renderSharedSportsFoundryRequest(request, String(shareMeta?.shareUrl || "").trim());
       } else if (isAutopilotMyRequest(request)) {
-        await renderSharedFoundryRequest(request, String(shareMeta?.shareUrl || "").trim());
+        await renderSharedFoundryRequest(request, String(shareMeta?.shareUrl || "").trim(), autopilotRun);
       } else if (type === "modelCouncil" && ui.tickerQueryOutput) {
         const outputsMeta = request.outputsMeta && typeof request.outputsMeta === "object" ? request.outputsMeta : {};
         const answer = String(outputsMeta.answer || outputsMeta.summary || "").trim();
@@ -24387,6 +24753,23 @@
 
       applyTheme(resolveThemePreference(), { persist: false });
 
+      try {
+        const currentPath = normalizePath(window.location.pathname || "/");
+        if (currentPath === "/dashboard") {
+          const params = new URLSearchParams(window.location.search || "");
+          const legacyPanel = normalizePanelName(params.get("panel"));
+          if (legacyPanel === "autopilot" || legacyPanel === "sports-autopilot") {
+            const targetPath = legacyPanel === "sports-autopilot" ? "/sports-forecasting" : "/autopilot";
+            params.delete("panel");
+            const nextQuery = params.toString();
+            window.location.replace(nextQuery ? `${targetPath}?${nextQuery}` : targetPath);
+            return;
+          }
+        }
+      } catch (_error) {
+        // Ignore legacy redirect errors and continue booting.
+      }
+
 			    const auth = firebase.auth();
 			    const db = firebase.firestore();
 			    const functions = firebase.functions();
@@ -24395,6 +24778,9 @@
           const nativeAuthBridge = installNativeAuthBridge(auth);
 
 	      state.clients = { auth, db, functions, storage, messaging };
+	      subscribeToPageVisibility(db).catch((error) => {
+        console.warn("[page-visibility] unable to subscribe, using defaults.", error);
+      });
 	      hydrateUnsplashGallery(functions);
 	      bindFeatureVoteForms(functions);
 
@@ -24724,17 +25110,42 @@
 		      syncTickerInputs(ticker, { source: "pick_ticker", emitAnalytics: true });
 		      logEvent("ticker_selected", { ticker, page_path: window.location.pathname });
 
-			      // If we're in the terminal, load the chart immediately. Otherwise, jump to the terminal.
-			      if (ui.terminalForm && ui.terminalTicker && ui.tickerChart) {
-              window.__quanturaSetPanel?.("ticker");
-			        ui.terminalTicker.value = ticker;
-			        ui.terminalForm.requestSubmit?.();
+			      // Forecast is now the canonical terminal destination for ticker-driven actions.
+			      if (ui.forecastForm && ui.forecastTicker && typeof window.__quanturaSetPanel === "function") {
+              window.__quanturaSetPanel("forecast");
+			        ui.forecastTicker.value = ticker;
+              ui.forecastTicker.focus?.();
 			      } else {
-		        window.location.href = buildTickerPanelUrl(ticker);
+			        window.location.href = buildForecastPanelUrl(ticker);
 		      }
 		    };
 
+        const openForecastForTicker = async (rawTicker) => {
+          const ticker = normalizeTicker(rawTicker);
+          if (!ticker) return;
+          syncTickerInputs(ticker, { source: "trending_forecast_pick", emitAnalytics: true });
+          logEvent("ticker_selected", {
+            ticker,
+            page_path: window.location.pathname,
+            destination: "forecast",
+          });
+
+          if (ui.forecastForm && ui.forecastTicker && typeof window.__quanturaSetPanel === "function") {
+            window.__quanturaSetPanel("forecast");
+            ui.forecastTicker.value = ticker;
+            ui.forecastTicker.focus?.();
+          } else {
+            window.location.href = buildForecastPanelUrl(ticker);
+          }
+        };
+
 		    document.addEventListener("click", async (event) => {
+          const forecastTickerButton = event.target.closest('[data-action="open-forecast-ticker"]');
+          if (forecastTickerButton) {
+            event.preventDefault();
+            await openForecastForTicker(forecastTickerButton.dataset.ticker || forecastTickerButton.textContent);
+            return;
+          }
           const historySelect = event.target.closest('[data-action="ticker-history-select"]');
           if (historySelect) {
             event.preventDefault();
@@ -24754,61 +25165,6 @@
 		      event.preventDefault();
 		      await pickTicker(button.dataset.ticker || button.textContent);
 		    });
-
-        document.addEventListener("click", async (event) => {
-          const retryBtn = event.target.closest('[data-action="x-trends-retry"]');
-          if (retryBtn) {
-            event.preventDefault();
-            const ticker = normalizeTicker(retryBtn.dataset.ticker || state.tickerContext.xTicker || state.tickerContext.ticker || "");
-            if (!ticker) return;
-            const query = normalizeXSocialQuery(retryBtn.dataset.query || state.tickerContext.xQuery || "");
-            await loadTickerXTrends(functions, ticker, {
-              force: true,
-              notify: true,
-              page: 1,
-              append: false,
-              queryOverride: query,
-            });
-            return;
-          }
-
-          const variantBtn = event.target.closest('[data-action="x-trends-variant"]');
-          if (variantBtn) {
-            event.preventDefault();
-            const ticker = normalizeTicker(variantBtn.dataset.ticker || state.tickerContext.xTicker || state.tickerContext.ticker || "");
-            if (!ticker) return;
-            const query = normalizeXSocialQuery(variantBtn.dataset.query || "");
-            await loadTickerXTrends(functions, ticker, {
-              force: true,
-              notify: true,
-              page: 1,
-              append: false,
-              queryOverride: query,
-            });
-            return;
-          }
-
-          const loadMoreBtn = event.target.closest('[data-action="x-trends-more"]');
-          if (loadMoreBtn) {
-            event.preventDefault();
-            const ticker = normalizeTicker(loadMoreBtn.dataset.ticker || state.tickerContext.xTicker || state.tickerContext.ticker || "");
-            if (!ticker) return;
-            const query = normalizeXSocialQuery(loadMoreBtn.dataset.query || state.tickerContext.xQuery || "");
-            const nextPage = Math.max(2, Number(loadMoreBtn.dataset.nextPage || state.tickerContext.xPage + 1 || 2));
-            loadMoreBtn.disabled = true;
-            try {
-              await loadTickerXTrends(functions, ticker, {
-                force: true,
-                notify: false,
-                page: nextPage,
-                append: true,
-                queryOverride: query,
-              });
-            } finally {
-              loadMoreBtn.disabled = false;
-            }
-          }
-        });
 
         document.addEventListener("click", async (event) => {
           const fullInfoBtn = event.target.closest('[data-action="intel-load-full-info"]');
@@ -26528,7 +26884,6 @@
       if (id === "google.com" || id === "google") return "Google";
       if (id === "facebook.com" || id === "facebook") return "Facebook";
       if (id === "github.com" || id === "github") return "GitHub";
-      if (id === "twitter.com" || id === "twitter") return "X";
       if (id === "yahoo.com" || id === "yahoo") return "Yahoo";
       if (id === "microsoft.com" || id === "microsoft") return "Microsoft";
       if (id === "password" || id === "emailpassword") return "Email and password";
@@ -26549,9 +26904,6 @@
         const provider = new firebase.auth.GithubAuthProvider();
         provider.addScope("user:email");
         return provider;
-      }
-      if (id === "twitter.com" || id === "twitter") {
-        return new firebase.auth.TwitterAuthProvider();
       }
       if (id === "yahoo.com" || id === "yahoo") {
         const provider = new firebase.auth.OAuthProvider("yahoo.com");
@@ -26604,9 +26956,6 @@
         }
         if (method === "github" || method === "github.com") {
           return firebase.auth.GithubAuthProvider.credentialFromError(error);
-        }
-        if (method === "twitter" || method === "twitter.com") {
-          return firebase.auth.TwitterAuthProvider.credentialFromError(error);
         }
       } catch (credentialError) {
         return null;
@@ -26952,8 +27301,6 @@
         "google",
         "apple",
         "github",
-        "twitter",
-        "x",
         "yahoo",
         "microsoft",
       ]).has(normalizedMethod);
@@ -27025,11 +27372,6 @@
       await signInWithProvider(provider, "Signed in with GitHub.", "github");
     });
 
-    ui.twitterSignin?.addEventListener("click", async () => {
-      const provider = new firebase.auth.TwitterAuthProvider();
-      await signInWithProvider(provider, "Signed in with X.", "twitter");
-    });
-
     ui.microsoftSignin?.addEventListener("click", async () => {
       const provider = new firebase.auth.OAuthProvider("microsoft.com");
       provider.addScope("user.read");
@@ -27042,6 +27384,30 @@
       provider.addScope("email");
       await signInWithProvider(provider, "Signed in with Yahoo.", "yahoo");
     });
+
+    if (ui.adminPageVisibility && ui.adminPageVisibility.dataset.bound !== "1") {
+      ui.adminPageVisibility.addEventListener("change", async (event) => {
+        const toggle = event.target instanceof HTMLElement ? event.target.closest("[data-page-visibility-toggle]") : null;
+        if (!(toggle instanceof HTMLInputElement)) return;
+        const pageKey = String(toggle.dataset.pageVisibilityToggle || "").trim();
+        if (!pageKey) return;
+        const previous = !toggle.checked;
+        toggle.disabled = true;
+        try {
+          setAdminPageVisibilityStatus(`Saving ${pageKey.replace(/_/g, " ")} visibility...`, "muted");
+          await updatePageVisibilitySetting(db, pageKey, toggle.checked);
+          showToast("Page visibility updated.");
+        } catch (error) {
+          toggle.checked = previous;
+          const message = extractErrorMessage(error, "Unable to update page visibility.");
+          setAdminPageVisibilityStatus(message, "warn");
+          showToast(message, "warn");
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+      ui.adminPageVisibility.dataset.bound = "1";
+    }
 
 		    ui.purchasePanels.forEach((panel) => {
 	      const purchaseBtn = panel.querySelector('[data-action="purchase"]');
@@ -28518,6 +28884,8 @@
 
     syncFoundrySourceFields();
     syncFoundryDateDefaults();
+    syncSportsFoundryTeamTotalDateDefault({ force: true });
+    syncSportsFoundryWorkflowUi();
     syncSportsFoundryButtons();
     syncSportsFoundryGameGap();
     ui.foundrySourceKind?.addEventListener("change", () => {
@@ -28529,6 +28897,33 @@
     });
     ui.foundryUseAllHistory?.addEventListener("change", () => {
       syncFoundryDateDefaults();
+    });
+    ui.foundryFile?.addEventListener("change", () => {
+      const file = ui.foundryFile?.files?.[0];
+      if (!file) {
+        setFoundryStatus("Select a CSV file to prepare a new Foundry source.");
+        return;
+      }
+      const sourceKind = String(ui.foundrySourceKind?.value || "prediction_csv").trim();
+      const renderVersion = bumpFoundryRenderVersion();
+      state.foundryContext.activeRunId = "";
+      state.foundryContext.activeRun = null;
+      renderFoundryRuns(state.foundryContext.runs || []);
+      resetFoundryPreviewState({
+        loading: false,
+        previewMessage: `Ready to upload ${file.name}.`,
+        plotMessage: `${file.name} selected · previous preview cleared.`,
+        chartTitle: file.name,
+        chartDetail: "Prepare the source to parse and display this latest upload.",
+        clearAnalysis: sourceKind === "prediction_csv",
+      });
+      setFoundryStatus(`Selected ${file.name}. Prepare source to parse the latest upload.`);
+      logFoundryDebug("file:selected", {
+        sourceKind,
+        fileName: file.name,
+        sizeBytes: Number(file.size || 0),
+        renderVersion,
+      });
     });
     ui.foundryQuantiles?.addEventListener("blur", () => {
       try {
@@ -28596,6 +28991,25 @@
         showToast(message, "warn");
       }
     });
+    ui.foundryOpenChartButton?.addEventListener("click", async () => {
+      try {
+        await openFoundryChartModal();
+      } catch (error) {
+        const message = extractErrorMessage(error, "Unable to open the Forecast Foundry chart.");
+        setFoundryStatus(message, "warn");
+        showToast(message, "warn");
+      }
+    });
+    ui.foundryBusinessDaysButton?.addEventListener("click", async () => {
+      try {
+        await downloadFoundryBusinessDayCsv();
+        showToast("Business-day CSV downloaded.");
+      } catch (error) {
+        const message = extractErrorMessage(error, "Unable to download the cleaned business-day CSV.");
+        setFoundryStatus(message, "warn");
+        showToast(message, "warn");
+      }
+    });
     ui.foundryShareButton?.addEventListener("click", async () => {
       try {
         await shareFoundryRun();
@@ -28630,6 +29044,17 @@
         showToast(message, "warn");
       }
     });
+    ui.predictionsChart?.addEventListener("click", async (event) => {
+      const openButton = event.target.closest('[data-action="open-foundry-chart-modal"]');
+      if (!openButton) return;
+      try {
+        await openFoundryChartModal();
+      } catch (error) {
+        const message = extractErrorMessage(error, "Unable to open the Forecast Foundry chart.");
+        setFoundryStatus(message, "warn");
+        showToast(message, "warn");
+      }
+    });
 
     ui.sportsFoundryLeague?.addEventListener("change", async () => {
       state.sportsFoundryContext.lastLeague = String(ui.sportsFoundryLeague?.value || "nba").trim().toLowerCase();
@@ -28637,6 +29062,9 @@
       state.sportsFoundryContext.lastPlayerId = "";
       try {
         await loadSportsFoundryTeams({ preserveSelection: false });
+        if (getSportsFoundryWorkflow() === "team_total_export") {
+          await loadSportsFoundryTeamTotals();
+        }
       } catch (error) {
         const message = extractErrorMessage(error, "Unable to load teams.");
         setSportsFoundryStatus(message, "warn");
@@ -28648,7 +29076,17 @@
       state.sportsFoundryContext.lastTeamId = String(ui.sportsFoundryTeam?.value || "").trim();
       state.sportsFoundryContext.lastPlayerId = "";
       try {
-        await loadSportsFoundryPlayers({ preserveSelection: false });
+        if (getSportsFoundryWorkflow() === "team_total_export") {
+          state.sportsFoundryContext.players = [];
+          state.sportsFoundryContext.context = null;
+          renderSportsFoundrySelect(ui.sportsFoundryPlayer, [], { placeholder: "Choose a team first" });
+          renderSportsFoundrySelect(ui.sportsFoundryStat, [], { placeholder: "Choose a player first", valueKey: "key" });
+          renderSportsFoundrySelect(ui.sportsFoundryGame, [], { placeholder: "Choose a player first" });
+          syncSportsFoundryGameGap();
+          await loadSportsFoundryTeamTotals();
+        } else {
+          await loadSportsFoundryPlayers({ preserveSelection: false });
+        }
       } catch (error) {
         const message = extractErrorMessage(error, "Unable to load players.");
         setSportsFoundryStatus(message, "warn");
@@ -28659,6 +29097,10 @@
     ui.sportsFoundryPlayer?.addEventListener("change", async () => {
       state.sportsFoundryContext.lastPlayerId = String(ui.sportsFoundryPlayer?.value || "").trim();
       try {
+        if (getSportsFoundryWorkflow() === "team_total_export") {
+          syncSportsFoundryButtons();
+          return;
+        }
         await loadSportsFoundryContext();
       } catch (error) {
         const message = extractErrorMessage(error, "Unable to load player data.");
@@ -28681,6 +29123,13 @@
     ui.sportsFoundryForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
       try {
+        if (getSportsFoundryWorkflow() === "team_total_export") {
+          await loadSportsFoundryTeamTotals();
+          const { csv, fileName } = buildSportsFoundryTeamTotalsCsv();
+          triggerDownload(fileName, csv, { mimeType: "text/csv;charset=utf-8;" });
+          showToast("Team total CSV downloaded.");
+          return;
+        }
         await createSportsFoundryRun({ notify: true });
       } catch (error) {
         const message = extractErrorMessage(error, "Unable to start sports forecast.");
@@ -28691,6 +29140,13 @@
 
     ui.sportsFoundryDownloadHistory?.addEventListener("click", async () => {
       try {
+        if (getSportsFoundryWorkflow() === "team_total_export") {
+          await loadSportsFoundryTeamTotals();
+          const { csv, fileName } = buildSportsFoundryTeamTotalsCsv();
+          triggerDownload(fileName, csv, { mimeType: "text/csv;charset=utf-8;" });
+          showToast("Team total CSV downloaded.");
+          return;
+        }
         const { csv } = buildSportsFoundryHistoryCsv();
         const context = state.sportsFoundryContext.context;
         const player = String(context?.player?.displayName || "player").trim().replace(/[^A-Za-z0-9._-]+/g, "_");
@@ -28706,6 +29162,9 @@
 
     ui.sportsFoundryDownloadJson?.addEventListener("click", async () => {
       try {
+        if (getSportsFoundryWorkflow() === "team_total_export") {
+          throw new Error("Team total export mode only supports CSV downloads.");
+        }
         const activeRun = state.sportsFoundryContext.activeRun;
         const forecastPayloadFile = activeRun?.files?.forecastPayloadJson;
         const inputPayloadFile = activeRun?.files?.forecastInputJson;
@@ -28738,6 +29197,50 @@
         showToast("Forecast JSON downloaded.");
       } catch (error) {
         const message = extractErrorMessage(error, "Unable to download forecast JSON.");
+        setSportsFoundryStatus(message, "warn");
+        showToast(message, "warn");
+      }
+    });
+
+    ui.sportsFoundryWorkflowInputs?.forEach((input) => {
+      input.addEventListener("change", async () => {
+        syncSportsFoundryWorkflowUi();
+        try {
+          if (getSportsFoundryWorkflow() === "team_total_export") {
+            if (!String(ui.sportsFoundryTeam?.value || "").trim()) return;
+            await loadSportsFoundryTeamTotals();
+            return;
+          }
+          if (String(ui.sportsFoundryPlayer?.value || "").trim()) {
+            await loadSportsFoundryContext();
+          }
+        } catch (error) {
+          const message = extractErrorMessage(
+            error,
+            getSportsFoundryWorkflow() === "team_total_export" ? "Unable to load team totals." : "Unable to load player data."
+          );
+          setSportsFoundryStatus(message, "warn");
+        }
+      });
+    });
+
+    ui.sportsFoundryTeamTotalDate?.addEventListener("change", async () => {
+      if (getSportsFoundryWorkflow() !== "team_total_export") return;
+      try {
+        await loadSportsFoundryTeamTotals();
+      } catch (error) {
+        const message = extractErrorMessage(error, "Unable to load team totals.");
+        setSportsFoundryStatus(message, "warn");
+        showToast(message, "warn");
+      }
+    });
+
+    ui.sportsFoundryTeamTotalHomeAway?.addEventListener("change", async () => {
+      if (getSportsFoundryWorkflow() !== "team_total_export") return;
+      try {
+        await loadSportsFoundryTeamTotals();
+      } catch (error) {
+        const message = extractErrorMessage(error, "Unable to load team totals.");
         setSportsFoundryStatus(message, "warn");
         showToast(message, "warn");
       }
@@ -29266,8 +29769,6 @@
             socialLinks: normalizeProfileSocialLinks(
               {
                 website: ui.profileWebsite?.value || "",
-                x: ui.profileX?.value || "",
-                linkedin: ui.profileLinkedin?.value || "",
                 github: ui.profileGithub?.value || "",
                 youtube: ui.profileYoutube?.value || "",
                 tiktok: ui.profileTiktok?.value || "",
@@ -29348,6 +29849,8 @@
             state.tickerContext.tickerHistory = readTickerHistory();
             renderTickerHistory();
             setAuthUi(null);
+            renderAdminPageVisibilityControls();
+            syncPageVisibilityAccess();
             state.publishPrefs = { ...DEFAULT_AUTO_PUBLISH_PREFS };
             setUserId(null);
             if (!state.anonymousBootstrapInFlight) {
@@ -29395,6 +29898,8 @@
             state.tickerContext.tickerHistory = readTickerHistory();
             renderTickerHistory();
 			      setAuthUi(user);
+            renderAdminPageVisibilityControls();
+            syncPageVisibilityAccess();
 			      setUserId(hasFullAccount(user) ? user.uid : null);
             await pingNotificationSession().catch(() => undefined);
             if (isNativeApp()) {
@@ -29424,11 +29929,16 @@
             state.sportsFoundryContext.teams = [];
             state.sportsFoundryContext.players = [];
             state.sportsFoundryContext.context = null;
+            state.sportsFoundryContext.teamTotals = null;
             state.sportsFoundryContext.runs = [];
             state.sportsFoundryContext.loaded = false;
             state.sportsFoundryContext.activeRunId = "";
             state.sportsFoundryContext.activeRun = null;
             state.sportsFoundryContext.loadingRunId = "";
+            state.sportsFoundryContext.workflow = "player_forecast";
+            state.sportsFoundryContext.lastLeague = "";
+            state.sportsFoundryContext.lastTeamId = "";
+            state.sportsFoundryContext.lastPlayerId = "";
             applyAdFreeExperience();
             renderOrderList([], ui.userOrders);
             renderFoundryRuns([]);
@@ -29436,6 +29946,11 @@
             setFoundryStatus("Sign in with a full account to use Forecast Foundry.");
             renderSportsFoundryRuns([]);
             await renderSportsFoundryRunDetail(null);
+            ui.sportsFoundryWorkflowInputs?.forEach((input) => {
+              input.checked = String(input?.value || "").trim() === "player_forecast";
+            });
+            syncSportsFoundryTeamTotalDateDefault({ force: true });
+            syncSportsFoundryWorkflowUi();
             setSportsFoundryStatus("Sign in with a full account to use sports forecasting.");
             renderRequestList([], ui.predictionsOutput, "No uploads yet.");
 		        if (ui.watchlistList) ui.watchlistList.textContent = "Sign in to manage your watchlist.";

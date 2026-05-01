@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Quantura FX Converter</title>
+        <meta name="description" content="Convert currencies using Quantura market data and Yahoo FX pairs." />
+        <meta name="robots" content="index, follow" />
+    <meta name="keywords" content="currency conversion, fx converter, usd eur converter, forex tools" />
+        <link rel="canonical" href="https://quantura.studio/tools/fx" />
+    <meta property="og:title" content="Quantura FX Converter" />
+    <meta property="og:description" content="Convert currencies using Quantura market data and Yahoo FX pairs." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://quantura.studio/tools/fx" />
+    <meta property="og:image" content="/assets/quantura-logo.svg" />
+    <meta property="og:site_name" content="Quantura" />
+    <meta property="og:locale" content="en_US" /><meta name="author" content="Quantura" />
+    <meta name="theme-color" content="#0B1526" />
+    <link rel="alternate" hreflang="en-US" href="https://quantura.studio/tools/fx" />
+    <link rel="alternate" hreflang="x-default" href="https://quantura.studio/tools/fx" />
+    <link rel="icon" type="image/png" href="/favicon-96x96.png" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-title" content="Quantura" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
+
+    <script defer src="/__/firebase/12.9.0/firebase-app-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-auth-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-firestore-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-functions-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-storage-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-remote-config-compat.js"></script>
+    <script defer src="/__/firebase/12.9.0/firebase-analytics-compat.js"></script>
+    <script defer src="/__/firebase/init.js?useEmulator=false"></script>
+    <script defer src="/app.js"></script>
+    <script defer src="/fx-tool.js"></script>
+  </head>
+  <body>
+    <header class="header">
+      <div class="container nav">
+        <a class="logo" href="/" aria-label="Quantura home"><span>QUANTURA</span></a>
+        <nav class="nav-links">
+          <a href="/forecasting" data-analytics="nav_terminal"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Terminal</span></a>
+          <a href="/research" data-analytics="nav_research"><i class="iconoir-bookmark-book" aria-hidden="true"></i><span>Research</span></a>
+          <a href="/blog" data-analytics="nav_blog"><i class="iconoir-page" aria-hidden="true"></i><span>Blog</span></a>
+          <a href="/pricing" data-analytics="nav_pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>Pricing</span></a>
+          <a href="/contact" data-analytics="nav_contact"><i class="iconoir-mail" aria-hidden="true"></i><span>Contact</span></a>
+        </nav>
+        <div class="nav-actions">
+          <span id="header-user-status" class="pill">Logged Out</span>
+          <button class="cta secondary" id="header-auth" type="button"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></button>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="section" id="fx-tool-root">
+        <div class="container" style="max-width: 920px;">
+          <div class="section-title">
+            <h1>Currency Converter</h1>
+            <p class="small">Uses Yahoo FX tickers through Quantura market-data backend (`BASEQUOTE=X`, fallback inverse).</p>
+          </div>
+
+          <div class="content-grid">
+            <form id="fx-convert-form" class="card" autocomplete="off">
+              <div class="form-grid">
+                <div class="field">
+                  <label class="label" for="fx-amount">Amount</label>
+                  <input id="fx-amount" name="amount" type="number" class="input" min="0" step="0.0001" value="1" required />
+                </div>
+                <div class="field">
+                  <label class="label" for="fx-from">From</label>
+                  <select id="fx-from" name="from" class="input" required>
+                    <option value="USD">USD</option>
+                    <option value="EUR">EUR</option>
+                    <option value="GBP">GBP</option>
+                    <option value="JPY">JPY</option>
+                    <option value="CAD">CAD</option>
+                    <option value="AUD">AUD</option>
+                    <option value="CHF">CHF</option>
+                    <option value="BDT">BDT</option>
+                    <option value="INR">INR</option>
+                    <option value="BTC">BTC</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label class="label" for="fx-to">To</label>
+                  <select id="fx-to" name="to" class="input" required>
+                    <option value="EUR">EUR</option>
+                    <option value="USD" selected>USD</option>
+                    <option value="GBP">GBP</option>
+                    <option value="JPY">JPY</option>
+                    <option value="CAD">CAD</option>
+                    <option value="AUD">AUD</option>
+                    <option value="CHF">CHF</option>
+                    <option value="BDT">BDT</option>
+                    <option value="INR">INR</option>
+                    <option value="BTC">BTC</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="hero-actions" style="margin-top: 12px;">
+                <button type="button" class="cta secondary small" id="fx-swap"><i class="iconoir-arrows-up-from-line" aria-hidden="true"></i><span>Swap</span></button>
+                <button type="submit" class="cta small" id="fx-submit"><i class="iconoir-calculator" aria-hidden="true"></i><span>Convert</span></button>
+              </div>
+
+              <p id="fx-status" class="small muted" style="margin-top: 12px;">Ready.</p>
+
+              <details style="margin-top: 14px;">
+                <summary class="small">Advanced endpoint</summary>
+                <label class="label" for="fx-api-base" style="margin-top: 10px;">Market Data API base URL</label>
+                <input id="fx-api-base" type="url" class="input" placeholder="http://127.0.0.1:8090" />
+                <p class="small muted" style="margin-top: 8px;">Default is local service. For deployed use, set your service URL here once.</p>
+              </details>
+            </form>
+
+            <div class="results-panel">
+              <h3>Latest result</h3>
+              <div id="fx-result" class="card" style="min-height: 180px;">
+                <div class="small muted">Run a conversion to see rate details.</div>
+              </div>
+              <h3 style="margin-top: 14px;">Recent conversions</h3>
+              <div id="fx-recent" class="card">
+                <div class="small muted">No recent conversions yet.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
