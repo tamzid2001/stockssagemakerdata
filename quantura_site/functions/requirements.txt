@@ -14,3 +14,5 @@ backtesting~=0.3.3
 matplotlib==3.10.9
 python-pptx~=0.6.23
 weasyprint~=68.1
+pillow>=12.3.0 # not directly required, pinned by Snyk to avoid a vulnerability
+pyasn1>=0.6.4 # not directly required, pinned by Snyk to avoid a vulnerability
