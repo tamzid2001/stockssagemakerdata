@@ -1244,8 +1244,7 @@ body.mobile-bottom-nav-enabled {
   }
 
   .shop-hero,
-  .catalog-shell,
-  .shop-comments-card {
+  .catalog-shell {
     padding: 14px;
   }
 }
@@ -1273,9 +1272,7 @@ html[data-liquid-glass-mode="refraction"] {
 .shipping-card,
 .summary-card,
 .bundle-note,
-.shop-message,
-.shop-comments-card,
-.shop-comments-card .quantura-comments-shell {
+.shop-message {
   background: var(--glass-panel-fill);
   border-color: var(--glass-border-strong);
   box-shadow: var(--glass-shadow-strong);
@@ -1342,36 +1339,4 @@ html[data-liquid-glass-mode="refraction"] {
     0 0 0 4px var(--glass-focus-ring),
     0 16px 30px rgba(15, 24, 41, 0.12),
     inset 0 1px 0 rgba(255, 255, 255, 0.88);
-}
-
-.shop-comments-card {
-  display: grid;
-  gap: 14px;
-  padding: 16px;
-}
-
-.shop-comments-card .quantura-comments-host {
-  width: 100%;
-  min-height: 240px;
-}
-
-.shop-comments-card .quantura-comments-shell {
-  min-height: 240px;
-  border-radius: 24px;
-  border: 1px dashed rgba(11, 77, 122, 0.2);
-  padding: 18px;
-}
-
-.shop-comments-card .quantura-comments-loading {
-  min-height: 206px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  color: var(--shop-ink-soft);
-  font-size: 14px;
-}
-
-.shop-comments-card iframe.giscus-frame {
-  width: 100%;
 }

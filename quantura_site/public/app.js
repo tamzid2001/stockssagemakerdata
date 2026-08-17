@@ -1971,8 +1971,6 @@
     screenerGithubHistoryRefresh: document.getElementById("screener-github-history-refresh"),
     screenerGithubHistoryStatus: document.getElementById("screener-github-history-status"),
     screenerGithubHistoryList: document.getElementById("screener-github-history-list"),
-    screenerCommentsHost: document.getElementById("screener-comments-host"),
-    screenerCommentsStatus: document.getElementById("screener-comments-status"),
     myRequestsPanels: Array.from(document.querySelectorAll("[data-my-requests-panel]")),
 	    watchlistForm: document.getElementById("watchlist-form"),
 	    watchlistTicker: document.getElementById("watchlist-ticker"),
@@ -2028,8 +2026,6 @@
     foundryShareButton: document.getElementById("foundry-share-button"),
     foundryRunMeta: document.getElementById("foundry-run-meta"),
     foundryPublishHost: document.getElementById("foundry-publish-host"),
-    foundryCommentsHost: document.getElementById("foundry-comments-host"),
-    foundryCommentsStatus: document.getElementById("foundry-comments-status"),
     foundryInstanceLimit: document.getElementById("foundry-instance-limit"),
     foundryAccessNote: document.getElementById("foundry-access-note"),
     sportsFoundryForm: document.getElementById("sports-foundry-form"),
@@ -2061,8 +2057,6 @@
     sportsFoundryShareButton: document.getElementById("sports-foundry-share-button"),
     sportsFoundryRunMeta: document.getElementById("sports-foundry-run-meta"),
     sportsFoundryPublishHost: document.getElementById("sports-foundry-publish-host"),
-    sportsFoundryCommentsHost: document.getElementById("sports-foundry-comments-host"),
-    sportsFoundryCommentsStatus: document.getElementById("sports-foundry-comments-status"),
     sportsFoundryAnalysis: document.getElementById("sports-foundry-analysis"),
     sportsFoundryChart: document.getElementById("sports-foundry-chart"),
     sportsFoundryPreview: document.getElementById("sports-foundry-preview"),
@@ -14956,243 +14950,6 @@
     return liquidGlassRuntimePromise;
   };
 
-  const GISCUS_RUNTIME_URL = "/giscus-comments.js?v=20260405a";
-  let giscusRuntimePromise = null;
-
-  const loadGiscusRuntime = () => {
-    if (window.QuanturaGiscus?.mount) return Promise.resolve(window.QuanturaGiscus);
-    if (giscusRuntimePromise) return giscusRuntimePromise;
-    giscusRuntimePromise = new Promise((resolve, reject) => {
-      const existing = document.querySelector('script[data-quantura-giscus-runtime="1"]');
-      if (existing) {
-        existing.addEventListener("load", () => resolve(window.QuanturaGiscus || null), { once: true });
-        existing.addEventListener("error", () => reject(new Error("Unable to load GitHub comments runtime.")), {
-          once: true,
-        });
-        return;
-      }
-      const script = document.createElement("script");
-      script.src = GISCUS_RUNTIME_URL;
-      script.defer = true;
-      script.dataset.quanturaGiscusRuntime = "1";
-      script.addEventListener("load", () => {
-        if (window.QuanturaGiscus?.mount) resolve(window.QuanturaGiscus);
-        else reject(new Error("GitHub comments runtime is unavailable."));
-      });
-      script.addEventListener("error", () => reject(new Error("Unable to load GitHub comments runtime.")));
-      document.head.appendChild(script);
-    }).catch((error) => {
-      giscusRuntimePromise = null;
-      throw error;
-    });
-    return giscusRuntimePromise;
-  };
-
-  const buildAbsoluteAppUrl = (path = "/") => {
-    try {
-      return new URL(String(path || "/"), window.location.origin).toString();
-    } catch (error) {
-      return window.location.href;
-    }
-  };
-
-  const buildDiscussionTerm = (scope, id) => {
-    const cleanScope = String(scope || "quantura")
-      .trim()
-      .replace(/\s+/g, " ")
-      .slice(0, 120);
-    const cleanId = String(id || "item")
-      .trim()
-      .replace(/\s+/g, " ")
-      .slice(0, 180);
-    return `${cleanScope} · ${cleanId || "item"}`;
-  };
-
-  const mountGithubComments = async ({
-    host = null,
-    statusNode = null,
-    term = "",
-    description = "",
-    backLink = "",
-  } = {}) => {
-    if (!host) return null;
-    const runtime = await loadGiscusRuntime();
-    return runtime.mount(host, {
-      statusNode,
-      term,
-      description,
-      backLink,
-    });
-  };
-
-  const syncFoundryCommentsThread = async (run = null, { request = null, shareUrl = "" } = {}) => {
-    if (!ui.foundryCommentsHost) return;
-    const requestId = String(request?.id || getFoundryRequestId(run) || "").trim();
-    const runId = String(run?.id || "").trim();
-    const ticker = normalizeTicker(run?.dataset?.ticker || request?.ticker || "");
-    const title = String(run?.title || request?.title || "Forecast Foundry").trim();
-    const term = requestId || runId
-      ? buildDiscussionTerm("Quantura Forecast Foundry Run", requestId || runId)
-      : buildDiscussionTerm("Quantura Forecast Foundry", "general");
-    const description = requestId || runId
-      ? `Discussion for Forecast Foundry run "${title}"${ticker ? ` on ${ticker}` : ""}.`
-      : "Discuss Forecast Foundry workflows, prediction analysis, and saved Autopilot outputs in Quantura.";
-    const backLink = String(shareUrl || "").trim()
-      || (runId ? buildAbsoluteAppUrl(`/autopilot?runId=${encodeURIComponent(runId)}`) : buildAbsoluteAppUrl("/autopilot"));
-    try {
-      await mountGithubComments({
-        host: ui.foundryCommentsHost,
-        statusNode: ui.foundryCommentsStatus,
-        term,
-        description,
-        backLink,
-      });
-    } catch (error) {
-      if (ui.foundryCommentsStatus) ui.foundryCommentsStatus.textContent = extractErrorMessage(error, "Unable to load GitHub discussion.");
-    }
-  };
-
-  const syncSportsFoundryCommentsThread = async (run = null, { request = null, shareUrl = "" } = {}) => {
-    if (!ui.sportsFoundryCommentsHost) return;
-    const requestId = String(request?.id || getSportsFoundryRequestId(run) || "").trim();
-    const runId = String(run?.id || "").trim();
-    const playerName = String(run?.sports?.player?.displayName || request?.input?.playerName || "").trim();
-    const statLabel = String(run?.sports?.stat?.label || request?.input?.statLabel || "").trim();
-    const title = String(run?.title || request?.title || "Sports forecast").trim();
-    const term = requestId || runId
-      ? buildDiscussionTerm("Quantura Sports Forecast Run", requestId || runId)
-      : buildDiscussionTerm("Quantura Sports Forecasting", "general");
-    const description = requestId || runId
-      ? `Discussion for sports forecast "${title}"${playerName ? ` featuring ${playerName}` : ""}${statLabel ? ` on ${statLabel}` : ""}.`
-      : "Discuss Quantura sports forecasting workflows, matchup context, and saved player-stat forecasts.";
-    const backLink = String(shareUrl || "").trim()
-      || (runId
-        ? buildAbsoluteAppUrl(`/sports-forecasting?runId=${encodeURIComponent(runId)}`)
-        : buildAbsoluteAppUrl("/sports-forecasting"));
-    try {
-      await mountGithubComments({
-        host: ui.sportsFoundryCommentsHost,
-        statusNode: ui.sportsFoundryCommentsStatus,
-        term,
-        description,
-        backLink,
-      });
-    } catch (error) {
-      if (ui.sportsFoundryCommentsStatus) {
-        ui.sportsFoundryCommentsStatus.textContent = extractErrorMessage(error, "Unable to load GitHub discussion.");
-      }
-    }
-  };
-
-  const syncScreenerCommentsThread = async (runDoc = null) => {
-    if (!ui.screenerCommentsHost) return;
-    const sharedMeta = runDoc && typeof runDoc.__sharedMeta === "object" ? runDoc.__sharedMeta : null;
-    const sharedShareUrl = String(sharedMeta?.shareUrl || "").trim();
-    const requestId =
-      String(runDoc?.exploreRequestId || "").trim()
-      || (runDoc?.id ? buildSourceRequestId("screener", runDoc.id) : "");
-    const runId = String(runDoc?.id || "").trim();
-    const title = String(runDoc?.title || "GitHub stock screener").trim();
-    const count = Number.isFinite(Number(runDoc?.resultsFound))
-      ? Number(runDoc.resultsFound)
-      : Array.isArray(runDoc?.results)
-      ? runDoc.results.length
-      : 0;
-    const term = requestId || runId
-      ? buildDiscussionTerm("Quantura Screener Run", requestId || runId)
-      : buildDiscussionTerm("Quantura Screener", "general");
-    const description = requestId || runId
-      ? `Discussion for screener run "${title}" with ${count} match${count === 1 ? "" : "es"}.`
-      : "Discuss Quantura screener workflows, GitHub Actions runs, and published watchlist candidates.";
-    const backLink = sharedShareUrl || buildAbsoluteAppUrl("/screener");
-    try {
-      await mountGithubComments({
-        host: ui.screenerCommentsHost,
-        statusNode: ui.screenerCommentsStatus,
-        term,
-        description,
-        backLink,
-      });
-    } catch (error) {
-      if (ui.screenerCommentsStatus) ui.screenerCommentsStatus.textContent = extractErrorMessage(error, "Unable to load GitHub discussion.");
-    }
-  };
-
-  const initBlogCommentsSurface = async () => {
-    const path = normalizePath(window.location.pathname || "/");
-    if (!path.startsWith("/blog")) return;
-    if (document.getElementById("blog-comments-host")) return;
-    const main = document.querySelector("main");
-    if (!main) return;
-    const section = document.createElement("section");
-    section.className = "section quantura-comments-section";
-    section.innerHTML = `
-      <div class="container">
-        <div class="card quantura-comments-card">
-          <div class="card-head">
-            <h3>GitHub Discussion</h3>
-            <p class="small muted" id="blog-comments-status">Comments powered by GitHub Discussions.</p>
-          </div>
-          <div id="blog-comments-host" class="quantura-comments-host"></div>
-        </div>
-      </div>
-    `;
-    main.appendChild(section);
-    const host = document.getElementById("blog-comments-host");
-    const statusNode = document.getElementById("blog-comments-status");
-    const title = String(document.querySelector("h1")?.textContent || document.title || "Quantura Blog").trim();
-    const metaDescription = String(document.querySelector('meta[name="description"]')?.getAttribute("content") || "").trim();
-    const segment = path === "/blog" ? "index" : path.replace(/^\/blog\//, "").replace(/\//g, " · ");
-    const scope = path.startsWith("/blog/posts/")
-      ? "Quantura Blog Post"
-      : path.startsWith("/blog/topics/")
-      ? "Quantura Blog Topic"
-      : "Quantura Blog";
-    try {
-      await mountGithubComments({
-        host,
-        statusNode,
-        term: buildDiscussionTerm(scope, segment),
-        description: metaDescription || `Discussion for "${title}" on Quantura Blog.`,
-        backLink: buildAbsoluteAppUrl(path),
-      });
-    } catch (error) {
-      if (statusNode) statusNode.textContent = extractErrorMessage(error, "Unable to load GitHub discussion.");
-    }
-  };
-
-  const initStaticPageCommentsSurfaces = async () => {
-    const hosts = Array.from(document.querySelectorAll('[data-quantura-page-comments="1"]'));
-    if (!hosts.length) return;
-    const path = normalizePath(window.location.pathname || "/");
-    const metaDescription = String(document.querySelector('meta[name="description"]')?.getAttribute("content") || "").trim();
-    for (const host of hosts) {
-      if (!(host instanceof HTMLElement)) continue;
-      const statusNode =
-        host.closest(".quantura-comments-card, .shop-comments-card")?.querySelector("[data-quantura-comments-status]")
-        || host.parentElement?.querySelector("[data-quantura-comments-status]");
-      const scope = String(host.dataset.commentsScope || document.title || "Quantura").trim() || "Quantura";
-      const itemId = String(host.dataset.commentsId || path || "page").trim() || "page";
-      const description =
-        String(host.dataset.commentsDescription || metaDescription || document.title || "Quantura discussion").trim()
-        || "Quantura discussion";
-      const backLink = String(host.dataset.commentsBackLink || path || "/").trim() || "/";
-      try {
-        await mountGithubComments({
-          host,
-          statusNode,
-          term: buildDiscussionTerm(scope, itemId),
-          description,
-          backLink: buildAbsoluteAppUrl(backLink),
-        });
-      } catch (error) {
-        if (statusNode) {
-          statusNode.textContent = extractErrorMessage(error, "Unable to load GitHub discussion.");
-        }
-      }
-    }
-  };
-
   const apiFetchTickerHistory = async ({ ticker = "", interval = "1d", start = "", end = "" } = {}) => {
     const params = new URLSearchParams();
     params.set("ticker", normalizeTicker(ticker));
@@ -19096,7 +18853,6 @@
         title: "Forecast Foundry chart",
         detail: "Open a Foundry run to inspect its saved prediction path in the modal chart workspace.",
       });
-      await syncFoundryCommentsThread(null);
       return;
     }
     const dataset = run.dataset && typeof run.dataset === "object" ? run.dataset : {};
@@ -19254,7 +19010,6 @@
         detail: error?.message || "Unable to load chart data for this request.",
       });
     }
-    await syncFoundryCommentsThread(run, { request: requestRecord, shareUrl: effectiveShareUrl });
   };
 
   const loadFoundryRunById = async (runId, { notify = false, preloadedRun = null, replaceUrl = true } = {}) => {
@@ -19980,7 +19735,6 @@
       if (ui.sportsFoundryChart) ui.sportsFoundryChart.innerHTML = `<div class="small muted">Historical and prediction chart will appear here once a forecast is ready.</div>`;
       if (ui.sportsFoundryPreview) ui.sportsFoundryPreview.innerHTML = `<div class="small muted">Historical and prediction preview data will appear here.</div>`;
       syncSportsFoundryButtons();
-      await syncSportsFoundryCommentsThread(null);
       return;
     }
     const sports = run?.sports && typeof run.sports === "object" ? run.sports : {};
@@ -20045,7 +19799,6 @@
     renderSportsFoundryRunPreview(run);
     await renderSportsFoundryChart(run);
     syncSportsFoundryButtons();
-    await syncSportsFoundryCommentsThread(run, { request: requestRecord, shareUrl: effectiveShareUrl });
   };
 
   const renderSportsFoundryRuns = (items = []) => {
@@ -22403,11 +22156,6 @@
       ${rows.length ? renderScreenerRowsTable(rows) : ""}
     `;
 
-    syncScreenerCommentsThread(runDoc).catch((error) => {
-      if (ui.screenerCommentsStatus) {
-        ui.screenerCommentsStatus.textContent = extractErrorMessage(error, "Unable to load GitHub discussion.");
-      }
-    });
   };
 
   const fetchAndRenderScreenerRun = async (runId) => {
@@ -25284,11 +25032,6 @@
           loadLiquidGlassRuntime().catch(() => {});
         }
       }, { timeout: 1600 });
-      queueIdleTask(() => {
-        initBlogCommentsSurface().catch(() => {});
-        initStaticPageCommentsSurfaces().catch(() => {});
-        syncScreenerCommentsThread(null).catch(() => {});
-      }, { timeout: 2200 });
   };
 
 		  const init = () => {
@@ -25422,7 +25165,6 @@
         }
 
         if (next === "autopilot") {
-          syncFoundryCommentsThread(null).catch(() => {});
           syncFoundrySourceFields();
           syncFoundryDateDefaults();
           const firstFoundryLoad = !state.panelAutoloaded.autopilot;
@@ -25455,7 +25197,6 @@
         }
 
         if (next === "sports-autopilot") {
-          syncSportsFoundryCommentsThread(null).catch(() => {});
           const firstSportsLoad = !state.panelAutoloaded["sports-autopilot"];
           state.panelAutoloaded["sports-autopilot"] = true;
           const requestShare = String(getQueryParam("requestShare") || "").trim();

@@ -149,9 +149,7 @@ body {
   .toast,
   .cookie-banner,
   .mobile-bottom-nav,
-  .home-bottom-nav,
-  .quantura-comments-card,
-  .quantura-comments-shell
+  .home-bottom-nav
 ) {
   color: var(--glass-text);
 }
@@ -164,9 +162,7 @@ body {
   .sidebar-nav,
   .modal-card,
   .toast,
-  .cookie-banner,
-  .quantura-comments-card,
-  .quantura-comments-shell
+  .cookie-banner
 ) :is(p, .muted, .small, .meta, .meta-line, .status-note, .field-hint, .form-help, .helper-text) {
   color: var(--glass-muted);
 }
@@ -179,9 +175,7 @@ body {
   .sidebar-nav,
   .modal-card,
   .toast,
-  .cookie-banner,
-  .quantura-comments-card,
-  .quantura-comments-shell
+  .cookie-banner
 ) :is(h1, h2, h3, h4, h5, h6, strong, label, summary) {
   color: var(--glass-text);
 }
@@ -2473,203 +2467,6 @@ textarea {
 .sports-foundry-preview-card {
   display: grid;
   gap: 10px;
-}
-
-.quantura-comments-section {
-  margin-top: 24px;
-}
-
-.quantura-comments-card {
-  display: grid;
-  gap: 12px;
-  min-width: 0;
-  margin-top: 14px;
-  padding: 18px 20px;
-  border-radius: calc(var(--glass-radius) - 2px);
-  border: 1px solid rgba(217, 210, 199, 0.72);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.74), rgba(255, 255, 255, 0.52));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
-}
-
-.quantura-comments-card .small {
-  margin: 0;
-}
-
-.quantura-comments-host {
-  width: 100%;
-  min-width: 0;
-  min-height: 240px;
-}
-
-.quantura-comments-shell {
-  min-height: 240px;
-  border-radius: 18px;
-  border: 1px dashed rgba(42, 51, 80, 0.18);
-  background: rgba(255, 255, 255, 0.54);
-  padding: 16px;
-}
-
-.quantura-comments-loading {
-  min-height: 206px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  color: var(--graphite);
-  font-size: 14px;
-}
-
-.quantura-comments-host iframe.giscus-frame {
-  width: 100%;
-}
-
-.quantura-comments-fallback {
-  display: grid;
-  gap: 14px;
-}
-
-.quantura-comments-fallback-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.quantura-comments-fallback-head h4 {
-  margin: 4px 0 0;
-  font-size: 1.05rem;
-}
-
-.quantura-comments-fallback-head p {
-  margin: 8px 0 0;
-}
-
-.quantura-comments-fallback-eyebrow {
-  font-size: 0.76rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--glass-muted);
-}
-
-.quantura-comments-fallback-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 42px;
-  padding: 10px 14px;
-  border-radius: 999px;
-  border: 1px solid rgba(15, 23, 42, 0.12);
-  background: rgba(11, 15, 26, 0.92);
-  color: #ffffff;
-  font-weight: 700;
-  text-decoration: none;
-  box-shadow: 0 12px 24px rgba(11, 15, 26, 0.18);
-}
-
-.quantura-comments-fallback-summary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.quantura-comments-fallback-summary span {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  background: rgba(255, 255, 255, 0.56);
-  color: var(--glass-text);
-  font-size: 0.82rem;
-  font-weight: 700;
-}
-
-.quantura-comments-fallback-body {
-  color: var(--glass-muted);
-  line-height: 1.6;
-}
-
-.quantura-comments-fallback-body p {
-  margin: 0;
-}
-
-.quantura-comments-fallback-list {
-  display: grid;
-  gap: 12px;
-}
-
-.quantura-comments-fallback-item {
-  display: grid;
-  gap: 10px;
-  padding: 14px;
-  border-radius: 16px;
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  background: rgba(255, 255, 255, 0.52);
-}
-
-.quantura-comments-fallback-author {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.quantura-comments-fallback-author a {
-  font-weight: 700;
-  color: var(--glass-text);
-  text-decoration: none;
-}
-
-.quantura-comments-fallback-avatar {
-  width: 34px;
-  height: 34px;
-  border-radius: 999px;
-  object-fit: cover;
-  border: 1px solid rgba(15, 23, 42, 0.08);
-}
-
-.quantura-comments-fallback-avatar--placeholder {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(11, 15, 26, 0.12);
-  color: var(--glass-text);
-  font-weight: 800;
-}
-
-.quantura-comments-fallback-meta,
-.quantura-comments-fallback-empty {
-  color: var(--glass-muted);
-  font-size: 0.9rem;
-}
-
-[data-theme="dark"] .quantura-comments-card {
-  border-color: rgba(233, 237, 247, 0.14);
-  background: linear-gradient(180deg, rgba(18, 24, 42, 0.86), rgba(18, 24, 42, 0.64));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-}
-
-[data-theme="dark"] .quantura-comments-shell {
-  border-color: rgba(233, 237, 247, 0.16);
-  background: rgba(11, 15, 26, 0.48);
-}
-
-[data-theme="dark"] .quantura-comments-fallback-link {
-  border-color: rgba(233, 237, 247, 0.16);
-  background: rgba(233, 237, 247, 0.08);
-  color: #ffffff;
-}
-
-[data-theme="dark"] .quantura-comments-fallback-summary span,
-[data-theme="dark"] .quantura-comments-fallback-item {
-  border-color: rgba(233, 237, 247, 0.12);
-  background: rgba(18, 24, 42, 0.48);
-}
-
-[data-theme="dark"] .quantura-comments-fallback-avatar {
-  border-color: rgba(233, 237, 247, 0.16);
 }
 
 .sports-foundry-workflow-toggle {
@@ -8530,9 +8327,7 @@ html[data-liquid-glass-mode="refraction"] {
   .toast,
   .mobile-bottom-nav,
   .cookie-banner,
-  .home-bottom-nav,
-  .quantura-comments-card,
-  .quantura-comments-shell
+  .home-bottom-nav
 ) {
   background: var(--glass-panel-fill);
   border-color: var(--glass-panel-border-strong);
@@ -8551,8 +8346,6 @@ html[data-liquid-glass-mode="refraction"] {
   .sidebar-link,
   .module-picker-chip,
   .sports-foundry-workflow-option span,
-  .quantura-comments-card,
-  .quantura-comments-shell,
   .home-bottom-nav,
   .home-bottom-nav-link
 ) {
@@ -8570,8 +8363,6 @@ html[data-liquid-glass-mode="refraction"] {
   .sidebar-link,
   .module-picker-chip,
   .sports-foundry-workflow-option span,
-  .quantura-comments-card,
-  .quantura-comments-shell,
   .home-bottom-nav,
   .home-bottom-nav-link
 )::before {
@@ -8596,8 +8387,6 @@ html[data-liquid-glass-mode="refraction"] {
   .sidebar-link,
   .module-picker-chip,
   .sports-foundry-workflow-option span,
-  .quantura-comments-card,
-  .quantura-comments-shell,
   .home-bottom-nav,
   .home-bottom-nav-link
 )::before {
