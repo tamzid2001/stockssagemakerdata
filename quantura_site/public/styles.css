@@ -7399,9 +7399,13 @@ body.mobile-sidebar-lock {
 
 .cookie-banner {
   position: fixed;
-  left: 16px;
-  right: 16px;
+  left: 50%;
+  right: auto;
   bottom: calc(12px + var(--safe-area-bottom));
+  width: min(760px, calc(100% - 32px));
+  max-height: min(72vh, 420px);
+  overflow-y: auto;
+  transform: translateX(-50%);
   z-index: 96;
   border-radius: calc(var(--glass-radius) + 4px);
   border: 1px solid var(--glass-panel-border-strong);
@@ -7431,6 +7435,13 @@ body.mobile-sidebar-lock {
 .cookie-banner-content .small {
   margin: 0;
   color: var(--glass-muted);
+}
+
+.cookie-banner-content .small a {
+  color: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .cookie-banner-actions {

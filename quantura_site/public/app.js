@@ -6611,17 +6611,19 @@
       banner = document.createElement("aside");
       banner.id = "cookie-banner";
       banner.className = "cookie-banner hidden";
+      banner.setAttribute("aria-label", "Cookie preferences");
       banner.innerHTML = `
         <div class="cookie-banner-content">
           <div>
-            <h3>Cookies and analytics</h3>
+            <h3>Choose your cookie preference</h3>
             <p class="small">
-              Quantura uses cookies for analytics and reliability. You can opt out at any time.
+              Essential cookies keep sign-in and core features working. Optional analytics help us improve Quantura.
+              <a href="/privacy">Privacy policy</a>
             </p>
           </div>
           <div class="cookie-banner-actions">
-            <button class="cta secondary small" type="button" data-action="decline">No thanks</button>
-            <button class="cta small" type="button" data-action="accept">Accept</button>
+            <button class="cta secondary small" type="button" data-action="decline">Essential only</button>
+            <button class="cta small" type="button" data-action="accept">Accept analytics</button>
           </div>
         </div>
       `;
@@ -6630,7 +6632,7 @@
     if (banner.dataset.bound !== "1") {
       banner.dataset.bound = "1";
       banner.addEventListener("click", (event) => {
-        const action = event.target?.dataset?.action;
+        const action = event.target?.closest?.("[data-action]")?.dataset?.action;
         if (!action) return;
         if (action === "accept") {
           setCookieConsent("accepted");
@@ -25549,7 +25551,7 @@
 
     if (state.cookieConsent === "accepted") {
       ensureInitialPageView();
-    } else {
+    } else if (state.cookieConsent !== "declined") {
       ensureCookieModal().classList.remove("hidden");
 	    }
       ensureProfileFeedbackButtons();
