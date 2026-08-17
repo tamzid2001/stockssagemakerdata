@@ -114,5 +114,7 @@ def scheduled_function(job_name: str) -> Any:
     handler_name = SCHEDULED_FUNCTIONS.get(job_name)
     if not handler_name:
         return {"ok": False, "error": "job_not_found"}, 404
-    getattr(main, handler_name)({})
-    return {"ok": True, "job": job_name}
+    # Firebase's scheduler decorator wraps each handler as a Flask endpoint and
+    # expects request headers, even when invoked outside Cloud Scheduler.
+    # Passing the active request preserves that contract on Vercel.
+    return app.make_response(getattr(main, handler_name)(request))
