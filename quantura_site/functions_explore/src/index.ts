@@ -5561,17 +5561,14 @@ function extractPreview(payload: Record<string, unknown>, postType: PostType): P
   }
 
   if (imageUrl) {
-    return {
-      kind: "image",
-      imageUrl,
-      metrics: Object.keys(metrics).length ? metrics : undefined,
-    };
+    return Object.keys(metrics).length
+      ? { kind: "image", imageUrl, metrics }
+      : { kind: "image", imageUrl };
   }
 
-  return {
-    kind: "summary",
-    metrics: Object.keys(metrics).length ? metrics : undefined,
-  };
+  return Object.keys(metrics).length
+    ? { kind: "summary", metrics }
+    : { kind: "summary" };
 }
 
 function buildTargetUrl(postType: PostType, sourceDocId: string): string {
