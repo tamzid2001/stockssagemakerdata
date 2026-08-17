@@ -1,11 +1,12 @@
 const crypto = require("crypto");
 const fs = require("fs/promises");
 const path = require("path");
+const express = require("express");
 
 const { onRequest } = require("firebase-functions/v2/https");
 const { setGlobalOptions } = require("firebase-functions/v2/options");
 
-const { initializeApp } = require("firebase-admin/app");
+const { cert, initializeApp } = require("firebase-admin/app");
 const { getRemoteConfig, RemoteConfigFetchResponse } = require("firebase-admin/remote-config");
 
 setGlobalOptions({ region: "us-central1", maxInstances: 10, memory: "512MiB" });
@@ -14,7 +15,10 @@ let adminApp = null;
 
 const getAdminApp = () => {
   if (adminApp) return adminApp;
-  adminApp = initializeApp();
+  const rawServiceAccount = String(process.env.FIREBASE_SERVICE_ACCOUNT_JSON || "").trim();
+  adminApp = rawServiceAccount
+    ? initializeApp({ credential: cert(JSON.parse(rawServiceAccount)) })
+    : initializeApp();
   return adminApp;
 };
 
@@ -296,7 +300,7 @@ const getServerTemplate = async () => {
   return template;
 };
 
-exports.ssr = onRequest(async (req, res) => {
+const ssrHandler = async (req, res) => {
   if (req.method !== "GET" && req.method !== "HEAD") {
     res.status(405).set("Allow", "GET, HEAD").send("Method not allowed.");
     return;
@@ -341,4 +345,11 @@ exports.ssr = onRequest(async (req, res) => {
   // HTML varies by functional cookie (qs_rcid). Avoid long-lived CDN caching across users.
   res.setHeader("Cache-Control", "private, no-cache, max-age=0, must-revalidate");
   res.status(200).send(req.method === "HEAD" ? "" : rendered);
-});
+};
+
+const vercelApp = express();
+vercelApp.use(ssrHandler);
+
+module.exports = vercelApp;
+module.exports.ssr = onRequest(ssrHandler);
+module.exports.ssrHandler = ssrHandler;

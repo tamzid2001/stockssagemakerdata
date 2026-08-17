@@ -1,7 +1,7 @@
 /* global importScripts, firebase, self, clients */
 
-importScripts("/__/firebase/12.9.0/firebase-app-compat.js");
-importScripts("/__/firebase/12.9.0/firebase-messaging-compat.js");
+importScripts("https://www.gstatic.com/firebasejs/12.9.0/firebase-app-compat.js");
+importScripts("https://www.gstatic.com/firebasejs/12.9.0/firebase-messaging-compat.js");
 importScripts("/__/firebase/init.js?useEmulator=false");
 
 let messaging = null;

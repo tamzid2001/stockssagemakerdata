@@ -40,6 +40,37 @@
   const DEFAULT_VOLATILITY_THRESHOLD = 0.05;
   const META_PIXEL_ID = "1643823927053003";
   const META_CAPI_CALLABLE = "track_meta_conversion_event";
+  const createVercelFunctionsClient = () => ({
+    httpsCallable: (functionName) => async (data) => {
+      const name = String(functionName || "").trim();
+      if (!/^[a-zA-Z0-9_]+$/.test(name)) {
+        throw new Error("Invalid callable function name.");
+      }
+      const headers = { "Content-Type": "application/json" };
+      try {
+        const currentUser = typeof firebase !== "undefined" ? firebase.auth?.()?.currentUser : null;
+        const idToken = currentUser ? await currentUser.getIdToken() : "";
+        if (idToken) headers.Authorization = `Bearer ${idToken}`;
+      } catch (_error) {
+        // Anonymous callable functions remain available without an ID token.
+      }
+      const response = await fetch(`/api/callable/${encodeURIComponent(name)}`, {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: JSON.stringify({ data: data ?? {} }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload?.error) {
+        const error = new Error(payload?.error?.message || payload?.message || `Function ${name} failed.`);
+        error.code = String(payload?.error?.status || payload?.error?.code || `http-${response.status}`).toLowerCase();
+        error.details = payload?.error?.details;
+        throw error;
+      }
+      return { data: payload?.data ?? payload?.result ?? null };
+    },
+  });
+  window.__quanturaFunctionsClient = createVercelFunctionsClient();
   const META_STANDARD_EVENTS = new Set([
     "PageView",
     "CustomizeProduct",
@@ -6656,7 +6687,7 @@
 
       try {
         if (typeof firebase === "undefined") throw new Error("App services are not loaded.");
-        const functions = firebase.functions();
+        const functions = window.__quanturaFunctionsClient;
         const submitFeedback = functions.httpsCallable("submit_feedback");
         await submitFeedback({
           rating,
@@ -25285,7 +25316,7 @@
 
 			    const auth = firebase.auth();
 			    const db = firebase.firestore();
-			    const functions = firebase.functions();
+			    const functions = window.__quanturaFunctionsClient;
 			    const storage = firebase.storage ? firebase.storage() : null;
 			    const messaging = getMessagingClient();
           const nativeAuthBridge = installNativeAuthBridge(auth);

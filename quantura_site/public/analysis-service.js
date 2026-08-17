@@ -78,13 +78,14 @@
   };
 
   const getHistoryRows = async (ticker) => {
-    if (!(window.firebase && firebase.app && firebase.app().functions)) {
+    const functionsClient = window.__quanturaFunctionsClient;
+    if (!functionsClient || typeof functionsClient.httpsCallable !== "function") {
       return [];
     }
     try {
       const end = new Date();
       const start = new Date(end.getTime() - 50 * 24 * 60 * 60 * 1000);
-      const callable = firebase.app().functions("us-central1").httpsCallable("get_ticker_history");
+      const callable = functionsClient.httpsCallable("get_ticker_history");
       const result = await callable({
         ticker,
         interval: "1d",

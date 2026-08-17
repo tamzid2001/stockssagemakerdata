@@ -91,6 +91,10 @@ def get_secret(name: str) -> str:
     if not key:
         raise ValueError("Secret name is required.")
 
+    env_value = str(os.environ.get(key) or "").strip()
+    if env_value:
+        return env_value
+
     cached = _SECRET_CACHE.get(key)
     now = time.time()
     if cached and cached[0] > now:

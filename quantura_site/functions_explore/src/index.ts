@@ -84,7 +84,17 @@ const SECRET_NAME_CACHE = new Map<string, string>();
 const SECRET_VALUE_PROMISE_CACHE = new Map<string, Promise<string>>();
 
 if (!admin.apps.length) {
-  admin.initializeApp(DEFAULT_STORAGE_BUCKET ? { storageBucket: DEFAULT_STORAGE_BUCKET } : undefined);
+  const rawServiceAccount = String(process.env.FIREBASE_SERVICE_ACCOUNT_JSON || "").trim();
+  const options: admin.AppOptions = DEFAULT_STORAGE_BUCKET ? { storageBucket: DEFAULT_STORAGE_BUCKET } : {};
+  if (rawServiceAccount) {
+    const parsed = JSON.parse(rawServiceAccount) as Record<string, string>;
+    options.credential = admin.credential.cert({
+      projectId: parsed.project_id || parsed.projectId,
+      clientEmail: parsed.client_email || parsed.clientEmail,
+      privateKey: parsed.private_key || parsed.privateKey,
+    });
+  }
+  admin.initializeApp(options);
 }
 
 const db = admin.firestore();
@@ -8343,6 +8353,14 @@ ROUTES.post("/forecast/run", async (req, res) => {
       meta: trimOutputsMeta(body.meta),
     };
     await docRef.set(payload, { merge: false });
+    try {
+      await createPostFromResult("forecast", docRef.id, {
+        ...payload,
+        createdAt: admin.firestore.Timestamp.now(),
+      });
+    } catch (postError) {
+      console.error("[Forecast] post creation failed", { requestId: docRef.id, postError });
+    }
 
     await upsertOwnedMyRequestFromSystem(user.uid, {
       requestId: buildMyRequestDocId("forecast", docRef.id),
@@ -8491,6 +8509,14 @@ ROUTES.post("/screener/run", async (req, res) => {
       meta: trimOutputsMeta(body.meta),
     };
     await docRef.set(payload, { merge: false });
+    try {
+      await createPostFromResult("screener", docRef.id, {
+        ...payload,
+        createdAt: admin.firestore.Timestamp.now(),
+      });
+    } catch (postError) {
+      console.error("[Screener] post creation failed", { runId: docRef.id, postError });
+    }
 
     let requestResponse = await syncScreenerMyRequestFromRun(user.uid, docRef.id, { ...payload, id: docRef.id }, false);
 
@@ -15451,6 +15477,82 @@ ROUTES.get("/shares/:shareId", async (req, res) => {
   } catch (error) {
     console.error("[Explore] share lookup failed", error);
     res.status(500).json({ error: "share_lookup_failed" });
+  }
+});
+
+function cronRequestAuthorized(req: Request): boolean {
+  const expected = sanitizeText(process.env.CRON_SECRET, 1000);
+  if (!expected) return false;
+  const authorization = asString(req.headers.authorization);
+  const supplied = authorization.match(/^Bearer\s+(.+)$/i)?.[1]?.trim() || asString(req.headers["x-cron-secret"]);
+  if (!supplied) return false;
+  const expectedBuffer = Buffer.from(expected);
+  const suppliedBuffer = Buffer.from(supplied);
+  return expectedBuffer.length === suppliedBuffer.length && crypto.timingSafeEqual(expectedBuffer, suppliedBuffer);
+}
+
+async function reconcileCreatedPosts(limitPerCollection = 100): Promise<Record<string, number>> {
+  const sources: Array<{ postType: PostType; collection: string }> = [
+    { postType: "forecast", collection: "forecast_requests" },
+    { postType: "backtest", collection: "backtests" },
+    { postType: "agent", collection: "agent_runs" },
+    { postType: "screener", collection: "screener_runs" },
+  ];
+  const checked: Record<string, number> = {};
+  for (const source of sources) {
+    let snapshot: admin.firestore.QuerySnapshot;
+    try {
+      snapshot = await db.collection(source.collection).orderBy("createdAt", "desc").limit(limitPerCollection).get();
+    } catch (_error) {
+      snapshot = await db.collection(source.collection).limit(limitPerCollection).get();
+    }
+    checked[source.collection] = snapshot.size;
+    for (const doc of snapshot.docs) {
+      try {
+        await createPostFromResult(source.postType, doc.id, (doc.data() || {}) as Record<string, unknown>);
+      } catch (error) {
+        console.error("[Explore] post reconciliation failed", {
+          collection: source.collection,
+          sourceId: doc.id,
+          error,
+        });
+      }
+    }
+  }
+  return checked;
+}
+
+ROUTES.all("/internal/cron/:jobName", async (req, res) => {
+  if (!cronRequestAuthorized(req)) {
+    res.status(401).json({ ok: false, error: "unauthorized" });
+    return;
+  }
+  try {
+    const jobName = sanitizeText(req.params.jobName, 100);
+    if (jobName === "reconcile-posts") {
+      const checked = await reconcileCreatedPosts();
+      res.status(200).json({ ok: true, job: jobName, checked });
+      return;
+    }
+    if (jobName === "autopilot-reconcile") {
+      await reconcileAutopilotRuns({});
+      res.status(200).json({ ok: true, job: jobName });
+      return;
+    }
+    if (jobName === "automation-schedules") {
+      await runAutomationSchedules({});
+      res.status(200).json({ ok: true, job: jobName });
+      return;
+    }
+    if (jobName === "fiscaldata-refresh") {
+      await refreshFiscaldataDefaults({});
+      res.status(200).json({ ok: true, job: jobName });
+      return;
+    }
+    res.status(404).json({ ok: false, error: "job_not_found" });
+  } catch (error) {
+    console.error("[Explore] cron job failed", { jobName: req.params.jobName, error });
+    res.status(500).json({ ok: false, error: "job_failed" });
   }
 });
 

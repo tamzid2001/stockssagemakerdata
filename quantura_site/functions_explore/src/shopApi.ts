@@ -1,5 +1,6 @@
 import express, { Request, Response } from "express";
 import admin from "firebase-admin";
+import helmet from "helmet";
 import { SecretManagerServiceClient } from "@google-cloud/secret-manager";
 import Stripe from "stripe";
 import {
@@ -14,7 +15,21 @@ import {
 } from "./shopCatalog";
 
 if (!admin.apps.length) {
-  admin.initializeApp();
+  const rawServiceAccount = String(process.env.FIREBASE_SERVICE_ACCOUNT_JSON || "").trim();
+  const storageBucket = String(process.env.FIREBASE_STORAGE_BUCKET || process.env.STORAGE_BUCKET || "").trim();
+  if (rawServiceAccount) {
+    const parsed = JSON.parse(rawServiceAccount) as Record<string, string>;
+    admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId: parsed.project_id || parsed.projectId,
+        clientEmail: parsed.client_email || parsed.clientEmail,
+        privateKey: parsed.private_key || parsed.privateKey,
+      }),
+      ...(storageBucket ? { storageBucket } : {}),
+    });
+  } else {
+    admin.initializeApp(storageBucket ? { storageBucket } : undefined);
+  }
 }
 
 const db = admin.firestore();
@@ -515,10 +530,6 @@ app.get("/api/shop/order/:sessionId", async (req, res) => {
     console.error("[shopApi] order fetch failed", error);
     res.status(500).json({ error: "order_lookup_failed" });
   }
-});
-
-app.use((_req, res) => {
-  res.status(404).json({ error: "not_found" });
 });
 
 app.use((error: any, _req: Request, res: Response, _next: unknown) => {

@@ -1,0 +1,65 @@
+name: Vercel backend schedules
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: vercel-backend-schedules
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      CRON_SECRET: ${{ secrets.QUANTURA_CRON_SECRET }}
+      API_ORIGIN: https://quantura-api.vercel.app
+      LEGACY_ORIGIN: https://quantura-legacy-api.vercel.app
+      NEWSLETTER_ORIGIN: https://quantura-newsletter.vercel.app
+    steps:
+      - name: Validate scheduler secret
+        shell: bash
+        run: test -n "$CRON_SECRET"
+
+      - name: Run recurring reconciliation jobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth_header="Authorization: Bearer ${CRON_SECRET}"
+          curl --fail --silent --show-error --retry 2 -H "$auth_header" -X POST "${API_ORIGIN}/api/internal/cron/reconcile-posts"
+          curl --fail --silent --show-error --retry 2 -H "$auth_header" -X POST "${API_ORIGIN}/api/internal/cron/autopilot-reconcile"
+          curl --fail --silent --show-error --retry 2 -H "$auth_header" -X POST "${API_ORIGIN}/api/internal/cron/automation-schedules"
+
+      - name: Dispatch time-based production jobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth_header="Authorization: Bearer ${CRON_SECRET}"
+          local_hour=$(TZ=America/New_York date +%H)
+          local_minute=$(TZ=America/New_York date +%M)
+          local_weekday=$(TZ=America/New_York date +%u)
+
+          if (( 10#$local_minute < 15 )); then
+            curl --fail --silent --show-error --retry 2 -H "$auth_header" -X POST "${LEGACY_ORIGIN}/api/internal/cron/social-dispatch"
+          fi
+
+          if (( 10#$local_minute < 15 || (10#$local_minute >= 30 && 10#$local_minute < 45) )); then
+            curl --fail --silent --show-error --retry 2 -H "$auth_header" -X POST "${LEGACY_ORIGIN}/api/internal/cron/forecast-report"
+          fi
+
+          if [[ "$local_hour" == "07" ]] && (( 10#$local_minute >= 15 && 10#$local_minute < 30 )); then
+            curl --fail --silent --show-error --retry 2 -H "$auth_header" -X POST "${LEGACY_ORIGIN}/api/internal/cron/social-planner"
+          fi
+
+          if [[ "$local_hour" == "13" ]] && (( 10#$local_minute < 15 )); then
+            curl --fail --silent --show-error --retry 2 -H "$auth_header" -X POST "${LEGACY_ORIGIN}/api/internal/cron/newsletter-daily"
+          fi
+
+          if [[ "$local_weekday" == "1" && "$local_hour" == "09" ]] && (( 10#$local_minute < 15 )); then
+            curl --fail --silent --show-error --retry 2 -H "$auth_header" -X POST "${NEWSLETTER_ORIGIN}/api/internal/cron/newsletter-weekly"
+          fi

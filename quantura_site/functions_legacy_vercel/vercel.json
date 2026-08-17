@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "app.py": {
+      "maxDuration": 300,
+      "memory": 2048,
+      "excludeFiles": "{sql/**,serviceAccountKey.example.json}"
+    }
+  }
+}

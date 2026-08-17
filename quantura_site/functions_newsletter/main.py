@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import firebase_admin
-from firebase_admin import auth, firestore
+from firebase_admin import auth, credentials, firestore
 from flask import Request, Response
 
 from newsletter_mailer import (
@@ -19,7 +19,11 @@ from newsletter_mailer import (
 )
 
 if not firebase_admin._apps:
-    firebase_admin.initialize_app()
+    raw_service_account = str(os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON") or "").strip()
+    if raw_service_account:
+        firebase_admin.initialize_app(credentials.Certificate(json.loads(raw_service_account)))
+    else:
+        firebase_admin.initialize_app()
 
 db = firestore.client()
 
