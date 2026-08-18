@@ -30,7 +30,7 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=20260405b" />
     <meta name="apple-mobile-web-app-title" content="Quantura" />
     <link rel="manifest" href="/site.webmanifest?v=20260405b" />
-    <link rel="stylesheet" href="/styles.css?v=20260817b" />
+    <link rel="stylesheet" href="/styles.css?v=20260817c" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
     <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 
@@ -42,7 +42,7 @@
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-remote-config-compat.js"></script>
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
-    <script defer src="/app.js?v=20260817b"></script>
+    <script defer src="/app.js?v=20260817c"></script>
     <script defer src="/assets/rnweb/quantura-rnw.js"></script>
   
     <script>
@@ -98,7 +98,6 @@
               <a class="sidebar-link" href="/sports-forecasting" data-panel-target="sports-autopilot"><i class="iconoir-trophy" aria-hidden="true"></i><span>Sports Forecasting</span></a>
 	            <a class="sidebar-link" href="/indicators" data-panel-target="indicators"><i class="iconoir-sigma-function" aria-hidden="true"></i><span>Indicators</span></a>
               <a class="sidebar-link" href="/market-headlines" data-panel-target="market-headlines"><i class="iconoir-globe" aria-hidden="true"></i><span>Market headlines</span></a>
-              <a class="sidebar-link" href="/forecasting" data-panel-target="macro"><i class="iconoir-database" aria-hidden="true"></i><span>Macro Dashboard</span></a>
               <a class="sidebar-link" href="/options" data-panel-target="options"><i class="iconoir-numbered-list-left" aria-hidden="true"></i><span>Options</span></a>
               <a class="sidebar-link" href="/terminal/fx" data-panel-target="fx"><i class="iconoir-coins-swap" aria-hidden="true"></i><span>Currency conversion</span></a>
               <a class="sidebar-link" href="/studio" data-panel-target="learn"><i class="iconoir-info-circle" aria-hidden="true"></i><span>Learn more</span></a>
@@ -767,23 +766,6 @@
                         <div id="market-headlines-meta" class="panel-output small">Provider attribution, feed links, terms, and source warnings will appear here.</div>
                       </div>
                     </div>
-                  </section>
-
-                  <section class="panel hidden" data-panel="macro">
-                    <div class="panel-header">
-                      <h2>Macro Dashboard</h2>
-                      <p class="small">Registry-driven Fiscal Data cards with schema-aware rendering and pagination.</p>
-                    </div>
-                    <div class="card" style="margin-bottom:16px;">
-                      <h3>U.S. Treasury Fiscal Data</h3>
-                      <p class="small muted" id="fiscaldata-macro-status">Loading registry and default macro cards...</p>
-                    </div>
-                    <div id="fiscaldata-macro-groups" class="content-grid">
-                      <div class="card">
-                        <div class="small muted">Loading cards...</div>
-                      </div>
-                    </div>
-                    <div id="fiscaldata-macro-details" class="modal hidden"></div>
                   </section>
 
                   <section class="panel hidden" data-panel="options">

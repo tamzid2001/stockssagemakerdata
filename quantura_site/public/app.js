@@ -1784,31 +1784,6 @@
   };
 
   ensureTerminalFxPanelScaffold();
-  const ensureFiscalMacroPanelScaffold = () => {
-    const macroSidebarLink = document.querySelector('[data-panel-target="macro"] span');
-    if (macroSidebarLink) macroSidebarLink.textContent = "Macro Dashboard";
-    const macroPanel = document.querySelector('[data-panel="macro"]');
-    if (!macroPanel) return;
-    if (macroPanel.querySelector("#fiscaldata-macro-groups")) return;
-    macroPanel.innerHTML = `
-      <div class="panel-header">
-        <h2>Macro Dashboard</h2>
-        <p class="small">Registry-driven Fiscal Data cards with schema-aware rendering and pagination.</p>
-      </div>
-      <div class="card" style="margin-bottom:16px;">
-        <h3>U.S. Treasury Fiscal Data</h3>
-        <p class="small muted" id="fiscaldata-macro-status">Loading registry and default macro cards...</p>
-      </div>
-      <div id="fiscaldata-macro-groups" class="content-grid">
-        <div class="card">
-          <div class="small muted">Loading cards...</div>
-        </div>
-      </div>
-      <div id="fiscaldata-macro-details" class="modal hidden"></div>
-    `;
-  };
-
-  ensureFiscalMacroPanelScaffold();
 
 	  const ui = {
     headerAuth: document.getElementById("header-auth"),
@@ -1926,9 +1901,6 @@
     marketHeadlinesStatus: document.getElementById("market-headlines-status"),
     marketHeadlinesOutput: document.getElementById("market-headlines-output"),
     marketHeadlinesMeta: document.getElementById("market-headlines-meta"),
-    macroDashboardStatus: document.getElementById("fiscaldata-macro-status"),
-    macroDashboardGroups: document.getElementById("fiscaldata-macro-groups"),
-    macroDetailsModal: document.getElementById("fiscaldata-macro-details"),
     tickerQueryForm: document.getElementById("ticker-query-form"),
     tickerQueryTicker: document.getElementById("ticker-query-ticker"),
     tickerQueryQuestion: document.getElementById("ticker-query-question"),
@@ -9837,6 +9809,7 @@
     const panel = String(value || "").trim();
     if (panel === "ticker-query") return "forecast";
     if (panel === "predictions") return "forecast";
+    if (panel === "macro") return "forecast";
     if (panel === "ticker-intelligence" || panel === "ticker" || panel === "trending") return "forecast";
     return panel;
   };
@@ -25213,12 +25186,6 @@
           loadMarketHeadlinesFeed(functions, { force: first, notify: false });
         }
 
-        if (next === "macro") {
-          const firstMacro = !state.panelAutoloaded.macro;
-          state.panelAutoloaded.macro = true;
-          loadFiscalMacroDashboard({ force: firstMacro }).catch(() => {});
-        }
-
         if (next === "ticker-query") {
           const ticker = resolveActiveOrDefaultTicker();
           if (ticker && ui.tickerQueryTicker && !String(ui.tickerQueryTicker.value || "").trim()) {
@@ -28707,42 +28674,6 @@
     };
     ui.marketHeadlinesOutput?.addEventListener("click", bindMarketHeadlinesLinkGate);
     ui.marketHeadlinesMeta?.addEventListener("click", bindMarketHeadlinesLinkGate);
-
-    if (ui.macroDashboardStatus) {
-      loadFiscalMacroDashboard({ force: false }).catch((error) => {
-        ui.macroDashboardStatus.textContent = extractErrorMessage(error, "Macro dashboard is unavailable.");
-      });
-    }
-    ui.macroDashboardGroups?.addEventListener("click", async (event) => {
-      const loadMoreButton = event.target.closest("[data-fiscaldata-load-more]");
-      const detailsButton = event.target.closest("[data-fiscaldata-view-details]");
-      if (loadMoreButton) {
-        const cardId = String(loadMoreButton.getAttribute("data-fiscaldata-load-more") || "").trim();
-        const entry = Array.isArray(state.fiscaldataRegistry)
-          ? state.fiscaldataRegistry.find((item) => String(item?.id || "").trim() === cardId)
-          : null;
-        if (!entry) return;
-      const cardState = state.fiscaldataMacroPages?.[cardId] || {};
-      const nextPage = Number(cardState?.nextPageNumber || Number(cardState?.pageNumber || 1) + 1);
-      await loadFiscalMacroCard(entry, { pageNumber: nextPage, append: true });
-      renderFiscalMacroDashboard();
-      return;
-      }
-      if (detailsButton) {
-        const cardId = String(detailsButton.getAttribute("data-fiscaldata-view-details") || "").trim();
-        const entry = Array.isArray(state.fiscaldataRegistry)
-          ? state.fiscaldataRegistry.find((item) => String(item?.id || "").trim() === cardId)
-          : null;
-        if (!entry) return;
-        renderFiscalMacroDetailsModal(entry, state.fiscaldataMacroPages?.[cardId] || {});
-      }
-    });
-    document.addEventListener("click", (event) => {
-      const closeButton = event.target.closest("[data-fiscaldata-close]");
-      if (!closeButton) return;
-      const modal = document.getElementById("fiscaldata-macro-details");
-      modal?.classList.add("hidden");
-    });
 
     if (ui.tickerQueryLanguage && !ui.tickerQueryLanguage.value) {
       ui.tickerQueryLanguage.value = state.preferredLanguage || "en";
