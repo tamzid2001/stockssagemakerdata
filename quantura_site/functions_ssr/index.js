@@ -110,7 +110,6 @@ const resolveTemplate = (pathname) => {
     "/sports-forecasting",
     "/terminal/fx",
     "/tools/fx",
-    "/predictions",
     "/indicators",
     "/news",
     "/market-headlines",
@@ -168,12 +167,13 @@ const resolveTemplate = (pathname) => {
   return templateFromRoute(route);
 };
 
-const REMOVED_MODEL_COUNCIL_ROUTES = new Set([
+const REMOVED_TERMINAL_ROUTES = new Set([
   "/model-council",
   "/ticker-query",
   "/ask-gpt-5",
   "/ask-gpt5",
   "/ask-gpt",
+  "/predictions",
 ]);
 
 const loadTemplateHtml = async (relPath) => {
@@ -309,7 +309,7 @@ const ssrHandler = async (req, res) => {
     return;
   }
 
-  if (REMOVED_MODEL_COUNCIL_ROUTES.has(normalizePath(req.path || "/"))) {
+  if (REMOVED_TERMINAL_ROUTES.has(normalizePath(req.path || "/"))) {
     res.redirect(308, "/forecasting");
     return;
   }

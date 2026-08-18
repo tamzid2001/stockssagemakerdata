@@ -1894,7 +1894,7 @@
     technicalsOutput: document.getElementById("technicals-output"),
     downloadForm: document.getElementById("download-form"),
     downloadEnd: document.getElementById("download-end"),
-    downloadUseAllHistory: document.getElementById("download-use-all-history"),
+    downloadRowLimit: document.getElementById("download-row-limit"),
     downloadStatus: document.getElementById("download-status"),
     downloadPreview: document.getElementById("download-preview"),
     intelOutput: document.getElementById("intel-output"),
@@ -2002,9 +2002,8 @@
     foundryWape: document.getElementById("foundry-wape"),
     foundryRmse: document.getElementById("foundry-rmse"),
     foundryMase: document.getElementById("foundry-mase"),
-    foundryStart: document.getElementById("foundry-start"),
     foundryEnd: document.getElementById("foundry-end"),
-    foundryUseAllHistory: document.getElementById("foundry-use-all-history"),
+    foundryRowLimit: document.getElementById("foundry-row-limit"),
     foundryFile: document.getElementById("foundry-file"),
     foundryNotes: document.getElementById("foundry-notes"),
     foundryModelMetricsBlock: document.getElementById("foundry-model-metrics-block"),
@@ -3306,7 +3305,6 @@
           "/terminal",
           "/forecasting",
           "/terminal/fx",
-          "/predictions",
           "/indicators",
           "/trending",
           "/news",
@@ -3384,11 +3382,11 @@
     };
 
     const preferredByRouter = {
-      terminal: ["forecast", "/forecasting", "predictions", "/predictions", "indicators", "/indicators", "fx", "/terminal/fx"],
+      terminal: ["forecast", "/forecasting", "indicators", "/indicators", "fx", "/terminal/fx"],
       dashboard: ["orders", "profile", "watchlist", "collaboration", "notifications", "/explore"],
     };
     const preferredByPath = {
-      "/screener": ["/forecasting", "/predictions", "/indicators", "/screener", "/explore"],
+      "/screener": ["/forecasting", "/indicators", "/screener", "/explore"],
     };
     const preferredPanels = preferredByPath[path] || preferredByRouter[routerName] || [];
     const selected = preferredPanels
@@ -9796,7 +9794,6 @@
         forecast: "/forecasting",
         autopilot: "/autopilot",
         "sports-autopilot": "/sports-forecasting",
-        predictions: "/predictions",
         indicators: "/indicators",
         news: "/news",
         "market-headlines": "/market-headlines",
@@ -9810,7 +9807,6 @@
         "/uploads": "autopilot",
         "/dashboard/uploads": "autopilot",
         "/sports-forecasting": "sports-autopilot",
-        "/predictions": "predictions",
         "/trending": "forecast",
         "/tools/fx": "fx",
         "/terminal/fx": "fx",
@@ -9840,6 +9836,7 @@
   const normalizePanelName = (value) => {
     const panel = String(value || "").trim();
     if (panel === "ticker-query") return "forecast";
+    if (panel === "predictions") return "forecast";
     if (panel === "ticker-intelligence" || panel === "ticker" || panel === "trending") return "forecast";
     return panel;
   };
@@ -18647,22 +18644,10 @@
   };
 
   const syncFoundryDateDefaults = ({ force = false } = {}) => {
-    const useAllHistory = Boolean(ui.foundryUseAllHistory?.checked);
     const today = new Date();
     const endValue = today.toISOString().slice(0, 10);
-    const startDate = new Date(today);
-    startDate.setFullYear(startDate.getFullYear() - 5);
-    const startValue = startDate.toISOString().slice(0, 10);
     if (ui.foundryEnd && (force || !String(ui.foundryEnd.value || "").trim())) {
       ui.foundryEnd.value = endValue;
-    }
-    if (ui.foundryStart) {
-      ui.foundryStart.disabled = useAllHistory;
-      if (useAllHistory) {
-        ui.foundryStart.value = "";
-      } else if (force || !String(ui.foundryStart.value || "").trim()) {
-        ui.foundryStart.value = startValue;
-      }
     }
   };
 
@@ -19210,22 +19195,21 @@
     setFoundryStatus("Preparing Forecast Foundry source...");
     let payload = null;
     if (sourceKind === "history") {
-      const start = String(ui.foundryStart?.value || "").trim();
       const end = String(ui.foundryEnd?.value || "").trim();
-      const useAllHistory = Boolean(ui.foundryUseAllHistory?.checked);
-      if (!ticker || !end || (!useAllHistory && !start)) {
-        throw new Error(
-          useAllHistory
-            ? "Ticker and end date are required when using all available history."
-            : "Ticker, start date, and end date are required for historical downloader imports."
-        );
+      const requestedRowLimit = String(ui.foundryRowLimit?.value || "500").trim().toLowerCase();
+      const useAllHistory = requestedRowLimit === "all";
+      const parsedRowLimit = Number.parseInt(requestedRowLimit, 10);
+      const rowLimit = useAllHistory || ![500, 1000, 1500, 2000].includes(parsedRowLimit) ? 500 : parsedRowLimit;
+      if (!ticker || !end) {
+        throw new Error("Ticker and end date are required for historical downloader imports.");
       }
       payload = await callFoundryApi("POST", "/api/autopilot/datasets/history", {
         ticker,
         interval,
-        start,
+        start: "",
         end,
         useAllHistory,
+        rowLimit: useAllHistory ? "all" : rowLimit,
         notes,
         modelMetrics,
         workspaceId,
@@ -28548,7 +28532,10 @@
         return;
       }
       const interval = "1d";
-      const useAllHistory = Boolean(formData.get("useAllHistory"));
+      const requestedRowLimit = String(formData.get("rowLimit") || "500").trim().toLowerCase();
+      const useAllHistory = requestedRowLimit === "all";
+      const parsedRowLimit = Number.parseInt(requestedRowLimit, 10);
+      const rowLimit = useAllHistory || ![500, 1000, 1500, 2000].includes(parsedRowLimit) ? null : parsedRowLimit;
       const today = new Date();
       const end = String(formData.get("end") || "").trim() || today.toISOString().slice(0, 10);
       const start = useAllHistory ? "" : "1900-01-01";
@@ -28558,6 +28545,7 @@
         end,
         interval,
         useAllHistory,
+        rowLimit: useAllHistory ? "all" : rowLimit || 500,
         meta: buildMeta(),
       };
 
@@ -28578,12 +28566,20 @@
           }
           return;
         }
-        const filename = String(data.filename || `${ticker}_${start}_${end}.csv`);
+        const selectionLabel = useAllHistory ? "all available" : `latest ${rowLimit || 500}`;
+        const filename = String(data.filename || `${ticker}_${useAllHistory ? "all" : `latest_${rowLimit || 500}`}_${end}.csv`);
         renderDownloadHistoryPreview(csvText, { ticker });
         triggerDownload(filename, csvText);
         const rowCount = Number(data.rowCount || 0);
-        ui.downloadStatus.textContent = rowCount ? `Download ready (${rowCount} rows).` : "Download ready.";
-        logEvent("download_history", { ticker, interval, use_all_history: useAllHistory });
+        ui.downloadStatus.textContent = rowCount
+          ? `Download ready (${rowCount} ${rowCount === 1 ? "price" : "prices"}; ${selectionLabel}).`
+          : "Download ready.";
+        logEvent("download_history", {
+          ticker,
+          interval,
+          row_limit: useAllHistory ? "all" : rowLimit || 500,
+          use_all_history: useAllHistory,
+        });
       } catch (error) {
         ui.downloadStatus.textContent = "Download failed.";
         showToast(error.message || "Unable to fetch history.", "warn");
@@ -29276,9 +29272,6 @@
     });
     ui.foundryInterval?.addEventListener("change", () => {
       syncFoundryDateDefaults({ force: true });
-    });
-    ui.foundryUseAllHistory?.addEventListener("change", () => {
-      syncFoundryDateDefaults();
     });
     ui.foundryQuantiles?.addEventListener("blur", () => {
       try {

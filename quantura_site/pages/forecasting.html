@@ -30,7 +30,7 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=20260405b" />
     <meta name="apple-mobile-web-app-title" content="Quantura" />
     <link rel="manifest" href="/site.webmanifest?v=20260405b" />
-    <link rel="stylesheet" href="/styles.css?v=20260817a" />
+    <link rel="stylesheet" href="/styles.css?v=20260817b" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
     <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 
@@ -42,7 +42,7 @@
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-remote-config-compat.js"></script>
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
-    <script defer src="/app.js?v=20260817a"></script>
+    <script defer src="/app.js?v=20260817b"></script>
     <script defer src="/assets/rnweb/quantura-rnw.js"></script>
   
     <script>
@@ -96,7 +96,6 @@
 	            <a class="sidebar-link active" href="/forecasting" data-panel-target="forecast"><i class="iconoir-magic-wand" aria-hidden="true"></i><span>Forecast</span></a>
               <a class="sidebar-link" href="/autopilot" data-panel-target="autopilot"><i class="iconoir-rocket" aria-hidden="true"></i><span>Forecast Foundry</span></a>
               <a class="sidebar-link" href="/sports-forecasting" data-panel-target="sports-autopilot"><i class="iconoir-trophy" aria-hidden="true"></i><span>Sports Forecasting</span></a>
-	              <a class="sidebar-link" href="/predictions" data-panel-target="predictions"><i class="iconoir-graph-up" aria-hidden="true"></i><span>Predictions</span></a>
 	            <a class="sidebar-link" href="/indicators" data-panel-target="indicators"><i class="iconoir-sigma-function" aria-hidden="true"></i><span>Indicators</span></a>
               <a class="sidebar-link" href="/market-headlines" data-panel-target="market-headlines"><i class="iconoir-globe" aria-hidden="true"></i><span>Market headlines</span></a>
               <a class="sidebar-link" href="/forecasting" data-panel-target="macro"><i class="iconoir-database" aria-hidden="true"></i><span>Macro Dashboard</span></a>
@@ -289,20 +288,19 @@
 
                             <div id="foundry-history-fields" class="form-grid">
                               <div class="field">
-                                <label class="label" for="foundry-start">Start date</label>
-                                <input id="foundry-start" name="start" type="date" />
-                              </div>
-                              <div class="field">
                                 <label class="label" for="foundry-end">End date</label>
                                 <input id="foundry-end" name="end" type="date" />
                               </div>
                               <div class="field">
-                                <label class="label" for="foundry-use-all-history">Use all available history</label>
-                                <label class="checkbox" style="display:flex; align-items:center; gap:10px; margin-top:8px;">
-                                  <input id="foundry-use-all-history" name="useAllHistory" type="checkbox" />
-                                  <span>Use all available historical data for this interval</span>
-                                </label>
-                                <div class="small muted">Foundry history preparation uses daily market data only.</div>
+                                <label class="label" for="foundry-row-limit">Market prices</label>
+                                <select id="foundry-row-limit" name="rowLimit">
+                                  <option value="500" selected>Latest 500 prices</option>
+                                  <option value="1000">Latest 1,000 prices</option>
+                                  <option value="1500">Latest 1,500 prices</option>
+                                  <option value="2000">Latest 2,000 prices</option>
+                                  <option value="all">All available prices</option>
+                                </select>
+                                <div class="small muted">Foundry prepares the selected number of daily market prices.</div>
                               </div>
                             </div>
 
@@ -577,18 +575,6 @@
                     </div>
                   </section>
 
-	                  <section class="panel hidden" data-panel="predictions">
-                    <div class="panel-header">
-                      <h2>Predictions</h2>
-                      <p class="small">Polymarket-inspired list view powered by Gamma API. Search by ticker or browse top active stock markets.</p>
-                    </div>
-                    <div class="results-panel">
-                      <h3>Prediction Markets</h3>
-                      <div id="ticker-predictions-output" class="panel-output small">Load a ticker to view related Polymarket prediction markets.</div>
-                      <p class="small muted" style="margin-top:10px;">Predictions are informational only and not investment advice.</p>
-                    </div>
-                  </section>
-
                   <section class="panel hidden" data-panel="indicators">
                     <div class="panel-header">
                       <h2>Indicators</h2>
@@ -704,13 +690,17 @@
                             <label class="label" for="download-end">End date</label>
                             <input id="download-end" name="end" type="date" />
                           </div>
-                        </div>
-                        <div class="field">
-                          <label class="checkbox download-history-toggle">
-                            <input id="download-use-all-history" name="useAllHistory" type="checkbox" />
-                            <span>Use all available historical data for this interval</span>
-                          </label>
-                          <div class="small muted download-history-note">Historical downloader exports daily market data only.</div>
+                          <div class="field">
+                            <label class="label" for="download-row-limit">Market prices</label>
+                            <select id="download-row-limit" name="rowLimit">
+                              <option value="500" selected>Latest 500 prices</option>
+                              <option value="1000">Latest 1,000 prices</option>
+                              <option value="1500">Latest 1,500 prices</option>
+                              <option value="2000">Latest 2,000 prices</option>
+                              <option value="all">All available prices</option>
+                            </select>
+                            <div class="small muted download-history-note">Daily prices export from oldest to newest within the selected range.</div>
+                          </div>
                         </div>
                         <div class="download-form-actions">
                           <button class="cta" type="submit" data-analytics="download_prices">Download CSV</button>
@@ -721,7 +711,7 @@
                         <h3>Export guidance</h3>
                         <p class="small">
                           Use the ticker field to export a clean canonical dataset with <code>item_id</code>, <code>timestamp</code>, and <code>closing_price</code>.
-                          Daily exports keep the downloader aligned with Forecast Foundry's daily-only historical workflow.
+                          Choose the latest 500, 1,000, 1,500, or 2,000 prices, or export every available daily price. Daily exports keep the downloader aligned with Forecast Foundry's daily-only historical workflow.
                         </p>
                         <details class="learn-more">
                           <summary>Learn more</summary>

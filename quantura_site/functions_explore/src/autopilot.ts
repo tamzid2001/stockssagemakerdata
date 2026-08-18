@@ -1041,6 +1041,7 @@ export async function downloadHistoricalStockDataset(input: {
   start?: string;
   end?: string;
   useAllHistory?: boolean;
+  rowLimit?: number | null;
   fetchImpl?: typeof fetch;
 }): Promise<CanonicalDataset> {
   const ticker = normalizeTicker(input.ticker);
@@ -1050,10 +1051,14 @@ export async function downloadHistoricalStockDataset(input: {
     throw new Error("Historical downloader currently supports daily data only.");
   }
   const useAllHistory = Boolean(input.useAllHistory);
-  const startDate = useAllHistory ? null : parseFlexibleDate(input.start);
+  const rowLimit = Number.isFinite(input.rowLimit)
+    ? Math.max(1, Math.floor(Number(input.rowLimit)))
+    : null;
+  const fetchAllAvailable = useAllHistory || rowLimit !== null;
+  const startDate = fetchAllAvailable ? null : parseFlexibleDate(input.start);
   const endDate = parseFlexibleDate(input.end) || new Date();
-  if (!endDate || (!useAllHistory && !startDate)) {
-    throw new Error(useAllHistory ? "End date is required." : "Start and end dates are required.");
+  if (!endDate || (!fetchAllAvailable && !startDate)) {
+    throw new Error(fetchAllAvailable ? "End date is required." : "Start and end dates are required.");
   }
   if (startDate && endDate.getTime() < startDate.getTime()) {
     throw new Error("End date must be on or after the start date.");
@@ -1064,11 +1069,16 @@ export async function downloadHistoricalStockDataset(input: {
   const chunkRows = await fetchYahooHistorySegment({
     ticker,
     interval,
-    startSeconds: useAllHistory ? 0 : Math.floor((startDate as Date).getTime() / 1000),
+    startSeconds: fetchAllAvailable ? 0 : Math.floor((startDate as Date).getTime() / 1000),
     endSeconds: Math.floor(endExclusive.getTime() / 1000),
     fetchImpl,
   });
-  const rows: CanonicalDatasetRow[] = chunkRows;
+  const sortedRows = chunkRows.slice().sort((left, right) => {
+    const leftMs = parseFlexibleDate(left.timestamp)?.getTime() || 0;
+    const rightMs = parseFlexibleDate(right.timestamp)?.getTime() || 0;
+    return leftMs - rightMs;
+  });
+  const rows: CanonicalDatasetRow[] = rowLimit === null ? sortedRows : sortedRows.slice(-rowLimit);
 
   if (!rows.length) {
     throw new Error(`No ${interval} history rows were returned for ${ticker}.`);
