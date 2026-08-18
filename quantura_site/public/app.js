@@ -2150,19 +2150,6 @@
       label: "MarketWatch Top Stories",
       feedIds: Object.freeze(["marketwatch_topstories"]),
     }),
-    spglobal: Object.freeze({
-      id: "spglobal",
-      label: "S&P DJI RSS",
-      feedIds: Object.freeze([
-        "spglobal_research",
-        "spglobal_commentary",
-        "spglobal_index_launches",
-        "spglobal_index_announcements",
-        "spglobal_consultations",
-      ]),
-    }),
-    mql5: Object.freeze({ id: "mql5", label: "MQL5 Blogs RSS", feedIds: Object.freeze(["mql5_blogs"]) }),
-    cnbc: Object.freeze({ id: "cnbc", label: "CNBC Market Insider", feedIds: Object.freeze(["cnbc_market_insider"]) }),
     economictimes: Object.freeze({
       id: "economictimes",
       label: "Economic Times Stocks",
@@ -2185,17 +2172,6 @@
     cnn10: Object.freeze({ id: "cnn10", provider: "cnn", label: "CNN 10" }),
     cnn_latest: Object.freeze({ id: "cnn_latest", provider: "cnn", label: "Most Recent" }),
     cnn_underscored: Object.freeze({ id: "cnn_underscored", provider: "cnn", label: "CNN Underscored" }),
-    spglobal_research: Object.freeze({ id: "spglobal_research", provider: "spglobal", label: "Research" }),
-    spglobal_commentary: Object.freeze({ id: "spglobal_commentary", provider: "spglobal", label: "Commentary" }),
-    spglobal_index_launches: Object.freeze({ id: "spglobal_index_launches", provider: "spglobal", label: "Index launches" }),
-    spglobal_index_announcements: Object.freeze({
-      id: "spglobal_index_announcements",
-      provider: "spglobal",
-      label: "Index announcements",
-    }),
-    spglobal_consultations: Object.freeze({ id: "spglobal_consultations", provider: "spglobal", label: "Consultations" }),
-    mql5_blogs: Object.freeze({ id: "mql5_blogs", provider: "mql5", label: "Latest blogs" }),
-    cnbc_market_insider: Object.freeze({ id: "cnbc_market_insider", provider: "cnbc", label: "Market Insider" }),
     economictimes_stocks: Object.freeze({ id: "economictimes_stocks", provider: "economictimes", label: "Stocks" }),
     investing_markets: Object.freeze({ id: "investing_markets", provider: "investing", label: "Market news" }),
     seekingalpha_top: Object.freeze({ id: "seekingalpha_top", provider: "seekingalpha", label: "Top feed" }),
@@ -3335,7 +3311,6 @@
           "/trending",
           "/news",
           "/market-headlines",
-          "/model-council",
           "/options",
           "/tools/fx",
           "/screener",
@@ -3409,11 +3384,11 @@
     };
 
     const preferredByRouter = {
-      terminal: ["forecast", "/forecasting", "predictions", "/predictions", "ticker-query", "/model-council", "fx", "/terminal/fx"],
+      terminal: ["forecast", "/forecasting", "predictions", "/predictions", "indicators", "/indicators", "fx", "/terminal/fx"],
       dashboard: ["orders", "profile", "watchlist", "collaboration", "notifications", "/explore"],
     };
     const preferredByPath = {
-      "/screener": ["/forecasting", "/predictions", "/indicators", "/screener", "/model-council"],
+      "/screener": ["/forecasting", "/predictions", "/indicators", "/screener", "/explore"],
     };
     const preferredPanels = preferredByPath[path] || preferredByRouter[routerName] || [];
     const selected = preferredPanels
@@ -9825,7 +9800,6 @@
         indicators: "/indicators",
         news: "/news",
         "market-headlines": "/market-headlines",
-        "ticker-query": "/model-council",
         options: "/options",
         screener: "/forecasting",
         fx: "/terminal/fx",
@@ -9838,8 +9812,6 @@
         "/sports-forecasting": "sports-autopilot",
         "/predictions": "predictions",
         "/trending": "forecast",
-        "/ticker-query": "ticker-query",
-        "/model-council": "ticker-query",
         "/tools/fx": "fx",
         "/terminal/fx": "fx",
       },
@@ -9867,6 +9839,7 @@
 
   const normalizePanelName = (value) => {
     const panel = String(value || "").trim();
+    if (panel === "ticker-query") return "forecast";
     if (panel === "ticker-intelligence" || panel === "ticker" || panel === "trending") return "forecast";
     return panel;
   };
@@ -16988,49 +16961,199 @@
   };
 
   const renderIndicatorChart = async (series) => {
-	    if (!ui.indicatorChart) return;
-	    const Plotly = getPlotly();
-	    if (!Plotly) {
-	      ui.indicatorChart.textContent = "Chart library not loaded.";
-	      return;
-	    }
-
-    const dates = series?.dates || [];
-    const items = series?.items || [];
-    if (!dates.length || !items.length) {
-      ui.indicatorChart.textContent = "No indicator series to plot.";
+    if (!ui.indicatorChart) return;
+    const Plotly = getPlotly();
+    if (!Plotly) {
+      ui.indicatorChart.textContent = "Chart library not loaded.";
       return;
     }
 
-    const traces = items.map((item) => ({
-      type: "scatter",
-      mode: "lines",
-      name: item.name,
-      x: dates,
-      y: item.values,
-      line: { width: 2 },
-    }));
+    const dates = Array.isArray(series?.dates) ? series.dates : [];
+    const items = Array.isArray(series?.items) ? series.items : [];
+    const price = series?.price && typeof series.price === "object" ? series.price : {};
+    const priceClose = Array.isArray(price.close) ? price.close : [];
+    if (!dates.length || (!items.length && !priceClose.length)) {
+      ui.indicatorChart.textContent = "No price or indicator series to plot.";
+      return;
+    }
 
-      const dark = isDarkMode();
-      const isMobileViewport = typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches;
-      const textColor = dark ? "rgba(246, 244, 238, 0.92)" : "#12182a";
-      const gridColor = dark ? "rgba(246, 244, 238, 0.14)" : "rgba(18, 24, 42, 0.12)";
-	    const layout = {
-	      title: { text: "Technical indicators", font: { family: "Manrope, sans-serif", size: 14, color: textColor } },
-	      font: { family: "Manrope, sans-serif", color: textColor },
-	      paper_bgcolor: "rgba(0,0,0,0)",
-	      plot_bgcolor: "rgba(0,0,0,0)",
-	      margin: { l: 50, r: 20, t: 40, b: isMobileViewport ? 88 : 50 },
-	      xaxis: { showspikes: true, spikemode: "across", spikesnap: "cursor", gridcolor: gridColor, zerolinecolor: gridColor },
-	      yaxis: { zeroline: false, gridcolor: gridColor },
-	      legend: {
-          orientation: "h",
-          y: isMobileViewport ? -0.28 : 1.05,
-          yanchor: "top",
-          x: 0,
-          xanchor: "left",
-        },
-	    };
+    const priceOverlayPattern = /^(SMA_|EMA_|BBANDS_)/i;
+    const priceOverlays = items.filter((item) => priceOverlayPattern.test(String(item?.name || "")));
+    const lowerItems = items.filter((item) => !priceOverlayPattern.test(String(item?.name || "")));
+    const paneKeyForItem = (name) => {
+      const normalized = String(name || "").trim().toUpperCase();
+      if (normalized.startsWith("MACD_")) return "MACD";
+      if (normalized.startsWith("ADX_") || normalized.startsWith("PLUS_DI_") || normalized.startsWith("MINUS_DI_")) return "ADX / DI";
+      if (normalized.startsWith("STOCH_")) return "Stochastic";
+      if (normalized.startsWith("RSI_")) return "RSI";
+      if (normalized.startsWith("ATR_")) return "ATR";
+      if (normalized.startsWith("CCI_")) return "CCI";
+      if (normalized.startsWith("MFI_")) return "MFI";
+      if (normalized.startsWith("WILLR_")) return "Williams %R";
+      if (normalized.startsWith("ROC_")) return "ROC";
+      if (normalized === "OBV") return "OBV";
+      return normalized.replace(/_/g, " ") || "Indicator";
+    };
+    const lowerPanes = [];
+    lowerItems.forEach((item) => {
+      const key = paneKeyForItem(item?.name);
+      let pane = lowerPanes.find((candidate) => candidate.key === key);
+      if (!pane) {
+        pane = { key, items: [] };
+        lowerPanes.push(pane);
+      }
+      pane.items.push(item);
+    });
+
+    const paneCount = 1 + lowerPanes.length;
+    const paneGap = lowerPanes.length ? 0.025 : 0;
+    const priceWeight = 2.35;
+    const lowerWeight = 1;
+    const usableDomain = 1 - paneGap * Math.max(0, paneCount - 1);
+    const totalWeight = priceWeight + lowerPanes.length * lowerWeight;
+    const priceHeight = (usableDomain * priceWeight) / totalWeight;
+    const lowerHeight = (usableDomain * lowerWeight) / totalWeight;
+    const paneDomains = [[1 - priceHeight, 1]];
+    let paneTop = paneDomains[0][0] - paneGap;
+    lowerPanes.forEach((_pane, index) => {
+      const bottom = index === lowerPanes.length - 1 ? 0 : Math.max(0, paneTop - lowerHeight);
+      paneDomains.push([bottom, paneTop]);
+      paneTop = bottom - paneGap;
+    });
+
+    const traces = [];
+    if (
+      priceClose.length === dates.length &&
+      [price.open, price.high, price.low].every((values) => Array.isArray(values) && values.length === dates.length)
+    ) {
+      traces.push({
+        type: "candlestick",
+        name: "Price",
+        x: dates,
+        open: price.open,
+        high: price.high,
+        low: price.low,
+        close: priceClose,
+        yaxis: "y",
+        increasing: { line: { color: "#18a77b" } },
+        decreasing: { line: { color: "#e05260" } },
+      });
+    } else if (priceClose.length === dates.length) {
+      traces.push({ type: "scatter", mode: "lines", name: "Price", x: dates, y: priceClose, yaxis: "y", line: { width: 2 } });
+    }
+    priceOverlays.forEach((item) => {
+      traces.push({
+        type: "scatter",
+        mode: "lines",
+        name: item.name,
+        x: dates,
+        y: item.values,
+        yaxis: "y",
+        line: { width: 1.8 },
+      });
+    });
+    lowerPanes.forEach((pane, paneIndex) => {
+      const axisRef = `y${paneIndex + 2}`;
+      pane.items.forEach((item) => {
+        const isHistogram = String(item?.name || "").toUpperCase() === "MACD_HIST";
+        traces.push({
+          type: isHistogram ? "bar" : "scatter",
+          mode: isHistogram ? undefined : "lines",
+          name: item.name,
+          x: dates,
+          y: item.values,
+          yaxis: axisRef,
+          opacity: isHistogram ? 0.58 : 1,
+          line: isHistogram ? undefined : { width: 1.8 },
+        });
+      });
+    });
+
+    const dark = isDarkMode();
+    const isMobileViewport = typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches;
+    const textColor = dark ? "rgba(246, 244, 238, 0.92)" : "#12182a";
+    const gridColor = dark ? "rgba(246, 244, 238, 0.14)" : "rgba(18, 24, 42, 0.12)";
+    const guideColor = dark ? "rgba(246, 244, 238, 0.24)" : "rgba(18, 24, 42, 0.22)";
+    const bottomAxisRef = lowerPanes.length ? `y${lowerPanes.length + 1}` : "y";
+    const chartHeight = Math.max(520, 360 + lowerPanes.length * 180);
+    ui.indicatorChart.style.height = `${chartHeight}px`;
+    const layout = {
+      height: chartHeight,
+      font: { family: "Manrope, sans-serif", color: textColor },
+      paper_bgcolor: "rgba(0,0,0,0)",
+      plot_bgcolor: "rgba(0,0,0,0)",
+      margin: { l: isMobileViewport ? 48 : 60, r: isMobileViewport ? 12 : 28, t: 52, b: isMobileViewport ? 98 : 58 },
+      hovermode: "x unified",
+      bargap: 0.05,
+      xaxis: {
+        anchor: bottomAxisRef,
+        showspikes: true,
+        spikemode: "across",
+        spikesnap: "cursor",
+        gridcolor: gridColor,
+        zerolinecolor: gridColor,
+        rangeslider: { visible: false },
+      },
+      yaxis: {
+        domain: paneDomains[0],
+        anchor: "x",
+        title: { text: "Price" },
+        side: "right",
+        fixedrange: false,
+        zeroline: false,
+        gridcolor: gridColor,
+      },
+      legend: {
+        orientation: "h",
+        y: isMobileViewport ? -0.24 : 1.04,
+        yanchor: "top",
+        x: 0,
+        xanchor: "left",
+      },
+      shapes: [],
+    };
+
+    const boundedPaneRanges = {
+      RSI: [0, 100],
+      MFI: [0, 100],
+      Stochastic: [0, 100],
+      "Williams %R": [-100, 0],
+      "ADX / DI": [0, 100],
+    };
+    const paneGuideLevels = {
+      RSI: [30, 70],
+      MFI: [20, 80],
+      Stochastic: [20, 80],
+      "Williams %R": [-80, -20],
+    };
+    lowerPanes.forEach((pane, paneIndex) => {
+      const axisNumber = paneIndex + 2;
+      const axisName = `yaxis${axisNumber}`;
+      const axisRef = `y${axisNumber}`;
+      layout[axisName] = {
+        domain: paneDomains[paneIndex + 1],
+        anchor: "x",
+        title: { text: pane.key },
+        side: "right",
+        fixedrange: false,
+        zeroline: true,
+        zerolinecolor: guideColor,
+        gridcolor: gridColor,
+        ...(boundedPaneRanges[pane.key] ? { range: boundedPaneRanges[pane.key] } : {}),
+      };
+      (paneGuideLevels[pane.key] || []).forEach((level) => {
+        layout.shapes.push({
+          type: "line",
+          xref: "paper",
+          x0: 0,
+          x1: 1,
+          yref: axisRef,
+          y0: level,
+          y1: level,
+          line: { color: guideColor, width: 1, dash: "dot" },
+        });
+      });
+    });
 
     await Plotly.react(ui.indicatorChart, traces, layout, {
       responsive: true,
@@ -28247,6 +28370,12 @@
             functions,
           });
           const prediction = analysis.prediction && typeof analysis.prediction === "object" ? analysis.prediction : {};
+          const targetPrice = Number(prediction.targetPrice);
+          const lastClose = Number(data?.meta?.lastClose);
+          const upsidePct =
+            Number.isFinite(targetPrice) && Number.isFinite(lastClose) && lastClose > 0
+              ? ((targetPrice - lastClose) / lastClose) * 100
+              : null;
           const indicatorSourceId = `ind_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
           const indicatorRequestId = buildSourceRequestId("indicator", indicatorSourceId);
           const indicatorAutoPublish = shouldAutoPublishForType("indicator");
@@ -28255,12 +28384,6 @@
 		          if (!rows.length) {
 		            ui.technicalsOutput.textContent = "No indicator data returned.";
 		          } else {
-                const targetPrice = Number(prediction.targetPrice);
-                const lastClose = Number(data?.meta?.lastClose);
-                const upsidePct =
-                  Number.isFinite(targetPrice) && Number.isFinite(lastClose) && lastClose > 0
-                    ? ((targetPrice - lastClose) / lastClose) * 100
-                    : null;
                 const providerId = normalizeModelCouncilProviderId(String(analysis.provider || "quantura").trim());
                 const providerLabel = String(MODEL_PROVIDER_LABEL[providerId] || titleCaseLabel(analysis.provider || "quantura")).trim() || "Quantura";
                 const modelId = normalizeAiModelId(analysis.model || "indicator_local_repair") || "indicator_local_repair";

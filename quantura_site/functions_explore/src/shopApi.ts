@@ -73,7 +73,7 @@ const SUBSCRIPTION_PLANS: Record<string, SubscriptionPlan> = {
     cycle: "monthly",
     amountCents: 800,
     label: "Quantura Go Monthly",
-    description: "Ad-free plan with higher limits for forecasts, screeners, and Model Council.",
+    description: "Ad-free plan with higher limits for forecasts, screeners, and indicator analysis.",
   },
   go_yearly: {
     tier: "go",

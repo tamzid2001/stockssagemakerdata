@@ -114,16 +114,11 @@ const resolveTemplate = (pathname) => {
     "/indicators",
     "/news",
     "/market-headlines",
-    "/model-council",
-    "/ticker-query",
     "/options",
     "/saved-forecasts",
     "/studio",
     "/forecast",
     "/terminal",
-    "/ask-gpt-5",
-    "/ask-gpt5",
-    "/ask-gpt",
     "/gpt-5",
     "/gpt5",
   ]);
@@ -172,6 +167,14 @@ const resolveTemplate = (pathname) => {
 
   return templateFromRoute(route);
 };
+
+const REMOVED_MODEL_COUNCIL_ROUTES = new Set([
+  "/model-council",
+  "/ticker-query",
+  "/ask-gpt-5",
+  "/ask-gpt5",
+  "/ask-gpt",
+]);
 
 const loadTemplateHtml = async (relPath) => {
   const fullPath = path.join(templatesRoot, relPath);
@@ -303,6 +306,11 @@ const getServerTemplate = async () => {
 const ssrHandler = async (req, res) => {
   if (req.method !== "GET" && req.method !== "HEAD") {
     res.status(405).set("Allow", "GET, HEAD").send("Method not allowed.");
+    return;
+  }
+
+  if (REMOVED_MODEL_COUNCIL_ROUTES.has(normalizePath(req.path || "/"))) {
+    res.redirect(308, "/forecasting");
     return;
   }
 

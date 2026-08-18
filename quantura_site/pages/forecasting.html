@@ -30,7 +30,7 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=20260405b" />
     <meta name="apple-mobile-web-app-title" content="Quantura" />
     <link rel="manifest" href="/site.webmanifest?v=20260405b" />
-    <link rel="stylesheet" href="/styles.css?v=20260405a" />
+    <link rel="stylesheet" href="/styles.css?v=20260817a" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
     <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 
@@ -42,7 +42,7 @@
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-remote-config-compat.js"></script>
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
-    <script defer src="/app.js?v=20260405a"></script>
+    <script defer src="/app.js?v=20260817a"></script>
     <script defer src="/assets/rnweb/quantura-rnw.js"></script>
   
     <script>
@@ -100,7 +100,6 @@
 	            <a class="sidebar-link" href="/indicators" data-panel-target="indicators"><i class="iconoir-sigma-function" aria-hidden="true"></i><span>Indicators</span></a>
               <a class="sidebar-link" href="/market-headlines" data-panel-target="market-headlines"><i class="iconoir-globe" aria-hidden="true"></i><span>Market headlines</span></a>
               <a class="sidebar-link" href="/forecasting" data-panel-target="macro"><i class="iconoir-database" aria-hidden="true"></i><span>Macro Dashboard</span></a>
-              <a class="sidebar-link" href="/model-council" data-panel-target="ticker-query"><i class="iconoir-brain" aria-hidden="true"></i><span>Model Council</span></a>
               <a class="sidebar-link" href="/options" data-panel-target="options"><i class="iconoir-numbered-list-left" aria-hidden="true"></i><span>Options</span></a>
               <a class="sidebar-link" href="/terminal/fx" data-panel-target="fx"><i class="iconoir-coins-swap" aria-hidden="true"></i><span>Currency conversion</span></a>
               <a class="sidebar-link" href="/studio" data-panel-target="learn"><i class="iconoir-info-circle" aria-hidden="true"></i><span>Learn more</span></a>
@@ -199,7 +198,6 @@
                             <option value="forecast">Forecasting</option>
                             <option value="screener">Screeners</option>
                             <option value="indicator">Indicators</option>
-                            <option value="modelCouncil">Model Council</option>
                           </select>
                         </div>
                         <div class="field">
@@ -636,7 +634,7 @@
                       <details class="learn-more">
                         <summary>Learn more</summary>
                         <p class="small">
-                          Start with RSI + MACD to spot momentum and regime shifts. Add SMA/EMA overlays for trend confirmation and Bollinger bands for volatility context.
+                          Price and SMA/EMA/Bollinger overlays render in the upper pane. Oscillators such as RSI and MACD render in separate lower panes with independent scales.
                         </p>
                       </details>
                     </form>
@@ -662,7 +660,6 @@
                             <option value="forecast">Forecasting</option>
                             <option value="screener">Screeners</option>
                             <option value="indicator">Indicators</option>
-                            <option value="modelCouncil">Model Council</option>
                           </select>
                         </div>
                         <div class="field">
@@ -752,9 +749,6 @@
                           <label class="label" for="market-headlines-provider">Source provider</label>
                           <select id="market-headlines-provider" name="provider">
                             <option value="marketwatch" selected>MarketWatch Top Stories</option>
-                            <option value="spglobal">S&amp;P DJI RSS</option>
-                            <option value="mql5">MQL5 Blogs RSS</option>
-                            <option value="cnbc">CNBC Market Insider</option>
                             <option value="economictimes">Economic Times Stocks</option>
                             <option value="investing">Investing.com Markets</option>
                             <option value="seekingalpha">Seeking Alpha</option>
@@ -800,129 +794,6 @@
                       </div>
                     </div>
                     <div id="fiscaldata-macro-details" class="modal hidden"></div>
-                  </section>
-
-                  <section class="panel hidden" data-panel="ticker-query">
-                    <div class="panel-header">
-                      <h2>Model Council</h2>
-                      <p class="small">Run multi-provider analysis with structured Yahoo Finance context modules for the ticker.</p>
-                    </div>
-                    <form id="ticker-query-form" class="card">
-                      <div class="form-grid">
-                        <div class="field">
-                          <label class="label" for="ticker-query-ticker">Ticker</label>
-                          <input id="ticker-query-ticker" name="ticker" placeholder="AAPL" required />
-                        </div>
-                        <div class="field">
-                          <label class="label" for="ticker-query-language">Response language</label>
-                          <select id="ticker-query-language" name="language">
-                            <option value="auto">Auto</option>
-                            <option value="en">English</option>
-                            <option value="es">Spanish</option>
-                            <option value="fr">French</option>
-                            <option value="de">German</option>
-                            <option value="ar">Arabic</option>
-                            <option value="bn">Bengali</option>
-                          </select>
-                        </div>
-                        <div class="field">
-                          <label class="label" for="ticker-query-provider">Provider</label>
-                          <select id="ticker-query-provider" name="provider">
-                            <option value="openai">Loading providers...</option>
-                          </select>
-                          <div id="ticker-query-provider-hint" class="small muted" style="margin-top:8px;">
-                            All provider calls are server-side only.
-                          </div>
-                        </div>
-                        <div class="field">
-                          <label class="label" for="ticker-query-model">Model</label>
-                          <select id="ticker-query-model" name="model">
-                            <option value="gpt-5-mini">Loading models...</option>
-                          </select>
-                          <div id="ticker-query-model-hint" class="small muted" style="margin-top:8px;">
-                            Some models may cost more and run slower.
-                          </div>
-                        </div>
-                      </div>
-                      <div class="field">
-                        <label class="label">Yahoo Finance info picker</label>
-                        <div id="ticker-query-modules-picker" class="module-picker-grid"></div>
-                        <div class="small muted" style="margin-top:8px;">
-                          Selected modules are attached as structured context.
-                        </div>
-                      </div>
-                      <div class="field">
-                        <label class="label" for="ticker-query-question">Question</label>
-                        <textarea id="ticker-query-question" name="question" placeholder="Example: Is this stock overvalued vs peers, and what are the top near-term risks?"></textarea>
-                      </div>
-                      <div class="model-council-prompt-panel">
-                        <div class="model-council-prompt-head">
-                          <div class="small"><strong>Question cards</strong></div>
-                          <button class="cta secondary small" id="ticker-query-prompt-shuffle" type="button">
-                            <i class="iconoir-refresh" aria-hidden="true"></i><span>Shuffle</span>
-                          </button>
-                        </div>
-                        <div id="ticker-query-prompt-cards" class="model-council-prompt-grid"></div>
-                        <div class="small muted">Click a card to auto-fill the question box.</div>
-                      </div>
-                      <label class="small muted model-council-improve-toggle">
-                        <input id="ticker-query-improve-toggle" type="checkbox" checked />
-                        <span class="model-council-toggle-label">Improve my prompt before final run</span>
-                      </label>
-                      <div id="ticker-query-improve-preview-wrap" class="field hidden">
-                        <label class="label" for="ticker-query-improve-preview">Improved prompt preview</label>
-                        <textarea id="ticker-query-improve-preview" name="improvedPrompt"></textarea>
-                        <div class="small muted" style="margin-top:8px;">Edit this preview, then run Model Council.</div>
-                        <button class="cta secondary" id="ticker-query-run-final" type="button">
-                          <i class="iconoir-play" aria-hidden="true"></i><span>Run Model Council</span>
-                        </button>
-                      </div>
-                      <button class="cta" type="submit" data-analytics="model_council_submit"><i class="iconoir-brain" aria-hidden="true"></i><span>Prepare Model Council</span></button>
-                      <p class="small muted" id="ticker-query-status"></p>
-                      <p class="small muted" id="ticker-query-model-info">Latency: — · Tokens: — · Cached: —</p>
-                      <label id="ticker-query-cache-toggle-wrap" class="small muted model-council-improve-toggle model-council-cache-toggle hidden">
-                        <input id="ticker-query-show-cache-stats" type="checkbox" />
-                        <span class="model-council-toggle-label">Show cache stats (dev)</span>
-                      </label>
-                      <div id="ticker-query-cache-stats" class="panel-output small hidden">Cache stats will appear after a response.</div>
-                    </form>
-                    <div class="results-panel">
-                      <h3>Model Council output</h3>
-                      <div id="ticker-query-output" class="panel-output small">Ask a question to generate a Model Council response with evidence and risk caveats.</div>
-                      <div id="ticker-query-modules-output" class="panel-output small hidden" style="margin-top:10px;">Selected yfinance modules will render here.</div>
-                    </div>
-                    <div class="card" data-my-requests-panel data-default-type="modelCouncil">
-                      <div class="card-head">
-                        <h3>My Requests</h3>
-                        <button class="cta secondary small" type="button" data-action="my-requests-refresh">Refresh</button>
-                      </div>
-                      <div class="form-grid">
-                        <div class="field">
-                          <label class="label">Search</label>
-                          <input type="search" data-my-requests-search placeholder="Title, ticker, date" />
-                        </div>
-                        <div class="field">
-                          <label class="label">Type</label>
-                          <select data-my-requests-type>
-                            <option value="">All</option>
-                            <option value="forecast">Forecasting</option>
-                            <option value="screener">Screeners</option>
-                            <option value="indicator">Indicators</option>
-                            <option value="modelCouncil">Model Council</option>
-                          </select>
-                        </div>
-                        <div class="field">
-                          <label class="label">Published</label>
-                          <select data-my-requests-published>
-                            <option value="all">All</option>
-                            <option value="published">Published</option>
-                            <option value="unpublished">Unpublished</option>
-                          </select>
-                        </div>
-                      </div>
-                      <p class="small muted" data-my-requests-status>Sign in to load your requests.</p>
-                      <div class="order-list panel-output" data-my-requests-list></div>
-                    </div>
                   </section>
 
                   <section class="panel hidden" data-panel="options">
@@ -1102,7 +973,6 @@
                               <option value="forecast">Forecasting</option>
                               <option value="screener">Screeners</option>
                               <option value="indicator">Indicators</option>
-                              <option value="modelCouncil">Model Council</option>
                             </select>
                           </div>
                           <div class="field">
