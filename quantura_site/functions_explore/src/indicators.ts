@@ -51,6 +51,13 @@ export type IndicatorAnalyzeResponse = {
   series: {
     dates: string[];
     items: IndicatorSeriesItem[];
+    price: {
+      open: number[];
+      high: number[];
+      low: number[];
+      close: number[];
+      volume: number[];
+    };
   };
   analysis: IndicatorAnalysis;
   meta: {
@@ -1792,6 +1799,7 @@ export async function runIndicatorAnalysis(
   }
 
   const analysis = await runSharedIndicatorAnalysis(computed, input, opts);
+  const priceCandles = computed.candles.slice(-computed.dates.length);
 
   return {
     ticker,
@@ -1802,6 +1810,13 @@ export async function runIndicatorAnalysis(
     series: {
       dates: computed.dates,
       items: computed.seriesItems,
+      price: {
+        open: priceCandles.map((candle) => candle.open),
+        high: priceCandles.map((candle) => candle.high),
+        low: priceCandles.map((candle) => candle.low),
+        close: priceCandles.map((candle) => candle.close),
+        volume: priceCandles.map((candle) => candle.volume),
+      },
     },
     analysis,
     meta: {
