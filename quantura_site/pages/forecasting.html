@@ -438,7 +438,7 @@
                           <form id="sports-foundry-form" class="card">
                             <div class="eyebrow">Quantura Sports Foundry</div>
                             <h3>Prepare a sports workflow</h3>
-                            <p class="small">Switch between a player-level sports forecast and a quick team total export. Quantura will normalize the league data, preview it here, and let you download the exact slice you need.</p>
+                            <p class="small">Build a player-level forecast or download sports-market candles at an exact one-minute interval.</p>
 
                             <div class="form-grid">
                               <div class="field">
@@ -449,13 +449,13 @@
                                     <span>Player forecast</span>
                                   </label>
                                   <label class="sports-foundry-workflow-option">
-                                    <input type="radio" name="sportsFoundryWorkflow" value="team_total_export" />
-                                    <span>Team total export</span>
+                                    <input type="radio" name="sportsFoundryWorkflow" value="market_minute_history" />
+                                    <span>Market 1-minute</span>
                                   </label>
                                 </div>
-                                <div class="small muted">Player forecasts save runs and publish to Explore. Team total export now supports full completed-history downloads or a filtered single-day export.</div>
+                                <div class="small muted">Player forecasts save runs and publish to Explore. One-minute downloads use Kalshi&apos;s public live and historical candle feeds.</div>
                               </div>
-                              <div class="field">
+                              <div class="field" id="sports-foundry-league-field">
                                 <label class="label" for="sports-foundry-league">League</label>
                                 <select id="sports-foundry-league" name="league">
                                   <option value="nba">NBA</option>
@@ -463,7 +463,7 @@
                                   <option value="mlb">MLB</option>
                                 </select>
                               </div>
-                              <div class="field">
+                              <div class="field" id="sports-foundry-team-field">
                                 <label class="label" for="sports-foundry-team">Team</label>
                                 <select id="sports-foundry-team" name="team">
                                   <option value="">Choose a league first</option>
@@ -504,36 +504,28 @@
                               </div>
                             </div>
 
-                            <div id="sports-foundry-team-total-fields" class="hidden">
+                            <div id="sports-foundry-minute-history-fields" class="hidden">
                               <div class="form-grid">
                                 <div class="field">
-                                  <label class="label" for="sports-team-total-all-history">History scope</label>
-                                  <label class="checkbox download-history-toggle">
-                                    <input id="sports-team-total-all-history" name="teamTotalAllHistory" type="checkbox" checked />
-                                    <span>Load full completed history</span>
-                                  </label>
+                                  <label class="label" for="sports-market-ticker">Kalshi market ticker</label>
+                                  <input id="sports-market-ticker" name="marketTicker" autocomplete="off" spellcheck="false" placeholder="KXSPORTS-MARKET-TICKER" />
                                 </div>
                                 <div class="field">
-                                  <label class="label" for="sports-team-total-date">Game date</label>
-                                  <input id="sports-team-total-date" name="teamTotalDate" type="date" />
-                                  <div class="small muted" id="sports-team-total-date-note">Optional when full history is enabled.</div>
+                                  <label class="label" for="sports-market-history-start">Start (your local time)</label>
+                                  <input id="sports-market-history-start" name="marketHistoryStart" type="datetime-local" step="60" />
                                 </div>
                                 <div class="field">
-                                  <label class="label" for="sports-team-total-home-away">Venue filter</label>
-                                  <select id="sports-team-total-home-away" name="teamTotalHomeAway">
-                                    <option value="any">Home or away</option>
-                                    <option value="home">Home only</option>
-                                    <option value="away">Away only</option>
-                                  </select>
+                                  <label class="label" for="sports-market-history-end">End (your local time)</label>
+                                  <input id="sports-market-history-end" name="marketHistoryEnd" type="datetime-local" step="60" />
                                 </div>
                               </div>
-                              <div class="small muted">Download the selected team&apos;s completed game totals across the available schedule history, or narrow it to one date. Doubleheaders export one row per game.</div>
+                              <div class="small muted">Downloads include trade-price OHLC, YES bid/ask OHLC, volume, and open interest. Times are converted to UTC, ranges may span up to seven days, and minutes with no activity remain gaps.</div>
                             </div>
 
                             <div class="card sports-foundry-preview-card" style="margin-top: 18px;">
                               <div class="card-head">
                                 <h3>Historical preview</h3>
-                                <div class="small muted" id="sports-foundry-history-meta">Choose a player to load historical game data and stat options, or switch to team total export for completed team-total history.</div>
+                                <div class="small muted" id="sports-foundry-history-meta">Choose a player to load historical game data, or switch to Market 1-minute and enter a Kalshi ticker.</div>
                               </div>
                               <div id="sports-foundry-history-preview" class="panel-output small">Historical player game logs will appear here.</div>
                             </div>
@@ -552,7 +544,7 @@
 
                             <p class="small" id="sports-foundry-status">Sign in with a full account to unlock sports forecasting.</p>
                             <div class="notice small" id="sports-foundry-empty-state">
-                              Choose a player to load league-aware stats and future scheduled games, or switch to team total export for completed team-total history.
+                              Choose a player to load league-aware stats and future scheduled games, or switch to Market 1-minute to download market candles.
                             </div>
                           </form>
 

@@ -33,6 +33,7 @@ import {
   type SportsLeagueKey,
   SPORTS_LEAGUES,
 } from "./sports";
+import { downloadKalshiMinuteHistory } from "./kalshiMinuteHistory";
 export { shopApi } from "./shopApi";
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const AdmZip = require("adm-zip");
@@ -12567,6 +12568,49 @@ ROUTES.get("/autopilot/sports/context", async (req, res) => {
     }
     console.error("[Sports] context failed", error);
     res.status(500).json({ error: "sports_context_failed", detail: sanitizeText(error?.message, 260) });
+  }
+});
+
+ROUTES.post("/autopilot/sports/market-minute-history", async (req, res) => {
+  try {
+    await requireFoundryUser(req);
+    const history = await downloadKalshiMinuteHistory({
+      ticker: req.body?.ticker,
+      startTime: req.body?.startTime,
+      endTime: req.body?.endTime,
+    });
+    res.status(200).json(history);
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "full_account_required") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    if (
+      code === "invalid_kalshi_market_ticker" ||
+      code === "invalid_kalshi_start_time" ||
+      code === "invalid_kalshi_end_time" ||
+      code === "invalid_kalshi_time_range" ||
+      code === "kalshi_time_range_too_large" ||
+      code === "kalshi_market_not_found"
+    ) {
+      res.status(400).json({ error: code });
+      return;
+    }
+    console.error("[Sports] one-minute market history failed", sanitizeText(code, 260));
+    res.status(502).json({
+      error: "market_minute_history_failed",
+      detail:
+        code === "kalshi_upstream_timeout"
+          ? "Kalshi timed out while preparing the minute history."
+          : code === "kalshi_rate_limited"
+          ? "Kalshi rate-limited the minute-history request. Please retry shortly."
+          : "One-minute market history is temporarily unavailable.",
+    });
   }
 });
 

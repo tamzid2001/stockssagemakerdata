@@ -428,6 +428,8 @@ Important runtime/deploy variables include:
 | `AUTOPILOT_RECONCILE_TOPIC` | Pub/Sub topic for forecasting reconcile flow |
 | `AUTOPILOT_RECONCILE_JOB` | Scheduler job for reconcile processing |
 | `LOCAL_FUNCTIONS_BUILD` | Whether to compile backend functions locally before deploy |
+| `POLYMARKET_PUBLIC_KEY` | Polymarket US API key ID for authenticated server-side Polymarket access |
+| `POLYMARKET_SECRET_KEY` | Base64 Ed25519 secret used to sign server-side Polymarket US requests |
 
 Secrets must never be committed to git. Use Secret Manager bindings through `GCLOUD_SET_SECRETS` or let `deploy.sh` auto-discover supported secret names.
 

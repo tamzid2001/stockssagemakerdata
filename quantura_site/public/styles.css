@@ -396,6 +396,7 @@ i[class*=" iconoir-"]::before {
   input[type="email"],
   input[type="number"],
   input[type="date"],
+  input[type="datetime-local"],
   input[type="url"],
   input[type="tel"],
   input[type="password"],
@@ -424,6 +425,7 @@ i[class*=" iconoir-"]::before {
   input[type="email"],
   input[type="number"],
   input[type="date"],
+  input[type="datetime-local"],
   input[type="url"],
   input[type="tel"],
   input[type="password"],
@@ -8354,54 +8356,13 @@ html[data-liquid-glass-mode="refraction"] {
 }
 
 :is(
-  .card,
-  .results-panel,
-  .sidebar-card,
-  .sidebar-nav,
-  .modal-card,
-  .tab,
-  .sidebar-link,
-  .module-picker-chip,
-  .sports-foundry-workflow-option span,
-  .home-bottom-nav,
-  .home-bottom-nav-link
-)::before {
-  content: "";
-  position: absolute;
-  inset: 1px;
-  border-radius: inherit;
-  pointer-events: none;
-  background:
-    linear-gradient(158deg, rgba(255, 255, 255, 0.72) 0%, rgba(255, 255, 255, 0.22) 28%, rgba(255, 255, 255, 0) 56%),
-    radial-gradient(110% 90% at 84% 100%, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0) 68%);
-  opacity: 0.85;
-}
-
-[data-theme="dark"] :is(
-  .card,
-  .results-panel,
-  .sidebar-card,
-  .sidebar-nav,
-  .modal-card,
-  .tab,
-  .sidebar-link,
-  .module-picker-chip,
-  .sports-foundry-workflow-option span,
-  .home-bottom-nav,
-  .home-bottom-nav-link
-)::before {
-  background:
-    linear-gradient(158deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.06) 26%, rgba(255, 255, 255, 0) 56%),
-    radial-gradient(110% 90% at 84% 100%, rgba(125, 171, 255, 0.16), rgba(125, 171, 255, 0) 68%);
-}
-
-:is(
   input:not([type]),
   input[type="text"],
   input[type="search"],
   input[type="email"],
   input[type="number"],
   input[type="date"],
+  input[type="datetime-local"],
   input[type="url"],
   input[type="tel"],
   input[type="password"],
@@ -8437,6 +8398,7 @@ html[data-liquid-glass-mode="refraction"] {
   input[type="email"],
   input[type="number"],
   input[type="date"],
+  input[type="datetime-local"],
   input[type="url"],
   input[type="tel"],
   input[type="password"],
@@ -8465,6 +8427,7 @@ html[data-liquid-glass-mode="refraction"] {
   input[type="email"],
   input[type="number"],
   input[type="date"],
+  input[type="datetime-local"],
   input[type="url"],
   input[type="tel"],
   input[type="password"],
@@ -8490,6 +8453,7 @@ html[data-liquid-glass-mode="refraction"] {
   input[type="email"],
   input[type="number"],
   input[type="date"],
+  input[type="datetime-local"],
   input[type="url"],
   input[type="tel"],
   input[type="password"],
