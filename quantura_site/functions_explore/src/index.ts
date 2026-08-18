@@ -12887,15 +12887,28 @@ ROUTES.post("/autopilot/datasets/history", async (req, res) => {
     const interval = sanitizeText(body.interval, 20) || "1d";
     const start = sanitizeText(body.start, 40);
     const end = sanitizeText(body.end, 40);
-    const useAllHistory = asBoolean(body.useAllHistory, false);
+    const rowLimitRaw = sanitizeText(body.rowLimit, 20).toLowerCase();
+    const parsedRowLimit = Math.floor(asFinite(rowLimitRaw, Number.NaN));
+    const rowLimit = [500, 1000, 1500, 2000].includes(parsedRowLimit) ? parsedRowLimit : null;
+    const useAllHistory = asBoolean(body.useAllHistory, false) || rowLimitRaw === "all";
+    const hasRowLimit = rowLimit !== null;
     const modelMetrics = normalizeFoundryModelMetrics(body.modelMetrics);
-    if (!ticker || !end || (!useAllHistory && !start)) {
+    const invalidRowLimit = Boolean(rowLimitRaw) && rowLimitRaw !== "all" && !hasRowLimit;
+    if (!ticker || !end || invalidRowLimit || (!useAllHistory && !hasRowLimit && !start)) {
       res.status(400).json({ error: "invalid_history_request" });
       return;
     }
 
-    const dataset = await downloadHistoricalStockDataset({ ticker, interval, start, end, useAllHistory });
-    const filename = `${ticker}_${sanitizeText(interval, 12)}_${useAllHistory ? "full_history" : start}_${end}.csv`.replace(
+    const dataset = await downloadHistoricalStockDataset({
+      ticker,
+      interval,
+      start,
+      end,
+      useAllHistory,
+      rowLimit: useAllHistory ? null : rowLimit,
+    });
+    const selectionSlug = useAllHistory ? "full_history" : hasRowLimit ? `latest_${rowLimit}` : start;
+    const filename = `${ticker}_${sanitizeText(interval, 12)}_${selectionSlug}_${end}.csv`.replace(
       /[^A-Za-z0-9._-]/g,
       "_"
     );
@@ -12913,9 +12926,10 @@ ROUTES.post("/autopilot/datasets/history", async (req, res) => {
           columns: dataset.columns,
           previewRows: dataset.previewRows,
           trainingEligible: dataset.trainingEligible,
-          start: useAllHistory ? "" : start,
+          start: useAllHistory || hasRowLimit ? "" : start,
           end,
           useAllHistory,
+          rowLimit: useAllHistory ? "all" : rowLimit,
         },
       });
       return;
@@ -12949,9 +12963,10 @@ ROUTES.post("/autopilot/datasets/history", async (req, res) => {
         sourceValueColumn: dataset.sourceValueColumn,
         sourceItemColumn: dataset.sourceItemColumn,
         originalHeaders: dataset.columns,
-        start: useAllHistory ? "" : start,
+        start: useAllHistory || hasRowLimit ? "" : start,
         end,
         useAllHistory,
+        rowLimit: useAllHistory ? "all" : rowLimit,
       },
       autopilot: {},
       analysis: {},
