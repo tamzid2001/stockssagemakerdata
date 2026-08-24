@@ -722,77 +722,24 @@
                   </section>
                   <section class="panel hidden" data-panel="screener">
                     <div class="panel-header screener-panel-header">
-                      <h2>GitHub Actions Screener</h2>
-                      <p class="small">Run the daily Prophet signal tracker from the Quantura repository and save completed results privately in My Requests.</p>
+                      <h2>Quantitative Forecast Screener</h2>
+                      <p class="small">Research the validated S&amp;P 500, broad Nasdaq common-stock universe, and SPY with forecast-quantile, market-cap, earnings, and model-signal filters.</p>
                     </div>
-                    <form id="screener-form" class="card" data-screener-mode="github_actions">
-                      <h3>Run stock screener</h3>
-                      <p class="small muted" style="margin-top:8px;">
-                        Quantura dispatches the repository GitHub Action, waits for the uploaded artifact, and saves the result privately in My Requests.
-                      </p>
-                      <div class="form-grid" style="margin-top:12px;">
-                        <div class="field">
-                          <label class="label" for="screener-min-market-cap">Market cap floor</label>
-                          <select id="screener-min-market-cap" name="minMarketCap">
-                            <option value="50000000000">$50B</option>
-                            <option value="100000000000" selected>$100B</option>
-                            <option value="200000000000">$200B</option>
-                            <option value="500000000000">$500B</option>
-                            <option value="1000000000000">$1T</option>
-                          </select>
-                          <p class="small muted">Default floor is $100B. The GitHub workflow scans the combined S&amp;P 500 + Nasdaq universe above this threshold.</p>
-                        </div>
+                    <div class="card">
+                      <h3>Open the research table</h3>
+                      <p class="small muted">The scheduled scanner now runs in deterministic parallel chunks, validates full-universe coverage, and publishes only complete datasets. Use the dedicated Screener for responsive search, combined quantile filters, sorting, pagination, and CSV export.</p>
+                      <div class="hero-actions" style="margin-top:16px;">
+                        <a class="cta" href="/screener"><i class="iconoir-search" aria-hidden="true"></i><span>Open Quantitative Screener</span></a>
                       </div>
-                      <div class="small muted" id="screener-results-count">Matches: —</div>
-                      <button class="cta" id="screener-generate-button" type="submit" data-analytics="screener_submit">
-                        <i class="iconoir-play" aria-hidden="true"></i><span>Launch live screener</span>
-                      </button>
-                      <p class="small muted" id="screener-dispatch-status">Ready to dispatch the live GitHub screener.</p>
-                      <details class="learn-more">
-                        <summary>Learn more</summary>
-                        <p class="small">
-                          Quantura stores each GitHub Actions run in your workspace so you can reopen it later and download the CSV.
-                        </p>
-                      </details>
-                    </form>
+                    </div>
                     <div class="results-panel">
-                      <h3>Screener output</h3>
-                      <div id="screener-output" class="panel-output small">Workflow status, saved request state, and live screener matches appear here.</div>
+                      <h3>Research coverage</h3>
+                      <div class="panel-output small">
+                        <p><strong>Universe:</strong> current S&amp;P 500 constituents, eligible Nasdaq-listed common stocks, plus SPY as an ETF.</p>
+                        <p><strong>Signals:</strong> actual price versus P10/P50/P90, percentage distance, P50 model bias, last-two-P10 signal, and next earnings date where available.</p>
+                        <p><strong>Integrity:</strong> missing values remain unavailable, timestamps are explicit, and a degraded scan cannot overwrite the prior validated dataset.</p>
+                      </div>
                     </div>
-
-                      <div class="card">
-                        <div class="card-head">
-                          <h3>Scheduled GitHub Runs</h3>
-                          <button class="cta secondary small" id="screener-github-history-refresh" type="button">Refresh</button>
-                        </div>
-                        <p class="small muted" id="screener-github-history-status">Loading scheduled GitHub screener runs...</p>
-                        <div class="order-list panel-output" id="screener-github-history-list">
-                          <div class="small muted">Running and completed scheduled GitHub screener workflows will appear here for everyone.</div>
-                        </div>
-                      </div>
-                      <div class="card" data-my-requests-panel data-default-type="screener">
-                        <div class="card-head">
-                          <h3>My Requests</h3>
-                          <button class="cta secondary small" type="button" data-action="my-requests-refresh">Refresh</button>
-                        </div>
-                        <div class="form-grid">
-                          <div class="field">
-                            <label class="label">Search</label>
-                            <input type="search" data-my-requests-search placeholder="Title, ticker, date" />
-                          </div>
-                          <div class="field">
-                            <label class="label">Type</label>
-                            <select data-my-requests-type>
-                              <option value="">All</option>
-                              <option value="forecast">Forecasting</option>
-                              <option value="screener">Screeners</option>
-                              <option value="indicator">Indicators</option>
-                            </select>
-                          </div>
-                        </div>
-                        <p class="small muted" data-my-requests-status>Sign in to load your requests.</p>
-                        <div class="order-list panel-output" data-my-requests-list></div>
-                      </div>
                   </section>
 
 	                  <section class="panel hidden" data-panel="watchlist">

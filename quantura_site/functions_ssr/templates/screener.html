@@ -3,34 +3,22 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Quantura Screener | Ranked Watchlists</title>
-        <meta name="description" content="Run a fast stock screen, rank candidates, and save every run to your workspace." />
-        <meta name="robots" content="index, follow" />
-    <meta name="keywords" content="stock screener, market data screener, ranked tickers, quantura screener" />
-        <link rel="canonical" href="https://quantura.studio/screener" />
-        <meta property="og:title" content="Quantura Stock Screener" />
-        <meta property="og:description" content="Rank candidates, export results, and store every screener run in your workspace." />
-        <meta property="og:type" content="website" />
-        <meta property="og:url" content="https://quantura.studio/screener" />
-        <meta property="og:image" content="/assets/quantura-logo.svg" />
-    <meta property="og:site_name" content="Quantura" />
-    <meta property="og:locale" content="en_US" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Quantura Stock Screener" />
-    <meta name="twitter:description" content="Rank candidates, export results, and store every screener run in your workspace." />
-    <meta name="twitter:image" content="/assets/quantura-logo.svg" />
-    <meta name="twitter:url" content="https://quantura.studio/screener" />
-    <meta name="author" content="Quantura" />
-    <meta name="theme-color" content="#0B1526" />
-    <link rel="alternate" hreflang="en-US" href="https://quantura.studio/screener" />
-    <link rel="alternate" hreflang="x-default" href="https://quantura.studio/screener" />
+    <title>Quantura Quantitative Screener | S&amp;P 500 + Nasdaq</title>
+    <meta name="description" content="Screen the current S&amp;P 500, eligible Nasdaq common stocks, and SPY by forecast quantiles, market cap, earnings, and model-derived signals." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://quantura.studio/screener" />
+    <meta property="og:title" content="Quantura Quantitative Screener" />
+    <meta property="og:description" content="A high-density market research table for quantile dislocations, earnings, and forecast signals." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://quantura.studio/screener" />
+    <meta property="og:image" content="/assets/quantura-logo.svg" />
+    <meta name="theme-color" content="#07111f" />
     <link rel="icon" type="image/png" href="/favicon-96x96.png?v=20260405b" sizes="96x96" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260405b" />
-    <link rel="shortcut icon" href="/favicon.ico?v=20260405b" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=20260405b" />
-    <meta name="apple-mobile-web-app-title" content="Quantura" />
     <link rel="manifest" href="/site.webmanifest?v=20260405b" />
-    <link rel="stylesheet" href="/styles.css?v=20260405a" />
+    <link rel="stylesheet" href="/styles.css?v=20260824s1" />
+    <link rel="stylesheet" href="/screener.css?v=20260824s1" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
 
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-app-compat.js"></script>
@@ -41,240 +29,240 @@
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-remote-config-compat.js"></script>
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
-    <script defer src="/app.js?v=20260405a"></script>
-    <script defer src="/assets/rnweb/quantura-rnw.js"></script>
-    <script defer src="/screener-plus.js"></script>
-
+    <script defer src="/app.js?v=20260824s1"></script>
+    <script defer src="/screener.js?v=20260824s1"></script>
     <script>
       window.__QUANTURA_RC_TEMPLATE_ID__ = "firebase-server";
-      window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ = {"status":200,"eTag":"etag-quantura-e2e3d-firebase-server-fetch--1213937490","config":{"welcome_message":"","watchlist_enabled":"true","forecast_prophet_enabled":"true","forecast_canvas_enabled":"true","push_notifications_enabled":"true","webpush_vapid_key":"","stripe_checkout_enabled":"true","stripe_public_key":"","holiday_promo":"false"}};
+      window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ = {"status":200,"eTag":"etag-quantura-screener-v2","config":{"welcome_message":"","watchlist_enabled":"true","forecast_prophet_enabled":"true","forecast_canvas_enabled":"true","push_notifications_enabled":"true","webpush_vapid_key":"","stripe_checkout_enabled":"true","stripe_public_key":"","holiday_promo":"false"}};
     </script>
   </head>
-  <body>
+  <body class="quant-screener-page">
     <header class="header">
       <div class="container nav">
         <a class="logo" href="/" aria-label="Quantura home"><span>QUANTURA</span></a>
-        <nav class="nav-links">
-          <a href="/forecasting" data-analytics="nav_forecasting"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Terminal</span></a>
-          <a href="/research" data-analytics="nav_research"><i class="iconoir-bookmark-book" aria-hidden="true"></i><span>Research</span></a>
-          <a href="/blog" data-analytics="nav_blog"><i class="iconoir-page" aria-hidden="true"></i><span>Blog</span></a>
-          <a href="/pricing" data-analytics="nav_pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>Pricing</span></a>
-          <a href="/contact" data-analytics="nav_contact"><i class="iconoir-mail" aria-hidden="true"></i><span>Contact Us</span></a>
+        <nav class="nav-links" aria-label="Primary navigation">
+          <a href="/forecasting"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Terminal</span></a>
+          <a href="/research"><i class="iconoir-bookmark-book" aria-hidden="true"></i><span>Research</span></a>
+          <a href="/pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>Pricing</span></a>
+          <a href="/contact"><i class="iconoir-mail" aria-hidden="true"></i><span>Contact</span></a>
         </nav>
         <div class="nav-actions">
           <span id="header-user-status" class="pill">Logged Out</span>
           <button class="cta secondary" id="header-auth" type="button"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></button>
-          <a class="cta" href="#screener"><i class="iconoir-search" aria-hidden="true"></i><span>Generate portfolio</span></a>
         </div>
       </div>
     </header>
 
-    <main>
-      <div class="app-layout">
-        <aside class="app-sidebar">
-          <nav class="sidebar-nav">
-            <a class="sidebar-link" href="/forecasting"><i class="iconoir-magic-wand" aria-hidden="true"></i><span>Forecast</span></a>
-            <a class="sidebar-link" href="/indicators"><i class="iconoir-sigma-function" aria-hidden="true"></i><span>Indicators</span></a>
-            <a class="sidebar-link" href="/trending"><i class="iconoir-fire-flame" aria-hidden="true"></i><span>Trending</span></a>
-            <a class="sidebar-link" href="/news"><i class="iconoir-journal-page" aria-hidden="true"></i><span>Historical Data Download</span></a>
-            <a class="sidebar-link" href="/events"><i class="iconoir-calendar" aria-hidden="true"></i><span>Events</span></a>
-            <a class="sidebar-link" href="/market-headlines"><i class="iconoir-globe" aria-hidden="true"></i><span>Market headlines</span></a>
-            <a class="sidebar-link" href="/options"><i class="iconoir-numbered-list-left" aria-hidden="true"></i><span>Options</span></a>
-            <a class="sidebar-link" href="/studio"><i class="iconoir-info-circle" aria-hidden="true"></i><span>Learn more</span></a>
-            <a class="sidebar-link active" href="/screener"><i class="iconoir-search" aria-hidden="true"></i><span>Screener</span></a>
-            <a class="sidebar-link" href="/watchlist"><i class="iconoir-bell-notification" aria-hidden="true"></i><span>Watchlist and alerts</span></a>
-          </nav>
-        </aside>
+    <main class="qs-shell">
+      <aside class="app-sidebar qs-sidebar">
+        <nav class="sidebar-nav" aria-label="Research tools">
+          <a class="sidebar-link" href="/forecasting"><i class="iconoir-magic-wand" aria-hidden="true"></i><span>Forecasting</span></a>
+          <a class="sidebar-link active" href="/screener"><i class="iconoir-search" aria-hidden="true"></i><span>Screener</span></a>
+          <a class="sidebar-link" href="/historical-data"><i class="iconoir-database-export" aria-hidden="true"></i><span>Historical Data</span></a>
+          <a class="sidebar-link" href="/options"><i class="iconoir-numbered-list-left" aria-hidden="true"></i><span>Options</span></a>
+          <a class="sidebar-link" href="/indicators"><i class="iconoir-sigma-function" aria-hidden="true"></i><span>Indicators</span></a>
+          <a class="sidebar-link" href="/sports-forecasting"><i class="iconoir-baseball" aria-hidden="true"></i><span>Sports Forecasting</span></a>
+          <a class="sidebar-link" href="/market-headlines"><i class="iconoir-globe" aria-hidden="true"></i><span>Market Headlines</span></a>
+          <a class="sidebar-link" href="/productivity"><i class="iconoir-task-list" aria-hidden="true"></i><span>Productivity</span></a>
+          <a class="sidebar-link" href="/account"><i class="iconoir-user" aria-hidden="true"></i><span>Account</span></a>
+        </nav>
+      </aside>
 
-	        <div class="app-main">
-          <div class="container quantura-rn-injection-shell">
-            <div
-              id="quantura-rn-screener"
-              class="quantura-rn-root"
-              data-quantura-rn-root
-              data-rn-slot-id="screener-native-slot-1"
-              data-rn-placement="screener_surface"
-              data-rn-context="screener"
-              data-rn-title="Screener injected RN surface"
-              data-rn-body="Shared RN component mount for screeners. Native ads only resolve in installed iOS/Android builds."
-              data-rn-placeholder="true"
-            ></div>
+      <div class="qs-main">
+        <section class="qs-hero" aria-labelledby="screener-title">
+          <div>
+            <div class="qs-eyebrow"><span class="qs-live-dot" aria-hidden="true"></span> Validated scheduled research dataset</div>
+            <h1 id="screener-title">Quantitative Forecast Screener</h1>
+            <p>
+              Find forecast dislocations across the current S&amp;P 500, broad eligible Nasdaq common-stock universe, and SPY.
+              Actual prices are compared with a consistent 10-business-day P10/P50/P90 forecast horizon.
+            </p>
           </div>
-	      <section class="section" id="screener">
-        <div class="container">
-          <div class="section-title">
-            <h2>GitHub Actions Screener</h2>
-            <p class="small">Run the daily Prophet signal tracker from the Quantura repository and save completed results privately in My Requests.</p>
+          <div class="qs-hero-actions">
+            <button class="cta secondary" id="qs-refresh" type="button"><i class="iconoir-refresh" aria-hidden="true"></i>Refresh data</button>
+            <a class="cta disabled" id="qs-export" aria-disabled="true"><i class="iconoir-download" aria-hidden="true"></i>Download CSV</a>
           </div>
-	          <div class="content-grid">
-		            <form id="screener-form" class="card" data-screener-mode="github_actions">
-              <h3>Run stock screener</h3>
-              <p class="small muted" style="margin-top:8px;">
-                Quantura dispatches the repository GitHub Action, waits for the uploaded artifact, and saves the result privately in My Requests.
-              </p>
-              <div class="form-grid" style="margin-top:12px;">
-                <div class="field">
-                  <label class="label" for="screener-min-market-cap">Market cap floor</label>
-                  <select
-                    id="screener-min-market-cap"
-                    name="minMarketCap"
-                  >
-                    <option value="50000000000">$50B</option>
-                    <option value="100000000000" selected>$100B</option>
-                    <option value="200000000000">$200B</option>
-                    <option value="500000000000">$500B</option>
-                    <option value="1000000000000">$1T</option>
-                  </select>
-                  <p class="small muted">Default floor is $100B. The GitHub workflow scans the combined S&amp;P 500 + Nasdaq universe above this threshold.</p>
-                </div>
+        </section>
+
+        <section class="qs-metrics" aria-label="Screener dataset status">
+          <article><span>Matching securities</span><strong id="qs-metric-matches">—</strong><small id="qs-metric-total">of — in universe</small></article>
+          <article><span>Scan coverage</span><strong id="qs-metric-coverage">—</strong><small id="qs-metric-processed">Awaiting manifest</small></article>
+          <article><span>Last validated scan</span><strong id="qs-metric-date">—</strong><small id="qs-metric-freshness">Timestamps are shown explicitly</small></article>
+          <article><span>Forecast engine</span><strong>Quantile Drift v1</strong><small>Log-return P10 / P50 / P90 bands</small></article>
+        </section>
+
+        <details class="qs-filter-panel" id="qs-filter-panel" open>
+          <summary>
+            <span><i class="iconoir-filter-list" aria-hidden="true"></i> Research filters</span>
+            <span id="qs-filter-count">0 active</span>
+          </summary>
+          <form id="qs-filters" novalidate>
+            <div class="qs-filter-grid">
+              <label class="qs-field qs-search-field">
+                <span>Search</span>
+                <div class="qs-input-icon"><i class="iconoir-search" aria-hidden="true"></i><input id="qs-search" name="search" type="search" placeholder="Ticker or company, e.g. PLTR" autocomplete="off" /></div>
+              </label>
+              <label class="qs-field">
+                <span>Universe</span>
+                <select id="qs-universe" name="universe">
+                  <option value="all">All securities</option>
+                  <option value="sp500">S&amp;P 500</option>
+                  <option value="nasdaq">Nasdaq common stocks</option>
+                  <option value="etf">SPY / ETF</option>
+                </select>
+              </label>
+              <label class="qs-field">
+                <span>Market cap</span>
+                <select id="qs-market-cap" name="marketCap">
+                  <option value="all">All known caps</option>
+                  <option value="mega">Mega · ≥ $200B</option>
+                  <option value="large">Large · $10B–$200B</option>
+                  <option value="mid">Mid · $2B–$10B</option>
+                  <option value="small">Small · $300M–$2B</option>
+                  <option value="micro">Micro · &lt; $300M</option>
+                </select>
+              </label>
+              <label class="qs-field">
+                <span>Model bias</span>
+                <select id="qs-bias" name="bias">
+                  <option value="all">All bias states</option>
+                  <option value="buying">Buying Bias</option>
+                  <option value="selling">Selling Bias</option>
+                  <option value="neutral">Neutral / Mixed</option>
+                </select>
+              </label>
+              <label class="qs-field">
+                <span>Next earnings</span>
+                <select id="qs-earnings" name="earnings">
+                  <option value="all">Any date</option>
+                  <option value="today">Today</option>
+                  <option value="7">Next 7 days</option>
+                  <option value="14">Next 14 days</option>
+                  <option value="30">Next 30 days</option>
+                  <option value="unknown">No known date</option>
+                </select>
+              </label>
+              <label class="qs-field">
+                <span>Sort results</span>
+                <select id="qs-sort" name="sort">
+                  <option value="ticker">Ticker</option>
+                  <option value="company">Company</option>
+                  <option value="actualPrice">Actual price</option>
+                  <option value="marketCap">Market cap</option>
+                  <option value="p10">P10</option>
+                  <option value="p50">P50</option>
+                  <option value="p90">P90</option>
+                  <option value="distanceP10">Distance from P10</option>
+                  <option value="distanceP50">Distance from P50</option>
+                  <option value="distanceP90">Distance from P90</option>
+                  <option value="nextEarnings">Next earnings</option>
+                  <option value="lastUpdate">Last update</option>
+                </select>
+              </label>
+              <label class="qs-field">
+                <span>Direction</span>
+                <select id="qs-direction" name="direction">
+                  <option value="asc">Ascending</option>
+                  <option value="desc">Descending</option>
+                </select>
+              </label>
+            </div>
+
+            <fieldset class="qs-quantile-filters">
+              <legend>Actual price relative to forecast quantiles</legend>
+              <div>
+                <label><input type="checkbox" name="position" value="below-p10" /> Below P10</label>
+                <label><input type="checkbox" name="position" value="above-p10" /> Above P10</label>
+                <label><input type="checkbox" name="position" value="below-p50" /> Below P50</label>
+                <label><input type="checkbox" name="position" value="above-p50" /> Above P50</label>
+                <label><input type="checkbox" name="position" value="below-p90" /> Below P90</label>
+                <label><input type="checkbox" name="position" value="above-p90" /> Above P90</label>
               </div>
-              <div class="small muted" id="screener-results-count">Matches: —</div>
-              <button class="cta" id="screener-generate-button" type="submit" data-analytics="screener_submit"><i class="iconoir-play" aria-hidden="true"></i><span>Launch live screener</span></button>
-              <p class="small muted" id="screener-dispatch-status">Ready to dispatch the live GitHub screener.</p>
-            </form>
-              <div class="card" data-my-requests-panel data-default-type="screener">
-                <div class="card-head">
-                  <h3>My Requests</h3>
-                  <button class="cta secondary small" type="button" data-action="my-requests-refresh">Refresh</button>
-                </div>
-                <div class="form-grid">
-                  <div class="field">
-                    <label class="label">Search</label>
-                    <input type="search" data-my-requests-search placeholder="Title, ticker, date" />
-                  </div>
-                  <div class="field">
-                    <label class="label">Type</label>
-                    <select data-my-requests-type>
-                      <option value="">All</option>
-                      <option value="forecast">Forecasting</option>
-                      <option value="screener">Screeners</option>
-                      <option value="indicator">Indicators</option>
-                    </select>
-                  </div>
-                  <div class="field">
-                    <label class="label">Published</label>
-                    <select data-my-requests-published>
-                      <option value="all">All</option>
-                      <option value="published">Published</option>
-                      <option value="unpublished">Unpublished</option>
-                    </select>
-                  </div>
-                </div>
-                <p class="small muted" data-my-requests-status>Sign in to load your requests.</p>
-                <div class="order-list panel-output" data-my-requests-list></div>
-                <details class="learn-more">
-                  <summary>Learn more</summary>
-                  <p class="small">
-                    Requests can be loaded, renamed, shared, unpublished from Workspace, or soft-deleted.
-                  </p>
-                </details>
-              </div>
-		            <div class="results-panel" id="screener-result">
-		              <h3>Screener output</h3>
-		              <p class="small">Workflow status, saved request state, and Prophet signal matches appear here.</p>
-		              <div id="screener-output" class="panel-output"></div>
-		            </div>
-                <div class="card">
-                  <div class="card-head">
-                    <h3>Scheduled GitHub Runs</h3>
-                    <button class="cta secondary small" id="screener-github-history-refresh" type="button">Refresh</button>
-                  </div>
-                  <p class="small muted" id="screener-github-history-status">Loading scheduled GitHub screener runs...</p>
-                  <div class="order-list panel-output" id="screener-github-history-list">
-                    <div class="small muted">Running and completed scheduled GitHub screener workflows will appear here for everyone.</div>
-                  </div>
-                </div>
-                <div class="card">
-                  <div class="card-head">
-                    <h3>Workspace feed</h3>
-                  </div>
-                  <p class="small">
-                    Workspace is the canonical discovery feed for published screener runs, forecasts, and saved Quantura outputs.
-                  </p>
-                  <div class="hero-actions">
-                  </div>
-                </div>
-                <div class="card help-article">
-                  <h3>Screener help</h3>
-                  <p class="small">
-                    This page now dispatches the repository GitHub Action and reads the uploaded artifact back into Quantura. The only user input is the market-cap floor, and completed runs remain shareable from My Requests and Workspace.
-                  </p>
-                  <div class="help-kv-grid small">
-                    <div><strong>Engine:</strong> GitHub Actions workflow running the daily Prophet tracker.</div>
-                    <div><strong>Universe:</strong> Combined S&amp;P 500 + Nasdaq scan.</div>
-                    <div><strong>Filter:</strong> Market-cap floor only, defaulted to $100B.</div>
-                    <div><strong>Storage:</strong> Completed runs remain in the authenticated workspace for later review.</div>
-                  </div>
-                  <details class="learn-more">
-                    <summary>How the workflow result is used</summary>
-                    <p class="small">
-                      Quantura reads the artifact, normalizes active Prophet breach signals, saves the run as a request, and keeps it in sync when you reload it later.
-                    </p>
-                  </details>
-                </div>
-		          </div>
-        </div>
-      </section>
-    </div>
-  </div>
+              <p>Conditions combine with AND. For example, Above P50 + Below P90 isolates the P50–P90 range.</p>
+            </fieldset>
+
+            <div class="qs-filter-footer">
+              <label class="qs-signal-toggle"><input id="qs-special-p10" name="specialP10" type="checkbox" value="true" /><span>Special P10 Signal: Active</span></label>
+              <button class="cta secondary small" id="qs-clear" type="button"><i class="iconoir-erase" aria-hidden="true"></i>Clear filters</button>
+            </div>
+          </form>
+        </details>
+
+        <section class="qs-results" aria-labelledby="qs-results-title">
+          <header>
+            <div>
+              <h2 id="qs-results-title">Screening results</h2>
+              <p id="qs-status" role="status" aria-live="polite">Scanning market data…</p>
+            </div>
+            <div class="qs-freshness" id="qs-freshness">Actual, forecast, and scan timestamps appear with every validated dataset.</div>
+          </header>
+
+          <div class="qs-state qs-loading" id="qs-loading">
+            <span class="qs-spinner" aria-hidden="true"></span>
+            <div><strong>Scanning market data…</strong><span>Loading the latest validated full-universe snapshot.</span></div>
+          </div>
+          <div class="qs-state qs-error" id="qs-error" hidden>
+            <i class="iconoir-warning-triangle" aria-hidden="true"></i>
+            <div><strong>Validated scan unavailable</strong><span id="qs-error-message">The most recent complete dataset could not be loaded.</span><button class="cta secondary small" id="qs-retry" type="button">Retry</button></div>
+          </div>
+          <div class="qs-state qs-empty" id="qs-empty" hidden>
+            <i class="iconoir-search" aria-hidden="true"></i>
+            <div><strong>No securities match your current filters.</strong><span>Remove one or more conditions to widen the result set.</span><button class="cta secondary small" id="qs-empty-clear" type="button">Clear filters</button></div>
+          </div>
+
+          <div class="qs-table-wrap" id="qs-table-wrap" hidden tabindex="0" aria-label="Scrollable quantitative screener table">
+            <table class="qs-table">
+              <thead>
+                <tr>
+                  <th scope="col">Security</th>
+                  <th scope="col">Actual</th>
+                  <th scope="col">P10</th>
+                  <th scope="col">P50</th>
+                  <th scope="col">P90</th>
+                  <th scope="col">Quantile position</th>
+                  <th scope="col">Distance %<span>P10 / P50 / P90</span></th>
+                  <th scope="col">Market cap</th>
+                  <th scope="col">Next earnings</th>
+                  <th scope="col">Model signal</th>
+                  <th scope="col">Updated</th>
+                </tr>
+              </thead>
+              <tbody id="qs-table-body"></tbody>
+            </table>
+          </div>
+
+          <nav class="qs-pagination" id="qs-pagination" aria-label="Screener pages" hidden>
+            <button class="cta secondary small" id="qs-previous" type="button"><i class="iconoir-nav-arrow-left" aria-hidden="true"></i>Previous</button>
+            <span id="qs-page-label">Page 1 of 1</span>
+            <button class="cta secondary small" id="qs-next" type="button">Next<i class="iconoir-nav-arrow-right" aria-hidden="true"></i></button>
+          </nav>
+        </section>
+
+        <section class="qs-methodology">
+          <article>
+            <h2>How to read this screener</h2>
+            <p>The latest adjusted daily bar close is compared with the final P10, P50, and P90 values in a 10-business-day forecast. Positive distance means actual price is above that boundary; negative distance means it is below.</p>
+          </article>
+          <article>
+            <h3>Bias and special signals</h3>
+            <p>Buying, Selling, and Neutral labels reuse the platform’s P50 statistical anomaly heuristic. “2W P10 Buy Bias” is shown only when the final two business-day P10 forecasts are unusually low. These are model-derived research heuristics, not investment advice.</p>
+          </article>
+          <article>
+            <h3>Freshness and gaps</h3>
+            <p>Missing market cap, earnings, actual-price, or forecast values remain explicitly unavailable. The scheduled scan never fabricates metadata and does not replace the last valid dataset when coverage is below threshold.</p>
+          </article>
+        </section>
+      </div>
     </main>
 
     <footer class="footer">
       <div class="container footer-grid">
-        <div>
-          <div class="logo">QUANTURA</div>
-          <p class="small">Decision intelligence for market research, forecasting, and execution.</p>
-          <div class="footer-social" aria-label="Quantura social links">
-            <a class="social-link" href="#" data-analytics="social_x" aria-label="X (coming soon)">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.9 2H22l-6.8 7.8L23 22h-6.9l-5.4-6.9L4.7 22H1.6l7.3-8.4L1 2h7.1l4.9 6.3L18.9 2zm-1.2 18h1.7L7.2 3.9H5.4L17.7 20z"/></svg>
-            </a>
-            <a class="social-link" href="#" data-analytics="social_linkedin" aria-label="LinkedIn (coming soon)">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.98 3.5C4.98 4.88 3.87 6 2.5 6S0 4.88 0 3.5 1.12 1 2.5 1 4.98 2.12 4.98 3.5zM0.5 8.5H4.5V23H0.5V8.5zM8.5 8.5H12.3V10.4h.1c.5-1 1.9-2.1 3.9-2.1 4.2 0 5 2.8 5 6.5V23h-4v-6.7c0-1.6 0-3.7-2.2-3.7-2.3 0-2.6 1.8-2.6 3.6V23h-4V8.5z"/></svg>
-            </a>
-            <a class="social-link" href="#" data-analytics="social_reddit" aria-label="Reddit (coming soon)">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21.9 10.7c.1-.4.1-.8 0-1.2-.3-1-1.4-1.6-2.5-1.3-.6.2-1 .6-1.2 1.1-1.5-1-3.4-1.7-5.5-1.8l1-4.6 3.2.7c.1.8.8 1.4 1.7 1.4.9 0 1.7-.8 1.7-1.7S19.5 2 18.6 2c-.6 0-1.2.4-1.5.9l-3.7-.8c-.3-.1-.6.1-.7.4l-1.2 5.2c-2.2.1-4.2.8-5.7 1.8-.2-.5-.6-.9-1.2-1.1-1-.3-2.1.3-2.5 1.3-.1.4-.1.8 0 1.2.1.6.4 1 .9 1.3-.1.4-.1.9-.1 1.3 0 3.6 4.1 6.5 9.1 6.5s9.1-2.9 9.1-6.5c0-.4 0-.9-.1-1.3.5-.3.8-.8.9-1.3zM7.9 12.8c0-.8.7-1.5 1.5-1.5s1.5.7 1.5 1.5-.7 1.5-1.5 1.5-1.5-.6-1.5-1.5zm8.5 4c-.9.9-2.6 1.3-4.4 1.3s-3.5-.4-4.4-1.3c-.2-.2-.2-.5 0-.7.2-.2.5-.2.7 0 .6.6 2 1 3.7 1 1.7 0 3.1-.4 3.7-1 .2-.2.5-.2.7 0 .2.2.2.5 0 .7zm-1.8-2.5c-.8 0-1.5-.7-1.5-1.5s.7-1.5 1.5-1.5 1.5.7 1.5 1.5-.7 1.5-1.5 1.5z"/></svg>
-            </a>
-            <a class="social-link" href="#" data-analytics="social_github" aria-label="GitHub (coming soon)">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .5C5.73.5.75 5.63.75 12c0 5.1 3.29 9.41 7.86 10.94.58.11.79-.26.79-.57v-2.1c-3.2.71-3.88-1.57-3.88-1.57-.53-1.37-1.29-1.74-1.29-1.74-1.05-.74.08-.73.08-.73 1.16.08 1.77 1.23 1.77 1.23 1.03 1.8 2.7 1.28 3.36.98.1-.77.4-1.28.72-1.58-2.55-.3-5.23-1.31-5.23-5.84 0-1.29.45-2.35 1.19-3.18-.12-.3-.52-1.53.11-3.2 0 0 .97-.32 3.18 1.21.92-.26 1.9-.39 2.88-.39.98 0 1.96.13 2.88.39 2.2-1.53 3.17-1.21 3.17-1.21.63 1.67.23 2.9.11 3.2.74.83 1.19 1.89 1.19 3.18 0 4.54-2.69 5.54-5.25 5.83.41.37.77 1.1.77 2.22v3.29c0 .31.21.68.8.57A11.3 11.3 0 0 0 23.25 12C23.25 5.63 18.27.5 12 .5z"/></svg>
-            </a>
-          </div>
-        </div>
-        <div class="small">
-          <strong>Workspace</strong>
-          <div><a href="/">Home</a></div>
-          <div><a href="/forecasting">Forecasting</a></div>
-          <div><a href="/research">Research</a></div>
-          <div><a href="/blog">Blog</a></div>
-          <div><a href="/dashboard">Dashboard</a></div>
-          <div><a href="/pricing">Pricing</a></div>
-          <div><a href="/contact">Contact</a></div>
-        </div>
-        <div class="small">
-          <strong>Legal</strong>
-          <div><a href="/terms">Terms and Conditions</a></div>
-          <div><a href="/privacy">Privacy Policy</a></div>
-          <div><a href="/disclaimer">Disclaimer Policy</a></div>
-          <details class="footer-terms" style="margin-top:10px;">
-            <summary>Terms summary (important)</summary>
-            <ul class="footer-terms-list">
-              <li>By using Quantura, you confirm you are at least 18 years old and authorized to act for your account or business.</li>
-              <li>Paid plans renew automatically until canceled before the next billing date. Refund and cancellation rules are listed in the full Terms.</li>
-              <li>Quantura provides software and data tooling, not brokerage, investment advisory, legal, or tax services.</li>
-              <li>Market data, forecast outputs, and AI-generated content may be delayed, incomplete, or inaccurate and must be independently verified.</li>
-              <li>Services are provided "as is" to the maximum extent permitted by law, with liability limitations and dispute resolution terms in the full Terms.</li>
-              <li>Where enforceable, disputes may be resolved through individual arbitration and class action waiver terms.</li>
-            </ul>
-          </details>
-          <p class="small legal-copy">
-            Financial disclaimer: nothing on Quantura is investment, tax, accounting, or legal advice. Trading and options involve substantial risk, including possible loss of principal.
-          </p>
-        </div>
+        <div><div class="logo">QUANTURA</div><p class="small">Decision intelligence for market research, forecasting, and execution.</p></div>
+        <div class="small"><strong>Research</strong><div><a href="/forecasting">Forecasting</a></div><div><a href="/screener">Screener</a></div><div><a href="/historical-data">Historical Data</a></div><div><a href="/options">Options</a></div></div>
+        <div class="small"><strong>Legal</strong><div><a href="/terms">Terms</a></div><div><a href="/privacy">Privacy</a></div><div><a href="/disclaimer">Disclaimer</a></div><p class="legal-copy">Quantura provides research software, not brokerage or investment-advisory services.</p></div>
       </div>
-      <div class="container small" style="margin-top: 24px;">
-        © 2026 Quantura. All rights reserved.
-      </div>
+      <div class="container small footer-bottom">© 2026 Quantura. All rights reserved.</div>
     </footer>
-
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
   </body>
 </html>
