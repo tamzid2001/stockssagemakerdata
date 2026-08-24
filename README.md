@@ -495,13 +495,9 @@ Current workflow files include:
 
 ### Research Automation
 
-The repo-root stock screening scripts support recurring signal generation and report creation. The daily Prophet tracker is designed to:
+`stock-screener.yml` runs the production Quantura screener after the US close on weekdays. It generates the current S&P 500 and eligible Nasdaq common-stock universe, adds SPY explicitly, snapshots market-cap/sector/industry and upcoming earnings metadata, and distributes symbols across deterministic matrix chunks. Each chunk prefers batched Alpaca daily bars and falls back to batched adjusted Yahoo daily closes when the server-side Alpaca credentials are not provisioned.
 
-- scan broad equity universes
-- filter by market-cap requirements
-- compute quantile-band based signal conditions
-- write artifacts for active signals and state transitions
-- run on scheduled GitHub Actions timing near market close
+The aggregate stage publishes the rolling `screener-latest` GitHub release only when actual successful-evaluation coverage meets the configured threshold. Chunk artifacts and same-day/hash checkpoints preserve partial work, individual symbols retain explicit failure states, and a degraded run leaves the last validated website dataset untouched. See [Quantitative screener pipeline](quantura_site/docs/quant-screener-pipeline.md) for the data contract, market-cap convention, provider behavior, and manual validation commands.
 
 ### Social Publishing Automation
 

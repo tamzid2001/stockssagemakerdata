@@ -136,3 +136,26 @@ def test_prediction_csv_analysis_is_available_from_forecast_foundry():
         "Extended P10 Buy Bias",
     ]:
         assert marker in client
+
+
+def test_quantitative_screener_surface_replaces_manual_prophet_dispatch():
+    screener = (PAGES / "screener.html").read_text()
+    client = (PUBLIC / "screener.js").read_text()
+    styles = (PUBLIC / "screener.css").read_text()
+    for marker in [
+        'id="qs-search"',
+        'id="qs-universe"',
+        'id="qs-market-cap"',
+        'value="above-p50"',
+        'value="below-p90"',
+        'id="qs-special-p10"',
+        'id="qs-table-body"',
+        'id="qs-pagination"',
+        "Download CSV",
+    ]:
+        assert marker in screener
+    assert "/api/screener/data" in client
+    assert "history.pushState" in client
+    assert "@media (max-width: 760px)" in styles
+    assert 'id="screener-generate-button"' not in screener
+    assert "$100B" not in screener

@@ -24,6 +24,12 @@ import {
   runMarketDataScreener,
 } from "./forecastingScreener";
 import {
+  filterSortPaginateRows,
+  loadPublishedScreenerCsv,
+  loadPublishedScreenerDataset,
+  parseQuantScreenerQuery,
+} from "./quantScreener";
+import {
   analyzeSportsPredictionCsv,
   buildSportsAutopilotDatasetCsv,
   buildSportsHistoricalCsv,
@@ -2347,6 +2353,7 @@ type GithubScreenerArtifactPayload = {
   manifest: Record<string, unknown>;
   activeSignals: Array<Record<string, unknown>>;
   allLatestRows: Array<Record<string, unknown>>;
+  datasetItems: Array<Record<string, unknown>>;
   errors: Array<Record<string, unknown>>;
   workflowLog: string;
 };
@@ -2391,7 +2398,6 @@ function buildScreenerWorkflowRunKey(runId: string): string {
 
 async function dispatchGithubScreenerWorkflow(input: {
   runKey: string;
-  minMarketCap: number;
 }): Promise<void> {
   await githubApiRequest(`/actions/workflows/${encodeURIComponent(GITHUB_SCREENER_WORKFLOW)}/dispatches`, {
     method: "POST",
@@ -2399,7 +2405,10 @@ async function dispatchGithubScreenerWorkflow(input: {
       ref: GITHUB_ACTIONS_BRANCH,
       inputs: {
         run_key: input.runKey,
-        min_market_cap: String(Math.max(0, Math.floor(input.minMarketCap || 0))),
+        max_tickers: "",
+        chunk_count: "16",
+        coverage_threshold: "0.90",
+        publish_results: "false",
       },
     }),
   });
@@ -2709,7 +2718,9 @@ function normalizeWorkflowScreenerRows(rowsRaw: unknown): Array<Record<string, u
       symbol,
       ticker: symbol,
       status: sanitizeText(row.status, 60).toLowerCase(),
-      lastClose: roundFinite(row.last_price, 2),
+      companyName: sanitizeText(row.company_name || row.companyName, 220),
+      exchange: sanitizeText(row.exchange, 80),
+      lastClose: roundFinite(row.last_price ?? row.actual_price, 2),
       gapToBandPct: roundFinite(row.gap_to_band_pct, 2),
       p1: roundFinite(row.p1, 2),
       p10: roundFinite(row.p10, 2),
@@ -2720,13 +2731,25 @@ function normalizeWorkflowScreenerRows(rowsRaw: unknown): Array<Record<string, u
       centralDeltaLabel: sanitizeText(row.central_delta_label, 80),
       tailDelta: roundFinite(row.tail_delta, 2),
       tailDeltaLabel: sanitizeText(row.tail_delta_label, 80),
-      marketCap: asFinite(row.market_cap, Number.NaN),
+      marketCap: roundFinite(row.market_cap, 2),
       marketCapLabel: sanitizeText(row.market_cap_fmt, 40),
       lastEarningsDate: sanitizeText(row.last_earnings_date, 40),
       lastReportPeriod: sanitizeText(row.last_report_period, 80),
       nextEarningsDate: sanitizeText(row.next_earnings_date, 40),
       nextReportPeriod: sanitizeText(row.next_report_period, 80),
       universe: sanitizeText(row.universe, 80),
+      universeMemberships: Array.isArray(row.universe_memberships)
+        ? row.universe_memberships.map((item) => sanitizeText(item, 40)).filter(Boolean)
+        : [],
+      quantilePosition: sanitizeText(row.quantile_position, 60),
+      distanceP10Pct: roundFinite(row.distance_p10_pct, 2),
+      distanceP50Pct: roundFinite(row.distance_p50_pct, 2),
+      distanceP90Pct: roundFinite(row.distance_p90_pct, 2),
+      generalBias: sanitizeText(row.general_bias, 80),
+      unusualP50Count: Math.max(0, Math.floor(asFinite(row.unusual_p50_count, 0))),
+      p10SignalActive: asBoolean(row.p10_signal_active, false),
+      forecastDate: sanitizeText(row.forecast_date, 40),
+      lastForecastUpdate: sanitizeText(row.last_forecast_update, 120),
     });
   }
   return normalized;
@@ -2739,7 +2762,11 @@ async function downloadGithubArtifactPayload(artifact: GithubArtifactRecord): Pr
   const buffer = Buffer.from(await response.arrayBuffer());
   const zip = new AdmZip(buffer);
   const manifestText =
-    readZipEntryText(zip, "artifacts/run_manifest.json") || readZipEntryText(zip, "run_manifest.json");
+    readZipEntryText(zip, "artifacts/run_manifest.json") ||
+    readZipEntryText(zip, "run_manifest.json") ||
+    readZipEntryText(zip, "run-manifest.json") ||
+    readZipEntryText(zip, "final/run-manifest.json") ||
+    readZipEntryText(zip, "screener-work/final/run-manifest.json");
   const activeSignalsText =
     readZipEntryText(zip, "artifacts/active_signals.csv") || readZipEntryText(zip, "active_signals.csv");
   const allLatestRowsText =
@@ -2747,17 +2774,30 @@ async function downloadGithubArtifactPayload(artifact: GithubArtifactRecord): Pr
   const errorsText = readZipEntryText(zip, "artifacts/errors.csv") || readZipEntryText(zip, "errors.csv");
   const workflowLog =
     readZipEntryText(zip, "artifacts/workflow-run.log") || readZipEntryText(zip, "workflow-run.log");
-  const manifest = manifestText ? asPlainObject(JSON.parse(manifestText)) : {};
+  const datasetText =
+    readZipEntryText(zip, "quantura-screener-latest.json") ||
+    readZipEntryText(zip, "final/quantura-screener-latest.json") ||
+    readZipEntryText(zip, "screener-work/final/quantura-screener-latest.json");
+  const dataset = datasetText ? asPlainObject(JSON.parse(datasetText)) : {};
+  const manifest = manifestText ? asPlainObject(JSON.parse(manifestText)) : asPlainObject(dataset.manifest);
   return {
     manifest,
     activeSignals: parseCsvRecords(activeSignalsText),
     allLatestRows: parseCsvRecords(allLatestRowsText),
+    datasetItems: Array.isArray(dataset.items) ? dataset.items.map((item) => asPlainObject(item)) : [],
     errors: parseCsvRecords(errorsText),
     workflowLog,
   };
 }
 
 function buildGithubScreenerServiceMessage(manifest: Record<string, unknown>, minMarketCap: number, resultCount: number): string {
+  if (sanitizeText(manifest.schema_version, 80) === "quantura-screener-v2") {
+    const coverage = asFinite(manifest.coverage_percentage, Number.NaN);
+    const processed = Math.max(0, Math.floor(asFinite(manifest.successfully_processed, 0)));
+    const expected = Math.max(0, Math.floor(asFinite(manifest.expected, 0)));
+    const coverageLabel = Number.isFinite(coverage) ? `${coverage.toFixed(2)}% coverage` : "coverage unavailable";
+    return `Quantura evaluated ${processed.toLocaleString()} of ${expected.toLocaleString()} eligible securities (${coverageLabel}) and retained ${resultCount.toLocaleString()} extreme or special-signal rows for this private run.`;
+  }
   const status = sanitizeText(manifest.status, 80).toLowerCase();
   const floorLabel = fmtCompactCurrency(minMarketCap) || `$${Number(minMarketCap || 0).toLocaleString()}`;
   if (status.startsWith("skipped_")) {
@@ -2946,7 +2986,7 @@ async function syncGithubScreenerRunRecord(runId: string, viewerUid: string): Pr
     patch.status = sanitizeText(data.status, 40) || "queued";
     patch.serviceMessage =
       sanitizeText(data.serviceMessage, 240) ||
-      `Dispatching GitHub Actions stock screener above the ${fmtCompactCurrency(minMarketCap)} floor.`;
+      "Dispatching the chunked S&P 500, Nasdaq, and SPY quantitative screener.";
     await ref.set(patch, { merge: true });
     const refreshed = await ref.get();
     const merged = { id: refreshed.id, ...(refreshed.data() || {}) } as Record<string, unknown>;
@@ -2963,7 +3003,7 @@ async function syncGithubScreenerRunRecord(runId: string, viewerUid: string): Pr
     patch.status = workflowRun.status === "queued" ? "queued" : "running";
     patch.serviceMessage =
       sanitizeText(patch.workflowProgress, 240) ||
-      `GitHub Actions is ${patch.status} for the ${fmtCompactCurrency(minMarketCap)} market-cap floor.`;
+      `GitHub Actions full-universe screener is ${patch.status}.`;
     await ref.set(patch, { merge: true });
     const refreshed = await ref.get();
     const merged = { id: refreshed.id, ...(refreshed.data() || {}) } as Record<string, unknown>;
@@ -2983,7 +3023,11 @@ async function syncGithubScreenerRunRecord(runId: string, viewerUid: string): Pr
   }
 
   const artifacts = await listGithubArtifactsForRun(workflowRun.id).catch(() => []);
-  const artifact = artifacts.find((item) => item.name === "daily-prophet-signal-tracker" && !item.expired) || artifacts[0] || null;
+  const artifact =
+    artifacts.find((item) => item.name === "quantura-screener-v2" && !item.expired) ||
+    artifacts.find((item) => item.name === "daily-prophet-signal-tracker" && !item.expired) ||
+    artifacts[0] ||
+    null;
   if (!artifact) {
     patch.status = "running";
     patch.serviceMessage = "GitHub Actions finished, but Quantura is still waiting for artifacts.";
@@ -2995,8 +3039,17 @@ async function syncGithubScreenerRunRecord(runId: string, viewerUid: string): Pr
   }
 
   const artifactPayload = await downloadGithubArtifactPayload(artifact);
-  const results = normalizeWorkflowScreenerRows(artifactPayload.activeSignals);
-  const allLatestRows = normalizeWorkflowScreenerRows(artifactPayload.allLatestRows);
+  const v2Rows = normalizeWorkflowScreenerRows(artifactPayload.datasetItems);
+  const allLatestRows = v2Rows.length ? v2Rows : normalizeWorkflowScreenerRows(artifactPayload.allLatestRows);
+  const results = v2Rows.length
+    ? v2Rows
+        .filter((row) =>
+          asBoolean(row.p10SignalActive, false) ||
+          ["below_p10", "above_p90"].includes(sanitizeText(row.quantilePosition, 60))
+        )
+        .sort((left, right) => Math.abs(asFinite(right.distanceP50Pct, 0)) - Math.abs(asFinite(left.distanceP50Pct, 0)))
+        .slice(0, 200)
+    : normalizeWorkflowScreenerRows(artifactPayload.activeSignals);
   const manifest = artifactPayload.manifest;
   const serviceMessage = buildGithubScreenerServiceMessage(manifest, minMarketCap, results.length);
   const topSymbols = extractScreenerTopSymbols(results);
@@ -3009,14 +3062,19 @@ async function syncGithubScreenerRunRecord(runId: string, viewerUid: string): Pr
   patch.results = results;
   patch.resultsFound = results.length;
   patch.topSymbols = topSymbols;
-  patch.appliedFilters = [`Market cap >= ${fmtCompactCurrency(minMarketCap)}`];
+  patch.appliedFilters = v2Rows.length
+    ? ["Current S&P 500 + eligible Nasdaq common stocks + SPY", "Validated P10/P50/P90 quantitative scan"]
+    : [`Market cap >= ${fmtCompactCurrency(minMarketCap)}`];
   patch.ignoredFilters = [];
   patch.workflowArtifactId = artifact.id;
   patch.workflowArtifactName = artifact.name;
   patch.workflowArtifactSizeInBytes = artifact.sizeInBytes;
   patch.workflowManifest = trimOutputsMeta(manifest);
   patch.workflowLogExcerpt = sanitizeText(artifactPayload.workflowLog.split(/\r?\n/).slice(-20).join(" "), 2400);
-  patch.screenedCount = Math.max(0, Math.floor(asFinite(manifest.screenedCount, allLatestRows.length)));
+  patch.screenedCount = Math.max(
+    0,
+    Math.floor(asFinite(manifest.successfully_processed ?? manifest.screenedCount, allLatestRows.length))
+  );
   patch.marketCapSkipped = Math.max(0, Math.floor(asFinite(manifest.marketCapSkipped, 0)));
   patch.allLatestRowsCount = allLatestRows.length;
 
@@ -8246,16 +8304,16 @@ ROUTES.post("/screener/run", async (req, res) => {
       market: "us",
       universe: "both",
       minMarketCap,
-      title: `Stock screener · ${fmtCompactCurrency(minMarketCap) || "$100B"} floor`,
+      title: "Full-universe quantitative screener",
       notes: "",
       status: "queued",
       results: [],
       resultsFound: 0,
-      serviceMessage: `Queued GitHub Actions stock screener above the ${fmtCompactCurrency(minMarketCap)} floor.`,
+      serviceMessage: "Queued the chunked S&P 500, Nasdaq, and SPY quantitative screener.",
       filters: {},
-      appliedFilters: [`Market cap >= ${fmtCompactCurrency(minMarketCap)}`],
+      appliedFilters: ["Current S&P 500 + eligible Nasdaq common stocks + SPY"],
       ignoredFilters: [],
-      modelUsed: "daily_prophet_signal_tracker",
+      modelUsed: "quantura_full_universe_screener_v2",
       modelProvider: "github_actions",
       modelTier: "workflow",
       autoPublishRequested,
@@ -8283,14 +8341,14 @@ ROUTES.post("/screener/run", async (req, res) => {
     let requestResponse = await syncScreenerMyRequestFromRun(user.uid, docRef.id, { ...payload, id: docRef.id }, false);
 
     try {
-      await dispatchGithubScreenerWorkflow({ runKey, minMarketCap });
+      await dispatchGithubScreenerWorkflow({ runKey });
       const workflowRun = await waitForGithubWorkflowRun(runKey, 12000).catch(() => null);
       const dispatchPatch: Record<string, unknown> = {
         status: workflowRun ? "running" : "queued",
         workflowStatus: workflowRun?.status || "queued",
         serviceMessage: workflowRun
-          ? `GitHub Actions is running the stock screener above the ${fmtCompactCurrency(minMarketCap)} floor.`
-          : `GitHub Actions dispatch accepted for the ${fmtCompactCurrency(minMarketCap)} floor.`,
+          ? "GitHub Actions is running the chunked full-universe quantitative screener."
+          : "GitHub Actions accepted the full-universe screener dispatch.",
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       };
       if (workflowRun) {
@@ -8441,6 +8499,53 @@ ROUTES.get("/screener/github-history/:workflowRunId/artifacts/:artifactId/downlo
   } catch (error) {
     console.error("[Screener] github artifact download failed", error);
     res.status(500).json({ error: "screener_github_artifact_download_failed" });
+  }
+});
+
+ROUTES.get("/screener/data", async (req, res) => {
+  const parsed = parseQuantScreenerQuery(asPlainObject(req.query));
+  if (parsed.errors.length) {
+    res.status(400).json({ error: "invalid_screener_query", details: parsed.errors });
+    return;
+  }
+  try {
+    const dataset = await loadPublishedScreenerDataset(GITHUB_REPO_OWNER, GITHUB_REPO_NAME);
+    const page = filterSortPaginateRows(dataset.items, parsed.query);
+    res.setHeader("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=600");
+    res.status(200).json({
+      ok: true,
+      ...page,
+      scanId: dataset.scan_id,
+      scanDate: dataset.scan_date,
+      generatedAt: dataset.generated_at,
+      manifest: dataset.manifest,
+      universeCount: dataset.items.length,
+      dataSource: "validated_github_release",
+    });
+  } catch (error: any) {
+    const detail = sanitizeText(error?.message || error, 120);
+    const notPublished = detail === "screener_dataset_not_published" || detail.includes("http_404");
+    res.status(notPublished ? 503 : 502).json({
+      error: notPublished ? "screener_scan_unavailable" : "screener_dataset_load_failed",
+      detail: notPublished
+        ? "No validated full-universe scan has been published yet. The scheduled pipeline will publish only after its coverage threshold passes."
+        : "The latest validated screener dataset could not be loaded. Retry shortly; the prior release has not been overwritten.",
+    });
+  }
+});
+
+ROUTES.get("/screener/export.csv", async (_req, res) => {
+  try {
+    const csv = await loadPublishedScreenerCsv(GITHUB_REPO_OWNER, GITHUB_REPO_NAME);
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=60, s-maxage=300");
+    res.setHeader("Content-Disposition", 'attachment; filename="quantura-screener-latest.csv"');
+    res.status(200).send(csv);
+  } catch (error) {
+    console.error("[Screener] validated CSV export unavailable", {
+      error: sanitizeText((error as Error)?.message || error, 120),
+    });
+    res.status(503).json({ error: "screener_export_unavailable" });
   }
 });
 
