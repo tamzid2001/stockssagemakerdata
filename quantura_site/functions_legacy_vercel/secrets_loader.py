@@ -6,6 +6,9 @@ from functools import lru_cache
 from typing import Final
 
 
+UNSET_SECRET_VALUES: Final[frozenset[str]] = frozenset({"__unset__"})
+
+
 @dataclass(frozen=True)
 class SecretSpec:
     key: str
@@ -173,7 +176,7 @@ def _lookup_secret(key: str) -> str:
         if raw is None:
             continue
         value = str(raw).strip()
-        if value:
+        if value and value.casefold() not in UNSET_SECRET_VALUES:
             return value
     return ""
 
