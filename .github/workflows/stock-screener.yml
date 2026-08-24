@@ -38,7 +38,6 @@ concurrency:
 
 env:
   PYTHON_VERSION: "3.11"
-  SCAN_DATE: ${{ github.run_started_at }}
   CHUNK_COUNT: ${{ github.event.inputs.chunk_count || '16' }}
   COVERAGE_THRESHOLD: ${{ github.event.inputs.coverage_threshold || '0.90' }}
   MAX_TICKERS: ${{ github.event.inputs.max_tickers || '' }}
@@ -73,7 +72,7 @@ jobs:
             --output screener-work/universe/universe.json
             --matrix-output screener-work/universe/matrix.json
             --chunk-count "${CHUNK_COUNT}"
-            --scan-date "${SCAN_DATE:0:10}"
+            --scan-date "$(date -u +%F)"
           )
           if [[ -n "${MAX_TICKERS}" ]]; then
             command+=(--max-tickers "${MAX_TICKERS}")

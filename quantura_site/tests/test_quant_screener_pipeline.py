@@ -106,6 +106,48 @@ def test_development_subset_still_includes_spy():
     assert any(row["ticker"] == "SPY" for row in selected)
 
 
+def test_chunk_zero_reuses_a_valid_checkpoint(tmp_path, monkeypatch, capsys):
+    universe_path = tmp_path / "universe.json"
+    output_path = tmp_path / "chunk-0.json"
+    universe_path.write_text(
+        json.dumps(
+            {
+                "schema_version": pipeline.SCHEMA_VERSION,
+                "scan_date": "2026-08-24",
+                "universe_hash": "checkpoint-fixture",
+                "items": [base_item("SPY", is_nasdaq=False, is_etf=True)],
+            }
+        ),
+        encoding="utf-8",
+    )
+    output_path.write_text(
+        json.dumps(
+            {
+                "schema_version": pipeline.SCHEMA_VERSION,
+                "universe_hash": "checkpoint-fixture",
+                "chunk": 0,
+                "chunk_count": 1,
+                "items": [{**base_item("SPY"), "status": "success"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(pipeline, "fetch_alpaca_histories", lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("provider called")))
+    args = type(
+        "Args",
+        (),
+        {
+            "universe": str(universe_path),
+            "chunk": 0,
+            "chunk_count": 1,
+            "output": str(output_path),
+            "resume": True,
+        },
+    )()
+    assert pipeline.command_chunk(args) == 0
+    assert '"event": "chunk_reused"' in capsys.readouterr().out
+
+
 def test_quantile_forecast_reuses_site_drift_methodology():
     forecast = pipeline.build_forecast(history())
     assert forecast is not None

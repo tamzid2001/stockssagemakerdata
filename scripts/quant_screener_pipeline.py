@@ -725,7 +725,7 @@ def command_chunk(args: argparse.Namespace) -> int:
         if (
             existing.get("schema_version") == SCHEMA_VERSION
             and existing.get("universe_hash") == expected_hash
-            and int(existing.get("chunk") or -1) == args.chunk
+            and int(existing.get("chunk", -1)) == args.chunk
             and int(existing.get("chunk_count") or 0) == args.chunk_count
         ):
             print(json.dumps({"event": "chunk_reused", "chunk": args.chunk, "rows": len(existing.get("items") or [])}))
