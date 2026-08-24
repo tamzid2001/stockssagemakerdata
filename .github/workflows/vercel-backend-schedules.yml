@@ -4,6 +4,19 @@ on:
   schedule:
     - cron: "*/15 * * * *"
   workflow_dispatch:
+    inputs:
+      job:
+        description: Production job to run (scheduled keeps the normal time gates)
+        required: true
+        default: scheduled
+        type: choice
+        options:
+          - scheduled
+          - social-dispatch
+          - forecast-report
+          - social-planner
+          - newsletter-daily
+          - newsletter-weekly
 
 concurrency:
   group: vercel-backend-schedules
@@ -27,15 +40,17 @@ jobs:
         run: test -n "$CRON_SECRET"
 
       - name: Run recurring reconciliation jobs
+        if: github.event_name != 'workflow_dispatch' || inputs.job == 'scheduled'
         shell: bash
         run: |
           set -euo pipefail
           auth_header="Authorization: Bearer ${CRON_SECRET}"
-          curl --fail --silent --show-error --retry 2 -H "$auth_header" -X POST "${API_ORIGIN}/api/internal/cron/reconcile-posts"
-          curl --fail --silent --show-error --retry 2 -H "$auth_header" -X POST "${API_ORIGIN}/api/internal/cron/autopilot-reconcile"
-          curl --fail --silent --show-error --retry 2 -H "$auth_header" -X POST "${API_ORIGIN}/api/internal/cron/automation-schedules"
+          curl --fail-with-body --silent --show-error --retry 2 -H "$auth_header" -X POST "${API_ORIGIN}/api/internal/cron/reconcile-posts"
+          curl --fail-with-body --silent --show-error --retry 2 -H "$auth_header" -X POST "${API_ORIGIN}/api/internal/cron/autopilot-reconcile"
+          curl --fail-with-body --silent --show-error --retry 2 -H "$auth_header" -X POST "${API_ORIGIN}/api/internal/cron/automation-schedules"
 
       - name: Dispatch time-based production jobs
+        if: github.event_name != 'workflow_dispatch' || inputs.job == 'scheduled'
         shell: bash
         run: |
           set -euo pipefail
@@ -43,23 +58,58 @@ jobs:
           local_hour=$(TZ=America/New_York date +%H)
           local_minute=$(TZ=America/New_York date +%M)
           local_weekday=$(TZ=America/New_York date +%u)
+          job_status=0
+
+          run_job() {
+            local origin="$1"
+            local job="$2"
+            if ! curl --fail-with-body --silent --show-error --retry 2 -H "$auth_header" -X POST "${origin}/api/internal/cron/${job}"; then
+              job_status=1
+            fi
+          }
 
           if (( 10#$local_minute < 15 )); then
-            curl --fail --silent --show-error --retry 2 -H "$auth_header" -X POST "${LEGACY_ORIGIN}/api/internal/cron/social-dispatch"
+            run_job "$LEGACY_ORIGIN" "social-dispatch"
           fi
 
           if (( 10#$local_minute < 15 || (10#$local_minute >= 30 && 10#$local_minute < 45) )); then
-            curl --fail --silent --show-error --retry 2 -H "$auth_header" -X POST "${LEGACY_ORIGIN}/api/internal/cron/forecast-report"
+            run_job "$LEGACY_ORIGIN" "forecast-report"
           fi
 
           if [[ "$local_hour" == "07" ]] && (( 10#$local_minute >= 15 && 10#$local_minute < 30 )); then
-            curl --fail --silent --show-error --retry 2 -H "$auth_header" -X POST "${LEGACY_ORIGIN}/api/internal/cron/social-planner"
+            run_job "$LEGACY_ORIGIN" "social-planner"
           fi
 
           if [[ "$local_hour" == "13" ]] && (( 10#$local_minute < 15 )); then
-            curl --fail --silent --show-error --retry 2 -H "$auth_header" -X POST "${LEGACY_ORIGIN}/api/internal/cron/newsletter-daily"
+            run_job "$LEGACY_ORIGIN" "newsletter-daily"
           fi
 
           if [[ "$local_weekday" == "1" && "$local_hour" == "09" ]] && (( 10#$local_minute < 15 )); then
-            curl --fail --silent --show-error --retry 2 -H "$auth_header" -X POST "${NEWSLETTER_ORIGIN}/api/internal/cron/newsletter-weekly"
+            run_job "$NEWSLETTER_ORIGIN" "newsletter-weekly"
           fi
+
+          exit "$job_status"
+
+      - name: Run requested production job
+        if: github.event_name == 'workflow_dispatch' && inputs.job != 'scheduled'
+        shell: bash
+        env:
+          REQUESTED_JOB: ${{ inputs.job }}
+        run: |
+          set -euo pipefail
+          auth_header="Authorization: Bearer ${CRON_SECRET}"
+
+          case "$REQUESTED_JOB" in
+            newsletter-weekly)
+              job_origin="$NEWSLETTER_ORIGIN"
+              ;;
+            social-dispatch|forecast-report|social-planner|newsletter-daily)
+              job_origin="$LEGACY_ORIGIN"
+              ;;
+            *)
+              echo "Unsupported production job: $REQUESTED_JOB" >&2
+              exit 2
+              ;;
+          esac
+
+          curl --fail-with-body --silent --show-error --retry 2 -H "$auth_header" -X POST "${job_origin}/api/internal/cron/${REQUESTED_JOB}"
