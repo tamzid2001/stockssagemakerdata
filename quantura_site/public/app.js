@@ -24778,8 +24778,14 @@
 		  const init = () => {
 	    hydrateUnsplashGallery();
       initializeUiShell();
-		    if (typeof firebase === "undefined") {
-		      console.error("App SDK not loaded.");
+		    if (
+          typeof firebase === "undefined"
+          || typeof firebase.auth !== "function"
+          || typeof firebase.firestore !== "function"
+        ) {
+		      // Marketing and commerce pages intentionally load only the Firebase
+          // products they use. The shared shell is already initialized above;
+          // skip account/data bindings when Auth or Firestore is absent.
 		      return;
 		    }
 
