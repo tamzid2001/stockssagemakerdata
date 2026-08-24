@@ -6,7 +6,7 @@
     <title>Quantura Terminal | Quantura Horizon + Indicators</title>
         <meta name="description" content="Generate quantile forecasts, toggle technical indicators, and track ticker momentum with Quantura's terminal." />
         <meta name="robots" content="index, follow" />
-    <meta name="keywords" content="stock forecasting terminal, quantile forecast, fan chart, ticker analysis, model council" />
+    <meta name="keywords" content="stock forecasting terminal, quantile forecast, fan chart, ticker analysis, historical market data" />
         <link rel="canonical" href="https://quantura.studio/forecasting" />
         <meta property="og:title" content="Quantura Forecasting Studio" />
         <meta property="og:description" content="Quantile forecasting, technical indicators, and demand intelligence for serious investors." />
@@ -43,6 +43,7 @@
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
     <script defer src="/app.js?v=20260817c"></script>
+    <script defer src="/data-integrations.js?v=20260823a"></script>
     <script defer src="/assets/rnweb/quantura-rnw.js"></script>
   
     <script>
@@ -59,7 +60,6 @@
         </a>
         <nav class="nav-links">
           <a href="/forecasting" data-analytics="nav_terminal"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Terminal</span></a>
-          <a href="/explore" data-analytics="nav_explore"><i class="iconoir-binocular" aria-hidden="true"></i><span>Explore</span></a>
           <a href="/blog" data-analytics="nav_blog"><i class="iconoir-page" aria-hidden="true"></i><span>Blog</span></a>
           <a href="/research" data-analytics="nav_research"><i class="iconoir-bookmark-book" aria-hidden="true"></i><span>Research</span></a>
           <a href="/events" data-analytics="nav_events"><i class="iconoir-calendar" aria-hidden="true"></i><span>Events</span></a>
@@ -97,12 +97,11 @@
               <a class="sidebar-link" href="/autopilot" data-panel-target="autopilot"><i class="iconoir-rocket" aria-hidden="true"></i><span>Forecast Foundry</span></a>
               <a class="sidebar-link" href="/sports-forecasting" data-panel-target="sports-autopilot"><i class="iconoir-trophy" aria-hidden="true"></i><span>Sports Forecasting</span></a>
 	            <a class="sidebar-link" href="/indicators" data-panel-target="indicators"><i class="iconoir-sigma-function" aria-hidden="true"></i><span>Indicators</span></a>
+              <a class="sidebar-link" href="/historical-data" data-panel-target="news"><i class="iconoir-database" aria-hidden="true"></i><span>Historical data</span></a>
               <a class="sidebar-link" href="/market-headlines" data-panel-target="market-headlines"><i class="iconoir-globe" aria-hidden="true"></i><span>Market headlines</span></a>
               <a class="sidebar-link" href="/options" data-panel-target="options"><i class="iconoir-numbered-list-left" aria-hidden="true"></i><span>Options</span></a>
-              <a class="sidebar-link" href="/terminal/fx" data-panel-target="fx"><i class="iconoir-coins-swap" aria-hidden="true"></i><span>Currency conversion</span></a>
               <a class="sidebar-link" href="/studio" data-panel-target="learn"><i class="iconoir-info-circle" aria-hidden="true"></i><span>Learn more</span></a>
 	            <a class="sidebar-link" href="/forecasting?panel=screener" data-panel-target="screener"><i class="iconoir-search" aria-hidden="true"></i><span>Screener</span></a>
-              <a class="sidebar-link" href="/explore"><i class="iconoir-binocular" aria-hidden="true"></i><span>Explore</span></a>
 	            <a class="sidebar-link" href="/watchlist"><i class="iconoir-bell-notification" aria-hidden="true"></i><span>Watchlist and alerts</span></a>
 	          </nav>
 	        </aside>
@@ -198,14 +197,6 @@
                             <option value="indicator">Indicators</option>
                           </select>
                         </div>
-                        <div class="field">
-                          <label class="label">Published</label>
-                          <select data-my-requests-published>
-                            <option value="all">All</option>
-                            <option value="published">Published</option>
-                            <option value="unpublished">Unpublished</option>
-                          </select>
-                        </div>
                       </div>
                       <p class="small muted" data-my-requests-status>Sign in to load your requests.</p>
                       <div class="order-list panel-output" data-my-requests-list></div>
@@ -216,7 +207,7 @@
                     <div class="container">
                       <div class="section-title">
                         <h2>Forecast Foundry</h2>
-                        <p class="small">Prepare market data, upload prediction CSVs, run SageMaker Autopilot on daily history, and keep every result private in Explore until you publish it.</p>
+                        <p class="small">Prepare market data, validate historical CSVs, and run SageMaker Autopilot on daily history while keeping every result private in your Workspace.</p>
                       </div>
 
                       <div class="foundry-layout">
@@ -224,14 +215,13 @@
                           <form id="foundry-source-form" class="card">
                             <div class="eyebrow">Quantura Forecast Foundry</div>
                             <h3>Prepare a source</h3>
-                            <p class="small">Historical downloader data is normalized to <code>item_id</code>, <code>timestamp</code>, and <code>closing_price</code>. Uploaded prediction CSVs are analyzed and pushed into Explore-ready request records automatically.</p>
+                            <p class="small">Historical downloader data is normalized to <code>item_id</code>, <code>timestamp</code>, and <code>closing_price</code>. Uploaded historical CSVs are validated before they can be used by Foundry.</p>
                             <div class="form-grid">
                               <div class="field">
                                 <label class="label" for="foundry-source-kind">Source type</label>
                                 <select id="foundry-source-kind" name="sourceKind">
                                   <option value="history">Historical downloader</option>
                                   <option value="historical_csv">Historical CSV</option>
-                                  <option value="prediction_csv">Predictions CSV</option>
                                 </select>
                               </div>
                               <div class="field">
@@ -306,15 +296,12 @@
                             <div id="foundry-file-field" class="field">
                               <label class="label" for="foundry-file">CSV file</label>
                               <input id="foundry-file" class="file-input" type="file" accept=".csv,text/csv" />
-                              <div class="small muted">Historical CSVs must resolve to item/date-close columns. Prediction CSVs should include quantiles such as P10, P50, and P90.</div>
+                              <div class="small muted">Historical CSVs must resolve to item, timestamp/date, and closing-price columns.</div>
                             </div>
 
                             <div class="hero-actions hidden" id="foundry-upload-actions" style="margin-top: 12px; justify-content: flex-start;">
                               <button class="cta" id="foundry-upload-prepare-button" type="button" data-analytics="foundry_prepare_source_upload">
                                 <i class="iconoir-data-transfer-up" aria-hidden="true"></i><span>Prepare source</span>
-                              </button>
-                              <button class="cta secondary" id="foundry-analyze-button" type="button" data-analytics="foundry_analyze_csv">
-                                <i class="iconoir-sparks" aria-hidden="true"></i><span>Analyze predictions</span>
                               </button>
                             </div>
 
@@ -359,7 +346,7 @@
                             <p class="small" id="autopilot-status">Sign in with a full account to unlock Forecast Foundry.</p>
                             <div class="small muted" id="foundry-instance-limit">Concurrent instance limit: 0 of 2 active.</div>
                             <div class="notice small" id="foundry-access-note">
-                              Forecast Foundry currently supports daily historical datasets only. Prediction CSV uploads can still be analyzed here. A matching repository workflow is now available in GitHub Actions for manual Foundry launches.
+                              Forecast Foundry currently supports daily historical datasets only. A matching repository workflow is available in GitHub Actions for controlled Foundry launches.
                             </div>
 
                             <div class="card" style="margin-top: 18px;">
@@ -377,7 +364,7 @@
                                   <code>P50</code> or <code>0.5</code>.
                                 </p>
                                 <p>
-                                  For stock prediction analysis, Quantura takes the first actionable business-day <code>P50</code> in the forecast window and the last valid business-day <code>P50</code> in the forecast output, rounds both to the nearest 10, and compares those tens-place levels. If the last rounded <code>P50</code> is below the first, Quantura marks the setup as <strong>BUY</strong> and communicates an end-date bias toward the upper bound, typically <code>P90</code>. Otherwise it marks the setup as <strong>SELL</strong> and communicates an end-date bias toward the lower bound.
+                                  Review the median forecast path and its outer quantile bands together. Wider bands communicate greater model uncertainty and should not be treated as trading instructions.
                                 </p>
                               </div>
                             </div>
@@ -401,10 +388,10 @@
                                 </button>
                               </div>
                             </div>
-                            <div id="foundry-run-meta" class="panel-output small">Select a foundry run to inspect its schema, predictions, and conclusions.</div>
-                            <div id="foundry-publish-host" class="small muted" style="margin-top: 12px;">Private Explore sync and publish controls appear here after a source is prepared.</div>
-                            <div id="predictions-agent-output" class="panel-output small" style="margin-top: 14px;">Prediction analysis and conclusions will appear here.</div>
-                            <div id="predictions-plot-meta" class="small muted" style="margin-top: 14px;">CSV schema preview metadata will appear here.</div>
+                            <div id="foundry-run-meta" class="panel-output small">Select a foundry run to inspect its source schema, status, and forecast artifacts.</div>
+                            <div id="foundry-publish-host" class="small muted" style="margin-top: 12px;">Private Workspace sync controls appear here after a source is prepared.</div>
+                            <div id="predictions-agent-output" class="panel-output small" style="margin-top: 14px;">Forecast run analysis will appear here.</div>
+                            <div id="predictions-plot-meta" class="small muted" style="margin-top: 14px;">Dataset preview metadata will appear here.</div>
                             <div id="predictions-chart" class="chart foundry-chart-launcher" style="margin-top: 14px;"></div>
                             <div id="predictions-preview" class="panel-output small" style="margin-top: 14px;">Preview will appear here.</div>
                           </div>
@@ -424,161 +411,52 @@
                   <section class="panel hidden" data-panel="sports-autopilot" id="sports-autopilot">
                     <div class="container">
                       <div class="section-title">
-                        <h2>Sports Forecasting</h2>
-                        <p class="small">Build player-level NBA, NFL, and MLB forecasts with the same private-save and Explore publishing flow used by Forecast Foundry.</p>
-                      </div>
-
-                      <div class="foundry-layout sports-foundry-layout">
-                        <div class="foundry-main-grid sports-foundry-main-grid">
-                          <form id="sports-foundry-form" class="card">
-                            <div class="eyebrow">Quantura Sports Foundry</div>
-                            <h3>Prepare a sports workflow</h3>
-                            <p class="small">Switch between a player-level sports forecast and a quick team total export. Quantura will normalize the league data, preview it here, and let you download the exact slice you need.</p>
-
-                            <div class="form-grid">
-                              <div class="field">
-                                <label class="label">Workflow</label>
-                                <div class="sports-foundry-workflow-toggle" id="sports-foundry-workflow-toggle">
-                                  <label class="sports-foundry-workflow-option">
-                                    <input type="radio" name="sportsFoundryWorkflow" value="player_forecast" checked />
-                                    <span>Player forecast</span>
-                                  </label>
-                                  <label class="sports-foundry-workflow-option">
-                                    <input type="radio" name="sportsFoundryWorkflow" value="team_total_export" />
-                                    <span>Team total export</span>
-                                  </label>
-                                </div>
-                                <div class="small muted">Player forecasts save runs and publish to Explore. Team total export now supports full completed-history downloads or a filtered single-day export.</div>
-                              </div>
-                              <div class="field">
-                                <label class="label" for="sports-foundry-league">League</label>
-                                <select id="sports-foundry-league" name="league">
-                                  <option value="nba">NBA</option>
-                                  <option value="nfl">NFL</option>
-                                  <option value="mlb">MLB</option>
-                                </select>
-                              </div>
-                              <div class="field">
-                                <label class="label" for="sports-foundry-team">Team</label>
-                                <select id="sports-foundry-team" name="team">
-                                  <option value="">Choose a league first</option>
-                                </select>
-                              </div>
-                            </div>
-
-                            <div id="sports-foundry-player-fields">
-                              <div class="form-grid">
-                                <div class="field">
-                                  <label class="label" for="sports-foundry-player">Player</label>
-                                  <select id="sports-foundry-player" name="player">
-                                    <option value="">Choose a team first</option>
-                                  </select>
-                                </div>
-                                <div class="field">
-                                  <label class="label" for="sports-foundry-stat">Stat</label>
-                                  <select id="sports-foundry-stat" name="stat">
-                                    <option value="">Choose a player first</option>
-                                  </select>
-                                </div>
-                                <div class="field">
-                                  <label class="label" for="sports-foundry-game">Future game</label>
-                                  <select id="sports-foundry-game" name="game">
-                                    <option value="">Choose a player first</option>
-                                  </select>
-                                  <div class="small muted" id="sports-foundry-game-gap">Future matchup timing will appear here once a game is selected.</div>
-                                </div>
-                                <div class="field">
-                                  <label class="label" for="sports-foundry-title">Run title</label>
-                                  <input id="sports-foundry-title" name="title" placeholder="Stephen Curry points vs BOS" />
-                                </div>
-                              </div>
-
-                              <div class="field">
-                                <label class="label" for="sports-foundry-notes">Notes</label>
-                                <textarea id="sports-foundry-notes" name="notes" placeholder="What this forecast should emphasize, matchup context, or how you plan to use the result"></textarea>
-                              </div>
-                            </div>
-
-                            <div id="sports-foundry-team-total-fields" class="hidden">
-                              <div class="form-grid">
-                                <div class="field">
-                                  <label class="label" for="sports-team-total-all-history">History scope</label>
-                                  <label class="checkbox download-history-toggle">
-                                    <input id="sports-team-total-all-history" name="teamTotalAllHistory" type="checkbox" checked />
-                                    <span>Load full completed history</span>
-                                  </label>
-                                </div>
-                                <div class="field">
-                                  <label class="label" for="sports-team-total-date">Game date</label>
-                                  <input id="sports-team-total-date" name="teamTotalDate" type="date" />
-                                  <div class="small muted" id="sports-team-total-date-note">Optional when full history is enabled.</div>
-                                </div>
-                                <div class="field">
-                                  <label class="label" for="sports-team-total-home-away">Venue filter</label>
-                                  <select id="sports-team-total-home-away" name="teamTotalHomeAway">
-                                    <option value="any">Home or away</option>
-                                    <option value="home">Home only</option>
-                                    <option value="away">Away only</option>
-                                  </select>
-                                </div>
-                              </div>
-                              <div class="small muted">Download the selected team&apos;s completed game totals across the available schedule history, or narrow it to one date. Doubleheaders export one row per game.</div>
-                            </div>
-
-                            <div class="card sports-foundry-preview-card" style="margin-top: 18px;">
-                              <div class="card-head">
-                                <h3>Historical preview</h3>
-                                <div class="small muted" id="sports-foundry-history-meta">Choose a player to load historical game data and stat options, or switch to team total export for completed team-total history.</div>
-                              </div>
-                              <div id="sports-foundry-history-preview" class="panel-output small">Historical player game logs will appear here.</div>
-                            </div>
-
-                            <div class="hero-actions sports-foundry-actions" style="margin-top: 14px; justify-content: flex-start;">
-                              <button class="cta secondary" id="sports-foundry-download-history" type="button">
-                                <i class="iconoir-download" aria-hidden="true"></i><span id="sports-foundry-download-history-label">Download historical CSV</span>
-                              </button>
-                              <button class="cta secondary" id="sports-foundry-download-json" type="button">
-                                <i class="iconoir-page" aria-hidden="true"></i><span>Download forecast JSON</span>
-                              </button>
-                              <button class="cta" id="sports-foundry-run-button" type="submit">
-                                <i class="iconoir-rocket" aria-hidden="true"></i><span>Run sports forecast</span>
-                              </button>
-                            </div>
-
-                            <p class="small" id="sports-foundry-status">Sign in with a full account to unlock sports forecasting.</p>
-                            <div class="notice small" id="sports-foundry-empty-state">
-                              Choose a player to load league-aware stats and future scheduled games, or switch to team total export for completed team-total history.
-                            </div>
-                          </form>
-
-                          <div class="card foundry-detail-card">
-                            <div class="card-head">
-                              <h3>Selected sports run</h3>
-                              <div class="hero-actions" style="justify-content: flex-start;">
-                                <button class="cta secondary small" id="sports-foundry-refresh-button" type="button">
-                                  <i class="iconoir-refresh" aria-hidden="true"></i><span>Refresh AWS status</span>
-                                </button>
-                                <button class="cta secondary small" id="sports-foundry-share-button" type="button">
-                                  <i class="iconoir-share-ios" aria-hidden="true"></i><span>Copy share link</span>
-                                </button>
-                              </div>
-                            </div>
-                            <div id="sports-foundry-run-meta" class="panel-output small">Select a sports forecast run to inspect the matchup, model inputs, and forecast output.</div>
-                            <div id="sports-foundry-publish-host" class="small muted" style="margin-top: 12px;">Private Explore sync and publish controls appear here after a sports run is saved.</div>
-                            <div id="sports-foundry-analysis" class="panel-output small" style="margin-top: 14px;">Sports forecast analysis will appear here.</div>
-                            <div id="sports-foundry-chart" class="chart" style="margin-top: 14px; min-height: 420px;"></div>
-                            <div id="sports-foundry-preview" class="panel-output small" style="margin-top: 14px;">Historical and prediction preview data will appear here.</div>
-                          </div>
-                        </div>
-
-                        <div class="results-panel foundry-runs-panel" id="sports-foundry-result">
-                          <div class="card-head">
-                            <h3>Sports runs</h3>
-                            <button class="cta secondary small" id="sports-foundry-refresh-list" type="button">Refresh</button>
-                          </div>
-                          <div id="sports-foundry-output" class="panel-output small">Saved sports forecasts will appear here.</div>
+                        <div>
+                          <div class="eyebrow">Polymarket US · MLB · 1-minute fidelity</div>
+                          <h2>MLB Pregame Market Forecasting</h2>
+                          <p class="small">Turn genuine pregame moneyline probabilities into a chronological time-series dataset for analysis and SageMaker. Missing minutes are forward-filled only after the first real observation, and data stops before first pitch.</p>
                         </div>
                       </div>
+                      <div class="integration-status" id="mlb-source-status" role="status" aria-live="polite">Loading MLB markets…</div>
+                      <div class="data-workflow-grid">
+                        <form id="mlb-market-form" class="card" autocomplete="off">
+                          <h3>Choose a market outcome</h3>
+                          <div class="form-grid">
+                            <div class="field">
+                              <label class="label" for="mlb-scope">Game scope</label>
+                              <select id="mlb-scope"><option value="any">Upcoming and recent</option><option value="upcoming">Upcoming</option><option value="previous">Recent completed</option></select>
+                            </div>
+                            <div class="field">
+                              <label class="label" for="mlb-game">MLB game / market</label>
+                              <select id="mlb-game" required><option value="">Loading games…</option></select>
+                            </div>
+                            <div class="field">
+                              <label class="label" for="mlb-outcome">Outcome / side</label>
+                              <select id="mlb-outcome" required><option value="">Choose a game first</option></select>
+                            </div>
+                            <div class="field">
+                              <label class="label" for="mlb-row-limit">Observations</label>
+                              <select id="mlb-row-limit"><option value="500">Latest 500</option><option value="1000">Latest 1,000</option><option value="1500">Latest 1,500</option><option value="2000">Latest 2,000</option><option value="all">All available</option></select>
+                            </div>
+                          </div>
+                          <div class="hero-actions workflow-actions">
+                            <button class="cta secondary" id="mlb-refresh-games" type="button"><i class="iconoir-refresh" aria-hidden="true"></i><span>Refresh games</span></button>
+                            <button class="cta" type="submit"><i class="iconoir-database" aria-hidden="true"></i><span>Load pregame history</span></button>
+                            <button class="cta secondary" id="mlb-download" type="button" disabled><i class="iconoir-download" aria-hidden="true"></i><span>Download CSV</span></button>
+                          </div>
+                          <p class="small muted">CSV schema: <code>item_id,datetime,price</code>. Price is the selected long/short dollar probability from Polymarket US.</p>
+                        </form>
+                        <aside class="card metadata-card">
+                          <h3>Dataset metadata</h3>
+                          <div id="mlb-metadata" class="metadata-list"><p class="small muted">Load a market to inspect teams, IDs, freshness, observation counts, and game timing.</p></div>
+                        </aside>
+                      </div>
+                      <div class="results-panel data-results-panel">
+                        <div class="card-head"><div><h3>Pregame probability history</h3><p id="mlb-history-summary" class="small muted">Select a market and outcome to begin.</p></div></div>
+                        <div id="mlb-history-chart" class="chart integration-chart" aria-label="MLB pregame probability history chart"></div>
+                        <div id="mlb-history-preview" class="responsive-table-wrap"><div class="empty-state">No observations loaded.</div></div>
+                      </div>
+                      <div class="notice small"><strong>SageMaker-ready:</strong> download this time-series dataset, connect your AWS role under <a href="/account">Account → AWS / SageMaker Integration</a>, then prepare it in Forecast Foundry. AWS resources run under the identity and account you connect.</div>
                     </div>
                   </section>
 
@@ -655,14 +533,6 @@
                             <option value="indicator">Indicators</option>
                           </select>
                         </div>
-                        <div class="field">
-                          <label class="label">Published</label>
-                          <select data-my-requests-published>
-                            <option value="all">All</option>
-                            <option value="published">Published</option>
-                            <option value="unpublished">Unpublished</option>
-                          </select>
-                        </div>
                       </div>
                       <p class="small muted" data-my-requests-status>Sign in to load your requests.</p>
                       <div class="order-list panel-output" data-my-requests-list></div>
@@ -672,63 +542,63 @@
                   <section class="panel hidden" data-panel="news">
                     <div class="panel-header">
                       <h2>Historical Data Download</h2>
-                      <p class="small">Company context and headlines update automatically and render below your chart.</p>
+                      <p class="small">Retrieve genuine Alpaca equity bars, preview them safely, and download a chronological CSV.</p>
                     </div>
                     <div class="content-grid">
-                      <form id="download-form" class="card download-form-card">
+                      <form id="alpaca-history-form" class="card download-form-card" autocomplete="off">
                         <div class="card-head">
                           <div>
-                            <h3>Download price history</h3>
-                            <p class="small muted download-form-subcopy">Enter a ticker directly or let Quantura prefill it from your active chart.</p>
+                            <h3>Historical Market Data</h3>
+                            <p class="small muted download-form-subcopy">Choose the symbol, timeframe, range, trading sessions, adjustment, and entitled feed.</p>
                           </div>
                         </div>
                         <div class="form-grid download-form-grid">
                           <div class="field">
-                            <label class="label" for="download-ticker">Ticker</label>
-                            <input id="download-ticker" name="ticker" type="text" placeholder="AAPL" autocomplete="off" />
+                            <label class="label" for="alpaca-symbol">Symbol</label>
+                            <input id="alpaca-symbol" name="symbol" type="text" value="AAPL" pattern="[A-Za-z][A-Za-z0-9.\-]{0,14}" required />
                           </div>
                           <div class="field">
-                            <label class="label" for="download-interval">Interval</label>
-                            <select id="download-interval" name="interval">
-                              <option value="1d">Daily</option>
+                            <label class="label" for="alpaca-timeframe">Timeframe</label>
+                            <select id="alpaca-timeframe" name="timeframe">
+                              <option value="1Min">1 minute</option><option value="5Min">5 minutes</option><option value="15Min">15 minutes</option><option value="30Min">30 minutes</option><option value="1Hour">1 hour</option><option value="1Day" selected>1 day</option>
                             </select>
                           </div>
                           <div class="field">
-                            <label class="label" for="download-end">End date</label>
-                            <input id="download-end" name="end" type="date" />
+                            <label class="label" for="alpaca-start">Start date</label>
+                            <input id="alpaca-start" name="start" type="date" required />
                           </div>
                           <div class="field">
-                            <label class="label" for="download-row-limit">Market prices</label>
-                            <select id="download-row-limit" name="rowLimit">
+                            <label class="label" for="alpaca-end">End date</label>
+                            <input id="alpaca-end" name="end" type="date" required />
+                          </div>
+                          <div class="field">
+                            <label class="label" for="alpaca-row-limit">Observations</label>
+                            <select id="alpaca-row-limit" name="limit">
                               <option value="500" selected>Latest 500 prices</option>
                               <option value="1000">Latest 1,000 prices</option>
                               <option value="1500">Latest 1,500 prices</option>
                               <option value="2000">Latest 2,000 prices</option>
                               <option value="all">All available prices</option>
                             </select>
-                            <div class="small muted download-history-note">Daily prices export from oldest to newest within the selected range.</div>
                           </div>
+                          <div class="field"><label class="label" for="alpaca-session">Trading sessions</label><select id="alpaca-session"><option value="regular">Regular hours only</option><option value="extended" selected>All observations returned by the feed</option></select></div>
+                          <div class="field"><label class="label" for="alpaca-adjustment">Adjustment</label><select id="alpaca-adjustment"><option value="raw">Raw</option><option value="split">Split</option><option value="dividend">Dividend</option><option value="all">All corporate actions</option></select></div>
+                          <div class="field"><label class="label" for="alpaca-feed">Data feed</label><select id="alpaca-feed"><option value="iex" selected>IEX</option><option value="sip">SIP (subscription required)</option><option value="boats">BOATS overnight</option><option value="otc">OTC (entitlement required)</option></select></div>
+                          <div class="field"><label class="label">Asset type</label><input value="US equity" disabled aria-label="Asset type" /><div class="small muted">Options history is available in the Options section.</div></div>
                         </div>
                         <div class="download-form-actions">
-                          <button class="cta" type="submit" data-analytics="download_prices">Download CSV</button>
-                          <p class="small" id="download-status"></p>
+                          <button class="cta" type="submit"><i class="iconoir-database" aria-hidden="true"></i><span>Load Data</span></button>
+                          <button class="cta secondary" id="alpaca-download" type="button" disabled><i class="iconoir-download" aria-hidden="true"></i><span>Download CSV</span></button>
+                          <p class="small" id="alpaca-history-status" role="status" aria-live="polite">Checking Alpaca connection…</p>
                         </div>
                       </form>
                       <div class="card download-guidance-card">
-                        <h3>Export guidance</h3>
-                        <p class="small">
-                          Use the ticker field to export a clean canonical dataset with <code>item_id</code>, <code>timestamp</code>, and <code>closing_price</code>.
-                          Choose the latest 500, 1,000, 1,500, or 2,000 prices, or export every available daily price. Daily exports keep the downloader aligned with Forecast Foundry's daily-only historical workflow.
-                        </p>
-                        <details class="learn-more">
-                          <summary>Learn more</summary>
-                          <p class="small">
-                            If you're building your own dashboard, keep the export interval matched to your modeling interval so the timestamp cadence stays consistent across training and evaluation.
-                          </p>
-                        </details>
-                        <div id="download-preview" class="panel-output small">Run a download to preview canonical <code>item_id</code>, <code>timestamp</code>, and <code>closing_price</code> rows before exporting.</div>
+                        <h3>Session coverage</h3>
+                        <p class="small">Intraday results label every row as premarket, regular, after-hours, or overnight. Extended-hours availability depends on the chosen feed and Alpaca subscription; Quantura never fabricates missing observations.</p>
+                        <div id="alpaca-session-summary" class="metadata-list"><p class="small muted">Load data to see session counts.</p></div>
                       </div>
                     </div>
+                    <div class="results-panel data-results-panel"><div class="card-head"><div><h3>Data preview</h3><p class="small muted" id="alpaca-preview-summary">No data loaded.</p></div></div><div id="alpaca-history-preview" class="responsive-table-wrap"><div class="empty-state">Set a symbol and date range, then choose Load Data.</div></div></div>
                     <div class="notice" style="margin-top: 16px;">
                       Historical downloads pair best with the Forecasting panel for the active symbol.
                       <a class="news-link" href="/forecasting?panel=forecast">Open Forecasting</a>.
@@ -779,122 +649,55 @@
                   <section class="panel hidden" data-panel="options">
                     <div class="panel-header">
                       <h2>Options</h2>
-                      <p class="small">Pull an options chain and estimate probability of expiring in the money (risk-neutral approximation).</p>
+                      <p class="small">Inspect active Alpaca contracts and snapshots, select a specific call or put, then preview, chart, and download its historical bars.</p>
                     </div>
-                    <form id="options-form" class="card">
+                    <form id="alpaca-options-form" class="card" autocomplete="off">
                       <div class="form-grid">
                         <div class="field">
-                          <label class="label" for="options-ticker">Underlying ticker</label>
-                          <input id="options-ticker" name="ticker" placeholder="AAPL" required />
+                          <label class="label" for="alpaca-options-underlying">Underlying ticker</label>
+                          <input id="alpaca-options-underlying" value="AAPL" required />
                         </div>
                         <div class="field">
-                          <label class="label" for="options-expiration">Expiry end date</label>
-                          <select id="options-expiration" name="expiration">
-                            <option value="">Auto (nearest)</option>
-                          </select>
-                          <div class="small muted" style="margin-top:8px;">Quantura loads available expirations from the market, remembers your last choice, and uses the selected date as the end date for the day counter.</div>
+                          <label class="label" for="alpaca-options-expiration">Expiration</label>
+                          <select id="alpaca-options-expiration" required><option value="">Load expirations first</option></select>
                         </div>
+                        <div class="field"><label class="label" for="alpaca-options-type">Contract type</label><select id="alpaca-options-type"><option value="call">Calls</option><option value="put">Puts</option></select></div>
+                        <div class="field"><label class="label" for="alpaca-options-feed">Snapshot feed</label><select id="alpaca-options-feed"><option value="indicative">Indicative</option><option value="opra">OPRA (subscription required)</option></select></div>
                       </div>
-                      <div class="options-date-tool">
-                        <div class="form-grid options-date-tool-grid">
-                          <div class="field">
-                            <label class="label" for="options-start-date">Begin date</label>
-                            <input id="options-start-date" name="startDate" type="date" />
-                            <div class="small muted" style="margin-top:8px;">Defaults to today and compares against the selected options expiry.</div>
-                          </div>
-                          <div class="field">
-                            <span class="label">Calendar day count</span>
-                            <div id="options-date-status" class="options-date-status" role="status" aria-live="polite">
-                              Load an options chain to populate expiry dates, then the day count will appear here.
-                            </div>
-                          </div>
-                        </div>
+                      <div class="hero-actions workflow-actions">
+                        <button class="cta secondary" id="alpaca-options-expirations" type="button">Load expirations</button>
+                        <button class="cta" type="submit">Load options chain</button>
                       </div>
-                      <button class="cta" type="submit" data-analytics="options_submit">Load options</button>
-                      <details class="learn-more">
-                        <summary>Learn more</summary>
-                        <p class="small">
-                          Probability is estimated from implied volatility and is not a guarantee.
-                          Use this as a rough sizing input, not a promise of outcomes.
-                        </p>
-                      </details>
+                      <p id="alpaca-options-status" class="small muted" role="status" aria-live="polite">Choose an underlying and load expirations.</p>
                     </form>
-                    <div class="results-panel options-chain-panel">
-                      <h3>Options chain</h3>
-                      <div id="options-output" class="panel-output small">Calls and puts will appear here.</div>
-                    </div>
-                  </section>
-
-                  <section class="panel hidden" data-panel="fx">
-                    <div class="panel-header">
-                      <h2>Currency conversion</h2>
-                      <p class="small">Convert with live FX rates and keep a quick recent list for repeat checks.</p>
-                    </div>
-                    <form id="terminal-fx-form" class="card" autocomplete="off">
+                    <div class="results-panel options-chain-panel"><div class="card-head"><div><h3>Options chain</h3><p class="small muted">Select one contract to unlock historical data.</p></div></div><div id="alpaca-options-chain" class="responsive-table-wrap"><div class="empty-state">No contracts loaded.</div></div></div>
+                    <form id="alpaca-option-history-form" class="card" autocomplete="off">
+                      <h3>Selected contract history</h3>
+                      <div class="selected-contract" id="alpaca-selected-contract">No contract selected.</div>
+                      <input id="alpaca-option-contract" type="hidden" />
                       <div class="form-grid">
-                        <div class="field">
-                          <label class="label" for="terminal-fx-amount">Amount</label>
-                          <input id="terminal-fx-amount" name="amount" type="number" min="0" step="0.0001" value="1" required />
+                        <div class="field"><label class="label" for="alpaca-option-start">Start date</label><input id="alpaca-option-start" type="date" required /></div>
+                        <div class="field"><label class="label" for="alpaca-option-end">End date</label><input id="alpaca-option-end" type="date" required /></div>
+                        <div class="field"><label class="label" for="alpaca-option-timeframe">Timeframe</label><select id="alpaca-option-timeframe"><option value="1Min">1 minute</option><option value="5Min">5 minutes</option><option value="15Min">15 minutes</option><option value="30Min">30 minutes</option><option value="1Hour">1 hour</option><option value="1Day">1 day</option></select></div>
+                        <div class="field"><label class="label" for="alpaca-option-row-limit">Observations</label><select id="alpaca-option-row-limit"><option value="500">Latest 500</option><option value="1000">Latest 1,000</option><option value="1500">Latest 1,500</option><option value="2000">Latest 2,000</option><option value="all">All available</option></select></div>
                         </div>
-                        <div class="field">
-                          <label class="label" for="terminal-fx-base">Base currency</label>
-                          <select id="terminal-fx-base" name="base" required>
-                            <option value="USD">USD</option>
-                            <option value="EUR">EUR</option>
-                            <option value="GBP">GBP</option>
-                            <option value="JPY">JPY</option>
-                            <option value="CAD">CAD</option>
-                            <option value="AUD">AUD</option>
-                            <option value="CHF">CHF</option>
-                            <option value="BDT">BDT</option>
-                            <option value="INR">INR</option>
-                            <option value="BTC">BTC</option>
-                          </select>
-                        </div>
-                        <div class="field">
-                          <label class="label" for="terminal-fx-quote">Quote currency</label>
-                          <select id="terminal-fx-quote" name="quote" required>
-                            <option value="EUR">EUR</option>
-                            <option value="USD" selected>USD</option>
-                            <option value="GBP">GBP</option>
-                            <option value="JPY">JPY</option>
-                            <option value="CAD">CAD</option>
-                            <option value="AUD">AUD</option>
-                            <option value="CHF">CHF</option>
-                            <option value="BDT">BDT</option>
-                            <option value="INR">INR</option>
-                            <option value="BTC">BTC</option>
-                          </select>
-                        </div>
-                      </div>
-                      <div class="hero-actions" style="margin-top: 12px;">
-                        <button type="button" class="cta secondary small" id="terminal-fx-swap">
-                          <i class="iconoir-arrows-up-from-line" aria-hidden="true"></i><span>Swap</span>
-                        </button>
-                        <button type="submit" class="cta small fx-convert-cta" id="terminal-fx-submit">
-                          <i class="iconoir-calculator" aria-hidden="true"></i><span>Convert</span>
-                        </button>
-                      </div>
-                      <p id="terminal-fx-status" class="small muted" style="margin-top: 10px;">Ready.</p>
+                      <div class="hero-actions workflow-actions"><button class="cta" type="submit" disabled id="alpaca-option-load-history">Load history</button><button class="cta secondary" type="button" id="alpaca-option-download" disabled>Download CSV</button></div>
+                      <p id="alpaca-option-history-status" class="small muted" role="status" aria-live="polite">Select a contract from the chain.</p>
                     </form>
-                    <div class="results-panel">
-                      <h3>Conversion result</h3>
-                      <div id="terminal-fx-result" class="panel-output small">Run a conversion to view rate details.</div>
-                    </div>
-                    <div class="card">
-                      <h3>Recent conversions</h3>
-                      <div id="terminal-fx-recent" class="order-list panel-output small">No recent conversions yet.</div>
+                    <div class="results-panel data-results-panel">
+                      <div id="alpaca-option-history-chart" class="chart integration-chart" aria-label="Option contract historical price chart"></div>
+                      <div id="alpaca-option-history-preview" class="responsive-table-wrap"><div class="empty-state">No contract history loaded.</div></div>
                     </div>
                   </section>
                   <section class="panel hidden" data-panel="screener">
                     <div class="panel-header screener-panel-header">
                       <h2>GitHub Actions Screener</h2>
-                      <p class="small">Run the daily Prophet signal tracker from the Quantura repository, save the result to My Requests, and auto-publish completed runs to Explore.</p>
+                      <p class="small">Run the daily Prophet signal tracker from the Quantura repository and save completed results privately in My Requests.</p>
                     </div>
                     <form id="screener-form" class="card" data-screener-mode="github_actions">
                       <h3>Run stock screener</h3>
                       <p class="small muted" style="margin-top:8px;">
-                        Quantura dispatches the repository GitHub Action, waits for the uploaded artifact, saves the result to My Requests, and auto-publishes completed runs to Explore.
+                        Quantura dispatches the repository GitHub Action, waits for the uploaded artifact, and saves the result privately in My Requests.
                       </p>
                       <div class="form-grid" style="margin-top:12px;">
                         <div class="field">
@@ -917,7 +720,7 @@
                       <details class="learn-more">
                         <summary>Learn more</summary>
                         <p class="small">
-                          Quantura stores each GitHub Actions run in your workspace so you can reopen it later, download the CSV, and review published results in Explore.
+                          Quantura stores each GitHub Actions run in your workspace so you can reopen it later and download the CSV.
                         </p>
                       </details>
                     </form>
@@ -953,14 +756,6 @@
                               <option value="forecast">Forecasting</option>
                               <option value="screener">Screeners</option>
                               <option value="indicator">Indicators</option>
-                            </select>
-                          </div>
-                          <div class="field">
-                            <label class="label">Published</label>
-                            <select data-my-requests-published>
-                              <option value="all">All</option>
-                              <option value="published">Published</option>
-                              <option value="unpublished">Unpublished</option>
                             </select>
                           </div>
                         </div>
@@ -1067,7 +862,7 @@
                             Quantura Screener dispatches the repository GitHub workflow, waits for the uploaded artifact, and saves the completed run back into your workspace.
                           </p>
                           <p class="small">
-                            Use the market-cap floor to control the universe, then reopen completed runs from My Requests or review the public history feed when scheduled jobs finish.
+                            Use the market-cap floor to control the universe, then reopen completed runs from My Requests when scheduled jobs finish.
                           </p>
                         </article>
                         <article class="card help-article" id="help-filter-groups">
@@ -1077,7 +872,7 @@
                             <div><strong>Tracking</strong> keeps the live workflow status attached to the saved run while the artifact is processing.</div>
                             <div><strong>Artifacts</strong> expose downloadable CSV output as soon as GitHub uploads the screener results.</div>
                             <div><strong>Workspace</strong> stores each run in My Requests so it can be reopened without rerunning the workflow.</div>
-                            <div><strong>Explore</strong> auto-publishes completed screener runs so the public feed stays in sync with successful jobs.</div>
+                            <div><strong>Dashboard</strong> keeps completed screener runs in the authenticated workspace for later review.</div>
                           </div>
                         </article>
 
@@ -1131,7 +926,7 @@
           </div>
         </div>
         <div class="small">
-          <strong>Explore</strong>
+          <strong>Platform</strong>
           <div><a href="/">Home</a></div>
           <div><a href="/forecasting">Forecasting</a></div>
           <div><a href="/research">Research</a></div>

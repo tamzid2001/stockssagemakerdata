@@ -56,7 +56,6 @@
         <a class="logo" href="/" aria-label="Quantura home"><span>QUANTURA</span></a>
         <nav class="nav-links">
           <a href="/forecasting" data-analytics="nav_forecasting"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Terminal</span></a>
-          <a href="/explore" data-analytics="nav_explore"><i class="iconoir-binocular" aria-hidden="true"></i><span>Explore</span></a>
           <a href="/research" data-analytics="nav_research"><i class="iconoir-bookmark-book" aria-hidden="true"></i><span>Research</span></a>
           <a href="/blog" data-analytics="nav_blog"><i class="iconoir-page" aria-hidden="true"></i><span>Blog</span></a>
           <a href="/pricing" data-analytics="nav_pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>Pricing</span></a>
@@ -81,10 +80,8 @@
             <a class="sidebar-link" href="/events"><i class="iconoir-calendar" aria-hidden="true"></i><span>Events</span></a>
             <a class="sidebar-link" href="/market-headlines"><i class="iconoir-globe" aria-hidden="true"></i><span>Market headlines</span></a>
             <a class="sidebar-link" href="/options"><i class="iconoir-numbered-list-left" aria-hidden="true"></i><span>Options</span></a>
-            <a class="sidebar-link" href="/tools/fx"><i class="iconoir-coins-swap" aria-hidden="true"></i><span>Currency conversion</span></a>
             <a class="sidebar-link" href="/studio"><i class="iconoir-info-circle" aria-hidden="true"></i><span>Learn more</span></a>
             <a class="sidebar-link active" href="/screener"><i class="iconoir-search" aria-hidden="true"></i><span>Screener</span></a>
-            <a class="sidebar-link" href="/explore"><i class="iconoir-binocular" aria-hidden="true"></i><span>Explore</span></a>
             <a class="sidebar-link" href="/watchlist"><i class="iconoir-bell-notification" aria-hidden="true"></i><span>Watchlist and alerts</span></a>
           </nav>
         </aside>
@@ -107,13 +104,13 @@
         <div class="container">
           <div class="section-title">
             <h2>GitHub Actions Screener</h2>
-            <p class="small">Run the daily Prophet signal tracker from the Quantura repository, save the result to My Requests, and auto-publish completed runs to Explore.</p>
+            <p class="small">Run the daily Prophet signal tracker from the Quantura repository and save completed results privately in My Requests.</p>
           </div>
 	          <div class="content-grid">
 		            <form id="screener-form" class="card" data-screener-mode="github_actions">
               <h3>Run stock screener</h3>
               <p class="small muted" style="margin-top:8px;">
-                Quantura dispatches the repository GitHub Action, waits for the uploaded artifact, saves the result to My Requests, and auto-publishes completed runs to Explore.
+                Quantura dispatches the repository GitHub Action, waits for the uploaded artifact, and saves the result privately in My Requests.
               </p>
               <div class="form-grid" style="margin-top:12px;">
                 <div class="field">
@@ -168,7 +165,7 @@
                 <details class="learn-more">
                   <summary>Learn more</summary>
                   <p class="small">
-                    Requests can be loaded, renamed, shared, unpublished from Explore, or soft-deleted.
+                    Requests can be loaded, renamed, shared, unpublished from Workspace, or soft-deleted.
                   </p>
                 </details>
               </div>
@@ -189,25 +186,24 @@
                 </div>
                 <div class="card">
                   <div class="card-head">
-                    <h3>Explore feed</h3>
+                    <h3>Workspace feed</h3>
                   </div>
                   <p class="small">
-                    Explore is the canonical discovery feed for published screener runs, forecasts, and saved Quantura outputs.
+                    Workspace is the canonical discovery feed for published screener runs, forecasts, and saved Quantura outputs.
                   </p>
                   <div class="hero-actions">
-                    <a class="cta secondary" href="/explore"><i class="iconoir-binocular" aria-hidden="true"></i><span>Open Explore</span></a>
                   </div>
                 </div>
                 <div class="card help-article">
                   <h3>Screener help</h3>
                   <p class="small">
-                    This page now dispatches the repository GitHub Action and reads the uploaded artifact back into Quantura. The only user input is the market-cap floor, and completed runs remain shareable from My Requests and Explore.
+                    This page now dispatches the repository GitHub Action and reads the uploaded artifact back into Quantura. The only user input is the market-cap floor, and completed runs remain shareable from My Requests and Workspace.
                   </p>
                   <div class="help-kv-grid small">
                     <div><strong>Engine:</strong> GitHub Actions workflow running the daily Prophet tracker.</div>
                     <div><strong>Universe:</strong> Combined S&amp;P 500 + Nasdaq scan.</div>
                     <div><strong>Filter:</strong> Market-cap floor only, defaulted to $100B.</div>
-                    <div><strong>Publishing:</strong> Completed runs auto-publish to Explore and remain shareable.</div>
+                    <div><strong>Storage:</strong> Completed runs remain in the authenticated workspace for later review.</div>
                   </div>
                   <details class="learn-more">
                     <summary>How the workflow result is used</summary>
@@ -244,7 +240,7 @@
           </div>
         </div>
         <div class="small">
-          <strong>Explore</strong>
+          <strong>Workspace</strong>
           <div><a href="/">Home</a></div>
           <div><a href="/forecasting">Forecasting</a></div>
           <div><a href="/research">Research</a></div>

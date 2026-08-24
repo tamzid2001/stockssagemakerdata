@@ -46,6 +46,13 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin() || canEditWorkspace(userId);
     }
 
+    // AWS role configuration is server-only. Authenticated clients use API
+    // endpoints that verify their Firebase ID token and scope every operation
+    // to users/{uid}/integrations/aws.
+    match /users/{userId}/integrations/{integrationId} {
+      allow read, write: if false;
+    }
+
     match /users/{userId}/watchlist/{tickerId} {
       allow read: if isAdmin()
         || (isSignedIn() && (request.auth.uid == userId || isWorkspaceCollaborator(userId)));

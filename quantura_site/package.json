@@ -5,6 +5,7 @@
   "description": "Quantura Firebase Hosting (static).",
   "scripts": {
     "build": "npm run build:rnweb && npm run build:observability",
+    "test": "uvx pytest tests -q && npm --prefix functions_explore test",
     "build:observability": "node ./scripts/build-vercel-observability.mjs",
     "build:rnweb": "node ./rnweb/build-rnw.mjs"
   },

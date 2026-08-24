@@ -14,6 +14,7 @@ import {
   SageMakerClient,
 } from "@aws-sdk/client-sagemaker";
 import { Readable } from "stream";
+import { AlpacaClient } from "./alpacaClient";
 
 export type SupportedDatasetInterval = "1m" | "1h" | "1d";
 
@@ -82,6 +83,7 @@ export type AutopilotAwsConfig = {
   secretAccessKey: string;
   sessionToken: string;
   transformInstanceType: string;
+  credentials?: () => Promise<{ accessKeyId: string; secretAccessKey: string; sessionToken?: string; expiration?: Date }>;
 };
 
 export type StartAutopilotTrainingInput = {
@@ -93,6 +95,7 @@ export type StartAutopilotTrainingInput = {
   quantiles: unknown;
   runtimeSeconds?: number | null;
   csvText: string;
+  awsConfig?: AutopilotAwsConfig;
 };
 
 export type StartAutopilotTrainingResult = {
@@ -112,6 +115,7 @@ export type RefreshAutopilotRunInput = {
   ticker: string;
   datasetS3Uri: string;
   autopilot: Record<string, unknown>;
+  awsConfig?: AutopilotAwsConfig;
 };
 
 export type RefreshAutopilotRunResult = {
@@ -572,14 +576,14 @@ function buildAwsCredentials(
 function createS3Client(config: AutopilotAwsConfig): S3Client {
   return new S3Client({
     region: config.region,
-    credentials: buildAwsCredentials(config),
+    credentials: config.credentials || buildAwsCredentials(config),
   });
 }
 
 function createSageMakerClient(config: AutopilotAwsConfig): SageMakerClient {
   return new SageMakerClient({
     region: config.region,
-    credentials: buildAwsCredentials(config),
+    credentials: config.credentials || buildAwsCredentials(config),
   });
 }
 
@@ -1064,15 +1068,23 @@ export async function downloadHistoricalStockDataset(input: {
     throw new Error("End date must be on or after the start date.");
   }
 
-  const fetchImpl = input.fetchImpl || fetch;
   const endExclusive = addUtcDays(toUtcMidnight(endDate), 1);
-  const chunkRows = await fetchYahooHistorySegment({
-    ticker,
-    interval,
-    startSeconds: fetchAllAvailable ? 0 : Math.floor((startDate as Date).getTime() / 1000),
-    endSeconds: Math.floor(endExclusive.getTime() / 1000),
-    fetchImpl,
+  const alpaca = new AlpacaClient({ fetchImpl: input.fetchImpl || fetch });
+  const history = await alpaca.getStockBars({
+    symbol: ticker,
+    timeframe: "1Day",
+    start: fetchAllAvailable ? "2016-01-01T00:00:00.000Z" : (startDate as Date).toISOString(),
+    end: endExclusive.toISOString(),
+    feed: "iex",
+    adjustment: "all",
+    session: "regular",
+    limit: rowLimit || 0,
   });
+  const chunkRows: CanonicalDatasetRow[] = history.rows.map((row) => ({
+    item_id: ticker,
+    timestamp: row.timestamp,
+    closing_price: row.close,
+  }));
   const sortedRows = chunkRows.slice().sort((left, right) => {
     const leftMs = parseFlexibleDate(left.timestamp)?.getTime() || 0;
     const rightMs = parseFlexibleDate(right.timestamp)?.getTime() || 0;
@@ -1088,7 +1100,7 @@ export async function downloadHistoricalStockDataset(input: {
     ticker,
     interval,
     sourceTimeColumn: "timestamp",
-    sourceValueColumn: "close",
+    sourceValueColumn: "closing_price",
     sourceItemColumn: "ticker",
   });
 }
@@ -1662,7 +1674,7 @@ function parseS3Uri(s3Uri: string): { bucket: string; key: string } {
 export async function startAutopilotTraining(
   input: StartAutopilotTrainingInput
 ): Promise<StartAutopilotTrainingResult> {
-  const config = await resolveAutopilotAwsConfig();
+  const config = input.awsConfig || await resolveAutopilotAwsConfig();
   const s3 = createS3Client(config);
   const sagemaker = createSageMakerClient(config);
   const interval = normalizeSupportedInterval(input.interval);
@@ -1746,7 +1758,7 @@ export async function startAutopilotTraining(
 export async function refreshAutopilotRun(
   input: RefreshAutopilotRunInput
 ): Promise<RefreshAutopilotRunResult> {
-  const config = await resolveAutopilotAwsConfig();
+  const config = input.awsConfig || await resolveAutopilotAwsConfig();
   const sagemaker = createSageMakerClient(config);
   const s3 = createS3Client(config);
   const autopilot = input.autopilot && typeof input.autopilot === "object" ? input.autopilot : {};

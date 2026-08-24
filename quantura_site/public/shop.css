@@ -1253,6 +1253,13 @@ body.mobile-bottom-nav-enabled {
   .mobile-bottom-nav {
     display: none !important;
   }
+
+  /* Desktop uses an in-layout sticky cart, not a modal drawer. The shared
+     openCart handler still toggles the overlay, so keep that overlay out of
+     the pointer stack at desktop widths. */
+  body.cart-open .cart-overlay {
+    display: none !important;
+  }
 }
 
 html[data-liquid-glass-mode="refraction"] {
