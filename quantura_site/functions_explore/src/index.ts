@@ -1820,9 +1820,26 @@ function trimOutputsMeta(input: unknown): Record<string, unknown> {
       }
       if (Array.isArray(value)) {
         out[cleanKey] = value
-          .slice(0, 24)
-          .map((item) => sanitizeText(item, 120))
-          .filter(Boolean);
+          .slice(0, 120)
+          .map((item) => {
+            if (typeof item === "string") return sanitizeText(item, 500);
+            if (typeof item === "number" || typeof item === "boolean") return item;
+            if (!item || typeof item !== "object") return null;
+            const child: Record<string, unknown> = {};
+            Object.entries(item as Record<string, unknown>)
+              .slice(0, 12)
+              .forEach(([itemKey, itemValue]) => {
+                const cleanItemKey = sanitizeText(itemKey, 40);
+                if (!cleanItemKey) return;
+                if (typeof itemValue === "number" || typeof itemValue === "boolean") {
+                  child[cleanItemKey] = itemValue;
+                } else if (typeof itemValue === "string") {
+                  child[cleanItemKey] = sanitizeText(itemValue, 220);
+                }
+              });
+            return Object.keys(child).length ? child : null;
+          })
+          .filter((item) => item !== null && item !== "");
         return;
       }
       if (value && typeof value === "object") {
@@ -12915,6 +12932,13 @@ ROUTES.post("/autopilot/datasets/upload", async (req, res) => {
       res.status(403).json({ error: code });
       return;
     }
+    if (code.startsWith("csv_validation:")) {
+      res.status(400).json({
+        error: "invalid_prediction_csv",
+        detail: sanitizeText(code.replace(/^csv_validation:\s*/i, ""), 500),
+      });
+      return;
+    }
     console.error("[Autopilot] upload dataset failed", error);
     res.status(500).json({ error: "autopilot_upload_dataset_failed", detail: sanitizeText(error?.message, 260) });
   }
@@ -13292,6 +13316,13 @@ ROUTES.post("/autopilot/runs/:runId/analyze", async (req, res) => {
     }
     if (code === "full_account_required") {
       res.status(403).json({ error: code });
+      return;
+    }
+    if (code.startsWith("csv_validation:")) {
+      res.status(400).json({
+        error: "invalid_prediction_csv",
+        detail: sanitizeText(code.replace(/^csv_validation:\s*/i, ""), 500),
+      });
       return;
     }
     console.error("[Autopilot] analyze run failed", error);

@@ -207,7 +207,7 @@
                     <div class="container">
                       <div class="section-title">
                         <h2>Forecast Foundry</h2>
-                        <p class="small">Prepare market data, validate historical CSVs, and run SageMaker Autopilot on daily history while keeping every result private in your Workspace.</p>
+                        <p class="small">Prepare daily market data for SageMaker or analyze prediction quantile CSVs with validated anomaly and tail-signal statistics, all inside your private Workspace.</p>
                       </div>
 
                       <div class="foundry-layout">
@@ -215,13 +215,14 @@
                           <form id="foundry-source-form" class="card">
                             <div class="eyebrow">Quantura Forecast Foundry</div>
                             <h3>Prepare a source</h3>
-                            <p class="small">Historical downloader data is normalized to <code>item_id</code>, <code>timestamp</code>, and <code>closing_price</code>. Uploaded historical CSVs are validated before they can be used by Foundry.</p>
+                            <p class="small">Prepare daily history for SageMaker or upload a prediction CSV for deterministic quantile, anomaly, and tail-signal analysis.</p>
                             <div class="form-grid">
                               <div class="field">
                                 <label class="label" for="foundry-source-kind">Source type</label>
                                 <select id="foundry-source-kind" name="sourceKind">
                                   <option value="history">Historical downloader</option>
                                   <option value="historical_csv">Historical CSV</option>
+                                  <option value="prediction_csv">Prediction quantile CSV</option>
                                 </select>
                               </div>
                               <div class="field">
@@ -296,7 +297,7 @@
                             <div id="foundry-file-field" class="field">
                               <label class="label" for="foundry-file">CSV file</label>
                               <input id="foundry-file" class="file-input" type="file" accept=".csv,text/csv" />
-                              <div class="small muted">Historical CSVs must resolve to item, timestamp/date, and closing-price columns.</div>
+                              <div class="small muted" id="foundry-file-help">Historical CSVs must resolve to item, timestamp/date, and closing-price columns.</div>
                             </div>
 
                             <div class="hero-actions hidden" id="foundry-upload-actions" style="margin-top: 12px; justify-content: flex-start;">
@@ -346,7 +347,7 @@
                             <p class="small" id="autopilot-status">Sign in with a full account to unlock Forecast Foundry.</p>
                             <div class="small muted" id="foundry-instance-limit">Concurrent instance limit: 0 of 2 active.</div>
                             <div class="notice small" id="foundry-access-note">
-                              Forecast Foundry currently supports daily historical datasets only. A matching repository workflow is available in GitHub Actions for controlled Foundry launches.
+                              SageMaker training currently supports daily historical datasets. Prediction CSV uploads are analysis-only and do not start SageMaker compute.
                             </div>
 
                             <div class="card" style="margin-top: 18px;">
@@ -356,7 +357,7 @@
                               <div class="small">
                                 <p>
                                   Use the
-                                  <a href="https://docs.aws.amazon.com/forecast/latest/dg/metrics.html?utm_source=chatgpt.com" target="_blank" rel="noopener noreferrer">AWS Forecast metrics documentation</a>
+                                  <a href="https://docs.aws.amazon.com/forecast/latest/dg/metrics.html" target="_blank" rel="noopener noreferrer">AWS Forecast metrics documentation</a>
                                   to understand how Average wQL, wQL, WAPE, RMSE, MAPE, and MASE are interpreted. Lower error values indicate a stronger forecasting model.
                                 </p>
                                 <p>
@@ -365,6 +366,9 @@
                                 </p>
                                 <p>
                                   Review the median forecast path and its outer quantile bands together. Wider bands communicate greater model uncertainty and should not be treated as trading instructions.
+                                </p>
+                                <p>
+                                  Prediction uploads use supplied model 95% interval columns when present. Otherwise Quantura labels the derived mean ± 1.96 sample-standard-deviation range as a <strong>P50 95% Statistical Anomaly Band</strong>, not as the model's confidence interval.
                                 </p>
                               </div>
                             </div>

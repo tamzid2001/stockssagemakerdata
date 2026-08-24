@@ -39,14 +39,6 @@ export type CanonicalDataset = {
   sourceItemColumn: string;
 };
 
-export type CurrentPriceInfo = {
-  ticker: string;
-  currentPrice: number | null;
-  quoteTime: string;
-  source: string;
-  error: string;
-};
-
 export type PredictionAnalysisResult = {
   kind: "prediction_output";
   status: "ok" | "error";
@@ -55,7 +47,7 @@ export type PredictionAnalysisResult = {
   columns: string[];
   summary: string;
   markdown: string;
-  metrics: Record<string, number | string | null>;
+  metrics: Record<string, number | string | boolean | null>;
   analysis: Record<string, unknown>;
   previewRows: Array<Record<string, string>>;
   businessDayCsvText?: string;
@@ -136,35 +128,36 @@ type QuantileColumn = {
   quantile: number;
 };
 
-type BusinessBoundaryRow = {
+type PredictionObservation = {
   row: string[];
   rowIndex: number;
   parsedDate: Date;
-  sessionDate: Date;
+  timestamp: string;
+  values: Map<number, number | null>;
 };
 
-type BusinessBoundaryInfo = {
-  timeIndex: number;
-  timeHeader: string;
-  validRows: BusinessBoundaryRow[];
-  firstValid: BusinessBoundaryRow;
-  lastValid: BusinessBoundaryRow;
-};
-
-type PredictionQuantileValue = {
-  header: string;
-  quantile: number;
+type AnomalyObservation = {
+  rowIndex: number;
+  date: string;
   value: number;
+  direction: "high" | "low";
+  lowerBoundary: number;
+  upperBoundary: number;
 };
 
-type PredictionBusinessDayExport = {
-  boundary: BusinessBoundaryInfo;
-  csvText: string;
-  rowCount: number;
-  previewRows: Array<Record<string, string>>;
-  nearestP10: PredictionQuantileValue | null;
-  nearestP50: PredictionQuantileValue | null;
-  nearestP90: PredictionQuantileValue | null;
+type SeriesAnomalyStats = {
+  count: number;
+  average: number | null;
+  minimum: number | null;
+  maximum: number | null;
+  standardDeviation: number | null;
+  lowerBoundary: number | null;
+  upperBoundary: number | null;
+  lowerBoundaryAverage: number | null;
+  upperBoundaryAverage: number | null;
+  boundaryMethod: "statistical_95_band" | "model_95_interval";
+  unusual: AnomalyObservation[];
+  unusualPercentage: number;
 };
 
 const GCP_PROJECT_ID = asString(
@@ -217,10 +210,6 @@ function normalizeCsvHeader(value: unknown): string {
 
 function pad2(value: number): string {
   return String(value).padStart(2, "0");
-}
-
-function roundTo10(value: number): number {
-  return Math.round(value / 10) * 10;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -352,13 +341,41 @@ function formatTimeZoneHourBucket(date: Date, timeZone: string): string {
 function parseFlexibleDate(value: unknown): Date | null {
   const text = asString(value).trim();
   if (!text) return null;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
-    const parsed = new Date(`${text}T00:00:00Z`);
-    return Number.isFinite(parsed.getTime()) ? parsed : null;
+  const dateMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateMatch) {
+    const [, yearText, monthText, dayText] = dateMatch;
+    const year = Number(yearText);
+    const month = Number(monthText);
+    const day = Number(dayText);
+    const parsed = new Date(Date.UTC(year, month - 1, day));
+    return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day
+      ? parsed
+      : null;
   }
-  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(text)) {
-    const parsed = new Date(text.replace(" ", "T") + "Z");
-    return Number.isFinite(parsed.getTime()) ? parsed : null;
+  const dateTimeMatch = text.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/);
+  if (dateTimeMatch) {
+    const [, yearText, monthText, dayText, hourText, minuteText, secondText] = dateTimeMatch;
+    const year = Number(yearText);
+    const month = Number(monthText);
+    const day = Number(dayText);
+    const hour = Number(hourText);
+    const minute = Number(minuteText);
+    const second = Number(secondText);
+    const parsed = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+    return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day &&
+      parsed.getUTCHours() === hour && parsed.getUTCMinutes() === minute && parsed.getUTCSeconds() === second
+      ? parsed
+      : null;
+  }
+  const isoDatePrefix = text.match(/^(\d{4})-(\d{2})-(\d{2})[Tt]/);
+  if (isoDatePrefix) {
+    const [, yearText, monthText, dayText] = isoDatePrefix;
+    const calendarCheck = new Date(Date.UTC(Number(yearText), Number(monthText) - 1, Number(dayText)));
+    if (
+      calendarCheck.getUTCFullYear() !== Number(yearText) ||
+      calendarCheck.getUTCMonth() !== Number(monthText) - 1 ||
+      calendarCheck.getUTCDate() !== Number(dayText)
+    ) return null;
   }
   const parsed = new Date(text);
   return Number.isFinite(parsed.getTime()) ? parsed : null;
@@ -689,34 +706,51 @@ function rowsToObjectPreview(headers: string[], rows: string[][], limit = 20): A
   });
 }
 
+function parseQuantileHeader(header: unknown): number | null {
+  const compact = asString(header)
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/%/g, "")
+    .replace(/^(?:forecast|prediction)[_-]?/, "")
+    .replace(/^quantile[_-]?/, "q")
+    .replace(/^percentile[_-]?/, "p")
+    .replace(/^([pq])[_-]/, "$1");
+  const match = compact.match(/^[pq](\d+(?:\.\d+)?)$/);
+  if (!match) return null;
+  const raw = Number(match[1]);
+  if (!Number.isFinite(raw)) return null;
+  const quantile = !match[1].includes(".") && match[1].length === 3
+    ? raw / 1000
+    : raw > 1
+      ? raw / 100
+      : raw;
+  return quantile > 0 && quantile < 1 ? quantile : null;
+}
+
 function extractQuantileColumns(headers: string[]): QuantileColumn[] {
   const cols: QuantileColumn[] = [];
   headers.forEach((header, index) => {
-    const normalized = normalizeCsvHeader(header);
-    let quantile = Number.NaN;
-    let match = normalized.match(/^(?:p|q)(\d{1,2})$/);
-    if (match) {
-      quantile = Number(match[1]) / 100;
-    } else {
-      match = normalized.match(/^(?:p|q)(0?\.\d+)$/);
-      if (match) quantile = Number(match[1]);
-    }
-    if (!Number.isFinite(quantile) || quantile <= 0 || quantile >= 1) return;
+    const quantile = parseQuantileHeader(header);
+    if (quantile === null) return;
     cols.push({ index, header, quantile });
   });
+
+  if (!cols.some((column) => Math.abs(column.quantile - 0.5) < 0.000001)) {
+    const medianIndex = headers.findIndex((header) =>
+      new Set(["median", "forecastmedian", "medianforecast", "pointforecast"]).has(normalizeCsvHeader(header))
+    );
+    if (medianIndex >= 0) {
+      cols.push({ index: medianIndex, header: headers[medianIndex], quantile: 0.5 });
+    }
+  }
+
   return cols.sort((left, right) => left.quantile - right.quantile);
 }
 
 function findPreferredColumn(headers: string[], candidates: string[]): number {
   const wanted = new Set(candidates.map((entry) => normalizeCsvHeader(entry)));
   return headers.findIndex((header) => wanted.has(normalizeCsvHeader(header)));
-}
-
-function findNearestQuantileColumn(columns: QuantileColumn[], targetQuantile: number): QuantileColumn | null {
-  if (!Array.isArray(columns) || !columns.length) return null;
-  return columns.reduce((best, item) =>
-    Math.abs(item.quantile - targetQuantile) < Math.abs(best.quantile - targetQuantile) ? item : best
-  , columns[0]);
 }
 
 function inferIntervalFromRows(rows: CanonicalDatasetRow[]): SupportedDatasetInterval {
@@ -1105,108 +1139,16 @@ export async function downloadHistoricalStockDataset(input: {
   });
 }
 
-async function fetchCurrentPriceInfo(ticker: string, fetchImpl: typeof fetch = fetch): Promise<CurrentPriceInfo> {
-  const cleanTicker = normalizeTicker(ticker);
-  const fallback: CurrentPriceInfo = {
-    ticker: cleanTicker,
-    currentPrice: null,
-    quoteTime: "",
-    source: "",
-    error: "",
-  };
-  if (!cleanTicker) return fallback;
-
-  try {
-    const intraday = await fetchImpl(
-      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(cleanTicker)}?range=1d&interval=1m&includePrePost=true`,
-      { headers: { Accept: "application/json", "User-Agent": "QuanturaForecastFoundry/1.0" } }
-    );
-    if (intraday.ok) {
-      const payload = (await intraday.json().catch(() => ({}))) as Record<string, any>;
-      const result = Array.isArray(payload?.chart?.result) ? payload.chart.result[0] : null;
-      const timestamps = Array.isArray(result?.timestamp) ? result.timestamp : [];
-      const quote = Array.isArray(result?.indicators?.quote) ? result.indicators.quote[0] || {} : {};
-      const closes = Array.isArray(quote?.close) ? quote.close : [];
-      for (let index = closes.length - 1; index >= 0; index -= 1) {
-        const close = Number(closes[index]);
-        const timestamp = Number(timestamps[index]);
-        if (!Number.isFinite(close) || !Number.isFinite(timestamp)) continue;
-        return {
-          ticker: cleanTicker,
-          currentPrice: Number(close.toFixed(4)),
-          quoteTime: formatAnalysisTimestamp(new Date(timestamp * 1000).toISOString()),
-          source: "Yahoo intraday 1m",
-          error: "",
-        };
-      }
-    }
-  } catch (_error) {
-    // Ignore and fall through.
-  }
-
-  try {
-    const quote = await fetchImpl(
-      `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(cleanTicker)}`,
-      { headers: { Accept: "application/json", "User-Agent": "QuanturaForecastFoundry/1.0" } }
-    );
-    if (quote.ok) {
-      const payload = (await quote.json().catch(() => ({}))) as Record<string, any>;
-      const result = Array.isArray(payload?.quoteResponse?.result) ? payload.quoteResponse.result[0] : null;
-      const price = Number(result?.regularMarketPrice ?? result?.postMarketPrice ?? result?.preMarketPrice);
-      const quoteTime = Number(result?.regularMarketTime);
-      if (Number.isFinite(price)) {
-        return {
-          ticker: cleanTicker,
-          currentPrice: Number(price.toFixed(4)),
-          quoteTime: Number.isFinite(quoteTime) ? formatAnalysisTimestamp(new Date(quoteTime * 1000).toISOString()) : "",
-          source: "Yahoo quote",
-          error: "",
-        };
-      }
-    }
-  } catch (_error) {
-    // Ignore and fall through.
-  }
-
-  try {
-    const daily = await fetchImpl(
-      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(cleanTicker)}?range=5d&interval=1d`,
-      { headers: { Accept: "application/json", "User-Agent": "QuanturaForecastFoundry/1.0" } }
-    );
-    if (daily.ok) {
-      const payload = (await daily.json().catch(() => ({}))) as Record<string, any>;
-      const result = Array.isArray(payload?.chart?.result) ? payload.chart.result[0] : null;
-      const timestamps = Array.isArray(result?.timestamp) ? result.timestamp : [];
-      const quote = Array.isArray(result?.indicators?.quote) ? result.indicators.quote[0] || {} : {};
-      const closes = Array.isArray(quote?.close) ? quote.close : [];
-      for (let index = closes.length - 1; index >= 0; index -= 1) {
-        const close = Number(closes[index]);
-        const timestamp = Number(timestamps[index]);
-        if (!Number.isFinite(close) || !Number.isFinite(timestamp)) continue;
-        return {
-          ticker: cleanTicker,
-          currentPrice: Number(close.toFixed(4)),
-          quoteTime: formatAnalysisTimestamp(new Date(timestamp * 1000).toISOString()),
-          source: "Yahoo daily fallback",
-          error: "",
-        };
-      }
-    }
-  } catch (error: any) {
-    fallback.error = sanitizeText(error?.message, 240);
-  }
-
-  fallback.error = fallback.error || "Unable to fetch current price from Yahoo.";
-  return fallback;
-}
-
 function buildPredictionAnalysisError(
   parsed: ParsedCsv,
   ticker: string,
   message: string,
-  summary?: string
+  summary?: string,
+  details: { errors?: string[]; warnings?: string[] } = {}
 ): PredictionAnalysisResult {
   const cleanMessage = sanitizeText(message, 500) || "Prediction CSV analysis failed.";
+  const errors = (details.errors || [cleanMessage]).map((item) => sanitizeText(item, 500)).filter(Boolean);
+  const warnings = (details.warnings || []).map((item) => sanitizeText(item, 500)).filter(Boolean);
   return {
     kind: "prediction_output",
     status: "error",
@@ -1214,315 +1156,578 @@ function buildPredictionAnalysisError(
     rowCount: parsed.rows.length,
     columns: parsed.headers,
     summary: sanitizeText(summary || cleanMessage, 500),
-    markdown: `## Quantile Analysis\n\n**Ticker:** \`${ticker || "UNKNOWN"}\`\n\n**Error:** ${cleanMessage}`,
+    markdown: [
+      "## Forecast Summary",
+      "",
+      `**Ticker:** \`${ticker || "UNKNOWN"}\``,
+      "",
+      "### CSV validation failed",
+      "",
+      ...errors.map((item) => `- ${item}`),
+      ...(warnings.length ? ["", "### Warnings", "", ...warnings.map((item) => `- ${item}`)] : []),
+    ].join("\n"),
     metrics: {},
     analysis: {
       message: cleanMessage,
+      validationErrors: errors,
+      validationWarnings: warnings,
     },
     previewRows: rowsToObjectPreview(parsed.headers, parsed.rows),
     businessDayCsvText: "",
   };
 }
 
-function resolveBusinessBoundaryRows(headers: string[], rows: string[][]): BusinessBoundaryInfo {
-  const timeIndex = findPreferredColumn(headers, ["date", "datetime", "timestamp", "time"]);
-  if (timeIndex < 0) {
-    throw new Error("No parsable date or time column was found, so business-day boundary filtering could not be applied.");
+function findExactQuantileColumn(columns: QuantileColumn[], target: number): QuantileColumn | null {
+  return columns.find((column) => Math.abs(column.quantile - target) < 0.000001) || null;
+}
+
+function findExplicit95IntervalColumns(
+  headers: string[],
+  quantileColumns: QuantileColumn[]
+): { lowerIndex: number; upperIndex: number; lowerHeader: string; upperHeader: string; hinted: boolean } {
+  const normalized = headers.map((header) => normalizeCsvHeader(header));
+  const hasSideAnd95 = (value: string, side: "lower" | "upper") => {
+    const sidePattern = side === "lower" ? /(lower|low|lcl|min)/ : /(upper|high|ucl|max)/;
+    return sidePattern.test(value) && /(95|095)/.test(value);
+  };
+  const lowerIndex = normalized.findIndex((value) => hasSideAnd95(value, "lower"));
+  const upperIndex = normalized.findIndex((value) => hasSideAnd95(value, "upper"));
+  if (lowerIndex >= 0 || upperIndex >= 0) {
+    return {
+      lowerIndex,
+      upperIndex,
+      lowerHeader: lowerIndex >= 0 ? headers[lowerIndex] : "",
+      upperHeader: upperIndex >= 0 ? headers[upperIndex] : "",
+      hinted: true,
+    };
   }
 
-  const datedRows = rows
-    .map((row, rowIndex) => {
-      const parsedDate = parseFlexibleDate(row[timeIndex]);
-      if (!parsedDate) return null;
-      return {
-        row,
-        rowIndex,
-        parsedDate,
-        sessionDate: toUtcMidnight(parsedDate),
-      } satisfies BusinessBoundaryRow;
-    })
-    .filter(Boolean) as BusinessBoundaryRow[];
-
-  if (!datedRows.length) {
-    throw new Error(`Date column "${headers[timeIndex] || "timestamp"}" has no valid parsed timestamps.`);
-  }
-
-  const validRows = datedRows.filter((entry) => isUsEquityBusinessDay(entry.sessionDate));
-  if (!validRows.length) {
-    throw new Error("No valid weekday business-day rows were found in the CSV.");
-  }
-
+  const lowerQuantile = findExactQuantileColumn(quantileColumns, 0.025);
+  const upperQuantile = findExactQuantileColumn(quantileColumns, 0.975);
   return {
-    timeIndex,
-    timeHeader: headers[timeIndex] || "timestamp",
-    validRows,
-    firstValid: validRows[0],
-    lastValid: validRows[validRows.length - 1],
+    lowerIndex: lowerQuantile?.index ?? -1,
+    upperIndex: upperQuantile?.index ?? -1,
+    lowerHeader: lowerQuantile?.header || "",
+    upperHeader: upperQuantile?.header || "",
+    hinted: Boolean(lowerQuantile || upperQuantile),
   };
 }
 
-function pickNearestPredictionQuantile(columns: PredictionQuantileValue[], target: number): PredictionQuantileValue | null {
-  if (!Array.isArray(columns) || !columns.length) return null;
-  return columns.reduce((best, item) =>
-    Math.abs(item.quantile - target) < Math.abs(best.quantile - target) ? item : best
-  , columns[0]);
+function predictionSeriesStats(values: number[]): {
+  average: number | null;
+  minimum: number | null;
+  maximum: number | null;
+  standardDeviation: number | null;
+} {
+  if (!values.length) {
+    return { average: null, minimum: null, maximum: null, standardDeviation: null };
+  }
+  const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+  const variance =
+    values.length > 1
+      ? values.reduce((sum, value) => sum + (value - average) ** 2, 0) / (values.length - 1)
+      : 0;
+  return {
+    average,
+    minimum: Math.min(...values),
+    maximum: Math.max(...values),
+    standardDeviation: Math.sqrt(Math.max(0, variance)),
+  };
 }
 
-function buildPredictionBusinessDayExport(parsed: ParsedCsv): PredictionBusinessDayExport {
-  const headers = parsed.headers || [];
-  const boundary = resolveBusinessBoundaryRows(headers, parsed.rows);
-  const validRows = boundary.validRows.map((entry) => entry.row);
-  const lastRowQuantiles = extractQuantileColumns(headers)
-    .map((column) => ({
-      header: column.header.toUpperCase(),
-      quantile: column.quantile,
-      value: Number(boundary.lastValid.row[column.index]),
+function calculateStatisticalAnomalyStats(
+  observations: PredictionObservation[],
+  column: QuantileColumn | null
+): SeriesAnomalyStats {
+  const entries = column
+    ? observations
+        .map((observation) => ({ observation, value: observation.values.get(column.index) }))
+        .filter((entry): entry is { observation: PredictionObservation; value: number } =>
+          typeof entry.value === "number" && Number.isFinite(entry.value)
+        )
+    : [];
+  const base = predictionSeriesStats(entries.map((entry) => entry.value));
+  const lowerBoundary = base.average !== null && base.standardDeviation !== null
+    ? base.average - 1.96 * base.standardDeviation
+    : null;
+  const upperBoundary = base.average !== null && base.standardDeviation !== null
+    ? base.average + 1.96 * base.standardDeviation
+    : null;
+  const unusual =
+    lowerBoundary === null || upperBoundary === null
+      ? []
+      : entries
+          .filter((entry) => entry.value < lowerBoundary || entry.value > upperBoundary)
+          .map((entry) => ({
+            rowIndex: entry.observation.rowIndex,
+            date: entry.observation.timestamp,
+            value: entry.value,
+            direction: entry.value < lowerBoundary ? "low" as const : "high" as const,
+            lowerBoundary,
+            upperBoundary,
+          }));
+  return {
+    count: entries.length,
+    ...base,
+    lowerBoundary,
+    upperBoundary,
+    lowerBoundaryAverage: lowerBoundary,
+    upperBoundaryAverage: upperBoundary,
+    boundaryMethod: "statistical_95_band",
+    unusual,
+    unusualPercentage: entries.length ? (unusual.length / entries.length) * 100 : 0,
+  };
+}
+
+function calculateModelIntervalAnomalyStats(
+  observations: PredictionObservation[],
+  p50Column: QuantileColumn,
+  lowerIndex: number,
+  upperIndex: number
+): SeriesAnomalyStats {
+  const values = observations
+    .map((observation) => observation.values.get(p50Column.index))
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  const base = predictionSeriesStats(values);
+  const usable = observations
+    .map((observation) => ({
+      observation,
+      value: observation.values.get(p50Column.index),
+      lower: observation.values.get(lowerIndex),
+      upper: observation.values.get(upperIndex),
     }))
-    .filter((entry) => Number.isFinite(entry.value));
-
+    .filter((entry): entry is { observation: PredictionObservation; value: number; lower: number; upper: number } =>
+      typeof entry.value === "number" && Number.isFinite(entry.value) &&
+      typeof entry.lower === "number" && Number.isFinite(entry.lower) &&
+      typeof entry.upper === "number" && Number.isFinite(entry.upper)
+    );
+  const lowerStats = predictionSeriesStats(usable.map((entry) => entry.lower));
+  const upperStats = predictionSeriesStats(usable.map((entry) => entry.upper));
+  const unusual = usable
+    .filter((entry) => entry.value < entry.lower || entry.value > entry.upper)
+    .map((entry) => ({
+      rowIndex: entry.observation.rowIndex,
+      date: entry.observation.timestamp,
+      value: entry.value,
+      direction: entry.value < entry.lower ? "low" as const : "high" as const,
+      lowerBoundary: entry.lower,
+      upperBoundary: entry.upper,
+    }));
   return {
-    boundary,
-    csvText: serializeCsv(headers, validRows),
-    rowCount: validRows.length,
-    previewRows: rowsToObjectPreview(headers, validRows),
-    nearestP10: pickNearestPredictionQuantile(lastRowQuantiles, 0.1),
-    nearestP50: pickNearestPredictionQuantile(lastRowQuantiles, 0.5),
-    nearestP90: pickNearestPredictionQuantile(lastRowQuantiles, 0.9),
+    count: values.length,
+    ...base,
+    lowerBoundary: null,
+    upperBoundary: null,
+    lowerBoundaryAverage: lowerStats.average,
+    upperBoundaryAverage: upperStats.average,
+    boundaryMethod: "model_95_interval",
+    unusual,
+    unusualPercentage: usable.length ? (unusual.length / usable.length) * 100 : 0,
   };
+}
+
+function nextUsEquityBusinessDay(date: Date): Date {
+  let cursor = addUtcDays(toUtcMidnight(date), 1);
+  while (!isUsEquityBusinessDay(cursor)) cursor = addUtcDays(cursor, 1);
+  return cursor;
+}
+
+function addUsEquityBusinessDays(date: Date, count: number): Date {
+  let cursor = toUtcMidnight(date);
+  let remaining = Math.max(0, Math.floor(count));
+  while (remaining > 0) {
+    cursor = addUtcDays(cursor, 1);
+    if (isUsEquityBusinessDay(cursor)) remaining -= 1;
+  }
+  return cursor;
+}
+
+function roundAnalysisMetric(value: number | null): number | null {
+  return value === null || !Number.isFinite(value) ? null : Number(value.toFixed(6));
+}
+
+function formatAnomalyMarkdown(observations: AnomalyObservation[], label: string): string[] {
+  if (!observations.length) return [`- No unusual ${label} observations were detected.`];
+  const visible = observations.slice(0, 60).map(
+    (item) =>
+      `- **${item.date}**: ${item.value.toLocaleString(undefined, { maximumFractionDigits: 6 })} (${item.direction}; boundaries ${item.lowerBoundary.toLocaleString(undefined, { maximumFractionDigits: 6 })} to ${item.upperBoundary.toLocaleString(undefined, { maximumFractionDigits: 6 })})`
+  );
+  if (observations.length > visible.length) {
+    visible.push(`- ${observations.length - visible.length} additional unusual observation(s) omitted from this summary.`);
+  }
+  return visible;
 }
 
 export async function analyzePredictionCsv(
   csvText: string,
   options: { ticker?: string; fetchImpl?: typeof fetch } = {}
 ): Promise<PredictionAnalysisResult> {
-  const parsed = parseCsvTable(csvText, 50000);
+  let parsed: ParsedCsv;
+  try {
+    parsed = parseCsvTable(csvText, 50000);
+  } catch (error: any) {
+    throw new Error(`csv_validation: ${sanitizeText(error?.message, 500) || "Unable to parse CSV."}`);
+  }
+
   const headers = parsed.headers || [];
   const quantileColumns = extractQuantileColumns(headers);
-  const ticker = normalizeTicker(options.ticker);
-  if (quantileColumns.length < 3) {
-    return buildPredictionAnalysisError(
-      parsed,
-      ticker,
-      `Need at least 3 columns starting with \`P\` or \`Q\`. Found columns: ${headers.join(", ") || "none"}`,
-      "Prediction CSV analysis failed because fewer than three quantile columns were detected."
-    );
+  const validationErrors: string[] = [];
+  const validationWarnings: string[] = [];
+  const rawTickerHint = asString(options.ticker).trim().toUpperCase();
+  const isValidTicker = (value: string) => /^(?=.*[A-Z])[A-Z0-9^][A-Z0-9.^=\/-]{0,23}$/.test(value);
+  if (rawTickerHint && !isValidTicker(rawTickerHint)) {
+    validationErrors.push(`Ticker hint "${sanitizeText(rawTickerHint, 32)}" is invalid.`);
   }
 
-  if (quantileColumns.length % 2 === 0) {
-    return buildPredictionAnalysisError(
-      parsed,
-      ticker,
-      "Quantile columns must be an odd count so a middle median column exists.",
-      "Prediction CSV analysis failed because the quantile column count must be odd."
-    );
+  const duplicateHeaders = headers.filter(
+    (header, index) => headers.findIndex((candidate) => normalizeCsvHeader(candidate) === normalizeCsvHeader(header)) !== index
+  );
+  if (duplicateHeaders.length) {
+    validationErrors.push(`Duplicate CSV headers detected: ${Array.from(new Set(duplicateHeaders)).join(", ")}.`);
+  }
+  const duplicateQuantiles = quantileColumns.filter(
+    (column, index) => quantileColumns.findIndex((candidate) => Math.abs(candidate.quantile - column.quantile) < 0.000001) !== index
+  );
+  if (duplicateQuantiles.length) {
+    validationErrors.push(`Duplicate quantile levels detected: ${Array.from(new Set(duplicateQuantiles.map((column) => column.header))).join(", ")}.`);
+  }
+  if (!quantileColumns.length) {
+    validationErrors.push("No forecast quantile columns were detected. Use headers such as P10, P50/median, P90, q0.1, or quantile_0.9.");
   }
 
-  try {
-    const businessDayExport = buildPredictionBusinessDayExport(parsed);
-    const medianIndex = Math.floor(quantileColumns.length / 2);
-    const medianCol = quantileColumns[medianIndex];
-    const lowerCols = quantileColumns.slice(0, medianIndex);
-    const upperCols = quantileColumns.slice(medianIndex + 1);
-    const boundary = businessDayExport.boundary;
-    const firstRow = boundary.firstValid.row;
-    const lastRow = boundary.lastValid.row;
-    const firstMedianRaw = Number(firstRow[medianCol.index]);
-    const lastMedianRaw = Number(lastRow[medianCol.index]);
+  const p10Column = findExactQuantileColumn(quantileColumns, 0.1);
+  const p50Column = findExactQuantileColumn(quantileColumns, 0.5);
+  const p90Column = findExactQuantileColumn(quantileColumns, 0.9);
+  if (!p50Column) validationErrors.push("P50 or median is required for median anomaly and bias analysis.");
+  if (!p10Column) validationWarnings.push("P10 was not supplied; P10 anomaly and last-two-observation analysis are unavailable.");
+  if (!p90Column) validationWarnings.push("P90 was not supplied; the forecast summary will omit its average.");
 
-    if (!Number.isFinite(firstMedianRaw) || !Number.isFinite(lastMedianRaw)) {
-      throw new Error("Median quantile column is missing numeric values in the first or last valid business-day row.");
+  const timeIndex = findPreferredColumn(headers, ["date", "ds", "datetime", "timestamp", "time"]);
+  if (timeIndex < 0) validationErrors.push("A date or timestamp column is required.");
+  const tickerIndex = findPreferredColumn(headers, ["ticker", "symbol", "item_id", "itemid", "asset"]);
+  const actualIndex = findPreferredColumn(headers, [
+    "actual_price",
+    "actualprice",
+    "actual",
+    "observed_price",
+    "observedprice",
+    "observed",
+    "ground_truth",
+    "groundtruth",
+    "target",
+    "close",
+    "closing_price",
+  ]);
+  const interval95 = findExplicit95IntervalColumns(headers, quantileColumns);
+  if (interval95.hinted && (interval95.lowerIndex < 0 || interval95.upperIndex < 0)) {
+    validationErrors.push("A model-provided 95% interval must include both lower and upper boundary columns.");
+  }
+  const hasExplicit95Interval = interval95.lowerIndex >= 0 && interval95.upperIndex >= 0;
+
+  const numericIndexes = new Set<number>(quantileColumns.map((column) => column.index));
+  if (actualIndex >= 0) numericIndexes.add(actualIndex);
+  if (interval95.lowerIndex >= 0) numericIndexes.add(interval95.lowerIndex);
+  if (interval95.upperIndex >= 0) numericIndexes.add(interval95.upperIndex);
+  const invalidNumericCounts = new Map<number, number>();
+  const missingNumericCounts = new Map<number, number>();
+  const tickerValues = new Set<string>();
+  let invalidTickerCount = 0;
+  let missingTickerCount = 0;
+  let invalidDateCount = 0;
+
+  const observations: PredictionObservation[] = [];
+  parsed.rows.forEach((row, rowIndex) => {
+    const parsedDate = timeIndex >= 0 ? parseFlexibleDate(row[timeIndex]) : null;
+    if (!parsedDate) {
+      invalidDateCount += 1;
     }
+    const values = new Map<number, number | null>();
+    numericIndexes.forEach((index) => {
+      const raw = asString(row[index]).trim();
+      if (!raw) {
+        values.set(index, null);
+        missingNumericCounts.set(index, (missingNumericCounts.get(index) || 0) + 1);
+        return;
+      }
+      const numeric = Number(raw.replace(/,/g, ""));
+      if (!Number.isFinite(numeric)) {
+        values.set(index, null);
+        invalidNumericCounts.set(index, (invalidNumericCounts.get(index) || 0) + 1);
+        return;
+      }
+      values.set(index, numeric);
+    });
 
-    const firstMedianRounded = roundTo10(firstMedianRaw);
-    const lastMedianRounded = roundTo10(lastMedianRaw);
-    const branch = firstMedianRounded > lastMedianRounded ? "upper" : "lower";
-    const recommendation = branch === "upper" ? "buy" : "sell";
-    const upperTargetQuantileCol = findNearestQuantileColumn(upperCols, 0.9);
-    const lowerTargetQuantileCol = findNearestQuantileColumn(lowerCols, 0.1);
-    const targetQuantileCol = branch === "upper" ? upperTargetQuantileCol : lowerTargetQuantileCol;
-    const endDateBias = branch === "upper" ? "near_upper_bound" : "near_lower_bound";
-    const endDateBiasLabel = branch === "upper" ? "upper bound" : "lower bound";
-    const upperTargetLabel = upperTargetQuantileCol?.header ? upperTargetQuantileCol.header.toUpperCase() : "P90";
-    const lowerTargetLabel = lowerTargetQuantileCol?.header ? lowerTargetQuantileCol.header.toUpperCase() : "P10";
-    const endDateTargetLabel = targetQuantileCol?.header ? targetQuantileCol.header.toUpperCase() : branch === "upper" ? "P90" : "P10";
-    const returnedCols = branch === "upper" ? upperCols : lowerCols;
-    const returnedValues = Object.fromEntries(
-      returnedCols
-        .map((col) => [col.header, Number(lastRow[col.index])])
-        .filter((entry) => Number.isFinite(entry[1] as number))
-        .map(([header, value]) => [String(header), Number((value as number).toFixed(6))])
-    );
+    if (tickerIndex >= 0) {
+      const rawTicker = asString(row[tickerIndex]).trim().toUpperCase();
+      if (!rawTicker) missingTickerCount += 1;
+      else if (!isValidTicker(rawTicker)) invalidTickerCount += 1;
+      else tickerValues.add(rawTicker);
+    }
+    if (parsedDate) {
+      observations.push({
+        row,
+        rowIndex,
+        parsedDate,
+        timestamp: formatAnalysisTimestamp(parsedDate.toISOString()),
+        values,
+      });
+    }
+  });
 
-    const firstValidTimestamp = formatAnalysisTimestamp(boundary.firstValid.parsedDate.toISOString());
-    const lastValidTimestamp = formatAnalysisTimestamp(boundary.lastValid.parsedDate.toISOString());
-    const currentPriceInfo = ticker ? await fetchCurrentPriceInfo(ticker, options.fetchImpl || fetch) : null;
-    const orderedLabels = quantileColumns.map((col) => col.header).join(", ");
-    const returnedLines = Object.entries(returnedValues)
-      .map(([label, value]) => `- **${label}**: ${Number(value).toLocaleString(undefined, { maximumFractionDigits: 6 })}`)
-      .join("\n");
-    const terminalQuantiles = [
-      businessDayExport.nearestP10,
-      businessDayExport.nearestP50,
-      businessDayExport.nearestP90,
-    ].filter(Boolean) as PredictionQuantileValue[];
-    const terminalQuantileSummary = terminalQuantiles
-      .map((entry) => `${entry.header}=${Number(entry.value).toLocaleString(undefined, { maximumFractionDigits: 6 })}`)
-      .join(", ");
-    const terminalQuantileLines = terminalQuantiles
-      .map((entry) => `- **${entry.header}**: ${Number(entry.value).toLocaleString(undefined, { maximumFractionDigits: 6 })}`)
-      .join("\n");
-    const currentPriceHeading =
-      currentPriceInfo && (currentPriceInfo.currentPrice !== null || currentPriceInfo.error) ? "### Current Price" : "";
-    const currentPriceLine =
-      currentPriceInfo && currentPriceInfo.currentPrice !== null
-        ? `- Current price: **${currentPriceInfo.currentPrice.toFixed(4)}**`
-        : currentPriceInfo?.error
-          ? `- Unable to fetch price: **${currentPriceInfo.error}**`
-          : "";
-    const currentPriceQuoteTime = currentPriceInfo?.quoteTime ? `- Quote time: **${currentPriceInfo.quoteTime}**` : "";
-    const currentPriceSource = currentPriceInfo?.source ? `- Source: **${currentPriceInfo.source}**` : "";
-    const summary = [
-      `${ticker || "Uploaded"} exploratory analysis issued a ${recommendation.toUpperCase()} signal.`,
-      `Rounded P50 moved from ${firstMedianRounded} on ${firstValidTimestamp} to ${lastMedianRounded} on ${lastValidTimestamp}.`,
-      `Rule: if the last rounded P50 is below the first rounded P50, bias the final price toward the upper bound (${upperTargetLabel}) by the end date; otherwise bias it toward the lower bound (${lowerTargetLabel}).`,
-      `Current end-date bias: ${endDateBiasLabel} (${endDateTargetLabel}).`,
-      terminalQuantileSummary ? `Final business-day quantiles at ${lastValidTimestamp}: ${terminalQuantileSummary}.` : "",
-      Object.keys(returnedValues).length
-        ? `Returned last business-day values: ${Object.entries(returnedValues)
-            .map(([label, value]) => `${label}=${value}`)
-            .join(", ")}.`
-        : "No terminal branch quantiles were returned from the last valid business-day row.",
-    ]
-      .join(" ")
-      .trim();
+  if (invalidDateCount) validationErrors.push(`${invalidDateCount} row(s) contain an invalid or missing date/timestamp.`);
+  invalidNumericCounts.forEach((count, index) => {
+    validationErrors.push(`${count} non-numeric value(s) found in "${headers[index] || `column ${index + 1}`}".`);
+  });
+  missingNumericCounts.forEach((count, index) => {
+    validationWarnings.push(`${count} missing value(s) found in "${headers[index] || `column ${index + 1}`}"; available numeric rows were analyzed.`);
+  });
+  if (invalidTickerCount) validationErrors.push(`${invalidTickerCount} row(s) contain an invalid ticker.`);
+  if (missingTickerCount) validationWarnings.push(`${missingTickerCount} row(s) have no ticker; ticker is optional when the upload form supplies one.`);
+  if (tickerValues.size > 1) validationErrors.push("Prediction analysis supports one ticker per CSV; multiple tickers were detected.");
 
-    const markdown = [
-      "## Quantile Analysis",
-      "",
-      `**Ticker:** \`${ticker || "UNKNOWN"}\``,
-      `**Branch:** **${branch.toUpperCase()}**`,
-      "",
-      "### Business-Day Boundary Rule",
-      "Compare only the nearest first valid business-day row and the nearest last valid business-day row. Weekends and observed U.S. equity-market holidays are skipped.",
-      "",
-      `- Time column used: **${boundary.timeHeader}**`,
-      `- First valid row index: **${boundary.firstValid.rowIndex}**`,
-      `- First valid date/time: **${firstValidTimestamp}**`,
-      `- Last valid row index: **${boundary.lastValid.rowIndex}**`,
-      `- Last valid date/time: **${lastValidTimestamp}**`,
-      `- Valid business-day rows found: **${boundary.validRows.length}**`,
-      `- Cleaned business-day CSV rows: **${businessDayExport.rowCount}**`,
-      "",
-      "### Comparison Rule",
-      "Compare the first valid-row P50 with the last valid-row P50 after rounding both to the nearest 10 so the decision uses their tens-place levels.",
-      "",
-      `- First valid P50 raw: **${firstMedianRaw.toFixed(6)}**`,
-      `- First valid P50 rounded to nearest 10: **${firstMedianRounded.toFixed(0)}**`,
-      `- Last valid P50 raw: **${lastMedianRaw.toFixed(6)}**`,
-      `- Last valid P50 rounded to nearest 10: **${lastMedianRounded.toFixed(0)}**`,
-      "",
-      `Since **${lastMedianRounded.toFixed(0)} ${lastMedianRounded < firstMedianRounded ? "<" : ">="} ${firstMedianRounded.toFixed(
-        0
-      )}**, the logic issues a **${recommendation.toUpperCase()}** signal and selects the **${branch}** branch.`,
-      "",
-      "### Research Context",
-      "AWS Forecast documents how Average wQL, wQL, WAPE, RMSE, MAPE, and MASE should be interpreted for time-series models. Lower values indicate better models. See [AWS Forecast metrics documentation](https://docs.aws.amazon.com/forecast/latest/dg/metrics.html?utm_source=chatgpt.com).",
-      "",
-      `- Point-forecast anchor: **${medianCol.header}** (the middle quantile, usually **P50** / **0.5**)`,
-      `- Decision rule: if the last rounded P50 is below the first rounded P50, output **BUY** and bias the terminal price toward the **upper** bound, usually **${upperTargetLabel}**. Otherwise output **SELL** and bias the terminal price toward the **lower** bound, usually **${lowerTargetLabel}**.`,
-      `- End-date communication rule: by the final forecast date, price is treated as finishing closer to the **${endDateBiasLabel}** first.`,
-      "",
-      "### End-Date Quantile Snapshot",
-      `- Final business-day date/time: **${lastValidTimestamp}**`,
-      terminalQuantileLines || "- No terminal quantile values were available for P10/P50/P90.",
-      "",
-      "### Quantile Structure",
-      `- Ordered quantile columns: **${orderedLabels}**`,
-      `- Median column: **${medianCol.header}**`,
-      `- Lower columns: **${lowerCols.map((col) => col.header).join(", ") || "None"}**`,
-      `- Upper columns: **${upperCols.map((col) => col.header).join(", ") || "None"}**`,
-      "",
-      "### Trading Interpretation",
-      `- Signal: **${recommendation.toUpperCase()}**`,
-      `- End-date bias: **${endDateBiasLabel.toUpperCase()}**`,
-      `- Terminal target quantile: **${endDateTargetLabel}**`,
-      "",
-      currentPriceHeading,
-      currentPriceLine,
-      currentPriceQuoteTime,
-      currentPriceSource,
-      "",
-      "### Conclusion",
-      summary,
-      "",
-      "### Returned Columns from the Last Valid Business-Day Row",
-      returnedLines || "- None",
-    ]
-      .filter(Boolean)
-      .join("\n");
+  const tickerFromRows = Array.from(tickerValues)[0] || "";
+  if (rawTickerHint && tickerFromRows && rawTickerHint !== tickerFromRows) {
+    validationErrors.push(`Ticker hint ${rawTickerHint} does not match CSV ticker ${tickerFromRows}.`);
+  }
+  const ticker = normalizeTicker(tickerFromRows || rawTickerHint);
 
-    return {
-      kind: "prediction_output",
-      status: "ok",
-      ticker,
-      rowCount: parsed.rows.length,
-      columns: headers,
-      summary,
-      markdown,
-      metrics: {
-        branch,
-        recommendation,
-        endDateBias,
-        endDateTargetQuantile: endDateTargetLabel,
-        firstMedianRaw: Number(firstMedianRaw.toFixed(6)),
-        firstMedianRounded,
-        lastMedianRaw: Number(lastMedianRaw.toFixed(6)),
-        lastMedianRounded,
-        currentPrice: currentPriceInfo?.currentPrice ?? null,
-        firstValidRowIndex: boundary.firstValid.rowIndex,
-        lastValidRowIndex: boundary.lastValid.rowIndex,
-        validBusinessDayRows: boundary.validRows.length,
-        firstValidTimestamp,
-        lastValidTimestamp,
-        businessDayRows: businessDayExport.rowCount,
-        lastBusinessDayP10: businessDayExport.nearestP10 ? Number(businessDayExport.nearestP10.value.toFixed(6)) : null,
-        lastBusinessDayP50: businessDayExport.nearestP50 ? Number(businessDayExport.nearestP50.value.toFixed(6)) : null,
-        lastBusinessDayP90: businessDayExport.nearestP90 ? Number(businessDayExport.nearestP90.value.toFixed(6)) : null,
-      },
-      analysis: {
-        orderedQuantileColumns: quantileColumns.map((col) => col.header),
-        medianColumn: medianCol.header,
-        lowerColumns: lowerCols.map((col) => col.header),
-        upperColumns: upperCols.map((col) => col.header),
-        branch,
-        recommendation,
-        endDateBias,
-        endDateTargetQuantile: endDateTargetLabel,
-        returnedValues,
-        currentPriceInfo,
-        timeColumn: boundary.timeHeader,
-        firstValidRowIndex: boundary.firstValid.rowIndex,
-        lastValidRowIndex: boundary.lastValid.rowIndex,
-        firstValidTimestamp,
-        lastValidTimestamp,
-        validBusinessDayRows: boundary.validRows.length,
-        businessDayRows: businessDayExport.rowCount,
-        lastBusinessDayQuantiles: terminalQuantiles.reduce<Record<string, number>>((acc, entry) => {
-          acc[entry.header] = Number(entry.value.toFixed(6));
-          return acc;
-        }, {}),
-      },
-      previewRows: rowsToObjectPreview(headers, parsed.rows),
-      businessDayCsvText: businessDayExport.csvText,
-    };
-  } catch (error: any) {
+  const originalOrder = observations.map((observation) => observation.parsedDate.getTime());
+  observations.sort((left, right) => left.parsedDate.getTime() - right.parsedDate.getTime());
+  const chronological = originalOrder.every((timestamp, index) => timestamp === observations[index]?.parsedDate.getTime());
+  if (!chronological) validationWarnings.push("Rows were not chronological and were sorted from oldest to newest for analysis and export.");
+  const duplicateDateCount = observations.reduce((count, observation, index) =>
+    index > 0 && observation.parsedDate.getTime() === observations[index - 1].parsedDate.getTime() ? count + 1 : count
+  , 0);
+  if (duplicateDateCount) validationErrors.push(`${duplicateDateCount} duplicate date/timestamp row(s) were detected.`);
+
+  let quantileOrderViolationCount = 0;
+  let intervalOrderViolationCount = 0;
+  observations.forEach((observation) => {
+    const rowQuantiles = quantileColumns
+      .map((column) => ({ column, value: observation.values.get(column.index) }))
+      .filter((entry): entry is { column: QuantileColumn; value: number } =>
+        typeof entry.value === "number" && Number.isFinite(entry.value)
+      );
+    if (rowQuantiles.some((entry, index) => index > 0 && entry.value < rowQuantiles[index - 1].value)) {
+      quantileOrderViolationCount += 1;
+    }
+    if (hasExplicit95Interval) {
+      const lower = observation.values.get(interval95.lowerIndex);
+      const upper = observation.values.get(interval95.upperIndex);
+      if (typeof lower === "number" && typeof upper === "number" && lower > upper) intervalOrderViolationCount += 1;
+    }
+  });
+  if (quantileOrderViolationCount) {
+    validationErrors.push(`${quantileOrderViolationCount} row(s) violate ascending quantile order (for example P10 ≤ P50 ≤ P90).`);
+  }
+  if (intervalOrderViolationCount) {
+    validationErrors.push(`${intervalOrderViolationCount} row(s) have a 95% interval lower boundary above the upper boundary.`);
+  }
+
+  if (validationErrors.length) {
     return buildPredictionAnalysisError(
       parsed,
       ticker,
-      sanitizeText(error?.message, 500) || "Prediction CSV analysis failed.",
-      "Prediction CSV analysis could not resolve valid business-day boundaries."
+      validationErrors[0],
+      "Prediction CSV validation found issues that must be corrected before anomaly analysis can run.",
+      { errors: validationErrors, warnings: validationWarnings }
     );
   }
+
+  const p50Stats = hasExplicit95Interval && p50Column
+    ? calculateModelIntervalAnomalyStats(observations, p50Column, interval95.lowerIndex, interval95.upperIndex)
+    : calculateStatisticalAnomalyStats(observations, p50Column);
+  const p10Stats = calculateStatisticalAnomalyStats(observations, p10Column);
+  const p90Stats = calculateStatisticalAnomalyStats(observations, p90Column);
+  if (!p50Stats.count) {
+    return buildPredictionAnalysisError(
+      parsed,
+      ticker,
+      "P50/median contains no valid numeric values.",
+      "Prediction CSV analysis could not calculate the P50 series.",
+      { errors: ["P50/median contains no valid numeric values."], warnings: validationWarnings }
+    );
+  }
+
+  const unusualAboveAverage = p50Stats.average === null
+    ? 0
+    : p50Stats.unusual.filter((item) => item.value > p50Stats.average!).length;
+  const unusualBelowAverage = p50Stats.average === null
+    ? 0
+    : p50Stats.unusual.filter((item) => item.value < p50Stats.average!).length;
+  const unusualTotal = p50Stats.unusual.length;
+  const unusualAbovePercentage = unusualTotal ? (unusualAboveAverage / unusualTotal) * 100 : 0;
+  const unusualBelowPercentage = unusualTotal ? (unusualBelowAverage / unusualTotal) * 100 : 0;
+  const generalBias = unusualAbovePercentage > 50
+    ? "Selling Bias"
+    : unusualBelowPercentage > 50
+      ? "Buying Bias"
+      : "Neutral / Mixed";
+  const biasExplanation = generalBias === "Selling Bias"
+    ? "The forecast's unusual median observations are predominantly elevated relative to the model's typical median forecast level."
+    : generalBias === "Buying Bias"
+      ? "The forecast's unusual median observations are predominantly depressed relative to the model's typical median forecast level."
+      : "Unusual median observations do not show a majority above or below the model's typical median forecast level.";
+
+  const finalTwo = observations.slice(-2);
+  const finalTwoP10Values = p10Column
+    ? finalTwo.map((observation) => observation.values.get(p10Column.index))
+    : [];
+  const lastTwoP10Valid = Boolean(
+    p10Column && finalTwo.length === 2 && finalTwoP10Values.every((value) => typeof value === "number" && Number.isFinite(value))
+  );
+  const lastTwoBusinessDays = finalTwo.length === 2 && finalTwo.every((observation) => isUsEquityBusinessDay(observation.parsedDate));
+  const unusuallyLowP10Rows = new Set(
+    p10Stats.unusual.filter((observation) => observation.direction === "low").map((observation) => observation.rowIndex)
+  );
+  const lastTwoP10UnusuallyLow = Boolean(
+    lastTwoP10Valid && finalTwo.every((observation) => unusuallyLowP10Rows.has(observation.rowIndex))
+  );
+  const extendedP10BuyBiasActive = lastTwoP10Valid && lastTwoBusinessDays && lastTwoP10UnusuallyLow;
+  const forecastStartDate = observations[0]?.timestamp || "";
+  const forecastEndDate = observations[observations.length - 1]?.timestamp || "";
+  const horizonEnd = observations[observations.length - 1]?.parsedDate || null;
+  const biasWindowStartDate = horizonEnd ? formatDateYmd(nextUsEquityBusinessDay(horizonEnd)) : "";
+  const biasWindowEndDate = horizonEnd ? formatDateYmd(addUsEquityBusinessDays(horizonEnd, 10)) : "";
+
+  const businessDayRows = observations.filter((observation) => isUsEquityBusinessDay(observation.parsedDate));
+  const businessDayCsvText = serializeCsv(headers, businessDayRows.map((observation) => observation.row));
+  const boundaryDescription = p50Stats.boundaryMethod === "model_95_interval"
+    ? `Supplied model 95% interval (${interval95.lowerHeader} to ${interval95.upperHeader})`
+    : "P50 95% Statistical Anomaly Band (mean ± 1.96 sample standard deviations)";
+  const summary = `${ticker || "Uploaded forecast"} contains ${observations.length.toLocaleString()} chronological observation(s). ${p50Stats.unusual.length} P50 observation(s) are unusual under the ${boundaryDescription}. General Bias: ${generalBias}.${extendedP10BuyBiasActive ? " Extended P10 Buy Bias is active." : ""}`;
+
+  const markdown = [
+    "## Forecast Summary",
+    "",
+    `**Ticker:** \`${ticker || "Not supplied"}\``,
+    `**Forecast Horizon:** **${forecastStartDate} → ${forecastEndDate}**`,
+    `**Rows analyzed:** **${observations.length}** (${businessDayRows.length} U.S. equity business-day rows)`,
+    `**P10 Average:** **${p10Stats.average === null ? "N/A" : p10Stats.average.toFixed(6)}**`,
+    `**P50 Average:** **${p50Stats.average === null ? "N/A" : p50Stats.average.toFixed(6)}**`,
+    `**P90 Average:** **${p90Stats.average === null ? "N/A" : p90Stats.average.toFixed(6)}**`,
+    "",
+    "### Median Anomalies",
+    "",
+    `- Method: **${boundaryDescription}**`,
+    `- P50 minimum / maximum: **${p50Stats.minimum?.toFixed(6)} / ${p50Stats.maximum?.toFixed(6)}**`,
+    `- P50 sample standard deviation: **${p50Stats.standardDeviation?.toFixed(6)}**`,
+    p50Stats.boundaryMethod === "model_95_interval"
+      ? `- Average supplied lower / upper boundaries: **${p50Stats.lowerBoundaryAverage?.toFixed(6)} / ${p50Stats.upperBoundaryAverage?.toFixed(6)}** (each row is evaluated against its own supplied interval)`
+      : `- Lower / upper anomaly boundaries: **${p50Stats.lowerBoundary?.toFixed(6)} / ${p50Stats.upperBoundary?.toFixed(6)}**`,
+    `- Unusual P50 observations: **${unusualTotal} (${p50Stats.unusualPercentage.toFixed(2)}%)**`,
+    `- Above P50 average: **${unusualAboveAverage} (${unusualAbovePercentage.toFixed(2)}%)**`,
+    `- Below P50 average: **${unusualBelowAverage} (${unusualBelowPercentage.toFixed(2)}%)**`,
+    `- General Bias: **${generalBias}**`,
+    `- Interpretation: ${biasExplanation}`,
+    "",
+    ...formatAnomalyMarkdown(p50Stats.unusual, "P50"),
+    "",
+    "### P10 Anomalies",
+    "",
+    `- P10 average: **${p10Stats.average === null ? "N/A" : p10Stats.average.toFixed(6)}**`,
+    `- P10 minimum / maximum: **${p10Stats.minimum === null ? "N/A" : p10Stats.minimum.toFixed(6)} / ${p10Stats.maximum === null ? "N/A" : p10Stats.maximum.toFixed(6)}**`,
+    `- P10 sample standard deviation: **${p10Stats.standardDeviation === null ? "N/A" : p10Stats.standardDeviation.toFixed(6)}**`,
+    `- P10 statistical anomaly boundaries: **${p10Stats.lowerBoundary === null ? "N/A" : p10Stats.lowerBoundary.toFixed(6)} / ${p10Stats.upperBoundary === null ? "N/A" : p10Stats.upperBoundary.toFixed(6)}**`,
+    `- Unusual P10 observations: **${p10Stats.unusual.length} (${p10Stats.unusualPercentage.toFixed(2)}%)**`,
+    "",
+    ...formatAnomalyMarkdown(p10Stats.unusual, "P10"),
+    "",
+    "### Tail Signal",
+    "",
+    `- Final two P10 values valid: **${lastTwoP10Valid ? "Yes" : "No"}**`,
+    `- Both final observations are U.S. equity business days: **${lastTwoBusinessDays ? "Yes" : "No"}**`,
+    `- Both final P10 values are unusually low: **${lastTwoP10UnusuallyLow ? "Yes" : "No"}**`,
+    `- Extended P10 Buy Bias: **${extendedP10BuyBiasActive ? "Active" : "Inactive"}**`,
+    extendedP10BuyBiasActive
+      ? "- Two unusually low P10 forecasts occur on the final two business-day observations."
+      : "- The special last-two-P10 rule was not fully satisfied.",
+    `- Model forecast end date: **${forecastEndDate}**`,
+    `- First business day after the forecast: **${biasWindowStartDate || "N/A"}**`,
+    `- Model-derived buy-bias window: **${biasWindowStartDate || "N/A"} → ${biasWindowEndDate || "N/A"}** (approximately two weeks after the forecast horizon)`,
+    "",
+    "This is a model-derived statistical heuristic, not a guaranteed trading outcome or financial advice.",
+    ...(validationWarnings.length ? ["", "### Parsing Notes", "", ...validationWarnings.map((warning) => `- ${warning}`)] : []),
+  ].join("\n");
+
+  return {
+    kind: "prediction_output",
+    status: "ok",
+    ticker,
+    rowCount: parsed.rows.length,
+    columns: headers,
+    summary,
+    markdown,
+    metrics: {
+      forecastStartDate,
+      forecastEndDate,
+      observationCount: observations.length,
+      businessDayRows: businessDayRows.length,
+      p10Average: roundAnalysisMetric(p10Stats.average),
+      p10Minimum: roundAnalysisMetric(p10Stats.minimum),
+      p10Maximum: roundAnalysisMetric(p10Stats.maximum),
+      p10StandardDeviation: roundAnalysisMetric(p10Stats.standardDeviation),
+      p10LowerBoundary: roundAnalysisMetric(p10Stats.lowerBoundary),
+      p10UpperBoundary: roundAnalysisMetric(p10Stats.upperBoundary),
+      p10UnusualCount: p10Stats.unusual.length,
+      p10UnusualPercentage: roundAnalysisMetric(p10Stats.unusualPercentage),
+      p50Average: roundAnalysisMetric(p50Stats.average),
+      p50Minimum: roundAnalysisMetric(p50Stats.minimum),
+      p50Maximum: roundAnalysisMetric(p50Stats.maximum),
+      p50StandardDeviation: roundAnalysisMetric(p50Stats.standardDeviation),
+      p50BoundaryMethod: p50Stats.boundaryMethod,
+      p50LowerBoundary: roundAnalysisMetric(p50Stats.lowerBoundary),
+      p50UpperBoundary: roundAnalysisMetric(p50Stats.upperBoundary),
+      p50ModelLowerBoundaryAverage: roundAnalysisMetric(p50Stats.lowerBoundaryAverage),
+      p50ModelUpperBoundaryAverage: roundAnalysisMetric(p50Stats.upperBoundaryAverage),
+      p50UnusualCount: unusualTotal,
+      p50UnusualPercentage: roundAnalysisMetric(p50Stats.unusualPercentage),
+      p50UnusualAboveAverageCount: unusualAboveAverage,
+      p50UnusualAboveAveragePercentage: roundAnalysisMetric(unusualAbovePercentage),
+      p50UnusualBelowAverageCount: unusualBelowAverage,
+      p50UnusualBelowAveragePercentage: roundAnalysisMetric(unusualBelowPercentage),
+      p90Average: roundAnalysisMetric(p90Stats.average),
+      generalBias,
+      explicit95Interval: hasExplicit95Interval,
+      lastTwoP10Valid,
+      lastTwoBusinessDays,
+      lastTwoP10UnusuallyLow,
+      extendedP10BuyBiasActive,
+      biasWindowStartDate,
+      biasWindowEndDate,
+    },
+    analysis: {
+      methodology: p50Stats.boundaryMethod,
+      quantileColumns: quantileColumns.map((column) => ({
+        header: column.header,
+        quantile: column.quantile,
+      })),
+      timeColumn: headers[timeIndex],
+      tickerColumn: tickerIndex >= 0 ? headers[tickerIndex] : "",
+      actualPriceColumn: actualIndex >= 0 ? headers[actualIndex] : "",
+      interval95LowerColumn: interval95.lowerHeader,
+      interval95UpperColumn: interval95.upperHeader,
+      validationErrors: [],
+      validationWarnings,
+      p50Anomalies: p50Stats.unusual,
+      p10Anomalies: p10Stats.unusual,
+      generalBias,
+      biasExplanation,
+      lastTwoP10: {
+        values: finalTwoP10Values.map((value) => typeof value === "number" ? value : null),
+        dates: finalTwo.map((observation) => observation.timestamp),
+        valid: lastTwoP10Valid,
+        businessDays: lastTwoBusinessDays,
+        unusuallyLow: lastTwoP10UnusuallyLow,
+        active: extendedP10BuyBiasActive,
+        windowStart: biasWindowStartDate,
+        windowEnd: biasWindowEndDate,
+      },
+    },
+    previewRows: rowsToObjectPreview(headers, observations.map((observation) => observation.row)),
+    businessDayCsvText,
+  };
 }
 
 export async function classifyUploadedCsv(
@@ -1531,6 +1736,23 @@ export async function classifyUploadedCsv(
 ): Promise<UploadClassificationResult> {
   const parsed = parseCsvTable(csvText, 200000);
   const previewRows = rowsToObjectPreview(parsed.headers, parsed.rows);
+  const quantileColumns = extractQuantileColumns(parsed.headers);
+
+  // Quantiles are the most specific schema signal. Check them before generic
+  // historical value names such as `close`, which may be an optional actual
+  // price alongside P10/P50/P90 in a prediction export.
+  if (quantileColumns.length >= 1) {
+    const analysis = await analyzePredictionCsv(csvText, {
+      ticker: options.tickerHint,
+      fetchImpl: options.fetchImpl,
+    });
+    return {
+      kind: "prediction_output",
+      analysis,
+      originalHeaders: parsed.headers,
+      previewRows,
+    };
+  }
 
   const timeIndex = findPreferredColumn(parsed.headers, ["timestamp", "datetime", "date", "time"]);
   const valueIndex = findPreferredColumn(parsed.headers, ["closing_price", "closingprice", "close", "price", "adj close", "adjclose"]);
@@ -1545,22 +1767,8 @@ export async function classifyUploadedCsv(
     };
   }
 
-  const quantileColumns = extractQuantileColumns(parsed.headers);
-  if (quantileColumns.length >= 3) {
-    const analysis = await analyzePredictionCsv(csvText, {
-      ticker: options.tickerHint,
-      fetchImpl: options.fetchImpl,
-    });
-    return {
-      kind: "prediction_output",
-      analysis,
-      originalHeaders: parsed.headers,
-      previewRows,
-    };
-  }
-
   throw new Error(
-    "Invalid CSV schema. Expected a historical dataset with item/date/close fields or a prediction output with quantile columns like P10/P50/P90."
+    "csv_validation: Invalid CSV schema. Expected a historical dataset with item/date/close fields or a prediction output with quantile columns such as P10, P50/median, or P90."
   );
 }
 
