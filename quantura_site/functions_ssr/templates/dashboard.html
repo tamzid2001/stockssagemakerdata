@@ -43,8 +43,8 @@
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-remote-config-compat.js"></script>
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
-    <script defer src="/app.js?v=20260405a"></script>
-    <script defer src="/data-integrations.js?v=20260823a"></script>
+    <script defer src="/app.js?v=20260824a"></script>
+    <script defer src="/data-integrations.js?v=20260824a"></script>
   
     <script>
       window.__QUANTURA_RC_TEMPLATE_ID__ = "firebase-server";
@@ -241,6 +241,21 @@
               <p id="aws-integration-status" class="integration-status" role="status" aria-live="polite">Sign in to load your AWS integration status.</p>
             </form>
             <details class="learn-more"><summary>Minimum IAM and trust-policy setup</summary><div class="small"><p>The assumed role needs scoped S3 access to the selected bucket, SageMaker job create/describe/list permissions, and <code>iam:PassRole</code> only for the selected SageMaker execution role. Its trust policy must allow <code>sts:AssumeRoleWithWebIdentity</code> from Vercel OIDC and restrict the subject to Quantura's production API project. See the deployment documentation for a copyable policy.</p></div></details>
+          </section>
+          <section class="card forecast-alert-settings-card" aria-labelledby="forecast-alert-settings-title">
+            <div class="card-head"><div><div class="eyebrow">Prediction monitoring</div><h3 id="forecast-alert-settings-title">Forecast Price Alerts</h3><p class="small muted">Manage date-aware quantile crossing emails created by your private prediction CSV analyses.</p></div><span class="pill">Alpaca + Resend</span></div>
+            <form id="forecast-alert-settings-form">
+              <div class="form-grid">
+                <label class="forecast-alert-master-toggle field-span-2"><input id="forecast-alerts-email-enabled" type="checkbox" /><span><strong>Email notifications enabled</strong><small>Disable this to pause every prediction alert without deleting its configuration.</small></span></label>
+                <div class="field field-span-2"><label class="label" for="forecast-alert-email">Verified alert email</label><input id="forecast-alert-email" type="email" readonly aria-readonly="true" /><div id="forecast-alert-email-help" class="small muted">The verified email on your Firebase account is used; custom unverified recipients are never stored.</div></div>
+                <div class="field"><span class="label">Default boundaries</span><div class="forecast-boundary-choices" role="group" aria-label="Default forecast boundaries"><label><input type="checkbox" value="P10" data-profile-alert-boundary /> P10</label><label><input type="checkbox" value="P50" data-profile-alert-boundary /> P50</label><label><input type="checkbox" value="P90" data-profile-alert-boundary /> P90</label></div></div>
+                <div class="field"><label class="label" for="forecast-alert-default-session">Default market session</label><select id="forecast-alert-default-session"><option value="regular">Regular hours only</option><option value="extended">Include premarket and after-hours</option></select></div>
+              </div>
+              <div class="hero-actions workflow-actions"><button class="cta" id="forecast-alert-settings-save" type="submit">Save alert settings</button><button class="cta secondary" id="forecast-alert-settings-refresh" type="button">Refresh</button></div>
+              <p id="forecast-alert-settings-status" class="integration-status" role="status" aria-live="polite">Sign in to load forecast alert settings.</p>
+            </form>
+            <div class="card-head forecast-active-alerts-head"><h4>Prediction alerts</h4><span class="small muted">Active, disabled, and expired</span></div>
+            <div id="forecast-active-alerts" class="forecast-active-alerts"><div class="small muted">No alert configurations loaded.</div></div>
           </section>
         </div>
       </section>
