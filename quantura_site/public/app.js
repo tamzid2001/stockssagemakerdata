@@ -1883,6 +1883,12 @@
     foundryRowLimit: document.getElementById("foundry-row-limit"),
     foundryFile: document.getElementById("foundry-file"),
     foundryFileHelp: document.getElementById("foundry-file-help"),
+    foundryPriceAlertConfig: document.getElementById("foundry-price-alert-config"),
+    foundryPriceAlertEnabled: document.getElementById("foundry-price-alert-enabled"),
+    foundryPriceAlertOptions: document.getElementById("foundry-price-alert-options"),
+    foundryPriceAlertSession: document.getElementById("foundry-price-alert-session"),
+    foundryPriceAlertBoundaries: Array.from(document.querySelectorAll("[data-foundry-alert-boundary]")),
+    foundryPriceAlertStatus: document.getElementById("foundry-price-alert-status"),
     foundryNotes: document.getElementById("foundry-notes"),
     foundryModelMetricsBlock: document.getElementById("foundry-model-metrics-block"),
     foundryHistoryFields: document.getElementById("foundry-history-fields"),
@@ -18188,6 +18194,7 @@
     ui.foundryHistoryFields?.classList.toggle("hidden", !historyMode);
     ui.foundryFileField?.classList.toggle("hidden", !fileMode);
     ui.foundryUploadActions?.classList.toggle("hidden", !predictionMode);
+    ui.foundryPriceAlertConfig?.classList.toggle("hidden", !predictionMode);
     ui.foundryAutopilotControls?.classList.toggle("hidden", predictionMode);
     ui.foundryPrimaryActions?.classList.toggle("hidden", predictionMode);
     if (ui.foundryFileHelp) {
@@ -18197,6 +18204,12 @@
     }
     const uploadButtonLabel = ui.foundryUploadPrepareButton?.querySelector("span");
     if (uploadButtonLabel) uploadButtonLabel.textContent = predictionMode ? "Analyze prediction CSV" : "Prepare source";
+    if (ui.foundryPriceAlertOptions) {
+      ui.foundryPriceAlertOptions.classList.toggle("is-disabled", !ui.foundryPriceAlertEnabled?.checked);
+      ui.foundryPriceAlertOptions.querySelectorAll("input, select").forEach((control) => {
+        control.disabled = !predictionMode || !ui.foundryPriceAlertEnabled?.checked;
+      });
+    }
     if (historyMode) syncFoundryDateDefaults();
     updateFoundryInstanceLimitUi();
   };
@@ -18225,6 +18238,23 @@
       if (numeric !== null) metrics[key] = numeric;
     });
     return metrics;
+  };
+
+  const collectFoundryPriceAlertConfig = () => {
+    if (String(ui.foundrySourceKind?.value || "").trim() !== "prediction_csv") return null;
+    const enabled = Boolean(ui.foundryPriceAlertEnabled?.checked);
+    const boundaries = (ui.foundryPriceAlertBoundaries || [])
+      .filter((input) => input.checked)
+      .map((input) => String(input.value || "").trim())
+      .filter(Boolean);
+    if (enabled && !boundaries.length) {
+      throw new Error("Select at least one forecast boundary to monitor.");
+    }
+    return {
+      enabled,
+      boundaries: boundaries.length ? boundaries : ["P10", "P50", "P90"],
+      sessionMode: String(ui.foundryPriceAlertSession?.value || "regular") === "extended" ? "extended" : "regular",
+    };
   };
 
   const formatFoundryModelMetricValue = (value) => {
@@ -18567,6 +18597,64 @@
     `;
   };
 
+  const renderForecastPriceAlertStatus = (alert, { readOnly = false } = {}) => {
+    const host = ui.foundryPriceAlertStatus;
+    if (!host) return;
+    host.onclick = null;
+    if (!alert || typeof alert !== "object" || !String(alert.id || alert.runId || "").trim()) {
+      host.classList.add("hidden");
+      host.innerHTML = "";
+      return;
+    }
+    host.classList.remove("hidden");
+    const monitored = Array.isArray(alert.monitoredBoundaries) ? alert.monitoredBoundaries : [];
+    const available = Array.isArray(alert.availableBoundaries) ? alert.availableBoundaries : [];
+    const statusLabel = String(alert.status || (alert.enabled ? "active" : "disabled")).replaceAll("_", " ");
+    const formatTimestamp = (value) => {
+      const parsed = Date.parse(String(value || ""));
+      return Number.isFinite(parsed) ? new Date(parsed).toLocaleString() : "Not yet";
+    };
+    host.innerHTML = `
+      <section class="forecast-alert-inline-card" aria-label="Price Alerts">
+        <div class="forecast-alert-list-head"><div><div class="eyebrow">Price Alerts</div><h4>${escapeHtml(String(alert.ticker || "Forecast boundary monitoring"))}</h4></div><span class="pill">${escapeHtml(statusLabel)}</span></div>
+        <p class="small muted">Date-aware crossing detection uses the latest completed Alpaca 1-minute bar close. Monitoring ends ${escapeHtml(String(alert.horizonEnd || "at the forecast horizon"))}.</p>
+        <div class="forecast-alert-row-controls">
+          <div class="forecast-boundary-choices">${available.map((boundary) => `<label><input type="checkbox" value="${escapeHtml(boundary)}" data-inline-alert-boundary ${monitored.includes(boundary) ? "checked" : ""} ${readOnly || alert.status === "expired" ? "disabled" : ""}/> ${escapeHtml(boundary)}</label>`).join("")}</div>
+          <select data-inline-alert-session aria-label="Alert market session" ${readOnly || alert.status === "expired" ? "disabled" : ""}><option value="regular" ${alert.sessionMode === "regular" ? "selected" : ""}>Regular hours only</option><option value="extended" ${alert.sessionMode === "extended" ? "selected" : ""}>Include extended hours</option></select>
+        </div>
+        <dl class="forecast-alert-list-meta"><div><dt>Current price</dt><dd>${Number.isFinite(Number(alert.lastPrice)) ? `$${formatForecastAnalysisNumber(alert.lastPrice)}` : "Not checked"}</dd></div><div><dt>Last checked</dt><dd>${escapeHtml(formatTimestamp(alert.lastCheckedAt))}</dd></div><div><dt>Last crossing</dt><dd>${alert.lastCrossing ? `${escapeHtml(alert.lastCrossing.boundary)} crossed ${escapeHtml(alert.lastCrossing.direction)}` : "None"}</dd></div><div><dt>Last email</dt><dd>${escapeHtml(formatTimestamp(alert.lastNotificationAt))}</dd></div></dl>
+        ${alert.lastError?.message ? `<p class="small forecast-alert-error">${escapeHtml(alert.lastError.message)}</p>` : ""}
+        ${readOnly ? `<p class="small muted">Alert controls are private to the analysis owner.</p>` : `<div class="hero-actions"><button class="cta secondary small" type="button" data-inline-alert-save>Save boundaries</button><button class="cta ${alert.enabled ? "danger" : "secondary"} small" type="button" data-inline-alert-toggle>${alert.enabled ? "Disable" : "Enable"}</button></div>`}
+      </section>`;
+    if (readOnly) return;
+    host.onclick = async (event) => {
+      const button = event.target.closest("[data-inline-alert-save], [data-inline-alert-toggle]");
+      if (!button) return;
+      const boundaries = [...host.querySelectorAll("[data-inline-alert-boundary]:checked")].map((input) => input.value);
+      if (!boundaries.length) {
+        showToast("Select at least one forecast boundary.", "warn");
+        return;
+      }
+      const toggle = button.hasAttribute("data-inline-alert-toggle");
+      button.disabled = true;
+      try {
+        const payload = await callFoundryApi("PUT", `/api/autopilot/runs/${encodeURIComponent(String(alert.runId || alert.id))}/price-alert`, {
+          enabled: toggle ? !alert.enabled : alert.enabled,
+          boundaries,
+          sessionMode: host.querySelector("[data-inline-alert-session]")?.value || "regular",
+        });
+        const nextAlert = payload?.alert && typeof payload.alert === "object" ? payload.alert : alert;
+        if (state.foundryContext.activeRun) state.foundryContext.activeRun.priceAlert = nextAlert;
+        renderForecastPriceAlertStatus(nextAlert);
+        showToast(toggle ? "Forecast alert status updated." : "Forecast alert boundaries saved.");
+      } catch (error) {
+        showToast(extractErrorMessage(error, "Unable to update this forecast alert."), "warn");
+      } finally {
+        if (button.isConnected) button.disabled = false;
+      }
+    };
+  };
+
   const renderFoundryRunDetail = async (run, { request = null, shareUrl = "", readOnly = false } = {}) => {
     state.foundryContext.activeRunId = String(run?.id || "").trim();
     state.foundryContext.activeRun = run && typeof run === "object" ? run : null;
@@ -18578,6 +18666,7 @@
       state.predictionsContext.analysis = null;
       state.predictionsContext.chartTitle = "";
       if (ui.foundryBusinessDaysButton) ui.foundryBusinessDaysButton.classList.add("hidden");
+      renderForecastPriceAlertStatus(null);
       ui.foundryRunMeta.innerHTML = `<div class="small muted">Select a foundry run to inspect it.</div>`;
       if (ui.foundryPublishHost) ui.foundryPublishHost.innerHTML = `<div class="small muted">Private Explore sync and publish controls appear here after a source is prepared.</div>`;
       renderFoundryChartLauncher({
@@ -18604,6 +18693,7 @@
       String(run?.sourceType || "").trim() === "prediction_csv" ||
       (files?.predictionsCsv && typeof files.predictionsCsv === "object") ||
       (files?.uploadedCsv && typeof files.uploadedCsv === "object");
+    renderForecastPriceAlertStatus(hasPredictionSource ? run.priceAlert : null, { readOnly: sharedReadOnly });
     if (ui.foundryBusinessDaysButton) {
       ui.foundryBusinessDaysButton.classList.toggle("hidden", !hasPredictionSource);
       const hasBusinessDaysFile = files?.businessDaysCsv && typeof files.businessDaysCsv === "object";
@@ -18815,6 +18905,7 @@
     const interval = "1d";
     const notes = String(ui.foundryNotes?.value || "").trim();
     const modelMetrics = collectFoundryModelMetrics();
+    const priceAlert = collectFoundryPriceAlertConfig();
     const workspaceId = String(state.activeWorkspaceId || state.user?.uid || "").trim();
 
     setFoundryStatus("Preparing Forecast Foundry source...");
@@ -18853,6 +18944,7 @@
         interval,
         notes,
         modelMetrics,
+        priceAlert,
         workspaceId,
       });
       if (ui.foundryFile) ui.foundryFile.value = "";
@@ -28885,6 +28977,7 @@
     syncSportsFoundryWorkflowUi();
     syncSportsFoundryButtons();
     syncSportsFoundryGameGap();
+    ui.foundryPriceAlertEnabled?.addEventListener("change", syncFoundrySourceFields);
     ui.foundrySourceKind?.addEventListener("change", () => {
       syncFoundrySourceFields();
       syncFoundryDateDefaults({ force: true });

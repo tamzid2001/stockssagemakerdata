@@ -42,8 +42,8 @@
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-remote-config-compat.js"></script>
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
-    <script defer src="/app.js?v=20260817c"></script>
-    <script defer src="/data-integrations.js?v=20260823a"></script>
+    <script defer src="/app.js?v=20260824a"></script>
+    <script defer src="/data-integrations.js?v=20260824a"></script>
     <script defer src="/assets/rnweb/quantura-rnw.js"></script>
   
     <script>
@@ -300,6 +300,32 @@
                               <div class="small muted" id="foundry-file-help">Historical CSVs must resolve to item, timestamp/date, and closing-price columns.</div>
                             </div>
 
+                            <fieldset id="foundry-price-alert-config" class="forecast-alert-config hidden">
+                              <legend>Price Boundary Email Notifications</legend>
+                              <label class="forecast-alert-master-toggle">
+                                <input id="foundry-price-alert-enabled" type="checkbox" />
+                                <span><strong>Notify me when actual price crosses a forecast boundary</strong><small>Alerts use the latest completed Alpaca 1-minute bar close and begin with a baseline check, so merely remaining above or below a boundary does not send email.</small></span>
+                              </label>
+                              <div class="forecast-alert-options" id="foundry-price-alert-options">
+                                <div class="field">
+                                  <span class="label">Boundaries to monitor</span>
+                                  <div class="forecast-boundary-choices" role="group" aria-label="Forecast boundaries">
+                                    <label><input type="checkbox" value="P10" data-foundry-alert-boundary checked /> P10</label>
+                                    <label><input type="checkbox" value="P50" data-foundry-alert-boundary checked /> P50</label>
+                                    <label><input type="checkbox" value="P90" data-foundry-alert-boundary checked /> P90</label>
+                                  </div>
+                                </div>
+                                <div class="field">
+                                  <label class="label" for="foundry-price-alert-session">Market session</label>
+                                  <select id="foundry-price-alert-session">
+                                    <option value="regular" selected>Regular hours only</option>
+                                    <option value="extended">Include premarket and after-hours</option>
+                                  </select>
+                                </div>
+                              </div>
+                              <p class="small muted">Notifications go only to the verified email on your private account. Monitoring stops after this forecast horizon expires.</p>
+                            </fieldset>
+
                             <div class="hero-actions hidden" id="foundry-upload-actions" style="margin-top: 12px; justify-content: flex-start;">
                               <button class="cta" id="foundry-upload-prepare-button" type="button" data-analytics="foundry_prepare_source_upload">
                                 <i class="iconoir-data-transfer-up" aria-hidden="true"></i><span>Prepare source</span>
@@ -395,6 +421,7 @@
                             <div id="foundry-run-meta" class="panel-output small">Select a foundry run to inspect its source schema, status, and forecast artifacts.</div>
                             <div id="foundry-publish-host" class="small muted" style="margin-top: 12px;">Private Workspace sync controls appear here after a source is prepared.</div>
                             <div id="predictions-agent-output" class="panel-output small" style="margin-top: 14px;">Forecast run analysis will appear here.</div>
+                            <div id="foundry-price-alert-status" class="forecast-alert-status hidden" aria-live="polite"></div>
                             <div id="predictions-plot-meta" class="small muted" style="margin-top: 14px;">Dataset preview metadata will appear here.</div>
                             <div id="predictions-chart" class="chart foundry-chart-launcher" style="margin-top: 14px;"></div>
                             <div id="predictions-preview" class="panel-output small" style="margin-top: 14px;">Preview will appear here.</div>

@@ -33,6 +33,13 @@ export type AlpacaBar = {
   session: "premarket" | "regular" | "after_hours" | "overnight";
 };
 
+export type AlpacaLatestPrice = {
+  symbol: string;
+  price: number;
+  timestamp: string;
+  session: AlpacaBar["session"];
+};
+
 export type StockHistoryInput = {
   symbol: string;
   start: string;
@@ -303,6 +310,34 @@ export class AlpacaClient {
       .slice(0, maxRows);
     if (!filtered.length) throw new AlpacaError("no_data", "No observations were available for this symbol and date range.", 404);
     return { symbol, timeframe, feed, adjustment, session, rows: filtered };
+  }
+
+  async getLatestStockPrices(symbolValues: string[], feedValue = "iex"): Promise<Map<string, AlpacaLatestPrice>> {
+    const symbols = [...new Set(symbolValues.map((value) => normalizeSymbol(value)))];
+    if (!symbols.length) return new Map();
+    const feed = STOCK_FEEDS.has(String(feedValue || "").toLowerCase()) ? String(feedValue).toLowerCase() : "iex";
+    const prices = new Map<string, AlpacaLatestPrice>();
+    for (let index = 0; index < symbols.length; index += 100) {
+      const chunk = symbols.slice(index, index + 100);
+      const query = new URLSearchParams({ symbols: chunk.join(","), feed });
+      const payload = await this.request("/v2/stocks/bars/latest", { query });
+      const root = payload.bars && typeof payload.bars === "object"
+        ? payload.bars as Record<string, Record<string, unknown>>
+        : {};
+      for (const symbol of chunk) {
+        const raw = root[symbol];
+        if (!raw || typeof raw !== "object") continue;
+        const bar = mapBar(raw);
+        if (!bar.timestamp || !Number.isFinite(bar.close) || bar.close <= 0) continue;
+        prices.set(symbol, {
+          symbol,
+          price: bar.close,
+          timestamp: bar.timestamp,
+          session: bar.session,
+        });
+      }
+    }
+    return prices;
   }
 
   async listOptionContracts(input: { underlying: string; expiration?: string; type?: string; limit?: number }): Promise<Array<Record<string, unknown>>> {

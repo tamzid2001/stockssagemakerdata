@@ -11,6 +11,7 @@ Secrets used by `functions/main.py` are declared in `set_global_options(secrets=
 | AMAZON_NOVA_KEY     | AMAZON_NOVA_API_KEY | Mapped in code                 |
 | FCM_WEB_VAPID_KEY   | FCM_WEB_VAPID_KEY   | Direct match                   |
 | OPENAI_API_KEY      | OPENAI_API_KEY      | Direct match                   |
+| RESEND_API_KEY      | RESEND_API_KEY      | Transactional forecast alert email |
 | SLACK_WEBHOOK_URL   | SLACK_WEBHOOK_URL   | Direct match                   |
 | STRIPE_PRIVATE_KEY  | STRIPE_SECRET_KEY   | Mapped in code                 |
 | STRIPE_PUBLIC_KEY   | STRIPE_PUBLIC_KEY   | Direct match                   |

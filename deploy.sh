@@ -27,6 +27,13 @@ AUTOPILOT_RECONCILE_TOPIC="${AUTOPILOT_RECONCILE_TOPIC:-quantura-autopilot-recon
 AUTOPILOT_RECONCILE_JOB="${AUTOPILOT_RECONCILE_JOB:-quantura-autopilot-reconcile}"
 AUTOPILOT_RECONCILE_CRON="${AUTOPILOT_RECONCILE_CRON:-*/15 * * * *}"
 AUTOPILOT_RECONCILE_TIMEZONE="${AUTOPILOT_RECONCILE_TIMEZONE:-America/New_York}"
+FORECAST_ALERT_TOPIC="${FORECAST_ALERT_TOPIC:-quantura-forecast-boundary-alerts}"
+FORECAST_ALERT_JOB="${FORECAST_ALERT_JOB:-quantura-forecast-boundary-alerts}"
+FORECAST_ALERT_CRON="${FORECAST_ALERT_CRON:-*/5 4-19 * * MON-FRI}"
+FORECAST_ALERT_TIMEZONE="${FORECAST_ALERT_TIMEZONE:-America/New_York}"
+FORECAST_ALERT_ALPACA_FEED="${FORECAST_ALERT_ALPACA_FEED:-iex}"
+FORECAST_ALERT_COOLDOWN_MINUTES="${FORECAST_ALERT_COOLDOWN_MINUTES:-15}"
+FORECAST_ALERT_MAX_PRICE_AGE_MINUTES="${FORECAST_ALERT_MAX_PRICE_AGE_MINUTES:-30}"
 NEWSLETTER_TOPIC="${NEWSLETTER_TOPIC:-quantura-newsletter-weekly}"
 NEWSLETTER_SCHEDULER_JOB="${NEWSLETTER_SCHEDULER_JOB:-quantura-newsletter-weekly}"
 SCHEDULER_LOCATION="${SCHEDULER_LOCATION:-us-central1}"
@@ -160,6 +167,9 @@ if [[ -z "${GCLOUD_SET_SECRETS:-}" ]]; then
   add_secret_binding "AUTOPILOT_S3_BUCKET" "AUTOPILOT_S3_BUCKET" "SAGEMAKER_AUTOPILOT_S3_BUCKET" || true
   add_secret_binding "SES_FROM_EMAIL" "SES_FROM_EMAIL" || true
   add_secret_binding "SES_CONFIG_SET" "SES_CONFIG_SET" || true
+  add_secret_binding "ALPACA_API_KEY" "ALPACA_API_KEY" || true
+  add_secret_binding "ALPACA_SECRET_KEY" "ALPACA_SECRET_KEY" || true
+  add_secret_binding "RESEND_API_KEY" "RESEND_API_KEY" || true
 
   if ! add_secret_binding "FMP_API_KEY" "FMP_API_KEY" "FMP_SECRET_KEY" "FMP_KEY"; then
     FMP_FALLBACK_SECRET="$("${GCLOUD_BIN}" secrets list --project="${PROJECT_ID}" --format='value(name)' --filter='name~^FMP_.*_KEY$' 2>/dev/null | head -n 1 | tr -d '[:space:]')"
@@ -325,6 +335,22 @@ echo "==> Deploying Pub/Sub trigger: reconcileAutopilotRuns"
   --trigger-topic="${AUTOPILOT_RECONCILE_TOPIC}" \
   ${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"}
 
+echo "==> Ensuring Pub/Sub topic exists: ${FORECAST_ALERT_TOPIC}"
+"${GCLOUD_BIN}" pubsub topics create "${FORECAST_ALERT_TOPIC}" --project="${PROJECT_ID}" >/dev/null 2>&1 || true
+
+echo "==> Deploying Pub/Sub trigger: monitorForecastBoundaryAlerts"
+"${GCLOUD_BIN}" functions deploy monitorForecastBoundaryAlerts \
+  --quiet \
+  --project="${PROJECT_ID}" \
+  --gen2 \
+  --runtime="${FUNCTIONS_RUNTIME}" \
+  --region="${REGION}" \
+  --source="${FUNCTIONS_SRC}" \
+  --entry-point=monitorForecastBoundaryAlerts \
+  --trigger-topic="${FORECAST_ALERT_TOPIC}" \
+  --set-env-vars="FORECAST_ALERT_ALPACA_FEED=${FORECAST_ALERT_ALPACA_FEED},FORECAST_ALERT_COOLDOWN_MINUTES=${FORECAST_ALERT_COOLDOWN_MINUTES},FORECAST_ALERT_MAX_PRICE_AGE_MINUTES=${FORECAST_ALERT_MAX_PRICE_AGE_MINUTES}" \
+  ${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"}
+
 echo "==> Deploying newsletter HTTP function: send_newsletter_daily_http"
 "${GCLOUD_BIN}" functions deploy send_newsletter_daily_http \
   --quiet \
@@ -412,6 +438,29 @@ else
     --topic="${AUTOPILOT_RECONCILE_TOPIC}" \
     --message-body='{"trigger":"autopilot_reconcile"}'; then
     echo "WARNING: Unable to create scheduler job ${AUTOPILOT_RECONCILE_JOB}. Check Cloud Scheduler permissions/config."
+  fi
+fi
+
+echo "==> Ensuring Cloud Scheduler forecast-boundary alert job"
+if "${GCLOUD_BIN}" scheduler jobs describe "${FORECAST_ALERT_JOB}" --location="${SCHEDULER_LOCATION}" --project="${PROJECT_ID}" >/dev/null 2>&1; then
+  if ! "${GCLOUD_BIN}" scheduler jobs update pubsub "${FORECAST_ALERT_JOB}" \
+    --project="${PROJECT_ID}" \
+    --location="${SCHEDULER_LOCATION}" \
+    --schedule="${FORECAST_ALERT_CRON}" \
+    --time-zone="${FORECAST_ALERT_TIMEZONE}" \
+    --topic="${FORECAST_ALERT_TOPIC}" \
+    --message-body='{"trigger":"forecast_boundary_alerts"}'; then
+    echo "WARNING: Unable to update scheduler job ${FORECAST_ALERT_JOB}. Check Cloud Scheduler permissions/config."
+  fi
+else
+  if ! "${GCLOUD_BIN}" scheduler jobs create pubsub "${FORECAST_ALERT_JOB}" \
+    --project="${PROJECT_ID}" \
+    --location="${SCHEDULER_LOCATION}" \
+    --schedule="${FORECAST_ALERT_CRON}" \
+    --time-zone="${FORECAST_ALERT_TIMEZONE}" \
+    --topic="${FORECAST_ALERT_TOPIC}" \
+    --message-body='{"trigger":"forecast_boundary_alerts"}'; then
+    echo "WARNING: Unable to create scheduler job ${FORECAST_ALERT_JOB}. Check Cloud Scheduler permissions/config."
   fi
 fi
 

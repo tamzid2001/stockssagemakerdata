@@ -387,7 +387,9 @@ Deployment order:
 - `send_newsletter_daily_http`
 - `email_unsubscribe_http`
 - `send_newsletter_weekly_scheduler`
-- Cloud Scheduler jobs for weekly newsletter and Autopilot reconcile flows
+- Cloud Scheduler jobs for weekly newsletter, Autopilot reconcile, and five-minute weekday forecast-boundary monitoring flows
+
+Forecast-boundary monitoring is deployed as the `monitorForecastBoundaryAlerts` Pub/Sub function. Its default scheduler window is every five minutes from 4:00 a.m. through 7:55 p.m. America/New_York on weekdays. Individual alert configurations still enforce regular-only versus extended-hours sessions, use the latest completed Alpaca one-minute bar close, and expire at the end of the uploaded forecast horizon. Required Secret Manager entries are `ALPACA_API_KEY`, `ALPACA_SECRET_KEY`, and `RESEND_API_KEY`; no provider credential is exposed to the browser.
 
 ### Live Smoke Checks
 

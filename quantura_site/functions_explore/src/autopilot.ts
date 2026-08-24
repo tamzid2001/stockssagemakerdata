@@ -51,6 +51,11 @@ export type PredictionAnalysisResult = {
   analysis: Record<string, unknown>;
   previewRows: Array<Record<string, string>>;
   businessDayCsvText?: string;
+  alertBoundarySchedule?: Array<{
+    timestamp: string;
+    dateKey: string;
+    values: Record<string, number>;
+  }>;
 };
 
 export type UploadClassificationResult =
@@ -206,6 +211,11 @@ function normalizeAwsNamePart(value: unknown, maxLen = 24): string {
 
 function normalizeCsvHeader(value: unknown): string {
   return sanitizeText(value, 80).toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function quantileBoundaryLabel(quantile: number): string {
+  const percent = Number((quantile * 100).toFixed(4));
+  return `P${String(percent).replace(/\.0+$/, "")}`;
 }
 
 function pad2(value: number): string {
@@ -1593,6 +1603,20 @@ export async function analyzePredictionCsv(
 
   const businessDayRows = observations.filter((observation) => isUsEquityBusinessDay(observation.parsedDate));
   const businessDayCsvText = serializeCsv(headers, businessDayRows.map((observation) => observation.row));
+  const alertBoundarySchedule = observations.map((observation) => {
+    const values: Record<string, number> = {};
+    quantileColumns.forEach((column) => {
+      const value = observation.values.get(column.index);
+      if (typeof value === "number" && Number.isFinite(value)) {
+        values[quantileBoundaryLabel(column.quantile)] = value;
+      }
+    });
+    return {
+      timestamp: observation.parsedDate.toISOString(),
+      dateKey: formatDateYmd(observation.parsedDate),
+      values,
+    };
+  });
   const boundaryDescription = p50Stats.boundaryMethod === "model_95_interval"
     ? `Supplied model 95% interval (${interval95.lowerHeader} to ${interval95.upperHeader})`
     : "P50 95% Statistical Anomaly Band (mean ± 1.96 sample standard deviations)";
@@ -1727,6 +1751,7 @@ export async function analyzePredictionCsv(
     },
     previewRows: rowsToObjectPreview(headers, observations.map((observation) => observation.row)),
     businessDayCsvText,
+    alertBoundarySchedule,
   };
 }
 

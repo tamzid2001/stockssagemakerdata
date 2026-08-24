@@ -26,7 +26,7 @@
     }
     const contentType = response.headers.get("content-type") || "";
     const payload = contentType.includes("application/json") ? await response.json() : {};
-    if (!response.ok) throw new Error(payload.message || payload.detail || "The request could not be completed.");
+    if (!response.ok) throw new Error(payload.message || payload.detail || String(payload.error || "").replaceAll("_", " ") || "The request could not be completed.");
     return payload;
   }
   async function downloadCsv(url, body, fallbackName) {
@@ -271,11 +271,11 @@
       if (window.firebase?.apps?.length && window.firebase.auth) {
         const user = window.firebase.auth().currentUser;
         if (user && !user.isAnonymous) return user.getIdToken();
-        if (user?.isAnonymous) throw new Error("Sign in with a full account to manage your private AWS integration.");
+        if (user?.isAnonymous) throw new Error("Sign in with a full account to manage private integrations.");
       }
       await new Promise((resolve) => setTimeout(resolve, 150));
     }
-    throw new Error("Sign in to manage your private AWS integration.");
+    throw new Error("Sign in to manage private integrations.");
   }
   function awsBody() {
     return { accountId: byId("aws-account-id")?.value, region: byId("aws-region")?.value, roleArn: byId("aws-role-arn")?.value, executionRoleArn: byId("aws-execution-role-arn")?.value, s3Bucket: byId("aws-s3-bucket")?.value };
@@ -316,5 +316,116 @@
     }
   }
 
-  window.addEventListener("DOMContentLoaded", () => { initHistoricalData(); initOptions(); initMlb(); initAws(); });
+  function initForecastAlerts() {
+    const form = byId("forecast-alert-settings-form");
+    if (!form) return;
+    const settingsStatus = byId("forecast-alert-settings-status");
+    const list = byId("forecast-active-alerts");
+    const save = byId("forecast-alert-settings-save");
+    const refresh = byId("forecast-alert-settings-refresh");
+    const boundaryInputs = [...form.querySelectorAll("[data-profile-alert-boundary]")];
+    const editable = [...form.querySelectorAll("input:not([readonly]), select, button")];
+
+    async function authRequest(url, options = {}) {
+      const token = await firebaseToken();
+      return jsonRequest(url, { ...options, headers: { Authorization: `Bearer ${token}`, ...(options.headers || {}) } });
+    }
+
+    const formatWhen = (value) => {
+      const parsed = Date.parse(String(value || ""));
+      return Number.isFinite(parsed) ? new Date(parsed).toLocaleString() : "Not yet";
+    };
+
+    function renderAlertList(alerts) {
+      if (!Array.isArray(alerts) || !alerts.length) {
+        list.innerHTML = '<div class="empty-state">Prediction CSV uploads will create alert configurations here.</div>';
+        return;
+      }
+      list.innerHTML = alerts.map((alert) => {
+        const monitored = Array.isArray(alert.monitoredBoundaries) ? alert.monitoredBoundaries : [];
+        const available = Array.isArray(alert.availableBoundaries) ? alert.availableBoundaries : [];
+        const expired = alert.status === "expired";
+        return `<article class="forecast-alert-list-item" data-forecast-alert-id="${html(alert.id)}" data-forecast-alert-enabled="${alert.enabled ? "true" : "false"}">
+          <div class="forecast-alert-list-head"><div><strong>${html(alert.ticker || "Forecast")}</strong><span>${html(alert.horizonStart || "N/A")} → ${html(alert.horizonEnd || "N/A")}</span></div><span class="pill" data-alert-state>${html(String(alert.status || "disabled").replaceAll("_", " "))}</span></div>
+          <div class="forecast-alert-row-controls">
+            <div class="forecast-boundary-choices">${available.map((boundary) => `<label><input type="checkbox" value="${html(boundary)}" data-alert-row-boundary ${monitored.includes(boundary) ? "checked" : ""} ${expired ? "disabled" : ""}/> ${html(boundary)}</label>`).join("")}</div>
+            <select data-alert-row-session aria-label="Market session" ${expired ? "disabled" : ""}><option value="regular" ${alert.sessionMode === "regular" ? "selected" : ""}>Regular hours</option><option value="extended" ${alert.sessionMode === "extended" ? "selected" : ""}>Extended hours</option></select>
+          </div>
+          <dl class="forecast-alert-list-meta"><div><dt>Last checked</dt><dd>${html(formatWhen(alert.lastCheckedAt))}</dd></div><div><dt>Last crossing</dt><dd>${html(alert.lastCrossing ? `${alert.lastCrossing.boundary} ${alert.lastCrossing.direction}` : "None")}</dd></div><div><dt>Last email</dt><dd>${html(formatWhen(alert.lastNotificationAt))}</dd></div></dl>
+          ${alert.lastError?.message ? `<p class="small forecast-alert-error">${html(alert.lastError.message)}</p>` : ""}
+          <div class="hero-actions"><button class="cta secondary small" type="button" data-alert-row-save ${expired ? "disabled" : ""}>Save</button><button class="cta ${alert.enabled ? "danger" : "secondary"} small" type="button" data-alert-row-toggle ${expired ? "disabled" : ""}>${alert.enabled ? "Disable" : "Enable"}</button><a class="cta secondary small" href="/autopilot?runId=${encodeURIComponent(alert.runId || alert.id)}">Open analysis</a></div>
+        </article>`;
+      }).join("");
+    }
+
+    function renderSettings(payload) {
+      const settings = payload?.settings || {};
+      byId("forecast-alerts-email-enabled").checked = settings.emailEnabled !== false;
+      byId("forecast-alert-email").value = settings.alertEmail || "";
+      byId("forecast-alert-default-session").value = settings.defaultSessionMode === "extended" ? "extended" : "regular";
+      const defaults = Array.isArray(settings.defaultBoundaries) ? settings.defaultBoundaries : ["P10", "P50", "P90"];
+      boundaryInputs.forEach((input) => { input.checked = defaults.includes(input.value); });
+      byId("forecast-alert-email-help").textContent = settings.emailVerified
+        ? "Alerts are delivered only to this verified Firebase email."
+        : "Verify your Firebase email before enabling forecast alert delivery.";
+      renderAlertList(payload?.alerts || []);
+      status(settingsStatus, settings.emailVerified ? "Forecast alert settings loaded." : "Email verification is required before alerts can be enabled.", settings.emailVerified ? "success" : "warning");
+    }
+
+    async function load() {
+      disable(refresh, true, "Refreshing…");
+      try { renderSettings(await authRequest("/api/me/forecast-alert-settings")); }
+      catch (error) { status(settingsStatus, error.message, "error"); }
+      finally { disable(refresh, false); }
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const defaults = boundaryInputs.filter((input) => input.checked).map((input) => input.value);
+      if (!defaults.length) { status(settingsStatus, "Select at least one default boundary.", "error"); return; }
+      disable(save, true, "Saving…");
+      try {
+        const payload = await authRequest("/api/me/forecast-alert-settings", { method: "PUT", body: JSON.stringify({ emailEnabled: byId("forecast-alerts-email-enabled").checked, defaultBoundaries: defaults, defaultSessionMode: byId("forecast-alert-default-session").value }) });
+        renderSettings(payload);
+        status(settingsStatus, "Forecast alert settings saved.", "success");
+      } catch (error) { status(settingsStatus, error.message, "error"); }
+      finally { disable(save, false); }
+    });
+    refresh.addEventListener("click", load);
+    list.addEventListener("click", async (event) => {
+      const button = event.target.closest("[data-alert-row-save], [data-alert-row-toggle]");
+      if (!button) return;
+      const row = button.closest("[data-forecast-alert-id]");
+      const id = row?.dataset?.forecastAlertId;
+      if (!id) return;
+      const boundaries = [...row.querySelectorAll("[data-alert-row-boundary]:checked")].map((input) => input.value);
+      if (!boundaries.length) { status(settingsStatus, "Select at least one boundary for this alert.", "error"); return; }
+      const toggle = button.hasAttribute("data-alert-row-toggle");
+      const currentlyEnabled = row.dataset.forecastAlertEnabled === "true";
+      disable(button, true, toggle ? (currentlyEnabled ? "Disabling…" : "Enabling…") : "Saving…");
+      try {
+        await authRequest(`/api/autopilot/runs/${encodeURIComponent(id)}/price-alert`, { method: "PUT", body: JSON.stringify({ enabled: toggle ? !currentlyEnabled : currentlyEnabled, boundaries, sessionMode: row.querySelector("[data-alert-row-session]").value }) });
+        await load();
+        status(settingsStatus, toggle ? "Alert status updated." : "Alert boundaries updated.", "success");
+      } catch (error) { status(settingsStatus, error.message, "error"); }
+      finally { disable(button, false); }
+    });
+
+    const firebaseAuth = window.firebase?.auth?.();
+    if (firebaseAuth?.onAuthStateChanged) {
+      const setAccess = (user) => {
+        const allowed = Boolean(user && !user.isAnonymous);
+        editable.forEach((control) => { control.disabled = !allowed; });
+        if (allowed) load();
+        else {
+          list.innerHTML = '<div class="empty-state">Sign in with a full account to manage private forecast alerts.</div>';
+          status(settingsStatus, "Sign in with a full account to manage forecast alerts.");
+        }
+      };
+      setAccess(firebaseAuth.currentUser);
+      firebaseAuth.onAuthStateChanged(setAccess);
+    }
+  }
+
+  window.addEventListener("DOMContentLoaded", () => { initHistoricalData(); initOptions(); initMlb(); initAws(); initForecastAlerts(); });
 })();

@@ -120,6 +120,16 @@ service cloud.firestore {
         || (isSignedIn() && request.auth.uid == resource.data.userId);
     }
 
+    // Forecast alert schedules and crossing state are server-only. The API
+    // verifies Firebase ID tokens and enforces alert.userId ownership.
+    match /forecast_price_alerts/{alertId} {
+      allow read, write: if false;
+    }
+
+    match /forecast_price_alerts/{alertId}/events/{eventId} {
+      allow read, write: if false;
+    }
+
     match /prediction_uploads/{uploadId} {
       allow read, write: if isAdmin();
     }
