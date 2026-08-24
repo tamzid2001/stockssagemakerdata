@@ -54,3 +54,26 @@ def test_pages_include_analytics():
         assert ("site.webmanifest" in html) or ("manifest.json" in html)
     dashboard_html = (PAGES / "dashboard.html").read_text()
     assert "firebase-messaging-compat" in dashboard_html
+
+
+def test_vercel_observability_is_built_and_loaded_globally():
+    package = json.loads((ROOT / "package.json").read_text())
+    dependencies = package.get("dependencies") or {}
+    assert "@vercel/analytics" in dependencies
+    assert "@vercel/speed-insights" in dependencies
+
+    bundle = PUBLIC / "vercel-observability.js"
+    assert bundle.exists()
+    bundle_text = bundle.read_text()
+    assert "/_vercel/insights/script.js" in bundle_text
+    assert "/_vercel/speed-insights/script.js" in bundle_text
+
+    app_js = (PUBLIC / "app.js").read_text()
+    assert "/vercel-observability.js" in app_js
+
+    for page in PAGES.rglob("*.html"):
+        html = page.read_text()
+        assert "/app.js" in html or "/vercel-observability.js" in html, f"Observability missing from {page}"
+
+    for direct_page in [PUBLIC / "explore.html", PUBLIC / "profile.html", PUBLIC / "shop/success.html"]:
+        assert "/vercel-observability.js" in direct_page.read_text()

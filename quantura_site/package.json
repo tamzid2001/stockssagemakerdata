@@ -4,10 +4,13 @@
   "private": true,
   "description": "Quantura Firebase Hosting (static).",
   "scripts": {
-    "build": "npm run build:rnweb",
+    "build": "npm run build:rnweb && npm run build:observability",
+    "build:observability": "node ./scripts/build-vercel-observability.mjs",
     "build:rnweb": "node ./rnweb/build-rnw.mjs"
   },
   "dependencies": {
+    "@vercel/analytics": "^2.0.1",
+    "@vercel/speed-insights": "^2.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-native-web": "^0.21.2"

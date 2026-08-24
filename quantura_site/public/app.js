@@ -1,4 +1,13 @@
 (() => {
+  const observabilitySrc = "/vercel-observability.js?v=20260823a";
+  if (!document.head.querySelector('script[data-quantura-vercel-observability="true"]')) {
+    const observabilityScript = document.createElement("script");
+    observabilityScript.src = observabilitySrc;
+    observabilityScript.defer = true;
+    observabilityScript.dataset.quanturaVercelObservability = "true";
+    document.head.appendChild(observabilityScript);
+  }
+
   const ADMIN_EMAIL = "tamzid257@gmail.com";
   const FCM_TOKEN_CACHE_KEY = "quantura_fcm_token";
   const COOKIE_CONSENT_KEY = "quantura_cookie_consent";
