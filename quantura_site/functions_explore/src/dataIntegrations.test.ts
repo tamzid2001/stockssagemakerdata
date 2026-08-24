@@ -55,6 +55,23 @@ test("Alpaca session classification distinguishes extended-hours observations", 
   assert.equal(classifyEquitySession("2026-08-21T21:00:00Z"), "after_hours");
 });
 
+test("Alpaca latest-price lookup batches tickers and uses completed one-minute bar closes", async () => {
+  withAlpacaEnvironment();
+  let requestedUrl = "";
+  const client = new AlpacaClient({ fetchImpl: (async (input: string | URL | Request) => {
+    requestedUrl = String(input);
+    return Response.json({ bars: {
+      AAPL: { t: "2026-08-24T14:59:00Z", c: 201.25 },
+      MSFT: { t: "2026-08-24T14:59:00Z", c: 512.5 },
+    } });
+  }) as typeof fetch });
+  const prices = await client.getLatestStockPrices(["aapl", "MSFT", "AAPL"], "iex");
+  assert.match(requestedUrl, /\/v2\/stocks\/bars\/latest/);
+  assert.match(requestedUrl, /symbols=AAPL%2CMSFT/);
+  assert.equal(prices.get("AAPL")?.price, 201.25);
+  assert.equal(prices.get("MSFT")?.session, "regular");
+});
+
 test("Alpaca errors classify authentication without exposing provider payloads", async () => {
   withAlpacaEnvironment();
   const client = new AlpacaClient({ fetchImpl: (async () => new Response(JSON.stringify({ message: "raw secret diagnostic" }), { status: 401, headers: { "content-type": "application/json" } })) as typeof fetch });

@@ -105,3 +105,34 @@ def test_data_integration_surfaces_are_present():
     assert "/api/market-data/options/history" in client
     assert "/api/sports/mlb/history" in client
     assert "/api/me/aws-integration" in client
+
+
+def test_pricing_describes_platform_features_without_generic_model_pricing():
+    pricing = (PAGES / "pricing.html").read_text().lower()
+    for required in [
+        "prediction csv",
+        "quantile anomaly analysis",
+        "historical equities",
+        "options",
+        "mlb polymarket",
+        "aws/sagemaker",
+        "billed separately by aws",
+    ]:
+        assert required in pricing
+    for removed in ["gpt-5", "gpt token", "llm token", "ai model access"]:
+        assert removed not in pricing
+
+
+def test_prediction_csv_analysis_is_available_from_forecast_foundry():
+    forecasting = (PAGES / "forecasting.html").read_text()
+    client = (PUBLIC / "app.js").read_text()
+    assert '<option value="prediction_csv">Prediction quantile CSV</option>' in forecasting
+    assert 'id="foundry-file-help"' in forecasting
+    assert "P50 95% Statistical Anomaly Band" in forecasting
+    for marker in [
+        "forecast-summary-card",
+        "p50Anomalies",
+        "p10Anomalies",
+        "Extended P10 Buy Bias",
+    ]:
+        assert marker in client

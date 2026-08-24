@@ -37,6 +37,19 @@ import {
   SPORTS_LEAGUES,
 } from "./sports";
 import { downloadKalshiMinuteHistory } from "./kalshiMinuteHistory";
+import { AlpacaClient } from "./alpacaClient";
+import {
+  alertFromSnapshot,
+  DEFAULT_FORECAST_ALERT_BOUNDARIES,
+  FirestoreForecastAlertRepository,
+  FORECAST_ALERT_COLLECTION,
+  normalizeBoundarySelection,
+  publicForecastAlert,
+  runForecastAlertMonitor,
+  type ForecastAlertRecord,
+  type ForecastBoundaryScheduleRow,
+} from "./forecastPriceAlerts";
+import { ResendForecastAlertEmailProvider } from "./forecastAlertEmail";
 export { shopApi } from "./shopApi";
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const AdmZip = require("adm-zip");
@@ -1820,9 +1833,26 @@ function trimOutputsMeta(input: unknown): Record<string, unknown> {
       }
       if (Array.isArray(value)) {
         out[cleanKey] = value
-          .slice(0, 24)
-          .map((item) => sanitizeText(item, 120))
-          .filter(Boolean);
+          .slice(0, 120)
+          .map((item) => {
+            if (typeof item === "string") return sanitizeText(item, 500);
+            if (typeof item === "number" || typeof item === "boolean") return item;
+            if (!item || typeof item !== "object") return null;
+            const child: Record<string, unknown> = {};
+            Object.entries(item as Record<string, unknown>)
+              .slice(0, 12)
+              .forEach(([itemKey, itemValue]) => {
+                const cleanItemKey = sanitizeText(itemKey, 40);
+                if (!cleanItemKey) return;
+                if (typeof itemValue === "number" || typeof itemValue === "boolean") {
+                  child[cleanItemKey] = itemValue;
+                } else if (typeof itemValue === "string") {
+                  child[cleanItemKey] = sanitizeText(itemValue, 220);
+                }
+              });
+            return Object.keys(child).length ? child : null;
+          })
+          .filter((item) => item !== null && item !== "");
         return;
       }
       if (value && typeof value === "object") {
@@ -4128,8 +4158,165 @@ async function toAutopilotRunResponse(docId: string, data: Record<string, unknow
           statCatalog: Array.isArray(sports.statCatalog) ? sports.statCatalog.slice(0, 40) : [],
         }
       : {},
+    priceAlert: trimOutputsMeta(asPlainObject(data.priceAlert)),
     files,
   };
+}
+
+type ForecastAlertPreferences = {
+  emailEnabled: boolean;
+  defaultBoundaries: string[];
+  defaultSessionMode: "regular" | "extended";
+};
+
+function normalizeForecastAlertPreferences(value: unknown): ForecastAlertPreferences {
+  const raw = asPlainObject(value);
+  const available = ["P10", "P50", "P90", "P25", "P75"];
+  const selected = normalizeBoundarySelection(raw.defaultBoundaries, available);
+  return {
+    emailEnabled: raw.emailEnabled !== false,
+    defaultBoundaries: selected.length ? selected : [...DEFAULT_FORECAST_ALERT_BOUNDARIES],
+    defaultSessionMode: raw.defaultSessionMode === "extended" ? "extended" : "regular",
+  };
+}
+
+function normalizeForecastAlertSchedule(value: unknown): ForecastBoundaryScheduleRow[] {
+  if (!Array.isArray(value)) return [];
+  const schedule = value.slice(0, 5000).map((entry) => {
+    const row = asPlainObject(entry);
+    const valuesRaw = asPlainObject(row.values);
+    const values: Record<string, number> = {};
+    Object.entries(valuesRaw).forEach(([key, rawValue]) => {
+      const numeric = Number(rawValue);
+      if (Number.isFinite(numeric)) values[key] = numeric;
+    });
+    return {
+      timestamp: sanitizeText(row.timestamp, 80),
+      dateKey: sanitizeText(row.dateKey, 10),
+      values,
+    };
+  }).filter((row) => row.timestamp && /^\d{4}-\d{2}-\d{2}$/.test(row.dateKey) && Object.keys(row.values).length);
+  const approximateBytes = Buffer.byteLength(JSON.stringify(schedule), "utf8");
+  return approximateBytes <= 700_000 ? schedule : [];
+}
+
+async function createPredictionForecastAlert(input: {
+  user: admin.auth.DecodedIdToken;
+  runId: string;
+  ticker: string;
+  schedule: unknown;
+  config: unknown;
+}): Promise<Record<string, unknown>> {
+  const userRef = db.collection("users").doc(input.user.uid);
+  const userSnap = await userRef.get();
+  const userData = (userSnap.data() || {}) as Record<string, unknown>;
+  const preferences = normalizeForecastAlertPreferences(userData.forecastAlertPrefs);
+  const config = asPlainObject(input.config);
+  const schedule = normalizeForecastAlertSchedule(input.schedule);
+  const availableBoundaries = [...new Set(schedule.flatMap((row) => Object.keys(row.values)))].sort((left, right) => Number(left.slice(1)) - Number(right.slice(1)));
+  const requestedBoundaries = normalizeBoundarySelection(
+    Array.isArray(config.boundaries) ? config.boundaries : preferences.defaultBoundaries,
+    availableBoundaries
+  );
+  const monitoredBoundaries = requestedBoundaries.length
+    ? requestedBoundaries
+    : normalizeBoundarySelection(DEFAULT_FORECAST_ALERT_BOUNDARIES, availableBoundaries);
+  const email = sanitizeText((input.user as any).email, 320).toLowerCase();
+  const emailVerified = Boolean((input.user as any).email_verified && email);
+  const requestedEnabled = config.enabled === true;
+  const horizonStart = schedule[0]?.dateKey || "";
+  const horizonEnd = schedule[schedule.length - 1]?.dateKey || "";
+  const configurationReady = Boolean(schedule.length && input.ticker && monitoredBoundaries.length && emailVerified);
+  const enabled = requestedEnabled && configurationReady;
+  const status: ForecastAlertRecord["status"] = !configurationReady && requestedEnabled
+    ? "configuration_required"
+    : enabled && preferences.emailEnabled
+      ? "active"
+      : "disabled";
+  const record: ForecastAlertRecord = {
+    id: input.runId,
+    userId: input.user.uid,
+    runId: input.runId,
+    ticker: normalizeTicker(input.ticker),
+    email,
+    emailVerified,
+    enabled,
+    globalEnabled: preferences.emailEnabled,
+    status,
+    sessionMode: config.sessionMode === "extended" ? "extended" : preferences.defaultSessionMode,
+    monitoredBoundaries,
+    availableBoundaries,
+    schedule,
+    boundaryStates: {},
+    horizonStart,
+    horizonEnd,
+    analysisUrl: `${PUBLIC_ORIGIN}/forecasting?panel=autopilot&run=${encodeURIComponent(input.runId)}`,
+    lastError: !schedule.length && requestedEnabled
+      ? { code: "schedule_too_large", message: "This forecast schedule is too large for automatic boundary monitoring.", at: new Date().toISOString() }
+      : !emailVerified && requestedEnabled
+        ? { code: "verified_email_required", message: "Verify the signed-in email before enabling forecast alerts.", at: new Date().toISOString() }
+        : null,
+  };
+  await db.collection(FORECAST_ALERT_COLLECTION).doc(input.runId).set({
+    ...record,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: false });
+  return publicForecastAlert(record);
+}
+
+async function readForecastAlertForOwner(userId: string, alertId: string): Promise<ForecastAlertRecord | null> {
+  const cleanId = sanitizeText(alertId, 220);
+  if (!userId || !cleanId) return null;
+  const snap = await db.collection(FORECAST_ALERT_COLLECTION).doc(cleanId).get();
+  if (!snap.exists) return null;
+  const alert = alertFromSnapshot(snap.id, (snap.data() || {}) as Record<string, unknown>);
+  return alert.userId === userId ? alert : null;
+}
+
+async function listForecastAlertsForOwner(userId: string): Promise<Record<string, unknown>[]> {
+  const snap = await db.collection(FORECAST_ALERT_COLLECTION).where("userId", "==", userId).limit(200).get();
+  return snap.docs
+    .map((doc) => alertFromSnapshot(doc.id, (doc.data() || {}) as Record<string, unknown>))
+    .sort((left, right) => right.horizonEnd.localeCompare(left.horizonEnd))
+    .map(publicForecastAlert);
+}
+
+async function updateOwnedForecastAlert(
+  user: admin.auth.DecodedIdToken,
+  alertId: string,
+  body: Record<string, unknown>
+): Promise<Record<string, unknown> | null> {
+  const current = await readForecastAlertForOwner(user.uid, alertId);
+  if (!current) return null;
+  const email = sanitizeText((user as any).email, 320).toLowerCase();
+  const emailVerified = Boolean((user as any).email_verified && email);
+  const boundaries = normalizeBoundarySelection(
+    Array.isArray(body.boundaries) ? body.boundaries : current.monitoredBoundaries,
+    current.availableBoundaries
+  );
+  if (!boundaries.length) throw new Error("at_least_one_boundary_required");
+  const requestedEnabled = typeof body.enabled === "boolean" ? body.enabled : current.enabled;
+  if (requestedEnabled && !emailVerified) throw new Error("verified_email_required");
+  const sessionMode = body.sessionMode === "extended" ? "extended" : body.sessionMode === "regular" ? "regular" : current.sessionMode;
+  const preferencesSnap = await db.collection("users").doc(user.uid).get();
+  const preferences = normalizeForecastAlertPreferences((preferencesSnap.data() || {}).forecastAlertPrefs);
+  const next: ForecastAlertRecord = {
+    ...current,
+    email,
+    emailVerified,
+    enabled: requestedEnabled,
+    globalEnabled: preferences.emailEnabled,
+    status: requestedEnabled && preferences.emailEnabled ? "active" : "disabled",
+    sessionMode,
+    monitoredBoundaries: boundaries,
+    boundaryStates: sessionMode !== current.sessionMode || boundaries.join("|") !== current.monitoredBoundaries.join("|")
+      ? {}
+      : current.boundaryStates,
+    lastError: null,
+  };
+  await new FirestoreForecastAlertRepository(db).updateAlert(current.id, next);
+  return publicForecastAlert(next);
 }
 
 function buildAutopilotAnalysisPatch(analysis: Record<string, unknown>): Record<string, unknown> {
@@ -11244,6 +11431,169 @@ ROUTES.get("/me/notification-settings", async (req, res) => {
   }
 });
 
+ROUTES.get("/me/forecast-alert-settings", async (req, res) => {
+  try {
+    const user = await requireFoundryUser(req);
+    const userSnap = await db.collection("users").doc(user.uid).get();
+    const preferences = normalizeForecastAlertPreferences((userSnap.data() || {}).forecastAlertPrefs);
+    const email = sanitizeText((user as any).email, 320).toLowerCase();
+    const emailVerified = Boolean((user as any).email_verified && email);
+    const alerts = await listForecastAlertsForOwner(user.uid);
+    res.status(200).json({
+      ok: true,
+      settings: {
+        ...preferences,
+        alertEmail: email,
+        emailVerified,
+        priceSource: "Alpaca latest completed 1-minute bar close",
+      },
+      alerts,
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "full_account_required") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    console.error("[ForecastAlerts] settings read failed", { code: sanitizeText(code, 80) });
+    res.status(500).json({ error: "forecast_alert_settings_failed" });
+  }
+});
+
+ROUTES.put("/me/forecast-alert-settings", async (req, res) => {
+  try {
+    const user = await requireFoundryUser(req);
+    const body = asPlainObject(req.body);
+    const userRef = db.collection("users").doc(user.uid);
+    const userSnap = await userRef.get();
+    const current = normalizeForecastAlertPreferences((userSnap.data() || {}).forecastAlertPrefs);
+    const email = sanitizeText((user as any).email, 320).toLowerCase();
+    const emailVerified = Boolean((user as any).email_verified && email);
+    const emailEnabled = typeof body.emailEnabled === "boolean" ? body.emailEnabled : current.emailEnabled;
+    if (emailEnabled && !emailVerified) {
+      res.status(400).json({ error: "verified_email_required", message: "Verify your signed-in email before enabling forecast alerts." });
+      return;
+    }
+    const defaultBoundaries = normalizeBoundarySelection(
+      Array.isArray(body.defaultBoundaries) ? body.defaultBoundaries : current.defaultBoundaries,
+      ["P10", "P25", "P50", "P75", "P90"]
+    );
+    if (!defaultBoundaries.length) {
+      res.status(400).json({ error: "at_least_one_boundary_required" });
+      return;
+    }
+    const preferences: ForecastAlertPreferences = {
+      emailEnabled,
+      defaultBoundaries,
+      defaultSessionMode: body.defaultSessionMode === "extended" ? "extended" : body.defaultSessionMode === "regular" ? "regular" : current.defaultSessionMode,
+    };
+    const alertsSnap = await db.collection(FORECAST_ALERT_COLLECTION).where("userId", "==", user.uid).limit(200).get();
+    const batch = db.batch();
+    batch.set(userRef, {
+      forecastAlertPrefs: preferences,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    alertsSnap.docs.forEach((doc) => {
+      const data = (doc.data() || {}) as Record<string, unknown>;
+      const individuallyEnabled = data.enabled === true;
+      batch.set(doc.ref, {
+        globalEnabled: emailEnabled,
+        email,
+        emailVerified,
+        status: individuallyEnabled && emailEnabled ? "active" : "disabled",
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+      const runId = sanitizeText(data.runId, 220);
+      if (runId) {
+        const mirroredAlert = publicForecastAlert({
+          ...alertFromSnapshot(doc.id, data),
+          globalEnabled: emailEnabled,
+          status: individuallyEnabled && emailEnabled ? "active" : "disabled",
+          emailVerified,
+        });
+        batch.set(db.collection("autopilot_requests").doc(runId), {
+          priceAlert: mirroredAlert,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+      }
+    });
+    await batch.commit();
+    res.status(200).json({
+      ok: true,
+      settings: { ...preferences, alertEmail: email, emailVerified },
+      alerts: await listForecastAlertsForOwner(user.uid),
+    });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "full_account_required") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    console.error("[ForecastAlerts] settings update failed", { code: sanitizeText(code, 80) });
+    res.status(500).json({ error: "forecast_alert_settings_update_failed" });
+  }
+});
+
+ROUTES.get("/autopilot/runs/:runId/price-alert", async (req, res) => {
+  try {
+    const user = await requireFoundryUser(req);
+    const alert = await readForecastAlertForOwner(user.uid, req.params.runId);
+    if (!alert) {
+      res.status(404).json({ error: "forecast_alert_not_found" });
+      return;
+    }
+    res.status(200).json({ ok: true, alert: publicForecastAlert(alert) });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "full_account_required") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    console.error("[ForecastAlerts] alert read failed", { code: sanitizeText(code, 80) });
+    res.status(500).json({ error: "forecast_alert_read_failed" });
+  }
+});
+
+ROUTES.put("/autopilot/runs/:runId/price-alert", async (req, res) => {
+  try {
+    const user = await requireFoundryUser(req);
+    const alert = await updateOwnedForecastAlert(user, req.params.runId, asPlainObject(req.body));
+    if (!alert) {
+      res.status(404).json({ error: "forecast_alert_not_found" });
+      return;
+    }
+    res.status(200).json({ ok: true, alert });
+  } catch (error: any) {
+    const code = String(error?.message || "");
+    if (code === "unauthenticated" || code === "invalid_token") {
+      res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "full_account_required") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    if (code === "verified_email_required" || code === "at_least_one_boundary_required") {
+      res.status(400).json({ error: code });
+      return;
+    }
+    console.error("[ForecastAlerts] alert update failed", { code: sanitizeText(code, 80) });
+    res.status(500).json({ error: "forecast_alert_update_failed" });
+  }
+});
+
 ROUTES.post("/notifications/register-token", async (req, res) => {
   try {
     const user = await verifyRequestUser(req, true);
@@ -12892,6 +13242,20 @@ ROUTES.post("/autopilot/datasets/upload", async (req, res) => {
       },
     };
     await runRef.set(doc, { merge: false });
+    if (analysis.status === "ok") {
+      const priceAlert = await createPredictionForecastAlert({
+        user,
+        runId: runRef.id,
+        ticker: analysis.ticker || tickerHint,
+        schedule: analysis.alertBoundarySchedule,
+        config: body.priceAlert,
+      });
+      await runRef.set({
+        priceAlert,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+      doc.priceAlert = priceAlert;
+    }
     const requestId = await syncAutopilotMyRequest(user.uid, runRef.id, doc);
     await runRef.set(
       {
@@ -12913,6 +13277,13 @@ ROUTES.post("/autopilot/datasets/upload", async (req, res) => {
     }
     if (code === "full_account_required") {
       res.status(403).json({ error: code });
+      return;
+    }
+    if (code.startsWith("csv_validation:")) {
+      res.status(400).json({
+        error: "invalid_prediction_csv",
+        detail: sanitizeText(code.replace(/^csv_validation:\s*/i, ""), 500),
+      });
       return;
     }
     console.error("[Autopilot] upload dataset failed", error);
@@ -13292,6 +13663,13 @@ ROUTES.post("/autopilot/runs/:runId/analyze", async (req, res) => {
     }
     if (code === "full_account_required") {
       res.status(403).json({ error: code });
+      return;
+    }
+    if (code.startsWith("csv_validation:")) {
+      res.status(400).json({
+        error: "invalid_prediction_csv",
+        detail: sanitizeText(code.replace(/^csv_validation:\s*/i, ""), 500),
+      });
       return;
     }
     console.error("[Autopilot] analyze run failed", error);
@@ -15067,6 +15445,11 @@ ROUTES.all("/internal/cron/:jobName", async (req, res) => {
       res.status(200).json({ ok: true, job: jobName });
       return;
     }
+    if (jobName === "forecast-boundary-alerts") {
+      const result = await monitorForecastBoundaryAlerts({});
+      res.status(200).json({ ok: true, job: jobName, result });
+      return;
+    }
     res.status(404).json({ ok: false, error: "job_not_found" });
   } catch (error) {
     console.error("[Explore] cron job failed", { jobName: req.params.jobName, error });
@@ -15150,6 +15533,32 @@ export async function reconcileAutopilotRuns(_cloudEvent: any): Promise<void> {
   } catch (error) {
     console.error("[Autopilot] reconcile job failed", error);
   }
+}
+
+export async function monitorForecastBoundaryAlerts(_cloudEvent: any): Promise<Record<string, number>> {
+  const alpaca = new AlpacaClient();
+  const repository = new FirestoreForecastAlertRepository(db);
+  const emailProvider = new ResendForecastAlertEmailProvider();
+  const feed = sanitizeText(process.env.FORECAST_ALERT_ALPACA_FEED, 20).toLowerCase() || "iex";
+  const result = await runForecastAlertMonitor({
+    repository,
+    priceSource: {
+      getLatestPrices: async (symbols) => {
+        const prices = await alpaca.getLatestStockPrices(symbols, feed);
+        return new Map([...prices.entries()].map(([symbol, quote]) => [symbol, {
+          symbol: quote.symbol,
+          price: quote.price,
+          timestamp: quote.timestamp,
+          session: quote.session,
+        }]));
+      },
+    },
+    emailProvider,
+    cooldownMinutes: Math.max(0, Math.floor(asFinite(process.env.FORECAST_ALERT_COOLDOWN_MINUTES, 15))),
+    maxPriceAgeMinutes: Math.max(2, Math.floor(asFinite(process.env.FORECAST_ALERT_MAX_PRICE_AGE_MINUTES, 30))),
+  });
+  console.info("[ForecastAlerts] monitor complete", result);
+  return result as unknown as Record<string, number>;
 }
 
 export async function runAutomationSchedules(_cloudEvent: any): Promise<void> {

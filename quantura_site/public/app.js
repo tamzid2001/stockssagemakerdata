@@ -1882,6 +1882,13 @@
     foundryEnd: document.getElementById("foundry-end"),
     foundryRowLimit: document.getElementById("foundry-row-limit"),
     foundryFile: document.getElementById("foundry-file"),
+    foundryFileHelp: document.getElementById("foundry-file-help"),
+    foundryPriceAlertConfig: document.getElementById("foundry-price-alert-config"),
+    foundryPriceAlertEnabled: document.getElementById("foundry-price-alert-enabled"),
+    foundryPriceAlertOptions: document.getElementById("foundry-price-alert-options"),
+    foundryPriceAlertSession: document.getElementById("foundry-price-alert-session"),
+    foundryPriceAlertBoundaries: Array.from(document.querySelectorAll("[data-foundry-alert-boundary]")),
+    foundryPriceAlertStatus: document.getElementById("foundry-price-alert-status"),
     foundryNotes: document.getElementById("foundry-notes"),
     foundryModelMetricsBlock: document.getElementById("foundry-model-metrics-block"),
     foundryHistoryFields: document.getElementById("foundry-history-fields"),
@@ -1999,7 +2006,6 @@
     predictionsChart: document.getElementById("predictions-chart"),
     predictionsPreview: document.getElementById("predictions-preview"),
     predictionsPlotMeta: document.getElementById("predictions-plot-meta"),
-    predictionsAgentButton: document.getElementById("predictions-agent-button"),
     predictionsAgentOutput: document.getElementById("predictions-agent-output"),
     toast: document.getElementById("toast"),
 	    purchasePanels: Array.from(document.querySelectorAll(".purchase-panel")),
@@ -2184,6 +2190,7 @@
       uploadId: "",
       uploadDoc: null,
       table: null,
+      analysis: null,
       chartTitle: "",
       previewPage: 0,
       previewPageSize: 25,
@@ -17408,36 +17415,29 @@
     return day >= 1 && day <= 5;
   };
 
-  const nearestWeekdayIndex = (rowsWithDate, fromIndex) => {
-    if (!Array.isArray(rowsWithDate) || !rowsWithDate.length) return -1;
-    const safeIndex = Math.max(0, Math.min(rowsWithDate.length - 1, fromIndex));
-    if (rowsWithDate[safeIndex]?.isWeekday) return safeIndex;
-    for (let distance = 1; distance < rowsWithDate.length; distance += 1) {
-      const future = safeIndex + distance;
-      if (future < rowsWithDate.length && rowsWithDate[future]?.isWeekday) return future;
-      const past = safeIndex - distance;
-      if (past >= 0 && rowsWithDate[past]?.isWeekday) return past;
-    }
-    return -1;
-  };
-
   const extractQuantileColumns = (headers) => {
     if (!Array.isArray(headers)) return [];
     const cols = [];
     headers.forEach((header, idx) => {
       const raw = String(header || "").trim();
-      const normalized = raw.toLowerCase().replace(/[^a-z0-9.]/g, "");
+      const normalized = raw
+        .toLowerCase()
+        .replace(/\s+/g, "")
+        .replace(/%/g, "")
+        .replace(/^(?:forecast|prediction)[_-]?/, "")
+        .replace(/^quantile[_-]?/, "q")
+        .replace(/^percentile[_-]?/, "p")
+        .replace(/^([pq])[_-]/, "$1");
       let q = null;
 
-      let match = normalized.match(/^(?:p|q)(\d{1,2})$/);
-      if (match) q = Number(match[1]) / 100;
-      if (q === null) {
-        match = normalized.match(/^(?:p|q)(0?\.\d+)$/);
-        if (match) q = Number(match[1]);
-      }
-      if (q === null) {
-        match = normalized.match(/^(?:quantile)?(0?\.\d+)$/);
-        if (match) q = Number(match[1]);
+      const match = normalized.match(/^[pq](\d+(?:\.\d+)?)$/);
+      if (match) {
+        const numeric = Number(match[1]);
+        q = !match[1].includes(".") && match[1].length === 3
+          ? numeric / 1000
+          : numeric > 1
+            ? numeric / 100
+            : numeric;
       }
       if (!Number.isFinite(q) || q <= 0 || q >= 1) return;
 
@@ -17449,6 +17449,17 @@
       });
     });
 
+    if (!cols.some((column) => Math.abs(column.q - 0.5) < 0.000001)) {
+      const medianIndex = headers.findIndex((header) =>
+        ["median", "forecastmedian", "medianforecast", "pointforecast"].includes(
+          String(header || "").toLowerCase().replace(/[^a-z0-9]/g, "")
+        )
+      );
+      if (medianIndex >= 0) {
+        cols.push({ idx: medianIndex, header: String(headers[medianIndex] || "median"), q: 0.5, label: "p50" });
+      }
+    }
+
     return cols.sort((a, b) => a.q - b.q);
   };
 
@@ -17456,247 +17467,6 @@
     const raw = row?.[idx];
     const num = Number(String(raw ?? "").trim());
     return Number.isFinite(num) ? num : null;
-  };
-
-  const shiftYmd = (ymd, deltaDays) => {
-    const base = parseDateCell(ymd);
-    if (!base) return ymd;
-    base.setDate(base.getDate() + Number(deltaDays || 0));
-    return dateToYmd(base);
-  };
-
-  const fetchTickerHighNearDate = async (functions, ticker, ymd) => {
-    const targetDate = parseDateCell(ymd);
-    if (!targetDate) throw new Error("Unable to parse target date for price lookup.");
-    const start = shiftYmd(ymd, -5);
-    const end = shiftYmd(ymd, 6);
-    const rows = await apiFetchTickerHistory({ ticker, interval: "1d", start, end });
-    if (!rows.length) throw new Error("No price rows found near the selected weekday.");
-
-    const targetYmd = dateToYmd(targetDate);
-    const candidates = rows
-      .map((row) => {
-        const rawDate = row.Date ?? row.Datetime ?? row.ds;
-        const dt = parseDateCell(rawDate);
-        const high = Number(row.High ?? row.high);
-        if (!dt || !Number.isFinite(high)) return null;
-        return {
-          ymd: dateToYmd(dt),
-          high,
-          ts: dt.getTime(),
-        };
-      })
-      .filter(Boolean);
-
-    if (!candidates.length) throw new Error("No valid highs were returned for the selected window.");
-
-    const exact = candidates.find((item) => item.ymd === targetYmd);
-    if (exact) return { ...exact, exact: true, requestedYmd: targetYmd };
-
-    const targetTs = targetDate.getTime();
-    candidates.sort((a, b) => {
-      const da = Math.abs(a.ts - targetTs);
-      const db = Math.abs(b.ts - targetTs);
-      if (da !== db) return da - db;
-      return b.ts - a.ts;
-    });
-    return { ...candidates[0], exact: false, requestedYmd: targetYmd };
-  };
-
-  const runPredictionsQuantileMapping = async (functions) => {
-    if (!hasFullAccount()) throw new Error("Sign in to run the OpenAI CSV Agent.");
-    const table = state.predictionsContext.table;
-    const uploadDoc = state.predictionsContext.uploadDoc;
-    const uploadId = state.predictionsContext.uploadId;
-    if (!table || !Array.isArray(table.rows) || table.rows.length < 2) {
-      throw new Error("Load an uploaded CSV first.");
-    }
-    if (!uploadDoc) {
-      throw new Error("Upload metadata is not loaded yet.");
-    }
-
-    let ticker = normalizeTicker(
-      uploadDoc.ticker || uploadDoc.metaTicker || ui.predictionsTicker?.value || state.tickerContext?.ticker || ""
-    );
-    if (!ticker) {
-      const prompted = await openPromptModal({
-        title: "Ticker required",
-        message: "Enter the ticker symbol for this uploaded predictions CSV.",
-        label: "Ticker",
-        placeholder: "AAPL",
-        initialValue: "",
-        confirmLabel: "Save ticker",
-      });
-      ticker = normalizeTicker(prompted || "");
-      if (!ticker) {
-        throw new Error("Ticker is required to run the OpenAI CSV Agent.");
-      }
-      if (ui.predictionsTicker) ui.predictionsTicker.value = ticker;
-      if (uploadId && state.clients?.db) {
-        try {
-          await state.clients.db.collection("prediction_uploads").doc(uploadId).set(
-            {
-              ticker,
-              metaTicker: ticker,
-              updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-              meta: buildMeta(),
-            },
-            { merge: true }
-          );
-        } catch (error) {
-          // Keep running even if persistence fails.
-        }
-      }
-    }
-
-    const headers = table.headers || [];
-    const rows = table.rows || [];
-    const norm = (h) => String(h || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-    const dateCandidates = new Set(["date", "ds", "datetime", "timestamp", "time"]);
-    const dateIndex = headers.findIndex((h) => dateCandidates.has(norm(h)));
-    if (dateIndex < 0) throw new Error("Could not find a date column in this CSV.");
-
-    const quantileCols = extractQuantileColumns(headers);
-    if (!quantileCols.length) throw new Error("No quantile columns were detected (expected names like p10/q50/p90).");
-
-    const quantilesForRow = (row) =>
-      quantileCols
-        .map((col) => ({ ...col, value: numericCell(row, col.idx) }))
-        .filter((item) => Number.isFinite(item.value));
-
-    const rowsWithDate = rows.map((row, idx) => {
-      const dt = parseDateCell(row?.[dateIndex]);
-      return {
-        idx,
-        row,
-        date: dt,
-        ymd: dt ? dateToYmd(dt) : "",
-        isWeekday: dt ? isWeekday(dt) : false,
-      };
-    });
-    if (!rowsWithDate[0]?.date || !rowsWithDate[rowsWithDate.length - 1]?.date) {
-      throw new Error("First/last prediction rows are missing valid dates.");
-    }
-
-    const firstRaw = rowsWithDate[0];
-    const lastRaw = rowsWithDate[rowsWithDate.length - 1];
-    const weekdayRows = rowsWithDate.filter((item) => item.isWeekday);
-    const firstUse =
-      weekdayRows.find((item) => quantilesForRow(item.row).length > 0) ||
-      rowsWithDate.find((item) => quantilesForRow(item.row).length > 0) ||
-      rowsWithDate[0];
-    const lastUse =
-      [...weekdayRows].reverse().find((item) => quantilesForRow(item.row).length > 0) ||
-      [...rowsWithDate].reverse().find((item) => quantilesForRow(item.row).length > 0) ||
-      rowsWithDate[rowsWithDate.length - 1];
-
-    const startQuantiles = quantilesForRow(firstUse.row);
-    if (!startQuantiles.length) throw new Error("Could not find numeric quantile values on the first weekday row.");
-
-    let highLookup = null;
-    let highLookupError = "";
-    let highValue = NaN;
-    try {
-      highLookup = await fetchTickerHighNearDate(functions, ticker, firstUse.ymd);
-      highValue = Number(highLookup.high);
-    } catch (error) {
-      highLookupError = String(error?.message || "Unable to fetch the reference High value.");
-    }
-
-    let selected = startQuantiles.reduce((best, item) =>
-      Math.abs(item.q - 0.5) < Math.abs(best.q - 0.5) ? item : best
-    , startQuantiles[0]);
-    if (Number.isFinite(highValue)) {
-      selected = startQuantiles[0];
-      for (const candidate of startQuantiles) {
-        if (highValue >= candidate.value) selected = candidate;
-      }
-    }
-
-    const pointForecastValue = numericCell(lastUse.row, selected.idx);
-    let resolvedPointForecast = pointForecastValue;
-    if (!Number.isFinite(resolvedPointForecast)) {
-      const lastQuantiles = quantilesForRow(lastUse.row);
-      if (lastQuantiles.length) {
-        const nearest = lastQuantiles.reduce((best, item) =>
-          Math.abs(item.q - selected.q) < Math.abs(best.q - selected.q) ? item : best
-        , lastQuantiles[0]);
-        resolvedPointForecast = nearest.value;
-      }
-    }
-    if (!Number.isFinite(resolvedPointForecast)) {
-      throw new Error(`Last usable row is missing numeric quantile values.`);
-    }
-
-    const firstRowText = firstRaw.row.map((value) => String(value ?? "")).join(" | ");
-    const lastRowText = lastRaw.row.map((value) => String(value ?? "")).join(" | ");
-    const warningBits = [];
-    if (!firstRaw.isWeekday) warningBits.push(`First row (${firstRaw.ymd}) is not a weekday; using ${firstUse.ymd}.`);
-    if (!lastRaw.isWeekday) warningBits.push(`Last row (${lastRaw.ymd}) is not a weekday; using ${lastUse.ymd}.`);
-
-    if (highLookupError) warningBits.push(highLookupError);
-    const relation = Number.isFinite(highValue)
-      ? (highValue > selected.value
-          ? `High ${highValue.toFixed(2)} is above ${selected.label.toUpperCase()} start value ${selected.value.toFixed(2)}.`
-          : highValue < selected.value
-            ? `High ${highValue.toFixed(2)} is below ${selected.label.toUpperCase()} start value ${selected.value.toFixed(2)}.`
-            : `High ${highValue.toFixed(2)} is equal to ${selected.label.toUpperCase()} start value ${selected.value.toFixed(2)}.`)
-      : `Reference high was unavailable, so ${selected.label.toUpperCase()} was selected from the first usable row.`;
-
-    const mappingResult = {
-      uploadId: uploadId || "",
-      uploadTitle: String(uploadDoc.title || "predictions.csv"),
-      ticker,
-      firstRowDate: firstRaw.ymd,
-      firstRowIsWeekday: firstRaw.isWeekday,
-      firstWeekdayDate: firstUse.ymd,
-      lastRowDate: lastRaw.ymd,
-      lastRowIsWeekday: lastRaw.isWeekday,
-      lastWeekdayDate: lastUse.ymd,
-      warningText: warningBits.join(" "),
-      referenceHigh: Number.isFinite(highValue) ? Number(highValue.toFixed(4)) : null,
-      referenceHighDate: highLookup?.ymd || "",
-      selectedQuantile: selected.label,
-      selectedQuantileLabel: selected.label.toUpperCase(),
-      selectedQuantileStartValue: Number(selected.value.toFixed(4)),
-      pointForecastValue: Number(resolvedPointForecast.toFixed(4)),
-      relation,
-      firstRowText,
-      lastRowText,
-    };
-
-    if (ui.predictionsAgentOutput) {
-      ui.predictionsAgentOutput.innerHTML = `
-        <div class="small"><strong>Ticker:</strong> ${escapeHtml(ticker)}</div>
-        <div class="small"><strong>Upload:</strong> ${escapeHtml(uploadDoc.title || uploadId || "predictions.csv")}</div>
-        <div class="small"><strong>First row date:</strong> ${escapeHtml(firstRaw.ymd)} (${firstRaw.isWeekday ? "weekday" : "weekend"})</div>
-        <div class="small"><strong>Last row date:</strong> ${escapeHtml(lastRaw.ymd)} (${lastRaw.isWeekday ? "weekday" : "weekend"})</div>
-        ${warningBits.length ? `<div class="small" style="margin-top:8px;"><strong>Warning:</strong> ${escapeHtml(warningBits.join(" "))}</div>` : ""}
-        ${
-          Number.isFinite(highValue) && highLookup
-            ? `<div class="small" style="margin-top:8px;"><strong>Reference high:</strong> ${highLookup.high.toFixed(2)} on ${escapeHtml(highLookup.ymd)}${
-                highLookup.exact ? "" : " (nearest trading day)"
-              }</div>`
-            : `<div class="small" style="margin-top:8px;"><strong>Reference high:</strong> unavailable</div>`
-        }
-        <div class="small" style="margin-top:8px;"><strong>Selected quantile:</strong> ${escapeHtml(selected.label.toUpperCase())}</div>
-        <div class="small">${escapeHtml(relation)}</div>
-        <div class="small" style="margin-top:8px;"><strong>Point forecast (last weekday, same quantile):</strong> ${resolvedPointForecast.toFixed(4)}</div>
-        <div class="small" style="margin-top:12px;"><strong>First prediction row (no header):</strong></div>
-        <pre class="small" style="margin:6px 0 0; white-space:pre-wrap;">${escapeHtml(firstRowText)}</pre>
-        <div class="small" style="margin-top:10px;"><strong>Last prediction row (no header):</strong></div>
-        <pre class="small" style="margin:6px 0 0; white-space:pre-wrap;">${escapeHtml(lastRowText)}</pre>
-      `;
-    }
-
-    logEvent("predictions_quantile_mapping", {
-      upload_id: uploadId || "",
-      ticker,
-      quantile: selected.label,
-      first_weekday: firstUse.ymd,
-      last_weekday: lastUse.ymd,
-    });
-    return mappingResult;
   };
 
   const computePredictionOptionsEnvelope = (table) => {
@@ -18049,20 +17819,34 @@
       .map((h, idx) => ({ h, idx, score: numericScore(idx) }))
       .filter((c) => c.idx !== xIndex && c.score >= 0.6);
 
-    const quantMatches = (h) => {
-      const m = norm(h).match(/^(q|p)(\d\d)$/);
-      if (!m) return null;
-      return { key: m[1], q: Number(m[2]) };
-    };
+    const quantileByIndex = new Map(
+      extractQuantileColumns(headers).map((column) => [column.idx, { key: "p", q: column.q * 100 }])
+    );
 
     const quantCols = numericCols
-      .map((c) => ({ ...c, qm: quantMatches(c.h) }))
+      .map((c) => ({ ...c, qm: quantileByIndex.get(c.idx) || null }))
       .filter((c) => c.qm && Number.isFinite(c.qm.q))
       .sort((a, b) => a.qm.q - b.qm.q);
 
     let yCols = [];
     if (quantCols.length >= 2) {
-      yCols = quantCols.slice(0, Math.min(6, quantCols.length));
+      const priority = [10, 50, 90]
+        .map((target) => quantCols.find((column) => Math.abs(column.qm.q - target) < 0.001))
+        .filter(Boolean);
+      const remaining = quantCols.filter((column) => !priority.includes(column));
+      yCols = [...priority, ...remaining].slice(0, Math.min(6, quantCols.length));
+      const actualNames = new Set([
+        "actual",
+        "actualprice",
+        "observed",
+        "observedprice",
+        "groundtruth",
+        "target",
+        "close",
+        "closingprice",
+      ]);
+      const actual = numericCols.find((column) => actualNames.has(norm(column.h)));
+      if (actual && !yCols.some((column) => column.idx === actual.idx)) yCols.push(actual);
     } else {
       const preferredNames = ["yhat", "prediction", "forecast", "price", "close", "value"];
       const preferred = [];
@@ -18101,6 +17885,18 @@
       return Number.isFinite(parsed) ? new Date(parsed) : val;
     });
 
+    const quantileByIndex = new Map(extractQuantileColumns(headers).map((column) => [column.idx, column.q]));
+    const actualNames = new Set(["actual", "actualprice", "observed", "observedprice", "groundtruth", "target", "close", "closingprice"]);
+    const seriesStyle = (col) => {
+      const quantile = quantileByIndex.get(col.idx);
+      if (Math.abs(Number(quantile) - 0.1) < 0.000001) return { color: "#f59e0b", width: 2 };
+      if (Math.abs(Number(quantile) - 0.5) < 0.000001) return { color: "#3b82f6", width: 3 };
+      if (Math.abs(Number(quantile) - 0.9) < 0.000001) return { color: "#10b981", width: 2 };
+      if (actualNames.has(String(col.h || "").toLowerCase().replace(/[^a-z0-9]/g, ""))) {
+        return { color: isDarkMode() ? "#f8fafc" : "#111827", width: 2.5, dash: "dash" };
+      }
+      return { width: 1.5, dash: "dot" };
+    };
     const traces = yCols.map((col) => ({
       type: "scatter",
       mode: "lines",
@@ -18108,11 +17904,76 @@
       x,
       y: rows.map((r) => {
         const raw = r?.[col.idx];
-        const num = Number(String(raw ?? "").trim());
+        const num = Number(String(raw ?? "").trim().replace(/,/g, ""));
         return Number.isFinite(num) ? num : null;
       }),
-      line: { width: 2 },
+      line: seriesStyle(col),
+      hovertemplate: `<b>${escapeHtml(String(col.h || "Series"))}</b><br>Date: %{x}<br>Value: %{y:.6f}<extra></extra>`,
     }));
+
+    const savedAnalysis = state.predictionsContext?.analysis && typeof state.predictionsContext.analysis === "object"
+      ? state.predictionsContext.analysis
+      : {};
+    const analysisMetrics = savedAnalysis.metrics && typeof savedAnalysis.metrics === "object" ? savedAnalysis.metrics : {};
+    const analysisData = savedAnalysis.data && typeof savedAnalysis.data === "object" ? savedAnalysis.data : {};
+    const addAnomalyMarkers = (items, label, color, symbol) => {
+      if (!Array.isArray(items) || !items.length) return;
+      traces.push({
+        type: "scatter",
+        mode: "markers",
+        name: label,
+        x: items.map((item) => {
+          const parsed = Date.parse(String(item?.date || ""));
+          return Number.isFinite(parsed) ? new Date(parsed) : String(item?.date || "");
+        }),
+        y: items.map((item) => Number(item?.value)),
+        customdata: items.map((item) => [item?.direction || "unusual", item?.lowerBoundary, item?.upperBoundary]),
+        marker: { color, size: 10, symbol, line: { color: "#ffffff", width: 1 } },
+        hovertemplate: `<b>${label}</b><br>Date: %{x}<br>Value: %{y:.6f}<br>Classification: %{customdata[0]}<br>Lower boundary: %{customdata[1]:.6f}<br>Upper boundary: %{customdata[2]:.6f}<extra></extra>`,
+      });
+    };
+    addAnomalyMarkers(analysisData.p50Anomalies, "Unusual P50", "#ef4444", "diamond");
+    addAnomalyMarkers(analysisData.p10Anomalies, "Unusual P10", "#f97316", "triangle-down");
+
+    const addConstantBoundary = (value, name, color, dash = "dash") => {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric) || !x.length) return;
+      traces.push({
+        type: "scatter",
+        mode: "lines",
+        name,
+        x: [x[0], x[x.length - 1]],
+        y: [numeric, numeric],
+        line: { color, width: 1.25, dash },
+        hovertemplate: `<b>${name}</b><br>Boundary: %{y:.6f}<extra></extra>`,
+      });
+    };
+    addConstantBoundary(analysisMetrics.p50LowerBoundary, "P50 lower anomaly boundary", "#60a5fa");
+    addConstantBoundary(analysisMetrics.p50UpperBoundary, "P50 upper anomaly boundary", "#60a5fa");
+    addConstantBoundary(analysisMetrics.p10LowerBoundary, "P10 lower anomaly boundary", "#fbbf24", "dot");
+    addConstantBoundary(analysisMetrics.p10UpperBoundary, "P10 upper anomaly boundary", "#fbbf24", "dot");
+
+    if (String(analysisMetrics.p50BoundaryMethod || "") === "model_95_interval") {
+      [
+        [analysisData.interval95LowerColumn, "Model 95% lower", "#8b5cf6"],
+        [analysisData.interval95UpperColumn, "Model 95% upper", "#a78bfa"],
+      ].forEach(([header, name, color]) => {
+        const index = headers.findIndex((candidate) => String(candidate || "") === String(header || ""));
+        if (index < 0) return;
+        traces.push({
+          type: "scatter",
+          mode: "lines",
+          name,
+          x,
+          y: rows.map((row) => {
+            const numeric = Number(String(row?.[index] ?? "").trim().replace(/,/g, ""));
+            return Number.isFinite(numeric) ? numeric : null;
+          }),
+          line: { color, width: 1.5, dash: "dot" },
+          hovertemplate: `<b>${name}</b><br>Date: %{x}<br>Boundary: %{y:.6f}<extra></extra>`,
+        });
+      });
+    }
 
     const dark = isDarkMode();
     const plotBg = dark ? "#0b0f1a" : "#ffffff";
@@ -18268,6 +18129,7 @@
     state.predictionsContext.uploadId = cleanId;
     state.predictionsContext.uploadDoc = doc;
     state.predictionsContext.table = table;
+    state.predictionsContext.analysis = null;
     state.predictionsContext.chartTitle = title;
     state.predictionsContext.previewPage = 0;
     if (ui.predictionsTicker && doc.ticker) ui.predictionsTicker.value = normalizeTicker(doc.ticker) || String(doc.ticker);
@@ -18277,7 +18139,7 @@
     removePredictionOptionsSupplement();
     if (ui.predictionsAgentOutput) {
       ui.predictionsAgentOutput.innerHTML =
-        "Run the OpenAI CSV Agent to compute weekday-aware quantile mapping and return an analyst summary.";
+        "Upload a prediction quantile CSV in Forecast Foundry to calculate validated P10/P50 anomaly and tail-signal statistics.";
     }
 
     renderCsvPreview(table);
@@ -18332,8 +18194,22 @@
     ui.foundryHistoryFields?.classList.toggle("hidden", !historyMode);
     ui.foundryFileField?.classList.toggle("hidden", !fileMode);
     ui.foundryUploadActions?.classList.toggle("hidden", !predictionMode);
+    ui.foundryPriceAlertConfig?.classList.toggle("hidden", !predictionMode);
     ui.foundryAutopilotControls?.classList.toggle("hidden", predictionMode);
     ui.foundryPrimaryActions?.classList.toggle("hidden", predictionMode);
+    if (ui.foundryFileHelp) {
+      ui.foundryFileHelp.textContent = predictionMode
+        ? "Prediction CSVs must include a date/timestamp and P50 or median. P10, P90, other quantiles, ticker, actual price, and explicit 95% interval columns are optional."
+        : "Historical CSVs must resolve to item, timestamp/date, and closing-price columns.";
+    }
+    const uploadButtonLabel = ui.foundryUploadPrepareButton?.querySelector("span");
+    if (uploadButtonLabel) uploadButtonLabel.textContent = predictionMode ? "Analyze prediction CSV" : "Prepare source";
+    if (ui.foundryPriceAlertOptions) {
+      ui.foundryPriceAlertOptions.classList.toggle("is-disabled", !ui.foundryPriceAlertEnabled?.checked);
+      ui.foundryPriceAlertOptions.querySelectorAll("input, select").forEach((control) => {
+        control.disabled = !predictionMode || !ui.foundryPriceAlertEnabled?.checked;
+      });
+    }
     if (historyMode) syncFoundryDateDefaults();
     updateFoundryInstanceLimitUi();
   };
@@ -18362,6 +18238,23 @@
       if (numeric !== null) metrics[key] = numeric;
     });
     return metrics;
+  };
+
+  const collectFoundryPriceAlertConfig = () => {
+    if (String(ui.foundrySourceKind?.value || "").trim() !== "prediction_csv") return null;
+    const enabled = Boolean(ui.foundryPriceAlertEnabled?.checked);
+    const boundaries = (ui.foundryPriceAlertBoundaries || [])
+      .filter((input) => input.checked)
+      .map((input) => String(input.value || "").trim())
+      .filter(Boolean);
+    if (enabled && !boundaries.length) {
+      throw new Error("Select at least one forecast boundary to monitor.");
+    }
+    return {
+      enabled,
+      boundaries: boundaries.length ? boundaries : ["P10", "P50", "P90"],
+      sessionMode: String(ui.foundryPriceAlertSession?.value || "regular") === "extended" ? "extended" : "regular",
+    };
   };
 
   const formatFoundryModelMetricValue = (value) => {
@@ -18568,6 +18461,7 @@
   const loadFoundryCsvIntoPreview = async (run) => {
     const files = run?.files && typeof run.files === "object" ? run.files : {};
     const dataset = run?.dataset && typeof run.dataset === "object" ? run.dataset : {};
+    state.predictionsContext.analysis = run?.analysis && typeof run.analysis === "object" ? run.analysis : null;
     const orderedFiles = [
       files.businessDaysCsv,
       files.predictionsCsv,
@@ -18617,6 +18511,150 @@
     }
   };
 
+  const formatForecastAnalysisNumber = (value, { percentage = false } = {}) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return "N/A";
+    const formatted = numeric.toLocaleString(undefined, { maximumFractionDigits: percentage ? 2 : 6 });
+    return percentage ? `${formatted}%` : formatted;
+  };
+
+  const renderForecastAnalysisSummary = (analysis) => {
+    const metrics = analysis?.metrics && typeof analysis.metrics === "object" ? analysis.metrics : {};
+    const data = analysis?.data && typeof analysis.data === "object" ? analysis.data : {};
+    const validationErrors = Array.isArray(data.validationErrors) ? data.validationErrors : [];
+    const validationWarnings = Array.isArray(data.validationWarnings) ? data.validationWarnings : [];
+    if (String(analysis?.status || "").toLowerCase() === "error") {
+      return `
+        <section class="forecast-summary-card is-error" aria-label="Prediction CSV validation errors">
+          <div class="forecast-summary-head">
+            <div><div class="eyebrow">Prediction CSV</div><h3>Correct the upload before analysis</h3></div>
+            <span class="forecast-signal-pill is-inactive">Validation failed</span>
+          </div>
+          <ul class="forecast-validation-list">
+            ${(validationErrors.length ? validationErrors : [analysis?.summary || "The CSV could not be analyzed."])
+              .map((item) => `<li>${escapeHtml(String(item || ""))}</li>`)
+              .join("")}
+          </ul>
+        </section>
+      `;
+    }
+    if (!Object.keys(metrics).length) return "";
+
+    const generalBias = String(metrics.generalBias || "Neutral / Mixed");
+    const tailActive = Boolean(metrics.extendedP10BuyBiasActive);
+    const modelInterval = String(metrics.p50BoundaryMethod || "") === "model_95_interval";
+    const boundaryCopy = modelInterval
+      ? `Supplied model 95% interval · avg ${formatForecastAnalysisNumber(metrics.p50ModelLowerBoundaryAverage)} to ${formatForecastAnalysisNumber(metrics.p50ModelUpperBoundaryAverage)}`
+      : `P50 95% Statistical Anomaly Band · ${formatForecastAnalysisNumber(metrics.p50LowerBoundary)} to ${formatForecastAnalysisNumber(metrics.p50UpperBoundary)}`;
+    return `
+      <section class="forecast-summary-card" aria-label="Forecast Summary">
+        <div class="forecast-summary-head">
+          <div>
+            <div class="eyebrow">Forecast Summary</div>
+            <h3>${escapeHtml(String(state.foundryContext.activeRun?.dataset?.ticker || "Uploaded forecast"))}</h3>
+            <p class="small muted">${escapeHtml(String(metrics.forecastStartDate || "N/A"))} → ${escapeHtml(String(metrics.forecastEndDate || "N/A"))}</p>
+          </div>
+          <span class="forecast-signal-pill">${escapeHtml(generalBias)}</span>
+        </div>
+        <div class="forecast-metric-grid">
+          <div><span>P10 average</span><strong>${formatForecastAnalysisNumber(metrics.p10Average)}</strong></div>
+          <div><span>P50 average</span><strong>${formatForecastAnalysisNumber(metrics.p50Average)}</strong></div>
+          <div><span>P90 average</span><strong>${formatForecastAnalysisNumber(metrics.p90Average)}</strong></div>
+          <div><span>Rows analyzed</span><strong>${formatForecastAnalysisNumber(metrics.observationCount)}</strong></div>
+        </div>
+        <div class="forecast-analysis-sections">
+          <section>
+            <h4>Median anomalies</h4>
+            <p class="small muted">${escapeHtml(boundaryCopy)}</p>
+            <dl class="forecast-stat-list">
+              <div><dt>P50 range</dt><dd>${formatForecastAnalysisNumber(metrics.p50Minimum)} → ${formatForecastAnalysisNumber(metrics.p50Maximum)}</dd></div>
+              <div><dt>P50 standard deviation</dt><dd>${formatForecastAnalysisNumber(metrics.p50StandardDeviation)}</dd></div>
+              <div><dt>Unusual P50</dt><dd>${formatForecastAnalysisNumber(metrics.p50UnusualCount)} (${formatForecastAnalysisNumber(metrics.p50UnusualPercentage, { percentage: true })})</dd></div>
+              <div><dt>Above average</dt><dd>${formatForecastAnalysisNumber(metrics.p50UnusualAboveAverageCount)} (${formatForecastAnalysisNumber(metrics.p50UnusualAboveAveragePercentage, { percentage: true })})</dd></div>
+              <div><dt>Below average</dt><dd>${formatForecastAnalysisNumber(metrics.p50UnusualBelowAverageCount)} (${formatForecastAnalysisNumber(metrics.p50UnusualBelowAveragePercentage, { percentage: true })})</dd></div>
+              <div><dt>General Bias</dt><dd>${escapeHtml(generalBias)}</dd></div>
+            </dl>
+            <p class="small muted">${escapeHtml(String(data.biasExplanation || "This is a model-derived statistical bias, not a trading certainty."))}</p>
+          </section>
+          <section>
+            <h4>Tail signal</h4>
+            <dl class="forecast-stat-list">
+              <div><dt>P10 range</dt><dd>${formatForecastAnalysisNumber(metrics.p10Minimum)} → ${formatForecastAnalysisNumber(metrics.p10Maximum)}</dd></div>
+              <div><dt>P10 standard deviation</dt><dd>${formatForecastAnalysisNumber(metrics.p10StandardDeviation)}</dd></div>
+              <div><dt>P10 anomaly band</dt><dd>${formatForecastAnalysisNumber(metrics.p10LowerBoundary)} → ${formatForecastAnalysisNumber(metrics.p10UpperBoundary)}</dd></div>
+              <div><dt>Unusual P10</dt><dd>${formatForecastAnalysisNumber(metrics.p10UnusualCount)} (${formatForecastAnalysisNumber(metrics.p10UnusualPercentage, { percentage: true })})</dd></div>
+              <div><dt>Last two P10 valid</dt><dd>${metrics.lastTwoP10Valid ? "Yes" : "No"}</dd></div>
+              <div><dt>Both business days</dt><dd>${metrics.lastTwoBusinessDays ? "Yes" : "No"}</dd></div>
+              <div><dt>Both unusually low</dt><dd>${metrics.lastTwoP10UnusuallyLow ? "Yes" : "No"}</dd></div>
+              <div><dt>Extended P10 Buy Bias</dt><dd>${tailActive ? "Active" : "Inactive"}</dd></div>
+            </dl>
+            <p class="small muted">Model-derived buy-bias window: ${escapeHtml(String(metrics.biasWindowStartDate || "N/A"))} → ${escapeHtml(String(metrics.biasWindowEndDate || "N/A"))} (approximately two weeks after the forecast horizon).</p>
+          </section>
+        </div>
+        ${validationWarnings.length ? `<details class="forecast-validation-notes"><summary>Parsing notes (${validationWarnings.length})</summary><ul>${validationWarnings.map((item) => `<li>${escapeHtml(String(item || ""))}</li>`).join("")}</ul></details>` : ""}
+        <p class="small muted forecast-heuristic-note">Statistical model heuristic only—not a guaranteed trading outcome or financial advice.</p>
+      </section>
+    `;
+  };
+
+  const renderForecastPriceAlertStatus = (alert, { readOnly = false } = {}) => {
+    const host = ui.foundryPriceAlertStatus;
+    if (!host) return;
+    host.onclick = null;
+    if (!alert || typeof alert !== "object" || !String(alert.id || alert.runId || "").trim()) {
+      host.classList.add("hidden");
+      host.innerHTML = "";
+      return;
+    }
+    host.classList.remove("hidden");
+    const monitored = Array.isArray(alert.monitoredBoundaries) ? alert.monitoredBoundaries : [];
+    const available = Array.isArray(alert.availableBoundaries) ? alert.availableBoundaries : [];
+    const statusLabel = String(alert.status || (alert.enabled ? "active" : "disabled")).replaceAll("_", " ");
+    const formatTimestamp = (value) => {
+      const parsed = Date.parse(String(value || ""));
+      return Number.isFinite(parsed) ? new Date(parsed).toLocaleString() : "Not yet";
+    };
+    host.innerHTML = `
+      <section class="forecast-alert-inline-card" aria-label="Price Alerts">
+        <div class="forecast-alert-list-head"><div><div class="eyebrow">Price Alerts</div><h4>${escapeHtml(String(alert.ticker || "Forecast boundary monitoring"))}</h4></div><span class="pill">${escapeHtml(statusLabel)}</span></div>
+        <p class="small muted">Date-aware crossing detection uses the latest completed Alpaca 1-minute bar close. Monitoring ends ${escapeHtml(String(alert.horizonEnd || "at the forecast horizon"))}.</p>
+        <div class="forecast-alert-row-controls">
+          <div class="forecast-boundary-choices">${available.map((boundary) => `<label><input type="checkbox" value="${escapeHtml(boundary)}" data-inline-alert-boundary ${monitored.includes(boundary) ? "checked" : ""} ${readOnly || alert.status === "expired" ? "disabled" : ""}/> ${escapeHtml(boundary)}</label>`).join("")}</div>
+          <select data-inline-alert-session aria-label="Alert market session" ${readOnly || alert.status === "expired" ? "disabled" : ""}><option value="regular" ${alert.sessionMode === "regular" ? "selected" : ""}>Regular hours only</option><option value="extended" ${alert.sessionMode === "extended" ? "selected" : ""}>Include extended hours</option></select>
+        </div>
+        <dl class="forecast-alert-list-meta"><div><dt>Current price</dt><dd>${Number.isFinite(Number(alert.lastPrice)) ? `$${formatForecastAnalysisNumber(alert.lastPrice)}` : "Not checked"}</dd></div><div><dt>Last checked</dt><dd>${escapeHtml(formatTimestamp(alert.lastCheckedAt))}</dd></div><div><dt>Last crossing</dt><dd>${alert.lastCrossing ? `${escapeHtml(alert.lastCrossing.boundary)} crossed ${escapeHtml(alert.lastCrossing.direction)}` : "None"}</dd></div><div><dt>Last email</dt><dd>${escapeHtml(formatTimestamp(alert.lastNotificationAt))}</dd></div></dl>
+        ${alert.lastError?.message ? `<p class="small forecast-alert-error">${escapeHtml(alert.lastError.message)}</p>` : ""}
+        ${readOnly ? `<p class="small muted">Alert controls are private to the analysis owner.</p>` : `<div class="hero-actions"><button class="cta secondary small" type="button" data-inline-alert-save>Save boundaries</button><button class="cta ${alert.enabled ? "danger" : "secondary"} small" type="button" data-inline-alert-toggle>${alert.enabled ? "Disable" : "Enable"}</button></div>`}
+      </section>`;
+    if (readOnly) return;
+    host.onclick = async (event) => {
+      const button = event.target.closest("[data-inline-alert-save], [data-inline-alert-toggle]");
+      if (!button) return;
+      const boundaries = [...host.querySelectorAll("[data-inline-alert-boundary]:checked")].map((input) => input.value);
+      if (!boundaries.length) {
+        showToast("Select at least one forecast boundary.", "warn");
+        return;
+      }
+      const toggle = button.hasAttribute("data-inline-alert-toggle");
+      button.disabled = true;
+      try {
+        const payload = await callFoundryApi("PUT", `/api/autopilot/runs/${encodeURIComponent(String(alert.runId || alert.id))}/price-alert`, {
+          enabled: toggle ? !alert.enabled : alert.enabled,
+          boundaries,
+          sessionMode: host.querySelector("[data-inline-alert-session]")?.value || "regular",
+        });
+        const nextAlert = payload?.alert && typeof payload.alert === "object" ? payload.alert : alert;
+        if (state.foundryContext.activeRun) state.foundryContext.activeRun.priceAlert = nextAlert;
+        renderForecastPriceAlertStatus(nextAlert);
+        showToast(toggle ? "Forecast alert status updated." : "Forecast alert boundaries saved.");
+      } catch (error) {
+        showToast(extractErrorMessage(error, "Unable to update this forecast alert."), "warn");
+      } finally {
+        if (button.isConnected) button.disabled = false;
+      }
+    };
+  };
+
   const renderFoundryRunDetail = async (run, { request = null, shareUrl = "", readOnly = false } = {}) => {
     state.foundryContext.activeRunId = String(run?.id || "").trim();
     state.foundryContext.activeRun = run && typeof run === "object" ? run : null;
@@ -18625,8 +18663,10 @@
     if (!ui.foundryRunMeta) return;
     if (!run || typeof run !== "object") {
       state.predictionsContext.table = null;
+      state.predictionsContext.analysis = null;
       state.predictionsContext.chartTitle = "";
       if (ui.foundryBusinessDaysButton) ui.foundryBusinessDaysButton.classList.add("hidden");
+      renderForecastPriceAlertStatus(null);
       ui.foundryRunMeta.innerHTML = `<div class="small muted">Select a foundry run to inspect it.</div>`;
       if (ui.foundryPublishHost) ui.foundryPublishHost.innerHTML = `<div class="small muted">Private Explore sync and publish controls appear here after a source is prepared.</div>`;
       renderFoundryChartLauncher({
@@ -18644,6 +18684,7 @@
     const sharedMeta = run.__sharedMeta && typeof run.__sharedMeta === "object" ? run.__sharedMeta : {};
     const sharedReadOnly = Boolean(readOnly || sharedMeta.readOnly);
     state.predictionsContext.table = null;
+    state.predictionsContext.analysis = analysis;
     state.predictionsContext.chartTitle = String(run?.title || "Forecast Foundry chart");
     const requestId = getFoundryRequestId(run);
     const requestRecord = request && typeof request === "object" ? request : requestId ? getMyRequestById(requestId) : null;
@@ -18652,6 +18693,7 @@
       String(run?.sourceType || "").trim() === "prediction_csv" ||
       (files?.predictionsCsv && typeof files.predictionsCsv === "object") ||
       (files?.uploadedCsv && typeof files.uploadedCsv === "object");
+    renderForecastPriceAlertStatus(hasPredictionSource ? run.priceAlert : null, { readOnly: sharedReadOnly });
     if (ui.foundryBusinessDaysButton) {
       ui.foundryBusinessDaysButton.classList.toggle("hidden", !hasPredictionSource);
       const hasBusinessDaysFile = files?.businessDaysCsv && typeof files.businessDaysCsv === "object";
@@ -18751,11 +18793,12 @@
     }
     if (ui.predictionsAgentOutput) {
       if (String(analysis?.markdown || "").trim()) {
-        ui.predictionsAgentOutput.innerHTML = `<div class="small markdown-output">${renderMarkdown(String(analysis.markdown), {
+        const summaryMarkup = renderForecastAnalysisSummary(analysis);
+        ui.predictionsAgentOutput.innerHTML = `${summaryMarkup}<details class="forecast-analysis-details"${summaryMarkup ? "" : " open"}><summary>Detailed methodology and unusual observations</summary><div class="small markdown-output">${renderMarkdown(String(analysis.markdown), {
           fallback: "Analysis is ready.",
-        })}</div>`;
+        })}</div></details>`;
       } else if (String(analysis?.summary || "").trim()) {
-        ui.predictionsAgentOutput.innerHTML = `<div class="small">${escapeHtml(String(analysis.summary))}</div>`;
+        ui.predictionsAgentOutput.innerHTML = `${renderForecastAnalysisSummary(analysis)}<div class="small">${escapeHtml(String(analysis.summary))}</div>`;
       } else {
         ui.predictionsAgentOutput.innerHTML = `<div class="small muted">Prediction analysis is not available yet. Use Refresh AWS status or Analyze predictions.</div>`;
       }
@@ -18862,6 +18905,7 @@
     const interval = "1d";
     const notes = String(ui.foundryNotes?.value || "").trim();
     const modelMetrics = collectFoundryModelMetrics();
+    const priceAlert = collectFoundryPriceAlertConfig();
     const workspaceId = String(state.activeWorkspaceId || state.user?.uid || "").trim();
 
     setFoundryStatus("Preparing Forecast Foundry source...");
@@ -18900,6 +18944,7 @@
         interval,
         notes,
         modelMetrics,
+        priceAlert,
         workspaceId,
       });
       if (ui.foundryFile) ui.foundryFile.value = "";
@@ -26308,7 +26353,7 @@
               if (ui.predictionsPreview) ui.predictionsPreview.innerHTML = "Preview will appear here.";
               if (ui.predictionsAgentOutput) {
                 ui.predictionsAgentOutput.innerHTML =
-                  "Run the OpenAI CSV Agent to compute weekday-aware quantile mapping and return an analyst summary.";
+                  "Upload a prediction quantile CSV in Forecast Foundry to calculate validated P10/P50 anomaly and tail-signal statistics.";
               }
             } catch (error) {
               showToast(error.message || "Unable to delete upload.", "warn");
@@ -28932,6 +28977,7 @@
     syncSportsFoundryWorkflowUi();
     syncSportsFoundryButtons();
     syncSportsFoundryGameGap();
+    ui.foundryPriceAlertEnabled?.addEventListener("change", syncFoundrySourceFields);
     ui.foundrySourceKind?.addEventListener("change", () => {
       syncFoundrySourceFields();
       syncFoundryDateDefaults({ force: true });
@@ -29342,92 +29388,6 @@
       } catch (error) {
         ui.predictionsStatus.textContent = "Upload failed.";
         showToast(error.message || "Upload failed.", "warn");
-      }
-    });
-
-    ui.predictionsAgentButton?.addEventListener("click", async () => {
-      try {
-        await ensureSessionUser({
-          reason: "predictions_agent_requires_session",
-          message: "Sign in to sync prediction agent runs.",
-        });
-      } catch (error) {
-        showToast(error?.message || "Unable to start guest session.", "warn");
-        return;
-      }
-      if (!requireAdminAccess("OpenAI CSV Agent is currently admin-only.")) return;
-      if (!functions) {
-        showToast("Functions client is not ready.", "warn");
-        return;
-      }
-      try {
-        setOutputLoading(ui.predictionsAgentOutput, "Analyzing uploaded CSV...");
-        const mappingResult = await runPredictionsQuantileMapping(functions);
-        try {
-          const envelope = computePredictionOptionsEnvelope(state.predictionsContext.table);
-          await appendPredictionOptionsSupplement(functions, {
-            ticker: mappingResult?.ticker || ui.predictionsTicker?.value || "",
-            envelope,
-            sourceLabel: "Options near the prediction CSV end date",
-          });
-        } catch (optionsError) {
-          if (ui.predictionsAgentOutput) {
-            ui.predictionsAgentOutput.innerHTML += `
-              <div class="small muted" style="margin-top:12px;">
-                Options overlay unavailable: ${escapeHtml(optionsError?.message || "Unable to load listed options.")}
-              </div>
-            `;
-          }
-        }
-        if (mappingResult?.uploadId) {
-          try {
-            const runAgent = functions.httpsCallable("run_prediction_upload_agent");
-            const agentRes = await runAgent({
-              uploadId: mappingResult.uploadId,
-              ticker: mappingResult.ticker,
-              mappingSummary: mappingResult,
-              meta: buildMeta(),
-            });
-	            const agent = agentRes?.data || {};
-	            const agentText = String(agent.analysis || "").trim();
-	            const modelUsed = normalizeAiModelId(agent.model || "gpt-5-mini") || "gpt-5-mini";
-              if (db && state.user && agentText) {
-                await db.collection("agent_runs").add({
-                  userId: state.user.uid,
-                  uploadId: mappingResult.uploadId,
-                  ticker: normalizeTicker(mappingResult.ticker || ""),
-                  model: modelUsed,
-                  summary: agentText,
-                  createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                  meta: buildMeta(),
-                });
-              }
-	            if (agentText && ui.predictionsAgentOutput) {
-	              ui.predictionsAgentOutput.innerHTML += `
-	                <div class="agent-summary" style="margin-top:14px;">
-	                  <div class="small"><strong>OpenAI Agent (${escapeHtml(modelUsed)}):</strong></div>
-                  <div class="small" style="margin-top:6px; white-space:pre-wrap;">${escapeHtml(agentText)}</div>
-                </div>
-              `;
-            }
-          } catch (agentError) {
-            if (ui.predictionsAgentOutput) {
-              ui.predictionsAgentOutput.innerHTML += `
-                <div class="small muted" style="margin-top:12px;">
-                  OpenAI agent unavailable: ${escapeHtml(agentError.message || "Unable to generate AI commentary.")}
-                </div>
-              `;
-            }
-          }
-        }
-        setOutputReady(ui.predictionsAgentOutput);
-        showToast("OpenAI CSV Agent completed.");
-      } catch (error) {
-        setOutputReady(ui.predictionsAgentOutput);
-        if (ui.predictionsAgentOutput) {
-          ui.predictionsAgentOutput.innerHTML = `<div class="small muted">${escapeHtml(error.message || "OpenAI CSV Agent failed.")}</div>`;
-        }
-        showToast(error.message || "OpenAI CSV Agent failed.", "warn");
       }
     });
 
@@ -30031,7 +29991,7 @@
             }
             if (ui.predictionsAgentOutput) {
               ui.predictionsAgentOutput.textContent =
-                "Run the OpenAI CSV Agent to compute weekday-aware quantile mapping and return an analyst summary.";
+                "Upload a prediction quantile CSV in Forecast Foundry to calculate validated P10/P50 anomaly and tail-signal statistics.";
             }
 
             const pendingShare = String(getPendingShareId() || "").trim();

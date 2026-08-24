@@ -36,7 +36,10 @@ Treasury Fiscal Data API does not require authentication.
 ### Push and messaging
 
 - `FCM_WEB_VAPID_KEY`: Web push token generation.
+- `RESEND_API_KEY`: server-side transactional email delivery for automation and forecast-boundary alerts.
 - `SLACK_WEBHOOK_URL`: operational notifications.
+
+`FORECAST_ALERT_EMAIL_FROM` is a non-secret sender address override. Prediction alerts are sent only to the authenticated user's verified Firebase email; recipient addresses are never accepted from an alert API request.
 
 ### Social APIs and publishing
 
