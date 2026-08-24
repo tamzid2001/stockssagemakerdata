@@ -171,3 +171,12 @@ def test_mobile_cookie_banner_resets_desktop_centering_transform():
     assert "left: 10px !important" in cookie_rule
     assert "right: 10px !important" in cookie_rule
     assert "transform: none !important" in cookie_rule
+
+
+def test_ssr_templates_mirror_every_public_html_page():
+    templates = ROOT / "functions_ssr" / "templates"
+    page_files = sorted(path.relative_to(PAGES) for path in PAGES.rglob("*.html"))
+    template_files = sorted(path.relative_to(templates) for path in templates.rglob("*.html"))
+    assert template_files == page_files
+    for relative_path in page_files:
+        assert (templates / relative_path).read_bytes() == (PAGES / relative_path).read_bytes()
