@@ -90,7 +90,7 @@ jobs:
           echo "scan_date=$(jq -r .scan_date screener-work/universe/universe.json)" >> "$GITHUB_OUTPUT"
           echo "selected_count=$(jq -r .counts.selected screener-work/universe/universe.json)" >> "$GITHUB_OUTPUT"
       - name: Upload immutable universe input
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: quantura-screener-universe-${{ github.run_id }}
           path: screener-work/universe
@@ -134,12 +134,12 @@ jobs:
       - name: Install scanner dependencies
         run: python -m pip install --disable-pip-version-check pandas requests yfinance
       - name: Download immutable universe input
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: quantura-screener-universe-${{ github.run_id }}
           path: screener-work/universe
       - name: Restore valid same-day chunk checkpoint
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: screener-work/chunks/chunk-${{ matrix.chunk }}.json
           key: quantura-screener-${{ needs.prepare.outputs.scan_date }}-${{ needs.prepare.outputs.universe_hash }}-chunk-${{ matrix.chunk }}-v2
@@ -154,7 +154,7 @@ jobs:
             --resume
       - name: Upload chunk checkpoint
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: quantura-screener-chunk-${{ matrix.chunk }}
           path: screener-work/chunks/chunk-${{ matrix.chunk }}.json
@@ -177,12 +177,12 @@ jobs:
       - name: Install aggregate dependencies
         run: python -m pip install --disable-pip-version-check requests
       - name: Download universe
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: quantura-screener-universe-${{ github.run_id }}
           path: screener-work/universe
       - name: Download all available chunk checkpoints
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: quantura-screener-chunk-*
           path: screener-work/downloaded-chunks
@@ -201,7 +201,7 @@ jobs:
           echo "coverage=$(jq -r .coverage_percentage screener-work/final/run-manifest.json)" >> "$GITHUB_OUTPUT"
       - name: Upload aggregate and diagnostics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: quantura-screener-v2
           path: screener-work/final
