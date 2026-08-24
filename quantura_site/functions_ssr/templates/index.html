@@ -6,7 +6,7 @@
     <title>Quantura | Demand Forecasting & Investor Intelligence</title>
         <meta name="description" content="Quantura delivers model-driven forecasting and collaborative research workflows for high-conviction decisions." />
         <meta name="robots" content="index, follow" />
-    <meta name="keywords" content="quantura, market intelligence, stock forecasting, model council, screener, research workflow, institutional analytics" />
+    <meta name="keywords" content="quantura, market intelligence, stock forecasting, historical market data, screener, research workflow, institutional analytics" />
     <link rel="canonical" href="https://quantura.studio/" />
         <meta property="og:title" content="Quantura | Demand Forecasting & Investor Intelligence" />
         <meta property="og:description" content="Precision forecasting reports and institutional-grade research workflows for serious operators and investors." />
@@ -98,15 +98,15 @@
             "name": "Can I save and reload forecasts and screener runs?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Yes. Saved forecasts, uploaded prediction files, and screener runs are stored in your workspace and can be reloaded, shared, and managed later."
+              "text": "Yes. Saved forecasts and screener runs are stored privately in your workspace and can be reloaded, shared with collaborators, and managed later."
             }
           },
           {
             "@type": "Question",
-            "name": "Can I upload my own prediction CSV files?",
+            "name": "Can I download historical market data?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Yes. You can upload prediction CSVs, preview rows, run plotting, and keep files tied to your workspace for future analysis."
+              "text": "Yes. The Historical Data workflow loads Alpaca equity bars, previews returned fields, distinguishes trading sessions, and generates chronologically ordered CSV files."
             }
           },
           {
@@ -165,7 +165,7 @@
 	            </p>
 	            <div class="hero-actions">
 	              <a class="cta" href="/pricing" data-analytics="hero_cta_primary"><i class="iconoir-page" aria-hidden="true"></i><span>View plans</span></a>
-	              <a class="cta secondary" href="/forecasting" data-analytics="hero_cta_secondary"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Explore forecasting</span></a>
+	              <a class="cta secondary" href="/forecasting" data-analytics="hero_cta_secondary"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Workspace forecasting</span></a>
 	            </div>
 	            <div class="small" style="margin-top: 20px;">
 	              Research loop compression: charts + narrative + alerts.
@@ -427,7 +427,7 @@
             <div class="card">
               <h3>Visualize Your Portfolio</h3>
               <p>
-                Explore your investments with an interactive map and allocation lens.
+                Workspace your investments with an interactive map and allocation lens.
                 Gain faster insight into sector concentration and portfolio performance.
               </p>
             </div>
@@ -585,10 +585,10 @@
               </p>
             </details>
             <details class="faq-item">
-              <summary><svg class="faq-icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5a2 2 0 0 1 2-2h7v2H5v14h14V12h2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5Zm12-2h2v4h4v2h-4v4h-2V9h-4V7h4V3Zm-9 9.5 2.8 3.4L11 13l3.5 4.2H6Z" fill="currentColor"/></svg><span>Can I upload my own prediction CSV?</span></summary>
+              <summary><svg class="faq-icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5a2 2 0 0 1 2-2h7v2H5v14h14V12h2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5Zm12-2h2v4h4v2h-4v4h-2V9h-4V7h4V3Zm-9 9.5 2.8 3.4L11 13l3.5 4.2H6Z" fill="currentColor"/></svg><span>Can I download historical market data?</span></summary>
               <p class="small faq-answer">
-                Yes. Uploads are workspace-scoped and support previewing, plotting, renaming, sharing, and deletion.
-                This enables clean handoff from external model pipelines into Quantura analysis.
+                Yes. Choose a ticker, timeframe, date range, trading-session policy, adjustment, and entitled Alpaca feed.
+                Preview the returned bars before generating a chronologically ordered CSV.
               </p>
             </details>
             <details class="faq-item">
@@ -750,7 +750,7 @@
           </div>
         </div>
         <div class="small">
-          <strong>Explore</strong>
+          <strong>Workspace</strong>
           <div><a href="/">Home</a></div>
           <div><a href="/forecasting">Forecasting</a></div>
           <div><a href="/research">Research</a></div>

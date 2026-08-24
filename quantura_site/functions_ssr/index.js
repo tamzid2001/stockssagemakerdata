@@ -108,10 +108,10 @@ const resolveTemplate = (pathname) => {
     "/autopilot",
     "/uploads",
     "/sports-forecasting",
-    "/terminal/fx",
-    "/tools/fx",
     "/indicators",
     "/news",
+    "/historical-data",
+    "/historical-prices",
     "/market-headlines",
     "/options",
     "/saved-forecasts",
@@ -174,6 +174,8 @@ const REMOVED_TERMINAL_ROUTES = new Set([
   "/ask-gpt5",
   "/ask-gpt",
   "/predictions",
+  "/explore",
+  "/profile",
 ]);
 
 const loadTemplateHtml = async (relPath) => {

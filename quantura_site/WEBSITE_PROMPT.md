@@ -1,40 +1,39 @@
-# Quantura Website Prompt
+# Quantura production design prompt
 
-Design a premium, elegant marketing site for **Quantura**, an AI-driven equity
-research platform for serious investors. The site must feel institutional yet
-modern—clean grids, deep navy palette, sharp typography, and confident
-copywriting.
+Redesign Quantura as a professional quantitative-research, fintech, AI, and
+forecasting platform. Treat every screen as a dense working product—not a
+marketing mockup. The visual system must support equity bars, options chains,
+technical charts, Polymarket probability time series, workflow boards, private
+cloud configuration, authentication, and administrative data without reducing
+legibility.
 
-## Goals
-- Convert newsletter sign-ups.
-- Explain the product clearly in 60 seconds.
-- Position the Pro plan and a one-time forecast upsell.
-- Build trust with professionalism and clarity.
+Use a calm deep-navy/slate foundation, solid elevated surfaces, cool blue as
+the primary action color, restrained green/amber/red semantic colors, Inter
+typography, tabular numerals for market data, 8–12px controls, 1px borders, and
+subtle shadows. Establish reusable tokens for background, surface, borders,
+text, muted text, primary, success, warning, and danger. Prefer clear grids,
+compact information hierarchy, precise labels, and generous but efficient
+spacing.
 
-## Must-have Sections
-1. **Hero**: headline, value proposition, CTA buttons (free newsletter + Pro).
-2. **Core Free Product (Top of Funnel)**: highlight the weekly 5–10 mispriced
-   stocks, 1–2 bullet commentary, and a chart/metric per stock.
-3. **Upsells**: include a one-time forecast ($199) that blends current price,
-   options pricing, and implied probabilities from Yahoo Finance.
-4. **Use Cases**: weekly portfolio review, pre-earnings prep, thesis validation.
-5. **Pricing**: free newsletter + Pro subscription + one-time forecast.
-6. **Login/Sign Up**: modal or section.
-7. **Settings**: toggles for promotional emails and upsell alerts.
-8. **Contact**: support email, sales CTA.
-9. **Footer**: terms, privacy, support email.
+Apply the system consistently to the homepage, terminal, historical data,
+options, charts, sports forecasting, Forecast Foundry, dashboard, private
+profile/AWS settings, productivity, authentication, tables, forms, modals,
+cookie consent, toasts, empty/loading/error states, and mobile navigation.
 
-## Copy Style
-- Use AIDA marketing framework: Attention → Interest → Desire → Action.
-- Keep text concise, confident, and data-driven.
-- No hype. Use professional, hedge-fund-like tone.
+Requirements:
 
-## Visual Style
-- Colors: deep navy, slate, electric blue accents.
-- Fonts: Inter or similar modern sans-serif.
-- Buttons: rounded, bold CTA.
-- Cards: subtle borders, soft shadows.
+- Text must meet accessible contrast on every surface.
+- Remove translucent white gradients and overlays that wash out components.
+- Use solid chart/table containers and sticky, readable table headers.
+- Give every form a visible label, focus state, disabled/loading state, and
+  actionable validation message.
+- Keep primary actions visually dominant and destructive actions distinct.
+- Make dense tables horizontally scrollable on small screens without clipping.
+- Use responsive one-column form/card layouts on mobile.
+- Avoid neon effects, excessive gradients, glass blur, giant empty sections,
+  unnecessary motion, and inconsistent component-specific styling.
+- Respect reduced-motion preferences and keyboard focus visibility.
 
-## Output
-Provide production-ready HTML, CSS, and JS for a single-page site with modals
-and placeholder Stripe checkout buttons.
+The result should feel trustworthy and operational at the quality level of a
+modern institutional market-data product: polished, restrained, fast to scan,
+and easy for a new user to understand.

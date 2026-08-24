@@ -44,6 +44,7 @@
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
     <script defer src="/app.js?v=20260405a"></script>
+    <script defer src="/data-integrations.js?v=20260823a"></script>
   
     <script>
       window.__QUANTURA_RC_TEMPLATE_ID__ = "firebase-server";
@@ -59,7 +60,6 @@
         </a>
         <nav class="nav-links">
           <a href="/forecasting" data-analytics="nav_terminal"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Terminal</span></a>
-          <a href="/explore" data-analytics="nav_explore"><i class="iconoir-binocular" aria-hidden="true"></i><span>Explore</span></a>
           <a href="/research" data-analytics="nav_research"><i class="iconoir-bookmark-book" aria-hidden="true"></i><span>Research</span></a>
           <a href="/blog" data-analytics="nav_blog"><i class="iconoir-page" aria-hidden="true"></i><span>Blog</span></a>
           <a href="/events" data-analytics="nav_events"><i class="iconoir-calendar" aria-hidden="true"></i><span>Events</span></a>
@@ -87,7 +87,6 @@
 	          </div>
 			          <nav class="sidebar-nav" aria-label="Dashboard navigation">
 			            <a class="sidebar-link active" href="/dashboard" data-panel-target="orders"><i class="iconoir-shopping-bag-check" aria-hidden="true"></i><span>Orders</span></a>
-			            <a class="sidebar-link" href="/explore"><i class="iconoir-binocular" aria-hidden="true"></i><span>Explore</span></a>
 			            <a class="sidebar-link" href="/dashboard?panel=profile" data-panel-target="profile"><i class="iconoir-user" aria-hidden="true"></i><span>Profile</span></a>
 			            <a class="sidebar-link" href="/watchlist" data-panel-target="watchlist"><i class="iconoir-bell-notification" aria-hidden="true"></i><span>Watchlist</span></a>
 		            <a class="sidebar-link" href="/productivity" data-panel-target="productivity"><i class="iconoir-kanban-board" aria-hidden="true"></i><span>Productivity</span></a>
@@ -206,121 +205,43 @@
 
       <section class="section panel hidden" data-panel="profile" id="profile">
         <div class="container">
-          <section class="page-hero" style="padding-top:0;">
-            <div class="content-grid">
-	            <div>
-	              <div class="eyebrow">Workspace profile</div>
-		              <h1>Manage subscription orders, saved forecasts, and workspace activity.</h1>
-		              <p>
-		                Every forecast and order is stored in your secure workspace. Sign in to unlock your
-		                dashboard and keep a complete audit trail for your research workflow.
-		              </p>
-	            </div>
-              <div class="card">
-                <h3>Account status</h3>
-                <div class="profile-item">
-                  <span class="label">Signed in as</span>
-                  <span id="user-email" class="value">Not signed in</span>
-                </div>
-                <div class="profile-item">
-                  <span class="label">Provider</span>
-                  <span id="user-provider" class="value">—</span>
-                </div>
-                <div class="profile-item">
-                  <span class="label">Status</span>
-                  <span id="user-status" class="pill">Logged Out</span>
-                </div>
-                <div class="billing-panel">
-                  <span class="label">Public profile</span>
-                  <a class="cta secondary small" href="/dashboard?panel=profile" data-panel-target="profile">Manage profile page</a>
-                  <span class="small muted">Set your public profile metadata and sharing visibility in the Profile section.</span>
-                </div>
-                <div class="billing-panel">
-                  <span class="label">Billing</span>
-                  <a id="billing-portal-link" class="cta secondary small" href="/account" data-analytics="billing_portal_open">Sign in to manage billing</a>
-                  <span class="small muted">Manage plan, invoices, and payment method in Stripe.</span>
-                </div>
-                <div class="notice" id="dashboard-cta">
-                  Sign in to unlock order tracking and fulfillment updates.
-                </div>
-              </div>
-            </div>
-          </section>
           <div class="section-title">
-            <h2>Public profile</h2>
-            <p class="small">Public profile page fields for Explore attribution and shareable profile URLs.</p>
+            <div><div class="eyebrow">Private account settings</div><h2>Profile &amp; Integrations</h2><p class="small">Manage private account details and connect cloud resources. Quantura does not publish user profile pages.</p></div>
           </div>
           <div class="content-grid">
             <div class="card">
-              <h3>Profile details</h3>
-              <form id="profile-form" class="profile-editor">
-                <label class="label" for="profile-username">Username</label>
-                <input id="profile-username" class="input" type="text" maxlength="32" placeholder="quantura_alpha" />
-
-                <div class="form-grid" style="margin-top:10px;">
-                  <div class="field">
-                    <label class="label" for="profile-avatar">Avatar style</label>
-                    <select id="profile-avatar" class="input">
-                      <option value="bull">Bull</option>
-                      <option value="bear">Bear</option>
-                      <option value="owl">Owl</option>
-                      <option value="rocket">Rocket</option>
-                      <option value="shield">Shield</option>
-                      <option value="wave">Wave</option>
-                    </select>
-                  </div>
-                  <div class="field">
-                    <label class="label" for="profile-bio">Bio</label>
-                    <input id="profile-bio" class="input" maxlength="300" placeholder="Short public bio for your profile page" />
-                  </div>
-                </div>
-
-                <div class="settings-grid" style="margin-top:10px;">
-                  <label class="setting-item"><input id="profile-public-enabled" type="checkbox" /> <span>Public profile URL enabled</span></label>
-                  <label class="setting-item"><input id="profile-public-screener" type="checkbox" /> <span>Default screener runs to public</span></label>
-                  <label class="setting-item"><input id="profile-public-email" type="checkbox" /> <span>Show email on public profile</span></label>
-                </div>
-
-                <div class="profile-links-grid" style="margin-top:10px;">
-                  <label class="label" for="profile-social-x">X</label>
-                  <input id="profile-social-x" class="input" type="url" placeholder="https://x.com/username" />
-                  <label class="label" for="profile-social-linkedin">LinkedIn</label>
-                  <input id="profile-social-linkedin" class="input" type="url" placeholder="https://linkedin.com/in/username" />
-                  <label class="label" for="profile-social-github">GitHub</label>
-                  <input id="profile-social-github" class="input" type="url" placeholder="https://github.com/username" />
-                  <label class="label" for="profile-social-youtube">YouTube</label>
-                  <input id="profile-social-youtube" class="input" type="url" placeholder="https://youtube.com/@channel" />
-                  <label class="label" for="profile-social-tiktok">TikTok</label>
-                  <input id="profile-social-tiktok" class="input" type="url" placeholder="https://tiktok.com/@username" />
-                  <label class="label" for="profile-social-facebook">Facebook</label>
-                  <input id="profile-social-facebook" class="input" type="url" placeholder="https://facebook.com/username" />
-                  <label class="label" for="profile-social-instagram">Instagram</label>
-                  <input id="profile-social-instagram" class="input" type="url" placeholder="https://instagram.com/username" />
-                  <label class="label" for="profile-social-reddit">Reddit</label>
-                  <input id="profile-social-reddit" class="input" type="url" placeholder="https://reddit.com/u/username" />
-                  <label class="label" for="profile-social-website">Website</label>
-                  <input id="profile-social-website" class="input" type="url" placeholder="https://your-site.com" />
-                </div>
-
-                <div class="hero-actions" style="margin-top:12px;">
-                  <button class="cta secondary small" type="submit">Save profile</button>
-                  <button class="cta secondary small" id="profile-connect-stripe" type="button"><i class="iconoir-wallet" aria-hidden="true"></i><span>Connect Stripe</span></button>
-                </div>
-                <p id="profile-status" class="small muted">Sign in to set your public profile.</p>
-              </form>
+              <h3>Account</h3>
+              <div class="profile-item"><span class="label">Signed in as</span><span id="user-email" class="value">Not signed in</span></div>
+              <div class="profile-item"><span class="label">Provider</span><span id="user-provider" class="value">—</span></div>
+              <div class="profile-item"><span class="label">Status</span><span id="user-status" class="pill">Logged Out</span></div>
+              <div class="billing-panel"><span class="label">Billing</span><a id="billing-portal-link" class="cta secondary small" href="/account">Sign in to manage billing</a><span class="small muted">Manage your plan, invoices, and payment method in Stripe.</span></div>
+              <div class="notice small">This settings area is authenticated and private. Public profiles and user discovery have been removed.</div>
             </div>
-            <div class="card">
-              <h3>Public profile page</h3>
-              <p class="small">
-                Your public profile is available at <code>/u/&lt;handle&gt;</code> and can be shared directly.
-                Verified badges are shown for premium plans and admins.
-              </p>
-              <div class="hero-actions">
-                <a class="cta secondary" href="/profile">Open profile page</a>
-                <a class="cta secondary" href="/explore">Open Explore</a>
-              </div>
+            <div class="card security-summary">
+              <h3>Cloud security</h3>
+              <ul class="compact-list small">
+                <li>No AWS access key or secret key is requested or stored.</li>
+                <li>Vercel OIDC exchanges deployment identity for temporary STS credentials.</li>
+                <li>Your configuration is authorized by Firebase ID token and isolated by user ID.</li>
+                <li>Disconnecting does not delete resources already running in your AWS account.</li>
+              </ul>
             </div>
           </div>
+          <section class="card aws-integration-card" aria-labelledby="aws-integration-title">
+            <div class="card-head"><div><div class="eyebrow">Bring your own cloud</div><h3 id="aws-integration-title">AWS / SageMaker Integration</h3><p class="small muted">Connect a least-privilege IAM role so SageMaker and S3 requests run under your AWS identity and are billed by AWS to your account.</p></div><span class="pill">Vercel OIDC + STS</span></div>
+            <form id="aws-integration-form" autocomplete="off">
+              <div class="form-grid">
+                <div class="field"><label class="label" for="aws-account-id">AWS account ID</label><input id="aws-account-id" inputmode="numeric" pattern="[0-9]{12}" maxlength="12" placeholder="123456789012" required /></div>
+                <div class="field"><label class="label" for="aws-region">AWS region</label><select id="aws-region" required><option value="us-east-1">US East (N. Virginia)</option><option value="us-east-2">US East (Ohio)</option><option value="us-west-1">US West (N. California)</option><option value="us-west-2">US West (Oregon)</option><option value="ca-central-1">Canada (Central)</option><option value="eu-west-1">Europe (Ireland)</option><option value="eu-west-2">Europe (London)</option><option value="eu-central-1">Europe (Frankfurt)</option><option value="ap-south-1">Asia Pacific (Mumbai)</option><option value="ap-northeast-1">Asia Pacific (Tokyo)</option><option value="ap-southeast-1">Asia Pacific (Singapore)</option><option value="ap-southeast-2">Asia Pacific (Sydney)</option></select></div>
+                <div class="field field-span-2"><label class="label" for="aws-role-arn">IAM role ARN for Quantura/Vercel</label><input id="aws-role-arn" placeholder="arn:aws:iam::123456789012:role/QuanturaVercelRole" required /><div class="small muted">Trust Vercel's OIDC provider and restrict the subject to this production project.</div></div>
+                <div class="field field-span-2"><label class="label" for="aws-execution-role-arn">SageMaker execution role ARN</label><input id="aws-execution-role-arn" placeholder="arn:aws:iam::123456789012:role/QuanturaSageMakerExecutionRole" required /><div class="small muted">This role is passed to SageMaker jobs. Do not attach AdministratorAccess.</div></div>
+                <div class="field field-span-2"><label class="label" for="aws-s3-bucket">S3 bucket</label><input id="aws-s3-bucket" pattern="[a-z0-9][a-z0-9.\-]{1,61}[a-z0-9]" placeholder="quantura-forecast-data-123456789012" required /><div class="small muted">Input datasets and SageMaker outputs are written here using your assumed role.</div></div>
+              </div>
+              <div class="hero-actions workflow-actions"><button class="cta" type="submit">Save / Update</button><button class="cta secondary" id="aws-test-connection" type="button" disabled>Test Connection</button><button class="cta danger" id="aws-disconnect" type="button" disabled>Disconnect</button></div>
+              <p id="aws-integration-status" class="integration-status" role="status" aria-live="polite">Sign in to load your AWS integration status.</p>
+            </form>
+            <details class="learn-more"><summary>Minimum IAM and trust-policy setup</summary><div class="small"><p>The assumed role needs scoped S3 access to the selected bucket, SageMaker job create/describe/list permissions, and <code>iam:PassRole</code> only for the selected SageMaker execution role. Its trust policy must allow <code>sts:AssumeRoleWithWebIdentity</code> from Vercel OIDC and restrict the subject to Quantura's production API project. See the deployment documentation for a copyable policy.</p></div></details>
+          </section>
         </div>
       </section>
 
@@ -604,7 +525,7 @@
           </div>
         </div>
         <div class="small">
-          <strong>Explore</strong>
+          <strong>Platform</strong>
           <div><a href="/">Home</a></div>
           <div><a href="/forecasting">Forecasting</a></div>
           <div><a href="/research">Research</a></div>

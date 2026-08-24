@@ -5,6 +5,9 @@ import crypto from "crypto";
 import { GoogleAuth } from "google-auth-library";
 import { SecretManagerServiceClient } from "@google-cloud/secret-manager";
 import { registerFiscalDataRoutes } from "./fiscaldataProxy";
+import { registerMarketDataRoutes } from "./marketDataRoutes";
+import { registerPolymarketMlbRoutes } from "./polymarketMlb";
+import { registerAwsIntegrationRoutes, resolveUserAutopilotAwsConfig } from "./awsIntegration";
 import { runScheduledFiscaldataRefresh } from "./schedules/refreshFiscaldata";
 import { runIndicatorAnalysis } from "./indicators";
 import {
@@ -202,9 +205,6 @@ const TICKER_INTEL_CACHE_TTL_MS = 10 * 60 * 1000;
 const TICKER_INTEL_CACHE_MAX_ENTRIES = 200;
 const TICKER_TRENDING_CACHE_TTL_MS = 5 * 60 * 1000;
 const TICKER_TRENDING_CACHE_MAX_ENTRIES = 64;
-const FX_RATE_CACHE_TTL_MS = 60 * 60 * 1000;
-const FX_RATE_CACHE_MAX_ENTRIES = 120;
-const FX_RATE_FETCH_TIMEOUT_MS = 7000;
 const OUTPUT_META_RICH_TEXT_KEYS = new Set([
   "answer",
   "answerfull",
@@ -324,16 +324,6 @@ type PolymarketCacheEntry = {
   value: PolymarketSearchResponse;
 };
 
-type FxRateCacheEntry = {
-  expiresAtMs: number;
-  value: {
-    rate: number;
-    asOf: string;
-    symbolUsed: string;
-    source: string;
-  };
-};
-
 type MarketHeadlineFeedConfig = {
   id: string;
   providerId: string;
@@ -399,7 +389,6 @@ const ROUTES = express.Router();
 const polymarketCache = new Map<string, PolymarketCacheEntry>();
 const tickerIntelCache = new Map<string, TickerIntelCacheEntry>();
 const tickerTrendingCache = new Map<string, TickerTrendingCacheEntry>();
-const fxRateCache = new Map<string, FxRateCacheEntry>();
 const MARKET_HEADLINE_DEFAULT_FEED_ID = "marketwatch_topstories";
 const MARKET_HEADLINE_FETCH_TIMEOUT_MS = 12000;
 const MARKET_HEADLINE_STALE_THRESHOLD_MS = 1000 * 60 * 60 * 24 * 7;
@@ -626,6 +615,15 @@ const AUTOMATION_EMAIL_REPLY_TO = asString(process.env.AUTOMATION_EMAIL_REPLY_TO
 const RESEND_API_KEY = asString(process.env.RESEND_API_KEY).trim();
 
 registerFiscalDataRoutes(ROUTES, { db });
+registerMarketDataRoutes(ROUTES);
+registerPolymarketMlbRoutes(ROUTES);
+registerAwsIntegrationRoutes(ROUTES, { db, auth });
+
+// Retired public-social and currency endpoints. Keep an explicit response for
+// old clients while ensuring none of the legacy handlers below can execute.
+ROUTES.all(["/fx/convert", "/explore", "/explore/*", "/posts/*", "/profile/handle/*", "/profile/*/posts", "/predictions", "/predictions/*", "/model-council", "/model-council/*", "/my-requests/:requestId/publish", "/my-requests/:requestId/unpublish"], (_req, res) => {
+  res.status(410).json({ error: "feature_removed", message: "This feature has been retired." });
+});
 
 function asString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
@@ -4290,6 +4288,7 @@ async function reconcileAutopilotRunDocument(
       ticker: normalizeTicker(dataset.ticker || existingData.ticker),
       datasetS3Uri: sanitizeText(asPlainObject(files.datasetCsv).s3Uri || autopilot.inputS3Uri, 500),
       autopilot,
+      awsConfig: await resolveUserAutopilotAwsConfig(db, ownerUid),
     });
     nextPatch.autopilot = {
       ...autopilot,
@@ -5773,162 +5772,6 @@ async function fetchGammaJson(path: string, params: Record<string, string | numb
   } finally {
     clearTimeout(timer);
   }
-}
-
-function normalizeFxCode(value: unknown, fallback = "USD"): string {
-  const normalized = sanitizeText(value, 8)
-    .toUpperCase()
-    .replace(/[^A-Z]/g, "")
-    .slice(0, 6);
-  if (normalized) return normalized;
-  return sanitizeText(fallback, 8)
-    .toUpperCase()
-    .replace(/[^A-Z]/g, "")
-    .slice(0, 6);
-}
-
-function pruneFxRateCache(nowMs = Date.now()): void {
-  for (const [key, entry] of fxRateCache.entries()) {
-    if (entry.expiresAtMs <= nowMs) fxRateCache.delete(key);
-  }
-  while (fxRateCache.size > FX_RATE_CACHE_MAX_ENTRIES) {
-    const oldestKey = fxRateCache.keys().next().value as string | undefined;
-    if (!oldestKey) break;
-    fxRateCache.delete(oldestKey);
-  }
-}
-
-function getFxRateCache(cacheKey: string): FxRateCacheEntry["value"] | null {
-  const entry = fxRateCache.get(cacheKey);
-  if (!entry) return null;
-  if (entry.expiresAtMs <= Date.now()) {
-    fxRateCache.delete(cacheKey);
-    return null;
-  }
-  fxRateCache.delete(cacheKey);
-  fxRateCache.set(cacheKey, entry);
-  return entry.value;
-}
-
-function setFxRateCache(cacheKey: string, value: FxRateCacheEntry["value"]): void {
-  pruneFxRateCache();
-  fxRateCache.set(cacheKey, {
-    expiresAtMs: Date.now() + FX_RATE_CACHE_TTL_MS,
-    value,
-  });
-  pruneFxRateCache();
-}
-
-async function fetchYahooFxRate(symbol: string): Promise<{ rate: number; asOf: string } | null> {
-  const cleanSymbol = sanitizeText(symbol, 24);
-  if (!cleanSymbol) return null;
-  const endpoint = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(cleanSymbol)}?interval=1d&range=5d`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FX_RATE_FETCH_TIMEOUT_MS);
-  try {
-    const response = await fetch(endpoint, {
-      method: "GET",
-      signal: controller.signal,
-      headers: {
-        Accept: "application/json",
-        "User-Agent": "QuanturaFx/1.0",
-      },
-    });
-    if (!response.ok) return null;
-    const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-    const result = Array.isArray((payload.chart as any)?.result) ? ((payload.chart as any).result[0] as Record<string, unknown>) : null;
-    if (!result) return null;
-    const meta = asPlainObject(result.meta);
-    const quoteSeries = Array.isArray((result.indicators as any)?.quote) ? ((result.indicators as any).quote[0] as Record<string, unknown>) : null;
-    const closes = Array.isArray(quoteSeries?.close) ? quoteSeries?.close : [];
-    let close = Number(meta.regularMarketPrice);
-    if (!Number.isFinite(close)) {
-      for (let idx = closes.length - 1; idx >= 0; idx -= 1) {
-        const candidate = Number(closes[idx]);
-        if (Number.isFinite(candidate) && candidate > 0) {
-          close = candidate;
-          break;
-        }
-      }
-    }
-    if (!Number.isFinite(close) || close <= 0) return null;
-    let asOfMs = Number(meta.regularMarketTime) * 1000;
-    if (!Number.isFinite(asOfMs) || asOfMs <= 0) {
-      const timestamps = Array.isArray(result.timestamp) ? result.timestamp : [];
-      const latestTs = Number(timestamps[timestamps.length - 1]);
-      asOfMs = Number.isFinite(latestTs) ? latestTs * 1000 : Date.now();
-    }
-    return {
-      rate: close,
-      asOf: new Date(asOfMs).toISOString(),
-    };
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function resolveFxRate(baseCode: string, quoteCode: string): Promise<{
-  rate: number;
-  asOf: string;
-  symbolUsed: string;
-  source: string;
-}> {
-  const base = normalizeFxCode(baseCode, "USD");
-  const quote = normalizeFxCode(quoteCode, "USD");
-  if (!base || !quote) {
-    throw new Error("invalid_currency_code");
-  }
-  if (base === quote) {
-    return {
-      rate: 1,
-      asOf: new Date().toISOString(),
-      symbolUsed: `${base}${quote}=X`,
-      source: "identity",
-    };
-  }
-
-  const cacheKey = `${base}_${quote}`;
-  const cached = getFxRateCache(cacheKey);
-  if (cached) {
-    return {
-      rate: cached.rate,
-      asOf: cached.asOf,
-      symbolUsed: cached.symbolUsed,
-      source: cached.source,
-    };
-  }
-
-  const directSymbols = [`${base}${quote}=X`, `${base}-${quote}`];
-  for (const symbol of directSymbols) {
-    const quoteData = await fetchYahooFxRate(symbol);
-    if (!quoteData) continue;
-    const value = {
-      rate: quoteData.rate,
-      asOf: quoteData.asOf,
-      symbolUsed: symbol,
-      source: "yahoo_finance",
-    };
-    setFxRateCache(cacheKey, value);
-    return value;
-  }
-
-  const inverseSymbols = [`${quote}${base}=X`, `${quote}-${base}`];
-  for (const symbol of inverseSymbols) {
-    const quoteData = await fetchYahooFxRate(symbol);
-    if (!quoteData || !Number.isFinite(quoteData.rate) || quoteData.rate <= 0) continue;
-    const value = {
-      rate: 1 / quoteData.rate,
-      asOf: quoteData.asOf,
-      symbolUsed: symbol,
-      source: "yahoo_finance_inverse",
-    };
-    setFxRateCache(cacheKey, value);
-    return value;
-  }
-
-  throw new Error("fx_rate_unavailable");
 }
 
 function summarizeWebhookPayload(req: Request): Record<string, unknown> {
@@ -8022,28 +7865,6 @@ ROUTES.get("/health", (_req, res) => {
   res.status(200).json({ ok: true, service: "quantura-explore-api", ts: new Date().toISOString() });
 });
 
-ROUTES.get("/ticker/history", async (req, res) => {
-  try {
-    const query = asPlainObject(req.query);
-    const ticker = normalizeTicker(query.ticker || query.symbol);
-    if (!ticker) {
-      res.status(400).json({ error: "invalid_ticker" });
-      return;
-    }
-    const payload = await fetchYahooHistoryBars({
-      ticker,
-      interval: query.interval,
-      start: query.start,
-      end: query.end,
-    });
-    res.status(200).json(payload);
-  } catch (error: any) {
-    const detail = sanitizeText(error?.message || error, 260) || "history_lookup_failed";
-    const status = /ticker is required|invalid_ticker|start|end/i.test(detail) ? 400 : 502;
-    res.status(status).json({ error: status === 400 ? "invalid_history_request" : "history_lookup_failed", detail });
-  }
-});
-
 ROUTES.post("/forecast/run", async (req, res) => {
   try {
     const user = await verifyRequestUser(req, true);
@@ -9027,70 +8848,6 @@ ROUTES.get("/ticker/intel", async (req, res) => {
     const detail = sanitizeText(error?.message || error, 220) || "ticker_intel_failed";
     res.status(500).json({ error: "ticker_intel_failed", detail });
   }
-});
-
-async function handleFxConvert(req: Request, res: Response): Promise<void> {
-  let viewer: admin.auth.DecodedIdToken | null = null;
-  try {
-    viewer = await verifyRequestUser(req, false);
-  } catch (error: any) {
-    if (String(error?.message) === "invalid_token") {
-      res.status(401).json({ error: "invalid_token" });
-      return;
-    }
-  }
-
-  const body = req.method === "GET" ? asPlainObject(req.query) : asPlainObject(req.body);
-  const amount = asFinite(body.amount, NaN);
-  const base = normalizeFxCode(body.base || body.from, "USD");
-  const quote = normalizeFxCode(body.quote || body.to, "USD");
-  if (!Number.isFinite(amount) || amount <= 0) {
-    res.status(400).json({ error: "invalid_amount", detail: "Amount must be greater than zero." });
-    return;
-  }
-  if (!base || !quote) {
-    res.status(400).json({ error: "invalid_currency", detail: "Base and quote currencies are required." });
-    return;
-  }
-
-  try {
-    const resolved = await resolveFxRate(base, quote);
-    const amountOut = Number((amount * resolved.rate).toFixed(8));
-    const payload = {
-      base,
-      quote,
-      amountIn: amount,
-      rate: resolved.rate,
-      amountOut,
-      asOf: resolved.asOf,
-      symbolUsed: resolved.symbolUsed,
-      source: resolved.source,
-      cachedTtlSeconds: Math.round(FX_RATE_CACHE_TTL_MS / 1000),
-    };
-
-    if (viewer?.uid) {
-      await db
-        .collection("users")
-        .doc(viewer.uid)
-        .collection("fxHistory")
-        .add({
-          ...payload,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-    }
-    res.status(200).json(payload);
-  } catch (error: any) {
-    const detail = sanitizeText(error?.message || error, 200) || "fx_convert_failed";
-    res.status(502).json({ error: "fx_convert_failed", detail });
-  }
-}
-
-ROUTES.post("/fx/convert", async (req, res) => {
-  await handleFxConvert(req, res);
-});
-
-ROUTES.get("/fx/convert", async (req, res) => {
-  await handleFxConvert(req, res);
 });
 
 ROUTES.get("/market-headlines", async (req, res) => {
@@ -13224,6 +12981,7 @@ ROUTES.post("/autopilot/runs", async (req, res) => {
       horizon: asFinite(body.horizon, asFinite(asPlainObject(current.autopilot).forecastHorizon, 30)),
       quantiles: body.quantiles || asPlainObject(current.autopilot).quantiles || ["p10", "p50", "p90"],
       csvText,
+      awsConfig: await resolveUserAutopilotAwsConfig(db, user.uid),
     });
     const patch: Record<string, unknown> = {
       mode: "autopilot_run",

@@ -122,8 +122,6 @@
   const POLYMARKET_CLIENT_CACHE_MAX_ENTRIES = 80;
   const POLYMARKET_DEFAULT_MARKET_LIMIT = 12;
   const POLYMARKET_SEARCH_DEBOUNCE_MS = 400;
-  const TERMINAL_FX_RECENT_KEY = "quantura_terminal_fx_recent_v1";
-  const TERMINAL_FX_RECENT_LIMIT = 8;
   const DEFAULT_NOTIFICATION_PREFS = Object.freeze({
     global: true,
     following: true,
@@ -185,7 +183,7 @@
     forecast: "Forecasting",
     screener: "Screeners",
     indicator: "Indicators",
-    modelCouncil: "Model Council",
+    modelCouncil: "Forecast Review",
   };
   const getNativePlatform = () => {
     try {
@@ -634,7 +632,7 @@
       tier: "Council",
       label: "Claude Sonnet 4.5",
       personality: "balanced",
-      helper: "Strong reasoning and synthesis for model council.",
+      helper: "Strong reasoning and synthesis for forecast review.",
       pricing: { input: null, cached_input: null, output: null },
     },
     {
@@ -882,9 +880,8 @@
       sidebar_news_data: "Historical Data Download",
       sidebar_corporate_events: "Earnings calendar",
       sidebar_market_headlines: "Market headlines",
-      sidebar_ask_gpt5: "Model Council",
+      sidebar_ask_gpt5: "Forecast Review",
       sidebar_options: "Options",
-      sidebar_currency_conversion: "Currency conversion",
       sidebar_learn_more: "Learn more",
       sidebar_screener: "Screener",
       sidebar_watchlist_alerts: "Watchlist and alerts",
@@ -892,7 +889,7 @@
       panel_forecast_subtitle: "Generate quantile bands for the ticker in your chart and save the run so you can re-plot it later.",
       panel_market_headlines_title: "Top market headlines",
       panel_market_headlines_subtitle: "Attributed RSS market headlines with provider selection, source links, and native-only ad slots between article groups.",
-      panel_ticker_query_title: "Model Council",
+      panel_ticker_query_title: "Forecast Review",
       panel_ticker_query_subtitle: "Run multi-provider analysis with structured Yahoo Finance context modules.",
       label_ticker: "Ticker",
       label_timeframe: "Timeframe",
@@ -902,8 +899,8 @@
       button_load_market_feed: "Feeds load automatically",
       label_response_language: "Response language",
       label_question: "Question",
-      button_ask_gpt5: "Prepare Model Council",
-      query_result: "Model Council output",
+      button_ask_gpt5: "Prepare Forecast Review",
+      query_result: "Forecast Review output",
       language_selector_label: "Language",
       language_auto: "Auto",
       language_english: "English",
@@ -943,9 +940,8 @@
       sidebar_news_data: "Noticias y datos",
       sidebar_corporate_events: "Calendario de resultados",
       sidebar_market_headlines: "Titulares del mercado",
-      sidebar_ask_gpt5: "Model Council",
+      sidebar_ask_gpt5: "Forecast Review",
       sidebar_options: "Opciones",
-      sidebar_currency_conversion: "Conversion de divisas",
       sidebar_learn_more: "Mas informacion",
       sidebar_screener: "Screener",
       sidebar_watchlist_alerts: "Lista y alertas",
@@ -953,7 +949,7 @@
       panel_forecast_subtitle: "Genera bandas de cuantiles para el ticker de tu grafico y guarda la ejecucion para volver a trazarla despues.",
       panel_market_headlines_title: "Titulares del mercado",
       panel_market_headlines_subtitle: "Titulares RSS atribuidos con seleccion de proveedor, enlaces de fuente y espacios publicitarios nativos entre grupos de articulos.",
-      panel_ticker_query_title: "Model Council",
+      panel_ticker_query_title: "Forecast Review",
       panel_ticker_query_subtitle: "Analisis multi-modelo con contexto estructurado de Yahoo Finance.",
       label_ticker: "Ticker",
       label_timeframe: "Periodo",
@@ -963,8 +959,8 @@
       button_load_market_feed: "Cargar mercado",
       label_response_language: "Idioma de respuesta",
       label_question: "Pregunta",
-      button_ask_gpt5: "Preparar Model Council",
-      query_result: "Salida de Model Council",
+      button_ask_gpt5: "Preparar Forecast Review",
+      query_result: "Salida de Forecast Review",
       language_selector_label: "Idioma",
       language_auto: "Automatico",
       language_english: "Ingles",
@@ -1004,9 +1000,8 @@
       sidebar_news_data: "Actualites et donnees",
       sidebar_corporate_events: "Calendrier des resultats",
       sidebar_market_headlines: "Titres du marche",
-      sidebar_ask_gpt5: "Model Council",
+      sidebar_ask_gpt5: "Forecast Review",
       sidebar_options: "Options",
-      sidebar_currency_conversion: "Conversion de devises",
       sidebar_learn_more: "En savoir plus",
       sidebar_screener: "Screener",
       sidebar_watchlist_alerts: "Watchlist et alertes",
@@ -1014,7 +1009,7 @@
       panel_forecast_subtitle: "Generez des bandes de quantiles pour le ticker de votre graphique et enregistrez l'execution pour la recharger plus tard.",
       panel_market_headlines_title: "Titres du marche",
       panel_market_headlines_subtitle: "Titres RSS attribues avec selection du fournisseur, liens source et emplacements publicitaires natifs entre groupes d articles.",
-      panel_ticker_query_title: "Model Council",
+      panel_ticker_query_title: "Forecast Review",
       panel_ticker_query_subtitle: "Analyse multi-modeles avec contexte Yahoo Finance structure.",
       label_ticker: "Ticker",
       label_timeframe: "Horizon",
@@ -1024,8 +1019,8 @@
       button_load_market_feed: "Charger le flux marche",
       label_response_language: "Langue de reponse",
       label_question: "Question",
-      button_ask_gpt5: "Preparer Model Council",
-      query_result: "Sortie Model Council",
+      button_ask_gpt5: "Preparer Forecast Review",
+      query_result: "Sortie Forecast Review",
       language_selector_label: "Langue",
       language_auto: "Auto",
       language_english: "Anglais",
@@ -1065,9 +1060,8 @@
       sidebar_news_data: "News und Daten",
       sidebar_corporate_events: "Ergebnis-Kalender",
       sidebar_market_headlines: "Markt-Schlagzeilen",
-      sidebar_ask_gpt5: "Model Council",
+      sidebar_ask_gpt5: "Forecast Review",
       sidebar_options: "Optionen",
-      sidebar_currency_conversion: "Waehrungsumrechnung",
       sidebar_learn_more: "Mehr erfahren",
       sidebar_screener: "Screener",
       sidebar_watchlist_alerts: "Watchlist und Alarme",
@@ -1075,7 +1069,7 @@
       panel_forecast_subtitle: "Erzeuge Quantil-Bander fur den Ticker in deinem Chart und speichere den Lauf fur spatere Vergleiche.",
       panel_market_headlines_title: "Top-Markt-Schlagzeilen",
       panel_market_headlines_subtitle: "Zugeordnete RSS-Marktschlagzeilen mit Anbieterauswahl, Quellenlinks und nativen Anzeigenplatzen zwischen Artikelgruppen.",
-      panel_ticker_query_title: "Model Council",
+      panel_ticker_query_title: "Forecast Review",
       panel_ticker_query_subtitle: "Multi-Provider-Analyse mit strukturiertem Yahoo-Finance-Kontext.",
       label_ticker: "Ticker",
       label_timeframe: "Zeitrahmen",
@@ -1085,8 +1079,8 @@
       button_load_market_feed: "Markt-Feed laden",
       label_response_language: "Antwortsprache",
       label_question: "Frage",
-      button_ask_gpt5: "Model Council vorbereiten",
-      query_result: "Model Council Ausgabe",
+      button_ask_gpt5: "Forecast Review vorbereiten",
+      query_result: "Forecast Review Ausgabe",
       language_selector_label: "Sprache",
       language_auto: "Auto",
       language_english: "Englisch",
@@ -1126,9 +1120,8 @@
       sidebar_news_data: "الاخبار والبيانات",
       sidebar_corporate_events: "تقويم الأرباح",
       sidebar_market_headlines: "عناوين السوق",
-      sidebar_ask_gpt5: "Model Council",
+      sidebar_ask_gpt5: "Forecast Review",
       sidebar_options: "الخيارات",
-      sidebar_currency_conversion: "تحويل العملات",
       sidebar_learn_more: "اعرف المزيد",
       sidebar_screener: "الفلتر",
       sidebar_watchlist_alerts: "قائمة المراقبة والتنبيهات",
@@ -1136,7 +1129,7 @@
       panel_forecast_subtitle: "انشئ نطاقات الكوانتايل للرمز في الرسم واحفظ التشغيل لاعادة عرضه لاحقا.",
       panel_market_headlines_title: "ابرز عناوين السوق",
       panel_market_headlines_subtitle: "عناوين RSS منسوبة مع اختيار المزود وروابط المصدر ومواضع اعلانات اصلية بين مجموعات المقالات.",
-      panel_ticker_query_title: "Model Council",
+      panel_ticker_query_title: "Forecast Review",
       panel_ticker_query_subtitle: "تحليل متعدد النماذج مع سياق Yahoo Finance المنظم.",
       label_ticker: "الرمز",
       label_timeframe: "الاطار الزمني",
@@ -1146,8 +1139,8 @@
       button_load_market_feed: "تحميل موجز السوق",
       label_response_language: "لغة الاجابة",
       label_question: "السؤال",
-      button_ask_gpt5: "تحضير Model Council",
-      query_result: "مخرجات Model Council",
+      button_ask_gpt5: "تحضير Forecast Review",
+      query_result: "مخرجات Forecast Review",
       language_selector_label: "اللغة",
       language_auto: "تلقائي",
       language_english: "الانجليزية",
@@ -1187,9 +1180,8 @@
       sidebar_news_data: "খবর ও ডেটা",
       sidebar_corporate_events: "আর্নিংস ক্যালেন্ডার",
       sidebar_market_headlines: "মার্কেট হেডলাইন",
-      sidebar_ask_gpt5: "Model Council",
+      sidebar_ask_gpt5: "Forecast Review",
       sidebar_options: "অপশন",
-      sidebar_currency_conversion: "কারেন্সি কনভার্সন",
       sidebar_learn_more: "আরও জানুন",
       sidebar_screener: "স্ক্রিনার",
       sidebar_watchlist_alerts: "ওয়াচলিস্ট ও অ্যালার্ট",
@@ -1197,7 +1189,7 @@
       panel_forecast_subtitle: "চার্টে থাকা টিকারের জন্য কোয়ান্টাইল ব্যান্ড তৈরি করুন এবং পরে পুনরায় দেখার জন্য রান সংরক্ষণ করুন।",
       panel_market_headlines_title: "শীর্ষ মার্কেট হেডলাইন",
       panel_market_headlines_subtitle: "অ্যাট্রিবিউটেড RSS মার্কেট হেডলাইন, প্রোভাইডার নির্বাচন, সোর্স লিংক এবং আর্টিকেল গ্রুপের মাঝে নেটিভ অ্যাড স্লট।",
-      panel_ticker_query_title: "Model Council",
+      panel_ticker_query_title: "Forecast Review",
       panel_ticker_query_subtitle: "স্ট্রাকচার্ড Yahoo Finance কনটেক্সটে মাল্টি-মডেল বিশ্লেষণ।",
       label_ticker: "টিকার",
       label_timeframe: "টাইমফ্রেম",
@@ -1207,8 +1199,8 @@
       button_load_market_feed: "মার্কেট ফিড লোড করুন",
       label_response_language: "উত্তরের ভাষা",
       label_question: "প্রশ্ন",
-      button_ask_gpt5: "Model Council প্রস্তুত করুন",
-      query_result: "Model Council আউটপুট",
+      button_ask_gpt5: "Forecast Review প্রস্তুত করুন",
+      query_result: "Forecast Review আউটপুট",
       language_selector_label: "ভাষা",
       language_auto: "অটো",
       language_english: "ইংরেজি",
@@ -1237,7 +1229,6 @@
     sidebar_market_headlines: ['[data-panel-target="market-headlines"] span'],
     sidebar_ask_gpt5: ['[data-panel-target="ticker-query"] span'],
     sidebar_options: ['[data-panel-target="options"] span'],
-    sidebar_currency_conversion: ['[data-panel-target="fx"] span'],
     sidebar_learn_more: ['[data-panel-target="learn"] span'],
     sidebar_screener: ['[data-panel-target="screener"] span', 'a[href="/screener"] span'],
     sidebar_watchlist_alerts: ['a[href="/watchlist"] span'],
@@ -1707,92 +1698,6 @@
     }
   };
 
-  const ensureTerminalFxPanelScaffold = () => {
-    const terminalRoot = document.querySelector('[data-panels][data-panel-router="terminal"]');
-    const panelColumn = terminalRoot?.querySelector(".studio-panel");
-    if (!terminalRoot || !panelColumn) return;
-
-    const fxSidebarLink = document.querySelector('[data-panel-target="fx"]');
-    if (fxSidebarLink) {
-      fxSidebarLink.setAttribute("href", "/terminal/fx");
-    }
-
-    if (panelColumn.querySelector('[data-panel="fx"]')) return;
-
-    const fxPanel = document.createElement("section");
-    fxPanel.className = "panel hidden";
-    fxPanel.dataset.panel = "fx";
-    fxPanel.innerHTML = `
-      <div class="panel-header">
-        <h2>Currency conversion</h2>
-        <p class="small">Convert with live FX rates and keep a quick recent list for repeat checks.</p>
-      </div>
-      <form id="terminal-fx-form" class="card" autocomplete="off">
-        <div class="form-grid">
-          <div class="field">
-            <label class="label" for="terminal-fx-amount">Amount</label>
-            <input id="terminal-fx-amount" name="amount" type="number" min="0" step="0.0001" value="1" required />
-          </div>
-          <div class="field">
-            <label class="label" for="terminal-fx-base">Base currency</label>
-            <select id="terminal-fx-base" name="base" required>
-              <option value="USD">USD</option>
-              <option value="EUR">EUR</option>
-              <option value="GBP">GBP</option>
-              <option value="JPY">JPY</option>
-              <option value="CAD">CAD</option>
-              <option value="AUD">AUD</option>
-              <option value="CHF">CHF</option>
-              <option value="BDT">BDT</option>
-              <option value="INR">INR</option>
-              <option value="BTC">BTC</option>
-            </select>
-          </div>
-          <div class="field">
-            <label class="label" for="terminal-fx-quote">Quote currency</label>
-            <select id="terminal-fx-quote" name="quote" required>
-              <option value="EUR">EUR</option>
-              <option value="USD" selected>USD</option>
-              <option value="GBP">GBP</option>
-              <option value="JPY">JPY</option>
-              <option value="CAD">CAD</option>
-              <option value="AUD">AUD</option>
-              <option value="CHF">CHF</option>
-              <option value="BDT">BDT</option>
-              <option value="INR">INR</option>
-              <option value="BTC">BTC</option>
-            </select>
-          </div>
-        </div>
-        <div class="hero-actions" style="margin-top: 12px;">
-          <button type="button" class="cta secondary small" id="terminal-fx-swap">
-            <i class="iconoir-arrows-up-from-line" aria-hidden="true"></i><span>Swap</span>
-          </button>
-          <button type="submit" class="cta small fx-convert-cta" id="terminal-fx-submit">
-            <i class="iconoir-calculator" aria-hidden="true"></i><span>Convert</span>
-          </button>
-        </div>
-        <p id="terminal-fx-status" class="small muted" style="margin-top: 10px;">Ready.</p>
-      </form>
-      <div class="results-panel">
-        <h3>Conversion result</h3>
-        <div id="terminal-fx-result" class="panel-output small">Run a conversion to view rate details.</div>
-      </div>
-      <div class="card">
-        <h3>Recent conversions</h3>
-        <div id="terminal-fx-recent" class="order-list panel-output small">No recent conversions yet.</div>
-      </div>
-    `;
-
-    const screenerPanel = panelColumn.querySelector('[data-panel="screener"]');
-    if (screenerPanel?.parentNode) {
-      screenerPanel.parentNode.insertBefore(fxPanel, screenerPanel);
-    } else {
-      panelColumn.appendChild(fxPanel);
-    }
-  };
-
-  ensureTerminalFxPanelScaffold();
 
 	  const ui = {
     headerAuth: document.getElementById("header-auth"),
@@ -1894,15 +1799,6 @@
     eventsCalendarSelectedDayTitle: document.getElementById("events-calendar-selected-day-title"),
     eventsCalendarStatus: document.getElementById("events-calendar-status"),
     eventsCalendarOutput: document.getElementById("events-calendar-output"),
-    terminalFxForm: document.getElementById("terminal-fx-form"),
-    terminalFxAmount: document.getElementById("terminal-fx-amount"),
-    terminalFxBase: document.getElementById("terminal-fx-base"),
-    terminalFxQuote: document.getElementById("terminal-fx-quote"),
-    terminalFxSwap: document.getElementById("terminal-fx-swap"),
-    terminalFxSubmit: document.getElementById("terminal-fx-submit"),
-    terminalFxStatus: document.getElementById("terminal-fx-status"),
-    terminalFxResult: document.getElementById("terminal-fx-result"),
-    terminalFxRecent: document.getElementById("terminal-fx-recent"),
     marketHeadlinesForm: document.getElementById("market-headlines-form"),
     marketHeadlinesProvider: document.getElementById("market-headlines-provider"),
     marketHeadlinesFeed: document.getElementById("market-headlines-feed"),
@@ -2940,7 +2836,7 @@
         selectedModules = [],
       } = {}) => {
         const cleanSymbol = normalizeTicker(symbol || "");
-        const providerLabel = titleCaseLabel(provider || "Model Council");
+        const providerLabel = titleCaseLabel(provider || "Forecast Review");
         const modelLabel = String(getModelMeta(model)?.label || model || "Quantura model").trim();
         const moduleCount = Array.isArray(selectedModules) ? selectedModules.filter(Boolean).length : 0;
         const cleanAnswer = String(answer || "").replace(/\s+/g, " ").trim();
@@ -3285,13 +3181,11 @@
         [
           "/terminal",
           "/forecasting",
-          "/terminal/fx",
           "/indicators",
           "/trending",
           "/news",
           "/market-headlines",
           "/options",
-          "/tools/fx",
           "/screener",
         ].includes(path)
       ) {
@@ -3363,11 +3257,11 @@
     };
 
     const preferredByRouter = {
-      terminal: ["forecast", "/forecasting", "indicators", "/indicators", "fx", "/terminal/fx"],
-      dashboard: ["orders", "profile", "watchlist", "collaboration", "notifications", "/explore"],
+      terminal: ["forecast", "/forecasting", "indicators", "/indicators", "options", "/options"],
+      dashboard: ["orders", "profile", "watchlist", "productivity", "notifications"],
     };
     const preferredByPath = {
-      "/screener": ["/forecasting", "/indicators", "/screener", "/explore"],
+      "/screener": ["/forecasting", "/indicators", "/screener", "/research"],
     };
     const preferredPanels = preferredByPath[path] || preferredByRouter[routerName] || [];
     const selected = preferredPanels
@@ -3405,8 +3299,7 @@
         const iconMarkup = link.querySelector("i")?.outerHTML || icon("nav-arrow-right");
         const label = String(link.textContent || "").trim();
         const compactLabelMap = {
-          "Currency conversion": "FX",
-          "Model Council": "Council",
+          "Forecast Review": "Council",
           "Watchlist and alerts": "Watchlist",
           "News and data": "History",
           "Historical Data Download": "History",
@@ -3451,12 +3344,11 @@
   const bindMarketingBottomNav = () => {
     const rawPath = normalizePath(window.location.pathname || "/");
     const path = rawPath.startsWith("/blog/") ? "/blog" : rawPath;
-    const supported = new Set(["/pricing", "/shop", "/blog", "/about", "/contact", "/events", "/research", "/explore"]);
+    const supported = new Set(["/pricing", "/shop", "/blog", "/about", "/contact", "/events", "/research"]);
     if (!supported.has(path)) return;
     if (document.querySelector(".app-sidebar .sidebar-nav")) return;
 
     const pageMeta = {
-      "/explore": { label: "Explore", iconName: "binocular" },
       "/research": { label: "Research", iconName: "bookmark-book" },
       "/pricing": { label: "Pricing", iconName: "wallet" },
       "/shop": { label: "Shop", iconName: "shop" },
@@ -3465,7 +3357,7 @@
       "/about": { label: "About", iconName: "info-circle" },
       "/events": { label: "Events", iconName: "calendar" },
     };
-    const baseLinks = ["/explore", "/research", "/pricing", "/shop", "/contact"];
+    const baseLinks = ["/research", "/pricing", "/shop", "/blog", "/contact"];
     const links = baseLinks.slice();
     if (!links.includes(path)) {
       links[0] = path;
@@ -8706,10 +8598,11 @@
 	      const actions = editable
 	        ? `
 	          <div class="task-actions">
+              <button class="task-chip" type="button" data-action="task-edit" data-task-id="${escapeHtml(task.id)}" data-title="${escapeHtml(task.title || "")}" data-notes="${escapeHtml(task.notes || "")}" data-due="${escapeHtml(task.dueDate || "")}" data-assignee="${escapeHtml(task.assigneeEmail || "")}" data-status="${escapeHtml(task.status || "backlog")}">Edit</button>
               <div class="task-move-group">
-	              <button class="task-chip" type="button" data-action="task-move" data-task-id="${escapeHtml(task.id)}" data-to="backlog">Backlog</button>
-	              <button class="task-chip" type="button" data-action="task-move" data-task-id="${escapeHtml(task.id)}" data-to="doing">Doing</button>
-	              <button class="task-chip" type="button" data-action="task-move" data-task-id="${escapeHtml(task.id)}" data-to="done">Done</button>
+	              <button class="task-chip" type="button" data-action="task-move" data-task-id="${escapeHtml(task.id)}" data-to="backlog" ${task.status === "backlog" ? "disabled aria-current=\"true\"" : ""}>Backlog</button>
+	              <button class="task-chip" type="button" data-action="task-move" data-task-id="${escapeHtml(task.id)}" data-to="doing" ${task.status === "doing" ? "disabled aria-current=\"true\"" : ""}>Doing</button>
+	              <button class="task-chip" type="button" data-action="task-move" data-task-id="${escapeHtml(task.id)}" data-to="done" ${task.status === "done" ? "disabled aria-current=\"true\"" : ""}>Done</button>
               </div>
 	            <button class="task-chip danger" type="button" data-action="task-delete" data-task-id="${escapeHtml(task.id)}">Delete</button>
 	          </div>
@@ -9240,8 +9133,7 @@
   };
 
   const shouldAutoPublishForType = (requestType) => {
-    const type = normalizeMyRequestType(requestType);
-    return Boolean(type && MY_REQUEST_TYPES.has(type));
+    return false;
   };
 
   const hashStringToInt = (value) => {
@@ -9776,11 +9668,10 @@
         autopilot: "/autopilot",
         "sports-autopilot": "/sports-forecasting",
         indicators: "/indicators",
-        news: "/news",
+        news: "/historical-data",
         "market-headlines": "/market-headlines",
         options: "/options",
         screener: "/forecasting",
-        fx: "/terminal/fx",
         learn: "/studio",
       },
       pathAliases: {
@@ -9788,9 +9679,9 @@
         "/uploads": "autopilot",
         "/dashboard/uploads": "autopilot",
         "/sports-forecasting": "sports-autopilot",
+        "/news": "news",
+        "/historical-prices": "news",
         "/trending": "forecast",
-        "/tools/fx": "fx",
-        "/terminal/fx": "fx",
       },
     },
     dashboard: {
@@ -9925,7 +9816,7 @@
     if (!navs.length && !navActions.length) return;
     navs.forEach((nav) => {
       nav.innerHTML = `
-        <a href="/explore" data-analytics="nav_explore">${icon("binocular")}<span>Explore</span></a>
+        <a href="/forecasting" data-analytics="nav_terminal">${icon("candlestick-chart")}<span>Terminal</span></a>
         <a href="/research" data-analytics="nav_research">${icon("bookmark-book")}<span>Research</span></a>
         <a href="/blog" data-analytics="nav_blog">${icon("page")}<span>Blog</span></a>
         <a href="/events" data-analytics="nav_events">${icon("calendar")}<span>Events</span></a>
@@ -14678,30 +14569,10 @@
 
   const renderOutputPublishControlsMarkup = ({ requestId = "", requestType = "" } = {}) => {
     const id = String(requestId || "").trim();
-    const type = String(requestType || "").trim();
     if (!id) {
-      return `<div class="small muted">Save this output to publish it to Explore.</div>`;
+      return `<div class="small muted">Save this output to your private workspace.</div>`;
     }
-    const request = typeof getMyRequestById === "function" ? getMyRequestById(id) : null;
-    const published = Boolean(request?.published);
-    const stateLabel = published ? "Published to Explore" : "Not published to Explore";
-    const unpublishLabel = "Remove from public Explore";
-    return `
-      <div class="task-chip-row" data-output-publish-controls data-request-id="${escapeHtml(id)}" data-request-type="${escapeHtml(type)}">
-        <span class="status status-icon-only ${published ? "fulfilled" : "pending"}" role="img" aria-label="${escapeHtml(stateLabel)}" title="${escapeHtml(stateLabel)}">
-          ${published ? icon("eye") : hidePublicationIcon()}
-        </span>
-        ${
-          published
-            ? `<button class="task-chip" type="button" data-action="output-unpublish" data-request-id="${escapeHtml(id)}" data-request-type="${escapeHtml(
-                type
-              )}" aria-label="${escapeHtml(unpublishLabel)}" title="${escapeHtml(unpublishLabel)}">${hidePublicationIcon()}<span>Unpublish</span></button>`
-            : `<button class="task-chip" type="button" data-action="output-publish" data-request-id="${escapeHtml(id)}" data-request-type="${escapeHtml(type)}">${icon(
-                "send"
-              )}<span>Publish to Explore</span></button>`
-        }
-      </div>
-    `;
+    return `<div class="task-chip-row" data-output-publish-controls data-request-id="${escapeHtml(id)}"><span class="status fulfilled">Saved privately</span></div>`;
   };
 
   const renderTickerQueryResult = (payload) => {
@@ -14723,7 +14594,7 @@
     ui.tickerQueryOutput.innerHTML = `
       <div class="small muted" style="display:flex; align-items:center; gap:10px;">
         ${logoUrl ? `<img src="${escapeHtml(logoUrl)}" alt="" loading="lazy" style="width:20px; height:20px; border-radius:50%; object-fit:cover;" />` : ""}
-        <span>Model Council response</span>
+        <span>Forecast Review response</span>
       </div>
       <div class="small markdown-output" style="margin-top:10px;">${renderMarkdown(answerText, { fallback: "No answer returned." })}</div>
       <div class="model-council-actions">
@@ -14776,7 +14647,7 @@
 
   const renderTickerQueryErrorState = ({ message = "", retryProvider = "", retryModel = "" } = {}) => {
     if (!ui.tickerQueryOutput) return;
-    const text = escapeHtml(String(message || "Unable to complete Model Council request right now."));
+    const text = escapeHtml(String(message || "Unable to complete Forecast Review request right now."));
     const provider = escapeHtml(String(retryProvider || "").trim());
     const model = escapeHtml(String(retryModel || "").trim());
     ui.tickerQueryOutput.innerHTML = `
@@ -14944,46 +14815,6 @@
     )}/download`;
   };
 
-  const normalizeFxCode = (value, fallback = "USD") => {
-    const normalized = String(value || "")
-      .trim()
-      .toUpperCase()
-      .replace(/[^A-Z]/g, "")
-      .slice(0, 6);
-    if (normalized) return normalized;
-    return String(fallback || "USD")
-      .trim()
-      .toUpperCase()
-      .replace(/[^A-Z]/g, "")
-      .slice(0, 6);
-  };
-
-  const readTerminalFxRecent = () => {
-    try {
-      const parsed = JSON.parse(localStorage.getItem(TERMINAL_FX_RECENT_KEY) || "[]");
-      return Array.isArray(parsed) ? parsed : [];
-    } catch (error) {
-      return [];
-    }
-  };
-
-  const writeTerminalFxRecent = (items) => {
-    try {
-      localStorage.setItem(TERMINAL_FX_RECENT_KEY, JSON.stringify((Array.isArray(items) ? items : []).slice(0, TERMINAL_FX_RECENT_LIMIT)));
-    } catch (error) {
-      // Ignore storage write failures.
-    }
-  };
-
-  const formatFxNumber = (value, maxDigits = 6) => {
-    const numeric = Number(value);
-    if (!Number.isFinite(numeric)) return "-";
-    return new Intl.NumberFormat(undefined, {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: maxDigits,
-    }).format(numeric);
-  };
-
   const formatFileSize = (value) => {
     const bytes = Number(value);
     if (!Number.isFinite(bytes) || bytes <= 0) return "";
@@ -14996,138 +14827,6 @@
     }
     const digits = size >= 100 || index === 0 ? 0 : size >= 10 ? 1 : 2;
     return `${size.toFixed(digits)} ${units[index]}`;
-  };
-
-  const setTerminalFxStatus = (message, isError = false) => {
-    if (!ui.terminalFxStatus) return;
-    ui.terminalFxStatus.textContent = String(message || "");
-    ui.terminalFxStatus.classList.toggle("error", Boolean(isError));
-  };
-
-  const renderTerminalFxResult = (payload) => {
-    if (!ui.terminalFxResult) return;
-    if (!payload || typeof payload !== "object") {
-      ui.terminalFxResult.innerHTML = '<div class="small muted">Run a conversion to view rate details.</div>';
-      return;
-    }
-    ui.terminalFxResult.innerHTML = `
-      <div class="profile-item"><span class="label">Amount in</span><span class="value">${formatFxNumber(payload.amountIn, 6)} ${escapeHtml(payload.base || "")}</span></div>
-      <div class="profile-item"><span class="label">Rate</span><span class="value">${formatFxNumber(payload.rate, 8)}</span></div>
-      <div class="profile-item"><span class="label">Amount out</span><span class="value">${formatFxNumber(payload.amountOut, 6)} ${escapeHtml(payload.quote || "")}</span></div>
-      <div class="profile-item"><span class="label">Symbol</span><span class="value">${escapeHtml(payload.symbolUsed || "-")}</span></div>
-      <div class="profile-item"><span class="label">Updated</span><span class="value">${
-        payload.asOf ? escapeHtml(new Date(payload.asOf).toLocaleString()) : "-"
-      }</span></div>
-      <div class="small muted" style="margin-top: 8px;">Source: ${escapeHtml(payload.source || "yahoo_finance")}</div>
-    `;
-  };
-
-  const renderTerminalFxRecent = () => {
-    if (!ui.terminalFxRecent) return;
-    const items = readTerminalFxRecent();
-    if (!items.length) {
-      ui.terminalFxRecent.innerHTML = '<div class="small muted">No recent conversions yet.</div>';
-      return;
-    }
-    ui.terminalFxRecent.innerHTML = items
-      .map((item, index) => {
-        const label = `${formatFxNumber(item.amountIn, 4)} ${normalizeFxCode(item.base)} -> ${formatFxNumber(
-          item.amountOut,
-          4
-        )} ${normalizeFxCode(item.quote)}`;
-        return `<button type="button" class="task-chip" data-terminal-fx-recent-index="${index}" style="margin: 4px 6px 4px 0;">${escapeHtml(
-          label
-        )}</button>`;
-      })
-      .join("");
-  };
-
-  const pushTerminalFxRecent = (payload) => {
-    const rows = readTerminalFxRecent();
-    const normalizedBase = normalizeFxCode(payload.base || "USD");
-    const normalizedQuote = normalizeFxCode(payload.quote || "USD");
-    const normalizedAmount = Number(payload.amountIn || 0);
-    const deduped = rows.filter((row) => {
-      const rowBase = normalizeFxCode(row.base || "USD");
-      const rowQuote = normalizeFxCode(row.quote || "USD");
-      return !(rowBase === normalizedBase && rowQuote === normalizedQuote && Number(row.amountIn || 0) === normalizedAmount);
-    });
-    deduped.unshift({
-      base: normalizedBase,
-      quote: normalizedQuote,
-      amountIn: normalizedAmount,
-      amountOut: Number(payload.amountOut || 0),
-      rate: Number(payload.rate || 0),
-      asOf: String(payload.asOf || ""),
-      symbolUsed: String(payload.symbolUsed || ""),
-      source: String(payload.source || ""),
-      createdAt: Date.now(),
-    });
-    writeTerminalFxRecent(deduped);
-    renderTerminalFxRecent();
-  };
-
-  const runTerminalFxConvert = async () => {
-    const amount = Number(ui.terminalFxAmount?.value || 0);
-    const base = normalizeFxCode(ui.terminalFxBase?.value || "USD");
-    const quote = normalizeFxCode(ui.terminalFxQuote?.value || "USD");
-
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setTerminalFxStatus("Enter a valid amount greater than zero.", true);
-      return;
-    }
-    if (!base || !quote) {
-      setTerminalFxStatus("Select base and quote currencies.", true);
-      return;
-    }
-
-    const submitButton = ui.terminalFxSubmit;
-    const submitLabel = submitButton?.querySelector("span");
-    if (submitButton) submitButton.disabled = true;
-    if (submitLabel) submitLabel.textContent = "Converting...";
-    setTerminalFxStatus("Requesting FX quote...");
-
-    try {
-      const headers = await buildApiAuthHeaders({ includeJson: true });
-      const response = await fetch("/api/fx/convert", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          base,
-          quote,
-          amount,
-          meta: buildMeta(),
-        }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        const detail = String(payload?.error || payload?.detail || `HTTP ${response.status}`).trim();
-        throw new Error(detail || "fx_convert_failed");
-      }
-
-      const normalized = {
-        base,
-        quote,
-        amountIn: Number(payload?.amountIn || amount),
-        amountOut: Number(payload?.amountOut || 0),
-        rate: Number(payload?.rate || 0),
-        symbolUsed: String(payload?.symbolUsed || ""),
-        source: String(payload?.source || "yahoo_finance"),
-        asOf: String(payload?.asOf || ""),
-      };
-      renderTerminalFxResult(normalized);
-      pushTerminalFxRecent(normalized);
-      setTerminalFxStatus(`Converted ${base}/${quote} using ${normalized.symbolUsed || "Yahoo FX"}.`);
-      logEvent("fx_convert", { base, quote });
-    } catch (error) {
-      const message = extractErrorMessage(error, "Currency conversion failed.");
-      setTerminalFxStatus(message, true);
-      renderTerminalFxResult(null);
-      showToast(message, "warn");
-    } finally {
-      if (submitButton) submitButton.disabled = false;
-      if (submitLabel) submitLabel.textContent = "Convert";
-    }
   };
 
   const normalizeMyRequestType = (value) => {
@@ -15287,8 +14986,6 @@
         const ticker = escapeHtml(String(item?.ticker || "—"));
         const createdAt = escapeHtml(formatTimestamp(item?.createdAt || item?.createdAtMs));
         const updatedAt = escapeHtml(formatTimestamp(item?.updatedAt || item?.updatedAtMs));
-        const published = Boolean(item?.published);
-        const publishStateLabel = published ? "Published to Explore" : "Not published to Explore";
         const share = item?.share && typeof item.share === "object" ? item.share : {};
         const shareVisibility = escapeHtml(String(share?.visibility || "private").toLowerCase());
         const summary = escapeHtml(String((item?.outputsMeta || {})?.summary || ""));
@@ -15309,9 +15006,7 @@
                 <div class="order-title">${title}</div>
                 <div class="small">ID: ${id}</div>
               </div>
-              <span class="status status-icon-only ${published ? "fulfilled" : "pending"}" role="img" aria-label="${escapeHtml(
-                publishStateLabel
-              )}" title="${escapeHtml(publishStateLabel)}">${icon(published ? "eye" : "eye-off")}</span>
+              <span class="status fulfilled">Private</span>
             </div>
             <div class="order-meta">
               <div><strong>Type</strong> ${typeLabel}</div>
@@ -15330,11 +15025,6 @@
               <button class="cta secondary small" type="button" data-action="my-request-share" data-request-id="${id}">${icon("share-ios")}<span>Share</span></button>
               <button class="cta secondary small" type="button" data-action="my-request-rename" data-request-id="${id}">${icon("edit-pencil")}<span>Rename</span></button>
               <button class="cta secondary small" type="button" data-action="my-request-duplicate" data-request-id="${id}">${icon("copy")}<span>Duplicate</span></button>
-              ${
-                published
-                  ? `<button class="cta secondary small" type="button" data-action="my-request-unpublish" data-request-id="${id}" aria-label="Remove from public Explore" title="Remove from public Explore">${hidePublicationIcon()}<span>Unpublish</span></button>`
-                  : `<button class="cta secondary small" type="button" data-action="my-request-publish" data-request-id="${id}">${icon("send")}<span>Publish</span></button>`
-              }
               <button class="cta secondary small danger" type="button" data-action="my-request-delete" data-request-id="${id}">${icon("trash")}<span>Delete</span></button>
             </div>
           </div>
@@ -15907,7 +15597,7 @@
       technicalContext: technicalContext && typeof technicalContext === "object" ? technicalContext : {},
     };
     return [
-      "You are Quantura Model Council, a multi-model equity research copilot.",
+      "You are Quantura Forecast Review, a multi-model equity research copilot.",
       "Use the provided structured ticker context and cite uncertainty clearly.",
       "Return a concise, structured response with thesis, risks, and next steps.",
       `Structured context JSON:\n${JSON.stringify(context)}`,
@@ -15939,7 +15629,7 @@
       if (response.ok) {
         const answerText = String(payload?.answer || payload?.text || "").trim();
         if (!answerText) {
-          throw new Error("Empty Model Council response.");
+          throw new Error("Empty Forecast Review response.");
         }
         return {
           answer: answerText,
@@ -15989,7 +15679,7 @@
     });
     const payload = await fallbackResponse.json().catch(() => ({}));
     if (!fallbackResponse.ok) {
-      const message = String(payload?.error || payload?.message || "Unable to complete Model Council request right now.").trim();
+      const message = String(payload?.error || payload?.message || "Unable to complete Forecast Review request right now.").trim();
       const err = new Error(message);
       err.retryProvider = String(payload?.retryProvider || "").trim();
       err.retryModel = String(payload?.retryModel || "").trim();
@@ -16132,7 +15822,7 @@
     if (!shareId) return false;
 
     try {
-      setOutputLoading(ui.tickerQueryOutput, "Loading shared Model Council response...");
+      setOutputLoading(ui.tickerQueryOutput, "Loading shared Forecast Review response...");
       const response = await fetch(`/api/model-council/share/${encodeURIComponent(shareId)}`, {
         method: "GET",
         credentials: "same-origin",
@@ -16155,7 +15845,7 @@
         shareUrl: state.tickerContext.tickerQueryShareUrl,
       });
       renderTickerQueryModulesOutput(payload?.moduleData || {}, payload?.selectedModules || []);
-      if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Viewing shared read-only Model Council response.";
+      if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Viewing shared read-only Forecast Review response.";
       if (setPanel && typeof window.__quanturaSetPanel === "function") {
         window.__quanturaSetPanel("ticker-query", { pushPath: false });
       }
@@ -16169,8 +15859,8 @@
   };
 
   const syncModelCouncilSeo = () => {
-    const title = "Model Council | Quantura";
-    const description = "Multi-provider Model Council with structured Yahoo Finance module context for ticker analysis.";
+    const title = "Forecast Review | Quantura";
+    const description = "Multi-provider Forecast Review with structured Yahoo Finance module context for ticker analysis.";
     try {
       if (window.location.pathname === "/model-council" || window.location.pathname === "/ticker-query") {
         document.title = title;
@@ -16202,17 +15892,17 @@
     const selectedModules = getSelectedTickerQueryModules();
 
     if (!symbol) {
-      showToast("Ticker is required for Model Council.", "warn");
+      showToast("Ticker is required for Forecast Review.", "warn");
       return;
     }
     if (!prompt) {
-      showToast("Enter a question for Model Council.", "warn");
+      showToast("Enter a question for Forecast Review.", "warn");
       return;
     }
     const rewardApproved = await maybeShowNativeRewardGate({
       reason: "model_council",
-      title: "Watch a rewarded ad to unlock Model Council output?",
-      message: "Running Model Council in the native app can require a rewarded video before generating output.",
+      title: "Watch a rewarded ad to unlock Forecast Review output?",
+      message: "Running Forecast Review in the native app can require a rewarded video before generating output.",
     });
     if (!rewardApproved) return;
 
@@ -16233,7 +15923,7 @@
         state.tickerContext.tickerQueryPendingQuestion = prompt;
         state.tickerContext.tickerQueryPendingProvider = selectedProvider;
         state.tickerContext.tickerQueryPendingModel = selectedModel;
-        if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Prompt improved. Review preview, then run Model Council.";
+        if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Prompt improved. Review preview, then run Forecast Review.";
         return;
       } catch (error) {
         if (notify) showToast(error.message || "Unable to improve prompt preview.", "warn");
@@ -16249,8 +15939,8 @@
     }
 
     try {
-      if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Running Model Council...";
-      setOutputLoading(ui.tickerQueryOutput, "Running Model Council analysis...");
+      if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Running Forecast Review...";
+      setOutputLoading(ui.tickerQueryOutput, "Running Forecast Review analysis...");
       if (ui.tickerQueryModulesOutput) {
         ui.tickerQueryModulesOutput.classList.add("hidden");
       }
@@ -16293,7 +15983,7 @@
       updateTickerQueryModelInfo({ latencyMs, usage });
       const showCacheStats = Boolean(ui.tickerQueryShowCacheStats?.checked);
       renderTickerQueryCacheStats(usage, { visible: showCacheStats });
-      if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Model Council completed.";
+      if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Forecast Review completed.";
       if (ui.tickerQueryImprovePreviewWrap && skipImprove) {
         ui.tickerQueryImprovePreviewWrap.classList.add("hidden");
       }
@@ -16313,7 +16003,7 @@
         const savedRequest = await upsertMyRequest({
 	        type: "modelCouncil",
           requestId: requestDocId,
-	        title: `${symbol} Model Council`,
+	        title: `${symbol} Forecast Review`,
 	        input: {
 	          ticker: symbol,
 	          question: finalPrompt,
@@ -16357,12 +16047,12 @@
 	    } catch (error) {
 	      setOutputReady(ui.tickerQueryOutput);
 	      renderTickerQueryErrorState({
-	        message: error.message || "Unable to run Model Council right now.",
+	        message: error.message || "Unable to run Forecast Review right now.",
         retryProvider: error.retryProvider || "",
         retryModel: error.retryModel || "",
       });
-      if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Unable to complete Model Council request.";
-      if (notify) showToast(error.message || "Unable to run Model Council.", "warn");
+      if (ui.tickerQueryStatus) ui.tickerQueryStatus.textContent = "Unable to complete Forecast Review request.";
+      if (notify) showToast(error.message || "Unable to run Forecast Review.", "warn");
     }
   };
 
@@ -23404,7 +23094,7 @@
             {
               role: "system",
               content:
-                "You are Quantura Model Council. Write a concise analyst narrative with sections: Thesis, Risk frame, Key levels, Next steps. Mention uncertainty clearly.",
+                "You are Quantura Forecast Review. Write a concise analyst narrative with sections: Thesis, Risk frame, Key levels, Next steps. Mention uncertainty clearly.",
             },
             {
               role: "user",
@@ -23497,7 +23187,7 @@
     const providerLabel = String(MODEL_PROVIDER_LABEL[providerId] || providerId || "AI").trim();
     const modelLabel = String(modelMeta?.label || modelId).trim();
     const statusLine = loading
-      ? "Generating Model Council summary..."
+      ? "Generating Forecast Review summary..."
       : error
         ? error
         : answer
@@ -24004,7 +23694,7 @@
         state.tickerContext.tickerQueryLastResponse = responsePayload;
         renderTickerQueryResult(responsePayload);
       }
-      if (notify) showToast("Model Council request loaded.");
+      if (notify) showToast("Forecast Review request loaded.");
       return item;
     }
 
@@ -26825,7 +26515,25 @@
 	      } finally {
 	        removeButton.disabled = false;
 		      }
-		    });
+	    });
+
+    const syncProductivityAccess = (user = state.user) => {
+      if (!ui.taskForm) return;
+      const enabled = hasFullAccount(user);
+      ui.taskForm.querySelectorAll("input, select, textarea, button").forEach((control) => {
+        control.disabled = !enabled;
+      });
+      if (!enabled) {
+        delete ui.taskForm.dataset.editingTaskId;
+        const submitButton = ui.taskForm.querySelector('button[type="submit"]');
+        if (submitButton) submitButton.textContent = "Add task";
+        if (ui.taskStatusText) {
+          ui.taskStatusText.textContent = "Sign in with a full account to create and manage tasks.";
+        }
+      } else if (ui.taskStatusText?.textContent.includes("Sign in with a full account")) {
+        ui.taskStatusText.textContent = "";
+      }
+    };
 
 	    ui.taskForm?.addEventListener("submit", async (event) => {
 	      event.preventDefault();
@@ -26838,7 +26546,7 @@
 	        showToast("Editor access required to create tasks.", "warn");
 	        return;
 	      }
-	      const title = String(ui.taskTitle?.value || "").trim();
+	      const title = String(ui.taskTitle?.value || "").trim().slice(0, 160);
 	      if (!title) {
 	        showToast("Enter a task title.", "warn");
 	        return;
@@ -26846,33 +26554,49 @@
 	      const dueDate = String(ui.taskDue?.value || "").trim();
 	      const status = String(ui.taskStatus?.value || "backlog");
 	      const assigneeEmail = String(ui.taskAssignee?.value || "").trim();
-	      const notes = String(ui.taskNotes?.value || "").trim();
-	      if (ui.taskStatusText) ui.taskStatusText.textContent = "Saving...";
+	      const notes = String(ui.taskNotes?.value || "").trim().slice(0, 4000);
+	      if (assigneeEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(assigneeEmail)) {
+	        showToast("Enter a valid assignee email address.", "warn");
+	        ui.taskAssignee?.focus();
+	        return;
+	      }
+	      const submitButton = ui.taskForm.querySelector('button[type="submit"]');
+	      const editingTaskId = String(ui.taskForm.dataset.editingTaskId || "").trim();
+	      if (ui.taskStatusText) ui.taskStatusText.textContent = editingTaskId ? "Updating..." : "Saving...";
+	      if (submitButton) submitButton.disabled = true;
 
 	      try {
-	        await db
-	          .collection("users")
-	          .doc(workspaceId)
-	          .collection("tasks")
-	          .add({
+	        const collection = db.collection("users").doc(workspaceId).collection("tasks");
+	        const payload = {
 	            title,
 	            notes,
 	            status,
 	            dueDate: dueDate || null,
 	            assigneeEmail: assigneeEmail || "",
 	            createdBy: { uid: state.user.uid, email: state.user.email || "" },
-	            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
 	            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
 	            meta: buildMeta(),
-	          });
-	        if (ui.taskStatusText) ui.taskStatusText.textContent = "Task created.";
+	        };
+	        if (editingTaskId) {
+	          await collection.doc(editingTaskId).set({ ...payload, editedBy: { uid: state.user.uid, email: state.user.email || "" } }, { merge: true });
+	        } else {
+	          await collection.add({ ...payload, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+	        }
+	        if (ui.taskStatusText) ui.taskStatusText.textContent = editingTaskId ? "Task updated." : "Task created.";
 	        if (ui.taskTitle) ui.taskTitle.value = "";
 	        if (ui.taskNotes) ui.taskNotes.value = "";
-	        showToast("Task created.");
-	        logEvent("task_created", { workspace_id: workspaceId });
+	        if (ui.taskAssignee) ui.taskAssignee.value = "";
+	        if (ui.taskDue) ui.taskDue.value = "";
+	        if (ui.taskStatus) ui.taskStatus.value = "backlog";
+	        delete ui.taskForm.dataset.editingTaskId;
+	        if (submitButton) submitButton.textContent = "Add task";
+	        showToast(editingTaskId ? "Task updated." : "Task created.");
+	        logEvent(editingTaskId ? "task_updated" : "task_created", { workspace_id: workspaceId });
 	      } catch (error) {
 	        if (ui.taskStatusText) ui.taskStatusText.textContent = error.message || "Unable to create task.";
 	        showToast(error.message || "Unable to create task.", "warn");
+	      } finally {
+	        if (submitButton) submitButton.disabled = false;
 	      }
 	    });
 
@@ -26995,6 +26719,27 @@
 	    });
 
 	    document.addEventListener("click", async (event) => {
+	      const edit = event.target.closest('[data-action="task-edit"]');
+	      if (edit) {
+	        if (!hasFullAccount()) return;
+	        const workspaceId = state.activeWorkspaceId || state.user.uid;
+	        if (!canWriteWorkspace(workspaceId)) {
+	          showToast("Editor access required to edit tasks.", "warn");
+	          return;
+	        }
+	        ui.taskForm.dataset.editingTaskId = String(edit.dataset.taskId || "");
+	        if (ui.taskTitle) ui.taskTitle.value = String(edit.dataset.title || "");
+	        if (ui.taskNotes) ui.taskNotes.value = String(edit.dataset.notes || "");
+	        if (ui.taskDue) ui.taskDue.value = String(edit.dataset.due || "").slice(0, 10);
+	        if (ui.taskAssignee) ui.taskAssignee.value = String(edit.dataset.assignee || "");
+	        if (ui.taskStatus) ui.taskStatus.value = String(edit.dataset.status || "backlog");
+	        const submitButton = ui.taskForm.querySelector('button[type="submit"]');
+	        if (submitButton) submitButton.textContent = "Update task";
+	        if (ui.taskStatusText) ui.taskStatusText.textContent = "Editing task. Submit to save changes.";
+	        ui.taskTitle?.focus();
+	        ui.taskForm.scrollIntoView({ behavior: "smooth", block: "center" });
+	        return;
+	      }
 	      const move = event.target.closest('[data-action="task-move"]');
 	      if (move) {
 	        if (!hasFullAccount()) return;
@@ -27037,6 +26782,7 @@
 	      }
 	      const taskId = del.dataset.taskId;
 	      if (!taskId) return;
+	      if (!window.confirm("Delete this task? This cannot be undone.")) return;
 	      del.disabled = true;
 	      try {
 	        await db.collection("users").doc(workspaceId).collection("tasks").doc(taskId).delete();
@@ -28255,7 +28001,7 @@
                 await performShare({
                   url: shareUrl,
                   title: "Quantura forecast summary",
-                  text: String(summary.text || "Forecast narrative generated by Model Council.").slice(0, 220),
+                  text: String(summary.text || "Forecast narrative generated by Forecast Review.").slice(0, 220),
                 });
                 showToast("Share link copied.");
               } catch (error) {
@@ -28621,32 +28367,6 @@
       }
     });
 
-    if (ui.terminalFxBase && !String(ui.terminalFxBase.value || "").trim()) ui.terminalFxBase.value = "USD";
-    if (ui.terminalFxQuote && !String(ui.terminalFxQuote.value || "").trim()) ui.terminalFxQuote.value = "EUR";
-    if (ui.terminalFxAmount && !String(ui.terminalFxAmount.value || "").trim()) ui.terminalFxAmount.value = "1";
-    renderTerminalFxRecent();
-    ui.terminalFxSwap?.addEventListener("click", () => {
-      const currentBase = normalizeFxCode(ui.terminalFxBase?.value || "USD");
-      const currentQuote = normalizeFxCode(ui.terminalFxQuote?.value || "EUR");
-      if (ui.terminalFxBase) ui.terminalFxBase.value = currentQuote;
-      if (ui.terminalFxQuote) ui.terminalFxQuote.value = currentBase;
-    });
-    ui.terminalFxForm?.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      await runTerminalFxConvert();
-    });
-    ui.terminalFxRecent?.addEventListener("click", async (event) => {
-      const button = event.target.closest("[data-terminal-fx-recent-index]");
-      if (!button) return;
-      const idx = Number(button.getAttribute("data-terminal-fx-recent-index"));
-      const record = readTerminalFxRecent()[idx];
-      if (!record) return;
-      if (ui.terminalFxAmount) ui.terminalFxAmount.value = String(record.amountIn || 1);
-      if (ui.terminalFxBase) ui.terminalFxBase.value = normalizeFxCode(record.base || "USD");
-      if (ui.terminalFxQuote) ui.terminalFxQuote.value = normalizeFxCode(record.quote || "EUR");
-      await runTerminalFxConvert();
-    });
-
     if (ui.marketHeadlinesProvider && !ui.marketHeadlinesProvider.value) {
       ui.marketHeadlinesProvider.value = DEFAULT_MARKET_HEADLINES_PROVIDER;
     }
@@ -28830,8 +28550,8 @@
             renderTickerQueryResult({ ...(state.tickerContext.tickerQueryLastResponse || {}), shareUrl });
             await performShare({
               url: shareUrl,
-              title: "Quantura Model Council",
-              text: "Read-only Model Council response",
+              title: "Quantura Forecast Review",
+              text: "Read-only Forecast Review response",
             });
             showToast("Share link copied.");
           } catch (error) {
@@ -30102,6 +29822,7 @@
           if (!user) {
             state.authResolved = true;
             state.user = null;
+            syncProductivityAccess(null);
             state.earningsCalendar.followsUid = "anon";
             state.earningsCalendar.follows = readLocalEarningsFollows();
             state.tickerContext.tickerHistory = readTickerHistory();
@@ -30129,6 +29850,7 @@
           }
 			      state.authResolved = true;
 			      state.user = user;
+          syncProductivityAccess(user);
           const nextUid = String(user?.uid || "").trim();
           if (previousWasAnonymous && hasFullAccount(user) && previousUid && nextUid && previousUid !== nextUid) {
             await mergeAnonymousSessionData(previousUid, nextUid).catch(() => undefined);
