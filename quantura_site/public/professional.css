@@ -325,7 +325,13 @@ body.shop-page { background: var(--q-bg) !important; color: var(--q-text) !impor
   .workflow-actions .cta { width: 100%; justify-content: center; }
   .integration-chart { min-height: 300px; }
   .data-table { min-width: 620px; }
-  .cookie-banner { left: 10px !important; right: 10px !important; bottom: calc(10px + env(safe-area-inset-bottom, 0px)) !important; width: auto !important; }
+  .cookie-banner {
+    left: 10px !important;
+    right: 10px !important;
+    bottom: calc(10px + env(safe-area-inset-bottom, 0px)) !important;
+    width: auto !important;
+    transform: none !important;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

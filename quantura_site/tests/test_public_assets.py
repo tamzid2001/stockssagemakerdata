@@ -159,3 +159,15 @@ def test_quantitative_screener_surface_replaces_manual_prophet_dispatch():
     assert "@media (max-width: 760px)" in styles
     assert 'id="screener-generate-button"' not in screener
     assert "$100B" not in screener
+
+
+def test_mobile_cookie_banner_resets_desktop_centering_transform():
+    styles = (PUBLIC / "professional.css").read_text()
+    mobile_start = styles.index("@media (max-width: 640px)")
+    mobile_rules = styles[mobile_start:]
+    cookie_start = mobile_rules.index(".cookie-banner")
+    cookie_end = mobile_rules.index("}", cookie_start)
+    cookie_rule = mobile_rules[cookie_start:cookie_end]
+    assert "left: 10px !important" in cookie_rule
+    assert "right: 10px !important" in cookie_rule
+    assert "transform: none !important" in cookie_rule
