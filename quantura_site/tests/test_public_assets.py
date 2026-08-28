@@ -256,8 +256,10 @@ def test_mobile_cookie_banner_resets_desktop_centering_transform():
 
 def test_ssr_templates_mirror_every_public_html_page():
     templates = ROOT / "functions_ssr" / "templates"
-    page_files = sorted(path.relative_to(PAGES) for path in PAGES.rglob("*.html"))
-    template_files = sorted(path.relative_to(templates) for path in templates.rglob("*.html"))
+    # Finder/iCloud conflict copies are untracked local artifacts and must not
+    # change the authoritative page inventory used by clean CI checkouts.
+    page_files = sorted(path.relative_to(PAGES) for path in PAGES.rglob("*.html") if not path.stem.endswith(" 2"))
+    template_files = sorted(path.relative_to(templates) for path in templates.rglob("*.html") if not path.stem.endswith(" 2"))
     assert template_files == page_files
     for relative_path in page_files:
         assert (templates / relative_path).read_bytes() == (PAGES / relative_path).read_bytes()

@@ -2,6 +2,12 @@ import { AlpacaBar, AlpacaError, OptionContract, classifyEquitySession } from ".
 
 type FetchLike = typeof fetch;
 
+type YahooOptionSession = {
+  cookie: string;
+  crumb: string;
+  expiresAt: number;
+};
+
 export type YahooStockHistoryInput = {
   symbol: unknown;
   start?: unknown;
@@ -26,6 +32,30 @@ const INTERVALS = new Map([
   ["1day", { canonical: "1Day", yahoo: "1d", range: "max" }],
   ["1d", { canonical: "1Day", yahoo: "1d", range: "max" }],
 ]);
+
+const YAHOO_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/124.0 Safari/537.36";
+const YAHOO_OPTION_SESSION_TTL_MS = 15 * 60 * 1000;
+
+function responseCookies(response: Response): string[] {
+  const headers = response.headers as Headers & { getSetCookie?: () => string[] };
+  const values = typeof headers.getSetCookie === "function"
+    ? headers.getSetCookie()
+    : [headers.get("set-cookie") || ""].filter(Boolean);
+  return values.flatMap((value) => {
+    const match = String(value).match(/^\s*([^=;,\s]+=[^;,]+)/);
+    return match ? [match[1].trim()] : [];
+  });
+}
+
+function cookieHeader(values: string[]): string {
+  const cookies = new Map<string, string>();
+  for (const value of values) {
+    const separator = value.indexOf("=");
+    if (separator <= 0) continue;
+    cookies.set(value.slice(0, separator), value);
+  }
+  return [...cookies.values()].join("; ");
+}
 
 function symbol(value: unknown, optionContract = false): string {
   const result = String(value || "").trim().toUpperCase();
@@ -120,16 +150,18 @@ export function parseYahooChartResponse(
 
 export class YahooFinanceClient {
   private readonly fetchImpl: FetchLike;
+  private optionSession: YahooOptionSession | null = null;
+  private optionSessionPromise: Promise<YahooOptionSession> | null = null;
 
   constructor(options: { fetchImpl?: FetchLike } = {}) {
     this.fetchImpl = options.fetchImpl || fetch;
   }
 
-  private async requestJson(url: string): Promise<Record<string, unknown>> {
+  private async requestJson(url: string, extraHeaders: Record<string, string> = {}): Promise<Record<string, unknown>> {
     let response: Response;
     try {
       response = await this.fetchImpl(url, {
-        headers: { Accept: "application/json", "User-Agent": "Mozilla/5.0 QuanturaMarketData/1.0" },
+        headers: { Accept: "application/json", "User-Agent": YAHOO_USER_AGENT, ...extraHeaders },
         signal: AbortSignal.timeout(25000),
       });
     } catch {
@@ -137,10 +169,82 @@ export class YahooFinanceClient {
     }
     if (response.status === 404) throw new AlpacaError("unsupported_symbol", "Yahoo Finance could not find this symbol.", 404);
     if (response.status === 429) throw new AlpacaError("rate_limit", "Yahoo Finance rate-limited this request. Wait briefly and retry.", 429);
+    if (response.status === 401 || response.status === 403) {
+      throw new AlpacaError("authentication", "Yahoo Finance requires a refreshed provider session.", 502);
+    }
     if (!response.ok) throw new AlpacaError("upstream", "Yahoo Finance could not complete the request.", 502);
     const payload = await response.json().catch(() => null) as Record<string, unknown> | null;
     if (!payload) throw new AlpacaError("upstream", "Yahoo Finance returned an unreadable response.", 502);
     return payload;
+  }
+
+  private async createOptionSession(force = false): Promise<YahooOptionSession> {
+    if (!force && this.optionSession && this.optionSession.expiresAt > Date.now()) return this.optionSession;
+    if (!force && this.optionSessionPromise) return this.optionSessionPromise;
+
+    const pending = (async () => {
+      let bootstrap: Response;
+      try {
+        bootstrap = await this.fetchImpl("https://fc.yahoo.com", {
+          headers: { Accept: "text/html", "User-Agent": YAHOO_USER_AGENT },
+          redirect: "follow",
+          signal: AbortSignal.timeout(15000),
+        });
+      } catch {
+        throw new AlpacaError("network", "Yahoo Finance options data could not establish a provider session.", 502);
+      }
+      const bootstrapCookies = responseCookies(bootstrap);
+      const initialCookie = cookieHeader(bootstrapCookies);
+      if (!initialCookie) throw new AlpacaError("upstream", "Yahoo Finance options data could not establish a provider session.", 502);
+
+      let crumbResponse: Response;
+      try {
+        crumbResponse = await this.fetchImpl("https://query1.finance.yahoo.com/v1/test/getcrumb", {
+          headers: { Accept: "text/plain", Cookie: initialCookie, "User-Agent": YAHOO_USER_AGENT },
+          signal: AbortSignal.timeout(15000),
+        });
+      } catch {
+        throw new AlpacaError("network", "Yahoo Finance options data could not refresh its provider session.", 502);
+      }
+      if (crumbResponse.status === 429) throw new AlpacaError("rate_limit", "Yahoo Finance rate-limited this request. Wait briefly and retry.", 429);
+      if (!crumbResponse.ok) throw new AlpacaError("upstream", "Yahoo Finance options data could not refresh its provider session.", 502);
+      const crumb = (await crumbResponse.text()).trim();
+      if (!crumb || crumb.length > 200 || /\s/.test(crumb) || /too many requests/i.test(crumb)) {
+        throw new AlpacaError("upstream", "Yahoo Finance returned an invalid options session.", 502);
+      }
+      const cookie = cookieHeader([...bootstrapCookies, ...responseCookies(crumbResponse)]);
+      const session = { cookie, crumb, expiresAt: Date.now() + YAHOO_OPTION_SESSION_TTL_MS };
+      this.optionSession = session;
+      return session;
+    })();
+
+    this.optionSessionPromise = pending;
+    try {
+      return await pending;
+    } finally {
+      if (this.optionSessionPromise === pending) this.optionSessionPromise = null;
+    }
+  }
+
+  private async requestOptionJson(url: string): Promise<Record<string, unknown>> {
+    try {
+      return await this.requestJson(url);
+    } catch (error) {
+      if (!(error instanceof AlpacaError) || error.code !== "authentication") throw error;
+    }
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const session = await this.createOptionSession(attempt > 0);
+      const authenticatedUrl = new URL(url);
+      authenticatedUrl.searchParams.set("crumb", session.crumb);
+      try {
+        return await this.requestJson(authenticatedUrl.toString(), { Cookie: session.cookie });
+      } catch (error) {
+        if (!(error instanceof AlpacaError) || error.code !== "authentication" || attempt > 0) throw error;
+        this.optionSession = null;
+      }
+    }
+    throw new AlpacaError("upstream", "Yahoo Finance options data could not refresh its provider session.", 502);
   }
 
   private optionResult(payload: Record<string, unknown>): Record<string, unknown> {
@@ -153,7 +257,7 @@ export class YahooFinanceClient {
 
   async listOptionExpirations(underlyingValue: unknown): Promise<string[]> {
     const underlying = symbol(underlyingValue);
-    const payload = await this.requestJson(`https://query2.finance.yahoo.com/v7/finance/options/${encodeURIComponent(underlying)}`);
+    const payload = await this.requestOptionJson(`https://query1.finance.yahoo.com/v7/finance/options/${encodeURIComponent(underlying)}`);
     const result = this.optionResult(payload);
     const expirations = (Array.isArray(result.expirationDates) ? result.expirationDates : [])
       .map((value) => Number(value))
@@ -169,7 +273,7 @@ export class YahooFinanceClient {
     const expiration = String(input.expiration || "").trim();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(expiration)) throw new AlpacaError("invalid_request", "Select a valid expiration date.", 400);
     const expirationSeconds = Math.floor(Date.parse(`${expiration}T00:00:00.000Z`) / 1000);
-    const payload = await this.requestJson(`https://query2.finance.yahoo.com/v7/finance/options/${encodeURIComponent(underlying)}?date=${expirationSeconds}`);
+    const payload = await this.requestOptionJson(`https://query1.finance.yahoo.com/v7/finance/options/${encodeURIComponent(underlying)}?date=${expirationSeconds}`);
     const result = this.optionResult(payload);
     const optionSets = Array.isArray(result.options) ? result.options : [];
     const optionSet = optionSets[0] && typeof optionSets[0] === "object" ? optionSets[0] as Record<string, unknown> : {};

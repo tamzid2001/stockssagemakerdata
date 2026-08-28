@@ -87,6 +87,33 @@ test("Yahoo options expirations and chains normalize genuine provider fields wit
   assert.equal(contracts[0].openInterest, 900);
 });
 
+test("Yahoo options refresh a cookie and crumb after an anonymous 401", async () => {
+  const optionPayload = {
+    optionChain: {
+      result: [{ expirationDates: [1787875200], options: [] }],
+    },
+  };
+  const requests: Array<{ url: string; cookie: string }> = [];
+  const client = new YahooFinanceClient({
+    fetchImpl: async (input, init) => {
+      const url = String(input);
+      const headers = new Headers(init?.headers);
+      requests.push({ url, cookie: headers.get("cookie") || "" });
+      if (url === "https://fc.yahoo.com") {
+        return new Response("", { status: 404, headers: { "set-cookie": "A3=session-value; Path=/; Secure" } });
+      }
+      if (url.includes("/v1/test/getcrumb")) return new Response("crumb-value", { status: 200 });
+      if (!url.includes("crumb=crumb-value")) return new Response("unauthorized", { status: 401 });
+      return new Response(JSON.stringify(optionPayload), { status: 200, headers: { "content-type": "application/json" } });
+    },
+  });
+
+  const expirations = await client.listOptionExpirations("AAPL");
+  assert.equal(expirations.length, 1);
+  assert.equal(requests.length, 4);
+  assert.match(requests[3].cookie, /A3=session-value/);
+});
+
 test("Yahoo option history accepts OCC contract symbols and returns chronological bars", async () => {
   const client = new YahooFinanceClient({
     fetchImpl: async (url) => {
